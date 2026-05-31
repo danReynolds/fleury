@@ -1,0 +1,1045 @@
+// ListView: a keyboard-navigable list of items.
+//
+// Three pieces:
+//   - ListController — a ChangeNotifier holding the active (selected)
+//     index plus programmatic scroll commands. Optional; the widget
+//     creates its own when none is supplied.
+//   - ListView — the widget. Lays out items vertically, claims
+//     arrow-up / arrow-down / home / end / enter via Focus.onKey, and
+//     auto-scrolls to keep the selected item visible.
+//   - _RenderListView — the render object. Lays out only items that
+//     fit in the viewport starting from a scroll anchor, paints them,
+//     and writes the resulting visible range back to the controller.
+//
+// What's intentionally not here yet:
+//   - Lazy item building. itemBuilder is called for every index on
+//     every rebuild; fine for hundreds of items, not for tens of
+//     thousands. Lazy mounting lands in a follow-up.
+//   - Variable per-item heights other than what the child reports
+//     during layout. The widget honors taller items, but the auto-
+//     scroll math assumes the selected item fits in the viewport.
+//   - Horizontal scrolling. Items are constrained to the viewport
+//     width.
+
+import '../foundation/change_notifier.dart';
+import '../foundation/geometry.dart';
+import '../rendering/cell_buffer.dart';
+import '../rendering/layout.dart';
+import '../rendering/render_object.dart';
+import '../terminal/events.dart';
+import 'focus.dart';
+import 'framework.dart';
+import 'pointer.dart';
+
+/// How a [ListView] handles up/down at the first/last item.
+enum EdgeBehavior {
+  /// The key is consumed (no-op) and focus stays in the list. Default.
+  contain,
+
+  /// The key is returned as `ignored` so ancestor `KeyBindings` can
+  /// act on it — e.g. move focus to a sibling pane.
+  bubble,
+}
+
+/// Mutable model for a [ListView]: the currently active item and a
+/// pending programmatic scroll command.
+///
+/// `selectedIndex` is a code-clamped item index in `0..itemCount-1`,
+/// or `null` for scroll-only mode (no cursor; the widget renders
+/// items from the top and arrow chords are not consumed). The widget
+/// updates [itemCount] before each build and writes the post-layout
+/// [visibleRange] back here so listeners can observe what's on
+/// screen without re-running layout themselves.
+class ListController extends ChangeNotifier {
+  ListController({int? selectedIndex, this.pinToBottom = false})
+    : _selectedIndex = selectedIndex;
+
+  int? _selectedIndex;
+  int _itemCount = 0;
+  ({int first, int last})? _visibleRange;
+  int? _pendingJumpIndex;
+
+  /// When `true`, the selection sticks to the last item — whenever
+  /// `itemCount` grows between rebuilds (typically because new items
+  /// were appended), the controller advances [selectedIndex] to the
+  /// new last item so the viewport follows along.
+  ///
+  /// Typical chat / tailed-log pattern is to keep this enabled by
+  /// default and toggle it off when the user scrolls upward to
+  /// browse history (so newly arriving messages don't yank the
+  /// viewport back). Re-enable when they scroll back to the bottom.
+  bool pinToBottom;
+
+  /// Total number of items in the list. Set by [ListView] from its
+  /// `itemCount` argument on every rebuild.
+  int get itemCount => _itemCount;
+
+  /// The first/last item indices currently visible in the viewport.
+  /// Null when the list is empty or before the first layout pass.
+  ({int first, int last})? get visibleRange => _visibleRange;
+
+  /// Index of the active (highlighted) item, or `null` for a
+  /// scroll-only list. Values outside `0..itemCount-1` are clamped on
+  /// write.
+  int? get selectedIndex => _selectedIndex;
+  set selectedIndex(int? value) {
+    final clamped = _clampSelection(value);
+    if (_selectedIndex == clamped) return;
+    _selectedIndex = clamped;
+    notifyListeners();
+  }
+
+  /// Scrolls the viewport so [index] is at the top. Selection is not
+  /// changed. Indices outside `0..itemCount-1` are clamped.
+  void jumpToIndex(int index) {
+    final clamped = _itemCount == 0 ? 0 : index.clamp(0, _itemCount - 1);
+    _pendingJumpIndex = clamped;
+    notifyListeners();
+  }
+
+  int? _clampSelection(int? value) {
+    if (value == null) return null;
+    // Before itemCount is known (no widget has attached yet), preserve
+    // the caller's value verbatim. The widget calls back through this
+    // setter once it has pushed itemCount, which is when real clamping
+    // can happen.
+    if (_itemCount == 0) return value;
+    return value.clamp(0, _itemCount - 1);
+  }
+}
+
+/// A vertical, keyboard-navigable list of items.
+///
+/// Two ways to populate the list:
+///
+///   - `ListView(children: [...])` — eager. Every child widget is
+///     built upfront on each rebuild; the layout/paint pass only
+///     visits items that fit in the viewport. Best when you have a
+///     bounded set of widgets you already constructed.
+///   - `ListView.builder(itemCount: N, itemBuilder: (ctx, i, sel) {})` —
+///     lazy. Only items currently within the viewport are mounted as
+///     element subtrees; items scroll into/out of the mounted set as
+///     the user navigates. Supports variable item heights. Best for
+///     long lists where most items are off-screen (file pickers, log
+///     viewers, completion menus).
+///
+/// When focused, the widget claims arrow-up, arrow-down, home, end,
+/// and enter:
+///   - Arrows / Home / End move the selected item; the viewport
+///     auto-scrolls to keep it visible.
+///   - Enter fires [onSelect] with the current selected index.
+///   - Up at the first item / Down at the last item respects
+///     [edgeBehavior]: `contain` consumes the key, `bubble` returns
+///     it to the focus chain so an ancestor `KeyBindings` (e.g. one
+///     coordinating sidebar + main pane focus traversal) can react.
+///
+/// [itemBuilder] (lazy form) is invoked with `(context, index,
+/// selected)` for every visible item. The `selected` flag lets the
+/// builder style the active item differently. With `children:`
+/// (eager form), selection styling is the caller's responsibility.
+class ListView extends StatefulWidget {
+  /// Eager constructor: build all items upfront from a fixed list
+  /// of widgets. Use when you have a bounded set of widgets already
+  /// constructed and selection styling is handled elsewhere (or not
+  /// needed).
+  const ListView({
+    super.key,
+    this.controller,
+    this.focusNode,
+    required List<Widget> this.children,
+    this.autofocus = false,
+    this.edgeBehavior = EdgeBehavior.contain,
+    this.onSelect,
+  }) : itemCount = null,
+       itemBuilder = null;
+
+  /// Lazy constructor: build items on demand by index, mount only the
+  /// visible ones. Each item builder invocation receives a `selected`
+  /// flag for styling the active row.
+  const ListView.builder({
+    super.key,
+    this.controller,
+    this.focusNode,
+    required int this.itemCount,
+    required Widget Function(BuildContext, int, bool) this.itemBuilder,
+    this.autofocus = false,
+    this.edgeBehavior = EdgeBehavior.contain,
+    this.onSelect,
+  }) : assert(itemCount >= 0, 'itemCount must be non-negative'),
+       children = null;
+
+  /// External controller. If null, the widget creates its own and
+  /// disposes it on unmount.
+  final ListController? controller;
+
+  /// External [FocusNode]. Provide one when a parent needs to drive
+  /// focus (e.g. Tab cycling between sidebar and main pane). If null,
+  /// the widget creates its own and disposes it on unmount.
+  final FocusNode? focusNode;
+
+  /// Pre-built widgets (eager form). Mutually exclusive with
+  /// [itemCount] / [itemBuilder].
+  final List<Widget>? children;
+
+  /// Number of items (lazy form). Mutually exclusive with [children].
+  final int? itemCount;
+
+  /// Per-index widget builder (lazy form). Mutually exclusive with
+  /// [children]. Invoked with `(context, index, selected)`.
+  final Widget Function(BuildContext context, int index, bool selected)?
+  itemBuilder;
+
+  /// Whether to request focus on first mount.
+  final bool autofocus;
+
+  /// What to do with up/down at the boundary of the list. See
+  /// [EdgeBehavior].
+  final EdgeBehavior edgeBehavior;
+
+  /// Called with the current selected index when the user presses
+  /// Enter. Not invoked when the list is empty or there's no
+  /// selection.
+  final void Function(int index)? onSelect;
+
+  /// Effective number of items, regardless of which constructor was
+  /// used. Returns `children!.length` for eager, `itemCount!` for
+  /// lazy.
+  int get effectiveItemCount => children?.length ?? itemCount!;
+
+  @override
+  State<ListView> createState() => _ListViewState();
+}
+
+class _ListViewState extends State<ListView> {
+  late ListController _controller;
+  late FocusNode _focusNode;
+  bool _ownsController = false;
+  bool _ownsFocusNode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final count = widget.effectiveItemCount;
+    _controller = widget.controller ?? ListController();
+    _ownsController = widget.controller == null;
+    _controller._itemCount = count;
+    // Default the cursor to 0 when items exist but the controller
+    // doesn't have one — keyboard nav requires a starting point.
+    // Write directly so we don't notify before any listener is attached.
+    if (_controller._selectedIndex == null && count > 0) {
+      _controller._selectedIndex = 0;
+    } else {
+      // An externally-supplied selectedIndex may be out of range for
+      // itemCount; clamp it through the setter (no-op when in range).
+      _controller.selectedIndex = _controller._selectedIndex;
+    }
+    _controller.addListener(_onControllerChange);
+    _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'ListView');
+    _ownsFocusNode = widget.focusNode == null;
+  }
+
+  @override
+  void didUpdateWidget(ListView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.controller != oldWidget.controller) {
+      _controller.removeListener(_onControllerChange);
+      if (_ownsController) _controller.dispose();
+      _controller =
+          widget.controller ??
+          ListController(
+            selectedIndex: widget.effectiveItemCount > 0 ? 0 : null,
+          );
+      _ownsController = widget.controller == null;
+      _controller.addListener(_onControllerChange);
+    }
+    if (widget.focusNode != oldWidget.focusNode) {
+      if (_ownsFocusNode) _focusNode.dispose();
+      _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'ListView');
+      _ownsFocusNode = widget.focusNode == null;
+    }
+    final newCount = widget.effectiveItemCount;
+    final oldCount = oldWidget.effectiveItemCount;
+    if (newCount != oldCount) {
+      _controller._itemCount = newCount;
+      if (_controller.pinToBottom && newCount > oldCount && newCount > 0) {
+        // New items appended; advance the selection to the new last
+        // item so the viewport scrolls forward.
+        _controller.selectedIndex = newCount - 1;
+      } else {
+        // Re-clamp through the setter so listeners see any selection
+        // change caused by the new bound.
+        _controller.selectedIndex = _controller.selectedIndex;
+      }
+    }
+  }
+
+  void _onControllerChange() {
+    setState(() {});
+  }
+
+  KeyEventResult _handleKey(KeyEvent event) {
+    final code = event.keyCode;
+    if (code == null) return KeyEventResult.ignored;
+    final count = widget.effectiveItemCount;
+    if (count == 0) return KeyEventResult.ignored;
+
+    final selected = _controller.selectedIndex;
+    // Scroll-only mode is supported via the controller's jumpToIndex,
+    // but arrow chords only operate when a selection cursor is present.
+    if (selected == null) return KeyEventResult.ignored;
+
+    switch (code) {
+      case KeyCode.arrowUp:
+        if (selected <= 0) return _edgeResult();
+        _controller.selectedIndex = selected - 1;
+        return KeyEventResult.handled;
+      case KeyCode.arrowDown:
+        if (selected >= count - 1) return _edgeResult();
+        _controller.selectedIndex = selected + 1;
+        return KeyEventResult.handled;
+      case KeyCode.pageUp:
+        if (selected <= 0) return _edgeResult();
+        _controller.selectedIndex = (selected - _pageSize()).clamp(
+          0,
+          count - 1,
+        );
+        return KeyEventResult.handled;
+      case KeyCode.pageDown:
+        if (selected >= count - 1) return _edgeResult();
+        _controller.selectedIndex = (selected + _pageSize()).clamp(
+          0,
+          count - 1,
+        );
+        return KeyEventResult.handled;
+      case KeyCode.home:
+        _controller.selectedIndex = 0;
+        return KeyEventResult.handled;
+      case KeyCode.end:
+        _controller.selectedIndex = count - 1;
+        return KeyEventResult.handled;
+      case KeyCode.enter:
+        widget.onSelect?.call(selected);
+        return KeyEventResult.handled;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
+
+  /// Number of items currently visible in the viewport, used as the
+  /// step size for PageUp / PageDown. Falls back to 1 before the
+  /// first layout when `visibleRange` is still null.
+  int _pageSize() {
+    final visible = _controller.visibleRange;
+    if (visible == null) return 1;
+    final size = visible.last - visible.first + 1;
+    return size < 1 ? 1 : size;
+  }
+
+  KeyEventResult _edgeResult() {
+    return widget.edgeBehavior == EdgeBehavior.bubble
+        ? KeyEventResult.ignored
+        : KeyEventResult.handled;
+  }
+
+  /// Scroll-wheel handler — works whether or not the list is focused, so
+  /// hovering an unfocused list and scrolling it just works. Moves the
+  /// selection when there is one (the viewport follows it), otherwise
+  /// jumps the scroll-only viewport.
+  void _scrollBy(int delta) {
+    final count = widget.effectiveItemCount;
+    if (count == 0) return;
+    final sel = _controller.selectedIndex;
+    if (sel != null) {
+      _controller.selectedIndex = (sel + delta).clamp(0, count - 1);
+    } else {
+      final first = _controller.visibleRange?.first ?? 0;
+      _controller.jumpToIndex((first + delta).clamp(0, count - 1));
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onControllerChange);
+    if (_ownsController) _controller.dispose();
+    if (_ownsFocusNode) _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = _controller.selectedIndex;
+    final Widget body;
+    if (widget.children != null) {
+      // Eager: build all children upfront, render object picks the
+      // visible window.
+      body = _ListViewBody(controller: _controller, children: widget.children!);
+    } else {
+      // Lazy: builder + count. Item subtrees are mounted on demand by
+      // the render object during layout.
+      body = _LazyListBody(
+        controller: _controller,
+        itemCount: widget.itemCount!,
+        itemBuilder: widget.itemBuilder!,
+        selectedIndex: selected,
+      );
+    }
+    return PointerScrollListener(
+      router: PointerRouterScope.maybeOf(context),
+      onScrollUp: () => _scrollBy(-1),
+      onScrollDown: () => _scrollBy(1),
+      child: Focus(
+        focusNode: _focusNode,
+        autofocus: widget.autofocus,
+        onKey: _handleKey,
+        child: body,
+      ),
+    );
+  }
+}
+
+class _ListViewBody extends MultiChildRenderObjectWidget {
+  const _ListViewBody({required this.controller, required super.children});
+
+  final ListController controller;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderListView(controller: controller);
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _RenderListView renderObject,
+  ) {
+    renderObject.controller = controller;
+  }
+}
+
+/// Lays out a vertical stack of children with a movable scroll anchor.
+///
+/// Strategy:
+///   1. Resolve the pending jump command (if any) into the scroll
+///      anchor — the index of the first item that should be visible
+///      at the top of the viewport.
+///   2. If a selection exists and lies above the anchor, drop the
+///      anchor to the selection (scroll up to reveal it).
+///   3. Lay out items starting at the anchor, accumulating rows
+///      until the viewport is full.
+///   4. If the selection lies below the last item that fit, advance
+///      the anchor so the selection becomes the last visible item,
+///      then re-lay out.
+///   5. Write `itemCount` and `visibleRange` back to the controller
+///      without notifying — these are read-only mirrors of layout
+///      state, not user-mutable fields, and notifying during layout
+///      would loop.
+class _RenderListView extends RenderObject implements RenderObjectWithChildren {
+  _RenderListView({required ListController controller})
+    : _controller = controller;
+
+  ListController _controller;
+  ListController get controller => _controller;
+  set controller(ListController value) {
+    if (identical(_controller, value)) return;
+    _controller = value;
+  }
+
+  final List<RenderObject> _children = <RenderObject>[];
+  final Map<RenderObject, CellOffset> _childOffsets =
+      <RenderObject, CellOffset>{};
+  final Set<RenderObject> _visibleChildren = Set<RenderObject>.identity();
+
+  /// Index of the first item that should appear at the top of the
+  /// viewport. Persists across layouts so scroll position is stable
+  /// when only selection / item count changes.
+  int _scrollAnchor = 0;
+
+  @override
+  List<RenderObject> get children => List.unmodifiable(_children);
+
+  @override
+  void replaceAllChildren(List<RenderObject> newChildren) {
+    final newSet = Set<RenderObject>.identity()..addAll(newChildren);
+    for (final c in List<RenderObject>.from(_children)) {
+      if (!newSet.contains(c)) {
+        dropChild(c);
+        _childOffsets.remove(c);
+        _visibleChildren.remove(c);
+      }
+    }
+    final oldSet = Set<RenderObject>.identity()..addAll(_children);
+    for (final c in newChildren) {
+      if (!oldSet.contains(c)) {
+        adoptChild(c);
+      }
+    }
+    _children
+      ..clear()
+      ..addAll(newChildren);
+  }
+
+  @override
+  CellSize performLayout(CellConstraints constraints) {
+    final maxRows = constraints.maxRows;
+    final maxCols = constraints.maxCols;
+    final count = _children.length;
+
+    if (count == 0 || maxRows == null || maxRows == 0) {
+      _visibleChildren.clear();
+      _controller._visibleRange = null;
+      // itemCount mirror — the widget already pushed it pre-build,
+      // but covering the empty-children case here keeps the field
+      // consistent regardless of how the renderer was reached.
+      _controller._itemCount = count;
+      return constraints.constrain(CellSize(maxCols ?? 0, maxRows ?? 0));
+    }
+
+    // (1) Apply pending jump. When the user has explicitly asked to
+    // jump, that intent wins over selection-follow — leaving the
+    // selection off-screen until the user moves it is preferable to
+    // silently undoing their scroll.
+    final pending = _controller._pendingJumpIndex;
+    final hadPendingJump = pending != null;
+    if (hadPendingJump) {
+      _scrollAnchor = pending.clamp(0, count - 1);
+      _controller._pendingJumpIndex = null;
+    }
+    _scrollAnchor = _scrollAnchor.clamp(0, count - 1);
+
+    final selected = _controller._selectedIndex;
+
+    // (2) Selection above the anchor — pull the anchor up.
+    if (!hadPendingJump && selected != null && selected < _scrollAnchor) {
+      _scrollAnchor = selected;
+    }
+
+    final childCC = CellConstraints(maxCols: maxCols);
+    final (firstVisible, lastVisible) = _layoutFromAnchor(
+      _scrollAnchor,
+      maxRows,
+      childCC,
+    );
+
+    // (4) Selection below the last visible — recompute anchor so
+    // selection is the bottom-most visible item, then re-layout.
+    if (!hadPendingJump && selected != null && selected > lastVisible) {
+      final newAnchor = _anchorThatEndsAt(selected, maxRows, childCC);
+      if (newAnchor != _scrollAnchor) {
+        _scrollAnchor = newAnchor;
+        final (f, l) = _layoutFromAnchor(_scrollAnchor, maxRows, childCC);
+        _controller._visibleRange = (first: f, last: l);
+      } else {
+        _controller._visibleRange = (first: firstVisible, last: lastVisible);
+      }
+    } else {
+      _controller._visibleRange = (first: firstVisible, last: lastVisible);
+    }
+    _controller._itemCount = count;
+
+    return constraints.constrain(CellSize(maxCols ?? 0, maxRows));
+  }
+
+  /// Lays out children starting at [anchor], placing each below the
+  /// previous one until [maxRows] is reached. Updates [_childOffsets]
+  /// and [_visibleChildren]. Returns the (first, last) visible index.
+  (int, int) _layoutFromAnchor(
+    int anchor,
+    int maxRows,
+    CellConstraints childCC,
+  ) {
+    _visibleChildren.clear();
+    var row = 0;
+    var last = anchor - 1;
+    for (var i = anchor; i < _children.length; i++) {
+      if (row >= maxRows) break;
+      final child = _children[i];
+      final remaining = maxRows - row;
+      final cc = CellConstraints(maxCols: childCC.maxCols, maxRows: remaining);
+      final size = child.layout(cc);
+      _childOffsets[child] = CellOffset(0, row);
+      _visibleChildren.add(child);
+      row += size.rows;
+      last = i;
+    }
+    return (anchor, last);
+  }
+
+  /// Computes the smallest anchor `a` such that laying out items
+  /// from `a` forward keeps [target] within the viewport. Walks
+  /// backwards from [target], laying each child out at the width the
+  /// child would actually receive, summing heights until adding one
+  /// more would exceed [maxRows]. The first child whose height
+  /// doesn't fit is the boundary; the next one is the anchor.
+  int _anchorThatEndsAt(int target, int maxRows, CellConstraints childCC) {
+    var rows = 0;
+    var anchor = target;
+    for (var i = target; i >= 0; i--) {
+      final child = _children[i];
+      final cc = CellConstraints(maxCols: childCC.maxCols);
+      final size = child.layout(cc);
+      if (rows + size.rows > maxRows) break;
+      rows += size.rows;
+      anchor = i;
+    }
+    return anchor;
+  }
+
+  @override
+  void paint(
+    CellBuffer buffer,
+    CellOffset offset, {
+    CellOffset? screenOffset,
+    CellRect? clipRect,
+  }) {
+    for (final c in _children) {
+      if (!_visibleChildren.contains(c)) continue;
+      final co = _childOffsets[c] ?? CellOffset.zero;
+      c.paint(
+        buffer,
+        offset + co,
+        screenOffset: (screenOffset ?? offset) + co,
+        clipRect: clipRect,
+      );
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Lazy ListView.builder
+// ---------------------------------------------------------------------------
+//
+// Implementation strategy (mirrors Flutter's SliverList):
+//
+//   - The widget tree only contains `_LazyListBody`; child item
+//     subtrees are NOT in the tree at build time. They're created
+//     by the render object during layout, on demand, and unmounted
+//     when they scroll out of view.
+//   - `_LazyListElement` holds a sparse Map<int, Element> of the
+//     currently-mounted item subtrees. It exposes `createChild(i)`
+//     and `disposeChild(i)` for the render object to call.
+//   - `_RenderLazyListView` walks items forward from `_scrollAnchor`
+//     during layout, asking the element to mount each one, laying
+//     them out, accumulating rows until the viewport is full. Items
+//     that were mounted but are no longer in the visible range get
+//     unmounted at the end of layout.
+//   - Build-during-layout means item heights aren't needed upfront;
+//     the lazy mode handles variable-height items (chat messages,
+//     wrapped text) without the caller specifying an `itemExtent`.
+
+class _LazyListBody extends RenderObjectWidget {
+  const _LazyListBody({
+    required this.controller,
+    required this.itemCount,
+    required this.itemBuilder,
+    required this.selectedIndex,
+  });
+
+  final ListController controller;
+  final int itemCount;
+  final Widget Function(BuildContext, int, bool) itemBuilder;
+  final int? selectedIndex;
+
+  @override
+  _LazyListElement createElement() => _LazyListElement(this);
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderLazyListView(controller: controller);
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _RenderLazyListView renderObject,
+  ) {
+    renderObject.controller = controller;
+  }
+}
+
+/// Element for a `_LazyListBody`. Manages the sparse set of mounted
+/// item subtrees and the bidirectional bridge with
+/// `_RenderLazyListView` (which calls `createChild` / `disposeChild`
+/// during layout).
+class _LazyListElement extends RenderObjectElement {
+  _LazyListElement(_LazyListBody super.widget);
+
+  /// Currently-mounted items keyed by their data index. Sparse: only
+  /// indices visible during the most recent layout are in this map.
+  final Map<int, Element> _mountedChildren = <int, Element>{};
+
+  @override
+  _LazyListBody get widget => super.widget as _LazyListBody;
+
+  @override
+  _RenderLazyListView get renderObject =>
+      super.renderObject as _RenderLazyListView;
+
+  @override
+  void mount(Element? parent) {
+    super.mount(parent);
+    renderObject._element = this;
+  }
+
+  @override
+  void unmount() {
+    // Unmount every active child first; this triggers their render
+    // objects to detach via `removeChildRenderObject`.
+    for (final el in _mountedChildren.values.toList()) {
+      el.unmount();
+    }
+    _mountedChildren.clear();
+    renderObject._element = null;
+    super.unmount();
+  }
+
+  @override
+  void performRebuild() {
+    // Re-update each currently-mounted child with a freshly-built
+    // widget from the (possibly new) itemBuilder. This is what
+    // propagates a selectedIndex change to existing items so their
+    // `selected` flag can re-render the highlight without us
+    // having to unmount/remount.
+    final maxValid = widget.itemCount;
+    final toRemove = <int>[];
+
+    // First pass: drop any mounted child whose index is no longer
+    // valid (itemCount shrank).
+    for (final i in _mountedChildren.keys) {
+      if (i >= maxValid) toRemove.add(i);
+    }
+    for (final i in toRemove) {
+      _mountedChildren.remove(i)?.unmount();
+    }
+
+    // Second pass: re-build & reconcile remaining children.
+    for (final entry in _mountedChildren.entries.toList()) {
+      final i = entry.key;
+      final oldEl = entry.value;
+      final newWidget = widget.itemBuilder(this, i, i == widget.selectedIndex);
+      if (identical(oldEl.widget, newWidget)) continue;
+      if (Widget.canUpdate(oldEl.widget, newWidget)) {
+        oldEl.update(newWidget);
+      } else {
+        oldEl.unmount();
+        final fresh = newWidget.createElement();
+        fresh.mount(this);
+        _mountedChildren[i] = fresh;
+      }
+    }
+  }
+
+  /// Mounts the item at [index] if not already mounted; returns its
+  /// root render object. Called by the render object during layout.
+  RenderObject? createChild(int index) {
+    final existing = _mountedChildren[index];
+    if (existing != null) {
+      return _findRootRenderObject(existing);
+    }
+    final newWidget = widget.itemBuilder(
+      this,
+      index,
+      index == widget.selectedIndex,
+    );
+    final element = newWidget.createElement();
+    element.mount(this);
+    _mountedChildren[index] = element;
+    return _findRootRenderObject(element);
+  }
+
+  /// Unmounts the item at [index]. Called by the render object during
+  /// layout when an item scrolls out of the visible range.
+  void disposeChild(int index) {
+    final el = _mountedChildren.remove(index);
+    el?.unmount();
+  }
+
+  static RenderObject? _findRootRenderObject(Element element) {
+    if (element is RenderObjectElement) return element.renderObject;
+    RenderObject? found;
+    element.visitChildren((child) {
+      found ??= _findRootRenderObject(child);
+    });
+    return found;
+  }
+
+  @override
+  void visitChildren(void Function(Element child) visitor) {
+    for (final el in _mountedChildren.values) {
+      visitor(el);
+    }
+  }
+
+  @override
+  void insertChildRenderObject(
+    RenderObject child,
+    RenderObjectElement element,
+  ) {
+    renderObject._adopt(child);
+  }
+
+  @override
+  void removeChildRenderObject(RenderObject child) {
+    renderObject._drop(child);
+  }
+}
+
+/// Render object for a lazy [ListView.builder]. Holds a sparse map
+/// of currently-laid-out children keyed by data index, plus the
+/// scroll anchor (top-of-viewport data index) that persists across
+/// layouts.
+///
+/// Layout strategy:
+///
+///   1. Apply pending jump command from the controller (if any) by
+///      moving the scroll anchor.
+///   2. If a selection is active and lies above the anchor, drop the
+///      anchor to the selection (pull viewport up).
+///   3. Walk items forward from the anchor, asking the element to
+///      `createChild(i)` for each, laying them out, accumulating
+///      rows until the viewport is full.
+///   4. If a selection lies below the last visible item, compute a
+///      new anchor that brings the selection into view as the
+///      bottom-most item, and re-walk.
+///   5. Unmount any items that were active before this layout but
+///      are no longer in the new visible range.
+///   6. Write `itemCount` and `visibleRange` back to the controller
+///      without notifying.
+class _RenderLazyListView extends RenderObject
+    implements RenderObjectWithChildren {
+  _RenderLazyListView({required ListController controller})
+    : _controller = controller;
+
+  ListController _controller;
+  ListController get controller => _controller;
+  set controller(ListController value) {
+    if (identical(_controller, value)) return;
+    _controller = value;
+  }
+
+  _LazyListElement? _element;
+
+  /// Currently-laid-out children keyed by data index. Same indices
+  /// the element has mounted in `_mountedChildren`; we mirror them
+  /// here for paint and offset lookup.
+  final Map<int, RenderObject> _activeByIndex = <int, RenderObject>{};
+
+  /// Reverse mapping from render object to index, used when the
+  /// element-level `removeChildRenderObject` hook fires during
+  /// unmount and we need to clean up our per-render-object state.
+  final Map<RenderObject, int> _indexByObject = <RenderObject, int>{};
+
+  /// Paint offsets for the children that fit in the current viewport.
+  final Map<RenderObject, CellOffset> _childOffsets =
+      <RenderObject, CellOffset>{};
+
+  /// All children we've adopted (whether currently in the layout
+  /// window or not). Tracks parent-child render-object relationships
+  /// so reparenting is well-defined.
+  final Set<RenderObject> _adopted = Set<RenderObject>.identity();
+
+  int _scrollAnchor = 0;
+
+  @override
+  List<RenderObject> get children => _activeByIndex.values.toList();
+
+  @override
+  void replaceAllChildren(List<RenderObject> newChildren) {
+    // Lazy mode doesn't reconcile a list — children are mounted /
+    // unmounted by the element on demand. This entry point is part
+    // of the RenderObjectWithChildren interface but isn't used.
+  }
+
+  /// Called by [_LazyListElement.insertChildRenderObject] when an
+  /// item's root render object is created (its element subtree just
+  /// finished mounting). Adopts it so the parent-child link is
+  /// well-formed before layout sees it.
+  void _adopt(RenderObject child) {
+    if (_adopted.add(child)) {
+      adoptChild(child);
+    }
+  }
+
+  /// Called by [_LazyListElement.removeChildRenderObject] when an
+  /// item's element subtree is unmounted (either because it scrolled
+  /// out of view or because the whole list is being torn down).
+  void _drop(RenderObject child) {
+    if (_adopted.remove(child)) {
+      dropChild(child);
+    }
+    final i = _indexByObject.remove(child);
+    if (i != null) _activeByIndex.remove(i);
+    _childOffsets.remove(child);
+  }
+
+  @override
+  CellSize performLayout(CellConstraints constraints) {
+    final maxRows = constraints.maxRows;
+    final maxCols = constraints.maxCols;
+    final element = _element;
+    final count = _controller._itemCount;
+
+    if (element == null || count == 0 || maxRows == null || maxRows == 0) {
+      // Unmount any leftovers from a previous non-empty layout.
+      _unmountAllVisible(element);
+      _controller._visibleRange = null;
+      return constraints.constrain(CellSize(maxCols ?? 0, maxRows ?? 0));
+    }
+
+    // (1) Apply pending jump.
+    final pending = _controller._pendingJumpIndex;
+    final hadPendingJump = pending != null;
+    if (hadPendingJump) {
+      _scrollAnchor = pending.clamp(0, count - 1);
+      _controller._pendingJumpIndex = null;
+    }
+    _scrollAnchor = _scrollAnchor.clamp(0, count - 1);
+
+    final selected = _controller._selectedIndex;
+
+    // (2) Selection above the anchor — pull the anchor up.
+    if (!hadPendingJump && selected != null && selected < _scrollAnchor) {
+      _scrollAnchor = selected;
+    }
+
+    final childCC = CellConstraints(maxCols: maxCols);
+    final priorlyMounted = _activeByIndex.keys.toSet();
+    final newlyVisible = <int>{};
+
+    var (firstVisible, lastVisible) = _layoutFromAnchor(
+      element,
+      _scrollAnchor,
+      maxRows,
+      childCC,
+      newlyVisible,
+    );
+
+    // (4) Selection below the last visible — recompute anchor so the
+    // selection becomes the bottom-most visible item, then re-walk.
+    if (!hadPendingJump && selected != null && selected > lastVisible) {
+      final newAnchor = _anchorThatEndsAt(element, selected, maxRows, childCC);
+      if (newAnchor != _scrollAnchor) {
+        _scrollAnchor = newAnchor;
+        newlyVisible.clear();
+        // We need to clear offsets / active map for the re-walk
+        // because the second walk replays from a different anchor.
+        _activeByIndex.clear();
+        _childOffsets.clear();
+        // Note: `_indexByObject` and `_adopted` stay populated; the
+        // unmount-leftovers pass at the end will sweep anything that
+        // didn't end up in `newlyVisible`.
+        final result = _layoutFromAnchor(
+          element,
+          _scrollAnchor,
+          maxRows,
+          childCC,
+          newlyVisible,
+        );
+        firstVisible = result.$1;
+        lastVisible = result.$2;
+      }
+    }
+
+    // (5) Unmount items mounted in the previous layout that are not
+    // visible in this one.
+    for (final i in priorlyMounted) {
+      if (!newlyVisible.contains(i)) {
+        element.disposeChild(i);
+      }
+    }
+
+    _controller._visibleRange = (first: firstVisible, last: lastVisible);
+    _controller._itemCount = count;
+
+    return constraints.constrain(CellSize(maxCols ?? 0, maxRows));
+  }
+
+  /// Walks items forward from [anchor], mounting each via
+  /// [element.createChild] and laying it out, accumulating rows
+  /// until [maxRows] is reached or `itemCount` runs out. Updates
+  /// `_activeByIndex`, `_indexByObject`, `_childOffsets`, and the
+  /// caller-provided [newlyVisible] set. Returns (first, last) data
+  /// indices currently in the viewport.
+  (int, int) _layoutFromAnchor(
+    _LazyListElement element,
+    int anchor,
+    int maxRows,
+    CellConstraints childCC,
+    Set<int> newlyVisible,
+  ) {
+    var row = 0;
+    var last = anchor - 1;
+    final count = _controller._itemCount;
+    for (var i = anchor; i < count; i++) {
+      if (row >= maxRows) break;
+      final remaining = maxRows - row;
+      final child = element.createChild(i);
+      if (child == null) break;
+      final size = child.layout(
+        CellConstraints(maxCols: childCC.maxCols, maxRows: remaining),
+      );
+      _activeByIndex[i] = child;
+      _indexByObject[child] = i;
+      _childOffsets[child] = CellOffset(0, row);
+      newlyVisible.add(i);
+      row += size.rows;
+      last = i;
+    }
+    return (anchor, last);
+  }
+
+  /// Computes the smallest anchor `a` such that laying out items
+  /// from `a` forward keeps [target] within the viewport. Walks
+  /// backwards from [target], mounting each item, summing heights.
+  /// Items mounted by this probe but not retained in the final
+  /// window will be cleaned up by the caller's unmount-leftovers
+  /// sweep at the end of layout.
+  int _anchorThatEndsAt(
+    _LazyListElement element,
+    int target,
+    int maxRows,
+    CellConstraints childCC,
+  ) {
+    var rows = 0;
+    var anchor = target;
+    for (var i = target; i >= 0; i--) {
+      final child = element.createChild(i);
+      if (child == null) break;
+      final size = child.layout(CellConstraints(maxCols: childCC.maxCols));
+      if (rows + size.rows > maxRows) break;
+      rows += size.rows;
+      anchor = i;
+    }
+    return anchor;
+  }
+
+  void _unmountAllVisible(_LazyListElement? element) {
+    if (element == null) {
+      _activeByIndex.clear();
+      _childOffsets.clear();
+      return;
+    }
+    for (final i in _activeByIndex.keys.toList()) {
+      element.disposeChild(i);
+    }
+    _activeByIndex.clear();
+    _childOffsets.clear();
+  }
+
+  @override
+  void paint(
+    CellBuffer buffer,
+    CellOffset offset, {
+    CellOffset? screenOffset,
+    CellRect? clipRect,
+  }) {
+    for (final child in _activeByIndex.values) {
+      final co = _childOffsets[child] ?? CellOffset.zero;
+      child.paint(
+        buffer,
+        offset + co,
+        screenOffset: (screenOffset ?? offset) + co,
+        clipRect: clipRect,
+      );
+    }
+  }
+}

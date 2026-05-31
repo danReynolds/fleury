@@ -1,0 +1,104 @@
+import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_test.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
+import 'package:test/test.dart';
+
+void main() {
+  group('Stepper', () {
+    testWidgets('renders the value between − and + chrome', (tester) {
+      tester.pumpWidget(Stepper(value: 42, onChanged: (_) {}));
+      final out = tester
+          .renderToString(size: const CellSize(20, 1), emptyMark: ' ')
+          .trimRight();
+      expect(out.contains('[ − 42 + ]'), isTrue);
+    });
+
+    testWidgets('Arrow Up increments by step when focused', (tester) {
+      num received = -1;
+      tester.pumpWidget(
+        Stepper(
+          value: 10,
+          step: 3,
+          autofocus: true,
+          onChanged: (v) => received = v,
+        ),
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+      expect(received, 13);
+    });
+
+    testWidgets('Arrow Down decrements by step', (tester) {
+      num received = -1;
+      tester.pumpWidget(
+        Stepper(
+          value: 10,
+          step: 2,
+          autofocus: true,
+          onChanged: (v) => received = v,
+        ),
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      expect(received, 8);
+    });
+
+    testWidgets('PageUp/PageDown move by largeStep', (tester) {
+      final calls = <num>[];
+      tester.pumpWidget(
+        Stepper(
+          value: 50,
+          step: 1,
+          largeStep: 25,
+          autofocus: true,
+          onChanged: calls.add,
+        ),
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.pageUp));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.pageDown));
+      expect(calls, [75, 25]);
+    });
+
+    testWidgets('Home/End jump to min/max', (tester) {
+      final calls = <num>[];
+      tester.pumpWidget(
+        Stepper(
+          value: 50,
+          min: 0,
+          max: 100,
+          autofocus: true,
+          onChanged: calls.add,
+        ),
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.home));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
+      expect(calls, [0, 100]);
+    });
+
+    testWidgets('clamps to max — no callback when already at limit', (tester) {
+      var count = 0;
+      tester.pumpWidget(
+        Stepper(value: 10, max: 10, autofocus: true, onChanged: (_) => count++),
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+      expect(count, 0, reason: 'already at max, no change');
+    });
+
+    testWidgets('+ and − text input also nudge', (tester) {
+      // Controlled widget — without updating the prop, each press
+      // nudges from the original value, so '+' fires +1 and '-' fires
+      // -1 (both deltas relative to the original 5).
+      final calls = <num>[];
+      tester.pumpWidget(
+        Stepper(value: 5, autofocus: true, onChanged: calls.add),
+      );
+      tester.type('+');
+      tester.type('-');
+      expect(calls, [6, 4]);
+    });
+
+    testWidgets('shows a label when provided', (tester) {
+      tester.pumpWidget(Stepper(value: 7, label: 'qty', onChanged: (_) {}));
+      final out = tester.renderToString(size: const CellSize(16, 1));
+      expect(out.contains('qty'), isTrue);
+    });
+  });
+}

@@ -1,0 +1,254 @@
+/// Fleury — the platform-agnostic core.
+///
+/// Everything here is free of `dart:io`, so it compiles to the web (and any
+/// other Dart target). The native umbrella `fleury.dart` re-exports this
+/// plus the `dart:io`-backed pieces (the POSIX driver, `runTui`, stray-output
+/// capture). A browser host pairs this core with a web `TerminalDriver`.
+///
+/// See `docs/rfcs/0007-fleury-framework.md` for scope and gates.
+library;
+
+// Foundation
+export 'src/foundation/change_notifier.dart' show ChangeNotifier, Listenable;
+export 'src/foundation/fleury_error.dart' show FleuryError;
+export 'src/foundation/geometry.dart' show CellSize, CellOffset, CellRect;
+export 'src/foundation/key.dart' show Key, LocalKey, ValueKey, UniqueKey;
+
+// Animation
+export 'src/animation/animation_policy.dart' show AnimationPolicy;
+export 'src/animation/clock.dart' show Clock, FakeClock, SystemClock;
+export 'src/animation/curves.dart' show Curve, Curves;
+export 'src/animation/frame_ticker.dart' show FrameTicker;
+export 'src/animation/lerp.dart'
+    show DiscreteLerp, Lerp, doubleLerp, intLerp, rgbColorLerp;
+export 'src/animation/animation.dart'
+    show Animation, AnimationStep, AnimationType;
+export 'src/animation/spring.dart' show Spring;
+export 'src/animation/ticker.dart' show Ticker, TickerCallback, TickerProvider;
+export 'src/animation/ticker_future.dart' show TickerCanceled, TickerFuture;
+export 'src/animation/ticker_scheduler.dart'
+    show
+        FakeTickerScheduler,
+        FrameCallback,
+        SchedulerTickCallback,
+        TickerScheduler;
+
+// Rendering
+export 'src/rendering/ansi_renderer.dart'
+    show AnsiRenderer, AnsiSink, StringAnsiSink, quantizeColor;
+export 'src/rendering/border.dart' show BorderGlyphs, BorderStyle, BoxBorder;
+export 'src/rendering/cell.dart'
+    show
+        AnsiColor,
+        Cell,
+        CellRole,
+        CellStyle,
+        Color,
+        Colors,
+        IndexedColor,
+        RgbColor;
+export 'src/rendering/cell_buffer.dart' show CellBuffer;
+export 'src/rendering/edge_insets.dart' show EdgeInsets;
+export 'src/rendering/layout.dart' show CellConstraints;
+export 'src/rendering/render_flex.dart'
+    show
+        Axis,
+        CrossAxisAlignment,
+        FlexFit,
+        MainAxisAlignment,
+        MainAxisSize,
+        RenderFlex,
+        RenderFlexible;
+export 'src/rendering/render_object.dart'
+    show
+        ParentData,
+        RenderObject,
+        RenderObjectWithChildren,
+        RenderObjectWithSingleChild;
+export 'src/rendering/render_repaint_boundary.dart' show RenderRepaintBoundary;
+export 'src/rendering/render_objects.dart'
+    show
+        RenderBorder,
+        RenderPadding,
+        RenderSizedBox,
+        RenderText,
+        TextAlign,
+        TextOverflow;
+export 'src/rendering/render_stack.dart'
+    show RenderPositioned, RenderStack, RenderIndexedStack;
+export 'src/rendering/render_wrap.dart' show RenderWrap;
+export 'src/rendering/text_sanitizer.dart'
+    show isUnsafeRune, replacementCharacter, sanitizeForDisplay;
+export 'src/rendering/width_resolver.dart'
+    show DefaultWidthResolver, TerminalProfile, WidthResolver;
+
+// Runtime
+export 'src/runtime/hot_reload.dart' show HotReloadController;
+export 'src/runtime/input_dispatcher.dart' show InputDispatcher;
+
+// Terminal
+export 'src/terminal/capabilities.dart'
+    show ColorMode, ImageProtocol, TerminalCapabilities;
+export 'src/terminal/events.dart'
+    show
+        KeyCode,
+        KeyEvent,
+        KeyEventType,
+        KeyModifier,
+        MouseButton,
+        MouseEvent,
+        MouseEventKind,
+        PasteEvent,
+        ResizeEvent,
+        TextInputEvent,
+        TuiEvent;
+export 'src/terminal/fake_driver.dart' show FakeTerminalDriver;
+export 'src/terminal/input_parser.dart' show InputParser, TuiEventSink;
+export 'src/terminal/terminal_driver.dart' show TerminalDriver, TerminalMode;
+
+// Widgets
+export 'src/widgets/focus.dart'
+    show
+        ExcludeFocus,
+        Focus,
+        FocusManager,
+        FocusManagerScope,
+        FocusNode,
+        FocusOnKeyCallback,
+        FocusScope,
+        FocusScopeRef,
+        FocusWithin,
+        KeyBindingSource,
+        KeyEventResult,
+        TextInputClaimant;
+export 'src/widgets/focus_traversal.dart'
+    show FocusTraversalGroup, TraversalDirection, nearestFocusableInDirection;
+export 'src/widgets/inherited_notifier.dart' show InheritedNotifier;
+export 'src/widgets/intrinsic.dart' show IntrinsicHeight, IntrinsicWidth;
+export 'src/widgets/key_bindings.dart'
+    show
+        KeyBinding,
+        KeyBindingEvent,
+        KeyBindingHandler,
+        KeyBindings,
+        KeyChord,
+        KeyChordChain,
+        $KeyChordInternal,
+        PendingKeyChord,
+        PendingKeyChordChain;
+export 'src/widgets/key_hint_bar.dart' show KeyHintBar;
+export 'src/widgets/list_view.dart' show EdgeBehavior, ListController, ListView;
+export 'src/widgets/navigator.dart'
+    show Navigator, NavigatorContext, NavigatorState, PopScope, RouteTransition;
+export 'src/widgets/layout_builder.dart'
+    show LayoutBuilder, LayoutWidgetBuilder, RenderLayoutBuilder;
+export 'src/widgets/media_query.dart' show MediaQuery, MediaQueryData;
+export 'src/widgets/overlay.dart' show Overlay, OverlayEntry, OverlayState;
+export 'src/widgets/repaint_boundary.dart' show RepaintBoundary;
+export 'src/widgets/rich_text.dart' show RenderRichText, RichText, TextSpan;
+export 'src/widgets/pointer.dart'
+    show
+        GestureDetector,
+        MouseRegion,
+        PointerRouter,
+        PointerRouterScope,
+        PointerScrollListener,
+        PointerTapCallback,
+        PointerPositionCallback;
+export 'src/widgets/scroll_view.dart' show ScrollController, ScrollView;
+export 'src/widgets/scrollbar.dart'
+    show RenderScrollbar, Scrollbar, ScrollbarGeometry, ScrollbarMetrics;
+export 'src/widgets/listenable_builder.dart' show ListenableBuilder;
+export 'src/widgets/blinking_cursor.dart' show BlinkingCursor;
+export 'src/widgets/frame_builder.dart' show FrameBuilder;
+export 'src/widgets/animation_builder.dart' show AnimationBuilder;
+export 'src/widgets/effects.dart'
+    show Animate, AnimateExtension, Edge, Effect, Effects;
+export 'src/widgets/presence.dart' show Reveal;
+export 'src/widgets/selection/selectable.dart'
+    show Selectable, SelectionRegistrant, SelectionRegistrar, SelectionScope;
+export 'src/widgets/selection/selection.dart'
+    show Selection, SelectedContent, SelectionGeometry, SelectionStatus;
+export 'src/runtime/clipboard.dart'
+    show Clipboard, ClipboardWriteResult, SystemClipboard, TestClipboard;
+export 'src/widgets/selection/selection_area.dart'
+    show SelectionArea, SelectionChangedCallback;
+export 'src/widgets/selection/selection_container_delegate.dart'
+    show SelectionContainerDelegate;
+export 'src/widgets/selection/selection_event.dart'
+    show
+        SelectionClearEvent,
+        SelectionEdgeUpdateEvent,
+        SelectionEvent,
+        SelectionGranularEvent,
+        SelectionGranularity,
+        SelectionResult;
+export 'src/widgets/spinner.dart' show Spinner, SpinnerStyle;
+export 'src/widgets/text_area.dart' show RenderTextArea, TextArea;
+export 'src/widgets/text_input.dart'
+    show RenderTextInput, TextEditingController, TextInput;
+export 'src/widgets/ticker_mode.dart' show TickerMode;
+export 'src/widgets/theme.dart'
+    show
+        Brightness,
+        ColorScheme,
+        DefaultTextStyle,
+        FleuryThemeContext,
+        Theme,
+        ThemeData;
+export 'src/widgets/tui_binding.dart'
+    show SingleTickerProviderStateMixin, TuiBinding, TuiBindingScope;
+export 'src/widgets/align.dart' show Align, Alignment, Center, RenderAlign;
+export 'src/widgets/anchor.dart'
+    show Anchor, AnchorLink, Follower, FollowerPlacement;
+export 'src/widgets/async.dart'
+    show
+        AsyncSnapshot,
+        AsyncWidgetBuilder,
+        ConnectionState,
+        FutureBuilder,
+        StreamBuilder;
+export 'src/widgets/basic.dart'
+    show
+        AspectRatio,
+        Column,
+        Container,
+        ConstrainedBox,
+        EmptyBox,
+        ErrorWidget,
+        Expanded,
+        Flex,
+        Flexible,
+        IndexedStack,
+        Padding,
+        Positioned,
+        Row,
+        SizedBox,
+        Stack,
+        Text,
+        Wrap;
+export 'src/widgets/framework.dart'
+    show
+        BuildContext,
+        BuildOwner,
+        ComponentElement,
+        Element,
+        GlobalKey,
+        InheritedElement,
+        InheritedWidget,
+        LeafRenderObjectElement,
+        LeafRenderObjectWidget,
+        MultiChildRenderObjectElement,
+        MultiChildRenderObjectWidget,
+        ProxyWidget,
+        RenderObjectElement,
+        RenderObjectWidget,
+        SingleChildRenderObjectElement,
+        SingleChildRenderObjectWidget,
+        State,
+        StatefulElement,
+        StatefulWidget,
+        StatelessElement,
+        StatelessWidget,
+        VoidCallback,
+        Widget;

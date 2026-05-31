@@ -1,0 +1,223 @@
+// Meta-tests: exercise FleuryTester / finders / goldens themselves.
+
+import 'dart:io';
+
+import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_test.dart';
+import 'package:test/test.dart';
+
+void main() {
+  group('FleuryTester lifecycle', () {
+    test('constructs with isolated framework pieces', () {
+      final t = FleuryTester();
+      try {
+        expect(t.binding, isNotNull);
+        expect(t.scheduler, isA<FakeTickerScheduler>());
+        expect(t.focusManager, isNotNull);
+        expect(t.dispatcher, isNotNull);
+        expect(t.owner, isNotNull);
+        expect(t.root, isNull);
+      } finally {
+        t.dispose();
+      }
+    });
+
+    testWidgets('throws when find is called before pumpWidget', (tester) {
+      expect(() => tester.find(byType(Text)), throwsStateError);
+    });
+
+    testWidgets('throws after dispose', (tester) {
+      tester.dispose();
+      expect(() => tester.pump(), throwsStateError);
+    });
+  });
+
+  group('pumpWidget / pump', () {
+    testWidgets('mounts the user widget under the binding scope', (tester) {
+      tester.pumpWidget(const Text('hello'));
+      expect(tester.find(byType(Text)), hasLength(1));
+    });
+
+    testWidgets('subsequent pumpWidget replaces the tree', (tester) {
+      tester.pumpWidget(const Text('one'));
+      expect(tester.find(text('one')), hasLength(1));
+      expect(tester.find(text('two')), isEmpty);
+
+      tester.pumpWidget(const Text('two'));
+      expect(tester.find(text('two')), hasLength(1));
+      expect(tester.find(text('one')), isEmpty);
+    });
+
+    testWidgets('pump(duration) advances the scheduler', (tester) {
+      tester.pumpWidget(const Text('x'));
+      final t0 = tester.clock.now;
+      tester.pump(const Duration(milliseconds: 100));
+      expect(tester.clock.now - t0, const Duration(milliseconds: 100));
+    });
+
+    testWidgets('pumpAndSettle returns once tickers idle', (tester) {
+      // No active tickers in this tree: should return immediately.
+      tester.pumpWidget(const Text('x'));
+      tester.pumpAndSettle();
+      expect(tester.scheduler.activeTickerCount, 0);
+    });
+  });
+
+  group('Finders', () {
+    testWidgets('byType matches every widget of that type', (tester) {
+      tester.pumpWidget(
+        const Column(children: [Text('a'), Text('b'), Text('c')]),
+      );
+      expect(tester.find(byType(Text)), hasLength(3));
+      expect(tester.find(byType(Column)), hasLength(1));
+    });
+
+    testWidgets('byKey matches the keyed widget', (tester) {
+      const key = ValueKey('target');
+      tester.pumpWidget(
+        const Column(
+          children: [
+            Text('skip'),
+            Text('hit', key: key),
+            Text('skip-also'),
+          ],
+        ),
+      );
+      final hit = tester.findOne(byKey(key));
+      expect(hit.widget, isA<Text>());
+      expect((hit.widget as Text).data, 'hit');
+    });
+
+    testWidgets('text matches Text.data exactly', (tester) {
+      tester.pumpWidget(const Column(children: [Text('save'), Text('cancel')]));
+      expect(tester.find(text('save')), hasLength(1));
+      expect(
+        tester.find(text('Save')),
+        isEmpty,
+        reason: 'matcher is case-sensitive',
+      );
+    });
+
+    testWidgets('byPredicate uses the closure', (tester) {
+      tester.pumpWidget(
+        const Column(children: [Text('alpha'), Text('beta'), Text('gamma')]),
+      );
+      final found = tester.find(
+        byPredicate(
+          (w) => w is Text && w.data.startsWith('b'),
+          description: 'Text starting with b',
+        ),
+      );
+      expect(found, hasLength(1));
+      expect((found.single.widget as Text).data, 'beta');
+    });
+
+    testWidgets('descendantOf scopes the inner finder', (tester) {
+      const inner = ValueKey('inner');
+      const outer = ValueKey('outer');
+      tester.pumpWidget(
+        const Column(
+          children: [
+            Column(key: inner, children: [Text('inside')]),
+            Column(key: outer, children: [Text('outside')]),
+          ],
+        ),
+      );
+      final hits = tester.find(
+        descendantOf(of: byKey(inner), matching: byType(Text)),
+      );
+      expect(hits, hasLength(1));
+      expect((hits.single.widget as Text).data, 'inside');
+    });
+
+    testWidgets('findOne fails with a tree dump on zero matches', (tester) {
+      tester.pumpWidget(const Text('only-one'));
+      try {
+        tester.findOne(text('nope'));
+        fail('findOne should have thrown');
+      } on TestFailure catch (e) {
+        expect(e.message, contains("text('nope')"));
+        expect(e.message, contains('Current tree:'));
+      }
+    });
+
+    testWidgets('findOne fails on multiple matches', (tester) {
+      tester.pumpWidget(const Column(children: [Text('x'), Text('x')]));
+      expect(() => tester.findOne(text('x')), throwsA(isA<TestFailure>()));
+    });
+  });
+
+  group('Rendering', () {
+    testWidgets('render produces a sized cell buffer', (tester) {
+      tester.pumpWidget(const Text('hi'));
+      final buf = tester.render(size: const CellSize(5, 1));
+      expect(buf.size.cols, 5);
+      expect(buf.size.rows, 1);
+      expect(buf.atColRow(0, 0).grapheme, 'h');
+      expect(buf.atColRow(1, 0).grapheme, 'i');
+    });
+
+    testWidgets('renderToString uses · for empty cells and rstrips '
+        'trailing emptys', (tester) {
+      tester.pumpWidget(const Text('hi'));
+      final s = tester.renderToString(size: const CellSize(5, 1));
+      expect(s, 'hi\n');
+    });
+  });
+
+  group('Input', () {
+    testWidgets('type dispatches a TextInputEvent and flushes builds', (
+      tester,
+    ) {
+      final controller = TextEditingController();
+      tester.pumpWidget(TextInput(controller: controller, autofocus: true));
+      tester.type('ab');
+      expect(controller.text, 'ab');
+    });
+
+    testWidgets('sendKey dispatches a KeyEvent', (tester) {
+      final controller = TextEditingController(text: 'ab');
+      tester.pumpWidget(TextInput(controller: controller, autofocus: true));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.backspace));
+      expect(controller.text, 'a');
+    });
+  });
+
+  group('Goldens', () {
+    test(
+      'writes the file on first run (and matches itself thereafter)',
+      () async {
+        final tempDir = Directory.systemTemp.createTempSync('fleury_goldens_');
+        addTearDown(() => tempDir.deleteSync(recursive: true));
+
+        // First run: file does not exist. Matcher should write + pass.
+        const value = 'hello world\n';
+        expect(value, matchesGolden('a.txt', directory: tempDir.path));
+        final file = File('${tempDir.path}/a.txt');
+        expect(file.existsSync(), isTrue);
+        expect(file.readAsStringSync(), value);
+
+        // Second run with identical content: should still pass.
+        expect(value, matchesGolden('a.txt', directory: tempDir.path));
+      },
+    );
+
+    test('fails with a diff when content drifts', () {
+      final tempDir = Directory.systemTemp.createTempSync('fleury_goldens_');
+      addTearDown(() => tempDir.deleteSync(recursive: true));
+      File('${tempDir.path}/b.txt').writeAsStringSync('expected\n');
+
+      expect(
+        () =>
+            expect('actual\n', matchesGolden('b.txt', directory: tempDir.path)),
+        throwsA(
+          isA<TestFailure>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('expected'), contains('actual')),
+          ),
+        ),
+      );
+    });
+  });
+}

@@ -1,0 +1,195 @@
+import 'package:fleury/fleury.dart';
+import 'package:test/test.dart';
+
+/// A render object used to test layout decisions without depending on the
+/// Text widget. Reports a fixed `intrinsic` size when given unbounded
+/// constraints, otherwise constrains to the bounds.
+class _FixedSize extends RenderObject {
+  _FixedSize(this.intrinsic);
+  final CellSize intrinsic;
+
+  @override
+  CellSize performLayout(CellConstraints constraints) {
+    return constraints.constrain(intrinsic);
+  }
+
+  @override
+  void paint(
+    CellBuffer buffer,
+    CellOffset offset, {
+    CellOffset? screenOffset,
+    CellRect? clipRect,
+  }) {
+    // Tests inspect `size` / offsets, not painted output.
+  }
+}
+
+void main() {
+  group('RenderFlex — empty', () {
+    test('zero children: zero size', () {
+      final flex = RenderFlex(direction: Axis.horizontal);
+      final size = flex.layout(const CellConstraints(maxCols: 10, maxRows: 5));
+      expect(size, CellSize.zero);
+    });
+  });
+
+  group('RenderFlex — inflexible children only', () {
+    test('horizontal: main axis = sum of widths, cross = max of heights', () {
+      final flex = RenderFlex(direction: Axis.horizontal);
+      flex.replaceAllChildren([
+        _FixedSize(const CellSize(3, 1)),
+        _FixedSize(const CellSize(4, 2)),
+      ]);
+      final size = flex.layout(const CellConstraints(maxCols: 20, maxRows: 5));
+      // mainAxisSize.max + horizontal + maxCols 20 → main = 20.
+      expect(size.cols, 20);
+      expect(size.rows, 2);
+    });
+
+    test('MainAxisSize.min: shrinks to children\'s used main extent', () {
+      final flex = RenderFlex(
+        direction: Axis.horizontal,
+        mainAxisSize: MainAxisSize.min,
+      );
+      flex.replaceAllChildren([
+        _FixedSize(const CellSize(3, 1)),
+        _FixedSize(const CellSize(4, 1)),
+      ]);
+      final size = flex.layout(const CellConstraints(maxCols: 20, maxRows: 5));
+      expect(size.cols, 7);
+    });
+  });
+
+  group('RenderFlex — flex distribution', () {
+    test('two Expanded(1) split equal space', () {
+      final flex = RenderFlex(direction: Axis.horizontal);
+      final a = RenderFlexible(flex: 1, fit: FlexFit.tight)
+        ..child = _FixedSize(const CellSize(0, 1));
+      final b = RenderFlexible(flex: 1, fit: FlexFit.tight)
+        ..child = _FixedSize(const CellSize(0, 1));
+      flex.replaceAllChildren([a, b]);
+      flex.layout(const CellConstraints(maxCols: 10, maxRows: 5));
+      expect(a.size.cols, 5);
+      expect(b.size.cols, 5);
+    });
+
+    test('Expanded(1) + Expanded(4) split 1:4', () {
+      final flex = RenderFlex(direction: Axis.horizontal);
+      final a = RenderFlexible(flex: 1, fit: FlexFit.tight)
+        ..child = _FixedSize(const CellSize(0, 1));
+      final b = RenderFlexible(flex: 4, fit: FlexFit.tight)
+        ..child = _FixedSize(const CellSize(0, 1));
+      flex.replaceAllChildren([a, b]);
+      flex.layout(const CellConstraints(maxCols: 120, maxRows: 5));
+      // 120 / 5 = 24 / 96
+      expect(a.size.cols, 24);
+      expect(b.size.cols, 96);
+    });
+
+    test('odd remainder is given to leftmost flex children in order', () {
+      // 10 cells / 3 flex = floor 3 each, 1 leftover.
+      // The leftover goes to the first child.
+      final flex = RenderFlex(direction: Axis.horizontal);
+      final children = [
+        RenderFlexible(flex: 1, fit: FlexFit.tight)
+          ..child = _FixedSize(const CellSize(0, 1)),
+        RenderFlexible(flex: 1, fit: FlexFit.tight)
+          ..child = _FixedSize(const CellSize(0, 1)),
+        RenderFlexible(flex: 1, fit: FlexFit.tight)
+          ..child = _FixedSize(const CellSize(0, 1)),
+      ];
+      flex.replaceAllChildren(children);
+      flex.layout(const CellConstraints(maxCols: 10, maxRows: 5));
+      expect(children[0].size.cols, 4);
+      expect(children[1].size.cols, 3);
+      expect(children[2].size.cols, 3);
+    });
+
+    test('mixed inflexible + flexible: flexible gets remaining space', () {
+      // 20 total. Sidebar = 5 (inflexible). Expanded gets 15.
+      final flex = RenderFlex(direction: Axis.horizontal);
+      final sidebar = _FixedSize(const CellSize(5, 1));
+      final pane = RenderFlexible(flex: 1, fit: FlexFit.tight)
+        ..child = _FixedSize(const CellSize(0, 1));
+      flex.replaceAllChildren([sidebar, pane]);
+      flex.layout(const CellConstraints(maxCols: 20, maxRows: 5));
+      expect(sidebar.size.cols, 5);
+      expect(pane.size.cols, 15);
+    });
+
+    test('overconstrained inflexible children leave zero for flex', () {
+      // Two inflexible children totalling 25 in a 20-wide flex; flex
+      // child gets clamped to zero.
+      final flex = RenderFlex(direction: Axis.horizontal);
+      final a = _FixedSize(const CellSize(15, 1));
+      final b = _FixedSize(const CellSize(10, 1));
+      final c = RenderFlexible(flex: 1, fit: FlexFit.tight)
+        ..child = _FixedSize(const CellSize(0, 1));
+      flex.replaceAllChildren([a, b, c]);
+      flex.layout(const CellConstraints(maxCols: 20, maxRows: 5));
+      expect(c.size.cols, 0);
+    });
+  });
+
+  group('RenderFlex — cross-axis alignment', () {
+    test('stretch: children fill the cross axis', () {
+      final flex = RenderFlex(
+        direction: Axis.horizontal,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+      );
+      final a = _FixedSize(const CellSize(3, 1));
+      final b = _FixedSize(const CellSize(2, 1));
+      flex.replaceAllChildren([a, b]);
+      flex.layout(const CellConstraints(maxCols: 10, maxRows: 5));
+      // Both children should be 5 cells tall (the cross-axis max).
+      expect(a.size.rows, 5);
+      expect(b.size.rows, 5);
+    });
+
+    test('start (default): children keep their own cross extent', () {
+      final flex = RenderFlex(direction: Axis.horizontal);
+      final a = _FixedSize(const CellSize(3, 2));
+      final b = _FixedSize(const CellSize(2, 1));
+      flex.replaceAllChildren([a, b]);
+      flex.layout(const CellConstraints(maxCols: 10, maxRows: 5));
+      expect(a.size.rows, 2);
+      expect(b.size.rows, 1);
+    });
+  });
+
+  group('RenderFlex — vertical direction', () {
+    test('column splits height between two Expandeds', () {
+      final flex = RenderFlex(direction: Axis.vertical);
+      final a = RenderFlexible(flex: 1, fit: FlexFit.tight)
+        ..child = _FixedSize(const CellSize(1, 0));
+      final b = RenderFlexible(flex: 1, fit: FlexFit.tight)
+        ..child = _FixedSize(const CellSize(1, 0));
+      flex.replaceAllChildren([a, b]);
+      flex.layout(const CellConstraints(maxCols: 5, maxRows: 10));
+      expect(a.size.rows, 5);
+      expect(b.size.rows, 5);
+    });
+  });
+
+  group('RenderFlex — child replacement', () {
+    test('replaceAllChildren adopts new children and drops old ones', () {
+      final flex = RenderFlex(direction: Axis.horizontal);
+      final a = _FixedSize(const CellSize(1, 1));
+      final b = _FixedSize(const CellSize(1, 1));
+      final c = _FixedSize(const CellSize(1, 1));
+
+      flex.replaceAllChildren([a, b]);
+      expect(a.parent, same(flex));
+      expect(b.parent, same(flex));
+
+      flex.replaceAllChildren([b, c]);
+      expect(a.parent, isNull, reason: 'a was removed; should be detached.');
+      expect(
+        b.parent,
+        same(flex),
+        reason: 'b was kept; should still be attached.',
+      );
+      expect(c.parent, same(flex));
+    });
+  });
+}

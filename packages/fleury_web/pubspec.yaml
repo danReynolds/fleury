@@ -1,0 +1,17 @@
+name: fleury_web
+description: >-
+  Run fleury in a browser via xterm.js — the basis for live, interactive
+  documentation. Bridges the framework's TerminalDriver to a web terminal.
+version: 0.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  fleury:
+    path: ../fleury
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.26.3

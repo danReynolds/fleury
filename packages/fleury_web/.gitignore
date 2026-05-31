@@ -1,0 +1,6 @@
+.dart_tool/
+pubspec.lock
+# Compiled output (regenerate with `dart compile js`).
+web/main.dart.js
+web/main.dart.js.deps
+web/main.dart.js.map

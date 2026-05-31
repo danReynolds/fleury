@@ -1,0 +1,8 @@
+# Tag config: `integration`-tagged tests spawn real processes and
+# take seconds rather than milliseconds — they're allowed but run on
+# request. Use `dart test -t integration` to include them or
+# `dart test -x integration` to exclude them.
+
+tags:
+  integration:
+    timeout: 30s

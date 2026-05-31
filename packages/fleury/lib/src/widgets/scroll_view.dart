@@ -1,0 +1,363 @@
+// ScrollView: a scrollable window onto a single, taller child.
+//
+// Where `ListView` windows a list of items (only the visible ones are
+// laid out), `ScrollView` takes one arbitrary child — a long paragraph,
+// a form, a rendered document — measures it at its full natural height,
+// and paints a clipped window at the current scroll offset. It is the
+// generic viewport primitive the rest of the widget layer reuses (a
+// pager, a tree body, scrollable panels) rather than each reinventing
+// scroll math + clipping.
+//
+// Three pieces, mirroring ListView:
+//   - ScrollController — a ChangeNotifier holding the scroll offset plus
+//     read-back metrics (max offset, viewport / content extent). Optional;
+//     the widget creates its own when none is given.
+//   - ScrollView — the widget. Claims arrow / page / home / end when
+//     focused and scrolls the viewport.
+//   - _RenderScrollView — measures the child with an unbounded main axis,
+//     clamps the offset, and paints the visible window (clipping the rest).
+//
+// Intentionally not here: horizontal scrolling, momentum/smooth scroll
+// (cells are integers — scrolling is discrete), and windowed building for
+// enormous children (use `ListView.builder` when most content is
+// off-screen; ScrollView paints its whole child to a scratch buffer).
+
+import '../foundation/change_notifier.dart';
+import '../foundation/geometry.dart';
+import '../rendering/cell.dart';
+import '../rendering/cell_buffer.dart';
+import '../rendering/layout.dart';
+import '../rendering/render_object.dart';
+import '../terminal/events.dart';
+import 'focus.dart';
+import 'framework.dart';
+import 'list_view.dart' show EdgeBehavior;
+import 'pointer.dart';
+
+/// Mutable scroll state for a [ScrollView]: the current offset plus
+/// read-only metrics the render object writes back after each layout.
+///
+/// `offset` is in rows from the top of the content. It is clamped to
+/// `0..maxOffset`; before the first layout (when metrics aren't known
+/// yet) only the lower bound is enforced, so an initial offset survives
+/// until layout can clamp it — mirroring how [ListController] preserves a
+/// selection before `itemCount` is known.
+class ScrollController extends ChangeNotifier {
+  ScrollController({int offset = 0}) : _offset = offset < 0 ? 0 : offset;
+
+  int _offset;
+  int _maxOffset = 0;
+  int _viewportExtent = 0;
+  int _contentExtent = 0;
+  bool _metricsKnown = false;
+
+  /// Rows scrolled from the top. Clamped to `0..maxOffset`.
+  int get offset => _offset;
+  set offset(int value) {
+    var v = value < 0 ? 0 : value;
+    if (_metricsKnown && v > _maxOffset) v = _maxOffset;
+    if (_offset == v) return;
+    _offset = v;
+    notifyListeners();
+  }
+
+  /// The largest valid [offset] (`contentExtent - viewportExtent`, or 0
+  /// when the content fits). Known only after the first layout.
+  int get maxOffset => _maxOffset;
+
+  /// Visible rows in the viewport (after the last layout).
+  int get viewportExtent => _viewportExtent;
+
+  /// Total rows the content occupies (after the last layout).
+  int get contentExtent => _contentExtent;
+
+  /// Whether the viewport is at the top / bottom of the content.
+  bool get atTop => _offset <= 0;
+  bool get atBottom => _offset >= _maxOffset;
+
+  /// Scrolls by [delta] rows (negative scrolls up).
+  void scrollBy(int delta) => offset = _offset + delta;
+
+  /// Scrolls so [value] is the top row.
+  void jumpTo(int value) => offset = value;
+
+  /// Scrolls to the very top / bottom.
+  void scrollToTop() => offset = 0;
+  void scrollToBottom() => offset = _metricsKnown ? _maxOffset : _offset;
+
+  /// Called by the render object during layout. Direct field writes (no
+  /// notify) — these mirror layout state and notifying here would loop.
+  void _applyMetrics(int contentExtent, int viewportExtent) {
+    _contentExtent = contentExtent;
+    _viewportExtent = viewportExtent;
+    final max = contentExtent - viewportExtent;
+    _maxOffset = max < 0 ? 0 : max;
+    _metricsKnown = true;
+    if (_offset > _maxOffset) _offset = _maxOffset;
+    if (_offset < 0) _offset = 0;
+  }
+}
+
+/// A scrollable viewport onto a single [child].
+///
+/// When focused, claims:
+///   - Up / Down — scroll one row (respecting [edgeBehavior] at the ends).
+///   - PageUp / PageDown — scroll a viewport's worth.
+///   - Home / End — jump to top / bottom.
+///
+/// At the top/bottom edge, [edgeBehavior] decides whether the key is
+/// consumed (`contain`) or returned to the focus chain (`bubble`) so an
+/// ancestor — e.g. a pane coordinator — can move focus instead.
+class ScrollView extends StatefulWidget {
+  const ScrollView({
+    super.key,
+    required this.child,
+    this.controller,
+    this.focusNode,
+    this.autofocus = false,
+    this.edgeBehavior = EdgeBehavior.contain,
+  });
+
+  final Widget child;
+
+  /// External controller. If null, the widget creates and disposes its own.
+  final ScrollController? controller;
+
+  /// External focus node. If null, the widget creates and disposes its own.
+  final FocusNode? focusNode;
+
+  /// Whether to request focus on first mount.
+  final bool autofocus;
+
+  /// What to do with up/down at the top/bottom edge.
+  final EdgeBehavior edgeBehavior;
+
+  @override
+  State<ScrollView> createState() => _ScrollViewState();
+}
+
+class _ScrollViewState extends State<ScrollView> {
+  late ScrollController _controller;
+  late FocusNode _focusNode;
+  bool _ownsController = false;
+  bool _ownsFocusNode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = widget.controller ?? ScrollController();
+    _ownsController = widget.controller == null;
+    _controller.addListener(_onChange);
+    _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'ScrollView');
+    _ownsFocusNode = widget.focusNode == null;
+  }
+
+  @override
+  void didUpdateWidget(ScrollView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.controller != oldWidget.controller) {
+      _controller.removeListener(_onChange);
+      if (_ownsController) _controller.dispose();
+      _controller = widget.controller ?? ScrollController();
+      _ownsController = widget.controller == null;
+      _controller.addListener(_onChange);
+    }
+    if (widget.focusNode != oldWidget.focusNode) {
+      if (_ownsFocusNode) _focusNode.dispose();
+      _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'ScrollView');
+      _ownsFocusNode = widget.focusNode == null;
+    }
+  }
+
+  void _onChange() => setState(() {});
+
+  KeyEventResult _handleKey(KeyEvent event) {
+    final page = _controller.viewportExtent < 1
+        ? 1
+        : _controller.viewportExtent;
+    switch (event.keyCode) {
+      case KeyCode.arrowUp:
+        if (_controller.atTop) return _edge();
+        _controller.scrollBy(-1);
+        return KeyEventResult.handled;
+      case KeyCode.arrowDown:
+        if (_controller.atBottom) return _edge();
+        _controller.scrollBy(1);
+        return KeyEventResult.handled;
+      case KeyCode.pageUp:
+        if (_controller.atTop) return _edge();
+        _controller.scrollBy(-page);
+        return KeyEventResult.handled;
+      case KeyCode.pageDown:
+        if (_controller.atBottom) return _edge();
+        _controller.scrollBy(page);
+        return KeyEventResult.handled;
+      case KeyCode.home:
+        _controller.scrollToTop();
+        return KeyEventResult.handled;
+      case KeyCode.end:
+        _controller.scrollToBottom();
+        return KeyEventResult.handled;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
+
+  KeyEventResult _edge() => widget.edgeBehavior == EdgeBehavior.bubble
+      ? KeyEventResult.ignored
+      : KeyEventResult.handled;
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onChange);
+    if (_ownsController) _controller.dispose();
+    if (_ownsFocusNode) _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PointerScrollListener(
+      router: PointerRouterScope.maybeOf(context),
+      onScrollUp: () => _controller.scrollBy(-3),
+      onScrollDown: () => _controller.scrollBy(3),
+      child: Focus(
+        focusNode: _focusNode,
+        autofocus: widget.autofocus,
+        onKey: _handleKey,
+        child: _ScrollViewport(controller: _controller, child: widget.child),
+      ),
+    );
+  }
+}
+
+class _ScrollViewport extends SingleChildRenderObjectWidget {
+  const _ScrollViewport({required this.controller, required super.child});
+
+  final ScrollController controller;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderScrollView(controller: controller);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _RenderScrollView renderObject,
+  ) {
+    renderObject.controller = controller;
+  }
+}
+
+/// Measures the child with an unbounded main axis (so it reports its full
+/// height), fills the bounded viewport, clamps the controller's offset to
+/// the content, and paints the visible window — dropping everything above
+/// and below it.
+class _RenderScrollView extends RenderObject
+    implements RenderObjectWithSingleChild {
+  _RenderScrollView({required ScrollController controller})
+    : _controller = controller;
+
+  ScrollController _controller;
+  ScrollController get controller => _controller;
+  set controller(ScrollController value) {
+    if (identical(_controller, value)) return;
+    _controller = value;
+  }
+
+  RenderObject? _child;
+  @override
+  RenderObject? get child => _child;
+  @override
+  set child(RenderObject? value) {
+    if (identical(_child, value)) return;
+    if (_child != null) dropChild(_child!);
+    _child = value;
+    if (value != null) adoptChild(value);
+  }
+
+  @override
+  CellSize performLayout(CellConstraints constraints) {
+    final c = _child;
+    if (c == null) {
+      _controller._applyMetrics(0, 0);
+      return constraints.constrain(CellSize.zero);
+    }
+    // Bound the cross axis to our width; leave the main axis unbounded so
+    // the child reports its full content height.
+    final childSize = c.layout(
+      CellConstraints(
+        minCols: constraints.minCols,
+        maxCols: constraints.maxCols,
+      ),
+    );
+    final cols = constraints.hasBoundedWidth
+        ? constraints.maxCols!
+        : childSize.cols;
+    final rows = constraints.hasBoundedHeight
+        ? constraints.maxRows!
+        : childSize.rows;
+    final size = constraints.constrain(CellSize(cols, rows));
+    _controller._applyMetrics(childSize.rows, size.rows);
+    return size;
+  }
+
+  @override
+  void paint(
+    CellBuffer buffer,
+    CellOffset offset, {
+    CellOffset? screenOffset,
+    CellRect? clipRect,
+  }) {
+    final c = _child;
+    if (c == null) return;
+    final childSize = c.size;
+    if (childSize.isEmpty || size.isEmpty) return;
+
+    // Our screen rect. clipRect is intersected with any ancestor clip
+    // so a ScrollView nested inside another clipped region honors
+    // both boundaries.
+    final ourScreenOffset = screenOffset ?? offset;
+    final ourScreenRect = CellRect(offset: ourScreenOffset, size: size);
+    final effectiveClip = clipRect == null
+        ? ourScreenRect
+        : (clipRect.intersect(ourScreenRect) ?? ourScreenRect);
+
+    final scroll = _controller.offset;
+    // Child paints into a scratch buffer at local (0, 0). The
+    // mapping to screen coords: scratch (c, r) appears on screen at
+    // (ourScreenOffset.col + c, ourScreenOffset.row + r - scroll).
+    // Pass that as the child's screenOffset, with the clip = our
+    // visible rect.
+    final scratch = CellBuffer(childSize);
+    c.paint(
+      scratch,
+      CellOffset.zero,
+      screenOffset: CellOffset(
+        ourScreenOffset.col,
+        ourScreenOffset.row - scroll,
+      ),
+      clipRect: effectiveClip,
+    );
+
+    final bufCols = buffer.size.cols;
+    final bufRows = buffer.size.rows;
+    final visibleCols = size.cols < childSize.cols ? size.cols : childSize.cols;
+    for (var r = 0; r < size.rows; r++) {
+      final srcRow = r + scroll;
+      if (srcRow < 0 || srcRow >= childSize.rows) continue;
+      for (var col = 0; col < visibleCols; col++) {
+        final cell = scratch.atColRow(col, srcRow);
+        if (cell.role != CellRole.leading) continue;
+        final tc = offset.col + col;
+        final tr = offset.row + r;
+        if (tc < 0 || tr < 0 || tc >= bufCols || tr >= bufRows) continue;
+        buffer.writeGrapheme(
+          CellOffset(tc, tr),
+          cell.grapheme!,
+          style: cell.style,
+        );
+      }
+    }
+  }
+}

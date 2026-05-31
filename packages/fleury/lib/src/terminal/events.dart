@@ -1,0 +1,255 @@
+import 'package:meta/meta.dart';
+
+import '../foundation/geometry.dart';
+
+/// A single special-key code that the terminal reports.
+///
+/// Printable characters and multi-byte Unicode input come through as
+/// [TextInputEvent], not as a key code. Modifier-only presses (e.g.
+/// Ctrl+letter) come through as a [KeyEvent] with [KeyEvent.char] set
+/// and the modifiers populated.
+enum KeyCode {
+  enter,
+  tab,
+  backspace,
+  escape,
+  arrowUp,
+  arrowDown,
+  arrowLeft,
+  arrowRight,
+  home,
+  end,
+  pageUp,
+  pageDown,
+  insert,
+  delete,
+  f1,
+  f2,
+  f3,
+  f4,
+  f5,
+  f6,
+  f7,
+  f8,
+  f9,
+  f10,
+  f11,
+  f12,
+}
+
+/// Keyboard modifier flags.
+///
+/// With the Kitty keyboard protocol (CSI-u) negotiated, all of these are
+/// resolved reliably and on every key — including the otherwise-ambiguous
+/// cases (Ctrl+I vs Tab, Ctrl+M vs Enter) and the [superKey] / [meta] chords
+/// that legacy encodings can't express. On terminals without the protocol,
+/// [ctrl] and the cursor/function-key modifiers still resolve via the
+/// classic xterm encoding; bare modified letters degrade to their control
+/// bytes.
+enum KeyModifier {
+  shift,
+  ctrl,
+  alt,
+
+  /// The "super" key — Command on macOS, Windows/Meta key elsewhere. Only
+  /// reported under the Kitty protocol.
+  superKey,
+
+  /// The "meta" key as distinct from [alt]. Only reported under the Kitty
+  /// protocol; most terminals fold Meta into [alt].
+  meta,
+}
+
+/// Whether a [KeyEvent] is an initial press, an auto-repeat, or a release.
+///
+/// Only the Kitty keyboard protocol distinguishes these, and only when
+/// event-type reporting is requested. Without it — the default — every
+/// key arrives as [down], so consumers that ignore this field behave
+/// exactly as before.
+enum KeyEventType { down, repeat, up }
+
+/// Base for all events flowing out of [TerminalDriver.events].
+@immutable
+sealed class TuiEvent {
+  const TuiEvent();
+}
+
+/// A non-text key press: a special key (arrows, enter, escape, ...) or
+/// a Ctrl-shortcut.
+///
+/// At least one of [keyCode] or [char] is non-null. When [char] is set,
+/// it carries the base character of a modified key (so Ctrl+C reports
+/// `char: 'c'`, `modifiers: {ctrl}`).
+@immutable
+final class KeyEvent extends TuiEvent {
+  const KeyEvent({
+    this.keyCode,
+    this.char,
+    this.modifiers = const <KeyModifier>{},
+    this.type = KeyEventType.down,
+  }) : assert(
+         keyCode != null || char != null,
+         'KeyEvent must carry a keyCode or char',
+       );
+
+  final KeyCode? keyCode;
+  final String? char;
+  final Set<KeyModifier> modifiers;
+
+  /// Whether this is a press, auto-repeat, or release. Always
+  /// [KeyEventType.down] unless the Kitty protocol's event-type reporting
+  /// is enabled.
+  final KeyEventType type;
+
+  bool get hasCtrl => modifiers.contains(KeyModifier.ctrl);
+  bool get hasAlt => modifiers.contains(KeyModifier.alt);
+  bool get hasShift => modifiers.contains(KeyModifier.shift);
+
+  @override
+  bool operator ==(Object other) =>
+      other is KeyEvent &&
+      other.keyCode == keyCode &&
+      other.char == char &&
+      other.type == type &&
+      _setEquals(other.modifiers, modifiers);
+
+  @override
+  int get hashCode => Object.hash(
+    keyCode,
+    char,
+    type,
+    modifiers.fold<int>(0, (acc, m) => acc ^ m.hashCode),
+  );
+
+  @override
+  String toString() {
+    final parts = <String>[
+      if (modifiers.contains(KeyModifier.ctrl)) 'ctrl',
+      if (modifiers.contains(KeyModifier.alt)) 'alt',
+      if (modifiers.contains(KeyModifier.shift)) 'shift',
+      if (modifiers.contains(KeyModifier.superKey)) 'super',
+      if (modifiers.contains(KeyModifier.meta)) 'meta',
+      if (keyCode != null) keyCode!.name else char ?? '',
+    ];
+    final suffix = type == KeyEventType.down ? '' : ' ${type.name}';
+    return 'KeyEvent(${parts.join('+')}$suffix)';
+  }
+}
+
+/// One or more graphemes of typed text. The driver accumulates UTF-8
+/// continuation bytes before emitting so consumers always get a
+/// valid string.
+@immutable
+final class TextInputEvent extends TuiEvent {
+  const TextInputEvent(this.text);
+  final String text;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TextInputEvent && other.text == text;
+  @override
+  int get hashCode => Object.hash(TextInputEvent, text);
+  @override
+  String toString() => 'TextInputEvent(${_quote(text)})';
+}
+
+/// Which mouse button an event concerns ([none] for wheel/motion).
+enum MouseButton { left, middle, right, none }
+
+/// What a [MouseEvent] reports.
+enum MouseEventKind { down, up, drag, moved, scrollUp, scrollDown }
+
+/// A mouse report (SGR 1006). [col]/[row] are 0-based cell coordinates.
+/// Only delivered when the app enabled `TerminalMode.mouse`.
+@immutable
+final class MouseEvent extends TuiEvent {
+  const MouseEvent({
+    required this.kind,
+    required this.button,
+    required this.col,
+    required this.row,
+    this.modifiers = const <KeyModifier>{},
+  });
+
+  final MouseEventKind kind;
+  final MouseButton button;
+  final int col;
+  final int row;
+  final Set<KeyModifier> modifiers;
+
+  bool get hasCtrl => modifiers.contains(KeyModifier.ctrl);
+  bool get hasAlt => modifiers.contains(KeyModifier.alt);
+  bool get hasShift => modifiers.contains(KeyModifier.shift);
+
+  @override
+  bool operator ==(Object other) =>
+      other is MouseEvent &&
+      other.kind == kind &&
+      other.button == button &&
+      other.col == col &&
+      other.row == row &&
+      _setEquals(other.modifiers, modifiers);
+
+  @override
+  int get hashCode => Object.hash(
+    kind,
+    button,
+    col,
+    row,
+    modifiers.fold<int>(0, (acc, m) => acc ^ m.hashCode),
+  );
+
+  @override
+  String toString() => 'MouseEvent(${kind.name} ${button.name} @$col,$row)';
+}
+
+/// A bracketed paste: the full clipboard text the terminal delivered
+/// between its paste markers, as one event. Crucially the embedded
+/// newlines arrive here rather than as individual Enter chords, so a
+/// multi-line paste inserts verbatim instead of submitting line by line.
+@immutable
+final class PasteEvent extends TuiEvent {
+  const PasteEvent(this.text);
+  final String text;
+
+  @override
+  bool operator ==(Object other) => other is PasteEvent && other.text == text;
+  @override
+  int get hashCode => Object.hash(PasteEvent, text);
+  @override
+  String toString() => 'PasteEvent(${_quote(text)})';
+}
+
+/// Terminal viewport size changed (e.g. from SIGWINCH on POSIX).
+@immutable
+final class ResizeEvent extends TuiEvent {
+  const ResizeEvent(this.size);
+  final CellSize size;
+
+  @override
+  bool operator ==(Object other) => other is ResizeEvent && other.size == size;
+  @override
+  int get hashCode => Object.hash(ResizeEvent, size);
+  @override
+  String toString() => 'ResizeEvent($size)';
+}
+
+// ---- helpers ---------------------------------------------------------------
+
+bool _setEquals(Set<KeyModifier> a, Set<KeyModifier> b) {
+  if (a.length != b.length) return false;
+  for (final v in a) {
+    if (!b.contains(v)) return false;
+  }
+  return true;
+}
+
+String _quote(String s) {
+  final escaped = s
+      .replaceAll(r'\', r'\\')
+      .replaceAll('"', r'\"')
+      .replaceAll('\n', r'\n')
+      .replaceAll('\r', r'\r')
+      .replaceAll('\t', r'\t');
+  return '"$escaped"';
+}

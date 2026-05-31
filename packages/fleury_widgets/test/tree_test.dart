@@ -1,0 +1,200 @@
+import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_test.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
+import 'package:test/test.dart';
+
+List<String> _lines(FleuryTester tester, {int cols = 14, required int rows}) {
+  final buf = tester.render(size: CellSize(cols, rows));
+  return [
+    for (var r = 0; r < rows; r++)
+      [
+        for (var c = 0; c < cols; c++)
+          buf.atColRow(c, r).role == CellRole.leading
+              ? buf.atColRow(c, r).grapheme!
+              : ' ',
+      ].join().trimRight(),
+  ];
+}
+
+Tree<String> _tree({void Function(TreeNode<String>)? onSelect}) => Tree<String>(
+  autofocus: true,
+  onSelect: onSelect,
+  roots: const [
+    TreeNode<String>(
+      'src',
+      children: [TreeNode<String>('a.dart'), TreeNode<String>('b.dart')],
+    ),
+    TreeNode<String>('README'),
+  ],
+);
+
+void main() {
+  testWidgets('renders roots collapsed', (tester) {
+    tester.pumpWidget(_tree());
+    expect(_lines(tester, rows: 4), ['▸ src', '  README', '', '']);
+  });
+
+  testWidgets('Right expands a branch, Left collapses it', (tester) {
+    tester.pumpWidget(_tree());
+
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    expect(_lines(tester, rows: 4), [
+      '▾ src',
+      '    a.dart',
+      '    b.dart',
+      '  README',
+    ]);
+
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+    expect(_lines(tester, rows: 4), ['▸ src', '  README', '', '']);
+  });
+
+  testWidgets('Down + Enter toggles the focused branch', (tester) {
+    tester.pumpWidget(_tree());
+    // Move to README (a leaf) then back; expand src via Enter instead.
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // src is selected
+    expect(_lines(tester, rows: 4).first, '▾ src');
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // collapse again
+    expect(_lines(tester, rows: 4).first, '▸ src');
+  });
+
+  testWidgets('Enter on a leaf fires onSelect', (tester) {
+    String? activated;
+    tester.pumpWidget(_tree(onSelect: (n) => activated = n.label));
+    // Down to README (leaf), Enter activates it.
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    expect(activated, 'README');
+  });
+
+  testWidgets('Left from a child steps out to its parent', (tester) {
+    tester.pumpWidget(_tree());
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight)); // expand src
+    tester.sendKey(
+      const KeyEvent(keyCode: KeyCode.arrowRight),
+    ); // step to a.dart
+    // a.dart is a leaf; Left steps out to src (the parent).
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+    // Now on src (still expanded); Left again collapses it.
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+    expect(_lines(tester, rows: 4), ['▸ src', '  README', '', '']);
+  });
+
+  group('composition & edges', () {
+    testWidgets('Right on a leaf bubbles to the focus chain', (tester) {
+      var bubbled = 0;
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [
+            KeyBinding(
+              KeyChord.key(KeyCode.arrowRight),
+              onEvent: (_) => bubbled++,
+            ),
+          ],
+          child: const Tree<String>(
+            autofocus: true,
+            roots: [TreeNode<String>('leaf')],
+          ),
+        ),
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      expect(bubbled, 1, reason: 'a leaf has nothing to expand');
+    });
+
+    testWidgets('Left on a collapsed root bubbles to the focus chain', (
+      tester,
+    ) {
+      var bubbled = 0;
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [
+            KeyBinding(
+              KeyChord.key(KeyCode.arrowLeft),
+              onEvent: (_) => bubbled++,
+            ),
+          ],
+          child: const Tree<String>(
+            autofocus: true,
+            roots: [
+              TreeNode<String>('dir', children: [TreeNode<String>('x')]),
+            ],
+          ),
+        ),
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+      expect(bubbled, 1, reason: 'collapsed root with no parent');
+    });
+
+    testWidgets('the selected row uses the selected style', (tester) {
+      tester.pumpWidget(
+        const Tree<String>(
+          autofocus: true,
+          selectedStyle: CellStyle(bold: true),
+          roots: [TreeNode<String>('a'), TreeNode<String>('b')],
+        ),
+      );
+      final buf = tester.render(size: const CellSize(8, 2));
+      // Row 0 ('a') is selected → bold; row 1 ('b') is not.
+      expect(buf.atColRow(2, 0).style.bold, isTrue);
+      expect(buf.atColRow(2, 1).style.bold, isFalse);
+    });
+
+    testWidgets('Enter on a branch toggles it and does not fire onSelect', (
+      tester,
+    ) {
+      var selected = 0;
+      tester.pumpWidget(
+        Tree<String>(
+          autofocus: true,
+          onSelect: (_) => selected++,
+          roots: const [
+            TreeNode<String>('dir', children: [TreeNode<String>('x')]),
+          ],
+        ),
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      expect(_lines(tester, rows: 2).first, '▾ dir', reason: 'expanded');
+      expect(selected, 0, reason: 'onSelect is for leaves only');
+    });
+
+    testWidgets('expanding one root leaves siblings collapsed', (tester) {
+      tester.pumpWidget(
+        const Tree<String>(
+          autofocus: true,
+          roots: [
+            TreeNode<String>('a', children: [TreeNode<String>('a1')]),
+            TreeNode<String>('b', children: [TreeNode<String>('b1')]),
+          ],
+        ),
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight)); // expand a
+      expect(_lines(tester, rows: 3), ['▾ a', '    a1', '▸ b']);
+    });
+
+    testWidgets('onSelect hands back the leaf node and its value payload', (
+      tester,
+    ) {
+      int? picked;
+      tester.pumpWidget(
+        Tree<int>(
+          autofocus: true,
+          onSelect: (n) => picked = n.value,
+          roots: const [
+            TreeNode<int>(
+              'files',
+              children: [
+                TreeNode<int>('one', value: 1),
+                TreeNode<int>('two', value: 2),
+              ],
+            ),
+          ],
+        ),
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight)); // expand
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → one
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → two
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      expect(picked, 2, reason: 'the typed value rode along on the node');
+    });
+  });
+}

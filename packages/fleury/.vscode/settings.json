@@ -1,0 +1,17 @@
+{
+  // Reload-on-save for the Dart VS Code extension. Despite the name,
+  // `dart.flutterHotReloadOnSave` applies to any VM-service-enabled
+  // Dart debug session — not just Flutter. "always" means: every
+  // Cmd+S triggers a hot reload of the running debug target. fleury
+  // picks the reload event up via dart:developer and reassembles its
+  // element tree. Counter values, focus, scroll, animation tickers
+  // all survive. Set to "manual" if you'd rather hit Cmd+Shift+F5
+  // yourself.
+  "dart.flutterHotReloadOnSave": "always",
+
+  // Don't auto-format-on-save; if the formatter rewrites the file
+  // mid-edit, the Dart extension's debounced reload can fire twice
+  // and you see a flicker. Off here is the polite default for a TUI
+  // library; turn it on per-app if you prefer.
+  "editor.formatOnSave": false
+}
