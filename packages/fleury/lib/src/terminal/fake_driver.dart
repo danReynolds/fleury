@@ -8,19 +8,26 @@ import 'terminal_driver.dart';
 /// A [TerminalDriver] for tests and offline rendering. No real I/O —
 /// the driver buffers everything written, exposes the buffer for
 /// assertions, and lets the test push events into the event stream.
-final class FakeTerminalDriver implements TerminalDriver {
+final class FakeTerminalDriver
+    implements TerminalDriver, TerminalHandoffDriver {
   FakeTerminalDriver({
     CellSize size = const CellSize(80, 24),
     this.capabilities = TerminalCapabilities.defaultCapabilities,
-    this.isInteractive = true,
-  }) : _size = size;
+    bool isInteractive = true,
+  }) : _size = size,
+       _isInteractive = isInteractive;
 
   /// Whether this fake stands in for an interactive terminal. Set false to
   /// exercise the non-TTY (piped/redirected) code paths.
   @override
-  bool isInteractive;
+  bool get isInteractive => _isInteractive;
+  set isInteractive(bool value) {
+    _checkNotDisposed();
+    _isInteractive = value;
+  }
 
   CellSize _size;
+  bool _isInteractive;
   @override
   CellSize get size => _size;
 
@@ -32,6 +39,8 @@ final class FakeTerminalDriver implements TerminalDriver {
       StreamController<TuiEvent>.broadcast();
 
   bool _active = false;
+  bool _handoffActive = false;
+  bool _disposed = false;
   TerminalMode? _enteredMode;
 
   /// Number of times [enter] was called. Useful for asserting
@@ -40,6 +49,15 @@ final class FakeTerminalDriver implements TerminalDriver {
 
   /// Number of times [restore] was called.
   int restoreCallCount = 0;
+
+  /// Number of terminal handoff operations run through this driver.
+  int handoffCallCount = 0;
+
+  /// Number of times an active fake terminal was suspended for handoff.
+  int handoffSuspendCallCount = 0;
+
+  /// Number of times an active fake terminal was resumed after handoff.
+  int handoffResumeCallCount = 0;
 
   @override
   bool get isActive => _active;
@@ -54,17 +72,20 @@ final class FakeTerminalDriver implements TerminalDriver {
   /// Clears the captured output. Useful for asserting on the bytes
   /// produced by a specific frame.
   void clearOutput() {
+    _checkNotDisposed();
     _output.clear();
   }
 
   /// Pushes an event onto the event stream. Tests use this to simulate
   /// keystrokes, resizes, etc.
   void enqueue(TuiEvent event) {
+    _checkNotDisposed();
     _events.add(event);
   }
 
   /// Updates the driver's reported size and fires a [ResizeEvent].
   void resize(CellSize newSize) {
+    _checkNotDisposed();
     _size = newSize;
     _events.add(ResizeEvent(newSize));
   }
@@ -74,6 +95,7 @@ final class FakeTerminalDriver implements TerminalDriver {
 
   @override
   Future<void> enter(TerminalMode mode) async {
+    _checkNotDisposed();
     enterCallCount += 1;
     _active = true;
     _enteredMode = mode;
@@ -81,17 +103,53 @@ final class FakeTerminalDriver implements TerminalDriver {
 
   @override
   Future<void> restore() async {
-    if (!_active) return;
+    if (!_active && !_handoffActive) return;
     restoreCallCount += 1;
     _active = false;
+    _handoffActive = false;
+  }
+
+  @override
+  Future<T> runWithTerminalHandoff<T>(FutureOr<T> Function() operation) async {
+    _checkNotDisposed();
+    handoffCallCount += 1;
+    if (!_active) return await operation();
+
+    handoffSuspendCallCount += 1;
+    _handoffActive = true;
+    _active = false;
+    try {
+      return await operation();
+    } finally {
+      if (_handoffActive) {
+        _handoffActive = false;
+        _active = true;
+        handoffResumeCallCount += 1;
+        _events.add(ResizeEvent(size));
+      }
+    }
   }
 
   @override
   void write(String data) {
+    _checkNotDisposed();
+    if (_handoffActive) return;
     _output.write(data);
   }
 
   /// Closes the underlying stream. Call this in test teardown so
   /// listeners don't hang.
-  Future<void> dispose() => _events.close();
+  Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    _active = false;
+    _handoffActive = false;
+    await _events.close();
+  }
+
+  void _checkNotDisposed() {
+    if (_disposed) {
+      throw StateError('FakeTerminalDriver has been disposed.');
+    }
+  }
 }

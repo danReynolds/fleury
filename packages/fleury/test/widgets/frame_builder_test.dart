@@ -3,6 +3,7 @@
 // the public spinner/cursor widgets per RFC §21.2.
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
 String _rowContent(CellBuffer buffer, int row) {

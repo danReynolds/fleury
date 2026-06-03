@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryPeerBenchmarkRun",
+  "runId": "opentui-sb3-datatable-2026-06-02T13-23-17Z",
+  "peerId": "opentui",
+  "scenarioId": "SB.3",
+  "capturedAt": "2026-06-02T13:23:17.931Z",
+  "source": {
+    "name": "OpenTUI",
+    "version": "0.3.1",
+    "url": "https://www.npmjs.com/package/@opentui/core"
+  },
+  "environment": {
+    "machine": "macbookpro.lan",
+    "operatingSystem": "darwin",
+    "operatingSystemVersion": "Darwin macbookpro.lan 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:09:40 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T6000 arm64",
+    "runtime": "Bun 1.3.14 / OpenTUI 0.3.1",
+    "terminalMode": "opentui-test-renderer-memory",
+    "terminalSize": {
+      "columns": 120,
+      "rows": 32
+    }
+  },
+  "fixture": {
+    "workingDirectory": "peer-fixtures/opentui/sb3_datatable",
+    "command": [
+      "npm",
+      "run",
+      "benchmark",
+      "--",
+      "--warmup=2",
+      "--iterations=5",
+      "--rows=100000",
+      "--json"
+    ],
+    "warmupIterations": 2,
+    "measuredIterations": 5
+  },
+  "metrics": {
+    "mountUs": {
+      "min": 48658,
+      "median": 77640,
+      "p95": 150268,
+      "p99": 150268,
+      "max": 150268,
+      "samples": 5
+    },
+    "firstRenderUs": {
+      "min": 1244,
+      "median": 2724,
+      "p95": 6805,
+      "p99": 6805,
+      "max": 6805,
+      "samples": 5
+    },
+    "arrowMoveUs": {
+      "min": 1672,
+      "median": 2681,
+      "p95": 3793,
+      "p99": 3793,
+      "max": 3793,
+      "samples": 5
+    },
+    "pageMoveUs": {
+      "min": 1675,
+      "median": 1876,
+      "p95": 8233,
+      "p99": 8233,
+      "max": 8233,
+      "samples": 5
+    },
+    "jumpToEndUs": {
+      "min": 1641,
+      "median": 1760,
+      "p95": 2002,
+      "p99": 2002,
+      "max": 2002,
+      "samples": 5
+    },
+    "copySelectedRowUs": {
+      "min": 13,
+      "median": 18,
+      "p95": 33,
+      "p99": 33,
+      "max": 33,
+      "samples": 5
+    },
+    "semanticOrTestQueryUs": {
+      "min": 30,
+      "median": 31,
+      "p95": 36,
+      "p99": 36,
+      "max": 36,
+      "samples": 5
+    },
+    "rssDeltaBytes": 152289280,
+    "lineOfCodeCount": 242,
+    "benchmarkLineOfCodeCount": 357,
+    "testLineOfCodeCount": 54,
+    "rowCount": 100000,
+    "observedRowCount": 100000,
+    "visibleWindowRowEstimate": 15,
+    "visibleRangeStart": 99985,
+    "visibleRangeEnd": 100000,
+    "finalSelectedRow": 99999,
+    "finalSelectedRowId": "RUN-099999",
+    "unsafeLeakCount": 0
+  },
+  "correctness": [
+    {
+      "gate": "visible window stays bounded",
+      "pass": true,
+      "evidence": "Fixture-owned visible-row slice stayed within the OpenTUI test-renderer height."
+    },
+    {
+      "gate": "selection is correct after jump",
+      "pass": true,
+      "evidence": "Jump-to-end selected RUN-099999 and rendered it in the OpenTUI character frame."
+    },
+    {
+      "gate": "copy/export is sanitized and exact",
+      "pass": true,
+      "evidence": "Selected row TSV matched generated source row and contained no escape/control/secret leakage."
+    }
+  ],
+  "ergonomics": {
+    "lineOfCodeCount": 242,
+    "benchmarkLineOfCodeCount": 357,
+    "testLineOfCodeCount": 54,
+    "appFile": "lib/table_app.js",
+    "benchmarkFile": "bin/sb3_datatable_benchmark.js",
+    "testFile": "test/table_app.test.js",
+    "peerOwnedTextTableRenderable": true,
+    "appOwnedRetainedRows": true,
+    "appOwnedVisibleRowSlicing": true,
+    "appOwnedSelectionState": true,
+    "appOwnedCopyExport": true,
+    "semanticGraphAvailable": false,
+    "testQueryViaFrameAndAppState": true
+  },
+  "artifacts": [
+    {
+      "kind": "source",
+      "path": "peer-fixtures/opentui/sb3_datatable/lib/table_app.js"
+    },
+    {
+      "kind": "benchmark",
+      "path": "peer-fixtures/opentui/sb3_datatable/bin/sb3_datatable_benchmark.js"
+    },
+    {
+      "kind": "test",
+      "path": "peer-fixtures/opentui/sb3_datatable/test/table_app.test.js"
+    }
+  ],
+  "notes": [
+    "This is an OpenTUI test-renderer memory fixture, not a real-terminal run.",
+    "OpenTUI 0.3.1 supplies TextTableRenderable, styled text chunks, and the native-backed test renderer.",
+    "The fixture owns retained row generation, visible-row slicing, navigation policy, selected-row copy/export, and state query because this scenario needs app behavior around the OpenTUI table renderer.",
+    "Timing is local-machine evidence and should not be used as a public superiority claim without repeated peer runs."
+  ]
+}

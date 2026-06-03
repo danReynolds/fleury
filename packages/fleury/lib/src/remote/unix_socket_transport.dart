@@ -24,9 +24,14 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
       _incoming = StreamController<RemoteFrame>.broadcast() {
     _socketSub = _socket.listen(
       (chunk) {
-        _decoder.feed(chunk);
-        for (final frame in _decoder.drain()) {
-          _incoming.add(frame);
+        try {
+          _decoder.feed(chunk);
+          for (final frame in _decoder.drain()) {
+            _incoming.add(frame);
+          }
+        } on Object catch (error, stackTrace) {
+          _incoming.addError(error, stackTrace);
+          unawaited(close());
         }
       },
       onError: _incoming.addError,

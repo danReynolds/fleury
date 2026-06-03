@@ -90,6 +90,55 @@ void main() {
       );
     });
 
+    testWidgets('link semantics expose safe visible-url fallback policy', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const MarkdownText('see [docs](https://fleury.dev) here'),
+      );
+
+      final link = tester.semantics().single(
+            role: SemanticRole.link,
+            label: 'docs',
+          );
+
+      expect(link.value, 'https://fleury.dev');
+      expect(link.state.terminalCapability, 'osc8Hyperlinks');
+      expect(link.state.capabilityRequirement, 'prohibited');
+      expect(link.state.capabilityResolution, 'disabledByPolicy');
+      expect(link.state.activeFallback, 'visible URL');
+      expect(link.state.values['linkScheme'], 'https');
+      expect(link.state.values['safeLinkScheme'], isTrue);
+      expect(link.state.values['osc8Policy'], 'disabledByDefault');
+    });
+
+    testWidgets('link semantics flag custom schemes as not safe for OSC 8', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const MarkdownText('run [local](myapp://open/project) manually'),
+      );
+
+      final link = tester.semantics().single(
+            role: SemanticRole.link,
+            label: 'local',
+          );
+
+      expect(link.value, 'myapp://open/project');
+      expect(link.state.capabilityResolution, 'disabledByPolicy');
+      expect(link.state.activeFallback, 'visible URL');
+      expect(link.state.values['linkScheme'], 'myapp');
+      expect(link.state.values['safeLinkScheme'], isFalse);
+    });
+
+    testWidgets('code fences do not expose markdown link semantics', (tester) {
+      tester.pumpWidget(
+        const MarkdownText('```\n[docs](https://fleury.dev)\n```'),
+      );
+
+      expect(tester.semantics().byRole(SemanticRole.link), isEmpty);
+    });
+
     testWidgets('unbalanced markup is left as literal text', (tester) {
       // *hello — no closing star — should NOT enter italic state and
       // emit raw text instead.
@@ -109,13 +158,16 @@ void main() {
       tester.pumpWidget(const MarkdownText('# Title\nbody'));
       final buf = tester.render(size: const CellSize(20, 2));
       expect(
-        _anyCellMatches(buf, {
-          'T',
-          'i',
-          't',
-          'l',
-          'e',
-        }, (s) => s.bold && s.inverse),
+        _anyCellMatches(
+            buf,
+            {
+              'T',
+              'i',
+              't',
+              'l',
+              'e',
+            },
+            (s) => s.bold && s.inverse),
         isTrue,
       );
     });
@@ -124,11 +176,14 @@ void main() {
       tester.pumpWidget(const MarkdownText('## Sub'));
       final buf = tester.render(size: const CellSize(20, 1));
       expect(
-        _anyCellMatches(buf, {
-          'S',
-          'u',
-          'b',
-        }, (s) => s.bold && s.underline && !s.inverse),
+        _anyCellMatches(
+            buf,
+            {
+              'S',
+              'u',
+              'b',
+            },
+            (s) => s.bold && s.underline && !s.inverse),
         isTrue,
       );
     });

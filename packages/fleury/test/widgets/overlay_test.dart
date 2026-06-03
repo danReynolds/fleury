@@ -5,6 +5,10 @@
 import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
+Matcher _stateError(String message) => throwsA(
+  isA<StateError>().having((error) => error.message, 'message', message),
+);
+
 class _Probe extends StatefulWidget {
   const _Probe({required this.label, required this.log});
   final String label;
@@ -193,6 +197,43 @@ void main() {
       // No exception; reachable.
       owner.flushBuild();
       expect(state.entries, [entry]);
+    });
+
+    test('disposed entry removes itself and rejects visible mutation', () {
+      final owner = BuildOwner();
+      final entry = OverlayEntry(builder: (_) => const Text('hi'));
+      final root = owner.mountRoot(Overlay(initialEntries: [entry]));
+      final state = _findOverlayState(root);
+
+      entry.dispose();
+      owner.flushBuild();
+      entry.dispose();
+
+      expect(state.entries, isEmpty);
+      expect(entry.opaque, isFalse);
+      expect(() => entry.remove(), returnsNormally);
+      expect(
+        () => entry.markNeedsBuild(),
+        _stateError('OverlayEntry has been disposed.'),
+      );
+      expect(
+        () => entry.opaque = true,
+        _stateError('OverlayEntry has been disposed.'),
+      );
+    });
+
+    test('disposed entry cannot be inserted', () {
+      final owner = BuildOwner();
+      final root = owner.mountRoot(Overlay());
+      final state = _findOverlayState(root);
+      final entry = OverlayEntry(builder: (_) => const Text('disposed'))
+        ..dispose();
+
+      expect(
+        () => state.insert(entry),
+        _stateError('OverlayEntry has been disposed.'),
+      );
+      expect(state.entries, isEmpty);
     });
   });
 }

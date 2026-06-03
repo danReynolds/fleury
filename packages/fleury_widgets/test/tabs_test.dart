@@ -13,7 +13,34 @@ String _row(FleuryTester tester, int row, {int cols = 20, int rows = 2}) {
   return sb.toString().trimRight();
 }
 
+Matcher _stateError(String message) {
+  return throwsA(
+    isA<StateError>().having((error) => error.message, 'message', message),
+  );
+}
+
 void main() {
+  group('TabController lifecycle', () {
+    test('dispose is idempotent and keeps final readable state', () {
+      final controller = TabController(initialIndex: 2);
+
+      controller.dispose();
+      controller.dispose();
+
+      expect(controller.index, 2);
+      expect(controller.length, 0);
+    });
+
+    test('mutating after dispose throws a lifecycle error', () {
+      final controller = TabController()..dispose();
+
+      const message = 'TabController has been disposed.';
+      expect(() => controller.index = 1, _stateError(message));
+      expect(controller.next, _stateError(message));
+      expect(controller.previous, _stateError(message));
+    });
+  });
+
   testWidgets('shows the active tab content below the strip', (tester) {
     tester.pumpWidget(
       const Tabs(
@@ -229,6 +256,146 @@ void main() {
       tester.sendKey(const KeyEvent(char: '2', modifiers: {KeyModifier.alt}));
       expect(c.index, 1, reason: 'accelerator fired from inside the content');
       expect(_row(tester, 1), 'bbb');
+    });
+  });
+
+  group('semantics', () {
+    testWidgets('exposes tab nodes with selection, focus, and shortcuts', (
+      tester,
+    ) {
+      final c = TabController(initialIndex: 1);
+      tester.pumpWidget(
+        Tabs(
+          controller: c,
+          autofocus: true,
+          tabs: const [
+            TabItem(label: 'Files', content: Text('files')),
+            TabItem(label: 'Search', content: Text('search')),
+            TabItem(label: 'Run', content: Text('run')),
+          ],
+        ),
+      );
+
+      final tree = tester.semantics();
+      final tabs = tree.byRole(SemanticRole.tab).toList(growable: false);
+
+      expect(tabs.map((node) => node.label), ['Files', 'Search', 'Run']);
+      final selected = tree.single(
+        role: SemanticRole.tab,
+        label: 'Search',
+        selected: true,
+        focused: true,
+      );
+      expect(
+        selected.actions,
+        containsAll(<SemanticAction>[
+          SemanticAction.focus,
+          SemanticAction.select,
+          SemanticAction.activate,
+        ]),
+      );
+      expect(selected.state.tabIndex, 1);
+      expect(selected.state.tabPosition, 2);
+      expect(selected.state.tabCount, 3);
+      expect(selected.state.shortcut, 'Alt+2');
+    });
+
+    testWidgets('semantic select switches tabs and focuses the tab strip', (
+      tester,
+    ) async {
+      final c = TabController();
+      tester.pumpWidget(
+        Tabs(
+          controller: c,
+          tabs: const [
+            TabItem(label: 'Files', content: Text('files')),
+            TabItem(label: 'Search', content: Text('search')),
+            TabItem(label: 'Run', content: Text('run')),
+          ],
+        ),
+      );
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.select,
+        role: SemanticRole.tab,
+        label: 'Run',
+      );
+
+      expect(result.completed, isTrue);
+      expect(c.index, 2);
+      expect(_row(tester, 1), 'run');
+      final selected = tester.semantics().single(
+        role: SemanticRole.tab,
+        label: 'Run',
+        selected: true,
+        focused: true,
+      );
+      expect(selected.state.tabPosition, 3);
+    });
+
+    testWidgets('inactive tab content is hidden from semantic snapshots', (
+      tester,
+    ) {
+      final c = TabController(initialIndex: 1);
+      tester.pumpWidget(
+        Tabs(
+          controller: c,
+          tabs: const [
+            TabItem(
+              label: 'Hidden',
+              content: Semantics(
+                role: SemanticRole.button,
+                label: 'Hidden action',
+                actions: {SemanticAction.activate},
+                child: Text('hidden'),
+              ),
+            ),
+            TabItem(
+              label: 'Visible',
+              content: Semantics(
+                role: SemanticRole.button,
+                label: 'Visible action',
+                actions: {SemanticAction.activate},
+                child: Text('visible'),
+              ),
+            ),
+          ],
+        ),
+      );
+
+      final tree = tester.semantics();
+
+      expect(
+        tree.where(role: SemanticRole.button, label: 'Hidden action'),
+        isEmpty,
+      );
+      expect(
+        tree.single(role: SemanticRole.button, label: 'Visible action'),
+        isNotNull,
+      );
+    });
+
+    testWidgets('accessibility fallback includes tab position and shortcut', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const Tabs(
+          tabs: [
+            TabItem(label: 'Files', content: Text('files')),
+            TabItem(label: 'Search', content: Text('search')),
+          ],
+        ),
+      );
+
+      final node = tester.accessibilitySnapshot().single(
+        role: SemanticRole.tab,
+        label: 'Files',
+        selected: true,
+        state: 'tab 1 of 2, shortcut Alt+1',
+      );
+
+      expect(node.announcement, contains('selected'));
+      expect(node.announcement, contains('actions: activate, focus, select'));
     });
   });
 

@@ -9,6 +9,10 @@
 import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
+Matcher _stateError(String message) => throwsA(
+  isA<StateError>().having((error) => error.message, 'message', message),
+);
+
 /// A minimal Selectable that maps screen-space columns to character
 /// offsets one-to-one within its bounds. Multi-row content is treated
 /// as one line per row. Good enough to validate the delegate without
@@ -418,6 +422,57 @@ void main() {
       delegate.add(b);
       expect(delegate.getSelectedText(), 'ello\ngoodbye');
     });
+
+    test(
+      'dispose keeps final state readable and blocks new selection work',
+      () {
+        final selectable = _StubSelectable(
+          bounds: const CellRect(
+            offset: CellOffset(0, 0),
+            size: CellSize(5, 1),
+          ),
+          text: 'hello',
+        );
+        final delegate = SelectionContainerDelegate()..add(selectable);
+        delegate.dispatchSelectionEvent(
+          const SelectionEdgeUpdateEvent(
+            globalPosition: CellOffset(1, 0),
+            isStart: true,
+          ),
+        );
+        delegate.dispatchSelectionEvent(
+          const SelectionEdgeUpdateEvent(
+            globalPosition: CellOffset(4, 0),
+            isStart: false,
+          ),
+        );
+
+        delegate.dispose();
+        delegate.dispose();
+
+        expect(delegate.selection, isNotNull);
+        expect(delegate.cursor, const CellOffset(4, 0));
+        expect(delegate.selectableCount, 0);
+        expect(delegate.getSelectedText(), isEmpty);
+        expect(() => delegate.remove(selectable), returnsNormally);
+        expect(
+          () => delegate.add(selectable),
+          _stateError('SelectionContainerDelegate has been disposed.'),
+        );
+        expect(
+          () => delegate.dispatchSelectionEvent(const SelectionClearEvent()),
+          _stateError('SelectionContainerDelegate has been disposed.'),
+        );
+        expect(
+          () => delegate.clear(),
+          _stateError('SelectionContainerDelegate has been disposed.'),
+        );
+        expect(
+          () => delegate.moveCursorTo(const CellOffset(2, 0)),
+          _stateError('SelectionContainerDelegate has been disposed.'),
+        );
+      },
+    );
   });
 
   group('SelectionContainerDelegate — change notification', () {

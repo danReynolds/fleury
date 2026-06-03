@@ -22,6 +22,7 @@ class NumberInput extends StatefulWidget {
   const NumberInput({
     super.key,
     this.initialValue,
+    this.controller,
     this.onChanged,
     this.onSubmit,
     this.min,
@@ -32,12 +33,19 @@ class NumberInput extends StatefulWidget {
     this.placeholderStyle = const CellStyle(dim: true),
     this.style = CellStyle.empty,
     this.cursorStyle = const CellStyle(inverse: true),
+    this.semanticLabel,
     this.focusNode,
     this.autofocus = false,
   });
 
   /// Initial parsed value to seed the field with. `null` starts empty.
+  ///
+  /// Ignored when [controller] is supplied; the controller text is treated as
+  /// the source of truth in controlled form bindings.
   final num? initialValue;
+
+  /// Optional text controller for embedding this field in a larger form.
+  final TextEditingController? controller;
 
   /// Called with the parsed value on every change. `null` is passed
   /// when the field is empty or holds an in-progress token like `"-"`
@@ -69,6 +77,12 @@ class NumberInput extends StatefulWidget {
   final CellStyle placeholderStyle;
   final CellStyle style;
   final CellStyle cursorStyle;
+
+  /// Label exposed through the semantic app graph.
+  ///
+  /// When omitted, [placeholder] still labels the underlying text field.
+  final String? semanticLabel;
+
   final FocusNode? focusNode;
   final bool autofocus;
 
@@ -78,6 +92,7 @@ class NumberInput extends StatefulWidget {
 
 class _NumberInputState extends State<NumberInput> {
   late TextEditingController _controller;
+  bool _ownsController = false;
   String _lastAccepted = '';
   // Suppresses the listener when we programmatically revert the
   // controller — otherwise the revert would fire onChanged a second
@@ -87,17 +102,64 @@ class _NumberInputState extends State<NumberInput> {
   @override
   void initState() {
     super.initState();
-    _lastAccepted = widget.initialValue == null
-        ? ''
-        : _stringify(widget.initialValue!);
-    _controller = TextEditingController(text: _lastAccepted);
+    _attachController(
+      widget.controller ??
+          TextEditingController(
+            text: widget.initialValue == null
+                ? ''
+                : _stringify(widget.initialValue!),
+          ),
+      ownsController: widget.controller == null,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant NumberInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.controller != oldWidget.controller) {
+      _controller.removeListener(_onChanged);
+      if (_ownsController) _controller.dispose();
+      _attachController(
+        widget.controller ??
+            TextEditingController(
+              text: widget.initialValue == null
+                  ? ''
+                  : _stringify(widget.initialValue!),
+            ),
+        ownsController: widget.controller == null,
+      );
+      return;
+    }
+    if (widget.controller == null &&
+        widget.initialValue != oldWidget.initialValue) {
+      final text = widget.initialValue == null
+          ? ''
+          : _stringify(widget.initialValue!);
+      if (_controller.text != text) {
+        _lastAccepted = text;
+        _suppress = true;
+        _controller
+          ..text = text
+          ..selection = text.length;
+        _suppress = false;
+      }
+    }
+  }
+
+  void _attachController(
+    TextEditingController controller, {
+    required bool ownsController,
+  }) {
+    _controller = controller;
+    _ownsController = ownsController;
+    _lastAccepted = controller.text;
     _controller.addListener(_onChanged);
   }
 
   @override
   void dispose() {
     _controller.removeListener(_onChanged);
-    _controller.dispose();
+    if (_ownsController) _controller.dispose();
     super.dispose();
   }
 
@@ -148,6 +210,7 @@ class _NumberInputState extends State<NumberInput> {
       return;
     }
     _lastAccepted = text;
+    setState(() {});
     widget.onChanged?.call(_parse(text));
   }
 
@@ -156,6 +219,21 @@ class _NumberInputState extends State<NumberInput> {
     if (widget.min != null && v < widget.min!) return widget.min!;
     if (widget.max != null && v > widget.max!) return widget.max!;
     return v;
+  }
+
+  SemanticState _semanticState() {
+    final parsed = _parse(_controller.text);
+    final state = <String, Object?>{
+      'fieldType': 'number',
+      if (widget.min != null) 'min': widget.min,
+      if (widget.max != null) 'max': widget.max,
+      'allowNegative': widget.allowNegative,
+      'allowDecimal': widget.allowDecimal,
+      'numberFormat': widget.allowDecimal ? 'decimal' : 'integer',
+      'clampOnSubmit': widget.min != null || widget.max != null,
+    };
+    if (parsed != null) state['numericValue'] = parsed;
+    return SemanticState(state);
   }
 
   @override
@@ -168,6 +246,8 @@ class _NumberInputState extends State<NumberInput> {
       placeholderStyle: widget.placeholderStyle,
       style: widget.style,
       cursorStyle: widget.cursorStyle,
+      semanticLabel: widget.semanticLabel,
+      semanticState: _semanticState(),
       onSubmit: (text) {
         final parsed = _parse(text);
         final clamped = _clampedSubmit(parsed);
@@ -180,6 +260,7 @@ class _NumberInputState extends State<NumberInput> {
             ..text = s
             ..selection = s.length;
           _suppress = false;
+          setState(() {});
         }
         widget.onSubmit?.call(clamped);
       },

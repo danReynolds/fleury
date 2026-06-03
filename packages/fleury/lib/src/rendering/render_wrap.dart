@@ -23,6 +23,7 @@ class RenderWrap extends RenderObject implements RenderObjectWithChildren {
   set spacing(int value) {
     if (_spacing == value) return;
     _spacing = value;
+    markNeedsLayout();
   }
 
   int _runSpacing;
@@ -30,6 +31,7 @@ class RenderWrap extends RenderObject implements RenderObjectWithChildren {
   set runSpacing(int value) {
     if (_runSpacing == value) return;
     _runSpacing = value;
+    markNeedsLayout();
   }
 
   final List<RenderObject> _children = <RenderObject>[];
@@ -40,6 +42,7 @@ class RenderWrap extends RenderObject implements RenderObjectWithChildren {
 
   @override
   void replaceAllChildren(List<RenderObject> newChildren) {
+    if (hasSameRenderChildrenInOrder(_children, newChildren)) return;
     final newSet = Set<RenderObject>.identity()..addAll(newChildren);
     for (final c in List<RenderObject>.from(_children)) {
       if (!newSet.contains(c)) {
@@ -54,6 +57,7 @@ class RenderWrap extends RenderObject implements RenderObjectWithChildren {
     _children
       ..clear()
       ..addAll(newChildren);
+    markNeedsLayout();
   }
 
   @override

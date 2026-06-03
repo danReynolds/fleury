@@ -24,6 +24,34 @@ class _FixedSize extends RenderObject {
   }
 }
 
+class _PaintCountingBox extends RenderObject {
+  _PaintCountingBox(this.intrinsic, this.marker);
+
+  final CellSize intrinsic;
+  final String marker;
+  int paintCount = 0;
+  CellOffset? lastOffset;
+  CellOffset? lastScreenOffset;
+
+  @override
+  CellSize performLayout(CellConstraints constraints) {
+    return constraints.constrain(intrinsic);
+  }
+
+  @override
+  void paint(
+    CellBuffer buffer,
+    CellOffset offset, {
+    CellOffset? screenOffset,
+    CellRect? clipRect,
+  }) {
+    paintCount += 1;
+    lastOffset = offset;
+    lastScreenOffset = screenOffset;
+    buffer.writeGrapheme(offset, marker);
+  }
+}
+
 void main() {
   group('RenderFlex — empty', () {
     test('zero children: zero size', () {
@@ -168,6 +196,74 @@ void main() {
       flex.layout(const CellConstraints(maxCols: 5, maxRows: 10));
       expect(a.size.rows, 5);
       expect(b.size.rows, 5);
+    });
+  });
+
+  group('RenderFlex — paint culling', () {
+    test('skips vertical children outside the paint buffer', () {
+      final flex = RenderFlex(
+        direction: Axis.vertical,
+        mainAxisSize: MainAxisSize.min,
+      );
+      final children = [
+        for (var i = 0; i < 20; i++)
+          _PaintCountingBox(const CellSize(1, 1), String.fromCharCode(65 + i)),
+      ];
+      flex.replaceAllChildren(children);
+      flex.layout(const CellConstraints(maxCols: 1));
+
+      final buffer = CellBuffer(const CellSize(1, 3));
+      flex.paint(
+        buffer,
+        const CellOffset(0, -10),
+        screenOffset: const CellOffset(5, -10),
+      );
+
+      expect(
+        [
+          for (var i = 0; i < children.length; i++)
+            if (children[i].paintCount > 0) i,
+        ],
+        [10, 11, 12],
+      );
+      expect(children[10].lastOffset, const CellOffset(0, 0));
+      expect(children[10].lastScreenOffset, const CellOffset(5, 0));
+      expect(buffer.atColRow(0, 0).grapheme, 'K');
+      expect(buffer.atColRow(0, 1).grapheme, 'L');
+      expect(buffer.atColRow(0, 2).grapheme, 'M');
+    });
+
+    test('skips horizontal children outside the paint buffer', () {
+      final flex = RenderFlex(
+        direction: Axis.horizontal,
+        mainAxisSize: MainAxisSize.min,
+      );
+      final children = [
+        for (var i = 0; i < 8; i++)
+          _PaintCountingBox(const CellSize(1, 1), '$i'),
+      ];
+      flex.replaceAllChildren(children);
+      flex.layout(const CellConstraints(maxRows: 1));
+
+      final buffer = CellBuffer(const CellSize(3, 1));
+      flex.paint(
+        buffer,
+        const CellOffset(-2, 0),
+        screenOffset: const CellOffset(-2, 7),
+      );
+
+      expect(
+        [
+          for (var i = 0; i < children.length; i++)
+            if (children[i].paintCount > 0) i,
+        ],
+        [2, 3, 4],
+      );
+      expect(children[2].lastOffset, const CellOffset(0, 0));
+      expect(children[2].lastScreenOffset, const CellOffset(0, 7));
+      expect(buffer.atColRow(0, 0).grapheme, '2');
+      expect(buffer.atColRow(1, 0).grapheme, '3');
+      expect(buffer.atColRow(2, 0).grapheme, '4');
     });
   });
 

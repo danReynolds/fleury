@@ -152,6 +152,118 @@ void main() {
     expect(homeInput.text, 'ac', reason: 'focus restored to home');
   });
 
+  testWidgets('exposes navigator and route semantics', (tester) {
+    BuildContext? home;
+    tester.pumpWidget(
+      Navigator(
+        home: _Capture(sink: (x) => home = x, label: 'home'),
+      ),
+    );
+
+    var tree = tester.semantics();
+    var nav = tree.single(role: SemanticRole.navigation);
+    expect(nav.label, 'root navigator');
+    expect(nav.value, 1);
+    expect(nav.actions, contains(SemanticAction.navigate));
+    expect(nav.actions, isNot(contains(SemanticAction.close)));
+    expect(nav.state.values['routeDepth'], 1);
+    expect(nav.state.values['root'], isTrue);
+
+    var activeRoutes = tree.where(role: SemanticRole.route, selected: true);
+    expect(activeRoutes, hasLength(1));
+    expect(activeRoutes.single.state.routeName, '_Capture');
+
+    home!.push<void>(const Text('detail'));
+    tester.pump(const Duration(milliseconds: 300));
+
+    tree = tester.semantics();
+    nav = tree.single(role: SemanticRole.navigation);
+    expect(nav.value, 2);
+    expect(nav.actions, contains(SemanticAction.close));
+    expect(nav.state.values['canPop'], isTrue);
+
+    activeRoutes = tree.where(role: SemanticRole.route, selected: true);
+    expect(activeRoutes, hasLength(1));
+    final active = activeRoutes.single;
+    expect(active.state.routeName, 'Text');
+    expect(active.state.values['routeDepth'], 2);
+    expect(active.actions, contains(SemanticAction.close));
+  });
+
+  testWidgets('semantic navigator close pops the top route', (tester) async {
+    BuildContext? home;
+    tester.pumpWidget(
+      Navigator(
+        home: _Capture(sink: (x) => home = x, label: 'home'),
+      ),
+    );
+    home!.push<void>(const Text('detail'));
+    tester.pump(const Duration(milliseconds: 300));
+    expect(_screen(tester), 'detail');
+
+    final result = await tester.invokeSemanticAction(
+      SemanticAction.close,
+      role: SemanticRole.navigation,
+    );
+    tester.pump(const Duration(milliseconds: 300));
+
+    expect(result.completed, isTrue);
+    expect(_screen(tester), 'home');
+    expect(home!.navigator.depth, 1);
+  });
+
+  testWidgets('semantic route close pops an active page route', (tester) async {
+    BuildContext? home;
+    tester.pumpWidget(
+      Navigator(
+        home: _Capture(sink: (x) => home = x, label: 'home'),
+      ),
+    );
+    home!.push<void>(const Text('detail'));
+    tester.pump(const Duration(milliseconds: 300));
+
+    final result = await tester.invokeSemanticAction(
+      SemanticAction.close,
+      role: SemanticRole.route,
+      selected: true,
+    );
+    tester.pump(const Duration(milliseconds: 300));
+
+    expect(result.completed, isTrue);
+    expect(_screen(tester), 'home');
+  });
+
+  testWidgets('semantic route dismiss closes an active modal route', (
+    tester,
+  ) async {
+    BuildContext? home;
+    tester.pumpWidget(
+      Navigator(
+        home: _Capture(sink: (x) => home = x, label: 'home'),
+      ),
+    );
+    home!.present<void>(const Text('modal'));
+    tester.pump(const Duration(milliseconds: 300));
+    expect(home!.navigator.depth, 2);
+
+    final modalRoute = tester.semantics().single(
+      role: SemanticRole.route,
+      selected: true,
+      action: SemanticAction.dismiss,
+    );
+    expect(modalRoute.state.values['modal'], isTrue);
+
+    final result = await tester.invokeSemanticAction(
+      SemanticAction.dismiss,
+      node: modalRoute,
+    );
+    tester.pump(const Duration(milliseconds: 300));
+
+    expect(result.completed, isTrue);
+    expect(home!.navigator.depth, 1);
+    expect(_screen(tester), 'home');
+  });
+
   testWidgets('lower routes stay mounted — state survives back-nav', (tester) {
     BuildContext? home;
     tester.pumpWidget(
@@ -535,6 +647,38 @@ void main() {
       expect(blocked, 1, reason: 'Esc was intercepted');
       expect(_screen(tester), 'editor', reason: 'still on the guarded screen');
       expect(nav.depth, 2, reason: 'pop was vetoed');
+    });
+
+    testWidgets('semantic route close respects a blocking PopScope', (
+      tester,
+    ) async {
+      var blocked = 0;
+      tester.pumpWidget(
+        Navigator(
+          home: _Capture(sink: (x) {}, label: 'home'),
+        ),
+      );
+      final nav = tester.binding.rootNavigator!;
+      nav.push<void>(
+        PopScope(
+          canPop: false,
+          onBlocked: () => blocked++,
+          child: const Focus(autofocus: true, child: Text('editor')),
+        ),
+      );
+      tester.pump(const Duration(milliseconds: 300));
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.close,
+        role: SemanticRole.route,
+        selected: true,
+      );
+      tester.pump(const Duration(milliseconds: 300));
+
+      expect(result.completed, isTrue);
+      expect(blocked, 1, reason: 'semantic close used maybePop');
+      expect(_screen(tester), 'editor', reason: 'still on the guarded screen');
+      expect(nav.depth, 2, reason: 'semantic close was vetoed');
     });
 
     testWidgets('an allowing PopScope lets Esc through', (tester) {

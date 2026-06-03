@@ -1,0 +1,220 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryBenchmarkVariance",
+  "peerId": "bubbletea",
+  "scenarioId": "SB.5",
+  "scenarioName": "Streaming Markdown",
+  "runCount": 3,
+  "minRuns": 3,
+  "sufficientRunCount": true,
+  "comparable": true,
+  "strictPass": true,
+  "errors": [],
+  "comparableIssues": [],
+  "source": {
+    "versions": [
+      "Bubble Tea 2.0.7 / Bubbles 2.1.0 / Glamour 2.0.0"
+    ],
+    "urls": [
+      "https://pkg.go.dev/charm.land/glamour/v2"
+    ]
+  },
+  "environment": {
+    "machines": [
+      "macbookpro.lan"
+    ],
+    "operatingSystems": [
+      "darwin"
+    ],
+    "runtimes": [
+      "go1.25.8 / Bubble Tea 2.0.7 / Bubbles 2.1.0 / Glamour 2.0.0"
+    ],
+    "terminalModes": [
+      "bubbletea-glamour-viewport-model-harness"
+    ],
+    "terminalSizes": [
+      "120x32"
+    ]
+  },
+  "fixture": {
+    "workingDirectories": [
+      "peer-fixtures/bubbletea/sb5_streaming_markdown"
+    ],
+    "commands": [
+      "go run . --warmup=1 --iterations=3 --rows=10000 --json"
+    ],
+    "warmupIterations": {
+      "samples": 3,
+      "min": 1,
+      "median": 1,
+      "mean": 1,
+      "max": 1,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        1,
+        1,
+        1
+      ]
+    },
+    "measuredIterations": {
+      "samples": 3,
+      "min": 3,
+      "median": 3,
+      "mean": 3,
+      "max": 3,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        3,
+        3,
+        3
+      ]
+    }
+  },
+  "runs": [
+    {
+      "runId": "bubbletea-sb5-streaming-markdown-2026-06-02T14-56-39Z",
+      "capturedAt": "2026-06-02T14:56:39.644907Z",
+      "path": "peer-fixtures/bubbletea/sb5_streaming_markdown/results/variance/bubbletea-sb5-streaming-markdown-2026-06-02-run-1.json"
+    },
+    {
+      "runId": "bubbletea-sb5-streaming-markdown-2026-06-02T14-57-31Z",
+      "capturedAt": "2026-06-02T14:57:31.176374Z",
+      "path": "peer-fixtures/bubbletea/sb5_streaming_markdown/results/variance/bubbletea-sb5-streaming-markdown-2026-06-02-run-2.json"
+    },
+    {
+      "runId": "bubbletea-sb5-streaming-markdown-2026-06-02T14-58-10Z",
+      "capturedAt": "2026-06-02T14:58:10.738394Z",
+      "path": "peer-fixtures/bubbletea/sb5_streaming_markdown/results/variance/bubbletea-sb5-streaming-markdown-2026-06-02-run-3.json"
+    }
+  ],
+  "metrics": {
+    "chunkUpdateUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 107130,
+      "median": 127299,
+      "mean": 124577.667,
+      "max": 139304,
+      "standardDeviation": 13275.185,
+      "relativeSpreadPercent": 25.274,
+      "values": [
+        139304,
+        107130,
+        127299
+      ]
+    },
+    "chunkParseUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 476,
+      "median": 565,
+      "mean": 744.333,
+      "max": 1192,
+      "standardDeviation": 318.627,
+      "relativeSpreadPercent": 126.726,
+      "values": [
+        1192,
+        476,
+        565
+      ]
+    },
+    "chunkFrameUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 13199,
+      "median": 16422,
+      "mean": 16862.333,
+      "max": 20966,
+      "standardDeviation": 3186.115,
+      "relativeSpreadPercent": 47.296,
+      "values": [
+        20966,
+        13199,
+        16422
+      ]
+    },
+    "finalRenderUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 2520,
+      "median": 4411,
+      "mean": 5825,
+      "max": 10544,
+      "standardDeviation": 3424.976,
+      "relativeSpreadPercent": 181.909,
+      "values": [
+        10544,
+        2520,
+        4411
+      ]
+    },
+    "selectedBlockCopyUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 29,
+      "median": 95,
+      "mean": 1863.333,
+      "max": 5466,
+      "standardDeviation": 2547.613,
+      "relativeSpreadPercent": 5723.158,
+      "values": [
+        95,
+        5466,
+        29
+      ]
+    },
+    "semanticOrTestQueryUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 20,
+      "median": 25,
+      "mean": 24.333,
+      "max": 28,
+      "standardDeviation": 3.3,
+      "relativeSpreadPercent": 32,
+      "values": [
+        28,
+        20,
+        25
+      ]
+    },
+    "unsafeFrameCount": {
+      "primaryValue": "value",
+      "samples": 3,
+      "min": 0,
+      "median": 0,
+      "mean": 0,
+      "max": 0,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": null,
+      "values": [
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "correctness": {
+    "allRunsPass": true,
+    "gates": {
+      "incremental content remains coherent": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "unsafe links have visible fallback": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "unsafe frame count is zero": {
+        "passCount": 3,
+        "failCount": 0
+      }
+    }
+  },
+  "notes": [
+    "Metric variance uses each run artifact primary value: scalar metrics use the scalar value; metric maps prefer p95, then median, max, and value.",
+    "strictPass is false unless run count, scenario/peer identity, source version, terminal mode, terminal size, fixture command, fixture directory, and correctness gates are comparable."
+  ]
+}

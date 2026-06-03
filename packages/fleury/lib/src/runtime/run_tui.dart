@@ -9,16 +9,22 @@ import 'dart:async';
 import 'dart:io' show File, IOOverrides, Platform;
 
 import '../debug/debug_events.dart';
+import '../debug/debug_invalidation.dart';
 import '../debug/debug_shell.dart';
 import '../debug/debug_state.dart';
 import '../foundation/fleury_error.dart';
+import '../foundation/geometry.dart';
 import '../remote/remote_driver.dart';
 import '../remote/unix_socket_transport.dart';
 import '../rendering/ansi_renderer.dart';
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
+import '../rendering/render_layout_stats.dart';
+import '../rendering/render_repaint_boundary.dart';
+import '../semantics/semantics.dart';
+import '../terminal/diagnostics.dart';
 import '../terminal/events.dart';
-import '../terminal/posix_driver.dart';
+import '../terminal/native_driver.dart';
 import '../terminal/terminal_driver.dart';
 import '../widgets/focus.dart';
 import '../widgets/basic.dart' show ErrorWidget;
@@ -53,7 +59,7 @@ typedef TuiEventHandler = ExitRequested? Function(TuiEvent event);
 ///
 /// Sequence:
 ///
-///   1. Acquire a [TerminalDriver] (defaults to [PosixTerminalDriver]).
+///   1. Acquire a [TerminalDriver] (defaults to the native platform driver).
 ///   2. Enter [mode] (raw input, alt screen, hidden cursor by default).
 ///   3. Mount [root] under a [BuildOwner]; render the first
 ///      frame.
@@ -99,6 +105,13 @@ Future<void> runTui(
   // root is rebuilt whenever the viewport resizes, so a per-build
   // controller would lose mode + tab selection on every SIGWINCH.
   final debugController = DebugController(debug);
+  TerminalDiagnosis currentTerminalDiagnosis() => diagnoseTerminal(
+    usedDriver,
+    environment: Platform.environment,
+    stdoutIsTerminal: usedDriver.isInteractive,
+  );
+  debugController.setTerminalDiagnosisProvider(currentTerminalDiagnosis);
+  DebugEvents.emitTerminalDiagnosis(currentTerminalDiagnosis());
 
   // Fail fast (before touching the terminal or allocating the tree) when
   // there's no interactive display to draw to. A visual TUI piped to a file
@@ -152,6 +165,7 @@ Future<void> runTui(
   Element? rootElement;
   var disposed = false;
   var framePending = false;
+  var pendingFrameReason = 'initial';
 
   // Double-buffered rendering: front (just-painted, for next-frame
   // diff) and back (cleared and re-painted). The pair is allocated
@@ -167,7 +181,7 @@ Future<void> runTui(
   // tuple allocation.
   List<int> lastFlashedCells = const [];
 
-  void renderFrame() {
+  void renderFrame(String reason) {
     if (disposed) {
       // Late frame after cleanup started: drain any callbacks that
       // arrived between `disposed = true` and the scheduled microtask
@@ -208,6 +222,8 @@ Future<void> runTui(
     Duration phaseBuild = Duration.zero;
     Duration phaseLayout = Duration.zero;
     Duration phasePaint = Duration.zero;
+    RenderLayoutDebugStats.beginFrame(enabled: debugWatching);
+    RepaintBoundaryDebugStats.beginFrame(enabled: debugWatching);
     owner.renderFrame(
       r,
       next,
@@ -219,6 +235,8 @@ Future<void> runTui(
             }
           : null,
     );
+    final layoutStats = RenderLayoutDebugStats.takeFrameStats();
+    final repaintBoundaryStats = RepaintBoundaryDebugStats.takeFrameStats();
 
     if (requireFullRepaint) {
       // Clear screen + home so any stale content (from the alt-screen
@@ -236,15 +254,36 @@ Future<void> runTui(
     // pays nothing because debugController.paintFlash is false.
     final wantFlashCapture = debugWatching && debugController.paintFlash;
     final currentDirty = wantFlashCapture ? <int>[] : null;
+    var dirtyCellCount = 0;
+    int? dirtyMinCol;
+    int? dirtyMinRow;
+    int? dirtyMaxCol;
+    int? dirtyMaxRow;
+
+    void recordDirtyCell(int col, int row) {
+      dirtyCellCount += 1;
+      if (dirtyMinCol == null || col < dirtyMinCol!) dirtyMinCol = col;
+      if (dirtyMaxCol == null || col > dirtyMaxCol!) dirtyMaxCol = col;
+      if (dirtyMinRow == null || row < dirtyMinRow!) dirtyMinRow = row;
+      if (dirtyMaxRow == null || row > dirtyMaxRow!) dirtyMaxRow = row;
+      currentDirty?.add(row * next.size.cols + col);
+    }
+
     renderer.renderDiff(
       prev,
       next,
       sink,
-      onDirtyCell: wantFlashCapture
-          ? (col, row) => currentDirty!.add(row * next.size.cols + col)
-          : null,
+      onDirtyCell: debugWatching ? recordDirtyCell : null,
     );
     final phaseDiff = diffSw?.elapsed ?? Duration.zero;
+    final dirtyBounds = dirtyCellCount == 0
+        ? null
+        : CellRect.fromLTWH(
+            dirtyMinCol!,
+            dirtyMinRow!,
+            dirtyMaxCol! - dirtyMinCol! + 1,
+            dirtyMaxRow! - dirtyMinRow! + 1,
+          );
 
     // Paint-flash overlay: emit ANSI directly to the sink (not into
     // the buffer) so the buffer state stays "the app's truth" and the
@@ -279,17 +318,25 @@ Future<void> runTui(
 
     if (debugWatching) {
       frameCounter++;
+      final dirtySources = DebugInvalidations.drain();
       DebugEvents.emitFrame(
         FrameEvent(
           frameNumber: frameCounter,
+          reason: reason,
           build: phaseBuild,
           layout: phaseLayout,
           paint: phasePaint,
           diff: phaseDiff,
-          dirtyCells: currentDirty?.length ?? 0,
+          dirtyCells: dirtyCellCount,
+          dirtyBounds: dirtyBounds,
+          dirtySources: dirtySources,
+          layoutStats: layoutStats,
+          repaintBoundaries: repaintBoundaryStats,
           bufferSize: next.size,
         ),
       );
+    } else {
+      DebugInvalidations.reset();
     }
 
     // Drain post-frame callbacks AFTER bytes are out. Callers can now
@@ -301,21 +348,27 @@ Future<void> runTui(
     binding.flushPostFrameCallbacks(binding.tickerScheduler.clock.now);
   }
 
-  void scheduleFrame() {
+  void scheduleFrame([String reason = 'scheduled']) {
     if (disposed) return;
-    if (framePending) return;
+    if (framePending) {
+      pendingFrameReason = _mergeFrameReasons(pendingFrameReason, reason);
+      return;
+    }
+    pendingFrameReason = reason;
     framePending = true;
     scheduleMicrotask(() {
       framePending = false;
-      renderFrame();
+      final reason = pendingFrameReason;
+      pendingFrameReason = 'scheduled';
+      renderFrame(reason);
     });
   }
 
-  owner.onScheduleBuild = scheduleFrame;
+  owner.onScheduleBuild = () => scheduleFrame('build');
   // Pump the next frame whenever a post-frame callback is enqueued —
   // a Timer.run that adds one while the app is idle would otherwise
   // queue indefinitely (no setState, no event).
-  binding.onPostFrameCallback = scheduleFrame;
+  binding.onPostFrameCallback = () => scheduleFrame('post-frame');
 
   HotReloadController? hotReload;
   StreamSubscription<TuiEvent>? eventSub;
@@ -339,6 +392,9 @@ Future<void> runTui(
     eventSub = null;
     await hotReload?.dispose();
     hotReload = null;
+    debugController.setSemanticTreeProvider(null);
+    debugController.setTerminalDiagnosisProvider(null);
+    DebugInvalidations.reset();
     // Unmount the root before restoring the terminal so State.dispose
     // runs on every stateful widget — cancelling stream subscriptions
     // they registered in initState and releasing anything else that
@@ -428,7 +484,11 @@ Future<void> runTui(
             ),
           );
           rootElement = owner.mountRoot(buildRoot());
-          scheduleFrame();
+          debugController.setSemanticTreeProvider(() {
+            final root = rootElement;
+            return root == null ? null : SemanticTree.fromElement(root);
+          });
+          scheduleFrame('initial');
 
           if (enableHotReload) {
             hotReload = await HotReloadController.attach(
@@ -441,13 +501,14 @@ Future<void> runTui(
                 // (which unregister themselves), so reset only the
                 // controllers that survive.
                 binding.tickerScheduler.reassemble();
-                scheduleFrame();
+                scheduleFrame('hot-reload');
               },
             );
           }
 
           eventSub = usedDriver.events.listen(
             (event) {
+              DebugEvents.emitInput(event);
               if (event is ResizeEvent) {
                 // Force buffer-pool reallocation and a full repaint on the
                 // next frame; the existing buffers are the wrong size.
@@ -458,13 +519,7 @@ Future<void> runTui(
                 // re-runs against the new buffer constraints).
                 final r = rootElement;
                 if (r != null) rootElement = owner.updateRoot(r, buildRoot());
-              }
-
-              // Ctrl+C: always exits. This stays as a framework-level guard
-              // so users can never accidentally lose escape hatches.
-              if (event is KeyEvent && event.char == 'c' && event.hasCtrl) {
-                if (!exit.isCompleted) exit.complete();
-                return;
+                DebugEvents.emitTerminalDiagnosis(currentTerminalDiagnosis());
               }
 
               // Debug-shell hotkeys (Ctrl+G, F11, Esc-in-fullscreen, F12,
@@ -473,11 +528,11 @@ Future<void> runTui(
               // Same escape-hatch tier as Ctrl+C.
               if (event is KeyEvent &&
                   tryConsumeDebugKey(debugController, event)) {
-                scheduleFrame();
+                scheduleFrame('debug-key');
                 return;
               }
               if (event is KeyEvent && maybeToggleDebugConsole(event)) {
-                scheduleFrame();
+                scheduleFrame('debug-console');
                 return;
               }
 
@@ -485,11 +540,23 @@ Future<void> runTui(
               // chain (sequences, KeyBindings, Focus.onKey, globals), text +
               // paste go to the nearest TextInputClaimant, and mouse events go
               // to pointer regions + click-to-focus.
+              KeyEventResult dispatchResult = KeyEventResult.ignored;
               if (event is KeyEvent ||
                   event is TextInputEvent ||
                   event is PasteEvent ||
                   event is MouseEvent) {
-                dispatcher.dispatch(event);
+                dispatchResult = dispatcher.dispatch(event);
+              }
+
+              // Ctrl+C exits only when the app did not handle it first.
+              // SelectionArea and focused text fields use Ctrl+C for copy and
+              // bubble when no selection exists, preserving the escape hatch.
+              if (event is KeyEvent &&
+                  event.char == 'c' &&
+                  event.hasCtrl &&
+                  dispatchResult != KeyEventResult.handled) {
+                if (!exit.isCompleted) exit.complete();
+                return;
               }
 
               if (onEvent != null) {
@@ -500,7 +567,7 @@ Future<void> runTui(
                 }
               }
 
-              scheduleFrame();
+              scheduleFrame(_frameReasonForEvent(event));
             },
             onDone: () {
               // The driver's event stream ended — stdin EOF on Posix, or a
@@ -531,6 +598,26 @@ Future<void> runTui(
   return done.future;
 }
 
+String _mergeFrameReasons(String current, String next) {
+  if (current == next) return current;
+  if (current.isEmpty || current == 'scheduled') return next;
+  if (next.isEmpty || next == 'scheduled') return current;
+  final parts = current.split('+');
+  if (parts.contains(next)) return current;
+  return '$current+$next';
+}
+
+String _frameReasonForEvent(TuiEvent event) {
+  return switch (event) {
+    ResizeEvent() => 'resize',
+    KeyEvent(:final keyCode, :final char) =>
+      'key:${keyCode?.name ?? char ?? '?'}',
+    TextInputEvent() => 'text-input',
+    PasteEvent() => 'paste',
+    MouseEvent() => 'mouse',
+  };
+}
+
 class _DriverSink implements AnsiSink {
   _DriverSink(this._driver);
   final TerminalDriver _driver;
@@ -553,7 +640,7 @@ class _DriverSink implements AnsiSink {
 ///      `fleury serve` is running locally; connect to it so the TUI
 ///      renders into the shell's terminal or browser, leaving the
 ///      IDE's stdout free for the debugger.
-///   3. Fall back to [PosixTerminalDriver] (the normal path).
+///   3. Fall back to the native platform driver (the normal path).
 ///
 /// A handle that exists but points to a dead socket falls through to
 /// the Posix driver with a one-line stderr warning rather than
@@ -578,9 +665,9 @@ Future<TerminalDriver> _resolveDefaultDriver() async {
   }
 
   final handle = _findHandleUpward();
-  if (handle == null) return PosixTerminalDriver();
+  if (handle == null) return createNativeTerminalDriver();
   final path = (await handle.readAsString()).trim();
-  if (path.isEmpty) return PosixTerminalDriver();
+  if (path.isEmpty) return createNativeTerminalDriver();
   try {
     final transport = await UnixSocketFrameTransport.connect(path);
     return RemoteTerminalDriver(transport);
@@ -590,7 +677,7 @@ Future<TerminalDriver> _resolveDefaultDriver() async {
       '[fleury] ${handle.path} present but socket unreachable ($e); '
       'falling back to local terminal.',
     );
-    return PosixTerminalDriver();
+    return createNativeTerminalDriver();
   }
 }
 

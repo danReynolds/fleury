@@ -1,0 +1,235 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryBenchmarkVariance",
+  "peerId": "nocterm",
+  "scenarioId": "SB.2",
+  "scenarioName": "Text Editing Composer Stress",
+  "runCount": 3,
+  "minRuns": 3,
+  "sufficientRunCount": true,
+  "comparable": true,
+  "strictPass": true,
+  "errors": [],
+  "comparableIssues": [],
+  "source": {
+    "versions": [
+      "0.6.0"
+    ],
+    "urls": [
+      "https://pub.dev/packages/nocterm"
+    ]
+  },
+  "environment": {
+    "machines": [
+      "macbookpro.lan"
+    ],
+    "operatingSystems": [
+      "macos"
+    ],
+    "runtimes": [
+      "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\""
+    ],
+    "terminalModes": [
+      "nocterm-test-harness"
+    ],
+    "terminalSizes": [
+      "80x24"
+    ]
+  },
+  "fixture": {
+    "workingDirectories": [
+      "peer-fixtures/nocterm/sb2_text_editing"
+    ],
+    "commands": [
+      "dart run bin/sb2_text_editing_benchmark.dart --warmup=2 --iterations=10 --text-chars=10000 --json"
+    ],
+    "warmupIterations": {
+      "samples": 3,
+      "min": 2,
+      "median": 2,
+      "mean": 2,
+      "max": 2,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        2,
+        2,
+        2
+      ]
+    },
+    "measuredIterations": {
+      "samples": 3,
+      "min": 10,
+      "median": 10,
+      "mean": 10,
+      "max": 10,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        10,
+        10,
+        10
+      ]
+    }
+  },
+  "runs": [
+    {
+      "runId": "nocterm-sb2-text-editing-2026-06-02T12-42-55Z",
+      "capturedAt": "2026-06-02T12:42:55.838660Z",
+      "path": "peer-fixtures/nocterm/sb2_text_editing/results/variance/nocterm-sb2-text-editing-2026-06-02-run-1.json"
+    },
+    {
+      "runId": "nocterm-sb2-text-editing-2026-06-02T12-43-35Z",
+      "capturedAt": "2026-06-02T12:43:35.733909Z",
+      "path": "peer-fixtures/nocterm/sb2_text_editing/results/variance/nocterm-sb2-text-editing-2026-06-02-run-2.json"
+    },
+    {
+      "runId": "nocterm-sb2-text-editing-2026-06-02T12-44-23Z",
+      "capturedAt": "2026-06-02T12:44:23.717422Z",
+      "path": "peer-fixtures/nocterm/sb2_text_editing/results/variance/nocterm-sb2-text-editing-2026-06-02-run-3.json"
+    }
+  ],
+  "metrics": {
+    "cursorMoveUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 13410,
+      "median": 24555,
+      "mean": 32368,
+      "max": 59139,
+      "standardDeviation": 19469.08,
+      "relativeSpreadPercent": 186.231,
+      "values": [
+        59139,
+        24555,
+        13410
+      ]
+    },
+    "insertionDeletionUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 18010,
+      "median": 90846,
+      "mean": 96958,
+      "max": 182018,
+      "standardDeviation": 67095.322,
+      "relativeSpreadPercent": 180.534,
+      "values": [
+        90846,
+        18010,
+        182018
+      ]
+    },
+    "selectionUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 20624,
+      "median": 46276,
+      "mean": 44639,
+      "max": 67017,
+      "standardDeviation": 18975.202,
+      "relativeSpreadPercent": 100.253,
+      "values": [
+        46276,
+        67017,
+        20624
+      ]
+    },
+    "undoRedoUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 18218,
+      "median": 29425,
+      "mean": 33345.333,
+      "max": 52393,
+      "standardDeviation": 14224.613,
+      "relativeSpreadPercent": 116.143,
+      "values": [
+        52393,
+        18218,
+        29425
+      ]
+    },
+    "historyNavigationUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 28404,
+      "median": 32397,
+      "mean": 40173.333,
+      "max": 59719,
+      "standardDeviation": 13916.676,
+      "relativeSpreadPercent": 96.66,
+      "values": [
+        28404,
+        59719,
+        32397
+      ]
+    },
+    "completionAcceptUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 27149,
+      "median": 30922,
+      "mean": 39317,
+      "max": 59880,
+      "standardDeviation": 14621.596,
+      "relativeSpreadPercent": 105.85,
+      "values": [
+        59880,
+        27149,
+        30922
+      ]
+    },
+    "pasteCompleteUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 30313,
+      "median": 45691,
+      "mean": 102298.333,
+      "max": 230891,
+      "standardDeviation": 91145.218,
+      "relativeSpreadPercent": 438.988,
+      "values": [
+        230891,
+        30313,
+        45691
+      ]
+    },
+    "semanticOrTestQueryUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 932,
+      "median": 4042,
+      "mean": 11820,
+      "max": 30486,
+      "standardDeviation": 13259.781,
+      "relativeSpreadPercent": 731.173,
+      "values": [
+        30486,
+        932,
+        4042
+      ]
+    }
+  },
+  "correctness": {
+    "allRunsPass": true,
+    "gates": {
+      "mixed-width text remains valid": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "selection and undo state are correct": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "redacted value stays redacted": {
+        "passCount": 3,
+        "failCount": 0
+      }
+    }
+  },
+  "notes": [
+    "Metric variance uses each run artifact primary value: scalar metrics use the scalar value; metric maps prefer p95, then median, max, and value.",
+    "strictPass is false unless run count, scenario/peer identity, source version, terminal mode, terminal size, fixture command, fixture directory, and correctness gates are comparable."
+  ]
+}

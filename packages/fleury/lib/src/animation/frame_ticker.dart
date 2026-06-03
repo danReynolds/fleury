@@ -86,6 +86,12 @@ class FrameTicker extends ChangeNotifier {
   /// the next scheduler tick that crosses an interval boundary.
   bool get muted => _muted;
   set muted(bool value) {
+    if (_disposed) {
+      throw StateError(
+        'FrameTicker.muted set after dispose. Create a new FrameTicker '
+        'instead of reusing this one.',
+      );
+    }
     if (_muted == value) return;
     _muted = value;
   }

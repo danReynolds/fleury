@@ -58,11 +58,19 @@ class Menu extends StatefulWidget {
     required this.trigger,
     required this.items,
     this.autofocus = false,
+    this.semanticLabel,
   });
 
   final Widget trigger;
   final List<MenuEntry> items;
   final bool autofocus;
+
+  /// Label for the menu trigger and root menu in semantic snapshots.
+  ///
+  /// The visible [trigger] can be any widget, so Fleury cannot reliably infer a
+  /// human label from it. Pass this when tests, debug tools, prompt fallback, or
+  /// future adapters need a stable menu name.
+  final String? semanticLabel;
 
   @override
   State<Menu> createState() => _MenuState();
@@ -85,6 +93,7 @@ class _MenuState extends State<Menu> {
   }
 
   void _open() {
+    if (widget.items.isEmpty || _isOpen) return;
     final manager = Focus.of(context);
     final overlay = Overlay.of(context);
     _priorFocus = manager.focusedNode;
@@ -96,6 +105,8 @@ class _MenuState extends State<Menu> {
         link: _link,
         child: _MenuBody(
           entries: widget.items,
+          semanticLabel: widget.semanticLabel,
+          depth: 0,
           selectionStyle: theme.selectionStyle,
           mutedStyle: theme.mutedStyle,
           borderStyle: theme.borderStyle,
@@ -111,6 +122,7 @@ class _MenuState extends State<Menu> {
     // Clear focus so the menu's autofocusing handler can claim it.
     manager.requestFocus(null);
     overlay.insert(entry);
+    setState(() {});
   }
 
   void _close() {
@@ -118,6 +130,7 @@ class _MenuState extends State<Menu> {
     _entry = null;
     final prior = _priorFocus;
     if (prior != null && prior.isAttached) prior.requestFocus();
+    if (mounted) setState(() {});
   }
 
   @override
@@ -129,13 +142,48 @@ class _MenuState extends State<Menu> {
 
   @override
   Widget build(BuildContext context) {
+    Focus.maybeOf(context); // Rebuild trigger semantics when focus moves.
     return Anchor(
       link: _link,
-      child: Focus(
-        focusNode: _triggerFocus,
-        autofocus: widget.autofocus,
-        onKey: _onTriggerKey,
-        child: widget.trigger,
+      child: Semantics(
+        role: SemanticRole.button,
+        label: widget.semanticLabel,
+        focused: _triggerFocus.hasFocus,
+        expanded: _isOpen,
+        actions: <SemanticAction>{
+          SemanticAction.focus,
+          if (widget.items.isNotEmpty) SemanticAction.activate,
+          if (widget.items.isNotEmpty)
+            _isOpen ? SemanticAction.close : SemanticAction.open,
+        },
+        state: SemanticState({
+          'menuItemCount': _menuItemCount(widget.items),
+          'open': _isOpen,
+        }),
+        onAction: (action) {
+          switch (action) {
+            case SemanticAction.focus:
+              _triggerFocus.requestFocus();
+              return;
+            case SemanticAction.activate:
+              _isOpen ? _close() : _open();
+              return;
+            case SemanticAction.open:
+              _open();
+              return;
+            case SemanticAction.close:
+              _close();
+              return;
+            case _:
+              return;
+          }
+        },
+        child: Focus(
+          focusNode: _triggerFocus,
+          autofocus: widget.autofocus,
+          onKey: _onTriggerKey,
+          child: widget.trigger,
+        ),
       ),
     );
   }
@@ -146,6 +194,8 @@ class _MenuState extends State<Menu> {
 class _MenuBody extends StatefulWidget {
   const _MenuBody({
     required this.entries,
+    required this.semanticLabel,
+    required this.depth,
     required this.selectionStyle,
     required this.mutedStyle,
     required this.borderStyle,
@@ -155,6 +205,8 @@ class _MenuBody extends StatefulWidget {
   });
 
   final List<MenuEntry> entries;
+  final String? semanticLabel;
+  final int depth;
   final CellStyle selectionStyle;
   final CellStyle mutedStyle;
   final BorderStyle borderStyle;
@@ -220,6 +272,8 @@ class _MenuBodyState extends State<_MenuBody> {
         placement: FollowerPlacement.right,
         child: _MenuBody(
           entries: sub.items,
+          semanticLabel: sub.label,
+          depth: widget.depth + 1,
           selectionStyle: widget.selectionStyle,
           mutedStyle: widget.mutedStyle,
           borderStyle: widget.borderStyle,
@@ -232,12 +286,14 @@ class _MenuBodyState extends State<_MenuBody> {
     _childEntry = entry;
     manager.requestFocus(null); // hand focus to the nested panel
     overlay.insert(entry);
+    setState(() {});
   }
 
   void _closeSubmenu() {
     _childEntry?.remove();
     _childEntry = null;
     if (mounted) _focus.requestFocus();
+    if (mounted) setState(() {});
   }
 
   KeyEventResult _onKey(KeyEvent event) {
@@ -282,6 +338,7 @@ class _MenuBodyState extends State<_MenuBody> {
 
   @override
   Widget build(BuildContext context) {
+    Focus.maybeOf(context); // Rebuild menu/item semantics when focus moves.
     final hasSubmenu = widget.entries.any((e) => e is SubMenu);
     // Width fits the longest label plus the marker (2) and, when any row
     // is a submenu, the trailing ' ▸' indicator (2).
@@ -296,50 +353,88 @@ class _MenuBodyState extends State<_MenuBody> {
     }
     final width = labelWidth + 2 + (hasSubmenu ? 2 : 0);
 
-    return FocusScope(
-      modal: true,
-      suppressGlobals: true,
-      child: Focus(
-        focusNode: _focus,
-        autofocus: true,
-        onKey: _onKey,
-        child: Anchor(
-          link: _selfLink,
-          child: Container(
-            border: BoxBorder(style: widget.borderStyle),
-            child: SizedBox(
-              width: width,
-              height: widget.entries.length,
-              child: ListView.builder(
-                controller: _list,
-                itemCount: widget.entries.length,
-                itemBuilder: (_, i, selected) {
-                  final entry = widget.entries[i];
-                  switch (entry) {
-                    case MenuSeparator():
-                      return Text('─' * width, style: widget.mutedStyle);
-                    case MenuItem(:final label, :final enabled):
-                      if (!enabled) {
-                        return Text('  $label', style: widget.mutedStyle);
-                      }
-                      return Text(
-                        '${selected ? '› ' : '  '}$label',
-                        style: selected
-                            ? widget.selectionStyle
-                            : CellStyle.empty,
-                      );
-                    case SubMenu(:final label, :final enabled):
-                      if (!enabled) {
-                        return Text('  $label ▸', style: widget.mutedStyle);
-                      }
-                      return Text(
-                        '${selected ? '› ' : '  '}$label ▸',
-                        style: selected
-                            ? widget.selectionStyle
-                            : CellStyle.empty,
-                      );
-                  }
-                },
+    return Semantics(
+      role: SemanticRole.menu,
+      label: widget.semanticLabel,
+      focused: _focus.hasFocus,
+      expanded: true,
+      actions: const <SemanticAction>{
+        SemanticAction.focus,
+        SemanticAction.close,
+      },
+      state: SemanticState({
+        'menuDepth': widget.depth,
+        'menuItemCount': _menuItemCount(widget.entries),
+        'selectedKey': _list.selectedIndex,
+        'canGoBack': widget.canGoBack,
+      }),
+      onAction: (action) {
+        switch (action) {
+          case SemanticAction.focus:
+            _focus.requestFocus();
+            return;
+          case SemanticAction.close:
+            widget.onDismiss();
+            return;
+          case _:
+            return;
+        }
+      },
+      child: FocusScope(
+        modal: true,
+        suppressGlobals: true,
+        child: Focus(
+          focusNode: _focus,
+          autofocus: true,
+          onKey: _onKey,
+          child: Anchor(
+            link: _selfLink,
+            child: Container(
+              border: BoxBorder(style: widget.borderStyle),
+              child: SizedBox(
+                width: width,
+                height: widget.entries.length,
+                child: ListView.builder(
+                  controller: _list,
+                  itemCount: widget.entries.length,
+                  itemBuilder: (_, i, selected) {
+                    final entry = widget.entries[i];
+                    switch (entry) {
+                      case MenuSeparator():
+                        return Text('─' * width, style: widget.mutedStyle);
+                      case MenuItem(:final label, :final enabled):
+                        final child = enabled
+                            ? Text(
+                                '${selected ? '› ' : '  '}$label',
+                                style: selected
+                                    ? widget.selectionStyle
+                                    : CellStyle.empty,
+                              )
+                            : Text('  $label', style: widget.mutedStyle);
+                        return _semanticMenuItem(
+                          entry: entry,
+                          index: i,
+                          selected: selected,
+                          child: child,
+                        );
+                      case SubMenu(:final label, :final enabled):
+                        final child = enabled
+                            ? Text(
+                                '${selected ? '› ' : '  '}$label ▸',
+                                style: selected
+                                    ? widget.selectionStyle
+                                    : CellStyle.empty,
+                              )
+                            : Text('  $label ▸', style: widget.mutedStyle);
+                        return _semanticMenuItem(
+                          entry: entry,
+                          index: i,
+                          selected: selected,
+                          child: child,
+                        );
+                    }
+                  },
+                ),
               ),
             ),
           ),
@@ -347,4 +442,80 @@ class _MenuBodyState extends State<_MenuBody> {
       ),
     );
   }
+
+  Widget _semanticMenuItem({
+    required MenuEntry entry,
+    required int index,
+    required bool selected,
+    required Widget child,
+  }) {
+    final label = switch (entry) {
+      MenuItem(:final label) => label,
+      SubMenu(:final label) => label,
+      MenuSeparator() => '',
+    };
+    final enabled = switch (entry) {
+      MenuItem(:final enabled) => enabled,
+      SubMenu(:final enabled) => enabled,
+      MenuSeparator() => false,
+    };
+    final submenu = entry is SubMenu;
+    final expanded = submenu && selected && _childEntry != null;
+    return Semantics(
+      role: SemanticRole.menuItem,
+      label: label,
+      enabled: enabled,
+      focused: _focus.hasFocus && selected,
+      selected: selected,
+      expanded: submenu ? expanded : null,
+      actions: enabled
+          ? <SemanticAction>{
+              if (submenu) SemanticAction.open,
+              SemanticAction.activate,
+            }
+          : const <SemanticAction>{},
+      state: SemanticState({
+        'menuDepth': widget.depth,
+        'menuItemIndex': index,
+        'menuItemPosition': _menuItemPosition(widget.entries, index),
+        'menuItemCount': _menuItemCount(widget.entries),
+        'entryKind': submenu ? 'submenu' : 'item',
+        if (submenu) 'childMenuItemCount': _menuItemCount(entry.items),
+      }),
+      onAction: (action) {
+        if (!enabled) return;
+        switch (action) {
+          case SemanticAction.open:
+            if (submenu) {
+              _list.selectedIndex = index;
+              _openSubmenu(entry);
+            }
+            return;
+          case SemanticAction.activate:
+            _list.selectedIndex = index;
+            _activate(index);
+            return;
+          case _:
+            return;
+        }
+      },
+      child: child,
+    );
+  }
+}
+
+int _menuItemCount(List<MenuEntry> entries) {
+  var count = 0;
+  for (final entry in entries) {
+    if (entry is! MenuSeparator) count += 1;
+  }
+  return count;
+}
+
+int _menuItemPosition(List<MenuEntry> entries, int index) {
+  var position = 0;
+  for (var i = 0; i <= index && i < entries.length; i++) {
+    if (entries[i] is! MenuSeparator) position += 1;
+  }
+  return position;
 }

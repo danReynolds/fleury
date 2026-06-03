@@ -11,6 +11,10 @@ void _host<T>(FleuryTester tester, Animation<T> animation) {
   tester.pumpWidget(_Show(animation));
 }
 
+Matcher _stateError(String message) => throwsA(
+  isA<StateError>().having((error) => error.message, 'message', message),
+);
+
 class _Show extends StatelessWidget {
   const _Show(this.animation);
   final Animation<Object?> animation;
@@ -199,6 +203,48 @@ void main() {
       tester.pump(const Duration(milliseconds: 40));
       m.to(0.5); // supersedes
       await expectLater(first.orCancel, throwsA(isA<TickerCanceled>()));
+    });
+
+    testWidgets('dispose freezes final state and blocks mutation', (
+      tester,
+    ) async {
+      final m = Animation(0.0);
+      _host(tester, m);
+      final active = m.to(
+        1.0,
+        curve: Curves.linear,
+        duration: const Duration(seconds: 1),
+      );
+      tester.pump(const Duration(milliseconds: 250));
+      final finalValue = m.value;
+
+      m.dispose();
+
+      expect(m.value, finalValue);
+      expect(m.target, 1.0);
+      expect(m.isMoving, isFalse);
+      expect(tester.scheduler.activeTickerCount, 0);
+      expect(
+        () => m.snap(0.0),
+        _stateError('Animation.snap() called after dispose.'),
+      );
+      expect(
+        () => m.stop(),
+        _stateError('Animation.stop() called after dispose.'),
+      );
+      expect(
+        () => m.to(0.5),
+        _stateError('Animation.to() called after dispose.'),
+      );
+      expect(
+        () => m.loop(between: (0.0, 1.0)),
+        _stateError('Animation.loop() called after dispose.'),
+      );
+      expect(
+        () => m.run([AnimationStep.to(0.25)]),
+        _stateError('Animation.run() called after dispose.'),
+      );
+      await expectLater(active.orCancel, throwsA(isA<TickerCanceled>()));
     });
   });
 }

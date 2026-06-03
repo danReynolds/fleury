@@ -36,6 +36,7 @@ class DatePicker extends StatefulWidget {
     this.firstDate,
     this.lastDate,
     this.weekStartsOn = CalendarWeekStart.sunday,
+    this.label,
     this.focusNode,
     this.autofocus = false,
   });
@@ -55,6 +56,9 @@ class DatePicker extends StatefulWidget {
   /// Which day starts a week — drives the day-of-week header order and
   /// the column layout. Defaults to Sunday (matches CalendarHeatmap).
   final CalendarWeekStart weekStartsOn;
+
+  /// Optional label exposed through the semantic app graph.
+  final String? label;
 
   final FocusNode? focusNode;
   final bool autofocus;
@@ -130,7 +134,21 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     return KeyEventResult.ignored;
   }
 
+  @override
+  KeyEventResult onPaste(String text) => KeyEventResult.ignored;
+
   DateTime _midnight(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  String _formatDate(DateTime d) {
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$m-$day';
+  }
+
+  String _formatMonth(DateTime d) {
+    final m = d.month.toString().padLeft(2, '0');
+    return '${d.year}-$m';
+  }
 
   bool _inBounds(DateTime d) {
     final m = _midnight(d);
@@ -224,6 +242,10 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     final firstOfMonth = DateTime(v.year, v.month, 1);
     final lastDay = DateTime(v.year, v.month + 1, 0).day;
     final leadingBlanks = _backToWeekStart(firstOfMonth);
+    final canDecrement = _inBounds(
+      _midnight(v).subtract(const Duration(days: 1)),
+    );
+    final canIncrement = _inBounds(_midnight(v).add(const Duration(days: 1)));
 
     // Build the 7-column day grid as rows. Each row is a List<Widget>
     // of cells (blank, in-bounds day, or out-of-bounds dimmed day).
@@ -262,39 +284,79 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
       rows.add(row);
     }
 
-    return Focus(
-      focusNode: _node,
-      autofocus: widget.autofocus,
-      onKey: _onKey,
-      child: GestureDetector(
-        onTap: () => _node.requestFocus(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Header: `< January 2024 >`. Left-anchored so flex layout
-            // can't push children to negative columns at tight widths.
-            Row(
-              children: [
-                Text('< ', style: theme.mutedStyle),
-                Text(
-                  '${_months[v.month - 1]} ${v.year}',
-                  style: focused
-                      ? theme.focusedStyle
-                      : const CellStyle(bold: true),
-                ),
-                Text(' >', style: theme.mutedStyle),
-              ],
-            ),
-            // Day-of-week labels.
-            Row(
-              children: [
-                for (final label in _dayLabels)
-                  _Cell(' $label', style: theme.mutedStyle),
-              ],
-            ),
-            // The day grid.
-            for (final r in rows) Row(children: r),
-          ],
+    return Semantics(
+      role: SemanticRole.datePicker,
+      label: widget.label,
+      value: _formatDate(v),
+      focused: focused,
+      actions: {
+        SemanticAction.focus,
+        if (canIncrement) SemanticAction.increment,
+        if (canDecrement) SemanticAction.decrement,
+      },
+      state: SemanticState({
+        'selectedDate': _formatDate(v),
+        'visibleMonth': _formatMonth(v),
+        'visibleYear': v.year,
+        'weekStartsOn': widget.weekStartsOn.name,
+        if (widget.firstDate != null)
+          'firstDate': _formatDate(_midnight(widget.firstDate!)),
+        if (widget.lastDate != null)
+          'lastDate': _formatDate(_midnight(widget.lastDate!)),
+        'canIncrement': canIncrement,
+        'canDecrement': canDecrement,
+      }),
+      onAction: (action) {
+        switch (action) {
+          case SemanticAction.focus:
+            _node.requestFocus();
+            return;
+          case SemanticAction.increment:
+            _node.requestFocus();
+            if (canIncrement) _move(const Duration(days: 1));
+            return;
+          case SemanticAction.decrement:
+            _node.requestFocus();
+            if (canDecrement) _move(const Duration(days: -1));
+            return;
+          case _:
+            return;
+        }
+      },
+      child: Focus(
+        focusNode: _node,
+        autofocus: widget.autofocus,
+        onKey: _onKey,
+        child: GestureDetector(
+          onTap: () => _node.requestFocus(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header: `< January 2024 >`. Left-anchored so flex layout
+              // can't push children to negative columns at tight widths.
+              Row(
+                children: [
+                  Text('< ', style: theme.mutedStyle),
+                  Text(
+                    '${_months[v.month - 1]} ${v.year}',
+                    style: focused
+                        ? theme.focusedStyle
+                        : const CellStyle(bold: true),
+                  ),
+                  Text(' >', style: theme.mutedStyle),
+                ],
+              ),
+              // Day-of-week labels.
+              Row(
+                children: [
+                  for (final label in _dayLabels)
+                    _Cell(' $label', style: theme.mutedStyle),
+                ],
+              ),
+              // The day grid.
+              for (final r in rows) Row(children: r),
+            ],
+          ),
         ),
       ),
     );

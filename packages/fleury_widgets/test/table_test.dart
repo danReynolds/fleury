@@ -1,6 +1,7 @@
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
+import 'package:fleury_widgets/src/table.dart' show RenderTable;
 import 'package:test/test.dart';
 
 List<String> _lines(
@@ -20,7 +21,52 @@ List<String> _lines(
   ];
 }
 
+Matcher _stateError(String message) {
+  return throwsA(
+    isA<StateError>().having((error) => error.message, 'message', message),
+  );
+}
+
+class _CountingCell extends RenderObject {
+  _CountingCell(this.nextSize);
+
+  CellSize nextSize;
+  int layoutCount = 0;
+
+  @override
+  CellSize performLayout(CellConstraints constraints) {
+    layoutCount += 1;
+    return constraints.constrain(nextSize);
+  }
+
+  @override
+  void paint(
+    CellBuffer buffer,
+    CellOffset offset, {
+    CellOffset? screenOffset,
+    CellRect? clipRect,
+  }) {}
+}
+
 void main() {
+  group('TableController lifecycle', () {
+    test('dispose is idempotent and keeps final readable state', () {
+      final controller = TableController(selectedIndex: 2);
+
+      controller.dispose();
+      controller.dispose();
+
+      expect(controller.selectedIndex, 2);
+    });
+
+    test('mutating after dispose throws a lifecycle error', () {
+      final controller = TableController()..dispose();
+
+      const message = 'TableController has been disposed.';
+      expect(() => controller.selectedIndex = 1, _stateError(message));
+    });
+  });
+
   testWidgets('intrinsic columns align across rows', (tester) {
     tester.pumpWidget(
       Table(
@@ -102,6 +148,44 @@ void main() {
     final lines = _lines(tester, cols: 8, rows: 2);
     expect(lines[1], 'only');
   });
+
+  test(
+    'RenderTable child replacement keeps same ordered children layout-cached',
+    () {
+      final table = RenderTable(
+        columnCount: 2,
+        columnWidths: const [IntrinsicColumnWidth(), IntrinsicColumnWidth()],
+        columnSpacing: 1,
+        hasHeader: false,
+        headerSeparator: false,
+        separatorStyle: CellStyle.empty,
+        selectedRow: null,
+        selectedStyle: CellStyle.empty,
+        onVisibleRange: (_, _) {},
+      );
+      final a = _CountingCell(const CellSize(2, 1));
+      final b = _CountingCell(const CellSize(3, 1));
+      const constraints = CellConstraints(maxCols: 20, maxRows: 10);
+
+      table.replaceAllChildren([a, b]);
+      table.layout(constraints);
+      table.layout(constraints);
+      final aLayoutCount = a.layoutCount;
+      final bLayoutCount = b.layoutCount;
+      expect(aLayoutCount, greaterThan(0));
+      expect(bLayoutCount, greaterThan(0));
+
+      table.replaceAllChildren([a, b]);
+      RenderLayoutDebugStats.beginFrame(enabled: true);
+      table.layout(constraints);
+      final stats = RenderLayoutDebugStats.takeFrameStats();
+
+      expect(stats.performedCount, 0);
+      expect(stats.skippedCount, 1);
+      expect(a.layoutCount, aLayoutCount);
+      expect(b.layoutCount, bLayoutCount);
+    },
+  );
 
   group('edges & constraints', () {
     testWidgets('an empty table renders nothing', (tester) {
@@ -316,6 +400,179 @@ void main() {
       }
       // Selection is now r3; window shows r2,r3 (r3 at the bottom).
       expect(_lines(tester, cols: 4, rows: 3), ['H', 'r2', 'r3']);
+    });
+  });
+
+  group('semantics', () {
+    testWidgets('exposes table shape and cell coordinates', (tester) {
+      tester.pumpWidget(
+        Table(
+          header: const [Text('Name'), Text('Age')],
+          rows: const [
+            [Text('Al'), Text('30')],
+            [Text('Bo'), Text('40')],
+          ],
+        ),
+      );
+
+      final tree = tester.semantics();
+      final table = tree.single(role: SemanticRole.table);
+      expect(table.state.collectionRowCount, 2);
+      expect(table.state.collectionColumnCount, 2);
+      expect(table.state.values['hasHeader'], isTrue);
+
+      final cells = tree.byRole(SemanticRole.tableCell).toList();
+      expect(cells, hasLength(6));
+      expect(cells.first.state.values['rowIndex'], -1);
+      expect(cells.first.state.values['columnIndex'], 0);
+      expect(cells.first.state.values['header'], isTrue);
+    });
+
+    testWidgets('exposes interactive selection state', (tester) {
+      final controller = TableController();
+      tester.pumpWidget(
+        Table(
+          selectable: true,
+          autofocus: true,
+          controller: controller,
+          rows: const [
+            [Text('Al'), Text('30')],
+            [Text('Bo'), Text('40')],
+          ],
+        ),
+      );
+      tester.render(size: const CellSize(8, 2));
+
+      controller.selectedIndex = 1;
+      tester.pump();
+      final tree = tester.semantics();
+      final table = tree.single(role: SemanticRole.table);
+      expect(table.value, 1);
+      expect(table.actions, contains(SemanticAction.focus));
+      expect(table.actions, contains(SemanticAction.select));
+      expect(table.state.selectedKey, 1);
+
+      final selectedCells = tree
+          .where(role: SemanticRole.tableCell, selected: true)
+          .toList();
+      expect(selectedCells, hasLength(2));
+      expect(selectedCells.first.state.values['rowIndex'], 1);
+    });
+
+    testWidgets('semantic table activate selects the current row', (
+      tester,
+    ) async {
+      final controller = TableController();
+      int? picked;
+      tester.pumpWidget(
+        Table(
+          selectable: true,
+          autofocus: true,
+          controller: controller,
+          onSelect: (index) => picked = index,
+          rows: const [
+            [Text('Al'), Text('30')],
+            [Text('Bo'), Text('40')],
+          ],
+        ),
+      );
+      tester.render(size: const CellSize(8, 2));
+      controller.selectedIndex = 1;
+      tester.pump();
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        role: SemanticRole.table,
+      );
+
+      expect(result.completed, isTrue);
+      expect(picked, 1);
+    });
+
+    testWidgets('semantic cell select moves focus and selection', (
+      tester,
+    ) async {
+      final controller = TableController();
+      tester.pumpWidget(
+        Table(
+          selectable: true,
+          autofocus: true,
+          controller: controller,
+          rows: const [
+            [Text('Al'), Text('30')],
+            [Text('Bo'), Text('40')],
+          ],
+        ),
+      );
+      tester.render(size: const CellSize(8, 2));
+
+      final target = tester
+          .semantics()
+          .where(
+            role: SemanticRole.tableCell,
+            action: SemanticAction.select,
+            selected: false,
+          )
+          .singleWhere(
+            (node) =>
+                node.state.values['rowIndex'] == 1 &&
+                node.state.values['columnIndex'] == 0,
+          );
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.select,
+        node: target,
+      );
+
+      expect(result.completed, isTrue);
+      expect(controller.selectedIndex, 1);
+      final selectedCells = tester
+          .semantics()
+          .where(role: SemanticRole.tableCell, selected: true)
+          .toList();
+      expect(selectedCells, hasLength(2));
+      expect(selectedCells.first.state.values['rowIndex'], 1);
+      expect(selectedCells.first.actions, contains(SemanticAction.select));
+      expect(selectedCells.first.focused, isTrue);
+    });
+
+    testWidgets('semantic cell activate selects and invokes the row', (
+      tester,
+    ) async {
+      final controller = TableController();
+      int? picked;
+      tester.pumpWidget(
+        Table(
+          selectable: true,
+          autofocus: true,
+          controller: controller,
+          onSelect: (index) => picked = index,
+          rows: const [
+            [Text('Al'), Text('30')],
+            [Text('Bo'), Text('40')],
+          ],
+        ),
+      );
+      tester.render(size: const CellSize(8, 2));
+
+      final target = tester
+          .semantics()
+          .where(role: SemanticRole.tableCell, action: SemanticAction.activate)
+          .singleWhere(
+            (node) =>
+                node.state.values['rowIndex'] == 1 &&
+                node.state.values['columnIndex'] == 0,
+          );
+      expect(target.actions, contains(SemanticAction.activate));
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        node: target,
+      );
+
+      expect(result.completed, isTrue);
+      expect(controller.selectedIndex, 1);
+      expect(picked, 1);
     });
   });
 }

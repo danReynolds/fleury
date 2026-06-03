@@ -1,5 +1,7 @@
 import 'package:fleury/fleury.dart';
 
+import 'component_theme.dart';
+
 /// A horizontal determinate progress bar that fills proportionally to
 /// [value] (0..1). It fills the available width — bound it with a
 /// `SizedBox` for a fixed length — and renders sub-cell precision with
@@ -9,21 +11,60 @@ import 'package:fleury/fleury.dart';
 /// ```dart
 /// SizedBox(width: 20, child: ProgressBar(value: downloaded / total));
 /// ```
-class ProgressBar extends LeafRenderObjectWidget {
+class ProgressBar extends StatelessWidget {
   const ProgressBar({
     super.key,
     required this.value,
-    this.filledStyle = CellStyle.empty,
-    this.trackStyle = const CellStyle(dim: true),
+    this.filledStyle,
+    this.trackStyle,
   });
 
   /// Fraction filled, clamped to 0..1.
   final double value;
 
   /// Style for the filled portion (the blocks).
-  final CellStyle filledStyle;
+  final CellStyle? filledStyle;
 
   /// Style for the unfilled track.
+  final CellStyle? trackStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    final clamped = value.clamp(0.0, 1.0);
+    final percent = (clamped * 100).round();
+    final theme = Theme.of(context);
+    final widgetTheme = FleuryWidgetTheme.from(theme);
+    final resolvedFilledStyle =
+        filledStyle ?? widgetTheme.resolveProgressFilled(theme);
+    final resolvedTrackStyle =
+        trackStyle ?? widgetTheme.resolveProgressTrack(theme);
+    return Semantics(
+      role: SemanticRole.progress,
+      label: 'Progress',
+      value: clamped,
+      state: SemanticState({
+        'progressCurrent': clamped,
+        'progressTotal': 1.0,
+        'progressLabel': '$percent%',
+      }),
+      child: _RawProgressBar(
+        value: value,
+        filledStyle: resolvedFilledStyle,
+        trackStyle: resolvedTrackStyle,
+      ),
+    );
+  }
+}
+
+final class _RawProgressBar extends LeafRenderObjectWidget {
+  const _RawProgressBar({
+    required this.value,
+    required this.filledStyle,
+    required this.trackStyle,
+  });
+
+  final double value;
+  final CellStyle filledStyle;
   final CellStyle trackStyle;
 
   @override
@@ -56,13 +97,25 @@ class RenderProgressBar extends RenderObject {
        _trackStyle = trackStyle;
 
   double _value;
-  set value(double v) => _value = v;
+  set value(double v) {
+    if (_value == v) return;
+    _value = v;
+    markNeedsPaintOnly();
+  }
 
   CellStyle _filledStyle;
-  set filledStyle(CellStyle v) => _filledStyle = v;
+  set filledStyle(CellStyle v) {
+    if (_filledStyle == v) return;
+    _filledStyle = v;
+    markNeedsPaintOnly();
+  }
 
   CellStyle _trackStyle;
-  set trackStyle(CellStyle v) => _trackStyle = v;
+  set trackStyle(CellStyle v) {
+    if (_trackStyle == v) return;
+    _trackStyle = v;
+    markNeedsPaintOnly();
+  }
 
   // 1/8..7/8 partial blocks; index 0 is unused (no partial).
   static const _eighths = [' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];

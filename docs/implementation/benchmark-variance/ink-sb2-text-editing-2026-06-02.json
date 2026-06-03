@@ -1,0 +1,235 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryBenchmarkVariance",
+  "peerId": "ink",
+  "scenarioId": "SB.2",
+  "scenarioName": "Text Editing Composer Stress",
+  "runCount": 3,
+  "minRuns": 3,
+  "sufficientRunCount": true,
+  "comparable": true,
+  "strictPass": true,
+  "errors": [],
+  "comparableIssues": [],
+  "source": {
+    "versions": [
+      "Ink 7.0.5 / React 19.2.7 / ink-text-input 6.0.0 / react-ink-textarea 0.1.3"
+    ],
+    "urls": [
+      "https://www.npmjs.com/package/ink"
+    ]
+  },
+  "environment": {
+    "machines": [
+      "macbookpro.lan"
+    ],
+    "operatingSystems": [
+      "darwin"
+    ],
+    "runtimes": [
+      "v24.14.0 / Ink 7.0.5 / React 19.2.7 / ink-text-input 6.0.0 / react-ink-textarea 0.1.3"
+    ],
+    "terminalModes": [
+      "ink-testing-library-memory"
+    ],
+    "terminalSizes": [
+      "120x32"
+    ]
+  },
+  "fixture": {
+    "workingDirectories": [
+      "peer-fixtures/ink/sb2_text_editing"
+    ],
+    "commands": [
+      "node bin/sb2_text_editing_benchmark.js --warmup=1 --iterations=5 --text-chars=10000 --json"
+    ],
+    "warmupIterations": {
+      "samples": 3,
+      "min": 1,
+      "median": 1,
+      "mean": 1,
+      "max": 1,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        1,
+        1,
+        1
+      ]
+    },
+    "measuredIterations": {
+      "samples": 3,
+      "min": 5,
+      "median": 5,
+      "mean": 5,
+      "max": 5,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        5,
+        5,
+        5
+      ]
+    }
+  },
+  "runs": [
+    {
+      "runId": "ink-sb2-text-editing-2026-06-02T12-35-00Z",
+      "capturedAt": "2026-06-02T12:35:00.417Z",
+      "path": "peer-fixtures/ink/sb2_text_editing/results/variance/ink-sb2-text-editing-2026-06-02-run-1.json"
+    },
+    {
+      "runId": "ink-sb2-text-editing-2026-06-02T12-35-03Z",
+      "capturedAt": "2026-06-02T12:35:03.264Z",
+      "path": "peer-fixtures/ink/sb2_text_editing/results/variance/ink-sb2-text-editing-2026-06-02-run-2.json"
+    },
+    {
+      "runId": "ink-sb2-text-editing-2026-06-02T12-35-05Z",
+      "capturedAt": "2026-06-02T12:35:05.972Z",
+      "path": "peer-fixtures/ink/sb2_text_editing/results/variance/ink-sb2-text-editing-2026-06-02-run-3.json"
+    }
+  ],
+  "metrics": {
+    "cursorMoveUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 1836,
+      "median": 2449,
+      "mean": 2522,
+      "max": 3281,
+      "standardDeviation": 592.173,
+      "relativeSpreadPercent": 59.004,
+      "values": [
+        3281,
+        2449,
+        1836
+      ]
+    },
+    "insertionDeletionUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 554,
+      "median": 961,
+      "mean": 864,
+      "max": 1077,
+      "standardDeviation": 224.26,
+      "relativeSpreadPercent": 54.422,
+      "values": [
+        554,
+        961,
+        1077
+      ]
+    },
+    "selectionUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 344,
+      "median": 442,
+      "mean": 456.333,
+      "max": 583,
+      "standardDeviation": 98.096,
+      "relativeSpreadPercent": 54.072,
+      "values": [
+        583,
+        442,
+        344
+      ]
+    },
+    "undoRedoUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 123,
+      "median": 129,
+      "mean": 266.333,
+      "max": 547,
+      "standardDeviation": 198.476,
+      "relativeSpreadPercent": 328.682,
+      "values": [
+        547,
+        129,
+        123
+      ]
+    },
+    "historyNavigationUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 15,
+      "median": 16,
+      "mean": 17.667,
+      "max": 22,
+      "standardDeviation": 3.091,
+      "relativeSpreadPercent": 43.75,
+      "values": [
+        15,
+        16,
+        22
+      ]
+    },
+    "completionAcceptUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 2,
+      "median": 2,
+      "mean": 3,
+      "max": 5,
+      "standardDeviation": 1.414,
+      "relativeSpreadPercent": 150,
+      "values": [
+        5,
+        2,
+        2
+      ]
+    },
+    "pasteCompleteUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 902,
+      "median": 997,
+      "mean": 1233.333,
+      "max": 1801,
+      "standardDeviation": 403.27,
+      "relativeSpreadPercent": 90.171,
+      "values": [
+        902,
+        997,
+        1801
+      ]
+    },
+    "semanticOrTestQueryUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 126909,
+      "median": 152763,
+      "mean": 148598.667,
+      "max": 166124,
+      "standardDeviation": 16278.008,
+      "relativeSpreadPercent": 25.67,
+      "values": [
+        152763,
+        126909,
+        166124
+      ]
+    }
+  },
+  "correctness": {
+    "allRunsPass": true,
+    "gates": {
+      "mixed-width text remains valid": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "selection and undo state are correct": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "redacted value stays redacted": {
+        "passCount": 3,
+        "failCount": 0
+      }
+    }
+  },
+  "notes": [
+    "Metric variance uses each run artifact primary value: scalar metrics use the scalar value; metric maps prefer p95, then median, max, and value.",
+    "strictPass is false unless run count, scenario/peer identity, source version, terminal mode, terminal size, fixture command, fixture directory, and correctness gates are comparable."
+  ]
+}

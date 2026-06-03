@@ -52,5 +52,65 @@ void main() {
       );
       expect(_row(tester, 5).trim(), '');
     });
+
+    testWidgets('same-length data updates repaint without relayout', (tester) {
+      tester.pumpWidget(
+        SizedBox(
+          width: 5,
+          height: 1,
+          child: Sparkline(data: const [0, 0, 0, 0, 0], max: 4),
+        ),
+      );
+      tester.render(size: const CellSize(5, 1));
+
+      tester.pumpWidget(
+        SizedBox(
+          width: 5,
+          height: 1,
+          child: Sparkline(data: const [0, 1, 2, 3, 4], max: 4),
+        ),
+      );
+      RenderLayoutDebugStats.beginFrame(enabled: true);
+      final row = _row(tester, 5);
+      final stats = RenderLayoutDebugStats.takeFrameStats();
+
+      expect(row, ' ▂▄▆█');
+      expect(stats.performedCount, 0);
+      expect(stats.skippedCount, greaterThan(0));
+    });
+
+    testWidgets('exposes chart semantics and fallback state', (tester) {
+      tester.pumpWidget(
+        SizedBox(
+          width: 5,
+          height: 1,
+          child: Sparkline(
+            data: const [1, 3, 5],
+            max: 10,
+            semanticLabel: 'CPU trend',
+          ),
+        ),
+      );
+
+      final chart = tester.semantics().single(
+        role: SemanticRole.chart,
+        label: 'CPU trend',
+        value: '5',
+      );
+      expect(chart.state.chartType, 'sparkline');
+      expect(chart.state.chartPointCount, 3);
+      expect(chart.state.chartMinValue, 0);
+      expect(chart.state.chartMaxValue, 10);
+      expect(chart.state.chartLatestValue, 5);
+
+      final fallback = tester.accessibilitySnapshot().single(
+        role: SemanticRole.chart,
+        label: 'CPU trend',
+      );
+      expect(
+        fallback.states,
+        contains('chart sparkline, 3 points, min 0, max 10, latest 5'),
+      );
+    });
   });
 }

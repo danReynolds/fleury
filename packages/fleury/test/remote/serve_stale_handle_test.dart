@@ -49,12 +49,18 @@ void main() {
           '--port=$secondPort',
         ], workingDirectory: tempDir.path);
         final secondStderr = StringBuffer();
-        second.stderr.transform(utf8.decoder).listen(secondStderr.write);
+        final secondStderrSub = second.stderr
+            .transform(utf8.decoder)
+            .listen(secondStderr.write);
+        final secondStdoutDone = second.stdout.drain<void>();
 
-        final exitCode = await second.exitCode.timeout(
-          const Duration(seconds: 5),
-          onTimeout: () => -1,
+        final exitCode = await _waitForExit(
+          second,
+          timeout: const Duration(seconds: 15),
+          what: 'second fleury serve stale-handle probe',
         );
+        await secondStderrSub.cancel();
+        await secondStdoutDone;
         expect(
           exitCode,
           2,
@@ -155,4 +161,24 @@ Future<_ServeHandle> _startServe(
         throw StateError('serve did not start within 10s. stderr:\n$buf'),
   );
   return _ServeHandle(proc);
+}
+
+Future<int> _waitForExit(
+  Process process, {
+  required Duration timeout,
+  required String what,
+}) async {
+  try {
+    return await process.exitCode.timeout(timeout);
+  } on TimeoutException {
+    process.kill(ProcessSignal.sigkill);
+    final exitCode = await process.exitCode.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => -9,
+    );
+    throw StateError(
+      '$what did not exit within ${timeout.inSeconds}s; '
+      'killed with exit code $exitCode.',
+    );
+  }
 }

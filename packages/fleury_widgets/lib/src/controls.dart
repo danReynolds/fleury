@@ -1,5 +1,7 @@
 import 'package:fleury/fleury.dart';
 
+import 'component_theme.dart';
+
 /// Shared focus + activation chrome for the form controls. Focusable;
 /// Enter or Space activates ([onActivate]). The [builder] gets whether
 /// the control currently holds focus so it can show a focus cue.
@@ -11,12 +13,22 @@ class _FocusableControl extends StatefulWidget {
   const _FocusableControl({
     required this.onActivate,
     required this.builder,
+    required this.semanticRole,
+    this.semanticLabel,
+    this.semanticValue,
+    this.semanticChecked,
+    this.semanticSelected = false,
     this.focusNode,
     this.autofocus = false,
   });
 
   final void Function() onActivate;
   final Widget Function(bool focused) builder;
+  final SemanticRole semanticRole;
+  final String? semanticLabel;
+  final Object? semanticValue;
+  final bool? semanticChecked;
+  final bool semanticSelected;
   final FocusNode? focusNode;
   final bool autofocus;
 
@@ -74,6 +86,9 @@ class _FocusableControlState extends State<_FocusableControl>
   }
 
   @override
+  KeyEventResult onPaste(String text) => KeyEventResult.ignored;
+
+  @override
   void dispose() {
     _node.textInputClaimant = null;
     if (_owns) _node.dispose();
@@ -82,18 +97,40 @@ class _FocusableControlState extends State<_FocusableControl>
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      // A click focuses the control and activates it, so pointer users get
-      // the same affordance as keyboard users.
-      onTap: () {
-        _node.requestFocus();
-        widget.onActivate();
+    return Semantics(
+      role: widget.semanticRole,
+      label: widget.semanticLabel,
+      value: widget.semanticValue,
+      focused: _node.hasFocus,
+      selected: widget.semanticSelected,
+      checked: widget.semanticChecked,
+      actions: const {SemanticAction.focus, SemanticAction.activate},
+      onAction: (action) {
+        switch (action) {
+          case SemanticAction.focus:
+            _node.requestFocus();
+            return;
+          case SemanticAction.activate:
+            _node.requestFocus();
+            widget.onActivate();
+            return;
+          case _:
+            return;
+        }
       },
-      child: Focus(
-        focusNode: _node,
-        autofocus: widget.autofocus,
-        onKey: _onKey,
-        child: widget.builder(_node.hasFocus),
+      child: GestureDetector(
+        // A click focuses the control and activates it, so pointer users get
+        // the same affordance as keyboard users.
+        onTap: () {
+          _node.requestFocus();
+          widget.onActivate();
+        },
+        child: Focus(
+          focusNode: _node,
+          autofocus: widget.autofocus,
+          onKey: _onKey,
+          child: widget.builder(_node.hasFocus),
+        ),
       ),
     );
   }
@@ -135,15 +172,21 @@ class Checkbox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final widgetTheme = FleuryWidgetTheme.from(theme);
     return _FocusableControl(
       focusNode: focusNode,
       autofocus: autofocus,
       onActivate: () => onChanged(!value),
+      semanticRole: SemanticRole.checkbox,
+      semanticLabel: label,
+      semanticValue: value,
+      semanticChecked: value,
       builder: (focused) => _row(
         value ? '[x]' : '[ ]',
         label,
         focused,
-        Theme.of(context).focusedStyle,
+        widgetTheme.resolveControlFocus(theme),
       ),
     );
   }
@@ -169,15 +212,21 @@ class Toggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final widgetTheme = FleuryWidgetTheme.from(theme);
     return _FocusableControl(
       focusNode: focusNode,
       autofocus: autofocus,
       onActivate: () => onChanged(!value),
+      semanticRole: SemanticRole.toggle,
+      semanticLabel: label,
+      semanticValue: value,
+      semanticChecked: value,
       builder: (focused) => _row(
         value ? '[ o]' : '[o ]',
         label,
         focused,
-        Theme.of(context).focusedStyle,
+        widgetTheme.resolveControlFocus(theme),
       ),
     );
   }
@@ -210,15 +259,22 @@ class Switch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final widgetTheme = FleuryWidgetTheme.from(theme);
     return _FocusableControl(
       focusNode: focusNode,
       autofocus: autofocus,
       onActivate: () => onChanged(!value),
+      semanticRole: SemanticRole.toggle,
+      semanticLabel: label,
+      semanticValue: value,
+      semanticChecked: value,
       builder: (focused) {
         final trackStyle = value
-            ? CellStyle(foreground: theme.colorScheme.primary)
-            : theme.mutedStyle;
-        final focusBracket = focused ? theme.focusedStyle : CellStyle.empty;
+            ? widgetTheme.resolveSwitchOn(theme)
+            : widgetTheme.resolveSwitchOff(theme);
+        final focusBracket = focused
+            ? widgetTheme.resolveControlFocus(theme)
+            : CellStyle.empty;
         return Row(
           children: [
             Text('[', style: focusBracket),
@@ -257,15 +313,22 @@ class Radio<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final selected = value == groupValue;
+    final theme = Theme.of(context);
+    final widgetTheme = FleuryWidgetTheme.from(theme);
     return _FocusableControl(
       focusNode: focusNode,
       autofocus: autofocus,
       onActivate: () => onChanged(value),
+      semanticRole: SemanticRole.radio,
+      semanticLabel: label,
+      semanticValue: value,
+      semanticChecked: selected,
+      semanticSelected: selected,
       builder: (focused) => _row(
         selected ? '(o)' : '( )',
         label,
         focused,
-        Theme.of(context).focusedStyle,
+        widgetTheme.resolveControlFocus(theme),
       ),
     );
   }
@@ -311,16 +374,24 @@ class Button extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final widgetTheme = FleuryWidgetTheme.from(theme);
     final content = '[ $label ]';
 
     if (onPressed == null) {
-      return Text(content, style: theme.mutedStyle);
+      return Semantics(
+        role: SemanticRole.button,
+        label: label,
+        enabled: false,
+        child: Text(content, style: widgetTheme.resolveDisabled(theme)),
+      );
     }
     final base = CellStyle(foreground: _color(variant, theme.colorScheme));
     return _FocusableControl(
       focusNode: focusNode,
       autofocus: autofocus,
       onActivate: onPressed!,
+      semanticRole: SemanticRole.button,
+      semanticLabel: label,
       builder: (focused) => Text(
         content,
         style: focused ? base.merge(theme.selectionStyle) : base,

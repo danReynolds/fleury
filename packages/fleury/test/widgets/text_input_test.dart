@@ -7,6 +7,8 @@ import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
 KeyEvent _code(KeyCode kc) => KeyEvent(keyCode: kc);
+KeyEvent _shiftCode(KeyCode kc) =>
+    KeyEvent(keyCode: kc, modifiers: const {KeyModifier.shift});
 KeyEvent _ctrlChar(String c) =>
     KeyEvent(char: c, modifiers: const {KeyModifier.ctrl});
 
@@ -56,6 +58,85 @@ void main() {
       expect(controller.selection, 3);
     });
 
+    testWidgets('backspace and arrows respect grapheme clusters', (tester) {
+      final controller = TextEditingController(text: 'a🙂b');
+      tester.pumpWidget(TextInput(controller: controller, autofocus: true));
+
+      tester.sendKey(_code(KeyCode.arrowLeft));
+      expect(controller.selection, 3);
+      tester.sendKey(_code(KeyCode.backspace));
+      expect(controller.text, 'ab');
+      expect(controller.selection, 1);
+    });
+
+    testWidgets('Shift+arrows extend and render a selection range', (tester) {
+      final controller = TextEditingController(text: 'abcd')..selection = 1;
+      tester.pumpWidget(
+        TextInput(controller: controller, autofocus: true, enableBlink: false),
+      );
+
+      tester.sendKey(_shiftCode(KeyCode.arrowRight));
+      tester.sendKey(_shiftCode(KeyCode.arrowRight));
+
+      expect(
+        controller.textSelection,
+        const TextSelection(baseOffset: 1, extentOffset: 3),
+      );
+      final buf = tester.render(size: const CellSize(6, 1));
+      expect(buf.atColRow(0, 0).style.inverse, isFalse);
+      expect(buf.atColRow(1, 0).style.inverse, isTrue);
+      expect(buf.atColRow(2, 0).style.inverse, isTrue);
+      expect(buf.atColRow(3, 0).style.inverse, isFalse);
+
+      tester.type('X');
+      expect(controller.text, 'aXd');
+      expect(controller.textSelection, const TextSelection.collapsed(2));
+    });
+
+    testWidgets('keymap presets can add Emacs-style movement', (tester) {
+      final controller = TextEditingController(text: 'abc')..selection = 3;
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          autofocus: true,
+          keymap: TextEditingKeymap.emacsSingleLine,
+        ),
+      );
+
+      tester.sendKey(_ctrlChar('a'));
+      expect(controller.selection, 0);
+
+      tester.sendKey(_ctrlChar('e'));
+      expect(controller.selection, 3);
+    });
+
+    testWidgets('Ctrl+arrows move by word through the default keymap', (
+      tester,
+    ) {
+      final controller = TextEditingController(text: 'run deploy now')
+        ..selection = 14;
+      tester.pumpWidget(TextInput(controller: controller, autofocus: true));
+
+      tester.sendKey(
+        const KeyEvent(
+          keyCode: KeyCode.arrowLeft,
+          modifiers: {KeyModifier.ctrl},
+        ),
+      );
+      expect(controller.selection, 11);
+
+      tester.sendKey(
+        const KeyEvent(
+          keyCode: KeyCode.arrowLeft,
+          modifiers: {KeyModifier.ctrl, KeyModifier.shift},
+        ),
+      );
+      expect(
+        controller.textSelection,
+        const TextSelection(baseOffset: 11, extentOffset: 4),
+      );
+    });
+
     testWidgets('Enter fires onSubmit with the current text', (tester) {
       String? submitted;
       final controller = TextEditingController(text: 'send me');
@@ -69,6 +150,19 @@ void main() {
 
       tester.sendKey(_code(KeyCode.enter));
       expect(submitted, 'send me');
+    });
+
+    testWidgets('Ctrl+Z and Ctrl+Y undo and redo edits', (tester) {
+      final controller = TextEditingController();
+      tester.pumpWidget(TextInput(controller: controller, autofocus: true));
+
+      tester.type('a');
+      tester.type('b');
+      tester.sendKey(_ctrlChar('z'));
+      expect(controller.text, '');
+
+      tester.sendKey(_ctrlChar('y'));
+      expect(controller.text, 'ab');
     });
 
     testWidgets('Escape calls onEscape when provided', (tester) {
@@ -98,6 +192,222 @@ void main() {
 
       tester.sendKey(_code(KeyCode.escape));
       expect(escapes, 1);
+    });
+  });
+
+  group('history navigation', () {
+    testWidgets('Up and Down browse opt-in submission history', (tester) {
+      final controller = TextEditingController(text: 'draft');
+      final history = TextHistoryController(entries: ['one', 'two']);
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          historyController: history,
+          autofocus: true,
+        ),
+      );
+
+      tester.sendKey(_code(KeyCode.arrowUp));
+      expect(controller.text, 'two');
+      expect(controller.selection, 3);
+      expect(history.isBrowsing, isTrue);
+      expect(history.selectedIndex, 1);
+
+      tester.sendKey(_code(KeyCode.arrowUp));
+      expect(controller.text, 'one');
+      expect(history.selectedIndex, 0);
+
+      tester.sendKey(_code(KeyCode.arrowDown));
+      expect(controller.text, 'two');
+      expect(history.selectedIndex, 1);
+
+      tester.sendKey(_code(KeyCode.arrowDown));
+      expect(controller.text, 'draft');
+      expect(history.isBrowsing, isFalse);
+    });
+
+    testWidgets('Up bubbles when no history controller is provided', (tester) {
+      var ancestorUps = 0;
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [KeyBinding(KeyChord.up, onEvent: (_) => ancestorUps += 1)],
+          child: const TextInput(autofocus: true),
+        ),
+      );
+
+      tester.sendKey(_code(KeyCode.arrowUp));
+
+      expect(ancestorUps, 1);
+    });
+
+    testWidgets('Enter commits submitted text before onSubmit runs', (tester) {
+      final controller = TextEditingController(text: 'deploy');
+      final history = TextHistoryController();
+      String? submitted;
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          historyController: history,
+          autofocus: true,
+          onSubmit: (text) {
+            submitted = text;
+            controller.clear();
+          },
+        ),
+      );
+
+      tester.sendKey(_code(KeyCode.enter));
+
+      expect(submitted, 'deploy');
+      expect(history.entries, ['deploy']);
+      expect(controller.text, '');
+    });
+
+    testWidgets('typing while browsing history restores normal Down bubbling', (
+      tester,
+    ) {
+      var ancestorDowns = 0;
+      final controller = TextEditingController(text: 'draft');
+      final history = TextHistoryController(entries: ['one', 'two']);
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeyChord.down, onEvent: (_) => ancestorDowns += 1),
+          ],
+          child: TextInput(
+            controller: controller,
+            historyController: history,
+            autofocus: true,
+          ),
+        ),
+      );
+
+      tester.sendKey(_code(KeyCode.arrowUp));
+      expect(controller.text, 'two');
+      expect(history.isBrowsing, isTrue);
+
+      tester.type('x');
+      expect(controller.text, 'twox');
+      expect(history.isBrowsing, isFalse);
+
+      tester.sendKey(_code(KeyCode.arrowDown));
+      expect(controller.text, 'twox');
+      expect(ancestorDowns, 1);
+    });
+  });
+
+  group('completion scaffolding', () {
+    testWidgets('Tab accepts the selected completion', (tester) {
+      final controller = TextEditingController(text: 'git che');
+      final completions = TextCompletionController()
+        ..open(
+          range: const TextRange(start: 4, end: 7),
+          query: 'che',
+          options: const [
+            TextCompletionOption(
+              label: 'checkout branch',
+              replacement: 'checkout',
+            ),
+          ],
+        );
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          completionController: completions,
+          autofocus: true,
+        ),
+      );
+
+      tester.sendKey(_code(KeyCode.tab));
+
+      expect(controller.text, 'git checkout');
+      expect(controller.textSelection, const TextSelection.collapsed(12));
+      expect(completions.isOpen, isFalse);
+
+      tester.sendKey(_ctrlChar('z'));
+      expect(controller.text, 'git che');
+    });
+
+    testWidgets('Up and Down move completion selection before history', (
+      tester,
+    ) {
+      final controller = TextEditingController(text: 'git che');
+      final history = TextHistoryController(entries: ['git status']);
+      final completions = TextCompletionController()
+        ..open(
+          range: const TextRange(start: 4, end: 7),
+          query: 'che',
+          options: const [
+            TextCompletionOption(
+              label: 'checkout branch',
+              replacement: 'checkout',
+            ),
+            TextCompletionOption(
+              label: 'cherry-pick commit',
+              replacement: 'cherry-pick',
+            ),
+          ],
+        );
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          historyController: history,
+          completionController: completions,
+          autofocus: true,
+        ),
+      );
+
+      tester.sendKey(_code(KeyCode.arrowDown));
+
+      expect(completions.selectedIndex, 1);
+      expect(history.isBrowsing, isFalse);
+      expect(controller.text, 'git che');
+
+      tester.sendKey(_code(KeyCode.tab));
+
+      expect(controller.text, 'git cherry-pick');
+      expect(completions.isOpen, isFalse);
+    });
+
+    testWidgets('Escape closes completion before calling onEscape', (tester) {
+      var escapes = 0;
+      final completions = TextCompletionController()
+        ..open(
+          range: const TextRange.collapsed(0),
+          options: const [TextCompletionOption(label: 'one')],
+        );
+      tester.pumpWidget(
+        TextInput(
+          completionController: completions,
+          autofocus: true,
+          onEscape: () => escapes += 1,
+        ),
+      );
+
+      tester.sendKey(_code(KeyCode.escape));
+
+      expect(completions.isOpen, isFalse);
+      expect(escapes, 0);
+
+      tester.sendKey(_code(KeyCode.escape));
+      expect(escapes, 1);
+    });
+
+    testWidgets('Tab bubbles when completion has no selected option', (tester) {
+      var tabs = 0;
+      final completions = TextCompletionController()
+        ..open(range: const TextRange.collapsed(0));
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [KeyBinding(KeyChord.tab, onEvent: (_) => tabs += 1)],
+          child: TextInput(completionController: completions, autofocus: true),
+        ),
+      );
+
+      tester.sendKey(_code(KeyCode.tab));
+
+      expect(tabs, 1);
+      expect(completions.isOpen, isTrue);
     });
   });
 
@@ -181,6 +491,366 @@ void main() {
         expect(submits, 0, reason: 'paste must never submit');
       },
     );
+
+    testWidgets('paste is one undoable transaction', (tester) {
+      final controller = TextEditingController();
+      tester.pumpWidget(TextInput(controller: controller, autofocus: true));
+
+      tester.paste('one\ntwo');
+      expect(controller.text, 'one two');
+
+      tester.sendKey(_ctrlChar('z'));
+      expect(controller.text, '');
+
+      tester.sendKey(_ctrlChar('y'));
+      expect(controller.text, 'one two');
+    });
+
+    testWidgets('large paste is chunked over post-frame pumps', (tester) {
+      final controller = TextEditingController();
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          autofocus: true,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 3,
+            chunkSize: 2,
+          ),
+        ),
+      );
+
+      tester.paste('abcdef');
+
+      expect(controller.text, 'ab');
+      var field = tester.semantics().single(role: SemanticRole.textField);
+      expect(field.state.pasteInProgress, isTrue);
+      expect(field.state.pasteInsertedLength, 2);
+      expect(field.state.pasteTotalLength, 6);
+
+      tester.pump();
+      expect(controller.text, 'abcd');
+
+      tester.pump();
+      expect(controller.text, 'abcdef');
+
+      tester.pump();
+      field = tester.semantics().single(role: SemanticRole.textField);
+      expect(field.state.pasteInProgress, isFalse);
+      expect(field.state.pasteInsertedLength, 0);
+      expect(field.state.pasteTotalLength, 0);
+
+      tester.sendKey(_ctrlChar('z'));
+      expect(controller.text, '');
+    });
+
+    testWidgets('single-line large paste normalizes before chunking', (tester) {
+      final controller = TextEditingController();
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          autofocus: true,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 3,
+            chunkSize: 20,
+          ),
+        ),
+      );
+
+      tester.paste('one\r\ntwo\nthree');
+
+      expect(controller.text, 'one two three');
+    });
+
+    testWidgets('undo during a scheduled paste cancels remaining chunks', (
+      tester,
+    ) {
+      final controller = TextEditingController();
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          autofocus: true,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 3,
+            chunkSize: 2,
+          ),
+        ),
+      );
+
+      tester.paste('abcdef');
+      expect(controller.text, 'ab');
+
+      tester.sendKey(_ctrlChar('z'));
+      expect(controller.text, '');
+
+      tester.pump();
+      tester.pump();
+      expect(controller.text, '');
+    });
+  });
+
+  group('enabled and readOnly', () {
+    testWidgets('semanticLabel and semanticState customize field semantics', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const TextInput(
+          placeholder: 'example text',
+          semanticLabel: 'Search query',
+          semanticState: SemanticState({'fieldType': 'search'}),
+        ),
+      );
+
+      final field = tester.semantics().single(
+        role: SemanticRole.textField,
+        label: 'Search query',
+      );
+      expect(field.state['fieldType'], 'search');
+    });
+
+    testWidgets('readOnly field consumes edits without mutating', (tester) {
+      final controller = TextEditingController(text: 'abc');
+      tester.pumpWidget(
+        TextInput(controller: controller, autofocus: true, readOnly: true),
+      );
+
+      tester.type('X');
+      tester.paste('YZ');
+      tester.sendKey(_code(KeyCode.backspace));
+      expect(controller.text, 'abc');
+      expect(controller.selection, 3);
+
+      tester.sendKey(_code(KeyCode.arrowLeft));
+      expect(controller.selection, 2);
+    });
+
+    testWidgets('disabled field does not autofocus or edit', (tester) {
+      final controller = TextEditingController();
+      tester.pumpWidget(
+        TextInput(controller: controller, autofocus: true, enabled: false),
+      );
+
+      tester.type('x');
+      tester.paste('y');
+      expect(controller.text, '');
+
+      final field = tester.semantics().single(
+        role: SemanticRole.textField,
+        enabled: false,
+      );
+      expect(field.focused, isFalse);
+    });
+  });
+
+  group('copy and cut', () {
+    late Clipboard originalClipboard;
+    late TestClipboard clipboard;
+
+    setUp(() {
+      originalClipboard = Clipboard.instance;
+      clipboard = TestClipboard();
+      Clipboard.instance = clipboard;
+    });
+
+    tearDown(() {
+      Clipboard.instance = originalClipboard;
+    });
+
+    testWidgets('Ctrl+C copies selected text', (tester) async {
+      final controller = TextEditingController(text: 'abcdef')
+        ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 4);
+      tester.pumpWidget(TextInput(controller: controller, autofocus: true));
+
+      tester.sendKey(_ctrlChar('c'));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(clipboard.lastWritten, 'bcd');
+      expect(controller.text, 'abcdef');
+    });
+
+    testWidgets('Ctrl+X cuts selected text when editable', (tester) async {
+      final controller = TextEditingController(text: 'abcdef')
+        ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 4);
+      tester.pumpWidget(TextInput(controller: controller, autofocus: true));
+
+      tester.sendKey(_ctrlChar('x'));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(clipboard.lastWritten, 'bcd');
+      expect(controller.text, 'aef');
+      expect(controller.textSelection, const TextSelection.collapsed(1));
+    });
+
+    testWidgets('Ctrl+C bubbles when there is no field selection', (tester) {
+      var ancestorCopies = 0;
+      final controller = TextEditingController(text: 'abc');
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeyChord.ctrl.c, onEvent: (_) => ancestorCopies += 1),
+          ],
+          child: TextInput(controller: controller, autofocus: true),
+        ),
+      );
+
+      tester.sendKey(_ctrlChar('c'));
+
+      expect(ancestorCopies, 1);
+      expect(clipboard.lastWritten, isNull);
+    });
+
+    testWidgets('disabled clipboard policy blocks copy and bubbling', (
+      tester,
+    ) async {
+      var ancestorCopies = 0;
+      final controller = TextEditingController(text: 'abcdef')
+        ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 4);
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeyChord.ctrl.c, onEvent: (_) => ancestorCopies += 1),
+          ],
+          child: TextInput(
+            controller: controller,
+            autofocus: true,
+            clipboardPolicy: TextClipboardPolicy.disabled,
+          ),
+        ),
+      );
+
+      tester.sendKey(_ctrlChar('c'));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(clipboard.lastWritten, isNull);
+      expect(ancestorCopies, 0);
+    });
+
+    testWidgets('redacted clipboard policy copies obscured text', (
+      tester,
+    ) async {
+      final controller = TextEditingController(text: 'secret')
+        ..textSelection = const TextSelection(baseOffset: 0, extentOffset: 6);
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          autofocus: true,
+          obscureText: true,
+          obscuringCharacter: '*',
+        ),
+      );
+
+      tester.sendKey(_ctrlChar('c'));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(clipboard.lastWritten, '******');
+    });
+
+    testWidgets('readOnly field can copy but not cut', (tester) async {
+      final controller = TextEditingController(text: 'abcdef')
+        ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 4);
+      tester.pumpWidget(
+        TextInput(controller: controller, autofocus: true, readOnly: true),
+      );
+
+      tester.sendKey(_ctrlChar('c'));
+      await Future<void>.delayed(Duration.zero);
+      expect(clipboard.lastWritten, 'bcd');
+
+      tester.sendKey(_ctrlChar('x'));
+      await Future<void>.delayed(Duration.zero);
+      expect(clipboard.lastWritten, 'bcd');
+      expect(controller.text, 'abcdef');
+    });
+  });
+
+  group('horizontal scrolling', () {
+    testWidgets('keeps the trailing cursor visible in bounded width', (tester) {
+      final controller = TextEditingController(text: 'abcdef');
+      tester.pumpWidget(
+        TextInput(controller: controller, autofocus: true, enableBlink: false),
+      );
+
+      final buf = tester.render(size: const CellSize(4, 1));
+
+      expect(buf.atColRow(0, 0).grapheme, 'd');
+      expect(buf.atColRow(1, 0).grapheme, 'e');
+      expect(buf.atColRow(2, 0).grapheme, 'f');
+      expect(buf.atColRow(3, 0).grapheme, ' ');
+      expect(buf.atColRow(3, 0).style.inverse, isTrue);
+    });
+
+    testWidgets('scrolls back when the cursor moves to the start', (tester) {
+      final controller = TextEditingController(text: 'abcdef');
+      tester.pumpWidget(
+        TextInput(controller: controller, autofocus: true, enableBlink: false),
+      );
+      tester.render(size: const CellSize(4, 1));
+
+      tester.sendKey(_code(KeyCode.home));
+      final buf = tester.render(size: const CellSize(4, 1));
+
+      expect(buf.atColRow(0, 0).grapheme, 'a');
+      expect(buf.atColRow(0, 0).style.inverse, isTrue);
+      expect(buf.atColRow(1, 0).grapheme, 'b');
+      expect(buf.atColRow(2, 0).grapheme, 'c');
+      expect(buf.atColRow(3, 0).grapheme, 'd');
+    });
+
+    testWidgets('does not split a wide grapheme at the scroll boundary', (
+      tester,
+    ) {
+      final controller = TextEditingController(text: 'ab🙂cd');
+      tester.pumpWidget(
+        TextInput(controller: controller, autofocus: true, enableBlink: false),
+      );
+
+      final buf = tester.render(size: const CellSize(4, 1));
+
+      expect(buf.atColRow(0, 0).grapheme, 'c');
+      expect(buf.atColRow(1, 0).grapheme, 'd');
+      expect(buf.atColRow(2, 0).grapheme, ' ');
+      expect(buf.atColRow(2, 0).style.inverse, isTrue);
+      expect(buf.atColRow(3, 0).grapheme, isNull);
+    });
+
+    testWidgets('scrolls obscured fields using obscured display width', (
+      tester,
+    ) {
+      final controller = TextEditingController(text: 'secret');
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          autofocus: true,
+          enableBlink: false,
+          obscureText: true,
+          obscuringCharacter: '*',
+        ),
+      );
+
+      final buf = tester.render(size: const CellSize(4, 1));
+
+      expect(buf.atColRow(0, 0).grapheme, '*');
+      expect(buf.atColRow(1, 0).grapheme, '*');
+      expect(buf.atColRow(2, 0).grapheme, '*');
+      expect(buf.atColRow(3, 0).grapheme, ' ');
+      expect(buf.atColRow(3, 0).style.inverse, isTrue);
+    });
+
+    testWidgets('keeps the active end of a selection visible', (tester) {
+      final controller = TextEditingController(text: 'abcdefgh')
+        ..textSelection = const TextSelection(baseOffset: 3, extentOffset: 8);
+      tester.pumpWidget(
+        TextInput(controller: controller, autofocus: true, enableBlink: false),
+      );
+
+      final buf = tester.render(size: const CellSize(5, 1));
+
+      expect(buf.atColRow(0, 0).grapheme, 'e');
+      expect(buf.atColRow(1, 0).grapheme, 'f');
+      expect(buf.atColRow(2, 0).grapheme, 'g');
+      expect(buf.atColRow(3, 0).grapheme, 'h');
+      expect(buf.atColRow(0, 0).style.inverse, isTrue);
+      expect(buf.atColRow(3, 0).style.inverse, isTrue);
+    });
   });
 
   group('placeholder', () {

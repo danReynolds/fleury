@@ -4,6 +4,10 @@
 **Date:** 2026-05-31  
 **Scope:** Fleury core, widget catalog, runtime, testing, terminal drivers, and developer-tool use cases  
 
+**Active execution tracker:** Use
+[docs/implementation/README.md](implementation/README.md) for milestone
+checklists, workstream notes, implementation evidence, and decision tracking.
+
 ## 1. Executive Thesis
 
 Fleury should aim to be the best framework for production terminal
@@ -53,6 +57,63 @@ The long-term positioning:
 > reactive, testable, fast, terminal-correct, and batteries-included for
 > data-heavy developer tools and agent workflows.
 
+### Proof App Strategy
+
+Fleury should be developed against real application pressure, not only toy
+examples.
+
+For this implementation cycle, the proof surface is an **example subpackage**
+inside the Fleury workspace. It should exercise the core framework like a real
+app while staying independent from Dune's product schedule.
+
+The later flagship product is **Dune through a future `dune_cli` app**. Dune
+should become the primary public proof surface after the core widgets and app
+framework are stable through examples, tests, and benchmarks.
+
+This changes the roadmap discipline:
+
+- Framework primitives should first be validated in the example subpackage.
+- The example subpackage should mimic real developer-tool pressure:
+  navigation, commands, text input, data views, logs/output, selection,
+  capability fallback, diagnostics, and benchmark fixtures.
+- Dune/`dune_cli` should begin only after the example subpackage proves the
+  core widgets and framework pieces work together.
+- Dune remains the later flagship commitment; the example subpackage is the
+  current-cycle proof harness.
+
+The current-cycle proof slice should stay narrow: sidebar/navigation,
+streamed content, composer/input, status, commands, selection, output/log
+regions, and at least one dense data surface. Tool-call, approval,
+protocol-specific agent flows, Dune integration, and full replay are future
+pressure tests, not current-cycle blockers.
+
+### Why Dart, Honestly
+
+Dart is not the default language for CLI frameworks. Go, Rust, Python, and
+TypeScript have stronger existing TUI ecosystems. Fleury should not hide that.
+
+The Dart bet is still defensible:
+
+- Dart gives Fleury a Flutter-shaped mental model without depending on
+  Flutter's engine.
+- Hot reload can make terminal app iteration feel unusually fast.
+- `dart compile exe` gives a credible standalone-binary distribution story.
+- Sound null safety and strong async primitives are a good fit for structured
+  developer tools.
+- Dart/Flutter-adjacent developers can serve as the first natural audience,
+  with Dune becoming the later flagship path.
+
+The tradeoff is real:
+
+- Most CLI builders are not Dart developers today.
+- The package ecosystem for terminal apps is smaller than Go, Rust, Python,
+  or TypeScript.
+- Fleury must win on product capability, not only language affinity.
+
+Therefore the launch pitch should not be "Dart TUI framework" alone. It
+should be "semantic, replayable, capability-aware developer-tool TUIs with
+Flutter-style ergonomics," with Dart as the implementation advantage.
+
 ## 3. Current Position
 
 Fleury already has credible foundations:
@@ -81,8 +142,9 @@ The important gaps are also clear:
 - Async workers, subprocesses, progress, cancellation, and stream binding are
   not first-class.
 - Terminal capability probing and compatibility policy are incomplete.
-- Dirty layout/paint propagation is not yet deep enough for a top-tier
-  performance story.
+- Dirty layout/paint propagation now has a conservative foundation, benchmark
+  proof, and a first audited paint-only split; the remaining performance work
+  is broader widget-package setter auditing under scenario pressure.
 - Styling and theming are clean but not yet expressive enough to rival the
   best product-oriented terminal frameworks.
 - Agent/developer-tool-specific primitives are not yet first-class.
@@ -531,8 +593,9 @@ Developer-visible win:
 
 Launch gate:
 
-- A failing scenario can emit a replay artifact.
-- The replay artifact can run headlessly and reproduce semantic state and
+- A failing scenario can emit structured debug capture with enough context to
+  write a regression test.
+- Later replay artifacts can run headlessly and reproduce semantic state and
   rendered frames.
 - Inspector views expose focus, commands, semantics, dirty regions, effects,
   and frame timing.
@@ -872,6 +935,7 @@ Make Fleury visibly fast on real workloads.
 - Buffer reuse.
 - Lazy `ListView.builder`.
 - Repaint boundaries with bounding-box blits.
+- Same-constraint render-object layout caching with upward dirty propagation.
 - Benchmark history and profiling discipline.
 
 ### Target Capabilities
@@ -997,8 +1061,7 @@ developer-tool TUIs.
 - `StreamingMarkdown`
 - `ToolCallCard`
 - `ApprovalPrompt`
-- `DiffReview`
-- `CodePatchView`
+- `PatchReview`
 - `TraceTimeline`
 - `TokenMeter`
 - `ContextPanel`
@@ -1022,48 +1085,177 @@ can build these, but few make them first-class.
 - Tool calls and approvals are keyboard-first and testable.
 - Diff/code views support review workflows, not only display.
 
-## 16. Roadmap Phases
+## 16. Workstream K: Agent Adapter Readiness And `fleury_acp`
+
+### Goal
+
+Make Fleury launch agent-adapter ready, while keeping ACP transport, protocol
+models, and ACP-specific widgets out of core and scoped to a fast-follow
+`fleury_acp` package.
+
+### Target Capabilities
+
+- Fleury core exposes protocol-neutral foundations: semantic nodes,
+  structured actions, commands, effects, progress, terminal output regions,
+  selection/copy, replay hooks, and capability/security policy.
+- General-purpose widgets such as markdown, logs, diffs, code, progress, data
+  views, command runners, and output regions live in core or `fleury_widgets`
+  only when useful outside ACP.
+- `fleury_acp` owns ACP transport, schema/version handling, ACP protocol
+  models, ACP-specific widgets, and ACP replay fixtures.
+- Fleury core never imports ACP schemas or JSON-RPC concepts.
+- Dune/`dune_cli` can adopt `fleury_acp` later if ACP support is needed.
+
+### Why This Matters
+
+Agent UIs are where terminal applications are moving fastest, but Fleury
+should not make a young protocol part of launch scope. The stronger
+architecture is to launch the general foundations that make deep protocol
+packages possible, then let `fleury_acp` prove that extension model.
+
+The example subpackage should validate Fleury's core developer-tool
+primitives first. Dune/`dune_cli` can later become the public flagship and
+only pull in `fleury_acp` if ACP support is needed for the product.
+
+### Acceptance Criteria
+
+- Fleury launch requirements identify the adapter-ready primitives
+  `fleury_acp` needs.
+- `fleury_acp` has a clear package boundary and does not block Fleury launch.
+- ACP-specific widgets are scoped to `fleury_acp`.
+- Reusable non-ACP widgets remain protocol-neutral and can serve Dune,
+  developer tools, and other domain packages.
+
+## 17. Workstream L: Adoption, Distribution, and Ecosystem
+
+### Goal
+
+Make Fleury not only technically strong, but easy to discover, try, compare,
+install, and adopt.
+
+### Target Capabilities
+
+- Clear positioning against Nocterm, Bubble Tea v2, Textual, OpenTUI, Ink, and
+  Ratatui.
+- Moving-target peer scorecards updated at regular checkpoints.
+- Simple first-run path for a new developer to create and run a Fleury app.
+- Distribution story for Dart packages, standalone binaries, Homebrew, and
+  npm wrappers when the framework is ready for external users.
+- Showcase shelf led first by the example subpackage, then Dune/`dune_cli`,
+  then third-party apps.
+- Contributor process, issue labels, RFC flow, and onboarding docs once APIs
+  are ready for outside contribution.
+
+### Why This Matters
+
+A framework becomes leading when developers choose it. Fleury needs visible
+reasons to be chosen, not only strong internals. The first reasons should be
+concrete: a serious example app, Dune as the later flagship,
+agent-adapter readiness, semantic testing, capability-aware widgets,
+selection, and scenario benchmarks.
+
+### Acceptance Criteria
+
+- A "Why Fleury?" page can name three concrete wins against Nocterm and three
+  concrete wins against Bubble Tea v2.
+- A peer scorecard compares Fleury against current versions of Nocterm,
+  Bubble Tea v2, Textual, OpenTUI, and Ratatui.
+- A developer can create and run a counter app quickly once distribution work
+  begins.
+- The example subpackage is maintained as the first showcase-quality proof app,
+  with Dune/`dune_cli` promoted later when the core is proven.
+
+### Active Execution Artifacts
+
+The implementation tracker owns the operational details for this workstream:
+
+- [Execution journal](implementation/execution-journal.md) records the
+  chronological implementation memory: changes, findings, validation, and next
+  steps.
+- [Proof-app scenario](implementation/proof-app-scenario.md) defines the
+  current-cycle example subpackage and the Phase 1 proof slice.
+- [Scenario benchmark lab](implementation/scenario-benchmark-lab.md) defines
+  app-shaped workloads, target metrics, fixtures, peer comparison targets, and
+  candidate thresholds.
+- [Prototype-first tracks](implementation/prototype-first-tracks.md) defines
+  narrow prototype scenarios for progressive modes, debug capture/future
+  replay, effects/workers, and subprocess handoff.
+- [Agent adapter boundary](implementation/agent-adapter-boundary.md) defines
+  launch adapter-readiness requirements and the fast-follow `fleury_acp`
+  package boundary.
+- [RFC 0011: Semantic app graph](rfcs/0011-semantic-app-graph.md) defines the
+  first architecture gate for semantic testing, inspection, and future
+  automation.
+- [RFC 0012: App kernel](rfcs/0012-app-kernel.md) defines `FleuryApp`, screens,
+  commands, shortcut scopes, status, lifecycle, and command palette integration.
+- [RFC 0013: Capability and security contract](rfcs/0013-capability-security-contract.md)
+  defines capability requirements, fallback policy, JSON diagnostics, and
+  safe defaults for untrusted terminal output.
+- [Peer scorecards](implementation/peer-scorecards.md) track the moving target
+  across Nocterm, Bubble Tea v2, Textual, OpenTUI, Ratatui, and Ink.
+- [Scope cut list](implementation/cut-list.md) defines what to drop first for
+  1-2 engineer, 3-4 engineer, and 5+ engineer realities.
+- [`fleury_acp` fast-follow package](implementation/workstreams/fleury-acp-fast-follow.md)
+  tracks ACP-specific package boundaries and fast-follow work.
+- [Adoption, distribution, and ecosystem](implementation/workstreams/adoption-distribution-ecosystem.md)
+  tracks installation, public positioning, showcase, and contributor work.
+
+## 18. Roadmap Phases
 
 ### Phase 0: Architecture Guardrails And Scenario Lab
 
 Objective: decide the contracts that would be expensive to retrofit after
-large widget and app-shell work.
+large widget and app-shell work, without turning Phase 0 into months of RFC
+writing.
 
 Deliverables:
 
-1. Semantic app graph RFC.
+1. Example subpackage proof-app scenario spec.
+   - Define the first realistic workflow that will prove Fleury: sidebar
+     navigation, streamed content, composer/input, commands, status, data
+     views, output/log regions, selection, capability fallbacks, and debug
+     capture hooks.
+   - Use this scenario as the forcing function for the Phase 0 RFCs and Phase 1
+     implementation slice.
+
+2. Semantic app graph RFC.
    - Roles, labels, values, commands, focus, selection, tables, dialogs,
      validation, progress, errors, routes, and capability requirements.
 
-2. Progressive mode RFC.
-   - Define how a form, command, permission request, and wizard can render as
-     full-screen UI, inline UI, sequential prompt flow, and test semantics.
+3. App kernel RFC.
+   - Define `FleuryApp`, screens, command registry, actions, shortcut scopes,
+     status binding, command palette structure, and app lifecycle.
 
-3. Effect and replay log RFC.
-   - Define how input, resize, fake time, worker events, process events,
-     terminal capability profiles, semantic snapshots, and frames are recorded.
-
-4. Capability requirement contract.
+4. Capability and security contract RFC.
    - Components declare required, preferred, and optional capabilities plus
      fallback behavior.
+   - Define first-pass policy for raw ANSI, OSC 52 clipboard, OSC 8 links,
+     image output, subprocess output, markdown, and secret redaction.
 
-5. Security policy v0.
-   - ANSI sanitizer, OSC 52 clipboard policy, OSC 8 link policy, image output
-     policy, subprocess output policy, markdown policy, and secret redaction.
+5. Scenario benchmark lab.
+   - Time-to-counter app, text editing composer stress, 100k-row table,
+     streaming log, streaming markdown, dashboard updates, resize storm,
+     overlay churn, subprocess handoff, and proof-app journey.
+   - Include moving-target peer comparisons against current Nocterm,
+     Bubble Tea v2, Textual, OpenTUI, Ratatui, and Ink where feasible.
 
-6. Scenario benchmark lab.
-   - Agent console, 100k-row table, streaming log, streaming markdown,
-     multiline editor, resize storm, dashboard updates, and subprocess handoff.
+6. Prototype-first tracks for progressive modes, replay, and workflow effects.
+   - Do not freeze these as RFCs until the example subpackage and Phase 1
+     prototypes reveal the surviving shape.
 
-7. Reference agent workflow shape.
-   - Session, plan, tool call, permission request, diff, terminal output,
-     cancellation, progress, model status, and transcript regions.
+7. Agent adapter and `fleury_acp` package boundary.
+   - Define what Fleury launch must expose for a fast-follow ACP package:
+     semantic actions, effects, progress, output regions, debug/replay hook
+     points, capability/security policy, and reusable non-protocol widgets.
 
 Exit criteria:
 
 - The core contracts are small enough to implement, but rich enough that
-  semantic testing, prompt fallback, replay, and capability-aware widgets can
-  share them.
+  semantic testing, prompt fallback, debug/replay hooks, and capability-aware
+  widgets can share them.
+- The example subpackage has a concrete Phase 1 proof-app scenario.
+- Phase 0 has not expanded beyond the three architecture RFCs: semantic app
+  graph, app kernel, and capability/security contract.
 
 ### Phase 1: Clear-Choice Foundations
 
@@ -1076,20 +1268,30 @@ Deliverables:
 2. Text editing v2.
 3. `FleuryApp` shell with commands, shortcuts, command palette, and status
    binding.
-4. Worker/task model with replay-aware event records.
-5. Terminal diagnose and capability model.
-6. Scenario benchmark harness.
-7. DataTable v1 with virtualization, sorting, selection, search, fixed
+4. Example subpackage proof app v0 running on Fleury.
+5. Agent-adapter readiness boundary for fast-follow packages such as
+   `fleury_acp`; no ACP transport or ACP-specific widgets in launch scope.
+6. Worker/task model with structured status, cancellation, output, and future
+   replay hook points.
+7. Terminal diagnose and capability model.
+8. Scenario benchmark harness with peer baseline snapshots.
+9. DataTable v1 with virtualization, sorting, selection, search, fixed
    headers, copy, and semantic cells.
-8. Debug inspector additions for focus, commands, semantics, dirty regions,
+10. Debug inspector additions for focus, commands, semantics, dirty regions,
    effects, and frame timing.
-9. Sanitized output pipeline for untrusted subprocess/log/markdown content.
+11. Sanitized output pipeline for untrusted subprocess/log/markdown content.
+12. Initial distribution path for trying Fleury examples locally.
 
 Exit criteria:
 
 - A developer can build a dense, keyboard-first app with strong text input,
   commands, workers, data tables, terminal diagnostics, semantic tests, and
   visible performance metrics.
+- The example subpackage demonstrates Fleury's strongest early differentiators:
+  semantic testing, selection, adapter-ready workflow primitives, command
+  structure, capability diagnostics, and rich developer-tool surfaces.
+- Fleury has a written comparison against current Nocterm and Bubble Tea v2
+  that names concrete wins and gaps.
 
 ### Phase 2: Production App Toolkit
 
@@ -1102,12 +1304,19 @@ Deliverables:
 3. TreeTable, FileBrowser, and SearchPanel.
 4. ProcessPanel, CommandRunner, and terminal output regions.
 5. Theme/component theme expansion.
-6. Accessibility and fallback model built from semantic nodes.
-7. Windows driver.
-8. Active capability probes and real-terminal compatibility tests across
+6. Dune/`dune_cli` first integration slice after the core framework is proven.
+7. Optional `fleury_acp` fast-follow package if Dune/`dune_cli` later needs
+   ACP integration.
+8. Accessibility and fallback model built from semantic nodes.
+9. Windows driver.
+10. Active capability probes and real-terminal compatibility tests across
    macOS Terminal, iTerm2, Kitty, Ghostty, Alacritty, WezTerm, Windows
    Terminal, SSH, and tmux.
-9. Replay v1 for scenario failures and bug reports.
+11. Targeted debug-capture and replay-hook prototype if example or
+    Dune/`dune_cli` testing exposes bugs that require it.
+12. Public-facing adoption assets once the product and APIs are credible:
+    package docs, "Why Fleury?", peer comparisons, showcase, and distribution
+    docs.
 
 Exit criteria:
 
@@ -1122,15 +1331,16 @@ terminal app development.
 
 Deliverables:
 
-1. Agent workflow widget suite.
-2. Terminal devtools protocol and browser/devtools bridge.
-3. Snapshot/replay debugging with shareable artifacts.
-4. Remote app/session story.
-5. Stable semantic inspection protocol for automation and AI agents.
-6. Optional high-performance engine boundary for render/data hot paths.
-7. Plugin/extension story for widgets, commands, themes, data sources, and
+1. Agent workflow widget suite v2.
+2. Dune/`dune_cli` as a maintained flagship showcase.
+3. Terminal devtools protocol and browser/devtools bridge.
+4. Snapshot/replay debugging with shareable artifacts.
+5. Remote app/session story.
+6. Stable semantic inspection protocol for automation and AI agents.
+7. Optional high-performance engine boundary for render/data hot paths.
+8. Plugin/extension story for widgets, commands, themes, data sources, and
    workflow integrations.
-8. Cross-framework comparative benchmarks and showcase apps.
+9. Cross-framework comparative benchmarks and showcase apps.
 
 Exit criteria:
 
@@ -1138,72 +1348,84 @@ Exit criteria:
   that are easier to test, inspect, replay, operate remotely, adapt to
   terminal capabilities, and integrate with agent/developer workflows.
 
-## 17. Immediate Next Implementation Sequence
+## 19. Immediate Next Implementation Sequence
 
 1. Write RFC: semantic app graph.
    - Define roles, labels, values, focus, commands, selection, validation,
      table regions, dialog regions, progress, errors, routes, and capability
      requirements.
 
-2. Implement semantic tree v0.
+2. Write RFC: `FleuryApp`, commands, actions, and shortcuts.
+   - Define app shell, screens, command registry, shortcut scopes, status
+     binding, command palette structure, lifecycle, and proof-app needs.
+
+3. Write RFC: capability and security contract.
+   - Define required/preferred/optional capabilities, terminal profiles,
+     fallback behavior, ANSI sanitizer, OSC policy, image policy, link policy,
+     markdown policy, subprocess output policy, and secret redaction.
+
+4. Write example subpackage proof-app scenario spec.
+   - Use the example app as the forcing function for sidebar navigation,
+     streamed content, composer/input, commands, data views, output/log
+     regions, selection, capability fallbacks, and debug capture.
+
+5. Add moving-target peer scorecard.
+   - Compare against current Nocterm, Bubble Tea v2, Textual, OpenTUI, and
+     Ratatui; record versions, claims, gaps, and benchmark targets.
+
+6. Add scenario benchmark harness.
+   - Include text editing, table scrolling, log tailing, streaming markdown,
+     dashboard updates, resize storms, overlay churn, subprocess handoff, and
+     streaming content/logs.
+
+7. Implement semantic tree v0.
    - Start with Button, Text, TextInput, TextArea, Table, Dialog, Navigator,
      Progress, and Command.
    - Expose semantic queries in `FleuryTester`.
    - Add inspector output for semantic nodes.
 
-3. Write RFC: progressive modes.
-   - Define how forms, wizards, permission requests, and command flows project
-     into full-screen, inline, prompt, and test modes.
-
-4. Write RFC: text editing v2.
+8. Write RFC: text editing v2.
    - Define `TextEditingValue`, selection, grapheme indexing, keymaps,
      clipboard, undo, completion, paste policy, password policy, and field
      APIs.
 
-5. Implement pure text model and tests.
+9. Implement pure text model and tests.
    - Cover graphemes, emoji, CJK, combining marks, wide characters, selection,
      word movement, undo, paste, history, and multiline behavior before
      touching widgets.
 
-6. Replace `TextInput` internals with `EditableText`.
+10. Replace `TextInput` internals with `EditableText`.
    - Preserve public API where possible, add richer APIs behind it.
 
-7. Write RFC: capability and security contracts.
-   - Define required/preferred/optional capabilities, terminal profiles,
-     fallback behavior, ANSI sanitizer, OSC policy, image policy, link policy,
-     and secret redaction.
-
-8. Add scenario benchmark harness.
-   - Include text editing, table scrolling, log tailing, streaming markdown,
-     dashboard updates, resize storms, overlay churn, subprocess handoff, and
-     agent transcript streaming.
-
-9. Write RFC: `FleuryApp`, commands, actions, and shortcuts.
-   - Make command palette structural rather than a standalone widget.
-
-10. Implement command registry and app shell.
+11. Implement command registry and app shell.
    - Wire key hint/status bar into active command scope.
 
-11. Build `DataTable` v1 as a semantic render island.
+12. Define `fleury_acp` fast-follow package boundary.
+   - Keep ACP transport, schemas, protocol models, and ACP-specific widgets
+     out of Fleury launch while ensuring core primitives can support the
+     package later.
+
+13. Build `DataTable` v1 as a semantic render island.
    - Virtualized rows, stable keys, selection, sort, filter/search, fixed
      header, copy, semantic rows/cells, and benchmark coverage.
 
-12. Add `Worker`, process, and effect-log primitives.
+14. Add `Worker`, process, and effect-log primitives.
    - Include cancellation, progress, captured output, permissions, subprocess
-     handoff, and replay records.
+     handoff, and future replay hook points.
 
-13. Build `fleury diagnose`.
+15. Build `fleury diagnose`.
    - Make terminal capabilities visible, machine-readable, and testable.
 
-14. Build agent console reference app.
-   - Use it as a forcing function for streaming markdown, diffs, tool calls,
-     approvals, logs, cancellation, semantics, and replay.
+16. Build the example subpackage proof app v0.
+   - Use it as the real forcing function for streamed content, data views,
+     logs, commands, cancellation, semantics, diagnostics, and selection.
 
-15. Add replay prototype.
-   - Capture input, resize, fake time, worker events, terminal profiles,
-     semantic snapshots, and golden frames.
+17. Add debug/replay hook points, not full replay.
+   - Capture enough input, resize, fake time, worker status, terminal profile,
+     and semantic snapshots to support future replay without promising
+     shareable replay artifacts at launch.
 
-## 18. Definition of "Leading"
+## 20. Definition of "Leading"
 
 Fleury should be considered leading when the following are true:
 
@@ -1218,18 +1440,26 @@ Fleury should be considered leading when the following are true:
 - Debugging a Fleury app is easier than debugging equivalent apps in peer
   frameworks.
 - Performance claims are backed by scenario benchmarks.
-- Semantic tests, replay artifacts, and capability diagnostics make complex
-  bugs reproducible instead of anecdotal.
+- Semantic tests, debug capture hooks, and capability diagnostics make complex
+  bugs inspectable instead of anecdotal; full replay can mature after launch.
 - A meaningful subset of apps can degrade from full-screen UI to inline or
   prompt-mode interaction without being rewritten.
 - Agent/developer workflows are first-class: tool calls, approvals, diffs,
   logs, plans, permissions, and cancellation have framework-level primitives.
 - Components declare capability requirements and security policies, so
   advanced terminal features fail predictably.
+- The example subpackage proves Fleury's launch scope under realistic app
+  pressure, and Dune/`dune_cli` later demonstrates it under product pressure.
+- Agent-adapter readiness is a visible launch differentiator, while ACP
+  support ships separately through a fast-follow `fleury_acp` package if a
+  later product needs it.
+- Published scorecards compare Fleury against current Nocterm, Bubble Tea v2,
+  Textual, OpenTUI, and Ratatui on capability, ergonomics, and scenario
+  performance.
 - The framework feels cohesive: widgets, commands, focus, navigation, theme,
   async, terminal capabilities, and testing all fit together.
 
-## 19. Non-Goals for the Next Phase
+## 21. Non-Goals for the Next Phase
 
 Avoid these until the core is stronger:
 
@@ -1241,8 +1471,12 @@ Avoid these until the core is stronger:
 - Adding plugins before extension points are proven inside first-party
   widgets.
 - Marketing/release work as a substitute for product superiority.
+- Splitting the seven engines into separate packages before implementation
+  proves the boundaries.
+- Promising native terminal screen-reader behavior beyond what current
+  terminals can reliably support.
 
-## 20. Assumptions To Challenge
+## 22. Assumptions To Challenge
 
 The roadmap above is intentionally ambitious, but it still inherits many
 assumptions from current TUI frameworks. If Fleury is meant to move the
@@ -1408,7 +1642,7 @@ Challenge:
 If Fleury can make a high-quality agent console easy, it will likely be good
 for many other developer tools too.
 
-## 21. Under-Researched Areas
+## 23. Under-Researched Areas
 
 These areas need more investigation before locking long-term architecture.
 
@@ -1528,7 +1762,7 @@ Recommended research:
 - Packaging for Homebrew, Scoop, apt, npm wrappers, and standalone binaries.
 - How Go/Rust/Python/Node TUI tools are distributed in practice.
 
-## 22. Category-Expanding Bets
+## 24. Category-Expanding Bets
 
 These are not required for initial parity, but they are the ideas most likely
 to push Fleury beyond today's TUI category.
@@ -1720,7 +1954,7 @@ session state, permissions, diffs, tool calls, and progress. Fleury can make
 that structure available through the framework instead of forcing apps and
 agents to rediscover it through screen scraping.
 
-## 23. Updated Immediate Research Spikes
+## 25. Updated Immediate Research Spikes
 
 These are no longer optional curiosity spikes. They are Phase 0 de-risking
 work that should happen before broad widget expansion, because each one could
@@ -1842,7 +2076,7 @@ signals where the same categories of pain repeat across ecosystems.
   <https://agentclientprotocol.com/protocol/prompt-turn> and
   <https://agentclientprotocol.com/protocol/tool-calls>.
 
-## 24. Open Design Decisions
+## 26. Open Design Decisions
 
 - Should the command/action model use Flutter terminology (`Intent`,
   `Action`, `Shortcuts`) or simpler TUI terminology (`Command`,
@@ -1868,10 +2102,10 @@ signals where the same categories of pain repeat across ecosystems.
 - How should capability requirements interact with theming and graceful
   degradation when advanced colors, images, mouse, clipboard, or keyboard
   protocols are unavailable?
-- Should the security policy be strict by default for all apps, or should
-  developer-tool apps opt into stricter untrusted-output handling?
+- Which policy escape hatches should trusted local apps receive without
+  weakening strict defaults for untrusted output?
 
-## 25. Guiding Implementation Standard
+## 27. Guiding Implementation Standard
 
 For every new primitive, answer these questions before implementation:
 

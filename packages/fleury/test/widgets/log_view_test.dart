@@ -10,7 +10,39 @@ LogBuffer _buffer(List<String> lines, {LogSource source = LogSource.stdout}) {
   return b;
 }
 
+Matcher _stateError(String message) {
+  return throwsA(
+    isA<StateError>().having((error) => error.message, 'message', message),
+  );
+}
+
 void main() {
+  group('LogBuffer lifecycle', () {
+    test('dispose is idempotent and keeps final readable lines', () {
+      final buffer = LogBuffer(capacity: 2)
+        ..add(const LogLine('one', LogSource.stdout))
+        ..add(const LogLine('two', LogSource.stderr))
+        ..add(const LogLine('three', LogSource.stdout));
+
+      buffer.dispose();
+      buffer.dispose();
+
+      expect(buffer.length, 2);
+      expect(buffer.isEmpty, isFalse);
+      expect(buffer.lines.map((line) => line.text), ['two', 'three']);
+      expect(buffer.lines.first.source, LogSource.stderr);
+    });
+
+    test('adding after dispose throws a lifecycle error', () {
+      final buffer = LogBuffer()..dispose();
+
+      expect(
+        () => buffer.add(const LogLine('late', LogSource.stdout)),
+        _stateError('LogBuffer has been disposed.'),
+      );
+    });
+  });
+
   group('LogView', () {
     testWidgets('tails to the most recent lines that fit', (tester) {
       final b = _buffer(['one', 'two', 'three', 'four']);

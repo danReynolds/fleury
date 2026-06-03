@@ -67,6 +67,103 @@ void main() {
     expect(activated, 'README');
   });
 
+  testWidgets('exposes semantic tree and tree-item state', (tester) {
+    tester.pumpWidget(
+      const Tree<String>(
+        label: 'Project tree',
+        autofocus: true,
+        roots: [
+          TreeNode<String>(
+            'src',
+            children: [TreeNode<String>('a.dart'), TreeNode<String>('b.dart')],
+          ),
+          TreeNode<String>('README'),
+        ],
+      ),
+    );
+
+    tester.render(size: const CellSize(20, 4));
+    var tree = tester.semantics().single(role: SemanticRole.tree);
+    expect(tree.label, 'Project tree');
+    expect(tree.state.collectionRowCount, 2);
+    expect(tree.state['rootCount'], 2);
+    expect(tree.state.selectedKey, '0');
+
+    var src = tester.semantics().single(
+      role: SemanticRole.treeItem,
+      label: 'src',
+    );
+    expect(src.selected, isTrue);
+    expect(src.actions, contains(SemanticAction.open));
+    expect(src.state['rowIndex'], 0);
+    expect(src.state['rowKey'], '0');
+    expect(src.state['depth'], 0);
+    expect(src.state['isBranch'], isTrue);
+    expect(src.state['expanded'], isFalse);
+    expect(src.state['childCount'], 2);
+
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.render(size: const CellSize(20, 4));
+
+    tree = tester.semantics().single(role: SemanticRole.tree);
+    expect(tree.state.collectionRowCount, 4);
+    expect(tree.state['expandedCount'], 1);
+
+    final child = tester.semantics().single(
+      role: SemanticRole.treeItem,
+      label: 'a.dart',
+    );
+    expect(child.state['rowIndex'], 1);
+    expect(child.state['rowKey'], '0.0');
+    expect(child.state['depth'], 1);
+    expect(child.actions, isNot(contains(SemanticAction.open)));
+  });
+
+  testWidgets('semantic focus, open, and activate drive tree behavior', (
+    tester,
+  ) async {
+    String? activated;
+    tester.pumpWidget(
+      Tree<String>(
+        label: 'Project tree',
+        roots: const [
+          TreeNode<String>(
+            'src',
+            children: [TreeNode<String>('a.dart'), TreeNode<String>('b.dart')],
+          ),
+          TreeNode<String>('README'),
+        ],
+        onSelect: (node) => activated = node.label,
+      ),
+    );
+
+    tester.render(size: const CellSize(20, 4));
+    var result = await tester.invokeSemanticAction(
+      SemanticAction.focus,
+      role: SemanticRole.tree,
+      label: 'Project tree',
+    );
+    expect(result.completed, isTrue);
+    expect(tester.semantics().single(role: SemanticRole.tree).focused, isTrue);
+
+    result = await tester.invokeSemanticAction(
+      SemanticAction.open,
+      role: SemanticRole.treeItem,
+      label: 'src',
+    );
+    expect(result.completed, isTrue);
+    tester.render(size: const CellSize(20, 4));
+    expect(tester.semantics().single(label: 'a.dart'), isA<SemanticNode>());
+
+    result = await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.treeItem,
+      label: 'b.dart',
+    );
+    expect(result.completed, isTrue);
+    expect(activated, 'b.dart');
+  });
+
   testWidgets('Left from a child steps out to its parent', (tester) {
     tester.pumpWidget(_tree());
     tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight)); // expand src
@@ -195,6 +292,29 @@ void main() {
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → two
       tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
       expect(picked, 2, reason: 'the typed value rode along on the node');
+    });
+
+    testWidgets('sanitizes unsafe labels for display and semantics', (tester) {
+      tester.pumpWidget(
+        const Tree<String>(
+          roots: [TreeNode<String>('bad\x1b]52;c;secret\x07\nname')],
+        ),
+      );
+
+      final output = tester.renderToString(
+        size: const CellSize(30, 2),
+        emptyMark: ' ',
+      );
+      expect(output, contains('bad'));
+      expect(output, contains('name'));
+      expect(output, contains(replacementCharacter));
+      expect(output, isNot(contains('secret')));
+      expect(output, isNot(contains('\x1b]52')));
+
+      final row = tester.semantics().single(role: SemanticRole.treeItem);
+      expect(row.label, contains(replacementCharacter));
+      expect(row.label, isNot(contains('secret')));
+      expect(row.state.outputSanitized, isTrue);
     });
   });
 }

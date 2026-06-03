@@ -166,5 +166,116 @@ void main() {
       }
       expect(found, isTrue, reason: 'expected to find the selected "15"');
     });
+
+    testWidgets('exposes date picker semantics and accessibility state', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        DatePicker(
+          value: _d(2024, 3, 15),
+          firstDate: _d(2024, 3, 1),
+          lastDate: _d(2024, 3, 31),
+          weekStartsOn: CalendarWeekStart.monday,
+          label: 'Due date',
+          onChanged: (_) {},
+        ),
+      );
+
+      final node = tester.semantics().single(
+        role: SemanticRole.datePicker,
+        label: 'Due date',
+        value: '2024-03-15',
+        action: SemanticAction.increment,
+      );
+      expect(node.actions, contains(SemanticAction.decrement));
+      expect(node.state['selectedDate'], '2024-03-15');
+      expect(node.state['visibleMonth'], '2024-03');
+      expect(node.state['visibleYear'], 2024);
+      expect(node.state['weekStartsOn'], 'monday');
+      expect(node.state['firstDate'], '2024-03-01');
+      expect(node.state['lastDate'], '2024-03-31');
+
+      expect(
+        tester
+            .accessibilitySnapshot()
+            .single(role: SemanticRole.datePicker, label: 'Due date')
+            .states,
+        contains(
+          'selected date 2024-03-15, visible month 2024-03, '
+          'visible year 2024, week starts monday, first date 2024-03-01, '
+          'last date 2024-03-31',
+        ),
+      );
+    });
+
+    testWidgets('semantic increment and decrement move by one day and focus', (
+      tester,
+    ) async {
+      final calls = <DateTime>[];
+      tester.pumpWidget(
+        DatePicker(
+          value: _d(2024, 3, 15),
+          label: 'Due date',
+          onChanged: calls.add,
+        ),
+      );
+
+      final increment = await tester.invokeSemanticAction(
+        SemanticAction.increment,
+        role: SemanticRole.datePicker,
+        label: 'Due date',
+      );
+      final decrement = await tester.invokeSemanticAction(
+        SemanticAction.decrement,
+        role: SemanticRole.datePicker,
+        label: 'Due date',
+      );
+
+      expect(increment.completed, isTrue);
+      expect(decrement.completed, isTrue);
+      expect(calls, [_d(2024, 3, 16), _d(2024, 3, 14)]);
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.datePicker, label: 'Due date')
+            .focused,
+        isTrue,
+      );
+    });
+
+    testWidgets('omits bounded date picker semantic actions at limits', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        DatePicker(
+          value: _d(2024, 3, 15),
+          firstDate: _d(2024, 3, 15),
+          lastDate: _d(2024, 3, 15),
+          label: 'Due date',
+          onChanged: (_) {},
+        ),
+      );
+
+      final node = tester.semantics().single(
+        role: SemanticRole.datePicker,
+        label: 'Due date',
+      );
+      expect(node.actions, contains(SemanticAction.focus));
+      expect(node.actions, isNot(contains(SemanticAction.increment)));
+      expect(node.actions, isNot(contains(SemanticAction.decrement)));
+      expect(node.state['canIncrement'], isFalse);
+      expect(node.state['canDecrement'], isFalse);
+      expect(
+        tester
+            .accessibilitySnapshot()
+            .single(role: SemanticRole.datePicker, label: 'Due date')
+            .states,
+        contains(
+          'selected date 2024-03-15, visible month 2024-03, '
+          'visible year 2024, week starts sunday, first date 2024-03-15, '
+          'last date 2024-03-15, cannot increment, cannot decrement',
+        ),
+      );
+    });
   });
 }

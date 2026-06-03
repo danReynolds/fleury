@@ -28,6 +28,11 @@ class PasswordInput extends StatelessWidget {
     this.style = CellStyle.empty,
     this.cursorStyle = const CellStyle(inverse: true),
     this.obscuringCharacter = '•',
+    this.enabled = true,
+    this.readOnly = false,
+    this.validationError,
+    this.semanticLabel,
+    this.semanticState = SemanticState.empty,
   });
 
   final TextEditingController? controller;
@@ -43,6 +48,19 @@ class PasswordInput extends StatelessWidget {
   /// Glyph used in place of each typed grapheme. Defaults to `•`.
   final String obscuringCharacter;
 
+  final bool enabled;
+  final bool readOnly;
+  final String? validationError;
+
+  /// Label exposed through the semantic app graph.
+  final String? semanticLabel;
+
+  /// Additional semantic metadata for app-specific secret fields.
+  ///
+  /// Secret-field facts owned by [PasswordInput], such as `fieldType` and
+  /// redaction state, remain authoritative.
+  final SemanticState semanticState;
+
   @override
   Widget build(BuildContext context) {
     return TextInput(
@@ -57,6 +75,15 @@ class PasswordInput extends StatelessWidget {
       cursorStyle: cursorStyle,
       obscureText: true,
       obscuringCharacter: obscuringCharacter,
+      enabled: enabled,
+      readOnly: readOnly,
+      validationError: validationError,
+      clipboardPolicy: TextClipboardPolicy.redacted,
+      semanticLabel: semanticLabel,
+      semanticState: semanticState.merge(const <String, Object?>{
+        'fieldType': 'secret',
+        'redacted': true,
+      }),
     );
   }
 }

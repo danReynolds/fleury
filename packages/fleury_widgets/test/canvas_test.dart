@@ -91,5 +91,92 @@ void main() {
       final cell = tester.render(size: const CellSize(1, 1)).atColRow(0, 0);
       expect(cell.style.foreground, const AnsiColor(1));
     });
+
+    testWidgets('plain canvas does not add semantic nodes', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 2,
+          height: 2,
+          child: Canvas(painter: _LineFromTo(0, 0, 1, 1)),
+        ),
+      );
+
+      expect(tester.semantics().byRole(SemanticRole.image), isEmpty);
+      expect(tester.semantics().byRole(SemanticRole.chart), isEmpty);
+    });
+
+    testWidgets('opt-in canvas semantics expose marker and bounds', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 2,
+          height: 2,
+          child: Canvas(
+            painter: _LineFromTo(-1, 0, 1, 100),
+            bounds: CanvasBounds(minX: -1, maxX: 1, minY: 0, maxY: 100),
+            marker: CanvasMarker.quadrant,
+            semanticLabel: 'Custom sketch',
+            semanticValue: 'peak 100',
+            semanticHint: 'Generated preview',
+          ),
+        ),
+      );
+
+      final node = tester.semantics().single(
+        role: SemanticRole.image,
+        label: 'Custom sketch',
+        value: 'peak 100',
+      );
+      expect(node.hint, 'Generated preview');
+      expect(node.state.canvasMarker, 'quadrant');
+      expect(node.state.canvasMinX, -1);
+      expect(node.state.canvasMaxX, 1);
+      expect(node.state.canvasMinY, 0);
+      expect(node.state.canvasMaxY, 100);
+
+      final fallback = tester.accessibilitySnapshot().single(
+        role: SemanticRole.image,
+        label: 'Custom sketch',
+      );
+      expect(
+        fallback.states,
+        contains('canvas marker quadrant, x -1.0-1.0, y 0.0-100.0'),
+      );
+    });
+
+    testWidgets('custom canvas can opt into chart semantics', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 4,
+          height: 2,
+          child: Canvas(
+            painter: _LineFromTo(0, 0, 1, 1),
+            semanticRole: SemanticRole.chart,
+            semanticLabel: 'Custom plot',
+            semanticState: SemanticState({
+              'chartType': 'custom',
+              'chartPointCount': 2,
+            }),
+          ),
+        ),
+      );
+
+      final chart = tester.semantics().single(
+        role: SemanticRole.chart,
+        label: 'Custom plot',
+      );
+      expect(chart.state.chartType, 'custom');
+      expect(chart.state.chartPointCount, 2);
+      expect(chart.state.canvasMarker, 'braille');
+
+      final fallback = tester.accessibilitySnapshot().single(
+        role: SemanticRole.chart,
+        label: 'Custom plot',
+      );
+      expect(fallback.states, contains('chart custom, 2 points'));
+      expect(
+        fallback.states,
+        contains('canvas marker braille, x 0.0-1.0, y 0.0-1.0'),
+      );
+    });
   });
 }

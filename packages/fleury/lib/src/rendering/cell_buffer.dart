@@ -214,7 +214,8 @@ final class CellBuffer {
   /// from arbitrary input. The buffer does not re-sanitize on every write.
   ///
   /// Returns the number of columns the write actually advanced (0, 1, or
-  /// 2). A grapheme of width 0 (combining-only) is dropped.
+  /// 2). A grapheme of width 0 (combining-only) is dropped. Out-of-bounds
+  /// writes are clipped and return 0; reads still throw.
   int writeGrapheme(
     CellOffset position,
     String grapheme, {
@@ -222,7 +223,7 @@ final class CellBuffer {
     WidthResolver widthResolver = const DefaultWidthResolver(),
     TerminalProfile profile = TerminalProfile.standard,
   }) {
-    _checkBounds(position);
+    if (!_containsColRow(position.col, position.row)) return 0;
     return _writeGraphemeAt(
       position.col,
       position.row,
@@ -271,7 +272,8 @@ final class CellBuffer {
   /// [text] across lines; this method does not interpret newlines.
   ///
   /// Returns the number of columns advanced. Stops at the right edge of
-  /// the row.
+  /// the row. A start position outside the buffer is clipped, which lets
+  /// translated paints draw only the visible tail of a line.
   int writeText(
     CellOffset position,
     String text, {
@@ -279,22 +281,27 @@ final class CellBuffer {
     WidthResolver widthResolver = const DefaultWidthResolver(),
     TerminalProfile profile = TerminalProfile.standard,
   }) {
-    _checkBounds(position);
     var col = position.col;
+    final startCol = col;
     final row = position.row;
+    if (row < 0 || row >= _size.rows) return 0;
     for (final grapheme in text.characters) {
       if (col >= _size.cols) break;
-      final advanced = _writeGraphemeAt(
-        col,
-        row,
-        grapheme,
-        style: style,
-        widthResolver: widthResolver,
-        profile: profile,
-      );
-      col += advanced;
+      final width = widthResolver.widthOfGrapheme(grapheme, profile);
+      if (width == 0) continue;
+      if (col >= 0) {
+        _writeGraphemeAt(
+          col,
+          row,
+          grapheme,
+          style: style,
+          widthResolver: widthResolver,
+          profile: profile,
+        );
+      }
+      col += width;
     }
-    return col - position.col;
+    return col - startCol;
   }
 
   /// Writes a terminal-protocol region into the buffer: a single
@@ -312,7 +319,7 @@ final class CellBuffer {
     required int width,
     required int height,
   }) {
-    _checkBounds(topLeft);
+    if (!_containsColRow(topLeft.col, topLeft.row)) return;
     final r0 = topLeft.row;
     final c0 = topLeft.col;
     final maxR = (r0 + height).clamp(0, _size.rows);
@@ -353,8 +360,11 @@ final class CellBuffer {
     _checkBoundsColRow(position.col, position.row);
   }
 
+  bool _containsColRow(int col, int row) =>
+      col >= 0 && row >= 0 && col < _size.cols && row < _size.rows;
+
   void _checkBoundsColRow(int col, int row) {
-    if (col < 0 || row < 0 || col >= _size.cols || row >= _size.rows) {
+    if (!_containsColRow(col, row)) {
       throw RangeError(
         'Cell ($col, $row) is out of bounds for buffer of size $_size.',
       );

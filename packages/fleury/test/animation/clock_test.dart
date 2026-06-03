@@ -1,4 +1,5 @@
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
 void main() {

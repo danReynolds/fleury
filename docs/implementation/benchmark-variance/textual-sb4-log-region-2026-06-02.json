@@ -1,0 +1,220 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryBenchmarkVariance",
+  "peerId": "textual",
+  "scenarioId": "SB.4",
+  "scenarioName": "LogRegion Tailing And Scrollback",
+  "runCount": 3,
+  "minRuns": 3,
+  "sufficientRunCount": true,
+  "comparable": true,
+  "strictPass": true,
+  "errors": [],
+  "comparableIssues": [],
+  "source": {
+    "versions": [
+      "8.2.7"
+    ],
+    "urls": [
+      "https://pypi.org/project/textual/"
+    ]
+  },
+  "environment": {
+    "machines": [
+      "macbookpro.lan"
+    ],
+    "operatingSystems": [
+      "darwin"
+    ],
+    "runtimes": [
+      "Python 3.12.13 / Textual 8.2.7"
+    ],
+    "terminalModes": [
+      "textual-run-test-harness"
+    ],
+    "terminalSizes": [
+      "120x32"
+    ]
+  },
+  "fixture": {
+    "workingDirectories": [
+      "peer-fixtures/textual/sb4_log_region"
+    ],
+    "commands": [
+      "python sb4_log_benchmark.py --warmup=2 --iterations=5 --rows=100000 --append=1000 --json"
+    ],
+    "warmupIterations": {
+      "samples": 3,
+      "min": 2,
+      "median": 2,
+      "mean": 2,
+      "max": 2,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        2,
+        2,
+        2
+      ]
+    },
+    "measuredIterations": {
+      "samples": 3,
+      "min": 5,
+      "median": 5,
+      "mean": 5,
+      "max": 5,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        5,
+        5,
+        5
+      ]
+    }
+  },
+  "runs": [
+    {
+      "runId": "textual-sb4-log-region-2026-06-02T13-57-07Z",
+      "capturedAt": "2026-06-02T13:57:07.077665Z",
+      "path": "peer-fixtures/textual/sb4_log_region/results/variance/textual-sb4-log-region-2026-06-02-run-1.json"
+    },
+    {
+      "runId": "textual-sb4-log-region-2026-06-02T13-57-15Z",
+      "capturedAt": "2026-06-02T13:57:15.490407Z",
+      "path": "peer-fixtures/textual/sb4_log_region/results/variance/textual-sb4-log-region-2026-06-02-run-2.json"
+    },
+    {
+      "runId": "textual-sb4-log-region-2026-06-02T13-57-24Z",
+      "capturedAt": "2026-06-02T13:57:24.119241Z",
+      "path": "peer-fixtures/textual/sb4_log_region/results/variance/textual-sb4-log-region-2026-06-02-run-3.json"
+    }
+  ],
+  "metrics": {
+    "appendBurstUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 90349,
+      "median": 92454,
+      "mean": 98223.667,
+      "max": 111868,
+      "standardDeviation": 9686.197,
+      "relativeSpreadPercent": 23.275,
+      "values": [
+        111868,
+        90349,
+        92454
+      ]
+    },
+    "scrollbackJumpUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 41820,
+      "median": 43054,
+      "mean": 43575,
+      "max": 45851,
+      "standardDeviation": 1686.381,
+      "relativeSpreadPercent": 9.363,
+      "values": [
+        45851,
+        43054,
+        41820
+      ]
+    },
+    "scrollToTailUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 43631,
+      "median": 46689,
+      "mean": 45738.333,
+      "max": 46895,
+      "standardDeviation": 1492.481,
+      "relativeSpreadPercent": 6.991,
+      "values": [
+        46895,
+        43631,
+        46689
+      ]
+    },
+    "copySelectedEntryUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 69172,
+      "median": 73105,
+      "mean": 76269.667,
+      "max": 86532,
+      "standardDeviation": 7432.081,
+      "relativeSpreadPercent": 23.747,
+      "values": [
+        69172,
+        73105,
+        86532
+      ]
+    },
+    "filterQueryUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 106620,
+      "median": 108052,
+      "mean": 112124.333,
+      "max": 121701,
+      "standardDeviation": 6796.914,
+      "relativeSpreadPercent": 13.957,
+      "values": [
+        108052,
+        106620,
+        121701
+      ]
+    },
+    "semanticOrTestQueryUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 54,
+      "median": 60,
+      "mean": 69.667,
+      "max": 95,
+      "standardDeviation": 18.08,
+      "relativeSpreadPercent": 68.333,
+      "values": [
+        95,
+        60,
+        54
+      ]
+    },
+    "unsafeArtifactLeakCount": {
+      "primaryValue": "value",
+      "samples": 3,
+      "min": 0,
+      "median": 0,
+      "mean": 0,
+      "max": 0,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": null,
+      "values": [
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "correctness": {
+    "allRunsPass": true,
+    "gates": {
+      "tail anchoring is correct": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "copy text is sanitized": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "unsafe output leak count is zero": {
+        "passCount": 3,
+        "failCount": 0
+      }
+    }
+  },
+  "notes": [
+    "Metric variance uses each run artifact primary value: scalar metrics use the scalar value; metric maps prefer p95, then median, max, and value.",
+    "strictPass is false unless run count, scenario/peer identity, source version, terminal mode, terminal size, fixture command, fixture directory, and correctness gates are comparable."
+  ]
+}

@@ -98,6 +98,7 @@ class RenderAlign extends RenderObject implements RenderObjectWithSingleChild {
   set alignment(Alignment value) {
     if (_alignment == value) return;
     _alignment = value;
+    markNeedsLayout();
   }
 
   RenderObject? _child;

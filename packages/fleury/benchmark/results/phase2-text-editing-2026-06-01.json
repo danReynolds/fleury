@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-01T02:42:25.179522Z",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "scenarioId": "SB.2",
+      "scenarioName": "Text Editing Composer Stress",
+      "fleuryVersion": "0.0.0",
+      "gitSha": "unknown",
+      "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+      "runMode": "test",
+      "os": "macos",
+      "cpu": 10,
+      "terminalProfile": {
+        "colorMode": "truecolor",
+        "imageProtocol": "halfBlock",
+        "tmuxPassthrough": false
+      },
+      "terminalSize": {
+        "columns": 80,
+        "rows": 24
+      },
+      "seed": 1,
+      "warmupIterations": 1,
+      "measuredIterations": 10,
+      "startedAt": "2026-06-01T02:42:24.790081Z",
+      "durationMs": 359.318,
+      "metrics": {
+        "journeyUs": {
+          "min": 29615,
+          "median": 31561,
+          "p95": 53438,
+          "p99": 67176,
+          "max": 70610,
+          "samples": 10
+        },
+        "mountUs": {
+          "min": 596,
+          "median": 770,
+          "p95": 8202,
+          "p99": 12789,
+          "max": 13936,
+          "samples": 10
+        },
+        "firstRenderUs": {
+          "min": 205,
+          "median": 293,
+          "p95": 3742,
+          "p99": 5683,
+          "max": 6168,
+          "samples": 10
+        },
+        "cursorMoveUs": {
+          "min": 220,
+          "median": 260,
+          "p95": 798,
+          "p99": 2056,
+          "max": 2783,
+          "samples": 40
+        },
+        "insertionDeletionUs": {
+          "min": 225,
+          "median": 255,
+          "p95": 641,
+          "p99": 1132,
+          "max": 1295,
+          "samples": 30
+        },
+        "selectionUs": {
+          "min": 1366,
+          "median": 1746,
+          "p95": 2191,
+          "p99": 2681,
+          "max": 3015,
+          "samples": 50
+        },
+        "pasteCompleteUs": {
+          "min": 13395,
+          "median": 14483,
+          "p95": 18573,
+          "p99": 20453,
+          "max": 20923,
+          "samples": 10
+        },
+        "undoRedoUs": {
+          "min": 670,
+          "median": 1041,
+          "p95": 1339,
+          "p99": 1405,
+          "max": 1421,
+          "samples": 20
+        },
+        "historyNavigationUs": {
+          "min": 282,
+          "median": 321,
+          "p95": 721,
+          "p99": 815,
+          "max": 839,
+          "samples": 20
+        },
+        "completionAcceptUs": {
+          "min": 317,
+          "median": 338,
+          "p95": 698,
+          "p99": 753,
+          "max": 767,
+          "samples": 10
+        },
+        "secretRenderUs": {
+          "min": 249,
+          "median": 277,
+          "p95": 411,
+          "p99": 425,
+          "max": 429,
+          "samples": 10
+        },
+        "semanticQueryUs": {
+          "min": 47,
+          "median": 80,
+          "p95": 508,
+          "p99": 738,
+          "max": 796,
+          "samples": 10
+        },
+        "firstFrameAnsiBytes": 669,
+        "finalAnsiBytes": 634,
+        "semanticNodeCount": 9,
+        "textCharsRequested": 10000,
+        "initialEditorChars": 10126,
+        "finalEditorChars": 15158,
+        "pasteChars": 5028,
+        "pasteFrameCount": 10,
+        "completionAccepted": true,
+        "historyRestoredDraft": true,
+        "secretSemanticRedacted": true,
+        "rssDeltaBytes": 8065024
+      },
+      "thresholds": {
+        "candidateCursorMoveP95Us": 16000,
+        "candidateInsertionDeletionP95Us": 16000,
+        "candidateSelectionP95Us": 16000,
+        "candidateSemanticQueryP95Us": 16000,
+        "candidatePasteCompleteP95Us": 100000,
+        "enforced": false
+      },
+      "pass": true,
+      "notes": [
+        "Candidate thresholds are informational until stable baselines exist.",
+        "Run mode is test-style harness execution, not a full terminal process.",
+        "Completion popup rendering lives in fleury_widgets; this core scenario measures the shared editing state and TextInput acceptance path."
+      ]
+    }
+  ]
+}

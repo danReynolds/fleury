@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryPeerBenchmarkRun",
+  "runId": "ink-sb2-text-editing-2026-06-02T12-35-03Z",
+  "peerId": "ink",
+  "scenarioId": "SB.2",
+  "capturedAt": "2026-06-02T12:35:03.264Z",
+  "source": {
+    "name": "Ink + Ink ecosystem inputs",
+    "version": "Ink 7.0.5 / React 19.2.7 / ink-text-input 6.0.0 / react-ink-textarea 0.1.3",
+    "url": "https://www.npmjs.com/package/ink"
+  },
+  "environment": {
+    "machine": "macbookpro.lan",
+    "operatingSystem": "darwin",
+    "operatingSystemVersion": "Darwin macbookpro.lan 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:09:40 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T6000 arm64",
+    "runtime": "v24.14.0 / Ink 7.0.5 / React 19.2.7 / ink-text-input 6.0.0 / react-ink-textarea 0.1.3",
+    "terminalMode": "ink-testing-library-memory",
+    "terminalSize": {
+      "columns": 120,
+      "rows": 32
+    }
+  },
+  "fixture": {
+    "workingDirectory": "peer-fixtures/ink/sb2_text_editing",
+    "command": [
+      "node",
+      "bin/sb2_text_editing_benchmark.js",
+      "--warmup=1",
+      "--iterations=5",
+      "--text-chars=10000",
+      "--json"
+    ],
+    "warmupIterations": 1,
+    "measuredIterations": 5
+  },
+  "metrics": {
+    "mountUs": {
+      "min": 23959,
+      "median": 24604,
+      "p95": 32234,
+      "p99": 32234,
+      "max": 32234,
+      "samples": 5
+    },
+    "firstRenderUs": {
+      "min": 26477,
+      "median": 54529,
+      "p95": 80682,
+      "p99": 80682,
+      "max": 80682,
+      "samples": 5
+    },
+    "cursorMoveUs": {
+      "min": 839,
+      "median": 1202,
+      "p95": 2449,
+      "p99": 2449,
+      "max": 2449,
+      "samples": 5
+    },
+    "insertionDeletionUs": {
+      "min": 288,
+      "median": 297,
+      "p95": 961,
+      "p99": 961,
+      "max": 961,
+      "samples": 5
+    },
+    "selectionUs": {
+      "min": 291,
+      "median": 301,
+      "p95": 442,
+      "p99": 442,
+      "max": 442,
+      "samples": 5
+    },
+    "undoRedoUs": {
+      "min": 123,
+      "median": 126,
+      "p95": 129,
+      "p99": 129,
+      "max": 129,
+      "samples": 5
+    },
+    "historyNavigationUs": {
+      "min": 1,
+      "median": 2,
+      "p95": 16,
+      "p99": 16,
+      "max": 16,
+      "samples": 5
+    },
+    "completionAcceptUs": {
+      "min": 1,
+      "median": 2,
+      "p95": 2,
+      "p99": 2,
+      "max": 2,
+      "samples": 5
+    },
+    "pasteCompleteUs": {
+      "min": 435,
+      "median": 467,
+      "p95": 997,
+      "p99": 997,
+      "max": 997,
+      "samples": 5
+    },
+    "semanticOrTestQueryUs": {
+      "min": 83066,
+      "median": 101546,
+      "p95": 126909,
+      "p99": 126909,
+      "max": 126909,
+      "samples": 5
+    },
+    "rssDeltaBytes": 10338304,
+    "lineOfCodeCount": 197,
+    "benchmarkLineOfCodeCount": 339,
+    "testLineOfCodeCount": 40,
+    "textCharsRequested": 10000,
+    "editorLength": 11815,
+    "editorLineCount": 110,
+    "composerValue": "git checkout",
+    "adapterOwnedFeatureCount": 4
+  },
+  "correctness": [
+    {
+      "gate": "mixed-width text remains valid",
+      "pass": true,
+      "evidence": "react-ink-textarea rendered a 10000 character mixed-width editor value while fixture state retained emoji, CJK, combining text, and the paste marker."
+    },
+    {
+      "gate": "selection and undo state are correct",
+      "pass": true,
+      "evidence": "Selection replacement and redo were fixture-owned adapters; undo state was verified around the react-ink-textarea-controlled value."
+    },
+    {
+      "gate": "redacted value stays redacted",
+      "pass": true,
+      "evidence": "ink-text-input mask rendering did not expose the raw secret in Ink frames."
+    }
+  ],
+  "ergonomics": {
+    "lineOfCodeCount": 197,
+    "benchmarkLineOfCodeCount": 339,
+    "testLineOfCodeCount": 40,
+    "appFile": "lib/text_editing_app.js",
+    "benchmarkFile": "bin/sb2_text_editing_benchmark.js",
+    "testFile": "test/text_editing_app.test.js",
+    "peerOwnedReactRenderer": true,
+    "peerOwnedTextareaComponent": true,
+    "peerOwnedTextInputComponent": true,
+    "peerOwnedMaskedInputDisplay": true,
+    "appOwnedSelection": true,
+    "appOwnedRedo": true,
+    "appOwnedHistory": true,
+    "appOwnedCompletion": true,
+    "semanticGraphAvailable": false,
+    "testQueryViaInkFrameAndAppState": true
+  },
+  "artifacts": [
+    {
+      "kind": "source",
+      "path": "peer-fixtures/ink/sb2_text_editing/lib/text_editing_app.js"
+    },
+    {
+      "kind": "benchmark",
+      "path": "peer-fixtures/ink/sb2_text_editing/bin/sb2_text_editing_benchmark.js"
+    },
+    {
+      "kind": "test",
+      "path": "peer-fixtures/ink/sb2_text_editing/test/text_editing_app.test.js"
+    }
+  ],
+  "notes": [
+    "This is an Ink testing-library memory fixture, not a real-terminal run.",
+    "Ink 7.0.5 supplies the React renderer; react-ink-textarea 0.1.3 supplies the multiline textarea component; ink-text-input 6.0.0 supplies the single-line and masked input components.",
+    "react-ink-textarea documents no selection and no redo, so selection replacement and redo are fixture-owned adapters. Submission history and completion acceptance are also fixture-owned app code.",
+    "Ink exposes rendered frames and app state for this fixture, not a Fleury-style semantic app graph.",
+    "Timing is local-machine evidence and should not be used as a public superiority claim without repeated peer runs."
+  ]
+}

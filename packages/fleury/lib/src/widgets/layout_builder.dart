@@ -84,7 +84,11 @@ class _LayoutBuilderElement extends RenderObjectElement {
 class RenderLayoutBuilder extends RenderObject
     implements RenderObjectWithSingleChild {
   void Function(CellConstraints)? _callback;
-  set callback(void Function(CellConstraints)? value) => _callback = value;
+  set callback(void Function(CellConstraints)? value) {
+    if (identical(_callback, value)) return;
+    _callback = value;
+    markNeedsLayout();
+  }
 
   RenderObject? _child;
   @override

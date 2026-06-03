@@ -1,9 +1,11 @@
 import 'package:meta/meta.dart';
 
+import '../debug/debug_invalidation.dart';
 import '../foundation/fleury_error.dart';
 import '../foundation/geometry.dart';
 import 'cell_buffer.dart';
 import 'layout.dart';
+import 'render_layout_stats.dart';
 
 /// Parent-attached layout metadata.
 ///
@@ -48,6 +50,7 @@ abstract class RenderObject {
 
   CellConstraints? _constraints;
   CellSize? _size;
+  bool _needsLayout = true;
 
   // Cache-invalidation flag, meaningful only at [isRepaintBoundary] render
   // objects. Non-boundary nodes always re-paint, so the flag is just the
@@ -63,26 +66,63 @@ abstract class RenderObject {
   @protected
   set needsPaint(bool value) => _needsPaint = value;
 
+  /// Whether this render object must run [performLayout] the next time it is
+  /// reached with the same constraints. Constraints changes always force a new
+  /// layout even when this flag is false.
+  @protected
+  bool get needsLayout => _needsLayout;
+
   /// Whether this render object owns its own paint cache (a `CellBuffer`
   /// it can blit instead of re-walking its subtree's paint). Override to
   /// true in subclasses that implement the cache discipline.
   bool get isRepaintBoundary => false;
 
-  /// Marks the nearest enclosing repaint boundary as needing to re-paint
-  /// into its cache. Cheap when nothing in the path is a boundary — walks
-  /// up `_parent` until it finds one (or reaches the root). Idempotent at
-  /// the boundary.
+  /// Marks this render object and its ancestors as needing layout, and marks
+  /// the nearest enclosing repaint boundary as dirty. Use this for changes
+  /// that can affect size, child constraints, child offsets, or layout-derived
+  /// paint state.
+  void markNeedsLayout() {
+    DebugInvalidations.recordLayout(runtimeType.toString());
+    _markNeedsLayoutUp();
+    _markNearestRepaintBoundaryDirty();
+  }
+
+  void _markNeedsLayoutUp() {
+    _needsLayout = true;
+    _parent?._markNeedsLayoutUp();
+  }
+
+  /// Marks this render object as visually stale and conservatively marks
+  /// layout dirty.
   ///
-  /// Called automatically when a render object's child list changes (via
-  /// [adoptChild] / [dropChild]) and when a `RenderObjectElement` reconciles
-  /// its widget. Subclasses with mutable configuration should also call it
-  /// from setters whose value actually changed.
+  /// This remains the compatibility-safe default for unaudited setters. Use
+  /// [markNeedsLayout] when the value can change size, child constraints,
+  /// offsets, or layout-derived paint state. Use [markNeedsPaintOnly] only
+  /// after verifying that the value cannot affect layout.
   void markNeedsPaint() {
+    DebugInvalidations.recordPaint(runtimeType.toString());
+    _markNeedsLayoutUp();
+    _markNearestRepaintBoundaryDirty();
+  }
+
+  /// Marks only the nearest enclosing repaint boundary as visually stale.
+  ///
+  /// Subclasses should use this for audited visual-only mutations such as
+  /// color, text style, cursor blink, or paint-time visibility toggles. It
+  /// intentionally does not mark this render object or its ancestors as layout
+  /// dirty, so the next same-constraint layout call can reuse cached sizes.
+  @protected
+  void markNeedsPaintOnly() {
+    DebugInvalidations.recordPaint(runtimeType.toString());
+    _markNearestRepaintBoundaryDirty();
+  }
+
+  void _markNearestRepaintBoundaryDirty() {
     if (isRepaintBoundary) {
       _needsPaint = true;
       return;
     }
-    _parent?.markNeedsPaint();
+    _parent?._markNearestRepaintBoundaryDirty();
   }
 
   /// The constraints from the most recent layout pass.
@@ -136,7 +176,7 @@ abstract class RenderObject {
     assert(child._parent == null, 'Render object adopted twice.');
     child._parent = this;
     setupParentData(child);
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   /// Detaches [child] from this render object.
@@ -146,7 +186,7 @@ abstract class RenderObject {
     child.parentData?.detach();
     child.parentData = null;
     child._parent = null;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   /// Override to install a subclass of [ParentData] on the child. The
@@ -159,6 +199,12 @@ abstract class RenderObject {
   /// chosen size. Subclasses implement [performLayout] rather than
   /// overriding this; the framework needs the bookkeeping around it.
   CellSize layout(CellConstraints constraints) {
+    final cachedSize = _size;
+    if (!_needsLayout && cachedSize != null && _constraints == constraints) {
+      RenderLayoutDebugStats.recordSkipped();
+      return cachedSize;
+    }
+    final previousSize = _size;
     _constraints = constraints;
     final result = performLayout(constraints);
     if (!constraints.isSatisfiedBy(result)) {
@@ -180,6 +226,11 @@ abstract class RenderObject {
       );
     }
     _size = result;
+    _needsLayout = false;
+    RenderLayoutDebugStats.recordPerformed();
+    if (previousSize != null && previousSize != result) {
+      _markNearestRepaintBoundaryDirty();
+    }
     return result;
   }
 
@@ -268,4 +319,22 @@ abstract class RenderObjectWithChildren implements RenderObject {
   /// order. Implementations must adopt children that are new and drop
   /// children that are no longer present.
   void replaceAllChildren(List<RenderObject> newChildren);
+}
+
+/// Whether two render-child lists contain the same child identities in the
+/// same order.
+///
+/// Multi-child render objects call this before reconciling children so ordinary
+/// widget rebuilds that preserve child identity do not accidentally dirty
+/// layout.
+@protected
+bool hasSameRenderChildrenInOrder(
+  List<RenderObject> current,
+  List<RenderObject> next,
+) {
+  if (current.length != next.length) return false;
+  for (var i = 0; i < current.length; i++) {
+    if (!identical(current[i], next[i])) return false;
+  }
+  return true;
 }

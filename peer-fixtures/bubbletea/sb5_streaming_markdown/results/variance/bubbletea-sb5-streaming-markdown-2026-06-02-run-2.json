@@ -1,0 +1,174 @@
+{
+  "artifacts": [
+    {
+      "kind": "source",
+      "path": "peer-fixtures/bubbletea/sb5_streaming_markdown/app.go"
+    },
+    {
+      "kind": "benchmark",
+      "path": "peer-fixtures/bubbletea/sb5_streaming_markdown/main.go"
+    },
+    {
+      "kind": "test",
+      "path": "peer-fixtures/bubbletea/sb5_streaming_markdown/app_test.go"
+    }
+  ],
+  "capturedAt": "2026-06-02T14:57:31.176374Z",
+  "correctness": [
+    {
+      "evidence": "The streamed document retained headings, lists, links, unsafe-link fallback metadata, code fences, selected final block, and non-empty copy text.",
+      "gate": "incremental content remains coherent",
+      "pass": true
+    },
+    {
+      "evidence": "Fixture-owned link policy rewrote unsafe links to a blocked href while preserving the original URL in visible text.",
+      "gate": "unsafe links have visible fallback",
+      "pass": true
+    },
+    {
+      "evidence": "Fixture-owned sanitizer removed OSC/CSI/control payloads and redacted secret-shaped text before Glamour rendering and Bubbles viewport ingestion.",
+      "gate": "unsafe frame count is zero",
+      "pass": true
+    }
+  ],
+  "environment": {
+    "machine": "macbookpro.lan",
+    "operatingSystem": "darwin",
+    "operatingSystemVersion": "Darwin macbookpro.lan 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:09:40 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T6000 x86_64",
+    "runtime": "go1.25.8 / Bubble Tea 2.0.7 / Bubbles 2.1.0 / Glamour 2.0.0",
+    "terminalMode": "bubbletea-glamour-viewport-model-harness",
+    "terminalSize": {
+      "columns": 120,
+      "rows": 32
+    }
+  },
+  "ergonomics": {
+    "appFile": "app.go",
+    "appOwnedLinkPolicy": true,
+    "appOwnedMarkdownMetadata": true,
+    "appOwnedSanitization": true,
+    "appOwnedSelectedBlockCopy": true,
+    "benchmarkFile": "main.go",
+    "benchmarkLineOfCodeCount": 538,
+    "ecosystemOwnedMarkdownRenderer": true,
+    "lineOfCodeCount": 476,
+    "peerOwnedIncrementalMarkdown": false,
+    "peerOwnedModelUpdateView": true,
+    "peerOwnedViewportWidget": true,
+    "semanticGraphAvailable": false,
+    "testFile": "app_test.go",
+    "testLineOfCodeCount": 58,
+    "testQueryViaAppStateAndViewport": true
+  },
+  "fixture": {
+    "command": [
+      "go",
+      "run",
+      ".",
+      "--warmup=1",
+      "--iterations=3",
+      "--rows=10000",
+      "--json"
+    ],
+    "measuredIterations": 3,
+    "warmupIterations": 1,
+    "workingDirectory": "peer-fixtures/bubbletea/sb5_streaming_markdown"
+  },
+  "kind": "fleuryPeerBenchmarkRun",
+  "metrics": {
+    "benchmarkLineOfCodeCount": 538,
+    "blockCount": 91,
+    "chunkCount": 100,
+    "chunkFrameUs": {
+      "max": 51288,
+      "median": 3164,
+      "min": 213,
+      "p95": 13199,
+      "p99": 19352,
+      "samples": 300
+    },
+    "chunkParseUs": {
+      "max": 8412,
+      "median": 112,
+      "min": 16,
+      "p95": 476,
+      "p99": 1973,
+      "samples": 300
+    },
+    "chunkUpdateUs": {
+      "max": 257667,
+      "median": 47280,
+      "min": 878,
+      "p95": 107130,
+      "p99": 167734,
+      "samples": 300
+    },
+    "codeBlockCount": 8,
+    "codeLineCount": 24,
+    "copiedByteCount": 46,
+    "finalRenderUs": {
+      "max": 2520,
+      "median": 2011,
+      "min": 1984,
+      "p95": 2520,
+      "p99": 2520,
+      "samples": 3
+    },
+    "headingCount": 9,
+    "journeyUs": {
+      "max": 5691118,
+      "median": 5232249,
+      "min": 4676745,
+      "p95": 5691118,
+      "p99": 5691118,
+      "samples": 3
+    },
+    "lineOfCodeCount": 476,
+    "linkCount": 25,
+    "listItemCount": 17,
+    "rssDeltaBytes": 1265664,
+    "sanitizedBlockCount": 0,
+    "sanitizedChunkCount": 41,
+    "selectedBlockCopyUs": {
+      "max": 5466,
+      "median": 7,
+      "min": 5,
+      "p95": 5466,
+      "p99": 5466,
+      "samples": 3
+    },
+    "selectedBlockIndex": 90,
+    "selectedBlockKind": "bullet",
+    "semanticOrTestQueryUs": {
+      "max": 20,
+      "median": 14,
+      "min": 13,
+      "p95": 20,
+      "p99": 20,
+      "samples": 3
+    },
+    "sourceByteCount": 6040,
+    "testLineOfCodeCount": 58,
+    "truncatedBlockCount": 0,
+    "unsafeFrameCount": 0,
+    "unsafeLinkCount": 8
+  },
+  "notes": [
+    "This is a Bubble Tea/Bubbles/Glamour model harness, not a real-terminal run.",
+    "Bubble Tea 2.0.7 supplies the Model/Update/View architecture, Bubbles 2.1.0 supplies viewport content and scrolling primitives, and Glamour 2.0.0 supplies full-document terminal Markdown rendering.",
+    "Sanitization/redaction, visible URL fallback for unsafe links, selected-block copy, and markdown metadata/test query state are fixture-owned app code.",
+    "The fixture re-renders the full Markdown document after each append because Bubble Tea/Bubbles/Glamour do not provide a built-in incremental Markdown stream widget matching Fleury SB.5.",
+    "Bubble Tea/Bubbles exposes app/model state for this fixture, not a Fleury-style semantic app graph.",
+    "chunkParseUs is fixture metadata parsing around the streamed source; Glamour rendering work is included in chunkUpdateUs.",
+    "Timing is local-machine evidence and should not be used as a public superiority claim without repeated peer runs."
+  ],
+  "peerId": "bubbletea",
+  "runId": "bubbletea-sb5-streaming-markdown-2026-06-02T14-57-31Z",
+  "scenarioId": "SB.5",
+  "schemaVersion": 1,
+  "source": {
+    "name": "Bubble Tea + Bubbles + Glamour",
+    "url": "https://pkg.go.dev/charm.land/glamour/v2",
+    "version": "Bubble Tea 2.0.7 / Bubbles 2.1.0 / Glamour 2.0.0"
+  }
+}

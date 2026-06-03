@@ -43,5 +43,29 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    testWidgets('exposes the underlying text semantically', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 17,
+          height: 5,
+          child: Digits('12:34', semanticLabel: 'Clock'),
+        ),
+      );
+
+      final node = tester.semantics().single(
+        role: SemanticRole.text,
+        label: 'Clock',
+        value: '12:34',
+      );
+      expect(node.value, '12:34');
+
+      final fallback = tester.accessibilitySnapshot().single(
+        role: SemanticRole.text,
+        label: 'Clock',
+        value: '12:34',
+      );
+      expect(fallback.value, '12:34');
+    });
   });
 }

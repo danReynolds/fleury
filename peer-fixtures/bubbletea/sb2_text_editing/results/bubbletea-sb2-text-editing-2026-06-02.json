@@ -1,0 +1,184 @@
+{
+  "artifacts": [
+    {
+      "kind": "source",
+      "path": "peer-fixtures/bubbletea/sb2_text_editing/app.go"
+    },
+    {
+      "kind": "benchmark",
+      "path": "peer-fixtures/bubbletea/sb2_text_editing/main.go"
+    },
+    {
+      "kind": "test",
+      "path": "peer-fixtures/bubbletea/sb2_text_editing/app_test.go"
+    }
+  ],
+  "capturedAt": "2026-06-02T01:31:55.918545Z",
+  "correctness": [
+    {
+      "evidence": "Bubbles textarea retained emoji, CJK, combining text, and the paste marker.",
+      "gate": "mixed-width text remains valid",
+      "pass": true
+    },
+    {
+      "evidence": "Selection replacement, undo, and redo were fixture-owned adapters over the Bubbles textarea value.",
+      "gate": "selection and undo state are correct",
+      "pass": true
+    },
+    {
+      "evidence": "Password textinput view did not contain the raw secret.",
+      "gate": "redacted value stays redacted",
+      "pass": true
+    }
+  ],
+  "environment": {
+    "machine": "macbookpro.lan",
+    "operatingSystem": "darwin",
+    "operatingSystemVersion": "Darwin macbookpro.lan 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:09:40 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T6000 x86_64",
+    "runtime": "go1.25.0 / Bubble Tea 2.0.7 / Bubbles 2.1.0",
+    "terminalMode": "bubbletea-textarea-model-harness",
+    "terminalSize": {
+      "columns": 120,
+      "rows": 32
+    }
+  },
+  "ergonomics": {
+    "appFile": "app.go",
+    "appOwnedHistory": true,
+    "appOwnedSelection": true,
+    "appOwnedUndoRedo": true,
+    "benchmarkFile": "main.go",
+    "benchmarkLineOfCodeCount": 476,
+    "lineOfCodeCount": 278,
+    "peerOwnedCompletion": true,
+    "peerOwnedPasteHandling": true,
+    "peerOwnedTextarea": true,
+    "peerOwnedTextinput": true,
+    "semanticGraphAvailable": false,
+    "testFile": "app_test.go",
+    "testLineOfCodeCount": 58,
+    "testQueryViaAppState": true
+  },
+  "fixture": {
+    "command": [
+      "go",
+      "run",
+      ".",
+      "--warmup=1",
+      "--iterations=5",
+      "--text-chars=10000",
+      "--json"
+    ],
+    "measuredIterations": 5,
+    "warmupIterations": 1,
+    "workingDirectory": "peer-fixtures/bubbletea/sb2_text_editing"
+  },
+  "kind": "fleuryPeerBenchmarkRun",
+  "metrics": {
+    "adapterOwnedFeatureCount": 3,
+    "benchmarkLineOfCodeCount": 476,
+    "completionAcceptUs": {
+      "max": 100,
+      "median": 98,
+      "min": 93,
+      "p95": 100,
+      "p99": 100,
+      "samples": 5
+    },
+    "composerValue": "git checkout",
+    "cursorMoveUs": {
+      "max": 140090,
+      "median": 132685,
+      "min": 131599,
+      "p95": 140090,
+      "p99": 140090,
+      "samples": 5
+    },
+    "editorLength": 11815,
+    "editorLineCount": 110,
+    "firstRenderUs": {
+      "max": 3247,
+      "median": 2846,
+      "min": 2837,
+      "p95": 3247,
+      "p99": 3247,
+      "samples": 5
+    },
+    "historyNavigationUs": {
+      "max": 26,
+      "median": 21,
+      "min": 20,
+      "p95": 26,
+      "p99": 26,
+      "samples": 5
+    },
+    "insertionDeletionUs": {
+      "max": 7586,
+      "median": 6770,
+      "min": 6573,
+      "p95": 7586,
+      "p99": 7586,
+      "samples": 5
+    },
+    "lineOfCodeCount": 278,
+    "mountUs": {
+      "max": 3475,
+      "median": 3240,
+      "min": 3088,
+      "p95": 3475,
+      "p99": 3475,
+      "samples": 5
+    },
+    "pasteCompleteUs": {
+      "max": 5193,
+      "median": 4889,
+      "min": 4434,
+      "p95": 5193,
+      "p99": 5193,
+      "samples": 5
+    },
+    "rssDeltaBytes": 921600,
+    "selectionUs": {
+      "max": 630,
+      "median": 593,
+      "min": 569,
+      "p95": 630,
+      "p99": 630,
+      "samples": 5
+    },
+    "semanticOrTestQueryUs": {
+      "max": 3582,
+      "median": 3355,
+      "min": 3345,
+      "p95": 3582,
+      "p99": 3582,
+      "samples": 5
+    },
+    "testLineOfCodeCount": 58,
+    "textCharsRequested": 10000,
+    "undoRedoUs": {
+      "max": 1411,
+      "median": 875,
+      "min": 834,
+      "p95": 1411,
+      "p99": 1411,
+      "samples": 5
+    }
+  },
+  "notes": [
+    "This is a Bubble Tea/Bubbles textarea and textinput model harness, not a real-terminal run.",
+    "Bubble Tea 2.0.7 supplies the Model/Update/View architecture; Bubbles 2.1.0 supplies textarea cursor/edit/paste behavior, textinput password masking, and textinput suggestions.",
+    "Selection replacement, undo/redo, and submission history are app-owned fixture adapters because Bubbles textarea/textinput do not expose Fleury-equivalent primitives for those SB.2 behaviors.",
+    "Bubble Tea/Bubbles exposes app/model state for this fixture, not a Fleury-style semantic app graph.",
+    "Timing is local-machine evidence and should not be used as a public superiority claim without repeated peer runs."
+  ],
+  "peerId": "bubbletea",
+  "runId": "bubbletea-sb2-text-editing-2026-06-02T01-31-55Z",
+  "scenarioId": "SB.2",
+  "schemaVersion": 1,
+  "source": {
+    "name": "Bubble Tea + Bubbles",
+    "url": "https://pkg.go.dev/charm.land/bubbles/v2",
+    "version": "Bubble Tea 2.0.7 / Bubbles 2.1.0"
+  }
+}

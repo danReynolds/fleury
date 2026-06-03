@@ -55,6 +55,7 @@ class _HostState extends State<_Host> {
       autofocus: true,
       value: value,
       options: widget.options,
+      semanticLabel: 'Color',
       onChanged: (v) {
         setState(() => value = v);
         widget.onPick?.call(v);
@@ -180,6 +181,135 @@ void main() {
         ),
       );
       expect(picked, 'blue');
+    });
+
+    group('semantics', () {
+      testWidgets('trigger semantic action opens the option menu', (
+        tester,
+      ) async {
+        tester.pumpWidget(const _Host(initial: 'green'));
+
+        final trigger = tester.semantics().single(
+          role: SemanticRole.button,
+          label: 'Color',
+          action: SemanticAction.open,
+        );
+
+        expect(trigger.focused, isTrue);
+        expect(trigger.value, 'Green');
+        expect(trigger.expanded, isFalse);
+        expect(trigger.state.menuItemCount, 3);
+        expect(trigger.state.selectedKey, 'green');
+        expect(trigger.state['selectedOptionLabel'], 'Green');
+
+        final result = await tester.invokeSemanticAction(
+          SemanticAction.open,
+          node: trigger,
+        );
+
+        expect(result.completed, isTrue);
+        tester.render(size: const CellSize(30, 8));
+        final tree = tester.semantics();
+        final menu = tree.single(role: SemanticRole.menu, label: 'Color');
+        expect(menu.focused, isTrue);
+        expect(menu.state.menuItemCount, 3);
+        expect(menu.state['appliedIndex'], 1);
+        final green = tree.single(role: SemanticRole.menuItem, label: 'Green');
+        expect(green.checked, isTrue);
+        expect(green.selected, isTrue);
+        expect(green.state.menuItemPosition, 2);
+      });
+
+      testWidgets('option semantic select picks the value and closes', (
+        tester,
+      ) async {
+        String? picked;
+        tester.pumpWidget(_Host(initial: 'red', onPick: (v) => picked = v));
+
+        await tester.invokeSemanticAction(
+          SemanticAction.open,
+          role: SemanticRole.button,
+          label: 'Color',
+        );
+        tester.render(size: const CellSize(30, 8));
+        final result = await tester.invokeSemanticAction(
+          SemanticAction.select,
+          role: SemanticRole.menuItem,
+          label: 'Blue',
+        );
+
+        expect(result.completed, isTrue);
+        expect(picked, 'blue');
+        expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
+        final trigger = tester.semantics().single(
+          role: SemanticRole.button,
+          label: 'Color',
+        );
+        expect(trigger.value, 'Blue');
+        expect(trigger.expanded, isFalse);
+        expect(trigger.state.selectedKey, 'blue');
+      });
+
+      testWidgets(
+        'disabled options are visible but not semantically selectable',
+        (tester) async {
+          tester.pumpWidget(
+            const _Host(
+              initial: 'red',
+              options: [
+                SelectOption(value: 'red', label: 'Red'),
+                SelectOption(value: 'green', label: 'Green', enabled: false),
+                SelectOption(value: 'blue', label: 'Blue'),
+              ],
+            ),
+          );
+
+          await tester.invokeSemanticAction(
+            SemanticAction.open,
+            role: SemanticRole.button,
+            label: 'Color',
+          );
+          tester.render(size: const CellSize(30, 8));
+
+          final disabled = tester.semantics().single(
+            role: SemanticRole.menuItem,
+            label: 'Green',
+            enabled: false,
+          );
+
+          expect(disabled.actions, isEmpty);
+          expect(disabled.state.menuItemPosition, 2);
+        },
+      );
+
+      testWidgets('accessibility fallback summarizes option positions', (
+        tester,
+      ) async {
+        tester.pumpWidget(const _Host(initial: 'red'));
+        await tester.invokeSemanticAction(
+          SemanticAction.open,
+          role: SemanticRole.button,
+          label: 'Color',
+        );
+        tester.render(size: const CellSize(30, 8));
+
+        final snapshot = tester.accessibilitySnapshot();
+        final menu = snapshot.single(
+          role: SemanticRole.menu,
+          label: 'Color',
+          state: 'menu 3 items',
+        );
+        final red = snapshot.single(
+          role: SemanticRole.menuItem,
+          label: 'Red',
+          checked: true,
+          state: 'menu item 1 of 3',
+        );
+
+        expect(menu.announcement, contains('focused'));
+        expect(red.announcement, contains('checked'));
+        expect(red.announcement, contains('actions: activate, select'));
+      });
     });
   });
 }

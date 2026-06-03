@@ -35,9 +35,8 @@ img.Image _solid(int width, int height, int r, int g, int b) {
 img.Image _rowStripes(int width, int height) {
   final i = img.Image(width: width, height: height);
   for (var y = 0; y < height; y++) {
-    final c = (y % 2 == 0)
-        ? img.ColorRgb8(255, 0, 0)
-        : img.ColorRgb8(0, 0, 255);
+    final c =
+        (y % 2 == 0) ? img.ColorRgb8(255, 0, 0) : img.ColorRgb8(0, 0, 255);
     for (var x = 0; x < width; x++) {
       i.setPixel(x, y, c);
     }
@@ -513,6 +512,76 @@ void main() {
     });
   });
 
+  group('Image — capability semantics', () {
+    testWidgets('reports glyph fallback when native images are unavailable', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        SizedBox(
+          width: 2,
+          height: 1,
+          child: Image(
+            source: ImageSource.decoded(_solid(4, 2, 20, 40, 80)),
+            fit: ImageFit.fill,
+            glyph: ImageGlyph.quarterBlock,
+            semanticLabel: 'Preview',
+          ),
+        ),
+      );
+
+      final node = tester.semantics().single(
+            role: SemanticRole.image,
+            label: 'Preview',
+          );
+
+      expect(node.value, 'halfBlock');
+      expect(node.state.terminalCapability, 'inlineImages');
+      expect(node.state.capabilityRequirement, 'preferred');
+      expect(node.state.capabilityResolution, 'degraded');
+      expect(node.state.activeFallback, 'quarterBlock glyph image');
+      expect(node.state.values['imageProtocol'], 'halfBlock');
+      expect(node.state.values['imageGlyph'], 'quarterBlock');
+      expect(node.state.values['frameIndex'], 0);
+      expect(node.state.values['frameCount'], 1);
+    });
+
+    testWidgets('reports native image capability when a protocol is active', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(
+            size: CellSize(10, 10),
+            imageProtocol: ImageProtocol.kitty,
+            tmuxPassthrough: true,
+          ),
+          child: SizedBox(
+            width: 2,
+            height: 1,
+            child: Image(
+              source: ImageSource.decoded(_solid(4, 2, 20, 40, 80)),
+              fit: ImageFit.fill,
+              semanticLabel: 'Logo',
+            ),
+          ),
+        ),
+      );
+
+      final node = tester.semantics().single(
+            role: SemanticRole.image,
+            label: 'Logo',
+          );
+
+      expect(node.value, 'kitty');
+      expect(node.state.terminalCapability, 'inlineImages');
+      expect(node.state.capabilityRequirement, 'preferred');
+      expect(node.state.capabilityResolution, 'available');
+      expect(node.state.activeFallback, isNull);
+      expect(node.state.values['imageProtocol'], 'kitty');
+      expect(node.state.values['tmuxPassthrough'], isTrue);
+    });
+  });
+
   group('Image — color-mode quantization', () {
     Widget hosted(Widget child, ColorMode mode) {
       return MediaQuery(
@@ -748,10 +817,8 @@ void main() {
             ),
           ),
         );
-        final escape = tester
-            .render(size: const CellSize(8, 4))
-            .atColRow(0, 0)
-            .grapheme!;
+        final escape =
+            tester.render(size: const CellSize(8, 4)).atColRow(0, 0).grapheme!;
         final continuations = 'm=1'.allMatches(escape).length;
         final finals = 'm=0'.allMatches(escape).length;
         expect(
@@ -842,10 +909,8 @@ void main() {
           ),
         ),
       );
-      final escape = tester
-          .render(size: const CellSize(6, 4))
-          .atColRow(0, 0)
-          .grapheme!;
+      final escape =
+          tester.render(size: const CellSize(6, 4)).atColRow(0, 0).grapheme!;
       expect(
         escape.startsWith('\x1B]1337;File='),
         isTrue,
@@ -894,10 +959,8 @@ void main() {
           ),
         ),
       );
-      final escape = tester
-          .render(size: const CellSize(3, 2))
-          .atColRow(0, 0)
-          .grapheme!;
+      final escape =
+          tester.render(size: const CellSize(3, 2)).atColRow(0, 0).grapheme!;
       final sizeMatch = RegExp(r'size=(\d+)').firstMatch(escape);
       expect(sizeMatch, isNotNull);
       final declared = int.parse(sizeMatch!.group(1)!);
@@ -985,8 +1048,7 @@ void main() {
       expect(
         cell.grapheme,
         '▌',
-        reason:
-            'left-column source picks the vertical-half glyph — '
+        reason: 'left-column source picks the vertical-half glyph — '
             'something half-block CANNOT represent',
       );
       expect(cell.style.foreground, const RgbColor(255, 255, 0));
@@ -1171,8 +1233,7 @@ void main() {
       expect(
         cell.grapheme!.codeUnits,
         '\u{1FB00}'.codeUnits,
-        reason:
-            'single-TL sextant lands on the first codepoint of the '
+        reason: 'single-TL sextant lands on the first codepoint of the '
             'Unicode 13 block',
       );
     });
@@ -1442,10 +1503,8 @@ void main() {
           ),
         ),
       );
-      final escape = tester
-          .render(size: const CellSize(2, 1))
-          .atColRow(0, 0)
-          .grapheme!;
+      final escape =
+          tester.render(size: const CellSize(2, 1)).atColRow(0, 0).grapheme!;
       expect(
         escape.startsWith('\x1BPq'),
         isTrue,
@@ -1472,7 +1531,8 @@ void main() {
       );
     });
 
-    testWidgets('sixel data bytes stay inside the legal `?`..`~` range '
+    testWidgets(
+        'sixel data bytes stay inside the legal `?`..`~` range '
         '(plus control chars)', (tester) {
       // Sixel data bytes are ASCII 63 ('?') to 126 ('~'). The only
       // allowed control chars in the payload are `$` (CR), `-` (NL),
@@ -1490,18 +1550,15 @@ void main() {
           ),
         ),
       );
-      final escape = tester
-          .render(size: const CellSize(2, 2))
-          .atColRow(0, 0)
-          .grapheme!;
+      final escape =
+          tester.render(size: const CellSize(2, 2)).atColRow(0, 0).grapheme!;
       // Strip the envelope to focus on the payload.
       final payload = escape
           .substring(3, escape.length - 2) // drop \x1BPq … \x1B\
           .replaceAll(RegExp(r'"[\d;]+'), '') // drop raster attrs
           .replaceAll(RegExp(r'#\d+(;\d+;\d+;\d+;\d+)?'), '');
       for (final code in payload.codeUnits) {
-        final ok =
-            (code >= 0x3F && code <= 0x7E) || // sixel chars
+        final ok = (code >= 0x3F && code <= 0x7E) || // sixel chars
             code == 0x24 || // $  CR within band
             code == 0x2D || // -  NL between bands
             code == 0x21 || // !  RLE
@@ -1510,8 +1567,7 @@ void main() {
         expect(
           ok,
           isTrue,
-          reason:
-              'unexpected code point 0x${code.toRadixString(16)} '
+          reason: 'unexpected code point 0x${code.toRadixString(16)} '
               'in sixel payload',
         );
       }
@@ -1720,7 +1776,7 @@ void main() {
         if (body.codeUnitAt(i) != 0x1B) continue;
         final paired =
             (i + 1 < body.length && body.codeUnitAt(i + 1) == 0x1B) ||
-            (i > 0 && body.codeUnitAt(i - 1) == 0x1B);
+                (i > 0 && body.codeUnitAt(i - 1) == 0x1B);
         expect(paired, isTrue, reason: 'lone ESC at body offset $i');
       }
     });
@@ -1742,10 +1798,8 @@ void main() {
           ),
         ),
       );
-      final bytes = tester
-          .render(size: const CellSize(3, 2))
-          .atColRow(0, 0)
-          .grapheme!;
+      final bytes =
+          tester.render(size: const CellSize(3, 2)).atColRow(0, 0).grapheme!;
       expect(
         bytes.startsWith('\x1B_G'),
         isTrue,
@@ -1774,10 +1828,8 @@ void main() {
           ),
         ),
       );
-      final sixelBytes = tester
-          .render(size: const CellSize(2, 1))
-          .atColRow(0, 0)
-          .grapheme!;
+      final sixelBytes =
+          tester.render(size: const CellSize(2, 1)).atColRow(0, 0).grapheme!;
       expect(sixelBytes.startsWith('\x1BPtmux;'), isTrue);
       expect(
         sixelBytes.contains('\x1B\x1BP'),
@@ -1802,10 +1854,8 @@ void main() {
           ),
         ),
       );
-      final itermBytes = tester
-          .render(size: const CellSize(2, 1))
-          .atColRow(0, 0)
-          .grapheme!;
+      final itermBytes =
+          tester.render(size: const CellSize(2, 1)).atColRow(0, 0).grapheme!;
       expect(itermBytes.startsWith('\x1BPtmux;'), isTrue);
       expect(
         itermBytes.contains('\x1B\x1B]1337;'),

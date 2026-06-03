@@ -1,0 +1,545 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryComparativeBenchmarkManifest",
+  "status": "scenario-contract",
+  "lastSourceRefresh": "2026-06-01",
+  "purpose": "Define peer-equivalent benchmark contracts before making external performance or superiority claims.",
+  "sourceLinks": {
+    "nocterm": "https://pub.dev/packages/nocterm",
+    "bubbletea": "https://github.com/charmbracelet/bubbletea",
+    "textual": "https://textual.textualize.io/",
+    "opentui": "https://opentui.com/docs/getting-started/",
+    "ratatui": "https://ratatui.rs/",
+    "ink": "https://github.com/vadimdemedes/ink#readme"
+  },
+  "rules": [
+    "Do not compare Fleury tester-only timings against peer real-terminal timings without labeling the mode.",
+    "Record machine, operating system, terminal mode, language/runtime version, dependency versions, warmup count, measured iteration count, terminal size, and fixture scale.",
+    "Include correctness counters beside timing counters; a fast run with stale focus, broken selection, unsafe output leakage, or missing semantic/test coverage does not support a launch claim.",
+    "Separate ergonomics evidence from timing evidence. Lines of code, app structure, test shape, and command/action model are separate fields from p95 latency.",
+    "Keep peer result slots empty until the peer fixture is implemented and run from source-linked package versions."
+  ],
+  "peers": [
+    {
+      "id": "nocterm",
+      "name": "Nocterm",
+      "comparisonFocus": [
+        "Flutter-like Dart ergonomics",
+        "component testing",
+        "hot reload",
+        "large-list and text-input behavior",
+        "app-kernel structure beyond widgets"
+      ]
+    },
+    {
+      "id": "bubbletea",
+      "name": "Bubble Tea v2",
+      "comparisonFocus": [
+        "Elm-style update loop",
+        "Charm ecosystem components",
+        "command/side-effect shape",
+        "terminal taste and renderer behavior",
+        "subprocess and viewport workflows"
+      ]
+    },
+    {
+      "id": "textual",
+      "name": "Textual",
+      "comparisonFocus": [
+        "mature full-app framework",
+        "commands and command palette",
+        "workers",
+        "data tables",
+        "testing and devtools"
+      ]
+    },
+    {
+      "id": "opentui",
+      "name": "OpenTUI",
+      "comparisonFocus": [
+        "native renderer throughput",
+        "terminal protocol surface",
+        "TypeScript bindings",
+        "agent/developer workflow apps",
+        "custom streams"
+      ]
+    },
+    {
+      "id": "ratatui",
+      "name": "Ratatui",
+      "comparisonFocus": [
+        "Rust immediate rendering",
+        "raw render throughput",
+        "table and paragraph workloads",
+        "explicit app architecture",
+        "backend portability"
+      ]
+    },
+    {
+      "id": "ink",
+      "name": "Ink",
+      "comparisonFocus": [
+        "React component ergonomics",
+        "npm distribution",
+        "interactive CLI adoption",
+        "testing shape",
+        "stdout/full-screen behavior"
+      ]
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "SB.1",
+      "name": "Time To Counter App",
+      "local": {
+        "workingDirectory": "packages/fleury",
+        "command": [
+          "dart",
+          "run",
+          "benchmark/scenario_benchmarks.dart",
+          "--filter=SB.1",
+          "--json"
+        ]
+      },
+      "peerTargets": ["nocterm", "bubbletea", "textual", "ink"],
+      "contract": [
+        "mount one counter app",
+        "render first frame",
+        "trigger one increment via the framework's normal input/action path",
+        "render updated frame",
+        "assert visible count and query test/semantic/app state where available"
+      ],
+      "requiredMetrics": [
+        "firstFrameUs",
+        "commandToFrameUs",
+        "semanticOrTestQueryUs",
+        "rssDeltaBytes",
+        "lineOfCodeCount",
+        "testLineOfCodeCount"
+      ],
+      "claimGates": [
+        "counter text updates correctly",
+        "input/action path matches normal app use",
+        "test shape is documented"
+      ],
+      "peerRuns": []
+    },
+    {
+      "id": "SB.2",
+      "name": "Text Editing Composer Stress",
+      "local": {
+        "workingDirectory": "packages/fleury",
+        "command": [
+          "dart",
+          "run",
+          "benchmark/scenario_benchmarks.dart",
+          "--filter=SB.2",
+          "--text-chars=10000",
+          "--json"
+        ]
+      },
+      "peerTargets": ["nocterm", "textual", "bubbletea", "ink"],
+      "contract": [
+        "mount multiline composer/editor plus secret field",
+        "drive grapheme-aware cursor movement",
+        "replace a selected range",
+        "exercise undo/redo and submitted-history navigation",
+        "accept one completion",
+        "paste a large mixed-width chunk",
+        "assert secret/redacted state never leaks through test artifacts"
+      ],
+      "requiredMetrics": [
+        "cursorMoveUs",
+        "insertionDeletionUs",
+        "selectionUs",
+        "undoRedoUs",
+        "historyNavigationUs",
+        "completionAcceptUs",
+        "pasteCompleteUs",
+        "semanticOrTestQueryUs"
+      ],
+      "claimGates": [
+        "mixed-width text remains valid",
+        "selection and undo state are correct",
+        "redacted value stays redacted"
+      ],
+      "peerRuns": []
+    },
+    {
+      "id": "SB.3",
+      "name": "DataTable 100k Rows",
+      "local": {
+        "workingDirectory": "packages/fleury_widgets",
+        "command": [
+          "dart",
+          "run",
+          "benchmark/scenario_benchmarks.dart",
+          "--filter=SB.3",
+          "--rows=100000",
+          "--json"
+        ]
+      },
+      "peerTargets": ["textual", "ratatui", "opentui", "nocterm"],
+      "contract": [
+        "mount a 100k-row tabular data set",
+        "render first frame with visible virtualization",
+        "move selection by arrow and page",
+        "jump to the final row",
+        "copy/export the selected row",
+        "assert visible range, selected row, and row/cell test semantics where available"
+      ],
+      "requiredMetrics": [
+        "mountUs",
+        "firstRenderUs",
+        "arrowMoveUs",
+        "pageMoveUs",
+        "jumpToEndUs",
+        "copySelectedRowUs",
+        "semanticOrTestQueryUs",
+        "rssDeltaBytes"
+      ],
+      "claimGates": [
+        "visible window stays bounded",
+        "selection is correct after jump",
+        "copy/export is sanitized and exact"
+      ],
+      "peerRuns": []
+    },
+    {
+      "id": "SB.4",
+      "name": "LogRegion Tailing And Scrollback",
+      "local": {
+        "workingDirectory": "packages/fleury_widgets",
+        "command": [
+          "dart",
+          "run",
+          "benchmark/scenario_benchmarks.dart",
+          "--filter=SB.4",
+          "--rows=100000",
+          "--json"
+        ]
+      },
+      "peerTargets": ["textual", "opentui", "bubbletea", "nocterm"],
+      "contract": [
+        "mount a large log buffer at the tail",
+        "append a burst containing unsafe terminal payloads",
+        "jump into scrollback and return to tail",
+        "copy the selected log row",
+        "filter/search the log corpus",
+        "assert unsafe payloads do not leak into visible output, copies, or test artifacts"
+      ],
+      "requiredMetrics": [
+        "appendBurstUs",
+        "scrollbackJumpUs",
+        "scrollToTailUs",
+        "copySelectedEntryUs",
+        "filterQueryUs",
+        "semanticOrTestQueryUs",
+        "unsafeArtifactLeakCount"
+      ],
+      "claimGates": [
+        "tail anchoring is correct",
+        "copy text is sanitized",
+        "unsafe output leak count is zero"
+      ],
+      "peerRuns": []
+    },
+    {
+      "id": "SB.5",
+      "name": "Streaming Markdown",
+      "local": {
+        "workingDirectory": "packages/fleury_widgets",
+        "command": [
+          "dart",
+          "run",
+          "benchmark/scenario_benchmarks.dart",
+          "--filter=SB.5",
+          "--json"
+        ]
+      },
+      "peerTargets": ["textual", "opentui", "bubbletea", "ink"],
+      "contract": [
+        "stream markdown chunks incrementally",
+        "include headings, lists, code fences, links, long paragraphs, partial chunks, and unsafe links/control payloads",
+        "render after each append",
+        "copy one selected block",
+        "assert link policy and unsafe-frame count"
+      ],
+      "requiredMetrics": [
+        "chunkUpdateUs",
+        "chunkParseUs",
+        "chunkFrameUs",
+        "finalRenderUs",
+        "selectedBlockCopyUs",
+        "semanticOrTestQueryUs",
+        "unsafeFrameCount"
+      ],
+      "claimGates": [
+        "incremental content remains coherent",
+        "unsafe links have visible fallback",
+        "unsafe frame count is zero"
+      ],
+      "peerRuns": []
+    },
+    {
+      "id": "SB.6",
+      "name": "Dashboard Update Pressure",
+      "local": {
+        "workingDirectory": "packages/fleury_widgets",
+        "command": [
+          "dart",
+          "run",
+          "benchmark/scenario_benchmarks.dart",
+          "--filter=SB.6",
+          "--json"
+        ]
+      },
+      "peerTargets": ["ratatui", "bubbletea", "opentui", "nocterm"],
+      "contract": [
+        "mount a dense dashboard with progress, gauge, sparkline, bar chart, counters, and status rows",
+        "drive repeated state updates without remounting",
+        "record per-update pump/frame cost",
+        "assert semantic/test-visible progress and chart values where available"
+      ],
+      "requiredMetrics": [
+        "updateTotalUs",
+        "updateFrameUs",
+        "updatePumpUs",
+        "semanticOrTestQueryUs",
+        "layoutPerformedCount",
+        "layoutSkippedCount",
+        "ansiBytes"
+      ],
+      "claimGates": [
+        "all surfaces update correctly",
+        "no unsafe frames",
+        "layout work is reported or equivalent renderer work is documented"
+      ],
+      "peerRuns": []
+    },
+    {
+      "id": "SB.7",
+      "name": "Resize Storm",
+      "local": {
+        "workingDirectory": "packages/fleury_widgets",
+        "command": [
+          "dart",
+          "run",
+          "benchmark/scenario_benchmarks.dart",
+          "--filter=SB.7",
+          "--resize-events=500",
+          "--json"
+        ]
+      },
+      "peerTargets": ["nocterm", "textual", "ratatui", "opentui"],
+      "contract": [
+        "keep a table/log/editor surface mounted",
+        "alternate normal, wide, narrow, and short terminal sizes",
+        "render every resize frame",
+        "assert focus, selected rows, visible ranges, and text input state survive"
+      ],
+      "requiredMetrics": [
+        "resizeFrameUs",
+        "semanticOrTestQueryUs",
+        "distinctSizeCount",
+        "unsafeFrameCount",
+        "exceptionCount"
+      ],
+      "claimGates": [
+        "no exceptions",
+        "semantic/test-visible core regions survive every resize",
+        "unsafe frame count is zero"
+      ],
+      "peerRuns": []
+    },
+    {
+      "id": "SB.8",
+      "name": "Overlay And Command Palette Churn",
+      "local": {
+        "workingDirectory": "packages/fleury_widgets",
+        "command": [
+          "dart",
+          "run",
+          "benchmark/scenario_benchmarks.dart",
+          "--filter=SB.8",
+          "--json"
+        ]
+      },
+      "peerTargets": ["textual", "bubbletea", "ink", "nocterm"],
+      "contract": [
+        "mount an app with global and active-screen commands",
+        "open a command palette repeatedly over a large command registry",
+        "filter, select, invoke, and dismiss through keyboard and semantic/test action paths",
+        "probe visible disabled commands",
+        "assert no stale palette rows or unexpected invocations"
+      ],
+      "requiredMetrics": [
+        "openUs",
+        "filterUs",
+        "selectionUs",
+        "actionUs",
+        "settleUs",
+        "cycleUs",
+        "semanticOrTestQueryUs",
+        "stalePaletteCount",
+        "unexpectedInvocationCount"
+      ],
+      "claimGates": [
+        "route depth is restored",
+        "disabled commands stay inert",
+        "stale palette and unexpected invocation counts are zero"
+      ],
+      "peerRuns": []
+    },
+    {
+      "id": "SB.9",
+      "name": "Subprocess Handoff And Untrusted Output",
+      "local": {
+        "workingDirectory": "packages/fleury_widgets",
+        "command": [
+          "dart",
+          "run",
+          "benchmark/scenario_benchmarks.dart",
+          "--filter=SB.9",
+          "--json"
+        ]
+      },
+      "peerTargets": ["textual", "bubbletea", "opentui", "nocterm"],
+      "contract": [
+        "run a large-output subprocess success path",
+        "run a stderr non-zero failure path",
+        "cancel one running subprocess",
+        "exercise terminal handoff or equivalent process-mode restoration",
+        "stream unsafe stdout/stderr-like output through an app-facing output region",
+        "assert unsafe payloads do not leak into visible output, copies, or semantic/test artifacts"
+      ],
+      "requiredMetrics": [
+        "processRunUs",
+        "failureRunUs",
+        "cancellationLatencyUs",
+        "editorOrTerminalHandoffUs",
+        "streamFrameUs",
+        "copyUs",
+        "semanticOrTestQueryUs",
+        "unsafeArtifactLeakCount"
+      ],
+      "claimGates": [
+        "terminal mode is restored",
+        "cancellation completes",
+        "unsafe artifact leak count is zero"
+      ],
+      "peerRuns": []
+    },
+    {
+      "id": "SB.10",
+      "name": "Proof-App Journey",
+      "local": {
+        "workingDirectory": "packages/fleury_example_console",
+        "command": [
+          "dart",
+          "run",
+          "benchmark/scenario_benchmarks.dart",
+          "--filter=SB.10",
+          "--json"
+        ]
+      },
+      "peerTargets": ["nocterm", "textual", "bubbletea", "opentui", "ink"],
+      "contract": [
+        "mount a multi-screen developer console",
+        "navigate through command palette and screen controls",
+        "exercise global search, indexed logs, DataTable, transcript, process panel, diagnostics, and debug capture",
+        "assert app-level command/action/test semantics or closest peer test equivalents"
+      ],
+      "requiredMetrics": [
+        "fullJourneyUs",
+        "commandPaletteUs",
+        "globalSearchUs",
+        "indexedLogsUs",
+        "runsFilterUs",
+        "processRunToSuccessUs",
+        "diagnosticsUs",
+        "debugCaptureUs",
+        "semanticOrTestQueryUs"
+      ],
+      "claimGates": [
+        "all major app regions are exercised",
+        "workflow correctness counters pass",
+        "test/automation surface is documented"
+      ],
+      "peerRuns": []
+    },
+    {
+      "id": "SB.11",
+      "name": "TreeTable Hierarchy Filter And Copy",
+      "local": {
+        "workingDirectory": "packages/fleury_widgets",
+        "command": [
+          "dart",
+          "run",
+          "benchmark/scenario_benchmarks.dart",
+          "--filter=SB.11",
+          "--json"
+        ]
+      },
+      "peerTargets": ["textual", "ratatui", "opentui", "nocterm"],
+      "contract": [
+        "mount a large hierarchical table with branch rows and leaves",
+        "expand branches",
+        "navigate and page through visible hierarchy",
+        "filter for a collapsed descendant",
+        "copy the selected filtered row",
+        "assert hierarchy semantics or nearest test equivalent"
+      ],
+      "requiredMetrics": [
+        "fixtureBuildUs",
+        "indexBuildUs",
+        "expandBranchUs",
+        "pageMoveUs",
+        "filterQueryUs",
+        "copySelectedRowUs",
+        "semanticOrTestQueryUs"
+      ],
+      "claimGates": [
+        "filtered descendant is reachable",
+        "copy text is exact and sanitized",
+        "hierarchy state is inspectable"
+      ],
+      "peerRuns": []
+    },
+    {
+      "id": "SB.12",
+      "name": "Layout Dirtiness Cache",
+      "local": {
+        "workingDirectory": "packages/fleury",
+        "command": [
+          "dart",
+          "run",
+          "benchmark/scenario_benchmarks.dart",
+          "--filter=SB.12",
+          "--json"
+        ]
+      },
+      "peerTargets": ["ratatui", "opentui", "bubbletea", "nocterm"],
+      "contract": [
+        "mount stable static and changing panes",
+        "record first frame, layout-affecting update, paint-only style update, paint-only text update, and idle frame",
+        "report equivalent renderer work if the peer does not expose layout performed/skipped counts"
+      ],
+      "requiredMetrics": [
+        "firstFrameUs",
+        "updateFrameUs",
+        "paintOnlyFrameUs",
+        "textPaintOnlyFrameUs",
+        "idleFrameUs",
+        "layoutPerformedCount",
+        "layoutSkippedCount"
+      ],
+      "claimGates": [
+        "static pane remains visually stable",
+        "update and paint-only paths are measured separately",
+        "equivalent peer renderer-work metric is documented"
+      ],
+      "peerRuns": []
+    }
+  ]
+}

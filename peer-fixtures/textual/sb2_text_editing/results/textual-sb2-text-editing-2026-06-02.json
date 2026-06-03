@@ -1,0 +1,162 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryPeerBenchmarkRun",
+  "runId": "textual-sb2-text-editing-2026-06-02T01-15-48Z",
+  "peerId": "textual",
+  "scenarioId": "SB.2",
+  "capturedAt": "2026-06-02T01:15:48.344079Z",
+  "source": {
+    "name": "Textual",
+    "version": "8.2.7",
+    "url": "https://pypi.org/project/textual/"
+  },
+  "environment": {
+    "machine": "macbookpro.lan",
+    "operatingSystem": "darwin",
+    "operatingSystemVersion": "macOS-26.2-x86_64-i386-64bit-Mach-O",
+    "runtime": "Python 3.13.1 / Textual 8.2.7",
+    "terminalMode": "textual-run-test-harness",
+    "terminalSize": {
+      "columns": 90,
+      "rows": 28
+    }
+  },
+  "fixture": {
+    "workingDirectory": "peer-fixtures/textual/sb2_text_editing",
+    "command": [
+      "python",
+      "sb2_text_editing_benchmark.py",
+      "--warmup=1",
+      "--iterations=5",
+      "--text-chars=10000",
+      "--json"
+    ],
+    "warmupIterations": 1,
+    "measuredIterations": 5
+  },
+  "metrics": {
+    "cursorMoveUs": {
+      "min": 87121,
+      "median": 88593,
+      "p95": 90273,
+      "p99": 103955,
+      "max": 103955,
+      "samples": 20
+    },
+    "insertionDeletionUs": {
+      "min": 87379,
+      "median": 88757,
+      "p95": 90516,
+      "p99": 90516,
+      "max": 90516,
+      "samples": 10
+    },
+    "selectionUs": {
+      "min": 32749,
+      "median": 39002,
+      "p95": 89952,
+      "p99": 89952,
+      "max": 89952,
+      "samples": 10
+    },
+    "undoRedoUs": {
+      "min": 87873,
+      "median": 89293,
+      "p95": 91934,
+      "p99": 91934,
+      "max": 91934,
+      "samples": 10
+    },
+    "historyNavigationUs": {
+      "min": 87814,
+      "median": 113926,
+      "p95": 122264,
+      "p99": 122264,
+      "max": 122264,
+      "samples": 10
+    },
+    "completionAcceptUs": {
+      "min": 88202,
+      "median": 88532,
+      "p95": 109193,
+      "p99": 109193,
+      "max": 109193,
+      "samples": 5
+    },
+    "pasteCompleteUs": {
+      "min": 45814,
+      "median": 53475,
+      "p95": 77338,
+      "p99": 77338,
+      "max": 77338,
+      "samples": 5
+    },
+    "semanticOrTestQueryUs": {
+      "min": 55,
+      "median": 124,
+      "p95": 165,
+      "p99": 165,
+      "max": 165,
+      "samples": 5
+    },
+    "rssDeltaBytes": 1646592,
+    "lineOfCodeCount": 232,
+    "benchmarkLineOfCodeCount": 353,
+    "testLineOfCodeCount": 54,
+    "textCharsRequested": 10000,
+    "adapterOwnedFeatureCount": 2
+  },
+  "correctness": [
+    {
+      "gate": "mixed-width text remains valid",
+      "pass": true,
+      "evidence": "Textual TextArea retained emoji, CJK, combining text, and paste marker."
+    },
+    {
+      "gate": "selection and undo state are correct",
+      "pass": true,
+      "evidence": "Textual TextArea handled selection replacement and undo/redo; history/completion are fixture-owned adapters."
+    },
+    {
+      "gate": "redacted value stays redacted",
+      "pass": true,
+      "evidence": "Password Input display did not contain the raw secret."
+    }
+  ],
+  "ergonomics": {
+    "lineOfCodeCount": 232,
+    "benchmarkLineOfCodeCount": 353,
+    "testLineOfCodeCount": 54,
+    "appFile": "sb2_text_editing_app.py",
+    "benchmarkFile": "sb2_text_editing_benchmark.py",
+    "testFile": "test_sb2_text_editing.py",
+    "peerOwnedTextArea": true,
+    "peerOwnedInput": true,
+    "peerOwnedUndoRedo": true,
+    "appOwnedHistory": true,
+    "appOwnedCompletion": true,
+    "semanticGraphAvailable": false,
+    "testQueryViaWidgetState": true
+  },
+  "artifacts": [
+    {
+      "kind": "source",
+      "path": "peer-fixtures/textual/sb2_text_editing/sb2_text_editing_app.py"
+    },
+    {
+      "kind": "benchmark",
+      "path": "peer-fixtures/textual/sb2_text_editing/sb2_text_editing_benchmark.py"
+    },
+    {
+      "kind": "test",
+      "path": "peer-fixtures/textual/sb2_text_editing/test_sb2_text_editing.py"
+    }
+  ],
+  "notes": [
+    "This is a Textual run_test peer fixture, not a real-terminal run.",
+    "Textual 8.2.7 supplies TextArea, password Input, built-in cursor movement, selection, paste/edit APIs, and undo/redo.",
+    "Submission history and completion acceptance are app-owned adapters in this fixture because Textual does not expose a Fleury-equivalent command composer history/completion contract for SB.2.",
+    "Textual exposes widget/app state for this fixture, not a Fleury-style semantic app graph.",
+    "Timing is local-machine evidence and should not be used as a public superiority claim without repeated peer runs."
+  ]
+}

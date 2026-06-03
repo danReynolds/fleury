@@ -196,5 +196,99 @@ void main() {
       tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
       expect(received, (2, 10));
     });
+
+    testWidgets('exposes slider semantics and increment/decrement actions', (
+      tester,
+    ) async {
+      (num, num)? received;
+      tester.pumpWidget(
+        SizedBox(
+          width: 11,
+          height: 1,
+          child: RangeSlider(
+            values: const (2, 8),
+            min: 0,
+            max: 10,
+            step: 2,
+            largeStep: 4,
+            label: 'window',
+            autofocus: true,
+            onChanged: (v) => received = v,
+          ),
+        ),
+      );
+
+      final node = tester.semantics().single(
+        role: SemanticRole.slider,
+        label: 'window',
+        value: '2-8',
+        action: SemanticAction.increment,
+      );
+      expect(node.actions, contains(SemanticAction.decrement));
+      expect(node.state['lowValue'], 2);
+      expect(node.state['highValue'], 8);
+      expect(node.state['activeHandle'], 'low');
+      expect(
+        tester
+            .accessibilitySnapshot()
+            .single(role: SemanticRole.slider, label: 'window')
+            .states,
+        contains(
+          'range 2-8, min 0, max 10, step 2, large step 4, active handle low',
+        ),
+      );
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.increment,
+        role: SemanticRole.slider,
+        label: 'window',
+      );
+
+      expect(result.completed, isTrue);
+      expect(received, (4, 8));
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.slider, label: 'window')
+            .focused,
+        isTrue,
+      );
+    });
+
+    testWidgets('slider semantic actions reflect the active handle bounds', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        SizedBox(
+          width: 11,
+          height: 1,
+          child: RangeSlider(
+            values: const (0, 8),
+            min: 0,
+            max: 10,
+            label: 'window',
+            autofocus: true,
+            onChanged: (_) {},
+          ),
+        ),
+      );
+
+      final low = tester.semantics().single(
+        role: SemanticRole.slider,
+        label: 'window',
+      );
+      expect(low.actions, contains(SemanticAction.increment));
+      expect(low.actions, isNot(contains(SemanticAction.decrement)));
+      expect(low.state['activeHandle'], 'low');
+
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
+      final high = tester.semantics().single(
+        role: SemanticRole.slider,
+        label: 'window',
+      );
+      expect(high.actions, contains(SemanticAction.increment));
+      expect(high.actions, contains(SemanticAction.decrement));
+      expect(high.state['activeHandle'], 'high');
+    });
   });
 }

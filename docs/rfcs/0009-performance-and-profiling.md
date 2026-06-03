@@ -109,7 +109,8 @@ JSON so we can diff successive runs (catch regressions in CI).
 
 ### 4.2 Real-app profiling
 
-Once the Dune CLI has a working chat MVP:
+Once the example subpackage, and later Dune/`dune_cli`, have a working
+developer-workflow MVP:
 
 - `dart --pause-isolates-on-exit --enable-vm-service` + DevTools CPU
   profiler. Run the demo, exercise typical paths (scroll a long

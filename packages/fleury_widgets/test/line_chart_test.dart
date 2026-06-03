@@ -852,6 +852,82 @@ void main() {
       );
     });
 
+    testWidgets('interactive chart exposes semantic cursor actions', (
+      tester,
+    ) async {
+      tester.pumpWidget(
+        SizedBox(
+          width: 30,
+          height: 8,
+          child: LineChart(
+            semanticLabel: 'Latency chart',
+            series: const [
+              LineSeries([(0, 1), (2, 5)], label: 'p95'),
+            ],
+            references: const [ReferenceLine.horizontal(4)],
+            interactive: true,
+            showAxes: false,
+          ),
+        ),
+      );
+
+      var chart = tester.semantics().single(
+        role: SemanticRole.chart,
+        label: 'Latency chart',
+        action: SemanticAction.increment,
+      );
+      expect(chart.state.chartType, 'line');
+      expect(chart.state.chartSeriesCount, 1);
+      expect(chart.state.chartPointCount, 2);
+      expect(chart.state.chartXMin, 0);
+      expect(chart.state.chartXMax, 2);
+      expect(chart.state.chartYMin, 1);
+      expect(chart.state.chartYMax, 5);
+      expect(chart.state.chartReferenceCount, 1);
+      expect(chart.state.chartInteractive, isTrue);
+      expect(chart.state.chartCursorCount, 2);
+      expect(chart.state.chartCursorIndex, 0);
+      expect(chart.state.chartCursorX, 0);
+
+      final focus = await tester.invokeSemanticAction(
+        SemanticAction.focus,
+        role: SemanticRole.chart,
+        label: 'Latency chart',
+      );
+      expect(focus.completed, isTrue);
+
+      final next = await tester.invokeSemanticAction(
+        SemanticAction.increment,
+        role: SemanticRole.chart,
+        label: 'Latency chart',
+      );
+      expect(next.completed, isTrue);
+      tester.pump();
+
+      chart = tester.semantics().single(
+        role: SemanticRole.chart,
+        label: 'Latency chart',
+        focused: true,
+        action: SemanticAction.decrement,
+      );
+      expect(chart.value, 'x: 2');
+      expect(chart.state.chartCursorIndex, 1);
+      expect(chart.state.chartCursorX, 2);
+      expect(chart.actions, isNot(contains(SemanticAction.increment)));
+
+      final fallback = tester.accessibilitySnapshot().single(
+        role: SemanticRole.chart,
+        label: 'Latency chart',
+      );
+      expect(
+        fallback.states,
+        contains(
+          'chart line, 1 series, 2 points, x 0.0-2.0, y 1.0-5.0, '
+          '1 reference, interactive, cursor 2 of 2, cursor x 2',
+        ),
+      );
+    });
+
     testWidgets('cursor stays put at the right edge', (tester) {
       tester.pumpWidget(
         SizedBox(

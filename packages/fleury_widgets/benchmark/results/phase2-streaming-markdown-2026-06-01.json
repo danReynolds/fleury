@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-01T04:40:54.442927Z",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "scenarioId": "SB.5",
+      "scenarioName": "Streaming Markdown",
+      "packageVersion": "0.0.0",
+      "gitSha": "unknown",
+      "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+      "runMode": "test",
+      "os": "macos",
+      "cpu": 10,
+      "terminalProfile": {
+        "colorMode": "truecolor",
+        "imageProtocol": "halfBlock",
+        "tmuxPassthrough": false
+      },
+      "terminalSize": {
+        "columns": 120,
+        "rows": 32
+      },
+      "seed": 1,
+      "rowCount": 100000,
+      "warmupIterations": 1,
+      "measuredIterations": 5,
+      "startedAt": "2026-06-01T04:40:16.626809Z",
+      "durationMs": 37781.076,
+      "metrics": {
+        "journeyUs": {
+          "min": 7475185,
+          "median": 7551267,
+          "p95": 7614815,
+          "p99": 7624502,
+          "max": 7626924,
+          "samples": 5
+        },
+        "chunkParseUs": {
+          "min": 20,
+          "median": 6622,
+          "p95": 12588,
+          "p99": 13327,
+          "max": 14936,
+          "samples": 5000
+        },
+        "chunkFrameUs": {
+          "min": 59,
+          "median": 637,
+          "p95": 926,
+          "p99": 1154,
+          "max": 17207,
+          "samples": 5000
+        },
+        "chunkUpdateUs": {
+          "min": 87,
+          "median": 7280,
+          "p95": 13428,
+          "p99": 14298,
+          "max": 28521,
+          "samples": 5000
+        },
+        "finalRenderUs": {
+          "min": 209,
+          "median": 270,
+          "p95": 2633,
+          "p99": 3074,
+          "max": 3184,
+          "samples": 5
+        },
+        "copySelectedBlockUs": {
+          "min": 326,
+          "median": 385,
+          "p95": 6283,
+          "p99": 6541,
+          "max": 6606,
+          "samples": 5
+        },
+        "semanticQueryUs": {
+          "min": 458,
+          "median": 476,
+          "p95": 2155,
+          "p99": 2429,
+          "max": 2498,
+          "samples": 5
+        },
+        "chunkCount": 1000,
+        "sourceByteCount": 55652,
+        "blockCount": 1165,
+        "headingCount": 84,
+        "listItemCount": 167,
+        "linkCount": 250,
+        "unsafeLinkCount": 83,
+        "codeBlockCount": 83,
+        "codeLineCount": 249,
+        "semanticNodeCount": 253,
+        "visibleRangeStart": 1164,
+        "visibleRangeEnd": 1164,
+        "selectedBlockIndex": 1164,
+        "selectedBlockKind": "bullet",
+        "initialAnsiBytes": 52,
+        "maxChunkAnsiBytes": 2324,
+        "finalAnsiBytes": 167,
+        "unsafeFrameCount": 0,
+        "sanitizedBlockCount": 166,
+        "truncatedBlockCount": 0,
+        "copiedByteCount": 47,
+        "rssDeltaBytes": 9584640
+      },
+      "thresholds": {
+        "candidateChunkUpdateP95Us": 33000,
+        "candidateChunkFrameP95Us": 16000,
+        "candidateSemanticQueryP95Us": 16000,
+        "enforced": false
+      },
+      "pass": true,
+      "notes": [
+        "Candidate thresholds are informational until stable baselines exist.",
+        "Scenario appends markdown chunks and measures parse/update/frame cost separately.",
+        "The first implementation intentionally measures full-document parse-on-append before committing to an incremental parser.",
+        "Fixture includes unsafe OSC/link payloads to verify sanitized visible, copied, and semantic output."
+      ]
+    }
+  ]
+}

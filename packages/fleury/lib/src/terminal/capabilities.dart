@@ -72,3 +72,71 @@ final class TerminalCapabilities {
         'tmuxPassthrough=$tmuxPassthrough)';
   }
 }
+
+/// Detects the terminal capability summary from environment variables.
+///
+/// This is intentionally static/env-derived for Phase 1. Active terminal
+/// probing belongs behind an explicit diagnostics/probe step because some
+/// probes write escape sequences, can be slow, and behave differently under
+/// tmux, SSH, or IDE consoles.
+TerminalCapabilities detectTerminalCapabilitiesFromEnvironment(
+  Map<String, String> environment,
+) {
+  return TerminalCapabilities(
+    colorMode: detectColorModeFromEnvironment(environment),
+    imageProtocol: detectImageProtocolFromEnvironment(environment),
+    tmuxPassthrough: detectTerminalMultiplexerFromEnvironment(environment),
+  );
+}
+
+/// Detects maximum color fidelity from conventional terminal environment.
+ColorMode detectColorModeFromEnvironment(Map<String, String> environment) {
+  // NO_COLOR wins outright (https://no-color.org): any non-empty value
+  // disables color, even over CLICOLOR_FORCE.
+  if ((environment['NO_COLOR'] ?? '').isNotEmpty) return ColorMode.none;
+
+  final colorterm = environment['COLORTERM']?.toLowerCase() ?? '';
+  final term = environment['TERM']?.toLowerCase() ?? '';
+  if (colorterm.contains('truecolor') || colorterm.contains('24bit')) {
+    return ColorMode.truecolor;
+  }
+  if (term.contains('256')) return ColorMode.indexed256;
+  if (term.isNotEmpty) return ColorMode.ansi16;
+  if ((environment['CLICOLOR_FORCE'] ?? '0') != '0') {
+    // No TERM, but the caller insists on color.
+    return ColorMode.ansi16;
+  }
+  return ColorMode.none;
+}
+
+/// Detects the best known image protocol from terminal environment.
+ImageProtocol detectImageProtocolFromEnvironment(
+  Map<String, String> environment,
+) {
+  final term = environment['TERM']?.toLowerCase() ?? '';
+  final program = environment['TERM_PROGRAM']?.toLowerCase() ?? '';
+  final lcTerminal = environment['LC_TERMINAL']?.toLowerCase() ?? '';
+
+  if (environment['KITTY_WINDOW_ID']?.isNotEmpty ?? false) {
+    return ImageProtocol.kitty;
+  }
+  if (term == 'xterm-kitty') return ImageProtocol.kitty;
+  if (program == 'wezterm' || program == 'ghostty') {
+    return ImageProtocol.kitty;
+  }
+  if (program == 'iterm.app' || lcTerminal == 'iterm2' || program == 'mintty') {
+    return ImageProtocol.iterm2;
+  }
+  if (term.contains('sixel')) return ImageProtocol.sixel;
+  return ImageProtocol.halfBlock;
+}
+
+/// Detects whether a terminal multiplexer is likely to need passthrough.
+bool detectTerminalMultiplexerFromEnvironment(
+  Map<String, String> environment,
+) {
+  if ((environment['TMUX'] ?? '').isNotEmpty) return true;
+  final term = environment['TERM']?.toLowerCase() ?? '';
+  if (term.startsWith('screen') || term.startsWith('tmux')) return true;
+  return false;
+}

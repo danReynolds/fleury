@@ -39,11 +39,16 @@ import 'package:test/test.dart' as pkg_test;
 import '../animation/animation_policy.dart';
 import '../animation/clock.dart';
 import '../animation/ticker_scheduler.dart';
+import '../app/app.dart';
+import '../app/commands.dart';
 import '../foundation/geometry.dart';
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/render_flex.dart' show RenderFlex;
 import '../runtime/input_dispatcher.dart';
+import '../semantics/accessibility.dart';
+import '../semantics/inspection.dart';
+import '../semantics/semantics.dart';
 import '../terminal/events.dart';
 import '../widgets/basic.dart';
 import '../widgets/focus.dart';
@@ -386,6 +391,165 @@ class FleuryTester {
   String describeTree() =>
       _root?.toStringDeep() ?? '(tester has no root; call pumpWidget first)';
 
+  /// Returns an immutable semantic snapshot for the current tree.
+  ///
+  /// This is collected on demand so early semantic work has no runtime cost
+  /// unless tests or debug tools ask for it.
+  SemanticTree semantics() {
+    _assertNotDisposed('semantics');
+    final root = _root;
+    if (root == null) {
+      throw StateError(
+        'FleuryTester.semantics called before pumpWidget; the tree is empty.',
+      );
+    }
+    _owner.flushBuild();
+    return SemanticTree.fromElement(root);
+  }
+
+  /// Returns a text-first accessibility/fallback snapshot for the tree.
+  ///
+  /// The snapshot is derived from semantic nodes, so it preserves redaction,
+  /// focus, selection, validation, capability fallback, progress, and action
+  /// state without reading rendered cells.
+  AccessibilitySnapshot accessibilitySnapshot() {
+    _assertNotDisposed('accessibilitySnapshot');
+    return semantics().toAccessibilitySnapshot();
+  }
+
+  /// Returns a machine-readable semantic inspection snapshot for the tree.
+  ///
+  /// The snapshot uses the same redaction-aware serializer as debug capture,
+  /// making it useful for regression tests and future automation adapters
+  /// without depending on rendered cells or debug-capture artifacts.
+  SemanticInspectionSnapshot semanticInspectionSnapshot() {
+    _assertNotDisposed('semanticInspectionSnapshot');
+    return semantics().toInspectionSnapshot();
+  }
+
+  /// Returns [semanticInspectionSnapshot] as schema-versioned JSON.
+  Map<String, Object?> semanticInspectionJson() {
+    _assertNotDisposed('semanticInspectionJson');
+    return semantics().toInspectionJson();
+  }
+
+  /// Invokes a semantic action on a node in the current semantic tree.
+  ///
+  /// When [node] is omitted, the remaining filters must identify exactly one
+  /// node that advertises [action]. This is intentionally semantic-first: tests
+  /// can exercise app commands, controls, fields, and app-authored regions by
+  /// role/label/action instead of reaching through widget internals.
+  Future<SemanticActionInvocationResult> invokeSemanticAction(
+    SemanticAction action, {
+    SemanticNode? node,
+    SemanticNodeId? id,
+    SemanticRole? role,
+    String? label,
+    Object? value,
+    bool? focused,
+    bool? selected,
+    bool? enabled,
+    bool? checked,
+    bool? busy,
+    String? validationError,
+  }) async {
+    _assertNotDisposed('invokeSemanticAction');
+    final root = _root;
+    if (root == null) {
+      return SemanticActionInvocationResult.notFound(action);
+    }
+
+    final tree = semantics();
+    final target = _resolveSemanticActionTarget(
+      tree,
+      action,
+      node: node,
+      id: id,
+      role: role,
+      label: label,
+      value: value,
+      focused: focused,
+      selected: selected,
+      enabled: enabled,
+      checked: checked,
+      busy: busy,
+      validationError: validationError,
+    );
+    if (target == null) {
+      return SemanticActionInvocationResult.notFound(action);
+    }
+    if (!target.enabled) {
+      return SemanticActionInvocationResult.disabled(target, action);
+    }
+    if (!target.actions.contains(action)) {
+      return SemanticActionInvocationResult.unsupported(target, action);
+    }
+
+    try {
+      final handled = await _dispatchSemanticAction(root, target, action);
+      _owner.flushBuild();
+      return handled
+          ? SemanticActionInvocationResult.completed(target, action)
+          : SemanticActionInvocationResult.unsupported(target, action);
+    } catch (error, stackTrace) {
+      _owner.flushBuild();
+      return SemanticActionInvocationResult.failed(
+        target,
+        action,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  /// Returns the active command registry for [context], or for the current
+  /// focus/default test context when [context] is omitted.
+  CommandRegistry commandRegistry({BuildContext? context}) {
+    _assertNotDisposed('commandRegistry');
+    final buildContext = _defaultCommandContext(context);
+    final registry = buildContext == null
+        ? null
+        : CommandRegistryScope.maybeOf(buildContext);
+    if (registry == null) {
+      throw StateError(
+        'FleuryTester.commandRegistry could not locate a CommandRegistryScope '
+        'in the current tree.',
+      );
+    }
+    return registry;
+  }
+
+  /// Latest command invocation result for the active command registry, if any.
+  CommandInvocationResult? get lastCommandResult {
+    _assertNotDisposed('lastCommandResult');
+    final buildContext = _defaultCommandContext(null);
+    if (buildContext == null) return null;
+    return FleuryApp.maybeOf(buildContext)?.commands.lastResult ??
+        CommandRegistryScope.maybeOf(buildContext)?.lastResult;
+  }
+
+  /// Invokes a command by stable ID and flushes builds triggered by it.
+  ///
+  /// Resolution follows app-shell expectations: nearest local command scopes
+  /// win first, then active screen commands, then app/parent commands.
+  Future<CommandInvocationResult> invokeCommand(
+    CommandId id, {
+    BuildContext? context,
+  }) async {
+    _assertNotDisposed('invokeCommand');
+    final buildContext = _defaultCommandContext(context);
+    final registry = commandRegistry(context: buildContext);
+    final resolution = _resolveCommandForTester(id, registry, buildContext);
+    final result = resolution == null
+        ? await registry.invoke(id, buildContext: buildContext)
+        : await resolution.registry.invokeCommand(
+            resolution.command,
+            buildContext: buildContext,
+          );
+    _owner.flushBuild();
+    return result;
+  }
+
   /// Tears down the test fixtures. Called automatically by
   /// [testWidgets]; tests that construct an [FleuryTester] manually
   /// must call this in their test teardown.
@@ -425,6 +589,169 @@ class FleuryTester {
       );
     }
   }
+
+  BuildContext? _defaultCommandContext(BuildContext? explicit) {
+    if (explicit != null) return explicit;
+    final focused = _focusManager.focusedNode?.context;
+    if (focused != null && focused.mounted) return focused;
+    final root = _root;
+    if (root == null) return null;
+    Element? deepest;
+    void visit(Element element) {
+      if (!element.mounted) return;
+      deepest = element;
+      element.visitChildren(visit);
+    }
+
+    visit(root);
+    return deepest;
+  }
+
+  _CommandResolution? _resolveCommandForTester(
+    CommandId id,
+    CommandRegistry registry,
+    BuildContext? buildContext,
+  ) {
+    final app = buildContext == null ? null : FleuryApp.maybeOf(buildContext);
+    final local = _localCommand(registry, id, buildContext);
+    if (local != null && !identical(registry, app?.commands)) {
+      return _CommandResolution(local, registry);
+    }
+
+    if (app != null && app.screens.hasScreens) {
+      for (final command in app.screens.activeScreen.commands) {
+        if (command.id != id) continue;
+        if (!registry.isVisible(command, buildContext: buildContext)) continue;
+        return _CommandResolution(command, registry);
+      }
+    }
+
+    final command = registry.command(id, buildContext: buildContext);
+    if (command == null) return null;
+    final appCommands = app?.commands;
+    if (appCommands != null && _ownsCommand(appCommands, command)) {
+      return _CommandResolution(command, appCommands);
+    }
+    return _CommandResolution(command, registry);
+  }
+
+  bool _ownsCommand(CommandRegistry registry, AppCommand command) {
+    for (final local in registry.localCommands) {
+      if (identical(local, command)) return true;
+    }
+    return false;
+  }
+
+  AppCommand? _localCommand(
+    CommandRegistry registry,
+    CommandId id,
+    BuildContext? buildContext,
+  ) {
+    for (final command in registry.localCommands) {
+      if (command.id != id) continue;
+      if (!registry.isVisible(command, buildContext: buildContext)) continue;
+      return command;
+    }
+    return null;
+  }
+
+  SemanticNode? _resolveSemanticActionTarget(
+    SemanticTree tree,
+    SemanticAction action, {
+    SemanticNode? node,
+    SemanticNodeId? id,
+    SemanticRole? role,
+    String? label,
+    Object? value,
+    bool? focused,
+    bool? selected,
+    bool? enabled,
+    bool? checked,
+    bool? busy,
+    String? validationError,
+  }) {
+    if (node != null) {
+      for (final current in tree.nodes) {
+        if (current.id == node.id) return current;
+      }
+      return null;
+    }
+    try {
+      return tree.single(
+        id: id,
+        role: role,
+        label: label,
+        value: value,
+        action: action,
+        focused: focused,
+        selected: selected,
+        enabled: enabled,
+        checked: checked,
+        busy: busy,
+        validationError: validationError,
+      );
+    } on StateError {
+      return null;
+    }
+  }
+
+  Future<bool> _dispatchSemanticAction(
+    Element element,
+    SemanticNode target,
+    SemanticAction action,
+  ) async {
+    final children = <Element>[];
+    if (element is SemanticChildrenProvider) {
+      (element as SemanticChildrenProvider).visitSemanticChildren(children.add);
+    } else {
+      element.visitChildren(children.add);
+    }
+    for (final child in children) {
+      if (await _dispatchSemanticAction(child, target, action)) {
+        return true;
+      }
+    }
+
+    if (element is! SemanticActionContributor) return false;
+    if (!_semanticSubtreeContains(element, target.id)) return false;
+    final contributor = element as SemanticActionContributor;
+    return await contributor.handleSemanticAction(target, action);
+  }
+
+  bool _semanticSubtreeContains(Element element, SemanticNodeId id) {
+    for (final node in _collectSemanticNodes(element)) {
+      if (node.selfAndDescendants.any((candidate) => candidate.id == id)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  List<SemanticNode> _collectSemanticNodes(Element element) {
+    final children = <SemanticNode>[];
+    void visitChild(Element child) {
+      children.addAll(_collectSemanticNodes(child));
+    }
+
+    if (element is SemanticChildrenProvider) {
+      (element as SemanticChildrenProvider).visitSemanticChildren(visitChild);
+    } else {
+      element.visitChildren(visitChild);
+    }
+
+    if (element is SemanticContributor) {
+      final contributor = element as SemanticContributor;
+      return <SemanticNode>[contributor.buildSemanticNode(children)];
+    }
+    return children;
+  }
+}
+
+final class _CommandResolution {
+  const _CommandResolution(this.command, this.registry);
+
+  final AppCommand command;
+  final CommandRegistry registry;
 }
 
 String _rstrip(String s, String mark) {

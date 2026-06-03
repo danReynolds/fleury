@@ -72,6 +72,12 @@ class Ticker {
   /// that snaps to its end state.
   bool get muted => _muted;
   set muted(bool value) {
+    if (_disposed) {
+      throw StateError(
+        'Ticker.muted set after dispose. Tickers cannot be reused once '
+        'disposed; create a new one via TickerProvider.createTicker.',
+      );
+    }
     if (_muted == value) return;
     _muted = value;
   }

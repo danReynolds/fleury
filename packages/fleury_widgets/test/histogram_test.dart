@@ -93,5 +93,65 @@ void main() {
       );
       expect(_rows(tester, 5, 5).join().trim(), '');
     });
+
+    testWidgets('exposes histogram chart semantics and fallback', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 5,
+          height: 5,
+          child: Histogram(
+            semanticLabel: 'Latency distribution',
+            values: [0.1, 0.2, 0.3, 1.0, 1.5, 2.0, 5.0],
+            bins: 3,
+            range: (0, 2),
+            barWidth: 1,
+            gap: 1,
+            showLabels: false,
+          ),
+        ),
+      );
+
+      final charts = tester.semantics().byRole(SemanticRole.chart).toList();
+      expect(charts, hasLength(1));
+      final chart = charts.single;
+      expect(chart.label, 'Latency distribution');
+      expect(chart.state.chartType, 'histogram');
+      expect(chart.state.chartBarCount, 3);
+      expect(chart.state.chartPointCount, 7);
+      expect(chart.state.chartRecordedPointCount, 6);
+      expect(chart.state.chartMinValue, 0);
+      expect(chart.state.chartMaxValue, 2);
+
+      final fallback = tester.accessibilitySnapshot().single(
+        role: SemanticRole.chart,
+        label: 'Latency distribution',
+      );
+      expect(
+        fallback.states,
+        contains(
+          'chart histogram, 7 points, 6 recorded, 3 bars, min 0.0, max 2.0',
+        ),
+      );
+    });
+
+    testWidgets('empty histogram still exposes no-data chart state', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 5,
+          height: 5,
+          child: Histogram(semanticLabel: 'Empty distribution', values: []),
+        ),
+      );
+
+      final chart = tester.semantics().single(
+        role: SemanticRole.chart,
+        label: 'Empty distribution',
+      );
+      expect(chart.state.chartType, 'histogram');
+      expect(chart.state.chartBarCount, 0);
+      expect(chart.state.chartPointCount, 0);
+      expect(chart.state.chartRecordedPointCount, 0);
+      expect(_rows(tester, 5, 5).join().trim(), '');
+    });
   });
 }

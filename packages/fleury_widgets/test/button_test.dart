@@ -68,6 +68,45 @@ void main() {
       expect(buf.atColRow(0, 0).style.inverse, isTrue);
     });
 
+    testWidgets('exposes button semantics', (tester) {
+      tester.pumpWidget(
+        Button(label: 'Save', autofocus: true, onPressed: () {}),
+      );
+
+      final node = tester.semantics().single(
+        role: SemanticRole.button,
+        label: 'Save',
+        focused: true,
+        action: SemanticAction.activate,
+      );
+
+      expect(node.enabled, isTrue);
+      expect(node.actions, contains(SemanticAction.focus));
+    });
+
+    testWidgets('semantic activate presses and focuses the button', (
+      tester,
+    ) async {
+      var presses = 0;
+      tester.pumpWidget(Button(label: 'Save', onPressed: () => presses++));
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        role: SemanticRole.button,
+        label: 'Save',
+      );
+
+      expect(result.completed, isTrue);
+      expect(presses, 1);
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.button, label: 'Save')
+            .focused,
+        isTrue,
+      );
+    });
+
     testWidgets('variant tints the label from the color scheme', (tester) {
       tester.pumpWidget(
         const Theme(
@@ -95,6 +134,36 @@ void main() {
         // Nothing claimed focus, so Enter reaches nothing.
         tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
         expect(presses, 0);
+      });
+
+      testWidgets('exposes disabled semantics', (tester) {
+        tester.pumpWidget(const Button(label: 'Save', onPressed: null));
+
+        final node = tester.semantics().single(
+          role: SemanticRole.button,
+          label: 'Save',
+          enabled: false,
+        );
+
+        expect(node.actions, isEmpty);
+      });
+
+      testWidgets('semantic activate reports disabled for explicit node', (
+        tester,
+      ) async {
+        tester.pumpWidget(const Button(label: 'Save', onPressed: null));
+
+        final node = tester.semantics().single(
+          role: SemanticRole.button,
+          label: 'Save',
+          enabled: false,
+        );
+        final result = await tester.invokeSemanticAction(
+          SemanticAction.activate,
+          node: node,
+        );
+
+        expect(result.status, SemanticActionInvocationStatus.disabled);
       });
     });
   });

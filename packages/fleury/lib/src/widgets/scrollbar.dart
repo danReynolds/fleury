@@ -11,7 +11,7 @@ import 'pointer.dart';
 import 'scroll_view.dart' show ScrollController;
 
 /// (content, viewport, offset) in rows or items.
-typedef ScrollbarMetrics = (int, int, int);
+typedef _ScrollbarMetrics = (int, int, int);
 
 /// A vertical scroll indicator drawn in a gutter on the right of [child],
 /// reflecting a [ScrollController] (or a [ListController] via
@@ -31,12 +31,12 @@ class Scrollbar extends StatefulWidget {
     this.thickness = 1,
     this.trackStyle = const CellStyle(dim: true),
     this.thumbStyle = CellStyle.empty,
-  }) : metrics = (() => (
+  }) : _metrics = (() => (
          controller.contentExtent,
          controller.viewportExtent,
          controller.offset,
        )),
-       scrollTo = ((f) =>
+       _scrollTo = ((f) =>
            controller.offset = (controller.maxOffset * f).round());
 
   /// Scrollbar for an item-scrolled [ListView]; the thumb reflects the
@@ -48,7 +48,7 @@ class Scrollbar extends StatefulWidget {
     this.thickness = 1,
     this.trackStyle = const CellStyle(dim: true),
     this.thumbStyle = CellStyle.empty,
-  }) : metrics = (() {
+  }) : _metrics = (() {
          final range = controller.visibleRange;
          if (range == null) {
            return (controller.itemCount, controller.itemCount, 0);
@@ -59,7 +59,7 @@ class Scrollbar extends StatefulWidget {
            range.first,
          );
        }),
-       scrollTo = ((f) {
+       _scrollTo = ((f) {
          final range = controller.visibleRange;
          final visible = range == null ? 0 : range.last - range.first + 1;
          final maxFirst = controller.itemCount - visible;
@@ -67,8 +67,8 @@ class Scrollbar extends StatefulWidget {
          controller.jumpToIndex((maxFirst * f).round().clamp(0, maxFirst));
        });
 
-  final ScrollbarMetrics Function() metrics;
-  final void Function(double fraction) scrollTo;
+  final _ScrollbarMetrics Function() _metrics;
+  final void Function(double fraction) _scrollTo;
   final Widget child;
   final int thickness;
   final CellStyle trackStyle;
@@ -81,18 +81,18 @@ class Scrollbar extends StatefulWidget {
 /// Holder for a [Scrollbar]'s painted geometry: the render object writes
 /// it each paint, the drag handler reads it to map a pointer row → scroll
 /// fraction (the same write-at-paint / read-elsewhere idiom as AnchorLink).
-class ScrollbarGeometry {
+class _ScrollbarGeometry {
   int top = 0;
   int height = 0;
 }
 
 class _ScrollbarState extends State<Scrollbar> {
-  final ScrollbarGeometry _geom = ScrollbarGeometry();
+  final _ScrollbarGeometry _geom = _ScrollbarGeometry();
 
   void _jumpToRow(int row) {
     if (_geom.height <= 1) return;
     final f = ((row - _geom.top) / (_geom.height - 1)).clamp(0.0, 1.0);
-    widget.scrollTo(f);
+    widget._scrollTo(f);
   }
 
   @override
@@ -108,7 +108,7 @@ class _ScrollbarState extends State<Scrollbar> {
           child: SizedBox(
             width: widget.thickness,
             child: _BarView(
-              metrics: widget.metrics,
+              metrics: widget._metrics,
               geometry: _geom,
               trackStyle: widget.trackStyle,
               thumbStyle: widget.thumbStyle,
@@ -128,13 +128,13 @@ class _BarView extends LeafRenderObjectWidget {
     required this.thumbStyle,
   });
 
-  final ScrollbarMetrics Function() metrics;
-  final ScrollbarGeometry geometry;
+  final _ScrollbarMetrics Function() metrics;
+  final _ScrollbarGeometry geometry;
   final CellStyle trackStyle;
   final CellStyle thumbStyle;
 
   @override
-  RenderObject createRenderObject(BuildContext context) => RenderScrollbar(
+  RenderObject createRenderObject(BuildContext context) => _RenderScrollbar(
     metrics: metrics,
     geometry: geometry,
     trackStyle: trackStyle,
@@ -144,7 +144,7 @@ class _BarView extends LeafRenderObjectWidget {
   @override
   void updateRenderObject(
     BuildContext context,
-    covariant RenderScrollbar renderObject,
+    covariant _RenderScrollbar renderObject,
   ) {
     renderObject
       ..metrics = metrics
@@ -157,10 +157,10 @@ class _BarView extends LeafRenderObjectWidget {
 /// Fills its slot and paints the scrollbar track + thumb, recording its
 /// painted geometry for the drag handler. Reads metrics at paint so they
 /// reflect the just-completed layout.
-class RenderScrollbar extends RenderObject {
-  RenderScrollbar({
-    required ScrollbarMetrics Function() metrics,
-    required ScrollbarGeometry geometry,
+class _RenderScrollbar extends RenderObject {
+  _RenderScrollbar({
+    required _ScrollbarMetrics Function() metrics,
+    required _ScrollbarGeometry geometry,
     required CellStyle trackStyle,
     required CellStyle thumbStyle,
   }) : _metrics = metrics,
@@ -168,14 +168,33 @@ class RenderScrollbar extends RenderObject {
        _trackStyle = trackStyle,
        _thumbStyle = thumbStyle;
 
-  ScrollbarMetrics Function() _metrics;
-  set metrics(ScrollbarMetrics Function() v) => _metrics = v;
-  ScrollbarGeometry _geometry;
-  set geometry(ScrollbarGeometry v) => _geometry = v;
+  _ScrollbarMetrics Function() _metrics;
+  set metrics(_ScrollbarMetrics Function() v) {
+    if (identical(_metrics, v)) return;
+    _metrics = v;
+    markNeedsPaintOnly();
+  }
+
+  _ScrollbarGeometry _geometry;
+  set geometry(_ScrollbarGeometry v) {
+    if (_geometry == v) return;
+    _geometry = v;
+    markNeedsPaintOnly();
+  }
+
   CellStyle _trackStyle;
-  set trackStyle(CellStyle v) => _trackStyle = v;
+  set trackStyle(CellStyle v) {
+    if (_trackStyle == v) return;
+    _trackStyle = v;
+    markNeedsPaintOnly();
+  }
+
   CellStyle _thumbStyle;
-  set thumbStyle(CellStyle v) => _thumbStyle = v;
+  set thumbStyle(CellStyle v) {
+    if (_thumbStyle == v) return;
+    _thumbStyle = v;
+    markNeedsPaintOnly();
+  }
 
   @override
   CellSize performLayout(CellConstraints constraints) {

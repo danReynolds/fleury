@@ -86,6 +86,7 @@ class BarChart extends StatelessWidget {
     this.showLabels = true,
     this.showValues = false,
     this.showLegend = false,
+    this.semanticLabel = 'Bar chart',
   });
 
   /// The bars, left to right.
@@ -126,26 +127,55 @@ class BarChart extends StatelessWidget {
   /// empty or the chart is too narrow to fit it.
   final bool showLegend;
 
+  /// Label exposed through the semantic app graph.
+  final String semanticLabel;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final p =
         palette ?? [cs.primary, cs.info, cs.warning, cs.success, cs.error];
-    return _RawBarChart(
-      bars: bars,
-      max: max,
-      barWidth: barWidth,
-      gap: gap,
-      showLabels: showLabels,
-      showValues: showValues,
-      showLegend: showLegend,
-      segmentLabels: segmentLabels,
-      palette: p,
-      defaultColor: p.isNotEmpty ? p.first : cs.primary,
-      labelStyle: theme.mutedStyle,
+    return Semantics(
+      role: SemanticRole.chart,
+      label: semanticLabel,
+      state: _barChartSemanticState(bars, max),
+      child: _RawBarChart(
+        bars: bars,
+        max: max,
+        barWidth: barWidth,
+        gap: gap,
+        showLabels: showLabels,
+        showValues: showValues,
+        showLegend: showLegend,
+        segmentLabels: segmentLabels,
+        palette: p,
+        defaultColor: p.isNotEmpty ? p.first : cs.primary,
+        labelStyle: theme.mutedStyle,
+      ),
     );
   }
+}
+
+SemanticState _barChartSemanticState(List<Bar> bars, num? explicitMax) {
+  num? minValue;
+  num? maxValue = explicitMax;
+  var segmentCount = 0;
+  for (final bar in bars) {
+    final total = bar.total;
+    if (total.toDouble().isFinite) {
+      if (minValue == null || total < minValue) minValue = total;
+      if (maxValue == null || total > maxValue) maxValue = total;
+    }
+    segmentCount += bar.segments.isEmpty ? 1 : bar.segments.length;
+  }
+  return SemanticState({
+    'chartType': 'bar',
+    'chartBarCount': bars.length,
+    'chartSegmentCount': segmentCount,
+    'chartMinValue': ?minValue,
+    'chartMaxValue': ?maxValue,
+  });
 }
 
 class _RawBarChart extends LeafRenderObjectWidget {
@@ -239,15 +269,20 @@ class RenderBarChart extends RenderObject {
   List<Bar> _bars;
   set bars(List<Bar> v) {
     if (identical(_bars, v)) return;
+    final layoutChanged = _bars.length != v.length;
     _bars = v;
-    markNeedsPaint();
+    if (layoutChanged) {
+      markNeedsLayout();
+    } else {
+      markNeedsPaintOnly();
+    }
   }
 
   num? _max;
   set max(num? v) {
     if (_max == v) return;
     _max = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   int _barWidth;
@@ -255,7 +290,7 @@ class RenderBarChart extends RenderObject {
     final clamped = v < 1 ? 1 : v;
     if (_barWidth == clamped) return;
     _barWidth = clamped;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   int _gap;
@@ -263,56 +298,56 @@ class RenderBarChart extends RenderObject {
     final clamped = v < 0 ? 0 : v;
     if (_gap == clamped) return;
     _gap = clamped;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   bool _showLabels;
   set showLabels(bool v) {
     if (_showLabels == v) return;
     _showLabels = v;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   bool _showValues;
   set showValues(bool v) {
     if (_showValues == v) return;
     _showValues = v;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   bool _showLegend;
   set showLegend(bool v) {
     if (_showLegend == v) return;
     _showLegend = v;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   List<String>? _segmentLabels;
   set segmentLabels(List<String>? v) {
     if (identical(_segmentLabels, v)) return;
     _segmentLabels = v;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   List<Color> _palette;
   set palette(List<Color> v) {
     if (identical(_palette, v)) return;
     _palette = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   Color _defaultColor;
   set defaultColor(Color v) {
     if (_defaultColor == v) return;
     _defaultColor = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   CellStyle _labelStyle;
   set labelStyle(CellStyle v) {
     if (_labelStyle == v) return;
     _labelStyle = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   static const _partials = ['', '▁', '▂', '▃', '▄', '▅', '▆', '▇'];

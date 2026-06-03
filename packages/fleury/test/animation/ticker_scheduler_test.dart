@@ -3,8 +3,12 @@
 
 import 'dart:math';
 
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
+
+Matcher _stateError(String message) => throwsA(
+  isA<StateError>().having((error) => error.message, 'message', message),
+);
 
 void main() {
   group('TickerScheduler idle behavior', () {
@@ -144,6 +148,48 @@ void main() {
       expect(scheduler.activeTickerCount, 0);
       scheduler.advanceFrame();
       expect(fires, 0);
+    });
+
+    test('dispose is idempotent and blocks new scheduled work', () {
+      final clock = FakeClock();
+      final scheduler = FakeTickerScheduler(clock: clock);
+      void tick(Duration _) {}
+      void reassemble() {}
+      scheduler.register(tick);
+      scheduler.registerReassembleCallback(reassemble);
+      scheduler.addPostFrameCallback((_) {});
+
+      scheduler.dispose();
+      scheduler.dispose();
+
+      expect(scheduler.isActive, isFalse);
+      expect(scheduler.activeTickerCount, 0);
+      expect(() => scheduler.unregister(tick), returnsNormally);
+      expect(
+        () => scheduler.unregisterReassembleCallback(reassemble),
+        returnsNormally,
+      );
+      expect(() => scheduler.reassemble(), returnsNormally);
+      expect(
+        () => scheduler.flushPostFrameCallbacks(clock.now),
+        returnsNormally,
+      );
+      expect(
+        () => scheduler.register(tick),
+        _stateError('TickerScheduler has been disposed.'),
+      );
+      expect(
+        () => scheduler.registerReassembleCallback(reassemble),
+        _stateError('TickerScheduler has been disposed.'),
+      );
+      expect(
+        () => scheduler.addPostFrameCallback((_) {}),
+        _stateError('TickerScheduler has been disposed.'),
+      );
+      expect(
+        () => scheduler.onPostFrameCallbackRegistered = () {},
+        _stateError('TickerScheduler has been disposed.'),
+      );
     });
   });
 

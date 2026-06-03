@@ -30,6 +30,9 @@ import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/remote/serve_index_html.dart';
 import 'package:fleury/src/remote/unix_socket_transport.dart';
 import 'package:fleury/src/terminal/capabilities.dart';
+import 'package:fleury/src/terminal/diagnostics.dart';
+import 'package:fleury/src/terminal/native_driver.dart';
+import 'package:fleury/src/terminal/terminal_probe.dart';
 
 Future<void> main(List<String> args) async {
   if (args.isEmpty) {
@@ -42,8 +45,9 @@ Future<void> main(List<String> args) async {
     case 'serve':
       exit(await _runServe(args.sublist(1)));
     case 'diagnose':
-      _runDiagnose();
-      exit(0);
+      exit(await _runDiagnose(args.sublist(1)));
+    case 'dev':
+      exit(await _runDev(args.sublist(1)));
     case '-h':
     case '--help':
     case 'help':
@@ -74,13 +78,61 @@ void _printUsage() {
     '--host=<addr> (default 127.0.0.1),',
   );
   stderr.writeln(
-    '                    --spawn <cmd ...> (per-browser '
-    'subprocess isolation).',
+    '                    --allow-origin=<origin>, --spawn <cmd ...> '
+    '(per-browser subprocess isolation).',
   );
   stderr.writeln(
     '  diagnose Print terminal + capability information for bug '
     'reports.',
   );
+  stderr.writeln(
+    '           Options: --json, --json-output=<path>, --probe, '
+    '--probe-timeout=<ms>',
+  );
+  stderr.writeln(
+    '  dev      Fleury framework contributor commands. Requires a '
+    'framework checkout.',
+  );
+  stderr.writeln('           Example: fleury dev check --quick');
+}
+
+Future<int> _runDev(List<String> args) async {
+  final root = _findFleuryRepoRoot(Directory.current);
+  if (root == null) {
+    stderr.writeln('fleury dev commands require a Fleury framework checkout.');
+    stderr.writeln(
+      'Run from the repo root or a subdirectory, or use public commands '
+      'like `fleury diagnose`.',
+    );
+    return 2;
+  }
+
+  final devTool = File('${root.path}/tool/fleury_dev.dart');
+  final forwarded = args.isEmpty || (args.length == 1 && args.first == 'help')
+      ? const <String>['--help']
+      : args;
+  final process = await Process.start(
+    Platform.resolvedExecutable,
+    <String>[devTool.path, ...forwarded],
+    workingDirectory: root.path,
+    mode: ProcessStartMode.inheritStdio,
+  );
+  return process.exitCode;
+}
+
+Directory? _findFleuryRepoRoot(Directory start) {
+  var directory = start.absolute;
+  while (true) {
+    if (_isFleuryRepoRoot(directory)) return directory;
+    final parent = directory.parent;
+    if (parent.path == directory.path) return null;
+    directory = parent;
+  }
+}
+
+bool _isFleuryRepoRoot(Directory directory) {
+  return File('${directory.path}/tool/fleury_dev.dart').existsSync() &&
+      File('${directory.path}/packages/fleury/bin/fleury.dart').existsSync();
 }
 
 Future<int> _runShell(List<String> args) async {
@@ -133,14 +185,40 @@ Future<int> _runShell(List<String> args) async {
 
   final exitCode = Completer<int>();
 
-  Future<void> cleanup() async {
-    await server.close();
-    try {
-      handleFile.deleteSync();
-    } catch (_) {}
-    try {
-      File(socketPath).deleteSync();
-    } catch (_) {}
+  final shutdownSession = Completer<void>();
+  Future<int>? activeSession;
+  Future<void>? cleanupFuture;
+
+  Future<void> cleanup() {
+    final existing = cleanupFuture;
+    if (existing != null) return existing;
+
+    cleanupFuture = () async {
+      if (!shutdownSession.isCompleted) shutdownSession.complete();
+      await server.close();
+
+      final session = activeSession;
+      if (session != null) {
+        try {
+          await session.timeout(const Duration(seconds: 2));
+        } on TimeoutException {
+          // The process is exiting; avoid hanging forever if the terminal
+          // stream refuses to drain during signal handling.
+        } catch (_) {
+          // Session cleanup is best-effort during signal handling. Keep the
+          // shell exit path deterministic even if the PTY has already closed.
+        }
+      }
+
+      try {
+        handleFile.deleteSync();
+      } catch (_) {}
+      try {
+        File(socketPath).deleteSync();
+      } catch (_) {}
+    }();
+
+    return cleanupFuture!;
   }
 
   // SIGINT in the shell tears down the proxy. The connected app sees
@@ -155,7 +233,9 @@ Future<int> _runShell(List<String> args) async {
   server.listen((client) async {
     // One app at a time. A second connection while one is live gets
     // dropped — the shell terminal can only show one TUI's frames.
-    final code = await _runSession(client);
+    final session = _runSession(client, shutdownSignal: shutdownSession.future);
+    activeSession = session;
+    final code = await session;
     await cleanup();
     if (!exitCode.isCompleted) exitCode.complete(code);
   });
@@ -166,8 +246,20 @@ Future<int> _runShell(List<String> args) async {
 /// Drives a single connected app: hand off our terminal to the app's
 /// frames, pump local stdin and SIGWINCH back to the app, and clean
 /// up when the socket closes.
-Future<int> _runSession(Socket client) async {
+Future<int> _runSession(Socket client, {Future<void>? shutdownSignal}) async {
   final transport = UnixSocketFrameTransport.fromSocket(client);
+  if (shutdownSignal != null) {
+    unawaited(
+      shutdownSignal.then((_) async {
+        try {
+          transport.send(const ByeFrame());
+        } catch (_) {
+          // Peer may already be gone; close below still tears down locally.
+        }
+        await transport.close();
+      }),
+    );
+  }
 
   // Take over our own terminal. The app's enter sequences would do this
   // on the LOCAL side normally; here, the app is remote and its alt
@@ -186,12 +278,15 @@ Future<int> _runSession(Socket client) async {
   // Initial handshake — send what the app needs to lay out its first
   // frame correctly: actual size + the capabilities OUR terminal
   // negotiated with the user's real terminal emulator.
+  final capabilities = detectTerminalCapabilitiesFromEnvironment(
+    Platform.environment,
+  );
   transport.send(
     InitFrame(
       size: _localSize(),
-      colorMode: _detectColorMode(),
-      imageProtocol: _detectImageProtocol(),
-      tmuxPassthrough: (Platform.environment['TMUX'] ?? '').isNotEmpty,
+      colorMode: capabilities.colorMode,
+      imageProtocol: capabilities.imageProtocol,
+      tmuxPassthrough: capabilities.tmuxPassthrough,
     ),
   );
 
@@ -207,24 +302,32 @@ Future<int> _runSession(Socket client) async {
     cancelOnError: false,
   );
 
-  // App's OUTPUT frames → stdout verbatim.
-  await for (final frame in transport.incoming) {
-    if (frame is OutputFrame) {
-      stdout.add(frame.bytes);
-    } else if (frame is ByeFrame) {
-      break;
+  try {
+    // App's OUTPUT frames → stdout verbatim.
+    await for (final frame in transport.incoming) {
+      if (frame is OutputFrame) {
+        stdout.add(frame.bytes);
+      } else if (frame is ByeFrame) {
+        break;
+      }
+      // INIT / INPUT / RESIZE from the app side would be a protocol
+      // violation; silently drop rather than crash the shell.
     }
-    // INIT / INPUT / RESIZE from the app side would be a protocol
-    // violation; silently drop rather than crash the shell.
+  } finally {
+    await winchSub.cancel();
+    await stdinSub.cancel();
+    // Restore terminal modes. Mirror order of the enter sequences.
+    try {
+      stdout.write('\x1B[<u\x1B[?2004l\x1B[?25h\x1B[?1049l');
+    } catch (_) {}
+    try {
+      stdin.lineMode = originalLine;
+    } catch (_) {}
+    try {
+      stdin.echoMode = originalEcho;
+    } catch (_) {}
+    await transport.close();
   }
-
-  await winchSub.cancel();
-  await stdinSub.cancel();
-  // Restore terminal modes. Mirror order of the enter sequences.
-  stdout.write('\x1B[<u\x1B[?2004l\x1B[?25h\x1B[?1049l');
-  stdin.lineMode = originalLine;
-  stdin.echoMode = originalEcho;
-  await transport.close();
   return 0;
 }
 
@@ -236,34 +339,6 @@ CellSize _localSize() {
   }
 }
 
-ColorMode _detectColorMode() {
-  final env = Platform.environment;
-  if ((env['NO_COLOR'] ?? '').isNotEmpty) return ColorMode.none;
-  final colorterm = env['COLORTERM']?.toLowerCase() ?? '';
-  final term = env['TERM']?.toLowerCase() ?? '';
-  if (colorterm.contains('truecolor') || colorterm.contains('24bit')) {
-    return ColorMode.truecolor;
-  }
-  if (term.contains('256')) return ColorMode.indexed256;
-  if (term.isNotEmpty) return ColorMode.ansi16;
-  return ColorMode.none;
-}
-
-ImageProtocol _detectImageProtocol() {
-  final env = Platform.environment;
-  final program = env['TERM_PROGRAM']?.toLowerCase() ?? '';
-  final lcTerminal = env['LC_TERMINAL']?.toLowerCase() ?? '';
-  final term = env['TERM']?.toLowerCase() ?? '';
-  if ((env['KITTY_WINDOW_ID'] ?? '').isNotEmpty) return ImageProtocol.kitty;
-  if (term == 'xterm-kitty') return ImageProtocol.kitty;
-  if (program == 'wezterm' || program == 'ghostty') return ImageProtocol.kitty;
-  if (program == 'iterm.app' || lcTerminal == 'iterm2' || program == 'mintty') {
-    return ImageProtocol.iterm2;
-  }
-  if (term.contains('sixel')) return ImageProtocol.sixel;
-  return ImageProtocol.halfBlock;
-}
-
 /// Stdin's stream gives us `List<int>`; the protocol wants `Uint8List`
 /// for zero-copy framing downstream.
 Uint8List _asUint8(List<int> b) => b is Uint8List ? b : Uint8List.fromList(b);
@@ -271,6 +346,7 @@ Uint8List _asUint8(List<int> b) => b is Uint8List ? b : Uint8List.fromList(b);
 Future<int> _runServe(List<String> args) async {
   var port = 5777;
   var host = '127.0.0.1';
+  var originPolicy = const _ServeOriginPolicy.sameOrigin();
   List<String>? spawnCmd;
   // `--spawn` is greedy: everything after it (in argv order) becomes
   // the subprocess command. So `--port=N` and `--host=...` must come
@@ -281,6 +357,17 @@ Future<int> _runServe(List<String> args) async {
       port = int.parse(arg.substring('--port='.length));
     } else if (arg.startsWith('--host=')) {
       host = arg.substring('--host='.length);
+    } else if (arg.startsWith('--allow-origin=')) {
+      final origin = arg.substring('--allow-origin='.length);
+      final updated = originPolicy.allow(origin);
+      if (updated == null) {
+        stderr.writeln(
+          '--allow-origin must be "*" or an http(s) origin such as '
+          'http://localhost:3000.',
+        );
+        return 2;
+      }
+      originPolicy = updated;
     } else if (arg == '--spawn') {
       spawnCmd = args.sublist(i + 1);
       if (spawnCmd.isEmpty) {
@@ -293,7 +380,8 @@ Future<int> _runServe(List<String> args) async {
       break;
     } else if (arg == '-h' || arg == '--help') {
       stderr.writeln(
-        'fleury serve [--port=<n>] [--host=<addr>] [--spawn <cmd> ...]',
+        'fleury serve [--port=<n>] [--host=<addr>] '
+        '[--allow-origin=<origin>] [--spawn <cmd> ...]',
       );
       return 0;
     } else {
@@ -303,14 +391,23 @@ Future<int> _runServe(List<String> args) async {
   }
 
   return spawnCmd != null
-      ? _runServeSpawn(host: host, port: port, command: spawnCmd)
-      : _runServeBridge(host: host, port: port);
+      ? _runServeSpawn(
+          host: host,
+          port: port,
+          originPolicy: originPolicy,
+          command: spawnCmd,
+        )
+      : _runServeBridge(host: host, port: port, originPolicy: originPolicy);
 }
 
 /// Bridge mode: one shared socket; user starts the app process
 /// themselves. Single session at a time. Good for IDE debug and
 /// local demos.
-Future<int> _runServeBridge({required String host, required int port}) async {
+Future<int> _runServeBridge({
+  required String host,
+  required int port,
+  required _ServeOriginPolicy originPolicy,
+}) async {
   final handleDir = Directory('.fleury');
   if (!handleDir.existsSync()) handleDir.createSync(recursive: true);
   final socketPath = '${handleDir.path}/shell.sock';
@@ -362,7 +459,7 @@ Future<int> _runServeBridge({required String host, required int port}) async {
   // Pairing state. Order of arrival doesn't matter — first one
   // through the door waits for its partner.
   Socket? pendingApp;
-  WebSocket? pendingBrowser;
+  _BufferedBrowserInput? pendingBrowser;
   var sessionInFlight = false;
 
   void tryPair() {
@@ -373,10 +470,13 @@ Future<int> _runServeBridge({required String host, required int port}) async {
     pendingBrowser = null;
     sessionInFlight = true;
     stderr.writeln('[serve] paired app ↔ browser; session live');
+    browser.markPaired();
     _pumpBytes(
       app: app,
-      browser: browser,
+      browser: browser.webSocket,
+      browserInput: browser.stream,
       onDone: () {
+        unawaited(browser.dispose());
         sessionInFlight = false;
         stderr.writeln('[serve] session ended; ready for the next attach');
       },
@@ -404,6 +504,10 @@ Future<int> _runServeBridge({required String host, required int port}) async {
         await req.response.close();
         return;
       }
+      if (!_isAllowedWebSocketOrigin(req, originPolicy)) {
+        await _rejectForbiddenWebSocketOrigin(req);
+        return;
+      }
       final ws = await WebSocketTransformer.upgrade(req);
       if (sessionInFlight || pendingBrowser != null) {
         ws.add(
@@ -421,7 +525,16 @@ Future<int> _runServeBridge({required String host, required int port}) async {
         await ws.close();
         return;
       }
-      pendingBrowser = ws;
+      final browser = _BufferedBrowserInput(ws);
+      pendingBrowser = browser;
+      unawaited(
+        browser.closed.then((_) {
+          if (pendingBrowser == browser) {
+            pendingBrowser = null;
+            stderr.writeln('[serve] browser disconnected before app attach');
+          }
+        }),
+      );
       stderr.writeln('[serve] browser connected, waiting for an app');
       tryPair();
     } else {
@@ -434,6 +547,8 @@ Future<int> _runServeBridge({required String host, required int port}) async {
   Future<void> cleanup() async {
     await appServer.close();
     await httpServer.close(force: true);
+    pendingApp?.destroy();
+    await pendingBrowser?.dispose();
     try {
       handleFile.deleteSync();
     } catch (_) {}
@@ -458,6 +573,7 @@ Future<int> _runServeBridge({required String host, required int port}) async {
 void _pumpBytes({
   required Socket app,
   required WebSocket browser,
+  Stream<List<int>>? browserInput,
   required void Function() onDone,
 }) {
   var stopped = false;
@@ -491,20 +607,160 @@ void _pumpBytes({
 
   // Browser → app. WebSocket text messages are ignored; the protocol
   // is binary-only.
-  browser.listen(
-    (data) {
-      if (data is List<int>) {
-        try {
-          app.add(data);
-        } catch (_) {
-          stop();
-        }
+  final browserBytes =
+      browserInput ??
+      browser.where((data) => data is List<int>).cast<List<int>>();
+  browserBytes.listen(
+    (bytes) {
+      try {
+        app.add(bytes);
+      } catch (_) {
+        stop();
       }
     },
     onError: (Object _) => stop(),
     onDone: stop,
     cancelOnError: false,
   );
+}
+
+bool _isAllowedWebSocketOrigin(
+  HttpRequest req,
+  _ServeOriginPolicy originPolicy,
+) {
+  final origin = req.headers.value('origin');
+  if (origin == null || origin.isEmpty) return true;
+
+  final originUri = Uri.tryParse(origin);
+  if (originUri == null || originUri.host.isEmpty) return false;
+
+  final requestHost = req.headers.value(HttpHeaders.hostHeader);
+  if (requestHost == null || requestHost.isEmpty) return false;
+
+  if (originUri.authority.toLowerCase() == requestHost.trim().toLowerCase()) {
+    return true;
+  }
+  return originPolicy.allows(origin);
+}
+
+Future<void> _rejectForbiddenWebSocketOrigin(HttpRequest req) async {
+  req.response.statusCode = HttpStatus.forbidden;
+  req.response.headers.contentType = ContentType.text;
+  req.response.write('Forbidden WebSocket origin.\n');
+  await req.response.close();
+}
+
+final class _ServeOriginPolicy {
+  const _ServeOriginPolicy.sameOrigin()
+    : allowAny = false,
+      allowedOrigins = const <String>{};
+
+  const _ServeOriginPolicy._({
+    required this.allowAny,
+    required this.allowedOrigins,
+  });
+
+  final bool allowAny;
+  final Set<String> allowedOrigins;
+
+  _ServeOriginPolicy? allow(String origin) {
+    final trimmed = origin.trim();
+    if (trimmed == '*') {
+      return _ServeOriginPolicy._(
+        allowAny: true,
+        allowedOrigins: allowedOrigins,
+      );
+    }
+
+    final normalized = _normalizeOrigin(trimmed);
+    if (normalized == null) return null;
+    return _ServeOriginPolicy._(
+      allowAny: allowAny,
+      allowedOrigins: {...allowedOrigins, normalized},
+    );
+  }
+
+  bool allows(String origin) {
+    if (allowAny) return true;
+    final normalized = _normalizeOrigin(origin);
+    if (normalized == null) return false;
+    return allowedOrigins.contains(normalized);
+  }
+
+  static String? _normalizeOrigin(String origin) {
+    final uri = Uri.tryParse(origin);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) return null;
+    if (uri.userInfo.isNotEmpty || uri.hasQuery || uri.hasFragment) {
+      return null;
+    }
+    if (uri.path.isNotEmpty && uri.path != '/') return null;
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme != 'http' && scheme != 'https') return null;
+    return '$scheme://${uri.authority.toLowerCase()}';
+  }
+}
+
+final class _BufferedBrowserInput {
+  _BufferedBrowserInput(this.webSocket) {
+    _subscription = webSocket.listen(
+      (data) {
+        if (data is! List<int>) return;
+        if (!_paired) {
+          _pendingBytes += data.length;
+          if (_pendingBytes > defaultMaxRemoteFramePayloadLength) {
+            if (!_controller.isClosed) {
+              _controller.addError(
+                const RemoteProtocolException(
+                  'pending browser input exceeded remote frame payload limit',
+                ),
+              );
+            }
+            unawaited(webSocket.close(1009, 'pending input too large'));
+            return;
+          }
+        }
+        if (!_controller.isClosed) {
+          _controller.add(_asUint8(data));
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (!_controller.isClosed) {
+          _controller.addError(error, stackTrace);
+        }
+        _completeClosed();
+      },
+      onDone: () {
+        if (!_controller.isClosed) unawaited(_controller.close());
+        _completeClosed();
+      },
+      cancelOnError: false,
+    );
+  }
+
+  final WebSocket webSocket;
+  final _controller = StreamController<List<int>>();
+  final _closed = Completer<void>();
+
+  late final StreamSubscription<dynamic> _subscription;
+  var _paired = false;
+  var _pendingBytes = 0;
+
+  Stream<List<int>> get stream => _controller.stream;
+  Future<void> get closed => _closed.future;
+
+  void markPaired() {
+    _paired = true;
+  }
+
+  Future<void> dispose() async {
+    await _subscription.cancel();
+    if (!_controller.isClosed) await _controller.close();
+    _completeClosed();
+  }
+
+  void _completeClosed() {
+    if (!_closed.isCompleted) _closed.complete();
+  }
 }
 
 /// Spawn mode: each browser connect spawns a fresh subprocess of
@@ -515,6 +771,7 @@ void _pumpBytes({
 Future<int> _runServeSpawn({
   required String host,
   required int port,
+  required _ServeOriginPolicy originPolicy,
   required List<String> command,
 }) async {
   final handleDir = Directory('.fleury');
@@ -541,6 +798,10 @@ Future<int> _runServeSpawn({
     if (!WebSocketTransformer.isUpgradeRequest(req)) {
       req.response.statusCode = HttpStatus.badRequest;
       await req.response.close();
+      return;
+    }
+    if (!_isAllowedWebSocketOrigin(req, originPolicy)) {
+      await _rejectForbiddenWebSocketOrigin(req);
       return;
     }
     final ws = await WebSocketTransformer.upgrade(req);
@@ -631,6 +892,12 @@ class _SpawnSession {
       0,
     );
 
+    // The browser client sends INIT immediately after the WebSocket opens,
+    // before a Dart subprocess can usually connect back to its session socket.
+    // Attach the WebSocket listener now and buffer bounded input so real
+    // runTui apps do not miss their remote handshake.
+    final browserInput = _BufferedBrowserInput(browser);
+
     final env = Map<String, String>.from(Platform.environment);
     env['FLEURY_HANDLE'] = _socketPath!;
     // Pure cosmetic: most TUIs sniff $TERM to pick colors. The browser
@@ -646,6 +913,7 @@ class _SpawnSession {
       );
     } on ProcessException catch (e) {
       stderr.writeln('[serve $tag] failed to spawn ${command.first}: $e');
+      await browserInput.dispose();
       await _cleanupSocket();
       _done.complete();
       return false;
@@ -677,6 +945,7 @@ class _SpawnSession {
         const Duration(seconds: 10),
         () => _ConnectTimeout(),
       ),
+      browserInput.closed.then((_) => const _BrowserClosedBeforeConnect()),
     ]);
 
     if (firstEvent is! _Connected) {
@@ -684,12 +953,22 @@ class _SpawnSession {
         '[serve $tag] subprocess never connected to session '
         'socket ($firstEvent); shutting down',
       );
+      await browserInput.dispose();
       await shutdown();
       return false;
     }
 
     final appSocket = firstEvent.socket;
-    _pumpBytes(app: appSocket, browser: browser, onDone: () => shutdown());
+    browserInput.markPaired();
+    _pumpBytes(
+      app: appSocket,
+      browser: browser,
+      browserInput: browserInput.stream,
+      onDone: () {
+        unawaited(browserInput.dispose());
+        shutdown();
+      },
+    );
 
     // Subprocess exiting is just as much a "session done" signal as
     // browser disconnect.
@@ -763,24 +1042,106 @@ class _ConnectTimeout extends _StartEvent {
   String toString() => 'timed out waiting for subprocess to connect (10s)';
 }
 
-/// `fleury diagnose` — prints the terminal environment, fleury + Dart
-/// versions, detected capabilities, and the current `.fleury/handle`
-/// state. Output is markdown so it pastes cleanly into a GitHub
-/// issue. Mirrors Textual's `textual diagnose`.
-void _runDiagnose() {
+class _BrowserClosedBeforeConnect extends _StartEvent {
+  const _BrowserClosedBeforeConnect();
+  @override
+  String toString() => 'browser disconnected before subprocess connected';
+}
+
+/// `fleury diagnose` prints terminal environment, capabilities, and
+/// shell/serve state. Markdown remains the default; `--json` is the stable
+/// machine-readable contract for bug reports, fixtures, and proof apps.
+Future<int> _runDiagnose(List<String> args) async {
+  var json = false;
+  String? jsonOutputPath;
+  var probe = false;
+  var probeTimeout = const Duration(milliseconds: 150);
+  for (final arg in args) {
+    if (arg == '--json') {
+      json = true;
+    } else if (arg.startsWith('--json-output=')) {
+      jsonOutputPath = arg.substring('--json-output='.length).trim();
+    } else if (arg == '--probe') {
+      probe = true;
+    } else if (arg.startsWith('--probe-timeout=')) {
+      final value = int.tryParse(arg.substring('--probe-timeout='.length));
+      if (value == null || value < 1) {
+        stderr.writeln('--probe-timeout must be a positive millisecond value.');
+        return 2;
+      }
+      probeTimeout = Duration(milliseconds: value);
+    } else if (arg == '-h' || arg == '--help') {
+      stderr.writeln(
+        'fleury diagnose [--json] [--json-output=<path>] [--probe] '
+        '[--probe-timeout=<ms>]',
+      );
+      return 0;
+    } else {
+      stderr.writeln('Unknown option for diagnose: $arg');
+      stderr.writeln(
+        'fleury diagnose [--json] [--json-output=<path>] [--probe] '
+        '[--probe-timeout=<ms>]',
+      );
+      return 2;
+    }
+  }
+  if (jsonOutputPath != null && jsonOutputPath.isEmpty) {
+    stderr.writeln('--json-output requires a non-empty path.');
+    return 2;
+  }
+
   final env = Platform.environment;
   final cwd = Directory.current.path;
   final hasHandle = File('$cwd/.fleury/handle').existsSync();
   final handleContents = hasHandle
       ? File('$cwd/.fleury/handle').readAsStringSync().trim()
       : null;
+  var diagnosis = diagnoseTerminal(
+    createNativeTerminalDriver(),
+    environment: env,
+    platform: _diagnosisPlatform(),
+    stdinIsTerminal: stdin.hasTerminal,
+    stdoutIsTerminal: stdout.hasTerminal,
+  );
+  if (probe) {
+    final probeReport = await _runActiveTerminalProbes(probeTimeout);
+    diagnosis = diagnosis.withActiveProbes(probeReport);
+  }
 
-  String? envOr(String name) {
-    final v = env[name];
-    return (v == null || v.isEmpty) ? null : v;
+  if (json || jsonOutputPath != null) {
+    final jsonText = const JsonEncoder.withIndent(
+      '  ',
+    ).convert(diagnosis.toJson());
+    if (jsonOutputPath != null) {
+      final output = File(jsonOutputPath);
+      output.parent.createSync(recursive: true);
+      output.writeAsStringSync('$jsonText\n');
+      return 0;
+    }
+    stdout.writeln(jsonText);
+    return 0;
   }
 
   void row(String k, Object? v) => stdout.writeln('| $k | ${v ?? '(unset)'} |');
+
+  void messages(String title, List<TerminalDiagnosticMessage> items) {
+    stdout.writeln();
+    stdout.writeln('## $title');
+    stdout.writeln('| | |');
+    stdout.writeln('|---|---|');
+    if (items.isEmpty) {
+      row('none', true);
+      return;
+    }
+    for (final item in items) {
+      row(item.code, '${item.severity.name}: ${item.message}');
+    }
+  }
+
+  final terminal = diagnosis.terminal;
+  final environment = diagnosis.environment;
+  final platform = diagnosis.platform;
+  final capabilities = diagnosis.capabilities;
 
   stdout.writeln('<!-- Paste this block into your GitHub issue. -->');
   stdout.writeln('# fleury diagnose');
@@ -789,52 +1150,190 @@ void _runDiagnose() {
   stdout.writeln('| | |');
   stdout.writeln('|---|---|');
   row('Dart', Platform.version);
-  row('fleury', '(0.0.0 — pre-release)');
+  row('fleury', '(0.0.0 - pre-release)');
   stdout.writeln();
   stdout.writeln('## Platform');
   stdout.writeln('| | |');
   stdout.writeln('|---|---|');
-  row('OS', Platform.operatingSystem);
-  row('OS version', Platform.operatingSystemVersion);
+  row('OS', platform?.operatingSystem ?? Platform.operatingSystem);
+  row(
+    'OS version',
+    platform?.operatingSystemVersion ?? Platform.operatingSystemVersion,
+  );
+  row('Dart version', platform?.dartVersion ?? Platform.version);
   row('Local hostname', Platform.localHostname);
   row('Executable', Platform.executable);
   stdout.writeln();
   stdout.writeln('## Terminal');
   stdout.writeln('| | |');
   stdout.writeln('|---|---|');
-  row('TERM', envOr('TERM'));
-  row('COLORTERM', envOr('COLORTERM'));
-  row('TERM_PROGRAM', envOr('TERM_PROGRAM'));
-  row('TERM_PROGRAM_VERSION', envOr('TERM_PROGRAM_VERSION'));
-  row('LC_TERMINAL', envOr('LC_TERMINAL'));
-  row('LC_TERMINAL_VERSION', envOr('LC_TERMINAL_VERSION'));
-  row('KITTY_WINDOW_ID', envOr('KITTY_WINDOW_ID'));
-  row('TMUX', envOr('TMUX'));
-  row('SSH_TTY', envOr('SSH_TTY'));
-  row('NO_COLOR', envOr('NO_COLOR'));
-  row('CLICOLOR_FORCE', envOr('CLICOLOR_FORCE'));
-  try {
-    row('Terminal size', '${stdout.terminalColumns} × ${stdout.terminalLines}');
-  } on StdoutException {
-    row('Terminal size', '(not a terminal — piped)');
-  }
-  row('stdout is terminal', stdout.hasTerminal);
-  row('stdin is terminal', stdin.hasTerminal);
+  row('TERM', terminal.term);
+  row('COLORTERM', terminal.colorterm);
+  row('TERM_PROGRAM', terminal.termProgram);
+  row('TERM_PROGRAM_VERSION', terminal.termProgramVersion);
+  row('LC_TERMINAL', terminal.lcTerminal);
+  row('LC_TERMINAL_VERSION', terminal.lcTerminalVersion);
+  row('KITTY_WINDOW_ID', terminal.kittyWindowId);
+  row('Terminal size', '${terminal.size.cols} x ${terminal.size.rows}');
+  row('stdout is terminal', terminal.stdoutIsTerminal);
+  row('stdin is terminal', terminal.stdinIsTerminal);
+  row('interactive', terminal.isInteractive);
+  row('tmux/screen', environment.tmux);
+  row('ssh', environment.ssh);
+  row('NO_COLOR', environment.noColor);
+  row('CLICOLOR_FORCE', environment.clicolorForce);
   stdout.writeln();
   stdout.writeln('## Detected capabilities');
   stdout.writeln('| | |');
   stdout.writeln('|---|---|');
-  row('Color mode', _detectColorMode().name);
-  row('Image protocol', _detectImageProtocol().name);
-  row('tmux passthrough', (env['TMUX'] ?? '').isNotEmpty ? 'on' : 'off');
+  row('Color mode', capabilities.colorMode.name);
+  row('Image protocol', capabilities.imageProtocol.name);
+  row('Alternate screen', capabilities.alternateScreen);
+  row('Hide cursor', capabilities.hideCursor);
+  row('Bracketed paste', capabilities.bracketedPaste);
+  row('Kitty keyboard', capabilities.kittyKeyboard);
+  row('Mouse', capabilities.mouse);
+  row('OSC 52 clipboard', capabilities.osc52Clipboard);
+  row('OSC 8 hyperlinks', capabilities.osc8Hyperlinks);
+  row('tmux passthrough', capabilities.tmuxPassthrough);
+  _writeProbeSection(diagnosis.activeProbes, row);
+  _writeCompatibilitySection(diagnosis.compatibility, row);
+  messages('Fallbacks', diagnosis.fallbacks);
+  messages('Warnings', diagnosis.warnings);
   stdout.writeln();
   stdout.writeln('## fleury shell / serve');
   stdout.writeln('| | |');
   stdout.writeln('|---|---|');
   row('CWD', cwd);
   row('.fleury/handle exists', hasHandle);
-  if (handleContents != null) row('.fleury/handle →', handleContents);
-  row('FLEURY_HANDLE env', envOr('FLEURY_HANDLE'));
+  if (handleContents != null) row('.fleury/handle ->', handleContents);
+  row('FLEURY_HANDLE env', env['FLEURY_HANDLE']);
+  return 0;
+}
+
+TerminalPlatformReport _diagnosisPlatform() {
+  return TerminalPlatformReport(
+    operatingSystem: Platform.operatingSystem,
+    operatingSystemVersion: Platform.operatingSystemVersion,
+    dartVersion: Platform.version,
+  );
+}
+
+Future<TerminalProbeReport> _runActiveTerminalProbes(Duration timeout) async {
+  if (!stdin.hasTerminal || !stdout.hasTerminal) {
+    return TerminalProbeReport.skipped(
+      'Active probes require both stdin and stdout to be terminals.',
+    );
+  }
+
+  bool? originalLineMode;
+  bool? originalEchoMode;
+  var changedStdin = false;
+  _StdioTerminalProbeTransport? transport;
+  try {
+    originalLineMode = stdin.lineMode;
+    originalEchoMode = stdin.echoMode;
+    stdin.lineMode = false;
+    stdin.echoMode = false;
+    changedStdin = true;
+
+    transport = _StdioTerminalProbeTransport();
+    return await runTerminalProbeSuite(transport, perProbeTimeout: timeout);
+  } on StdinException catch (error) {
+    return TerminalProbeReport.skipped(
+      'Could not enter raw terminal mode for active probes: $error',
+    );
+  } finally {
+    await transport?.close();
+    if (changedStdin) {
+      try {
+        if (originalLineMode != null) stdin.lineMode = originalLineMode;
+      } on StdinException {
+        // ignore; the terminal may have detached
+      }
+      try {
+        if (originalEchoMode != null) stdin.echoMode = originalEchoMode;
+      } on StdinException {
+        // ignore; the terminal may have detached
+      }
+    }
+  }
+}
+
+void _writeProbeSection(
+  TerminalProbeReport? report,
+  void Function(String key, Object? value) row,
+) {
+  stdout.writeln();
+  stdout.writeln('## Active probes');
+  stdout.writeln('| | |');
+  stdout.writeln('|---|---|');
+  if (report == null) {
+    row('not run', 'pass --probe to collect opt-in active probe evidence');
+    return;
+  }
+  if (report.skippedReason != null) {
+    row('skipped', report.skippedReason);
+    return;
+  }
+  if (report.probes.isEmpty) {
+    row('none', true);
+    return;
+  }
+  for (final probe in report.probes) {
+    final detail = probe.detail == null ? '' : ': ${probe.detail}';
+    row(probe.id, '${probe.status.name}$detail');
+  }
+}
+
+void _writeCompatibilitySection(
+  TerminalCompatibilityReport? report,
+  void Function(String key, Object? value) row,
+) {
+  stdout.writeln();
+  stdout.writeln('## Compatibility findings');
+  stdout.writeln('| | |');
+  stdout.writeln('|---|---|');
+  if (report == null) {
+    row('not run', 'pass --probe to compare passive and active evidence');
+    return;
+  }
+  if (report.skippedReason != null) {
+    row('skipped', report.skippedReason);
+  }
+  for (final finding in report.findings) {
+    final active = finding.activeStatus == null
+        ? 'no active probe'
+        : finding.activeStatus!.name;
+    row(
+      finding.feature.name,
+      '${finding.status.name}; passive=${finding.passiveSupported}; '
+      'active=$active',
+    );
+  }
+}
+
+final class _StdioTerminalProbeTransport implements TerminalProbeTransport {
+  _StdioTerminalProbeTransport() {
+    _subscription = stdin.listen(
+      (bytes) => _buffer.addAll(bytes),
+      cancelOnError: false,
+    );
+  }
+
+  late final StreamSubscription<List<int>> _subscription;
+  List<int> _buffer = <int>[];
+
+  @override
+  Future<List<int>> request(String bytes, {required Duration timeout}) async {
+    _buffer = <int>[];
+    stdout.write(bytes);
+    await stdout.flush();
+    await Future<void>.delayed(timeout);
+    return List<int>.unmodifiable(_buffer);
+  }
+
+  Future<void> close() => _subscription.cancel();
 }
 
 enum _HandleStatus { absent, stale, live }

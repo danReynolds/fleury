@@ -1,0 +1,163 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryPeerBenchmarkRun",
+  "runId": "nocterm-sb3-datatable-2026-06-02T00-55-51Z",
+  "peerId": "nocterm",
+  "scenarioId": "SB.3",
+  "capturedAt": "2026-06-02T00:55:51.013048Z",
+  "source": {
+    "name": "Nocterm",
+    "version": "0.6.0",
+    "url": "https://pub.dev/packages/nocterm"
+  },
+  "environment": {
+    "machine": "macbookpro.lan",
+    "operatingSystem": "macos",
+    "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+    "runtime": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+    "terminalMode": "nocterm-test-harness",
+    "terminalSize": {
+      "columns": 120,
+      "rows": 32
+    }
+  },
+  "fixture": {
+    "workingDirectory": "peer-fixtures/nocterm/sb3_datatable",
+    "command": [
+      "dart",
+      "run",
+      "bin/sb3_datatable_benchmark.dart",
+      "--warmup=2",
+      "--iterations=5",
+      "--rows=100000",
+      "--json"
+    ],
+    "warmupIterations": 2,
+    "measuredIterations": 5
+  },
+  "metrics": {
+    "mountUs": {
+      "min": 446417,
+      "median": 449056,
+      "p95": 451662,
+      "p99": 451662,
+      "max": 451662,
+      "samples": 5
+    },
+    "firstRenderUs": {
+      "min": 601,
+      "median": 609,
+      "p95": 712,
+      "p99": 712,
+      "max": 712,
+      "samples": 5
+    },
+    "arrowMoveUs": {
+      "min": 5927,
+      "median": 6371,
+      "p95": 6480,
+      "p99": 6480,
+      "max": 6480,
+      "samples": 5
+    },
+    "pageMoveUs": {
+      "min": 3049,
+      "median": 3539,
+      "p95": 5660,
+      "p99": 5660,
+      "max": 5660,
+      "samples": 5
+    },
+    "jumpToEndUs": {
+      "min": 3775,
+      "median": 3805,
+      "p95": 4543,
+      "p99": 4543,
+      "max": 4543,
+      "samples": 5
+    },
+    "copySelectedRowUs": {
+      "min": 948,
+      "median": 1071,
+      "p95": 1194,
+      "p99": 1194,
+      "max": 1194,
+      "samples": 5
+    },
+    "semanticOrTestQueryUs": {
+      "min": 980,
+      "median": 1003,
+      "p95": 1056,
+      "p99": 1056,
+      "max": 1056,
+      "samples": 5
+    },
+    "rssDeltaBytes": 5754880,
+    "lineOfCodeCount": 283,
+    "benchmarkLineOfCodeCount": 434,
+    "testLineOfCodeCount": 48,
+    "rowCount": 100000,
+    "observedRowCount": 100000,
+    "visibleWindowRowEstimate": 31,
+    "visibleRangeStart": 99969,
+    "visibleRangeEnd": 100000,
+    "finalSelectedRow": 99999,
+    "finalSelectedRowId": "RUN-099999",
+    "unsafeArtifactLeakCount": 0
+  },
+  "correctness": [
+    {
+      "gate": "visible window stays bounded",
+      "pass": true,
+      "evidence": "Nocterm ListView rendered a bounded viewport around fixture-owned table rows."
+    },
+    {
+      "gate": "selection is correct after jump",
+      "pass": true,
+      "evidence": "Jump-to-end selected RUN-099999 and rendered it in terminal state."
+    },
+    {
+      "gate": "copy/export is sanitized and exact",
+      "pass": true,
+      "evidence": "Selected row TSV matched generated source row and contained no escape/control/secret leakage."
+    }
+  ],
+  "ergonomics": {
+    "lineOfCodeCount": 283,
+    "benchmarkLineOfCodeCount": 434,
+    "testLineOfCodeCount": 48,
+    "appFile": "lib/table_app.dart",
+    "benchmarkFile": "bin/sb3_datatable_benchmark.dart",
+    "testFile": "test/table_benchmark_test.dart",
+    "peerOwnedListView": true,
+    "peerOwnedScrollController": true,
+    "peerOwnedText": true,
+    "appOwnedTableFormatting": true,
+    "appOwnedRetainedRows": true,
+    "appOwnedSelectionState": true,
+    "appOwnedCopyExport": true,
+    "semanticGraphAvailable": false,
+    "testQueryViaTerminalStateAndAppState": true
+  },
+  "artifacts": [
+    {
+      "kind": "source",
+      "path": "peer-fixtures/nocterm/sb3_datatable/lib/table_app.dart"
+    },
+    {
+      "kind": "benchmark",
+      "path": "peer-fixtures/nocterm/sb3_datatable/bin/sb3_datatable_benchmark.dart"
+    },
+    {
+      "kind": "test",
+      "path": "peer-fixtures/nocterm/sb3_datatable/test/table_benchmark_test.dart"
+    }
+  ],
+  "notes": [
+    "This is a Nocterm test-harness peer fixture, not a real-terminal run.",
+    "Nocterm 0.6.0 supplies ListView.builder, lazy list rendering, ScrollController, Text rendering, and terminal-state test queries.",
+    "Nocterm 0.6.0 does not expose a dedicated DataTable widget in this package source, so table formatting, retained rows, selection, visible-window policy, and copy/export are app-owned fixture code.",
+    "Nocterm exposes terminal/app state for this fixture, not a Fleury-style semantic app graph.",
+    "Timing is local-machine evidence and should not be used as a public superiority claim without repeated peer runs."
+  ]
+}

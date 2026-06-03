@@ -1,0 +1,125 @@
+import 'package:fleury/fleury.dart';
+
+import 'controls.dart' show Button, ButtonVariant;
+import 'dialog.dart' show Dialog;
+
+/// Severity for a protocol-neutral approval request.
+enum ApprovalSeverity { info, warning, destructive }
+
+/// User decision emitted by [ApprovalPrompt].
+enum ApprovalDecision { approved, denied }
+
+/// Protocol-neutral approval request data.
+///
+/// This intentionally avoids ACP, JSON-RPC, or provider-specific terminology.
+/// Adapter packages can map their own permission or confirmation objects onto
+/// this shape while Fleury owns the reusable UI, semantics, and test surface.
+final class ApprovalRequest {
+  const ApprovalRequest({
+    required this.id,
+    required this.title,
+    required this.message,
+    this.subject,
+    this.details = const <String>[],
+    this.severity = ApprovalSeverity.info,
+    this.confirmLabel = 'Approve',
+    this.cancelLabel = 'Deny',
+  });
+
+  final String id;
+  final String title;
+  final String message;
+  final String? subject;
+  final List<String> details;
+  final ApprovalSeverity severity;
+  final String confirmLabel;
+  final String cancelLabel;
+}
+
+/// A compact approval prompt for developer-tool and agent-style workflows.
+class ApprovalPrompt extends StatelessWidget {
+  const ApprovalPrompt({
+    super.key,
+    required this.request,
+    required this.onDecision,
+    this.width = 56,
+    this.autofocusApprove = true,
+  });
+
+  final ApprovalRequest request;
+  final void Function(ApprovalDecision decision) onDecision;
+  final int? width;
+  final bool autofocusApprove;
+
+  void _approve() => onDecision(ApprovalDecision.approved);
+  void _deny() => onDecision(ApprovalDecision.denied);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      role: SemanticRole.approval,
+      label: request.title,
+      value: request.subject,
+      actions: const {SemanticAction.submit, SemanticAction.cancel},
+      state: SemanticState({
+        'approvalId': request.id,
+        'severity': request.severity.name,
+        if (request.subject != null) 'approvalSubject': request.subject,
+        'detailCount': request.details.length,
+        'confirmLabel': request.confirmLabel,
+        'cancelLabel': request.cancelLabel,
+      }),
+      onAction: (action) {
+        switch (action) {
+          case SemanticAction.submit:
+            _approve();
+            return;
+          case SemanticAction.cancel:
+            _deny();
+            return;
+          case _:
+            return;
+        }
+      },
+      child: Dialog(
+        title: request.title,
+        width: width,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(request.message),
+            if (request.subject != null)
+              Text('Subject: ${request.subject}', style: theme.mutedStyle),
+            if (request.details.isNotEmpty) ...[
+              const SizedBox(height: 1),
+              for (final detail in request.details) Text('- $detail'),
+            ],
+            const SizedBox(height: 1),
+            Row(
+              children: [
+                Button(
+                  label: request.confirmLabel,
+                  variant: _confirmVariant(request.severity),
+                  autofocus: autofocusApprove,
+                  onPressed: _approve,
+                ),
+                const SizedBox(width: 1),
+                Button(label: request.cancelLabel, onPressed: _deny),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+ButtonVariant _confirmVariant(ApprovalSeverity severity) {
+  return switch (severity) {
+    ApprovalSeverity.info => ButtonVariant.primary,
+    ApprovalSeverity.warning => ButtonVariant.warning,
+    ApprovalSeverity.destructive => ButtonVariant.error,
+  };
+}

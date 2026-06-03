@@ -44,6 +44,23 @@ import 'dart:typed_data';
 import '../foundation/geometry.dart';
 import '../terminal/capabilities.dart';
 
+/// Default remote frame payload cap.
+///
+/// This is intentionally much larger than normal terminal diff frames, while
+/// still preventing a malformed peer from advertising a multi-gigabyte frame
+/// and keeping the decoder pinned forever waiting for it.
+const int defaultMaxRemoteFramePayloadLength = 64 * 1024 * 1024;
+
+/// A malformed frame or payload was received from a remote peer.
+final class RemoteProtocolException implements Exception {
+  const RemoteProtocolException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'RemoteProtocolException: $message';
+}
+
 /// Frame type discriminator.
 enum FrameType {
   init(0x01),
@@ -145,6 +162,10 @@ String _encodeInit(InitFrame f) =>
 /// holds partial-frame state across calls so a fragmented socket
 /// read or websocket message boundary doesn't lose data.
 final class FrameDecoder {
+  FrameDecoder({this.maxPayloadLength = defaultMaxRemoteFramePayloadLength})
+    : assert(maxPayloadLength > 0, 'maxPayloadLength must be positive');
+
+  final int maxPayloadLength;
   final BytesBuilder _buffer = BytesBuilder(copy: false);
 
   /// Add raw bytes from the transport.
@@ -165,6 +186,12 @@ final class FrameDecoder {
         return;
       }
       final length = ByteData.sublistView(bytes, 1, 5).getUint32(0);
+      if (length > maxPayloadLength) {
+        _buffer.clear();
+        throw RemoteProtocolException(
+          'Frame payload length $length exceeds limit $maxPayloadLength.',
+        );
+      }
       final total = 5 + length;
       if (bytes.length < total) {
         _buffer.clear();
@@ -191,14 +218,12 @@ final class FrameDecoder {
   RemoteFrame _decode(FrameType type, Uint8List payload) {
     switch (type) {
       case FrameType.init:
-        return _decodeInit(utf8.decode(payload));
+        return _decodeInit(_decodeUtf8Payload(payload, 'INIT'));
       case FrameType.input:
         return InputFrame(payload);
       case FrameType.resize:
-        final params = _parseParams(utf8.decode(payload));
-        return ResizeFrame(
-          CellSize(int.parse(params['cols']!), int.parse(params['rows']!)),
-        );
+        final params = _parseParams(_decodeUtf8Payload(payload, 'RESIZE'));
+        return ResizeFrame(_decodeSize(params, 'RESIZE'));
       case FrameType.output:
         return OutputFrame(payload);
       case FrameType.bye:
@@ -207,10 +232,20 @@ final class FrameDecoder {
   }
 }
 
+String _decodeUtf8Payload(Uint8List payload, String frameType) {
+  try {
+    return utf8.decode(payload);
+  } on FormatException catch (error) {
+    throw RemoteProtocolException(
+      '$frameType frame payload is not valid UTF-8: ${error.message}.',
+    );
+  }
+}
+
 InitFrame _decodeInit(String body) {
   final params = _parseParams(body);
   return InitFrame(
-    size: CellSize(int.parse(params['cols']!), int.parse(params['rows']!)),
+    size: _decodeSize(params, 'INIT'),
     colorMode: ColorMode.values.firstWhere(
       (m) => m.name == params['color'],
       orElse: () => ColorMode.truecolor,
@@ -221,6 +256,30 @@ InitFrame _decodeInit(String body) {
     ),
     tmuxPassthrough: params['tmux'] == '1',
   );
+}
+
+CellSize _decodeSize(Map<String, String> params, String frameType) {
+  final cols = _decodePositiveInt(params, 'cols', frameType);
+  final rows = _decodePositiveInt(params, 'rows', frameType);
+  return CellSize(cols, rows);
+}
+
+int _decodePositiveInt(
+  Map<String, String> params,
+  String key,
+  String frameType,
+) {
+  final raw = params[key];
+  if (raw == null || raw.isEmpty) {
+    throw RemoteProtocolException('$frameType frame is missing `$key`.');
+  }
+  final value = int.tryParse(raw);
+  if (value == null || value <= 0) {
+    throw RemoteProtocolException(
+      '$frameType frame has invalid `$key`: `$raw`.',
+    );
+  }
+  return value;
 }
 
 Map<String, String> _parseParams(String body) {

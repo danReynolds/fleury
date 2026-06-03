@@ -1,0 +1,220 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryBenchmarkVariance",
+  "peerId": "bubbletea",
+  "scenarioId": "SB.4",
+  "scenarioName": "LogRegion Tailing And Scrollback",
+  "runCount": 3,
+  "minRuns": 3,
+  "sufficientRunCount": true,
+  "comparable": true,
+  "strictPass": true,
+  "errors": [],
+  "comparableIssues": [],
+  "source": {
+    "versions": [
+      "Bubble Tea 2.0.7 / Bubbles 2.1.0"
+    ],
+    "urls": [
+      "https://pkg.go.dev/charm.land/bubbletea/v2"
+    ]
+  },
+  "environment": {
+    "machines": [
+      "macbookpro.lan"
+    ],
+    "operatingSystems": [
+      "darwin"
+    ],
+    "runtimes": [
+      "go1.25.0 / Bubble Tea 2.0.7 / Bubbles 2.1.0"
+    ],
+    "terminalModes": [
+      "bubbletea-viewport-model-harness"
+    ],
+    "terminalSizes": [
+      "120x32"
+    ]
+  },
+  "fixture": {
+    "workingDirectories": [
+      "peer-fixtures/bubbletea/sb4_log_region"
+    ],
+    "commands": [
+      "go run . --warmup=2 --iterations=5 --rows=100000 --append=1000 --json"
+    ],
+    "warmupIterations": {
+      "samples": 3,
+      "min": 2,
+      "median": 2,
+      "mean": 2,
+      "max": 2,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        2,
+        2,
+        2
+      ]
+    },
+    "measuredIterations": {
+      "samples": 3,
+      "min": 5,
+      "median": 5,
+      "mean": 5,
+      "max": 5,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        5,
+        5,
+        5
+      ]
+    }
+  },
+  "runs": [
+    {
+      "runId": "bubbletea-sb4-log-region-2026-06-02T14-03-45Z",
+      "capturedAt": "2026-06-02T14:03:45.5786Z",
+      "path": "peer-fixtures/bubbletea/sb4_log_region/results/variance/bubbletea-sb4-log-region-2026-06-02-run-1.json"
+    },
+    {
+      "runId": "bubbletea-sb4-log-region-2026-06-02T14-04-30Z",
+      "capturedAt": "2026-06-02T14:04:30.120086Z",
+      "path": "peer-fixtures/bubbletea/sb4_log_region/results/variance/bubbletea-sb4-log-region-2026-06-02-run-2.json"
+    },
+    {
+      "runId": "bubbletea-sb4-log-region-2026-06-02T14-05-06Z",
+      "capturedAt": "2026-06-02T14:05:06.266741Z",
+      "path": "peer-fixtures/bubbletea/sb4_log_region/results/variance/bubbletea-sb4-log-region-2026-06-02-run-3.json"
+    }
+  ],
+  "metrics": {
+    "appendBurstUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 1274736,
+      "median": 1346052,
+      "mean": 1600684.667,
+      "max": 2181266,
+      "standardDeviation": 411564.095,
+      "relativeSpreadPercent": 67.347,
+      "values": [
+        1274736,
+        2181266,
+        1346052
+      ]
+    },
+    "scrollbackJumpUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 601200,
+      "median": 658370,
+      "mean": 758542,
+      "max": 1016056,
+      "standardDeviation": 183579.587,
+      "relativeSpreadPercent": 63.013,
+      "values": [
+        601200,
+        1016056,
+        658370
+      ]
+    },
+    "scrollToTailUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 630815,
+      "median": 649960,
+      "mean": 680652.667,
+      "max": 761183,
+      "standardDeviation": 57477.437,
+      "relativeSpreadPercent": 20.058,
+      "values": [
+        630815,
+        761183,
+        649960
+      ]
+    },
+    "copySelectedEntryUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 11,
+      "median": 13,
+      "mean": 12.667,
+      "max": 14,
+      "standardDeviation": 1.247,
+      "relativeSpreadPercent": 23.077,
+      "values": [
+        11,
+        13,
+        14
+      ]
+    },
+    "filterQueryUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 431672,
+      "median": 437393,
+      "mean": 485053.333,
+      "max": 586095,
+      "standardDeviation": 71485.412,
+      "relativeSpreadPercent": 35.305,
+      "values": [
+        437393,
+        586095,
+        431672
+      ]
+    },
+    "semanticOrTestQueryUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 20,
+      "median": 49,
+      "mean": 42,
+      "max": 57,
+      "standardDeviation": 15.895,
+      "relativeSpreadPercent": 75.51,
+      "values": [
+        20,
+        49,
+        57
+      ]
+    },
+    "unsafeArtifactLeakCount": {
+      "primaryValue": "value",
+      "samples": 3,
+      "min": 0,
+      "median": 0,
+      "mean": 0,
+      "max": 0,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": null,
+      "values": [
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "correctness": {
+    "allRunsPass": true,
+    "gates": {
+      "tail anchoring is correct": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "copy text is sanitized": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "unsafe output leak count is zero": {
+        "passCount": 3,
+        "failCount": 0
+      }
+    }
+  },
+  "notes": [
+    "Metric variance uses each run artifact primary value: scalar metrics use the scalar value; metric maps prefer p95, then median, max, and value.",
+    "strictPass is false unless run count, scenario/peer identity, source version, terminal mode, terminal size, fixture command, fixture directory, and correctness gates are comparable."
+  ]
+}

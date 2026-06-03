@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-05-31T22:20:18.864058Z",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "scenarioId": "SB.3",
+      "scenarioName": "DataTable 100k Rows",
+      "packageVersion": "0.0.0",
+      "gitSha": "unknown",
+      "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+      "runMode": "test",
+      "os": "macos",
+      "cpu": 10,
+      "terminalProfile": {
+        "colorMode": "truecolor",
+        "imageProtocol": "halfBlock",
+        "tmuxPassthrough": false
+      },
+      "terminalSize": {
+        "columns": 120,
+        "rows": 32
+      },
+      "seed": 1,
+      "rowCount": 100000,
+      "warmupIterations": 2,
+      "measuredIterations": 20,
+      "startedAt": "2026-05-31T22:20:18.760025Z",
+      "durationMs": 84.739,
+      "metrics": {
+        "journeyUs": {
+          "min": 2150,
+          "median": 2839,
+          "p95": 6127,
+          "p99": 6177,
+          "max": 6190,
+          "samples": 20
+        },
+        "mountUs": {
+          "min": 83,
+          "median": 141,
+          "p95": 273,
+          "p99": 274,
+          "max": 274,
+          "samples": 20
+        },
+        "firstRenderUs": {
+          "min": 349,
+          "median": 449,
+          "p95": 1155,
+          "p99": 1496,
+          "max": 1582,
+          "samples": 20
+        },
+        "arrowMoveUs": {
+          "min": 358,
+          "median": 412,
+          "p95": 829,
+          "p99": 865,
+          "max": 874,
+          "samples": 20
+        },
+        "pageMoveUs": {
+          "min": 352,
+          "median": 378,
+          "p95": 772,
+          "p99": 935,
+          "max": 976,
+          "samples": 20
+        },
+        "jumpToEndUs": {
+          "min": 362,
+          "median": 383,
+          "p95": 825,
+          "p99": 1665,
+          "max": 1875,
+          "samples": 20
+        },
+        "copySelectedRowUs": {
+          "min": 87,
+          "median": 135,
+          "p95": 310,
+          "p99": 467,
+          "max": 506,
+          "samples": 20
+        },
+        "semanticQueryUs": {
+          "min": 511,
+          "median": 825,
+          "p95": 2497,
+          "p99": 2895,
+          "max": 2994,
+          "samples": 20
+        },
+        "initialAnsiBytes": 4111,
+        "finalAnsiBytes": 4169,
+        "semanticNodeCount": 281,
+        "visibleRangeStart": 99970,
+        "visibleRangeEnd": 99999,
+        "selectedKey": "RUN-199999",
+        "cellBuilderCalls": 1208,
+        "uniqueRowsRequested": 62,
+        "maxRequestedRow": 99999,
+        "rssDeltaBytes": 532480
+      },
+      "thresholds": {
+        "candidateArrowMoveP95Us": 16000,
+        "candidatePageMoveP95Us": 16000,
+        "candidateCopySelectedRowP95Us": 16000,
+        "candidateSemanticQueryP95Us": 16000,
+        "enforced": false
+      },
+      "pass": true,
+      "notes": [
+        "Candidate thresholds are informational until stable baselines exist.",
+        "Run mode is FleuryTester harness execution, not a full terminal process.",
+        "Sort/filter helper behavior is covered by widget tests; this scenario keeps the virtualization hot path isolated."
+      ]
+    }
+  ]
+}

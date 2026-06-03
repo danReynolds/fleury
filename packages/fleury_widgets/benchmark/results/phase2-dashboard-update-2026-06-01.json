@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-01T18:06:59.317457Z",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "scenarioId": "SB.6",
+      "scenarioName": "Dashboard Update Pressure",
+      "packageVersion": "0.0.0",
+      "gitSha": "unknown",
+      "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+      "runMode": "test",
+      "os": "macos",
+      "cpu": 10,
+      "terminalProfile": {
+        "colorMode": "truecolor",
+        "imageProtocol": "halfBlock",
+        "tmuxPassthrough": false
+      },
+      "terminalSize": {
+        "columns": 120,
+        "rows": 32
+      },
+      "seed": 1,
+      "rowCount": 100000,
+      "warmupIterations": 2,
+      "measuredIterations": 20,
+      "startedAt": "2026-06-01T18:06:55.555496Z",
+      "durationMs": 3721.152,
+      "metrics": {
+        "journeyUs": {
+          "min": 177800,
+          "median": 182102,
+          "p95": 199193,
+          "p99": 202147,
+          "max": 202885,
+          "samples": 20
+        },
+        "mountUs": {
+          "min": 337,
+          "median": 463,
+          "p95": 1190,
+          "p99": 1228,
+          "max": 1237,
+          "samples": 20
+        },
+        "firstRenderUs": {
+          "min": 115,
+          "median": 151,
+          "p95": 327,
+          "p99": 418,
+          "max": 441,
+          "samples": 20
+        },
+        "updatePumpUs": {
+          "min": 63,
+          "median": 70,
+          "p95": 97,
+          "p99": 197,
+          "max": 6763,
+          "samples": 8000
+        },
+        "updateFrameUs": {
+          "min": 92,
+          "median": 99,
+          "p95": 120,
+          "p99": 230,
+          "max": 3556,
+          "samples": 8000
+        },
+        "updateTotalUs": {
+          "min": 156,
+          "median": 170,
+          "p95": 267,
+          "p99": 348,
+          "max": 10265,
+          "samples": 8000
+        },
+        "updateLayoutPerformed": {
+          "min": 45,
+          "median": 45,
+          "p95": 45,
+          "p99": 45,
+          "max": 45,
+          "samples": 8000
+        },
+        "updateLayoutSkipped": {
+          "min": 29,
+          "median": 29,
+          "p95": 29,
+          "p99": 29,
+          "max": 29,
+          "samples": 8000
+        },
+        "semanticQueryUs": {
+          "min": 113,
+          "median": 170,
+          "p95": 439,
+          "p99": 2050,
+          "max": 2453,
+          "samples": 20
+        },
+        "lastFirstFrameLayout": {
+          "performedCount": 115,
+          "skippedCount": 0,
+          "totalCount": 115,
+          "skippedRatio": 0.0
+        },
+        "lastUpdateFrameLayout": {
+          "performedCount": 45,
+          "skippedCount": 29,
+          "totalCount": 74,
+          "skippedRatio": 0.3918918918918919
+        },
+        "dashboardTickCount": 400,
+        "surfaceCount": 23,
+        "progressSurfaceCount": 8,
+        "gaugeSurfaceCount": 6,
+        "sparklineSurfaceCount": 6,
+        "chartSurfaceCount": 1,
+        "semanticNodeCount": 54,
+        "progressSemanticCount": 8,
+        "firstFrameAnsiBytes": 6545,
+        "maxUpdateAnsiBytes": 7128,
+        "finalAnsiBytes": 6726,
+        "unsafeFrameCount": 0,
+        "finalTick": 400,
+        "finalProgressLabel": "5%",
+        "rssDeltaBytes": 8949760
+      },
+      "thresholds": {
+        "candidateUpdateTotalP95Us": 16000,
+        "candidateUpdateFrameP95Us": 16000,
+        "candidateSemanticQueryP95Us": 16000,
+        "enforced": false
+      },
+      "pass": true,
+      "notes": [
+        "Candidate thresholds are informational until stable baselines exist.",
+        "Scenario repeatedly updates a compact dashboard with progress bars, gauges, sparklines, charts, counters, and status rows.",
+        "Run mode is FleuryTester harness execution, not a wall-clock scheduler or terminal process."
+      ]
+    }
+  ]
+}

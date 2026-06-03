@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-01T05:37:30.432783Z",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "scenarioId": "SB.9",
+      "scenarioName": "Subprocess Handoff And Untrusted Output",
+      "packageVersion": "0.0.0",
+      "gitSha": "unknown",
+      "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+      "runMode": "test",
+      "os": "macos",
+      "cpu": 10,
+      "terminalProfile": {
+        "colorMode": "truecolor",
+        "imageProtocol": "halfBlock",
+        "tmuxPassthrough": false
+      },
+      "terminalSize": {
+        "columns": 120,
+        "rows": 32
+      },
+      "seed": 1,
+      "rowCount": 100000,
+      "warmupIterations": 2,
+      "measuredIterations": 10,
+      "startedAt": "2026-06-01T05:37:12.423454Z",
+      "durationMs": 17992.478,
+      "metrics": {
+        "journeyUs": {
+          "min": 1732469,
+          "median": 1775106,
+          "p95": 1861429,
+          "p99": 1864331,
+          "max": 1865057,
+          "samples": 10
+        },
+        "processRunUs": {
+          "min": 601500,
+          "median": 614409,
+          "p95": 647254,
+          "p99": 649008,
+          "max": 649447,
+          "samples": 10
+        },
+        "failureRunUs": {
+          "min": 562009,
+          "median": 570538,
+          "p95": 629356,
+          "p99": 655326,
+          "max": 661818,
+          "samples": 10
+        },
+        "cancelLatencyUs": {
+          "min": 9995,
+          "median": 10354,
+          "p95": 11823,
+          "p99": 12083,
+          "max": 12148,
+          "samples": 10
+        },
+        "editorHandoffUs": {
+          "min": 1673,
+          "median": 1932,
+          "p95": 6826,
+          "p99": 8353,
+          "max": 8735,
+          "samples": 10
+        },
+        "streamFrameUs": {
+          "min": 916,
+          "median": 1378,
+          "p95": 6230,
+          "p99": 7684,
+          "max": 8273,
+          "samples": 160
+        },
+        "processPanelRenderUs": {
+          "min": 2484,
+          "median": 4318,
+          "p95": 10649,
+          "p99": 11155,
+          "max": 11281,
+          "samples": 10
+        },
+        "terminalOutputRenderUs": {
+          "min": 1071,
+          "median": 1412,
+          "p95": 2859,
+          "p99": 3022,
+          "max": 3063,
+          "samples": 10
+        },
+        "copySelectedUs": {
+          "min": 223,
+          "median": 337,
+          "p95": 2898,
+          "p99": 2908,
+          "max": 2911,
+          "samples": 10
+        },
+        "semanticQueryUs": {
+          "min": 222,
+          "median": 311,
+          "p95": 1965,
+          "p99": 1967,
+          "max": 1967,
+          "samples": 10
+        },
+        "processLineCount": 3907,
+        "processTargetBytes": 1000000,
+        "capturedOutputBytes": 840052,
+        "capturedOriginalBytes": 859464,
+        "processOutputCount": 4288,
+        "stderrOutputCount": 230,
+        "sanitizedOutputCount": 4288,
+        "truncatedOutputCount": 0,
+        "unsafeSequenceBlockCount": 4288,
+        "failureExitCode": 7,
+        "failureOutputCount": 1,
+        "cancelOutputObserved": true,
+        "cancelProcessExitCode": -15,
+        "terminalModeRestored": true,
+        "handoffCallCount": 4,
+        "handoffSuspendCallCount": 4,
+        "handoffResumeCallCount": 4,
+        "terminalOutputLineCount": 2000,
+        "terminalStreamBatchCount": 16,
+        "semanticNodeCount": 57,
+        "taskSemanticCount": 3,
+        "logSemanticCount": 4,
+        "initialAnsiBytes": 0,
+        "maxStreamAnsiBytes": 1785,
+        "processPanelAnsiBytes": 1420,
+        "terminalOutputAnsiBytes": 1783,
+        "unsafeFrameCount": 0,
+        "unsafeArtifactLeakCount": 0,
+        "copiedByteCount": 214,
+        "editorChanged": true,
+        "rssDeltaBytes": 13078528
+      },
+      "thresholds": {
+        "candidateProcessRunP95Us": 1000000,
+        "candidateCancelLatencyP95Us": 200000,
+        "candidateStreamFrameP95Us": 33000,
+        "candidateSemanticQueryP95Us": 16000,
+        "terminalModeRestoredRequired": true,
+        "unsafeArtifactLeakCountRequired": 0,
+        "enforced": false
+      },
+      "pass": true,
+      "notes": [
+        "Candidate thresholds are informational until stable baselines exist.",
+        "Scenario runs real Dart subprocesses for success, non-zero exit, cancellation, and terminal handoff.",
+        "Streaming frame timing is measured through TerminalOutputRegion with unsafe stdout/stderr-like lines.",
+        "Correctness requires restored terminal handoff state and no unsafe payload leakage into visible, copied, or semantic artifacts."
+      ]
+    }
+  ]
+}

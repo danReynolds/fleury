@@ -114,5 +114,16 @@ void main() {
       tester.pump(const Duration(milliseconds: 100));
       expect(m.value, 10);
     });
+
+    testWidgets('disposed animation value reads stay renderable but do not '
+        'reattach', (tester) {
+      final m = Animation(7)..dispose();
+
+      tester.pumpWidget(_Reader(m));
+
+      expect(tester.renderToString(size: const CellSize(4, 1)), '7\n');
+      expect(tester.scheduler.activeTickerCount, 0);
+      expect(() => m.to(9), throwsStateError);
+    });
   });
 }

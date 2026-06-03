@@ -85,9 +85,18 @@ class TickerScheduler {
   /// an idle Timer.run (no event, no setState) still produces a frame —
   /// without it, the drain would never run because nothing scheduled
   /// the next frame.
-  void Function()? onPostFrameCallbackRegistered;
+  void Function()? _onPostFrameCallbackRegistered;
+
+  void Function()? get onPostFrameCallbackRegistered =>
+      _onPostFrameCallbackRegistered;
+
+  set onPostFrameCallbackRegistered(void Function()? callback) {
+    _checkNotDisposed();
+    _onPostFrameCallbackRegistered = callback;
+  }
 
   Timer? _timer;
+  bool _disposed = false;
 
   /// Whether the scheduler currently has a periodic source running.
   /// Structural assertion target: should be `false` when no
@@ -103,6 +112,7 @@ class TickerScheduler {
   /// Starts the underlying periodic source if this was the first
   /// callback.
   void register(SchedulerTickCallback callback) {
+    _checkNotDisposed();
     final wasEmpty = _callbacks.isEmpty;
     if (!_callbacks.add(callback)) return;
     if (wasEmpty) _startTimer();
@@ -124,6 +134,7 @@ class TickerScheduler {
   /// runtime calls [reassemble] from its hot-reload hook
   /// immediately after `BuildOwner.reassembleApplication`.
   void registerReassembleCallback(VoidCallback callback) {
+    _checkNotDisposed();
     _reassembleCallbacks.add(callback);
   }
 
@@ -141,6 +152,7 @@ class TickerScheduler {
   /// itself (e.g. an `Animation.dispose` triggered by a
   /// freshly-reloaded build).
   void reassemble() {
+    if (_disposed) return;
     if (_reassembleCallbacks.isEmpty) return;
     final snapshot = List<VoidCallback>.from(_reassembleCallbacks);
     for (final cb in snapshot) {
@@ -158,8 +170,9 @@ class TickerScheduler {
   /// a frame; without that, a callback added from an idle Timer.run
   /// would queue indefinitely (no setState, no event, no frame).
   void addPostFrameCallback(FrameCallback callback) {
+    _checkNotDisposed();
     _postFrameCallbacks.add(callback);
-    onPostFrameCallbackRegistered?.call();
+    _onPostFrameCallbackRegistered?.call();
   }
 
   /// Fires every queued post-frame callback in registration order with
@@ -180,6 +193,7 @@ class TickerScheduler {
   /// [addPostFrameCallback].
   @internal
   void flushPostFrameCallbacks(Duration timeStamp) {
+    if (_disposed) return;
     assert(
       _drainDepth == 0,
       'Nested flushPostFrameCallbacks: a callback called pump() or '
@@ -219,7 +233,7 @@ class TickerScheduler {
   /// register or unregister during a tick without confusing
   /// iteration.
   void _fire() {
-    if (_callbacks.isEmpty) return;
+    if (_disposed || _callbacks.isEmpty) return;
     final snapshot = List<SchedulerTickCallback>.from(_callbacks);
     final now = _clock.now;
     for (final cb in snapshot) {
@@ -237,6 +251,8 @@ class TickerScheduler {
   /// Exceptions in a callback are routed through Zone.current and do
   /// not abort the rest of the drain.
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     _stopTimer();
     // Drain first so a callback can still run side effects (e.g. log
     // a final state) before everything is torn down. Snapshot+swap
@@ -256,7 +272,13 @@ class TickerScheduler {
     _callbacks.clear();
     _reassembleCallbacks.clear();
     _postFrameCallbacks.clear();
-    onPostFrameCallbackRegistered = null;
+    _onPostFrameCallbackRegistered = null;
+  }
+
+  void _checkNotDisposed() {
+    if (_disposed) {
+      throw StateError('TickerScheduler has been disposed.');
+    }
   }
 }
 

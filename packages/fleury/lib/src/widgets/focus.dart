@@ -82,6 +82,12 @@ abstract interface class TextInputClaimant {
   /// lets a non-text control claim just a single character (e.g. Space
   /// to toggle) while letting everything else pass.
   KeyEventResult onTextInput(String text);
+
+  /// Invoked by the dispatcher with bracketed paste content. Paste is
+  /// separated from typed text so editable fields can record one paste
+  /// transaction, while controls that claim single typed trigger characters
+  /// do not activate from pasted blobs.
+  KeyEventResult onPaste(String text);
 }
 
 /// A long-lived focus identity. One per [Focus] widget; consumers can
@@ -220,6 +226,7 @@ class FocusManager extends ChangeNotifier {
   FocusManager();
 
   FocusNode? _focusedNode;
+  bool _disposed = false;
 
   /// The currently focused node, or null when nothing is focused.
   FocusNode? get focusedNode => _focusedNode;
@@ -241,10 +248,12 @@ class FocusManager extends ChangeNotifier {
       <_FocusScopeMarkerElement>{};
 
   void _registerModalScope(_FocusScopeMarkerElement element) {
+    _checkNotDisposed();
     if (_activeModalScopes.add(element)) _notifyManagerScopeChanged();
   }
 
   void _unregisterModalScope(_FocusScopeMarkerElement element) {
+    if (_disposed) return;
     if (_activeModalScopes.remove(element)) _notifyManagerScopeChanged();
   }
 
@@ -254,6 +263,7 @@ class FocusManager extends ChangeNotifier {
   /// build phase, and `notifyListeners` there would re-enter `setState`
   /// on a dependent.
   void _notifyManagerScopeChanged() {
+    if (_disposed) return;
     scheduleMicrotask(notifyListeners);
   }
 
@@ -287,6 +297,7 @@ class FocusManager extends ChangeNotifier {
 
   /// Attaches [node] to this manager. Idempotent.
   void _register(FocusNode node, Element element) {
+    _checkNotDisposed();
     if (identical(node._manager, this)) return;
     node._manager = this;
     node._element = element;
@@ -296,6 +307,12 @@ class FocusManager extends ChangeNotifier {
   /// Detaches [node] from this manager. Safe if not attached.
   void _unregister(FocusNode node) {
     if (!identical(node._manager, this)) return;
+    if (_disposed) {
+      node._manager = null;
+      node._element = null;
+      node._enclosingScope = null;
+      return;
+    }
     if (identical(_focusedNode, node)) {
       _focusedNode = null;
       notifyListeners();
@@ -306,6 +323,7 @@ class FocusManager extends ChangeNotifier {
   /// Requests that [node] become the focused node (null to clear
   /// focus). Returns whether focus actually moved.
   bool requestFocus(FocusNode? node) {
+    _checkNotDisposed();
     if (node != null && !node.canRequestFocus) return false;
     if (identical(_focusedNode, node)) return false;
     _focusedNode = node;
@@ -329,6 +347,7 @@ class FocusManager extends ChangeNotifier {
   bool focusPrevious() => _cycleFocus(forward: false);
 
   bool _cycleFocus({required bool forward}) {
+    _checkNotDisposed();
     final order = _traversalOrder();
     if (order.isEmpty) return false;
     final current = _focusedNode;
@@ -565,6 +584,7 @@ class FocusManager extends ChangeNotifier {
   /// `onKey` in deepest-first order. Stops at the first handler that
   /// returns [KeyEventResult.handled] or at the chain's end.
   KeyEventResult dispatchKey(KeyEvent event) {
+    _checkNotDisposed();
     for (final node in activeChain()) {
       final handler = node.onKey;
       if (handler == null) continue;
@@ -572,6 +592,29 @@ class FocusManager extends ChangeNotifier {
       if (result == KeyEventResult.handled) return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _focusedNode = null;
+    for (final node in List<FocusNode>.of(_attachedNodes)) {
+      if (identical(node._manager, this)) {
+        node._manager = null;
+        node._element = null;
+        node._enclosingScope = null;
+      }
+    }
+    _attachedNodes.clear();
+    _activeModalScopes.clear();
+    super.dispose();
+  }
+
+  void _checkNotDisposed() {
+    if (_disposed) {
+      throw StateError('FocusManager has been disposed.');
+    }
   }
 }
 
@@ -814,6 +857,7 @@ class _RenderFocusBounds extends RenderObject
     // stale bounding box doesn't drive directional traversal.
     _node.rect = null;
     _node = value;
+    markNeedsPaintOnly();
   }
 
   RenderObject? _child;

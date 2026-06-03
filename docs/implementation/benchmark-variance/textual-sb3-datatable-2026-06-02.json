@@ -1,0 +1,235 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryBenchmarkVariance",
+  "peerId": "textual",
+  "scenarioId": "SB.3",
+  "scenarioName": "DataTable 100k Rows",
+  "runCount": 3,
+  "minRuns": 3,
+  "sufficientRunCount": true,
+  "comparable": true,
+  "strictPass": true,
+  "errors": [],
+  "comparableIssues": [],
+  "source": {
+    "versions": [
+      "8.2.7"
+    ],
+    "urls": [
+      "https://pypi.org/project/textual/"
+    ]
+  },
+  "environment": {
+    "machines": [
+      "macbookpro.lan"
+    ],
+    "operatingSystems": [
+      "darwin"
+    ],
+    "runtimes": [
+      "Python 3.12.13 / Textual 8.2.7"
+    ],
+    "terminalModes": [
+      "textual-run-test-harness"
+    ],
+    "terminalSizes": [
+      "80x24"
+    ]
+  },
+  "fixture": {
+    "workingDirectories": [
+      "peer-fixtures/textual/sb3_datatable"
+    ],
+    "commands": [
+      "python sb3_datatable_benchmark.py --warmup=2 --iterations=5 --rows=100000 --json"
+    ],
+    "warmupIterations": {
+      "samples": 3,
+      "min": 2,
+      "median": 2,
+      "mean": 2,
+      "max": 2,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        2,
+        2,
+        2
+      ]
+    },
+    "measuredIterations": {
+      "samples": 3,
+      "min": 5,
+      "median": 5,
+      "mean": 5,
+      "max": 5,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        5,
+        5,
+        5
+      ]
+    }
+  },
+  "runs": [
+    {
+      "runId": "textual-sb3-datatable-2026-06-02T13-32-00Z",
+      "capturedAt": "2026-06-02T13:32:00.096903Z",
+      "path": "peer-fixtures/textual/sb3_datatable/results/variance/textual-sb3-datatable-2026-06-02-run-1.json"
+    },
+    {
+      "runId": "textual-sb3-datatable-2026-06-02T13-33-06Z",
+      "capturedAt": "2026-06-02T13:33:06.173960Z",
+      "path": "peer-fixtures/textual/sb3_datatable/results/variance/textual-sb3-datatable-2026-06-02-run-2.json"
+    },
+    {
+      "runId": "textual-sb3-datatable-2026-06-02T13-34-12Z",
+      "capturedAt": "2026-06-02T13:34:12.139408Z",
+      "path": "peer-fixtures/textual/sb3_datatable/results/variance/textual-sb3-datatable-2026-06-02-run-3.json"
+    }
+  ],
+  "metrics": {
+    "mountUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 8632328,
+      "median": 10503380,
+      "mean": 10399712,
+      "max": 12063428,
+      "standardDeviation": 1402657.5,
+      "relativeSpreadPercent": 32.667,
+      "values": [
+        12063428,
+        8632328,
+        10503380
+      ]
+    },
+    "firstRenderUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 65022,
+      "median": 72114,
+      "mean": 71385.333,
+      "max": 77020,
+      "standardDeviation": 4925.188,
+      "relativeSpreadPercent": 16.638,
+      "values": [
+        72114,
+        65022,
+        77020
+      ]
+    },
+    "arrowMoveUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 286775,
+      "median": 296076,
+      "mean": 340300.333,
+      "max": 438050,
+      "standardDeviation": 69223.672,
+      "relativeSpreadPercent": 51.093,
+      "values": [
+        438050,
+        286775,
+        296076
+      ]
+    },
+    "pageMoveUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 91850,
+      "median": 97347,
+      "mean": 103544.667,
+      "max": 121437,
+      "standardDeviation": 12849.279,
+      "relativeSpreadPercent": 30.393,
+      "values": [
+        121437,
+        97347,
+        91850
+      ]
+    },
+    "jumpToEndUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 259856,
+      "median": 285626,
+      "mean": 303462.667,
+      "max": 364906,
+      "standardDeviation": 44702.615,
+      "relativeSpreadPercent": 36.779,
+      "values": [
+        285626,
+        259856,
+        364906
+      ]
+    },
+    "copySelectedRowUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 76706,
+      "median": 81377,
+      "mean": 81927,
+      "max": 87698,
+      "standardDeviation": 4504.286,
+      "relativeSpreadPercent": 13.508,
+      "values": [
+        87698,
+        76706,
+        81377
+      ]
+    },
+    "semanticOrTestQueryUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 135,
+      "median": 230,
+      "mean": 584.667,
+      "max": 1389,
+      "standardDeviation": 570.07,
+      "relativeSpreadPercent": 545.217,
+      "values": [
+        1389,
+        230,
+        135
+      ]
+    },
+    "rssDeltaBytes": {
+      "primaryValue": "value",
+      "samples": 3,
+      "min": 0,
+      "median": 0,
+      "mean": 3637248,
+      "max": 10911744,
+      "standardDeviation": 5143845.451,
+      "relativeSpreadPercent": null,
+      "values": [
+        10911744,
+        0,
+        0
+      ]
+    }
+  },
+  "correctness": {
+    "allRunsPass": true,
+    "gates": {
+      "visible window stays bounded": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "selection is correct after jump": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "copy/export is sanitized and exact": {
+        "passCount": 3,
+        "failCount": 0
+      }
+    }
+  },
+  "notes": [
+    "Metric variance uses each run artifact primary value: scalar metrics use the scalar value; metric maps prefer p95, then median, max, and value.",
+    "strictPass is false unless run count, scenario/peer identity, source version, terminal mode, terminal size, fixture command, fixture directory, and correctness gates are comparable."
+  ]
+}

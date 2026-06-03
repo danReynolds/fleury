@@ -47,7 +47,11 @@ class RenderCellEffect extends RenderObject
   }
 
   CellComposite _composite;
-  set composite(CellComposite value) => _composite = value;
+  set composite(CellComposite value) {
+    if (identical(_composite, value)) return;
+    _composite = value;
+    markNeedsPaintOnly();
+  }
 
   RenderObject? _child;
   @override
@@ -123,10 +127,18 @@ class RenderClip extends RenderObject implements RenderObjectWithSingleChild {
   }
 
   double _widthFactor;
-  set widthFactor(double v) => _widthFactor = v;
+  set widthFactor(double v) {
+    if (_widthFactor == v) return;
+    _widthFactor = v;
+    markNeedsLayout();
+  }
 
   double _heightFactor;
-  set heightFactor(double v) => _heightFactor = v;
+  set heightFactor(double v) {
+    if (_heightFactor == v) return;
+    _heightFactor = v;
+    markNeedsLayout();
+  }
 
   RenderObject? _child;
   @override

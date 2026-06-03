@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-01T05:12:49.320505Z",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "scenarioId": "SB.8",
+      "scenarioName": "Overlay And Command Palette Churn",
+      "packageVersion": "0.0.0",
+      "gitSha": "unknown",
+      "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+      "runMode": "test",
+      "os": "macos",
+      "cpu": 10,
+      "terminalProfile": {
+        "colorMode": "truecolor",
+        "imageProtocol": "halfBlock",
+        "tmuxPassthrough": false
+      },
+      "terminalSize": {
+        "columns": 120,
+        "rows": 32
+      },
+      "seed": 1,
+      "rowCount": 100000,
+      "warmupIterations": 2,
+      "measuredIterations": 20,
+      "startedAt": "2026-06-01T05:10:02.937644Z",
+      "durationMs": 166347.356,
+      "metrics": {
+        "journeyUs": {
+          "min": 7743398,
+          "median": 8004890,
+          "p95": 10043370,
+          "p99": 10340594,
+          "max": 10414900,
+          "samples": 20
+        },
+        "mountUs": {
+          "min": 5106,
+          "median": 5960,
+          "p95": 13614,
+          "p99": 17782,
+          "max": 18824,
+          "samples": 20
+        },
+        "firstRenderUs": {
+          "min": 44,
+          "median": 52,
+          "p95": 2621,
+          "p99": 3969,
+          "max": 4306,
+          "samples": 20
+        },
+        "openUs": {
+          "min": 3987,
+          "median": 6731,
+          "p95": 33667,
+          "p99": 40608,
+          "max": 125388,
+          "samples": 800
+        },
+        "filterUs": {
+          "min": 70846,
+          "median": 79600,
+          "p95": 98705,
+          "p99": 120537,
+          "max": 289025,
+          "samples": 800
+        },
+        "selectionUs": {
+          "min": 434,
+          "median": 2898,
+          "p95": 15239,
+          "p99": 17672,
+          "max": 78955,
+          "samples": 800
+        },
+        "actionUs": {
+          "min": 4218,
+          "median": 11854,
+          "p95": 29610,
+          "p99": 37360,
+          "max": 96516,
+          "samples": 800
+        },
+        "settleUs": {
+          "min": 69969,
+          "median": 76987,
+          "p95": 93096,
+          "p99": 109334,
+          "max": 340146,
+          "samples": 800
+        },
+        "cycleUs": {
+          "min": 163279,
+          "median": 198984,
+          "p95": 247544,
+          "p99": 314190,
+          "max": 512314,
+          "samples": 800
+        },
+        "semanticQueryUs": {
+          "min": 496,
+          "median": 578,
+          "p95": 948,
+          "p99": 1390,
+          "max": 52609,
+          "samples": 800
+        },
+        "disabledSemanticActionUs": {
+          "min": 742,
+          "median": 9059,
+          "p95": 11692,
+          "p99": 14914,
+          "max": 15720,
+          "samples": 20
+        },
+        "disabledKeyboardActionUs": {
+          "min": 400,
+          "median": 1197,
+          "p95": 1865,
+          "p99": 1885,
+          "max": 1890,
+          "samples": 20
+        },
+        "commandCount": 1000,
+        "cycleCount": 40,
+        "invokedCount": 24,
+        "dismissedCount": 16,
+        "screenCommandInvokeCount": 3,
+        "semanticNodeCount": 1116,
+        "paletteSemanticCount": 1,
+        "commandSemanticCount": 54,
+        "disabledCommandEnabledState": false,
+        "disabledStayedOpen": true,
+        "disabledSemanticActionStatus": "disabled",
+        "stalePaletteAfterCloseCount": 0,
+        "routeDepthMismatchCount": 0,
+        "paletteMismatchCount": 0,
+        "selectedMismatchCount": 0,
+        "visibleTextMismatchCount": 0,
+        "actionFailureCount": 0,
+        "semanticMismatchCount": 0,
+        "unexpectedInvocationCount": 0,
+        "homeAnsiBytes": 44,
+        "maxOpenAnsiBytes": 1818,
+        "maxFilteredAnsiBytes": 1870,
+        "rssDeltaBytes": -424710144
+      },
+      "thresholds": {
+        "candidateOpenP95Us": 33000,
+        "candidateFilterP95Us": 16000,
+        "candidateActionP95Us": 16000,
+        "candidateCycleP95Us": 50000,
+        "candidateSemanticQueryP95Us": 16000,
+        "enforced": false
+      },
+      "pass": true,
+      "notes": [
+        "Candidate thresholds are informational until stable baselines exist.",
+        "Scenario opens AppCommandPalette through Navigator.present so it exercises overlay lifecycle and app command discovery.",
+        "Cycles alternate keyboard invocation, semantic submit, semantic activate, Escape dismissal, and semantic dismissal.",
+        "A disabled command probe verifies visible-but-inert commands stay open and do not invoke stale actions."
+      ]
+    }
+  ]
+}

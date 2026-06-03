@@ -35,17 +35,32 @@ class LogBuffer extends ChangeNotifier {
 
   final int capacity;
   final List<LogLine> _lines = <LogLine>[];
+  bool _disposed = false;
 
   List<LogLine> get lines => List.unmodifiable(_lines);
   bool get isEmpty => _lines.isEmpty;
   int get length => _lines.length;
 
   void add(LogLine line) {
+    _checkNotDisposed();
     _lines.add(line);
     if (_lines.length > capacity) {
       _lines.removeRange(0, _lines.length - capacity);
     }
     notifyListeners();
+  }
+
+  void _checkNotDisposed() {
+    if (_disposed) {
+      throw StateError('LogBuffer has been disposed.');
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    super.dispose();
   }
 }
 

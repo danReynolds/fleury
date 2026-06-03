@@ -3,6 +3,8 @@
 // `ChangeNotifier` so the shell rebuilds on mode flips.
 
 import '../foundation/change_notifier.dart';
+import '../semantics/semantics.dart';
+import '../terminal/diagnostics.dart';
 
 /// Three-state lifecycle of the debug surface.
 ///   - off:        no panel mounted; user app uses full terminal;
@@ -62,15 +64,46 @@ class DebugController extends ChangeNotifier {
   DebugMode _lastOpen = DebugMode.docked;
   DebugTab _tab = DebugTab.live;
   bool _paintFlash = false;
+  int _semanticCursorIndex = 0;
+  SemanticTree? Function()? _semanticTreeProvider;
+  TerminalDiagnosis? Function()? _terminalDiagnosisProvider;
+  bool _disposed = false;
 
   DebugConfig get config => _config;
   DebugMode get mode => _mode;
   DebugTab get tab => _tab;
   bool get paintFlash => _paintFlash;
+  int get semanticCursorIndex => _semanticCursorIndex;
+
+  /// Supplies the current semantic tree to the debug panel's Tree tab.
+  ///
+  /// The provider is nullable so tests and embedders can opt in without
+  /// making debug state depend on a particular app root. It is evaluated only
+  /// when the panel asks for a snapshot.
+  void setSemanticTreeProvider(SemanticTree? Function()? provider) {
+    _checkNotDisposed();
+    _semanticTreeProvider = provider;
+    notifyListeners();
+  }
+
+  SemanticTree? semanticSnapshot() => _semanticTreeProvider?.call();
+
+  /// Supplies the current terminal profile/capability diagnosis to the
+  /// inspector. Evaluated on demand so resize and driver capability changes
+  /// are reflected without per-frame capture.
+  void setTerminalDiagnosisProvider(TerminalDiagnosis? Function()? provider) {
+    _checkNotDisposed();
+    _terminalDiagnosisProvider = provider;
+    notifyListeners();
+  }
+
+  TerminalDiagnosis? terminalDiagnosisSnapshot() =>
+      _terminalDiagnosisProvider?.call();
 
   /// Ctrl+G — off ↔ last-opened mode. Means a user who docked then
   /// closed gets back to docked, not bounced to fullscreen.
   void toggleOnOff() {
+    _checkNotDisposed();
     if (_mode == DebugMode.off) {
       _mode = _lastOpen;
     } else {
@@ -82,6 +115,7 @@ class DebugController extends ChangeNotifier {
 
   /// Shift+Ctrl+G / F11 — docked ↔ fullscreen. No-op when off.
   void toggleExpand() {
+    _checkNotDisposed();
     if (_mode == DebugMode.off) return;
     _mode = _mode == DebugMode.docked ? DebugMode.fullscreen : DebugMode.docked;
     _lastOpen = _mode;
@@ -90,6 +124,7 @@ class DebugController extends ChangeNotifier {
 
   /// Esc when fullscreen → back to docked.
   void collapseFromFullscreen() {
+    _checkNotDisposed();
     if (_mode != DebugMode.fullscreen) return;
     _mode = DebugMode.docked;
     _lastOpen = _mode;
@@ -97,13 +132,46 @@ class DebugController extends ChangeNotifier {
   }
 
   void selectTab(DebugTab tab) {
+    _checkNotDisposed();
     if (_tab == tab) return;
     _tab = tab;
     notifyListeners();
   }
 
   void togglePaintFlash() {
+    _checkNotDisposed();
     _paintFlash = !_paintFlash;
     notifyListeners();
+  }
+
+  void moveSemanticCursor(int delta) {
+    _checkNotDisposed();
+    final next = _semanticCursorIndex + delta;
+    final clamped = next < 0 ? 0 : next;
+    if (clamped == _semanticCursorIndex) return;
+    _semanticCursorIndex = clamped;
+    notifyListeners();
+  }
+
+  void resetSemanticCursor() {
+    _checkNotDisposed();
+    if (_semanticCursorIndex == 0) return;
+    _semanticCursorIndex = 0;
+    notifyListeners();
+  }
+
+  void _checkNotDisposed() {
+    if (_disposed) {
+      throw StateError('DebugController has been disposed.');
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _semanticTreeProvider = null;
+    _terminalDiagnosisProvider = null;
+    super.dispose();
   }
 }

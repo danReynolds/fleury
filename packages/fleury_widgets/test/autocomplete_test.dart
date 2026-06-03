@@ -92,6 +92,147 @@ void main() {
       );
     },
   );
+
+  group('semantics', () {
+    testWidgets('suggestion menu exposes filtered option semantics', (tester) {
+      tester.pumpWidget(
+        const Autocomplete(
+          options: _fruits,
+          autofocus: true,
+          placeholder: 'Fruit',
+          semanticLabel: 'Fruit suggestions',
+        ),
+      );
+      tester.type('ap');
+      tester.render(size: const CellSize(30, 8));
+
+      final tree = tester.semantics();
+      final field = tree.single(
+        role: SemanticRole.textField,
+        label: 'Fruit',
+        focused: true,
+      );
+      expect(field.value, 'ap');
+
+      final menu = tree.single(
+        role: SemanticRole.menu,
+        label: 'Fruit suggestions',
+      );
+      expect(menu.focused, isTrue);
+      expect(menu.state.menuItemCount, 2);
+      expect(menu.state.completionQuery, 'ap');
+      expect(tree.byRole(SemanticRole.menuItem).map((node) => node.label), [
+        'apple',
+        'apricot',
+      ]);
+
+      final apple = tree.single(
+        role: SemanticRole.menuItem,
+        label: 'apple',
+        selected: true,
+      );
+      expect(apple.actions, contains(SemanticAction.activate));
+      expect(apple.actions, contains(SemanticAction.select));
+      expect(apple.state.menuItemPosition, 1);
+      expect(apple.state.completionQuery, 'ap');
+    });
+
+    testWidgets('semantic activation picks a suggestion and closes the menu', (
+      tester,
+    ) async {
+      String? selected;
+      tester.pumpWidget(
+        Autocomplete(
+          options: _fruits,
+          autofocus: true,
+          placeholder: 'Fruit',
+          semanticLabel: 'Fruit suggestions',
+          onSelected: (value) => selected = value,
+        ),
+      );
+      tester.type('ap');
+      tester.render(size: const CellSize(30, 8));
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        role: SemanticRole.menuItem,
+        label: 'apricot',
+      );
+
+      expect(result.completed, isTrue);
+      expect(selected, 'apricot');
+      expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.textField, label: 'Fruit')
+            .value,
+        'apricot',
+      );
+    });
+
+    testWidgets('semantic close hides suggestions without clearing query', (
+      tester,
+    ) async {
+      tester.pumpWidget(
+        const Autocomplete(
+          options: _fruits,
+          autofocus: true,
+          placeholder: 'Fruit',
+          semanticLabel: 'Fruit suggestions',
+        ),
+      );
+      tester.type('ba');
+      tester.render(size: const CellSize(30, 8));
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.close,
+        role: SemanticRole.menu,
+        label: 'Fruit suggestions',
+      );
+
+      expect(result.completed, isTrue);
+      expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.textField, label: 'Fruit')
+            .value,
+        'ba',
+      );
+    });
+
+    testWidgets('accessibility fallback summarizes suggestion positions', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const Autocomplete(
+          options: _fruits,
+          autofocus: true,
+          placeholder: 'Fruit',
+          semanticLabel: 'Fruit suggestions',
+        ),
+      );
+      tester.type('ap');
+      tester.render(size: const CellSize(30, 8));
+
+      final snapshot = tester.accessibilitySnapshot();
+      final menu = snapshot.single(
+        role: SemanticRole.menu,
+        label: 'Fruit suggestions',
+        state: 'menu 2 items',
+      );
+      final apple = snapshot.single(
+        role: SemanticRole.menuItem,
+        label: 'apple',
+        selected: true,
+        state: 'menu item 1 of 2',
+      );
+
+      expect(menu.announcement, contains('focused'));
+      expect(apple.announcement, contains('actions: activate, select'));
+    });
+  });
 }
 
 class _Person {

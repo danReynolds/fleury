@@ -36,6 +36,7 @@ class Select<T> extends StatefulWidget {
     this.placeholder = 'Select…',
     this.focusNode,
     this.autofocus = false,
+    this.semanticLabel,
   });
 
   final List<SelectOption<T>> options;
@@ -46,6 +47,13 @@ class Select<T> extends StatefulWidget {
   final String placeholder;
   final FocusNode? focusNode;
   final bool autofocus;
+
+  /// Stable label for semantic snapshots.
+  ///
+  /// The visible collapsed value changes as the user picks options, so pass a
+  /// label such as "Environment" or "Color" when tests, debug tools, prompt
+  /// fallback, or future adapters need to refer to the picker itself.
+  final String? semanticLabel;
 
   @override
   State<Select<T>> createState() => _SelectState<T>();
@@ -130,6 +138,7 @@ class _SelectState<T> extends State<Select<T>> {
         link: _link,
         child: _SelectList<T>(
           options: widget.options,
+          semanticLabel: widget.semanticLabel,
           initialIndex: _initialIndex(),
           appliedIndex: _appliedIndex(),
           selectionStyle: theme.selectionStyle,
@@ -166,21 +175,59 @@ class _SelectState<T> extends State<Select<T>> {
 
   @override
   Widget build(BuildContext context) {
+    Focus.maybeOf(context); // Rebuild trigger semantics when focus moves.
     final theme = Theme.of(context);
     final focused = _triggerFocus.hasFocus;
     final style = focused ? theme.selectionStyle : CellStyle.empty;
     return Anchor(
       link: _link,
-      child: GestureDetector(
-        onTap: () {
-          _triggerFocus.requestFocus();
-          _open();
+      child: Semantics(
+        role: SemanticRole.button,
+        label: widget.semanticLabel ?? _currentLabel,
+        value: _currentLabel,
+        focused: _triggerFocus.hasFocus,
+        expanded: _isOpen,
+        actions: <SemanticAction>{
+          SemanticAction.focus,
+          if (widget.options.isNotEmpty) SemanticAction.activate,
+          if (widget.options.isNotEmpty)
+            _isOpen ? SemanticAction.close : SemanticAction.open,
         },
-        child: Focus(
-          focusNode: _triggerFocus,
-          autofocus: widget.autofocus,
-          onKey: _onTriggerKey,
-          child: Text('$_currentLabel ${_isOpen ? '▴' : '▾'}', style: style),
+        state: SemanticState({
+          'menuItemCount': widget.options.length,
+          'open': _isOpen,
+          'selectedKey': widget.value,
+          'selectedOptionLabel': _currentLabel,
+        }),
+        onAction: (action) {
+          switch (action) {
+            case SemanticAction.focus:
+              _triggerFocus.requestFocus();
+              return;
+            case SemanticAction.activate:
+              _isOpen ? _close() : _open();
+              return;
+            case SemanticAction.open:
+              _open();
+              return;
+            case SemanticAction.close:
+              _close();
+              return;
+            case _:
+              return;
+          }
+        },
+        child: GestureDetector(
+          onTap: () {
+            _triggerFocus.requestFocus();
+            _open();
+          },
+          child: Focus(
+            focusNode: _triggerFocus,
+            autofocus: widget.autofocus,
+            onKey: _onTriggerKey,
+            child: Text('$_currentLabel ${_isOpen ? '▴' : '▾'}', style: style),
+          ),
         ),
       ),
     );
@@ -191,6 +238,7 @@ class _SelectState<T> extends State<Select<T>> {
 class _SelectList<T> extends StatefulWidget {
   const _SelectList({
     required this.options,
+    required this.semanticLabel,
     required this.initialIndex,
     required this.appliedIndex,
     required this.selectionStyle,
@@ -201,6 +249,7 @@ class _SelectList<T> extends StatefulWidget {
   });
 
   final List<SelectOption<T>> options;
+  final String? semanticLabel;
   final int initialIndex;
   final int appliedIndex;
   final CellStyle selectionStyle;
@@ -285,6 +334,7 @@ class _SelectListState<T> extends State<_SelectList<T>> {
 
   @override
   Widget build(BuildContext context) {
+    Focus.maybeOf(context); // Rebuild list/item semantics when focus moves.
     var labelWidth = 0;
     for (final o in widget.options) {
       if (o.label.length > labelWidth) labelWidth = o.label.length;
@@ -292,38 +342,103 @@ class _SelectListState<T> extends State<_SelectList<T>> {
     // Leading marker (2 cells: check + space) plus the label.
     final width = labelWidth + 2;
 
-    return FocusScope(
-      modal: true,
-      suppressGlobals: true,
-      child: Focus(
-        focusNode: _focus,
-        autofocus: true,
-        onKey: _onKey,
-        child: Container(
-          border: BoxBorder(style: widget.borderStyle),
-          child: SizedBox(
-            width: width,
-            height: widget.options.length,
-            child: ListView.builder(
-              controller: _list,
-              itemCount: widget.options.length,
-              itemBuilder: (_, i, selected) {
-                final option = widget.options[i];
-                // A width-1 marker keeps every row aligned and within the
-                // computed panel width (a width-2 glyph would wrap).
-                final marker = i == widget.appliedIndex ? '• ' : '  ';
-                final text = '$marker${option.label}';
-                if (!option.enabled) {
-                  return Text(text, style: widget.mutedStyle);
-                }
-                return GestureDetector(
-                  onTap: () => _pick(i),
-                  child: Text(
-                    text,
-                    style: selected ? widget.selectionStyle : CellStyle.empty,
-                  ),
-                );
-              },
+    return Semantics(
+      role: SemanticRole.menu,
+      label: widget.semanticLabel,
+      focused: _focus.hasFocus,
+      expanded: true,
+      actions: const <SemanticAction>{
+        SemanticAction.focus,
+        SemanticAction.close,
+      },
+      state: SemanticState({
+        'menuDepth': 0,
+        'menuItemCount': widget.options.length,
+        'selectedKey': _list.selectedIndex,
+        'appliedIndex': widget.appliedIndex,
+      }),
+      onAction: (action) {
+        switch (action) {
+          case SemanticAction.focus:
+            _focus.requestFocus();
+            return;
+          case SemanticAction.close:
+            widget.onDismiss();
+            return;
+          case _:
+            return;
+        }
+      },
+      child: FocusScope(
+        modal: true,
+        suppressGlobals: true,
+        child: Focus(
+          focusNode: _focus,
+          autofocus: true,
+          onKey: _onKey,
+          child: Container(
+            border: BoxBorder(style: widget.borderStyle),
+            child: SizedBox(
+              width: width,
+              height: widget.options.length,
+              child: ListView.builder(
+                controller: _list,
+                itemCount: widget.options.length,
+                itemBuilder: (_, i, selected) {
+                  final option = widget.options[i];
+                  // A width-1 marker keeps every row aligned and within the
+                  // computed panel width (a width-2 glyph would wrap).
+                  final marker = i == widget.appliedIndex ? '• ' : '  ';
+                  final text = '$marker${option.label}';
+                  final row = option.enabled
+                      ? GestureDetector(
+                          onTap: () => _pick(i),
+                          child: Text(
+                            text,
+                            style: selected
+                                ? widget.selectionStyle
+                                : CellStyle.empty,
+                          ),
+                        )
+                      : Text(text, style: widget.mutedStyle);
+                  return Semantics(
+                    role: SemanticRole.menuItem,
+                    label: option.label,
+                    value: option.value,
+                    enabled: option.enabled,
+                    focused: _focus.hasFocus && selected,
+                    selected: selected,
+                    checked: i == widget.appliedIndex,
+                    actions: option.enabled
+                        ? const <SemanticAction>{
+                            SemanticAction.select,
+                            SemanticAction.activate,
+                          }
+                        : const <SemanticAction>{},
+                    state: SemanticState({
+                      'menuDepth': 0,
+                      'menuItemIndex': i,
+                      'menuItemPosition': i + 1,
+                      'menuItemCount': widget.options.length,
+                      'entryKind': 'option',
+                      'applied': i == widget.appliedIndex,
+                    }),
+                    onAction: (action) {
+                      if (!option.enabled) return;
+                      switch (action) {
+                        case SemanticAction.select:
+                        case SemanticAction.activate:
+                          _list.selectedIndex = i;
+                          _pick(i);
+                          return;
+                        case _:
+                          return;
+                      }
+                    },
+                    child: row,
+                  );
+                },
+              ),
             ),
           ),
         ),

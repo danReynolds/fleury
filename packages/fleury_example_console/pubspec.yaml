@@ -1,0 +1,17 @@
+name: fleury_example_console
+description: Internal proof app for Fleury's reactive TUI foundations.
+version: 0.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  fleury:
+    path: ../fleury
+  fleury_widgets:
+    path: ../fleury_widgets
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.26.3

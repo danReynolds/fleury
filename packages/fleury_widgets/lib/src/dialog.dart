@@ -60,11 +60,22 @@ class Dialog extends StatelessWidget {
               child,
             ],
           );
-    return Container(
-      width: width,
-      border: border ?? BoxBorder(style: theme.borderStyle),
-      padding: padding,
-      child: body,
+    return Semantics(
+      role: SemanticRole.dialog,
+      label: t,
+      actions: const <SemanticAction>{SemanticAction.dismiss},
+      onAction: (action) {
+        if (action == SemanticAction.dismiss) {
+          Navigator.maybeOf(context)?.pop();
+        }
+      },
+      state: SemanticState({'hasTitle': t != null}),
+      child: Container(
+        width: width,
+        border: border ?? BoxBorder(style: theme.borderStyle),
+        padding: padding,
+        child: body,
+      ),
     );
   }
 }

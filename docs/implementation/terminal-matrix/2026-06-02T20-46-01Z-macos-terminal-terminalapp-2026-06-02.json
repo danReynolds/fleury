@@ -1,0 +1,242 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryTerminalMatrixEntry",
+  "label": "macos-terminal-terminalapp-2026-06-02",
+  "capturedAt": "2026-06-02T20:46:05.123848Z",
+  "command": [
+    "dart",
+    "run",
+    "bin/fleury.dart",
+    "diagnose",
+    "--json-output=<matrix-diagnosis-json>",
+    "--probe",
+    "--probe-timeout=150"
+  ],
+  "summary": {
+    "platform": {
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "dartVersion": "3.11.5 (stable) (Wed Apr 15 00:36:32 2026 -0700) on \"macos_arm64\""
+    },
+    "terminal": {
+      "term": "xterm-256color",
+      "termProgram": "Apple_Terminal",
+      "termProgramVersion": "466",
+      "columns": 80,
+      "rows": 24,
+      "isInteractive": true,
+      "stdinIsTerminal": true,
+      "stdoutIsTerminal": true,
+      "tmux": false,
+      "ssh": false
+    },
+    "capabilities": {
+      "colorMode": "none",
+      "imageProtocol": "halfBlock",
+      "alternateScreen": true,
+      "hideCursor": true,
+      "tmuxPassthrough": false
+    },
+    "diagnostics": {
+      "fallbackCount": 2,
+      "warningCount": 0,
+      "unsupportedFeatureCount": 2,
+      "fallbackCodes": [
+        "color_monochrome_fallback",
+        "image_half_block_fallback"
+      ],
+      "warningCodes": [],
+      "unsupportedFeatures": [
+        "ansiColor",
+        "nativeImages"
+      ]
+    },
+    "activeProbes": {
+      "skippedReason": null,
+      "confirmedFeatures": [],
+      "summary": {
+        "confirmed": 1,
+        "unsupported": 2,
+        "skipped": 0,
+        "timeout": 0,
+        "error": 0
+      },
+      "probeStatuses": {
+        "primaryDeviceAttributes": "confirmed",
+        "kittyKeyboardStatus": "unsupported",
+        "kittyGraphicsQuery": "unsupported"
+      }
+    },
+    "compatibility": {
+      "skippedReason": null,
+      "summary": {
+        "confirmed": 0,
+        "activeConfirmed": 0,
+        "passiveUnverified": 0,
+        "unsupported": 2,
+        "inconclusive": 0
+      },
+      "findings": [
+        {
+          "feature": "kittyKeyboard",
+          "status": "unsupported",
+          "passiveSupported": false,
+          "activeStatus": "unsupported"
+        },
+        {
+          "feature": "imageKitty",
+          "status": "unsupported",
+          "passiveSupported": false,
+          "activeStatus": "unsupported"
+        }
+      ]
+    }
+  },
+  "review": {
+    "status": "readyForReview",
+    "issues": [],
+    "notes": [
+      "Captured-from-Apple-Terminal.app-via-osascript-from-Codex"
+    ]
+  },
+  "diagnosis": {
+    "schemaVersion": 1,
+    "terminal": {
+      "term": "xterm-256color",
+      "termProgram": "Apple_Terminal",
+      "termProgramVersion": "466",
+      "colorterm": "truecolor",
+      "lcTerminal": null,
+      "lcTerminalVersion": null,
+      "kittyWindowId": null,
+      "columns": 80,
+      "rows": 24,
+      "isInteractive": true,
+      "stdinIsTerminal": true,
+      "stdoutIsTerminal": true
+    },
+    "environment": {
+      "ssh": false,
+      "tmux": false,
+      "noColor": true,
+      "clicolorForce": false,
+      "ci": false
+    },
+    "platform": {
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "dartVersion": "3.11.5 (stable) (Wed Apr 15 00:36:32 2026 -0700) on \"macos_arm64\""
+    },
+    "capabilities": {
+      "colorMode": "none",
+      "imageProtocol": "halfBlock",
+      "alternateScreen": true,
+      "hideCursor": true,
+      "bracketedPaste": "enabledByDefault",
+      "kittyKeyboard": "attempted",
+      "mouse": "availableOptIn",
+      "osc52Clipboard": "policyGated",
+      "osc8Hyperlinks": "policyGated",
+      "tmuxPassthrough": false
+    },
+    "fallbacks": [
+      {
+        "severity": "info",
+        "code": "color_monochrome_fallback",
+        "message": "Styled color output will degrade to monochrome text.",
+        "details": {
+          "noColor": true
+        }
+      },
+      {
+        "severity": "info",
+        "code": "image_half_block_fallback",
+        "message": "Native image output is unavailable; images use cell art."
+      }
+    ],
+    "warnings": [],
+    "unsupportedFeatures": [
+      "ansiColor",
+      "nativeImages"
+    ],
+    "activeProbes": {
+      "schemaVersion": 1,
+      "confirmedFeatures": [],
+      "summary": {
+        "confirmed": 1,
+        "unsupported": 2,
+        "skipped": 0,
+        "timeout": 0,
+        "error": 0
+      },
+      "probes": [
+        {
+          "id": "primaryDeviceAttributes",
+          "label": "Primary device attributes",
+          "status": "confirmed",
+          "elapsedMs": 164,
+          "response": "\\x1B[?1;2c",
+          "detail": "Primary device attributes reply received.",
+          "details": {
+            "parameters": [
+              1,
+              2
+            ]
+          }
+        },
+        {
+          "id": "kittyKeyboardStatus",
+          "label": "Kitty keyboard status",
+          "feature": "kittyKeyboard",
+          "status": "unsupported",
+          "elapsedMs": 152,
+          "response": "\\x1B[?1;2c",
+          "detail": "Terminal answered DA but not the Kitty keyboard status query."
+        },
+        {
+          "id": "kittyGraphicsQuery",
+          "label": "Kitty graphics query",
+          "feature": "imageKitty",
+          "status": "unsupported",
+          "elapsedMs": 155,
+          "response": "\\x1B[?1;2c",
+          "detail": "Terminal answered DA but not the Kitty graphics query."
+        }
+      ]
+    },
+    "compatibility": {
+      "schemaVersion": 1,
+      "summary": {
+        "confirmed": 0,
+        "activeConfirmed": 0,
+        "passiveUnverified": 0,
+        "unsupported": 2,
+        "inconclusive": 0
+      },
+      "confirmedAvailableFeatures": [],
+      "activeConfirmedFeatures": [],
+      "findings": [
+        {
+          "feature": "kittyKeyboard",
+          "label": "Kitty keyboard protocol",
+          "passiveSupported": false,
+          "passiveEvidence": "capabilities.kittyKeyboard=attempted",
+          "status": "unsupported",
+          "probeId": "kittyKeyboardStatus",
+          "activeStatus": "unsupported",
+          "detail": "Terminal answered DA but not the Kitty keyboard status query."
+        },
+        {
+          "feature": "imageKitty",
+          "label": "Kitty graphics protocol",
+          "passiveSupported": false,
+          "passiveEvidence": "capabilities.imageProtocol=halfBlock",
+          "status": "unsupported",
+          "probeId": "kittyGraphicsQuery",
+          "activeStatus": "unsupported",
+          "detail": "Terminal answered DA but not the Kitty graphics query."
+        }
+      ]
+    }
+  }
+}

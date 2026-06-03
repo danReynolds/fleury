@@ -16,11 +16,13 @@ class TabController extends ChangeNotifier {
 
   int _index;
   int _length = 0;
+  bool _disposed = false;
 
   int get index => _index;
   int get length => _length;
 
   set index(int value) {
+    _checkNotDisposed();
     if (_length == 0) {
       _index = value < 0 ? 0 : value;
       return;
@@ -33,14 +35,29 @@ class TabController extends ChangeNotifier {
 
   /// Advances to the next tab, wrapping at the end.
   void next() {
+    _checkNotDisposed();
     if (_length == 0) return;
     index = (_index + 1) % _length;
   }
 
   /// Moves to the previous tab, wrapping at the start.
   void previous() {
+    _checkNotDisposed();
     if (_length == 0) return;
     index = (_index - 1) % _length;
+  }
+
+  void _checkNotDisposed() {
+    if (_disposed) {
+      throw StateError('TabController has been disposed.');
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    super.dispose();
   }
 }
 
@@ -145,6 +162,7 @@ class _TabsState extends State<Tabs> {
 
   @override
   Widget build(BuildContext context) {
+    Focus.maybeOf(context); // Rebuild tab semantics when focus moves.
     _controller._length = widget.tabs.length;
     if (widget.tabs.isEmpty) return const EmptyBox();
     final active = _controller.index.clamp(0, widget.tabs.length - 1);
@@ -161,9 +179,41 @@ class _TabsState extends State<Tabs> {
           Row(
             children: [
               for (var i = 0; i < widget.tabs.length; i++)
-                Text(
-                  ' ${widget.tabs[i].label} ',
-                  style: i == active ? activeStyle : inactiveStyle,
+                Semantics(
+                  role: SemanticRole.tab,
+                  label: widget.tabs[i].label,
+                  focused: _focusNode.hasFocus && i == active,
+                  selected: i == active,
+                  actions: const <SemanticAction>{
+                    SemanticAction.focus,
+                    SemanticAction.select,
+                    SemanticAction.activate,
+                  },
+                  state: SemanticState({
+                    'tabIndex': i,
+                    'tabPosition': i + 1,
+                    'tabCount': widget.tabs.length,
+                    'active': i == active,
+                    if (i < 9) 'shortcut': 'Alt+${i + 1}',
+                  }),
+                  onAction: (action) {
+                    switch (action) {
+                      case SemanticAction.focus:
+                        _focusNode.requestFocus();
+                        return;
+                      case SemanticAction.select:
+                      case SemanticAction.activate:
+                        _controller.index = i;
+                        _focusNode.requestFocus();
+                        return;
+                      case _:
+                        return;
+                    }
+                  },
+                  child: Text(
+                    ' ${widget.tabs[i].label} ',
+                    style: i == active ? activeStyle : inactiveStyle,
+                  ),
                 ),
             ],
           ),

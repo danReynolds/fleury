@@ -1,0 +1,159 @@
+{
+  "artifacts": [
+    {
+      "kind": "source",
+      "path": "peer-fixtures/ratatui/sb3_datatable/src/lib.rs"
+    },
+    {
+      "kind": "benchmark",
+      "path": "peer-fixtures/ratatui/sb3_datatable/src/main.rs"
+    },
+    {
+      "kind": "test",
+      "path": "peer-fixtures/ratatui/sb3_datatable/tests/sb3_datatable_test.rs"
+    }
+  ],
+  "capturedAt": "2026-06-02T13:12:54.435179Z",
+  "correctness": [
+    {
+      "evidence": "Fixture-owned visible-row slice stayed within the render-buffer height.",
+      "gate": "visible window stays bounded",
+      "pass": true
+    },
+    {
+      "evidence": "Jump-to-end selected RUN-099999 and rendered it in the Ratatui buffer.",
+      "gate": "selection is correct after jump",
+      "pass": true
+    },
+    {
+      "evidence": "Selected row TSV matched generated source row and contained no escape bytes.",
+      "gate": "copy/export is sanitized and exact",
+      "pass": true
+    }
+  ],
+  "environment": {
+    "machine": "macbookpro.lan",
+    "operatingSystem": "macos",
+    "operatingSystemVersion": "Darwin macbookpro.lan 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:09:40 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T6000 arm64",
+    "runtime": "rustc 1.93.1 (01f6ddf75 2026-02-11) (Homebrew) / Ratatui 0.30.0",
+    "terminalMode": "ratatui-buffer-render-harness",
+    "terminalSize": {
+      "columns": 120,
+      "rows": 32
+    }
+  },
+  "ergonomics": {
+    "appFile": "src/lib.rs",
+    "appOwnedCopyExport": true,
+    "appOwnedSelectionState": true,
+    "appOwnedVisibleRowSlicing": true,
+    "benchmarkFile": "src/main.rs",
+    "benchmarkLineOfCodeCount": 458,
+    "lineOfCodeCount": 232,
+    "peerOwnedTableWidget": true,
+    "semanticGraphAvailable": false,
+    "testFile": "tests/sb3_datatable_test.rs",
+    "testLineOfCodeCount": 31,
+    "testQueryViaAppStateAndBuffer": true
+  },
+  "fixture": {
+    "command": [
+      "cargo",
+      "run",
+      "--release",
+      "--",
+      "--warmup=2",
+      "--iterations=20",
+      "--rows=100000",
+      "--json"
+    ],
+    "measuredIterations": 20,
+    "warmupIterations": 2,
+    "workingDirectory": "peer-fixtures/ratatui/sb3_datatable"
+  },
+  "kind": "fleuryPeerBenchmarkRun",
+  "metrics": {
+    "arrowMoveUs": {
+      "max": 732,
+      "median": 228,
+      "min": 191,
+      "p95": 732,
+      "p99": 732,
+      "samples": 20
+    },
+    "benchmarkLineOfCodeCount": 458,
+    "copySelectedRowUs": {
+      "max": 781,
+      "median": 5,
+      "min": 3,
+      "p95": 781,
+      "p99": 781,
+      "samples": 20
+    },
+    "finalSelectedRow": 99999,
+    "finalSelectedRowId": "RUN-099999",
+    "firstRenderUs": {
+      "max": 1220,
+      "median": 315,
+      "min": 214,
+      "p95": 1220,
+      "p99": 1220,
+      "samples": 20
+    },
+    "jumpToEndUs": {
+      "max": 2536,
+      "median": 213,
+      "min": 192,
+      "p95": 2536,
+      "p99": 2536,
+      "samples": 20
+    },
+    "lineOfCodeCount": 232,
+    "mountUs": {
+      "max": 94318,
+      "median": 46428,
+      "min": 38854,
+      "p95": 94318,
+      "p99": 94318,
+      "samples": 20
+    },
+    "observedRowCount": 100000,
+    "pageMoveUs": {
+      "max": 809,
+      "median": 281,
+      "min": 187,
+      "p95": 809,
+      "p99": 809,
+      "samples": 20
+    },
+    "rowCount": 100000,
+    "rssDeltaBytes": 36192256,
+    "semanticOrTestQueryUs": {
+      "max": 141,
+      "median": 24,
+      "min": 23,
+      "p95": 141,
+      "p99": 141,
+      "samples": 20
+    },
+    "testLineOfCodeCount": 31,
+    "visibleRangeEnd": 100000,
+    "visibleRangeStart": 99969,
+    "visibleWindowRowEstimate": 31
+  },
+  "notes": [
+    "This is a Ratatui buffer-render peer fixture, not a real-terminal run.",
+    "Ratatui 0.30.0 supplies Table rendering, TableState selection highlighting, and Buffer rendering.",
+    "The fixture owns the retained data model, visible-row slicing, navigation policy, selected-row copy/export, and state query because Ratatui is an immediate rendering library rather than a retained app framework.",
+    "Timing is local-machine evidence and should not be used as a public superiority claim without repeated peer runs."
+  ],
+  "peerId": "ratatui",
+  "runId": "ratatui-sb3-datatable-2026-06-02T13-12-54Z",
+  "scenarioId": "SB.3",
+  "schemaVersion": 1,
+  "source": {
+    "name": "Ratatui",
+    "url": "https://crates.io/crates/ratatui",
+    "version": "0.30.0"
+  }
+}

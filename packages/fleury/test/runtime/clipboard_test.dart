@@ -5,6 +5,7 @@
 import 'dart:convert';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -18,7 +19,7 @@ void main() {
       final clip = SystemClipboard(
         environment: const <String, String>{},
         stdoutWrite: (_) {},
-        runTool: (_, _, _) async => true,
+        runTool: (executable, args, text) async => true,
       );
       // No SSH env, no display → on Linux: no tool, falls to OSC 52.
       // The test still verifies the in-process register is populated.
@@ -35,7 +36,7 @@ void main() {
           'DISPLAY': ':0',
         },
         stdoutWrite: (s) => oscEmitted = s,
-        runTool: (_, _, _) async {
+        runTool: (executable, args, text) async {
           toolInvocations++;
           return true;
         },
@@ -54,7 +55,7 @@ void main() {
           'DISPLAY': ':0',
         },
         stdoutWrite: (_) {},
-        runTool: (_, _, _) async {
+        runTool: (executable, args, text) async {
           toolInvocations++;
           return true;
         },
@@ -70,7 +71,7 @@ void main() {
         final clip = SystemClipboard(
           environment: const <String, String>{'DISPLAY': ':0'},
           stdoutWrite: (s) => oscEmitted = s,
-          runTool: (_, _, _) async => false,
+          runTool: (executable, args, text) async => false,
         );
         final result = await clip.write('hello');
         expect(result, ClipboardWriteResult.osc52);
@@ -85,7 +86,7 @@ void main() {
       final clip = SystemClipboard(
         environment: const <String, String>{'SSH_TTY': '/dev/pts/1'},
         stdoutWrite: (s) => oscEmitted = s,
-        runTool: (_, _, _) async => true,
+        runTool: (executable, args, text) async => true,
       );
       const payload = 'hello world';
       await clip.write(payload);
@@ -98,12 +99,38 @@ void main() {
       expect(utf8.decode(base64.decode(encoded)), payload);
     });
 
+    test('writeWithReport exposes OSC 52 capability state', () async {
+      String? oscEmitted;
+      final clip = SystemClipboard(
+        environment: const <String, String>{'SSH_TTY': '/dev/pts/1'},
+        stdoutWrite: (s) => oscEmitted = s,
+        runTool: (executable, args, text) async => true,
+      );
+
+      final report = await clip.writeWithReport('hello');
+      final state = report.toSemanticState();
+
+      expect(report.result, ClipboardWriteResult.osc52);
+      expect(report.resolution.feature, TerminalFeature.osc52Clipboard);
+      expect(report.resolution.state, CapabilityResolutionState.available);
+      expect(report.overSsh, isTrue);
+      expect(report.osc52Attempted, isTrue);
+      expect(report.osc52Emitted, isTrue);
+      expect(oscEmitted, isNotNull);
+      expect(state.terminalCapability, 'osc52Clipboard');
+      expect(state.capabilityRequirement, 'preferred');
+      expect(state.capabilityResolution, 'available');
+      expect(state.clipboardTransport, 'osc52');
+      expect(state.clipboardPolicy, 'standard');
+      expect(state.values['clipboardInProcessUpdated'], isTrue);
+    });
+
     test('refuses to emit a payload larger than the safe cap', () async {
       String? oscEmitted;
       final clip = SystemClipboard(
         environment: const <String, String>{'SSH_TTY': '/dev/pts/1'},
         stdoutWrite: (s) => oscEmitted = s,
-        runTool: (_, _, _) async => true,
+        runTool: (executable, args, text) async => true,
       );
       // > 100KB after base64. A 100KB raw string base64s to ~133KB.
       final huge = 'a' * 100000;
@@ -113,6 +140,33 @@ void main() {
       // In-process register still populated.
       expect(clip.readInProcess(), huge);
     });
+
+    test('policy can force in-process-only writes', () async {
+      String? oscEmitted;
+      final clip = SystemClipboard(
+        environment: const <String, String>{'SSH_TTY': '/dev/pts/1'},
+        stdoutWrite: (s) => oscEmitted = s,
+        runTool: (executable, args, text) async => true,
+      );
+
+      final report = await clip.writeWithReport(
+        'local only',
+        policy: ClipboardWritePolicy.inProcessOnly,
+      );
+
+      expect(report.result, ClipboardWriteResult.inProcessOnly);
+      expect(report.resolution.feature, TerminalFeature.osc52Clipboard);
+      expect(
+        report.resolution.state,
+        CapabilityResolutionState.disabledByPolicy,
+      );
+      expect(report.resolution.fallbackLabel, 'in-process register');
+      expect(report.osc52Attempted, isFalse);
+      expect(report.osc52Emitted, isFalse);
+      expect(oscEmitted, isNull);
+      expect(clip.readInProcess(), 'local only');
+      expect(report.toSemanticState().clipboardPolicy, 'inProcessOnly');
+    });
   });
 
   group('SystemClipboard — in-process register', () {
@@ -120,7 +174,7 @@ void main() {
       final clip = SystemClipboard(
         environment: const <String, String>{'SSH_TTY': '/dev/pts/1'},
         stdoutWrite: (_) {},
-        runTool: (_, _, _) async => true,
+        runTool: (executable, args, text) async => true,
       );
       expect(clip.readInProcess(), isNull);
       await clip.write('first');
@@ -137,6 +191,17 @@ void main() {
       expect(result, ClipboardWriteResult.inProcessOnly);
       expect(clip.lastWritten, 'hello');
       expect(clip.readInProcess(), 'hello');
+    });
+
+    test('writeWithReport marks the in-process fallback', () async {
+      final clip = TestClipboard();
+      final report = await clip.writeWithReport('hello');
+
+      expect(report.result, ClipboardWriteResult.inProcessOnly);
+      expect(report.resolution.feature, TerminalFeature.clipboardWrite);
+      expect(report.resolution.state, CapabilityResolutionState.degraded);
+      expect(report.resolution.fallbackLabel, 'in-process register');
+      expect(report.toSemanticState().clipboardTransport, 'inProcessOnly');
     });
 
     test(

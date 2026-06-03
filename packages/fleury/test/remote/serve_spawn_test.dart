@@ -160,6 +160,94 @@ void main() {
       },
     );
   }, tags: ['integration']);
+
+  group('fleury serve --spawn with a real runTui app', () {
+    late Directory tempDir;
+    late Process serveProcess;
+    late int port;
+    late String pkgRoot;
+    final stderrLines = <String>[];
+    late StreamSubscription<String> stderrSub;
+
+    setUp(() async {
+      tempDir = Directory.systemTemp.createTempSync('fleury_spawn_run_tui_');
+      port = 6000 + Random.secure().nextInt(100);
+      pkgRoot = Directory.current.path;
+      stderrLines.clear();
+
+      serveProcess = await Process.start(Platform.resolvedExecutable, [
+        'run',
+        '$pkgRoot/bin/fleury.dart',
+        'serve',
+        '--port=$port',
+        '--spawn',
+        Platform.resolvedExecutable,
+        'run',
+        '$pkgRoot/example/counter_quickstart.dart',
+      ], workingDirectory: tempDir.path);
+
+      final ready = Completer<void>();
+      stderrSub = serveProcess.stderr
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen((line) {
+            stderrLines.add(line);
+            if (line.contains('spawn mode') && !ready.isCompleted) {
+              ready.complete();
+            }
+          });
+      await ready.future.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw StateError(
+          'serve did not start within 10s. stderr:\n${stderrLines.join('\n')}',
+        ),
+      );
+    });
+
+    tearDown(() async {
+      await stderrSub.cancel();
+      serveProcess.kill(ProcessSignal.sigint);
+      await serveProcess.exitCode.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          serveProcess.kill(ProcessSignal.sigkill);
+          return -9;
+        },
+      );
+      tempDir.deleteSync(recursive: true);
+    });
+
+    test('preserves browser INIT sent before the app connects', () async {
+      final ws = await WebSocket.connect('ws://127.0.0.1:$port/ws');
+      final inbound = BytesBuilder();
+      final wsSub = ws.listen((data) {
+        if (data is List<int>) inbound.add(data);
+      });
+
+      // Real browsers send INIT immediately on WebSocket open. The server must
+      // preserve that frame while the spawned runTui process starts and
+      // connects back to the per-session Unix socket.
+      ws.add(
+        encodeFrame(
+          const InitFrame(
+            size: CellSize(80, 24),
+            colorMode: ColorMode.truecolor,
+            imageProtocol: ImageProtocol.halfBlock,
+            tmuxPassthrough: false,
+          ),
+        ),
+      );
+
+      await _waitFor(
+        () => _hasOutputFrameText(inbound.toBytes(), 'count: 0'),
+        timeout: const Duration(seconds: 20),
+        what: 'counter first paint over WS',
+      );
+
+      await wsSub.cancel();
+      await ws.close();
+    });
+  }, tags: ['integration']);
 }
 
 /// Polls [check] every 50ms until it returns true or [timeout] elapses.
@@ -185,6 +273,17 @@ bool _hasHelloFrame(Uint8List bytes, String tag) {
   for (final frame in decoder.drain()) {
     if (frame is! OutputFrame) continue;
     if (utf8.decode(frame.bytes, allowMalformed: true).contains(needle)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool _hasOutputFrameText(Uint8List bytes, String text) {
+  final decoder = FrameDecoder()..feed(bytes);
+  for (final frame in decoder.drain()) {
+    if (frame is! OutputFrame) continue;
+    if (utf8.decode(frame.bytes, allowMalformed: true).contains(text)) {
       return true;
     }
   }

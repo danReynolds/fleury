@@ -158,6 +158,9 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
     }
   }
 
+  @override
+  KeyEventResult onPaste(String text) => KeyEventResult.ignored;
+
   String _format(num v) {
     final f = widget.formatter;
     if (f != null) return f(v);
@@ -175,36 +178,73 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
     final focusStyle = focused ? theme.focusedStyle : CellStyle.empty;
     final dim = const CellStyle(dim: true);
 
-    return Focus(
-      focusNode: _node,
-      autofocus: widget.autofocus,
-      onKey: _onKey,
-      child: GestureDetector(
-        onTap: () => _node.requestFocus(),
-        child: Row(
-          children: [
-            if (widget.label != null) ...[
-              Text(widget.label!, style: muted),
-              const Text(' '),
+    return Semantics(
+      role: SemanticRole.spinButton,
+      label: widget.label,
+      value: widget.value,
+      focused: focused,
+      actions: {
+        SemanticAction.focus,
+        if (canInc) SemanticAction.increment,
+        if (canDec) SemanticAction.decrement,
+      },
+      state: SemanticState({
+        'numericValue': widget.value,
+        if (widget.min != null) 'min': widget.min,
+        if (widget.max != null) 'max': widget.max,
+        'step': widget.step,
+        'largeStep': widget.largeStep,
+        'canIncrement': canInc,
+        'canDecrement': canDec,
+      }),
+      onAction: (action) {
+        switch (action) {
+          case SemanticAction.focus:
+            _node.requestFocus();
+            return;
+          case SemanticAction.increment:
+            _node.requestFocus();
+            if (canInc) _nudge(widget.step);
+            return;
+          case SemanticAction.decrement:
+            _node.requestFocus();
+            if (canDec) _nudge(-widget.step);
+            return;
+          case _:
+            return;
+        }
+      },
+      child: Focus(
+        focusNode: _node,
+        autofocus: widget.autofocus,
+        onKey: _onKey,
+        child: GestureDetector(
+          onTap: () => _node.requestFocus(),
+          child: Row(
+            children: [
+              if (widget.label != null) ...[
+                Text(widget.label!, style: muted),
+                const Text(' '),
+              ],
+              Text('[', style: focusStyle),
+              GestureDetector(
+                onTap: () {
+                  _node.requestFocus();
+                  _nudge(-widget.step);
+                },
+                child: Text(' − ', style: canDec ? focusStyle : dim),
+              ),
+              Text(_format(widget.value), style: focusStyle),
+              GestureDetector(
+                onTap: () {
+                  _node.requestFocus();
+                  _nudge(widget.step);
+                },
+                child: Text(' + ', style: canInc ? focusStyle : dim),
+              ),
+              Text(']', style: focusStyle),
             ],
-            Text('[', style: focusStyle),
-            GestureDetector(
-              onTap: () {
-                _node.requestFocus();
-                _nudge(-widget.step);
-              },
-              child: Text(' − ', style: canDec ? focusStyle : dim),
-            ),
-            Text(_format(widget.value), style: focusStyle),
-            GestureDetector(
-              onTap: () {
-                _node.requestFocus();
-                _nudge(widget.step);
-              },
-              child: Text(' + ', style: canInc ? focusStyle : dim),
-            ),
-            Text(']', style: focusStyle),
-          ],
+          ),
         ),
       ),
     );

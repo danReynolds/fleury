@@ -162,4 +162,136 @@ void main() {
     }
     fail('did not find the toast text');
   });
+
+  group('semantics', () {
+    testWidgets('exposes toasts as notification nodes with safe state', (
+      tester,
+    ) {
+      late BuildContext ctx;
+      tester.pumpWidget(
+        Toaster(
+          duration: const Duration(seconds: 4),
+          child: _Capture((c) => ctx = c),
+        ),
+      );
+
+      Toaster.show(ctx, 'Saved', severity: ToastSeverity.success);
+      tester.pump();
+
+      final node = tester.semantics().single(
+        role: SemanticRole.notification,
+        label: 'Saved',
+      );
+
+      expect(node.hint, 'Transient notification');
+      expect(node.actions, contains(SemanticAction.dismiss));
+      expect(node.actions, isNot(contains(SemanticAction.activate)));
+      expect(node.state.severity, 'success');
+      expect(node.state['notificationIndex'], 1);
+      expect(node.state['notificationCount'], 1);
+      expect(node.state['autoDismissMs'], 4000);
+    });
+
+    testWidgets('semantic dismiss removes the toast', (tester) async {
+      late BuildContext ctx;
+      tester.pumpWidget(Toaster(child: _Capture((c) => ctx = c)));
+
+      Toaster.show(ctx, 'Saved');
+      tester.pump();
+      expect(
+        tester.semantics().where(role: SemanticRole.notification),
+        isNotEmpty,
+      );
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.dismiss,
+        role: SemanticRole.notification,
+        label: 'Saved',
+      );
+      expect(result.completed, isTrue);
+      tester.pump();
+
+      expect(
+        tester.semantics().where(role: SemanticRole.notification),
+        isEmpty,
+      );
+      expect(_screen(tester).contains('Saved'), isFalse);
+    });
+
+    testWidgets('semantic activate runs the toast action and dismisses it', (
+      tester,
+    ) async {
+      late BuildContext ctx;
+      var undone = 0;
+      tester.pumpWidget(
+        Toaster(child: Focus(autofocus: true, child: _Capture((c) => ctx = c))),
+      );
+
+      Toaster.show(
+        ctx,
+        'Deleted',
+        action: ToastAction(
+          label: 'Undo',
+          key: KeyChord.alt.u,
+          onPressed: () => undone++,
+        ),
+      );
+      tester.pump();
+
+      final node = tester.semantics().single(
+        role: SemanticRole.notification,
+        label: 'Deleted',
+      );
+      expect(node.actions, contains(SemanticAction.activate));
+      expect(node.actions, contains(SemanticAction.dismiss));
+      expect(node.state['notificationActionLabel'], 'Undo');
+      expect(node.state['notificationActionKey'], 'Alt+U');
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        node: node,
+      );
+      expect(result.completed, isTrue);
+      expect(undone, 1);
+      tester.pump();
+      expect(
+        tester.semantics().where(role: SemanticRole.notification),
+        isEmpty,
+      );
+    });
+
+    testWidgets('accessibility snapshot summarizes notification actions', (
+      tester,
+    ) {
+      late BuildContext ctx;
+      tester.pumpWidget(Toaster(child: _Capture((c) => ctx = c)));
+      Toaster.show(
+        ctx,
+        'Deleted',
+        severity: ToastSeverity.warning,
+        action: ToastAction(
+          label: 'Undo',
+          key: KeyChord.alt.u,
+          onPressed: () {},
+        ),
+      );
+      tester.pump();
+
+      final node = tester.accessibilitySnapshot().single(
+        role: SemanticRole.notification,
+        label: 'Deleted',
+      );
+
+      expect(node.roleLabel, 'notification');
+      expect(node.states, contains('severity warning'));
+      expect(
+        node.states,
+        contains(
+          'notification 1 of 1, action Undo, key Alt+U, auto dismiss 3000ms',
+        ),
+      );
+      expect(node.actions, contains(SemanticAction.activate));
+      expect(node.actions, contains(SemanticAction.dismiss));
+    });
+  });
 }

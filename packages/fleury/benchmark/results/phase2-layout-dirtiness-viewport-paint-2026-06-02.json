@@ -1,0 +1,269 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-02T15:53:51.507926Z",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "scenarioId": "SB.12",
+      "scenarioName": "Layout Dirtiness Cache",
+      "fleuryVersion": "0.0.0",
+      "gitSha": "unknown",
+      "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+      "runMode": "test",
+      "os": "macos",
+      "cpu": 10,
+      "terminalProfile": {
+        "colorMode": "truecolor",
+        "imageProtocol": "halfBlock",
+        "tmuxPassthrough": false
+      },
+      "terminalSize": {
+        "columns": 80,
+        "rows": 24
+      },
+      "seed": 1,
+      "warmupIterations": 2,
+      "measuredIterations": 20,
+      "startedAt": "2026-06-02T15:53:42.518802Z",
+      "durationMs": 8931.776,
+      "metrics": {
+        "journeyUs": {
+          "min": 371708,
+          "median": 425836,
+          "p95": 547759,
+          "p99": 572002,
+          "max": 578063,
+          "samples": 20
+        },
+        "firstFrameUs": {
+          "min": 162,
+          "median": 264,
+          "p95": 5403,
+          "p99": 5495,
+          "max": 5518,
+          "samples": 20
+        },
+        "commandToFrameUs": {
+          "min": 261,
+          "median": 711,
+          "p95": 7014,
+          "p99": 8838,
+          "max": 9294,
+          "samples": 20
+        },
+        "idleFrameUs": {
+          "min": 90,
+          "median": 95,
+          "p95": 111,
+          "p99": 119,
+          "max": 121,
+          "samples": 20
+        },
+        "paintOnlyFrameUs": {
+          "min": 126,
+          "median": 198,
+          "p95": 6692,
+          "p99": 9253,
+          "max": 9893,
+          "samples": 20
+        },
+        "textPaintOnlyFrameUs": {
+          "min": 119,
+          "median": 170,
+          "p95": 842,
+          "p99": 962,
+          "max": 992,
+          "samples": 20
+        },
+        "childListNoOpFrameUs": {
+          "min": 199,
+          "median": 269,
+          "p95": 1425,
+          "p99": 1807,
+          "max": 1902,
+          "samples": 20
+        },
+        "viewportFirstFrameUs": {
+          "min": 392,
+          "median": 627,
+          "p95": 4773,
+          "p99": 6718,
+          "max": 7204,
+          "samples": 20
+        },
+        "viewportScrollFrameUs": {
+          "min": 175,
+          "median": 238,
+          "p95": 1245,
+          "p99": 2019,
+          "max": 2213,
+          "samples": 20
+        },
+        "viewportFirstPaintedRows": {
+          "min": 24,
+          "median": 24,
+          "p95": 24,
+          "p99": 24,
+          "max": 24,
+          "samples": 20
+        },
+        "viewportScrolledPaintedRows": {
+          "min": 24,
+          "median": 24,
+          "p95": 24,
+          "p99": 24,
+          "max": 24,
+          "samples": 20
+        },
+        "updateLayoutPerformed": {
+          "min": 7,
+          "median": 7,
+          "p95": 7,
+          "p99": 7,
+          "max": 7,
+          "samples": 20
+        },
+        "updateLayoutSkipped": {
+          "min": 3,
+          "median": 3,
+          "p95": 3,
+          "p99": 3,
+          "max": 3,
+          "samples": 20
+        },
+        "idleLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 20
+        },
+        "idleLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 20
+        },
+        "paintOnlyLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 20
+        },
+        "paintOnlyLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 20
+        },
+        "textPaintOnlyLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 20
+        },
+        "textPaintOnlyLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 20
+        },
+        "childListNoOpLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 20
+        },
+        "childListNoOpLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 20
+        },
+        "semanticQueryUs": {
+          "min": 228,
+          "median": 450,
+          "p95": 10983,
+          "p99": 11859,
+          "max": 12078,
+          "samples": 20
+        },
+        "lastFirstFrameLayout": {
+          "performedCount": 43,
+          "skippedCount": 0,
+          "totalCount": 43,
+          "skippedRatio": 0.0
+        },
+        "lastUpdateFrameLayout": {
+          "performedCount": 7,
+          "skippedCount": 3,
+          "totalCount": 10,
+          "skippedRatio": 0.3
+        },
+        "lastIdleFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "lastPaintOnlyFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "lastTextPaintOnlyFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "lastChildListNoOpFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "staticRows": 32,
+        "viewportRows": 24,
+        "viewportTotalRows": 2000,
+        "viewportScrollOffset": 1000,
+        "lastViewportFirstPaintedRows": 24,
+        "lastViewportScrolledPaintedRows": 24,
+        "semanticNodeCount": 40,
+        "counterValue": 10,
+        "paintAccent": true,
+        "textVariant": true
+      },
+      "thresholds": {
+        "candidateCommandToFrameP95Us": 16000,
+        "candidateIdleFrameP95Us": 8000,
+        "enforced": false
+      },
+      "pass": true,
+      "notes": [
+        "Measures layout dirtiness through a static pane plus a changing counter pane.",
+        "Update frames should skip clean static subtree layouts; idle frames should skip the root layout.",
+        "Paint-only style changes should repaint while skipping same-constraint layout.",
+        "Same-width single-line text swaps should repaint while skipping same-constraint layout.",
+        "Same-identity child-list rebuilds should preserve cached layout.",
+        "Viewport paint should visit visible non-selectable rows, not every row in a long ScrollView child."
+      ]
+    }
+  ]
+}

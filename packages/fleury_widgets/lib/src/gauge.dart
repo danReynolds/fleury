@@ -20,6 +20,7 @@ class Gauge extends StatelessWidget {
     this.showPercentage = true,
     this.color,
     this.trackColor,
+    this.semanticLabel,
   });
 
   /// Fraction filled, clamped to 0..1.
@@ -37,6 +38,11 @@ class Gauge extends StatelessWidget {
   /// Empty-track color. Defaults to the theme's muted style.
   final Color? trackColor;
 
+  /// Label exposed through the semantic app graph.
+  ///
+  /// Defaults to [label] when present, otherwise `Gauge`.
+  final String? semanticLabel;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -45,12 +51,28 @@ class Gauge extends StatelessWidget {
       foreground: trackColor ?? theme.mutedStyle.foreground,
       dim: true,
     );
-    return _RawGauge(
-      value: value,
-      label: label,
-      showPercentage: showPercentage,
-      filledStyle: filled,
-      trackStyle: track,
+    final clamped = value.clamp(0.0, 1.0);
+    final percent = (clamped * 100).round();
+    return Semantics(
+      role: SemanticRole.chart,
+      label: semanticLabel ?? label ?? 'Gauge',
+      value: '$percent%',
+      state: SemanticState({
+        'chartType': 'gauge',
+        'chartMinValue': 0,
+        'chartMaxValue': 1,
+        'chartLatestValue': clamped,
+        'progressCurrent': percent,
+        'progressTotal': 100,
+        if (label != null) 'progressLabel': label,
+      }),
+      child: _RawGauge(
+        value: value,
+        label: label,
+        showPercentage: showPercentage,
+        filledStyle: filled,
+        trackStyle: track,
+      ),
     );
   }
 }
@@ -109,32 +131,37 @@ class RenderGauge extends RenderObject {
 
   double _value;
   set value(double v) {
+    if (_value == v) return;
     _value = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   String? _label;
   set label(String? v) {
+    if (_label == v) return;
     _label = v;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   bool _showPercentage;
   set showPercentage(bool v) {
+    if (_showPercentage == v) return;
     _showPercentage = v;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   CellStyle _filledStyle;
   set filledStyle(CellStyle v) {
+    if (_filledStyle == v) return;
     _filledStyle = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   CellStyle _trackStyle;
   set trackStyle(CellStyle v) {
+    if (_trackStyle == v) return;
     _trackStyle = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   static const _eighths = [' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
@@ -143,6 +170,7 @@ class RenderGauge extends RenderObject {
 
   String get _suffix =>
       _showPercentage ? ' ${(_value.clamp(0.0, 1.0) * 100).round()}%' : '';
+  String get _maxSuffix => _showPercentage ? ' 100%' : '';
   String get _prefix => _label == null ? '' : '${_label!}  ';
 
   @override
@@ -155,7 +183,7 @@ class RenderGauge extends RenderObject {
   int computeMaxIntrinsicWidth(int? height) {
     // Want at least enough room for the label/percentage chrome plus a
     // visible track. A 10-cell track is a sensible default.
-    return _prefix.length + _suffix.length + 10;
+    return _prefix.length + _maxSuffix.length + 10;
   }
 
   @override

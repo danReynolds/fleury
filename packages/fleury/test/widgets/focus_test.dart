@@ -1,6 +1,10 @@
 import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
+Matcher _stateError(String message) => throwsA(
+  isA<StateError>().having((error) => error.message, 'message', message),
+);
+
 KeyEvent _key(String char, {bool ctrl = false, bool alt = false}) {
   return KeyEvent(
     char: char,
@@ -106,6 +110,50 @@ void main() {
 
       node.dispose();
       expect(manager.focusedNode, isNull);
+    });
+
+    test('manager dispose detaches nodes and rejects focus work', () {
+      final manager = FocusManager();
+      final owner = BuildOwner();
+      final node = FocusNode(debugLabel: 'owned');
+      owner.mountRoot(
+        FocusManagerScope(
+          manager: manager,
+          child: Focus(
+            focusNode: node,
+            autofocus: true,
+            child: const EmptyBox(),
+          ),
+        ),
+      );
+      expect(manager.focusedNode, same(node));
+      expect(node.isAttached, isTrue);
+
+      manager.dispose();
+      manager.dispose();
+
+      expect(manager.focusedNode, isNull);
+      expect(manager.attachedNodes, isEmpty);
+      expect(node.isAttached, isFalse);
+      expect(node.hasFocus, isFalse);
+      expect(() => node.requestFocus(), returnsNormally);
+      expect(() => node.dispose(), returnsNormally);
+      expect(
+        () => manager.requestFocus(node),
+        _stateError('FocusManager has been disposed.'),
+      );
+      expect(
+        () => manager.focusNext(),
+        _stateError('FocusManager has been disposed.'),
+      );
+      expect(
+        () => manager.focusPrevious(),
+        _stateError('FocusManager has been disposed.'),
+      );
+      expect(
+        () => manager.dispatchKey(_key('x')),
+        _stateError('FocusManager has been disposed.'),
+      );
     });
   });
 

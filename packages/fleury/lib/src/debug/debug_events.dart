@@ -11,27 +11,54 @@
 import 'dart:async';
 
 import '../foundation/geometry.dart';
+import '../rendering/render_layout_stats.dart';
+import '../rendering/render_repaint_boundary.dart';
+import '../terminal/diagnostics.dart';
+import '../terminal/events.dart';
 
 /// One frame's per-phase timing breakdown plus the headline counters
 /// the live overlay shows. Emitted once per rendered frame.
 final class FrameEvent {
   const FrameEvent({
     required this.frameNumber,
+    required this.reason,
     required this.build,
     required this.layout,
     required this.paint,
     required this.diff,
     required this.dirtyCells,
+    this.dirtyBounds,
+    this.dirtySources = const <String>[],
+    this.layoutStats = RenderLayoutFrameStats.empty,
+    this.repaintBoundaries = RepaintBoundaryFrameStats.empty,
     required this.bufferSize,
   });
 
   /// Monotonically increasing, never wraps.
   final int frameNumber;
+
+  /// Best-effort reason the frame was scheduled.
+  final String reason;
   final Duration build;
   final Duration layout;
   final Duration paint;
   final Duration diff;
   final int dirtyCells;
+
+  /// Bounding rectangle for emitted dirty cells, or null when the frame
+  /// produced no diff.
+  final CellRect? dirtyBounds;
+
+  /// Best-effort build/layout/paint invalidation sources that caused this
+  /// frame.
+  final List<String> dirtySources;
+
+  /// Render-layout cache activity observed during the layout phase.
+  final RenderLayoutFrameStats layoutStats;
+
+  /// Repaint-boundary cache activity observed during the paint phase.
+  final RepaintBoundaryFrameStats repaintBoundaries;
+
   final CellSize bufferSize;
 
   Duration get total => build + layout + paint + diff;
@@ -47,6 +74,56 @@ sealed class DebugEvent {
 final class FrameDebugEvent extends DebugEvent {
   const FrameDebugEvent(this.frame);
   final FrameEvent frame;
+}
+
+final class InputDebugEvent extends DebugEvent {
+  const InputDebugEvent({
+    required this.kind,
+    required this.summary,
+    this.resizeSize,
+  });
+
+  factory InputDebugEvent.fromTuiEvent(TuiEvent event) {
+    return switch (event) {
+      KeyEvent(:final keyCode, :final char, :final modifiers, :final type) =>
+        InputDebugEvent(
+          kind: 'key',
+          summary: [
+            if (modifiers.isNotEmpty)
+              modifiers.map((modifier) => modifier.name).join('+'),
+            keyCode?.name ?? char ?? '?',
+            if (type != KeyEventType.down) type.name,
+          ].join('+'),
+        ),
+      TextInputEvent(:final text) => InputDebugEvent(
+        kind: 'text',
+        summary: '${text.length} chars',
+      ),
+      PasteEvent(:final text) => InputDebugEvent(
+        kind: 'paste',
+        summary: '${text.length} chars',
+      ),
+      ResizeEvent(:final size) => InputDebugEvent(
+        kind: 'resize',
+        summary: '${size.cols}x${size.rows}',
+        resizeSize: size,
+      ),
+      MouseEvent(:final kind, :final button, :final col, :final row) =>
+        InputDebugEvent(
+          kind: 'mouse',
+          summary: '${kind.name}:${button.name}@$col,$row',
+        ),
+    };
+  }
+
+  final String kind;
+  final String summary;
+  final CellSize? resizeSize;
+}
+
+final class TerminalDebugEvent extends DebugEvent {
+  const TerminalDebugEvent(this.diagnosis);
+  final TerminalDiagnosis diagnosis;
 }
 
 /// Global broadcast bus. Always alive (no setup), so framework code
@@ -81,5 +158,15 @@ final class DebugEvents {
   static void emitFrame(FrameEvent frame) {
     if (!_controller.hasListener) return;
     _controller.add(FrameDebugEvent(frame));
+  }
+
+  static void emitInput(TuiEvent event) {
+    if (!_controller.hasListener) return;
+    _controller.add(InputDebugEvent.fromTuiEvent(event));
+  }
+
+  static void emitTerminalDiagnosis(TerminalDiagnosis diagnosis) {
+    if (!_controller.hasListener) return;
+    _controller.add(TerminalDebugEvent(diagnosis));
   }
 }

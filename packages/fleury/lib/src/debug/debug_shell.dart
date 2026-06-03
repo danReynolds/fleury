@@ -147,6 +147,7 @@ class _DebugShellState extends State<DebugShell> {
 ///   F12                 show/hide Logs tab (open if off, close if
 ///                       already on Logs, switch tab otherwise)
 ///   p                   toggle paint-flash (only when shell is open)
+///   ↑/↓/Home            move semantic cursor while Tree tab is active
 bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
   if (!controller.config.enabled) return false;
 
@@ -185,6 +186,20 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
       return true;
     }
     return false;
+  }
+  if (controller.mode != DebugMode.off && controller.tab == DebugTab.tree) {
+    if (event.keyCode == KeyCode.arrowDown) {
+      controller.moveSemanticCursor(1);
+      return true;
+    }
+    if (event.keyCode == KeyCode.arrowUp) {
+      controller.moveSemanticCursor(-1);
+      return true;
+    }
+    if (event.keyCode == KeyCode.home) {
+      controller.resetSemanticCursor();
+      return true;
+    }
   }
   return false;
 }

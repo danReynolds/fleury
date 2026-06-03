@@ -1,3 +1,5 @@
+import 'dart:async' show FutureOr;
+
 import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
@@ -120,4 +122,34 @@ abstract interface class TerminalDriver {
   /// guarantees these are pre-sanitized ANSI from the diff renderer —
   /// the driver does not re-validate.
   void write(String data);
+}
+
+/// Optional terminal lifecycle hook for subprocesses, external editors, and
+/// other workflows that need the user's terminal while a TUI is running.
+///
+/// Implementations restore the terminal-facing modes they own before running
+/// [operation], then re-enter the previous TUI mode afterward. They should
+/// suppress framework frame writes while the handoff is active and trigger a
+/// repaint after resume.
+abstract interface class TerminalHandoffDriver {
+  Future<T> runWithTerminalHandoff<T>(
+    FutureOr<T> Function() operation,
+  );
+}
+
+/// Runs [operation] through [driver]'s handoff hook when supported.
+///
+/// Drivers that do not own terminal modes, such as remote render targets, can
+/// simply skip [TerminalHandoffDriver]; callers still get a usable fallback.
+Future<T> withTerminalHandoff<T>(
+  TerminalDriver driver,
+  FutureOr<T> Function() operation,
+) {
+  final handoff = driver;
+  if (handoff is TerminalHandoffDriver) {
+    return (handoff as TerminalHandoffDriver).runWithTerminalHandoff(
+      operation,
+    );
+  }
+  return Future<T>.sync(operation);
 }

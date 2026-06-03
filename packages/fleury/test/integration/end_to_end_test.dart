@@ -61,13 +61,11 @@ void main() {
 
       owner.renderFrame(root, buf);
 
-      // Sanitizer replaces the ESC with U+FFFD; remaining chars are
-      // printable.
+      // Sanitizer collapses the full CSI sequence to U+FFFD.
       final firstCell = buf.atColRow(0, 0);
       expect(firstCell.role, CellRole.leading);
       expect(firstCell.grapheme, replacementCharacter);
-      // 'a' lands at column 4: FFFD, [, 2, J, a.
-      expect(buf.atColRow(4, 0).grapheme, 'a');
+      expect(buf.atColRow(1, 0).grapheme, 'a');
     });
   });
 

@@ -24,6 +24,7 @@ class Histogram extends StatelessWidget {
     this.barWidth = 2,
     this.gap = 0,
     this.color,
+    this.semanticLabel = 'Histogram',
   });
 
   /// Raw observations to bin.
@@ -44,47 +45,50 @@ class Histogram extends StatelessWidget {
   /// Bar color override; defaults to the theme's primary.
   final Color? color;
 
+  /// Label exposed through the semantic app graph.
+  final String semanticLabel;
+
   @override
   Widget build(BuildContext context) {
-    if (values.isEmpty || bins < 1) return const EmptyBox();
-
-    var lo = range?.$1.toDouble();
-    var hi = range?.$2.toDouble();
-    if (lo == null || hi == null) {
-      var autoLo = values.first.toDouble();
-      var autoHi = values.first.toDouble();
-      for (final v in values) {
-        final d = v.toDouble();
-        if (d < autoLo) autoLo = d;
-        if (d > autoHi) autoHi = d;
-      }
-      lo ??= autoLo;
-      hi ??= autoHi;
-    }
-    if (hi == lo) hi = lo + 1;
-
-    final binWidth = (hi - lo) / bins;
-    final counts = List<int>.filled(bins, 0);
-    for (final v in values) {
-      final d = v.toDouble();
-      if (d < lo || d > hi) continue;
-      var idx = ((d - lo) / binWidth).floor();
-      if (idx >= bins) idx = bins - 1;
-      if (idx < 0) idx = 0;
-      counts[idx]++;
+    final distribution = _histogramDistribution(
+      values,
+      bins: bins,
+      range: range,
+      color: color,
+    );
+    if (distribution == null) {
+      return Semantics(
+        role: SemanticRole.chart,
+        label: semanticLabel,
+        state: const SemanticState({
+          'chartType': 'histogram',
+          'chartBarCount': 0,
+          'chartPointCount': 0,
+          'chartRecordedPointCount': 0,
+        }),
+        child: const EmptyBox(),
+      );
     }
 
-    final bars = <Bar>[
-      for (var i = 0; i < bins; i++)
-        Bar(_format(lo + (i + 0.5) * binWidth), counts[i], color: color),
-    ];
-
-    return BarChart(
-      bars: bars,
-      barWidth: barWidth,
-      gap: gap,
-      showLabels: showLabels,
-      showValues: showValues,
+    return Semantics(
+      role: SemanticRole.chart,
+      label: semanticLabel,
+      includeChildren: false,
+      state: SemanticState({
+        'chartType': 'histogram',
+        'chartBarCount': distribution.bars.length,
+        'chartPointCount': values.length,
+        'chartRecordedPointCount': distribution.includedValueCount,
+        'chartMinValue': distribution.low,
+        'chartMaxValue': distribution.high,
+      }),
+      child: BarChart(
+        bars: distribution.bars,
+        barWidth: barWidth,
+        gap: gap,
+        showLabels: showLabels,
+        showValues: showValues,
+      ),
     );
   }
 
@@ -94,4 +98,52 @@ class Histogram extends StatelessWidget {
     }
     return v.toStringAsFixed(1);
   }
+}
+
+({List<Bar> bars, int includedValueCount, num low, num high})?
+_histogramDistribution(
+  List<num> values, {
+  required int bins,
+  required (num, num)? range,
+  required Color? color,
+}) {
+  if (values.isEmpty || bins < 1) return null;
+
+  var lo = range?.$1.toDouble();
+  var hi = range?.$2.toDouble();
+  if (lo == null || hi == null) {
+    var autoLo = values.first.toDouble();
+    var autoHi = values.first.toDouble();
+    for (final v in values) {
+      final d = v.toDouble();
+      if (d < autoLo) autoLo = d;
+      if (d > autoHi) autoHi = d;
+    }
+    lo ??= autoLo;
+    hi ??= autoHi;
+  }
+  if (hi == lo) hi = lo + 1;
+
+  final binWidth = (hi - lo) / bins;
+  final counts = List<int>.filled(bins, 0);
+  var included = 0;
+  for (final v in values) {
+    final d = v.toDouble();
+    if (d < lo || d > hi) continue;
+    var idx = ((d - lo) / binWidth).floor();
+    if (idx >= bins) idx = bins - 1;
+    if (idx < 0) idx = 0;
+    counts[idx]++;
+    included += 1;
+  }
+
+  final bars = <Bar>[
+    for (var i = 0; i < bins; i++)
+      Bar(
+        Histogram._format(lo + (i + 0.5) * binWidth),
+        counts[i],
+        color: color,
+      ),
+  ];
+  return (bars: bars, includedValueCount: included, low: lo, high: hi);
 }

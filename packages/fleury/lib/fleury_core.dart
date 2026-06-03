@@ -14,9 +14,69 @@ export 'src/foundation/fleury_error.dart' show FleuryError;
 export 'src/foundation/geometry.dart' show CellSize, CellOffset, CellRect;
 export 'src/foundation/key.dart' show Key, LocalKey, ValueKey, UniqueKey;
 
+// App kernel
+export 'src/app/app.dart'
+    show
+        ActiveScreenView,
+        AppStatusBuilder,
+        FleuryApp,
+        FleuryAppController,
+        FleuryAppExtension,
+        FleuryAppScope,
+        FleuryCommandContext,
+        FleuryScreen,
+        ScreenController,
+        ScreenControllerScope,
+        ScreenId,
+        ScreenWidgetBuilder;
+export 'src/app/commands.dart'
+    show
+        AppCommand,
+        AppCommandCallback,
+        AppCommandPredicate,
+        CommandContext,
+        CommandId,
+        CommandInvocationResult,
+        CommandInvocationStatus,
+        CommandRegistry,
+        CommandRegistryScope,
+        CommandScope;
+export 'src/app/status.dart'
+    show AppStatusBar, StatusController, StatusItem, StatusSeverity;
+
+// Editing
+export 'src/editing/text_completion.dart'
+    show TextCompletionController, TextCompletionOption, TextCompletionState;
+export 'src/editing/text_editing.dart'
+    show TextEditingModel, TextEditingValue, TextRange, TextSelection;
+export 'src/editing/text_history.dart' show TextHistoryController;
+export 'src/editing/text_keymap.dart'
+    show TextEditingKeyAction, TextEditingKeyBinding, TextEditingKeymap;
+export 'src/editing/text_paste.dart'
+    show TextPastePolicy, TextPasteProgress, TextPasteSession;
+
+// Effects
+export 'src/effects/task.dart'
+    show
+        DebouncedTaskController,
+        TaskCanceled,
+        TaskContext,
+        TaskController,
+        TaskEvent,
+        TaskEventKind,
+        TaskOutput,
+        TaskOutputSeverity,
+        TaskProgress,
+        TaskResult,
+        TaskRunner,
+        TaskStatus,
+        TaskStatusView,
+        TaskYieldCheckpoint,
+        TaskYieldPolicy;
+
 // Animation
 export 'src/animation/animation_policy.dart' show AnimationPolicy;
-export 'src/animation/clock.dart' show Clock, FakeClock, SystemClock;
+export 'src/animation/clock.dart' show Clock, SystemClock;
 export 'src/animation/curves.dart' show Curve, Curves;
 export 'src/animation/frame_ticker.dart' show FrameTicker;
 export 'src/animation/lerp.dart'
@@ -27,11 +87,7 @@ export 'src/animation/spring.dart' show Spring;
 export 'src/animation/ticker.dart' show Ticker, TickerCallback, TickerProvider;
 export 'src/animation/ticker_future.dart' show TickerCanceled, TickerFuture;
 export 'src/animation/ticker_scheduler.dart'
-    show
-        FakeTickerScheduler,
-        FrameCallback,
-        SchedulerTickCallback,
-        TickerScheduler;
+    show FrameCallback, SchedulerTickCallback, TickerScheduler;
 
 // Rendering
 export 'src/rendering/ansi_renderer.dart'
@@ -86,9 +142,77 @@ export 'src/rendering/width_resolver.dart'
 export 'src/runtime/hot_reload.dart' show HotReloadController;
 export 'src/runtime/input_dispatcher.dart' show InputDispatcher;
 
+// Semantics
+export 'src/semantics/accessibility.dart'
+    show
+        AccessibilityNode,
+        AccessibilitySnapshot,
+        AccessibilitySnapshotSummary,
+        SemanticTreeAccessibility,
+        buildAccessibilitySnapshot;
+export 'src/semantics/inspection.dart'
+    show
+        SemanticInspectionNode,
+        SemanticInspectionSnapshot,
+        SemanticTreeInspection;
+export 'src/semantics/semantics.dart'
+    show
+        SemanticAction,
+        SemanticActionCallback,
+        SemanticActionContributor,
+        SemanticActionInvocationResult,
+        SemanticActionInvocationStatus,
+        SemanticContributor,
+        SemanticNode,
+        SemanticNodeId,
+        SemanticRole,
+        SemanticState,
+        SemanticTree,
+        Semantics,
+        SemanticsElement;
+
 // Terminal
 export 'src/terminal/capabilities.dart'
-    show ColorMode, ImageProtocol, TerminalCapabilities;
+    show
+        ColorMode,
+        ImageProtocol,
+        TerminalCapabilities,
+        detectColorModeFromEnvironment,
+        detectImageProtocolFromEnvironment,
+        detectTerminalCapabilitiesFromEnvironment,
+        detectTerminalMultiplexerFromEnvironment;
+export 'src/terminal/capability_requirements.dart'
+    show
+        CapabilityFallback,
+        CapabilityLevel,
+        CapabilityRequirement,
+        CapabilityResolution,
+        CapabilityResolutionState,
+        TerminalFeature,
+        resolveCapabilityRequirement,
+        resolveCapabilityRequirements,
+        terminalFeatureAvailable;
+export 'src/terminal/diagnostics.dart'
+    show
+        TerminalCapabilityReport,
+        TerminalCompatibilityFinding,
+        TerminalCompatibilityReport,
+        TerminalCompatibilityStatus,
+        TerminalDiagnosis,
+        TerminalDiagnosticMessage,
+        TerminalDiagnosticSeverity,
+        TerminalEnvironmentReport,
+        TerminalPlatformReport,
+        TerminalProfileReport,
+        buildTerminalCompatibilityReport,
+        diagnoseTerminal;
+export 'src/terminal/terminal_probe.dart'
+    show
+        TerminalProbeReport,
+        TerminalProbeResult,
+        TerminalProbeStatus,
+        TerminalProbeTransport,
+        runTerminalProbeSuite;
 export 'src/terminal/events.dart'
     show
         KeyCode,
@@ -104,7 +228,12 @@ export 'src/terminal/events.dart'
         TuiEvent;
 export 'src/terminal/fake_driver.dart' show FakeTerminalDriver;
 export 'src/terminal/input_parser.dart' show InputParser, TuiEventSink;
-export 'src/terminal/terminal_driver.dart' show TerminalDriver, TerminalMode;
+export 'src/terminal/terminal_driver.dart'
+    show
+        TerminalDriver,
+        TerminalHandoffDriver,
+        TerminalMode,
+        withTerminalHandoff;
 
 // Widgets
 export 'src/widgets/focus.dart'
@@ -133,7 +262,6 @@ export 'src/widgets/key_bindings.dart'
         KeyBindings,
         KeyChord,
         KeyChordChain,
-        $KeyChordInternal,
         PendingKeyChord,
         PendingKeyChordChain;
 export 'src/widgets/key_hint_bar.dart' show KeyHintBar;
@@ -141,11 +269,11 @@ export 'src/widgets/list_view.dart' show EdgeBehavior, ListController, ListView;
 export 'src/widgets/navigator.dart'
     show Navigator, NavigatorContext, NavigatorState, PopScope, RouteTransition;
 export 'src/widgets/layout_builder.dart'
-    show LayoutBuilder, LayoutWidgetBuilder, RenderLayoutBuilder;
+    show LayoutBuilder, LayoutWidgetBuilder;
 export 'src/widgets/media_query.dart' show MediaQuery, MediaQueryData;
 export 'src/widgets/overlay.dart' show Overlay, OverlayEntry, OverlayState;
 export 'src/widgets/repaint_boundary.dart' show RepaintBoundary;
-export 'src/widgets/rich_text.dart' show RenderRichText, RichText, TextSpan;
+export 'src/widgets/rich_text.dart' show RichText, TextSpan;
 export 'src/widgets/pointer.dart'
     show
         GestureDetector,
@@ -156,8 +284,7 @@ export 'src/widgets/pointer.dart'
         PointerTapCallback,
         PointerPositionCallback;
 export 'src/widgets/scroll_view.dart' show ScrollController, ScrollView;
-export 'src/widgets/scrollbar.dart'
-    show RenderScrollbar, Scrollbar, ScrollbarGeometry, ScrollbarMetrics;
+export 'src/widgets/scrollbar.dart' show Scrollbar;
 export 'src/widgets/listenable_builder.dart' show ListenableBuilder;
 export 'src/widgets/blinking_cursor.dart' show BlinkingCursor;
 export 'src/widgets/frame_builder.dart' show FrameBuilder;
@@ -170,7 +297,12 @@ export 'src/widgets/selection/selectable.dart'
 export 'src/widgets/selection/selection.dart'
     show Selection, SelectedContent, SelectionGeometry, SelectionStatus;
 export 'src/runtime/clipboard.dart'
-    show Clipboard, ClipboardWriteResult, SystemClipboard, TestClipboard;
+    show
+        Clipboard,
+        ClipboardWritePolicy,
+        ClipboardWriteReport,
+        ClipboardWriteResult,
+        SystemClipboard;
 export 'src/widgets/selection/selection_area.dart'
     show SelectionArea, SelectionChangedCallback;
 export 'src/widgets/selection/selection_container_delegate.dart'
@@ -184,9 +316,9 @@ export 'src/widgets/selection/selection_event.dart'
         SelectionGranularity,
         SelectionResult;
 export 'src/widgets/spinner.dart' show Spinner, SpinnerStyle;
-export 'src/widgets/text_area.dart' show RenderTextArea, TextArea;
+export 'src/widgets/text_area.dart' show TextArea;
 export 'src/widgets/text_input.dart'
-    show RenderTextInput, TextEditingController, TextInput;
+    show TextClipboardPolicy, TextEditingController, TextInput;
 export 'src/widgets/ticker_mode.dart' show TickerMode;
 export 'src/widgets/theme.dart'
     show

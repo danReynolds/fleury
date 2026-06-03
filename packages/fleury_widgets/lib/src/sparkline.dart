@@ -19,6 +19,7 @@ class Sparkline extends StatelessWidget {
     this.min = 0,
     this.color,
     this.style,
+    this.semanticLabel = 'Sparkline',
   });
 
   /// The series of values to plot. The newest value goes on the right.
@@ -36,13 +37,39 @@ class Sparkline extends StatelessWidget {
   /// Full style override; takes precedence over [color].
   final CellStyle? style;
 
+  /// Label exposed through the semantic app graph.
+  final String semanticLabel;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final resolved =
         style ?? CellStyle(foreground: color ?? theme.colorScheme.primary);
-    return _RawSparkline(data: data, max: max, min: min, style: resolved);
+    final latest = data.isEmpty ? null : data.last;
+    final resolvedMax = max ?? _maxFinite(data);
+    return Semantics(
+      role: SemanticRole.chart,
+      label: semanticLabel,
+      value: latest?.toString(),
+      state: SemanticState({
+        'chartType': 'sparkline',
+        'chartPointCount': data.length,
+        'chartMinValue': min,
+        'chartMaxValue': ?resolvedMax,
+        'chartLatestValue': ?latest,
+      }),
+      child: _RawSparkline(data: data, max: max, min: min, style: resolved),
+    );
   }
+}
+
+num? _maxFinite(Iterable<num> values) {
+  num? result;
+  for (final value in values) {
+    if (!value.toDouble().isFinite) continue;
+    if (result == null || value > result) result = value;
+  }
+  return result;
 }
 
 class _RawSparkline extends LeafRenderObjectWidget {
@@ -89,26 +116,35 @@ class RenderSparkline extends RenderObject {
 
   List<num> _data;
   set data(List<num> v) {
+    if (identical(_data, v)) return;
+    final layoutChanged = _data.length != v.length;
     _data = v;
-    markNeedsPaint();
+    if (layoutChanged) {
+      markNeedsLayout();
+    } else {
+      markNeedsPaintOnly();
+    }
   }
 
   num? _max;
   set max(num? v) {
+    if (_max == v) return;
     _max = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   num _min;
   set min(num v) {
+    if (_min == v) return;
     _min = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   CellStyle _style;
   set style(CellStyle v) {
+    if (_style == v) return;
     _style = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   // Index 0 ('') means "below baseline — write nothing"; 1..8 are the

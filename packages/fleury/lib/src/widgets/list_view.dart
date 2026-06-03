@@ -51,13 +51,16 @@ enum EdgeBehavior {
 /// [visibleRange] back here so listeners can observe what's on
 /// screen without re-running layout themselves.
 class ListController extends ChangeNotifier {
-  ListController({int? selectedIndex, this.pinToBottom = false})
-    : _selectedIndex = selectedIndex;
+  ListController({int? selectedIndex, bool pinToBottom = false})
+    : _selectedIndex = selectedIndex,
+      _pinToBottom = pinToBottom;
 
   int? _selectedIndex;
   int _itemCount = 0;
   ({int first, int last})? _visibleRange;
   int? _pendingJumpIndex;
+  bool _pinToBottom;
+  bool _disposed = false;
 
   /// When `true`, the selection sticks to the last item — whenever
   /// `itemCount` grows between rebuilds (typically because new items
@@ -68,7 +71,13 @@ class ListController extends ChangeNotifier {
   /// default and toggle it off when the user scrolls upward to
   /// browse history (so newly arriving messages don't yank the
   /// viewport back). Re-enable when they scroll back to the bottom.
-  bool pinToBottom;
+  bool get pinToBottom => _pinToBottom;
+  set pinToBottom(bool value) {
+    _checkNotDisposed();
+    if (_pinToBottom == value) return;
+    _pinToBottom = value;
+    notifyListeners();
+  }
 
   /// Total number of items in the list. Set by [ListView] from its
   /// `itemCount` argument on every rebuild.
@@ -83,6 +92,7 @@ class ListController extends ChangeNotifier {
   /// write.
   int? get selectedIndex => _selectedIndex;
   set selectedIndex(int? value) {
+    _checkNotDisposed();
     final clamped = _clampSelection(value);
     if (_selectedIndex == clamped) return;
     _selectedIndex = clamped;
@@ -92,6 +102,7 @@ class ListController extends ChangeNotifier {
   /// Scrolls the viewport so [index] is at the top. Selection is not
   /// changed. Indices outside `0..itemCount-1` are clamped.
   void jumpToIndex(int index) {
+    _checkNotDisposed();
     final clamped = _itemCount == 0 ? 0 : index.clamp(0, _itemCount - 1);
     _pendingJumpIndex = clamped;
     notifyListeners();
@@ -105,6 +116,20 @@ class ListController extends ChangeNotifier {
     // can happen.
     if (_itemCount == 0) return value;
     return value.clamp(0, _itemCount - 1);
+  }
+
+  void _checkNotDisposed() {
+    if (_disposed) {
+      throw StateError('ListController has been disposed.');
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _pendingJumpIndex = null;
+    super.dispose();
   }
 }
 
@@ -413,6 +438,9 @@ class _ListViewBody extends MultiChildRenderObjectWidget {
     covariant _RenderListView renderObject,
   ) {
     renderObject.controller = controller;
+    // The controller is mutable; selection and pending jump changes are read
+    // during layout even when the controller identity is stable.
+    renderObject.markNeedsLayout();
   }
 }
 
@@ -442,6 +470,7 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
   set controller(ListController value) {
     if (identical(_controller, value)) return;
     _controller = value;
+    markNeedsLayout();
   }
 
   final List<RenderObject> _children = <RenderObject>[];
@@ -476,6 +505,7 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
     _children
       ..clear()
       ..addAll(newChildren);
+    markNeedsLayout();
   }
 
   @override
@@ -653,6 +683,9 @@ class _LazyListBody extends RenderObjectWidget {
     covariant _RenderLazyListView renderObject,
   ) {
     renderObject.controller = controller;
+    // The controller is mutable; selection and pending jump changes drive
+    // visible child mounting during layout even when identity is stable.
+    renderObject.markNeedsLayout();
   }
 }
 
@@ -814,6 +847,7 @@ class _RenderLazyListView extends RenderObject
   set controller(ListController value) {
     if (identical(_controller, value)) return;
     _controller = value;
+    markNeedsLayout();
   }
 
   _LazyListElement? _element;

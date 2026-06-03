@@ -54,6 +54,39 @@ void main() {
       '',
     ]);
   });
+
+  testWidgets('exposes dialog semantics', (tester) {
+    tester.pumpWidget(const Dialog(title: 'Confirm', child: Text('ok')));
+
+    final node = tester.semantics().single(
+      role: SemanticRole.dialog,
+      label: 'Confirm',
+    );
+    expect(node.actions, contains(SemanticAction.dismiss));
+    expect(node.state.values['hasTitle'], isTrue);
+  });
+
+  testWidgets('semantic dismiss pops a presented dialog', (tester) async {
+    late BuildContext ctx;
+    tester.pumpWidget(Navigator(home: _Host((c) => ctx = c)));
+    Navigator.of(
+      ctx,
+    ).present<void>(const Dialog(title: 'Confirm', child: Text('ok')));
+    tester.pump(const Duration(milliseconds: 300));
+    expect(Navigator.of(ctx).depth, 2);
+
+    final result = await tester.invokeSemanticAction(
+      SemanticAction.dismiss,
+      role: SemanticRole.dialog,
+      label: 'Confirm',
+    );
+
+    expect(result.completed, isTrue);
+    tester.pump(const Duration(milliseconds: 300));
+    await Future<void>.delayed(Duration.zero);
+    tester.pump();
+    expect(Navigator.of(ctx).depth, 1);
+  });
 }
 
 class _Host extends StatelessWidget {

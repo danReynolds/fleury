@@ -8,9 +8,18 @@ import 'package:fleury/fleury.dart';
 /// disappears. Built on [FocusWithin], so it tracks descendant focus —
 /// wrap a button or field and it just works.
 class Tooltip extends StatefulWidget {
-  const Tooltip({super.key, required this.message, required this.child});
+  const Tooltip({
+    super.key,
+    required this.message,
+    this.semanticLabel = 'Tooltip',
+    required this.child,
+  });
 
   final String message;
+
+  /// Label exposed through the semantic app graph.
+  final String semanticLabel;
+
   final Widget child;
 
   @override
@@ -30,30 +39,63 @@ class _TooltipState extends State<Tooltip> {
         link: _link,
         child: Container(
           border: const BoxBorder(style: BorderStyle.rounded),
-          child: Text(widget.message),
+          child: Semantics(
+            role: SemanticRole.text,
+            label: widget.semanticLabel,
+            value: _safeMessage,
+            state: const SemanticState({'tooltipVisible': true}),
+            child: Text(widget.message),
+          ),
         ),
       ),
     );
     _entry = entry;
     Overlay.of(context).insert(entry);
+    setState(() {});
   }
 
-  void _hide() {
+  void _hide({bool notify = true}) {
     _entry?.remove();
     _entry = null;
+    if (notify && mounted) setState(() {});
+  }
+
+  @override
+  void didUpdateWidget(covariant Tooltip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.message != oldWidget.message ||
+        widget.semanticLabel != oldWidget.semanticLabel) {
+      _entry?.markNeedsBuild();
+      setState(() {});
+    }
   }
 
   @override
   void dispose() {
-    _hide();
+    _hide(notify: false);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return FocusWithin(
-      onFocusChange: _onFocusChange,
-      child: Anchor(link: _link, child: widget.child),
+    return Semantics(
+      role: SemanticRole.region,
+      label: widget.semanticLabel,
+      value: _safeMessage,
+      hint: _safeMessage,
+      state: SemanticState({'tooltipVisible': _entry != null}),
+      child: FocusWithin(
+        onFocusChange: _onFocusChange,
+        child: Anchor(link: _link, child: widget.child),
+      ),
+    );
+  }
+
+  String get _safeMessage {
+    return sanitizeForDisplay(
+      widget.message.replaceAll(_tooltipLineBreakPattern, ' '),
     );
   }
 }
+
+final _tooltipLineBreakPattern = RegExp(r'[\r\n\t]');

@@ -186,7 +186,7 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
   /// a build is a plain value read with no subscription.
   T get value {
     final element = Element.current;
-    if (element != null) {
+    if (element != null && !_disposed) {
       element.dependOnExternal(this);
       if (_scheduler == null) {
         final binding = TuiBinding.maybeOf(element);
@@ -197,7 +197,10 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
   }
 
   @override
-  void addDependent(Element element) => _dependents.add(element);
+  void addDependent(Element element) {
+    if (_disposed) return;
+    _dependents.add(element);
+  }
 
   @override
   void removeDependent(Element element) => _dependents.remove(element);
@@ -238,6 +241,7 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
   /// Jumps to [value] immediately, cancelling any animation. Use for
   /// initial state or hard resets.
   void snap(T value) {
+    if (_disposed) throw StateError('Animation.snap() called after dispose.');
     _stop(canceled: true);
     _value = value;
     _position = _type.toVector(value);
@@ -349,6 +353,7 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
 
   /// Stops the animation where it is, keeping the current value.
   void stop() {
+    if (_disposed) throw StateError('Animation.stop() called after dispose.');
     _looping = false;
     _queue = null;
     _stop(canceled: true);

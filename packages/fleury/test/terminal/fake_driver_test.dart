@@ -28,6 +28,106 @@ void main() {
       expect(driver.restoreCallCount, 0);
       await driver.dispose();
     });
+
+    test('terminal handoff suspends, suppresses writes, and resumes', () async {
+      final driver = FakeTerminalDriver();
+      final events = <TuiEvent>[];
+      final sub = driver.events.listen(events.add);
+      await driver.enter(TerminalMode.interactive);
+
+      final result = await withTerminalHandoff(driver, () {
+        expect(driver.isActive, isFalse);
+        driver.write('frame during handoff');
+        return 'done';
+      });
+      await Future<void>.delayed(Duration.zero);
+
+      expect(result, 'done');
+      expect(driver.isActive, isTrue);
+      expect(driver.output, isEmpty);
+      expect(driver.handoffCallCount, 1);
+      expect(driver.handoffSuspendCallCount, 1);
+      expect(driver.handoffResumeCallCount, 1);
+      expect(events, [const ResizeEvent(CellSize(80, 24))]);
+      await sub.cancel();
+      await driver.dispose();
+    });
+
+    test('terminal handoff falls through when driver is inactive', () async {
+      final driver = FakeTerminalDriver();
+
+      final result = await withTerminalHandoff(driver, () {
+        driver.write('plain output');
+        return 42;
+      });
+
+      expect(result, 42);
+      expect(driver.output, 'plain output');
+      expect(driver.handoffCallCount, 1);
+      expect(driver.handoffSuspendCallCount, 0);
+      expect(driver.handoffResumeCallCount, 0);
+      await driver.dispose();
+    });
+
+    test('restore during terminal handoff prevents resume', () async {
+      final driver = FakeTerminalDriver();
+      await driver.enter(TerminalMode.interactive);
+
+      final result = await withTerminalHandoff(driver, () async {
+        await driver.restore();
+        return 'closed';
+      });
+
+      expect(result, 'closed');
+      expect(driver.isActive, isFalse);
+      expect(driver.restoreCallCount, 1);
+      expect(driver.handoffSuspendCallCount, 1);
+      expect(driver.handoffResumeCallCount, 0);
+      await driver.dispose();
+    });
+
+    test('dispose is idempotent and keeps final state readable', () async {
+      final driver = FakeTerminalDriver();
+      await driver.enter(TerminalMode.interactive);
+      driver.write('final frame');
+      expect(driver.isActive, isTrue);
+
+      await driver.dispose();
+      await driver.dispose();
+
+      expect(driver.isActive, isFalse);
+      expect(driver.output, 'final frame');
+      expect(driver.enterCallCount, 1);
+      expect(driver.currentMode, TerminalMode.interactive);
+      await driver.restore();
+    });
+
+    test('terminal activity after dispose throws a lifecycle error', () async {
+      final driver = FakeTerminalDriver();
+      await driver.dispose();
+
+      const message = 'FakeTerminalDriver has been disposed.';
+      await expectLater(
+        driver.enter(TerminalMode.interactive),
+        throwsA(_stateError(message)),
+      );
+      await expectLater(
+        withTerminalHandoff(driver, () {}),
+        throwsA(_stateError(message)),
+      );
+      expect(() => driver.write('late frame'), throwsA(_stateError(message)));
+      expect(driver.clearOutput, throwsA(_stateError(message)));
+      expect(
+        () => driver.enqueue(const KeyEvent(keyCode: KeyCode.enter)),
+        throwsA(_stateError(message)),
+      );
+      expect(
+        () => driver.resize(const CellSize(120, 40)),
+        throwsA(_stateError(message)),
+      );
+      expect(() => driver.isInteractive = false, throwsA(_stateError(message)));
+      await driver.restore();
+    });
   });
 
   group('FakeTerminalDriver output capture', () {
@@ -97,3 +197,6 @@ void main() {
     });
   });
 }
+
+Matcher _stateError(String message) =>
+    isA<StateError>().having((error) => error.message, 'message', message);

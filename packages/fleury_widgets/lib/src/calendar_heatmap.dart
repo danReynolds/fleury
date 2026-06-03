@@ -42,6 +42,7 @@ class CalendarHeatmap extends StatelessWidget {
     this.weekStartsOn = CalendarWeekStart.sunday,
     this.showMonthLabels = true,
     this.showDayLabels = true,
+    this.semanticLabel = 'Calendar heatmap',
   }) : assert(cellWidth >= 1, 'cellWidth must be >= 1');
 
   /// Sparse map of date → intensity. Dates with no entry render empty
@@ -78,26 +79,127 @@ class CalendarHeatmap extends StatelessWidget {
   /// Draw day-of-week labels along the left gutter (Mon/Wed/Fri).
   final bool showDayLabels;
 
+  /// Label exposed through the semantic app graph.
+  final String semanticLabel;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return _RawCalendarHeatmap(
-      values: values,
-      start: _midnight(start),
-      end: _midnight(end),
+    final normalizedStart = _midnight(start);
+    final normalizedEnd = _midnight(end);
+    final normalizedValues = _normalizeCalendarValues(values);
+    final stats = _calendarHeatmapStats(
+      normalizedValues,
+      start: normalizedStart,
+      end: normalizedEnd,
       min: min,
       max: max,
-      color: color ?? theme.colorScheme.primary,
-      cellWidth: cellWidth,
       weekStartsOn: weekStartsOn,
-      labelStyle: theme.mutedStyle,
-      showMonthLabels: showMonthLabels,
-      showDayLabels: showDayLabels,
+    );
+    return Semantics(
+      role: SemanticRole.chart,
+      label: semanticLabel,
+      state: SemanticState({
+        'chartType': 'calendarHeatmap',
+        'chartRowCount': 7,
+        'chartColumnCount': stats.weeks,
+        'chartPointCount': stats.days,
+        'chartRecordedPointCount': stats.recorded,
+        'chartMinValue': stats.min,
+        'chartMaxValue': stats.max,
+        'chartStartDate': _dateLabel(normalizedStart),
+        'chartEndDate': _dateLabel(normalizedEnd),
+        'chartWeekStart': weekStartsOn.name,
+      }),
+      child: _RawCalendarHeatmap(
+        values: normalizedValues,
+        start: normalizedStart,
+        end: normalizedEnd,
+        min: min,
+        max: max,
+        color: color ?? theme.colorScheme.primary,
+        cellWidth: cellWidth,
+        weekStartsOn: weekStartsOn,
+        labelStyle: theme.mutedStyle,
+        showMonthLabels: showMonthLabels,
+        showDayLabels: showDayLabels,
+      ),
     );
   }
 }
 
 DateTime _midnight(DateTime d) => DateTime(d.year, d.month, d.day);
+
+Map<DateTime, num> _normalizeCalendarValues(Map<DateTime, num> values) {
+  if (values.isEmpty) return const <DateTime, num>{};
+  return {
+    for (final entry in values.entries) _midnight(entry.key): entry.value,
+  };
+}
+
+String _dateLabel(DateTime date) {
+  final month = date.month.toString().padLeft(2, '0');
+  final day = date.day.toString().padLeft(2, '0');
+  return '${date.year}-$month-$day';
+}
+
+({int days, int weeks, int recorded, num min, num max}) _calendarHeatmapStats(
+  Map<DateTime, num> values, {
+  required DateTime start,
+  required DateTime end,
+  required num? min,
+  required num? max,
+  required CalendarWeekStart weekStartsOn,
+}) {
+  final days = _calendarDayCount(start, end);
+  final weeks = _calendarWeekCount(start, end, weekStartsOn: weekStartsOn);
+  var recorded = 0;
+  num? autoMin;
+  num? autoMax;
+  for (final entry in values.entries) {
+    final date = _midnight(entry.key);
+    if (date.isBefore(start) || date.isAfter(end)) continue;
+    recorded += 1;
+    final value = entry.value;
+    if (autoMin == null || value < autoMin) autoMin = value;
+    if (autoMax == null || value > autoMax) autoMax = value;
+  }
+  var resolvedMin = min ?? autoMin ?? 0;
+  var resolvedMax = max ?? autoMax ?? 1;
+  if (resolvedMax == resolvedMin) resolvedMax = resolvedMin + 1;
+  return (
+    days: days,
+    weeks: weeks,
+    recorded: recorded,
+    min: resolvedMin,
+    max: resolvedMax,
+  );
+}
+
+int _calendarDayCount(DateTime start, DateTime end) {
+  if (!end.isAfter(start) && !end.isAtSameMomentAs(start)) return 0;
+  return end.difference(start).inDays + 1;
+}
+
+int _calendarWeekCount(
+  DateTime start,
+  DateTime end, {
+  required CalendarWeekStart weekStartsOn,
+}) {
+  final days = _calendarDayCount(start, end);
+  if (days <= 0) return 0;
+  final firstAnchor = start.subtract(
+    Duration(days: _backToCalendarWeekStart(start, weekStartsOn)),
+  );
+  final daysFromAnchor = end.difference(firstAnchor).inDays;
+  return (daysFromAnchor ~/ 7) + 1;
+}
+
+int _backToCalendarWeekStart(DateTime date, CalendarWeekStart weekStartsOn) {
+  final weekday = date.weekday;
+  if (weekStartsOn == CalendarWeekStart.monday) return weekday - 1;
+  return weekday % 7;
+}
 
 class _RawCalendarHeatmap extends LeafRenderObjectWidget {
   const _RawCalendarHeatmap({
@@ -192,42 +294,42 @@ class RenderCalendarHeatmap extends RenderObject {
   set values(Map<DateTime, num> v) {
     if (identical(_values, v)) return;
     _values = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   DateTime _start;
   set start(DateTime v) {
     if (_start == v) return;
     _start = v;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   DateTime _end;
   set end(DateTime v) {
     if (_end == v) return;
     _end = v;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   num? _min;
   set min(num? v) {
     if (_min == v) return;
     _min = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   num? _max;
   set max(num? v) {
     if (_max == v) return;
     _max = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   Color _color;
   set color(Color v) {
     if (_color == v) return;
     _color = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   int _cellWidth;
@@ -235,35 +337,35 @@ class RenderCalendarHeatmap extends RenderObject {
     final clamped = v < 1 ? 1 : v;
     if (_cellWidth == clamped) return;
     _cellWidth = clamped;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   CalendarWeekStart _weekStartsOn;
   set weekStartsOn(CalendarWeekStart v) {
     if (_weekStartsOn == v) return;
     _weekStartsOn = v;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   CellStyle _labelStyle;
   set labelStyle(CellStyle v) {
     if (_labelStyle == v) return;
     _labelStyle = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   bool _showMonthLabels;
   set showMonthLabels(bool v) {
     if (_showMonthLabels == v) return;
     _showMonthLabels = v;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   bool _showDayLabels;
   set showDayLabels(bool v) {
     if (_showDayLabels == v) return;
     _showDayLabels = v;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   // Five-step intensity ladder. Index 0 is the dim "zero / out of range"

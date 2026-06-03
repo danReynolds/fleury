@@ -73,5 +73,63 @@ void main() {
       );
       expect(_row(tester, 5), '░░░░░');
     });
+
+    testWidgets('value updates repaint without relayout', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 8,
+          height: 1,
+          child: Gauge(value: 0.25, showPercentage: false),
+        ),
+      );
+      tester.render(size: const CellSize(8, 1));
+
+      tester.pumpWidget(
+        const SizedBox(
+          width: 8,
+          height: 1,
+          child: Gauge(value: 0.75, showPercentage: false),
+        ),
+      );
+      RenderLayoutDebugStats.beginFrame(enabled: true);
+      final row = tester
+          .renderToString(size: const CellSize(8, 1), emptyMark: ' ')
+          .trimRight();
+      final stats = RenderLayoutDebugStats.takeFrameStats();
+
+      expect(row, '██████░░');
+      expect(stats.performedCount, 0);
+      expect(stats.skippedCount, greaterThan(0));
+    });
+
+    testWidgets('exposes chart semantics and text-first fallback', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 12,
+          height: 1,
+          child: Gauge(value: 0.42, label: 'CPU', semanticLabel: 'CPU gauge'),
+        ),
+      );
+
+      final chart = tester.semantics().single(
+        role: SemanticRole.chart,
+        label: 'CPU gauge',
+        value: '42%',
+      );
+      expect(chart.state.chartType, 'gauge');
+      expect(chart.state.chartLatestValue, 0.42);
+      expect(chart.state.progressCurrent, 42);
+      expect(chart.state.progressTotal, 100);
+
+      final fallback = tester.accessibilitySnapshot().single(
+        role: SemanticRole.chart,
+        label: 'CPU gauge',
+      );
+      expect(fallback.states, contains('progress CPU 42 of 100'));
+      expect(
+        fallback.states,
+        contains('chart gauge, min 0, max 1, latest 0.42'),
+      );
+    });
   });
 }

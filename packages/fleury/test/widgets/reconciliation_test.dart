@@ -14,12 +14,19 @@ class _Counter extends StatefulWidget {
 
 class _CounterState extends State<_Counter> {
   int count = 0;
+  bool disposed = false;
   String? lastDidUpdateOldLabel;
 
   @override
   void didUpdateWidget(_Counter oldWidget) {
     super.didUpdateWidget(oldWidget);
     lastDidUpdateOldLabel = oldWidget.label;
+  }
+
+  @override
+  void dispose() {
+    disposed = true;
+    super.dispose();
   }
 
   @override
@@ -137,19 +144,45 @@ void main() {
       final stateBefore = root.state as _CounterState;
       stateBefore.count = 99;
 
-      // The root key changes; updateRoot only updates in place for compatible
-      // widgets, so this should throw and leave the tree intact. That's the
-      // contract today; multi-child reconciliation will exercise the
-      // remount-on-key-change path when it lands.
-      expect(
-        () =>
-            owner.updateRoot(root, const _Counter(key: ValueKey<String>('b'))),
-        throwsA(isA<UnsupportedError>()),
-      );
+      final newRoot =
+          owner.updateRoot(
+                root,
+                const _Counter(key: ValueKey<String>('b'), label: 'two'),
+              )
+              as StatefulElement;
+      final stateAfter = newRoot.state as _CounterState;
 
-      // Original state is untouched.
-      expect(stateBefore.count, 99);
-      expect(stateBefore.mounted, isTrue);
+      expect(identical(newRoot, root), isFalse);
+      expect(owner.root, same(newRoot));
+      expect(identical(stateAfter, stateBefore), isFalse);
+      expect(stateAfter.count, 0);
+      expect(stateAfter.widget.label, 'two');
+      expect(
+        stateBefore.mounted,
+        isFalse,
+        reason: 'The incompatible old root must be permanently unmounted.',
+      );
+      expect(
+        stateBefore.disposed,
+        isTrue,
+        reason: 'The incompatible old root State must be disposed.',
+      );
+    });
+
+    test('updateRoot rejects a stale root element after replacement', () {
+      final owner = BuildOwner();
+      final root =
+          owner.mountRoot(
+                const _Counter(key: ValueKey<String>('a'), label: 'one'),
+              )
+              as StatefulElement;
+
+      owner.updateRoot(root, const _Counter(key: ValueKey<String>('b')));
+
+      expect(
+        () => owner.updateRoot(root, const _Counter(label: 'stale')),
+        throwsA(isA<StateError>()),
+      );
     });
   });
 

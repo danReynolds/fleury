@@ -20,8 +20,9 @@ import 'capabilities.dart';
 import 'events.dart';
 import 'input_parser.dart';
 import 'terminal_driver.dart';
+import 'terminal_sequences.dart';
 
-class PosixTerminalDriver implements TerminalDriver {
+class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
   PosixTerminalDriver({Stdin? stdinOverride, Stdout? stdoutOverride})
     : _stdin = stdinOverride ?? stdin,
       _stdout = stdoutOverride ?? stdout;
@@ -49,6 +50,7 @@ class PosixTerminalDriver implements TerminalDriver {
   Timer? _flushTimer;
 
   bool _active = false;
+  bool _handoffActive = false;
   TerminalMode? _mode;
   bool _wroteEnterSequences = false;
   bool _changedStdin = false;
@@ -81,7 +83,8 @@ class PosixTerminalDriver implements TerminalDriver {
   }
 
   @override
-  TerminalCapabilities get capabilities => _detectCapabilities();
+  TerminalCapabilities get capabilities =>
+      detectTerminalCapabilitiesFromEnvironment(Platform.environment);
 
   @override
   Stream<TuiEvent> get events => _events.stream;
@@ -156,36 +159,14 @@ class PosixTerminalDriver implements TerminalDriver {
   /// Builds the mode-entry escape sequence (alt screen, hide cursor,
   /// bracketed paste, Kitty keyboard, mouse), shared by [enter] and resume.
   String _enterSequences(TerminalMode mode) {
-    final buf = StringBuffer();
-    if (mode.alternateScreen) buf.write('\x1B[?1049h');
-    if (mode.hideCursor) buf.write('\x1B[?25l');
-    if (mode.bracketedPaste) buf.write('\x1B[?2004h');
-    // Push the Kitty "disambiguate escape codes" flag (1). Unknown to
-    // terminals without the protocol, which drop the sequence silently.
-    if (mode.kittyKeyboard) buf.write('\x1B[>1u');
-    // SGR mouse: button tracking (1000) + drag (1002), plus all-motion
-    // (1003) for hover when requested, all in SGR encoding (1006).
-    if (mode.mouse || mode.mouseMotion) {
-      buf.write('\x1B[?1000h\x1B[?1002h');
-      if (mode.mouseMotion) buf.write('\x1B[?1003h');
-      buf.write('\x1B[?1006h');
-    }
-    return buf.toString();
+    return buildTerminalEnterSequences(mode);
   }
 
   /// Builds the mode-exit escape sequence, shared by [restore] and
   /// suspend. Disables mouse modes unconditionally (incl. all-motion
   /// 1003) so none leak back to the shell.
   String _exitSequences(TerminalMode mode) {
-    final buf = StringBuffer();
-    buf.write('\x1B[?1006l\x1B[?1003l\x1B[?1002l\x1B[?1000l');
-    // Pop the Kitty keyboard flag we pushed on entry.
-    if (mode.kittyKeyboard) buf.write('\x1B[<u');
-    if (mode.bracketedPaste) buf.write('\x1B[?2004l');
-    if (mode.hideCursor) buf.write('\x1B[?25h');
-    if (mode.resetStyleOnExit) buf.write('\x1B[0m');
-    if (mode.alternateScreen) buf.write('\x1B[?1049l');
-    return buf.toString();
+    return buildTerminalExitSequences(mode);
   }
 
   void _setRawMode() {
@@ -225,6 +206,35 @@ class PosixTerminalDriver implements TerminalDriver {
     Process.killPid(pid, ProcessSignal.sigtstp);
   }
 
+  @override
+  Future<T> runWithTerminalHandoff<T>(FutureOr<T> Function() operation) async {
+    final mode = _mode;
+    if (!_active || mode == null) return await operation();
+
+    _handoffActive = true;
+    if (_wroteEnterSequences) _stdout.write(_exitSequences(mode));
+    if (_changedStdin) _restoreCookedMode();
+    try {
+      await _stdout.flush();
+    } catch (_) {}
+
+    try {
+      return await operation();
+    } finally {
+      if (_active && identical(_mode, mode)) {
+        if (_changedStdin) _setRawMode();
+        if (_wroteEnterSequences) _stdout.write(_enterSequences(mode));
+        try {
+          await _stdout.flush();
+        } catch (_) {}
+        _handoffActive = false;
+        _events.add(ResizeEvent(size));
+      } else {
+        _handoffActive = false;
+      }
+    }
+  }
+
   /// SIGCONT (`fg`): re-enter the configured mode, re-arm SIGTSTP, and
   /// force a full repaint (the window may have resized while stopped).
   void _resume() {
@@ -242,6 +252,7 @@ class PosixTerminalDriver implements TerminalDriver {
   Future<void> restore() async {
     if (!_active && !_wroteEnterSequences && !_changedStdin) return;
 
+    _handoffActive = false;
     _flushTimer?.cancel();
     _flushTimer = null;
 
@@ -291,6 +302,7 @@ class PosixTerminalDriver implements TerminalDriver {
 
   @override
   void write(String data) {
+    if (_handoffActive) return;
     _stdout.write(data);
   }
 
@@ -302,79 +314,6 @@ class PosixTerminalDriver implements TerminalDriver {
     _flushTimer = Timer(const Duration(milliseconds: 30), () {
       _parser.flush(_sink);
     });
-  }
-
-  TerminalCapabilities _detectCapabilities() {
-    final env = Platform.environment;
-    // NO_COLOR wins outright (https://no-color.org): any non-empty value
-    // disables color, even over CLICOLOR_FORCE.
-    if ((env['NO_COLOR'] ?? '').isNotEmpty) {
-      return const TerminalCapabilities(colorMode: ColorMode.none);
-    }
-    final colorterm = env['COLORTERM']?.toLowerCase() ?? '';
-    final term = env['TERM']?.toLowerCase() ?? '';
-    ColorMode color;
-    if (colorterm.contains('truecolor') || colorterm.contains('24bit')) {
-      color = ColorMode.truecolor;
-    } else if (term.contains('256')) {
-      color = ColorMode.indexed256;
-    } else if (term.isNotEmpty) {
-      color = ColorMode.ansi16;
-    } else if ((env['CLICOLOR_FORCE'] ?? '0') != '0') {
-      // No TERM, but the caller insists on color (http://bixense.com/clicolors).
-      color = ColorMode.ansi16;
-    } else {
-      color = ColorMode.none;
-    }
-    return TerminalCapabilities(
-      colorMode: color,
-      imageProtocol: _detectImageProtocol(env, term),
-      tmuxPassthrough: _detectTmuxPassthrough(env, term),
-    );
-  }
-
-  /// Detect whether we're running under tmux (or GNU screen, which uses
-  /// the same passthrough envelope). When true, the Image widget wraps
-  /// protocol payloads so the multiplexer doesn't swallow them.
-  bool _detectTmuxPassthrough(Map<String, String> env, String term) {
-    if ((env['TMUX'] ?? '').isNotEmpty) return true;
-    if (term.startsWith('screen') || term.startsWith('tmux')) return true;
-    return false;
-  }
-
-  /// Detect what image protocol the terminal supports from env vars.
-  /// Higher-fidelity protocols win; we never DOWNgrade to halfBlock if
-  /// a richer one is available.
-  ///
-  /// Kitty path chords on `TERM=xterm-kitty` and the `KITTY_WINDOW_ID`
-  /// env var (Kitty proper), `TERM_PROGRAM=WezTerm` (WezTerm), and
-  /// `TERM_PROGRAM=ghostty` (Ghostty). All three terminals implement
-  /// the Kitty graphics protocol.
-  ///
-  /// iTerm2 path chords on `TERM_PROGRAM=iTerm.app` and `LC_TERMINAL=iTerm2`
-  /// (a flag iTerm2 sets when it forwards over SSH).
-  ///
-  /// Sixel path chords on `TERM` containing `sixel` (xterm-sixel,
-  /// foot-sixel, mlterm-sixel). mintty also supports Sixel since 3.0
-  /// but additionally implements iTerm2's protocol, so it lands in
-  /// the iTerm2 bucket above for higher fidelity.
-  ImageProtocol _detectImageProtocol(Map<String, String> env, String term) {
-    final program = env['TERM_PROGRAM']?.toLowerCase() ?? '';
-    final lcTerminal = env['LC_TERMINAL']?.toLowerCase() ?? '';
-    if (env['KITTY_WINDOW_ID']?.isNotEmpty ?? false) return ImageProtocol.kitty;
-    if (term == 'xterm-kitty') return ImageProtocol.kitty;
-    if (program == 'wezterm' || program == 'ghostty') {
-      return ImageProtocol.kitty;
-    }
-    if (program == 'iterm.app' ||
-        lcTerminal == 'iterm2' ||
-        program == 'mintty') {
-      return ImageProtocol.iterm2;
-    }
-    if (term.contains('sixel')) {
-      return ImageProtocol.sixel;
-    }
-    return ImageProtocol.halfBlock;
   }
 }
 

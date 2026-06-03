@@ -25,6 +25,24 @@ void main() {
     expect(_bar(tester), '░░░░░░░░░░');
   });
 
+  testWidgets('value updates repaint without relayout', (tester) {
+    tester.pumpWidget(const ProgressBar(value: 0.2));
+    tester.render(size: const CellSize(10, 1));
+
+    tester.pumpWidget(const ProgressBar(value: 0.8));
+    RenderLayoutDebugStats.beginFrame(enabled: true);
+    final buf = tester.render(size: const CellSize(10, 1));
+    final stats = RenderLayoutDebugStats.takeFrameStats();
+
+    final row = StringBuffer();
+    for (var c = 0; c < 10; c++) {
+      row.write(buf.atColRow(c, 0).grapheme ?? ' ');
+    }
+    expect(row.toString(), '████████░░');
+    expect(stats.performedCount, 0);
+    expect(stats.skippedCount, greaterThan(0));
+  });
+
   testWidgets('renders a partial block for sub-cell precision', (tester) {
     // 0.45 * 10 = 4.5 cells → 4 full + a half block + 5 track.
     tester.pumpWidget(const ProgressBar(value: 0.45));
@@ -41,5 +59,16 @@ void main() {
   testWidgets('fills the bounded width it is given', (tester) {
     tester.pumpWidget(const SizedBox(width: 4, child: ProgressBar(value: 0.5)));
     expect(_bar(tester, cols: 4), '██░░'); // 4-wide bar, half filled
+  });
+
+  testWidgets('exposes progress semantics', (tester) {
+    tester.pumpWidget(const ProgressBar(value: 0.45));
+
+    final node = tester.semantics().single(role: SemanticRole.progress);
+    expect(node.label, 'Progress');
+    expect(node.value, 0.45);
+    expect(node.state.progressCurrent, 0.45);
+    expect(node.state.progressTotal, 1.0);
+    expect(node.state.progressLabel, '45%');
   });
 }

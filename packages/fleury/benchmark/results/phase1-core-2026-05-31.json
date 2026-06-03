@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-05-31T22:20:08.827663Z",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "scenarioId": "SB.1",
+      "scenarioName": "Time To Counter App",
+      "fleuryVersion": "0.0.0",
+      "gitSha": "unknown",
+      "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+      "runMode": "test",
+      "os": "macos",
+      "cpu": 10,
+      "terminalProfile": {
+        "colorMode": "truecolor",
+        "imageProtocol": "halfBlock",
+        "tmuxPassthrough": false
+      },
+      "terminalSize": {
+        "columns": 80,
+        "rows": 24
+      },
+      "seed": 1,
+      "warmupIterations": 2,
+      "measuredIterations": 20,
+      "startedAt": "2026-05-31T22:20:08.790343Z",
+      "durationMs": 15.358,
+      "metrics": {
+        "journeyUs": {
+          "min": 416,
+          "median": 624,
+          "p95": 1229,
+          "p99": 1264,
+          "max": 1273,
+          "samples": 20
+        },
+        "startupMountUs": {
+          "min": 137,
+          "median": 149,
+          "p95": 224,
+          "p99": 270,
+          "max": 282,
+          "samples": 20
+        },
+        "firstFrameUs": {
+          "min": 44,
+          "median": 48,
+          "p95": 61,
+          "p99": 91,
+          "max": 99,
+          "samples": 20
+        },
+        "commandToFrameUs": {
+          "min": 134,
+          "median": 145,
+          "p95": 254,
+          "p99": 272,
+          "max": 276,
+          "samples": 20
+        },
+        "semanticQueryUs": {
+          "min": 52,
+          "median": 58,
+          "p95": 102,
+          "p99": 196,
+          "max": 219,
+          "samples": 20
+        },
+        "firstFrameAnsiBytes": 49,
+        "semanticNodeCount": 6,
+        "commandCount": 1,
+        "counterValue": 1
+      },
+      "thresholds": {
+        "candidateCommandToFrameP95Us": 16000,
+        "candidateFirstFrameP95Us": 33000,
+        "enforced": false
+      },
+      "pass": true,
+      "notes": [
+        "Candidate thresholds are informational until first baselines stabilize.",
+        "Run mode is test-style harness execution, not a full terminal process."
+      ]
+    }
+  ]
+}

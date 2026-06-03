@@ -7,6 +7,7 @@ environment:
   sdk: ^3.10.4
 
 dependencies:
+  characters: ^1.4.0
   fleury:
     path: ../fleury
   image: ^4.5.4

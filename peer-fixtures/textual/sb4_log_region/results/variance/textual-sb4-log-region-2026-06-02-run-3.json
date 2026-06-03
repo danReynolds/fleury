@@ -1,0 +1,162 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryPeerBenchmarkRun",
+  "runId": "textual-sb4-log-region-2026-06-02T13-57-24Z",
+  "peerId": "textual",
+  "scenarioId": "SB.4",
+  "capturedAt": "2026-06-02T13:57:24.119241Z",
+  "source": {
+    "name": "Textual",
+    "version": "8.2.7",
+    "url": "https://pypi.org/project/textual/"
+  },
+  "environment": {
+    "machine": "macbookpro.lan",
+    "operatingSystem": "darwin",
+    "operatingSystemVersion": "macOS-26.2-arm64-arm-64bit",
+    "runtime": "Python 3.12.13 / Textual 8.2.7",
+    "terminalMode": "textual-run-test-harness",
+    "terminalSize": {
+      "columns": 120,
+      "rows": 32
+    }
+  },
+  "fixture": {
+    "workingDirectory": "peer-fixtures/textual/sb4_log_region",
+    "command": [
+      "python",
+      "sb4_log_benchmark.py",
+      "--warmup=2",
+      "--iterations=5",
+      "--rows=100000",
+      "--append=1000",
+      "--json"
+    ],
+    "warmupIterations": 2,
+    "measuredIterations": 5
+  },
+  "metrics": {
+    "mountUs": {
+      "min": 678716,
+      "median": 751445,
+      "p95": 905388,
+      "p99": 905388,
+      "max": 905388,
+      "samples": 5
+    },
+    "firstRenderUs": {
+      "min": 105564,
+      "median": 117859,
+      "p95": 168357,
+      "p99": 168357,
+      "max": 168357,
+      "samples": 5
+    },
+    "appendBurstUs": {
+      "min": 48809,
+      "median": 57682,
+      "p95": 92454,
+      "p99": 92454,
+      "max": 92454,
+      "samples": 5
+    },
+    "scrollbackJumpUs": {
+      "min": 26753,
+      "median": 30006,
+      "p95": 41820,
+      "p99": 41820,
+      "max": 41820,
+      "samples": 5
+    },
+    "scrollToTailUs": {
+      "min": 25737,
+      "median": 36126,
+      "p95": 46689,
+      "p99": 46689,
+      "max": 46689,
+      "samples": 5
+    },
+    "copySelectedEntryUs": {
+      "min": 65332,
+      "median": 66991,
+      "p95": 86532,
+      "p99": 86532,
+      "max": 86532,
+      "samples": 5
+    },
+    "filterQueryUs": {
+      "min": 36359,
+      "median": 61751,
+      "p95": 121701,
+      "p99": 121701,
+      "max": 121701,
+      "samples": 5
+    },
+    "semanticOrTestQueryUs": {
+      "min": 18,
+      "median": 31,
+      "p95": 54,
+      "p99": 54,
+      "max": 54,
+      "samples": 5
+    },
+    "unsafeArtifactLeakCount": 0,
+    "rssDeltaBytes": 36995072,
+    "lineOfCodeCount": 177,
+    "testLineOfCodeCount": 55,
+    "entryCountAfterAppend": 101000,
+    "appendCount": 1000,
+    "lineCountAfterFilter": 1000,
+    "filterMatchCount": 1000,
+    "selectedKey": "LOG-200999",
+    "finalScrollY": 969,
+    "finalMaxScrollY": 969,
+    "visibleWindowRowEstimate": 31
+  },
+  "correctness": [
+    {
+      "gate": "tail anchoring is correct",
+      "pass": true,
+      "evidence": "After append and explicit tail scroll, Textual Log stayed anchored at LOG-200999."
+    },
+    {
+      "gate": "copy text is sanitized",
+      "pass": true,
+      "evidence": "Selected-entry copy matched the generated sanitized log line and contained no escape, secret, or newline artifacts."
+    },
+    {
+      "gate": "unsafe output leak count is zero",
+      "pass": true,
+      "evidence": "Fixture-owned sanitizer removed ANSI/OSC/control payloads before Textual Log ingestion."
+    }
+  ],
+  "ergonomics": {
+    "lineOfCodeCount": 177,
+    "testLineOfCodeCount": 55,
+    "appFile": "sb4_log_app.py",
+    "testFile": "test_sb4_log_region.py",
+    "peerOwnedLogWidget": true,
+    "appOwnedSanitization": true,
+    "appOwnedFiltering": true,
+    "appOwnedSelectedEntryCopy": true,
+    "semanticGraphAvailable": false,
+    "testQueryViaWidgetAndAppState": true
+  },
+  "artifacts": [
+    {
+      "kind": "source",
+      "path": "peer-fixtures/textual/sb4_log_region/sb4_log_app.py"
+    },
+    {
+      "kind": "test",
+      "path": "peer-fixtures/textual/sb4_log_region/test_sb4_log_region.py"
+    }
+  ],
+  "notes": [
+    "This is a Textual run_test peer fixture, not a real-terminal run.",
+    "Textual 8.2.7 supplies the Log widget, append rendering, scroll state, focus, and test harness.",
+    "Sanitization/redaction, filtering, selected-entry state, and copy/export are app-owned fixture code because Textual Log does not provide Fleury-equivalent primitives for those SB.4 behaviors.",
+    "Textual exposes public widget/app state for this fixture, not a Fleury-style semantic app graph.",
+    "Timing is local-machine evidence and should not be used as a public superiority claim without repeated peer runs."
+  ]
+}

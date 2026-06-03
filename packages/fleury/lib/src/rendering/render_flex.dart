@@ -3,6 +3,7 @@
 // flex children.
 
 import '../foundation/geometry.dart';
+import '../widgets/selection/selectable.dart';
 import 'cell.dart';
 import 'cell_buffer.dart';
 import 'layout.dart';
@@ -82,12 +83,14 @@ class RenderFlexible extends RenderObject
     assert(value > 0, 'Flex factor must be positive');
     if (_flex == value) return;
     _flex = value;
+    markNeedsLayout();
   }
 
   FlexFit get fit => _fit;
   set fit(FlexFit value) {
     if (_fit == value) return;
     _fit = value;
+    markNeedsLayout();
   }
 
   RenderObject? _child;
@@ -181,24 +184,28 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
   set direction(Axis value) {
     if (_direction == value) return;
     _direction = value;
+    markNeedsLayout();
   }
 
   MainAxisSize get mainAxisSize => _mainAxisSize;
   set mainAxisSize(MainAxisSize value) {
     if (_mainAxisSize == value) return;
     _mainAxisSize = value;
+    markNeedsLayout();
   }
 
   MainAxisAlignment get mainAxisAlignment => _mainAxisAlignment;
   set mainAxisAlignment(MainAxisAlignment value) {
     if (_mainAxisAlignment == value) return;
     _mainAxisAlignment = value;
+    markNeedsLayout();
   }
 
   CrossAxisAlignment get crossAxisAlignment => _crossAxisAlignment;
   set crossAxisAlignment(CrossAxisAlignment value) {
     if (_crossAxisAlignment == value) return;
     _crossAxisAlignment = value;
+    markNeedsLayout();
   }
 
   final List<RenderObject> _children = <RenderObject>[];
@@ -210,6 +217,7 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
 
   @override
   void replaceAllChildren(List<RenderObject> newChildren) {
+    if (hasSameRenderChildrenInOrder(_children, newChildren)) return;
     final newSet = Set<RenderObject>.identity()..addAll(newChildren);
     for (final c in List<RenderObject>.from(_children)) {
       if (!newSet.contains(c)) {
@@ -226,6 +234,7 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
     _children
       ..clear()
       ..addAll(newChildren);
+    markNeedsLayout();
   }
 
   @override
@@ -394,15 +403,51 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
       _paintClipped(buffer, offset);
       return;
     }
+    final baseScreenOffset = screenOffset ?? offset;
     for (final c in _children) {
       final childOffset = _childOffsets[c] ?? CellOffset.zero;
+      final paintOffset = offset + childOffset;
+      if (_isOutsidePaintBuffer(paintOffset, c.size, buffer.size) &&
+          !_subtreeNeedsOffscreenPaint(c)) {
+        continue;
+      }
       c.paint(
         buffer,
-        offset + childOffset,
-        screenOffset: (screenOffset ?? offset) + childOffset,
+        paintOffset,
+        screenOffset: baseScreenOffset + childOffset,
         clipRect: clipRect,
       );
     }
+  }
+
+  bool _isOutsidePaintBuffer(
+    CellOffset offset,
+    CellSize childSize,
+    CellSize bufferSize,
+  ) {
+    if (childSize.isEmpty || bufferSize.isEmpty) return true;
+    final left = offset.col;
+    final top = offset.row;
+    final right = left + childSize.cols;
+    final bottom = top + childSize.rows;
+    return right <= 0 ||
+        bottom <= 0 ||
+        left >= bufferSize.cols ||
+        top >= bufferSize.rows;
+  }
+
+  bool _subtreeNeedsOffscreenPaint(RenderObject object) {
+    if (object is Selectable) return true;
+    if (object is RenderObjectWithSingleChild) {
+      final child = object.child;
+      return child != null && _subtreeNeedsOffscreenPaint(child);
+    }
+    if (object is RenderObjectWithChildren) {
+      for (final child in object.children) {
+        if (_subtreeNeedsOffscreenPaint(child)) return true;
+      }
+    }
+    return false;
   }
 
   void _paintClipped(CellBuffer buffer, CellOffset offset) {

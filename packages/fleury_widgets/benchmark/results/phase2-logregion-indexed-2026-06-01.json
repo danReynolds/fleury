@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-01T05:57:33.507930Z",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "scenarioId": "SB.4",
+      "scenarioName": "LogRegion Tailing And Scrollback",
+      "packageVersion": "0.0.0",
+      "gitSha": "unknown",
+      "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+      "runMode": "test",
+      "os": "macos",
+      "cpu": 10,
+      "terminalProfile": {
+        "colorMode": "truecolor",
+        "imageProtocol": "halfBlock",
+        "tmuxPassthrough": false
+      },
+      "terminalSize": {
+        "columns": 120,
+        "rows": 32
+      },
+      "seed": 1,
+      "rowCount": 100000,
+      "warmupIterations": 2,
+      "measuredIterations": 20,
+      "startedAt": "2026-06-01T05:57:24.564844Z",
+      "durationMs": 8921.519,
+      "metrics": {
+        "journeyUs": {
+          "min": 419619,
+          "median": 437052,
+          "p95": 464315,
+          "p99": 469073,
+          "max": 470263,
+          "samples": 20
+        },
+        "fixtureBuildUs": {
+          "min": 55051,
+          "median": 60897,
+          "p95": 69624,
+          "p99": 72754,
+          "max": 73537,
+          "samples": 20
+        },
+        "searchIndexBuildUs": {
+          "min": 287534,
+          "median": 305243,
+          "p95": 319669,
+          "p99": 321795,
+          "max": 322327,
+          "samples": 20
+        },
+        "mountUs": {
+          "min": 16976,
+          "median": 17530,
+          "p95": 17977,
+          "p99": 18099,
+          "max": 18129,
+          "samples": 20
+        },
+        "firstRenderUs": {
+          "min": 6420,
+          "median": 7538,
+          "p95": 9618,
+          "p99": 11270,
+          "max": 11683,
+          "samples": 20
+        },
+        "appendBurstUs": {
+          "min": 8780,
+          "median": 10333,
+          "p95": 21859,
+          "p99": 28761,
+          "max": 30487,
+          "samples": 20
+        },
+        "scrollbackJumpUs": {
+          "min": 1839,
+          "median": 2789,
+          "p95": 4988,
+          "p99": 9652,
+          "max": 10818,
+          "samples": 20
+        },
+        "scrollToTailUs": {
+          "min": 1542,
+          "median": 2194,
+          "p95": 10084,
+          "p99": 19477,
+          "max": 21825,
+          "samples": 20
+        },
+        "copySelectedEntryUs": {
+          "min": 7433,
+          "median": 7813,
+          "p95": 12068,
+          "p99": 14845,
+          "max": 15539,
+          "samples": 20
+        },
+        "filterQueryUs": {
+          "min": 12276,
+          "median": 13885,
+          "p95": 35979,
+          "p99": 40939,
+          "max": 42179,
+          "samples": 20
+        },
+        "semanticQueryUs": {
+          "min": 2107,
+          "median": 2269,
+          "p95": 2874,
+          "p99": 2997,
+          "max": 3028,
+          "samples": 20
+        },
+        "initialAnsiBytes": 2354,
+        "appendAnsiBytes": 2392,
+        "finalAnsiBytes": 2392,
+        "filteredAnsiBytes": 101,
+        "semanticNodeCount": 68,
+        "visibleRangeStart": 100968,
+        "visibleRangeEnd": 100999,
+        "scrollbackVisibleRangeStart": 50000,
+        "filterMatchCount": 1000,
+        "filterVisibleRangeStart": 999,
+        "filterVisibleRangeEnd": 999,
+        "selectedKey": "LOG-200999",
+        "entryCountAfterAppend": 101000,
+        "appendCount": 1000,
+        "sanitizingFixtureRows": 1299,
+        "copiedByteCount": 67,
+        "rssDeltaBytes": 54611968
+      },
+      "thresholds": {
+        "candidateAppendBurstP95Us": 33000,
+        "candidateScrollbackJumpP95Us": 16000,
+        "candidateCopySelectedEntryP95Us": 16000,
+        "candidateFilterQueryP95Us": 80000,
+        "candidateSemanticQueryP95Us": 16000,
+        "enforced": false
+      },
+      "pass": true,
+      "notes": [
+        "Candidate thresholds are informational until stable baselines exist.",
+        "This is a LogRegion widget scenario, not a full subprocess stream.",
+        "Fixture includes ANSI/OSC/newline payloads to verify sanitized visible and copied output."
+      ]
+    }
+  ]
+}

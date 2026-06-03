@@ -1,0 +1,235 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryBenchmarkVariance",
+  "peerId": "ratatui",
+  "scenarioId": "SB.3",
+  "scenarioName": "DataTable 100k Rows",
+  "runCount": 3,
+  "minRuns": 3,
+  "sufficientRunCount": true,
+  "comparable": true,
+  "strictPass": true,
+  "errors": [],
+  "comparableIssues": [],
+  "source": {
+    "versions": [
+      "0.30.0"
+    ],
+    "urls": [
+      "https://crates.io/crates/ratatui"
+    ]
+  },
+  "environment": {
+    "machines": [
+      "macbookpro.lan"
+    ],
+    "operatingSystems": [
+      "macos"
+    ],
+    "runtimes": [
+      "rustc 1.93.1 (01f6ddf75 2026-02-11) (Homebrew) / Ratatui 0.30.0"
+    ],
+    "terminalModes": [
+      "ratatui-buffer-render-harness"
+    ],
+    "terminalSizes": [
+      "120x32"
+    ]
+  },
+  "fixture": {
+    "workingDirectories": [
+      "peer-fixtures/ratatui/sb3_datatable"
+    ],
+    "commands": [
+      "cargo run --release -- --warmup=2 --iterations=20 --rows=100000 --json"
+    ],
+    "warmupIterations": {
+      "samples": 3,
+      "min": 2,
+      "median": 2,
+      "mean": 2,
+      "max": 2,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        2,
+        2,
+        2
+      ]
+    },
+    "measuredIterations": {
+      "samples": 3,
+      "min": 20,
+      "median": 20,
+      "mean": 20,
+      "max": 20,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        20,
+        20,
+        20
+      ]
+    }
+  },
+  "runs": [
+    {
+      "runId": "ratatui-sb3-datatable-2026-06-02T13-12-48Z",
+      "capturedAt": "2026-06-02T13:12:48.864708Z",
+      "path": "peer-fixtures/ratatui/sb3_datatable/results/variance/ratatui-sb3-datatable-2026-06-02-run-1.json"
+    },
+    {
+      "runId": "ratatui-sb3-datatable-2026-06-02T13-12-52Z",
+      "capturedAt": "2026-06-02T13:12:52.070602Z",
+      "path": "peer-fixtures/ratatui/sb3_datatable/results/variance/ratatui-sb3-datatable-2026-06-02-run-2.json"
+    },
+    {
+      "runId": "ratatui-sb3-datatable-2026-06-02T13-12-54Z",
+      "capturedAt": "2026-06-02T13:12:54.435179Z",
+      "path": "peer-fixtures/ratatui/sb3_datatable/results/variance/ratatui-sb3-datatable-2026-06-02-run-3.json"
+    }
+  ],
+  "metrics": {
+    "mountUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 56091,
+      "median": 78320,
+      "mean": 76243,
+      "max": 94318,
+      "standardDeviation": 15675.061,
+      "relativeSpreadPercent": 48.809,
+      "values": [
+        56091,
+        78320,
+        94318
+      ]
+    },
+    "firstRenderUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 1220,
+      "median": 1943,
+      "mean": 1794.333,
+      "max": 2220,
+      "standardDeviation": 421.566,
+      "relativeSpreadPercent": 51.467,
+      "values": [
+        2220,
+        1943,
+        1220
+      ]
+    },
+    "arrowMoveUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 732,
+      "median": 1128,
+      "mean": 1656.667,
+      "max": 3110,
+      "standardDeviation": 1040.3,
+      "relativeSpreadPercent": 210.816,
+      "values": [
+        3110,
+        1128,
+        732
+      ]
+    },
+    "pageMoveUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 809,
+      "median": 908,
+      "mean": 2017.333,
+      "max": 4335,
+      "standardDeviation": 1639.336,
+      "relativeSpreadPercent": 388.326,
+      "values": [
+        4335,
+        908,
+        809
+      ]
+    },
+    "jumpToEndUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 628,
+      "median": 667,
+      "mean": 1277,
+      "max": 2536,
+      "standardDeviation": 890.39,
+      "relativeSpreadPercent": 286.057,
+      "values": [
+        667,
+        628,
+        2536
+      ]
+    },
+    "copySelectedRowUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 9,
+      "median": 590,
+      "mean": 460,
+      "max": 781,
+      "standardDeviation": 328.3,
+      "relativeSpreadPercent": 130.847,
+      "values": [
+        9,
+        590,
+        781
+      ]
+    },
+    "semanticOrTestQueryUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 141,
+      "median": 198,
+      "mean": 265,
+      "max": 456,
+      "standardDeviation": 137.047,
+      "relativeSpreadPercent": 159.091,
+      "values": [
+        198,
+        456,
+        141
+      ]
+    },
+    "rssDeltaBytes": {
+      "primaryValue": "value",
+      "samples": 3,
+      "min": 36192256,
+      "median": 36208640,
+      "mean": 36246869.333,
+      "max": 36339712,
+      "standardDeviation": 65989.542,
+      "relativeSpreadPercent": 0.407,
+      "values": [
+        36208640,
+        36339712,
+        36192256
+      ]
+    }
+  },
+  "correctness": {
+    "allRunsPass": true,
+    "gates": {
+      "visible window stays bounded": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "selection is correct after jump": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "copy/export is sanitized and exact": {
+        "passCount": 3,
+        "failCount": 0
+      }
+    }
+  },
+  "notes": [
+    "Metric variance uses each run artifact primary value: scalar metrics use the scalar value; metric maps prefer p95, then median, max, and value.",
+    "strictPass is false unless run count, scenario/peer identity, source version, terminal mode, terminal size, fixture command, fixture directory, and correctness gates are comparable."
+  ]
+}

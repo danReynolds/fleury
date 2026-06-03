@@ -1,0 +1,235 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryBenchmarkVariance",
+  "peerId": "bubbletea",
+  "scenarioId": "SB.2",
+  "scenarioName": "Text Editing Composer Stress",
+  "runCount": 3,
+  "minRuns": 3,
+  "sufficientRunCount": true,
+  "comparable": true,
+  "strictPass": true,
+  "errors": [],
+  "comparableIssues": [],
+  "source": {
+    "versions": [
+      "Bubble Tea 2.0.7 / Bubbles 2.1.0"
+    ],
+    "urls": [
+      "https://pkg.go.dev/charm.land/bubbles/v2"
+    ]
+  },
+  "environment": {
+    "machines": [
+      "macbookpro.lan"
+    ],
+    "operatingSystems": [
+      "darwin"
+    ],
+    "runtimes": [
+      "go1.25.0 / Bubble Tea 2.0.7 / Bubbles 2.1.0"
+    ],
+    "terminalModes": [
+      "bubbletea-textarea-model-harness"
+    ],
+    "terminalSizes": [
+      "120x32"
+    ]
+  },
+  "fixture": {
+    "workingDirectories": [
+      "peer-fixtures/bubbletea/sb2_text_editing"
+    ],
+    "commands": [
+      "go run . --warmup=1 --iterations=5 --text-chars=10000 --json"
+    ],
+    "warmupIterations": {
+      "samples": 3,
+      "min": 1,
+      "median": 1,
+      "mean": 1,
+      "max": 1,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        1,
+        1,
+        1
+      ]
+    },
+    "measuredIterations": {
+      "samples": 3,
+      "min": 5,
+      "median": 5,
+      "mean": 5,
+      "max": 5,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        5,
+        5,
+        5
+      ]
+    }
+  },
+  "runs": [
+    {
+      "runId": "bubbletea-sb2-text-editing-2026-06-02T13-04-00Z",
+      "capturedAt": "2026-06-02T13:04:00.594459Z",
+      "path": "peer-fixtures/bubbletea/sb2_text_editing/results/variance/bubbletea-sb2-text-editing-2026-06-02-run-1.json"
+    },
+    {
+      "runId": "bubbletea-sb2-text-editing-2026-06-02T13-04-08Z",
+      "capturedAt": "2026-06-02T13:04:08.021162Z",
+      "path": "peer-fixtures/bubbletea/sb2_text_editing/results/variance/bubbletea-sb2-text-editing-2026-06-02-run-2.json"
+    },
+    {
+      "runId": "bubbletea-sb2-text-editing-2026-06-02T13-04-15Z",
+      "capturedAt": "2026-06-02T13:04:15.443553Z",
+      "path": "peer-fixtures/bubbletea/sb2_text_editing/results/variance/bubbletea-sb2-text-editing-2026-06-02-run-3.json"
+    }
+  ],
+  "metrics": {
+    "cursorMoveUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 492531,
+      "median": 718298,
+      "mean": 698661.333,
+      "max": 885155,
+      "standardDeviation": 160888.368,
+      "relativeSpreadPercent": 54.66,
+      "values": [
+        718298,
+        885155,
+        492531
+      ]
+    },
+    "insertionDeletionUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 24146,
+      "median": 40413,
+      "mean": 44226,
+      "max": 68119,
+      "standardDeviation": 18153.244,
+      "relativeSpreadPercent": 108.809,
+      "values": [
+        24146,
+        40413,
+        68119
+      ]
+    },
+    "selectionUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 3017,
+      "median": 9836,
+      "mean": 17543.667,
+      "max": 39778,
+      "standardDeviation": 15966.608,
+      "relativeSpreadPercent": 373.739,
+      "values": [
+        3017,
+        9836,
+        39778
+      ]
+    },
+    "undoRedoUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 11262,
+      "median": 18494,
+      "mean": 37833.667,
+      "max": 83745,
+      "standardDeviation": 32598.194,
+      "relativeSpreadPercent": 391.927,
+      "values": [
+        11262,
+        18494,
+        83745
+      ]
+    },
+    "historyNavigationUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 50,
+      "median": 66,
+      "mean": 268.333,
+      "max": 689,
+      "standardDeviation": 297.528,
+      "relativeSpreadPercent": 968.182,
+      "values": [
+        66,
+        689,
+        50
+      ]
+    },
+    "completionAcceptUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 355,
+      "median": 68417,
+      "mean": 53197.667,
+      "max": 90821,
+      "standardDeviation": 38468.562,
+      "relativeSpreadPercent": 132.227,
+      "values": [
+        90821,
+        355,
+        68417
+      ]
+    },
+    "pasteCompleteUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 14481,
+      "median": 22525,
+      "mean": 28667.333,
+      "max": 48996,
+      "standardDeviation": 14744.886,
+      "relativeSpreadPercent": 153.23,
+      "values": [
+        22525,
+        14481,
+        48996
+      ]
+    },
+    "semanticOrTestQueryUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 16229,
+      "median": 16321,
+      "mean": 21642.333,
+      "max": 32377,
+      "standardDeviation": 7590.649,
+      "relativeSpreadPercent": 98.94,
+      "values": [
+        32377,
+        16321,
+        16229
+      ]
+    }
+  },
+  "correctness": {
+    "allRunsPass": true,
+    "gates": {
+      "mixed-width text remains valid": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "selection and undo state are correct": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "redacted value stays redacted": {
+        "passCount": 3,
+        "failCount": 0
+      }
+    }
+  },
+  "notes": [
+    "Metric variance uses each run artifact primary value: scalar metrics use the scalar value; metric maps prefer p95, then median, max, and value.",
+    "strictPass is false unless run count, scenario/peer identity, source version, terminal mode, terminal size, fixture command, fixture directory, and correctness gates are comparable."
+  ]
+}

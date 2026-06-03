@@ -39,6 +39,7 @@ class Tree<T> extends StatefulWidget {
   const Tree({
     super.key,
     required this.roots,
+    this.label = 'Tree',
     this.focusNode,
     this.autofocus = false,
     this.onSelect,
@@ -46,6 +47,7 @@ class Tree<T> extends StatefulWidget {
   });
 
   final List<TreeNode<T>> roots;
+  final String label;
   final FocusNode? focusNode;
   final bool autofocus;
 
@@ -62,26 +64,44 @@ class Tree<T> extends StatefulWidget {
 class _TreeState<T> extends State<Tree<T>> {
   final Set<TreeNode<T>> _expanded = Set<TreeNode<T>>.identity();
   final ListController _list = ListController(selectedIndex: 0);
-  List<(TreeNode<T>, int)> _flat = const [];
+  List<_TreeRow<T>> _flat = const [];
+  late FocusNode _focusNode;
+  bool _ownsFocusNode = false;
 
-  List<(TreeNode<T>, int)> _flatten() {
-    final out = <(TreeNode<T>, int)>[];
-    void visit(TreeNode<T> node, int depth) {
-      out.add((node, depth));
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'Tree');
+    _ownsFocusNode = widget.focusNode == null;
+  }
+
+  @override
+  void didUpdateWidget(covariant Tree<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.focusNode == oldWidget.focusNode) return;
+    if (_ownsFocusNode) _focusNode.dispose();
+    _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'Tree');
+    _ownsFocusNode = widget.focusNode == null;
+  }
+
+  List<_TreeRow<T>> _flatten() {
+    final out = <_TreeRow<T>>[];
+    void visit(TreeNode<T> node, int depth, String key) {
+      out.add(_TreeRow<T>(node: node, depth: depth, key: key));
       if (_expanded.contains(node)) {
-        for (final child in node.children) {
-          visit(child, depth + 1);
+        for (var i = 0; i < node.children.length; i++) {
+          visit(node.children[i], depth + 1, '$key.$i');
         }
       }
     }
 
-    for (final root in widget.roots) {
-      visit(root, 0);
+    for (var i = 0; i < widget.roots.length; i++) {
+      visit(widget.roots[i], 0, '$i');
     }
     return out;
   }
 
-  (TreeNode<T>, int)? get _selected {
+  _TreeRow<T>? get _selected {
     final i = _list.selectedIndex;
     if (i == null || i < 0 || i >= _flat.length) return null;
     return _flat[i];
@@ -91,7 +111,7 @@ class _TreeState<T> extends State<Tree<T>> {
     final sel = _selected;
     final i = _list.selectedIndex;
     if (sel == null || i == null) return KeyEventResult.ignored;
-    final node = sel.$1;
+    final node = sel.node;
     if (!node.isBranch) return KeyEventResult.ignored;
     if (!_expanded.contains(node)) {
       setState(() => _expanded.add(node));
@@ -106,13 +126,14 @@ class _TreeState<T> extends State<Tree<T>> {
     final sel = _selected;
     final i = _list.selectedIndex;
     if (sel == null || i == null) return KeyEventResult.ignored;
-    final (node, depth) = sel;
+    final node = sel.node;
+    final depth = sel.depth;
     if (node.isBranch && _expanded.contains(node)) {
       setState(() => _expanded.remove(node));
       return KeyEventResult.handled;
     }
     for (var j = i - 1; j >= 0; j--) {
-      if (_flat[j].$2 < depth) {
+      if (_flat[j].depth < depth) {
         _list.selectedIndex = j;
         return KeyEventResult.handled;
       }
@@ -122,7 +143,7 @@ class _TreeState<T> extends State<Tree<T>> {
 
   void _onEnter(int index) {
     if (index < 0 || index >= _flat.length) return;
-    final node = _flat[index].$1;
+    final node = _flat[index].node;
     if (node.isBranch) {
       setState(() {
         if (!_expanded.remove(node)) _expanded.add(node);
@@ -132,9 +153,43 @@ class _TreeState<T> extends State<Tree<T>> {
     }
   }
 
+  void _openRow(int index) {
+    if (index < 0 || index >= _flat.length) return;
+    _focusNode.requestFocus();
+    _list.selectedIndex = index;
+    final node = _flat[index].node;
+    if (!node.isBranch) return;
+    setState(() => _expanded.add(node));
+  }
+
+  void _activateRow(int index) {
+    if (index < 0 || index >= _flat.length) return;
+    _focusNode.requestFocus();
+    _list.selectedIndex = index;
+    final node = _flat[index].node;
+    if (node.isBranch) {
+      _openRow(index);
+    } else {
+      widget.onSelect?.call(node);
+    }
+  }
+
+  void _handleTreeAction(SemanticAction action) {
+    switch (action) {
+      case SemanticAction.focus:
+      case SemanticAction.navigate:
+        _focusNode.requestFocus();
+        setState(() {});
+        return;
+      case _:
+        return;
+    }
+  }
+
   @override
   void dispose() {
     _list.dispose();
+    if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
   }
 
@@ -147,30 +202,129 @@ class _TreeState<T> extends State<Tree<T>> {
     // `ignored` and bubbles to the focus chain — letting an enclosing
     // FocusTraversalGroup move between panes at the tree's edges. (A
     // matched KeyBinding is terminal even when it returns ignored.)
-    return Focus(
-      canRequestFocus: false,
-      onKey: (event) => switch (event.keyCode) {
-        KeyCode.arrowRight => _expandOrEnter(),
-        KeyCode.arrowLeft => _collapseOrParent(),
-        _ => KeyEventResult.ignored,
-      },
-      child: ListView.builder(
-        controller: _list,
-        focusNode: widget.focusNode,
-        autofocus: widget.autofocus,
-        itemCount: _flat.length,
-        onSelect: _onEnter,
-        itemBuilder: (context, i, selected) {
-          final (node, depth) = _flat[i];
-          final marker = node.isBranch
-              ? (_expanded.contains(node) ? '▾ ' : '▸ ')
-              : '  ';
-          return Text(
-            '${'  ' * depth}$marker${node.label}',
-            style: selected ? selectedStyle : CellStyle.empty,
-          );
+    return Semantics(
+      role: SemanticRole.tree,
+      label: widget.label,
+      focused: _focusNode.hasFocus,
+      actions: const {SemanticAction.focus, SemanticAction.navigate},
+      onAction: _handleTreeAction,
+      state: SemanticState({
+        'collectionRowCount': _flat.length,
+        'rootCount': widget.roots.length,
+        'expandedCount': _expanded.length,
+        if (_list.visibleRange != null) ...{
+          'visibleRangeStart': _list.visibleRange!.first,
+          'visibleRangeEnd': _list.visibleRange!.last,
         },
+        if (_list.selectedIndex != null) 'selectedIndex': _list.selectedIndex,
+        if (_selected != null) 'selectedKey': _selected!.key,
+      }),
+      child: Focus(
+        canRequestFocus: false,
+        onKey: (event) => switch (event.keyCode) {
+          KeyCode.arrowRight => _expandOrEnter(),
+          KeyCode.arrowLeft => _collapseOrParent(),
+          _ => KeyEventResult.ignored,
+        },
+        child: ListView.builder(
+          controller: _list,
+          focusNode: _focusNode,
+          autofocus: widget.autofocus,
+          itemCount: _flat.length,
+          onSelect: _onEnter,
+          itemBuilder: (context, i, selected) {
+            final row = _flat[i];
+            return _TreeRowWidget<T>(
+              row: row,
+              rowIndex: i,
+              selected: selected,
+              expanded: _expanded.contains(row.node),
+              selectedStyle: selectedStyle,
+              hasOnSelect: widget.onSelect != null,
+              onOpen: () => _openRow(i),
+              onActivate: () => _activateRow(i),
+            );
+          },
+        ),
       ),
     );
   }
+}
+
+final class _TreeRow<T> {
+  const _TreeRow({required this.node, required this.depth, required this.key});
+
+  final TreeNode<T> node;
+  final int depth;
+  final String key;
+}
+
+class _TreeRowWidget<T> extends StatelessWidget {
+  const _TreeRowWidget({
+    required this.row,
+    required this.rowIndex,
+    required this.selected,
+    required this.expanded,
+    required this.selectedStyle,
+    required this.hasOnSelect,
+    required this.onOpen,
+    required this.onActivate,
+  });
+
+  final _TreeRow<T> row;
+  final int rowIndex;
+  final bool selected;
+  final bool expanded;
+  final CellStyle selectedStyle;
+  final bool hasOnSelect;
+  final void Function() onOpen;
+  final void Function() onActivate;
+
+  @override
+  Widget build(BuildContext context) {
+    final node = row.node;
+    final label = _sanitizeTreeText(node.label);
+    final marker = node.isBranch ? (expanded ? '▾ ' : '▸ ') : '  ';
+    return Semantics(
+      role: SemanticRole.treeItem,
+      label: label,
+      selected: selected,
+      enabled: true,
+      actions: {
+        if (node.isBranch) SemanticAction.open,
+        if (!node.isBranch && hasOnSelect) SemanticAction.activate,
+      },
+      onAction: (action) {
+        switch (action) {
+          case SemanticAction.open:
+            if (node.isBranch) onOpen();
+            return;
+          case SemanticAction.activate:
+            if (!node.isBranch && hasOnSelect) onActivate();
+            return;
+          case _:
+            return;
+        }
+      },
+      state: SemanticState({
+        'rowIndex': rowIndex,
+        'rowKey': row.key,
+        'depth': row.depth,
+        'isBranch': node.isBranch,
+        'expanded': expanded,
+        'childCount': node.children.length,
+        'outputSanitized': label != node.label,
+      }),
+      child: Text(
+        '${'  ' * row.depth}$marker$label',
+        style: selected ? selectedStyle : CellStyle.empty,
+      ),
+    );
+  }
+}
+
+final _treeLineBreakPattern = RegExp(r'[\r\n\t]');
+
+String _sanitizeTreeText(String text) {
+  return sanitizeForDisplay(text.replaceAll(_treeLineBreakPattern, ' '));
 }

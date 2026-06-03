@@ -48,6 +48,7 @@ class TuiBinding implements TickerProvider {
   /// `SingleTickerProviderStateMixin` in this runtime's tree)
   /// register with this scheduler.
   final TickerScheduler tickerScheduler;
+  bool _disposed = false;
 
   /// The application's root navigator — the top-level [NavigatorState]
   /// with no enclosing navigator. A root-level `Navigator` registers
@@ -94,6 +95,7 @@ class TuiBinding implements TickerProvider {
   /// automatically.
   @override
   Ticker createTicker(TickerCallback onTick) {
+    _checkNotDisposed();
     return Ticker(onTick, scheduler: tickerScheduler);
   }
 
@@ -106,8 +108,10 @@ class TuiBinding implements TickerProvider {
   /// the FOLLOWING frame, never re-entrantly within the same drain
   /// (Flutter runs them in the current frame). Exceptions in one
   /// callback do not abort the rest of the drain.
-  void addPostFrameCallback(FrameCallback callback) =>
-      tickerScheduler.addPostFrameCallback(callback);
+  void addPostFrameCallback(FrameCallback callback) {
+    _checkNotDisposed();
+    tickerScheduler.addPostFrameCallback(callback);
+  }
 
   /// Drains the post-frame callback queue. Called by the runtime
   /// (native + web) after `renderer.renderDiff` and by
@@ -116,8 +120,10 @@ class TuiBinding implements TickerProvider {
   ///
   /// Driven by `TuiBinding` consumers (`run_tui`, `run_tui_web`,
   /// `FleuryTester.pump`); app code should use [addPostFrameCallback].
-  void flushPostFrameCallbacks(Duration timeStamp) =>
-      tickerScheduler.flushPostFrameCallbacks(timeStamp);
+  void flushPostFrameCallbacks(Duration timeStamp) {
+    if (_disposed) return;
+    tickerScheduler.flushPostFrameCallbacks(timeStamp);
+  }
 
   /// The currently-effective animation policy. Set at binding
   /// construction; runtime mutation lands later if a real use
@@ -128,7 +134,15 @@ class TuiBinding implements TickerProvider {
   /// Releases the binding's resources. Idempotent. Tickers
   /// registered against the scheduler should be disposed first.
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     tickerScheduler.dispose();
+  }
+
+  void _checkNotDisposed() {
+    if (_disposed) {
+      throw StateError('TuiBinding has been disposed.');
+    }
   }
 }
 

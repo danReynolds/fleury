@@ -65,6 +65,32 @@ void main() {
       expect(advanced, 3);
       expect(buf.atColRow(2, 0).grapheme, 'l');
     });
+
+    test('out-of-bounds grapheme writes are clipped', () {
+      final buf = CellBuffer(const CellSize(3, 1));
+      expect(buf.writeGrapheme(const CellOffset(-1, 0), 'A'), 0);
+      expect(buf.writeGrapheme(const CellOffset(0, -1), 'B'), 0);
+      expect(buf.writeGrapheme(const CellOffset(3, 0), 'C'), 0);
+      expect(buf.writeGrapheme(const CellOffset(0, 1), 'D'), 0);
+      expect(buf.atColRow(0, 0), const Cell.empty());
+      expect(buf.atColRow(2, 0), const Cell.empty());
+    });
+
+    test('writeText clips a negative starting column', () {
+      final buf = CellBuffer(const CellSize(3, 1));
+      final advanced = buf.writeText(const CellOffset(-2, 0), 'abcde');
+      expect(advanced, 5);
+      expect(buf.atColRow(0, 0).grapheme, 'c');
+      expect(buf.atColRow(1, 0).grapheme, 'd');
+      expect(buf.atColRow(2, 0).grapheme, 'e');
+    });
+
+    test('writeText clips rows outside the buffer', () {
+      final buf = CellBuffer(const CellSize(3, 1));
+      expect(buf.writeText(const CellOffset(0, -1), 'abc'), 0);
+      expect(buf.writeText(const CellOffset(0, 1), 'abc'), 0);
+      expect(buf.atColRow(0, 0), const Cell.empty());
+    });
   });
 
   group('Wide graphemes', () {
@@ -186,6 +212,27 @@ void main() {
         style,
         reason: 'Continuation cells inherit the leading cell\'s style.',
       );
+    });
+  });
+
+  group('Protocol regions', () {
+    test('out-of-bounds protocol anchors are clipped', () {
+      final buf = CellBuffer(const CellSize(3, 1));
+      buf.writeProtocol(const CellOffset(-1, 0), 'bytes', width: 2, height: 1);
+      buf.writeProtocol(const CellOffset(0, -1), 'bytes', width: 2, height: 1);
+      buf.writeProtocol(const CellOffset(3, 0), 'bytes', width: 2, height: 1);
+      buf.writeProtocol(const CellOffset(0, 1), 'bytes', width: 2, height: 1);
+
+      expect(buf.atColRow(0, 0), const Cell.empty());
+      expect(buf.atColRow(2, 0), const Cell.empty());
+    });
+
+    test('in-bounds protocol anchors still cover their region', () {
+      final buf = CellBuffer(const CellSize(3, 1));
+      buf.writeProtocol(const CellOffset(1, 0), 'bytes', width: 2, height: 1);
+
+      expect(buf.atColRow(1, 0), const Cell.protocolAnchor(grapheme: 'bytes'));
+      expect(buf.atColRow(2, 0), const Cell.protocolCovered());
     });
   });
 }

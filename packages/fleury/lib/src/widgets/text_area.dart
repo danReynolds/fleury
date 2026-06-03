@@ -1,19 +1,23 @@
 // TextArea: a multi-line editable text widget.
 //
 // Reuses TextEditingController (a newline is just another character in
-// the text + code-unit cursor). On top of TextInput it adds:
+// the shared editing value). On top of TextInput it adds:
 //   - Enter inserts a newline.
 //   - Up/Down move the cursor between lines (preserving the column).
 //   - Home/End move within the current line.
 //   - RenderTextArea lays the text out as rows and scrolls vertically to
-//     keep the cursor line in view.
+//     keep the cursor line in view, and horizontally to keep the cursor
+//     column in view.
 //
-// Not yet here: horizontal scroll / soft-wrap (long lines clip at the
-// right edge), grapheme-cluster cursor movement (code-unit indices, as in
-// TextInput), and a blinking cursor (solid while focused for now).
+// Not yet here: soft-wrap and a blinking cursor (solid while focused for now).
+
+import 'dart:async' show scheduleMicrotask, unawaited;
 
 import 'package:characters/characters.dart';
 
+import '../editing/text_editing.dart';
+import '../editing/text_keymap.dart';
+import '../editing/text_paste.dart';
 import '../foundation/geometry.dart';
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
@@ -21,10 +25,14 @@ import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
 import '../rendering/text_sanitizer.dart';
 import '../rendering/width_resolver.dart';
+import '../runtime/clipboard.dart';
+import '../semantics/semantics.dart';
 import '../terminal/events.dart';
 import 'focus.dart';
 import 'framework.dart';
-import 'text_input.dart' show TextEditingController;
+import 'text_input.dart'
+    show TextClipboardPolicy, TextEditingController, textClipboardSemanticState;
+import 'tui_binding.dart';
 
 /// A multi-line editable text widget. Pair with a [TextEditingController]
 /// to read/drive the text; newlines live in the text like any character.
@@ -39,6 +47,12 @@ class TextArea extends StatefulWidget {
     this.placeholderStyle = const CellStyle(dim: true),
     this.style = CellStyle.empty,
     this.cursorStyle = const CellStyle(inverse: true),
+    this.enabled = true,
+    this.readOnly = false,
+    this.validationError,
+    this.clipboardPolicy = TextClipboardPolicy.allowed,
+    this.keymap = TextEditingKeymap.defaultMultiline,
+    this.pastePolicy = const TextPastePolicy(),
   });
 
   final TextEditingController? controller;
@@ -56,6 +70,18 @@ class TextArea extends StatefulWidget {
 
   final CellStyle style;
   final CellStyle cursorStyle;
+  final bool enabled;
+  final bool readOnly;
+  final String? validationError;
+
+  /// Policy future copy/cut actions should use for this area.
+  final TextClipboardPolicy clipboardPolicy;
+
+  /// Keymap used to resolve non-text key events into editing actions.
+  final TextEditingKeymap keymap;
+
+  /// Policy for chunking large bracketed paste payloads.
+  final TextPastePolicy pastePolicy;
 
   @override
   State<TextArea> createState() => _TextAreaState();
@@ -66,6 +92,9 @@ class _TextAreaState extends State<TextArea> implements TextInputClaimant {
   late FocusNode _focusNode;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
+  TextPasteSession? _pasteSession;
+  TextPasteProgress _pasteProgress = TextPasteProgress.inactive;
+  int _pasteGeneration = 0;
 
   @override
   void initState() {
@@ -73,7 +102,9 @@ class _TextAreaState extends State<TextArea> implements TextInputClaimant {
     _controller = widget.controller ?? TextEditingController();
     _ownsController = widget.controller == null;
     _controller.addListener(_onChange);
-    _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'TextArea');
+    _focusNode =
+        widget.focusNode ??
+        FocusNode(debugLabel: 'TextArea', canRequestFocus: widget.enabled);
     _focusNode.textInputClaimant = this;
     _ownsFocusNode = widget.focusNode == null;
   }
@@ -82,6 +113,7 @@ class _TextAreaState extends State<TextArea> implements TextInputClaimant {
   void didUpdateWidget(TextArea oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
+      _cancelScheduledPaste();
       _controller.removeListener(_onChange);
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? TextEditingController();
@@ -91,9 +123,22 @@ class _TextAreaState extends State<TextArea> implements TextInputClaimant {
     if (widget.focusNode != oldWidget.focusNode) {
       _focusNode.textInputClaimant = null;
       if (_ownsFocusNode) _focusNode.dispose();
-      _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'TextArea');
+      _focusNode =
+          widget.focusNode ??
+          FocusNode(debugLabel: 'TextArea', canRequestFocus: widget.enabled);
       _focusNode.textInputClaimant = this;
       _ownsFocusNode = widget.focusNode == null;
+    }
+    if (_ownsFocusNode) {
+      _focusNode.canRequestFocus = widget.enabled;
+      if (!widget.enabled && _focusNode.hasFocus) {
+        _focusNode.unfocus();
+      }
+    }
+    if ((!widget.enabled || widget.readOnly) &&
+        (oldWidget.enabled != widget.enabled ||
+            oldWidget.readOnly != widget.readOnly)) {
+      _cancelScheduledPaste();
     }
   }
 
@@ -105,97 +150,224 @@ class _TextAreaState extends State<TextArea> implements TextInputClaimant {
 
   void _onChange() => setState(() {});
 
-  @override
-  KeyEventResult onTextInput(String text) {
-    _controller.insert(text);
+  bool get _canEdit => widget.enabled && !widget.readOnly;
+
+  void _cancelScheduledPaste() {
+    _pasteGeneration++;
+    _pasteSession = null;
+    _pasteProgress = TextPasteProgress.inactive;
+  }
+
+  void _startPaste(String text) {
+    _cancelScheduledPaste();
+    if (text.isEmpty) return;
+
+    if (!widget.pastePolicy.shouldChunk(text)) {
+      _controller.paste(text);
+      return;
+    }
+
+    final generation = _pasteGeneration;
+    _pasteSession = TextPasteSession(text: text, policy: widget.pastePolicy);
+    _applyNextPasteChunk(generation, firstChunk: true);
+  }
+
+  void _applyNextPasteChunk(int generation, {required bool firstChunk}) {
+    if (!mounted || generation != _pasteGeneration) return;
+    final session = _pasteSession;
+    if (session == null) return;
+    final chunk = session.nextChunk();
+    if (chunk == null) {
+      _finishScheduledPaste(generation);
+      return;
+    }
+
+    _controller.paste(chunk, coalesce: !firstChunk);
+    _pasteProgress = session.progress;
+    if (session.isComplete) {
+      _finishScheduledPaste(generation);
+      return;
+    }
+    setState(() {});
+    _scheduleNextPasteChunk(generation);
+  }
+
+  void _finishScheduledPaste(int generation) {
+    if (generation != _pasteGeneration) return;
+    _pasteSession = null;
+    _pasteProgress = TextPasteProgress.inactive;
+    if (mounted) setState(() {});
+  }
+
+  void _scheduleNextPasteChunk(int generation) {
+    final binding = TuiBinding.maybeOf(context);
+    if (binding == null) {
+      scheduleMicrotask(() {
+        _applyNextPasteChunk(generation, firstChunk: false);
+      });
+      return;
+    }
+    binding.addPostFrameCallback((_) {
+      _applyNextPasteChunk(generation, firstChunk: false);
+    });
+  }
+
+  String _redactClipboardText(String text) {
+    return text.characters
+        .map((grapheme) => grapheme == '\n' ? '\n' : '•')
+        .join();
+  }
+
+  KeyEventResult _copyOrCutSelection({required bool cut}) {
+    if (!widget.enabled) return KeyEventResult.ignored;
+    final selected = _controller.selectedText;
+    if (selected.isEmpty) return KeyEventResult.ignored;
+    if (cut && !_canEdit) return KeyEventResult.handled;
+
+    switch (widget.clipboardPolicy) {
+      case TextClipboardPolicy.allowed:
+        unawaited(Clipboard.instance.write(selected));
+        break;
+      case TextClipboardPolicy.redacted:
+        unawaited(Clipboard.instance.write(_redactClipboardText(selected)));
+        break;
+      case TextClipboardPolicy.disabled:
+        return KeyEventResult.handled;
+    }
+    if (cut) {
+      _cancelScheduledPaste();
+      _controller.deleteSelection();
+    }
     return KeyEventResult.handled;
   }
 
-  // ---- line-aware cursor movement -------------------------------------
-
-  int _lineStart(String t, int sel) {
-    if (sel <= 0) return 0;
-    final nl = t.lastIndexOf('\n', sel - 1);
-    return nl == -1 ? 0 : nl + 1;
+  void _handleSemanticAction(SemanticAction action) {
+    switch (action) {
+      case SemanticAction.focus:
+        if (widget.enabled) _focusNode.requestFocus();
+        return;
+      case SemanticAction.clear:
+        if (_canEdit) {
+          _cancelScheduledPaste();
+          _controller.clear();
+        }
+        return;
+      case SemanticAction.copy:
+        _copyOrCutSelection(cut: false);
+        return;
+      case _:
+        return;
+    }
   }
 
-  int _lineEnd(String t, int sel) {
-    final nl = t.indexOf('\n', sel);
-    return nl == -1 ? t.length : nl;
+  @override
+  KeyEventResult onTextInput(String text) {
+    if (!widget.enabled) return KeyEventResult.ignored;
+    if (widget.readOnly) return KeyEventResult.handled;
+    _cancelScheduledPaste();
+    _controller.insert(text, coalesce: true);
+    return KeyEventResult.handled;
   }
 
-  void _moveUp() {
-    final t = _controller.text;
-    final sel = _controller.selection;
-    final start = _lineStart(t, sel);
-    if (start == 0) return;
-    final col = sel - start;
-    final prevEnd = start - 1;
-    final prevStart = _lineStart(t, prevEnd);
-    final prevLen = prevEnd - prevStart;
-    _controller.selection = prevStart + (col < prevLen ? col : prevLen);
-  }
-
-  void _moveDown() {
-    final t = _controller.text;
-    final sel = _controller.selection;
-    final end = _lineEnd(t, sel);
-    if (end == t.length) return;
-    final col = sel - _lineStart(t, sel);
-    final nextStart = end + 1;
-    final nextEnd = _lineEnd(t, nextStart);
-    final nextLen = nextEnd - nextStart;
-    _controller.selection = nextStart + (col < nextLen ? col : nextLen);
+  @override
+  KeyEventResult onPaste(String text) {
+    if (!widget.enabled) return KeyEventResult.ignored;
+    if (widget.readOnly) return KeyEventResult.handled;
+    _startPaste(text);
+    return KeyEventResult.handled;
   }
 
   KeyEventResult _handleKey(KeyEvent event) {
-    switch (event.keyCode) {
-      case KeyCode.backspace:
+    if (!widget.enabled) return KeyEventResult.ignored;
+    final action = widget.keymap.resolve(event);
+    if (action == null) return KeyEventResult.ignored;
+    switch (action) {
+      case TextEditingKeyAction.copy:
+        return _copyOrCutSelection(cut: false);
+      case TextEditingKeyAction.cut:
+        return _copyOrCutSelection(cut: true);
+      case TextEditingKeyAction.undo:
+        if (widget.readOnly) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _controller.undo();
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.redo:
+        if (widget.readOnly) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _controller.redo();
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.backspace:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
         _controller.backspace();
         return KeyEventResult.handled;
-      case KeyCode.delete:
+      case TextEditingKeyAction.deleteForward:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
         _controller.delete();
         return KeyEventResult.handled;
-      case KeyCode.arrowLeft:
-        _controller.moveCursorLeft();
+      case TextEditingKeyAction.moveLeft:
+        _cancelScheduledPaste();
+        _controller.moveCursorLeft(extend: event.hasShift);
         return KeyEventResult.handled;
-      case KeyCode.arrowRight:
-        _controller.moveCursorRight();
+      case TextEditingKeyAction.moveRight:
+        _cancelScheduledPaste();
+        _controller.moveCursorRight(extend: event.hasShift);
         return KeyEventResult.handled;
-      case KeyCode.arrowUp:
-        _moveUp();
+      case TextEditingKeyAction.moveWordLeft:
+        _cancelScheduledPaste();
+        _controller.moveCursorWordLeft(extend: event.hasShift);
         return KeyEventResult.handled;
-      case KeyCode.arrowDown:
-        _moveDown();
+      case TextEditingKeyAction.moveWordRight:
+        _cancelScheduledPaste();
+        _controller.moveCursorWordRight(extend: event.hasShift);
         return KeyEventResult.handled;
-      case KeyCode.home:
-        _controller.selection = _lineStart(
-          _controller.text,
-          _controller.selection,
-        );
+      case TextEditingKeyAction.moveUp:
+        _cancelScheduledPaste();
+        _controller.moveCursorLineUp(extend: event.hasShift);
         return KeyEventResult.handled;
-      case KeyCode.end:
-        _controller.selection = _lineEnd(
-          _controller.text,
-          _controller.selection,
-        );
+      case TextEditingKeyAction.moveDown:
+        _cancelScheduledPaste();
+        _controller.moveCursorLineDown(extend: event.hasShift);
         return KeyEventResult.handled;
-      case KeyCode.enter:
+      case TextEditingKeyAction.moveLineStart:
+        _cancelScheduledPaste();
+        _controller.moveCursorToLineStart(extend: event.hasShift);
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.moveLineEnd:
+        _cancelScheduledPaste();
+        _controller.moveCursorToLineEnd(extend: event.hasShift);
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.moveDocumentStart:
+        _cancelScheduledPaste();
+        _controller.moveCursorToStart(extend: event.hasShift);
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.moveDocumentEnd:
+        _cancelScheduledPaste();
+        _controller.moveCursorToEnd(extend: event.hasShift);
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.insertNewline:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
         _controller.insert('\n');
         return KeyEventResult.handled;
-      case KeyCode.escape:
+      case TextEditingKeyAction.escape:
         if (widget.onEscape != null) {
           widget.onEscape!();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
-      default:
+      case TextEditingKeyAction.previousVertical:
+      case TextEditingKeyAction.nextVertical:
+      case TextEditingKeyAction.acceptCompletion:
+      case TextEditingKeyAction.submit:
         return KeyEventResult.ignored;
     }
   }
 
   @override
   void dispose() {
+    _cancelScheduledPaste();
     _controller.removeListener(_onChange);
     if (_ownsController) _controller.dispose();
     _focusNode.textInputClaimant = null;
@@ -205,18 +377,56 @@ class _TextAreaState extends State<TextArea> implements TextInputClaimant {
 
   @override
   Widget build(BuildContext context) {
-    return Focus(
-      focusNode: _focusNode,
-      autofocus: widget.autofocus,
-      onKey: _handleKey,
-      child: _TextAreaDisplay(
-        text: _controller.text,
-        selection: _controller.selection,
-        placeholder: widget.placeholder,
-        placeholderStyle: widget.placeholderStyle,
-        style: widget.style,
-        cursorStyle: widget.cursorStyle,
-        cursorVisible: _focusNode.hasFocus,
+    final focused = _focusNode.hasFocus;
+    return Semantics(
+      role: SemanticRole.textArea,
+      label: widget.placeholder.isEmpty ? null : widget.placeholder,
+      value: widget.clipboardPolicy == TextClipboardPolicy.redacted
+          ? null
+          : _controller.text,
+      enabled: widget.enabled,
+      focused: focused,
+      validationError: widget.validationError,
+      actions: {
+        if (widget.enabled) SemanticAction.focus,
+        if (widget.enabled && !widget.readOnly) SemanticAction.clear,
+        if (widget.enabled &&
+            _controller.hasSelection &&
+            widget.clipboardPolicy != TextClipboardPolicy.disabled)
+          SemanticAction.copy,
+      },
+      state: SemanticState({
+        'selectionBase': _controller.textSelection.baseOffset,
+        'selectionExtent': _controller.textSelection.extentOffset,
+        'composingActive': _controller.hasComposingRange,
+        'composingStart': _controller.composing.normalizedStart,
+        'composingEnd': _controller.composing.normalizedEnd,
+        'readOnly': widget.readOnly,
+        'redactedValue': widget.clipboardPolicy == TextClipboardPolicy.redacted,
+        ...textClipboardSemanticState(widget.clipboardPolicy),
+        'pasteInProgress': _pasteProgress.active,
+        'pasteInsertedLength': _pasteProgress.insertedLength,
+        'pasteTotalLength': _pasteProgress.totalLength,
+      }),
+      onAction: _handleSemanticAction,
+      child: Focus(
+        focusNode: _focusNode,
+        autofocus: widget.autofocus && widget.enabled,
+        canRequestFocus: widget.enabled,
+        onKey: _handleKey,
+        child: _TextAreaDisplay(
+          text: _controller.text,
+          selection: _controller.textSelection,
+          placeholder: widget.placeholder,
+          placeholderStyle: widget.enabled
+              ? widget.placeholderStyle
+              : widget.placeholderStyle.merge(const CellStyle(dim: true)),
+          style: widget.enabled
+              ? widget.style
+              : widget.style.merge(const CellStyle(dim: true)),
+          cursorStyle: widget.cursorStyle,
+          cursorVisible: focused,
+        ),
       ),
     );
   }
@@ -234,7 +444,7 @@ class _TextAreaDisplay extends LeafRenderObjectWidget {
   });
 
   final String text;
-  final int selection;
+  final TextSelection selection;
   final String placeholder;
   final CellStyle placeholderStyle;
   final CellStyle style;
@@ -273,7 +483,7 @@ class _TextAreaDisplay extends LeafRenderObjectWidget {
 class RenderTextArea extends RenderObject {
   RenderTextArea({
     required String text,
-    required int selection,
+    required TextSelection selection,
     String placeholder = '',
     CellStyle placeholderStyle = const CellStyle(dim: true),
     CellStyle style = CellStyle.empty,
@@ -282,7 +492,7 @@ class RenderTextArea extends RenderObject {
     WidthResolver widthResolver = const DefaultWidthResolver(),
     TerminalProfile profile = TerminalProfile.standard,
   }) : _text = _sanitize(text),
-       _selection = selection.clamp(0, text.length),
+       _selection = selection.normalizeForText(_sanitize(text)),
        _placeholder = _sanitize(placeholder),
        _placeholderStyle = placeholderStyle,
        _style = style,
@@ -295,7 +505,7 @@ class RenderTextArea extends RenderObject {
       value.split('\n').map(sanitizeForDisplay).join('\n');
 
   String _text;
-  int _selection;
+  TextSelection _selection;
   String _placeholder;
   CellStyle _placeholderStyle;
   CellStyle _style;
@@ -304,20 +514,53 @@ class RenderTextArea extends RenderObject {
   final WidthResolver _widthResolver;
   final TerminalProfile _profile;
   int _scrollTop = 0;
+  int _scrollLeft = 0;
 
   set text(String value) {
     final s = _sanitize(value);
     if (s == _text) return;
     _text = s;
-    _selection = _selection.clamp(0, _text.length);
+    _selection = _selection.normalizeForText(_text);
+    markNeedsLayout();
   }
 
-  set placeholder(String value) => _placeholder = _sanitize(value);
-  set placeholderStyle(CellStyle value) => _placeholderStyle = value;
-  set selection(int value) => _selection = value.clamp(0, _text.length);
-  set style(CellStyle value) => _style = value;
-  set cursorStyle(CellStyle value) => _cursorStyle = value;
-  set cursorVisible(bool value) => _cursorVisible = value;
+  set placeholder(String value) {
+    final sanitized = _sanitize(value);
+    if (_placeholder == sanitized) return;
+    _placeholder = sanitized;
+    markNeedsLayout();
+  }
+
+  set placeholderStyle(CellStyle value) {
+    if (_placeholderStyle == value) return;
+    _placeholderStyle = value;
+    markNeedsPaintOnly();
+  }
+
+  set selection(TextSelection value) {
+    final normalized = value.normalizeForText(_text);
+    if (_selection == normalized) return;
+    _selection = normalized;
+    markNeedsLayout();
+  }
+
+  set style(CellStyle value) {
+    if (_style == value) return;
+    _style = value;
+    markNeedsPaintOnly();
+  }
+
+  set cursorStyle(CellStyle value) {
+    if (_cursorStyle == value) return;
+    _cursorStyle = value;
+    markNeedsPaintOnly();
+  }
+
+  set cursorVisible(bool value) {
+    if (_cursorVisible == value) return;
+    _cursorVisible = value;
+    markNeedsPaintOnly();
+  }
 
   bool get _showPlaceholder => _text.isEmpty && _placeholder.isNotEmpty;
 
@@ -328,7 +571,8 @@ class RenderTextArea extends RenderObject {
     var idx = 0;
     for (var i = 0; i < lines.length; i++) {
       final len = lines[i].length;
-      if (_selection <= idx + len) return (i, _selection - idx);
+      final cursor = _selection.extentOffset;
+      if (cursor <= idx + len) return (i, cursor - idx);
       idx += len + 1; // + the newline
     }
     return (lines.length - 1, lines.isEmpty ? 0 : lines.last.length);
@@ -358,7 +602,61 @@ class RenderTextArea extends RenderObject {
     if (_scrollTop > maxScroll) _scrollTop = maxScroll;
     if (_scrollTop < 0) _scrollTop = 0;
 
-    return constraints.constrain(CellSize(cols, rows));
+    final nextSize = constraints.constrain(CellSize(cols, rows));
+    _syncHorizontalScroll(lines, nextSize.cols);
+    return nextSize;
+  }
+
+  int _lineDisplayWidth(String line) =>
+      _widthResolver.widthOfText(line, _profile);
+
+  int _displayCellForLineOffset(String line, int textOffset) {
+    var cell = 0;
+    var codeUnitOffset = 0;
+    for (final grapheme in line.characters) {
+      if (textOffset <= codeUnitOffset) return cell;
+      codeUnitOffset += grapheme.length;
+      cell += _widthResolver.widthOfGrapheme(grapheme, _profile);
+      if (textOffset <= codeUnitOffset) return cell;
+    }
+    return cell;
+  }
+
+  int _displayBoundaryAtOrAfter(String line, int cellOffset) {
+    if (cellOffset <= 0) return 0;
+    var cell = 0;
+    for (final grapheme in line.characters) {
+      final next = cell + _widthResolver.widthOfGrapheme(grapheme, _profile);
+      if (cellOffset <= cell) return cell;
+      if (cellOffset < next) return next;
+      cell = next;
+    }
+    return cell;
+  }
+
+  void _syncHorizontalScroll(List<String> lines, int visibleCols) {
+    if (_showPlaceholder || visibleCols <= 0 || lines.isEmpty) {
+      _scrollLeft = 0;
+      return;
+    }
+    final (cursorLine, cursorCol) = _cursorLineCol(lines);
+    final line = lines[cursorLine];
+    final lineWidth = _lineDisplayWidth(line) + 1; // trailing cursor cell
+    if (lineWidth <= visibleCols) {
+      _scrollLeft = 0;
+      return;
+    }
+    final cursorCell = _displayCellForLineOffset(line, cursorCol);
+    var next = _scrollLeft;
+    if (cursorCell < next) {
+      next = cursorCell;
+    } else if (cursorCell >= next + visibleCols) {
+      next = cursorCell - visibleCols + 1;
+    }
+    if (next < 0) next = 0;
+    next = _displayBoundaryAtOrAfter(line, next);
+    if (next > cursorCell) next = cursorCell;
+    _scrollLeft = next;
   }
 
   @override
@@ -381,6 +679,8 @@ class RenderTextArea extends RenderObject {
         var first = r == 0;
         for (final g in phLines[r].characters) {
           if (col >= maxCol) break;
+          final width = _widthResolver.widthOfGrapheme(g, _profile);
+          if (col + width > maxCol) break;
           final st = (first && _cursorVisible)
               ? _placeholderStyle.merge(_cursorStyle)
               : _placeholderStyle;
@@ -401,38 +701,63 @@ class RenderTextArea extends RenderObject {
     final lines = _lines;
     final (cursorLine, cursorCol) = _cursorLineCol(lines);
     final maxCol = offset.col + size.cols;
+    final selectionStart = _selection.start;
+    final selectionEnd = _selection.end;
+    final selectionCollapsed = _selection.isCollapsed;
+    final visibleStart = _scrollLeft;
+    final visibleEnd = _scrollLeft + size.cols;
+    var lineStartOffset = 0;
 
     for (var r = 0; r < size.rows; r++) {
       final li = _scrollTop + r;
       if (li >= lines.length) break;
+      lineStartOffset = _lineStartOffset(lines, li);
       final line = lines[li];
       final row = offset.row + r;
-      var col = offset.col;
       var cu = 0;
       var paintedCursor = false;
+      var displayCell = 0;
 
       for (final g in line.characters) {
-        if (col >= maxCol) break;
-        final atCursor = li == cursorLine && cu == cursorCol;
-        final st = (atCursor && _cursorVisible)
+        final globalStart = lineStartOffset + cu;
+        final globalEnd = globalStart + g.length;
+        final width = _widthResolver.widthOfGrapheme(g, _profile);
+        final displayStart = displayCell;
+        final displayEnd = displayStart + width;
+        cu += g.length;
+        displayCell = displayEnd;
+        if (displayEnd <= visibleStart) continue;
+        if (displayStart < visibleStart) continue;
+        if (displayStart >= visibleEnd) break;
+        if (displayEnd > visibleEnd) break;
+        final atCursor =
+            selectionCollapsed &&
+            li == cursorLine &&
+            globalStart == lineStartOffset + cursorCol;
+        final selected =
+            !selectionCollapsed &&
+            globalStart >= selectionStart &&
+            globalEnd <= selectionEnd;
+        final st = ((atCursor && _cursorVisible) || selected)
             ? _style.merge(_cursorStyle)
             : _style;
         buffer.writeGrapheme(
-          CellOffset(col, row),
+          CellOffset(offset.col + (displayStart - visibleStart), row),
           g,
           style: st,
           widthResolver: _widthResolver,
           profile: _profile,
         );
-        col += _widthResolver.widthOfGrapheme(g, _profile);
-        cu += g.length;
         if (atCursor) paintedCursor = true;
       }
 
-      if (li == cursorLine &&
-          !paintedCursor &&
-          _cursorVisible &&
-          col < maxCol) {
+      if (selectionCollapsed && li == cursorLine && !paintedCursor) {
+        final cursorCell = _displayCellForLineOffset(line, cursorCol);
+        final cursorVisible =
+            cursorCell >= visibleStart && cursorCell < visibleEnd;
+        final col = offset.col + (cursorCell - visibleStart);
+        if (!cursorVisible || col >= maxCol) continue;
+        if (!_cursorVisible) continue;
         buffer.writeGrapheme(
           CellOffset(col, row),
           ' ',
@@ -440,5 +765,13 @@ class RenderTextArea extends RenderObject {
         );
       }
     }
+  }
+
+  int _lineStartOffset(List<String> lines, int lineIndex) {
+    var offset = 0;
+    for (var i = 0; i < lineIndex; i++) {
+      offset += lines[i].length + 1;
+    }
+    return offset;
   }
 }

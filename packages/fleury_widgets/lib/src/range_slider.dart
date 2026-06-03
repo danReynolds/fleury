@@ -28,6 +28,7 @@ class RangeSlider extends StatefulWidget {
     required this.max,
     this.step = 1,
     this.largeStep = 10,
+    this.label,
     this.focusNode,
     this.autofocus = false,
   }) : assert(min < max, 'min must be < max'),
@@ -49,6 +50,9 @@ class RangeSlider extends StatefulWidget {
 
   /// Granularity of PageUp/PageDown moves.
   final num largeStep;
+
+  /// Optional label exposed through the semantic app graph.
+  final String? label;
 
   final FocusNode? focusNode;
   final bool autofocus;
@@ -153,18 +157,64 @@ class _RangeSliderState extends State<RangeSlider> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Focus(
-      focusNode: _node,
-      autofocus: widget.autofocus,
-      onKey: _onKey,
-      child: _RawRangeSlider(
-        values: _normalized,
-        min: widget.min,
-        max: widget.max,
-        active: _active,
-        focused: _node.hasFocus,
-        accent: theme.colorScheme.primary,
-        trackStyle: theme.mutedStyle,
+    final (lo, hi) = _normalized;
+    final canDecrement = _active == _ActiveHandle.low
+        ? lo > widget.min
+        : hi > lo;
+    final canIncrement = _active == _ActiveHandle.low
+        ? lo < hi
+        : hi < widget.max;
+    return Semantics(
+      role: SemanticRole.slider,
+      label: widget.label,
+      value: '$lo-$hi',
+      focused: _node.hasFocus,
+      actions: {
+        SemanticAction.focus,
+        if (canIncrement) SemanticAction.increment,
+        if (canDecrement) SemanticAction.decrement,
+      },
+      state: SemanticState({
+        'lowValue': lo,
+        'highValue': hi,
+        'min': widget.min,
+        'max': widget.max,
+        'step': widget.step,
+        'largeStep': widget.largeStep,
+        'activeHandle': _active.name,
+        'canIncrement': canIncrement,
+        'canDecrement': canDecrement,
+      }),
+      onAction: (action) {
+        switch (action) {
+          case SemanticAction.focus:
+            _node.requestFocus();
+            return;
+          case SemanticAction.increment:
+            _node.requestFocus();
+            if (canIncrement) _nudge(widget.step);
+            return;
+          case SemanticAction.decrement:
+            _node.requestFocus();
+            if (canDecrement) _nudge(-widget.step);
+            return;
+          case _:
+            return;
+        }
+      },
+      child: Focus(
+        focusNode: _node,
+        autofocus: widget.autofocus,
+        onKey: _onKey,
+        child: _RawRangeSlider(
+          values: _normalized,
+          min: widget.min,
+          max: widget.max,
+          active: _active,
+          focused: _node.hasFocus,
+          accent: theme.colorScheme.primary,
+          trackStyle: theme.mutedStyle,
+        ),
       ),
     );
   }
@@ -237,49 +287,49 @@ class _RenderRangeSlider extends RenderObject {
   set values((num, num) v) {
     if (_values == v) return;
     _values = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   num _min;
   set rmin(num v) {
     if (_min == v) return;
     _min = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   num _max;
   set rmax(num v) {
     if (_max == v) return;
     _max = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   _ActiveHandle _active;
   set active(_ActiveHandle v) {
     if (_active == v) return;
     _active = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   bool _focused;
   set focused(bool v) {
     if (_focused == v) return;
     _focused = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   Color _accent;
   set accent(Color v) {
     if (_accent == v) return;
     _accent = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   CellStyle _trackStyle;
   set trackStyle(CellStyle v) {
     if (_trackStyle == v) return;
     _trackStyle = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   @override

@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryPeerBenchmarkRun",
+  "runId": "textual-sb3-datatable-2026-06-02T13-33-06Z",
+  "peerId": "textual",
+  "scenarioId": "SB.3",
+  "capturedAt": "2026-06-02T13:33:06.173960Z",
+  "source": {
+    "name": "Textual",
+    "version": "8.2.7",
+    "url": "https://pypi.org/project/textual/"
+  },
+  "environment": {
+    "machine": "macbookpro.lan",
+    "operatingSystem": "darwin",
+    "operatingSystemVersion": "macOS-26.2-arm64-arm-64bit",
+    "runtime": "Python 3.12.13 / Textual 8.2.7",
+    "terminalMode": "textual-run-test-harness",
+    "terminalSize": {
+      "columns": 80,
+      "rows": 24
+    }
+  },
+  "fixture": {
+    "workingDirectory": "peer-fixtures/textual/sb3_datatable",
+    "command": [
+      "python",
+      "sb3_datatable_benchmark.py",
+      "--warmup=2",
+      "--iterations=5",
+      "--rows=100000",
+      "--json"
+    ],
+    "warmupIterations": 2,
+    "measuredIterations": 5
+  },
+  "metrics": {
+    "mountUs": {
+      "min": 8029690,
+      "median": 8338158,
+      "p95": 8632328,
+      "p99": 8632328,
+      "max": 8632328,
+      "samples": 5
+    },
+    "firstRenderUs": {
+      "min": 42009,
+      "median": 63782,
+      "p95": 65022,
+      "p99": 65022,
+      "max": 65022,
+      "samples": 5
+    },
+    "arrowMoveUs": {
+      "min": 130323,
+      "median": 144826,
+      "p95": 286775,
+      "p99": 286775,
+      "max": 286775,
+      "samples": 5
+    },
+    "pageMoveUs": {
+      "min": 86654,
+      "median": 87924,
+      "p95": 97347,
+      "p99": 97347,
+      "max": 97347,
+      "samples": 5
+    },
+    "jumpToEndUs": {
+      "min": 99190,
+      "median": 107618,
+      "p95": 259856,
+      "p99": 259856,
+      "max": 259856,
+      "samples": 5
+    },
+    "copySelectedRowUs": {
+      "min": 66726,
+      "median": 69002,
+      "p95": 76706,
+      "p99": 76706,
+      "max": 76706,
+      "samples": 5
+    },
+    "semanticOrTestQueryUs": {
+      "min": 54,
+      "median": 101,
+      "p95": 230,
+      "p99": 230,
+      "max": 230,
+      "samples": 5
+    },
+    "rssDeltaBytes": 0,
+    "lineOfCodeCount": 104,
+    "testLineOfCodeCount": 30,
+    "rowCount": 100000,
+    "visibleWindowRowEstimate": 23,
+    "virtualHeight": 100001,
+    "finalCursorRow": 99999,
+    "finalSelectedRowId": "RUN-099999",
+    "finalScrollY": 99978,
+    "finalMaxScrollY": 99978
+  },
+  "correctness": [
+    {
+      "gate": "visible window stays bounded",
+      "pass": true,
+      "evidence": "Textual DataTable scrollable_size.height stayed within terminal rows plus margin."
+    },
+    {
+      "gate": "selection is correct after jump",
+      "pass": true,
+      "evidence": "Priority End binding selected RUN-099999."
+    },
+    {
+      "gate": "copy/export is sanitized and exact",
+      "pass": true,
+      "evidence": "Selected row TSV matched generated source row and contained no escape bytes."
+    }
+  ],
+  "ergonomics": {
+    "lineOfCodeCount": 104,
+    "testLineOfCodeCount": 30,
+    "appFile": "sb3_datatable_app.py",
+    "testFile": "test_sb3_datatable.py",
+    "peerOwnedDataTable": true,
+    "appOwnedJumpToEndCommand": true,
+    "appOwnedCopyExport": true,
+    "semanticGraphAvailable": false,
+    "testQueryViaWidgetState": true
+  },
+  "artifacts": [
+    {
+      "kind": "source",
+      "path": "peer-fixtures/textual/sb3_datatable/sb3_datatable_app.py"
+    },
+    {
+      "kind": "test",
+      "path": "peer-fixtures/textual/sb3_datatable/test_sb3_datatable.py"
+    }
+  ],
+  "notes": [
+    "This is a Textual run_test peer fixture, not a real-terminal run.",
+    "Textual 8.2.7 supplies the DataTable, cursor movement, paging, focus, and test harness.",
+    "Jump-to-final-row and selected-row copy/export are app-owned commands in this fixture so they match the SB.3 contract explicitly.",
+    "Textual exposes public widget state for this fixture, not a Fleury-style semantic app graph.",
+    "Timing is local-machine evidence and should not be used as a public superiority claim without repeated peer runs."
+  ]
+}

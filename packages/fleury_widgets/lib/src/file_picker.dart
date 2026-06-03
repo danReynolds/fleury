@@ -23,6 +23,7 @@ class FilePicker extends StatefulWidget {
     required this.onSelected,
     this.filter,
     this.showHidden = false,
+    this.semanticLabel = 'Files',
     this.focusNode,
     this.autofocus = false,
   });
@@ -43,6 +44,9 @@ class FilePicker extends StatefulWidget {
   /// When `false` (default), entries whose name starts with `.` are
   /// hidden — matches the unix convention. Set `true` to include them.
   final bool showHidden;
+
+  /// Label exposed through the semantic app graph.
+  final String semanticLabel;
 
   final FocusNode? focusNode;
   final bool autofocus;
@@ -122,6 +126,49 @@ class _FilePickerState extends State<FilePicker> {
     return i < 0 ? path : path.substring(i + 1);
   }
 
+  String _safeText(String text) {
+    return sanitizeForDisplay(
+      text.replaceAll(_filePickerLineBreakPattern, ' '),
+    );
+  }
+
+  String _entryType(FileSystemEntity entry) {
+    if (entry is Directory) return 'directory';
+    if (entry is File) return 'file';
+    if (entry is Link) return 'link';
+    return 'other';
+  }
+
+  String _displayName(FileSystemEntity entry) {
+    final name = _safeText(_basename(entry.path));
+    return entry is Directory ? '$name/' : name;
+  }
+
+  bool _canOpen(FileSystemEntity entry) => entry is Directory || entry is File;
+
+  void _activateEntryAt(int index) {
+    if (index < 0 || index >= _entries.length) return;
+    _node.requestFocus();
+    setState(() => _cursor = index);
+    _enterCurrent();
+  }
+
+  void _handlePickerAction(SemanticAction action) {
+    switch (action) {
+      case SemanticAction.focus:
+      case SemanticAction.navigate:
+        _node.requestFocus();
+        setState(() {});
+        return;
+      case SemanticAction.open:
+        _node.requestFocus();
+        _enterCurrent();
+        return;
+      case _:
+        return;
+    }
+  }
+
   void _enterCurrent() {
     if (_entries.isEmpty) return;
     final e = _entries[_cursor];
@@ -181,7 +228,9 @@ class _FilePickerState extends State<FilePicker> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final focused = _node.hasFocus;
-    final rows = <Widget>[Text(_cwd.path, style: theme.mutedStyle)];
+    final safeCwd = _safeText(_cwd.path);
+    final selected = _entries.isEmpty ? null : _entries[_cursor];
+    final rows = <Widget>[Text(safeCwd, style: theme.mutedStyle)];
     if (_entries.isEmpty) {
       rows.add(const Text('  (empty)', style: CellStyle(dim: true)));
     }
@@ -190,31 +239,87 @@ class _FilePickerState extends State<FilePicker> {
       final isDir = e is Directory;
       final isSelected = i == _cursor;
       final marker = isDir ? '▸ ' : '  ';
-      final name = _basename(e.path) + (isDir ? '/' : '');
+      final rawName = _basename(e.path) + (isDir ? '/' : '');
+      final name = _displayName(e);
       final style = isSelected
           ? (focused ? theme.focusedStyle : theme.selectionStyle)
           : CellStyle.empty;
+      final safePath = _safeText(e.path);
+      final canOpen = _canOpen(e);
       rows.add(
-        Row(
-          children: [
-            Text(' ', style: style),
-            Text(marker, style: style),
-            Text(name, style: style),
-          ],
+        Semantics(
+          role: SemanticRole.treeItem,
+          label: name,
+          value: safePath,
+          selected: isSelected,
+          enabled: true,
+          actions: {if (canOpen) SemanticAction.open},
+          onAction: (action) {
+            switch (action) {
+              case SemanticAction.open:
+                if (canOpen) _activateEntryAt(i);
+                return;
+              case _:
+                return;
+            }
+          },
+          state: SemanticState({
+            'rowIndex': i,
+            'rowKey': safePath,
+            'path': safePath,
+            'entryType': _entryType(e),
+            'isDirectory': isDir,
+            'hidden': _basename(e.path).startsWith('.'),
+            'outputSanitized': safePath != e.path || name != rawName,
+          }),
+          child: Row(
+            children: [
+              Text(' ', style: style),
+              Text(marker, style: style),
+              Text(name, style: style),
+            ],
+          ),
         ),
       );
     }
-    return Focus(
-      focusNode: _node,
-      autofocus: widget.autofocus,
-      onKey: _onKey,
-      child: GestureDetector(
-        onTap: () => _node.requestFocus(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: rows,
+    return Semantics(
+      role: SemanticRole.tree,
+      label: widget.semanticLabel,
+      value: safeCwd,
+      focused: focused,
+      actions: {
+        SemanticAction.focus,
+        SemanticAction.navigate,
+        if (selected != null && _canOpen(selected)) SemanticAction.open,
+      },
+      onAction: _handlePickerAction,
+      state: SemanticState({
+        'currentDirectory': safeCwd,
+        'collectionRowCount': _entries.length,
+        'showHidden': widget.showHidden,
+        'outputSanitized': safeCwd != _cwd.path,
+        if (selected != null) ...{
+          'selectedIndex': _cursor,
+          'selectedKey': _safeText(selected.path),
+          'selectedPath': _safeText(selected.path),
+          'selectedEntryType': _entryType(selected),
+          'selectedIsDirectory': selected is Directory,
+        },
+      }),
+      child: Focus(
+        focusNode: _node,
+        autofocus: widget.autofocus,
+        onKey: _onKey,
+        child: GestureDetector(
+          onTap: () => _node.requestFocus(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: rows,
+          ),
         ),
       ),
     );
   }
 }
+
+final _filePickerLineBreakPattern = RegExp(r'[\r\n\t]');

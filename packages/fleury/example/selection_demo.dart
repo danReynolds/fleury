@@ -49,8 +49,8 @@ class _SelectionDemoState extends State<SelectionDemo> {
       bindings: [
         KeyBinding(
           KeyChord.ctrl.c,
-          onEvent: (_) {
-            /* let ancestor exit */
+          onEvent: (event) {
+            event.bubble();
           },
         ),
       ],

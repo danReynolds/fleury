@@ -142,5 +142,126 @@ void main() {
       final out = tester.renderToString(size: const CellSize(40, 4));
       expect(out.contains('(empty)'), isTrue);
     });
+
+    testWidgets('exposes tree semantics for the selected entry', (tester) {
+      final dir = _scratchDir();
+      tester.pumpWidget(
+        FilePicker(
+          initialDirectory: dir,
+          semanticLabel: 'Project files',
+          onSelected: (_) {},
+        ),
+      );
+
+      final tree = tester.semantics().single(
+        role: SemanticRole.tree,
+        label: 'Project files',
+        value: dir,
+        action: SemanticAction.open,
+      );
+      expect(tree.actions, contains(SemanticAction.focus));
+      expect(tree.actions, contains(SemanticAction.navigate));
+      expect(tree.state.collectionRowCount, 3);
+      expect(tree.state['selectedIndex'], 0);
+      expect(tree.state['selectedPath'], '$dir${Platform.pathSeparator}sub');
+      expect(tree.state['selectedEntryType'], 'directory');
+      expect(tree.state['selectedIsDirectory'], isTrue);
+
+      final selected = tester.semantics().single(
+        role: SemanticRole.treeItem,
+        label: 'sub/',
+        selected: true,
+        action: SemanticAction.open,
+      );
+      expect(selected.value, '$dir${Platform.pathSeparator}sub');
+      expect(selected.state['entryType'], 'directory');
+      expect(selected.state['isDirectory'], isTrue);
+
+      expect(
+        tester
+            .accessibilitySnapshot()
+            .single(role: SemanticRole.tree, label: 'Project files')
+            .states,
+        contains('3 rows'),
+      );
+    });
+
+    testWidgets('semantic open on a directory navigates into it', (
+      tester,
+    ) async {
+      final dir = _scratchDir();
+      tester.pumpWidget(
+        FilePicker(initialDirectory: dir, autofocus: true, onSelected: (_) {}),
+      );
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.open,
+        role: SemanticRole.treeItem,
+        label: 'sub/',
+      );
+
+      expect(result.completed, isTrue);
+      expect(
+        tester.semantics().single(role: SemanticRole.tree).value,
+        '$dir${Platform.pathSeparator}sub',
+      );
+      expect(
+        tester.semantics().single(
+          role: SemanticRole.treeItem,
+          label: 'inside.dart',
+          selected: true,
+        ),
+        isNotNull,
+      );
+    });
+
+    testWidgets('semantic open on a file selects it', (tester) async {
+      final dir = _scratchDir();
+      File? picked;
+      tester.pumpWidget(
+        FilePicker(
+          initialDirectory: dir,
+          autofocus: true,
+          onSelected: (file) => picked = file,
+        ),
+      );
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.open,
+        role: SemanticRole.treeItem,
+        label: 'a.txt',
+      );
+
+      expect(result.completed, isTrue);
+      expect(picked, isNotNull);
+      expect(picked!.path, '$dir${Platform.pathSeparator}a.txt');
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.tree)
+            .state['selectedIndex'],
+        1,
+      );
+    });
+
+    testWidgets('semantic focus updates the focused tree node', (tester) async {
+      final dir = _scratchDir();
+      tester.pumpWidget(FilePicker(initialDirectory: dir, onSelected: (_) {}));
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.focus,
+        role: SemanticRole.tree,
+        label: 'Files',
+      );
+
+      expect(result.completed, isTrue);
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.tree, label: 'Files')
+            .focused,
+        isTrue,
+      );
+    });
   });
 }

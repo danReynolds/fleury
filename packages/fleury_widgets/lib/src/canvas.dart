@@ -75,6 +75,11 @@ class Canvas extends StatelessWidget {
     required this.painter,
     this.bounds,
     this.marker = CanvasMarker.braille,
+    this.semanticRole = SemanticRole.image,
+    this.semanticLabel,
+    this.semanticValue,
+    this.semanticHint,
+    this.semanticState = SemanticState.empty,
   });
 
   final CanvasPainter painter;
@@ -85,16 +90,60 @@ class Canvas extends StatelessWidget {
   /// Sub-cell rendering style. See [CanvasMarker] for the tradeoffs.
   final CanvasMarker marker;
 
+  /// Semantic role used when this canvas opts into semantics.
+  ///
+  /// Defaults to [SemanticRole.image]. Custom plots can use
+  /// [SemanticRole.chart] and provide chart-specific [semanticState].
+  final SemanticRole semanticRole;
+
+  /// Optional label that exposes the canvas to the semantic app graph.
+  ///
+  /// Plain canvases do not contribute semantics because higher-level widgets
+  /// such as charts wrap their drawing surface with richer meaning.
+  final String? semanticLabel;
+
+  /// Optional semantic value for the drawn content.
+  final Object? semanticValue;
+
+  /// Optional semantic hint for the drawn content.
+  final String? semanticHint;
+
+  /// Additional semantic state for custom canvas surfaces.
+  final SemanticState semanticState;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return _RawCanvas(
+    final resolvedBounds = bounds ?? CanvasBounds.unit;
+    final raw = _RawCanvas(
       painter: painter,
-      bounds: bounds ?? CanvasBounds.unit,
+      bounds: resolvedBounds,
       marker: marker,
       defaultStyle: CellStyle(foreground: theme.colorScheme.primary),
     );
+    if (!_hasSemantics) return raw;
+    return Semantics(
+      role: semanticRole,
+      label: semanticLabel,
+      value: semanticValue,
+      hint: semanticHint,
+      state: semanticState.merge(<String, Object?>{
+        'canvasMarker': marker.name,
+        'canvasMinX': resolvedBounds.minX,
+        'canvasMaxX': resolvedBounds.maxX,
+        'canvasMinY': resolvedBounds.minY,
+        'canvasMaxY': resolvedBounds.maxY,
+      }),
+      child: raw,
+    );
   }
+
+  bool get _hasSemantics =>
+      semanticLabel != null ||
+      semanticValue != null ||
+      semanticHint != null ||
+      semanticState.values.isNotEmpty ||
+      semanticRole != SemanticRole.image;
 }
 
 class _RawCanvas extends LeafRenderObjectWidget {
@@ -145,27 +194,30 @@ class RenderCanvas extends RenderObject {
 
   CanvasPainter _painter;
   set painter(CanvasPainter v) {
+    if (identical(_painter, v)) return;
     _painter = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   CanvasBounds _bounds;
   set bounds(CanvasBounds v) {
+    if (_bounds == v) return;
     _bounds = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   CanvasMarker _marker;
   set marker(CanvasMarker v) {
     if (_marker == v) return;
     _marker = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   CellStyle _defaultStyle;
   set defaultStyle(CellStyle v) {
+    if (_defaultStyle == v) return;
     _defaultStyle = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   @override

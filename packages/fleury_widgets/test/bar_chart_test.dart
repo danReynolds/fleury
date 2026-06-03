@@ -148,6 +148,49 @@ void main() {
       expect(buf.atColRow(0, 0).style.foreground, const AnsiColor(5));
     });
 
+    testWidgets('same-length bar updates repaint without relayout', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 3,
+          height: 3,
+          child: BarChart(
+            bars: [Bar('a', 1), Bar('b', 1)],
+            max: 2,
+            barWidth: 1,
+            gap: 1,
+            showLabels: false,
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(3, 3));
+
+      tester.pumpWidget(
+        const SizedBox(
+          width: 3,
+          height: 3,
+          child: BarChart(
+            bars: [Bar('a', 2), Bar('b', 1)],
+            max: 2,
+            barWidth: 1,
+            gap: 1,
+            showLabels: false,
+          ),
+        ),
+      );
+      RenderLayoutDebugStats.beginFrame(enabled: true);
+      final buf = tester.render(size: const CellSize(3, 3));
+      final stats = RenderLayoutDebugStats.takeFrameStats();
+
+      expect(buf.atColRow(0, 0).grapheme, '█');
+      expect(buf.atColRow(2, 0).role, CellRole.empty);
+      expect(buf.atColRow(0, 1).grapheme, '█');
+      expect(buf.atColRow(2, 1).grapheme, '▄');
+      expect(buf.atColRow(0, 2).grapheme, '█');
+      expect(buf.atColRow(2, 2).grapheme, '█');
+      expect(stats.performedCount, 0);
+      expect(stats.skippedCount, greaterThan(0));
+    });
+
     // ----- Stacked bars --------------------------------------------------
 
     testWidgets('stacked bar fills bottom→top with palette colors', (tester) {
@@ -224,6 +267,42 @@ void main() {
       final buf = tester.render(size: const CellSize(1, 2));
       expect(buf.atColRow(0, 1).style.foreground, const AnsiColor(4));
       expect(buf.atColRow(0, 0).style.foreground, const AnsiColor(5));
+    });
+
+    testWidgets('exposes chart semantics and fallback state', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 8,
+          height: 5,
+          child: BarChart(
+            bars: [
+              Bar('api', 2),
+              Bar.stacked('db', [1, 3]),
+            ],
+            max: 4,
+            semanticLabel: 'Service load',
+          ),
+        ),
+      );
+
+      final chart = tester.semantics().single(
+        role: SemanticRole.chart,
+        label: 'Service load',
+      );
+      expect(chart.state.chartType, 'bar');
+      expect(chart.state.chartBarCount, 2);
+      expect(chart.state.chartSegmentCount, 3);
+      expect(chart.state.chartMinValue, 2);
+      expect(chart.state.chartMaxValue, 4);
+
+      final fallback = tester.accessibilitySnapshot().single(
+        role: SemanticRole.chart,
+        label: 'Service load',
+      );
+      expect(
+        fallback.states,
+        contains('chart bar, 2 bars, 3 segments, min 2, max 4'),
+      );
     });
 
     // ----- Legend --------------------------------------------------------

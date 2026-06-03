@@ -11,6 +11,10 @@
 import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
+Matcher _stateError(String message) => throwsA(
+  isA<StateError>().having((error) => error.message, 'message', message),
+);
+
 KeyEvent _char(String c, {bool ctrl = false, bool alt = false}) {
   return KeyEvent(
     char: c,
@@ -43,7 +47,77 @@ class _TestHarness {
   KeyEventResult dispatch(KeyEvent event) => dispatcher.dispatch(event);
 }
 
+class _ClaimLog extends StatefulWidget {
+  const _ClaimLog({required this.events});
+
+  final List<String> events;
+
+  @override
+  State<_ClaimLog> createState() => _ClaimLogState();
+}
+
+class _ClaimLogState extends State<_ClaimLog> implements TextInputClaimant {
+  late final FocusNode _node;
+
+  @override
+  void initState() {
+    super.initState();
+    _node = FocusNode(debugLabel: 'claim-log');
+    _node.textInputClaimant = this;
+  }
+
+  @override
+  KeyEventResult onTextInput(String text) {
+    widget.events.add('text:$text');
+    return KeyEventResult.handled;
+  }
+
+  @override
+  KeyEventResult onPaste(String text) {
+    widget.events.add('paste:$text');
+    return KeyEventResult.handled;
+  }
+
+  @override
+  void dispose() {
+    _node.textInputClaimant = null;
+    _node.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(focusNode: _node, autofocus: true, child: const EmptyBox());
+  }
+}
+
 void main() {
+  group('InputDispatcher lifecycle', () {
+    test('dispose clears pending state and blocks further dispatch', () {
+      final h = _TestHarness(
+        globalBindings: [
+          KeyBinding.list([KeyChord.space.q], onEvent: (_) {}),
+        ],
+      );
+      h.dispatch(_char(' '));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      h.dispatcher.dispose();
+      h.dispatcher.dispose();
+
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+      expect(() => h.dispatcher.globalBindings, returnsNormally);
+      expect(
+        () => h.dispatch(_char('q')),
+        _stateError('InputDispatcher has been disposed.'),
+      );
+      expect(
+        () => h.dispatcher.globalBindings = const [],
+        _stateError('InputDispatcher has been disposed.'),
+      );
+    });
+  });
+
   group('Acceptance tests — focus chain bubble-up', () {
     test('1. Focused child binding handles a key before parent', () {
       final calls = <String>[];
@@ -397,6 +471,49 @@ void main() {
       expect(controller.text, ' ');
       expect(paletteOpens, 0);
       expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('16a. Unclaimed printable text falls through to KeyBindings', () {
+      var activations = 0;
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [KeyBinding(.space, onEvent: (_) => activations += 1)],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      h.dispatcher.dispatch(const TextInputEvent(' '));
+      expect(activations, 1);
+    });
+
+    test('16c. Unclaimed printable text can complete a leader sequence', () {
+      var paletteOpens = 0;
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [KeyBinding(.space.p, onEvent: (_) => paletteOpens += 1)],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      h.dispatcher.dispatch(const TextInputEvent(' '));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      h.dispatcher.dispatch(const TextInputEvent('p'));
+      expect(paletteOpens, 1);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('16d. Bracketed paste dispatches to onPaste, not onTextInput', () {
+      final events = <String>[];
+      final h = _TestHarness();
+      h.mountRoot(_ClaimLog(events: events));
+
+      h.dispatcher.dispatch(const TextInputEvent('a'));
+      h.dispatcher.dispatch(const PasteEvent('b\nc'));
+
+      expect(events, ['text:a', 'paste:b\nc']);
     });
   });
 

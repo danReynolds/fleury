@@ -56,5 +56,55 @@ void main() {
           .trimRight();
       expect(out.contains('***'), isTrue);
     });
+
+    testWidgets('semantics redact the real value', (tester) {
+      final ctrl = TextEditingController(text: 'hunter2');
+      tester.pumpWidget(PasswordInput(controller: ctrl, autofocus: true));
+
+      final field = tester.semantics().single(
+        role: SemanticRole.textField,
+        focused: true,
+      );
+
+      expect(field.value, isNull);
+      expect(field.state.obscureText, isTrue);
+      expect(field.state.redactedValue, isTrue);
+      expect(field.state.clipboardPolicy, 'redacted');
+      expect(field.state['fieldType'], 'secret');
+      expect(field.state['redacted'], isTrue);
+    });
+
+    testWidgets('semantic label and secret metadata are adapter friendly', (
+      tester,
+    ) {
+      final ctrl = TextEditingController(text: 'api-secret');
+      tester.pumpWidget(
+        PasswordInput(
+          controller: ctrl,
+          autofocus: true,
+          semanticLabel: 'API key',
+          semanticState: const SemanticState({'credentialKind': 'apiKey'}),
+        ),
+      );
+
+      final field = tester.semantics().single(
+        role: SemanticRole.textField,
+        label: 'API key',
+        focused: true,
+      );
+
+      expect(field.value, isNull);
+      expect(field.state['credentialKind'], 'apiKey');
+      expect(field.state['fieldType'], 'secret');
+      expect(field.state['redacted'], isTrue);
+      expect(field.state.redactedValue, isTrue);
+      expect(field.state.clipboardRedacted, isTrue);
+
+      final accessibility = tester.accessibilitySnapshot();
+      final node = accessibility.single(label: 'API key', valueRedacted: true);
+      expect(node.states, contains('field type secret'));
+      expect(node.states, contains('secret'));
+      expect(accessibility.toPlainText(), isNot(contains('api-secret')));
+    });
   });
 }

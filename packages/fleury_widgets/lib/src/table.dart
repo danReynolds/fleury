@@ -32,11 +32,13 @@ class TableController extends ChangeNotifier {
 
   int? _selectedIndex;
   int _rowCount = 0;
+  bool _disposed = false;
 
   /// Index of the highlighted body row, or null when nothing is
   /// selected. Writes outside `0..rowCount-1` are clamped.
   int? get selectedIndex => _selectedIndex;
   set selectedIndex(int? value) {
+    _checkNotDisposed();
     final clamped = _clamp(value);
     if (_selectedIndex == clamped) return;
     _selectedIndex = clamped;
@@ -47,6 +49,19 @@ class TableController extends ChangeNotifier {
     if (value == null) return null;
     if (_rowCount == 0) return value;
     return value.clamp(0, _rowCount - 1);
+  }
+
+  void _checkNotDisposed() {
+    if (_disposed) {
+      throw StateError('TableController has been disposed.');
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    super.dispose();
   }
 }
 
@@ -160,6 +175,7 @@ class _TableState extends State<Table> {
 
   // Mirror of the last laid-out visible row count, for PageUp/PageDown.
   // Written from layout without notifying; read on the next key.
+  int _visibleFirst = 0;
   int _visibleRows = 1;
 
   bool get _interactive => widget._interactive;
@@ -273,12 +289,40 @@ class _TableState extends State<Table> {
   @override
   Widget build(BuildContext context) {
     final c = widget.columnCount;
-    if (c == 0) return const EmptyBox();
+    if (c == 0) {
+      return Semantics(
+        role: SemanticRole.table,
+        state: const SemanticState({
+          'collectionRowCount': 0,
+          'collectionColumnCount': 0,
+          'hasHeader': false,
+        }),
+        child: const EmptyBox(),
+      );
+    }
     final widths =
         widget.columnWidths ?? List.filled(c, const IntrinsicColumnWidth());
+    final fittedHeader = widget.header == null
+        ? null
+        : _fitRow(widget.header!, c);
+    final fittedRows = [for (final row in widget.rows) _fitRow(row, c)];
     final cells = <Widget>[
-      if (widget.header != null) ..._fitRow(widget.header!, c),
-      for (final row in widget.rows) ..._fitRow(row, c),
+      if (fittedHeader != null)
+        for (var col = 0; col < c; col++)
+          _semanticCell(
+            fittedHeader[col],
+            rowIndex: -1,
+            columnIndex: col,
+            header: true,
+          ),
+      for (var row = 0; row < widget.rows.length; row++)
+        for (var col = 0; col < c; col++)
+          _semanticCell(
+            fittedRows[row][col],
+            rowIndex: row,
+            columnIndex: col,
+            selected: _interactive && _controller?.selectedIndex == row,
+          ),
     ];
     final body = _TableBody(
       columnCount: c,
@@ -289,16 +333,60 @@ class _TableState extends State<Table> {
       separatorStyle: widget.separatorStyle,
       selectedRow: _interactive ? _controller?.selectedIndex : null,
       selectedStyle: widget.selectedStyle ?? Theme.of(context).selectionStyle,
-      onVisibleCount: (n) => _visibleRows = n < 1 ? 1 : n,
+      onVisibleRange: (first, count) {
+        _visibleFirst = first;
+        _visibleRows = count < 1 ? 1 : count;
+      },
       children: cells,
     );
-    if (!_interactive) return body;
+    final selectedIndex = _controller?.selectedIndex;
+    final visibleEnd = _visibleEnd();
+    final state = <String, Object?>{
+      'collectionRowCount': widget.rows.length,
+      'collectionColumnCount': c,
+      'hasHeader': widget.header != null,
+    };
+    if (selectedIndex != null) {
+      state['selectedKey'] = selectedIndex;
+    }
+    if (_interactive) {
+      state['visibleRangeStart'] = _visibleFirst;
+    }
+    if (visibleEnd != null) {
+      state['visibleRangeEnd'] = visibleEnd;
+    }
+
+    final table = Semantics(
+      role: SemanticRole.table,
+      value: selectedIndex,
+      focused: _focusNode?.hasFocus ?? false,
+      actions: _interactive
+          ? <SemanticAction>{
+              SemanticAction.focus,
+              SemanticAction.select,
+              if (widget.onSelect != null) SemanticAction.activate,
+            }
+          : const <SemanticAction>{},
+      state: SemanticState(state),
+      onAction: _interactive ? _handleTableAction : null,
+      child: body,
+    );
+    if (!_interactive) return table;
     return Focus(
       focusNode: _focusNode,
       autofocus: widget.autofocus,
       onKey: _onKey,
-      child: body,
+      child: table,
     );
+  }
+
+  int? _visibleEnd() {
+    if (!_interactive || widget.rows.isEmpty) return null;
+    var end = _visibleFirst + _visibleRows - 1;
+    if (end < _visibleFirst) end = _visibleFirst;
+    final max = widget.rows.length - 1;
+    if (end > max) end = max;
+    return end;
   }
 
   static List<Widget> _fitRow(List<Widget> row, int c) {
@@ -310,6 +398,71 @@ class _TableState extends State<Table> {
       ...row,
       for (var i = row.length; i < c; i++) const SizedBox(width: 0, height: 0),
     ];
+  }
+
+  void _handleTableAction(SemanticAction action) {
+    switch (action) {
+      case SemanticAction.focus:
+      case SemanticAction.select:
+        _focusNode?.requestFocus();
+        return;
+      case SemanticAction.activate:
+        final selected = _controller?.selectedIndex;
+        if (selected != null) widget.onSelect?.call(selected);
+        return;
+      case _:
+        return;
+    }
+  }
+
+  void _handleCellAction(int rowIndex, SemanticAction action) {
+    if (rowIndex < 0) return;
+    switch (action) {
+      case SemanticAction.focus:
+      case SemanticAction.select:
+        _focusNode?.requestFocus();
+        _controller?.selectedIndex = rowIndex;
+        return;
+      case SemanticAction.activate:
+        _focusNode?.requestFocus();
+        _controller?.selectedIndex = rowIndex;
+        widget.onSelect?.call(rowIndex);
+        return;
+      case _:
+        return;
+    }
+  }
+
+  Widget _semanticCell(
+    Widget child, {
+    required int rowIndex,
+    required int columnIndex,
+    bool header = false,
+    bool selected = false,
+  }) {
+    final interactiveBodyCell = _interactive && !header && rowIndex >= 0;
+    return Semantics(
+      role: SemanticRole.tableCell,
+      focused:
+          interactiveBodyCell && selected && (_focusNode?.hasFocus ?? false),
+      selected: selected,
+      actions: interactiveBodyCell
+          ? <SemanticAction>{
+              SemanticAction.focus,
+              SemanticAction.select,
+              if (widget.onSelect != null) SemanticAction.activate,
+            }
+          : const <SemanticAction>{},
+      state: SemanticState({
+        'rowIndex': rowIndex,
+        'columnIndex': columnIndex,
+        'header': header,
+      }),
+      onAction: interactiveBodyCell
+          ? (action) => _handleCellAction(rowIndex, action)
+          : null,
+      child: child,
+    );
   }
 }
 
@@ -323,7 +476,7 @@ class _TableBody extends MultiChildRenderObjectWidget {
     required this.separatorStyle,
     required this.selectedRow,
     required this.selectedStyle,
-    required this.onVisibleCount,
+    required this.onVisibleRange,
     required super.children,
   });
 
@@ -335,7 +488,7 @@ class _TableBody extends MultiChildRenderObjectWidget {
   final CellStyle separatorStyle;
   final int? selectedRow;
   final CellStyle selectedStyle;
-  final void Function(int visibleRows) onVisibleCount;
+  final void Function(int visibleFirst, int visibleRows) onVisibleRange;
 
   @override
   RenderObject createRenderObject(BuildContext context) => RenderTable(
@@ -347,7 +500,7 @@ class _TableBody extends MultiChildRenderObjectWidget {
     separatorStyle: separatorStyle,
     selectedRow: selectedRow,
     selectedStyle: selectedStyle,
-    onVisibleCount: onVisibleCount,
+    onVisibleRange: onVisibleRange,
   );
 
   @override
@@ -361,7 +514,7 @@ class _TableBody extends MultiChildRenderObjectWidget {
       ..separatorStyle = separatorStyle
       ..selectedRow = selectedRow
       ..selectedStyle = selectedStyle
-      ..onVisibleCount = onVisibleCount;
+      ..onVisibleRange = onVisibleRange;
   }
 }
 
@@ -379,7 +532,7 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
     required CellStyle separatorStyle,
     required int? selectedRow,
     required CellStyle selectedStyle,
-    required void Function(int) onVisibleCount,
+    required void Function(int, int) onVisibleRange,
   }) : _columnCount = columnCount,
        _columnWidths = columnWidths,
        _columnSpacing = columnSpacing,
@@ -388,34 +541,71 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
        _separatorStyle = separatorStyle,
        _selectedRow = selectedRow,
        _selectedStyle = selectedStyle,
-       _onVisibleCount = onVisibleCount;
+       _onVisibleRange = onVisibleRange;
 
   int _columnCount;
-  set columnCount(int v) => _columnCount = v;
+  set columnCount(int v) {
+    if (_columnCount == v) return;
+    _columnCount = v;
+    markNeedsLayout();
+  }
 
   List<TableColumnWidth> _columnWidths;
-  set columnWidths(List<TableColumnWidth> v) => _columnWidths = v;
+  set columnWidths(List<TableColumnWidth> v) {
+    if (_sameColumnWidths(_columnWidths, v)) return;
+    _columnWidths = v;
+    markNeedsLayout();
+  }
 
   int _columnSpacing;
-  set columnSpacing(int v) => _columnSpacing = v;
+  set columnSpacing(int v) {
+    if (_columnSpacing == v) return;
+    _columnSpacing = v;
+    markNeedsLayout();
+  }
 
   bool _hasHeader;
-  set hasHeader(bool v) => _hasHeader = v;
+  set hasHeader(bool v) {
+    if (_hasHeader == v) return;
+    _hasHeader = v;
+    markNeedsLayout();
+  }
 
   bool _headerSeparator;
-  set headerSeparator(bool v) => _headerSeparator = v;
+  set headerSeparator(bool v) {
+    if (_headerSeparator == v) return;
+    _headerSeparator = v;
+    markNeedsLayout();
+  }
 
   CellStyle _separatorStyle;
-  set separatorStyle(CellStyle v) => _separatorStyle = v;
+  set separatorStyle(CellStyle v) {
+    if (_separatorStyle == v) return;
+    _separatorStyle = v;
+    markNeedsPaintOnly();
+  }
 
   int? _selectedRow;
-  set selectedRow(int? v) => _selectedRow = v;
+  set selectedRow(int? v) {
+    if (_selectedRow == v) return;
+    final needsLayout = _selectedRowChangeNeedsLayout(v);
+    _selectedRow = v;
+    if (needsLayout) {
+      markNeedsLayout();
+    } else {
+      markNeedsPaintOnly();
+    }
+  }
 
   CellStyle _selectedStyle;
-  set selectedStyle(CellStyle v) => _selectedStyle = v;
+  set selectedStyle(CellStyle v) {
+    if (_selectedStyle == v) return;
+    _selectedStyle = v;
+    markNeedsPaintOnly();
+  }
 
-  void Function(int) _onVisibleCount;
-  set onVisibleCount(void Function(int) v) => _onVisibleCount = v;
+  void Function(int, int) _onVisibleRange;
+  set onVisibleRange(void Function(int, int) v) => _onVisibleRange = v;
 
   final List<RenderObject> _children = <RenderObject>[];
   final Map<RenderObject, CellOffset> _offsets = <RenderObject, CellOffset>{};
@@ -429,6 +619,7 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
   List<int> _rowHeight = const [];
   int _bodyAnchor = 0; // first visible body row (persists across layouts)
   int _visibleFirst = 0;
+  int _visibleRows = 0;
   bool _windowing = false;
 
   int get _headerOffset => _hasHeader ? 1 : 0;
@@ -438,6 +629,7 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
 
   @override
   void replaceAllChildren(List<RenderObject> newChildren) {
+    if (_hasSameRenderChildrenInOrder(_children, newChildren)) return;
     final newSet = Set<RenderObject>.identity()..addAll(newChildren);
     for (final c in List<RenderObject>.from(_children)) {
       if (!newSet.contains(c)) {
@@ -452,6 +644,18 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
     _children
       ..clear()
       ..addAll(newChildren);
+    markNeedsLayout();
+  }
+
+  bool _selectedRowChangeNeedsLayout(int? next) {
+    if (_rowHeight.isEmpty) return true;
+    if (_selectedRow == null || next == null) return true;
+    if (!_windowing) return false;
+    final bodyCount = _rowHeight.length - _headerOffset;
+    if (bodyCount <= 0) return false;
+    final selected = next.clamp(0, bodyCount - 1);
+    final last = _visibleFirst + _visibleRows - 1;
+    return selected < _visibleFirst || selected > last;
   }
 
   TableColumnWidth _specFor(int column) => column < _columnWidths.length
@@ -599,15 +803,18 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
           (first, last) = _bodyWindow(_bodyAnchor, viewport, bodyCount);
         }
         _visibleFirst = first;
-        _onVisibleCount(last - first + 1);
+        _visibleRows = last - first + 1;
+        _onVisibleRange(first, last - first + 1);
       } else {
         _bodyAnchor = 0;
         _visibleFirst = 0;
-        _onVisibleCount(bodyCount);
+        _visibleRows = bodyCount;
+        _onVisibleRange(0, bodyCount);
       }
     } else {
       _bodyAnchor = 0;
       _visibleFirst = 0;
+      _visibleRows = 0;
     }
 
     final height = _windowing ? constraints.maxRows! : _naturalHeight;
@@ -742,4 +949,36 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
       }
     }
   }
+}
+
+bool _hasSameRenderChildrenInOrder(
+  List<RenderObject> current,
+  List<RenderObject> next,
+) {
+  if (current.length != next.length) return false;
+  for (var i = 0; i < current.length; i++) {
+    if (!identical(current[i], next[i])) return false;
+  }
+  return true;
+}
+
+bool _sameColumnWidths(List<TableColumnWidth> a, List<TableColumnWidth> b) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i += 1) {
+    if (!_sameColumnWidth(a[i], b[i])) return false;
+  }
+  return true;
+}
+
+bool _sameColumnWidth(TableColumnWidth a, TableColumnWidth b) {
+  if (identical(a, b)) return true;
+  return switch ((a, b)) {
+    (IntrinsicColumnWidth(), IntrinsicColumnWidth()) => true,
+    (FixedColumnWidth(width: final aw), FixedColumnWidth(width: final bw)) =>
+      aw == bw,
+    (FlexColumnWidth(flex: final af), FlexColumnWidth(flex: final bf)) =>
+      af == bf,
+    _ => false,
+  };
 }

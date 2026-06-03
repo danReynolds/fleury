@@ -50,6 +50,62 @@ void main() {
       tester.type(' '); // Space arrives as inserted text
       expect(changed, isTrue);
     });
+
+    testWidgets('pasted space does not toggle when focused', (tester) {
+      var calls = 0;
+      tester.pumpWidget(
+        Checkbox(value: false, autofocus: true, onChanged: (_) => calls++),
+      );
+      tester.paste(' ');
+      expect(calls, 0);
+    });
+
+    testWidgets('exposes semantic state', (tester) {
+      tester.pumpWidget(
+        Checkbox(
+          value: true,
+          label: 'Wrap',
+          autofocus: true,
+          onChanged: (_) {},
+        ),
+      );
+
+      final node = tester.semantics().single(
+        role: SemanticRole.checkbox,
+        label: 'Wrap',
+        focused: true,
+        action: SemanticAction.activate,
+      );
+
+      expect(node.checked, isTrue);
+      expect(node.value, isTrue);
+      expect(node.actions, contains(SemanticAction.focus));
+    });
+
+    testWidgets('semantic activate toggles and focuses checkbox', (
+      tester,
+    ) async {
+      bool? changed;
+      tester.pumpWidget(
+        Checkbox(value: false, label: 'Wrap', onChanged: (v) => changed = v),
+      );
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        role: SemanticRole.checkbox,
+        label: 'Wrap',
+      );
+
+      expect(result.completed, isTrue);
+      expect(changed, isTrue);
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.checkbox, label: 'Wrap')
+            .focused,
+        isTrue,
+      );
+    });
   });
 
   group('Toggle', () {
@@ -58,6 +114,37 @@ void main() {
       expect(_line(tester), '[o ]');
       tester.pumpWidget(Toggle(value: true, onChanged: (_) {}));
       expect(_line(tester), '[ o]');
+    });
+
+    testWidgets('exposes toggle semantics', (tester) {
+      tester.pumpWidget(
+        Toggle(value: true, label: 'Feature', onChanged: (_) {}),
+      );
+
+      final node = tester.semantics().single(
+        role: SemanticRole.toggle,
+        label: 'Feature',
+      );
+
+      expect(node.checked, isTrue);
+      expect(node.value, isTrue);
+      expect(node.actions, contains(SemanticAction.activate));
+    });
+
+    testWidgets('semantic activate toggles value', (tester) async {
+      bool? changed;
+      tester.pumpWidget(
+        Toggle(value: true, label: 'Feature', onChanged: (v) => changed = v),
+      );
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        role: SemanticRole.toggle,
+        label: 'Feature',
+      );
+
+      expect(result.completed, isTrue);
+      expect(changed, isFalse);
     });
   });
 
@@ -98,6 +185,42 @@ void main() {
         ),
       );
       tester.type(' ');
+      expect(picked, 3);
+    });
+
+    testWidgets('exposes radio selection semantics', (tester) {
+      tester.pumpWidget(
+        Radio<int>(value: 1, groupValue: 1, label: 'One', onChanged: (_) {}),
+      );
+
+      final node = tester.semantics().single(
+        role: SemanticRole.radio,
+        label: 'One',
+        selected: true,
+      );
+
+      expect(node.checked, isTrue);
+      expect(node.value, 1);
+    });
+
+    testWidgets('semantic activate selects radio value', (tester) async {
+      int? picked;
+      tester.pumpWidget(
+        Radio<int>(
+          value: 3,
+          groupValue: 1,
+          label: 'Three',
+          onChanged: (v) => picked = v,
+        ),
+      );
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        role: SemanticRole.radio,
+        label: 'Three',
+      );
+
+      expect(result.completed, isTrue);
       expect(picked, 3);
     });
   });

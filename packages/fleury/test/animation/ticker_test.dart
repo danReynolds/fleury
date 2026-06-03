@@ -1,6 +1,7 @@
 // FakeClock-driven tests for Ticker. Discipline per RFC 0010 §21.1.
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
 ({FakeClock clock, FakeTickerScheduler scheduler}) _fixture() {
@@ -8,6 +9,10 @@ import 'package:test/test.dart';
   final scheduler = FakeTickerScheduler(clock: clock);
   return (clock: clock, scheduler: scheduler);
 }
+
+Matcher _stateError(String message) => throwsA(
+  isA<StateError>().having((error) => error.message, 'message', message),
+);
 
 void main() {
   group('Ticker lifecycle', () {
@@ -73,6 +78,29 @@ void main() {
       ticker.dispose();
       ticker.dispose();
       expect(ticker.isDisposed, isTrue);
+    });
+
+    test('dispose keeps final state readable and blocks muted changes', () {
+      final f = _fixture();
+      final ticker = Ticker((_) {}, scheduler: f.scheduler)
+        ..start()
+        ..muted = true;
+      f.scheduler.advance(const Duration(milliseconds: 120));
+
+      ticker.dispose();
+
+      expect(ticker.isDisposed, isTrue);
+      expect(ticker.isActive, isFalse);
+      expect(ticker.muted, isTrue);
+      expect(ticker.lastElapsed, const Duration(milliseconds: 120));
+      expect(
+        () => ticker.muted = false,
+        _stateError(
+          'Ticker.muted set after dispose. Tickers cannot be reused once '
+          'disposed; create a new one via TickerProvider.createTicker.',
+        ),
+      );
+      expect(ticker.muted, isTrue);
     });
   });
 

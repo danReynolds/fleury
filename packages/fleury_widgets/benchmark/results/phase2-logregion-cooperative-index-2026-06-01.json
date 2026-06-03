@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-01T06:29:43.697215Z",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "scenarioId": "SB.4",
+      "scenarioName": "LogRegion Tailing And Scrollback",
+      "packageVersion": "0.0.0",
+      "gitSha": "unknown",
+      "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+      "runMode": "test",
+      "os": "macos",
+      "cpu": 10,
+      "terminalProfile": {
+        "colorMode": "truecolor",
+        "imageProtocol": "halfBlock",
+        "tmuxPassthrough": false
+      },
+      "terminalSize": {
+        "columns": 120,
+        "rows": 32
+      },
+      "seed": 1,
+      "rowCount": 100000,
+      "warmupIterations": 1,
+      "measuredIterations": 5,
+      "startedAt": "2026-06-01T06:29:41.061441Z",
+      "durationMs": 2617.015,
+      "metrics": {
+        "journeyUs": {
+          "min": 494654,
+          "median": 506639,
+          "p95": 549948,
+          "p99": 556931,
+          "max": 558677,
+          "samples": 5
+        },
+        "fixtureBuildUs": {
+          "min": 60611,
+          "median": 71171,
+          "p95": 72731,
+          "p99": 72829,
+          "max": 72853,
+          "samples": 5
+        },
+        "searchIndexBuildUs": {
+          "min": 354353,
+          "median": 371341,
+          "p95": 375479,
+          "p99": 375771,
+          "max": 375844,
+          "samples": 5
+        },
+        "mountUs": {
+          "min": 17104,
+          "median": 17299,
+          "p95": 18606,
+          "p99": 18801,
+          "max": 18850,
+          "samples": 5
+        },
+        "firstRenderUs": {
+          "min": 8862,
+          "median": 9079,
+          "p95": 9777,
+          "p99": 9865,
+          "max": 9887,
+          "samples": 5
+        },
+        "appendBurstUs": {
+          "min": 12057,
+          "median": 12909,
+          "p95": 17553,
+          "p99": 18450,
+          "max": 18674,
+          "samples": 5
+        },
+        "scrollbackJumpUs": {
+          "min": 3328,
+          "median": 3806,
+          "p95": 24340,
+          "p99": 28303,
+          "max": 29294,
+          "samples": 5
+        },
+        "scrollToTailUs": {
+          "min": 2594,
+          "median": 2997,
+          "p95": 4255,
+          "p99": 4464,
+          "max": 4516,
+          "samples": 5
+        },
+        "copySelectedEntryUs": {
+          "min": 4251,
+          "median": 4629,
+          "p95": 6956,
+          "p99": 7354,
+          "max": 7453,
+          "samples": 5
+        },
+        "filterQueryUs": {
+          "min": 13371,
+          "median": 14301,
+          "p95": 21771,
+          "p99": 22904,
+          "max": 23187,
+          "samples": 5
+        },
+        "semanticQueryUs": {
+          "min": 2370,
+          "median": 2612,
+          "p95": 4505,
+          "p99": 4801,
+          "max": 4875,
+          "samples": 5
+        },
+        "initialAnsiBytes": 2354,
+        "appendAnsiBytes": 2392,
+        "finalAnsiBytes": 2392,
+        "filteredAnsiBytes": 101,
+        "semanticNodeCount": 68,
+        "visibleRangeStart": 100968,
+        "visibleRangeEnd": 100999,
+        "scrollbackVisibleRangeStart": 50000,
+        "filterMatchCount": 1000,
+        "filterVisibleRangeStart": 999,
+        "filterVisibleRangeEnd": 999,
+        "selectedKey": "LOG-200999",
+        "entryCountAfterAppend": 101000,
+        "appendCount": 1000,
+        "sanitizingFixtureRows": 1299,
+        "copiedByteCount": 67,
+        "searchIndexTaskEventCount": 42,
+        "searchIndexProgressCurrent": 100000,
+        "appendIndexTaskEventCount": 3,
+        "appendIndexProgressCurrent": 101000,
+        "rssDeltaBytes": 20344832
+      },
+      "thresholds": {
+        "candidateAppendBurstP95Us": 33000,
+        "candidateScrollbackJumpP95Us": 16000,
+        "candidateCopySelectedEntryP95Us": 16000,
+        "candidateFilterQueryP95Us": 80000,
+        "candidateSemanticQueryP95Us": 16000,
+        "enforced": false
+      },
+      "pass": true,
+      "notes": [
+        "Candidate thresholds are informational until stable baselines exist.",
+        "This is a LogRegion widget scenario, not a full subprocess stream.",
+        "Fixture includes ANSI/OSC/newline payloads to verify sanitized visible and copied output.",
+        "Search-index build and append refresh run cooperatively through TaskController."
+      ]
+    }
+  ]
+}

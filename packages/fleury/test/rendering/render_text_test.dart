@@ -1,4 +1,5 @@
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
 /// Returns a single-row string of the cells in [row] of [buffer], using
@@ -83,19 +84,17 @@ void main() {
       final t = RenderText(text: 'a\x1B[2Jb')..layout(const CellConstraints());
       final buf = CellBuffer(const CellSize(10, 1));
       t.paint(buf, CellOffset.zero);
-      // The string is sanitized once at construction; the ESC becomes
-      // U+FFFD. So 6 graphemes total: a, FFFD, [, 2, J, b.
-      // (The '[', '2', 'J' are printable ASCII — they're fine on their
-      // own; only the ESC turns them into a hijack.)
+      // The string is sanitized once at construction; the full CSI sequence
+      // collapses to U+FFFD so active terminal parameters are not displayed.
       final cells = <String>[];
       for (var col = 0; col < buf.size.cols; col++) {
         final c = buf.atColRow(col, 0);
         if (c.role == CellRole.leading) cells.add(c.grapheme!);
       }
-      expect(cells.length, 6);
+      expect(cells.length, 3);
       expect(cells[0], 'a');
       expect(cells[1], replacementCharacter);
-      expect(cells[5], 'b');
+      expect(cells[2], 'b');
     });
 
     test('respects layout width when content overflows (no wrap)', () {
@@ -166,6 +165,116 @@ void main() {
       final beforeWidth = t.intrinsicWidth;
       t.style = const CellStyle(bold: true);
       expect(t.intrinsicWidth, beforeWidth);
+    });
+
+    test('setting style reuses same-constraint layout cache', () {
+      final t = RenderText(text: 'abc')
+        ..layout(const CellConstraints(maxCols: 10));
+
+      RenderLayoutDebugStats.beginFrame(enabled: true);
+      t.style = const CellStyle(bold: true);
+      expect(
+        t.layout(const CellConstraints(maxCols: 10)),
+        const CellSize(3, 1),
+      );
+      final stats = RenderLayoutDebugStats.takeFrameStats();
+
+      expect(stats.performedCount, 0);
+      expect(stats.skippedCount, 1);
+    });
+
+    test('widget style update preserves same-constraint layout cache', () {
+      final tester = FleuryTester(viewportSize: const CellSize(20, 3));
+      addTearDown(tester.dispose);
+
+      tester.pumpWidget(const Text('abc'));
+      tester.render();
+
+      tester.pumpWidget(const Text('abc', style: CellStyle(bold: true)));
+      RenderLayoutDebugStats.beginFrame(enabled: true);
+      tester.render();
+      final stats = RenderLayoutDebugStats.takeFrameStats();
+
+      expect(stats.performedCount, 0);
+      expect(stats.skippedCount, greaterThan(0));
+    });
+
+    test('same-width no-wrap text update preserves layout cache', () {
+      final t = RenderText(text: 'abc', softWrap: false)
+        ..layout(const CellConstraints(maxCols: 3));
+
+      RenderLayoutDebugStats.beginFrame(enabled: true);
+      t.text = 'xyz';
+      expect(t.layout(const CellConstraints(maxCols: 3)), const CellSize(3, 1));
+      final stats = RenderLayoutDebugStats.takeFrameStats();
+
+      final buf = CellBuffer(const CellSize(3, 1));
+      t.paint(buf, CellOffset.zero);
+      expect(_rowContent(buf, 0), 'xyz');
+      expect(stats.performedCount, 0);
+      expect(stats.skippedCount, 1);
+    });
+
+    test('same-width soft-wrap text update preserves cache when it fits', () {
+      final t = RenderText(text: 'abc')
+        ..layout(const CellConstraints(maxCols: 5));
+
+      RenderLayoutDebugStats.beginFrame(enabled: true);
+      t.text = 'xyz';
+      expect(t.layout(const CellConstraints(maxCols: 5)), const CellSize(3, 1));
+      final stats = RenderLayoutDebugStats.takeFrameStats();
+
+      expect(stats.performedCount, 0);
+      expect(stats.skippedCount, 1);
+    });
+
+    test('same-width wrapping text update still relayouts', () {
+      final t = RenderText(text: 'aa aa')
+        ..layout(const CellConstraints(maxCols: 2));
+
+      RenderLayoutDebugStats.beginFrame(enabled: true);
+      t.text = 'bb bb';
+      expect(t.layout(const CellConstraints(maxCols: 2)), const CellSize(2, 2));
+      final stats = RenderLayoutDebugStats.takeFrameStats();
+
+      expect(stats.performedCount, 1);
+      expect(stats.skippedCount, 0);
+    });
+
+    test('style update under multi-child rebuild preserves layout cache', () {
+      final tester = FleuryTester(viewportSize: const CellSize(20, 3));
+      final model = _StyleToggleModel();
+      addTearDown(tester.dispose);
+      addTearDown(model.dispose);
+
+      tester.pumpWidget(
+        ListenableBuilder(
+          animation: model,
+          builder: (context, _) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'abc',
+                  style: model.accent
+                      ? const CellStyle(bold: true)
+                      : CellStyle.empty,
+                ),
+                const Text('steady'),
+              ],
+            );
+          },
+        ),
+      );
+      tester.render();
+
+      model.toggle();
+      RenderLayoutDebugStats.beginFrame(enabled: true);
+      tester.render();
+      final stats = RenderLayoutDebugStats.takeFrameStats();
+
+      expect(stats.performedCount, 0);
+      expect(stats.skippedCount, greaterThan(0));
     });
 
     test('setting profile re-measures', () {
@@ -245,4 +354,15 @@ void main() {
       expect(_rowContent(buf, 0), 'aaaa…');
     });
   });
+}
+
+final class _StyleToggleModel extends ChangeNotifier {
+  var _accent = false;
+
+  bool get accent => _accent;
+
+  void toggle() {
+    _accent = !_accent;
+    notifyListeners();
+  }
 }

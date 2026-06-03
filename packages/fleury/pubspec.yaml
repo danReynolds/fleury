@@ -8,6 +8,7 @@ environment:
 
 dependencies:
   characters: ^1.4.0
+  ffi: ^2.1.4
   meta: ^1.17.0
   vm_service: ^15.0.2
 

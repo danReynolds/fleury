@@ -51,6 +51,7 @@ class RenderAnchorBounds extends RenderObject
     if (identical(_link, value)) return;
     _link.rect = null;
     _link = value;
+    markNeedsPaintOnly();
   }
 
   RenderObject? _child;
@@ -140,13 +141,25 @@ class RenderFollower extends RenderObject
   RenderFollower(this._link, this._gap, this._placement);
 
   AnchorLink _link;
-  set link(AnchorLink value) => _link = value;
+  set link(AnchorLink value) {
+    if (identical(_link, value)) return;
+    _link = value;
+    markNeedsLayout();
+  }
 
   int _gap;
-  set gap(int value) => _gap = value;
+  set gap(int value) {
+    if (_gap == value) return;
+    _gap = value;
+    markNeedsLayout();
+  }
 
   FollowerPlacement _placement;
-  set placement(FollowerPlacement value) => _placement = value;
+  set placement(FollowerPlacement value) {
+    if (_placement == value) return;
+    _placement = value;
+    markNeedsLayout();
+  }
 
   RenderObject? _child;
   @override

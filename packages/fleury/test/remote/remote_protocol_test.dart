@@ -128,5 +128,45 @@ void main() {
         expect(out.single, isA<ByeFrame>());
       },
     );
+
+    test('oversized frame payloads fail with a protocol error', () {
+      final wire = encodeFrame(InputFrame(Uint8List.fromList([1, 2, 3, 4, 5])));
+      final decoder = FrameDecoder(maxPayloadLength: 4)..feed(wire);
+
+      expect(
+        () => decoder.drain().toList(),
+        throwsA(isA<RemoteProtocolException>()),
+      );
+    });
+
+    test('malformed RESIZE payloads fail with a protocol error', () {
+      final wire = _rawFrame(FrameType.resize, 'rows=24'.codeUnits);
+      final decoder = FrameDecoder()..feed(wire);
+
+      expect(
+        () => decoder.drain().toList(),
+        throwsA(isA<RemoteProtocolException>()),
+      );
+    });
+
+    test('invalid UTF-8 control payloads fail with a protocol error', () {
+      final wire = _rawFrame(FrameType.init, const [0xFF]);
+      final decoder = FrameDecoder()..feed(wire);
+
+      expect(
+        () => decoder.drain().toList(),
+        throwsA(isA<RemoteProtocolException>()),
+      );
+    });
   });
+}
+
+Uint8List _rawFrame(FrameType type, List<int> payload) {
+  final length = Uint8List(4);
+  length.buffer.asByteData().setUint32(0, payload.length);
+  final builder = BytesBuilder()
+    ..addByte(type.code)
+    ..add(length)
+    ..add(payload);
+  return builder.toBytes();
 }

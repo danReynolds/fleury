@@ -150,6 +150,7 @@ void main() {
   group('submenus', () {
     Menu fileMenu(void Function(String) onRun) => Menu(
       trigger: const Text('File'),
+      semanticLabel: 'File menu',
       autofocus: true,
       items: [
         MenuItem(label: 'New', onSelected: () => onRun('new')),
@@ -224,6 +225,169 @@ void main() {
       final out = _screen(tester, cols: 30);
       expect(out.contains('Recent'), isFalse);
       expect(out.contains('New'), isTrue, reason: 'parent menu still open');
+    });
+  });
+
+  group('semantics', () {
+    testWidgets('trigger semantic action opens the menu', (tester) async {
+      tester.pumpWidget(
+        Menu(
+          trigger: const Text('Edit'),
+          semanticLabel: 'Edit menu',
+          autofocus: true,
+          items: items((_) {}),
+        ),
+      );
+
+      final trigger = tester.semantics().single(
+        role: SemanticRole.button,
+        label: 'Edit menu',
+        action: SemanticAction.open,
+      );
+
+      expect(trigger.focused, isTrue);
+      expect(trigger.expanded, isFalse);
+      expect(trigger.state.menuItemCount, 3);
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.open,
+        node: trigger,
+      );
+
+      expect(result.completed, isTrue);
+      tester.render(size: const CellSize(30, 8));
+      final tree = tester.semantics();
+      final menu = tree.single(role: SemanticRole.menu, label: 'Edit menu');
+      expect(menu.focused, isTrue);
+      expect(menu.expanded, isTrue);
+      expect(menu.state.menuItemCount, 3);
+      expect(tree.byRole(SemanticRole.menuItem).map((node) => node.label), [
+        'Cut',
+        'Copy',
+        'Paste',
+      ]);
+    });
+
+    testWidgets('menu item semantic activate runs the item and closes', (
+      tester,
+    ) async {
+      String? ran;
+      tester.pumpWidget(
+        Menu(
+          trigger: const Text('Edit'),
+          semanticLabel: 'Edit menu',
+          autofocus: true,
+          items: items((v) => ran = v),
+        ),
+      );
+
+      await tester.invokeSemanticAction(
+        SemanticAction.open,
+        role: SemanticRole.button,
+        label: 'Edit menu',
+      );
+      tester.render(size: const CellSize(30, 8));
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        role: SemanticRole.menuItem,
+        label: 'Copy',
+      );
+
+      expect(result.completed, isTrue);
+      expect(ran, 'copy');
+      expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.button, label: 'Edit menu')
+            .expanded,
+        isFalse,
+      );
+    });
+
+    testWidgets('submenu semantic open exposes child menu semantics', (
+      tester,
+    ) async {
+      tester.pumpWidget(
+        Menu(
+          trigger: const Text('File'),
+          semanticLabel: 'File menu',
+          autofocus: true,
+          items: [
+            MenuItem(label: 'New', onSelected: () {}),
+            SubMenu(
+              label: 'Open',
+              items: [
+                MenuItem(label: 'Recent', onSelected: () {}),
+                MenuItem(label: 'Browse', onSelected: () {}),
+              ],
+            ),
+          ],
+        ),
+      );
+      await tester.invokeSemanticAction(
+        SemanticAction.open,
+        role: SemanticRole.button,
+        label: 'File menu',
+      );
+      tester.render(size: const CellSize(40, 8));
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.open,
+        role: SemanticRole.menuItem,
+        label: 'Open',
+      );
+
+      expect(result.completed, isTrue);
+      tester.render(size: const CellSize(40, 8));
+      final tree = tester.semantics();
+      final submenu = tree.single(role: SemanticRole.menu, label: 'Open');
+      expect(submenu.state.menuDepth, 1);
+      expect(submenu.state.menuItemCount, 2);
+      expect(
+        tree.single(role: SemanticRole.menuItem, label: 'Recent'),
+        isNotNull,
+      );
+      expect(
+        tree.single(role: SemanticRole.menuItem, label: 'Open').expanded,
+        isTrue,
+      );
+    });
+
+    testWidgets('accessibility fallback summarizes menu item positions', (
+      tester,
+    ) async {
+      tester.pumpWidget(
+        Menu(
+          trigger: const Text('Edit'),
+          semanticLabel: 'Edit menu',
+          autofocus: true,
+          items: items((_) {}),
+        ),
+      );
+
+      await tester.invokeSemanticAction(
+        SemanticAction.open,
+        role: SemanticRole.button,
+        label: 'Edit menu',
+      );
+      tester.render(size: const CellSize(30, 8));
+
+      final snapshot = tester.accessibilitySnapshot();
+      final menu = snapshot.single(
+        role: SemanticRole.menu,
+        label: 'Edit menu',
+        state: 'menu 3 items',
+      );
+      final cut = snapshot.single(
+        role: SemanticRole.menuItem,
+        label: 'Cut',
+        selected: true,
+        state: 'menu item 1 of 3',
+      );
+
+      expect(menu.announcement, contains('focused'));
+      expect(cut.announcement, contains('actions: activate'));
     });
   });
 }

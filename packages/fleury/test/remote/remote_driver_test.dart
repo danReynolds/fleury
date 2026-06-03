@@ -33,6 +33,7 @@ class _FakeTransport implements RemoteFrameTransport {
   }
 
   void emit(RemoteFrame frame) => _in.add(frame);
+  void emitError(Object error) => _in.addError(error, StackTrace.current);
   Future<void> disconnect() async {
     if (!_in.isClosed) await _in.close();
   }
@@ -190,6 +191,12 @@ void main() {
       );
 
       await eventSub.cancel();
+      await driver.restore();
+      expect(
+        transport.closed,
+        isTrue,
+        reason: 'restore must still close resources after peer disconnect',
+      );
     });
 
     test('disconnect before INIT fails the enter() future', () async {
@@ -200,6 +207,16 @@ void main() {
       await transport.disconnect();
 
       await expectLater(entering, throwsA(isA<StateError>()));
+    });
+
+    test('transport error before INIT fails the enter() future', () async {
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(transport);
+
+      final entering = driver.enter(TerminalMode.interactive);
+      transport.emitError(const RemoteProtocolException('bad init'));
+
+      await expectLater(entering, throwsA(isA<RemoteProtocolException>()));
     });
 
     test('restore() sends BYE and tears down', () async {

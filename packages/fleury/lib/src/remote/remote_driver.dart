@@ -63,7 +63,7 @@ final class RemoteTerminalDriver implements TerminalDriver {
     _handshake = Completer<void>();
     _frameSub = _transport.incoming.listen(
       _onFrame,
-      onError: (Object e, StackTrace st) => _events.addError(e, st),
+      onError: _onTransportError,
       onDone: _onDisconnect,
       cancelOnError: false,
     );
@@ -78,17 +78,19 @@ final class RemoteTerminalDriver implements TerminalDriver {
 
   @override
   Future<void> restore() async {
-    if (!_active) return;
+    final wasActive = _active;
     _active = false;
-    try {
-      _transport.send(const ByeFrame());
-    } catch (_) {
-      // Best-effort — peer may already be gone.
+    if (wasActive) {
+      try {
+        _transport.send(const ByeFrame());
+      } catch (_) {
+        // Best-effort — peer may already be gone.
+      }
     }
     await _frameSub?.cancel();
     _frameSub = null;
     await _transport.close();
-    await _events.close();
+    if (!_events.isClosed) await _events.close();
   }
 
   @override
@@ -122,6 +124,16 @@ final class RemoteTerminalDriver implements TerminalDriver {
       case ByeFrame():
         _onDisconnect();
     }
+  }
+
+  void _onTransportError(Object error, StackTrace stackTrace) {
+    if (!_active) {
+      if (!(_handshake?.isCompleted ?? true)) {
+        _handshake?.completeError(error, stackTrace);
+      }
+      return;
+    }
+    _events.addError(error, stackTrace);
   }
 
   void _onDisconnect() {

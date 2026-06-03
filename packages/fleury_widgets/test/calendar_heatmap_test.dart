@@ -296,5 +296,59 @@ void main() {
       );
       tester.render(size: const CellSize(10, 8));
     });
+
+    testWidgets('exposes chart semantics and text-first fallback', (tester) {
+      tester.pumpWidget(
+        SizedBox(
+          width: 12,
+          height: 8,
+          child: CalendarHeatmap(
+            semanticLabel: 'Release activity',
+            start: DateTime(2024, 1, 1),
+            end: DateTime(2024, 1, 14),
+            values: {
+              DateTime(2024, 1, 1, 12): 0,
+              DateTime(2024, 1, 3): 4,
+              DateTime(2024, 2, 1): 99,
+            },
+            weekStartsOn: CalendarWeekStart.monday,
+            cellWidth: 1,
+          ),
+        ),
+      );
+
+      final chart = tester.semantics().single(
+        role: SemanticRole.chart,
+        label: 'Release activity',
+      );
+      expect(chart.state.chartType, 'calendarHeatmap');
+      expect(chart.state.chartRowCount, 7);
+      expect(chart.state.chartColumnCount, 2);
+      expect(chart.state.chartPointCount, 14);
+      expect(chart.state.chartRecordedPointCount, 2);
+      expect(chart.state.chartMinValue, 0);
+      expect(chart.state.chartMaxValue, 4);
+      expect(chart.state.chartStartDate, '2024-01-01');
+      expect(chart.state.chartEndDate, '2024-01-14');
+      expect(chart.state.chartWeekStart, 'monday');
+      expect(
+        tester.render(size: const CellSize(12, 8)).atColRow(4, 1).grapheme,
+        '·',
+        reason: 'time-of-day keys should bucket into their calendar day',
+      );
+
+      final fallback = tester.accessibilitySnapshot().single(
+        role: SemanticRole.chart,
+        label: 'Release activity',
+      );
+      expect(
+        fallback.states,
+        contains(
+          'chart calendarHeatmap, 7 rows, 2 columns, 14 points, '
+          '2 recorded, min 0, max 4, 2024-01-01 to 2024-01-14, '
+          'week starts monday',
+        ),
+      );
+    });
   });
 }

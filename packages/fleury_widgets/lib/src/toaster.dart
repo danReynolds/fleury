@@ -85,6 +85,7 @@ class Toaster extends StatefulWidget {
       message,
       duration ?? scope.state.widget.duration,
       resolved,
+      severity,
       action,
     );
   }
@@ -94,9 +95,20 @@ class Toaster extends StatefulWidget {
 }
 
 class _Toast {
-  _Toast(this.message, this.style, this.action);
+  _Toast({
+    required this.id,
+    required this.message,
+    required this.severity,
+    required this.style,
+    required this.duration,
+    required this.action,
+  });
+
+  final int id;
   final String message;
+  final ToastSeverity severity;
   final CellStyle style;
+  final Duration duration;
   final ToastAction? action;
   FrameTicker? timer; // scheduler-driven auto-dismiss clock
 }
@@ -105,6 +117,7 @@ class _ToasterState extends State<Toaster> {
   final List<_Toast> _toasts = <_Toast>[];
   TuiBinding? _binding;
   OverlayEntry? _entry;
+  var _nextToastId = 0;
 
   @override
   void didChangeDependencies() {
@@ -123,9 +136,17 @@ class _ToasterState extends State<Toaster> {
     String message,
     Duration duration,
     CellStyle style,
+    ToastSeverity severity,
     ToastAction? action,
   ) {
-    final toast = _Toast(message, style, action);
+    final toast = _Toast(
+      id: ++_nextToastId,
+      message: message,
+      severity: severity,
+      style: style,
+      duration: duration,
+      action: action,
+    );
     _toasts.add(toast);
     _refresh();
     final binding = _binding;
@@ -162,16 +183,53 @@ class _ToasterState extends State<Toaster> {
         mainAxisSize: MainAxisSize.min,
         children: [
           for (final toast in _toasts)
-            Container(
-              border: BoxBorder(
-                style: BorderStyle.rounded,
-                cellStyle: toast.style,
+            Semantics(
+              id: SemanticNodeId('toast-${toast.id}'),
+              role: SemanticRole.notification,
+              label: toast.message,
+              hint: toast.action == null
+                  ? 'Transient notification'
+                  : '${toast.action!.label} (${toast.action!.key.hintLabel})',
+              actions: <SemanticAction>{
+                SemanticAction.dismiss,
+                if (toast.action != null) SemanticAction.activate,
+              },
+              state: _toastSemanticState(toast),
+              includeChildren: false,
+              onAction: (action) {
+                switch (action) {
+                  case SemanticAction.dismiss:
+                    _dismiss(toast);
+                  case SemanticAction.activate:
+                    _activateAction(toast);
+                  default:
+                    break;
+                }
+              },
+              child: Container(
+                border: BoxBorder(
+                  style: BorderStyle.rounded,
+                  cellStyle: toast.style,
+                ),
+                child: _toastContent(toast),
               ),
-              child: _toastContent(toast),
             ),
         ],
       ),
     );
+  }
+
+  SemanticState _toastSemanticState(_Toast toast) {
+    return SemanticState(<String, Object?>{
+      'severity': toast.severity.name,
+      'notificationIndex': _toasts.indexOf(toast) + 1,
+      'notificationCount': _toasts.length,
+      'autoDismissMs': toast.duration.inMilliseconds,
+      if (toast.action case final action?) ...<String, Object?>{
+        'notificationActionLabel': action.label,
+        'notificationActionKey': action.key.hintLabel,
+      },
+    });
   }
 
   Widget _toastContent(_Toast toast) {
@@ -187,6 +245,14 @@ class _ToasterState extends State<Toaster> {
         ),
       ],
     );
+  }
+
+  void _activateAction(_Toast toast) {
+    final action = toast.action;
+    if (action == null) return;
+    if (!_toasts.contains(toast)) return;
+    _dismiss(toast);
+    action.onPressed();
   }
 
   @override
@@ -216,9 +282,7 @@ class _ToasterState extends State<Toaster> {
             KeyBinding(
               toast.action!.key,
               onEvent: (_) {
-                final action = toast.action!;
-                _dismiss(toast);
-                action.onPressed();
+                _activateAction(toast);
               },
               hideFromHintBar: true,
             ),

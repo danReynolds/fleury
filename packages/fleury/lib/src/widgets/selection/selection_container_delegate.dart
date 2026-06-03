@@ -39,6 +39,7 @@ import 'selection_event.dart';
 class SelectionContainerDelegate extends ChangeNotifier
     implements SelectionRegistrar {
   final List<Selectable> _selectables = <Selectable>[];
+  bool _disposed = false;
   Selection? _selection;
   CellOffset? _pendingStartEdge;
   CellOffset? _pendingEndEdge;
@@ -101,6 +102,7 @@ class SelectionContainerDelegate extends ChangeNotifier
 
   @override
   void add(Selectable selectable) {
+    _checkNotDisposed();
     if (_selectables.contains(selectable)) return;
     _selectables.add(selectable);
     selectable.addListener(_onSelectableChanged);
@@ -112,6 +114,7 @@ class SelectionContainerDelegate extends ChangeNotifier
 
   @override
   void remove(Selectable selectable) {
+    if (_disposed) return;
     if (_selectables.remove(selectable)) {
       selectable.removeListener(_onSelectableChanged);
     }
@@ -124,6 +127,7 @@ class SelectionContainerDelegate extends ChangeNotifier
   /// Tracks the active edges internally so a newly-mounted Selectable
   /// can pick up the in-flight selection.
   void dispatchSelectionEvent(SelectionEvent event) {
+    _checkNotDisposed();
     switch (event) {
       case SelectionEdgeUpdateEvent(:final isStart, :final globalPosition):
         if (isStart) {
@@ -176,6 +180,7 @@ class SelectionContainerDelegate extends ChangeNotifier
   /// `onSelectionChanged`. The change came FROM a Selectable so we
   /// don't bounce the event back through `dispatchSelectionEvent`.
   void _onSelectableChanged() {
+    if (_disposed) return;
     notifyListeners();
   }
 
@@ -240,10 +245,18 @@ class SelectionContainerDelegate extends ChangeNotifier
 
   @override
   void dispose() {
+    if (_disposed) return;
     for (final s in _selectables) {
       s.removeListener(_onSelectableChanged);
     }
     _selectables.clear();
+    _disposed = true;
     super.dispose();
+  }
+
+  void _checkNotDisposed() {
+    if (_disposed) {
+      throw StateError('SelectionContainerDelegate has been disposed.');
+    }
   }
 }

@@ -10,6 +10,7 @@ import '../rendering/render_objects.dart';
 import '../rendering/render_stack.dart';
 import '../rendering/render_wrap.dart';
 import '../rendering/width_resolver.dart';
+import '../semantics/semantics.dart';
 import 'align.dart';
 import 'framework.dart';
 import 'selection/selectable.dart';
@@ -108,15 +109,20 @@ final class Text extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _RawText(
-      data: data,
-      style: DefaultTextStyle.of(context).merge(style),
-      softWrap: softWrap,
-      maxLines: maxLines,
-      overflow: overflow,
-      textAlign: textAlign,
-      profile: profile,
-      allowSelect: allowSelect,
+    return Semantics(
+      role: SemanticRole.text,
+      label: data,
+      value: data,
+      child: _RawText(
+        data: data,
+        style: DefaultTextStyle.of(context).merge(style),
+        softWrap: softWrap,
+        maxLines: maxLines,
+        overflow: overflow,
+        textAlign: textAlign,
+        profile: profile,
+        allowSelect: allowSelect,
+      ),
     );
   }
 }
@@ -463,6 +469,9 @@ final class IndexedStack extends MultiChildRenderObjectWidget {
   final int index;
 
   @override
+  MultiChildRenderObjectElement createElement() => _IndexedStackElement(this);
+
+  @override
   RenderObject createRenderObject(BuildContext context) =>
       RenderIndexedStack(index: index);
 
@@ -472,6 +481,22 @@ final class IndexedStack extends MultiChildRenderObjectWidget {
     covariant RenderIndexedStack renderObject,
   ) {
     renderObject.index = index;
+  }
+}
+
+final class _IndexedStackElement extends MultiChildRenderObjectElement
+    implements SemanticChildrenProvider {
+  _IndexedStackElement(IndexedStack super.widget);
+
+  @override
+  IndexedStack get widget => super.widget as IndexedStack;
+
+  @override
+  void visitSemanticChildren(void Function(Element child) visitor) {
+    final children = childElements;
+    final active = widget.index;
+    if (active < 0 || active >= children.length) return;
+    visitor(children[active]);
   }
 }
 
@@ -660,7 +685,7 @@ class _RenderFilledBox extends RenderObject
   set color(Color v) {
     if (_color == v) return;
     _color = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   RenderObject? _child;
@@ -931,7 +956,7 @@ class _RenderAspectRatio extends RenderObject
   set aspectRatio(double value) {
     if (_aspectRatio == value) return;
     _aspectRatio = value;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   RenderObject? _child;

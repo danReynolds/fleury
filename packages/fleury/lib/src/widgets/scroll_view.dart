@@ -20,7 +20,8 @@
 // Intentionally not here: horizontal scrolling, momentum/smooth scroll
 // (cells are integers — scrolling is discrete), and windowed building for
 // enormous children (use `ListView.builder` when most content is
-// off-screen; ScrollView paints its whole child to a scratch buffer).
+// off-screen; ScrollView still lays out the whole child, but paints only
+// the visible viewport into an intermediate buffer).
 
 import '../foundation/change_notifier.dart';
 import '../foundation/geometry.dart';
@@ -50,10 +51,12 @@ class ScrollController extends ChangeNotifier {
   int _viewportExtent = 0;
   int _contentExtent = 0;
   bool _metricsKnown = false;
+  bool _disposed = false;
 
   /// Rows scrolled from the top. Clamped to `0..maxOffset`.
   int get offset => _offset;
   set offset(int value) {
+    _checkNotDisposed();
     var v = value < 0 ? 0 : value;
     if (_metricsKnown && v > _maxOffset) v = _maxOffset;
     if (_offset == v) return;
@@ -76,18 +79,32 @@ class ScrollController extends ChangeNotifier {
   bool get atBottom => _offset >= _maxOffset;
 
   /// Scrolls by [delta] rows (negative scrolls up).
-  void scrollBy(int delta) => offset = _offset + delta;
+  void scrollBy(int delta) {
+    _checkNotDisposed();
+    offset = _offset + delta;
+  }
 
   /// Scrolls so [value] is the top row.
-  void jumpTo(int value) => offset = value;
+  void jumpTo(int value) {
+    _checkNotDisposed();
+    offset = value;
+  }
 
   /// Scrolls to the very top / bottom.
-  void scrollToTop() => offset = 0;
-  void scrollToBottom() => offset = _metricsKnown ? _maxOffset : _offset;
+  void scrollToTop() {
+    _checkNotDisposed();
+    offset = 0;
+  }
+
+  void scrollToBottom() {
+    _checkNotDisposed();
+    offset = _metricsKnown ? _maxOffset : _offset;
+  }
 
   /// Called by the render object during layout. Direct field writes (no
   /// notify) — these mirror layout state and notifying here would loop.
   void _applyMetrics(int contentExtent, int viewportExtent) {
+    _checkNotDisposed();
     _contentExtent = contentExtent;
     _viewportExtent = viewportExtent;
     final max = contentExtent - viewportExtent;
@@ -95,6 +112,19 @@ class ScrollController extends ChangeNotifier {
     _metricsKnown = true;
     if (_offset > _maxOffset) _offset = _maxOffset;
     if (_offset < 0) _offset = 0;
+  }
+
+  void _checkNotDisposed() {
+    if (_disposed) {
+      throw StateError('ScrollController has been disposed.');
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    super.dispose();
   }
 }
 
@@ -263,6 +293,7 @@ class _RenderScrollView extends RenderObject
   set controller(ScrollController value) {
     if (identical(_controller, value)) return;
     _controller = value;
+    markNeedsLayout();
   }
 
   RenderObject? _child;
@@ -321,18 +352,17 @@ class _RenderScrollView extends RenderObject
     final ourScreenRect = CellRect(offset: ourScreenOffset, size: size);
     final effectiveClip = clipRect == null
         ? ourScreenRect
-        : (clipRect.intersect(ourScreenRect) ?? ourScreenRect);
+        : clipRect.intersect(ourScreenRect);
+    if (effectiveClip == null) return;
 
     final scroll = _controller.offset;
-    // Child paints into a scratch buffer at local (0, 0). The
-    // mapping to screen coords: scratch (c, r) appears on screen at
-    // (ourScreenOffset.col + c, ourScreenOffset.row + r - scroll).
-    // Pass that as the child's screenOffset, with the clip = our
-    // visible rect.
-    final scratch = CellBuffer(childSize);
+    // Paint only the visible viewport into scratch. The negative child offset
+    // drops rows above the scroll window while screenOffset preserves the
+    // child's full screen-space origin for selection and hit-testing.
+    final scratch = CellBuffer(size);
     c.paint(
       scratch,
-      CellOffset.zero,
+      CellOffset(0, -scroll),
       screenOffset: CellOffset(
         ourScreenOffset.col,
         ourScreenOffset.row - scroll,
@@ -344,10 +374,8 @@ class _RenderScrollView extends RenderObject
     final bufRows = buffer.size.rows;
     final visibleCols = size.cols < childSize.cols ? size.cols : childSize.cols;
     for (var r = 0; r < size.rows; r++) {
-      final srcRow = r + scroll;
-      if (srcRow < 0 || srcRow >= childSize.rows) continue;
       for (var col = 0; col < visibleCols; col++) {
-        final cell = scratch.atColRow(col, srcRow);
+        final cell = scratch.atColRow(col, r);
         if (cell.role != CellRole.leading) continue;
         final tc = offset.col + col;
         final tr = offset.row + r;

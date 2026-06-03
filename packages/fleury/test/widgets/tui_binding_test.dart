@@ -2,7 +2,12 @@
 // SingleTickerProviderStateMixin. FakeClock-driven.
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
+
+Matcher _stateError(String message) => throwsA(
+  isA<StateError>().having((error) => error.message, 'message', message),
+);
 
 /// Walks the subtree under [root] looking for the first State whose
 /// runtimeType matches [T]. Returned for tests that need to poke a
@@ -86,6 +91,29 @@ void main() {
       binding.dispose();
       expect(scheduler.activeTickerCount, 0);
       expect(scheduler.isActive, isFalse);
+    });
+
+    test('dispose is idempotent and blocks new binding work', () {
+      final clock = FakeClock();
+      final scheduler = FakeTickerScheduler(clock: clock);
+      final binding = TuiBinding(tickerScheduler: scheduler);
+
+      binding.dispose();
+      binding.dispose();
+
+      expect(() => binding.flushPostFrameCallbacks(clock.now), returnsNormally);
+      expect(
+        () => binding.createTicker((_) {}),
+        _stateError('TuiBinding has been disposed.'),
+      );
+      expect(
+        () => binding.addPostFrameCallback((_) {}),
+        _stateError('TuiBinding has been disposed.'),
+      );
+      expect(
+        () => scheduler.register((_) {}),
+        _stateError('TickerScheduler has been disposed.'),
+      );
     });
   });
 

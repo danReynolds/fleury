@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryPeerBenchmarkRun",
+  "runId": "textual-sb5-streaming-markdown-2026-06-02T14-54-55Z",
+  "peerId": "textual",
+  "scenarioId": "SB.5",
+  "capturedAt": "2026-06-02T14:54:55.198709Z",
+  "source": {
+    "name": "Textual",
+    "version": "8.2.7",
+    "url": "https://textual.textualize.io/widgets/markdown/"
+  },
+  "environment": {
+    "machine": "macbookpro.lan",
+    "operatingSystem": "darwin",
+    "operatingSystemVersion": "macOS-26.2-arm64-arm-64bit",
+    "runtime": "Python 3.12.13 / Textual 8.2.7",
+    "terminalMode": "textual-run-test-harness",
+    "terminalSize": {
+      "columns": 120,
+      "rows": 32
+    }
+  },
+  "fixture": {
+    "workingDirectory": "peer-fixtures/textual/sb5_streaming_markdown",
+    "command": [
+      "python",
+      "sb5_markdown_benchmark.py",
+      "--warmup=1",
+      "--iterations=3",
+      "--rows=10000",
+      "--json"
+    ],
+    "warmupIterations": 1,
+    "measuredIterations": 3
+  },
+  "metrics": {
+    "journeyUs": {
+      "min": 6797790,
+      "median": 6845612,
+      "p95": 9756484,
+      "p99": 9756484,
+      "max": 9756484,
+      "samples": 3
+    },
+    "chunkParseUs": {
+      "min": 31,
+      "median": 185,
+      "p95": 894,
+      "p99": 2781,
+      "max": 15336,
+      "samples": 300
+    },
+    "chunkFrameUs": {
+      "min": 25125,
+      "median": 64502,
+      "p95": 158718,
+      "p99": 223161,
+      "max": 379099,
+      "samples": 300
+    },
+    "chunkUpdateUs": {
+      "min": 25187,
+      "median": 65017,
+      "p95": 159364,
+      "p99": 223281,
+      "max": 379187,
+      "samples": 300
+    },
+    "finalRenderUs": {
+      "min": 34804,
+      "median": 38905,
+      "p95": 45034,
+      "p99": 45034,
+      "max": 45034,
+      "samples": 3
+    },
+    "selectedBlockCopyUs": {
+      "min": 73557,
+      "median": 77823,
+      "p95": 78141,
+      "p99": 78141,
+      "max": 78141,
+      "samples": 3
+    },
+    "semanticOrTestQueryUs": {
+      "min": 68,
+      "median": 77,
+      "p95": 83,
+      "p99": 83,
+      "max": 83,
+      "samples": 3
+    },
+    "unsafeFrameCount": 0,
+    "rssDeltaBytes": 5652480,
+    "initialFrameProbeUs": {
+      "min": 41979,
+      "median": 42832,
+      "p95": 51077,
+      "p99": 51077,
+      "max": 51077,
+      "samples": 3
+    },
+    "lineOfCodeCount": 316,
+    "testLineOfCodeCount": 38,
+    "chunkCount": 100,
+    "sourceByteCount": 6040,
+    "blockCount": 91,
+    "headingCount": 9,
+    "listItemCount": 17,
+    "linkCount": 25,
+    "unsafeLinkCount": 8,
+    "codeBlockCount": 8,
+    "codeLineCount": 24,
+    "selectedBlockIndex": 90,
+    "selectedBlockKind": "bullet",
+    "sanitizedBlockCount": 0,
+    "sanitizedChunkCount": 41,
+    "truncatedBlockCount": 0,
+    "copiedByteCount": 46
+  },
+  "correctness": [
+    {
+      "gate": "incremental content remains coherent",
+      "pass": true,
+      "evidence": "The streamed document retained headings, lists, links, unsafe-link fallback metadata, code fences, selected final block, and non-empty copy text."
+    },
+    {
+      "gate": "unsafe links have visible fallback",
+      "pass": true,
+      "evidence": "Fixture-owned link policy rewrote unsafe links to a blocked href while preserving the original URL in visible text."
+    },
+    {
+      "gate": "unsafe frame count is zero",
+      "pass": true,
+      "evidence": "Fixture-owned sanitizer removed OSC/CSI/control payloads and redacted secret-shaped text before Textual Markdown ingestion."
+    }
+  ],
+  "ergonomics": {
+    "lineOfCodeCount": 316,
+    "testLineOfCodeCount": 38,
+    "appFile": "sb5_markdown_app.py",
+    "testFile": "test_sb5_markdown.py",
+    "peerOwnedMarkdownWidget": true,
+    "peerOwnedMarkdownAppend": true,
+    "appOwnedSanitization": true,
+    "appOwnedLinkPolicy": true,
+    "appOwnedSelectedBlockCopy": true,
+    "appOwnedMarkdownMetadata": true,
+    "semanticGraphAvailable": false,
+    "testQueryViaWidgetAndAppState": true
+  },
+  "artifacts": [
+    {
+      "kind": "source",
+      "path": "peer-fixtures/textual/sb5_streaming_markdown/sb5_markdown_app.py"
+    },
+    {
+      "kind": "test",
+      "path": "peer-fixtures/textual/sb5_streaming_markdown/test_sb5_markdown.py"
+    }
+  ],
+  "notes": [
+    "This is a Textual run_test peer fixture, not a real-terminal run.",
+    "Textual 8.2.7 supplies the Markdown widget, append API, parser/rendering, focus, scrolling, and test harness.",
+    "Sanitization/redaction, visible URL fallback for unsafe links, selected-block copy, and metadata/test query state are fixture-owned app code.",
+    "Textual exposes widget/app state for this fixture, not a Fleury-style semantic app graph.",
+    "chunkParseUs is fixture metadata parsing around the streamed source; Textual's internal parse/render work is included in chunkFrameUs and chunkUpdateUs.",
+    "Timing is local-machine evidence and should not be used as a public superiority claim without repeated peer runs."
+  ]
+}

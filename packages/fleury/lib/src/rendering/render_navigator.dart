@@ -42,6 +42,7 @@ class RenderNavigatorStack extends RenderObject
   set firstPainted(int value) {
     if (_firstPainted == value) return;
     _firstPainted = value;
+    markNeedsPaintOnly();
   }
 
   final List<RenderObject> _children = <RenderObject>[];
@@ -51,6 +52,7 @@ class RenderNavigatorStack extends RenderObject
 
   @override
   void replaceAllChildren(List<RenderObject> newChildren) {
+    if (hasSameRenderChildrenInOrder(_children, newChildren)) return;
     final newSet = Set<RenderObject>.identity()..addAll(newChildren);
     for (final c in List<RenderObject>.from(_children)) {
       if (!newSet.contains(c)) dropChild(c);
@@ -62,6 +64,7 @@ class RenderNavigatorStack extends RenderObject
     _children
       ..clear()
       ..addAll(newChildren);
+    markNeedsLayout();
   }
 
   @override

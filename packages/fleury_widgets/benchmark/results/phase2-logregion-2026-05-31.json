@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-05-31T23:13:40.497919Z",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "scenarioId": "SB.4",
+      "scenarioName": "LogRegion Tailing And Scrollback",
+      "packageVersion": "0.0.0",
+      "gitSha": "unknown",
+      "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+      "runMode": "test",
+      "os": "macos",
+      "cpu": 10,
+      "terminalProfile": {
+        "colorMode": "truecolor",
+        "imageProtocol": "halfBlock",
+        "tmuxPassthrough": false
+      },
+      "terminalSize": {
+        "columns": 120,
+        "rows": 32
+      },
+      "seed": 1,
+      "rowCount": 100000,
+      "warmupIterations": 2,
+      "measuredIterations": 20,
+      "startedAt": "2026-05-31T23:13:36.801221Z",
+      "durationMs": 3675.499,
+      "metrics": {
+        "journeyUs": {
+          "min": 165210,
+          "median": 174476,
+          "p95": 192351,
+          "p99": 195710,
+          "max": 196550,
+          "samples": 20
+        },
+        "fixtureBuildUs": {
+          "min": 55644,
+          "median": 67456,
+          "p95": 74958,
+          "p99": 75496,
+          "max": 75631,
+          "samples": 20
+        },
+        "mountUs": {
+          "min": 16314,
+          "median": 16798,
+          "p95": 20930,
+          "p99": 23364,
+          "max": 23973,
+          "samples": 20
+        },
+        "firstRenderUs": {
+          "min": 7168,
+          "median": 8349,
+          "p95": 11445,
+          "p99": 13455,
+          "max": 13958,
+          "samples": 20
+        },
+        "appendBurstUs": {
+          "min": 5690,
+          "median": 6982,
+          "p95": 9591,
+          "p99": 13691,
+          "max": 14716,
+          "samples": 20
+        },
+        "scrollbackJumpUs": {
+          "min": 1697,
+          "median": 2056,
+          "p95": 3513,
+          "p99": 7041,
+          "max": 7923,
+          "samples": 20
+        },
+        "scrollToTailUs": {
+          "min": 1250,
+          "median": 1961,
+          "p95": 8675,
+          "p99": 17273,
+          "max": 19423,
+          "samples": 20
+        },
+        "copySelectedEntryUs": {
+          "min": 7632,
+          "median": 7844,
+          "p95": 8608,
+          "p99": 10226,
+          "max": 10630,
+          "samples": 20
+        },
+        "filterQueryUs": {
+          "min": 53376,
+          "median": 54310,
+          "p95": 68785,
+          "p99": 80077,
+          "max": 82900,
+          "samples": 20
+        },
+        "semanticQueryUs": {
+          "min": 2436,
+          "median": 2679,
+          "p95": 3630,
+          "p99": 8967,
+          "max": 10301,
+          "samples": 20
+        },
+        "initialAnsiBytes": 2354,
+        "appendAnsiBytes": 2392,
+        "finalAnsiBytes": 2392,
+        "filteredAnsiBytes": 101,
+        "semanticNodeCount": 68,
+        "visibleRangeStart": 100968,
+        "visibleRangeEnd": 100999,
+        "scrollbackVisibleRangeStart": 50000,
+        "filterMatchCount": 1000,
+        "filterVisibleRangeStart": 999,
+        "filterVisibleRangeEnd": 999,
+        "selectedKey": "LOG-200999",
+        "entryCountAfterAppend": 101000,
+        "appendCount": 1000,
+        "sanitizingFixtureRows": 1299,
+        "copiedByteCount": 67,
+        "rssDeltaBytes": 50905088
+      },
+      "thresholds": {
+        "candidateAppendBurstP95Us": 33000,
+        "candidateScrollbackJumpP95Us": 16000,
+        "candidateCopySelectedEntryP95Us": 16000,
+        "candidateFilterQueryP95Us": 80000,
+        "candidateSemanticQueryP95Us": 16000,
+        "enforced": false
+      },
+      "pass": true,
+      "notes": [
+        "Candidate thresholds are informational until stable baselines exist.",
+        "This is a LogRegion widget scenario, not a full subprocess stream.",
+        "Fixture includes ANSI/OSC/newline payloads to verify sanitized visible and copied output."
+      ]
+    }
+  ]
+}

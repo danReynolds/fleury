@@ -25,6 +25,7 @@ class Heatmap extends StatelessWidget {
     this.color,
     this.rowLabels,
     this.colLabels,
+    this.semanticLabel = 'Heatmap',
   });
 
   /// `values[row][col]` — outer list is rows top→bottom, inner is cols
@@ -50,20 +51,77 @@ class Heatmap extends StatelessWidget {
   /// Optional labels for the columns (drawn above the grid).
   final List<String>? colLabels;
 
+  /// Label exposed through the semantic app graph.
+  final String semanticLabel;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return _RawHeatmap(
-      values: values,
-      min: min,
-      max: max,
-      cellWidth: cellWidth < 1 ? 1 : cellWidth,
-      color: color ?? theme.colorScheme.primary,
-      labelStyle: theme.mutedStyle,
-      rowLabels: rowLabels,
-      colLabels: colLabels,
+    final stats = _heatmapStats(values, min: min, max: max);
+    return Semantics(
+      role: SemanticRole.chart,
+      label: semanticLabel,
+      state: SemanticState({
+        'chartType': 'heatmap',
+        'chartRowCount': stats.rows,
+        'chartColumnCount': stats.columns,
+        'chartPointCount': stats.pointCount,
+        'chartMinValue': stats.min,
+        'chartMaxValue': stats.max,
+        'rowLabelCount': rowLabels?.length ?? 0,
+        'columnLabelCount': colLabels?.length ?? 0,
+      }),
+      child: _RawHeatmap(
+        values: values,
+        min: min,
+        max: max,
+        cellWidth: cellWidth < 1 ? 1 : cellWidth,
+        color: color ?? theme.colorScheme.primary,
+        labelStyle: theme.mutedStyle,
+        rowLabels: rowLabels,
+        colLabels: colLabels,
+      ),
     );
   }
+}
+
+bool _labelsEqual(List<String>? a, List<String>? b) {
+  if (identical(a, b)) return true;
+  if (a == null || b == null) return false;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i += 1) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
+({int rows, int columns, int pointCount, num min, num max}) _heatmapStats(
+  List<List<num>> values, {
+  required num? min,
+  required num? max,
+}) {
+  var columns = 0;
+  var pointCount = 0;
+  num? autoMin;
+  num? autoMax;
+  for (final row in values) {
+    if (row.length > columns) columns = row.length;
+    pointCount += row.length;
+    for (final value in row) {
+      if (autoMin == null || value < autoMin) autoMin = value;
+      if (autoMax == null || value > autoMax) autoMax = value;
+    }
+  }
+  var resolvedMin = min ?? autoMin ?? 0;
+  var resolvedMax = max ?? autoMax ?? 1;
+  if (resolvedMax == resolvedMin) resolvedMax = resolvedMin + 1;
+  return (
+    rows: values.length,
+    columns: columns,
+    pointCount: pointCount,
+    min: resolvedMin,
+    max: resolvedMax,
+  );
 }
 
 class _RawHeatmap extends LeafRenderObjectWidget {
@@ -135,50 +193,67 @@ class RenderHeatmap extends RenderObject {
 
   List<List<num>> _values;
   set values(List<List<num>> v) {
+    if (identical(_values, v)) return;
+    final layoutChanged =
+        _values.length != v.length ||
+        (_values.isEmpty ? 0 : _values[0].length) !=
+            (v.isEmpty ? 0 : v[0].length);
     _values = v;
-    markNeedsPaint();
+    if (layoutChanged) {
+      markNeedsLayout();
+    } else {
+      markNeedsPaintOnly();
+    }
   }
 
   num? _min;
   set min(num? v) {
+    if (_min == v) return;
     _min = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   num? _max;
   set max(num? v) {
+    if (_max == v) return;
     _max = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   int _cellWidth;
   set cellWidth(int v) {
-    _cellWidth = v < 1 ? 1 : v;
-    markNeedsPaint();
+    final clamped = v < 1 ? 1 : v;
+    if (_cellWidth == clamped) return;
+    _cellWidth = clamped;
+    markNeedsLayout();
   }
 
   Color _color;
   set color(Color v) {
+    if (_color == v) return;
     _color = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   CellStyle _labelStyle;
   set labelStyle(CellStyle v) {
+    if (_labelStyle == v) return;
     _labelStyle = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   List<String>? _rowLabels;
   set rowLabels(List<String>? v) {
+    if (_labelsEqual(_rowLabels, v)) return;
     _rowLabels = v;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   List<String>? _colLabels;
   set colLabels(List<String>? v) {
+    if (_labelsEqual(_colLabels, v)) return;
     _colLabels = v;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   // Four-level density ladder. Empty cells stay empty (transparent).

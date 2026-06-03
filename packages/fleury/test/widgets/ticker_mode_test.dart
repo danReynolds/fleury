@@ -2,6 +2,7 @@
 // integration. FakeClock-driven per RFC §21.1.
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
 T _findState<T extends State>(Element root) {

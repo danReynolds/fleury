@@ -49,6 +49,7 @@ import '../animation/curves.dart';
 import '../foundation/key.dart';
 import '../rendering/render_navigator.dart';
 import '../rendering/render_object.dart';
+import '../semantics/semantics.dart';
 import '../terminal/events.dart';
 import 'align.dart' show Align, Alignment;
 import 'effects.dart';
@@ -506,16 +507,49 @@ class NavigatorState extends State<Navigator> {
     // Expose this navigator to its routes' subtrees so `context.push` /
     // `context.pop` resolve to it, then lay the routes out in our own
     // slot via RenderNavigatorStack.
-    return _NavigatorScope(
-      navigator: this,
-      child: _RouteStack(
-        firstPainted: _firstPainted(),
-        children: <Widget>[
-          for (final route in _routes)
-            _RouteHost(key: route.key, navigator: this, route: route),
-        ],
+    return Semantics(
+      role: SemanticRole.navigation,
+      label: _isRoot ? 'root navigator' : 'navigator',
+      value: depth,
+      actions: <SemanticAction>{
+        SemanticAction.navigate,
+        if (canPop) SemanticAction.close,
+      },
+      state: SemanticState({
+        'routeDepth': depth,
+        'canPop': canPop,
+        'root': _isRoot,
+      }),
+      onAction: _handleNavigatorAction,
+      child: _NavigatorScope(
+        navigator: this,
+        child: _RouteStack(
+          firstPainted: _firstPainted(),
+          children: <Widget>[
+            for (var i = 0; i < _routes.length; i++)
+              _RouteHost(
+                key: _routes[i].key,
+                navigator: this,
+                route: _routes[i],
+                routeIndex: i,
+              ),
+          ],
+        ),
       ),
     );
+  }
+
+  void _handleNavigatorAction(SemanticAction action) {
+    switch (action) {
+      case SemanticAction.close:
+      case SemanticAction.dismiss:
+        maybePop();
+        return;
+      case SemanticAction.navigate:
+        return;
+      case _:
+        return;
+    }
   }
 }
 
@@ -527,10 +561,12 @@ class _RouteHost extends StatelessWidget {
     required super.key,
     required this.navigator,
     required this.route,
+    required this.routeIndex,
   });
 
   final NavigatorState navigator;
   final _Route route;
+  final int routeIndex;
 
   @override
   Widget build(BuildContext context) {
@@ -575,7 +611,47 @@ class _RouteHost extends StatelessWidget {
           ? transition.exit.build(content, (1 - t).clamp(0.0, 1.0))
           : transition.enter.build(content, t.clamp(0.0, 1.0));
     }
-    return content;
+    final routeName = route.screen.runtimeType.toString();
+    return Semantics(
+      role: SemanticRole.route,
+      label: routeName,
+      selected: active,
+      enabled: !route.leaving,
+      includeChildren: active,
+      actions: active
+          ? <SemanticAction>{
+              SemanticAction.navigate,
+              if (navigator.canPop)
+                route.presentAlignment == null
+                    ? SemanticAction.close
+                    : SemanticAction.dismiss,
+            }
+          : const <SemanticAction>{},
+      state: SemanticState({
+        'routeName': routeName,
+        'routeIndex': routeIndex,
+        'routeDepth': navigator.depth,
+        'active': active,
+        'leaving': route.leaving,
+        'modal': route.presentAlignment != null,
+        'opaque': route.opaque,
+      }),
+      onAction: active
+          ? (action) {
+              switch (action) {
+                case SemanticAction.close:
+                case SemanticAction.dismiss:
+                  navigator.maybePop();
+                  return;
+                case SemanticAction.navigate:
+                  return;
+                case _:
+                  return;
+              }
+            }
+          : null,
+      child: content,
+    );
   }
 }
 

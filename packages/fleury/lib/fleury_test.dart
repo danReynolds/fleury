@@ -16,7 +16,50 @@
 /// builds don't depend on `dart:io` or test harness machinery.
 library;
 
+export 'src/animation/clock.dart' show FakeClock;
+export 'src/animation/ticker_scheduler.dart' show FakeTickerScheduler;
+export 'src/runtime/clipboard.dart' show TestClipboard;
 export 'src/testing/fleury_tester.dart' show FleuryTester, testWidgets;
 export 'src/testing/finders.dart'
     show Finder, byKey, byPredicate, byType, descendantOf, text;
 export 'src/testing/goldens.dart' show matchesGolden;
+export 'src/semantics/semantics.dart'
+    show
+        SemanticAction,
+        SemanticActionCallback,
+        SemanticActionContributor,
+        SemanticActionInvocationResult,
+        SemanticActionInvocationStatus,
+        SemanticNode,
+        SemanticNodeId,
+        SemanticRole,
+        SemanticState,
+        SemanticTree,
+        Semantics;
+export 'src/semantics/accessibility.dart'
+    show
+        AccessibilityNode,
+        AccessibilitySnapshot,
+        AccessibilitySnapshotSummary,
+        SemanticTreeAccessibility,
+        buildAccessibilitySnapshot;
+export 'src/semantics/inspection.dart'
+    show
+        SemanticInspectionNode,
+        SemanticInspectionSnapshot,
+        SemanticTreeInspection;
+export 'src/debug/debug_capture.dart'
+    show
+        DebugCaptureArtifact,
+        DebugCaptureRecorder,
+        DebugCaptureSemanticNode,
+        DebugCaptureSnapshot,
+        DebugOutputSummary,
+        DebugTaskEventSummary,
+        DebugTimeMarker;
+export 'src/debug/debug_events.dart'
+    show DebugEvent, DebugEvents, FrameDebugEvent, FrameEvent, InputDebugEvent;
+export 'src/rendering/render_layout_stats.dart'
+    show RenderLayoutDebugStats, RenderLayoutFrameStats;
+export 'src/rendering/render_repaint_boundary.dart'
+    show RepaintBoundaryFrameStats;

@@ -19,6 +19,7 @@
 
 import 'package:meta/meta.dart';
 
+import '../debug/debug_invalidation.dart';
 import '../foundation/geometry.dart';
 import '../foundation/key.dart';
 import '../rendering/cell_buffer.dart';
@@ -626,6 +627,7 @@ abstract class Element implements BuildContext {
     if (_lifecycle != _ElementLifecycle.active) return;
     if (_dirty) return;
     _dirty = true;
+    DebugInvalidations.recordBuild(_debugInvalidationLabel);
     _owner?.scheduleBuildFor(this);
   }
 
@@ -661,6 +663,14 @@ abstract class Element implements BuildContext {
     final widget = _widget;
     final keyPart = widget.key != null ? ', key: ${widget.key}' : '';
     return '$runtimeType(widget: ${widget.runtimeType}$keyPart)';
+  }
+
+  String get _debugInvalidationLabel {
+    if (this is StatefulElement) {
+      final state = (this as StatefulElement).state;
+      return '${_widget.runtimeType}/${state.runtimeType}';
+    }
+    return _widget.runtimeType.toString();
   }
 
   /// Multi-line indented dump of this subtree, one element per line.
@@ -967,23 +977,25 @@ class BuildOwner {
     return element;
   }
 
-  /// Replaces the root widget while preserving the [Element] subtree where
-  /// `runtimeType` + `Key` match. Returns the (possibly same) root element.
-  ///
-  /// The current revision only supports updating in place when the new root
-  /// widget is compatible with the old one. Replacing the root with an
-  /// incompatible widget is not yet supported.
+  /// Replaces the root widget while preserving the [Element] subtree when
+  /// `runtimeType` + `Key` match. Returns the current root element, which is
+  /// either [root] for a compatible update or a freshly mounted element after
+  /// an incompatible root replacement.
   Element updateRoot(Element root, Widget newRoot) {
+    if (!identical(root, _root)) {
+      throw StateError(
+        'BuildOwner.updateRoot called with an element that is not the current '
+        'root.',
+      );
+    }
     if (Widget.canUpdate(root.widget, newRoot)) {
       root.update(newRoot);
       flushBuild();
       return root;
     }
-    throw UnsupportedError(
-      'Replacing the root widget with an incompatible type is not yet '
-      'supported (old=${root.widget.runtimeType}, '
-      'new=${newRoot.runtimeType}).',
-    );
+    root.unmount();
+    _root = null;
+    return mountRoot(newRoot);
   }
 
   void scheduleBuildFor(Element element) {
@@ -1226,9 +1238,10 @@ abstract class RenderObjectElement extends Element {
   void update(covariant RenderObjectWidget newWidget) {
     super.update(newWidget);
     newWidget.updateRenderObject(this, _renderObject!);
-    // A widget reconcile can have changed the render object's configuration,
-    // so any enclosing `RenderRepaintBoundary` must invalidate its cache.
-    _renderObject!.markNeedsPaint();
+    // Render-object setters own their invalidation. Keeping that decision at
+    // the setter is what lets audited paint-only updates avoid relayout while
+    // layout-affecting setters still call markNeedsLayout or the conservative
+    // markNeedsPaint compatibility path.
     rebuild(force: true);
   }
 
@@ -1425,7 +1438,10 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
       final r = _findFirstRenderObject(c);
       if (r != null) desired.add(r);
     }
-    (renderObject as RenderObjectWithChildren).replaceAllChildren(desired);
+    final owner = renderObject as RenderObjectWithChildren;
+    final current = owner.children;
+    if (_sameRenderObjectOrder(current, desired)) return;
+    owner.replaceAllChildren(desired);
   }
 
   static RenderObject? _findFirstRenderObject(Element element) {
@@ -1435,6 +1451,17 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
       found ??= _findFirstRenderObject(child);
     });
     return found;
+  }
+
+  static bool _sameRenderObjectOrder(
+    List<RenderObject> current,
+    List<RenderObject> desired,
+  ) {
+    if (current.length != desired.length) return false;
+    for (var i = 0; i < current.length; i++) {
+      if (!identical(current[i], desired[i])) return false;
+    }
+    return true;
   }
 
   @override

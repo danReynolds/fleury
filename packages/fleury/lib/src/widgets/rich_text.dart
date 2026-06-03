@@ -205,12 +205,27 @@ class RenderRichText extends RenderObject
 
   void setSpan(TextSpan span, CellStyle base) {
     _glyphs = _flatten(span, base);
+    markNeedsLayout();
   }
 
-  set softWrap(bool value) => _softWrap = value;
-  set maxLines(int? value) => _maxLines = value;
+  set softWrap(bool value) {
+    if (_softWrap == value) return;
+    _softWrap = value;
+    markNeedsLayout();
+  }
+
+  set maxLines(int? value) {
+    if (_maxLines == value) return;
+    _maxLines = value;
+    markNeedsLayout();
+  }
+
   // ignore: unnecessary_getters_setters
-  set overflow(TextOverflow value) => _overflow = value;
+  set overflow(TextOverflow value) {
+    if (_overflow == value) return;
+    _overflow = value;
+    markNeedsPaintOnly();
+  }
 
   List<_Glyph> _flatten(TextSpan span, CellStyle inherited) {
     final out = <_Glyph>[];

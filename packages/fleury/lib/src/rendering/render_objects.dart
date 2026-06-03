@@ -118,14 +118,24 @@ class RenderText extends RenderObject
   void _invalidateLayoutCache() {
     _cachedConstraints = null;
     _cachedSize = null;
+    markNeedsLayout();
   }
 
   String get text => _text;
   set text(String value) {
     final sanitized = _sanitizePreservingNewlines(value);
     if (sanitized == _text) return;
+    final nextIntrinsicWidth = _measureIntrinsicWidth(sanitized);
+    if (_canReuseCurrentSingleLineLayout(sanitized, nextIntrinsicWidth)) {
+      _text = sanitized;
+      _intrinsicWidth = nextIntrinsicWidth;
+      _lines = <String>[sanitized];
+      _moreLinesTruncated = false;
+      markNeedsPaintOnly();
+      return;
+    }
     _text = sanitized;
-    _recomputeIntrinsicWidth();
+    _intrinsicWidth = nextIntrinsicWidth;
     _invalidateLayoutCache();
   }
 
@@ -134,6 +144,7 @@ class RenderText extends RenderObject
     if (_style == value) return;
     _style = value;
     // Style is paint-only; layout result is unaffected.
+    markNeedsPaintOnly();
   }
 
   bool get softWrap => _softWrap;
@@ -154,14 +165,22 @@ class RenderText extends RenderObject
   // line breaking, so changing it leaves the layout cache valid.
   // ignore: unnecessary_getters_setters
   TextOverflow get overflow => _overflow;
-  set overflow(TextOverflow value) => _overflow = value;
+  set overflow(TextOverflow value) {
+    if (_overflow == value) return;
+    _overflow = value;
+    markNeedsPaintOnly();
+  }
 
   // textAlign also only affects paint — it shifts each line's start
   // column inside the box but doesn't change which graphemes wrap
   // where. Layout cache stays valid across changes.
   // ignore: unnecessary_getters_setters
   TextAlign get textAlign => _textAlign;
-  set textAlign(TextAlign value) => _textAlign = value;
+  set textAlign(TextAlign value) {
+    if (_textAlign == value) return;
+    _textAlign = value;
+    markNeedsPaintOnly();
+  }
 
   WidthResolver get widthResolver => _widthResolver;
   set widthResolver(WidthResolver value) {
@@ -184,20 +203,33 @@ class RenderText extends RenderObject
   int get intrinsicWidth => _intrinsicWidth;
 
   void _recomputeIntrinsicWidth() {
-    if (_text.isEmpty) {
-      _intrinsicWidth = 0;
-      return;
-    }
-    if (!_text.contains('\n')) {
-      _intrinsicWidth = _widthResolver.widthOfText(_text, _profile);
-      return;
+    _intrinsicWidth = _measureIntrinsicWidth(_text);
+  }
+
+  int _measureIntrinsicWidth(String value) {
+    if (value.isEmpty) return 0;
+    if (!value.contains('\n')) {
+      return _widthResolver.widthOfText(value, _profile);
     }
     var widest = 0;
-    for (final line in _text.split('\n')) {
+    for (final line in value.split('\n')) {
       final w = _widthResolver.widthOfText(line, _profile);
       if (w > widest) widest = w;
     }
-    _intrinsicWidth = widest;
+    return widest;
+  }
+
+  bool _canReuseCurrentSingleLineLayout(
+    String nextText,
+    int nextIntrinsicWidth,
+  ) {
+    if (needsLayout) return false;
+    if (_text.isEmpty != nextText.isEmpty) return false;
+    if (_text.contains('\n') || nextText.contains('\n')) return false;
+    if (_intrinsicWidth != nextIntrinsicWidth) return false;
+    if (!_softWrap) return true;
+    final maxCols = constraints.maxCols;
+    return maxCols == null || nextIntrinsicWidth <= maxCols;
   }
 
   @override
@@ -521,14 +553,29 @@ class RenderText extends RenderObject
 /// for height. With both null and no child, this collapses to zero.
 class RenderSizedBox extends RenderObject
     implements RenderObjectWithSingleChild {
-  RenderSizedBox({this.width, this.height, RenderObject? child}) {
+  RenderSizedBox({int? width, int? height, RenderObject? child})
+    : _width = width,
+      _height = height {
     if (child != null) {
       this.child = child;
     }
   }
 
-  int? width;
-  int? height;
+  int? _width;
+  int? get width => _width;
+  set width(int? value) {
+    if (_width == value) return;
+    _width = value;
+    markNeedsLayout();
+  }
+
+  int? _height;
+  int? get height => _height;
+  set height(int? value) {
+    if (_height == value) return;
+    _height = value;
+    markNeedsLayout();
+  }
 
   RenderObject? _child;
   @override
@@ -550,42 +597,49 @@ class RenderSizedBox extends RenderObject
     // Resolve the `expandSize` sentinel against the parent's max.
     // Anywhere SizedBox.expand or a hand-set huge width comes through,
     // it caps at what the parent actually offers.
-    final w = (width != null && width! >= 0x7fffffff)
+    final width = _width;
+    final height = _height;
+    final w = (width != null && width >= 0x7fffffff)
         ? constraints.maxCols
         : width;
-    final h = (height != null && height! >= 0x7fffffff)
+    final h = (height != null && height >= 0x7fffffff)
         ? constraints.maxRows
         : height;
+    final resolvedWidth = w == null ? null : constraints.constrainWidth(w);
+    final resolvedHeight = h == null ? null : constraints.constrainHeight(h);
     final childConstraints = CellConstraints(
-      minCols: w ?? constraints.minCols,
-      maxCols: w ?? constraints.maxCols,
-      minRows: h ?? constraints.minRows,
-      maxRows: h ?? constraints.maxRows,
+      minCols: resolvedWidth ?? constraints.minCols,
+      maxCols: resolvedWidth ?? constraints.maxCols,
+      minRows: resolvedHeight ?? constraints.minRows,
+      maxRows: resolvedHeight ?? constraints.maxRows,
     );
     final c = _child;
     if (c != null) {
-      return c.layout(childConstraints);
+      return constraints.constrain(c.layout(childConstraints));
     }
     return constraints.constrain(
-      CellSize(w ?? constraints.minCols, h ?? constraints.minRows),
+      CellSize(
+        resolvedWidth ?? constraints.minCols,
+        resolvedHeight ?? constraints.minRows,
+      ),
     );
   }
 
   @override
   int computeMaxIntrinsicWidth(int? height) =>
-      width ?? (_child?.computeMaxIntrinsicWidth(height) ?? 0);
+      _width ?? (_child?.computeMaxIntrinsicWidth(height) ?? 0);
 
   @override
   int computeMinIntrinsicWidth(int? height) =>
-      width ?? (_child?.computeMinIntrinsicWidth(height) ?? 0);
+      _width ?? (_child?.computeMinIntrinsicWidth(height) ?? 0);
 
   @override
   int computeMaxIntrinsicHeight(int? width) =>
-      height ?? (_child?.computeMaxIntrinsicHeight(width) ?? 0);
+      _height ?? (_child?.computeMaxIntrinsicHeight(width) ?? 0);
 
   @override
   int computeMinIntrinsicHeight(int? width) =>
-      height ?? (_child?.computeMinIntrinsicHeight(width) ?? 0);
+      _height ?? (_child?.computeMinIntrinsicHeight(width) ?? 0);
 
   @override
   void paint(
@@ -622,6 +676,7 @@ class RenderPadding extends RenderObject
   set padding(EdgeInsets value) {
     if (_padding == value) return;
     _padding = value;
+    markNeedsLayout();
   }
 
   RenderObject? _child;
@@ -743,6 +798,7 @@ class RenderBorder extends RenderObject implements RenderObjectWithSingleChild {
   set border(BoxBorder value) {
     if (_border == value) return;
     _border = value;
+    markNeedsPaintOnly();
   }
 
   RenderObject? _child;

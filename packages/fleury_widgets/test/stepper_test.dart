@@ -100,5 +100,82 @@ void main() {
       final out = tester.renderToString(size: const CellSize(16, 1));
       expect(out.contains('qty'), isTrue);
     });
+
+    testWidgets(
+      'exposes spin button semantics and increment/decrement actions',
+      (tester) async {
+        final calls = <num>[];
+        tester.pumpWidget(
+          Stepper(
+            value: 7,
+            min: 0,
+            max: 10,
+            step: 2,
+            largeStep: 5,
+            label: 'qty',
+            onChanged: calls.add,
+          ),
+        );
+
+        final node = tester.semantics().single(
+          role: SemanticRole.spinButton,
+          label: 'qty',
+          value: 7,
+          action: SemanticAction.increment,
+        );
+        expect(node.actions, contains(SemanticAction.decrement));
+        expect(node.state['numericValue'], 7);
+        expect(node.state['min'], 0);
+        expect(node.state['max'], 10);
+        expect(node.state['step'], 2);
+        expect(
+          tester
+              .accessibilitySnapshot()
+              .single(role: SemanticRole.spinButton, label: 'qty')
+              .states,
+          contains('value 7, min 0, max 10, step 2, large step 5'),
+        );
+
+        final increment = await tester.invokeSemanticAction(
+          SemanticAction.increment,
+          role: SemanticRole.spinButton,
+          label: 'qty',
+        );
+        final decrement = await tester.invokeSemanticAction(
+          SemanticAction.decrement,
+          role: SemanticRole.spinButton,
+          label: 'qty',
+        );
+
+        expect(increment.completed, isTrue);
+        expect(decrement.completed, isTrue);
+        expect(calls, [9, 5]);
+        expect(
+          tester
+              .semantics()
+              .single(role: SemanticRole.spinButton, label: 'qty')
+              .focused,
+          isTrue,
+        );
+      },
+    );
+
+    testWidgets('omits bounded spin button semantic actions at limits', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        Stepper(value: 10, min: 0, max: 10, label: 'qty', onChanged: (_) {}),
+      );
+
+      final node = tester.semantics().single(
+        role: SemanticRole.spinButton,
+        label: 'qty',
+      );
+
+      expect(node.actions, isNot(contains(SemanticAction.increment)));
+      expect(node.actions, contains(SemanticAction.decrement));
+      expect(node.state['canIncrement'], isFalse);
+      expect(node.state['canDecrement'], isTrue);
+    });
   });
 }

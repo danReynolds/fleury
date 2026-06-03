@@ -381,6 +381,7 @@ class RenderPointerListener extends RenderObject
     if (identical(_router, value)) return;
     _router?._remove(this);
     _router = value;
+    markNeedsPaintOnly();
   }
 
   PointerTapCallback? onTap;

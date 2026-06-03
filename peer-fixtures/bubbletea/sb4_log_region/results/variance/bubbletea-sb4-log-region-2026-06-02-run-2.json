@@ -1,0 +1,170 @@
+{
+  "artifacts": [
+    {
+      "kind": "source",
+      "path": "peer-fixtures/bubbletea/sb4_log_region/app.go"
+    },
+    {
+      "kind": "benchmark",
+      "path": "peer-fixtures/bubbletea/sb4_log_region/main.go"
+    },
+    {
+      "kind": "test",
+      "path": "peer-fixtures/bubbletea/sb4_log_region/app_test.go"
+    }
+  ],
+  "capturedAt": "2026-06-02T14:04:30.120086Z",
+  "correctness": [
+    {
+      "evidence": "After append and explicit tail scroll, the Bubbles viewport stayed anchored at LOG-200999.",
+      "gate": "tail anchoring is correct",
+      "pass": true
+    },
+    {
+      "evidence": "Selected-entry copy matched the generated sanitized log line and contained no escape, secret, or newline artifacts.",
+      "gate": "copy text is sanitized",
+      "pass": true
+    },
+    {
+      "evidence": "Fixture-owned sanitizer removed ANSI/OSC/control payloads before Bubbles viewport ingestion.",
+      "gate": "unsafe output leak count is zero",
+      "pass": true
+    }
+  ],
+  "environment": {
+    "machine": "macbookpro.lan",
+    "operatingSystem": "darwin",
+    "operatingSystemVersion": "Darwin macbookpro.lan 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:09:40 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T6000 x86_64",
+    "runtime": "go1.25.0 / Bubble Tea 2.0.7 / Bubbles 2.1.0",
+    "terminalMode": "bubbletea-viewport-model-harness",
+    "terminalSize": {
+      "columns": 120,
+      "rows": 32
+    }
+  },
+  "ergonomics": {
+    "appFile": "app.go",
+    "appOwnedFiltering": true,
+    "appOwnedSanitization": true,
+    "appOwnedSelectedEntryCopy": true,
+    "benchmarkFile": "main.go",
+    "benchmarkLineOfCodeCount": 508,
+    "lineOfCodeCount": 304,
+    "peerOwnedViewportWidget": true,
+    "semanticGraphAvailable": false,
+    "testFile": "app_test.go",
+    "testLineOfCodeCount": 57,
+    "testQueryViaAppStateAndViewport": true
+  },
+  "fixture": {
+    "command": [
+      "go",
+      "run",
+      ".",
+      "--warmup=2",
+      "--iterations=5",
+      "--rows=100000",
+      "--append=1000",
+      "--json"
+    ],
+    "measuredIterations": 5,
+    "warmupIterations": 2,
+    "workingDirectory": "peer-fixtures/bubbletea/sb4_log_region"
+  },
+  "kind": "fleuryPeerBenchmarkRun",
+  "metrics": {
+    "appendBurstUs": {
+      "max": 2181266,
+      "median": 1452158,
+      "min": 1161650,
+      "p95": 2181266,
+      "p99": 2181266,
+      "samples": 5
+    },
+    "appendCount": 1000,
+    "benchmarkLineOfCodeCount": 508,
+    "copySelectedEntryUs": {
+      "max": 13,
+      "median": 11,
+      "min": 10,
+      "p95": 13,
+      "p99": 13,
+      "samples": 5
+    },
+    "entryCountAfterAppend": 101000,
+    "filterMatchCount": 1000,
+    "filterQueryUs": {
+      "max": 586095,
+      "median": 468087,
+      "min": 395968,
+      "p95": 586095,
+      "p99": 586095,
+      "samples": 5
+    },
+    "finalMaxScrollY": 968,
+    "finalScrollY": 968,
+    "firstRenderUs": {
+      "max": 2734,
+      "median": 503,
+      "min": 250,
+      "p95": 2734,
+      "p99": 2734,
+      "samples": 5
+    },
+    "lineCountAfterFilter": 1000,
+    "lineOfCodeCount": 304,
+    "mountUs": {
+      "max": 3812887,
+      "median": 3106764,
+      "min": 2304473,
+      "p95": 3812887,
+      "p99": 3812887,
+      "samples": 5
+    },
+    "rssDeltaBytes": 4911104,
+    "scrollToTailUs": {
+      "max": 761183,
+      "median": 648630,
+      "min": 569850,
+      "p95": 761183,
+      "p99": 761183,
+      "samples": 5
+    },
+    "scrollbackJumpUs": {
+      "max": 1016056,
+      "median": 745710,
+      "min": 545614,
+      "p95": 1016056,
+      "p99": 1016056,
+      "samples": 5
+    },
+    "selectedKey": "LOG-200999",
+    "semanticOrTestQueryUs": {
+      "max": 49,
+      "median": 21,
+      "min": 20,
+      "p95": 49,
+      "p99": 49,
+      "samples": 5
+    },
+    "testLineOfCodeCount": 57,
+    "unsafeArtifactLeakCount": 0,
+    "visibleWindowRowEstimate": 32
+  },
+  "notes": [
+    "This is a Bubble Tea/Bubbles viewport model harness, not a real-terminal run.",
+    "Bubble Tea 2.0.7 supplies the Model/Update/View architecture, and Bubbles 2.1.0 supplies viewport content and scrolling primitives.",
+    "Sanitization/redaction, filtering, selected-entry state, and copy/export are app-owned fixture code because Bubbles viewport does not provide Fleury-equivalent primitives for those SB.4 behaviors.",
+    "Bubble Tea/Bubbles exposes app/model state for this fixture, not a Fleury-style semantic app graph.",
+    "Timing is local-machine evidence and should not be used as a public superiority claim without repeated peer runs."
+  ],
+  "peerId": "bubbletea",
+  "runId": "bubbletea-sb4-log-region-2026-06-02T14-04-30Z",
+  "scenarioId": "SB.4",
+  "schemaVersion": 1,
+  "source": {
+    "name": "Bubble Tea + Bubbles",
+    "url": "https://pkg.go.dev/charm.land/bubbletea/v2",
+    "version": "Bubble Tea 2.0.7 / Bubbles 2.1.0"
+  }
+}

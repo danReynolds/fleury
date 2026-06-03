@@ -40,6 +40,13 @@ void main() {
       expect(serveIndexHtml, contains("binaryType = 'arraybuffer'"));
     });
 
+    test('bounds incoming frame payload sizes', () {
+      expect(serveIndexHtml, contains('MAX_FRAME_PAYLOAD = 64 * 1024 * 1024'));
+      expect(serveIndexHtml, contains('new DataView'));
+      expect(serveIndexHtml, contains('getUint32(1, false)'));
+      expect(serveIndexHtml, contains("ws.close(1009, 'frame too large')"));
+    });
+
     test('writes OUTPUT frames into the terminal', () {
       expect(serveIndexHtml, contains('term.write'));
       expect(serveIndexHtml, contains('FRAME.OUTPUT'));

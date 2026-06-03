@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-01T00:34:24.746949Z",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "scenarioId": "SB.11",
+      "scenarioName": "TreeTable Hierarchy Filter And Copy",
+      "packageVersion": "0.0.0",
+      "gitSha": "unknown",
+      "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+      "runMode": "test",
+      "os": "macos",
+      "cpu": 10,
+      "terminalProfile": {
+        "colorMode": "truecolor",
+        "imageProtocol": "halfBlock",
+        "tmuxPassthrough": false
+      },
+      "terminalSize": {
+        "columns": 120,
+        "rows": 32
+      },
+      "seed": 1,
+      "rowCount": 100000,
+      "warmupIterations": 2,
+      "measuredIterations": 20,
+      "startedAt": "2026-06-01T00:33:43.740895Z",
+      "durationMs": 40984.46,
+      "metrics": {
+        "journeyUs": {
+          "min": 2015203,
+          "median": 2048074,
+          "p95": 2072912,
+          "p99": 2074151,
+          "max": 2074461,
+          "samples": 20
+        },
+        "fixtureBuildUs": {
+          "min": 121885,
+          "median": 126503,
+          "p95": 156243,
+          "p99": 157765,
+          "max": 158146,
+          "samples": 20
+        },
+        "indexBuildUs": {
+          "min": 1831544,
+          "median": 1839397,
+          "p95": 1851310,
+          "p99": 1852472,
+          "max": 1852763,
+          "samples": 20
+        },
+        "mountUs": {
+          "min": 18806,
+          "median": 20774,
+          "p95": 22009,
+          "p99": 22741,
+          "max": 22924,
+          "samples": 20
+        },
+        "firstRenderUs": {
+          "min": 7612,
+          "median": 8581,
+          "p95": 9410,
+          "p99": 9841,
+          "max": 9949,
+          "samples": 20
+        },
+        "expandBranchUs": {
+          "min": 6836,
+          "median": 7500,
+          "p95": 16698,
+          "p99": 17064,
+          "max": 17156,
+          "samples": 20
+        },
+        "pageMoveUs": {
+          "min": 2428,
+          "median": 3374,
+          "p95": 11640,
+          "p99": 25826,
+          "max": 29373,
+          "samples": 20
+        },
+        "jumpToEndUs": {
+          "min": 2609,
+          "median": 3488,
+          "p95": 9386,
+          "p99": 12080,
+          "max": 12753,
+          "samples": 20
+        },
+        "filterQueryUs": {
+          "min": 2568,
+          "median": 3078,
+          "p95": 4074,
+          "p99": 4614,
+          "max": 4749,
+          "samples": 20
+        },
+        "copySelectedRowUs": {
+          "min": 7317,
+          "median": 7636,
+          "p95": 8002,
+          "p99": 8024,
+          "max": 8029,
+          "samples": 20
+        },
+        "semanticQueryUs": {
+          "min": 1711,
+          "median": 1860,
+          "p95": 1979,
+          "p99": 2029,
+          "max": 2041,
+          "samples": 20
+        },
+        "initialAnsiBytes": 2544,
+        "expandedAnsiBytes": 2597,
+        "filteredAnsiBytes": 431,
+        "semanticNodeCount": 19,
+        "initialRowCount": 1100,
+        "expandedRowCount": 2100,
+        "filteredRowCount": 2,
+        "visibleRangeStart": 2077,
+        "visibleRangeEnd": 2099,
+        "filterVisibleRangeStart": 1,
+        "filterVisibleRangeEnd": 1,
+        "selectedKey": "TASK-199999",
+        "targetKey": "TASK-199999",
+        "rootCount": 100,
+        "treeNodeCount": 100100,
+        "searchIndexRowCount": 100100,
+        "cellBuilderCalls": 401948,
+        "uniqueNodesRequested": 100100,
+        "sanitizingFixtureRows": 1286,
+        "copiedByteCount": 115,
+        "rssDeltaBytes": 85962752
+      },
+      "thresholds": {
+        "candidateExpandBranchP95Us": 16000,
+        "candidatePageMoveP95Us": 16000,
+        "candidateJumpToEndP95Us": 16000,
+        "candidateFilterQueryP95Us": 120000,
+        "candidateCopySelectedRowP95Us": 16000,
+        "candidateSemanticQueryP95Us": 16000,
+        "enforced": false
+      },
+      "pass": true,
+      "notes": [
+        "Candidate thresholds are informational until stable baselines exist.",
+        "Scenario uses a 100k-leaf hierarchy plus branch nodes.",
+        "Scenario uses TreeTableSearchIndex so filterQueryUs measures repeated query cost after index construction.",
+        "Fixture includes ANSI/OSC/newline payloads to verify sanitized visible, copied, and searched output."
+      ]
+    }
+  ]
+}

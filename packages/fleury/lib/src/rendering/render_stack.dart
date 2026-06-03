@@ -37,6 +37,7 @@ class RenderPositioned extends RenderObject
     assert(value >= 0);
     if (_left == value) return;
     _left = value;
+    markNeedsLayout();
   }
 
   int get top => _top;
@@ -44,6 +45,7 @@ class RenderPositioned extends RenderObject
     assert(value >= 0);
     if (_top == value) return;
     _top = value;
+    markNeedsLayout();
   }
 
   int? get width => _width;
@@ -51,6 +53,7 @@ class RenderPositioned extends RenderObject
     assert(value == null || value >= 0);
     if (_width == value) return;
     _width = value;
+    markNeedsLayout();
   }
 
   int? get height => _height;
@@ -58,6 +61,7 @@ class RenderPositioned extends RenderObject
     assert(value == null || value >= 0);
     if (_height == value) return;
     _height = value;
+    markNeedsLayout();
   }
 
   RenderObject? _child;
@@ -118,6 +122,7 @@ class RenderStack extends RenderObject implements RenderObjectWithChildren {
 
   @override
   void replaceAllChildren(List<RenderObject> newChildren) {
+    if (hasSameRenderChildrenInOrder(_children, newChildren)) return;
     final newSet = Set<RenderObject>.identity()..addAll(newChildren);
     for (final c in List<RenderObject>.from(_children)) {
       if (!newSet.contains(c)) {
@@ -134,6 +139,7 @@ class RenderStack extends RenderObject implements RenderObjectWithChildren {
     _children
       ..clear()
       ..addAll(newChildren);
+    markNeedsLayout();
   }
 
   @override
@@ -215,7 +221,11 @@ class RenderIndexedStack extends RenderObject
   RenderIndexedStack({int index = 0}) : _index = index;
 
   int _index;
-  set index(int value) => _index = value;
+  set index(int value) {
+    if (_index == value) return;
+    _index = value;
+    markNeedsPaintOnly();
+  }
 
   final List<RenderObject> _children = <RenderObject>[];
 
@@ -224,6 +234,7 @@ class RenderIndexedStack extends RenderObject
 
   @override
   void replaceAllChildren(List<RenderObject> newChildren) {
+    if (hasSameRenderChildrenInOrder(_children, newChildren)) return;
     final newSet = Set<RenderObject>.identity()..addAll(newChildren);
     for (final c in List<RenderObject>.from(_children)) {
       if (!newSet.contains(c)) dropChild(c);
@@ -235,6 +246,7 @@ class RenderIndexedStack extends RenderObject
     _children
       ..clear()
       ..addAll(newChildren);
+    markNeedsLayout();
   }
 
   @override

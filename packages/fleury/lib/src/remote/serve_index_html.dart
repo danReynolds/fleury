@@ -31,6 +31,7 @@ const String serveIndexHtml = r'''
     // Wire format (mirror of lib/src/remote/remote_protocol.dart):
     //   [ 1 byte type ][ 4 bytes BE length ][ payload ]
     const FRAME = { INIT: 0x01, INPUT: 0x02, RESIZE: 0x03, OUTPUT: 0x10, BYE: 0x11 };
+    const MAX_FRAME_PAYLOAD = 64 * 1024 * 1024;
 
     function encodeFrame(type, payload) {
       const buf = new Uint8Array(5 + payload.length);
@@ -50,7 +51,12 @@ const String serveIndexHtml = r'''
       merged.set(chunk, inbuf.length);
       inbuf = merged;
       while (inbuf.length >= 5) {
-        const len = (inbuf[1] << 24) | (inbuf[2] << 16) | (inbuf[3] << 8) | inbuf[4];
+        const len = new DataView(inbuf.buffer, inbuf.byteOffset, inbuf.byteLength)
+          .getUint32(1, false);
+        if (len > MAX_FRAME_PAYLOAD) {
+          inbuf = new Uint8Array(0);
+          throw new Error('frame too large');
+        }
         if (inbuf.length < 5 + len) break;
         const type = inbuf[0];
         const payload = inbuf.slice(5, 5 + len);
@@ -92,13 +98,18 @@ const String serveIndexHtml = r'''
     };
 
     ws.onmessage = (event) => {
-      for (const f of drainFrames(new Uint8Array(event.data))) {
-        if (f.type === FRAME.OUTPUT) {
-          term.write(dec.decode(f.payload));
-          status.textContent = 'connected';
-        } else if (f.type === FRAME.BYE) {
-          status.textContent = 'app exited';
+      try {
+        for (const f of drainFrames(new Uint8Array(event.data))) {
+          if (f.type === FRAME.OUTPUT) {
+            term.write(dec.decode(f.payload));
+            status.textContent = 'connected';
+          } else if (f.type === FRAME.BYE) {
+            status.textContent = 'app exited';
+          }
         }
+      } catch (e) {
+        status.textContent = 'protocol error';
+        ws.close(1009, 'frame too large');
       }
     };
 

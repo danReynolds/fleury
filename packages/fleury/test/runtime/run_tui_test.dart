@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
 /// A leaf whose layout throws — stands in for a render/paint bug that
@@ -61,6 +62,26 @@ class _ModalAppState extends State<_ModalApp> {
   Widget build(BuildContext context) => const Text('base');
 }
 
+class _CounterApp extends StatefulWidget {
+  const _CounterApp({super.key});
+
+  @override
+  State<_CounterApp> createState() => _CounterAppState();
+}
+
+class _CounterAppState extends State<_CounterApp> {
+  var _count = 0;
+
+  void increment() {
+    setState(() {
+      _count += 1;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Text('count:$_count');
+}
+
 /// Lets the run loop's async body reach the point where it's listening for
 /// events before the test pushes one (a broadcast stream drops events that
 /// arrive with no listener).
@@ -85,6 +106,47 @@ void main() {
       expect(driver.restoreCallCount, 1);
       await driver.dispose();
     });
+
+    test(
+      'Ctrl+C copies a focused text selection before falling back to exit',
+      () async {
+        final originalClipboard = Clipboard.instance;
+        final clipboard = TestClipboard();
+        Clipboard.instance = clipboard;
+        final controller = TextEditingController(text: 'copyme')
+          ..textSelection = const TextSelection(baseOffset: 0, extentOffset: 4);
+        final driver = FakeTerminalDriver();
+        try {
+          final future = runTui(
+            TextInput(controller: controller, autofocus: true),
+            driver: driver,
+            enableHotReload: false,
+          );
+          await _settle();
+          expect(driver.isActive, isTrue);
+
+          driver.enqueue(
+            const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          );
+          await Future<void>.delayed(Duration.zero);
+
+          expect(driver.isActive, isTrue);
+          expect(clipboard.lastWritten, 'copy');
+
+          driver.enqueue(const KeyEvent(keyCode: KeyCode.arrowRight));
+          await Future<void>.delayed(Duration.zero);
+          driver.enqueue(
+            const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          );
+          await future;
+
+          expect(driver.isActive, isFalse);
+        } finally {
+          Clipboard.instance = originalClipboard;
+          await driver.dispose();
+        }
+      },
+    );
 
     test('an uncaught error in an event handler restores the terminal and '
         'surfaces the error', () async {
@@ -281,6 +343,188 @@ void main() {
       await future;
       await driver.dispose();
     });
+
+    test(
+      'debug frame events include dirty bounds without paint flash',
+      () async {
+        final frames = <FrameEvent>[];
+        final sub = DebugEvents.stream.listen((event) {
+          if (event is FrameDebugEvent) frames.add(event.frame);
+        });
+        final driver = FakeTerminalDriver(size: const CellSize(20, 4));
+        try {
+          final future = runTui(
+            const Text('dirty'),
+            driver: driver,
+            enableHotReload: false,
+          );
+          await _settle();
+
+          expect(frames, isNotEmpty);
+          final first = frames.first;
+          expect(first.reason, contains('initial'));
+          expect(first.dirtyCells, greaterThan(0));
+          expect(first.dirtyBounds, isNotNull);
+          expect(first.dirtyBounds!.left, 0);
+          expect(first.dirtyBounds!.top, 0);
+
+          driver.enqueue(
+            const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          );
+          await future;
+        } finally {
+          await sub.cancel();
+          await driver.dispose();
+        }
+      },
+    );
+
+    test('debug frame events include repaint boundary cache metrics', () async {
+      final frames = <FrameEvent>[];
+      final sub = DebugEvents.stream.listen((event) {
+        if (event is FrameDebugEvent) frames.add(event.frame);
+      });
+      final driver = FakeTerminalDriver(size: const CellSize(20, 4));
+      try {
+        final future = runTui(
+          const RepaintBoundary(child: Text('cached')),
+          driver: driver,
+          enableHotReload: false,
+        );
+        await _settle();
+
+        expect(frames, isNotEmpty);
+        final firstFrame = frames.first;
+        expect(firstFrame.layoutStats.performedCount, greaterThan(0));
+        expect(firstFrame.layoutStats.skippedCount, 0);
+        final firstBoundaries = firstFrame.repaintBoundaries;
+        expect(firstBoundaries.boundaryCount, 1);
+        expect(firstBoundaries.repaintedCount, 1);
+        expect(firstBoundaries.cachedCount, 0);
+        expect(firstBoundaries.copiedCellCount, greaterThan(0));
+
+        frames.clear();
+        driver.enqueue(const KeyEvent(keyCode: KeyCode.arrowDown));
+        await _settle();
+
+        expect(frames, isNotEmpty);
+        final secondFrame = frames.last;
+        expect(secondFrame.layoutStats.performedCount, 0);
+        expect(secondFrame.layoutStats.skippedCount, greaterThan(0));
+        final secondBoundaries = secondFrame.repaintBoundaries;
+        expect(secondBoundaries.boundaryCount, 1);
+        expect(secondBoundaries.repaintedCount, 0);
+        expect(secondBoundaries.cachedCount, 1);
+        expect(secondBoundaries.copiedCellCount, greaterThan(0));
+
+        driver.enqueue(
+          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+        );
+        await future;
+      } finally {
+        await sub.cancel();
+        await driver.dispose();
+      }
+    });
+
+    test('debug frame events include build invalidation sources', () async {
+      final key = GlobalKey<_CounterAppState>();
+      final frames = <FrameEvent>[];
+      final sub = DebugEvents.stream.listen((event) {
+        if (event is FrameDebugEvent) frames.add(event.frame);
+      });
+      final driver = FakeTerminalDriver(size: const CellSize(24, 4));
+      try {
+        final future = runTui(
+          _CounterApp(key: key),
+          driver: driver,
+          enableHotReload: false,
+          onEvent: (event) {
+            if (event is KeyEvent && event.keyCode == KeyCode.enter) {
+              key.currentState!.increment();
+            }
+            return null;
+          },
+        );
+        await _settle();
+        frames.clear();
+
+        driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
+        await _settle();
+
+        expect(frames, isNotEmpty);
+        final frame = frames.last;
+        expect(frame.reason, contains('key:enter'));
+        expect(
+          frame.dirtySources,
+          contains(contains('_CounterApp/_CounterAppState')),
+        );
+
+        driver.enqueue(
+          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+        );
+        await future;
+      } finally {
+        await sub.cancel();
+        await driver.dispose();
+      }
+    });
+
+    test(
+      'debug capture recorder observes terminal, input, resize, and frames',
+      () async {
+        final recorder = DebugCaptureRecorder()..attach();
+        final driver = FakeTerminalDriver(size: const CellSize(20, 4));
+        try {
+          final future = runTui(
+            const Text('capture'),
+            driver: driver,
+            enableHotReload: false,
+          );
+          await _settle();
+
+          driver.resize(const CellSize(30, 6));
+          await _settle();
+          driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
+          await _settle();
+          driver.enqueue(
+            const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          );
+          await future;
+
+          final snapshot = recorder.snapshot();
+          expect(snapshot.terminalDiagnosis, isNotNull);
+          expect(
+            snapshot.terminalDiagnosis!.terminal.size,
+            const CellSize(30, 6),
+          );
+          expect(snapshot.frames, isNotEmpty);
+          expect(
+            snapshot.inputs.map((input) => input.kind),
+            containsAll(<String>['resize', 'key']),
+          );
+
+          final json = snapshot.toJson();
+          final terminal = json['terminal'] as Map<String, Object?>;
+          final terminalProfile = terminal['terminal'] as Map<String, Object?>;
+          expect(terminalProfile['columns'], 30);
+          expect(terminalProfile['rows'], 6);
+          final inputs = json['inputs'] as List<Object?>;
+          expect(
+            inputs.where(
+              (input) =>
+                  input is Map<String, Object?> && input['kind'] == 'resize',
+            ),
+            isNotEmpty,
+          );
+          final frames = json['frames'] as List<Object?>;
+          expect(frames, isNotEmpty);
+        } finally {
+          await recorder.dispose();
+          await driver.dispose();
+        }
+      },
+    );
 
     test('F12 reaches Logs even inside a Navigator modal route', () async {
       // The Navigator's active route sets `suppressGlobals: true`,

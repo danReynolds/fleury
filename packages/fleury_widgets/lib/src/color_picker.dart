@@ -23,6 +23,8 @@ class ColorPicker extends StatefulWidget {
     this.colors,
     this.columns = 8,
     this.swatchWidth = 3,
+    this.semanticLabel = 'Colors',
+    this.semanticColorLabelBuilder,
     this.focusNode,
     this.autofocus = false,
   }) : assert(columns >= 1, 'columns must be >= 1'),
@@ -45,6 +47,12 @@ class ColorPicker extends StatefulWidget {
   /// Cell width per swatch (≥ 1). Wider swatches read more clearly at
   /// the cost of horizontal space.
   final int swatchWidth;
+
+  /// Label exposed through the semantic app graph for the picker.
+  final String semanticLabel;
+
+  /// Optional semantic label builder for custom palette entries.
+  final String Function(Color color, int index)? semanticColorLabelBuilder;
 
   final FocusNode? focusNode;
   final bool autofocus;
@@ -120,6 +128,24 @@ class _ColorPickerState extends State<ColorPicker> {
     widget.onChanged(_palette[index]);
   }
 
+  void _selectIndex(int index) {
+    if (index < 0 || index >= _palette.length) return;
+    _node.requestFocus();
+    _moveTo(index);
+  }
+
+  void _handlePickerAction(SemanticAction action) {
+    switch (action) {
+      case SemanticAction.focus:
+      case SemanticAction.navigate:
+        _node.requestFocus();
+        setState(() {});
+        return;
+      case _:
+        return;
+    }
+  }
+
   KeyEventResult _onKey(KeyEvent event) {
     final idx = _currentIndex;
     final cols = widget.columns;
@@ -179,40 +205,155 @@ class _ColorPickerState extends State<ColorPicker> {
           '█' * widget.swatchWidth,
           style: CellStyle(foreground: color),
         );
+        final swatchParts = <Widget>[];
         if (isSelected) {
-          cells.add(
+          swatchParts.add(
             Text(
               '[',
               style: focused ? theme.focusedStyle : theme.selectionStyle,
             ),
           );
-          cells.add(swatch);
-          cells.add(
+          swatchParts.add(swatch);
+          swatchParts.add(
             Text(
               ']',
               style: focused ? theme.focusedStyle : theme.selectionStyle,
             ),
           );
         } else {
-          cells.add(const Text(' '));
-          cells.add(swatch);
-          cells.add(const Text(' '));
+          swatchParts.add(const Text(' '));
+          swatchParts.add(swatch);
+          swatchParts.add(const Text(' '));
         }
+        cells.add(
+          Semantics(
+            role: SemanticRole.radio,
+            label: _colorLabel(color, idx),
+            value: _colorValue(color),
+            selected: isSelected,
+            checked: isSelected,
+            enabled: true,
+            actions: const {SemanticAction.select, SemanticAction.activate},
+            onAction: (action) {
+              switch (action) {
+                case SemanticAction.select:
+                case SemanticAction.activate:
+                  _selectIndex(idx);
+                  return;
+                case _:
+                  return;
+              }
+            },
+            state: SemanticState({
+              'colorIndex': idx,
+              'colorPosition': idx + 1,
+              'colorCount': palette.length,
+              'colorKind': _colorKind(color),
+              ..._colorComponents(color),
+            }),
+            child: Row(children: swatchParts),
+          ),
+        );
       }
       rows.add(Row(children: cells));
     }
 
-    return Focus(
-      focusNode: _node,
-      autofocus: widget.autofocus,
-      onKey: _onKey,
-      child: GestureDetector(
-        onTap: () => _node.requestFocus(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: rows,
+    final rowCount = (palette.length + cols - 1) ~/ cols;
+    final visibleColumns = palette.length < cols ? palette.length : cols;
+    final selectedColor = palette.isEmpty ? null : palette[selectedIdx];
+    return Semantics(
+      role: SemanticRole.list,
+      label: widget.semanticLabel,
+      value: selectedColor == null
+          ? null
+          : _colorLabel(selectedColor, selectedIdx),
+      focused: focused,
+      actions: const {SemanticAction.focus, SemanticAction.navigate},
+      onAction: _handlePickerAction,
+      state: SemanticState({
+        'collectionRowCount': rowCount,
+        'collectionColumnCount': visibleColumns,
+        'colorCount': palette.length,
+        if (selectedColor != null) ...{
+          'selectedIndex': selectedIdx,
+          'selectedKey': _colorValue(selectedColor),
+          'selectedColorLabel': _colorLabel(selectedColor, selectedIdx),
+          'selectedColorKind': _colorKind(selectedColor),
+        },
+      }),
+      child: Focus(
+        focusNode: _node,
+        autofocus: widget.autofocus,
+        onKey: _onKey,
+        child: GestureDetector(
+          onTap: () => _node.requestFocus(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: rows,
+          ),
         ),
       ),
     );
   }
+
+  String _colorLabel(Color color, int index) {
+    final builder = widget.semanticColorLabelBuilder;
+    if (builder != null) return sanitizeForDisplay(builder(color, index));
+    return _defaultColorLabel(color);
+  }
 }
+
+String _defaultColorLabel(Color color) {
+  return switch (color) {
+    AnsiColor(:final index) => 'ANSI color $index ${_ansiColorNames[index]}',
+    IndexedColor(:final index) => 'Indexed color $index',
+    RgbColor(:final r, :final g, :final b) => 'RGB color $r $g $b',
+  };
+}
+
+String _colorValue(Color color) {
+  return switch (color) {
+    AnsiColor(:final index) => 'ansi:$index',
+    IndexedColor(:final index) => 'indexed:$index',
+    RgbColor(:final r, :final g, :final b) => 'rgb:$r,$g,$b',
+  };
+}
+
+String _colorKind(Color color) {
+  return switch (color) {
+    AnsiColor() => 'ansi',
+    IndexedColor() => 'indexed',
+    RgbColor() => 'rgb',
+  };
+}
+
+Map<String, Object?> _colorComponents(Color color) {
+  return switch (color) {
+    AnsiColor(:final index) => <String, Object?>{'ansiColorIndex': index},
+    IndexedColor(:final index) => <String, Object?>{'indexedColorIndex': index},
+    RgbColor(:final r, :final g, :final b) => <String, Object?>{
+      'red': r,
+      'green': g,
+      'blue': b,
+    },
+  };
+}
+
+const _ansiColorNames = <String>[
+  'black',
+  'red',
+  'green',
+  'yellow',
+  'blue',
+  'magenta',
+  'cyan',
+  'white',
+  'bright black',
+  'bright red',
+  'bright green',
+  'bright yellow',
+  'bright blue',
+  'bright magenta',
+  'bright cyan',
+  'bright white',
+];

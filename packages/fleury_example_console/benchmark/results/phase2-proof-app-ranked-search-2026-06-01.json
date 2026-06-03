@@ -1,0 +1,177 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-01T06:51:00.643863Z",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "scenarioId": "SB.10",
+      "scenarioName": "Proof-App Journey",
+      "packageVersion": "0.0.0",
+      "gitSha": "unknown",
+      "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+      "runMode": "test",
+      "os": "macos",
+      "cpu": 10,
+      "terminalProfile": {
+        "colorMode": "truecolor",
+        "imageProtocol": "halfBlock",
+        "tmuxPassthrough": false
+      },
+      "terminalSize": {
+        "columns": 100,
+        "rows": 28
+      },
+      "seed": 1,
+      "warmupIterations": 1,
+      "measuredIterations": 10,
+      "startedAt": "2026-06-01T06:50:58.357193Z",
+      "durationMs": 2271.355,
+      "metrics": {
+        "journeyUs": {
+          "min": 199640,
+          "median": 203365,
+          "p95": 296062,
+          "p99": 313604,
+          "max": 317990,
+          "samples": 10
+        },
+        "mountUs": {
+          "min": 919,
+          "median": 1315,
+          "p95": 8023,
+          "p99": 8140,
+          "max": 8169,
+          "samples": 10
+        },
+        "firstRenderUs": {
+          "min": 151,
+          "median": 191,
+          "p95": 259,
+          "p99": 273,
+          "max": 277,
+          "samples": 10
+        },
+        "commandPaletteUs": {
+          "min": 4175,
+          "median": 6280,
+          "p95": 15076,
+          "p99": 15713,
+          "max": 15872,
+          "samples": 10
+        },
+        "globalSearchUs": {
+          "min": 74676,
+          "median": 76314,
+          "p95": 84221,
+          "p99": 85558,
+          "max": 85892,
+          "samples": 10
+        },
+        "indexedLogsUs": {
+          "min": 53700,
+          "median": 55973,
+          "p95": 73452,
+          "p99": 78511,
+          "max": 79776,
+          "samples": 10
+        },
+        "runsFilterUs": {
+          "min": 2513,
+          "median": 3102,
+          "p95": 14609,
+          "p99": 20511,
+          "max": 21986,
+          "samples": 10
+        },
+        "runsCopyUs": {
+          "min": 888,
+          "median": 1157,
+          "p95": 4391,
+          "p99": 4538,
+          "max": 4575,
+          "samples": 10
+        },
+        "transcriptUs": {
+          "min": 2838,
+          "median": 3609,
+          "p95": 9716,
+          "p99": 12054,
+          "max": 12638,
+          "samples": 10
+        },
+        "processRunToSuccessUs": {
+          "min": 45828,
+          "median": 48102,
+          "p95": 58716,
+          "p99": 60629,
+          "max": 61107,
+          "samples": 10
+        },
+        "diagnosticsUs": {
+          "min": 1331,
+          "median": 1642,
+          "p95": 2638,
+          "p99": 2676,
+          "max": 2686,
+          "samples": 10
+        },
+        "debugCaptureUs": {
+          "min": 3853,
+          "median": 5139,
+          "p95": 16800,
+          "p99": 17042,
+          "max": 17103,
+          "samples": 10
+        },
+        "semanticQueryUs": {
+          "min": 449,
+          "median": 610,
+          "p95": 993,
+          "p99": 1175,
+          "max": 1220,
+          "samples": 10
+        },
+        "firstFrameAnsiBytes": 1052,
+        "finalFrameAnsiBytes": 988,
+        "semanticNodeCount": 100,
+        "accessibilityNodeCount": 100,
+        "accessibilityPlainTextBytes": 7396,
+        "debugCaptureBytes": 41452,
+        "commandCount": 18,
+        "statusCount": 5,
+        "finalActiveScreenId": "diagnostics",
+        "lastCommandId": "debug.captureSnapshot",
+        "runsFilteredCount": 1,
+        "selectedRunKey": "RUN-1002",
+        "globalSearchResultCount": 1,
+        "globalSearchSelectedKey": "run.RUN-1002",
+        "indexedLogRowCount": 195,
+        "indexedLogFilterCount": 49,
+        "indexedLogProgressCurrent": 195,
+        "indexedLogSelectedKey": "IDX-1000",
+        "transcriptRowCount": 8,
+        "processOutputCount": 1,
+        "diagnosticCapabilityRows": 5,
+        "unsafeFrameCount": 0,
+        "rssDeltaBytes": 43372544
+      },
+      "thresholds": {
+        "candidateCommandPaletteP95Us": 16000,
+        "candidateGlobalSearchP95Us": 100000,
+        "candidateIndexedLogsP95Us": 100000,
+        "candidateRunsFilterP95Us": 16000,
+        "candidateRunsCopyP95Us": 16000,
+        "candidateTranscriptP95Us": 33000,
+        "candidateDiagnosticsP95Us": 16000,
+        "candidateSemanticQueryP95Us": 16000,
+        "enforced": false
+      },
+      "pass": true,
+      "notes": [
+        "Candidate thresholds are informational until stable baselines exist.",
+        "Scenario measures the integrated proof app, including app shell, command palette, debounced global search, cooperative indexed logs, DataTable, LogRegion, process task, diagnostics, semantics, accessibility, and debug capture.",
+        "The native process step runs the current Dart executable with --version, so process timing includes OS spawn variance."
+      ]
+    }
+  ]
+}

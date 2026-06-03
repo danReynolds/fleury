@@ -5,6 +5,12 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
+Matcher _stateError(String message) {
+  return throwsA(
+    isA<StateError>().having((error) => error.message, 'message', message),
+  );
+}
+
 /// A tall column of single-row labels r0..r{n-1}.
 Widget _rows(int n) =>
     Column(children: [for (var i = 0; i < n; i++) Text('r$i')]);
@@ -24,6 +30,79 @@ List<String> _lines(FleuryTester tester, {int cols = 6, required int rows}) {
   return out;
 }
 
+class _PaintProbe {
+  CellSize? bufferSize;
+  CellOffset? offset;
+  CellOffset? screenOffset;
+  CellRect? clipRect;
+}
+
+class _PaintProbeWidget extends LeafRenderObjectWidget {
+  const _PaintProbeWidget({required this.probe, required this.desiredSize});
+
+  final _PaintProbe probe;
+  final CellSize desiredSize;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _PaintProbeRender(probe: probe, desiredSize: desiredSize);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _PaintProbeRender renderObject,
+  ) {
+    renderObject
+      ..probe = probe
+      ..desiredSize = desiredSize;
+  }
+}
+
+class _PaintProbeRender extends RenderObject {
+  _PaintProbeRender({required _PaintProbe probe, required CellSize desiredSize})
+    : _probe = probe,
+      _desiredSize = desiredSize;
+
+  _PaintProbe _probe;
+  _PaintProbe get probe => _probe;
+  set probe(_PaintProbe value) {
+    if (identical(_probe, value)) return;
+    _probe = value;
+    markNeedsPaintOnly();
+  }
+
+  CellSize _desiredSize;
+  CellSize get desiredSize => _desiredSize;
+  set desiredSize(CellSize value) {
+    if (_desiredSize == value) return;
+    _desiredSize = value;
+    markNeedsLayout();
+  }
+
+  @override
+  CellSize performLayout(CellConstraints constraints) {
+    return constraints.constrain(_desiredSize);
+  }
+
+  @override
+  void paint(
+    CellBuffer buffer,
+    CellOffset offset, {
+    CellOffset? screenOffset,
+    CellRect? clipRect,
+  }) {
+    _probe
+      ..bufferSize = buffer.size
+      ..offset = offset
+      ..screenOffset = screenOffset
+      ..clipRect = clipRect;
+
+    for (var r = 0; r < _desiredSize.rows; r++) {
+      buffer.writeGrapheme(CellOffset(offset.col, offset.row + r), 'x');
+    }
+  }
+}
+
 void main() {
   testWidgets('shows the top of the content by default', (tester) {
     tester.pumpWidget(ScrollView(child: _rows(10)));
@@ -41,6 +120,36 @@ void main() {
 
     ctl.scrollBy(2);
     expect(_lines(tester, rows: 3), ['r2', 'r3', 'r4']);
+  });
+
+  testWidgets('paints the child into a viewport-sized scratch buffer', (
+    tester,
+  ) {
+    final ctl = ScrollController(offset: 10);
+    final probe = _PaintProbe();
+    tester.pumpWidget(
+      SizedBox(
+        width: 6,
+        height: 4,
+        child: ScrollView(
+          controller: ctl,
+          child: _PaintProbeWidget(
+            probe: probe,
+            desiredSize: const CellSize(6, 40),
+          ),
+        ),
+      ),
+    );
+
+    expect(_lines(tester, rows: 4), ['x', 'x', 'x', 'x']);
+    expect(ctl.maxOffset, 36);
+    expect(probe.bufferSize, const CellSize(6, 4));
+    expect(probe.offset, const CellOffset(0, -10));
+    expect(probe.screenOffset, const CellOffset(0, -10));
+    expect(
+      probe.clipRect,
+      const CellRect(offset: CellOffset.zero, size: CellSize(6, 4)),
+    );
   });
 
   testWidgets('clamps at the bottom and reports atBottom', (tester) {
@@ -117,4 +226,33 @@ void main() {
     expect(bubbled, 1);
     expect(ctl.offset, 0);
   });
+
+  testWidgets(
+    'controller dispose keeps metrics readable and rejects mutation',
+    (tester) {
+      final ctl = ScrollController(offset: 2);
+      tester.pumpWidget(ScrollView(controller: ctl, child: _rows(10)));
+      expect(_lines(tester, rows: 3), ['r2', 'r3', 'r4']);
+      expect(ctl.contentExtent, 10);
+      expect(ctl.viewportExtent, 3);
+      expect(ctl.maxOffset, 7);
+
+      ctl.dispose();
+      ctl.dispose();
+
+      expect(ctl.offset, 2);
+      expect(ctl.contentExtent, 10);
+      expect(ctl.viewportExtent, 3);
+      expect(ctl.maxOffset, 7);
+      expect(ctl.atTop, isFalse);
+      expect(ctl.atBottom, isFalse);
+
+      const message = 'ScrollController has been disposed.';
+      expect(() => ctl.offset = 0, _stateError(message));
+      expect(() => ctl.scrollBy(1), _stateError(message));
+      expect(() => ctl.jumpTo(0), _stateError(message));
+      expect(() => ctl.scrollToTop(), _stateError(message));
+      expect(() => ctl.scrollToBottom(), _stateError(message));
+    },
+  );
 }

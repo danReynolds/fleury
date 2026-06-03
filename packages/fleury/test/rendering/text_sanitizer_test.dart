@@ -57,11 +57,50 @@ void main() {
       // Classic terminal hijack: clear screen + cursor home.
       const hostile = '\x1b[2J\x1b[H';
       final cleaned = sanitizeForDisplay(hostile);
-      // 6 unsafe runes (2 x ESC, plus four printable that ride along but
-      // are themselves printable — but the test only asserts the ESCs are
-      // replaced).
       expect(cleaned.contains('\x1B'), isFalse);
-      expect(cleaned.contains(replacementCharacter), isTrue);
+      expect(cleaned, replacementCharacter * 2);
+    });
+
+    test('collapses CSI sequences without leaking parameters', () {
+      const hostile = 'a\x1b[31mred\x1b[0mb';
+      final cleaned = sanitizeForDisplay(hostile);
+      expect(cleaned, 'a${replacementCharacter}red${replacementCharacter}b');
+      expect(cleaned, isNot(contains('[31m')));
+      expect(cleaned, isNot(contains('[0m')));
+    });
+
+    test('redacts OSC 52 clipboard payloads', () {
+      final hostile =
+          '\x1b]52;c;U0VDUkVUX1RPS0VO${String.fromCharCode(0x07)}after';
+      final cleaned = sanitizeForDisplay(hostile);
+      expect(cleaned, '${replacementCharacter}after');
+      expect(cleaned, isNot(contains('U0VDUkVUX1RPS0VO')));
+      expect(cleaned, isNot(contains('\x07')));
+    });
+
+    test('redacts OSC 8 hyperlink control payload while preserving label', () {
+      final bel = String.fromCharCode(0x07);
+      final hostile =
+          '\x1b]8;;https://evil.example/secret${bel}CLICK'
+          '\x1b]8;;$bel';
+      final cleaned = sanitizeForDisplay(hostile);
+      expect(cleaned, '${replacementCharacter}CLICK$replacementCharacter');
+      expect(cleaned, isNot(contains('https://evil.example/secret')));
+    });
+
+    test('redacts DCS/Sixel and APC/Kitty image payloads', () {
+      const sixel = '\x1bPq"1;1;1;1#0!~\x1b\\done';
+      const kitty = '\x1b_Gf=100,a=T;AAAA\x1b\\done';
+
+      expect(sanitizeForDisplay(sixel), '${replacementCharacter}done');
+      expect(sanitizeForDisplay(kitty), '${replacementCharacter}done');
+    });
+
+    test('unterminated OSC consumes the rest of the unsafe payload', () {
+      const hostile = '\x1b]52;c;SECRET';
+      final cleaned = sanitizeForDisplay(hostile);
+      expect(cleaned, replacementCharacter);
+      expect(cleaned, isNot(contains('SECRET')));
     });
 
     test('replaces every C0 control with the replacement character', () {

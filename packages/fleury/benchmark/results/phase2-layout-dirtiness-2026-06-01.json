@@ -1,0 +1,200 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-01T21:52:54.675658Z",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "scenarioId": "SB.12",
+      "scenarioName": "Layout Dirtiness Cache",
+      "fleuryVersion": "0.0.0",
+      "gitSha": "unknown",
+      "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+      "runMode": "test",
+      "os": "macos",
+      "cpu": 10,
+      "terminalProfile": {
+        "colorMode": "truecolor",
+        "imageProtocol": "halfBlock",
+        "tmuxPassthrough": false
+      },
+      "terminalSize": {
+        "columns": 80,
+        "rows": 24
+      },
+      "seed": 1,
+      "warmupIterations": 2,
+      "measuredIterations": 20,
+      "startedAt": "2026-06-01T21:52:54.178984Z",
+      "durationMs": 358.808,
+      "metrics": {
+        "journeyUs": {
+          "min": 2121,
+          "median": 8810,
+          "p95": 25699,
+          "p99": 29980,
+          "max": 31050,
+          "samples": 20
+        },
+        "firstFrameUs": {
+          "min": 222,
+          "median": 465,
+          "p95": 2126,
+          "p99": 3478,
+          "max": 3816,
+          "samples": 20
+        },
+        "commandToFrameUs": {
+          "min": 389,
+          "median": 947,
+          "p95": 11799,
+          "p99": 13085,
+          "max": 13407,
+          "samples": 20
+        },
+        "idleFrameUs": {
+          "min": 87,
+          "median": 148,
+          "p95": 692,
+          "p99": 1157,
+          "max": 1273,
+          "samples": 20
+        },
+        "paintOnlyFrameUs": {
+          "min": 152,
+          "median": 419,
+          "p95": 1210,
+          "p99": 2843,
+          "max": 3252,
+          "samples": 20
+        },
+        "textPaintOnlyFrameUs": {
+          "min": 140,
+          "median": 342,
+          "p95": 3251,
+          "p99": 4493,
+          "max": 4804,
+          "samples": 20
+        },
+        "updateLayoutPerformed": {
+          "min": 7,
+          "median": 7,
+          "p95": 7,
+          "p99": 7,
+          "max": 7,
+          "samples": 20
+        },
+        "updateLayoutSkipped": {
+          "min": 3,
+          "median": 3,
+          "p95": 3,
+          "p99": 3,
+          "max": 3,
+          "samples": 20
+        },
+        "idleLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 20
+        },
+        "idleLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 20
+        },
+        "paintOnlyLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 20
+        },
+        "paintOnlyLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 20
+        },
+        "textPaintOnlyLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 20
+        },
+        "textPaintOnlyLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 20
+        },
+        "semanticQueryUs": {
+          "min": 239,
+          "median": 883,
+          "p95": 16056,
+          "p99": 21226,
+          "max": 22519,
+          "samples": 20
+        },
+        "lastFirstFrameLayout": {
+          "performedCount": 43,
+          "skippedCount": 0,
+          "totalCount": 43,
+          "skippedRatio": 0.0
+        },
+        "lastUpdateFrameLayout": {
+          "performedCount": 7,
+          "skippedCount": 3,
+          "totalCount": 10,
+          "skippedRatio": 0.3
+        },
+        "lastIdleFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "lastPaintOnlyFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "lastTextPaintOnlyFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "staticRows": 32,
+        "semanticNodeCount": 40,
+        "counterValue": 10,
+        "paintAccent": true,
+        "textVariant": true
+      },
+      "thresholds": {
+        "candidateCommandToFrameP95Us": 16000,
+        "candidateIdleFrameP95Us": 8000,
+        "enforced": false
+      },
+      "pass": true,
+      "notes": [
+        "Measures layout dirtiness through a static pane plus a changing counter pane.",
+        "Update frames should skip clean static subtree layouts; idle frames should skip the root layout.",
+        "Paint-only style changes should repaint while skipping same-constraint layout.",
+        "Same-width single-line text swaps should repaint while skipping same-constraint layout."
+      ]
+    }
+  ]
+}

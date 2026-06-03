@@ -1,6 +1,7 @@
 // FakeClock-driven tests for FrameTicker.
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
 ({FakeClock clock, FakeTickerScheduler scheduler}) _fixture() {
@@ -8,6 +9,10 @@ import 'package:test/test.dart';
   final scheduler = FakeTickerScheduler(clock: clock);
   return (clock: clock, scheduler: scheduler);
 }
+
+Matcher _stateError(String message) => throwsA(
+  isA<StateError>().having((error) => error.message, 'message', message),
+);
 
 void main() {
   group('FrameTicker cadence', () {
@@ -143,6 +148,35 @@ void main() {
       expect(f.scheduler.activeTickerCount, 0);
       expect(() => ticker.start(), throwsStateError);
       expect(() => ticker.stop(), throwsStateError);
+    });
+
+    test('dispose keeps final state readable and blocks muted changes', () {
+      final f = _fixture();
+      final ticker =
+          FrameTicker(
+              interval: const Duration(milliseconds: 80),
+              scheduler: f.scheduler,
+            )
+            ..start()
+            ..muted = true;
+      f.scheduler.advance(const Duration(milliseconds: 200));
+
+      ticker.dispose();
+
+      expect(ticker.isDisposed, isTrue);
+      expect(ticker.isActive, isFalse);
+      expect(ticker.muted, isTrue);
+      expect(ticker.frame, 1);
+      expect(ticker.elapsed, const Duration(milliseconds: 200));
+      expect(ticker.delta, const Duration(milliseconds: 200));
+      expect(
+        () => ticker.muted = false,
+        _stateError(
+          'FrameTicker.muted set after dispose. Create a new FrameTicker '
+          'instead of reusing this one.',
+        ),
+      );
+      expect(ticker.muted, isTrue);
     });
 
     test('ten concurrent FrameTickers share one scheduler timer', () {

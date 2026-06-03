@@ -101,5 +101,75 @@ void main() {
       tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
       expect(submitted, 100);
     });
+
+    testWidgets('exposes constrained numeric text-field semantics', (tester) {
+      tester.pumpWidget(
+        const NumberInput(
+          initialValue: 2,
+          min: 0,
+          max: 5,
+          allowNegative: false,
+          placeholder: 'Visible example',
+          semanticLabel: 'Retry count',
+        ),
+      );
+
+      final field = tester.semantics().single(
+        role: SemanticRole.textField,
+        label: 'Retry count',
+        value: '2',
+      );
+      expect(field.actions, contains(SemanticAction.focus));
+      expect(field.actions, contains(SemanticAction.clear));
+      expect(field.actions, contains(SemanticAction.submit));
+      expect(field.state['fieldType'], 'number');
+      expect(field.state['numericValue'], 2);
+      expect(field.state['min'], 0);
+      expect(field.state['max'], 5);
+      expect(field.state['allowNegative'], isFalse);
+      expect(field.state['allowDecimal'], isFalse);
+      expect(field.state['numberFormat'], 'integer');
+      expect(field.state['clampOnSubmit'], isTrue);
+
+      final states = tester
+          .accessibilitySnapshot()
+          .single(role: SemanticRole.textField, label: 'Retry count')
+          .states;
+      expect(states, contains('field type number'));
+      expect(states, contains('value 2, min 0, max 5'));
+    });
+
+    testWidgets('semantic submit clamps through the existing submit path', (
+      tester,
+    ) async {
+      final controller = TextEditingController(text: '9');
+      num? submitted;
+      tester.pumpWidget(
+        NumberInput(
+          controller: controller,
+          min: 0,
+          max: 5,
+          semanticLabel: 'Retry count',
+          onSubmit: (value) => submitted = value,
+        ),
+      );
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.submit,
+        role: SemanticRole.textField,
+        label: 'Retry count',
+      );
+
+      expect(result.completed, isTrue);
+      expect(submitted, 5);
+      expect(controller.text, '5');
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.textField, label: 'Retry count')
+            .state['numericValue'],
+        5,
+      );
+    });
   });
 }

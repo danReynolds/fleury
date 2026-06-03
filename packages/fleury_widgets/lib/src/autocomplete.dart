@@ -20,6 +20,8 @@ class Autocomplete<T extends Object> extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
+    this.placeholder = '',
+    this.semanticLabel,
     this.onSelected,
     this.maxVisible = 6,
   });
@@ -33,6 +35,17 @@ class Autocomplete<T extends Object> extends StatefulWidget {
   final TextEditingController? controller;
   final FocusNode? focusNode;
   final bool autofocus;
+
+  /// Hint text passed to the underlying [TextInput].
+  final String placeholder;
+
+  /// Stable label for the suggestion menu in semantic snapshots.
+  ///
+  /// Defaults to [placeholder] when provided. Use this when tests, debug tools,
+  /// prompt fallback, or future adapters need to refer to the autocomplete
+  /// surface independently from the current query text.
+  final String? semanticLabel;
+
   final void Function(T value)? onSelected;
   final int maxVisible;
 
@@ -152,17 +165,81 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
     final height = _filtered.length > widget.maxVisible
         ? widget.maxVisible
         : _filtered.length;
-    return Container(
-      border: BoxBorder(style: _borderStyle),
-      child: SizedBox(
-        width: width + 2,
-        height: height,
-        child: ListView.builder(
-          controller: _list,
-          itemCount: _filtered.length,
-          itemBuilder: (_, i, selected) => Text(
-            '${selected ? '› ' : '  '}${_display(_filtered[i])}',
-            style: selected ? _selectionStyle : CellStyle.empty,
+    final label =
+        widget.semanticLabel ??
+        (widget.placeholder.isEmpty ? null : widget.placeholder);
+    return Semantics(
+      role: SemanticRole.menu,
+      label: label,
+      focused: _focusNode.hasFocus,
+      expanded: true,
+      actions: const <SemanticAction>{
+        SemanticAction.focus,
+        SemanticAction.close,
+      },
+      state: SemanticState({
+        'menuDepth': 0,
+        'menuItemCount': _filtered.length,
+        'selectedKey': _list.selectedIndex,
+        'completionQuery': _controller.text,
+      }),
+      onAction: (action) {
+        switch (action) {
+          case SemanticAction.focus:
+            _focusNode.requestFocus();
+            return;
+          case SemanticAction.close:
+            _close();
+            return;
+          case _:
+            return;
+        }
+      },
+      child: Container(
+        border: BoxBorder(style: _borderStyle),
+        child: SizedBox(
+          width: width + 2,
+          height: height,
+          child: ListView.builder(
+            controller: _list,
+            itemCount: _filtered.length,
+            itemBuilder: (_, i, selected) {
+              final label = _display(_filtered[i]);
+              return Semantics(
+                role: SemanticRole.menuItem,
+                label: label,
+                value: label,
+                focused: _focusNode.hasFocus && selected,
+                selected: selected,
+                actions: const <SemanticAction>{
+                  SemanticAction.select,
+                  SemanticAction.activate,
+                },
+                state: SemanticState({
+                  'menuDepth': 0,
+                  'menuItemIndex': i,
+                  'menuItemPosition': i + 1,
+                  'menuItemCount': _filtered.length,
+                  'entryKind': 'suggestion',
+                  'completionQuery': _controller.text,
+                }),
+                onAction: (action) {
+                  switch (action) {
+                    case SemanticAction.select:
+                    case SemanticAction.activate:
+                      _list.selectedIndex = i;
+                      _pick();
+                      return;
+                    case _:
+                      return;
+                  }
+                },
+                child: Text(
+                  '${selected ? '› ' : '  '}$label',
+                  style: selected ? _selectionStyle : CellStyle.empty,
+                ),
+              );
+            },
           ),
         ),
       ),
@@ -227,6 +304,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
           controller: _controller,
           focusNode: _focusNode,
           autofocus: widget.autofocus,
+          placeholder: widget.placeholder,
           onSubmit: (_) => _pick(),
         ),
       ),

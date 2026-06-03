@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryPeerBenchmarkRun",
+  "runId": "nocterm-sb2-text-editing-2026-06-02T12-44-23Z",
+  "peerId": "nocterm",
+  "scenarioId": "SB.2",
+  "capturedAt": "2026-06-02T12:44:23.717422Z",
+  "source": {
+    "name": "Nocterm",
+    "version": "0.6.0",
+    "url": "https://pub.dev/packages/nocterm"
+  },
+  "environment": {
+    "machine": "macbookpro.lan",
+    "operatingSystem": "macos",
+    "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+    "runtime": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+    "terminalMode": "nocterm-test-harness",
+    "terminalSize": {
+      "columns": 80,
+      "rows": 24
+    }
+  },
+  "fixture": {
+    "workingDirectory": "peer-fixtures/nocterm/sb2_text_editing",
+    "command": [
+      "dart",
+      "run",
+      "bin/sb2_text_editing_benchmark.dart",
+      "--warmup=2",
+      "--iterations=10",
+      "--text-chars=10000",
+      "--json"
+    ],
+    "warmupIterations": 2,
+    "measuredIterations": 10
+  },
+  "metrics": {
+    "cursorMoveUs": {
+      "min": 3231,
+      "median": 6203,
+      "p95": 13410,
+      "p99": 28127,
+      "max": 28127,
+      "samples": 40
+    },
+    "insertionDeletionUs": {
+      "min": 3405,
+      "median": 6851,
+      "p95": 182018,
+      "p99": 194388,
+      "max": 194388,
+      "samples": 30
+    },
+    "selectionUs": {
+      "min": 3083,
+      "median": 6051,
+      "p95": 20624,
+      "p99": 208865,
+      "max": 208865,
+      "samples": 50
+    },
+    "undoRedoUs": {
+      "min": 3287,
+      "median": 4705,
+      "p95": 29425,
+      "p99": 50011,
+      "max": 50011,
+      "samples": 20
+    },
+    "historyNavigationUs": {
+      "min": 4694,
+      "median": 8326,
+      "p95": 32397,
+      "p99": 89376,
+      "max": 89376,
+      "samples": 20
+    },
+    "completionAcceptUs": {
+      "min": 5514,
+      "median": 7841,
+      "p95": 30922,
+      "p99": 30922,
+      "max": 30922,
+      "samples": 10
+    },
+    "pasteCompleteUs": {
+      "min": 5485,
+      "median": 7637,
+      "p95": 45691,
+      "p99": 45691,
+      "max": 45691,
+      "samples": 10
+    },
+    "semanticOrTestQueryUs": {
+      "min": 548,
+      "median": 651,
+      "p95": 4042,
+      "p99": 4042,
+      "max": 4042,
+      "samples": 10
+    },
+    "rssDeltaBytes": 921600,
+    "lineOfCodeCount": 278,
+    "testLineOfCodeCount": 64,
+    "textCharsRequested": 10000,
+    "adapterOwnedFeatureCount": 3
+  },
+  "correctness": [
+    {
+      "gate": "mixed-width text remains valid",
+      "pass": true,
+      "evidence": "Nocterm TextField retained emoji, CJK, combining text, and paste marker."
+    },
+    {
+      "gate": "selection and undo state are correct",
+      "pass": true,
+      "evidence": "Selection is TextField-owned; undo/redo is fixture app-owned."
+    },
+    {
+      "gate": "redacted value stays redacted",
+      "pass": true,
+      "evidence": "Obscured TextField terminal buffer does not contain the raw secret."
+    }
+  ],
+  "ergonomics": {
+    "lineOfCodeCount": 278,
+    "testLineOfCodeCount": 64,
+    "appFile": "lib/text_editing_app.dart",
+    "testFile": "test/text_editing_benchmark_test.dart",
+    "peerOwnedTextField": true,
+    "appOwnedUndoRedo": true,
+    "appOwnedHistory": true,
+    "appOwnedCompletion": true,
+    "semanticGraphAvailable": false
+  },
+  "artifacts": [
+    {
+      "kind": "source",
+      "path": "peer-fixtures/nocterm/sb2_text_editing/lib/text_editing_app.dart"
+    },
+    {
+      "kind": "test",
+      "path": "peer-fixtures/nocterm/sb2_text_editing/test/text_editing_benchmark_test.dart"
+    }
+  ],
+  "notes": [
+    "This is a Nocterm test-harness peer fixture, not a real-terminal run.",
+    "Nocterm 0.6.0 supplies TextField, multiline, selection, clipboard paste, and obscured text.",
+    "Undo/redo, submission history, and completion are app-owned adapters in this fixture because Nocterm 0.6.0 does not expose Fleury-equivalent built-in primitives for those behaviors.",
+    "Timing is local-machine evidence and should not be used as a public superiority claim without repeated peer runs."
+  ]
+}

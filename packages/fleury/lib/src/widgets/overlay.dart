@@ -56,6 +56,7 @@ class OverlayEntry extends ChangeNotifier {
   bool _opaque;
   bool get opaque => _opaque;
   set opaque(bool value) {
+    _checkNotDisposed();
     if (_opaque == value) return;
     _opaque = value;
     _markNeedsRebuild();
@@ -69,6 +70,7 @@ class OverlayEntry extends ChangeNotifier {
   final bool maintainState;
 
   OverlayState? _state;
+  bool _disposed = false;
 
   /// Removes this entry from its [Overlay]. No-op if not currently
   /// inserted, or if already removed.
@@ -83,6 +85,7 @@ class OverlayEntry extends ChangeNotifier {
   /// builder depends on state outside the widget tree that has
   /// changed.
   void markNeedsBuild() {
+    _checkNotDisposed();
     _markNeedsRebuild();
   }
 
@@ -92,11 +95,26 @@ class OverlayEntry extends ChangeNotifier {
   }
 
   void _attach(OverlayState state) {
+    _checkNotDisposed();
     _state = state;
   }
 
   void _detach() {
     _state = null;
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    remove();
+    _disposed = true;
+    super.dispose();
+  }
+
+  void _checkNotDisposed() {
+    if (_disposed) {
+      throw StateError('OverlayEntry has been disposed.');
+    }
   }
 }
 
@@ -347,8 +365,7 @@ class _RenderVisibility extends RenderObject
   set visible(bool value) {
     if (_visible == value) return;
     _visible = value;
-    // Paint-only flip — layout unchanged; the framework re-paints
-    // the tree every frame so no explicit invalidation is needed.
+    markNeedsPaintOnly();
   }
 
   RenderObject? _child;

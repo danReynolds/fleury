@@ -14,6 +14,8 @@
 
 import 'dart:async';
 
+import 'package:characters/characters.dart';
+
 import '../terminal/events.dart';
 import '../widgets/focus.dart';
 import '../widgets/key_bindings.dart';
@@ -26,8 +28,8 @@ class InputDispatcher {
     required this.focusManager,
     this.pointerRouter,
     this.sequenceTimeout = const Duration(milliseconds: 500),
-    this.globalBindings = const [],
-  });
+    List<KeyBinding> globalBindings = const [],
+  }) : _globalBindings = globalBindings;
 
   /// The focus manager whose chain this dispatcher walks.
   final FocusManager focusManager;
@@ -42,10 +44,18 @@ class InputDispatcher {
 
   /// Bindings to consult after the focus chain ignores an event.
   /// Mutable so consumers can update it dynamically.
-  List<KeyBinding> globalBindings;
+  List<KeyBinding> _globalBindings;
+
+  List<KeyBinding> get globalBindings => _globalBindings;
+
+  set globalBindings(List<KeyBinding> value) {
+    _checkNotDisposed();
+    _globalBindings = value;
+  }
 
   _PendingSequence? _pending;
   Timer? _timer;
+  bool _disposed = false;
 
   /// Whether a sequence is currently pending. Useful for tests.
   bool get hasPendingSequence => _pending != null;
@@ -58,14 +68,12 @@ class InputDispatcher {
   /// types are ignored — the framework handles them outside the
   /// dispatcher.
   KeyEventResult dispatch(TuiEvent event) {
+    _checkNotDisposed();
     if (event is TextInputEvent) {
       return _dispatchText(event);
     }
     if (event is PasteEvent) {
-      // Paste is bulk text input: route it to the focused claimant just
-      // like typed text, so a multi-line paste inserts in one shot rather
-      // than submitting per line.
-      return _deliverText(event.text);
+      return _dispatchPaste(event);
     }
     if (event is MouseEvent) {
       return _dispatchMouse(event);
@@ -177,18 +185,46 @@ class InputDispatcher {
   /// the original key first (sequence got broken), then deliver
   /// the text.
   KeyEventResult _dispatchText(TextInputEvent event) {
-    if (_pending != null) {
-      final pending = _pending!;
-      _clearPending();
-      for (final e in pending.events) {
-        _dispatchPlain(e, allowSequenceStart: false);
-      }
+    final textResult = _deliverText(event.text);
+    if (textResult == KeyEventResult.handled) {
+      if (_pending != null) _clearPending();
+      return textResult;
     }
-    return _deliverText(event.text);
+
+    final keyEvent = _keyEventForText(event.text);
+    if (keyEvent != null) {
+      return _dispatchKeyEvent(keyEvent);
+    }
+
+    if (_pending != null) {
+      _cancelPendingAndRedispatchHeld();
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// Delivers a bracketed paste as bulk content to the nearest claimant.
+  ///
+  /// Paste is not equivalent to typed text: a focused text field should record
+  /// one paste transaction, while non-text controls that claim single typed
+  /// trigger characters should ignore pasted blobs.
+  KeyEventResult _dispatchPaste(PasteEvent event) {
+    if (_pending != null) {
+      _cancelPendingAndRedispatchHeld();
+    }
+    return _deliverPaste(event.text);
+  }
+
+  void _cancelPendingAndRedispatchHeld() {
+    final pending = _pending;
+    if (pending == null) return;
+    _clearPending();
+    for (final e in pending.events) {
+      _dispatchPlain(e, allowSequenceStart: false);
+    }
   }
 
   /// Offers [text] to each [TextInputClaimant] up the focus chain until
-  /// one consumes it. Shared by typed text and paste.
+  /// one consumes it.
   KeyEventResult _deliverText(String text) {
     for (final node in focusManager.activeChain()) {
       final claimant = node.textInputClaimant;
@@ -198,6 +234,27 @@ class InputDispatcher {
       }
     }
     return KeyEventResult.ignored;
+  }
+
+  /// Offers bracketed paste content to each [TextInputClaimant] up the focus
+  /// chain until one consumes it.
+  KeyEventResult _deliverPaste(String text) {
+    for (final node in focusManager.activeChain()) {
+      final claimant = node.textInputClaimant;
+      if (claimant != null &&
+          claimant.onPaste(text) == KeyEventResult.handled) {
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  static KeyEvent? _keyEventForText(String text) {
+    final iterator = text.characters.iterator;
+    if (!iterator.moveNext()) return null;
+    final grapheme = iterator.current;
+    if (iterator.moveNext()) return null;
+    return KeyEvent(char: grapheme);
   }
 
   KeyEventResult _dispatchPlain(
@@ -269,13 +326,13 @@ class InputDispatcher {
     if (!focusManager.suppressGlobals) {
       if (allowSequenceStart) {
         final globalSeqs = <KeyBinding>[];
-        _collectSequenceStarts(globalBindings, event, globalSeqs);
+        _collectSequenceStarts(_globalBindings, event, globalSeqs);
         if (globalSeqs.isNotEmpty) {
           _startPending(event, globalSeqs);
           return KeyEventResult.handled;
         }
       }
-      final hit = _findDirectMatch(globalBindings, event);
+      final hit = _findDirectMatch(_globalBindings, event);
       if (hit != null) {
         final result = _fire(hit, event);
         if (result == KeyEventResult.handled) return result;
@@ -347,7 +404,15 @@ class InputDispatcher {
   /// Releases pending-sequence resources. Idempotent. Called by
   /// `runTui` during teardown.
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     _clearPending();
+  }
+
+  void _checkNotDisposed() {
+    if (_disposed) {
+      throw StateError('InputDispatcher has been disposed.');
+    }
   }
 }
 

@@ -1,0 +1,220 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryBenchmarkVariance",
+  "peerId": "nocterm",
+  "scenarioId": "SB.4",
+  "scenarioName": "LogRegion Tailing And Scrollback",
+  "runCount": 3,
+  "minRuns": 3,
+  "sufficientRunCount": true,
+  "comparable": true,
+  "strictPass": true,
+  "errors": [],
+  "comparableIssues": [],
+  "source": {
+    "versions": [
+      "0.6.0"
+    ],
+    "urls": [
+      "https://pub.dev/packages/nocterm"
+    ]
+  },
+  "environment": {
+    "machines": [
+      "macbookpro.lan"
+    ],
+    "operatingSystems": [
+      "macos"
+    ],
+    "runtimes": [
+      "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\""
+    ],
+    "terminalModes": [
+      "nocterm-test-harness"
+    ],
+    "terminalSizes": [
+      "120x32"
+    ]
+  },
+  "fixture": {
+    "workingDirectories": [
+      "peer-fixtures/nocterm/sb4_log_region"
+    ],
+    "commands": [
+      "dart run bin/sb4_log_region_benchmark.dart --warmup=2 --iterations=5 --rows=100000 --append=1000 --json"
+    ],
+    "warmupIterations": {
+      "samples": 3,
+      "min": 2,
+      "median": 2,
+      "mean": 2,
+      "max": 2,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        2,
+        2,
+        2
+      ]
+    },
+    "measuredIterations": {
+      "samples": 3,
+      "min": 5,
+      "median": 5,
+      "mean": 5,
+      "max": 5,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        5,
+        5,
+        5
+      ]
+    }
+  },
+  "runs": [
+    {
+      "runId": "nocterm-sb4-log-region-2026-06-02T13-41-32",
+      "capturedAt": "2026-06-02T13:41:32.960208Z",
+      "path": "peer-fixtures/nocterm/sb4_log_region/results/variance/nocterm-sb4-log-region-2026-06-02-run-1.json"
+    },
+    {
+      "runId": "nocterm-sb4-log-region-2026-06-02T13-42-03",
+      "capturedAt": "2026-06-02T13:42:03.065899Z",
+      "path": "peer-fixtures/nocterm/sb4_log_region/results/variance/nocterm-sb4-log-region-2026-06-02-run-2.json"
+    },
+    {
+      "runId": "nocterm-sb4-log-region-2026-06-02T13-42-33",
+      "capturedAt": "2026-06-02T13:42:33.238776Z",
+      "path": "peer-fixtures/nocterm/sb4_log_region/results/variance/nocterm-sb4-log-region-2026-06-02-run-3.json"
+    }
+  ],
+  "metrics": {
+    "appendBurstUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 77861,
+      "median": 95014,
+      "mean": 89428.333,
+      "max": 95410,
+      "standardDeviation": 8180.937,
+      "relativeSpreadPercent": 18.47,
+      "values": [
+        95014,
+        95410,
+        77861
+      ]
+    },
+    "scrollbackJumpUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 5617,
+      "median": 6099,
+      "mean": 10487.667,
+      "max": 19747,
+      "standardDeviation": 6550.294,
+      "relativeSpreadPercent": 231.677,
+      "values": [
+        19747,
+        6099,
+        5617
+      ]
+    },
+    "scrollToTailUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 3384,
+      "median": 5615,
+      "mean": 6029.333,
+      "max": 9089,
+      "standardDeviation": 2347.411,
+      "relativeSpreadPercent": 101.603,
+      "values": [
+        9089,
+        5615,
+        3384
+      ]
+    },
+    "copySelectedEntryUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 648,
+      "median": 2469,
+      "mean": 1875,
+      "max": 2508,
+      "standardDeviation": 867.766,
+      "relativeSpreadPercent": 75.334,
+      "values": [
+        2469,
+        2508,
+        648
+      ]
+    },
+    "filterQueryUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 84121,
+      "median": 125479,
+      "mean": 160003.667,
+      "max": 270411,
+      "standardDeviation": 79874.716,
+      "relativeSpreadPercent": 148.463,
+      "values": [
+        270411,
+        125479,
+        84121
+      ]
+    },
+    "semanticOrTestQueryUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 346,
+      "median": 682,
+      "mean": 570.667,
+      "max": 684,
+      "standardDeviation": 158.865,
+      "relativeSpreadPercent": 49.56,
+      "values": [
+        684,
+        682,
+        346
+      ]
+    },
+    "unsafeArtifactLeakCount": {
+      "primaryValue": "value",
+      "samples": 3,
+      "min": 0,
+      "median": 0,
+      "mean": 0,
+      "max": 0,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": null,
+      "values": [
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "correctness": {
+    "allRunsPass": true,
+    "gates": {
+      "tail anchoring is correct": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "copy text is sanitized": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "unsafe output leak count is zero": {
+        "passCount": 3,
+        "failCount": 0
+      }
+    }
+  },
+  "notes": [
+    "Metric variance uses each run artifact primary value: scalar metrics use the scalar value; metric maps prefer p95, then median, max, and value.",
+    "strictPass is false unless run count, scenario/peer identity, source version, terminal mode, terminal size, fixture command, fixture directory, and correctness gates are comparable."
+  ]
+}

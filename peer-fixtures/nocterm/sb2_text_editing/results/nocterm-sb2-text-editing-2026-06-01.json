@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryPeerBenchmarkRun",
+  "runId": "nocterm-sb2-text-editing-2026-06-01T23-08-19Z",
+  "peerId": "nocterm",
+  "scenarioId": "SB.2",
+  "capturedAt": "2026-06-01T23:08:19.628048Z",
+  "source": {
+    "name": "Nocterm",
+    "version": "0.6.0",
+    "url": "https://pub.dev/packages/nocterm"
+  },
+  "environment": {
+    "machine": "macbookpro.lan",
+    "operatingSystem": "macos",
+    "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+    "runtime": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+    "terminalMode": "nocterm-test-harness",
+    "terminalSize": {
+      "columns": 80,
+      "rows": 24
+    }
+  },
+  "fixture": {
+    "workingDirectory": "peer-fixtures/nocterm/sb2_text_editing",
+    "command": [
+      "dart",
+      "run",
+      "bin/sb2_text_editing_benchmark.dart",
+      "--warmup=2",
+      "--iterations=10",
+      "--text-chars=10000",
+      "--json"
+    ],
+    "warmupIterations": 2,
+    "measuredIterations": 10
+  },
+  "metrics": {
+    "cursorMoveUs": {
+      "min": 3137,
+      "median": 3751,
+      "p95": 7279,
+      "p99": 9241,
+      "max": 9241,
+      "samples": 40
+    },
+    "insertionDeletionUs": {
+      "min": 3162,
+      "median": 4885,
+      "p95": 9915,
+      "p99": 10605,
+      "max": 10605,
+      "samples": 30
+    },
+    "selectionUs": {
+      "min": 3138,
+      "median": 4923,
+      "p95": 20243,
+      "p99": 114893,
+      "max": 114893,
+      "samples": 50
+    },
+    "undoRedoUs": {
+      "min": 3194,
+      "median": 3743,
+      "p95": 8590,
+      "p99": 9162,
+      "max": 9162,
+      "samples": 20
+    },
+    "historyNavigationUs": {
+      "min": 4429,
+      "median": 5093,
+      "p95": 9811,
+      "p99": 11656,
+      "max": 11656,
+      "samples": 20
+    },
+    "completionAcceptUs": {
+      "min": 4656,
+      "median": 5623,
+      "p95": 10309,
+      "p99": 10309,
+      "max": 10309,
+      "samples": 10
+    },
+    "pasteCompleteUs": {
+      "min": 4797,
+      "median": 7102,
+      "p95": 23541,
+      "p99": 23541,
+      "max": 23541,
+      "samples": 10
+    },
+    "semanticOrTestQueryUs": {
+      "min": 531,
+      "median": 578,
+      "p95": 860,
+      "p99": 860,
+      "max": 860,
+      "samples": 10
+    },
+    "rssDeltaBytes": 1691648,
+    "lineOfCodeCount": 278,
+    "testLineOfCodeCount": 64,
+    "textCharsRequested": 10000,
+    "adapterOwnedFeatureCount": 3
+  },
+  "correctness": [
+    {
+      "gate": "mixed-width text remains valid",
+      "pass": true,
+      "evidence": "Nocterm TextField retained emoji, CJK, combining text, and paste marker."
+    },
+    {
+      "gate": "selection and undo state are correct",
+      "pass": true,
+      "evidence": "Selection is TextField-owned; undo/redo is fixture app-owned."
+    },
+    {
+      "gate": "redacted value stays redacted",
+      "pass": true,
+      "evidence": "Obscured TextField terminal buffer does not contain the raw secret."
+    }
+  ],
+  "ergonomics": {
+    "lineOfCodeCount": 278,
+    "testLineOfCodeCount": 64,
+    "appFile": "lib/text_editing_app.dart",
+    "testFile": "test/text_editing_benchmark_test.dart",
+    "peerOwnedTextField": true,
+    "appOwnedUndoRedo": true,
+    "appOwnedHistory": true,
+    "appOwnedCompletion": true,
+    "semanticGraphAvailable": false
+  },
+  "artifacts": [
+    {
+      "kind": "source",
+      "path": "peer-fixtures/nocterm/sb2_text_editing/lib/text_editing_app.dart"
+    },
+    {
+      "kind": "test",
+      "path": "peer-fixtures/nocterm/sb2_text_editing/test/text_editing_benchmark_test.dart"
+    }
+  ],
+  "notes": [
+    "This is a Nocterm test-harness peer fixture, not a real-terminal run.",
+    "Nocterm 0.6.0 supplies TextField, multiline, selection, clipboard paste, and obscured text.",
+    "Undo/redo, submission history, and completion are app-owned adapters in this fixture because Nocterm 0.6.0 does not expose Fleury-equivalent built-in primitives for those behaviors.",
+    "Timing is local-machine evidence and should not be used as a public superiority claim without repeated peer runs."
+  ]
+}

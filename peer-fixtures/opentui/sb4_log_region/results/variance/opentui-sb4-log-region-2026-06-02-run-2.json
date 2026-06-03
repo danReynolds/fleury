@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryPeerBenchmarkRun",
+  "runId": "opentui-sb4-log-region-2026-06-02T13-50-06Z",
+  "peerId": "opentui",
+  "scenarioId": "SB.4",
+  "capturedAt": "2026-06-02T13:50:06.151Z",
+  "source": {
+    "name": "OpenTUI",
+    "version": "0.3.1",
+    "url": "https://www.npmjs.com/package/@opentui/core"
+  },
+  "environment": {
+    "machine": "macbookpro.lan",
+    "operatingSystem": "darwin",
+    "operatingSystemVersion": "Darwin macbookpro.lan 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:09:40 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T6000 arm64",
+    "runtime": "1.3.14 / OpenTUI 0.3.1",
+    "terminalMode": "opentui-test-renderer-memory",
+    "terminalSize": {
+      "columns": 120,
+      "rows": 32
+    }
+  },
+  "fixture": {
+    "workingDirectory": "peer-fixtures/opentui/sb4_log_region",
+    "command": [
+      "npm",
+      "run",
+      "benchmark",
+      "--",
+      "--warmup=2",
+      "--iterations=5",
+      "--rows=100000",
+      "--append=1000",
+      "--json"
+    ],
+    "warmupIterations": 2,
+    "measuredIterations": 5
+  },
+  "metrics": {
+    "mountUs": {
+      "min": 63478,
+      "median": 95508,
+      "p95": 99570,
+      "p99": 99570,
+      "max": 99570,
+      "samples": 5
+    },
+    "firstRenderUs": {
+      "min": 625,
+      "median": 5111,
+      "p95": 8058,
+      "p99": 8058,
+      "max": 8058,
+      "samples": 5
+    },
+    "appendBurstUs": {
+      "min": 1342,
+      "median": 1650,
+      "p95": 14014,
+      "p99": 14014,
+      "max": 14014,
+      "samples": 5
+    },
+    "scrollbackJumpUs": {
+      "min": 759,
+      "median": 892,
+      "p95": 7144,
+      "p99": 7144,
+      "max": 7144,
+      "samples": 5
+    },
+    "scrollToTailUs": {
+      "min": 728,
+      "median": 1018,
+      "p95": 3103,
+      "p99": 3103,
+      "max": 3103,
+      "samples": 5
+    },
+    "copySelectedEntryUs": {
+      "min": 1,
+      "median": 1,
+      "p95": 13,
+      "p99": 13,
+      "max": 13,
+      "samples": 5
+    },
+    "filterQueryUs": {
+      "min": 18037,
+      "median": 22651,
+      "p95": 133856,
+      "p99": 133856,
+      "max": 133856,
+      "samples": 5
+    },
+    "semanticOrTestQueryUs": {
+      "min": 34,
+      "median": 35,
+      "p95": 45,
+      "p99": 45,
+      "max": 45,
+      "samples": 5
+    },
+    "unsafeArtifactLeakCount": 0,
+    "rssDeltaBytes": 136429568,
+    "lineOfCodeCount": 257,
+    "benchmarkLineOfCodeCount": 390,
+    "testLineOfCodeCount": 50,
+    "entryCountAfterAppend": 101000,
+    "appendCount": 1000,
+    "lineCountAfterFilter": 1000,
+    "filterMatchCount": 1000,
+    "selectedKey": "LOG-100999",
+    "finalVisibleStart": 968,
+    "finalVisibleEnd": 1000,
+    "visibleWindowRowEstimate": 32
+  },
+  "correctness": [
+    {
+      "gate": "tail anchoring is correct",
+      "pass": true,
+      "evidence": "After append and explicit tail scroll, the OpenTUI text frame stayed anchored at LOG-100999."
+    },
+    {
+      "gate": "copy text is sanitized",
+      "pass": true,
+      "evidence": "Selected-entry copy matched the generated sanitized log line and contained no escape, secret, or newline artifacts."
+    },
+    {
+      "gate": "unsafe output leak count is zero",
+      "pass": true,
+      "evidence": "Fixture-owned sanitizer removed ANSI/OSC/control payloads before OpenTUI TextRenderable rendering."
+    }
+  ],
+  "ergonomics": {
+    "lineOfCodeCount": 257,
+    "benchmarkLineOfCodeCount": 390,
+    "testLineOfCodeCount": 50,
+    "appFile": "lib/log_app.js",
+    "benchmarkFile": "bin/sb4_log_region_benchmark.js",
+    "testFile": "test/log_app.test.js",
+    "peerOwnedTextRenderable": true,
+    "peerOwnedTestRenderer": true,
+    "appOwnedRetainedLogs": true,
+    "appOwnedTailPolicy": true,
+    "appOwnedSanitization": true,
+    "appOwnedFiltering": true,
+    "appOwnedSelectedEntryCopy": true,
+    "semanticGraphAvailable": false,
+    "testQueryViaFrameAndAppState": true
+  },
+  "artifacts": [
+    {
+      "kind": "source",
+      "path": "peer-fixtures/opentui/sb4_log_region/lib/log_app.js"
+    },
+    {
+      "kind": "benchmark",
+      "path": "peer-fixtures/opentui/sb4_log_region/bin/sb4_log_region_benchmark.js"
+    },
+    {
+      "kind": "test",
+      "path": "peer-fixtures/opentui/sb4_log_region/test/log_app.test.js"
+    }
+  ],
+  "notes": [
+    "This is an OpenTUI test-renderer peer fixture, not a real-terminal run.",
+    "OpenTUI 0.3.1 supplies TextRenderable and the native-backed test renderer.",
+    "Retained logs, tail policy, scrollback selection, sanitization/redaction, filtering, selected-entry state, and copy/export are app-owned fixture code because OpenTUI 0.3.1 does not expose Fleury-equivalent built-in LogRegion semantics.",
+    "OpenTUI exposes frame/app state for this fixture, not a Fleury-style semantic app graph.",
+    "Timing is local-machine evidence and should not be used as a public superiority claim without repeated peer runs."
+  ]
+}

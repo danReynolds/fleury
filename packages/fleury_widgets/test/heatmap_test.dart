@@ -138,5 +138,44 @@ void main() {
       final cell = tester.render(size: const CellSize(1, 1)).atColRow(0, 0);
       expect(cell.style.foreground, const AnsiColor(2));
     });
+
+    testWidgets('exposes chart semantics and text-first fallback', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 4,
+          height: 2,
+          child: Heatmap(
+            semanticLabel: 'Weekly activity',
+            values: [
+              [0, 2],
+              [3, 5],
+            ],
+            cellWidth: 1,
+            rowLabels: ['A', 'B'],
+            colLabels: ['x', 'y'],
+          ),
+        ),
+      );
+
+      final chart = tester.semantics().single(
+        role: SemanticRole.chart,
+        label: 'Weekly activity',
+      );
+      expect(chart.state.chartType, 'heatmap');
+      expect(chart.state.chartRowCount, 2);
+      expect(chart.state.chartColumnCount, 2);
+      expect(chart.state.chartPointCount, 4);
+      expect(chart.state.chartMinValue, 0);
+      expect(chart.state.chartMaxValue, 5);
+
+      final fallback = tester.accessibilitySnapshot().single(
+        role: SemanticRole.chart,
+        label: 'Weekly activity',
+      );
+      expect(
+        fallback.states,
+        contains('chart heatmap, 2 rows, 2 columns, 4 points, min 0, max 5'),
+      );
+    });
   });
 }

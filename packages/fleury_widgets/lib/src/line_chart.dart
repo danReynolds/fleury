@@ -229,6 +229,7 @@ class LineChart extends StatefulWidget {
     this.interactive = false,
     this.autofocus = false,
     this.focusNode,
+    this.semanticLabel = 'Line chart',
   });
 
   /// One or more series to plot.
@@ -286,6 +287,9 @@ class LineChart extends StatefulWidget {
 
   /// Optional caller-provided node for [interactive] mode.
   final FocusNode? focusNode;
+
+  /// Label exposed through the semantic app graph.
+  final String semanticLabel;
 
   @override
   State<LineChart> createState() => _LineChartState();
@@ -358,6 +362,30 @@ class _LineChartState extends State<LineChart> {
     }
   }
 
+  Future<void> _handleSemanticAction(SemanticAction action) async {
+    final last = _cursorXs.length - 1;
+    switch (action) {
+      case SemanticAction.focus:
+        if (widget.interactive) {
+          _node.requestFocus();
+          setState(() => _focused = true);
+        }
+        return;
+      case SemanticAction.increment:
+        if (widget.interactive && _cursorIdx < last) {
+          setState(() => _cursorIdx += 1);
+        }
+        return;
+      case SemanticAction.decrement:
+        if (widget.interactive && _cursorIdx > 0) {
+          setState(() => _cursorIdx -= 1);
+        }
+        return;
+      case _:
+        return;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -386,7 +414,32 @@ class _LineChartState extends State<LineChart> {
       cursorX: cursorX,
     );
 
-    if (!widget.interactive) return raw;
+    final semantic = Semantics(
+      role: SemanticRole.chart,
+      label: widget.semanticLabel,
+      value: cursorX == null ? null : 'x: $cursorX',
+      focused: widget.interactive && _focused,
+      actions: {
+        if (widget.interactive) SemanticAction.focus,
+        if (widget.interactive && _cursorIdx < _cursorXs.length - 1)
+          SemanticAction.increment,
+        if (widget.interactive && _cursorIdx > 0) SemanticAction.decrement,
+      },
+      onAction: _handleSemanticAction,
+      state: _lineChartSemanticState(
+        series: widget.series,
+        xRange: widget.xRange,
+        yRange: widget.yRange,
+        padding: widget.padding,
+        references: widget.references,
+        interactive: widget.interactive,
+        cursorXs: _cursorXs,
+        cursorIndex: _cursorIdx,
+      ),
+      child: raw,
+    );
+
+    if (!widget.interactive) return semantic;
     return FocusWithin(
       onFocusChange: (has) {
         if (!mounted) return;
@@ -396,10 +449,87 @@ class _LineChartState extends State<LineChart> {
         focusNode: _node,
         autofocus: widget.autofocus,
         onKey: _onKey,
-        child: raw,
+        child: semantic,
       ),
     );
   }
+}
+
+SemanticState _lineChartSemanticState({
+  required List<LineSeries> series,
+  required (num min, num max)? xRange,
+  required (num min, num max)? yRange,
+  required double padding,
+  required List<ReferenceLine> references,
+  required bool interactive,
+  required List<num> cursorXs,
+  required int cursorIndex,
+}) {
+  var pointCount = 0;
+  for (final item in series) {
+    pointCount += item.points.length;
+  }
+  var (xMin, xMax) = _effectiveChartRange(
+    xRange,
+    _lineChartExtents(series, x: true),
+    padding,
+  );
+  var (yMin, yMax) = _effectiveChartRange(
+    yRange,
+    _lineChartExtents(series, x: false),
+    padding,
+  );
+  if (xMin == xMax) xMax = xMin + 1;
+  if (yMin == yMax) yMax = yMin + 1;
+  final safeCursorIndex = cursorXs.isEmpty
+      ? 0
+      : cursorIndex.clamp(0, cursorXs.length - 1);
+  return SemanticState({
+    'chartType': 'line',
+    'chartSeriesCount': series.length,
+    'chartPointCount': pointCount,
+    'chartXMin': xMin,
+    'chartXMax': xMax,
+    'chartYMin': yMin,
+    'chartYMax': yMax,
+    'chartReferenceCount': references.length,
+    'chartInteractive': interactive,
+    if (interactive) 'chartCursorCount': cursorXs.length,
+    if (interactive && cursorXs.isNotEmpty) ...{
+      'chartCursorIndex': safeCursorIndex,
+      'chartCursorX': cursorXs[safeCursorIndex],
+    },
+  });
+}
+
+(double, double) _lineChartExtents(List<LineSeries> series, {required bool x}) {
+  double? lo;
+  double? hi;
+  for (final item in series) {
+    for (final point in item.points) {
+      final value = (x ? point.$1 : point.$2).toDouble();
+      if (!value.isFinite) continue;
+      if (lo == null || value < lo) lo = value;
+      if (hi == null || value > hi) hi = value;
+    }
+  }
+  return (lo ?? 0, hi ?? 1);
+}
+
+(double, double) _effectiveChartRange(
+  (num min, num max)? explicit,
+  (double, double) auto,
+  double padding,
+) {
+  if (explicit != null) {
+    return (explicit.$1.toDouble(), explicit.$2.toDouble());
+  }
+  if (padding <= 0) return auto;
+  final (lo, hi) = auto;
+  final span = hi - lo;
+  if (span <= 0) return auto;
+  final pad = span * padding;
+  return (lo - pad, hi + pad);
 }
 
 class _RawLineChart extends LeafRenderObjectWidget {
@@ -512,98 +642,98 @@ class RenderLineChart extends RenderObject {
   set series(List<LineSeries> v) {
     if (identical(_series, v)) return;
     _series = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   (num min, num max)? _xRange;
   set xRange((num min, num max)? v) {
     if (_xRange == v) return;
     _xRange = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   (num min, num max)? _yRange;
   set yRange((num min, num max)? v) {
     if (_yRange == v) return;
     _yRange = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   double _padding;
   set padding(double v) {
     if (_padding == v) return;
     _padding = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   bool _showAxes;
   set showAxes(bool v) {
     if (_showAxes == v) return;
     _showAxes = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   bool _showGrid;
   set showGrid(bool v) {
     if (_showGrid == v) return;
     _showGrid = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   bool _showLegend;
   set showLegend(bool v) {
     if (_showLegend == v) return;
     _showLegend = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   List<Color> _palette;
   set palette(List<Color> v) {
     if (identical(_palette, v)) return;
     _palette = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   Color _defaultColor;
   set defaultColor(Color v) {
     if (_defaultColor == v) return;
     _defaultColor = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   CellStyle _axisStyle;
   set axisStyle(CellStyle v) {
     if (_axisStyle == v) return;
     _axisStyle = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   TickFormatter _xTickFormat;
   set xTickFormat(TickFormatter v) {
     if (identical(_xTickFormat, v)) return;
     _xTickFormat = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   TickFormatter _yTickFormat;
   set yTickFormat(TickFormatter v) {
     if (identical(_yTickFormat, v)) return;
     _yTickFormat = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   List<ReferenceLine> _references;
   set references(List<ReferenceLine> v) {
     if (identical(_references, v)) return;
     _references = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   num? _cursorX;
   set cursorX(num? v) {
     if (_cursorX == v) return;
     _cursorX = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   @override

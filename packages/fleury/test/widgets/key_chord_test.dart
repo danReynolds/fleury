@@ -1,4 +1,5 @@
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/widgets/key_bindings.dart';
 import 'package:test/test.dart';
 
 KeyEvent _char(

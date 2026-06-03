@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryPeerBenchmarkRun",
+  "runId": "nocterm-sb1-counter-2026-06-01T22-58-15Z",
+  "peerId": "nocterm",
+  "scenarioId": "SB.1",
+  "capturedAt": "2026-06-01T22:58:15.606924Z",
+  "source": {
+    "name": "Nocterm",
+    "version": "0.6.0",
+    "url": "https://pub.dev/packages/nocterm"
+  },
+  "environment": {
+    "machine": "macbookpro.lan",
+    "operatingSystem": "macos",
+    "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+    "runtime": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+    "terminalMode": "nocterm-test-harness",
+    "terminalSize": {
+      "columns": 80,
+      "rows": 24
+    }
+  },
+  "fixture": {
+    "workingDirectory": "peer-fixtures/nocterm/sb1_counter",
+    "command": [
+      "dart",
+      "run",
+      "bin/sb1_counter_benchmark.dart",
+      "--warmup=2",
+      "--iterations=20",
+      "--json"
+    ],
+    "warmupIterations": 2,
+    "measuredIterations": 20
+  },
+  "metrics": {
+    "firstFrameUs": {
+      "min": 168,
+      "median": 245,
+      "p95": 1926,
+      "p99": 2475,
+      "max": 2475,
+      "samples": 20
+    },
+    "commandToFrameUs": {
+      "min": 157,
+      "median": 261,
+      "p95": 2053,
+      "p99": 3390,
+      "max": 3390,
+      "samples": 20
+    },
+    "semanticOrTestQueryUs": {
+      "min": 158,
+      "median": 191,
+      "p95": 2385,
+      "p99": 5461,
+      "max": 5461,
+      "samples": 20
+    },
+    "rssDeltaBytes": 1044480,
+    "lineOfCodeCount": 25,
+    "testLineOfCodeCount": 14
+  },
+  "correctness": [
+    {
+      "gate": "counter text updates correctly",
+      "pass": true
+    },
+    {
+      "gate": "input/action path matches normal app use",
+      "pass": true,
+      "evidence": "NoctermTester.sendKey(LogicalKey.space)"
+    },
+    {
+      "gate": "test shape is documented",
+      "pass": true,
+      "evidence": "test/counter_benchmark_test.dart"
+    }
+  ],
+  "ergonomics": {
+    "lineOfCodeCount": 25,
+    "testLineOfCodeCount": 14,
+    "appFile": "lib/counter_app.dart",
+    "testFile": "test/counter_benchmark_test.dart"
+  },
+  "artifacts": [
+    {
+      "kind": "source",
+      "path": "peer-fixtures/nocterm/sb1_counter/lib/counter_app.dart"
+    },
+    {
+      "kind": "test",
+      "path": "peer-fixtures/nocterm/sb1_counter/test/counter_benchmark_test.dart"
+    }
+  ],
+  "notes": [
+    "This is a Nocterm test-harness peer fixture, not a real-terminal run.",
+    "Timing is local-machine evidence and should not be used as a public superiority claim without repeated peer runs."
+  ]
+}

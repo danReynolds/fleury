@@ -2,7 +2,7 @@
 //
 // Composed of three pieces:
 //   - TextEditingController — a ChangeNotifier holding the current
-//     text and the cursor's code-unit index.
+//     TextEditingValue and compatibility text/cursor accessors.
 //   - TextInput — the widget. Creates a Focus node tagged as a
 //     TextInputClaimant, so the InputDispatcher routes
 //     TextInputEvents (typed printable text) directly to it. Handles
@@ -13,18 +13,19 @@
 // What's intentionally not here yet:
 //   - Multi-line text (Enter inserts a newline + wraps); v0 is
 //     single-line and Enter calls onSubmit.
-//   - Grapheme-cluster-aware cursor movement. v0 uses code-unit
-//     indices, which works for ASCII / BMP characters but can split
-//     emoji surrogate pairs. Documented; promoted to grapheme-
-//     indexed editing in a polish slice.
-//   - Horizontal scrolling for text longer than the available width.
-//     v0 clips at the right edge; the cursor disappears off-screen.
-//   - Selection ranges (only a single cursor index).
+//   - Command/submission history unless a TextHistoryController is supplied.
+
+import 'dart:async' show scheduleMicrotask, unawaited;
 
 import 'package:characters/characters.dart';
 
 import '../animation/animation_policy.dart';
 import '../animation/frame_ticker.dart';
+import '../editing/text_completion.dart';
+import '../editing/text_editing.dart';
+import '../editing/text_history.dart';
+import '../editing/text_keymap.dart';
+import '../editing/text_paste.dart';
 import '../foundation/change_notifier.dart';
 import '../foundation/geometry.dart';
 import '../rendering/cell.dart';
@@ -33,99 +34,402 @@ import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
 import '../rendering/text_sanitizer.dart';
 import '../rendering/width_resolver.dart';
+import '../runtime/clipboard.dart';
+import '../semantics/semantics.dart';
+import '../terminal/capabilities.dart';
+import '../terminal/capability_requirements.dart';
 import '../terminal/events.dart';
 import 'focus.dart';
 import 'framework.dart';
 import 'tui_binding.dart';
 
-/// Mutable model for a [TextInput]: the current text and cursor
-/// position.
+/// How an editable text widget should treat copy/cut operations.
 ///
-/// `selection` is a **code-unit index** into [text] (0 = before
-/// the first code unit, `text.length` = after the last). For ASCII
-/// and BMP characters this is the same as grapheme-cluster
-/// indexing; emoji and other supplementary-plane characters can
-/// theoretically be split with the v0 API.
+/// Field-level copy/cut commands use this policy so keyboard behavior,
+/// semantics, inspectors, and future adapters agree on whether field content
+/// is safe to copy.
+enum TextClipboardPolicy {
+  /// Plain text may be copied unchanged.
+  allowed,
+
+  /// Copy/cut commands should be unavailable for this field.
+  disabled,
+
+  /// Copy/cut commands should not expose the raw value.
+  redacted,
+}
+
+CapabilityResolution resolveTextClipboardPolicy(TextClipboardPolicy policy) {
+  return resolveCapabilityRequirement(
+    const CapabilityRequirement(
+      feature: TerminalFeature.clipboardWrite,
+      level: CapabilityLevel.preferred,
+      reason: 'Copy selected editable text.',
+      fallback: CapabilityFallback(label: 'in-process register'),
+    ),
+    TerminalCapabilities.defaultCapabilities,
+    policyBlockedFeatures: policy == TextClipboardPolicy.disabled
+        ? const <TerminalFeature>{TerminalFeature.clipboardWrite}
+        : const <TerminalFeature>{},
+  );
+}
+
+Map<String, Object?> textClipboardSemanticState(TextClipboardPolicy policy) {
+  final resolution = resolveTextClipboardPolicy(policy);
+  return <String, Object?>{
+    'clipboardPolicy': policy.name,
+    'clipboardCapability': resolution.feature.name,
+    'clipboardCapabilityResolution': resolution.state.name,
+    if (resolution.fallbackLabel != null)
+      'clipboardFallback': resolution.fallbackLabel,
+    'clipboardRedacted': policy == TextClipboardPolicy.redacted,
+  };
+}
+
+enum _EditTransaction { edit, typing, paste }
+
+/// Mutable model for text input widgets.
+///
+/// The compatibility [selection] accessor remains a Dart string offset, but
+/// writes and editing operations snap to extended-grapheme boundaries. This
+/// prevents cursor movement and deletion from splitting emoji, combining
+/// marks, or other multi-code-unit user-perceived characters.
 class TextEditingController extends ChangeNotifier {
   TextEditingController({String text = ''})
-    : _text = text,
-      _selection = text.length;
+    : _value = TextEditingValue(text: text);
 
-  String _text;
-  int _selection;
+  static const int _maxHistoryEntries = 200;
 
-  String get text => _text;
-  set text(String value) {
-    if (_text == value) return;
-    _text = value;
-    _selection = _selection.clamp(0, value.length);
-    notifyListeners();
+  TextEditingValue _value;
+  TextEditingValue? _compositionBase;
+  final List<TextEditingValue> _undoStack = <TextEditingValue>[];
+  final List<TextEditingValue> _redoStack = <TextEditingValue>[];
+  _EditTransaction? _lastTransaction;
+  bool _disposed = false;
+
+  TextEditingValue get value => _value;
+  set value(TextEditingValue next) => _setValue(next, resetHistory: true);
+
+  String get text => _value.text;
+  set text(String text) {
+    _setValue(_value.copyWith(text: text), resetHistory: true);
   }
 
-  /// Cursor index in code units. Always in `0..text.length`.
-  int get selection => _selection;
-  set selection(int value) {
-    final clamped = value.clamp(0, _text.length);
-    if (_selection == clamped) return;
-    _selection = clamped;
-    notifyListeners();
+  /// Cursor index as a Dart string offset. Always snapped to a grapheme
+  /// boundary within `0..text.length`.
+  int get selection => _value.selection.extentOffset;
+  set selection(int offset) {
+    _setValue(_value.copyWith(selection: TextSelection.collapsed(offset)));
+  }
+
+  TextSelection get textSelection => _value.selection;
+  set textSelection(TextSelection selection) {
+    _setValue(_value.copyWith(selection: selection));
+  }
+
+  TextRange get composing => _value.composing;
+  bool get hasComposingRange => !_value.composing.isCollapsed;
+  bool get canUndo => _undoStack.isNotEmpty;
+  bool get canRedo => _redoStack.isNotEmpty;
+  bool get hasSelection => !_value.selection.isCollapsed;
+
+  String get selectedText {
+    if (!hasSelection) return '';
+    final range = _value.selection.range.clamp(_value.text.length);
+    return _value.text.substring(range.normalizedStart, range.normalizedEnd);
   }
 
   void clear() {
-    if (_text.isEmpty && _selection == 0) return;
-    _text = '';
-    _selection = 0;
-    notifyListeners();
+    _checkNotDisposed();
+    _applyEdit(TextEditingValue.empty());
   }
 
   /// Inserts [s] at the current cursor and advances the cursor past
   /// the inserted text. No-op if [s] is empty.
-  void insert(String s) {
-    if (s.isEmpty) return;
-    _text = _text.substring(0, _selection) + s + _text.substring(_selection);
-    _selection += s.length;
-    notifyListeners();
+  ///
+  /// When [coalesce] is true, consecutive text-changing inserts are recorded
+  /// as one undo transaction until cursor movement or another edit type breaks
+  /// the run. Text widgets use this for typed input.
+  void insert(String s, {bool singleLine = false, bool coalesce = false}) {
+    _checkNotDisposed();
+    _applyEdit(
+      TextEditingModel.insert(_value, s, singleLine: singleLine),
+      transaction: coalesce ? _EditTransaction.typing : _EditTransaction.edit,
+    );
+  }
+
+  /// Inserts bracketed paste content as one undoable transaction.
+  void paste(String s, {bool singleLine = false, bool coalesce = false}) {
+    _checkNotDisposed();
+    _applyEdit(
+      TextEditingModel.insert(_value, s, singleLine: singleLine),
+      transaction: _EditTransaction.paste,
+      coalesceWithPrevious: coalesce,
+    );
   }
 
   /// Deletes the character before the cursor and moves the cursor
   /// left. No-op when the cursor is at the start.
   void backspace() {
-    if (_selection == 0) return;
-    _text = _text.substring(0, _selection - 1) + _text.substring(_selection);
-    _selection -= 1;
-    notifyListeners();
+    _checkNotDisposed();
+    _applyEdit(TextEditingModel.backspace(_value));
   }
 
   /// Deletes the character at the cursor (the one to its right).
   /// No-op when the cursor is at the end.
   void delete() {
-    if (_selection >= _text.length) return;
-    _text = _text.substring(0, _selection) + _text.substring(_selection + 1);
+    _checkNotDisposed();
+    _applyEdit(TextEditingModel.delete(_value));
+  }
+
+  void deleteSelection() {
+    _checkNotDisposed();
+    if (!hasSelection) return;
+    _applyEdit(TextEditingModel.replaceSelection(_value, ''));
+  }
+
+  void replaceRange(
+    TextRange range,
+    String replacement, {
+    bool singleLine = false,
+  }) {
+    _checkNotDisposed();
+    _applyEdit(
+      TextEditingModel.replaceRange(
+        _value,
+        range,
+        replacement,
+        singleLine: singleLine,
+      ),
+    );
+  }
+
+  /// Marks [range] as the current composing range without changing text.
+  ///
+  /// This is intentionally an extension point for input-method adapters, not a
+  /// terminal protocol implementation. The first composition change captures a
+  /// base value so the composition can later be committed as one undo step or
+  /// cancelled back to its original value.
+  void setComposingRange(TextRange range) {
+    _checkNotDisposed();
+    _compositionBase ??= TextEditingModel.clearComposing(_value);
+    _setValue(TextEditingModel.setComposingRange(_value, range));
+  }
+
+  /// Clears the visible composing range without changing the text.
+  void clearComposing() {
+    _checkNotDisposed();
+    final next = TextEditingModel.clearComposing(_value);
+    _compositionBase = null;
+    _setValue(next);
+  }
+
+  /// Replaces the active composing range with [text].
+  ///
+  /// Interim composition updates are deliberately not undoable. A later
+  /// [commitComposing] records the full composition as one undo transaction.
+  void updateComposingText(String text, {bool singleLine = false}) {
+    _checkNotDisposed();
+    _compositionBase ??= TextEditingModel.clearComposing(_value);
+    final next = TextEditingModel.updateComposing(
+      _value,
+      text,
+      singleLine: singleLine,
+    );
+    _lastTransaction = null;
+    _setValue(next, clearTransaction: false);
+  }
+
+  /// Commits the active composition.
+  ///
+  /// If [text] is supplied, it replaces the composing range before the commit.
+  /// The completed composition is recorded as one undoable edit against the
+  /// value captured before composition began.
+  void commitComposing({String? text, bool singleLine = false}) {
+    _checkNotDisposed();
+    final base = _compositionBase;
+    if (base == null) {
+      final next = TextEditingModel.commitComposing(
+        _value,
+        text: text,
+        singleLine: singleLine,
+      );
+      if (text == null) {
+        _setValue(next);
+      } else {
+        _applyEdit(next);
+      }
+      return;
+    }
+
+    final next = TextEditingModel.commitComposing(
+      _value,
+      text: text,
+      singleLine: singleLine,
+    );
+    _compositionBase = null;
+    if (next.text != base.text) {
+      _pushUndoValue(base);
+      _redoStack.clear();
+      _lastTransaction = _EditTransaction.edit;
+    } else {
+      _lastTransaction = null;
+    }
+    _setValue(next, clearTransaction: false);
+  }
+
+  /// Cancels the active composition and restores the pre-composition value.
+  void cancelComposing() {
+    _checkNotDisposed();
+    final base = _compositionBase;
+    _compositionBase = null;
+    _lastTransaction = null;
+    if (base != null) {
+      _setValue(base);
+    } else {
+      _setValue(TextEditingModel.clearComposing(_value));
+    }
+  }
+
+  void moveCursorLeft({bool extend = false}) {
+    _checkNotDisposed();
+    _setValue(TextEditingModel.moveLeft(_value, extend: extend));
+  }
+
+  void moveCursorRight({bool extend = false}) {
+    _checkNotDisposed();
+    _setValue(TextEditingModel.moveRight(_value, extend: extend));
+  }
+
+  void moveCursorWordLeft({bool extend = false}) {
+    _checkNotDisposed();
+    _setValue(TextEditingModel.moveWordLeft(_value, extend: extend));
+  }
+
+  void moveCursorWordRight({bool extend = false}) {
+    _checkNotDisposed();
+    _setValue(TextEditingModel.moveWordRight(_value, extend: extend));
+  }
+
+  void moveCursorToStart({bool extend = false}) {
+    _checkNotDisposed();
+    _setValue(TextEditingModel.moveToStart(_value, extend: extend));
+  }
+
+  void moveCursorToEnd({bool extend = false}) {
+    _checkNotDisposed();
+    _setValue(TextEditingModel.moveToEnd(_value, extend: extend));
+  }
+
+  void moveCursorToLineStart({bool extend = false}) {
+    _checkNotDisposed();
+    _setValue(TextEditingModel.moveToLineStart(_value, extend: extend));
+  }
+
+  void moveCursorToLineEnd({bool extend = false}) {
+    _checkNotDisposed();
+    _setValue(TextEditingModel.moveToLineEnd(_value, extend: extend));
+  }
+
+  void moveCursorLineUp({bool extend = false}) {
+    _checkNotDisposed();
+    _setValue(TextEditingModel.moveLineUp(_value, extend: extend));
+  }
+
+  void moveCursorLineDown({bool extend = false}) {
+    _checkNotDisposed();
+    _setValue(TextEditingModel.moveLineDown(_value, extend: extend));
+  }
+
+  void undo() {
+    _checkNotDisposed();
+    if (_compositionBase != null) {
+      cancelComposing();
+      return;
+    }
+    if (_undoStack.isEmpty) return;
+    _redoStack.add(_value);
+    _lastTransaction = null;
+    _setValue(_undoStack.removeLast());
+  }
+
+  void redo() {
+    _checkNotDisposed();
+    if (_compositionBase != null) {
+      cancelComposing();
+      return;
+    }
+    if (_redoStack.isEmpty) return;
+    _undoStack.add(_value);
+    _lastTransaction = null;
+    _setValue(_redoStack.removeLast());
+  }
+
+  void _pushUndoValue(TextEditingValue value) {
+    _undoStack.add(value);
+    if (_undoStack.length > _maxHistoryEntries) {
+      _undoStack.removeAt(0);
+    }
+  }
+
+  void _applyEdit(
+    TextEditingValue next, {
+    _EditTransaction transaction = _EditTransaction.edit,
+    bool coalesceWithPrevious = false,
+  }) {
+    _checkNotDisposed();
+    if (_value == next) return;
+    _compositionBase = null;
+    if (_value.text != next.text) {
+      final shouldCoalesce =
+          (transaction == _EditTransaction.typing &&
+              _lastTransaction == _EditTransaction.typing) ||
+          (coalesceWithPrevious && _lastTransaction == transaction);
+      if (!shouldCoalesce) {
+        _pushUndoValue(_value);
+      }
+      _redoStack.clear();
+      _lastTransaction = transaction;
+    } else {
+      _lastTransaction = null;
+    }
+    _setValue(next, clearTransaction: false);
+  }
+
+  void _setValue(
+    TextEditingValue next, {
+    bool resetHistory = false,
+    bool clearTransaction = true,
+  }) {
+    _checkNotDisposed();
+    if (_value == next) return;
+    _value = next;
+    if (resetHistory) {
+      _compositionBase = null;
+      _undoStack.clear();
+      _redoStack.clear();
+    }
+    if (resetHistory || clearTransaction) {
+      _lastTransaction = null;
+    }
     notifyListeners();
   }
 
-  void moveCursorLeft() {
-    if (_selection == 0) return;
-    _selection -= 1;
-    notifyListeners();
+  void _checkNotDisposed() {
+    if (_disposed) {
+      throw StateError('TextEditingController has been disposed.');
+    }
   }
 
-  void moveCursorRight() {
-    if (_selection >= _text.length) return;
-    _selection += 1;
-    notifyListeners();
-  }
-
-  void moveCursorToStart() {
-    if (_selection == 0) return;
-    _selection = 0;
-    notifyListeners();
-  }
-
-  void moveCursorToEnd() {
-    if (_selection == _text.length) return;
-    _selection = _text.length;
-    notifyListeners();
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _compositionBase = null;
+    _undoStack.clear();
+    _redoStack.clear();
+    _lastTransaction = null;
+    super.dispose();
   }
 }
 
@@ -160,6 +464,18 @@ class TextInput extends StatefulWidget {
     this.enableBlink = true,
     this.obscureText = false,
     this.obscuringCharacter = '•',
+    this.enabled = true,
+    this.readOnly = false,
+    this.validationError,
+    this.semanticLabel,
+    this.semanticState = SemanticState.empty,
+    this.clipboardPolicy,
+    this.historyController,
+    this.commitHistoryOnSubmit = true,
+    this.completionController,
+    this.onCompletionAccepted,
+    this.keymap = TextEditingKeymap.defaultSingleLine,
+    this.pastePolicy = const TextPastePolicy(),
   });
 
   /// External controller for the text. If null, the widget creates
@@ -215,6 +531,66 @@ class TextInput extends StatefulWidget {
   /// true. Defaults to `•`.
   final String obscuringCharacter;
 
+  /// Whether the field can receive focus and handle input.
+  final bool enabled;
+
+  /// Whether the field can receive focus but refuses text mutations.
+  ///
+  /// Cursor movement and submit/escape callbacks still work while read-only.
+  final bool readOnly;
+
+  /// Validation error attached to the current value.
+  ///
+  /// Fleury does not run validators inside the widget yet; apps can compute
+  /// validation externally and pass the current error here for semantics,
+  /// tests, and inspector/debug surfaces.
+  final String? validationError;
+
+  /// Label exposed through the semantic app graph.
+  ///
+  /// When omitted, [placeholder] is used as the field label when non-empty.
+  /// Use this when a visible form label sits outside the field or the
+  /// placeholder is example text rather than the durable field name.
+  final String? semanticLabel;
+
+  /// Extra semantic state merged into the text-field node.
+  ///
+  /// Specialized fields can use this to expose stable domain facts such as
+  /// numeric bounds while keeping the core text editing role and actions.
+  final SemanticState semanticState;
+
+  /// Policy future copy/cut actions should use for this field.
+  ///
+  /// When null, obscured fields default to [TextClipboardPolicy.redacted] and
+  /// normal fields default to [TextClipboardPolicy.allowed].
+  final TextClipboardPolicy? clipboardPolicy;
+
+  /// Optional command/submission history for Up/Down navigation.
+  ///
+  /// History is opt-in so fields embedded in palettes, autocompletes, and
+  /// other parent-owned navigation surfaces keep bubbling Up/Down by default.
+  final TextHistoryController? historyController;
+
+  /// Whether pressing Enter should commit the submitted value to
+  /// [historyController] before [onSubmit] runs.
+  final bool commitHistoryOnSubmit;
+
+  /// Optional completion state for this field.
+  ///
+  /// Popup rendering and suggestion providers are layered separately. When a
+  /// controller is supplied, this field can navigate active completion options
+  /// with Up/Down and accept the selected option with Tab.
+  final TextCompletionController? completionController;
+
+  /// Called after a selected completion option is applied.
+  final void Function(TextCompletionOption option)? onCompletionAccepted;
+
+  /// Keymap used to resolve non-text key events into editing actions.
+  final TextEditingKeymap keymap;
+
+  /// Policy for chunking large bracketed paste payloads.
+  final TextPastePolicy pastePolicy;
+
   @override
   State<TextInput> createState() => _TextInputState();
 }
@@ -224,6 +600,9 @@ class _TextInputState extends State<TextInput> implements TextInputClaimant {
   late FocusNode _focusNode;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
+  TextPasteSession? _pasteSession;
+  TextPasteProgress _pasteProgress = TextPasteProgress.inactive;
+  int _pasteGeneration = 0;
 
   /// Blink ticker — lazily created in [didChangeDependencies]
   /// because we need a `TuiBinding` to source the scheduler, which
@@ -244,12 +623,16 @@ class _TextInputState extends State<TextInput> implements TextInputClaimant {
     _controller = widget.controller ?? TextEditingController();
     _ownsController = widget.controller == null;
     _controller.addListener(_onControllerChange);
+    widget.historyController?.addListener(_onHistoryChange);
+    widget.completionController?.addListener(_onCompletionChange);
     // Note: don't set _focusNode.onKey here — the Focus widget's
     // State.initState assigns onKey from `widget.onKey`, overwriting
     // anything we set. We pass `_handleKey` to the Focus widget
     // below instead. We do set `textInputClaimant` since the Focus
     // widget never touches it.
-    _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'TextInput');
+    _focusNode =
+        widget.focusNode ??
+        FocusNode(debugLabel: 'TextInput', canRequestFocus: widget.enabled);
     _focusNode.textInputClaimant = this;
     _ownsFocusNode = widget.focusNode == null;
   }
@@ -258,19 +641,41 @@ class _TextInputState extends State<TextInput> implements TextInputClaimant {
   void didUpdateWidget(TextInput oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
+      _cancelScheduledPaste();
       _controller.removeListener(_onControllerChange);
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? TextEditingController();
       _ownsController = widget.controller == null;
       _controller.addListener(_onControllerChange);
     }
+    if (widget.historyController != oldWidget.historyController) {
+      oldWidget.historyController?.removeListener(_onHistoryChange);
+      widget.historyController?.addListener(_onHistoryChange);
+    }
+    if (widget.completionController != oldWidget.completionController) {
+      oldWidget.completionController?.removeListener(_onCompletionChange);
+      widget.completionController?.addListener(_onCompletionChange);
+    }
     if (widget.focusNode != oldWidget.focusNode) {
       // Stop claiming text on the old node before letting it go.
       _focusNode.textInputClaimant = null;
       if (_ownsFocusNode) _focusNode.dispose();
-      _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'TextInput');
+      _focusNode =
+          widget.focusNode ??
+          FocusNode(debugLabel: 'TextInput', canRequestFocus: widget.enabled);
       _focusNode.textInputClaimant = this;
       _ownsFocusNode = widget.focusNode == null;
+    }
+    if (_ownsFocusNode) {
+      _focusNode.canRequestFocus = widget.enabled;
+      if (!widget.enabled && _focusNode.hasFocus) {
+        _focusNode.unfocus();
+      }
+    }
+    if ((!widget.enabled || widget.readOnly) &&
+        (oldWidget.enabled != widget.enabled ||
+            oldWidget.readOnly != widget.readOnly)) {
+      _cancelScheduledPaste();
     }
     if (widget.blinkInterval != oldWidget.blinkInterval ||
         widget.enableBlink != oldWidget.enableBlink) {
@@ -353,56 +758,322 @@ class _TextInputState extends State<TextInput> implements TextInputClaimant {
     });
   }
 
+  void _onHistoryChange() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  void _onCompletionChange() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  bool get _canEdit => widget.enabled && !widget.readOnly;
+
+  TextClipboardPolicy get _effectiveClipboardPolicy =>
+      widget.clipboardPolicy ??
+      (widget.obscureText
+          ? TextClipboardPolicy.redacted
+          : TextClipboardPolicy.allowed);
+
+  bool get _redactSemanticValue =>
+      widget.obscureText ||
+      _effectiveClipboardPolicy == TextClipboardPolicy.redacted;
+
+  Object? get _semanticValue => _redactSemanticValue ? null : _controller.text;
+
+  String _redactClipboardText(String text) {
+    return text.characters
+        .map((grapheme) => grapheme == '\n' ? '\n' : widget.obscuringCharacter)
+        .join();
+  }
+
+  void _resetHistoryBrowsing() {
+    widget.historyController?.resetBrowsing();
+  }
+
+  void _cancelScheduledPaste() {
+    _pasteGeneration++;
+    _pasteSession = null;
+    _pasteProgress = TextPasteProgress.inactive;
+  }
+
+  void _startPaste(String text) {
+    _cancelScheduledPaste();
+    if (text.isEmpty) return;
+
+    if (!widget.pastePolicy.shouldChunk(text)) {
+      _controller.paste(text);
+      return;
+    }
+
+    final generation = _pasteGeneration;
+    _pasteSession = TextPasteSession(text: text, policy: widget.pastePolicy);
+    _applyNextPasteChunk(generation, firstChunk: true);
+  }
+
+  void _applyNextPasteChunk(int generation, {required bool firstChunk}) {
+    if (!mounted || generation != _pasteGeneration) return;
+    final session = _pasteSession;
+    if (session == null) return;
+    final chunk = session.nextChunk();
+    if (chunk == null) {
+      _finishScheduledPaste(generation);
+      return;
+    }
+
+    _controller.paste(chunk, coalesce: !firstChunk);
+    _pasteProgress = session.progress;
+    if (session.isComplete) {
+      _finishScheduledPaste(generation);
+      return;
+    }
+    setState(() {});
+    _scheduleNextPasteChunk(generation);
+  }
+
+  void _finishScheduledPaste(int generation) {
+    if (generation != _pasteGeneration) return;
+    _pasteSession = null;
+    _pasteProgress = TextPasteProgress.inactive;
+    if (mounted) setState(() {});
+  }
+
+  void _scheduleNextPasteChunk(int generation) {
+    final binding = TuiBinding.maybeOf(context);
+    if (binding == null) {
+      scheduleMicrotask(() {
+        _applyNextPasteChunk(generation, firstChunk: false);
+      });
+      return;
+    }
+    binding.addPostFrameCallback((_) {
+      _applyNextPasteChunk(generation, firstChunk: false);
+    });
+  }
+
+  bool _completionIsOpenWithOptions() {
+    final completion = widget.completionController;
+    return completion != null &&
+        completion.isOpen &&
+        completion.selectedOption != null;
+  }
+
+  KeyEventResult _acceptCompletion() {
+    final completion = widget.completionController;
+    if (completion == null || !completion.isOpen) return KeyEventResult.ignored;
+    final state = completion.state;
+    final option = state.selectedOption;
+    if (option == null) return KeyEventResult.ignored;
+    if (!_canEdit) {
+      return widget.enabled ? KeyEventResult.handled : KeyEventResult.ignored;
+    }
+    _cancelScheduledPaste();
+    _resetHistoryBrowsing();
+    _controller.replaceRange(state.range, option.replacement, singleLine: true);
+    completion.close();
+    widget.onCompletionAccepted?.call(option);
+    return KeyEventResult.handled;
+  }
+
+  KeyEventResult _moveCompletion(int delta) {
+    final completion = widget.completionController;
+    if (completion == null || !completion.isOpen) return KeyEventResult.ignored;
+    if (completion.state.options.isEmpty) return KeyEventResult.ignored;
+    completion.moveSelection(delta);
+    return KeyEventResult.handled;
+  }
+
+  KeyEventResult _navigateHistory({required bool previous}) {
+    final history = widget.historyController;
+    if (history == null) return KeyEventResult.ignored;
+    if (!_canEdit) {
+      return widget.enabled ? KeyEventResult.handled : KeyEventResult.ignored;
+    }
+    final next = previous
+        ? history.navigatePrevious(_controller.value)
+        : history.navigateNext();
+    if (next == null) return KeyEventResult.ignored;
+    _cancelScheduledPaste();
+    _controller.value = next;
+    return KeyEventResult.handled;
+  }
+
+  KeyEventResult _copyOrCutSelection({required bool cut}) {
+    if (!widget.enabled) return KeyEventResult.ignored;
+    final selected = _controller.selectedText;
+    if (selected.isEmpty) return KeyEventResult.ignored;
+    if (cut && !_canEdit) return KeyEventResult.handled;
+
+    switch (_effectiveClipboardPolicy) {
+      case TextClipboardPolicy.allowed:
+        unawaited(Clipboard.instance.write(selected));
+        break;
+      case TextClipboardPolicy.redacted:
+        unawaited(Clipboard.instance.write(_redactClipboardText(selected)));
+        break;
+      case TextClipboardPolicy.disabled:
+        return KeyEventResult.handled;
+    }
+    if (cut) {
+      _cancelScheduledPaste();
+      _resetHistoryBrowsing();
+      _controller.deleteSelection();
+    }
+    return KeyEventResult.handled;
+  }
+
+  KeyEventResult _submitCurrentText() {
+    _cancelScheduledPaste();
+    final text = _controller.text;
+    if (widget.onSubmit != null &&
+        widget.commitHistoryOnSubmit &&
+        widget.historyController != null) {
+      widget.historyController!.commit(text);
+    } else {
+      widget.historyController?.resetBrowsing();
+    }
+    widget.onSubmit?.call(text);
+    return KeyEventResult.handled;
+  }
+
+  void _handleSemanticAction(SemanticAction action) {
+    switch (action) {
+      case SemanticAction.focus:
+        if (widget.enabled) _focusNode.requestFocus();
+        return;
+      case SemanticAction.clear:
+        if (_canEdit) {
+          _cancelScheduledPaste();
+          _resetHistoryBrowsing();
+          _controller.clear();
+        }
+        return;
+      case SemanticAction.copy:
+        _copyOrCutSelection(cut: false);
+        return;
+      case SemanticAction.submit:
+        if (widget.enabled && widget.onSubmit != null) {
+          _submitCurrentText();
+        }
+        return;
+      case _:
+        return;
+    }
+  }
+
   KeyEventResult _handleKey(KeyEvent event) {
-    final code = event.keyCode;
-    if (code == null) return KeyEventResult.ignored;
-    switch (code) {
-      case KeyCode.backspace:
+    if (!widget.enabled) return KeyEventResult.ignored;
+    final action = widget.keymap.resolve(event);
+    if (action == null) return KeyEventResult.ignored;
+    switch (action) {
+      case TextEditingKeyAction.copy:
+        return _copyOrCutSelection(cut: false);
+      case TextEditingKeyAction.cut:
+        return _copyOrCutSelection(cut: true);
+      case TextEditingKeyAction.undo:
+        if (widget.readOnly) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _resetHistoryBrowsing();
+        _controller.undo();
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.redo:
+        if (widget.readOnly) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _resetHistoryBrowsing();
+        _controller.redo();
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.backspace:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _resetHistoryBrowsing();
         _controller.backspace();
         return KeyEventResult.handled;
-      case KeyCode.delete:
+      case TextEditingKeyAction.deleteForward:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _resetHistoryBrowsing();
         _controller.delete();
         return KeyEventResult.handled;
-      case KeyCode.arrowLeft:
-        _controller.moveCursorLeft();
+      case TextEditingKeyAction.moveLeft:
+        _cancelScheduledPaste();
+        _controller.moveCursorLeft(extend: event.hasShift);
         return KeyEventResult.handled;
-      case KeyCode.arrowRight:
-        _controller.moveCursorRight();
+      case TextEditingKeyAction.moveRight:
+        _cancelScheduledPaste();
+        _controller.moveCursorRight(extend: event.hasShift);
         return KeyEventResult.handled;
-      case KeyCode.home:
-        _controller.moveCursorToStart();
+      case TextEditingKeyAction.moveWordLeft:
+        _cancelScheduledPaste();
+        _controller.moveCursorWordLeft(extend: event.hasShift);
         return KeyEventResult.handled;
-      case KeyCode.end:
-        _controller.moveCursorToEnd();
+      case TextEditingKeyAction.moveWordRight:
+        _cancelScheduledPaste();
+        _controller.moveCursorWordRight(extend: event.hasShift);
         return KeyEventResult.handled;
-      case KeyCode.enter:
-        widget.onSubmit?.call(_controller.text);
+      case TextEditingKeyAction.previousVertical:
+        if (_completionIsOpenWithOptions()) return _moveCompletion(-1);
+        return _navigateHistory(previous: true);
+      case TextEditingKeyAction.nextVertical:
+        if (_completionIsOpenWithOptions()) return _moveCompletion(1);
+        return _navigateHistory(previous: false);
+      case TextEditingKeyAction.acceptCompletion:
+        return _acceptCompletion();
+      case TextEditingKeyAction.moveDocumentStart:
+        _cancelScheduledPaste();
+        _controller.moveCursorToStart(extend: event.hasShift);
         return KeyEventResult.handled;
-      case KeyCode.escape:
+      case TextEditingKeyAction.moveDocumentEnd:
+        _cancelScheduledPaste();
+        _controller.moveCursorToEnd(extend: event.hasShift);
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.submit:
+        return _submitCurrentText();
+      case TextEditingKeyAction.escape:
+        final completion = widget.completionController;
+        if (completion != null && completion.isOpen) {
+          completion.close();
+          return KeyEventResult.handled;
+        }
         if (widget.onEscape != null) {
           widget.onEscape!();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
-      default:
+      case TextEditingKeyAction.moveUp:
+      case TextEditingKeyAction.moveDown:
+      case TextEditingKeyAction.moveLineStart:
+      case TextEditingKeyAction.moveLineEnd:
+      case TextEditingKeyAction.insertNewline:
         return KeyEventResult.ignored;
     }
   }
 
   @override
   KeyEventResult onTextInput(String text) {
-    // Single-line field: a pasted blob may carry newlines — collapse them
-    // to spaces so the value stays on one line (typed input never has any).
-    final flat = text.contains('\n') || text.contains('\r')
-        ? text.replaceAll('\r\n', ' ').replaceAll(RegExp('[\n\r]'), ' ')
-        : text;
-    _controller.insert(flat);
+    if (!widget.enabled) return KeyEventResult.ignored;
+    if (widget.readOnly) return KeyEventResult.handled;
+    _cancelScheduledPaste();
+    _resetHistoryBrowsing();
+    _controller.insert(text, singleLine: true, coalesce: true);
+    return KeyEventResult.handled;
+  }
+
+  @override
+  KeyEventResult onPaste(String text) {
+    if (!widget.enabled) return KeyEventResult.ignored;
+    if (widget.readOnly) return KeyEventResult.handled;
+    _resetHistoryBrowsing();
+    _startPaste(TextEditingModel.normalizeSingleLineInput(text));
     return KeyEventResult.handled;
   }
 
   @override
   void dispose() {
     _disposeBlinkTicker();
+    _cancelScheduledPaste();
+    widget.historyController?.removeListener(_onHistoryChange);
+    widget.completionController?.removeListener(_onCompletionChange);
     _controller.removeListener(_onControllerChange);
     if (_ownsController) _controller.dispose();
     _focusNode.textInputClaimant = null;
@@ -417,20 +1088,81 @@ class _TextInputState extends State<TextInput> implements TextInputClaimant {
     // _blinkOn; when unfocused we suppress the cursor entirely.
     final focused = _focusNode.hasFocus;
     final cursorVisible = focused && (!widget.enableBlink || _blinkOn);
-    return Focus(
-      focusNode: _focusNode,
-      autofocus: widget.autofocus,
-      onKey: _handleKey,
-      child: _TextInputDisplay(
-        text: _controller.text,
-        selection: _controller.selection,
-        placeholder: widget.placeholder,
-        placeholderStyle: widget.placeholderStyle,
-        style: widget.style,
-        cursorStyle: widget.cursorStyle,
-        cursorVisible: cursorVisible,
-        obscureText: widget.obscureText,
-        obscuringCharacter: widget.obscuringCharacter,
+    final history = widget.historyController;
+    final completion = widget.completionController;
+    final completionState = completion?.state;
+    return Semantics(
+      role: SemanticRole.textField,
+      label:
+          widget.semanticLabel ??
+          (widget.placeholder.isEmpty ? null : widget.placeholder),
+      value: _semanticValue,
+      enabled: widget.enabled,
+      focused: focused,
+      validationError: widget.validationError,
+      actions: {
+        if (widget.enabled) SemanticAction.focus,
+        if (widget.enabled && !widget.readOnly) SemanticAction.clear,
+        if (widget.enabled &&
+            _controller.hasSelection &&
+            _effectiveClipboardPolicy != TextClipboardPolicy.disabled)
+          SemanticAction.copy,
+        if (widget.enabled && widget.onSubmit != null) SemanticAction.submit,
+      },
+      state: widget.semanticState.merge({
+        'selectionBase': _controller.textSelection.baseOffset,
+        'selectionExtent': _controller.textSelection.extentOffset,
+        'composingActive': _controller.hasComposingRange,
+        'composingStart': _controller.composing.normalizedStart,
+        'composingEnd': _controller.composing.normalizedEnd,
+        'readOnly': widget.readOnly,
+        'obscureText': widget.obscureText,
+        'redactedValue': _redactSemanticValue,
+        ...textClipboardSemanticState(_effectiveClipboardPolicy),
+        if (history != null) 'historyCount': history.length,
+        if (history != null && history.selectedIndex != null)
+          'historyIndex': history.selectedIndex,
+        if (history != null) 'historyBrowsing': history.isBrowsing,
+        if (completionState != null) 'completionActive': completionState.active,
+        if (completionState != null &&
+            completionState.active &&
+            !_redactSemanticValue)
+          'completionQuery': completionState.query,
+        if (completionState != null && completionState.active)
+          'completionRangeStart': completionState.range.normalizedStart,
+        if (completionState != null && completionState.active)
+          'completionRangeEnd': completionState.range.normalizedEnd,
+        if (completionState != null && completionState.active)
+          'completionOptionCount': completionState.options.length,
+        if (completionState != null &&
+            completionState.active &&
+            completionState.selectedIndex != null)
+          'completionSelectedIndex': completionState.selectedIndex,
+        'pasteInProgress': _pasteProgress.active,
+        'pasteInsertedLength': _pasteProgress.insertedLength,
+        'pasteTotalLength': _pasteProgress.totalLength,
+      }),
+      onAction: _handleSemanticAction,
+      child: Focus(
+        focusNode: _focusNode,
+        autofocus: widget.autofocus && widget.enabled,
+        canRequestFocus: widget.enabled,
+        onKey: _handleKey,
+        child: _TextInputDisplay(
+          text: _controller.text,
+          selection: _controller.textSelection,
+          placeholder: widget.placeholder,
+          placeholderStyle: widget.enabled
+              ? widget.placeholderStyle
+              : widget.placeholderStyle.merge(const CellStyle(dim: true)),
+          style: widget.enabled
+              ? widget.style
+              : widget.style.merge(const CellStyle(dim: true)),
+          cursorStyle: widget.cursorStyle,
+          cursorVisible: cursorVisible,
+          obscureText: widget.obscureText,
+          obscuringCharacter: widget.obscuringCharacter,
+        ),
       ),
     );
   }
@@ -450,7 +1182,7 @@ class _TextInputDisplay extends LeafRenderObjectWidget {
   });
 
   final String text;
-  final int selection;
+  final TextSelection selection;
   final String placeholder;
   final CellStyle placeholderStyle;
   final CellStyle style;
@@ -500,7 +1232,7 @@ class _TextInputDisplay extends LeafRenderObjectWidget {
 class RenderTextInput extends RenderObject {
   RenderTextInput({
     required String text,
-    required int selection,
+    required TextSelection selection,
     String placeholder = '',
     CellStyle placeholderStyle = const CellStyle(dim: true),
     CellStyle style = CellStyle.empty,
@@ -511,7 +1243,7 @@ class RenderTextInput extends RenderObject {
     WidthResolver widthResolver = const DefaultWidthResolver(),
     TerminalProfile profile = TerminalProfile.standard,
   }) : _text = sanitizeForDisplay(text),
-       _selection = selection.clamp(0, text.length),
+       _selection = selection.normalizeForText(sanitizeForDisplay(text)),
        _placeholder = sanitizeForDisplay(placeholder),
        _placeholderStyle = placeholderStyle,
        _style = style,
@@ -523,7 +1255,7 @@ class RenderTextInput extends RenderObject {
        _profile = profile;
 
   String _text;
-  int _selection;
+  TextSelection _selection;
   String _placeholder;
   CellStyle _placeholderStyle;
   CellStyle _style;
@@ -533,39 +1265,46 @@ class RenderTextInput extends RenderObject {
   String _obscuringCharacter;
   final WidthResolver _widthResolver;
   final TerminalProfile _profile;
+  int _scrollLeft = 0;
 
   set text(String value) {
     final sanitized = sanitizeForDisplay(value);
     if (sanitized == _text) return;
     _text = sanitized;
-    _selection = _selection.clamp(0, _text.length);
+    _selection = _selection.normalizeForText(_text);
+    markNeedsLayout();
   }
 
   set placeholder(String value) {
     final sanitized = sanitizeForDisplay(value);
     if (sanitized == _placeholder) return;
     _placeholder = sanitized;
+    markNeedsLayout();
   }
 
   set placeholderStyle(CellStyle value) {
     if (_placeholderStyle == value) return;
     _placeholderStyle = value;
+    markNeedsPaintOnly();
   }
 
-  set selection(int value) {
-    final clamped = value.clamp(0, _text.length);
-    if (_selection == clamped) return;
-    _selection = clamped;
+  set selection(TextSelection value) {
+    final normalized = value.normalizeForText(_text);
+    if (_selection == normalized) return;
+    _selection = normalized;
+    markNeedsLayout();
   }
 
   set style(CellStyle value) {
     if (_style == value) return;
     _style = value;
+    markNeedsPaintOnly();
   }
 
   set cursorStyle(CellStyle value) {
     if (_cursorStyle == value) return;
     _cursorStyle = value;
+    markNeedsPaintOnly();
   }
 
   /// When false, the cursor cell renders with the regular [style]
@@ -575,35 +1314,89 @@ class RenderTextInput extends RenderObject {
   set cursorVisible(bool value) {
     if (_cursorVisible == value) return;
     _cursorVisible = value;
+    markNeedsPaintOnly();
   }
 
   set obscureText(bool value) {
     if (_obscureText == value) return;
     _obscureText = value;
+    markNeedsLayout();
   }
 
   set obscuringCharacter(String value) {
     if (_obscuringCharacter == value) return;
     _obscuringCharacter = value;
+    markNeedsLayout();
   }
 
   @override
   CellSize performLayout(CellConstraints constraints) {
-    final int intrinsic;
-    if (_text.isEmpty && _placeholder.isNotEmpty) {
-      intrinsic = _widthResolver.widthOfText(_placeholder, _profile);
-    } else if (_obscureText) {
-      // When obscured, the displayed width is N × width(obscureChar).
-      // The grapheme count drives the visible cell count.
-      final n = _text.characters.length;
-      final w = _widthResolver.widthOfGrapheme(_obscuringCharacter, _profile);
-      intrinsic = n * w + 1;
-    } else {
-      intrinsic = _widthResolver.widthOfText(_text, _profile) + 1;
-    }
+    final intrinsic = _intrinsicWidth;
     final maxCols = constraints.maxCols;
     final cols = maxCols == null ? intrinsic : intrinsic.clamp(0, maxCols);
-    return constraints.constrain(CellSize(cols, 1));
+    final nextSize = constraints.constrain(CellSize(cols, 1));
+    _syncHorizontalScroll(nextSize.cols, intrinsic);
+    return nextSize;
+  }
+
+  int get _intrinsicWidth {
+    if (_text.isEmpty && _placeholder.isNotEmpty) {
+      return _widthResolver.widthOfText(_placeholder, _profile);
+    }
+    var width = 0;
+    for (final grapheme in _text.characters) {
+      width += _displayWidthOf(grapheme);
+    }
+    return width + 1; // trailing cursor cell
+  }
+
+  String _displayGrapheme(String grapheme) =>
+      _obscureText ? _obscuringCharacter : grapheme;
+
+  int _displayWidthOf(String grapheme) {
+    return _widthResolver.widthOfGrapheme(_displayGrapheme(grapheme), _profile);
+  }
+
+  int _displayCellForTextOffset(int textOffset) {
+    var cell = 0;
+    var codeUnitOffset = 0;
+    for (final grapheme in _text.characters) {
+      if (textOffset <= codeUnitOffset) return cell;
+      codeUnitOffset += grapheme.length;
+      cell += _displayWidthOf(grapheme);
+      if (textOffset <= codeUnitOffset) return cell;
+    }
+    return cell;
+  }
+
+  int _displayBoundaryAtOrAfter(int cellOffset) {
+    if (cellOffset <= 0) return 0;
+    var cell = 0;
+    for (final grapheme in _text.characters) {
+      final next = cell + _displayWidthOf(grapheme);
+      if (cellOffset <= cell) return cell;
+      if (cellOffset < next) return next;
+      cell = next;
+    }
+    return cell;
+  }
+
+  void _syncHorizontalScroll(int visibleCols, int intrinsicWidth) {
+    if (visibleCols <= 0 || intrinsicWidth <= visibleCols || _text.isEmpty) {
+      _scrollLeft = 0;
+      return;
+    }
+    final cursorCell = _displayCellForTextOffset(_selection.extentOffset);
+    var next = _scrollLeft;
+    if (cursorCell < next) {
+      next = cursorCell;
+    } else if (cursorCell >= next + visibleCols) {
+      next = cursorCell - visibleCols + 1;
+    }
+    if (next < 0) next = 0;
+    next = _displayBoundaryAtOrAfter(next);
+    if (next > cursorCell) next = cursorCell;
+    _scrollLeft = next;
   }
 
   @override
@@ -624,6 +1417,8 @@ class RenderTextInput extends RenderObject {
       var first = true;
       for (final grapheme in _placeholder.characters) {
         if (col >= maxCol) break;
+        final width = _widthResolver.widthOfGrapheme(grapheme, _profile);
+        if (col + width > maxCol) break;
         final style = (first && _cursorVisible)
             ? _placeholderStyle.merge(_cursorStyle)
             : _placeholderStyle;
@@ -642,21 +1437,43 @@ class RenderTextInput extends RenderObject {
 
     var codeUnitOffset = 0;
     var paintedCursor = false;
+    final selectionStart = _selection.start;
+    final selectionEnd = _selection.end;
+    final cursorOffset = _selection.extentOffset;
+    final selectionCollapsed = _selection.isCollapsed;
+    final visibleStart = _scrollLeft;
+    final visibleEnd = _scrollLeft + size.cols;
+    var displayCell = 0;
 
     for (final grapheme in _text.characters) {
-      if (col >= maxCol) break;
-      final atCursor = codeUnitOffset == _selection;
+      final graphemeStart = codeUnitOffset;
+      final graphemeEnd = codeUnitOffset + grapheme.length;
+      final displayed = _displayGrapheme(grapheme);
+      final displayWidth = _widthResolver.widthOfGrapheme(displayed, _profile);
+      final displayStart = displayCell;
+      final displayEnd = displayStart + displayWidth;
+      codeUnitOffset = graphemeEnd;
+      displayCell = displayEnd;
+      if (displayEnd <= visibleStart) continue;
+      if (displayStart < visibleStart) continue;
+      if (displayStart >= visibleEnd) break;
+      if (displayEnd > visibleEnd) break;
+      final atCursor = selectionCollapsed && graphemeStart == cursorOffset;
+      final selected =
+          !selectionCollapsed &&
+          graphemeStart >= selectionStart &&
+          graphemeEnd <= selectionEnd;
       // Only apply cursorStyle when the cursor is currently visible
       // (focused + blink-on). When invisible, the cursor cell
       // renders with the base style so the character underneath
       // (or a blank if past EOL) reads normally.
-      final cellStyle = (atCursor && _cursorVisible)
+      final cellStyle = ((atCursor && _cursorVisible) || selected)
           ? _style.merge(_cursorStyle)
           : _style;
       // Mask the displayed glyph when obscureText is on. The real text
       // (and the cursor's code-unit position) is unchanged — only the
       // pixel rendering is replaced.
-      final displayed = _obscureText ? _obscuringCharacter : grapheme;
+      col = offset.col + (displayStart - visibleStart);
       buffer.writeGrapheme(
         CellOffset(col, row),
         displayed,
@@ -664,23 +1481,27 @@ class RenderTextInput extends RenderObject {
         widthResolver: _widthResolver,
         profile: _profile,
       );
-      col += _widthResolver.widthOfGrapheme(displayed, _profile);
-      codeUnitOffset += grapheme.length;
       if (atCursor) paintedCursor = true;
     }
 
     // Cursor past the last character.
-    if (!paintedCursor && col < maxCol) {
-      if (_cursorVisible) {
-        buffer.writeGrapheme(
-          CellOffset(col, row),
-          ' ',
-          style: _style.merge(_cursorStyle),
-        );
+    if (selectionCollapsed && !paintedCursor) {
+      final cursorCell = _displayCellForTextOffset(cursorOffset);
+      final cursorVisible =
+          cursorCell >= visibleStart && cursorCell < visibleEnd;
+      col = offset.col + (cursorCell - visibleStart);
+      if (cursorVisible && col < maxCol) {
+        if (_cursorVisible) {
+          buffer.writeGrapheme(
+            CellOffset(col, row),
+            ' ',
+            style: _style.merge(_cursorStyle),
+          );
+        }
+        // When the cursor is invisible past-EOL, we deliberately
+        // leave the cell empty — same as the rest of the trailing
+        // space.
       }
-      // When the cursor is invisible past-EOL, we deliberately
-      // leave the cell empty — same as the rest of the trailing
-      // space.
     }
   }
 }

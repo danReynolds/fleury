@@ -174,6 +174,7 @@ class Image extends StatefulWidget {
     this.fit = ImageFit.contain,
     this.glyph = ImageGlyph.halfBlock,
     this.backgroundColor,
+    this.semanticLabel,
   });
 
   /// Shorthand for `Image(source: ImageSource.file(path))` — the
@@ -185,6 +186,7 @@ class Image extends StatefulWidget {
     this.fit = ImageFit.contain,
     this.glyph = ImageGlyph.halfBlock,
     this.backgroundColor,
+    this.semanticLabel,
   }) : source = ImageSource.file(path);
 
   /// Shorthand for `Image(source: ImageSource.bytes(bytes))`.
@@ -194,6 +196,7 @@ class Image extends StatefulWidget {
     this.fit = ImageFit.contain,
     this.glyph = ImageGlyph.halfBlock,
     this.backgroundColor,
+    this.semanticLabel,
   }) : source = ImageSource.bytes(bytes);
 
   /// Shorthand for `Image(source: ImageSource.decoded(decoded))` —
@@ -205,6 +208,7 @@ class Image extends StatefulWidget {
     this.fit = ImageFit.contain,
     this.glyph = ImageGlyph.halfBlock,
     this.backgroundColor,
+    this.semanticLabel,
   }) : source = ImageSource.decoded(decoded);
 
   final ImageSource source;
@@ -229,6 +233,12 @@ class Image extends StatefulWidget {
   /// [backgroundColor] (typically the surrounding container's color)
   /// when transparent PNGs need crisp edges against a known surface.
   final Color? backgroundColor;
+
+  /// Semantic label exposed to tests, inspectors, and future adapters.
+  ///
+  /// Leave null for decorative images. Capability and fallback state is still
+  /// exposed so diagnostics can explain how the image rendered.
+  final String? semanticLabel;
 
   @override
   State<Image> createState() => _ImageState();
@@ -320,14 +330,47 @@ class _ImageState extends State<Image> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return _RawImage(
-      decoded: _source.frames[_frameIndex],
-      fit: widget.fit,
-      glyph: widget.glyph,
-      colorMode: MediaQuery.colorModeOf(context),
-      protocol: MediaQuery.imageProtocolOf(context),
-      tmuxPassthrough: MediaQuery.tmuxPassthroughOf(context),
-      backgroundColor: widget.backgroundColor,
+    final colorMode = MediaQuery.colorModeOf(context);
+    final protocol = MediaQuery.imageProtocolOf(context);
+    final tmuxPassthrough = MediaQuery.tmuxPassthroughOf(context);
+    final capabilityResolution = resolveCapabilityRequirement(
+      CapabilityRequirement(
+        feature: TerminalFeature.inlineImages,
+        level: CapabilityLevel.preferred,
+        reason: 'Render image widgets with native terminal pixels.',
+        fallback: CapabilityFallback(label: '${widget.glyph.name} glyph image'),
+      ),
+      TerminalCapabilities(
+        colorMode: colorMode,
+        imageProtocol: protocol,
+        tmuxPassthrough: tmuxPassthrough,
+      ),
+    );
+    final semanticState = capabilityResolution
+        .toSemanticState()
+        .merge(<String, Object?>{
+          'imageProtocol': protocol.name,
+          'imageGlyph': widget.glyph.name,
+          'colorMode': colorMode.name,
+          'tmuxPassthrough': tmuxPassthrough,
+          'frameIndex': _frameIndex,
+          'frameCount': _source.frames.length,
+        });
+
+    return Semantics(
+      role: SemanticRole.image,
+      label: widget.semanticLabel,
+      value: protocol.name,
+      state: semanticState,
+      child: _RawImage(
+        decoded: _source.frames[_frameIndex],
+        fit: widget.fit,
+        glyph: widget.glyph,
+        colorMode: colorMode,
+        protocol: protocol,
+        tmuxPassthrough: tmuxPassthrough,
+        backgroundColor: widget.backgroundColor,
+      ),
     );
   }
 }
@@ -397,49 +440,49 @@ class RenderImage extends RenderObject {
   set decoded(img.Image v) {
     if (identical(_decoded, v)) return;
     _decoded = v;
-    markNeedsPaint();
+    markNeedsLayout();
   }
 
   ImageFit _fit;
   set fit(ImageFit v) {
     if (_fit == v) return;
     _fit = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   ImageGlyph _glyph;
   set glyph(ImageGlyph v) {
     if (_glyph == v) return;
     _glyph = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   ColorMode _colorMode;
   set colorMode(ColorMode v) {
     if (_colorMode == v) return;
     _colorMode = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   ImageProtocol _protocol;
   set protocol(ImageProtocol v) {
     if (_protocol == v) return;
     _protocol = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   bool _tmuxPassthrough;
   set tmuxPassthrough(bool v) {
     if (_tmuxPassthrough == v) return;
     _tmuxPassthrough = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   Color? _backgroundColor;
   set backgroundColor(Color? v) {
     if (_backgroundColor == v) return;
     _backgroundColor = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   @override

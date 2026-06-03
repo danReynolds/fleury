@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-01T02:20:53.120306Z",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "scenarioId": "SB.7",
+      "scenarioName": "Resize Storm",
+      "packageVersion": "0.0.0",
+      "gitSha": "unknown",
+      "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+      "runMode": "test",
+      "os": "macos",
+      "cpu": 10,
+      "terminalProfile": {
+        "colorMode": "truecolor",
+        "imageProtocol": "halfBlock",
+        "tmuxPassthrough": false
+      },
+      "terminalSize": {
+        "columns": 120,
+        "rows": 32
+      },
+      "seed": 1,
+      "rowCount": 100000,
+      "resizeEventCount": 500,
+      "warmupIterations": 1,
+      "measuredIterations": 5,
+      "startedAt": "2026-06-01T02:20:51.138537Z",
+      "durationMs": 1935.343,
+      "metrics": {
+        "journeyUs": {
+          "min": 358038,
+          "median": 385690,
+          "p95": 398725,
+          "p99": 399192,
+          "max": 399309,
+          "samples": 5
+        },
+        "mountUs": {
+          "min": 773,
+          "median": 908,
+          "p95": 17581,
+          "p99": 18213,
+          "max": 18371,
+          "samples": 5
+        },
+        "firstRenderUs": {
+          "min": 968,
+          "median": 1347,
+          "p95": 4059,
+          "p99": 4164,
+          "max": 4190,
+          "samples": 5
+        },
+        "resizeFrameUs": {
+          "min": 42,
+          "median": 168,
+          "p95": 488,
+          "p99": 637,
+          "max": 8498,
+          "samples": 2500
+        },
+        "semanticQueryUs": {
+          "min": 68,
+          "median": 227,
+          "p95": 593,
+          "p99": 724,
+          "max": 10399,
+          "samples": 2500
+        },
+        "resizeEventCount": 500,
+        "sizesValidated": 500,
+        "distinctSizeCount": 8,
+        "minColumns": 32,
+        "maxColumns": 200,
+        "minRows": 8,
+        "maxRows": 60,
+        "firstFrameAnsiBytes": 3467,
+        "maxResizeAnsiBytes": 5977,
+        "semanticNodeCount": 119,
+        "tableVisibleRangeStart": 0,
+        "tableVisibleRangeEnd": 8,
+        "logVisibleRangeStart": 4999,
+        "logVisibleRangeEnd": 4999,
+        "selectedTableKey": "RUN-100000",
+        "selectedLogKey": "LOG-104999",
+        "logEntryCount": 5000,
+        "unsafeFrameCount": 0,
+        "rssDeltaBytes": 11563008
+      },
+      "thresholds": {
+        "candidateResizeFrameP95Us": 50000,
+        "candidateSemanticQueryP95Us": 16000,
+        "enforced": false
+      },
+      "pass": true,
+      "notes": [
+        "Candidate thresholds are informational until stable baselines exist.",
+        "Scenario alternates normal, wide, narrow, and short terminal sizes while a table/log/editor surface stays mounted.",
+        "Correctness requires no unsafe terminal payload leakage and valid semantic table/log/text-field nodes after every resize."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,235 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryBenchmarkVariance",
+  "peerId": "nocterm",
+  "scenarioId": "SB.3",
+  "scenarioName": "DataTable 100k Rows",
+  "runCount": 3,
+  "minRuns": 3,
+  "sufficientRunCount": true,
+  "comparable": true,
+  "strictPass": true,
+  "errors": [],
+  "comparableIssues": [],
+  "source": {
+    "versions": [
+      "0.6.0"
+    ],
+    "urls": [
+      "https://pub.dev/packages/nocterm"
+    ]
+  },
+  "environment": {
+    "machines": [
+      "macbookpro.lan"
+    ],
+    "operatingSystems": [
+      "macos"
+    ],
+    "runtimes": [
+      "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\""
+    ],
+    "terminalModes": [
+      "nocterm-test-harness"
+    ],
+    "terminalSizes": [
+      "120x32"
+    ]
+  },
+  "fixture": {
+    "workingDirectories": [
+      "peer-fixtures/nocterm/sb3_datatable"
+    ],
+    "commands": [
+      "dart run bin/sb3_datatable_benchmark.dart --warmup=2 --iterations=5 --rows=100000 --json"
+    ],
+    "warmupIterations": {
+      "samples": 3,
+      "min": 2,
+      "median": 2,
+      "mean": 2,
+      "max": 2,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        2,
+        2,
+        2
+      ]
+    },
+    "measuredIterations": {
+      "samples": 3,
+      "min": 5,
+      "median": 5,
+      "mean": 5,
+      "max": 5,
+      "standardDeviation": 0,
+      "relativeSpreadPercent": 0,
+      "values": [
+        5,
+        5,
+        5
+      ]
+    }
+  },
+  "runs": [
+    {
+      "runId": "nocterm-sb3-datatable-2026-06-02T13-17-18Z",
+      "capturedAt": "2026-06-02T13:17:18.614330Z",
+      "path": "peer-fixtures/nocterm/sb3_datatable/results/variance/nocterm-sb3-datatable-2026-06-02-run-1.json"
+    },
+    {
+      "runId": "nocterm-sb3-datatable-2026-06-02T13-17-39Z",
+      "capturedAt": "2026-06-02T13:17:39.330339Z",
+      "path": "peer-fixtures/nocterm/sb3_datatable/results/variance/nocterm-sb3-datatable-2026-06-02-run-2.json"
+    },
+    {
+      "runId": "nocterm-sb3-datatable-2026-06-02T13-18-00Z",
+      "capturedAt": "2026-06-02T13:18:00.870911Z",
+      "path": "peer-fixtures/nocterm/sb3_datatable/results/variance/nocterm-sb3-datatable-2026-06-02-run-3.json"
+    }
+  ],
+  "metrics": {
+    "mountUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 944754,
+      "median": 1170683,
+      "mean": 1181653.333,
+      "max": 1429523,
+      "standardDeviation": 198058.084,
+      "relativeSpreadPercent": 41.409,
+      "values": [
+        944754,
+        1170683,
+        1429523
+      ]
+    },
+    "firstRenderUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 1389,
+      "median": 2185,
+      "mean": 2185.667,
+      "max": 2983,
+      "standardDeviation": 650.748,
+      "relativeSpreadPercent": 72.952,
+      "values": [
+        2983,
+        2185,
+        1389
+      ]
+    },
+    "arrowMoveUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 14479,
+      "median": 18291,
+      "mean": 18977.333,
+      "max": 24162,
+      "standardDeviation": 3982.747,
+      "relativeSpreadPercent": 52.939,
+      "values": [
+        18291,
+        14479,
+        24162
+      ]
+    },
+    "pageMoveUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 11940,
+      "median": 22230,
+      "mean": 26558.333,
+      "max": 45505,
+      "standardDeviation": 14040.493,
+      "relativeSpreadPercent": 150.99,
+      "values": [
+        22230,
+        45505,
+        11940
+      ]
+    },
+    "jumpToEndUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 6526,
+      "median": 8622,
+      "mean": 10787,
+      "max": 17213,
+      "standardDeviation": 4623.737,
+      "relativeSpreadPercent": 123.95,
+      "values": [
+        17213,
+        6526,
+        8622
+      ]
+    },
+    "copySelectedRowUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 1947,
+      "median": 3133,
+      "mean": 3119.667,
+      "max": 4279,
+      "standardDeviation": 952.082,
+      "relativeSpreadPercent": 74.433,
+      "values": [
+        3133,
+        4279,
+        1947
+      ]
+    },
+    "semanticOrTestQueryUs": {
+      "primaryValue": "p95",
+      "samples": 3,
+      "min": 2574,
+      "median": 2751,
+      "mean": 3598,
+      "max": 5469,
+      "standardDeviation": 1324.969,
+      "relativeSpreadPercent": 105.234,
+      "values": [
+        2751,
+        2574,
+        5469
+      ]
+    },
+    "rssDeltaBytes": {
+      "primaryValue": "value",
+      "samples": 3,
+      "min": 0,
+      "median": 0,
+      "mean": 221184,
+      "max": 663552,
+      "standardDeviation": 312801.413,
+      "relativeSpreadPercent": null,
+      "values": [
+        0,
+        0,
+        663552
+      ]
+    }
+  },
+  "correctness": {
+    "allRunsPass": true,
+    "gates": {
+      "visible window stays bounded": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "selection is correct after jump": {
+        "passCount": 3,
+        "failCount": 0
+      },
+      "copy/export is sanitized and exact": {
+        "passCount": 3,
+        "failCount": 0
+      }
+    }
+  },
+  "notes": [
+    "Metric variance uses each run artifact primary value: scalar metrics use the scalar value; metric maps prefer p95, then median, max, and value.",
+    "strictPass is false unless run count, scenario/peer identity, source version, terminal mode, terminal size, fixture command, fixture directory, and correctness gates are comparable."
+  ]
+}

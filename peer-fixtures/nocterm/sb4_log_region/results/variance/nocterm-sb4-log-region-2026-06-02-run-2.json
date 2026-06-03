@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryPeerBenchmarkRun",
+  "runId": "nocterm-sb4-log-region-2026-06-02T13-42-03",
+  "peerId": "nocterm",
+  "scenarioId": "SB.4",
+  "capturedAt": "2026-06-02T13:42:03.065899Z",
+  "source": {
+    "name": "Nocterm",
+    "version": "0.6.0",
+    "url": "https://pub.dev/packages/nocterm"
+  },
+  "environment": {
+    "machine": "macbookpro.lan",
+    "operatingSystem": "macos",
+    "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+    "runtime": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+    "terminalMode": "nocterm-test-harness",
+    "terminalSize": {
+      "columns": 120,
+      "rows": 32
+    }
+  },
+  "fixture": {
+    "workingDirectory": "peer-fixtures/nocterm/sb4_log_region",
+    "command": [
+      "dart",
+      "run",
+      "bin/sb4_log_region_benchmark.dart",
+      "--warmup=2",
+      "--iterations=5",
+      "--rows=100000",
+      "--append=1000",
+      "--json"
+    ],
+    "warmupIterations": 2,
+    "measuredIterations": 5
+  },
+  "metrics": {
+    "mountUs": {
+      "min": 2145951,
+      "median": 2307205,
+      "p95": 3383424,
+      "p99": 3383424,
+      "max": 3383424,
+      "samples": 5
+    },
+    "firstRenderUs": {
+      "min": 806,
+      "median": 840,
+      "p95": 1050,
+      "p99": 1050,
+      "max": 1050,
+      "samples": 5
+    },
+    "appendBurstUs": {
+      "min": 34051,
+      "median": 72402,
+      "p95": 95410,
+      "p99": 95410,
+      "max": 95410,
+      "samples": 5
+    },
+    "scrollbackJumpUs": {
+      "min": 2908,
+      "median": 3105,
+      "p95": 6099,
+      "p99": 6099,
+      "max": 6099,
+      "samples": 5
+    },
+    "scrollToTailUs": {
+      "min": 2633,
+      "median": 4567,
+      "p95": 5615,
+      "p99": 5615,
+      "max": 5615,
+      "samples": 5
+    },
+    "copySelectedEntryUs": {
+      "min": 623,
+      "median": 642,
+      "p95": 2508,
+      "p99": 2508,
+      "max": 2508,
+      "samples": 5
+    },
+    "filterQueryUs": {
+      "min": 58219,
+      "median": 76748,
+      "p95": 125479,
+      "p99": 125479,
+      "max": 125479,
+      "samples": 5
+    },
+    "semanticOrTestQueryUs": {
+      "min": 358,
+      "median": 389,
+      "p95": 682,
+      "p99": 682,
+      "max": 682,
+      "samples": 5
+    },
+    "unsafeArtifactLeakCount": 0,
+    "rssDeltaBytes": 3657728,
+    "lineOfCodeCount": 244,
+    "benchmarkLineOfCodeCount": 461,
+    "testLineOfCodeCount": 42,
+    "entryCountAfterAppend": 101000,
+    "appendCount": 1000,
+    "lineCountAfterFilter": 1000,
+    "filterMatchCount": 1000,
+    "selectedKey": "LOG-200999",
+    "finalScrollY": 968,
+    "finalMaxScrollY": 968,
+    "visibleWindowRowEstimate": 32
+  },
+  "correctness": [
+    {
+      "gate": "tail anchoring is correct",
+      "pass": true,
+      "evidence": "After append and explicit tail scroll, the Nocterm ListView stayed anchored at LOG-200999."
+    },
+    {
+      "gate": "copy text is sanitized",
+      "pass": true,
+      "evidence": "Selected-entry copy matched the generated sanitized log line and contained no escape, secret, or newline artifacts."
+    },
+    {
+      "gate": "unsafe output leak count is zero",
+      "pass": true,
+      "evidence": "Fixture-owned sanitizer removed ANSI/OSC/control payloads before Nocterm Text/ListView rendering."
+    }
+  ],
+  "ergonomics": {
+    "lineOfCodeCount": 244,
+    "benchmarkLineOfCodeCount": 461,
+    "testLineOfCodeCount": 42,
+    "appFile": "lib/log_region_app.dart",
+    "benchmarkFile": "bin/sb4_log_region_benchmark.dart",
+    "testFile": "test/log_region_benchmark_test.dart",
+    "peerOwnedListView": true,
+    "peerOwnedScrollController": true,
+    "appOwnedSanitization": true,
+    "appOwnedFiltering": true,
+    "appOwnedSelectedEntryCopy": true,
+    "semanticGraphAvailable": false,
+    "testQueryViaTerminalStateAndAppState": true
+  },
+  "artifacts": [
+    {
+      "kind": "source",
+      "path": "peer-fixtures/nocterm/sb4_log_region/lib/log_region_app.dart"
+    },
+    {
+      "kind": "benchmark",
+      "path": "peer-fixtures/nocterm/sb4_log_region/bin/sb4_log_region_benchmark.dart"
+    },
+    {
+      "kind": "test",
+      "path": "peer-fixtures/nocterm/sb4_log_region/test/log_region_benchmark_test.dart"
+    }
+  ],
+  "notes": [
+    "This is a Nocterm test-harness peer fixture, not a real-terminal run.",
+    "Nocterm 0.6.0 supplies ListView.builder, lazy list rendering, ScrollController, Text rendering, and terminal-state test queries.",
+    "Sanitization/redaction, filtering, selected-entry state, and copy/export are app-owned fixture code because Nocterm 0.6.0 does not expose Fleury-equivalent built-in primitives for those SB.4 behaviors.",
+    "Nocterm exposes terminal/app state for this fixture, not a Fleury-style semantic app graph.",
+    "Timing is local-machine evidence and should not be used as a public superiority claim without repeated peer runs."
+  ]
+}

@@ -11,18 +11,30 @@ import 'package:fleury/fleury.dart';
 ///
 /// Throws if [text] contains a character outside `[0-9: ]`.
 class Digits extends StatelessWidget {
-  const Digits(this.text, {super.key, this.style, this.color});
+  const Digits(
+    this.text, {
+    super.key,
+    this.style,
+    this.color,
+    this.semanticLabel = 'Digits',
+  });
 
   final String text;
   final CellStyle? style;
   final Color? color;
+  final String semanticLabel;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final resolved =
         style ?? CellStyle(foreground: color ?? theme.colorScheme.primary);
-    return _RawDigits(text: text, style: resolved);
+    return Semantics(
+      role: SemanticRole.text,
+      label: semanticLabel,
+      value: text,
+      child: _RawDigits(text: text, style: resolved),
+    );
   }
 }
 
@@ -55,14 +67,22 @@ class RenderDigits extends RenderObject {
 
   String _text;
   set text(String v) {
+    if (_text == v) return;
+    final layoutChanged = _digitsWidth(_text) != _digitsWidth(v);
     _text = v;
-    markNeedsPaint();
+    _cachedGlyphs = null;
+    if (layoutChanged) {
+      markNeedsLayout();
+    } else {
+      markNeedsPaintOnly();
+    }
   }
 
   CellStyle _style;
   set style(CellStyle v) {
+    if (_style == v) return;
     _style = v;
-    markNeedsPaint();
+    markNeedsPaintOnly();
   }
 
   // Each glyph is exactly _rows tall; widths vary. Patterns use '█' for an
@@ -83,6 +103,17 @@ class RenderDigits extends RenderObject {
     ':': [' ', '█', ' ', '█', ' '],
     ' ': ['  ', '  ', '  ', '  ', '  '],
   };
+
+  static int _digitsWidth(String text) {
+    var width = 0;
+    for (var i = 0; i < text.length; i += 1) {
+      final glyph = _glyphs[text[i]];
+      if (glyph == null) return -1;
+      width += glyph[0].length;
+      if (i > 0) width += _gap;
+    }
+    return width;
+  }
 
   List<List<String>>? _cachedGlyphs;
   int _cachedWidth = 0;
