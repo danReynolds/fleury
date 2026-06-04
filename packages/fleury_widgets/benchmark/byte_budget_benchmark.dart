@@ -207,6 +207,12 @@ class _ScenarioReport {
     'updateFrameCount': updateFrameCount,
     'updateTotal': updateTotal.toJson(),
     'avgUpdateBytes': avgUpdateBytes,
+    'estLatencyMs': <String, double>{
+      for (final p in TransportProfile.defaults)
+        p.name: p.frameMs(
+          updateFrameCount > 0 ? avgUpdateBytes.round() : firstPaint.total,
+        ),
+    },
   };
 }
 
@@ -237,6 +243,12 @@ _ScenarioReport _run(_Scenario scenario, CellSize size) {
 String _pct(int part, int whole) =>
     whole == 0 ? '  -  ' : '${(100 * part / whole).toStringAsFixed(0).padLeft(3)}%';
 
+/// Estimated wire time for a frame of [bytes] across the transport profiles —
+/// the bytes->latency mapping (a model; confirm on hardware per the handoff).
+String _latency(int bytes) => TransportProfile.defaults
+    .map((p) => '${p.name} ${p.frameMs(bytes).toStringAsFixed(1)}ms')
+    .join('  ·  ');
+
 void _printHuman(List<_ScenarioReport> reports, CellSize size) {
   stdout.writeln('Byte budget — terminal ${size.cols}x${size.rows}, '
       'UTF-8 bytes on the wire\n');
@@ -253,7 +265,7 @@ void _printHuman(List<_ScenarioReport> reports, CellSize size) {
         'sync ${_pct(fp.sync, fp.total)}');
 
     if (r.updateFrameCount == 0) {
-      stdout.writeln('  updates     : (none)\n');
+      stdout.writeln('  est latency : ${_latency(fp.total)}  (first paint)\n');
       continue;
     }
     final u = r.updateTotal;
@@ -264,7 +276,9 @@ void _printHuman(List<_ScenarioReport> reports, CellSize size) {
         'cursor ${_pct(u.cursor, u.total)}  '
         'sync ${_pct(u.sync, u.total)}');
     stdout.writeln('  update overhead (non-content): '
-        '${(100 * u.overheadFraction).toStringAsFixed(0)}%\n');
+        '${(100 * u.overheadFraction).toStringAsFixed(0)}%');
+    stdout.writeln('  est latency : ${_latency(r.avgUpdateBytes.round())}  '
+        '(avg update frame)\n');
   }
 
   // Cross-scenario verdict: where does SGR dominate update bytes?

@@ -69,7 +69,36 @@ void main() {
     });
   });
 
+  group('TransportProfile', () {
+    test('frameMs is fixed overhead plus serialization time', () {
+      const p = TransportProfile('t', bytesPerSecond: 1000, fixedOverheadMs: 2);
+      expect(p.frameMs(0), 2.0); // pure overhead
+      expect(p.frameMs(1000), closeTo(2 + 1000, 1e-9)); // +1s for 1000 B
+      expect(p.frameMs(500), closeTo(2 + 500, 1e-9));
+    });
+
+    test('byte savings matter on slow links, not on fast ones', () {
+      // 250-byte saving (e.g. a scroll frame after cursor compression).
+      const saved = 250;
+      final onSlow = TransportProfile.slow9600.frameMs(1024) -
+          TransportProfile.slow9600.frameMs(1024 - saved);
+      final onWan = TransportProfile.sshWan.frameMs(1024) -
+          TransportProfile.sshWan.frameMs(1024 - saved);
+      expect(onSlow, greaterThan(150)); // ~208 ms saved on 9600 baud
+      expect(onWan, lessThan(1)); // negligible on a fast WAN link
+    });
+  });
+
   group('CountingAnsiSink', () {
+    test('aggregate mode keeps totals without retaining frames', () {
+      final sink = CountingAnsiSink.aggregate();
+      sink.write('\x1B[1;1Hab');
+      sink.write('\x1B[2;1Hcd');
+      expect(sink.frameCount, 2);
+      expect(sink.total.content, 4);
+      expect(sink.frames, isEmpty); // no per-frame list retained
+    });
+
     test('accumulates per-frame and total, and forwards to inner sink', () {
       final inner = StringAnsiSink();
       final sink = CountingAnsiSink(inner);

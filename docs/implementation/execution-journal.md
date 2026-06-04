@@ -20807,3 +20807,50 @@ Next:
 - Real-terminal step still open: wrap `CountingAnsiSink` around the live
   `IoSinkAnsiSink` and confirm the bytes -> latency mapping on actual
   terminals / SSH.
+
+## 2026-06-04 - Byte → Latency: Estimator + Live Telemetry Hook
+
+Status: Complete for what a non-TTY environment can do; hardware capture handed off
+
+Context:
+- The byte harness answered "how many bytes per frame"; the open question was
+  "does that translate to latency?". This shell is non-TTY, so real-terminal /
+  SSH timing can't be measured here. Built the parts that are buildable and
+  validated, plus a handoff for the hardware step.
+
+Changes:
+- `TransportProfile` in [ansi_byte_budget.dart](../../packages/fleury/lib/src/rendering/ansi_byte_budget.dart):
+  first-order wire-time model (`fixedOverheadMs + 1000*bytes/bytesPerSecond`)
+  with `local` / `ssh-lan` / `ssh-wan` / `slow-9600` profiles. Exported via
+  `fleury_test.dart`. `CountingAnsiSink.aggregate` constructor added so
+  long-running telemetry stays bounded (running total, no per-frame list).
+- [byte_budget_benchmark.dart](../../packages/fleury_widgets/benchmark/byte_budget_benchmark.dart)
+  now prints estimated per-frame latency across profiles (human + JSON);
+  baseline regenerated.
+- Live telemetry hook in [run_tui.dart](../../packages/fleury/lib/src/runtime/run_tui.dart):
+  `FLEURY_BYTE_TELEMETRY=1` wraps the real driver sink with
+  `CountingAnsiSink.aggregate` and prints a byte + estimated-latency summary to
+  stderr on cleanup (after terminal restore). Zero cost when unset.
+- [byte-latency-handoff.md](byte-latency-handoff.md): the real-terminal capture
+  procedure and acceptance criteria.
+
+Findings (estimator over the 2026-06-04 baseline) — refines the earlier
+"bytes dominate real-terminal latency" hypothesis:
+- Fast links (local, LAN SSH): every scenario is sub-millisecond; per-frame byte
+  size is NOT the latency bottleneck. Cursor compression buys throughput/CPU
+  there, not perceived latency.
+- WAN SSH: latency is RTT-dominated and ~flat (~40 ms) across frame sizes — the
+  lever is frame COUNT (round trips), not size.
+- Bandwidth-constrained (≈9600 baud): byte size dominates; scroll frame ≈858 ms
+  (the cursor-compression saving ≈210 ms lands here directly).
+
+Validation:
+- `dart analyze` clean across `fleury` and `fleury_widgets`.
+- Core suite green: 1495 tests (full, `--concurrency=1`); `fleury_widgets` 798.
+  run_tui integration tests pass with the telemetry hook present (off by
+  default).
+
+Next:
+- Hardware capture per the handoff: collect `FLEURY_BYTE_TELEMETRY` summaries on
+  real terminals + SSH, measure actual input→paint latency, calibrate the
+  TransportProfile constants, re-run the harness.

@@ -27,7 +27,13 @@
         "other": 0,
         "overheadFraction": 0.0
       },
-      "avgUpdateBytes": 0.0
+      "avgUpdateBytes": 0.0,
+      "estLatencyMs": {
+        "local": 0.1081,
+        "ssh-lan": 0.8524,
+        "ssh-wan": 41.762,
+        "slow-9600": 1473.3333333333333
+      }
     },
     {
       "id": "selection-highlight",
@@ -52,7 +58,13 @@
         "other": 0,
         "overheadFraction": 0.9664948453608248
       },
-      "avgUpdateBytes": 35.27272727272727
+      "avgUpdateBytes": 35.27272727272727,
+      "estLatencyMs": {
+        "local": 0.021750000000000002,
+        "ssh-lan": 0.507,
+        "ssh-wan": 40.035,
+        "slow-9600": 34.16666666666667
+      }
     },
     {
       "id": "color-churn",
@@ -77,7 +89,13 @@
         "other": 936,
         "overheadFraction": 0.5623100303951368
       },
-      "avgUpdateBytes": 427.7
+      "avgUpdateBytes": 427.7,
+      "estLatencyMs": {
+        "local": 0.0414,
+        "ssh-lan": 0.5856,
+        "ssh-wan": 40.428,
+        "slow-9600": 361.6666666666667
+      }
     },
     {
       "id": "full-content-refresh",
@@ -102,7 +120,13 @@
         "other": 2808,
         "overheadFraction": 0.41781423967184295
       },
-      "avgUpdateBytes": 1023.9
+      "avgUpdateBytes": 1023.9,
+      "estLatencyMs": {
+        "local": 0.0712,
+        "ssh-lan": 0.7048,
+        "ssh-wan": 41.024,
+        "slow-9600": 858.3333333333334
+      }
     },
     {
       "id": "scattered-numbers",
@@ -127,7 +151,13 @@
         "other": 0,
         "overheadFraction": 0.9090909090909091
       },
-      "avgUpdateBytes": 40.7
+      "avgUpdateBytes": 40.7,
+      "estLatencyMs": {
+        "local": 0.02205,
+        "ssh-lan": 0.5082,
+        "ssh-wan": 40.041,
+        "slow-9600": 39.166666666666664
+      }
     }
   ]
 }

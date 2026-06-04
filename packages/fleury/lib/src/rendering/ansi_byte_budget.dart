@@ -142,8 +142,53 @@ class AnsiByteBreakdown {
       'cursor: $cursor, sync: $sync, other: $other)';
 }
 
+/// A simple transport model for turning a frame's byte count into an estimated
+/// wire time, so byte-budget numbers can be reasoned about as latency.
+///
+/// `frameMs(bytes) = fixedOverheadMs + 1000 * bytes / bytesPerSecond`.
+///
+/// This is a deliberately simple first-order model: a one-way overhead (link
+/// propagation / per-frame fixed cost) plus serialization time at the link's
+/// throughput. It is NOT a substitute for measuring on real hardware — it
+/// exists to show *where* byte count actually translates into latency. The
+/// honest conclusion it surfaces: byte savings dominate on bandwidth-limited
+/// links and are near-irrelevant on fast, RTT-dominated ones.
+class TransportProfile {
+  const TransportProfile(
+    this.name, {
+    required this.bytesPerSecond,
+    required this.fixedOverheadMs,
+  });
+
+  final String name;
+  final double bytesPerSecond;
+  final double fixedOverheadMs;
+
+  double frameMs(int bytes) => fixedOverheadMs + 1000.0 * bytes / bytesPerSecond;
+
+  /// Local pty: throughput so high these byte counts are effectively free.
+  static const local =
+      TransportProfile('local', bytesPerSecond: 20000000, fixedOverheadMs: 0.02);
+
+  /// SSH over a LAN: fast, low latency.
+  static const sshLan =
+      TransportProfile('ssh-lan', bytesPerSecond: 5000000, fixedOverheadMs: 0.5);
+
+  /// SSH over a WAN: ample bandwidth but ~40 ms one-way — RTT-dominated, so
+  /// byte savings barely move the needle here.
+  static const sshWan =
+      TransportProfile('ssh-wan', bytesPerSecond: 1000000, fixedOverheadMs: 40);
+
+  /// A constrained link (≈9600 baud) where every byte costs ~0.83 ms —
+  /// bandwidth-dominated, so byte savings translate directly to time.
+  static const slow9600 =
+      TransportProfile('slow-9600', bytesPerSecond: 1200, fixedOverheadMs: 5);
+
+  static const defaults = <TransportProfile>[local, sshLan, sshWan, slow9600];
+}
+
 /// An [AnsiSink] that categorizes every write into an [AnsiByteBreakdown],
-/// keeping both a running [total] and a per-frame list.
+/// keeping both a running [total] and (optionally) a per-frame list.
 ///
 /// [AnsiRenderer.renderDiff] flushes each frame to the sink in exactly one
 /// `write` call (and only when the frame is non-empty), so each entry in
@@ -153,20 +198,32 @@ class AnsiByteBreakdown {
 /// destination — making this usable for live byte telemetry against a real
 /// terminal, not just offline analysis.
 class CountingAnsiSink implements AnsiSink {
-  CountingAnsiSink([this.inner]);
+  /// [keepFrames] retains a per-frame breakdown list (for offline analysis).
+  /// Set it false for long-running production telemetry, where only the
+  /// running [total] and [frameCount] are needed and an unbounded list would
+  /// grow without limit.
+  CountingAnsiSink([this.inner]) : keepFrames = true;
+  CountingAnsiSink.aggregate([this.inner]) : keepFrames = false;
 
   final AnsiSink? inner;
+  final bool keepFrames;
 
   final List<AnsiByteBreakdown> frames = <AnsiByteBreakdown>[];
   AnsiByteBreakdown total = const AnsiByteBreakdown();
 
+  int _frameCount = 0;
+
   /// Number of non-empty frames written.
-  int get frameCount => frames.length;
+  int get frameCount => keepFrames ? frames.length : _frameCount;
 
   @override
   void write(String data) {
     final breakdown = AnsiByteBreakdown.analyze(data);
-    frames.add(breakdown);
+    if (keepFrames) {
+      frames.add(breakdown);
+    } else {
+      _frameCount++;
+    }
     total = total + breakdown;
     inner?.write(data);
   }
@@ -176,6 +233,7 @@ class CountingAnsiSink implements AnsiSink {
 
   void reset() {
     frames.clear();
+    _frameCount = 0;
     total = const AnsiByteBreakdown();
   }
 }

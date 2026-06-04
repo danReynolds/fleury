@@ -62,6 +62,6 @@ export 'src/debug/debug_events.dart'
 export 'src/rendering/render_layout_stats.dart'
     show RenderLayoutDebugStats, RenderLayoutFrameStats;
 export 'src/rendering/ansi_byte_budget.dart'
-    show AnsiByteBreakdown, CountingAnsiSink;
+    show AnsiByteBreakdown, CountingAnsiSink, TransportProfile;
 export 'src/rendering/render_repaint_boundary.dart'
     show RepaintBoundaryFrameStats;
