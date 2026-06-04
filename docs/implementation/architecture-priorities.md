@@ -72,8 +72,13 @@ so the window is open.
   agent stream; fleury exposes the rendered UI as data. Don't reinvent ACP.
 - **P3 — Reframe perf, stop racing it.** Recast the byte/frame work as
   correctness/determinism enablers, not a speed race vs OpenTUI/Bubble Tea.
-- **P4 — Prove standing (still open).** The self-graded-evidence gap remains;
-  the accessibility projection (P1a) is the cheapest verifiable proof point.
+- **P4 — Prove standing (in progress).** The self-graded-evidence gap remains.
+  Cross-framework profiling harness core built + proven (`profiling/`,
+  `docs/implementation/profiling-harness.md`): language-agnostic pty capture +
+  one shared `AnsiByteBreakdown` analyzer + verdict banding (way-off / ballpark /
+  competitive / leading). Next: per-framework self-driving scenario apps and
+  Tier-C (real-terminal/SSH) numbers. The accessibility projection (P1a) remains
+  the cheapest *verifiable* proof point.
 - **Demoted to opportunistic gap-fills:** async-compute seam, focus-preservation.
   **Still no:** native render core (OpenTUI owns that cross-language perf lane).
 - **Posture call, now informed:** "best-in-class for Dart **and** own the
