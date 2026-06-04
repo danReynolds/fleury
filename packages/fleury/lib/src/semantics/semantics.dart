@@ -2,7 +2,14 @@ import 'dart:async' show FutureOr;
 
 import '../widgets/framework.dart';
 
-/// Stable identifier for a semantic node within one snapshot.
+/// Identity of a semantic node.
+///
+/// Ids are unique within a [SemanticTree] snapshot. For identity that is also
+/// STABLE ACROSS REBUILDS — required by future incremental/observable semantic
+/// backends, remote/agent mirrors, and durable test selectors — give the node
+/// an explicit [Semantics.id] or a [Key]; the auto-generated fallback
+/// (`element-<hash>`) is snapshot-local and must not be relied on across
+/// frames.
 final class SemanticNodeId {
   const SemanticNodeId(this.value);
 
@@ -502,6 +509,13 @@ final class SemanticNode {
 }
 
 /// Immutable semantic snapshot of a mounted Fleury app.
+///
+/// This is a read-only value snapshot: every query ([byRole], [where],
+/// [nodeById], …) is model-agnostic. [SemanticTree.fromElement] is the current
+/// producer — a full element-tree walk. The [SemanticTree.new] constructor
+/// deliberately accepts a pre-built [root] so a future incremental/observable
+/// backend can produce the same query surface from a maintained tree without
+/// committing callers to the walk.
 final class SemanticTree {
   const SemanticTree({required this.root});
 
@@ -697,8 +711,19 @@ final class SemanticsElement extends ComponentElement
   @override
   Widget buildChild() => widget.child;
 
-  SemanticNodeId get _nodeId =>
-      widget.id ?? SemanticNodeId('element-$hashCode');
+  /// The node's identity. An explicit [Semantics.id] wins; otherwise a [Key] on
+  /// the widget yields a stable, deterministic id (`key:<key>`) that survives
+  /// rebuilds — the identity a future incremental/observable backend, a remote
+  /// mirror, or a durable test selector needs. With neither, the id falls back
+  /// to an element-instance hash, which is snapshot-local and NOT stable across
+  /// rebuilds (see [SemanticNodeId]).
+  SemanticNodeId get _nodeId {
+    final explicitId = widget.id;
+    if (explicitId != null) return explicitId;
+    final key = widget.key;
+    if (key != null) return SemanticNodeId('key:$key');
+    return SemanticNodeId('element-$hashCode');
+  }
 
   @override
   SemanticNode buildSemanticNode(List<SemanticNode> children) {

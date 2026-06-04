@@ -20854,3 +20854,51 @@ Next:
 - Hardware capture per the handoff: collect `FLEURY_BYTE_TELEMETRY` summaries on
   real terminals + SSH, measure actual input→paint latency, calibrate the
   TransportProfile constants, re-run the harness.
+
+## 2026-06-04 - Tier 1 Arch: Semantic API Freeze-Proofing + Contract Conformance
+
+Status: Complete (Tier 1 of architecture-priorities.md)
+
+Context:
+- Pre-launch, the breaking-change window is open. Tier 1 = the cheap, timing-
+  sensitive items: protect the semantic differentiator's public API before it
+  freezes, and make the widget contract enforced instead of conceptual.
+
+Changes:
+- Semantic-tree freeze-proofing in
+  [semantics.dart](../../packages/fleury/lib/src/semantics/semantics.dart):
+  node identity now derives from an explicit `Semantics.id` or a `Key`
+  (`key:<key>`, stable + deterministic across rebuilds), falling back to the
+  documented snapshot-local `element-<hash>`. Documented the identity contract
+  on `SemanticNodeId` and the producer-agnostic snapshot model on `SemanticTree`
+  (the `.new` constructor lets a future incremental backend build the same query
+  surface without the element walk). Pinned by
+  [semantic_identity_test.dart](../../packages/fleury/test/semantics/semantic_identity_test.dart).
+- Contract conformance in
+  [semantic_contract_conformance_test.dart](../../packages/fleury_widgets/test/semantic_contract_conformance_test.dart):
+  runtime role-materialization for representative widgets + a catalog drift
+  guard that checks the full 47-widget semantic-role surface against source
+  (verified to FAIL when a widget gains/loses/changes semantics).
+- Updated [architecture-priorities.md](architecture-priorities.md) and
+  [decision-log.md](decision-log.md).
+
+Findings:
+- Capability correction: the earlier cohesion-audit claim "capability fallback
+  at ~6% = critical drift" was a measurement artifact. Color and grapheme-width
+  degrade centrally (renderer `quantizeColor` + width resolver), chart/Unicode-
+  glyph widgets need no protocol gating, and the only genuinely protocol-gated
+  widgets (Image, MarkdownText hyperlinks, DataTable) ALREADY declare
+  `CapabilityRequirement`s. So #2's "capability-fallback propagation" was largely
+  a non-task; the real deliverable is the enforcement mechanism (conformance
+  tests), not cargo-culting requirements onto widgets that don't need them.
+- Existing tests use explicit semantic ids, never the auto `element-<hash>` ids,
+  so the key-derived identity change is non-breaking.
+
+Validation:
+- `dart analyze` clean across `fleury` and `fleury_widgets`.
+- Core 1499 tests (+4 identity), `fleury_widgets` 808 (+10 conformance); full
+  suites green at `--concurrency=1`. Both new guards verified to bite.
+
+Next:
+- Tier 2 is the next active tier: async-compute seam (Isolate.run) and the new
+  frame-rate coalescing item (the fast/WAN-SSH latency lever).
