@@ -18,11 +18,12 @@ hide behind its language; the bytes are the bytes.
 
 ## Architecture
 
-1. **Capture** (`profiling/capture_pty.py`) — runs ANY framework's scenario app
-   under a real pseudo-terminal (so it renders normally) and captures every
-   output byte + per-read timestamps. Uses `pty.fork`, so it works even from a
-   non-interactive shell (macOS `script` chokes on socket stdin). Language-
-   agnostic by construction.
+1. **Capture** (`profiling/capture_pty.dart`) — all-Dart, runs ANY framework's
+   scenario app under a real pseudo-terminal (so it renders normally) and
+   captures every output byte + per-read timestamps. Pure `dart:ffi`
+   (openpty + posix_spawnp + non-blocking read loop); no Python, no Flutter, no
+   third-party pty dep. POSIX (macOS / Linux). `fork()` in the VM is unsafe, so
+   it uses posix_spawnp. Language-agnostic by construction.
 2. **Analyze** (`profiling/analyze.dart`) — runs each capture through
    `AnsiByteBreakdown` and reports the axes; with multiple labelled captures of
    the SAME scenario, bands each vs the best.
@@ -72,13 +73,33 @@ Each framework needs a **self-driving scenario app**: renders a shared scenario
 times out). Then:
 
 ```sh
-python3 profiling/capture_pty.py --out caps/<fw>-<scenario> -- <run command>
+dart run profiling/capture_pty.dart --out caps/<fw>-<scenario> -- <run command>
 dart run profiling/analyze.dart fleury=caps/fleury-<s> nocterm=caps/nocterm-<s> ...
 ```
 
 Toolchain status here: dart ✅ · go ✅ · cargo ✅ · python3 ✅ · node ✅ ·
 **bun ✗ (OpenTUI deferred to a bun host)**.
 
-Status: **capture + analyze + banding proven.** Remaining: write the per-
+## Are these the right axes? (research note, 2026-06-04)
+
+There is **no established cross-framework TUI benchmark standard** — only ad-hoc
+blog comparisons and per-framework micro-benches. Our axes are *reasoned* from
+the byte→latency analysis (perceived-latency drivers) + cross-language fairness,
+and they align with the one credible published methodology
+([Rezi benchmarks](https://www.mintlify.com/RtlZeroMemory/Rezi/architecture/benchmarks)):
+PTY-mode benchmarks that include the terminal write path (= our bytes-on-wire),
+and "strict-ui vs full-ui" scenarios to avoid biasing layout-engine frameworks
+against raw-buffer libs.
+
+Formalization to do before publishing comparisons:
+- **Add the axes the field actually leads with:** memory (RSS) and CPU under
+  sustained load, and sustained FPS. Report RSS *with the caveat* that it's
+  runtime-confounded (Go/Rust binary vs Dart-AOT vs Node vs Python floors
+  differ), rather than omitting it — the field reports it.
+- **Adopt the strict-vs-full-UI framing** so layout-engine vs raw-buffer
+  comparisons are honest.
+- Run Tier-C on bare metal with replicates (virtualized hosts add jitter).
+
+Status: **capture + analyze + banding proven, all-Dart.** Remaining: write the per-
 framework self-driving scenario apps (fleury first, then peers), define the
 shared scenario set (reuse SB.* shapes), and collect Tier-C numbers on hardware.
