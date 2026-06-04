@@ -558,6 +558,12 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
     if (_selectionGeometry == next) return;
     _selectionGeometry = next;
     notifyListeners();
-    markNeedsPaint();
+    // Paint-only: a selection-range change moves which cells are
+    // highlighted, never the text's size or wrap. `performLayout` produces
+    // the line structure that selection maps onto (layout -> selection), not
+    // the reverse, so the cached layout stays valid. cellBounds for
+    // reading-order selection are refreshed during paint, which
+    // [markNeedsPaintOnly] still triggers via the nearest repaint boundary.
+    markNeedsPaintOnly();
   }
 }

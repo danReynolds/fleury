@@ -1,0 +1,133 @@
+{
+  "terminalSize": {
+    "cols": 100,
+    "rows": 30
+  },
+  "scenarios": [
+    {
+      "id": "first-paint-styled",
+      "name": "First paint — styled screen",
+      "note": "baseline full paint of a colorful screen; content vs SGR split",
+      "firstPaint": {
+        "total": 1762,
+        "content": 660,
+        "sgr": 996,
+        "cursor": 90,
+        "sync": 16,
+        "other": 0,
+        "overheadFraction": 0.6254256526674233
+      },
+      "updateFrameCount": 0,
+      "updateTotal": {
+        "total": 0,
+        "content": 0,
+        "sgr": 0,
+        "cursor": 0,
+        "sync": 0,
+        "other": 0,
+        "overheadFraction": 0.0
+      },
+      "avgUpdateBytes": 0.0
+    },
+    {
+      "id": "selection-highlight",
+      "name": "Selection extend",
+      "note": "inverse-highlight churn as a selection grows; SGR lever",
+      "firstPaint": {
+        "total": 83,
+        "content": 64,
+        "sgr": 0,
+        "cursor": 3,
+        "sync": 16,
+        "other": 0,
+        "overheadFraction": 0.2289156626506024
+      },
+      "updateFrameCount": 11,
+      "updateTotal": {
+        "total": 388,
+        "content": 13,
+        "sgr": 132,
+        "cursor": 67,
+        "sync": 176,
+        "other": 0,
+        "overheadFraction": 0.9664948453608248
+      },
+      "avgUpdateBytes": 35.27272727272727
+    },
+    {
+      "id": "color-churn",
+      "name": "Color churn — heatmap",
+      "note": "every cell changes color each tick; SGR-dominant updates",
+      "firstPaint": {
+        "total": 465,
+        "content": 384,
+        "sgr": 13,
+        "cursor": 28,
+        "sync": 16,
+        "other": 24,
+        "overheadFraction": 0.17419354838709677
+      },
+      "updateFrameCount": 10,
+      "updateTotal": {
+        "total": 4277,
+        "content": 1872,
+        "sgr": 1014,
+        "cursor": 295,
+        "sync": 160,
+        "other": 936,
+        "overheadFraction": 0.5623100303951368
+      },
+      "avgUpdateBytes": 427.7
+    },
+    {
+      "id": "full-content-refresh",
+      "name": "Full content refresh (scroll-equivalent)",
+      "note": "every visible line changes; content + cursor heavy",
+      "firstPaint": {
+        "total": 1144,
+        "content": 1038,
+        "sgr": 0,
+        "cursor": 90,
+        "sync": 16,
+        "other": 0,
+        "overheadFraction": 0.09265734265734266
+      },
+      "updateFrameCount": 10,
+      "updateTotal": {
+        "total": 10239,
+        "content": 5961,
+        "sgr": 0,
+        "cursor": 1310,
+        "sync": 160,
+        "other": 2808,
+        "overheadFraction": 0.41781423967184295
+      },
+      "avgUpdateBytes": 1023.9
+    },
+    {
+      "id": "scattered-numbers",
+      "name": "Scattered numbers (sparse dashboard)",
+      "note": "only a few cells change per tick; cursor overhead vs tiny content",
+      "firstPaint": {
+        "total": 228,
+        "content": 172,
+        "sgr": 0,
+        "cursor": 40,
+        "sync": 16,
+        "other": 0,
+        "overheadFraction": 0.24561403508771928
+      },
+      "updateFrameCount": 10,
+      "updateTotal": {
+        "total": 407,
+        "content": 37,
+        "sgr": 0,
+        "cursor": 210,
+        "sync": 160,
+        "other": 0,
+        "overheadFraction": 0.9090909090909091
+      },
+      "avgUpdateBytes": 40.7
+    }
+  ]
+}

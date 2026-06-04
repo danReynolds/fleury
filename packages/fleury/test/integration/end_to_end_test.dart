@@ -145,7 +145,7 @@ void main() {
       const AnsiRenderer(synchronizedOutput: false).renderFull(buf, sink);
 
       // Default style → no SGR; just cursor + content.
-      expect(sink.output, '\x1B[1;1Hhi');
+      expect(sink.output, '\x1B[Hhi');
     });
 
     test('two-frame cycle: diff only emits changed cells', () {
@@ -164,7 +164,7 @@ void main() {
       ).renderDiff(prev, next, sink);
 
       // Only column 0 differs between '1····' and '2····'.
-      expect(sink.output, '\x1B[1;1H2');
+      expect(sink.output, '\x1B[H2');
     });
   });
 

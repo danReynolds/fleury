@@ -68,9 +68,9 @@ void main() {
       const AnsiRenderer(
         synchronizedOutput: false,
       ).renderDiff(prev, next, sink);
-      // Cursor to (1,1); 'a' advances to col 2, 'b' to col 3, 'c' to 4.
-      // No intermediate CSI H expected.
-      expect(sink.output, '\x1B[1;1Habc');
+      // Cursor home (CSI H == CSI 1;1H); 'a' advances to col 2, 'b' to col 3,
+      // 'c' to 4. No intermediate cursor move expected.
+      expect(sink.output, '\x1B[Habc');
     });
 
     test('a gap between dirty cells causes a second cursor move', () {
@@ -83,7 +83,9 @@ void main() {
       const AnsiRenderer(
         synchronizedOutput: false,
       ).renderDiff(prev, next, sink);
-      expect(sink.output, '\x1B[1;1Ha\x1B[1;4Hd');
+      // Home, 'a' (cursor now at col 1), then a same-row gap of 2 is a
+      // relative forward move (CSI 2C) — shorter than absolute CSI 1;4H.
+      expect(sink.output, '\x1B[Ha\x1B[2Cd');
     });
 
     test('dirty cells in multiple rows emit a cursor move per row', () {
@@ -96,7 +98,9 @@ void main() {
       const AnsiRenderer(
         synchronizedOutput: false,
       ).renderDiff(prev, next, sink);
-      expect(sink.output, '\x1B[1;1Ha\x1B[3;1Hc');
+      // Cross-row move stays absolute, with the column omitted (CSI 3H == row
+      // 3, col 1).
+      expect(sink.output, '\x1B[Ha\x1B[3Hc');
     });
   });
 
@@ -113,7 +117,7 @@ void main() {
       ).renderDiff(prev, next, sink);
       // After the wide '中' the cursor is at col 3 (1-indexed); 'x' is at
       // col 3 (0-indexed col 2 → 1-indexed col 3). No second cursor move.
-      expect(sink.output, '\x1B[1;1H中x');
+      expect(sink.output, '\x1B[H中x');
     });
 
     test('continuation cells emit nothing themselves', () {
@@ -126,7 +130,7 @@ void main() {
         synchronizedOutput: false,
       ).renderDiff(prev, next, sink);
       // Only one cursor move + one grapheme; no extra cell for col 1.
-      expect(sink.output, '\x1B[1;1H中');
+      expect(sink.output, '\x1B[H中');
     });
   });
 
@@ -141,7 +145,7 @@ void main() {
       const AnsiRenderer(
         synchronizedOutput: false,
       ).renderDiff(prev, next, sink);
-      expect(sink.output, '\x1B[1;1H ');
+      expect(sink.output, '\x1B[H ');
     });
   });
 
@@ -160,7 +164,7 @@ void main() {
         synchronizedOutput: false,
       ).renderDiff(prev, next, sink);
       // Cursor + reset + fg red (31) + bold (1) + 'A' + trailing reset.
-      expect(sink.output, '\x1B[1;1H\x1B[0m\x1B[31m\x1B[1mA\x1B[0m');
+      expect(sink.output, '\x1B[H\x1B[0m\x1B[31m\x1B[1mA\x1B[0m');
     });
 
     test('resets style at end of frame when any style was emitted', () {
@@ -199,7 +203,7 @@ void main() {
       // style flips back: reset → 'c';
       // no final reset because we already reset back to default
       // before emitting 'c'.
-      expect(sink.output, '\x1B[1;1Ha\x1B[0m\x1B[1mb\x1B[0mc');
+      expect(sink.output, '\x1B[Ha\x1B[0m\x1B[1mb\x1B[0mc');
     });
   });
 
@@ -493,7 +497,7 @@ void main() {
 
       const AnsiRenderer().renderDiff(prev, next, sink);
       final bsu = sink.output.indexOf('\x1B[?2026h');
-      final firstCup = sink.output.indexOf('\x1B[1;1H');
+      final firstCup = sink.output.indexOf('\x1B[H'); // home (CSI H == 1;1)
       expect(
         bsu,
         lessThan(firstCup),
@@ -525,9 +529,9 @@ void main() {
       final sink = StringAnsiSink();
 
       renderer.renderDiff(prev, next, sink);
-      // Exactly one cursor move (for the anchor); no per-cell moves for
-      // the two covered cells.
-      expect('\x1B[1;1H'.allMatches(sink.output).length, 1);
+      // Exactly one cursor move (for the anchor at home); no per-cell moves
+      // for the two covered cells.
+      expect('\x1B[H'.allMatches(sink.output).length, 1);
       expect(sink.output.contains('\x1B[1;2H'), isFalse);
       expect(sink.output.contains('\x1B[1;3H'), isFalse);
     });

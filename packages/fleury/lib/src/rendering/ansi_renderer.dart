@@ -128,9 +128,12 @@ final class AnsiRenderer {
         // default so production pays nothing.
         onDirtyCell?.call(col, row);
 
-        // Cursor positioning. Terminal coordinates are 1-indexed.
+        // Cursor positioning. Pick the shortest encoding that lands the
+        // cursor at (row, col); see [_cursorMove]. Bytes-on-the-wire matter
+        // more than CPU here, and cursor moves are the dominant frame
+        // overhead on scroll/dashboard/sparse updates.
         if (cursorRow != row || cursorCol != col) {
-          buf.write('\x1B[${row + 1};${col + 1}H');
+          buf.write(_cursorMove(cursorRow, cursorCol, row, col));
           cursorRow = row;
           cursorCol = col;
         }
@@ -206,6 +209,41 @@ final class AnsiRenderer {
     final empty = CellBuffer(buffer.size);
     renderDiff(empty, buffer, sink);
   }
+
+  // ---- Cursor encoding ---------------------------------------------------
+
+  /// The shortest escape that moves the cursor from `(fromRow, fromCol)` to
+  /// `(row, col)`. Every branch is byte-output-equivalent to the absolute
+  /// `CSI row;col H` it replaces — it leaves the cursor in exactly the same
+  /// place with no other visible effect:
+  ///
+  ///   - Same row: a relative `CSI n C` (forward) / `CSI n D` (back) is
+  ///     usually shorter than an absolute reposition. CUF/CUB do not wrap or
+  ///     change the row, and the target column is always on-screen, so the
+  ///     landing position is identical. `n == 1` omits the parameter
+  ///     (`CSI C` / `CSI D`), which defaults to 1.
+  ///   - Otherwise (unknown previous position, or a different row): absolute,
+  ///     with the column omitted when it is 1 (`CSI row H`) and both omitted
+  ///     at home (`CSI H`).
+  static String _cursorMove(int? fromRow, int? fromCol, int row, int col) {
+    if (fromRow != null && fromCol != null && fromRow == row && fromCol != col) {
+      final n = (col - fromCol).abs();
+      final dir = col > fromCol ? 'C' : 'D';
+      final relative = n == 1 ? '\x1B[$dir' : '\x1B[$n$dir';
+      return _shorter(relative, _absolutePosition(row, col));
+    }
+    return _absolutePosition(row, col);
+  }
+
+  /// Absolute cursor position (1-indexed), omitting defaults: `CSI H` at home,
+  /// `CSI row H` when the column is 1.
+  static String _absolutePosition(int row, int col) {
+    if (row == 0 && col == 0) return '\x1B[H';
+    if (col == 0) return '\x1B[${row + 1}H';
+    return '\x1B[${row + 1};${col + 1}H';
+  }
+
+  static String _shorter(String a, String b) => b.length < a.length ? b : a;
 
   // ---- Style encoding ----------------------------------------------------
 
