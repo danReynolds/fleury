@@ -15,6 +15,74 @@ coalescing are all "do exactly what changed, nothing more."
 
 ---
 
+## 🧭 Re-derived priorities (2026-06-04 frontier refresh)
+
+A bounded competitive/frontier research pass (live web, sourced) re-derived
+priorities. Verdict on the question that triggered it — *is the arch strong
+enough that Tier 2 is low priority?* — **yes.** The arch is genuinely strong;
+the remaining Tier 2/3 items are incremental gap-fills. The leverage has moved
+off "more arch depth" and onto **one frontier we still uniquely own.**
+
+What the research found (all verified w/ sources, mid-2026):
+- **fleury's semantic / agent-legible *render-tree* is still unowned.** No TUI
+  framework exposes a queryable, machine-readable tree of its rendered UI.
+  Accessibility is an industry-wide failure (Bubble Tea a11y issue open since
+  2023; Textualize folded; "the text mode lie" essay). Proof of the gap:
+  `agent-tui` exists *because* agents must screenshot + scrape ANSI to drive
+  TUIs.
+- **But the field converged adjacent, not at us:** the momentum is structured
+  agent↔frontend *message* protocols — ACP (25+ agents, Zed/JetBrains/MS), Toad,
+  goose 2.0. These serialize the agent's I/O stream, **not** the rendered UI
+  tree. Complementary to fleury, but it means the coding-agent workload's pull is
+  partly satisfied *without* a UI tree.
+- **The principle is already won elsewhere:** browser/mobile agents use the
+  accessibility tree, not pixels (Playwright MCP: 2–5KB structured vs ~500KB
+  screenshots). Validates the intuition — but those are GUI, not terminal.
+- **Several fleury "differentiators" have eroded as standalone claims:** testing
+  (Nocterm pump/sendKey, Textual pytest-snapshot already do it), retained-
+  reactive (Bubble Tea v2 went declarative), capability contracts (Bubble Tea v2
+  baked in synchronized output + grapheme correctness), and **raw perf** (OpenTUI
+  Zig core + Bubble Tea v2 own perf with *shipped, validated* work — our
+  self-graded numbers lose that comparison).
+
+The strategic key: **the SAME semantic tree serves accessibility + agent-drive +
+testing.** Betting on any one alone is weak (accessibility has no monetization
+precedent — Textualize died; agent-legibility alone risks ACP absorbing it). The
+defensible, unowned position is the **intersection**, and as of mid-2026 nobody
+is standing there.
+
+Honest asterisks (don't oversell): the semantic-UI-tree need is currently *ahead
+of the demand curve* for coding agents (ACP satisfies them at the message
+layer); strongest near-term pull is **agents driving third-party/legacy TUIs**
+and **accessibility** — smaller, earlier markets. **Toad** (McGugan, same
+frontend/backend instinct) is the competitor to watch; still a private prototype,
+so the window is open.
+
+### The re-derived list
+
+- **P1 — Make the semantic tree the flagship (was "gated").** Promote the
+  incremental/observable semantic tree and build the *convergence*: one live,
+  queryable structure that yields (a) an accessibility/screen-reader projection
+  (a verifiable "nobody else has this" first — de-risks our self-graded-evidence
+  problem by competing on a checkable axis), (b) an agent read/drive surface
+  (read state + invoke `SemanticAction`s), (c) test assertions. Tier-1
+  freeze-proofing already laid the identity foundation.
+- **P2 — Ride ACP, don't fight it.** Stand up `fleury_acp` (already planned
+  fast-follow) and position the semantic tree as *complementary*: ACP carries the
+  agent stream; fleury exposes the rendered UI as data. Don't reinvent ACP.
+- **P3 — Reframe perf, stop racing it.** Recast the byte/frame work as
+  correctness/determinism enablers, not a speed race vs OpenTUI/Bubble Tea.
+- **P4 — Prove standing (still open).** The self-graded-evidence gap remains;
+  the accessibility projection (P1a) is the cheapest verifiable proof point.
+- **Demoted to opportunistic gap-fills:** async-compute seam, focus-preservation.
+  **Still no:** native render core (OpenTUI owns that cross-language perf lane).
+- **Posture call, now informed:** "best-in-class for Dart **and** own the
+  semantic-convergence frontier" — which travels as an idea/protocol even though
+  the impl is Dart. Cross-language via a native core is a losing race; the
+  convergence tree is the cross-language-relevant bet.
+
+The Tier 2/3 lists below remain accurate as a backlog but are subordinate to P1–P4.
+
 ## ✅ Completed
 
 - **Paint-only / layout invalidation split** — closed the last conservative
