@@ -20902,3 +20902,44 @@ Validation:
 Next:
 - Tier 2 is the next active tier: async-compute seam (Isolate.run) and the new
   frame-rate coalescing item (the fast/WAN-SSH latency lever).
+
+## 2026-06-04 - Tier 2: Frame-Rate Coalescing
+
+Status: Complete (Tier 2 item)
+
+Context:
+- The byte→latency estimator showed fast/WAN-SSH latency is round-trip / frame-
+  COUNT dominated, not byte-size dominated, and the agent-streaming workload
+  (token/log streams) is the hot case. Investigation confirmed `scheduleFrame`
+  coalesced only WITHIN an event-loop turn (via `scheduleMicrotask`): a stream
+  emitting N events across N turns rendered N frames — no rate cap.
+
+Changes:
+- New [frame_scheduler.dart](../../packages/fleury/lib/src/runtime/frame_scheduler.dart):
+  `FrameScheduler` coalesces frame requests and, when `minFrameInterval > 0`,
+  defers a too-soon request to the trailing edge of the interval, collapsing a
+  burst to one render per interval (updates merged, never dropped). Clock- and
+  flush-injectable so it is deterministically testable.
+- Wired into [run_tui.dart](../../packages/fleury/lib/src/runtime/run_tui.dart):
+  replaced the inline `framePending`/`pendingFrameReason`/`scheduleFrame`
+  closure (and the now-dead `_mergeFrameReasons`) with a `FrameScheduler`, and
+  added an opt-in `runTui(frameInterval:)` param. Default `Duration.zero` is
+  byte-for-byte the old microtask-per-turn behavior.
+- [frame_scheduler_test.dart](../../packages/fleury/test/runtime/frame_scheduler_test.dart):
+  uncapped = current behavior (single flush, reason merge); capped = first frame
+  immediate, then 10 burst updates → one render at the trailing edge; post-
+  interval request renders immediately; dispose no-ops.
+
+Decisions:
+- Opt-in, default uncapped. A default cap (e.g. 60 fps) would help the common
+  case but is a behavior change that should be validated on real terminals
+  first; flipping the default is a follow-up once hardware evidence exists.
+
+Validation:
+- `dart analyze` clean. Core suite green: 1504 tests (+5 scheduler), including
+  the runTui integration tests (end_to_end, remote serve/shell) — default frame
+  path unchanged. `fleury_widgets` unaffected.
+
+Next:
+- Consider a default `frameInterval` (~16 ms) after real-terminal validation.
+- Remaining Tier 2: async-compute seam (Isolate.run); focus-preservation.

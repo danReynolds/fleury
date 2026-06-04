@@ -32,6 +32,11 @@ coalescing are all "do exactly what changed, nothing more."
   identity, an explicit identity contract (`SemanticNodeId` doc), and a
   producer-agnostic snapshot model so an incremental/observable backend won't be
   a breaking change. Guarded by `semantic_identity_test`.
+- **(Tier 2) Frame-rate coalescing** — `FrameScheduler` coalesces frame requests
+  and an opt-in `runTui(frameInterval:)` caps the render rate so high-rate
+  streams / rapid setState collapse to one frame per interval (frame-count is
+  the WAN-SSH + agent-streaming latency lever). Default uncapped = unchanged
+  behavior; clock-injectable + unit-tested (`frame_scheduler_test`).
 - **(Tier 1) Contract-conformance tests** — runtime role-materialization checks
   + a catalog drift guard over the whole 47-widget semantic surface
   (`semantic_contract_conformance_test`). **Capability finding corrected:** the
@@ -65,15 +70,13 @@ of the API track until after the storybook work, not arch blockers.
    guard. Removes the single-isolate ceiling for sort/filter/parse/diff on the
    data-heavy workloads Fleury targets. ~1 week, no strategic decision needed.
 
-4. **Frame-rate coalescing under high-rate updates.** *(new — 2026-06-04)*
-   The latency estimator showed fast/WAN-SSH latency is RTT/frame-**count**
-   dominated, not byte-size dominated. The lever is emitting fewer frames under
-   bursty updates: investigate whether the runtime currently emits a frame per
-   event-loop turn (e.g. one per streamed token/log line) or coalesces to a
-   frame budget; if the former, add a frame-rate cap / coalescing window so a
-   burst of N updates produces one frame. Directly improves remote-session
-   responsiveness **and** the agent-streaming workload (token/log/markdown
-   streams). Pair with the byte telemetry to measure frames-per-second emitted.
+4. ✅ **Frame-rate coalescing under high-rate updates.** *(done — 2026-06-04)*
+   Confirmed the runtime coalesced only within an event-loop turn (microtask),
+   not across turns — so a burst rendered one frame per event. Added
+   `FrameScheduler` (clock-injectable, unit-tested) and an opt-in
+   `runTui(frameInterval:)` rate cap that collapses a burst to one frame per
+   interval (10 updates → 1 render, verified) while merging updates. Default
+   `Duration.zero` is unchanged behavior. See Completed.
 
 5. **Focus-preservation-across-screens hardening.** The decision log keeps
    inactive-screen command scopes *disabled* pending "focus preservation

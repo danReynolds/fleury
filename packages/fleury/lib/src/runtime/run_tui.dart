@@ -37,6 +37,7 @@ import '../widgets/navigator.dart';
 import '../widgets/overlay.dart';
 import '../widgets/pointer.dart';
 import '../widgets/tui_binding.dart';
+import 'frame_scheduler.dart';
 import 'hot_reload.dart';
 import 'input_dispatcher.dart';
 import 'output_capture.dart';
@@ -82,6 +83,14 @@ typedef TuiEventHandler = ExitRequested? Function(TuiEvent event);
 /// animating, and each tick marks elements dirty, which coalesces into
 /// a single on-demand frame. Idle apps schedule no frames at all.
 ///
+/// Multiple updates within one event-loop turn already coalesce into one
+/// frame. To also cap the rate ACROSS turns — so a high-rate stream (tokens,
+/// log lines) or rapid `setState`s collapse to one frame per interval instead
+/// of one each — pass [frameInterval] (e.g. `Duration(milliseconds: 16)` for
+/// ~60 fps). This trims frame COUNT, which is what drives perceived latency on
+/// round-trip-bound transports (WAN SSH) and streaming agent UIs. The default
+/// ([Duration.zero]) is uncapped. Updates are merged, never dropped.
+///
 /// Requires an interactive terminal: if standard output is piped or
 /// redirected (no TTY), this throws before entering rather than spewing
 /// cursor-control sequences into the stream. Pass
@@ -100,6 +109,7 @@ Future<void> runTui(
   List<KeyBinding> globalBindings = const [],
   Duration sequenceTimeout = const Duration(milliseconds: 500),
   DebugConfig debug = const DebugConfig(),
+  Duration frameInterval = Duration.zero,
 }) async {
   final usedDriver = driver ?? await _resolveDefaultDriver();
   // Long-lived shell-state holder. Survives setState / rebuilds; the
@@ -171,8 +181,6 @@ Future<void> runTui(
   final renderer = AnsiRenderer(colorMode: usedDriver.capabilities.colorMode);
   Element? rootElement;
   var disposed = false;
-  var framePending = false;
-  var pendingFrameReason = 'initial';
 
   // Double-buffered rendering: front (just-painted, for next-frame
   // diff) and back (cleared and re-painted). The pair is allocated
@@ -348,27 +356,24 @@ Future<void> runTui(
 
     // Drain post-frame callbacks AFTER bytes are out. Callers can now
     // safely read render-object geometry (sizes / offsets reflect the
-    // frame the user is seeing). A callback that schedules another
-    // frame goes through scheduleFrame; we don't reset framePending
-    // here because renderFrame is itself called from the scheduled
-    // microtask, which clears it before invoking us.
+    // frame the user is seeing). A callback that schedules another frame goes
+    // through scheduleFrame; the FrameScheduler has already cleared its pending
+    // flag before invoking us, so the new request schedules a fresh flush.
     binding.flushPostFrameCallbacks(binding.tickerScheduler.clock.now);
   }
 
+  // Coalesces frame requests and, when [frameInterval] > 0, caps the render
+  // rate so bursts (high-rate streams, rapid setState) collapse to one frame
+  // per interval. The default (Duration.zero) is uncapped — identical to the
+  // historical microtask-per-turn behaviour.
+  final frameScheduler = FrameScheduler(
+    clock: binding.tickerScheduler.clock,
+    minFrameInterval: frameInterval,
+    onRender: renderFrame,
+  );
   void scheduleFrame([String reason = 'scheduled']) {
     if (disposed) return;
-    if (framePending) {
-      pendingFrameReason = _mergeFrameReasons(pendingFrameReason, reason);
-      return;
-    }
-    pendingFrameReason = reason;
-    framePending = true;
-    scheduleMicrotask(() {
-      framePending = false;
-      final reason = pendingFrameReason;
-      pendingFrameReason = 'scheduled';
-      renderFrame(reason);
-    });
+    frameScheduler.requestFrame(reason);
   }
 
   owner.onScheduleBuild = () => scheduleFrame('build');
@@ -407,6 +412,7 @@ Future<void> runTui(
     // they registered in initState and releasing anything else that
     // would otherwise keep the isolate alive after restore().
     rootElement?.unmount();
+    frameScheduler.dispose();
     dispatcher.dispose();
     focusManager.dispose();
     binding.dispose();
@@ -610,14 +616,6 @@ Future<void> runTui(
   return done.future;
 }
 
-String _mergeFrameReasons(String current, String next) {
-  if (current == next) return current;
-  if (current.isEmpty || current == 'scheduled') return next;
-  if (next.isEmpty || next == 'scheduled') return current;
-  final parts = current.split('+');
-  if (parts.contains(next)) return current;
-  return '$current+$next';
-}
 
 String _frameReasonForEvent(TuiEvent event) {
   return switch (event) {
