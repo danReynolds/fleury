@@ -6,7 +6,7 @@
 // exception bubbles up.
 
 import 'dart:async';
-import 'dart:io' show File, IOOverrides, Platform;
+import 'dart:io' show File, IOOverrides, Platform, stderr;
 
 import '../debug/debug_events.dart';
 import '../debug/debug_invalidation.dart';
@@ -16,6 +16,7 @@ import '../foundation/fleury_error.dart';
 import '../foundation/geometry.dart';
 import '../remote/remote_driver.dart';
 import '../remote/unix_socket_transport.dart';
+import '../rendering/ansi_byte_budget.dart';
 import '../rendering/ansi_renderer.dart';
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
@@ -159,7 +160,13 @@ Future<void> runTui(
     sequenceTimeout: sequenceTimeout,
     globalBindings: globalBindings,
   );
-  final sink = _DriverSink(usedDriver);
+  // Optional byte telemetry: set FLEURY_BYTE_TELEMETRY=1 to wrap the live
+  // output sink and print a per-frame byte budget on exit. Aggregate mode
+  // (no per-frame list) so a long session stays bounded; zero cost when off.
+  final byteTelemetry = Platform.environment['FLEURY_BYTE_TELEMETRY'] == '1'
+      ? CountingAnsiSink.aggregate(_DriverSink(usedDriver))
+      : null;
+  final AnsiSink sink = byteTelemetry ?? _DriverSink(usedDriver);
   // Downsample colors to whatever the terminal actually supports.
   final renderer = AnsiRenderer(colorMode: usedDriver.capabilities.colorMode);
   Element? rootElement;
@@ -414,6 +421,11 @@ Future<void> runTui(
         usedDriver.write('${line.text}\n');
       }
     }
+
+    // Byte telemetry summary, after the terminal is restored.
+    if (byteTelemetry != null) {
+      stderr.write(_formatByteTelemetry(byteTelemetry));
+    }
   }
 
   // Intercept stray output so it can't corrupt the frame. `print()` is
@@ -627,6 +639,26 @@ class _DriverSink implements AnsiSink {
 
   @override
   Future<void> flush() async {}
+}
+
+/// Renders a one-shot byte-telemetry summary for the FLEURY_BYTE_TELEMETRY
+/// path: aggregate byte budget by category plus estimated per-frame wire time
+/// across transport profiles. Real-terminal capture is the point — run a
+/// Fleury app with the env var set on the target terminal/SSH session.
+String _formatByteTelemetry(CountingAnsiSink sink) {
+  final t = sink.total;
+  final frames = sink.frameCount;
+  final avg = frames == 0 ? 0 : (t.total / frames).round();
+  String pct(int part) =>
+      t.total == 0 ? '0%' : '${(100 * part / t.total).round()}%';
+  final latency = TransportProfile.defaults
+      .map((p) => '${p.name} ${p.frameMs(avg).toStringAsFixed(1)}ms')
+      .join('  ');
+  return '\n[fleury byte telemetry] frames=$frames '
+      'totalBytes=${t.total} avg=$avg B/frame\n'
+      '  content ${pct(t.content)}  sgr ${pct(t.sgr)}  '
+      'cursor ${pct(t.cursor)}  sync ${pct(t.sync)}\n'
+      '  est avg-frame latency: $latency\n';
 }
 
 /// Picks the right default driver when the caller didn't pass one.

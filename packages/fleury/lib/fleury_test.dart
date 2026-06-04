@@ -61,5 +61,7 @@ export 'src/debug/debug_events.dart'
     show DebugEvent, DebugEvents, FrameDebugEvent, FrameEvent, InputDebugEvent;
 export 'src/rendering/render_layout_stats.dart'
     show RenderLayoutDebugStats, RenderLayoutFrameStats;
+export 'src/rendering/ansi_byte_budget.dart'
+    show AnsiByteBreakdown, CountingAnsiSink, TransportProfile;
 export 'src/rendering/render_repaint_boundary.dart'
     show RepaintBoundaryFrameStats;

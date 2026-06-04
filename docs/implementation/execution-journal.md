@@ -20630,3 +20630,275 @@ Next:
   matrix coverage, real Windows validation, Dune/`dune_cli`, `fleury_acp`,
   public launch/adoption collateral, full replay/devtools, and expanded peer
   benchmark/comparison work.
+
+## 2026-06-03 - Paint-Only Invalidation: Close Straggler + Enforce Contract
+
+Status: Complete for this invalidation-audit slice
+
+Context:
+- External architecture review picked up the paint-only/layout invalidation
+  split as the highest-leverage arch item (it is both the top retained-model
+  perf lever and what makes the three-tree's cached layout/paint state pay off).
+- Inventory finding: the audit was already far more complete than the trackers
+  implied. The conservative `markNeedsPaint()` (which still walks layout up via
+  `_markNeedsLayoutUp`) had been eliminated everywhere except ONE site:
+  `SelectableTextMixin._recomputeGeometry` in
+  [selectable_text_mixin.dart](../../packages/fleury/lib/src/rendering/selectable_text_mixin.dart).
+  `markNeedsPaintOnly()` is used across ~25 files; the decision log undersold
+  this state.
+
+Changes:
+- Converted the lone `markNeedsPaint()` straggler to `markNeedsPaintOnly()` with
+  an explanatory comment. Safety argument: a selection-range change moves which
+  cells are highlighted but never the text's size or wrap. `performLayout`
+  produces the line structure that selection maps onto (layout -> selection,
+  not the reverse), so cached layout stays valid; reading-order `cellBounds` are
+  refreshed during paint, which `markNeedsPaintOnly` still triggers via the
+  nearest repaint boundary.
+- Added [selection_paint_only_test.dart](../../packages/fleury/test/rendering/selection_paint_only_test.dart):
+  a regression guard that anchors a selection, warms the layout cache, extends
+  the selection (Shift+Right), and asserts the next frame is paint-only
+  (`performedCount == 0`, `skippedCount > 0`). The test self-validates its
+  precondition (the selection text actually changed).
+
+Findings:
+- Before the fix, every selection/cursor change recorded 5 performed layouts
+  (the text plus 4 ancestors); after the fix, 0. Selection/cursor movement is a
+  hot path in editable text, so this is a real win, not a microbenchmark.
+- The paint-only audit can now be considered substantially complete across both
+  packages. Remaining work is enforcement breadth, not unconverted setters: the
+  `markNeedsLayout()` call sites reviewed during the inventory are all genuine
+  shape/geometry changes.
+
+Validation:
+- `dart analyze` clean in `fleury` and `fleury_widgets`.
+- Falsification cycle on the new guard: PASS with the fix, FAIL on the
+  conservative call (`Expected: <0> / Actual: <5>`), PASS after re-applying.
+  Confirms the guard bites instead of passing vacuously.
+- Full suites green: `fleury` 1467 tests (was 1466, +1 guard),
+  `fleury_widgets` 798 tests.
+
+Next:
+- Optional follow-up: extend the paint-only enforcement pattern to a small
+  conformance suite so future widgets are guarded by default (ties into the
+  broader "contract conformance, not just done-once" arch theme).
+- Higher-leverage perf measurement remains: bytes-per-frame on real terminals /
+  SSH (the actual perceived-latency bottleneck), which also validates the
+  retained-vs-Ratatui flagship claim.
+
+## 2026-06-04 - Byte-Budget Harness: Where Do The Frame Bytes Go
+
+Status: Complete for this measurement slice
+
+Context:
+- Architecture review flagged that real-terminal perceived latency is dominated
+  by bytes-on-the-wire, not CPU layout, and that the existing scenario
+  benchmarks only report a single full-repaint "ANSI bytes" total. We needed a
+  per-frame, per-category byte model to know which encoding work (if any) is
+  worth doing — and to validate/refute the prior hypothesis that incremental
+  SGR was the top byte lever.
+
+Changes:
+- Added [ansi_byte_budget.dart](../../packages/fleury/lib/src/rendering/ansi_byte_budget.dart):
+  `AnsiByteBreakdown` (UTF-8 byte categorizer: content / sgr / cursor / sync /
+  other) and `CountingAnsiSink` (wrapping sink, per-frame + running total).
+  UTF-8 because that is what the terminal/SSH transport carries. The sink
+  wraps an optional inner sink, so it can later wrap the real `IoSinkAnsiSink`
+  for live byte telemetry against an actual terminal.
+- Exported both from [fleury_test.dart](../../packages/fleury/lib/fleury_test.dart)
+  (diagnostic surface, not the production barrel).
+- Added [ansi_byte_budget_test.dart](../../packages/fleury/test/rendering/ansi_byte_budget_test.dart):
+  9 tests pinning the categorizer against the exact CSI sequences the renderer
+  emits (cursor `H`, SGR `m`, private-mode `?...h/l`, multi-byte content), and
+  proving one `renderDiff` frame == one sink write.
+- Added [byte_budget_benchmark.dart](../../packages/fleury_widgets/benchmark/byte_budget_benchmark.dart):
+  drives 5 representative scenarios through `FleuryTester` + real widgets, diffs
+  consecutive frames, and reports first-paint vs update-frame byte budgets by
+  category. Saved baseline:
+  [byte-budget-2026-06-04.json](../../packages/fleury_widgets/benchmark/results/byte-budget-2026-06-04.json)
+  (100x30 terminal).
+
+Findings (100x30 terminal, UTF-8 bytes):
+- THE HEADLINE, and it corrects the earlier recommendation: in UPDATE frames,
+  **cursor positioning is the dominant overhead (~48% of bytes), not SGR
+  (~6%)**. The renderer emits a full absolute `CSI row;col H` (6-9 bytes) for
+  every dirty run, including 1-2 cell gaps created by coincidental
+  old==new cell matches within a changed row. Across all update frames:
+  cursor 48%, content 43%, sgr 6%, sync 4%.
+  - full scroll (every line differs): cursor 52% / content 47%, 1274 B/frame.
+  - sparse dashboard: cursor 52% / sync 39% / content 9%, 41 B/frame.
+  - color churn: cursor 39% / content 38% / sgr 20%, 498 B/frame.
+- SGR dominates FIRST PAINT of styled screens (55% of 1803 B), not updates. So
+  incremental SGR is a first-paint/resize/colorful-full-repaint win, not a
+  steady-state one — secondary to cursor work.
+- Synchronized-output markers are a fixed 16 B/frame: proportionally large on
+  tiny frequent frames (45% of a 36 B selection frame) but absolutely
+  negligible; keep them (flicker prevention >> 16 B).
+
+Revised perf recommendation:
+1. Cursor-move compression is the #1 byte lever (was: incremental SGR). Use
+   relative moves (`CSI nC`/`CSI nD`/`\r`) or short-gap overwrite when cheaper
+   than an absolute reposition. Biggest win on scroll/dashboard/scattered
+   interactive updates.
+2. Incremental SGR is a scoped first-paint/colorful-repaint win, not steady
+   state.
+3. Real-terminal step: wrap `CountingAnsiSink` around `IoSinkAnsiSink` and run
+   against actual terminals/SSH to confirm the bytes -> latency mapping.
+
+Validation:
+- `dart analyze` clean across `fleury` and `fleury_widgets`.
+- Core suite green: 1476 tests (1467 + 9 categorizer tests). `fleury_widgets`
+  analyze clean; harness runs and emits JSON.
+
+Next:
+- Prototype cursor-move compression in `AnsiRenderer` behind the byte harness as
+  a before/after gate (target: cut update-frame cursor bytes materially without
+  changing rendered output — guard with golden ANSI tests).
+
+## 2026-06-04 - Cursor-Move Compression In AnsiRenderer
+
+Status: Complete for this byte-encoding slice
+
+Context:
+- The byte-budget harness (prior entry) found cursor positioning, not SGR, is
+  the dominant update-frame overhead (~48% of bytes). The renderer emitted a
+  full absolute `CSI row;col H` (6-9 bytes) for every dirty run, including the
+  1-2 cell gaps created when old==new cells coincidentally match inside a
+  changed row.
+
+Changes:
+- [ansi_renderer.dart](../../packages/fleury/lib/src/rendering/ansi_renderer.dart):
+  replaced the inline absolute-cursor emit with `_cursorMove`, which picks the
+  shortest byte-output-equivalent encoding: relative `CSI nC` (forward) /
+  `CSI nD` (back) for same-row gaps, and absolute with omitted defaults
+  (`CSI H` at home, `CSI row H` when col is 1) otherwise. Cross-row moves stay
+  absolute deliberately (CUU/CUD vertical compression deferred — lower value,
+  keeps the change minimal and safe).
+- [ansi_renderer_equivalence_test.dart](../../packages/fleury/test/rendering/ansi_renderer_equivalence_test.dart):
+  output-equivalence proof. A minimal terminal interpreter (CUP/CUF/CUB; SGR
+  and private modes ignored) applies the emitted diff to `previous` and asserts
+  it reproduces `next`, across 300 random ASCII frames + structural edge cases
+  (same-row gaps, multi-row, backward, full-row, clear), plus a meta-test that
+  the interpreter is not trivially passing.
+- Updated the exact-byte golden assertions in
+  [ansi_renderer_test.dart](../../packages/fleury/test/rendering/ansi_renderer_test.dart)
+  (10) and [end_to_end_test.dart](../../packages/fleury/test/integration/end_to_end_test.dart)
+  (2) to the new equivalent sequences. (`remote_protocol_test` line 42 is a
+  transport round-trip fixture, not renderer output — left unchanged.)
+- Regenerated [byte-budget-2026-06-04.json](../../packages/fleury_widgets/benchmark/results/byte-budget-2026-06-04.json).
+
+Findings (byte harness before -> after, 100x30, update frames):
+- Cursor share of update bytes: 48% -> 12%; content is now the majority (51%).
+- Full scroll: 1274 -> 1024 B/frame (-20%). Color churn: 498 -> 428 (-14%).
+- Total update bytes across scenarios: 18511 -> 15311 (-17%).
+- Sparse cross-row dashboards are unchanged (their moves are cross-row, kept
+  absolute); they are tiny-byte frames anyway (~41 B/frame).
+
+Validation:
+- `dart analyze` clean across `fleury` and `fleury_widgets`.
+- Equivalence proof green (300 random frames + edge cases + meta-test).
+- Full suites green: `fleury` 1492 tests (full, incl. integration, run with
+  `--concurrency=1` to avoid the documented full-suite parallelism flakes in
+  clipboard/input_dispatcher, which pass in isolation), `fleury_widgets` 798.
+
+Next:
+- Optional: vertical (CUU/CUD) compression for cross-row moves on sparse
+  dashboards — lower value (tiny frames), measure first.
+- Real-terminal step still open: wrap `CountingAnsiSink` around the live
+  `IoSinkAnsiSink` and confirm the bytes -> latency mapping on actual
+  terminals / SSH.
+
+## 2026-06-04 - Byte → Latency: Estimator + Live Telemetry Hook
+
+Status: Complete for what a non-TTY environment can do; hardware capture handed off
+
+Context:
+- The byte harness answered "how many bytes per frame"; the open question was
+  "does that translate to latency?". This shell is non-TTY, so real-terminal /
+  SSH timing can't be measured here. Built the parts that are buildable and
+  validated, plus a handoff for the hardware step.
+
+Changes:
+- `TransportProfile` in [ansi_byte_budget.dart](../../packages/fleury/lib/src/rendering/ansi_byte_budget.dart):
+  first-order wire-time model (`fixedOverheadMs + 1000*bytes/bytesPerSecond`)
+  with `local` / `ssh-lan` / `ssh-wan` / `slow-9600` profiles. Exported via
+  `fleury_test.dart`. `CountingAnsiSink.aggregate` constructor added so
+  long-running telemetry stays bounded (running total, no per-frame list).
+- [byte_budget_benchmark.dart](../../packages/fleury_widgets/benchmark/byte_budget_benchmark.dart)
+  now prints estimated per-frame latency across profiles (human + JSON);
+  baseline regenerated.
+- Live telemetry hook in [run_tui.dart](../../packages/fleury/lib/src/runtime/run_tui.dart):
+  `FLEURY_BYTE_TELEMETRY=1` wraps the real driver sink with
+  `CountingAnsiSink.aggregate` and prints a byte + estimated-latency summary to
+  stderr on cleanup (after terminal restore). Zero cost when unset.
+- [byte-latency-handoff.md](byte-latency-handoff.md): the real-terminal capture
+  procedure and acceptance criteria.
+
+Findings (estimator over the 2026-06-04 baseline) — refines the earlier
+"bytes dominate real-terminal latency" hypothesis:
+- Fast links (local, LAN SSH): every scenario is sub-millisecond; per-frame byte
+  size is NOT the latency bottleneck. Cursor compression buys throughput/CPU
+  there, not perceived latency.
+- WAN SSH: latency is RTT-dominated and ~flat (~40 ms) across frame sizes — the
+  lever is frame COUNT (round trips), not size.
+- Bandwidth-constrained (≈9600 baud): byte size dominates; scroll frame ≈858 ms
+  (the cursor-compression saving ≈210 ms lands here directly).
+
+Validation:
+- `dart analyze` clean across `fleury` and `fleury_widgets`.
+- Core suite green: 1495 tests (full, `--concurrency=1`); `fleury_widgets` 798.
+  run_tui integration tests pass with the telemetry hook present (off by
+  default).
+
+Next:
+- Hardware capture per the handoff: collect `FLEURY_BYTE_TELEMETRY` summaries on
+  real terminals + SSH, measure actual input→paint latency, calibrate the
+  TransportProfile constants, re-run the harness.
+
+## 2026-06-04 - Tier 1 Arch: Semantic API Freeze-Proofing + Contract Conformance
+
+Status: Complete (Tier 1 of architecture-priorities.md)
+
+Context:
+- Pre-launch, the breaking-change window is open. Tier 1 = the cheap, timing-
+  sensitive items: protect the semantic differentiator's public API before it
+  freezes, and make the widget contract enforced instead of conceptual.
+
+Changes:
+- Semantic-tree freeze-proofing in
+  [semantics.dart](../../packages/fleury/lib/src/semantics/semantics.dart):
+  node identity now derives from an explicit `Semantics.id` or a `Key`
+  (`key:<key>`, stable + deterministic across rebuilds), falling back to the
+  documented snapshot-local `element-<hash>`. Documented the identity contract
+  on `SemanticNodeId` and the producer-agnostic snapshot model on `SemanticTree`
+  (the `.new` constructor lets a future incremental backend build the same query
+  surface without the element walk). Pinned by
+  [semantic_identity_test.dart](../../packages/fleury/test/semantics/semantic_identity_test.dart).
+- Contract conformance in
+  [semantic_contract_conformance_test.dart](../../packages/fleury_widgets/test/semantic_contract_conformance_test.dart):
+  runtime role-materialization for representative widgets + a catalog drift
+  guard that checks the full 47-widget semantic-role surface against source
+  (verified to FAIL when a widget gains/loses/changes semantics).
+- Updated [architecture-priorities.md](architecture-priorities.md) and
+  [decision-log.md](decision-log.md).
+
+Findings:
+- Capability correction: the earlier cohesion-audit claim "capability fallback
+  at ~6% = critical drift" was a measurement artifact. Color and grapheme-width
+  degrade centrally (renderer `quantizeColor` + width resolver), chart/Unicode-
+  glyph widgets need no protocol gating, and the only genuinely protocol-gated
+  widgets (Image, MarkdownText hyperlinks, DataTable) ALREADY declare
+  `CapabilityRequirement`s. So #2's "capability-fallback propagation" was largely
+  a non-task; the real deliverable is the enforcement mechanism (conformance
+  tests), not cargo-culting requirements onto widgets that don't need them.
+- Existing tests use explicit semantic ids, never the auto `element-<hash>` ids,
+  so the key-derived identity change is non-breaking.
+
+Validation:
+- `dart analyze` clean across `fleury` and `fleury_widgets`.
+- Core 1499 tests (+4 identity), `fleury_widgets` 808 (+10 conformance); full
+  suites green at `--concurrency=1`. Both new guards verified to bite.
+
+Next:
+- Tier 2 is the next active tier: async-compute seam (Isolate.run) and the new
+  frame-rate coalescing item (the fast/WAN-SSH latency lever).
