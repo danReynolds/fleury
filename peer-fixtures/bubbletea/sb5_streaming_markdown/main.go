@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 const (
@@ -25,6 +27,8 @@ const (
 	defaultWarmups    = 1
 	defaultIterations = 3
 	defaultRowCount   = 10_000
+	defaultWireSteps  = 16
+	defaultWireMs     = 50
 )
 
 type Options struct {
@@ -35,6 +39,9 @@ type Options struct {
 	TerminalRows       int
 	PrintJSON          bool
 	OutputPath         string
+	Wire               bool
+	WireSteps          int
+	WireIntervalMs     int
 }
 
 type Sample struct {
@@ -73,6 +80,13 @@ func main() {
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
+	}
+	if options.Wire {
+		if err := runWire(options); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	for range options.WarmupIterations {
@@ -119,6 +133,66 @@ func main() {
 	if options.OutputPath != "" {
 		fmt.Printf("Saved %s\n", options.OutputPath)
 	}
+}
+
+type wireModel struct {
+	Sb5StreamingMarkdownModel
+}
+
+func (m wireModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.Sb5StreamingMarkdownModel.Update(msg)
+	if typed, ok := next.(Sb5StreamingMarkdownModel); ok {
+		m.Sb5StreamingMarkdownModel = typed
+	}
+	return m, cmd
+}
+
+func (m wireModel) View() tea.View {
+	view := m.Sb5StreamingMarkdownModel.View()
+	view.AltScreen = true
+	return view
+}
+
+func runWire(options Options) error {
+	model := wireModel{
+		Sb5StreamingMarkdownModel: NewSb5StreamingMarkdownModel(
+			options.TerminalColumns,
+			options.TerminalRows,
+		),
+	}
+	program := tea.NewProgram(
+		model,
+		tea.WithInput(nil),
+		tea.WithWindowSize(options.TerminalColumns, options.TerminalRows),
+		tea.WithFPS(60),
+	)
+
+	go func() {
+		fixture := MarkdownFixture{Seed: 1}
+		chunkCount := markdownChunkCountFor(options.Rows)
+		interval := time.Duration(options.WireIntervalMs) * time.Millisecond
+		time.Sleep(interval)
+		emitted := 0
+		for step := 0; step < options.WireSteps && emitted < chunkCount; step++ {
+			remaining := chunkCount - emitted
+			remainingSteps := options.WireSteps - step
+			count := remaining / remainingSteps
+			if count <= 0 {
+				count = 1
+			}
+			for i := 0; i < count && emitted < chunkCount; i++ {
+				program.Send(appendChunkMsg{RawChunk: fixture.Chunk(emitted)})
+				emitted++
+			}
+			time.Sleep(interval)
+		}
+		program.Send(selectFinalBlockMsg{})
+		time.Sleep(interval)
+		program.Quit()
+	}()
+
+	_, err := program.Run()
+	return err
 }
 
 func runSample(options Options) Sample {
@@ -384,11 +458,15 @@ func parseArgs(args []string) (Options, error) {
 		Rows:               defaultRowCount,
 		TerminalColumns:    defaultColumns,
 		TerminalRows:       defaultRows,
+		WireSteps:          defaultWireSteps,
+		WireIntervalMs:     defaultWireMs,
 	}
 	for _, arg := range args {
 		switch {
 		case arg == "--json":
 			options.PrintJSON = true
+		case arg == "--wire":
+			options.Wire = true
 		case strings.HasPrefix(arg, "--warmup="):
 			value, err := positiveOrZeroInt(strings.TrimPrefix(arg, "--warmup="), "warmup")
 			if err != nil {
@@ -414,6 +492,18 @@ func parseArgs(args []string) (Options, error) {
 			}
 			options.TerminalColumns = columns
 			options.TerminalRows = rows
+		case strings.HasPrefix(arg, "--steps="):
+			value, err := positiveInt(strings.TrimPrefix(arg, "--steps="), "steps")
+			if err != nil {
+				return Options{}, err
+			}
+			options.WireSteps = value
+		case strings.HasPrefix(arg, "--interval-ms="):
+			value, err := positiveInt(strings.TrimPrefix(arg, "--interval-ms="), "interval-ms")
+			if err != nil {
+				return Options{}, err
+			}
+			options.WireIntervalMs = value
 		case strings.HasPrefix(arg, "--output="):
 			options.OutputPath = strings.TrimPrefix(arg, "--output=")
 		default:

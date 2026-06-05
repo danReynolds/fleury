@@ -28,6 +28,8 @@ SCENARIO_ID = "SB.3"
 DEFAULT_WARMUPS = 1
 DEFAULT_ITERATIONS = 3
 DEFAULT_ROWS = 100_000
+DEFAULT_WIRE_STEPS = 5
+DEFAULT_WIRE_INTERVAL_MS = 80
 DEFAULT_SIZE = (80, 24)
 
 
@@ -36,6 +38,9 @@ class Options:
     warmup_iterations: int
     measured_iterations: int
     rows: int
+    wire: bool
+    wire_steps: int
+    wire_interval_ms: int
     size: tuple[int, int]
     print_json: bool
     output_path: str | None
@@ -63,9 +68,7 @@ class Sample:
     copy_exact: bool
 
 
-async def main() -> None:
-    options = parse_args()
-
+async def main(options: Options) -> None:
     for _ in range(options.warmup_iterations):
         await run_sample(options)
 
@@ -93,6 +96,50 @@ async def main() -> None:
         print(f"copySelectedRowUs p95: {metrics['copySelectedRowUs']['p95']}")
         if options.output_path is not None:
             print(f"Saved {options.output_path}")
+
+
+class Sb3WireDataTableApp(Sb3DataTableApp):
+    def __init__(self, *, rows: int, steps: int, interval_seconds: float) -> None:
+        super().__init__(row_count=rows)
+        self._wire_steps = steps
+        self._wire_interval_seconds = interval_seconds
+        self._wire_step = 0
+
+    def on_mount(self) -> None:
+        super().on_mount()
+        asyncio.create_task(self._drive_wire())
+
+    async def _drive_wire(self) -> None:
+        await asyncio.sleep(self._wire_interval_seconds)
+        while self._wire_step < self._wire_steps:
+            step = self._wire_step % 5
+            if step == 0:
+                self._table.move_cursor(row=1, column=0, animate=False, scroll=True)
+            elif step == 1:
+                self._table.action_page_down()
+            elif step == 2:
+                self._table.move_cursor(
+                    row=self.row_count // 2,
+                    column=0,
+                    animate=False,
+                    scroll=True,
+                )
+            elif step == 3:
+                self.action_jump_end()
+            elif step == 4:
+                self.action_copy_row()
+            self._wire_step += 1
+            await asyncio.sleep(self._wire_interval_seconds)
+        self.exit()
+
+
+def run_wire(options: Options) -> None:
+    app = Sb3WireDataTableApp(
+        rows=options.rows,
+        steps=options.wire_steps,
+        interval_seconds=options.wire_interval_ms / 1000,
+    )
+    app.run()
 
 
 async def run_sample(options: Options) -> Sample:
@@ -280,6 +327,11 @@ def parse_args() -> Options:
     parser.add_argument("--warmup", type=positive_or_zero_int, default=DEFAULT_WARMUPS)
     parser.add_argument("--iterations", type=positive_int, default=DEFAULT_ITERATIONS)
     parser.add_argument("--rows", type=positive_int, default=DEFAULT_ROWS)
+    parser.add_argument("--wire", action="store_true")
+    parser.add_argument("--steps", type=positive_int, default=DEFAULT_WIRE_STEPS)
+    parser.add_argument(
+        "--interval-ms", type=positive_int, default=DEFAULT_WIRE_INTERVAL_MS
+    )
     parser.add_argument("--size", default=f"{DEFAULT_SIZE[0]}x{DEFAULT_SIZE[1]}")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--output")
@@ -288,6 +340,9 @@ def parse_args() -> Options:
         warmup_iterations=args.warmup,
         measured_iterations=args.iterations,
         rows=args.rows,
+        wire=args.wire,
+        wire_steps=args.steps,
+        wire_interval_ms=args.interval_ms,
         size=parse_size(args.size),
         print_json=args.json,
         output_path=args.output,
@@ -370,4 +425,8 @@ def timestamp_for_id(value: datetime) -> str:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parsed_options = parse_args()
+    if parsed_options.wire:
+        run_wire(parsed_options)
+    else:
+        asyncio.run(main(parsed_options))

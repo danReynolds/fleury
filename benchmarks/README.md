@@ -1,0 +1,154 @@
+# Fleury Benchmarks And Profiling
+
+This folder is the index for Fleury performance work. Benchmark source stays
+next to the package or peer fixture that owns its dependencies:
+
+| Area | Source | Run through |
+| --- | --- | --- |
+| Core Fleury scenarios | `packages/fleury/benchmark` | `fleury benchmark local SB.1` / `SB.2` / `SB.12` |
+| Fleury widget scenarios | `packages/fleury_widgets/benchmark` | `fleury benchmark local SB.3` / `SB.4` / `SB.5` / `SB.6` / `SB.7` / `SB.8` / `SB.9` / `SB.11` |
+| Proof app scenario | `packages/fleury_example_console/benchmark` | `fleury benchmark local SB.10` |
+| Peer fixtures | `peer-fixtures` | peer-specific commands plus manifest tooling |
+| PTY wire profiling | `profiling` | `fleury benchmark wire ...` |
+| Scenario contract | `docs/implementation/comparative-benchmark-manifest.json` | `fleury benchmark manifest` |
+| Harness spec | `docs/implementation/profiling-harness.md` | documentation |
+
+## Command Surface
+
+Run these from the repo root or any subdirectory in a framework checkout.
+
+| Task | Command |
+| --- | --- |
+| See local scenarios, peers, and wire coverage | `fleury benchmark list` |
+| See machine-readable benchmark catalog | `fleury benchmark list --json` |
+| List scenarios from all local runners | `fleury benchmark local --list` |
+| Show wire benchmark help | `fleury benchmark wire --help` |
+| Show help for one wire scenario | `fleury benchmark wire sb6 --help` |
+| List peers configured for one wire scenario | `fleury benchmark wire sb6 --list-peers`; `fleury benchmark wire sb6 --list-peers --json` |
+| Run one local scenario | `fleury benchmark local SB.4 --warmup=1 --iterations=3 --json` |
+| Run all local scenario groups | `fleury benchmark local all --warmup=1 --iterations=1` |
+| Run P0 SB.4 LogRegion PTY peer comparisons | `fleury benchmark wire sb4 --runs=3` |
+| Run P0 SB.5 streaming Markdown PTY peer comparisons | `fleury benchmark wire sb5 --runs=3` |
+| Run P1 SB.2 text editing PTY peer comparisons | `fleury benchmark wire sb2 --runs=3` |
+| Run P1 SB.3 DataTable PTY peer comparisons | `fleury benchmark wire sb3 --runs=3` |
+| Run P2 SB.6 dashboard PTY peer comparisons | `fleury benchmark wire sb6 --runs=3` |
+| Run P2 SB.12 layout dirtiness PTY peer comparisons | `fleury benchmark wire sb12 --runs=3` |
+| Run P3 SB.8 overlay/palette PTY peer comparisons | `fleury benchmark wire sb8 --runs=3` |
+| Run P3 SB.9 subprocess-output PTY peer comparisons | `fleury benchmark wire sb9 --runs=3` |
+| Run P3 SB.10 proof-app PTY peer comparisons | `fleury benchmark wire sb10 --runs=3` |
+| Narrow a wire run to specific peers | `fleury benchmark wire sb6 --peers=ratatui,opentui --runs=3`; `fleury benchmark wire sb6-ratatui --runs=3` |
+| Validate/print the comparative manifest | `fleury benchmark manifest --json` |
+| Validate one peer result artifact | `fleury benchmark result --input=peer-run.json --json` |
+| Summarize repeated peer result artifacts | `fleury benchmark variance --input=peer-runs --strict` |
+
+## Benchmark Matrix
+
+Each benchmark has three primary peer targets. The three should match that
+scenario's natural peer strengths; extra peer fixtures can exist, but they are
+secondary evidence unless promoted here. If a peer fixture needs too much
+app-owned adapter code to simulate the scenario, keep it as secondary evidence
+for that benchmark. Primary peer status should mean the peer can express the
+workload with its own natural APIs.
+
+| Priority | Benchmark | Implemented | Focus / why it exists | Primary peer targets | Why these peers |
+| --- | --- | --- | --- | --- | --- |
+| P0 | SB.4 Log region | Local yes; primary fixtures 3/3; wire 3/3 | Append-heavy output, tailing, scrollback, filtering, sanitization, selection, and copy. This is where byte efficiency and terminal scroll behavior matter most. | Textual, Bubble Tea, OpenTUI | Textual has a first-class Log widget; Bubble Tea/Bubbles viewport is a common Go log viewer shape; OpenTUI targets high-throughput text rendering. |
+| P0 | SB.5 Streaming Markdown | Local yes; primary fixtures 3/3; wire 3/3 | Incremental rich text: partial chunks, headings, lists, code fences, links, unsafe control payloads, selection, and copy. This tests rich output under streaming updates. | Textual, Bubble Tea, Ink | Textual has Markdown append support; Bubble Tea can pair Bubbles viewport with Glamour rendering; Ink is the React ecosystem comparison for rich text composition. |
+| P1 | SB.2 Text editing | Local yes; primary fixtures 3/3; wire 3/3 | Composer-grade input: cursor movement, paste, password fields, selection, undo/redo, completions, history, and command submission. This protects the main interactive surface of serious terminal apps. | Textual, Bubble Tea, Ink | Textual has mature text widgets; Bubble Tea/Bubbles has canonical Go textarea/textinput components; Ink brings React terminal input components. |
+| P1 | SB.3 DataTable | Local yes; primary fixtures 3/3; wire 3/3 | Large retained data with virtualized visible windows, selection, navigation, copy/export, and terminal rendering cost. This is the high-volume operational-tool workload. | Textual, Ratatui, OpenTUI | Textual has a rich DataTable; Ratatui is the Rust buffer/table baseline; OpenTUI is the high-performance TS renderer/table comparison. |
+| P2 | SB.6 Dashboard updates | Local yes; primary fixtures 3/3; wire 3/3 | Many independent widgets updating under pressure: counters, gauges, tables, logs, and status regions. This tests diffing, redraw scope, and update scheduling. | Ratatui, OpenTUI, Bubble Tea | Ratatui and OpenTUI are strong raw/buffer render baselines; Bubble Tea is the common model-update-view dashboard baseline. |
+| P2 | SB.12 Layout dirtiness cache | Local yes; primary fixtures 3/3; wire 3/3 | Incremental layout invalidation: mutate one region, avoid recomputing or rewriting unaffected regions, and preserve correctness. This directly tests Fleury's renderer/layout optimization thesis. | Nocterm, Ratatui, OpenTUI | Nocterm is the closest widget-tree comparison; Ratatui and OpenTUI are strong low-level references for minimal redraw behavior. |
+| P3 | SB.8 Overlay/palette churn | Local yes; primary fixtures 3/3; wire 3/3 | Command palette, modal/overlay open-close churn, focus restoration, fuzzy filtering, and repeated transient UI creation. This protects app-shell ergonomics. | Textual, Ink, Bubble Tea | Textual is strong for rich app UI; Ink/React stresses component churn; Bubble Tea represents command-mode MUV patterns. |
+| P3 | SB.9 Subprocess/untrusted output | Local yes; primary fixtures 3/3; wire 3/3 | Running subprocesses, ingesting untrusted terminal output, redaction/sanitization, and handoff back to app state. This tests shell-adjacent safety and output pressure. | Textual, Bubble Tea, OpenTUI | Textual and Bubble Tea are common full-app shells for process output; OpenTUI gives a high-throughput renderer comparison for output ingestion. |
+| P3 | SB.10 Proof-app journey | Local yes; primary fixtures 3/3; wire 3/3 | End-to-end realistic app flow across navigation, command execution, async work, widgets, copy/export, diagnostics, and test hooks. This is the product-readiness smoke benchmark. | Textual, Bubble Tea, Ink | These are the broadest full-app peers across Python, Go, and React/Node, so they best match a complete Fleury app journey. |
+| P4 | SB.7 Resize storm | Local yes; primary fixtures 0/3; wire 0/3 | Repeated terminal resizes across nested layout, focus, and scroll state. This tests layout correctness, invalidation, and recovery from terminal churn. | Textual, Ratatui, OpenTUI | Textual stresses full app layout; Ratatui exposes low-level buffer/layout behavior; OpenTUI covers a high-performance retained renderer. |
+| P4 | SB.11 TreeTable/filter/copy | Local yes; primary fixtures 0/3; wire 0/3 | Hierarchical data with expansion, filtering, selection preservation, and copy/export. This targets dense operational data browsers. | Textual, Ratatui, OpenTUI | Textual has rich structured widgets; Ratatui is the Rust table/tree buffer baseline; OpenTUI is the high-performance TS structured-renderer peer. |
+| P4 | SB.1 Counter/startup | Local yes; primary fixtures 1/3; wire 0/3 | Smallest app lifecycle path: startup, first paint, state update, and runtime floor. This catches overhead that every Fleury app pays before widgets get complex. | Nocterm, Bubble Tea, Ink | Nocterm is the closest Dart widget-tree baseline; Bubble Tea is the Go MUV startup baseline; Ink exposes React/Node startup and reconciliation overhead. |
+
+## Execution Coverage
+
+"Peer fixtures present" means source fixtures/results exist under
+`peer-fixtures`; "Wire command" means a repeatable real-PTY comparison is
+already available through `fleury benchmark wire`. Bare scenario IDs run all
+configured primary peers for that scenario; use `--peer=<id>`,
+`--peers=a,b`, or a concrete ID such as `sb6-ratatui` to narrow the run.
+
+| Priority | Benchmark | Fleury runner | Peer fixtures present | Wire command |
+| --- | --- | --- | --- | --- |
+| P0 | SB.4 Log region | `fleury benchmark local SB.4` | Nocterm, Textual, Bubble Tea, OpenTUI | `fleury benchmark wire sb4 --runs=3` |
+| P0 | SB.5 Streaming Markdown | `fleury benchmark local SB.5` | Textual, Bubble Tea, Ink | `fleury benchmark wire sb5 --runs=3` |
+| P1 | SB.2 Text editing | `fleury benchmark local SB.2` | Nocterm, Textual, Bubble Tea, Ink | `fleury benchmark wire sb2 --runs=3` |
+| P1 | SB.3 DataTable | `fleury benchmark local SB.3` | Nocterm, Textual, Ratatui, OpenTUI | `fleury benchmark wire sb3 --runs=3` |
+| P2 | SB.6 Dashboard updates | `fleury benchmark local SB.6` | Ratatui, OpenTUI, Bubble Tea | `fleury benchmark wire sb6 --runs=3` |
+| P2 | SB.12 Layout dirtiness cache | `fleury benchmark local SB.12` | Nocterm, Ratatui, OpenTUI | `fleury benchmark wire sb12 --runs=3` |
+| P3 | SB.8 Overlay/palette churn | `fleury benchmark local SB.8` | Textual, Ink, Bubble Tea | `fleury benchmark wire sb8 --runs=3` |
+| P3 | SB.9 Subprocess/untrusted output | `fleury benchmark local SB.9` | Textual, Bubble Tea, OpenTUI | `fleury benchmark wire sb9 --runs=3` |
+| P3 | SB.10 Proof-app journey | `fleury benchmark local SB.10` | Textual, Bubble Tea, Ink | `fleury benchmark wire sb10 --runs=3` |
+| P4 | SB.7 Resize storm | `fleury benchmark local SB.7` | not yet | not yet |
+| P4 | SB.11 TreeTable/filter/copy | `fleury benchmark local SB.11` | not yet | not yet |
+| P4 | SB.1 Counter/startup | `fleury benchmark local SB.1` | Nocterm | not yet |
+
+## Profiling Axes
+
+The PTY harness reports these axes for real terminal output captures:
+
+| Axis | Status | Notes |
+| --- | --- | --- |
+| Bytes on wire | implemented | Uses Fleury's shared `AnsiByteBreakdown` for every framework. |
+| Bytes per frame | implemented | CLI wire captures use scenario logical frame counts; direct captures use sync markers or PTY-read fallback. |
+| Frames emitted | implemented | CLI wire captures pass `--frame-count=steps+1` so peer frame/FPS bands are not based on PTY read bursts. |
+| Control overhead | implemented | SGR/cursor/sync/other bytes as a share of total output. |
+| Time to first byte | implemented | PTY capture timestamp. |
+| RSS max | implemented | Runtime-confounded; report it because the field reports it. |
+| CPU load during capture | implemented | Child process user+system CPU over capture duration. |
+| Sustained FPS | implemented | Derived from scenario logical frames over capture duration for CLI wire runs. |
+
+Use `--ui-mode strict-ui|full-ui` in direct `profiling/capture_pty.dart` calls.
+Use `--frame-count=N` when a direct capture has a known logical frame count.
+The CLI wire scenarios currently record all primary peer captures as `full-ui`.
+For local SB.4, use the documented large-list scale (`--rows=10000` or the
+runner default); very small row counts are not part of that scenario contract.
+
+## Peer Coverage
+
+| Peer | Scenario fixtures/results present | Real PTY wire command |
+| --- | --- | --- |
+| Nocterm | SB.1, SB.2, SB.3, SB.4, SB.12 | `fleury benchmark wire sb12 --peer=nocterm` |
+| Bubble Tea | SB.2, SB.4, SB.5, SB.6, SB.8, SB.9, SB.10 | `fleury benchmark wire sb2 --peer=bubbletea`, `sb4 --peer=bubbletea`, `sb5 --peer=bubbletea`, `sb6 --peer=bubbletea`, `sb8 --peer=bubbletea`, `sb9 --peer=bubbletea`, `sb10 --peer=bubbletea` |
+| Textual | SB.2, SB.3, SB.4, SB.5, SB.8, SB.9, SB.10 | `fleury benchmark wire sb2 --peer=textual`, `sb3 --peer=textual`, `sb4 --peer=textual`, `sb5 --peer=textual`, `sb8 --peer=textual`, `sb9 --peer=textual`, `sb10 --peer=textual` |
+| OpenTUI | SB.3, SB.4, SB.6, SB.9, SB.12 | `fleury benchmark wire sb3 --peer=opentui`, `sb4 --peer=opentui`, `sb6 --peer=opentui`, `sb9 --peer=opentui`, `sb12 --peer=opentui` |
+| Ratatui | SB.3, SB.6, SB.12 | `fleury benchmark wire sb3 --peer=ratatui`, `sb6 --peer=ratatui`, `sb12 --peer=ratatui` |
+| Ink | SB.2, SB.5, SB.8, SB.10 | `fleury benchmark wire sb2 --peer=ink`, `sb5 --peer=ink`, `sb8 --peer=ink`, `sb10 --peer=ink` |
+
+## Current Take
+
+The local Fleury scenario suite is clean and repeatable for internal performance
+decisions. The PTY harness is now organized enough for reduced peer readings on
+the major output and runtime axes, and the P0-P3 primary matrix has
+repeatable wire commands for all selected peers. Use the default `--runs=3`
+commands for decision signal; use tiny `--rows`/`--steps` overrides only as
+smoke tests.
+
+SB.4 already found and validated a real renderer improvement: Fleury moved from
+8834 B to 2983 B on reduced SB.4, versus Bubble Tea at 2411 B. SB.5 is
+favorable against Bubble Tea: median local PTY runs show Fleury at 2455 B
+versus Bubble Tea at 6789 B, with lower CPU and RSS in this fixture.
+
+Textual gives the first non-Go full-app peer wire signal. On the same reduced
+P0 shapes, Fleury leads Textual heavily on bytes, frames, RSS, and CPU: SB.4 is
+2983 B versus 131555 B; SB.5 is 2455 B versus 279726 B. Textual emits many more
+PTY read bursts in earlier captures; CLI wire runs now use scenario logical
+frame counts, so FPS is a coarse delivered-cadence signal. Publishable timing
+still requires Tier-C bare-metal replicates.
+
+The standing perf call: Fleury looks peer-competitive to peer-leading on the
+measured P0 output/runtime axes. P1/P2/P3 are now ready for real readings
+across text editing, DataTable, dashboard, layout dirtiness, overlay churn,
+subprocess output, and proof-app journey peers. The main cleanup target is
+still renderer control overhead in the Bubble Tea comparison, plus Tier-C
+bare-metal replicates before treating timing/FPS bands as publication-grade.
+
+Before using this for public peer claims, convert P4 peer fixtures into
+self-driving PTY apps and run Tier-C on bare metal with replicates. The current
+reduced wire results are useful decision signal, not a publishable benchmark
+suite.

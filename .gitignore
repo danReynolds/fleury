@@ -8,3 +8,4 @@ peer-fixtures/**/.pytest_cache/
 peer-fixtures/**/node_modules/
 peer-fixtures/**/.bun/
 peer-fixtures/**/target/
+peer-fixtures/**/fleury_peer_*

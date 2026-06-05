@@ -34,6 +34,8 @@ DEFAULT_WARMUPS = 1
 DEFAULT_ITERATIONS = 3
 DEFAULT_ROWS = 100_000
 DEFAULT_APPEND = 1_000
+DEFAULT_WIRE_STEPS = 5
+DEFAULT_WIRE_INTERVAL_MS = 100
 DEFAULT_SIZE = (120, 32)
 
 
@@ -43,6 +45,9 @@ class Options:
     measured_iterations: int
     rows: int
     append_count: int
+    wire: bool
+    wire_steps: int
+    wire_interval_ms: int
     size: tuple[int, int]
     print_json: bool
     output_path: str | None
@@ -73,9 +78,7 @@ class Sample:
     scrollback_selected_correct: bool
 
 
-async def main() -> None:
-    options = parse_args()
-
+async def main(options: Options) -> None:
     for _ in range(options.warmup_iterations):
         await run_sample(options)
 
@@ -104,6 +107,42 @@ async def main() -> None:
         print(f"unsafeArtifactLeakCount: {metrics['unsafeArtifactLeakCount']}")
         if options.output_path is not None:
             print(f"Saved {options.output_path}")
+
+
+class Sb4WireLogRegionApp(Sb4LogRegionApp):
+    def __init__(
+        self,
+        *,
+        row_count: int,
+        append_count: int,
+        steps: int,
+        interval_seconds: float,
+    ) -> None:
+        super().__init__(row_count=row_count)
+        self._wire_append_count = append_count
+        self._wire_steps = steps
+        self._wire_interval_seconds = interval_seconds
+
+    def on_mount(self) -> None:
+        super().on_mount()
+        asyncio.create_task(self._drive_wire())
+
+    async def _drive_wire(self) -> None:
+        await asyncio.sleep(self._wire_interval_seconds)
+        for _ in range(self._wire_steps):
+            self.append_burst(self._wire_append_count)
+            await asyncio.sleep(self._wire_interval_seconds)
+        self.exit()
+
+
+def run_wire(options: Options) -> None:
+    app = Sb4WireLogRegionApp(
+        row_count=options.rows,
+        append_count=options.append_count,
+        steps=options.wire_steps,
+        interval_seconds=options.wire_interval_ms / 1000,
+    )
+    app.run()
 
 
 async def run_sample(options: Options) -> Sample:
@@ -342,6 +381,13 @@ def parse_args() -> Options:
     parser.add_argument("--rows", type=positive_int, default=DEFAULT_ROWS)
     parser.add_argument("--append", type=positive_int, default=DEFAULT_APPEND)
     parser.add_argument("--size", default=f"{DEFAULT_SIZE[0]}x{DEFAULT_SIZE[1]}")
+    parser.add_argument("--wire", action="store_true")
+    parser.add_argument("--steps", type=positive_int, default=DEFAULT_WIRE_STEPS)
+    parser.add_argument(
+        "--interval-ms",
+        type=positive_int,
+        default=DEFAULT_WIRE_INTERVAL_MS,
+    )
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--output")
     args = parser.parse_args()
@@ -350,6 +396,9 @@ def parse_args() -> Options:
         measured_iterations=args.iterations,
         rows=args.rows,
         append_count=args.append,
+        wire=args.wire,
+        wire_steps=args.steps,
+        wire_interval_ms=args.interval_ms,
         size=parse_size(args.size),
         print_json=args.json,
         output_path=args.output,
@@ -432,4 +481,8 @@ def timestamp_for_id(value: datetime) -> str:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parsed_options = parse_args()
+    if parsed_options.wire:
+        run_wire(parsed_options)
+    else:
+        asyncio.run(main(parsed_options))

@@ -1,4 +1,4 @@
-import { TextTableRenderable, stringToStyledText } from '@opentui/core'
+import { createCliRenderer, TextTableRenderable, stringToStyledText } from '@opentui/core'
 import { createTestRenderer } from '@opentui/core/testing'
 
 export const COLUMNS = [
@@ -111,6 +111,38 @@ export class Sb3OpenTuiTableHarness {
       terminalColumns,
       terminalRows,
       setup,
+    })
+    app.mount()
+    return app
+  }
+
+  static async createTerminal(options = {}) {
+    const rowCount = options.rowCount ?? 100_000
+    const terminalColumns = options.terminalColumns ?? 120
+    const terminalRows = options.terminalRows ?? 32
+    const renderer = await createCliRenderer({
+      width: terminalColumns,
+      height: terminalRows,
+      consoleMode: 'disabled',
+      screenMode: 'alternate-screen',
+      clearOnShutdown: true,
+      targetFps: 60,
+      maxFps: 60,
+      exitOnCtrlC: false,
+    })
+    const app = new Sb3OpenTuiTableHarness({
+      rowCount,
+      terminalColumns,
+      terminalRows,
+      setup: {
+        renderer,
+        renderOnce: async () => {
+          renderer.requestRender()
+          await renderer.idle()
+        },
+        captureCharFrame: () => '',
+        getNativeStats: () => null,
+      },
     })
     app.mount()
     return app

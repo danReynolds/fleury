@@ -24,10 +24,17 @@ const DEFAULT_WARMUPS = 2
 const DEFAULT_ITERATIONS = 5
 const DEFAULT_ROWS = 100_000
 const DEFAULT_APPEND = 1_000
+const DEFAULT_WIRE_STEPS = 5
+const DEFAULT_WIRE_INTERVAL_MS = 100
 const DEFAULT_COLUMNS = 120
 const DEFAULT_TERMINAL_ROWS = 32
 
 const options = parseArgs(process.argv.slice(2))
+
+if (options.wire) {
+  await runWire(options)
+  process.exit(0)
+}
 
 for (let index = 0; index < options.warmupIterations; index += 1) {
   await runSample(options)
@@ -157,6 +164,32 @@ async function runSample(options) {
     }
   } finally {
     app?.destroy()
+  }
+}
+
+async function runWire(options) {
+  const app = await Sb4OpenTuiLogHarness.createTerminal({
+    rowCount: options.rows,
+    terminalColumns: options.terminalColumns,
+    terminalRows: options.terminalRows,
+  })
+  try {
+    await app.render()
+    const interval = options.wireIntervalMs
+    await sleep(interval)
+    let appended = 0
+    for (let step = 0; step < options.wireSteps && appended < options.appendCount; step += 1) {
+      const remaining = options.appendCount - appended
+      const remainingSteps = options.wireSteps - step
+      let count = remainingSteps <= 1 ? remaining : Math.floor(remaining / remainingSteps)
+      if (count <= 0) count = 1
+      app.appendBurst(count)
+      appended += count
+      await app.render()
+      await sleep(interval)
+    }
+  } finally {
+    app.destroy()
   }
 }
 
@@ -365,9 +398,16 @@ function parseArgs(args) {
     terminalRows: DEFAULT_TERMINAL_ROWS,
     printJson: false,
     outputPath: '',
+    wire: false,
+    wireSteps: DEFAULT_WIRE_STEPS,
+    wireIntervalMs: DEFAULT_WIRE_INTERVAL_MS,
   }
 
   for (const arg of args) {
+    if (arg === '--wire') {
+      options.wire = true
+      continue
+    }
     if (arg === '--json') {
       options.printJson = true
       continue
@@ -386,12 +426,24 @@ function parseArgs(args) {
       case '--append':
         options.appendCount = parsePositiveInt(name, value)
         break
+      case '--steps':
+        options.wireSteps = parsePositiveInt(name, value)
+        break
+      case '--interval-ms':
+        options.wireIntervalMs = parsePositiveInt(name, value)
+        break
       case '--columns':
         options.terminalColumns = parsePositiveInt(name, value)
         break
       case '--terminal-rows':
         options.terminalRows = parsePositiveInt(name, value)
         break
+      case '--size': {
+        const [columns, rows] = parseSize(value)
+        options.terminalColumns = columns
+        options.terminalRows = rows
+        break
+      }
       case '--output':
         if (!value) throw new Error('--output requires a path')
         options.outputPath = value
@@ -404,12 +456,23 @@ function parseArgs(args) {
   return options
 }
 
+function parseSize(value) {
+  if (!value) throw new Error('--size requires COLUMNSxROWS')
+  const parts = value.toLowerCase().split('x')
+  if (parts.length !== 2) throw new Error('--size requires COLUMNSxROWS')
+  return [parsePositiveInt('--size columns', parts[0]), parsePositiveInt('--size rows', parts[1])]
+}
+
 function parsePositiveInt(name, value) {
   const parsed = Number.parseInt(value, 10)
   if (!Number.isFinite(parsed) || parsed <= 0) {
     throw new Error(`${name} must be a positive integer.`)
   }
   return parsed
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function parseNonNegativeInt(name, value) {

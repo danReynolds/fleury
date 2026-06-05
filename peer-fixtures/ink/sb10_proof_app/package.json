@@ -1,0 +1,13 @@
+{
+  "name": "fleury-peer-ink-sb10-proof-app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "benchmark": "node bin/sb10_proof_app_benchmark.js"
+  },
+  "dependencies": {
+    "ink": "7.0.5",
+    "react": "19.2.7"
+  }
+}

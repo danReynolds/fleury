@@ -1,0 +1,11 @@
+name: fleury_profiling
+description: TUI profiling harness — capture (dart:ffi pty) + analyze (AnsiByteBreakdown) for fleury and peers. Not shipped.
+publish_to: none
+environment:
+  sdk: ^3.6.0
+dependencies:
+  fleury:
+    path: ../packages/fleury
+  fleury_widgets:
+    path: ../packages/fleury_widgets
+  ffi: ^2.1.0

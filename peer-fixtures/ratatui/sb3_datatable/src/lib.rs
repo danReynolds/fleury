@@ -2,6 +2,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Cell, Row, StatefulWidget, Table, TableState};
+use ratatui::Frame;
 
 const COLUMNS: [(&str, &str, u16); 8] = [
     ("id", "ID", 12),
@@ -181,6 +182,30 @@ impl Sb3TableApp {
                 buffer_contains_selected_row,
             },
         }
+    }
+
+    pub fn render_to_frame(&self, frame: &mut Frame) {
+        let area = frame.area();
+        let visible_capacity = visible_capacity(area.height);
+        let visible_end = self.visible_end(visible_capacity);
+        let visible_rows = self.rows[self.visible_start..visible_end]
+            .iter()
+            .map(|record| Row::new(record.cells()));
+        let header = Row::new(COLUMNS.iter().map(|column| Cell::from(column.1)))
+            .style(Style::default().add_modifier(Modifier::BOLD));
+        let widths: Vec<Constraint> = COLUMNS
+            .iter()
+            .map(|column| Constraint::Length(column.2))
+            .collect();
+        let table = Table::new(visible_rows, widths)
+            .header(header)
+            .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+        let mut table_state = TableState::default();
+        let relative_selected = self.selected_row.saturating_sub(self.visible_start);
+        if relative_selected < visible_end.saturating_sub(self.visible_start) {
+            table_state.select(Some(relative_selected));
+        }
+        frame.render_stateful_widget(table, area, &mut table_state);
     }
 
     fn visible_end(&self, visible_capacity: usize) -> usize {
