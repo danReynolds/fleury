@@ -149,6 +149,60 @@ void main() {
     });
   });
 
+  group('renderDiff — scroll-up row shifts', () {
+    test('uses terminal scroll for whole-screen upward row shifts', () {
+      final prev = CellBuffer(const CellSize(4, 4));
+      final next = CellBuffer(const CellSize(4, 4));
+      prev.writeText(const CellOffset(0, 0), 'aaaa');
+      prev.writeText(const CellOffset(0, 1), 'bbbb');
+      prev.writeText(const CellOffset(0, 2), 'cccc');
+      prev.writeText(const CellOffset(0, 3), 'dddd');
+      next.writeText(const CellOffset(0, 0), 'cccc');
+      next.writeText(const CellOffset(0, 1), 'dddd');
+      next.writeText(const CellOffset(0, 2), 'eeee');
+      next.writeText(const CellOffset(0, 3), 'ffff');
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer(
+        synchronizedOutput: false,
+      ).renderDiff(prev, next, sink);
+
+      expect(sink.output, '\x1B[2S\x1B[3Heeee\x1B[4Hffff');
+    });
+
+    test('wraps scroll updates in synchronized-output markers', () {
+      final prev = CellBuffer(const CellSize(4, 2));
+      final next = CellBuffer(const CellSize(4, 2));
+      prev.writeText(const CellOffset(0, 0), 'aaaa');
+      prev.writeText(const CellOffset(0, 1), 'bbbb');
+      next.writeText(const CellOffset(0, 0), 'bbbb');
+      next.writeText(const CellOffset(0, 1), 'cccc');
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer().renderDiff(prev, next, sink);
+
+      expect(sink.output, '\x1B[?2026h\x1B[S\x1B[2Hcccc\x1B[?2026l');
+    });
+
+    test('falls back to cell diff when protocol cells are present', () {
+      final prev = CellBuffer(const CellSize(4, 3));
+      final next = CellBuffer(const CellSize(4, 3));
+      prev.writeText(const CellOffset(0, 1), 'bbbb');
+      prev.writeText(const CellOffset(0, 2), 'cccc');
+      next.writeText(const CellOffset(0, 0), 'bbbb');
+      next.writeText(const CellOffset(0, 1), 'cccc');
+      next.writeProtocol(const CellOffset(0, 2), 'P', width: 1, height: 1);
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer(
+        synchronizedOutput: false,
+      ).renderDiff(prev, next, sink);
+
+      expect(sink.output.contains('\x1B[S'), isFalse);
+      expect(sink.output.contains('P'), isTrue);
+    });
+  });
+
   group('renderDiff — styles', () {
     test('emits SGR change before the grapheme of a styled cell', () {
       final prev = CellBuffer(const CellSize(3, 1));
@@ -163,8 +217,10 @@ void main() {
       const AnsiRenderer(
         synchronizedOutput: false,
       ).renderDiff(prev, next, sink);
-      // Cursor + reset + fg red (31) + bold (1) + 'A' + trailing reset.
-      expect(sink.output, '\x1B[H\x1B[0m\x1B[31m\x1B[1mA\x1B[0m');
+      // Cursor + fg red (31) + bold (1) + 'A' + trailing reset. No leading
+      // reset is needed because the renderer knows a frame starts in default
+      // style.
+      expect(sink.output, '\x1B[H\x1B[31m\x1B[1mA\x1B[0m');
     });
 
     test('resets style at end of frame when any style was emitted', () {
@@ -203,7 +259,7 @@ void main() {
       // style flips back: reset → 'c';
       // no final reset because we already reset back to default
       // before emitting 'c'.
-      expect(sink.output, '\x1B[Ha\x1B[0m\x1B[1mb\x1B[0mc');
+      expect(sink.output, '\x1B[Ha\x1B[1mb\x1B[0mc');
     });
   });
 

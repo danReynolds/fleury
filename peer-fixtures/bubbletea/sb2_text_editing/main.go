@@ -26,6 +26,8 @@ const (
 	defaultWarmups    = 1
 	defaultIterations = 5
 	defaultTextChars  = 10_000
+	defaultWireSteps  = 8
+	defaultWireMs     = 60
 )
 
 type Options struct {
@@ -36,6 +38,9 @@ type Options struct {
 	TerminalRows       int
 	PrintJSON          bool
 	OutputPath         string
+	Wire               bool
+	WireSteps          int
+	WireIntervalMs     int
 }
 
 type Sample struct {
@@ -66,6 +71,13 @@ func main() {
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
+	}
+	if options.Wire {
+		if err := runWire(options); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	for range options.WarmupIterations {
@@ -110,6 +122,78 @@ func main() {
 	if options.OutputPath != "" {
 		fmt.Printf("Saved %s\n", options.OutputPath)
 	}
+}
+
+type wireModel struct {
+	Sb2TextEditingModel
+}
+
+func (m wireModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.Sb2TextEditingModel.Update(msg)
+	if typed, ok := next.(Sb2TextEditingModel); ok {
+		m.Sb2TextEditingModel = typed
+	}
+	return m, cmd
+}
+
+func (m wireModel) View() tea.View {
+	view := m.Sb2TextEditingModel.View()
+	view.AltScreen = true
+	return view
+}
+
+func runWire(options Options) error {
+	model := wireModel{
+		Sb2TextEditingModel: NewSb2TextEditingModel(
+			options.TextChars,
+			options.TerminalColumns,
+			options.TerminalRows,
+		),
+	}
+	program := tea.NewProgram(
+		model,
+		tea.WithInput(nil),
+		tea.WithWindowSize(options.TerminalColumns, options.TerminalRows),
+		tea.WithFPS(60),
+	)
+
+	go func() {
+		interval := time.Duration(options.WireIntervalMs) * time.Millisecond
+		time.Sleep(interval)
+		for step := 0; step < options.WireSteps; step++ {
+			switch step % 8 {
+			case 0:
+				for range 12 {
+					program.Send(tea.KeyPressMsg{Code: tea.KeyLeft})
+				}
+				for range 6 {
+					program.Send(tea.KeyPressMsg{Code: tea.KeyRight})
+				}
+			case 1:
+				program.Send(insertDeleteMsg{})
+			case 2:
+				program.Send(replaceSelectionMsg{})
+			case 3:
+				program.Send(undoMsg{})
+				program.Send(redoMsg{})
+			case 4:
+				program.Send(tea.PasteMsg{Content: largePasteText()})
+			case 5:
+				program.Send(prepareCompletionMsg{})
+				program.Send(acceptCompletionMsg{})
+			case 6:
+				program.Send(historyPreviousMsg{})
+				program.Send(historyNextMsg{})
+			case 7:
+				program.Send(tea.KeyPressMsg{Code: tea.KeyUp})
+			}
+			time.Sleep(interval)
+		}
+		program.Quit()
+	}()
+
+	_, err := program.Run()
+	return err
 }
 
 func runSample(options Options) Sample {
@@ -333,9 +417,13 @@ func parseArgs(args []string) (Options, error) {
 		TextChars:          defaultTextChars,
 		TerminalColumns:    defaultColumns,
 		TerminalRows:       defaultRows,
+		WireSteps:          defaultWireSteps,
+		WireIntervalMs:     defaultWireMs,
 	}
 	for _, arg := range args {
 		switch {
+		case arg == "--wire":
+			options.Wire = true
 		case arg == "--json":
 			options.PrintJSON = true
 		case strings.HasPrefix(arg, "--warmup="):
@@ -356,6 +444,24 @@ func parseArgs(args []string) (Options, error) {
 				return Options{}, err
 			}
 			options.TextChars = value
+		case strings.HasPrefix(arg, "--rows="):
+			value, err := positiveInt(strings.TrimPrefix(arg, "--rows="), "rows")
+			if err != nil {
+				return Options{}, err
+			}
+			options.TextChars = value
+		case strings.HasPrefix(arg, "--steps="):
+			value, err := positiveInt(strings.TrimPrefix(arg, "--steps="), "steps")
+			if err != nil {
+				return Options{}, err
+			}
+			options.WireSteps = value
+		case strings.HasPrefix(arg, "--interval-ms="):
+			value, err := positiveInt(strings.TrimPrefix(arg, "--interval-ms="), "interval-ms")
+			if err != nil {
+				return Options{}, err
+			}
+			options.WireIntervalMs = value
 		case strings.HasPrefix(arg, "--size="):
 			columns, rows, err := parseSize(strings.TrimPrefix(arg, "--size="))
 			if err != nil {

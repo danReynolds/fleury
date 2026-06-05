@@ -72,6 +72,22 @@ Do not hand-edit `peerRuns` into
   fixture using Nocterm `0.6.0` `ListView.builder`, `ScrollController`, and
   `Text` plus fixture-owned sanitization, filtering, selected-entry state, copy,
   and terminal/app-state queries.
+- `bubbletea/sb6_dashboard`, `ratatui/sb6_dashboard`, and
+  `opentui/sb6_dashboard` - wire-only `SB.6 Dashboard Updates` fixtures using
+  the peers' normal terminal render loops for sustained dashboard update
+  pressure.
+- `nocterm/sb12_layout_dirtiness`, `ratatui/sb12_layout_dirtiness`, and
+  `opentui/sb12_layout_dirtiness` - wire-only `SB.12 Layout Dirtiness Cache`
+  fixtures for layout/paint dirtiness and minimal redraw comparisons.
+- `textual/sb8_overlay_palette`, `ink/sb8_overlay_palette`, and
+  `bubbletea/sb8_overlay_palette` - wire-only `SB.8 Overlay/Palette Churn`
+  fixtures for transient command palette open/filter/close work.
+- `textual/sb9_subprocess_output`, `bubbletea/sb9_subprocess_output`, and
+  `opentui/sb9_subprocess_output` - wire-only `SB.9 Subprocess/Untrusted
+  Output` fixtures for streaming process-output ingestion.
+- `textual/sb10_proof_app`, `bubbletea/sb10_proof_app`, and
+  `ink/sb10_proof_app` - wire-only `SB.10 Proof-App Journey` fixtures for a
+  compact full-app navigation/action/status flow.
 
 Run from the fixture package:
 

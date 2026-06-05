@@ -28,6 +28,8 @@ SCENARIO_ID = "SB.2"
 DEFAULT_WARMUPS = 1
 DEFAULT_ITERATIONS = 5
 DEFAULT_TEXT_CHARS = 10_000
+DEFAULT_WIRE_STEPS = 8
+DEFAULT_WIRE_INTERVAL_MS = 60
 DEFAULT_SIZE = (90, 28)
 
 
@@ -36,6 +38,9 @@ class Options:
     warmup_iterations: int
     measured_iterations: int
     text_chars: int
+    wire: bool
+    wire_steps: int
+    wire_interval_ms: int
     size: tuple[int, int]
     print_json: bool
     output_path: str | None
@@ -57,9 +62,7 @@ class Sample:
     redacted_correct: bool
 
 
-async def main() -> None:
-    options = parse_args()
-
+async def main(options: Options) -> None:
     for _ in range(options.warmup_iterations):
         await run_sample(options)
 
@@ -87,6 +90,59 @@ async def main() -> None:
         print(f"semanticOrTestQueryUs p95: {metrics['semanticOrTestQueryUs']['p95']}")
         if options.output_path is not None:
             print(f"Saved {options.output_path}")
+
+
+class Sb2WireTextEditingApp(Sb2TextEditingApp):
+    def __init__(self, *, text_chars: int, steps: int, interval_seconds: float) -> None:
+        super().__init__(generate_fixture(text_chars=text_chars))
+        self._wire_steps = steps
+        self._wire_interval_seconds = interval_seconds
+        self._wire_step = 0
+
+    def on_mount(self) -> None:
+        super().on_mount()
+        asyncio.create_task(self._drive_wire())
+
+    async def _drive_wire(self) -> None:
+        await asyncio.sleep(self._wire_interval_seconds)
+        while self._wire_step < self._wire_steps:
+            step = self._wire_step % 8
+            if step == 0:
+                self.focus_editor_end()
+                self._editor.move_cursor_relative(columns=-12)
+                self._editor.move_cursor_relative(columns=6)
+            elif step == 1:
+                self._editor.insert("x")
+                self._editor.action_delete_left()
+            elif step == 2:
+                self.replace_selection()
+            elif step == 3:
+                self._editor.undo()
+                self._editor.redo()
+            elif step == 4:
+                self.paste_large_text()
+            elif step == 5:
+                self.focus_composer()
+                self.set_composer_text("git che")
+                self.action_accept_completion()
+            elif step == 6:
+                self.set_composer_text(self.fixture.history_draft)
+                self.action_history_previous()
+                self.action_history_next()
+            elif step == 7:
+                self.focus_secret()
+            self._wire_step += 1
+            await asyncio.sleep(self._wire_interval_seconds)
+        self.exit()
+
+
+def run_wire(options: Options) -> None:
+    app = Sb2WireTextEditingApp(
+        text_chars=options.text_chars,
+        steps=options.wire_steps,
+        interval_seconds=options.wire_interval_ms / 1000,
+    )
+    app.run()
 
 
 async def run_sample(options: Options) -> Sample:
@@ -369,13 +425,30 @@ def timestamp_for_id(value: datetime) -> str:
     return value.strftime("%Y-%m-%dT%H-%M-%SZ")
 
 
+def parse_size(value: str) -> tuple[int, int]:
+    parts = value.lower().split("x", maxsplit=1)
+    if len(parts) != 2:
+        raise argparse.ArgumentTypeError("--size must be COLUMNSxROWS")
+    try:
+        columns = int(parts[0])
+        rows = int(parts[1])
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("--size must be COLUMNSxROWS") from error
+    return columns, rows
+
+
 def parse_args() -> Options:
     parser = argparse.ArgumentParser(description="Textual SB.2 text editing fixture")
     parser.add_argument("--warmup", type=int, default=DEFAULT_WARMUPS)
     parser.add_argument("--iterations", type=int, default=DEFAULT_ITERATIONS)
     parser.add_argument("--text-chars", type=int, default=DEFAULT_TEXT_CHARS)
+    parser.add_argument("--rows", type=int, dest="row_workload")
+    parser.add_argument("--wire", action="store_true")
+    parser.add_argument("--steps", type=int, default=DEFAULT_WIRE_STEPS)
+    parser.add_argument("--interval-ms", type=int, default=DEFAULT_WIRE_INTERVAL_MS)
     parser.add_argument("--columns", type=int, default=DEFAULT_SIZE[0])
-    parser.add_argument("--rows", type=int, default=DEFAULT_SIZE[1])
+    parser.add_argument("--terminal-rows", type=int, default=DEFAULT_SIZE[1])
+    parser.add_argument("--size")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--output")
     args = parser.parse_args()
@@ -383,19 +456,37 @@ def parse_args() -> Options:
         parser.error("--warmup must be non-negative")
     if args.iterations <= 0:
         parser.error("--iterations must be positive")
-    if args.text_chars <= 0:
+    text_chars = args.text_chars
+    if args.row_workload is not None:
+        text_chars = args.row_workload
+    columns = args.columns
+    terminal_rows = args.terminal_rows
+    if args.size is not None:
+        columns, terminal_rows = parse_size(args.size)
+    if text_chars <= 0:
         parser.error("--text-chars must be positive")
-    if args.columns <= 0 or args.rows <= 0:
+    if args.steps <= 0:
+        parser.error("--steps must be positive")
+    if args.interval_ms <= 0:
+        parser.error("--interval-ms must be positive")
+    if columns <= 0 or terminal_rows <= 0:
         parser.error("--columns and --rows must be positive")
     return Options(
         warmup_iterations=args.warmup,
         measured_iterations=args.iterations,
-        text_chars=args.text_chars,
-        size=(args.columns, args.rows),
+        text_chars=text_chars,
+        wire=args.wire,
+        wire_steps=args.steps,
+        wire_interval_ms=args.interval_ms,
+        size=(columns, terminal_rows),
         print_json=args.json,
         output_path=args.output,
     )
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parsed_options = parse_args()
+    if parsed_options.wire:
+        run_wire(parsed_options)
+    else:
+        asyncio.run(main(parsed_options))

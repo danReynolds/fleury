@@ -1,0 +1,9 @@
+name: fleury_peer_nocterm_sb12_layout_dirtiness
+description: Nocterm SB.12 peer fixture for Fleury comparative benchmarks.
+publish_to: none
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  nocterm: 0.6.0

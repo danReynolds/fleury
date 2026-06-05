@@ -1,3 +1,4 @@
+import '../foundation/geometry.dart';
 import '../terminal/capabilities.dart';
 import 'cell.dart';
 import 'cell_buffer.dart';
@@ -97,12 +98,55 @@ final class AnsiRenderer {
       '(previous=${previous.size}, next=${next.size}).',
     );
 
+    if (_buffersEqual(previous, next)) return;
+
     final size = next.size;
+    final scrollUpRows = _detectBeneficialScrollUp(previous, next);
+    if (scrollUpRows != null) {
+      final scrolledPrevious = CellBuffer(size);
+      scrolledPrevious.copyRectFrom(
+        previous,
+        CellRect(
+          offset: CellOffset(0, scrollUpRows),
+          size: CellSize(size.cols, size.rows - scrollUpRows),
+        ),
+        const CellOffset(0, 0),
+      );
+      final buf = StringBuffer();
+      if (synchronizedOutput) buf.write(_beginSyncUpdate);
+      buf.write(_scrollUp(scrollUpRows));
+      _appendCellDiff(scrolledPrevious, next, buf, onDirtyCell: onDirtyCell);
+      if (synchronizedOutput) buf.write(_endSyncUpdate);
+      sink.write(buf.toString());
+      return;
+    }
+
     final buf = StringBuffer();
-    if (synchronizedOutput) buf.write(_beginSyncUpdate);
+    final anyDirty = _appendCellDiff(
+      previous,
+      next,
+      buf,
+      onDirtyCell: onDirtyCell,
+    );
+    if (!anyDirty) return;
+    final output = StringBuffer();
+    if (synchronizedOutput) output.write(_beginSyncUpdate);
+    output.write(buf);
+    if (synchronizedOutput) output.write(_endSyncUpdate);
+    sink.write(output.toString());
+  }
+
+  bool _appendCellDiff(
+    CellBuffer previous,
+    CellBuffer next,
+    StringBuffer buf, {
+    void Function(int col, int row)? onDirtyCell,
+  }) {
+    final size = next.size;
     int? cursorRow;
     int? cursorCol;
     CellStyle? emittedStyle;
+    var styleResetRequired = false;
     var anyDirty = false;
 
     for (var row = 0; row < size.rows; row++) {
@@ -145,11 +189,12 @@ final class AnsiRenderer {
         if (newCell.role == CellRole.protocolAnchor) {
           buf.write(newCell.grapheme!);
           // The terminal may leave the cursor anywhere after the
-          // protocol completes; invalidate our cached position so the
-          // next dirty cell re-emits a cursor move.
+          // protocol completes; invalidate our cached position/style so
+          // the next dirty cell re-emits a cursor move and resets SGR.
           cursorRow = null;
           cursorCol = null;
           emittedStyle = null;
+          styleResetRequired = true;
           continue;
         }
 
@@ -161,11 +206,17 @@ final class AnsiRenderer {
         // SGR-free.
         if (newCell.style != emittedStyle) {
           if (newCell.style == CellStyle.empty) {
-            if (emittedStyle != null && emittedStyle != CellStyle.empty) {
+            if (styleResetRequired ||
+                (emittedStyle != null && emittedStyle != CellStyle.empty)) {
               buf.write('\x1B[0m');
+              styleResetRequired = false;
             }
           } else {
-            buf.write(_encodeStyle(newCell.style));
+            final resetFirst =
+                styleResetRequired ||
+                (emittedStyle != null && emittedStyle != CellStyle.empty);
+            buf.write(_encodeStyle(newCell.style, resetFirst: resetFirst));
+            styleResetRequired = false;
           }
           emittedStyle = newCell.style;
         }
@@ -195,9 +246,7 @@ final class AnsiRenderer {
     // doesn't need a sync wrapper and emitting one would be a small
     // wasted round-trip on terminals that DON'T support 2026 (they
     // ignore the unknown escapes but still process the bytes).
-    if (synchronizedOutput && anyDirty) buf.write(_endSyncUpdate);
-
-    if (anyDirty) sink.write(buf.toString());
+    return anyDirty;
   }
 
   /// Renders [buffer] as a full frame (no previous state). Equivalent to
@@ -226,7 +275,10 @@ final class AnsiRenderer {
   ///     with the column omitted when it is 1 (`CSI row H`) and both omitted
   ///     at home (`CSI H`).
   static String _cursorMove(int? fromRow, int? fromCol, int row, int col) {
-    if (fromRow != null && fromCol != null && fromRow == row && fromCol != col) {
+    if (fromRow != null &&
+        fromCol != null &&
+        fromRow == row &&
+        fromCol != col) {
       final n = (col - fromCol).abs();
       final dir = col > fromCol ? 'C' : 'D';
       final relative = n == 1 ? '\x1B[$dir' : '\x1B[$n$dir';
@@ -245,11 +297,83 @@ final class AnsiRenderer {
 
   static String _shorter(String a, String b) => b.length < a.length ? b : a;
 
+  static String _scrollUp(int rows) => rows == 1 ? '\x1B[S' : '\x1B[${rows}S';
+
+  static bool _buffersEqual(CellBuffer a, CellBuffer b) {
+    final size = a.size;
+    if (b.size != size) return false;
+    for (var row = 0; row < size.rows; row++) {
+      for (var col = 0; col < size.cols; col++) {
+        if (a.atColRow(col, row) != b.atColRow(col, row)) return false;
+      }
+    }
+    return true;
+  }
+
+  static int? _detectBeneficialScrollUp(CellBuffer previous, CellBuffer next) {
+    final size = previous.size;
+    if (size != next.size || size.rows < 2) return null;
+    if (_containsProtocolCell(previous) || _containsProtocolCell(next)) {
+      return null;
+    }
+
+    final normalDirty = _dirtyCellCount(previous, next);
+    var bestShift = 0;
+    var bestDirty = normalDirty;
+    for (var shift = 1; shift < size.rows; shift++) {
+      var retainedNonEmpty = false;
+      var shiftedDirty = 0;
+      for (var row = 0; row < size.rows - shift; row++) {
+        for (var col = 0; col < size.cols; col++) {
+          final oldCell = previous.atColRow(col, row + shift);
+          final newCell = next.atColRow(col, row);
+          if (oldCell != newCell) shiftedDirty++;
+          if (oldCell.role != CellRole.empty) retainedNonEmpty = true;
+        }
+      }
+      for (var row = size.rows - shift; row < size.rows; row++) {
+        for (var col = 0; col < size.cols; col++) {
+          if (next.atColRow(col, row) != const Cell.empty()) shiftedDirty++;
+        }
+      }
+      if (retainedNonEmpty && shiftedDirty < bestDirty) {
+        bestShift = shift;
+        bestDirty = shiftedDirty;
+      }
+    }
+    return bestShift == 0 ? null : bestShift;
+  }
+
+  static int _dirtyCellCount(CellBuffer previous, CellBuffer next) {
+    final size = previous.size;
+    var dirty = 0;
+    for (var row = 0; row < size.rows; row++) {
+      for (var col = 0; col < size.cols; col++) {
+        if (previous.atColRow(col, row) != next.atColRow(col, row)) dirty++;
+      }
+    }
+    return dirty;
+  }
+
+  static bool _containsProtocolCell(CellBuffer buffer) {
+    final size = buffer.size;
+    for (var row = 0; row < size.rows; row++) {
+      for (var col = 0; col < size.cols; col++) {
+        final role = buffer.atColRow(col, row).role;
+        if (role == CellRole.protocolAnchor ||
+            role == CellRole.protocolCovered) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   // ---- Style encoding ----------------------------------------------------
 
-  String _encodeStyle(CellStyle style) {
-    // Reset, then apply.
-    final buf = StringBuffer('\x1B[0m');
+  String _encodeStyle(CellStyle style, {required bool resetFirst}) {
+    final buf = StringBuffer();
+    if (resetFirst) buf.write('\x1B[0m');
 
     final fg = style.foreground;
     if (fg != null) buf.write(_encodeColor(fg, isBackground: false));

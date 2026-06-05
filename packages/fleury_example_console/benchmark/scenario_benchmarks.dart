@@ -127,9 +127,17 @@ final class _ScenarioOptions {
     final text = filter;
     if (text == null) return true;
     final query = text.toLowerCase();
+    final idFilter = _scenarioIdFilter(query);
+    if (idFilter != null) return scenario.id.toLowerCase() == idFilter;
     return scenario.id.toLowerCase().contains(query) ||
         scenario.name.toLowerCase().contains(query);
   }
+}
+
+String? _scenarioIdFilter(String query) {
+  if (!query.startsWith('sb')) return null;
+  final digits = query.substring(2).replaceAll(RegExp('[^0-9]'), '');
+  return digits.isEmpty ? null : 'sb.$digits';
 }
 
 final class _ScenarioConfig {

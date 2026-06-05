@@ -23,10 +23,17 @@ const SCENARIO_ID = 'SB.3'
 const DEFAULT_WARMUPS = 2
 const DEFAULT_ITERATIONS = 5
 const DEFAULT_ROWS = 100_000
+const DEFAULT_WIRE_STEPS = 5
+const DEFAULT_WIRE_INTERVAL_MS = 80
 const DEFAULT_COLUMNS = 120
 const DEFAULT_TERMINAL_ROWS = 32
 
 const options = parseArgs(process.argv.slice(2))
+
+if (options.wire) {
+  await runWire(options)
+  process.exit(0)
+}
 
 for (let index = 0; index < options.warmupIterations; index += 1) {
   await runSample(options)
@@ -134,6 +141,43 @@ async function runSample(options) {
     }
   } finally {
     app?.destroy()
+  }
+}
+
+async function runWire(options) {
+  const app = await Sb3OpenTuiTableHarness.createTerminal({
+    rowCount: options.rows,
+    terminalColumns: options.terminalColumns,
+    terminalRows: options.terminalRows,
+  })
+  try {
+    await app.render()
+    await sleep(options.wireIntervalMs)
+    for (let step = 0; step < options.wireSteps; step += 1) {
+      switch (step % 5) {
+        case 0:
+          app.arrowDown()
+          break
+        case 1:
+          app.pageDown()
+          break
+        case 2:
+          app.selectedIndex = Math.floor(options.rows / 2)
+          app.keepSelectedVisible()
+          app.updateTable()
+          break
+        case 3:
+          app.jumpToEnd()
+          break
+        case 4:
+          app.copySelectedRow()
+          break
+      }
+      await app.render()
+      await sleep(options.wireIntervalMs)
+    }
+  } finally {
+    app.destroy()
   }
 }
 
@@ -286,10 +330,15 @@ function parseArgs(args) {
     terminalRows: DEFAULT_TERMINAL_ROWS,
     printJson: false,
     outputPath: null,
+    wire: false,
+    wireSteps: DEFAULT_WIRE_STEPS,
+    wireIntervalMs: DEFAULT_WIRE_INTERVAL_MS,
   }
 
   for (const arg of args) {
-    if (arg === '--json') {
+    if (arg === '--wire') {
+      options.wire = true
+    } else if (arg === '--json') {
       options.printJson = true
     } else if (arg.startsWith('--warmup=')) {
       options.warmupIterations = parseNonNegativeInteger(arg, 'warmup')
@@ -297,6 +346,10 @@ function parseArgs(args) {
       options.measuredIterations = parsePositiveInteger(arg, 'iterations')
     } else if (arg.startsWith('--rows=')) {
       options.rows = parsePositiveInteger(arg, 'rows')
+    } else if (arg.startsWith('--steps=')) {
+      options.wireSteps = parsePositiveInteger(arg, 'steps')
+    } else if (arg.startsWith('--interval-ms=')) {
+      options.wireIntervalMs = parsePositiveInteger(arg, 'interval-ms')
     } else if (arg.startsWith('--size=')) {
       const value = arg.slice('--size='.length)
       const [columns, rows] = value.split('x')
@@ -377,6 +430,10 @@ function commandOutput(command, args = []) {
   } catch {
     return null
   }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function runtimeVersion() {

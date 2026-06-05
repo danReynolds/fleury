@@ -34,6 +34,8 @@ SCENARIO_ID = "SB.5"
 DEFAULT_WARMUPS = 1
 DEFAULT_ITERATIONS = 3
 DEFAULT_ROWS = 100_000
+DEFAULT_WIRE_STEPS = 16
+DEFAULT_WIRE_INTERVAL_MS = 50
 DEFAULT_SIZE = (120, 32)
 
 
@@ -42,6 +44,9 @@ class Options:
     warmup_iterations: int
     measured_iterations: int
     rows: int
+    wire: bool
+    wire_steps: int
+    wire_interval_ms: int
     size: tuple[int, int]
     print_json: bool
     output_path: str | None
@@ -79,9 +84,7 @@ class Sample:
     unsafe_frame_free: bool
 
 
-async def main() -> None:
-    options = parse_args()
-
+async def main(options: Options) -> None:
     for _ in range(options.warmup_iterations):
         await run_sample(options)
 
@@ -110,6 +113,49 @@ async def main() -> None:
         print(f"unsafeFrameCount: {metrics['unsafeFrameCount']}")
         if options.output_path is not None:
             print(f"Saved {options.output_path}")
+
+
+class Sb5WireStreamingMarkdownApp(Sb5StreamingMarkdownApp):
+    def __init__(self, *, rows: int, steps: int, interval_seconds: float) -> None:
+        super().__init__()
+        self._wire_fixture = MarkdownFixture(seed=1)
+        self._wire_chunk_count = markdown_chunk_count_for(rows)
+        self._wire_steps = steps
+        self._wire_interval_seconds = interval_seconds
+        self._wire_emitted = 0
+
+    def on_mount(self) -> None:
+        super().on_mount()
+        asyncio.create_task(self._drive_wire())
+
+    async def _drive_wire(self) -> None:
+        await asyncio.sleep(self._wire_interval_seconds)
+        while self._wire_emitted < self._wire_chunk_count:
+            remaining = self._wire_chunk_count - self._wire_emitted
+            remaining_steps = self._wire_steps - (
+                self._wire_emitted * self._wire_steps // self._wire_chunk_count
+            )
+            batch = remaining if remaining_steps <= 1 else remaining // remaining_steps
+            if batch <= 0:
+                batch = 1
+            for _ in range(batch):
+                if self._wire_emitted >= self._wire_chunk_count:
+                    break
+                await self.append_chunk(self._wire_fixture.chunk(self._wire_emitted))
+                self._wire_emitted += 1
+            await asyncio.sleep(self._wire_interval_seconds)
+        self.select_final_block()
+        await asyncio.sleep(self._wire_interval_seconds)
+        self.exit()
+
+
+def run_wire(options: Options) -> None:
+    app = Sb5WireStreamingMarkdownApp(
+        rows=options.rows,
+        steps=options.wire_steps,
+        interval_seconds=options.wire_interval_ms / 1000,
+    )
+    app.run()
 
 
 async def run_sample(options: Options) -> Sample:
@@ -370,6 +416,13 @@ def parse_args() -> Options:
     parser.add_argument("--iterations", type=positive_int, default=DEFAULT_ITERATIONS)
     parser.add_argument("--rows", type=positive_int, default=DEFAULT_ROWS)
     parser.add_argument("--size", type=parse_size, default=DEFAULT_SIZE)
+    parser.add_argument("--wire", action="store_true")
+    parser.add_argument("--steps", type=positive_int, default=DEFAULT_WIRE_STEPS)
+    parser.add_argument(
+        "--interval-ms",
+        type=positive_int,
+        default=DEFAULT_WIRE_INTERVAL_MS,
+    )
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--output")
     args = parser.parse_args()
@@ -377,6 +430,9 @@ def parse_args() -> Options:
         warmup_iterations=args.warmup,
         measured_iterations=args.iterations,
         rows=args.rows,
+        wire=args.wire,
+        wire_steps=args.steps,
+        wire_interval_ms=args.interval_ms,
         size=args.size,
         print_json=args.json,
         output_path=args.output,
@@ -455,4 +511,8 @@ def timestamp_for_id(value: datetime) -> str:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parsed_options = parse_args()
+    if parsed_options.wire:
+        run_wire(parsed_options)
+    else:
+        asyncio.run(main(parsed_options))

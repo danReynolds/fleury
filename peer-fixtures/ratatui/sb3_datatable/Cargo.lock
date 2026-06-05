@@ -1016,6 +1016,7 @@ dependencies = [
 name = "ratatui_sb3_datatable"
 version = "0.1.0"
 dependencies = [
+ "crossterm",
  "ratatui",
  "serde_json",
 ]

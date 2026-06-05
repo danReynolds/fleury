@@ -21,10 +21,12 @@ import 'package:test/test.dart';
 
 /// A minimal terminal: tracks the cursor and writes single-width graphemes,
 /// understanding exactly the escapes AnsiRenderer emits (CUP `H`, CUF `C`,
-/// CUB `D`; SGR `m` and private modes `?…h/l` are ignored as they don't move
-/// the cursor or place content).
+/// CUB `D`, SU `S`; SGR `m` and private modes `?…h/l` are ignored as they
+/// don't move the cursor or place content).
 List<List<String>> _apply(List<List<String>> start, String output) {
-  final grid = [for (final row in start) [...row]];
+  final grid = [
+    for (final row in start) [...row],
+  ];
   final rows = grid.length;
   final cols = rows == 0 ? 0 : grid[0].length;
   var cr = 0;
@@ -61,11 +63,13 @@ List<List<String>> _apply(List<List<String>> start, String output) {
       switch (finalByte) {
         case 0x48: // 'H' — CUP (1-indexed; omitted params default to 1)
           final parts = ps.isEmpty ? const <String>[] : ps.split(';');
-          final r = (parts.isNotEmpty && parts[0].isNotEmpty
+          final r =
+              (parts.isNotEmpty && parts[0].isNotEmpty
                   ? int.parse(parts[0])
                   : 1) -
               1;
-          final c = (parts.length > 1 && parts[1].isNotEmpty
+          final c =
+              (parts.length > 1 && parts[1].isNotEmpty
                   ? int.parse(parts[1])
                   : 1) -
               1;
@@ -75,6 +79,15 @@ List<List<String>> _apply(List<List<String>> start, String output) {
           cc += ps.isEmpty ? 1 : int.parse(ps);
         case 0x44: // 'D' — CUB (omitted -> 1)
           cc -= ps.isEmpty ? 1 : int.parse(ps);
+        case 0x53: // 'S' — SU/scroll up (omitted -> 1)
+          final count = ps.isEmpty ? 1 : int.parse(ps);
+          for (var r = 0; r < rows; r++) {
+            if (r + count < rows) {
+              grid[r] = [...grid[r + count]];
+            } else {
+              grid[r] = List<String>.filled(cols, ' ');
+            }
+          }
         case 0x6D: // 'm' — SGR, ignored
           break;
         default:

@@ -4,7 +4,8 @@ import path from 'node:path';
 import process from 'node:process';
 import {execFileSync} from 'node:child_process';
 import React from 'react';
-import {render} from 'ink-testing-library';
+import {render as renderInk} from 'ink';
+import {render as renderTest} from 'ink-testing-library';
 import {InkSb2App, InkSb2Fixture} from '../lib/text_editing_app.js';
 
 const schemaVersion = 1;
@@ -19,11 +20,17 @@ const scenarioId = 'SB.2';
 const defaultWarmups = 1;
 const defaultIterations = 5;
 const defaultTextChars = 10000;
+const defaultWireSteps = 8;
+const defaultWireIntervalMs = 60;
 const defaultColumns = 120;
 const defaultRows = 32;
 
-function main() {
+async function main() {
   const options = parseArgs(process.argv.slice(2));
+  if (options.wire) {
+    await runWire(options);
+    return;
+  }
   for (let index = 0; index < options.warmupIterations; index += 1) {
     runSample(options);
   }
@@ -64,7 +71,7 @@ function runSample(options) {
   const mountUs = elapsedUs(mountStart);
 
   const firstRenderStart = nowNs();
-  const rendered = render(React.createElement(InkSb2App, {fixture}));
+  const rendered = renderTest(React.createElement(InkSb2App, {fixture}));
   const firstFrame = rendered.lastFrame() ?? '';
   const firstRenderUs = elapsedUs(firstRenderStart);
 
@@ -127,6 +134,85 @@ function runSample(options) {
     editorLineCount: state.editorLineCount,
     composerValue: state.composerValue
   };
+}
+
+async function runWire(options) {
+  const fixture = new InkSb2Fixture({
+    textChars: options.textChars,
+    columns: options.terminalColumns,
+    rows: options.terminalRows
+  });
+  let instance;
+  const done = new Promise(resolve => {
+    instance = renderInk(
+      React.createElement(InkSb2WireApp, {
+        fixture,
+        steps: options.wireSteps,
+        intervalMs: options.wireIntervalMs,
+        onDone: () => {
+          instance.unmount();
+          resolve();
+        }
+      }),
+      {
+        exitOnCtrlC: false,
+        interactive: true,
+        alternateScreen: true,
+        maxFps: 60,
+        patchConsole: false
+      }
+    );
+  });
+  await done;
+  await instance.waitUntilExit();
+}
+
+function InkSb2WireApp({fixture, steps, intervalMs, onDone}) {
+  const [tick, setTick] = React.useState(0);
+  React.useEffect(() => {
+    let step = 0;
+    const timer = setInterval(() => {
+      switch (step % 8) {
+        case 0:
+          fixture.cursorMove();
+          break;
+        case 1:
+          fixture.insertionDeletion();
+          break;
+        case 2:
+          fixture.replaceSelection();
+          break;
+        case 3:
+          fixture.undo();
+          fixture.redo();
+          break;
+        case 4:
+          fixture.pasteLargeText();
+          break;
+        case 5:
+          fixture.acceptCompletion();
+          break;
+        case 6:
+          fixture.historyPrevious();
+          fixture.historyPrevious();
+          break;
+        case 7:
+          fixture.composerValue = 'status --short';
+          break;
+        default:
+          break;
+      }
+      step += 1;
+      setTick(step);
+      if (step >= steps) {
+        clearInterval(timer);
+        setTimeout(onDone, intervalMs);
+      }
+    }, intervalMs);
+    return () => clearInterval(timer);
+  }, [fixture, steps, intervalMs, onDone]);
+
+  return React.createElement(InkSb2App, {fixture, tick});
 }
 
 function buildArtifact(options, samples) {
@@ -259,18 +345,29 @@ function parseArgs(args) {
     textChars: defaultTextChars,
     terminalColumns: defaultColumns,
     terminalRows: defaultRows,
+    wire: false,
+    wireSteps: defaultWireSteps,
+    wireIntervalMs: defaultWireIntervalMs,
     printJson: false,
     outputPath: ''
   };
   for (const arg of args) {
     if (arg === '--json') {
       options.printJson = true;
+    } else if (arg === '--wire') {
+      options.wire = true;
     } else if (arg.startsWith('--warmup=')) {
       options.warmupIterations = positiveOrZeroInt(arg.slice('--warmup='.length), 'warmup');
     } else if (arg.startsWith('--iterations=')) {
       options.measuredIterations = positiveInt(arg.slice('--iterations='.length), 'iterations');
     } else if (arg.startsWith('--text-chars=')) {
       options.textChars = positiveInt(arg.slice('--text-chars='.length), 'text-chars');
+    } else if (arg.startsWith('--rows=')) {
+      options.textChars = positiveInt(arg.slice('--rows='.length), 'rows');
+    } else if (arg.startsWith('--steps=')) {
+      options.wireSteps = positiveInt(arg.slice('--steps='.length), 'steps');
+    } else if (arg.startsWith('--interval-ms=')) {
+      options.wireIntervalMs = positiveInt(arg.slice('--interval-ms='.length), 'interval-ms');
     } else if (arg.startsWith('--size=')) {
       const [columns, rows] = parseSize(arg.slice('--size='.length));
       options.terminalColumns = columns;
@@ -363,4 +460,4 @@ function timestampForId(value) {
   return value.toISOString().replace(/\.\d{3}Z$/, 'Z').replaceAll(':', '-');
 }
 
-main();
+await main();

@@ -1,3 +1,9 @@
+use crossterm::{
+    cursor::{Hide, Show},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use ratatui::{backend::CrosstermBackend, Terminal};
 use ratatui_sb3_datatable::{
     buffer_text, expected_selected_tsv, row_id, visible_capacity, Sb3TableApp,
 };
@@ -5,8 +11,10 @@ use serde_json::{json, Value};
 use std::cmp::Ordering;
 use std::env;
 use std::fs;
+use std::io;
 use std::path::Path;
 use std::process::Command;
+use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const SCHEMA_VERSION: u64 = 1;
@@ -18,6 +26,8 @@ const SCENARIO_ID: &str = "SB.3";
 const DEFAULT_WARMUPS: usize = 1;
 const DEFAULT_ITERATIONS: usize = 10;
 const DEFAULT_ROWS: usize = 100_000;
+const DEFAULT_WIRE_STEPS: usize = 5;
+const DEFAULT_WIRE_INTERVAL_MS: u64 = 80;
 const DEFAULT_COLUMNS: u16 = 120;
 const DEFAULT_TERMINAL_ROWS: u16 = 32;
 
@@ -30,6 +40,9 @@ struct Options {
     terminal_rows: u16,
     print_json: bool,
     output_path: Option<String>,
+    wire: bool,
+    wire_steps: usize,
+    wire_interval_ms: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -55,6 +68,9 @@ struct Sample {
 
 fn main() -> Result<(), String> {
     let options = parse_args()?;
+    if options.wire {
+        return run_wire(&options);
+    }
 
     let run_rss_before = current_rss_bytes();
     for _ in 0..options.warmup_iterations {
@@ -95,6 +111,56 @@ fn main() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn run_wire(options: &Options) -> Result<(), String> {
+    let mut app = Sb3TableApp::new(options.rows);
+    let capacity = visible_capacity(options.terminal_rows);
+    enable_raw_mode().map_err(|error| error.to_string())?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, Hide).map_err(|error| {
+        let _ = disable_raw_mode();
+        error.to_string()
+    })?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend).map_err(|error| {
+        let _ = disable_raw_mode();
+        error.to_string()
+    })?;
+    let interval = Duration::from_millis(options.wire_interval_ms);
+
+    let result = (|| -> Result<(), String> {
+        terminal
+            .draw(|frame| app.render_to_frame(frame))
+            .map_err(|error| error.to_string())?;
+        thread::sleep(interval);
+        for step in 0..options.wire_steps {
+            match step % 5 {
+                0 => app.arrow_down(capacity),
+                1 => app.page_down(capacity),
+                2 => {
+                    for _ in 0..8 {
+                        app.page_down(capacity);
+                    }
+                }
+                3 => app.jump_to_end(capacity),
+                _ => {
+                    let _ = app.copy_selected_tsv();
+                }
+            }
+            terminal
+                .draw(|frame| app.render_to_frame(frame))
+                .map_err(|error| error.to_string())?;
+            thread::sleep(interval);
+        }
+        Ok(())
+    })();
+
+    let cleanup_result = execute!(terminal.backend_mut(), Show, LeaveAlternateScreen)
+        .map_err(|error| error.to_string())
+        .and_then(|_| disable_raw_mode().map_err(|error| error.to_string()));
+
+    result.and(cleanup_result)
 }
 
 fn run_sample(options: &Options) -> Sample {
@@ -298,17 +364,26 @@ fn parse_args() -> Result<Options, String> {
         terminal_rows: DEFAULT_TERMINAL_ROWS,
         print_json: false,
         output_path: None,
+        wire: false,
+        wire_steps: DEFAULT_WIRE_STEPS,
+        wire_interval_ms: DEFAULT_WIRE_INTERVAL_MS,
     };
 
     for arg in env::args().skip(1) {
         if arg == "--json" {
             options.print_json = true;
+        } else if arg == "--wire" {
+            options.wire = true;
         } else if let Some(value) = arg.strip_prefix("--warmup=") {
             options.warmup_iterations = parse_usize(value, "warmup")?;
         } else if let Some(value) = arg.strip_prefix("--iterations=") {
             options.measured_iterations = parse_usize(value, "iterations")?;
         } else if let Some(value) = arg.strip_prefix("--rows=") {
             options.rows = parse_usize(value, "rows")?;
+        } else if let Some(value) = arg.strip_prefix("--steps=") {
+            options.wire_steps = parse_usize(value, "steps")?;
+        } else if let Some(value) = arg.strip_prefix("--interval-ms=") {
+            options.wire_interval_ms = parse_u64(value, "interval-ms")?;
         } else if let Some(value) = arg.strip_prefix("--size=") {
             let (columns, rows) = parse_size(value)?;
             options.terminal_columns = columns;
@@ -326,12 +401,25 @@ fn parse_args() -> Result<Options, String> {
     if options.rows == 0 {
         return Err("--rows must be positive".to_string());
     }
+    if options.wire_steps == 0 {
+        return Err("--steps must be positive".to_string());
+    }
+    if options.wire_interval_ms == 0 {
+        return Err("--interval-ms must be positive".to_string());
+    }
     Ok(options)
 }
 
 fn parse_usize(value: &str, label: &str) -> Result<usize, String> {
     let parsed = value
         .parse::<usize>()
+        .map_err(|_| format!("--{label} must be an integer"))?;
+    Ok(parsed)
+}
+
+fn parse_u64(value: &str, label: &str) -> Result<u64, String> {
+    let parsed = value
+        .parse::<u64>()
         .map_err(|_| format!("--{label} must be an integer"))?;
     Ok(parsed)
 }

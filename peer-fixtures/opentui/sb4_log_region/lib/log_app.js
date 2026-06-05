@@ -1,4 +1,4 @@
-import { TextRenderable } from '@opentui/core'
+import { createCliRenderer, TextRenderable } from '@opentui/core'
 import { createTestRenderer } from '@opentui/core/testing'
 
 const LEVELS = ['info', 'warn', 'error', 'debug']
@@ -87,6 +87,38 @@ export class Sb4OpenTuiLogHarness {
       terminalColumns,
       terminalRows,
       setup,
+    })
+    app.mount()
+    return app
+  }
+
+  static async createTerminal(options = {}) {
+    const rowCount = options.rowCount ?? 100_000
+    const terminalColumns = options.terminalColumns ?? 120
+    const terminalRows = options.terminalRows ?? 32
+    const renderer = await createCliRenderer({
+      width: terminalColumns,
+      height: terminalRows,
+      consoleMode: 'disabled',
+      screenMode: 'alternate-screen',
+      clearOnShutdown: true,
+      targetFps: 60,
+      maxFps: 60,
+      exitOnCtrlC: false,
+    })
+    const app = new Sb4OpenTuiLogHarness({
+      rowCount,
+      terminalColumns,
+      terminalRows,
+      setup: {
+        renderer,
+        renderOnce: async () => {
+          renderer.requestRender()
+          await renderer.idle()
+        },
+        captureCharFrame: () => '',
+        getNativeStats: () => null,
+      },
     })
     app.mount()
     return app

@@ -11,6 +11,10 @@
 //   fleury serve    (future) Same idea, websocket transport: app
 //                  renders into a browser xterm.js client.
 //
+//   fleury benchmark
+//                  Run contributor benchmark and profiling workflows from
+//                  a local Fleury framework checkout.
+//
 // Usage:
 //
 //   $ fleury shell                 # in terminal A
@@ -48,6 +52,8 @@ Future<void> main(List<String> args) async {
       exit(await _runDiagnose(args.sublist(1)));
     case 'dev':
       exit(await _runDev(args.sublist(1)));
+    case 'benchmark':
+      exit(await _runBenchmark(args.sublist(1)));
     case '-h':
     case '--help':
     case 'help':
@@ -94,12 +100,37 @@ void _printUsage() {
     'framework checkout.',
   );
   stderr.writeln('           Example: fleury dev check --quick');
+  stderr.writeln(
+    '  benchmark Run local and peer benchmark/profiling workflows. '
+    'Requires a',
+  );
+  stderr.writeln('           framework checkout.');
+  stderr.writeln('           Example: fleury benchmark list');
 }
 
 Future<int> _runDev(List<String> args) async {
+  final forwarded = args.isEmpty || (args.length == 1 && args.first == 'help')
+      ? const <String>['--help']
+      : args;
+  return _runRepoDevTool(forwarded, commandName: 'fleury dev');
+}
+
+Future<int> _runBenchmark(List<String> args) async {
+  final forwarded = args.isEmpty || (args.length == 1 && args.first == 'help')
+      ? const <String>['benchmark', '--help']
+      : <String>['benchmark', ...args];
+  return _runRepoDevTool(forwarded, commandName: 'fleury benchmark');
+}
+
+Future<int> _runRepoDevTool(
+  List<String> forwarded, {
+  required String commandName,
+}) async {
   final root = _findFleuryRepoRoot(Directory.current);
   if (root == null) {
-    stderr.writeln('fleury dev commands require a Fleury framework checkout.');
+    stderr.writeln(
+      '$commandName commands require a Fleury framework checkout.',
+    );
     stderr.writeln(
       'Run from the repo root or a subdirectory, or use public commands '
       'like `fleury diagnose`.',
@@ -108,9 +139,6 @@ Future<int> _runDev(List<String> args) async {
   }
 
   final devTool = File('${root.path}/tool/fleury_dev.dart');
-  final forwarded = args.isEmpty || (args.length == 1 && args.first == 'help')
-      ? const <String>['--help']
-      : args;
   final process = await Process.start(
     Platform.resolvedExecutable,
     <String>[devTool.path, ...forwarded],
