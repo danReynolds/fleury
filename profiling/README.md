@@ -35,6 +35,14 @@ peer in one report. Capture artifacts are written under `profiling/caps/`. The
 SB.2/SB.3 commands are the P1 first-reading set; SB.4/SB.5 are the P0
 output/rich-text set.
 
+Each `fleury benchmark wire ...` run also refreshes `scoreboard.md` inside the
+selected capture directory. Regenerate or redirect it explicitly with:
+
+```sh
+fleury benchmark scoreboard --input=profiling/caps --output=profiling/caps/scoreboard.md
+dart run scoreboard.dart --input=caps --output=caps/scoreboard.md --matrix-link=../../benchmarks/README.md
+```
+
 Lower-level manual helpers:
 
 ```sh

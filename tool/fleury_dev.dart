@@ -757,6 +757,9 @@ class _Runner {
       case 'wire':
         await benchmarkWire(rest);
         return;
+      case 'scoreboard':
+        await benchmarkScoreboard(rest);
+        return;
       case 'manifest':
         await benchmarkManifest(rest);
         return;
@@ -977,6 +980,37 @@ class _Runner {
     }
 
     stdout.writeln('captures written under ${_relative(outDir.path)}');
+    await _refreshWireScoreboard(outDir.path);
+  }
+
+  Future<void> benchmarkScoreboard(List<String> args) async {
+    final options = _BenchmarkScoreboardOptions.parse(root, args);
+    final matrixLink = options.outputPath == null
+        ? 'benchmarks/README.md'
+        : _relativeFilePath(
+            fromDirectory: File(options.outputPath!).parent.path,
+            toPath: '$root/benchmarks/README.md',
+          );
+    await _run('dart', [
+      'run',
+      'scoreboard.dart',
+      '--input=${options.inputDir}',
+      if (options.outputPath != null) '--output=${options.outputPath}',
+      '--matrix-link=$matrixLink',
+      if (options.json) '--json',
+    ], workingDirectory: profiling);
+  }
+
+  Future<void> _refreshWireScoreboard(String outDir) async {
+    final outputPath = '$outDir/scoreboard.md';
+    stdout.writeln('refresh scoreboard ${_relative(outputPath)}');
+    await _run('dart', [
+      'run',
+      'scoreboard.dart',
+      '--input=$outDir',
+      '--output=$outputPath',
+      '--matrix-link=${_relativeFilePath(fromDirectory: outDir, toPath: '$root/benchmarks/README.md')}',
+    ], workingDirectory: profiling);
   }
 
   Future<void> _ensurePythonWireRequirements(_WireScenarioConfig config) async {
@@ -2139,6 +2173,18 @@ Map<String, Object?> _benchmarkCatalog() {
     'schemaVersion': 1,
     'kind': 'fleuryBenchmarkCatalog',
     'command': 'fleury benchmark',
+    'scoreboard': <String, Object?>{
+      'command': [
+        'fleury',
+        'benchmark',
+        'scoreboard',
+        '--input=profiling/caps',
+        '--output=profiling/caps/scoreboard.md',
+      ],
+      'defaultInput': 'profiling/caps',
+      'defaultOutput': 'stdout',
+      'autoRefreshedByWireRuns': true,
+    },
     'localScenarios': <Map<String, Object?>>[
       for (final target in _localBenchmarkTargets)
         <String, Object?>{
@@ -2569,6 +2615,47 @@ final class _BenchmarkWireOptions {
       cols: cols,
       ptyRows: ptyRows,
       outDir: _absolutePath(root, outDir),
+    );
+  }
+}
+
+final class _BenchmarkScoreboardOptions {
+  const _BenchmarkScoreboardOptions({
+    required this.inputDir,
+    required this.outputPath,
+    required this.json,
+  });
+
+  final String inputDir;
+  final String? outputPath;
+  final bool json;
+
+  static _BenchmarkScoreboardOptions parse(String root, List<String> args) {
+    var inputDir = '$root/profiling/caps';
+    String? outputPath;
+    var json = false;
+
+    for (final arg in args) {
+      if (arg == '-h' || arg == '--help' || arg == 'help') {
+        _printBenchmarkScoreboardUsage();
+        exit(0);
+      } else if (arg.startsWith('--input=')) {
+        inputDir = _absolutePath(root, arg.substring('--input='.length));
+      } else if (arg.startsWith('--output=')) {
+        outputPath = _absolutePath(root, arg.substring('--output='.length));
+      } else if (arg == '--json') {
+        json = true;
+      } else {
+        stderr.writeln('Unknown option for benchmark scoreboard: $arg');
+        _printBenchmarkScoreboardUsage();
+        exit(2);
+      }
+    }
+
+    return _BenchmarkScoreboardOptions(
+      inputDir: inputDir,
+      outputPath: outputPath,
+      json: json,
     );
   }
 }
@@ -3054,6 +3141,9 @@ void _printBenchmarkUsage() {
   stdout.writeln(
     '  wire <scenario> [...]   Build/capture/analyze real PTY peer runs',
   );
+  stdout.writeln(
+    '  scoreboard [options]    Build the generated benchmark scoreboard',
+  );
   stdout.writeln('  manifest [options]     Alias for benchmark-manifest');
   stdout.writeln('  result [options]       Alias for benchmark-result');
   stdout.writeln('  variance [options]     Alias for benchmark-variance');
@@ -3070,6 +3160,9 @@ void _printBenchmarkUsage() {
   );
   stdout.writeln('  fleury benchmark wire sb4 --runs=3');
   stdout.writeln('  fleury benchmark wire sb5 --peer=ink --runs=3');
+  stdout.writeln(
+    '  fleury benchmark scoreboard --input=profiling/caps --output=profiling/caps/scoreboard.md',
+  );
 }
 
 void _printBenchmarkListUsage() {
@@ -3170,6 +3263,33 @@ void _printBenchmarkWireUsage() {
   stdout.writeln('  fleury benchmark wire sb6-ratatui --runs=3');
   stdout.writeln('  fleury benchmark wire sb6 --list-peers');
   stdout.writeln('  fleury benchmark wire sb6 --help');
+}
+
+void _printBenchmarkScoreboardUsage() {
+  stdout.writeln(
+    'Usage: dart tool/fleury_dev.dart benchmark scoreboard [options]',
+  );
+  stdout.writeln('');
+  stdout.writeln(
+    'Scans capture_pty outputs and writes a scenario-indexed Markdown scoreboard.',
+  );
+  stdout.writeln('');
+  stdout.writeln('Options:');
+  stdout.writeln(
+    '  --input=PATH            Capture directory, default profiling/caps',
+  );
+  stdout.writeln(
+    '  --output=PATH           Markdown output; omit to print to stdout',
+  );
+  stdout.writeln(
+    '  --json                  Also print machine-readable scoreboard JSON',
+  );
+  stdout.writeln('');
+  stdout.writeln('Examples:');
+  stdout.writeln('  fleury benchmark scoreboard');
+  stdout.writeln(
+    '  fleury benchmark scoreboard --input=profiling/caps/2026-06-05-baseline --output=profiling/caps/2026-06-05-baseline/scoreboard.md',
+  );
 }
 
 void _printBenchmarkWireScenarioUsage(String selector) {
@@ -3281,6 +3401,7 @@ void _printBenchmarkCatalog(Map<String, Object?> catalog) {
   stdout.writeln('  fleury benchmark list');
   stdout.writeln('  fleury benchmark local <SB.id> [runner options]');
   stdout.writeln('  fleury benchmark wire <scenario> [options]');
+  stdout.writeln('  fleury benchmark scoreboard [options]');
   stdout.writeln('  fleury benchmark manifest|result|variance [options]');
   stdout.writeln('');
   stdout.writeln('Local Fleury scenario runners:');
@@ -3388,6 +3509,30 @@ String _relativePath(String root, String path) {
   if (path == root) return '.';
   if (path.startsWith('$root/')) return path.substring(root.length + 1);
   return path;
+}
+
+String _relativeFilePath({
+  required String fromDirectory,
+  required String toPath,
+}) {
+  final fromParts = Directory(fromDirectory).absolute.path
+      .split(Platform.pathSeparator)
+      .where((part) => part.isNotEmpty)
+      .toList();
+  final toParts = File(toPath).absolute.path
+      .split(Platform.pathSeparator)
+      .where((part) => part.isNotEmpty)
+      .toList();
+  var common = 0;
+  while (common < fromParts.length &&
+      common < toParts.length &&
+      fromParts[common] == toParts[common]) {
+    common++;
+  }
+  final up = List<String>.filled(fromParts.length - common, '..');
+  final down = toParts.sublist(common);
+  final parts = [...up, ...down];
+  return parts.isEmpty ? '.' : parts.join('/');
 }
 
 String _fileStem(String path) {
