@@ -73,9 +73,51 @@ void main() {
       expect(sink.output, '\x1B[Habc');
     });
 
-    test('a gap between dirty cells causes a second cursor move', () {
+    test(
+      'a cheap plain gap between dirty cells is written instead of skipped',
+      () {
+        final prev = CellBuffer(const CellSize(5, 1));
+        final next = CellBuffer(const CellSize(5, 1));
+        next.writeGrapheme(const CellOffset(0, 0), 'a');
+        next.writeGrapheme(const CellOffset(3, 0), 'd');
+        final sink = StringAnsiSink();
+
+        const AnsiRenderer(
+          synchronizedOutput: false,
+        ).renderDiff(prev, next, sink);
+        // Home, 'a' (cursor now at col 1), then two unchanged plain cells are
+        // cheaper to write than a same-row cursor move.
+        expect(sink.output, '\x1B[Ha  d');
+      },
+    );
+
+    test('a long plain gap still uses a cursor move when cheaper', () {
+      final prev = CellBuffer(const CellSize(20, 1));
+      final next = CellBuffer(const CellSize(20, 1));
+      next.writeGrapheme(const CellOffset(0, 0), 'a');
+      next.writeGrapheme(const CellOffset(15, 0), 'p');
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer(
+        synchronizedOutput: false,
+      ).renderDiff(prev, next, sink);
+
+      expect(sink.output, '\x1B[Ha\x1B[14Cp');
+    });
+
+    test('a styled gap keeps the explicit cursor move', () {
       final prev = CellBuffer(const CellSize(5, 1));
       final next = CellBuffer(const CellSize(5, 1));
+      prev.writeGrapheme(
+        const CellOffset(1, 0),
+        'b',
+        style: const CellStyle(bold: true),
+      );
+      next.writeGrapheme(
+        const CellOffset(1, 0),
+        'b',
+        style: const CellStyle(bold: true),
+      );
       next.writeGrapheme(const CellOffset(0, 0), 'a');
       next.writeGrapheme(const CellOffset(3, 0), 'd');
       final sink = StringAnsiSink();
@@ -83,25 +125,54 @@ void main() {
       const AnsiRenderer(
         synchronizedOutput: false,
       ).renderDiff(prev, next, sink);
-      // Home, 'a' (cursor now at col 1), then a same-row gap of 2 is a
-      // relative forward move (CSI 2C) — shorter than absolute CSI 1;4H.
+
       expect(sink.output, '\x1B[Ha\x1B[2Cd');
     });
 
-    test('dirty cells in multiple rows emit a cursor move per row', () {
+    test('same-column row movement uses line feed', () {
       final prev = CellBuffer(const CellSize(3, 3));
       final next = CellBuffer(const CellSize(3, 3));
       next.writeGrapheme(const CellOffset(0, 0), 'a');
-      next.writeGrapheme(const CellOffset(0, 2), 'c');
+      next.writeGrapheme(const CellOffset(1, 1), 'c');
       final sink = StringAnsiSink();
 
       const AnsiRenderer(
         synchronizedOutput: false,
       ).renderDiff(prev, next, sink);
-      // Cross-row move stays absolute, with the column omitted (CSI 3H == row
-      // 3, col 1).
-      expect(sink.output, '\x1B[Ha\x1B[3Hc');
+      // After 'a' the cursor is at col 1; LF moves one row down at same col.
+      expect(sink.output, '\x1B[Ha\nc');
     });
+
+    test('line-start row movement uses carriage-return line-feed', () {
+      final prev = CellBuffer(const CellSize(3, 3));
+      final next = CellBuffer(const CellSize(3, 3));
+      next.writeGrapheme(const CellOffset(0, 0), 'a');
+      next.writeGrapheme(const CellOffset(0, 1), 'b');
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer(
+        synchronizedOutput: false,
+      ).renderDiff(prev, next, sink);
+      // After 'a' the cursor is at col 1; CRLF moves down to col 0.
+      expect(sink.output, '\x1B[Ha\r\nb');
+    });
+
+    test(
+      'indented next-row movement uses carriage-return line-feed plus CUF',
+      () {
+        final prev = CellBuffer(const CellSize(8, 3));
+        final next = CellBuffer(const CellSize(8, 3));
+        next.writeText(const CellOffset(0, 0), 'aaaa');
+        next.writeText(const CellOffset(1, 1), 'b');
+        final sink = StringAnsiSink();
+
+        const AnsiRenderer(
+          synchronizedOutput: false,
+        ).renderDiff(prev, next, sink);
+        // After 'aaaa' the cursor is at col 4; CRLF + CUF beats CNL + CUF by 1 B.
+        expect(sink.output, '\x1B[Haaaa\r\n\x1B[Cb');
+      },
+    );
   });
 
   group('renderDiff — wide content', () {
@@ -167,7 +238,7 @@ void main() {
         synchronizedOutput: false,
       ).renderDiff(prev, next, sink);
 
-      expect(sink.output, '\x1B[2S\x1B[3Heeee\x1B[4Hffff');
+      expect(sink.output, '\x1B[2S\x1B[3Heeee\r\nffff');
     });
 
     test('wraps scroll updates in synchronized-output markers', () {
@@ -217,10 +288,10 @@ void main() {
       const AnsiRenderer(
         synchronizedOutput: false,
       ).renderDiff(prev, next, sink);
-      // Cursor + fg red (31) + bold (1) + 'A' + trailing reset. No leading
-      // reset is needed because the renderer knows a frame starts in default
-      // style.
-      expect(sink.output, '\x1B[H\x1B[31m\x1B[1mA\x1B[0m');
+      // Cursor + combined fg red (31) and bold (1) + 'A' + trailing reset.
+      // No leading reset is needed because the renderer knows a frame starts
+      // in default style.
+      expect(sink.output, '\x1B[H\x1B[31;1mA\x1B[0m');
     });
 
     test('resets style at end of frame when any style was emitted', () {
@@ -260,6 +331,50 @@ void main() {
       // no final reset because we already reset back to default
       // before emitting 'c'.
       expect(sink.output, '\x1B[Ha\x1B[1mb\x1B[0mc');
+    });
+
+    test('non-empty style transitions emit deltas without full reset', () {
+      final prev = CellBuffer(const CellSize(3, 1));
+      final next = CellBuffer(const CellSize(3, 1));
+      next.writeGrapheme(
+        const CellOffset(0, 0),
+        'a',
+        style: const CellStyle(foreground: AnsiColor(1), bold: true),
+      );
+      next.writeGrapheme(
+        const CellOffset(1, 0),
+        'b',
+        style: const CellStyle(foreground: AnsiColor(4), bold: true),
+      );
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer(
+        synchronizedOutput: false,
+      ).renderDiff(prev, next, sink);
+
+      expect(sink.output, '\x1B[H\x1B[31;1ma\x1B[34mb\x1B[0m');
+    });
+
+    test('intensity delta preserves dim when bold turns off', () {
+      final prev = CellBuffer(const CellSize(3, 1));
+      final next = CellBuffer(const CellSize(3, 1));
+      next.writeGrapheme(
+        const CellOffset(0, 0),
+        'a',
+        style: const CellStyle(bold: true, dim: true),
+      );
+      next.writeGrapheme(
+        const CellOffset(1, 0),
+        'b',
+        style: const CellStyle(dim: true),
+      );
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer(
+        synchronizedOutput: false,
+      ).renderDiff(prev, next, sink);
+
+      expect(sink.output, '\x1B[H\x1B[1;2ma\x1B[22;2mb\x1B[0m');
     });
   });
 
@@ -353,9 +468,7 @@ void main() {
         synchronizedOutput: false,
       ).renderDiff(prev, next, sink);
       final output = sink.output;
-      expect(output.contains('\x1B[1m'), isTrue);
-      expect(output.contains('\x1B[3m'), isTrue);
-      expect(output.contains('\x1B[4m'), isTrue);
+      expect(output.contains('\x1B[1;3;4m'), isTrue);
     });
   });
 
@@ -616,9 +729,9 @@ void main() {
         reason: 'cursor must be re-emitted after the anchor',
       );
       expect(
-        afterAnchor.contains('\x1B[38;2;255;0;0m'),
+        afterAnchor.contains('\x1B[0;38;2;255;0;0m'),
         isTrue,
-        reason: 'style cache invalidated — fg must be re-emitted',
+        reason: 'style cache invalidated — reset and fg must be re-emitted',
       );
     });
   });

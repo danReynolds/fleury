@@ -619,12 +619,25 @@ Map<String, Object?> _frameToJson(FrameEvent frame) {
     'dirtyCells': frame.dirtyCells,
     if (frame.dirtyBounds != null)
       'dirtyBounds': _rectToJson(frame.dirtyBounds!),
+    if (frame.dirtySpans.hasDirtySpans)
+      'dirtySpans': _dirtySpansToJson(frame.dirtySpans),
     if (frame.dirtySources.isNotEmpty) 'dirtySources': frame.dirtySources,
     if (frame.layoutStats.hasLayouts)
       'layoutStats': _layoutStatsToJson(frame.layoutStats),
     if (frame.repaintBoundaries.hasBoundaries)
       'repaintBoundaries': _repaintBoundariesToJson(frame.repaintBoundaries),
     'bufferSize': _sizeToJson(frame.bufferSize),
+  };
+}
+
+Map<String, Object?> _dirtySpansToJson(DirtySpanFrameStats stats) {
+  return <String, Object?>{
+    'rowCount': stats.rowCount,
+    'spanCount': stats.spanCount,
+    'coveredCellCount': stats.coveredCellCount,
+    'longestSpan': stats.longestSpan,
+    'averageSpanLength': stats.averageSpanLength,
+    'spansPerRow': stats.spansPerRow,
   };
 }
 

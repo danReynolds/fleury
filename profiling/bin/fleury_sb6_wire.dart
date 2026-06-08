@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/debug/debug_capture.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 
 import 'fleury_wire_support.dart';
@@ -9,16 +12,32 @@ import 'fleury_wire_support.dart';
 Future<void> main(List<String> args) async {
   final options = _WireOptions.parse(args);
   final driver = WireTerminalDriver();
-  await runTui(
-    _WireDashboardApp(
+  final debugCapturePath = Platform.environment['FLEURY_DEBUG_CAPTURE']?.trim();
+  final debugRecorder = debugCapturePath == null || debugCapturePath.isEmpty
+      ? null
+      : (DebugCaptureRecorder(maxFrames: options.steps + 4)..attach());
+  try {
+    await runTui(
+      _WireDashboardApp(
+        driver: driver,
+        rows: options.rows,
+        steps: options.steps,
+        interval: options.interval,
+      ),
       driver: driver,
-      rows: options.rows,
-      steps: options.steps,
-      interval: options.interval,
-    ),
-    driver: driver,
-    frameInterval: const Duration(milliseconds: 16),
-  );
+      frameInterval: const Duration(milliseconds: 16),
+    );
+  } finally {
+    if (debugRecorder != null) {
+      final output = File(debugCapturePath!);
+      output.parent.createSync(recursive: true);
+      final json = const JsonEncoder.withIndent(
+        '  ',
+      ).convert(debugRecorder.snapshot().toJson());
+      output.writeAsStringSync('$json\n');
+      await debugRecorder.dispose();
+    }
+  }
 }
 
 final class _WireOptions {

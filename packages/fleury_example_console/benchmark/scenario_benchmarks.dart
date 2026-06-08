@@ -77,6 +77,7 @@ final class _ScenarioOptions {
     var iterations = _defaultIterations;
     var seed = 1;
     var size = const CellSize(100, 28);
+    var profileMemory = false;
 
     for (final arg in args) {
       if (arg == '--json') {
@@ -93,6 +94,8 @@ final class _ScenarioOptions {
         iterations = _positiveInt(arg, '--iterations=');
       } else if (arg.startsWith('--seed=')) {
         seed = _positiveInt(arg, '--seed=');
+      } else if (arg == '--profile-memory') {
+        profileMemory = true;
       } else if (arg.startsWith('--size=')) {
         size = _parseSize(arg.substring('--size='.length));
       } else if (arg == '--help' || arg == '-h') {
@@ -109,6 +112,7 @@ final class _ScenarioOptions {
         measuredIterations: iterations,
         seed: seed,
         terminalSize: size,
+        profileMemory: profileMemory,
       ),
       filter: filter.isEmpty ? null : filter,
       printJson: printJson,
@@ -146,12 +150,14 @@ final class _ScenarioConfig {
     required this.measuredIterations,
     required this.seed,
     required this.terminalSize,
+    required this.profileMemory,
   });
 
   final int warmupIterations;
   final int measuredIterations;
   final int seed;
   final CellSize terminalSize;
+  final bool profileMemory;
 }
 
 abstract interface class _ScenarioBenchmark {
@@ -922,5 +928,8 @@ Never _printUsageAndExit({int exitCodeValue = 0}) {
   );
   stdout.writeln('  --seed=N               Fixture seed. Default 1.');
   stdout.writeln('  --size=COLSxROWS       Terminal size. Default 100x28.');
+  stdout.writeln(
+    '  --profile-memory       Accepted for local benchmark batch consistency.',
+  );
   exit(exitCodeValue);
 }

@@ -350,6 +350,48 @@ void main() {
     expect(substring, isEmpty);
   });
 
+  test('indexed filtering preserves case-sensitive matching semantics', () {
+    const roots = [
+      TreeTableNode<String>(
+        key: 'upper',
+        label: 'Build Alpha',
+        cells: {'status': 'Ready', 'owner': 'OpsTeam'},
+      ),
+      TreeTableNode<String>(
+        key: 'lower',
+        label: 'build alpha',
+        cells: {'status': 'ready', 'owner': 'opsteam'},
+      ),
+    ];
+    final index = TreeTableSearchIndex<String>.build(
+      roots: roots,
+      columns: _columns,
+    );
+
+    final indexed = buildTreeTableRows<String>(
+      roots: roots,
+      columns: _columns,
+      filter: const TreeTableFilterDescriptor(
+        query: 'OpsTeam',
+        caseSensitive: true,
+      ),
+      searchIndex: index,
+    );
+    expect([for (final row in indexed) row.key], ['upper']);
+
+    final indexedColumn = buildTreeTableRows<String>(
+      roots: roots,
+      columns: _columns,
+      filter: const TreeTableFilterDescriptor(
+        query: 'Ready',
+        columnIds: {'status'},
+        caseSensitive: true,
+      ),
+      searchIndex: index,
+    );
+    expect([for (final row in indexedColumn) row.key], ['upper']);
+  });
+
   test('indexed prefix-token filtering supports durable ID typeahead', () {
     const roots = [
       TreeTableNode<String>(

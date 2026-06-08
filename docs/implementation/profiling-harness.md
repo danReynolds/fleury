@@ -1,7 +1,8 @@
 # TUI Profiling Harness
 
-**Status:** Core built + proven and axis set formalized (2026-06-04); P0-P3
-primary peer wire commands are runnable for SB.2/SB.3/SB.4/SB.5/SB.6/SB.8/SB.9/SB.10/SB.12
+**Status:** Core built + proven and axis set formalized (2026-06-04); the
+current primary peer matrix is runnable for
+SB.1/SB.2/SB.3/SB.4/SB.5/SB.6/SB.7/SB.8/SB.9/SB.10/SB.11/SB.12
 **Goal:** Know where fleury stands vs peer TUIs on good axes — band each as
 **way-off / ballpark / competitive / leading** — so arch decisions are driven by
 measurement, not belief. Per the frontier re-derivation, the aim is *credible
@@ -125,11 +126,12 @@ Formalization applied before publishing comparisons:
 - **Tier-C rule:** publish hardware numbers only after bare-metal replicates.
 
 Status: **capture + analyze + banding proven, all-Dart, with the final axis
-set in place.** The P0-P3 shared scenario set now has self-driving
-real-PTY wire apps through the `fleury benchmark wire ...` command surface.
-Remaining: broaden P4 peer fixtures and collect Tier-C numbers on hardware.
+set in place.** The current primary scenario matrix now has self-driving
+real-PTY wire apps through the `fleury benchmark wire ...` command surface,
+including dynamic PTY resize driving for SB.7. Remaining: collect Tier-C
+numbers on hardware before publishing peer claims.
 
-## Current Wire Coverage (2026-06-05)
+## Current Wire Coverage (2026-06-08)
 
 These commands build Fleury plus the configured primary peer fixtures, run
 them under the same PTY capture harness, and analyze the captures together.
@@ -138,6 +140,17 @@ Bare scenario IDs run every configured peer for that scenario. Use
 a run. Use `fleury benchmark wire <scenario> --list-peers` to inspect the
 scenario's configured peers before running it. Use `--runs=3` or more for
 decision signal; tiny `--rows`/`--steps` overrides are smoke tests only.
+Use `--debug-capture` when a Fleury-side `DebugCaptureSnapshot` is needed for
+dirty span, layout, repaint-boundary, or invalidation diagnostics; the JSON is
+written beside the Fleury capture and is diagnostic-only for timing.
+Use `--runtime-markers` when Fleury-side startup/render milestones are needed
+to decompose raw TTFB; the marker sidecar is folded into the capture JSON and
+scoreboard without changing PTY bytes. The scoreboard reports both raw marker
+offsets and framework-over-runtime deltas.
+Use local `--profile-memory` runs for Fleury-only RSS phase checks when a
+scenario needs internal attribution, for example
+`fleury benchmark local SB.6 --warmup=1 --iterations=3 --profile-memory --json --save=profiling/caps/sb6-local-memory.json`.
+Relative `--save` paths are resolved from the repository root by the wrapper.
 
 | Priority | Scenario | Primary peers | Commands |
 | --- | --- | --- | --- |
@@ -145,11 +158,14 @@ decision signal; tiny `--rows`/`--steps` overrides are smoke tests only.
 | P0 | SB.5 Streaming Markdown | Bubble Tea, Textual, Ink | `fleury benchmark wire sb5 --runs=3` |
 | P1 | SB.2 Text Editing | Bubble Tea, Textual, Ink | `fleury benchmark wire sb2 --runs=3` |
 | P1 | SB.3 DataTable | Textual, Ratatui, OpenTUI | `fleury benchmark wire sb3 --runs=3` |
+| P2 | SB.1 Counter/Startup | Bubble Tea, Textual, Ink | `fleury benchmark wire sb1 --runs=3` |
 | P2 | SB.6 Dashboard Updates | Bubble Tea, Ratatui, OpenTUI | `fleury benchmark wire sb6 --runs=3` |
 | P2 | SB.12 Layout Dirtiness Cache | Nocterm, Ratatui, OpenTUI | `fleury benchmark wire sb12 --runs=3` |
 | P3 | SB.8 Overlay/Palette Churn | Textual, Ink, Bubble Tea | `fleury benchmark wire sb8 --runs=3` |
 | P3 | SB.9 Subprocess/Untrusted Output | Textual, Bubble Tea, OpenTUI | `fleury benchmark wire sb9 --runs=3` |
 | P3 | SB.10 Proof-App Journey | Textual, Bubble Tea, Ink | `fleury benchmark wire sb10 --runs=3` |
+| P4 | SB.7 Resize Storm | Textual, Ratatui, OpenTUI | `fleury benchmark wire sb7 --runs=3` |
+| P4 | SB.11 TreeTable/filter/copy | Textual, Ratatui, OpenTUI | `fleury benchmark wire sb11 --runs=3` |
 
 ## First Reduced Reading (SB.4 full-ui, 2026-06-04)
 

@@ -13,7 +13,8 @@ import 'ansi_renderer.dart';
 /// Categories map to what [AnsiRenderer] emits:
 ///   - [content]: printable graphemes (the actual information).
 ///   - [sgr]:     `CSI … m` — style set/reset (color, bold, inverse, …).
-///   - [cursor]:  `CSI … H` / `CSI … f` — cursor positioning.
+///   - [cursor]:  CSI cursor moves/positioning (`A`/`B`/`C`/`D`, `H`/`f`,
+///                and related row/column positioning commands).
 ///   - [sync]:    `CSI ? … h` / `CSI ? … l` — private modes (synchronized
 ///                output 2026, and any other DEC private mode toggles).
 ///   - [other]:   any other escape sequence (e.g. an image/protocol anchor
@@ -78,6 +79,15 @@ class AnsiByteBreakdown {
     final n = data.length;
     while (i < n) {
       final cu = data.codeUnitAt(i);
+      if (cu == 0x08 || cu == 0x0A || cu == 0x0D) {
+        // BS, LF, and CR are printable-stream C0 controls that terminals use
+        // as cursor movement. Fleury's sanitized cell content cannot contain
+        // them, and peer captures use them for the same cursor-control role.
+        flushContent();
+        cursor += 1;
+        i++;
+        continue;
+      }
       if (cu != esc) {
         contentRun.writeCharCode(cu);
         i++;
@@ -107,8 +117,8 @@ class AnsiByteBreakdown {
       final len = i - start; // CSI is ASCII: byte length == code-unit length
       if (private && (finalByte == 0x68 || finalByte == 0x6C)) {
         sync += len; // h / l
-      } else if (finalByte == 0x48 || finalByte == 0x66) {
-        cursor += len; // H / f
+      } else if (_isCursorCsiFinal(finalByte)) {
+        cursor += len;
       } else if (finalByte == 0x6D) {
         sgr += len; // m
       } else {
@@ -142,6 +152,24 @@ class AnsiByteBreakdown {
       'cursor: $cursor, sync: $sync, other: $other)';
 }
 
+bool _isCursorCsiFinal(int finalByte) {
+  return switch (finalByte) {
+    0x41 || // A: CUU
+    0x42 || // B: CUD
+    0x43 || // C: CUF
+    0x44 || // D: CUB
+    0x45 || // E: CNL
+    0x46 || // F: CPL
+    0x47 || // G: CHA
+    0x48 || // H: CUP
+    0x61 || // a: HPR
+    0x64 || // d: VPA
+    0x65 || // e: VPR
+    0x66 => true, // f: HVP
+    _ => false,
+  };
+}
+
 /// A simple transport model for turning a frame's byte count into an estimated
 /// wire time, so byte-budget numbers can be reasoned about as latency.
 ///
@@ -164,25 +192,38 @@ class TransportProfile {
   final double bytesPerSecond;
   final double fixedOverheadMs;
 
-  double frameMs(int bytes) => fixedOverheadMs + 1000.0 * bytes / bytesPerSecond;
+  double frameMs(int bytes) =>
+      fixedOverheadMs + 1000.0 * bytes / bytesPerSecond;
 
   /// Local pty: throughput so high these byte counts are effectively free.
-  static const local =
-      TransportProfile('local', bytesPerSecond: 20000000, fixedOverheadMs: 0.02);
+  static const local = TransportProfile(
+    'local',
+    bytesPerSecond: 20000000,
+    fixedOverheadMs: 0.02,
+  );
 
   /// SSH over a LAN: fast, low latency.
-  static const sshLan =
-      TransportProfile('ssh-lan', bytesPerSecond: 5000000, fixedOverheadMs: 0.5);
+  static const sshLan = TransportProfile(
+    'ssh-lan',
+    bytesPerSecond: 5000000,
+    fixedOverheadMs: 0.5,
+  );
 
   /// SSH over a WAN: ample bandwidth but ~40 ms one-way — RTT-dominated, so
   /// byte savings barely move the needle here.
-  static const sshWan =
-      TransportProfile('ssh-wan', bytesPerSecond: 1000000, fixedOverheadMs: 40);
+  static const sshWan = TransportProfile(
+    'ssh-wan',
+    bytesPerSecond: 1000000,
+    fixedOverheadMs: 40,
+  );
 
   /// A constrained link (≈9600 baud) where every byte costs ~0.83 ms —
   /// bandwidth-dominated, so byte savings translate directly to time.
-  static const slow9600 =
-      TransportProfile('slow-9600', bytesPerSecond: 1200, fixedOverheadMs: 5);
+  static const slow9600 = TransportProfile(
+    'slow-9600',
+    bytesPerSecond: 1200,
+    fixedOverheadMs: 5,
+  );
 
   static const defaults = <TransportProfile>[local, sshLan, sshWan, slow9600];
 }

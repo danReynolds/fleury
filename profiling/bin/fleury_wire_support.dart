@@ -11,6 +11,7 @@ final class WireTerminalDriver implements TerminalDriver {
   final Stdout _stdout;
   final StreamController<TuiEvent> _events =
       StreamController<TuiEvent>.broadcast();
+  StreamSubscription<ProcessSignal>? _resizeSubscription;
   var _active = false;
   TerminalMode? _mode;
 
@@ -45,6 +46,11 @@ final class WireTerminalDriver implements TerminalDriver {
     if (_active) return;
     _mode = mode;
     _active = true;
+    if (!Platform.isWindows) {
+      _resizeSubscription ??= ProcessSignal.sigwinch.watch().listen((_) {
+        if (!_events.isClosed) _events.add(ResizeEvent(size));
+      });
+    }
     final enter = buildTerminalEnterSequences(mode);
     if (enter.isNotEmpty) _stdout.write(enter);
   }
@@ -57,6 +63,8 @@ final class WireTerminalDriver implements TerminalDriver {
     try {
       await _stdout.flush();
     } catch (_) {}
+    await _resizeSubscription?.cancel();
+    _resizeSubscription = null;
     _active = false;
     _mode = null;
   }

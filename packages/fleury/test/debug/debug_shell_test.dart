@@ -701,6 +701,12 @@ void main() {
           diff: const Duration(microseconds: 4500),
           dirtyCells: 12,
           dirtyBounds: CellRect.fromLTWH(2, 3, 4, 5),
+          dirtySpans: const DirtySpanFrameStats(
+            rowCount: 3,
+            spanCount: 4,
+            coveredCellCount: 12,
+            longestSpan: 5,
+          ),
           dirtySources: const [
             'build:DemoWidget/_DemoState',
             'paint:RenderText',
@@ -729,6 +735,7 @@ void main() {
       expect(output, contains('Last frame  #7 key:enter'));
       expect(output, contains('Dirty cells  12/1920'));
       expect(output, contains('Dirty bounds  2,3 4×5'));
+      expect(output, contains('Dirty spans  4 spans / 3 rows'));
       expect(output, contains('Layouts  8 run, 3 skipped'));
       expect(
         output,

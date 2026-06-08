@@ -29,6 +29,22 @@ void main() {
       expect(b.sgr, 0);
     });
 
+    test('relative cursor movement is categorized as cursor', () {
+      const sequence = '\x1B[2C\x1B[3D\x1B[1A\x1B[4B\x1B[E\x1B[2F';
+      final b = AnsiByteBreakdown.analyze(sequence);
+      expect(b.cursor, sequence.length);
+      expect(b.other, 0);
+      expect(b.content, 0);
+    });
+
+    test('C0 cursor controls are categorized as cursor', () {
+      const sequence = '\b\n\r';
+      final b = AnsiByteBreakdown.analyze(sequence);
+      expect(b.cursor, sequence.length);
+      expect(b.other, 0);
+      expect(b.content, 0);
+    });
+
     test('SGR set and reset are categorized as sgr', () {
       final b = AnsiByteBreakdown.analyze('\x1B[0m\x1B[1m\x1B[38;5;9m');
       expect(b.sgr, '\x1B[0m\x1B[1m\x1B[38;5;9m'.length);
@@ -80,9 +96,11 @@ void main() {
     test('byte savings matter on slow links, not on fast ones', () {
       // 250-byte saving (e.g. a scroll frame after cursor compression).
       const saved = 250;
-      final onSlow = TransportProfile.slow9600.frameMs(1024) -
+      final onSlow =
+          TransportProfile.slow9600.frameMs(1024) -
           TransportProfile.slow9600.frameMs(1024 - saved);
-      final onWan = TransportProfile.sshWan.frameMs(1024) -
+      final onWan =
+          TransportProfile.sshWan.frameMs(1024) -
           TransportProfile.sshWan.frameMs(1024 - saved);
       expect(onSlow, greaterThan(150)); // ~208 ms saved on 9600 baud
       expect(onWan, lessThan(1)); // negligible on a fast WAN link

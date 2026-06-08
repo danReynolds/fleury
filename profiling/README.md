@@ -16,10 +16,18 @@ dart run analyze.dart fleury=/tmp/fleury-scroll nocterm=/tmp/nocterm-scroll
 Preferred full-ui first-reading commands:
 
 ```sh
+fleury benchmark wire sb1 --runs=3
 fleury benchmark wire sb2 --runs=3
 fleury benchmark wire sb3 --runs=3
 fleury benchmark wire sb4 --runs=3
 fleury benchmark wire sb5 --runs=3
+fleury benchmark wire sb6 --runs=3
+fleury benchmark wire sb7 --runs=3
+fleury benchmark wire sb8 --runs=3
+fleury benchmark wire sb9 --runs=3
+fleury benchmark wire sb10 --runs=3
+fleury benchmark wire sb11 --runs=3
+fleury benchmark wire sb12 --runs=3
 # Narrow when needed:
 fleury benchmark wire sb3 --peers=ratatui,opentui --runs=3
 fleury benchmark wire sb5 --peer=ink --runs=3
@@ -31,9 +39,9 @@ fleury benchmark wire sb3 --help
 Bare scenario IDs run every configured primary peer for that scenario. These
 build the Fleury and peer wire apps, install fixture-local peer dependencies
 when needed, capture paired PTY runs, and analyze Fleury against every selected
-peer in one report. Capture artifacts are written under `profiling/caps/`. The
-SB.2/SB.3 commands are the P1 first-reading set; SB.4/SB.5 are the P0
-output/rich-text set.
+peer in one report. Capture artifacts are written under `profiling/caps/`.
+`benchmarks/README.md` is the source of truth for scenario priority, focus, and
+peer selection rationale.
 
 Each `fleury benchmark wire ...` run also refreshes `scoreboard.md` inside the
 selected capture directory. Regenerate or redirect it explicitly with:

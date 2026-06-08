@@ -82,6 +82,7 @@ reactive TUI vision.
 - [MVP completion audit](mvp-completion-audit.md)
 - [Local distribution path](local-distribution-path.md)
 - [Peer scorecards](peer-scorecards.md)
+- [Performance architecture recommendations](perf-architecture-recommendations.md)
 - [Comparative benchmark manifest](comparative-benchmark-manifest.json)
 - [Why Fleury?](why-fleury.md)
 - [Scope cut list](cut-list.md)
