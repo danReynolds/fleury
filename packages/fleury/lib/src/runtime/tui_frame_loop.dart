@@ -87,6 +87,7 @@ final class TuiFrameLoop {
       fullRepaint: _requireFullRepaint,
       requiresFullDiff: _renderDamage?.takeRequiresFullDiff() ?? true,
       paintDamageBounds: next.takeDamageBounds(),
+      paintDamageRows: next.takeDamageRows(),
     );
     _requireFullRepaint = false;
 
@@ -137,6 +138,7 @@ final class TuiFrameDamage {
     required this.fullRepaint,
     required this.requiresFullDiff,
     required this.paintDamageBounds,
+    this.paintDamageRows,
   });
 
   /// Whether the presenter should treat this as a full repaint.
@@ -147,6 +149,13 @@ final class TuiFrameDamage {
 
   /// Conservative bounds of cells mutated by paint.
   final CellRect? paintDamageBounds;
+
+  /// The exact rows mutated by paint, when tracked.
+  ///
+  /// Unlike [paintDamageBounds] (a single union rect), scattered writes stay
+  /// disjoint: five separated dirty rows are five rows here, not the tall
+  /// rect spanning them. Null/empty falls back to the rect.
+  final Set<int>? paintDamageRows;
 
   /// Bounds safe to pass to a diffing presenter.
   ///
@@ -164,6 +173,10 @@ final class TuiFrameDamage {
   TuiDirtyRows dirtyRowsFor(CellSize size) {
     final bounds = diffBounds;
     if (bounds == null) return TuiDirtyRows.full(size.rows);
+    final rows = paintDamageRows;
+    if (rows != null && rows.isNotEmpty) {
+      return TuiDirtyRows.fromRows(rows, rowCount: size.rows);
+    }
     return TuiDirtyRows.range(bounds.top, bounds.bottom, rowCount: size.rows);
   }
 }

@@ -9,6 +9,7 @@ enum WebBenchmarkScenarioKind {
   fullFrameChurn,
   scrollRowChurn,
   scrollKeyed,
+  scatteredRows,
   cursorBlink,
   textInputBurst,
   resizeBurst,
@@ -123,6 +124,18 @@ const webBenchmarkScenarios = <WebBenchmarkScenario>[
     description: 'Log viewport shifts by one row per frame.',
   ),
   WebBenchmarkScenario(
+    id: 'scattered-rows-160x50',
+    label: '160x50 scattered dirty rows',
+    kind: WebBenchmarkScenarioKind.scatteredRows,
+    cols: 160,
+    rows: 50,
+    defaultFrames: 32,
+    description:
+        'Five widely separated rows change per frame; everything between '
+        'them is untouched. Exercises multi-range damage: only the five '
+        'rows should rebuild/replace, not the span between them.',
+  ),
+  WebBenchmarkScenario(
     id: 'scroll-keyed-160x50',
     label: '160x50 keyed scrolling log',
     kind: WebBenchmarkScenarioKind.scrollKeyed,
@@ -210,6 +223,7 @@ final class DrivenWebBenchmarkScenarioState
       case WebBenchmarkScenarioKind.fullFrameChurn:
       case WebBenchmarkScenarioKind.scrollRowChurn:
       case WebBenchmarkScenarioKind.scrollKeyed:
+      case WebBenchmarkScenarioKind.scatteredRows:
       case WebBenchmarkScenarioKind.cursorBlink:
       case WebBenchmarkScenarioKind.textInputBurst:
       case WebBenchmarkScenarioKind.resizeBurst:
@@ -387,6 +401,10 @@ Widget buildWebBenchmarkScenarioWidget(
     WebBenchmarkScenarioKind.fullFrameChurn => _fullFrameGrid(scenario, step),
     WebBenchmarkScenarioKind.scrollRowChurn => _scrollGrid(scenario, step),
     WebBenchmarkScenarioKind.scrollKeyed => _scrollKeyedGrid(scenario, step),
+    WebBenchmarkScenarioKind.scatteredRows => _scatteredRowsGrid(
+      scenario,
+      step,
+    ),
     WebBenchmarkScenarioKind.cursorBlink => _cursorBlink(
       scenario,
       step,
@@ -486,6 +504,33 @@ Widget _scrollGrid(WebBenchmarkScenario scenario, int step) {
       // also mutates per step is the full-frame-churn scenario's job.
       for (var row = 0; row < scenario.rows; row++)
         Text(_line(_logLine(row + step, 0), scenario.cols)),
+    ],
+  );
+}
+
+Widget _scatteredRowsGrid(WebBenchmarkScenario scenario, int step) {
+  // Five driven rows spread across the viewport; all other rows are stable.
+  final driven = <int>{
+    for (var i = 0; i < 5; i++) (scenario.rows * i) ~/ 5 + 2,
+  };
+  // Per-row repaint boundaries: untouched rows blit their cache without
+  // recording damage, so the five driven rows are the ONLY painted rows —
+  // which is the disjoint pattern multi-range damage must preserve.
+  // (Boundaries fit here because content is static; for MOVING content the
+  // scroll-keyed canary shows they are the wrong tool.)
+  return Column(
+    children: [
+      for (var row = 0; row < scenario.rows; row++)
+        RepaintBoundary(
+          child: Text(
+            _line(
+              driven.contains(row)
+                  ? 'driven ${_num(row)} ${_token(row * 977 + step)}'
+                  : 'stable row ${_num(row)}',
+              scenario.cols,
+            ),
+          ),
+        ),
     ],
   );
 }

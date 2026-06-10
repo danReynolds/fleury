@@ -34,6 +34,7 @@ final class CellBuffer {
   List<Cell> _cells;
   var _damageTrackingEnabled = false;
   CellRect? _damageBounds;
+  final Set<int> _damageRows = <int>{};
   var _damageSuppressionDepth = 0;
 
   CellSize get size => _size;
@@ -50,9 +51,19 @@ final class CellBuffer {
   void resetDamageTracking() {
     _damageTrackingEnabled = true;
     _damageBounds = null;
+    _damageRows.clear();
   }
 
   /// Clears and returns the accumulated damage bounds.
+  /// The exact rows written since [resetDamageTracking], independent of the
+  /// single-rect union in [takeDamageBounds]. Scattered writes (disjoint
+  /// rows) stay disjoint here instead of being smeared into one tall rect.
+  Set<int> takeDamageRows() {
+    final result = Set<int>.of(_damageRows);
+    _damageRows.clear();
+    return result;
+  }
+
   CellRect? takeDamageBounds() {
     final result = _damageBounds;
     _damageBounds = null;
@@ -421,6 +432,9 @@ final class CellBuffer {
     final rect = CellRect.fromLTWH(left, top, right - left, bottom - top);
     final current = _damageBounds;
     _damageBounds = current == null ? rect : current.union(rect);
+    for (var damagedRow = top; damagedRow < bottom; damagedRow++) {
+      _damageRows.add(damagedRow);
+    }
   }
 
   void _checkBoundsColRow(int col, int row) {

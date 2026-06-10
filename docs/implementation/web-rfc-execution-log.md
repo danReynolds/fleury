@@ -14419,3 +14419,37 @@ SB.2 journey -41%; SB.6 journey -14%.
 
 `--heap-profile` and `--trace-frames` are forwarded by the
 `fleury benchmark web-capture` launcher.
+
+## 2026-06-10 (frame-path plan, Phases 6-7: banded damage + warmup closure)
+
+### Phase 6 — multi-range row damage (A-3)
+
+Scattered updates no longer smear into the union rect's row span:
+
+- `CellBuffer` tracks the exact painted-row SET alongside the union rect
+  (`takeDamageRows`); `TuiFrameDamage.paintDamageRows` carries it;
+  `dirtyRowsFor` prefers exact rows over the rect range; the planner uses
+  it for bounded frames. Rect consumers (ANSI bounded diff) are
+  unaffected.
+- New `scattered-rows-160x50` scenario: five widely separated rows change
+  per frame behind per-row repaint boundaries (boundaries are the right
+  tool for STATIC content with localized change — clean boundaries blit
+  without recording damage; the scroll-keyed canary shows they are the
+  wrong tool for MOVING content). Result: `rowsReplaced = 5` and
+  `dirtyRowCount = 5` on every steady frame (previously the rect span
+  would have replaced ~40 rows), steady p95 1.6ms.
+- Unit coverage: disjoint painted rows stay disjoint in
+  `dirtyRowsFor` while the union rect still spans the gap.
+
+### Phase 7 — warmup/startup (P-5): closed by the Phase 4 root cause
+
+Rosetta was the warmup story. On the native stack:
+
+- First captured frames after driven warmup are indistinguishable from
+  steady state (no frame anywhere in any arm-native run over 8.5ms,
+  including the early window).
+- Cold start (warmup=0, 3 runs, normal-80x24): the very first driven
+  frame is 1.6-1.9ms; frame 2 onward ~1.1ms.
+- P-5 budget set from data: first interactive frame <= 16.67ms (observed
+  ~1.9ms worst), no frame over 50ms after frame 3 (observed max 8.5ms
+  anywhere). No warmup engineering required.

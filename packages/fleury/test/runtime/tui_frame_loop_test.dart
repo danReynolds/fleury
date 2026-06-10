@@ -2,6 +2,32 @@ import 'package:fleury/fleury_host.dart';
 import 'package:test/test.dart';
 
 void main() {
+  group('scattered damage', () {
+    test('disjoint painted rows stay disjoint in dirty rows', () {
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
+      const size = CellSize(10, 12);
+      final first = loop.render(size: size, paint: (_) {})!;
+      loop.commit(first);
+
+      final frame = loop.render(
+        size: size,
+        paint: (buffer) {
+          buffer.writeText(const CellOffset(0, 1), 'aaa');
+          buffer.writeText(const CellOffset(0, 6), 'bbb');
+          buffer.writeText(const CellOffset(0, 11), 'ccc');
+        },
+      )!;
+
+      final rows = frame.damage.dirtyRowsFor(size);
+      expect(rows.isFull, isFalse);
+      expect(rows.rows, [1, 6, 11]);
+      // The union rect still spans the gap for rect consumers.
+      expect(frame.damage.paintDamageBounds!.top, 1);
+      expect(frame.damage.paintDamageBounds!.bottom, 12);
+    });
+  });
+
   group('needsRender', () {
     test('cold pool and size changes need a render; warm pool does not', () {
       final damage = RenderDamageTracker();

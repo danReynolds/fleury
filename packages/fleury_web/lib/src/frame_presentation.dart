@@ -221,12 +221,11 @@ final class FramePresentationPlanner {
     }
     final bounds = runtimeDamage.diffBounds;
     if (bounds != null) {
+      // dirtyRowsFor prefers the exact painted-row set when the buffer
+      // tracked one, so scattered updates stay scattered instead of being
+      // smeared into the union rect's row span.
       return _DirtyRowsResult(
-        rows: TuiDirtyRows.range(
-          bounds.top,
-          bounds.bottom,
-          rowCount: frame.next.size.rows,
-        ),
+        rows: runtimeDamage.dirtyRowsFor(frame.next.size),
         diffTime: Duration.zero,
       );
     }
