@@ -7,12 +7,11 @@
 // asserts the result equals the `next` frame — across hundreds of randomized
 // frame pairs plus the structural edge cases the encoder special-cases.
 //
-// Scope: graphemes and positions (what the cursor encoding affects). SGR/style
-// bytes are unchanged by construction — this change does not touch
-// `_encodeStyle` or the style-emission path — and the exact-byte golden tests
-// in ansi_renderer_test.dart continue to pin those. Content is single-width
-// ASCII here so the interpreter needs no width model; wide-grapheme cursor
-// advance is covered by the golden tests.
+// Scope: graphemes and positions. SGR/style bytes are ignored because they do
+// not place content; exact-byte golden tests in ansi_renderer_test.dart pin
+// style encoding separately. Content is single-width ASCII here so the
+// interpreter needs no width model; wide-grapheme cursor advance is covered by
+// the golden tests.
 
 import 'dart:math';
 
@@ -20,9 +19,9 @@ import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
 /// A minimal terminal: tracks the cursor and writes single-width graphemes,
-/// understanding exactly the escapes AnsiRenderer emits (CUP `H`, CUF `C`,
-/// CUB `D`, SU `S`; SGR `m` and private modes `?…h/l` are ignored as they
-/// don't move the cursor or place content).
+/// understanding exactly the escapes AnsiRenderer emits (CUP `H`, CUU/CUD
+/// `A`/`B`, CUF/CUB `C`/`D`, CNL/CPL `E`/`F`, SU `S`; SGR `m` and private
+/// modes `?…h/l` are ignored as they don't move the cursor or place content).
 List<List<String>> _apply(List<List<String>> start, String output) {
   final grid = [
     for (final row in start) [...row],
@@ -75,10 +74,20 @@ List<List<String>> _apply(List<List<String>> start, String output) {
               1;
           cr = r;
           cc = c;
+        case 0x41: // 'A' — CUU (omitted -> 1)
+          cr -= ps.isEmpty ? 1 : int.parse(ps);
+        case 0x42: // 'B' — CUD (omitted -> 1)
+          cr += ps.isEmpty ? 1 : int.parse(ps);
         case 0x43: // 'C' — CUF (omitted -> 1)
           cc += ps.isEmpty ? 1 : int.parse(ps);
         case 0x44: // 'D' — CUB (omitted -> 1)
           cc -= ps.isEmpty ? 1 : int.parse(ps);
+        case 0x45: // 'E' — CNL (omitted -> 1)
+          cr += ps.isEmpty ? 1 : int.parse(ps);
+          cc = 0;
+        case 0x46: // 'F' — CPL (omitted -> 1)
+          cr -= ps.isEmpty ? 1 : int.parse(ps);
+          cc = 0;
         case 0x53: // 'S' — SU/scroll up (omitted -> 1)
           final count = ps.isEmpty ? 1 : int.parse(ps);
           for (var r = 0; r < rows; r++) {

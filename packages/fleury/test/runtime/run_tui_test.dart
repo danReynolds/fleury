@@ -82,6 +82,26 @@ class _CounterAppState extends State<_CounterApp> {
   Widget build(BuildContext context) => Text('count:$_count');
 }
 
+class _ShrinkTextApp extends StatefulWidget {
+  const _ShrinkTextApp({super.key});
+
+  @override
+  State<_ShrinkTextApp> createState() => _ShrinkTextAppState();
+}
+
+class _ShrinkTextAppState extends State<_ShrinkTextApp> {
+  var _short = false;
+
+  void shrink() {
+    setState(() {
+      _short = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Text(_short ? 'hi' : 'hello');
+}
+
 /// Lets the run loop's async body reach the point where it's listening for
 /// events before the test pushes one (a broadcast stream drops events that
 /// arrive with no listener).
@@ -423,6 +443,42 @@ void main() {
         await future;
       } finally {
         await sub.cancel();
+        await driver.dispose();
+      }
+    });
+
+    test('layout-affecting shrink clears trailing cells', () async {
+      final key = GlobalKey<_ShrinkTextAppState>();
+      final driver = FakeTerminalDriver(size: const CellSize(12, 2));
+      try {
+        final future = runTui(
+          _ShrinkTextApp(key: key),
+          driver: driver,
+          enableHotReload: false,
+          onEvent: (event) {
+            if (event is KeyEvent && event.keyCode == KeyCode.enter) {
+              key.currentState!.shrink();
+            }
+            return null;
+          },
+        );
+        await _settle();
+
+        driver.clearOutput();
+        driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
+        await _settle();
+
+        expect(
+          driver.output.contains('i   '),
+          isTrue,
+          reason: 'shrinking text must clear old trailing cells via full diff',
+        );
+
+        driver.enqueue(
+          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+        );
+        await future;
+      } finally {
         await driver.dispose();
       }
     });

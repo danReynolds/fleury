@@ -7,6 +7,108 @@ import 'cell_buffer.dart';
 import 'layout.dart';
 import 'render_layout_stats.dart';
 
+/// Frame-level signal for whether the terminal presenter can trust
+/// paint-buffer damage bounds.
+///
+/// Paint-only mutations can be bounded by the cells repainted into the frame
+/// buffer. Layout-affecting mutations cannot: cells may disappear or move
+/// without being rewritten, so the presenter must fall back to full-buffer
+/// diffing for that frame.
+final class RenderDamageTracker {
+  RenderDamageTracker._();
+
+  static bool _requiresFullDiff = false;
+
+  static void recordLayoutOrConservativePaint() {
+    _requiresFullDiff = true;
+  }
+
+  static bool takeRequiresFullDiff() {
+    final result = _requiresFullDiff;
+    _requiresFullDiff = false;
+    return result;
+  }
+
+  static void reset() {
+    _requiresFullDiff = false;
+  }
+}
+
+typedef SemanticPaintBoundsCallback = void Function(CellRect? bounds);
+
+/// A paint-captured semantic bounds callback plus its cache-local bounds.
+///
+/// Repaint boundaries paint children into scratch buffers, then copy cached
+/// cells on later frames. Semantic bounds still need to be refreshed in
+/// screen coordinates on those cached frames. Records captured while painting
+/// into a boundary cache let the boundary replay the callback without
+/// re-walking the visual paint path.
+final class SemanticPaintBoundsRecord {
+  const SemanticPaintBoundsRecord({
+    required this.onPaintBounds,
+    required this.localBounds,
+  });
+
+  final SemanticPaintBoundsCallback onPaintBounds;
+  final CellRect localBounds;
+
+  void publishToActiveCapture(CellOffset paintOffset) {
+    SemanticPaintBoundsCapture.record(
+      onPaintBounds,
+      _translate(localBounds, paintOffset),
+    );
+  }
+
+  void replay({
+    required CellOffset paintOffset,
+    required CellOffset screenOffset,
+    required CellRect? clipRect,
+  }) {
+    publishToActiveCapture(paintOffset);
+    final screenBounds = _translate(localBounds, screenOffset);
+    onPaintBounds(
+      clipRect == null ? screenBounds : screenBounds.intersect(clipRect),
+    );
+  }
+
+  static CellRect _translate(CellRect rect, CellOffset offset) {
+    return CellRect(offset: offset + rect.offset, size: rect.size);
+  }
+}
+
+/// Stack-scoped collector for semantic bounds produced during paint.
+final class SemanticPaintBoundsCapture {
+  SemanticPaintBoundsCapture._();
+
+  static final List<List<SemanticPaintBoundsRecord>> _stack =
+      <List<SemanticPaintBoundsRecord>>[];
+
+  static void collect(
+    List<SemanticPaintBoundsRecord> records,
+    void Function() paint,
+  ) {
+    _stack.add(records);
+    try {
+      paint();
+    } finally {
+      _stack.removeLast();
+    }
+  }
+
+  static void record(
+    SemanticPaintBoundsCallback onPaintBounds,
+    CellRect localBounds,
+  ) {
+    if (_stack.isEmpty) return;
+    _stack.last.add(
+      SemanticPaintBoundsRecord(
+        onPaintBounds: onPaintBounds,
+        localBounds: localBounds,
+      ),
+    );
+  }
+}
+
 /// Parent-attached layout metadata.
 ///
 /// Multi-child render objects (Flex, Stack) keep per-child layout state
@@ -83,6 +185,7 @@ abstract class RenderObject {
   /// paint state.
   void markNeedsLayout() {
     DebugInvalidations.recordLayout(runtimeType.toString());
+    RenderDamageTracker.recordLayoutOrConservativePaint();
     _markNeedsLayoutUp();
     _markNearestRepaintBoundaryDirty();
   }
@@ -101,6 +204,7 @@ abstract class RenderObject {
   /// after verifying that the value cannot affect layout.
   void markNeedsPaint() {
     DebugInvalidations.recordPaint(runtimeType.toString());
+    RenderDamageTracker.recordLayoutOrConservativePaint();
     _markNeedsLayoutUp();
     _markNearestRepaintBoundaryDirty();
   }
@@ -229,6 +333,7 @@ abstract class RenderObject {
     _needsLayout = false;
     RenderLayoutDebugStats.recordPerformed();
     if (previousSize != null && previousSize != result) {
+      RenderDamageTracker.recordLayoutOrConservativePaint();
       _markNearestRepaintBoundaryDirty();
     }
     return result;

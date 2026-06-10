@@ -16,8 +16,16 @@ import 'framework.dart';
 /// whenever a `RenderObjectElement` inside it is reconciled or any render
 /// object's child list changes. Stable subtrees (`const` widgets, or
 /// instances kept identical across builds) stay cached across many frames.
-class RepaintBoundary extends SingleChildRenderObjectWidget {
+class RepaintBoundary extends SingleChildRenderObjectWidget
+    implements WidgetUpdatePruner {
   const RepaintBoundary({super.key, super.child});
+
+  @override
+  bool hasEquivalentWidgetConfiguration(Widget other) {
+    return other is RepaintBoundary &&
+        key == other.key &&
+        canSkipNullableWidgetUpdate(child, other.child);
+  }
 
   @override
   RenderRepaintBoundary createRenderObject(BuildContext context) =>

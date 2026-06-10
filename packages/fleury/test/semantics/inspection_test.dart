@@ -11,13 +11,14 @@ void main() {
           id: const SemanticNodeId('root'),
           role: SemanticRole.app,
           children: [
-            const SemanticNode(
+            SemanticNode(
               id: SemanticNodeId('field:api-key'),
               role: SemanticRole.textField,
               label: 'API key\x1b]52;c;secret-token\x07',
               value: 'secret-token',
               focused: true,
               validationError: 'secret-token rejected',
+              bounds: CellRect.fromLTWH(1, 2, 10, 1),
               actions: {SemanticAction.submit, SemanticAction.copy},
               state: SemanticState({
                 'redactedValue': true,
@@ -57,6 +58,13 @@ void main() {
       expect(field.label, 'API key�');
       expect(field.value, '<redacted>');
       expect(field.validationError, '<redacted>');
+      expect(field.bounds, CellRect.fromLTWH(1, 2, 10, 1));
+      expect(field.toJson()['bounds'], {
+        'left': 1,
+        'top': 2,
+        'width': 10,
+        'height': 1,
+      });
       expect(field.actions, ['copy', 'submit']);
       expect(field.state, containsPair('redactedValue', true));
       expect(field.state, containsPair('apiToken', '<redacted>'));
@@ -90,6 +98,7 @@ void main() {
               'value': 'secret-token',
               'focused': true,
               'validationError': 'secret-token rejected',
+              'bounds': {'left': 3, 'top': 4, 'width': 12, 'height': 1},
               'actions': ['submit', 'copy', 'copy'],
               'state': {
                 'redactedValue': true,
@@ -123,6 +132,7 @@ void main() {
       expect(field.actions, ['copy', 'submit']);
       expect(field.value, '<redacted>');
       expect(field.validationError, '<redacted>');
+      expect(field.bounds, CellRect.fromLTWH(3, 4, 12, 1));
       expect(field.state, containsPair('apiToken', '<redacted>'));
       expect(field.state, containsPair('historyCount', 2));
       expect(field.toJson(), isNot(contains('futureNodePayload')));

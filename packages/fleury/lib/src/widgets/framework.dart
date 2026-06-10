@@ -59,6 +59,34 @@ abstract class Widget {
   String toString() => key == null ? '$runtimeType' : '$runtimeType(key: $key)';
 }
 
+/// Internal opt-in for immutable widgets that can prove a new widget instance
+/// would leave the mounted subtree unchanged.
+///
+/// The reconciler still requires [Widget.canUpdate] before consulting this
+/// hook. Stateful widgets should not implement it unless they can also prove
+/// skipping `didUpdateWidget` is correct.
+@internal
+abstract interface class WidgetUpdatePruner {
+  bool hasEquivalentWidgetConfiguration(Widget other);
+}
+
+@internal
+bool canSkipWidgetUpdate(Widget oldWidget, Widget newWidget) {
+  if (identical(oldWidget, newWidget)) return true;
+  if (!Widget.canUpdate(oldWidget, newWidget)) return false;
+  final pruner = oldWidget;
+  if (pruner is! WidgetUpdatePruner) return false;
+  return (pruner as WidgetUpdatePruner).hasEquivalentWidgetConfiguration(
+    newWidget,
+  );
+}
+
+@internal
+bool canSkipNullableWidgetUpdate(Widget? oldWidget, Widget? newWidget) {
+  if (oldWidget == null || newWidget == null) return oldWidget == newWidget;
+  return canSkipWidgetUpdate(oldWidget, newWidget);
+}
+
 /// A [Key] unique across the whole tree, indexing the element that
 /// currently carries it. Use it to reach a mounted widget's state or
 /// context imperatively from outside the build — e.g. to call a method on
@@ -702,7 +730,7 @@ abstract class Element implements BuildContext {
       return null;
     }
     if (child != null) {
-      if (identical(child._widget, newWidget)) {
+      if (canSkipWidgetUpdate(child._widget, newWidget)) {
         return child;
       }
       if (Widget.canUpdate(child._widget, newWidget)) {
@@ -924,6 +952,30 @@ class StatefulElement extends ComponentElement {
 // BuildOwner
 // ---------------------------------------------------------------------------
 
+/// Counts produced by one [BuildOwner.flushBuild] call.
+final class BuildFlushStats {
+  const BuildFlushStats({
+    required this.passCount,
+    required this.rebuiltElementCount,
+    required this.maxDirtyElementCount,
+  });
+
+  static const zero = BuildFlushStats(
+    passCount: 0,
+    rebuiltElementCount: 0,
+    maxDirtyElementCount: 0,
+  );
+
+  /// Number of dirty-queue passes needed to settle the build.
+  final int passCount;
+
+  /// Number of dirty element entries processed across all passes.
+  final int rebuiltElementCount;
+
+  /// Largest dirty-queue snapshot processed in any pass.
+  final int maxDirtyElementCount;
+}
+
 /// Drives the build pipeline. Holds the set of dirty elements and flushes
 /// them in shallow-first order.
 class BuildOwner {
@@ -1017,20 +1069,34 @@ class BuildOwner {
   /// `setState` with n=1–5 the difference is below measurement noise.
   ///
   /// See RFC 0009 §5.6 H6.
-  void flushBuild() {
+  BuildFlushStats flushBuild() {
     assert(() {
       _debugGlobalKeyClaims.clear();
       return true;
     }());
+    var passCount = 0;
+    var rebuiltElementCount = 0;
+    var maxDirtyElementCount = 0;
     while (_dirtyElements.isNotEmpty) {
       final snapshot = _dirtyElements.toList()
         ..sort((a, b) => a._depth - b._depth);
       _dirtyElements.clear();
+      passCount += 1;
+      rebuiltElementCount += snapshot.length;
+      if (snapshot.length > maxDirtyElementCount) {
+        maxDirtyElementCount = snapshot.length;
+      }
       for (final element in snapshot) {
         element.rebuild();
       }
     }
     _finalizeInactiveElements();
+    if (passCount == 0) return BuildFlushStats.zero;
+    return BuildFlushStats(
+      passCount: passCount,
+      rebuiltElementCount: rebuiltElementCount,
+      maxDirtyElementCount: maxDirtyElementCount,
+    );
   }
 
   /// Permanently unmounts every subtree that was deactivated during the
@@ -1112,10 +1178,12 @@ class BuildOwner {
     CellBuffer buffer, {
     void Function(Duration build, Duration layout, Duration paint)?
     onPhaseTiming,
+    void Function(BuildFlushStats stats)? onBuildStats,
   }) {
     final sw = onPhaseTiming != null ? (Stopwatch()..start()) : null;
-    flushBuild();
+    final buildStats = flushBuild();
     final buildElapsed = sw?.elapsed ?? Duration.zero;
+    onBuildStats?.call(buildStats);
 
     final rootRender = findRootRenderObject(root);
     if (rootRender == null) {
@@ -1365,6 +1433,12 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
     List<Element> oldChildren,
     List<Widget> newWidgets,
   ) {
+    final stableUnkeyed = _reconcileStableUnkeyedChildren(
+      oldChildren,
+      newWidgets,
+    );
+    if (stableUnkeyed != null) return stableUnkeyed;
+
     final result = List<Element?>.filled(newWidgets.length, null);
 
     // Partition the old children into keyed (by-key) and unkeyed (queue).
@@ -1427,6 +1501,34 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
     }
 
     return result.cast<Element>();
+  }
+
+  List<Element>? _reconcileStableUnkeyedChildren(
+    List<Element> oldChildren,
+    List<Widget> newWidgets,
+  ) {
+    if (oldChildren.length != newWidgets.length) return null;
+    if (oldChildren.isEmpty) return oldChildren;
+
+    for (var index = 0; index < oldChildren.length; index++) {
+      final oldChild = oldChildren[index];
+      final newWidget = newWidgets[index];
+      if (oldChild.widget.key != null || newWidget.key != null) return null;
+      if (!Widget.canUpdate(oldChild.widget, newWidget)) return null;
+    }
+
+    // Common steady-state path for dense rows/grids: all children are
+    // unkeyed, positional, and compatible. Avoid building keyed maps and
+    // unkeyed queues; render-object order is still checked by the caller
+    // because component children can change their internal render root.
+    for (var index = 0; index < oldChildren.length; index++) {
+      final child = oldChildren[index];
+      final newWidget = newWidgets[index];
+      if (!canSkipWidgetUpdate(child.widget, newWidget)) {
+        child.update(newWidget);
+      }
+    }
+    return oldChildren;
   }
 
   /// Walks each child element looking for its first descendant render

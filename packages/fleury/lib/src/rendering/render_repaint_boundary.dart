@@ -117,6 +117,8 @@ class RenderRepaintBoundary extends RenderObject
   RenderObject? _child;
   CellBuffer? _cache;
   CellRect? _cacheBounds;
+  List<SemanticPaintBoundsRecord> _semanticBounds =
+      const <SemanticPaintBoundsRecord>[];
 
   @override
   bool get isRepaintBoundary => true;
@@ -161,14 +163,34 @@ class RenderRepaintBoundary extends RenderObject
 
     var repainted = false;
     if (needsPaint) {
-      cache.clear();
-      c.paint(cache, CellOffset.zero);
+      final targetCache = cache;
+      final capturedSemanticBounds = <SemanticPaintBoundsRecord>[];
+      cache.withoutDamageTracking(() {
+        targetCache.clear();
+        SemanticPaintBoundsCapture.collect(capturedSemanticBounds, () {
+          c.paint(
+            targetCache,
+            CellOffset.zero,
+            screenOffset: screenOffset ?? offset,
+            clipRect: clipRect,
+          );
+        });
+      });
+      _semanticBounds = List<SemanticPaintBoundsRecord>.unmodifiable(
+        capturedSemanticBounds,
+      );
       // Tighten the next blit to just the non-empty cells. For dense
       // subtrees that's the full size (no penalty); for sparse subtrees
       // this avoids copying a buffer of mostly-empty cells.
       _cacheBounds = cache.boundingBoxOfNonEmpty();
       needsPaint = false;
       repainted = true;
+    } else {
+      _replaySemanticBounds(
+        paintOffset: offset,
+        screenOffset: screenOffset ?? offset,
+        clipRect: clipRect,
+      );
     }
 
     final bounds = _cacheBounds;
@@ -176,14 +198,41 @@ class RenderRepaintBoundary extends RenderObject
       repainted: repainted,
       copiedBounds: bounds,
     );
+    if (repainted) {
+      _publishSemanticBounds(paintOffset: offset);
+    }
     if (bounds == null) return; // entirely empty cache — nothing to draw
-    buffer.copyRectFrom(
-      cache,
-      bounds,
-      CellOffset(
-        offset.col + bounds.offset.col,
-        offset.row + bounds.offset.row,
-      ),
+    final cacheForCopy = cache;
+    final destOffset = CellOffset(
+      offset.col + bounds.offset.col,
+      offset.row + bounds.offset.row,
     );
+    if (repainted) {
+      buffer.copyRectFrom(cacheForCopy, bounds, destOffset);
+    } else {
+      buffer.withoutDamageTracking(
+        () => buffer.copyRectFrom(cacheForCopy, bounds, destOffset),
+      );
+    }
+  }
+
+  void _publishSemanticBounds({required CellOffset paintOffset}) {
+    for (final record in _semanticBounds) {
+      record.publishToActiveCapture(paintOffset);
+    }
+  }
+
+  void _replaySemanticBounds({
+    required CellOffset paintOffset,
+    required CellOffset screenOffset,
+    required CellRect? clipRect,
+  }) {
+    for (final record in _semanticBounds) {
+      record.replay(
+        paintOffset: paintOffset,
+        screenOffset: screenOffset,
+        clipRect: clipRect,
+      );
+    }
   }
 }

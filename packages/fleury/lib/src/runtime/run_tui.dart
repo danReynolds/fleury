@@ -21,6 +21,7 @@ import '../rendering/ansi_renderer.dart';
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/render_layout_stats.dart';
+import '../rendering/render_object.dart';
 import '../rendering/render_repaint_boundary.dart';
 import '../semantics/semantics.dart';
 import '../terminal/diagnostics.dart';
@@ -41,6 +42,8 @@ import 'frame_scheduler.dart';
 import 'hot_reload.dart';
 import 'input_dispatcher.dart';
 import 'output_capture.dart';
+import 'tui_frame_loop.dart';
+import 'tui_runtime.dart';
 
 /// A signal returned by an event handler in [runTui] to ask the loop to
 /// exit cleanly.
@@ -148,10 +151,14 @@ Future<void> runTui(
     );
   }
 
-  final owner = BuildOwner();
-  final focusManager = FocusManager();
-  final binding = TuiBinding();
-  final pointerRouter = PointerRouter();
+  RenderDamageTracker.reset();
+  SemanticDirtyTracker.reset();
+
+  final runtime = TuiRuntime();
+  final owner = runtime.owner;
+  final focusManager = runtime.focusManager;
+  final binding = runtime.binding;
+  final pointerRouter = runtime.pointerRouter;
   // Install the build-error boundary: a thrown build() renders an error
   // panel for that subtree instead of crashing the app.
   Element.errorBuilder ??= (error, stack) => ErrorWidget.builder(error, stack);
@@ -182,13 +189,9 @@ Future<void> runTui(
   Element? rootElement;
   var disposed = false;
 
-  // Double-buffered rendering: front (just-painted, for next-frame
-  // diff) and back (cleared and re-painted). The pair is allocated
-  // once per terminal size; resize triggers re-allocation and a full
-  // repaint via a clear-screen + diff-against-empty pass.
-  CellBuffer? frontBuffer;
-  CellBuffer? backBuffer;
-  var requireFullRepaint = true;
+  // Shared double-buffer and damage lifecycle. The host still owns
+  // presentation, debug timings, input, and post-frame behavior.
+  final frameLoop = TuiFrameLoop();
   var frameCounter = 0;
   // Cells we tinted green in the previous frame's paint-flash pass.
   // Empty when paint-flash is off; populated each frame the flash is
@@ -203,28 +206,13 @@ Future<void> runTui(
       // firing so their side effects (a final log line, releasing a
       // captured resource) aren't silently dropped. `binding.dispose()`
       // also drains, but only the FIRST cleanup branch reaches it.
-      binding.flushPostFrameCallbacks(binding.tickerScheduler.clock.now);
+      runtime.flushPostFrameCallbacks();
       return;
     }
     final r = rootElement;
     if (r == null) return;
     final size = usedDriver.size;
     if (size.isEmpty) return;
-
-    // (Re)allocate the buffer pool on first frame or after a resize.
-    if (frontBuffer == null || frontBuffer!.size != size) {
-      frontBuffer = CellBuffer(size);
-      backBuffer = CellBuffer(size);
-      requireFullRepaint = true;
-    }
-
-    // The back buffer becomes "next"; we swap roles after the diff.
-    final next = backBuffer!;
-    final prev = frontBuffer!;
-    next.clear();
-    // Pointer regions re-register as they paint, so reset the registry
-    // first — only what's on screen this frame is hit-testable.
-    pointerRouter.beginFrame();
 
     // Capture per-phase timings only when the debug stream has live
     // listeners — when no one's watching, we skip the Stopwatch
@@ -237,27 +225,33 @@ Future<void> runTui(
     Duration phaseBuild = Duration.zero;
     Duration phaseLayout = Duration.zero;
     Duration phasePaint = Duration.zero;
-    RenderLayoutDebugStats.beginFrame(enabled: debugWatching);
-    RepaintBoundaryDebugStats.beginFrame(enabled: debugWatching);
-    owner.renderFrame(
-      r,
-      next,
-      onPhaseTiming: debugWatching
-          ? (b, l, p) {
-              phaseBuild = b;
-              phaseLayout = l;
-              phasePaint = p;
-            }
-          : null,
+    final frame = frameLoop.render(
+      size: size,
+      paint: (next) {
+        RenderLayoutDebugStats.beginFrame(enabled: debugWatching);
+        RepaintBoundaryDebugStats.beginFrame(enabled: debugWatching);
+        runtime.renderFrame(
+          next,
+          onPhaseTiming: debugWatching
+              ? (b, l, p) {
+                  phaseBuild = b;
+                  phaseLayout = l;
+                  phasePaint = p;
+                }
+              : null,
+        );
+      },
     );
+    if (frame == null) return;
+    final prev = frame.previous;
+    final next = frame.next;
     final layoutStats = RenderLayoutDebugStats.takeFrameStats();
     final repaintBoundaryStats = RepaintBoundaryDebugStats.takeFrameStats();
 
-    if (requireFullRepaint) {
+    if (frame.damage.fullRepaint) {
       // Clear screen + home so any stale content (from the alt-screen
       // switch, terminal scrollback, or a previous size) doesn't leak.
       sink.write('\x1B[2J\x1B[H');
-      requireFullRepaint = false;
     }
     // renderDiff against an all-empty prev (post-clear) produces the
     // same byte output as renderFull, so the same path handles first
@@ -288,6 +282,7 @@ Future<void> runTui(
       prev,
       next,
       sink,
+      dirtyBounds: frame.damage.diffBounds,
       onDirtyCell: debugWatching ? recordDirtyCell : null,
     );
     final phaseDiff = diffSw?.elapsed ?? Duration.zero;
@@ -326,10 +321,7 @@ Future<void> runTui(
       lastFlashedCells = const [];
     }
 
-    // Roles swap: the just-painted "next" becomes the "front" we'll
-    // diff against on the next frame.
-    backBuffer = prev;
-    frontBuffer = next;
+    frameLoop.commit(frame);
 
     if (debugWatching) {
       frameCounter++;
@@ -359,7 +351,7 @@ Future<void> runTui(
     // frame the user is seeing). A callback that schedules another frame goes
     // through scheduleFrame; the FrameScheduler has already cleared its pending
     // flag before invoking us, so the new request schedules a fresh flush.
-    binding.flushPostFrameCallbacks(binding.tickerScheduler.clock.now);
+    runtime.flushPostFrameCallbacks();
   }
 
   // Coalesces frame requests and, when [frameInterval] > 0, caps the render
@@ -407,15 +399,9 @@ Future<void> runTui(
     debugController.setSemanticTreeProvider(null);
     debugController.setTerminalDiagnosisProvider(null);
     DebugInvalidations.reset();
-    // Unmount the root before restoring the terminal so State.dispose
-    // runs on every stateful widget — cancelling stream subscriptions
-    // they registered in initState and releasing anything else that
-    // would otherwise keep the isolate alive after restore().
-    rootElement?.unmount();
     frameScheduler.dispose();
     dispatcher.dispose();
-    focusManager.dispose();
-    binding.dispose();
+    runtime.dispose();
     await usedDriver.restore();
 
     // The terminal is back on the normal screen now. Unless the caller took
@@ -501,7 +487,7 @@ Future<void> runTui(
               ),
             ),
           );
-          rootElement = owner.mountRoot(buildRoot());
+          rootElement = runtime.mountRoot(buildRoot());
           debugController.setSemanticTreeProvider(() {
             final root = rootElement;
             return root == null ? null : SemanticTree.fromElement(root);
@@ -511,7 +497,7 @@ Future<void> runTui(
           if (enableHotReload) {
             hotReload = await HotReloadController.attach(
               onReassemble: () {
-                owner.reassembleApplication();
+                runtime.reassembleApplication();
                 // Fire scheduler-level reassemble after the element-tree
                 // walk so Animations + FrameTickers reset to a
                 // known state under the freshly-reloaded code. Order
@@ -530,13 +516,11 @@ Future<void> runTui(
               if (event is ResizeEvent) {
                 // Force buffer-pool reallocation and a full repaint on the
                 // next frame; the existing buffers are the wrong size.
-                frontBuffer = null;
-                backBuffer = null;
-                requireFullRepaint = true;
+                frameLoop.resetBuffers();
                 // Propagate the new size through MediaQuery (layout already
                 // re-runs against the new buffer constraints).
                 final r = rootElement;
-                if (r != null) rootElement = owner.updateRoot(r, buildRoot());
+                if (r != null) rootElement = runtime.updateRoot(buildRoot());
                 DebugEvents.emitTerminalDiagnosis(currentTerminalDiagnosis());
               }
 
@@ -561,6 +545,7 @@ Future<void> runTui(
               KeyEventResult dispatchResult = KeyEventResult.ignored;
               if (event is KeyEvent ||
                   event is TextInputEvent ||
+                  event is TextCompositionEvent ||
                   event is PasteEvent ||
                   event is MouseEvent) {
                 dispatchResult = dispatcher.dispatch(event);
@@ -616,13 +601,13 @@ Future<void> runTui(
   return done.future;
 }
 
-
 String _frameReasonForEvent(TuiEvent event) {
   return switch (event) {
     ResizeEvent() => 'resize',
     KeyEvent(:final keyCode, :final char) =>
       'key:${keyCode?.name ?? char ?? '?'}',
     TextInputEvent() => 'text-input',
+    TextCompositionEvent(:final kind) => 'text-composition:${kind.name}',
     PasteEvent() => 'paste',
     MouseEvent() => 'mouse',
   };

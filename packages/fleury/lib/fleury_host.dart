@@ -1,0 +1,37 @@
+/// Fleury host SPI.
+///
+/// Import this when building a platform host for Fleury rather than an
+/// application UI. The library re-exports `fleury_core.dart` plus the
+/// host-facing runtime, damage, and semantic-update contracts that native and
+/// browser runners need to mount, render, present, and mirror a Fleury tree.
+///
+/// This library is still platform-neutral and free of `dart:io`.
+library;
+
+export 'fleury_core.dart';
+export 'src/rendering/render_object.dart' show RenderDamageTracker;
+export 'src/widgets/framework.dart' show BuildFlushStats;
+export 'src/runtime/frame_scheduler.dart'
+    show FrameFlushScheduler, FrameRenderCallback, FrameScheduler;
+export 'src/runtime/input_dispatcher.dart' show InputDispatcher;
+export 'src/runtime/tui_frame_loop.dart'
+    show
+        TuiDirtyRowRange,
+        TuiDirtyRows,
+        TuiFrameDamage,
+        TuiFrameLoop,
+        TuiFramePaintCallback,
+        TuiRenderedFrame;
+export 'src/runtime/tui_runtime.dart' show TuiRuntime;
+export 'src/semantics/semantics_owner.dart'
+    show SemanticsOwner, SemanticTreeUpdate;
+export 'src/semantics/semantics.dart'
+    show
+        SemanticActionContributor,
+        SemanticActionInvocationResult,
+        SemanticActionInvocationStatus,
+        SemanticContributor,
+        SemanticDirtySnapshot,
+        SemanticDirtyTracker,
+        SemanticsElement,
+        invokeSemanticActionFromElement;

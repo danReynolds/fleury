@@ -63,14 +63,18 @@ class InputDispatcher {
   /// Routes [event] through the dispatch algorithm.
   ///
   /// Accepts the union of [KeyEvent] (chord-style routing through
-  /// the focus chain + globals) and [TextInputEvent] (insertable
-  /// text routed to the nearest [TextInputClaimant]). Other event
-  /// types are ignored — the framework handles them outside the
-  /// dispatcher.
+  /// the focus chain + globals), [TextInputEvent] (insertable text
+  /// routed to the nearest [TextInputClaimant]), [TextCompositionEvent]
+  /// (IME lifecycle routed to the nearest [TextCompositionClaimant]),
+  /// paste, and mouse. Other event types are ignored — the framework
+  /// handles them outside the dispatcher.
   KeyEventResult dispatch(TuiEvent event) {
     _checkNotDisposed();
     if (event is TextInputEvent) {
       return _dispatchText(event);
+    }
+    if (event is TextCompositionEvent) {
+      return _dispatchComposition(event);
     }
     if (event is PasteEvent) {
       return _dispatchPaste(event);
@@ -214,6 +218,18 @@ class InputDispatcher {
     return _deliverPaste(event.text);
   }
 
+  /// Delivers IME composition lifecycle events to the nearest claimant.
+  ///
+  /// Composition is not ordinary printable text, so unclaimed composition
+  /// events do not fall through to key bindings. Any pending leader sequence is
+  /// canceled first because the user's text-editing interaction broke it.
+  KeyEventResult _dispatchComposition(TextCompositionEvent event) {
+    if (_pending != null) {
+      _cancelPendingAndRedispatchHeld();
+    }
+    return _deliverComposition(event);
+  }
+
   void _cancelPendingAndRedispatchHeld() {
     final pending = _pending;
     if (pending == null) return;
@@ -245,6 +261,26 @@ class InputDispatcher {
           claimant.onPaste(text) == KeyEventResult.handled) {
         return KeyEventResult.handled;
       }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// Offers IME composition content to each [TextCompositionClaimant] up the
+  /// focus chain until one consumes it.
+  KeyEventResult _deliverComposition(TextCompositionEvent event) {
+    for (final node in focusManager.activeChain()) {
+      final claimant = node.textCompositionClaimant;
+      if (claimant == null) continue;
+      final result = switch (event.kind) {
+        TextCompositionEventKind.update => claimant.onTextCompositionUpdate(
+          event.text ?? '',
+        ),
+        TextCompositionEventKind.commit => claimant.onTextCompositionCommit(
+          event.text,
+        ),
+        TextCompositionEventKind.cancel => claimant.onTextCompositionCancel(),
+      };
+      if (result == KeyEventResult.handled) return result;
     }
     return KeyEventResult.ignored;
   }

@@ -90,6 +90,18 @@ abstract interface class TextInputClaimant {
   KeyEventResult onPaste(String text);
 }
 
+/// Widgets that consume IME composition updates.
+///
+/// The dispatcher routes [TextCompositionEvent] to the nearest claimant in the
+/// active focus chain. This is separate from [TextInputClaimant] because
+/// composition updates mutate the active composing range without committing
+/// ordinary text-input transactions.
+abstract interface class TextCompositionClaimant {
+  KeyEventResult onTextCompositionUpdate(String text);
+  KeyEventResult onTextCompositionCommit(String? text);
+  KeyEventResult onTextCompositionCancel();
+}
+
 /// A long-lived focus identity. One per [Focus] widget; consumers can
 /// also create their own and pass it into a `Focus` to keep focus
 /// state stable across reparenting.
@@ -127,6 +139,10 @@ class FocusNode {
   /// `KeyBindings` sees them.
   TextInputClaimant? textInputClaimant;
 
+  /// Optional consumer of IME composition updates. Usually the same
+  /// editable widget that registered [textInputClaimant].
+  TextCompositionClaimant? textCompositionClaimant;
+
   /// Bounding rectangle of the focusable region in absolute cell
   /// coordinates, populated by the framework on every paint pass.
   /// Null until the node's owning `Focus` widget has been painted at
@@ -136,6 +152,15 @@ class FocusNode {
   /// (left/right/up/down arrows move focus to the spatially nearest
   /// focusable). Don't write to this from app code.
   CellRect? rect;
+
+  /// Latest painted caret rectangle in absolute cell coordinates, when this
+  /// focus node owns an editable text widget.
+  ///
+  /// Hosts use this for IME candidate-window placement and future semantic
+  /// focus geometry. The value is populated during paint, clipped to the
+  /// visible viewport when possible, and may be null before the first paint or
+  /// when the caret is outside the visible region.
+  CellRect? caretRect;
 
   /// Whether this node can currently take focus.
   bool get canRequestFocus => _canRequestFocus;
@@ -188,7 +213,9 @@ class FocusNode {
     onKey = null;
     bindingSource = null;
     textInputClaimant = null;
+    textCompositionClaimant = null;
     rect = null;
+    caretRect = null;
   }
 
   @override

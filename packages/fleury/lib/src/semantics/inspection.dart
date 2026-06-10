@@ -1,3 +1,4 @@
+import '../foundation/geometry.dart';
 import '../rendering/text_sanitizer.dart';
 import 'semantics.dart';
 
@@ -212,6 +213,7 @@ final class SemanticInspectionNode {
     'expanded',
     'busy',
     'validationError',
+    'bounds',
     'actions',
     'state',
     'children',
@@ -230,6 +232,7 @@ final class SemanticInspectionNode {
     this.expanded,
     required this.busy,
     this.validationError,
+    this.bounds,
     required List<String> actions,
     required Map<String, Object?> state,
     required List<SemanticInspectionNode> children,
@@ -256,6 +259,7 @@ final class SemanticInspectionNode {
           : (node.validationError == null
                 ? null
                 : sanitizeForDisplay(node.validationError!)),
+      bounds: node.bounds,
       actions: [for (final action in node.actions) action.name]..sort(),
       state: _semanticStateToJson(node.state),
       children: [
@@ -298,6 +302,7 @@ final class SemanticInspectionNode {
       validationError: redacted && json['validationError'] != null
           ? '<redacted>'
           : _jsonSanitizedString(json['validationError']),
+      bounds: _jsonCellRect(json['bounds']),
       actions: _jsonSortedStrings(json['actions']),
       state: redacted ? _redactSensitiveState(state) : state,
       children: _jsonNodeList(json['children']),
@@ -316,6 +321,7 @@ final class SemanticInspectionNode {
   final bool? expanded;
   final bool busy;
   final String? validationError;
+  final CellRect? bounds;
   final List<String> actions;
   final Map<String, Object?> state;
   final List<SemanticInspectionNode> children;
@@ -347,6 +353,7 @@ final class SemanticInspectionNode {
     if (expanded != null) 'expanded': expanded,
     if (busy) 'busy': true,
     if (validationError != null) 'validationError': validationError,
+    if (bounds != null) 'bounds': _cellRectToJson(bounds!),
     if (actions.isNotEmpty) 'actions': actions,
     if (state.isNotEmpty) 'state': state,
     if (children.isNotEmpty)
@@ -460,6 +467,29 @@ Object? _jsonValue(Object? value) {
     },
     _ => sanitizeForDisplay(value.toString()),
   };
+}
+
+Map<String, Object?> _cellRectToJson(CellRect rect) {
+  return <String, Object?>{
+    'left': rect.left,
+    'top': rect.top,
+    'width': rect.size.cols,
+    'height': rect.size.rows,
+  };
+}
+
+CellRect? _jsonCellRect(Object? value) {
+  final map = _jsonMap(value);
+  if (map == null) return null;
+  final left = map['left'];
+  final top = map['top'];
+  final width = map['width'];
+  final height = map['height'];
+  if (left is! int || top is! int || width is! int || height is! int) {
+    return null;
+  }
+  if (width < 0 || height < 0) return null;
+  return CellRect.fromLTWH(left, top, width, height);
 }
 
 Map<String, Object?>? _jsonMap(Object? value) {

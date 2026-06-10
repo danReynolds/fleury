@@ -1,14 +1,15 @@
 /// Fleury — Flutter ergonomics, terminal truth.
 ///
-/// The native umbrella: the platform-agnostic core (`fleury_core.dart`)
-/// plus the `dart:io`-backed pieces — native terminal drivers, `runTui`,
+/// The native umbrella: the host SPI (`fleury_host.dart`, which itself
+/// re-exports the app-facing core `fleury_core.dart`) plus the
+/// `dart:io`-backed pieces — native terminal drivers, `runTui`,
 /// stray-output capture + the log console. Browser hosts import
-/// `fleury_core.dart` and supply their own `TerminalDriver`.
+/// `fleury_host.dart` and supply their own presentation/input surfaces.
 ///
 /// See `docs/rfcs/0007-fleury-framework.md` for scope and gates.
 library;
 
-export 'fleury_core.dart';
+export 'fleury_host.dart';
 
 // Native (dart:io) surface.
 export 'src/effects/process_task.dart'

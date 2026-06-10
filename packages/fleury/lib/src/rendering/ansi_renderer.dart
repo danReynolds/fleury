@@ -42,8 +42,7 @@ final class StringAnsiSink implements AnsiSink {
 ///   4. On a dirty cell, emit:
 ///        - A cursor position update if the terminal's cursor isn't
 ///          already at this cell.
-///        - A style change (full reset + re-apply) if the style differs
-///          from what was last emitted.
+///        - A style delta if the style differs from what was last emitted.
 ///        - The cell's grapheme (or a space for `CellRole.empty`).
 ///   5. After the last cell, if any style was emitted, reset back to
 ///      default with `\x1B[0m`.
@@ -86,10 +85,16 @@ final class AnsiRenderer {
   /// [StringBuffer] and flushed to [sink] in a single `write` call.
   /// This reduces per-frame `sink.write` calls (and the IOSink queue
   /// operations they trigger downstream) from O(dirty cells) to one.
+  ///
+  /// [dirtyBounds], when provided, must conservatively contain every cell that
+  /// can differ between [previous] and [next]. The renderer then scans only
+  /// that rectangle. Pass null whenever layout, removal, scrolling, or any
+  /// other unsafe mutation can change cells outside the known painted region.
   void renderDiff(
     CellBuffer previous,
     CellBuffer next,
     AnsiSink sink, {
+    CellRect? dirtyBounds,
     void Function(int col, int row)? onDirtyCell,
   }) {
     assert(
@@ -98,10 +103,20 @@ final class AnsiRenderer {
       '(previous=${previous.size}, next=${next.size}).',
     );
 
-    if (_buffersEqual(previous, next)) return;
+    final diffBounds = dirtyBounds?.intersect(
+      CellRect(offset: CellOffset.zero, size: next.size),
+    );
+    if (dirtyBounds != null && diffBounds == null) return;
+    if (diffBounds == null) {
+      if (_buffersEqual(previous, next)) return;
+    } else if (_buffersEqual(previous, next, bounds: diffBounds)) {
+      return;
+    }
 
     final size = next.size;
-    final scrollUpRows = _detectBeneficialScrollUp(previous, next);
+    final scrollUpRows = diffBounds == null
+        ? _detectBeneficialScrollUp(previous, next)
+        : null;
     if (scrollUpRows != null) {
       final scrolledPrevious = CellBuffer(size);
       scrolledPrevious.copyRectFrom(
@@ -126,6 +141,7 @@ final class AnsiRenderer {
       previous,
       next,
       buf,
+      dirtyBounds: diffBounds,
       onDirtyCell: onDirtyCell,
     );
     if (!anyDirty) return;
@@ -140,17 +156,23 @@ final class AnsiRenderer {
     CellBuffer previous,
     CellBuffer next,
     StringBuffer buf, {
+    CellRect? dirtyBounds,
     void Function(int col, int row)? onDirtyCell,
   }) {
     final size = next.size;
+    final top = dirtyBounds?.top ?? 0;
+    final bottom = dirtyBounds?.bottom ?? size.rows;
+    final left = dirtyBounds?.left ?? 0;
+    final right = dirtyBounds?.right ?? size.cols;
     int? cursorRow;
     int? cursorCol;
     CellStyle? emittedStyle;
     var styleResetRequired = false;
+    var styleBytesEmitted = false;
     var anyDirty = false;
 
-    for (var row = 0; row < size.rows; row++) {
-      for (var col = 0; col < size.cols; col++) {
+    for (var row = top; row < bottom; row++) {
+      for (var col = left; col < right; col++) {
         final newCell = next.atColRow(col, row);
 
         // Continuation cells emit nothing — the leading's grapheme
@@ -176,6 +198,23 @@ final class AnsiRenderer {
         // cursor at (row, col); see [_cursorMove]. Bytes-on-the-wire matter
         // more than CPU here, and cursor moves are the dominant frame
         // overhead on scroll/dashboard/sparse updates.
+        if (cursorRow == row && cursorCol != null && cursorCol < col) {
+          final gap = _sameStyleAsciiGap(
+            previous,
+            next,
+            row,
+            cursorCol,
+            col,
+            emittedStyle,
+          );
+          if (gap != null) {
+            final move = _cursorMove(cursorRow, cursorCol, row, col);
+            if (gap.length < move.length) {
+              buf.write(gap);
+              cursorCol = col;
+            }
+          }
+        }
         if (cursorRow != row || cursorCol != col) {
           buf.write(_cursorMove(cursorRow, cursorCol, row, col));
           cursorRow = row;
@@ -198,24 +237,29 @@ final class AnsiRenderer {
           continue;
         }
 
-        // Style change. Full reset + re-apply on every non-empty
-        // transition keeps the encoder simple and correct at the cost
-        // of a few extra bytes per style boundary. Empty-style runs
-        // only emit a reset when transitioning out of a previously-
-        // emitted non-empty style — otherwise plain content stays
-        // SGR-free.
+        // Style change. Emit a combined SGR delta where the terminal state is
+        // known; fall back to reset+set when a protocol anchor invalidated the
+        // cache. Empty-style runs only emit a reset when transitioning out of
+        // a previously emitted non-empty style, or after an invalidating
+        // protocol anchor.
         if (newCell.style != emittedStyle) {
           if (newCell.style == CellStyle.empty) {
             if (styleResetRequired ||
                 (emittedStyle != null && emittedStyle != CellStyle.empty)) {
               buf.write('\x1B[0m');
+              styleBytesEmitted = true;
               styleResetRequired = false;
             }
           } else {
-            final resetFirst =
-                styleResetRequired ||
-                (emittedStyle != null && emittedStyle != CellStyle.empty);
-            buf.write(_encodeStyle(newCell.style, resetFirst: resetFirst));
+            final encoded = _encodeStyleTransition(
+              emittedStyle,
+              newCell.style,
+              resetFirst: styleResetRequired,
+            );
+            if (encoded.isNotEmpty) {
+              buf.write(encoded);
+              styleBytesEmitted = true;
+            }
             styleResetRequired = false;
           }
           emittedStyle = newCell.style;
@@ -238,7 +282,10 @@ final class AnsiRenderer {
     }
 
     // If we ever changed style, leave the terminal in a known state.
-    if (anyDirty && emittedStyle != null && emittedStyle != CellStyle.empty) {
+    if (anyDirty &&
+        styleBytesEmitted &&
+        emittedStyle != null &&
+        emittedStyle != CellStyle.empty) {
       buf.write('\x1B[0m');
     }
 
@@ -271,20 +318,42 @@ final class AnsiRenderer {
   ///     change the row, and the target column is always on-screen, so the
   ///     landing position is identical. `n == 1` omits the parameter
   ///     (`CSI C` / `CSI D`), which defaults to 1.
-  ///   - Otherwise (unknown previous position, or a different row): absolute,
-  ///     with the column omitted when it is 1 (`CSI row H`) and both omitted
-  ///     at home (`CSI H`).
+  ///   - Same column: a relative `CSI n B` / `CSI n A` is usually shorter
+  ///     than an absolute reposition and preserves the column.
+  ///   - Different row, target column 0: CNL/CPL (`CSI n E` / `CSI n F`) can
+  ///     move vertically and return to line start in one escape.
+  ///   - Otherwise: try a vertical relative move plus a horizontal relative
+  ///     move, and fall back to absolute if that is shorter.
+  ///
+  /// Absolute positions omit defaults: `CSI H` at home, and `CSI row H` when
+  /// the column is 1.
   static String _cursorMove(int? fromRow, int? fromCol, int row, int col) {
-    if (fromRow != null &&
-        fromCol != null &&
-        fromRow == row &&
-        fromCol != col) {
-      final n = (col - fromCol).abs();
-      final dir = col > fromCol ? 'C' : 'D';
-      final relative = n == 1 ? '\x1B[$dir' : '\x1B[$n$dir';
-      return _shorter(relative, _absolutePosition(row, col));
+    var shortest = _absolutePosition(row, col);
+    if (fromRow != null && fromCol != null) {
+      if (fromRow == row) {
+        shortest = _shorter(shortest, _horizontalMove(fromCol, col));
+      } else {
+        if (fromCol == col) {
+          shortest = _shorter(shortest, _verticalMove(fromRow, row));
+        }
+        if (col == 0) {
+          shortest = _shorter(shortest, _lineMove(fromRow, row));
+        }
+        if (fromCol != col) {
+          shortest = _shorter(
+            shortest,
+            _verticalMove(fromRow, row) + _horizontalMove(fromCol, col),
+          );
+          if (col > 0) {
+            shortest = _shorter(
+              shortest,
+              _lineMove(fromRow, row) + _horizontalMove(0, col),
+            );
+          }
+        }
+      }
     }
-    return _absolutePosition(row, col);
+    return shortest;
   }
 
   /// Absolute cursor position (1-indexed), omitting defaults: `CSI H` at home,
@@ -297,13 +366,80 @@ final class AnsiRenderer {
 
   static String _shorter(String a, String b) => b.length < a.length ? b : a;
 
+  static String _horizontalMove(int fromCol, int col) {
+    if (fromCol == col) return '';
+    final n = (col - fromCol).abs();
+    final dir = col > fromCol ? 'C' : 'D';
+    return n == 1 ? '\x1B[$dir' : '\x1B[$n$dir';
+  }
+
+  static String _verticalMove(int fromRow, int row) {
+    if (fromRow == row) return '';
+    final n = (row - fromRow).abs();
+    final dir = row > fromRow ? 'B' : 'A';
+    return n == 1 ? '\x1B[$dir' : '\x1B[$n$dir';
+  }
+
+  static String _lineMove(int fromRow, int row) {
+    if (fromRow == row) return '';
+    final n = (row - fromRow).abs();
+    final dir = row > fromRow ? 'E' : 'F';
+    return n == 1 ? '\x1B[$dir' : '\x1B[$n$dir';
+  }
+
   static String _scrollUp(int rows) => rows == 1 ? '\x1B[S' : '\x1B[${rows}S';
 
-  static bool _buffersEqual(CellBuffer a, CellBuffer b) {
+  static String? _sameStyleAsciiGap(
+    CellBuffer previous,
+    CellBuffer next,
+    int row,
+    int fromCol,
+    int toCol,
+    CellStyle? emittedStyle,
+  ) {
+    if (fromCol >= toCol) return null;
+    final effectiveStyle = emittedStyle ?? CellStyle.empty;
+    final out = StringBuffer();
+    for (var col = fromCol; col < toCol; col++) {
+      final cell = next.atColRow(col, row);
+      if (previous.atColRow(col, row) != cell) return null;
+      if (cell.style != effectiveStyle) return null;
+      switch (cell.role) {
+        case CellRole.empty:
+          out.write(' ');
+        case CellRole.leading:
+          final grapheme = cell.grapheme!;
+          if (!_isAscii(grapheme)) return null;
+          final isWide =
+              col + 1 < next.size.cols &&
+              next.atColRow(col + 1, row).role == CellRole.continuation;
+          if (isWide) return null;
+          out.write(grapheme);
+        case CellRole.continuation:
+        case CellRole.protocolAnchor:
+        case CellRole.protocolCovered:
+          return null;
+      }
+    }
+    return out.toString();
+  }
+
+  static bool _isAscii(String text) {
+    for (var i = 0; i < text.length; i++) {
+      if (text.codeUnitAt(i) > 0x7F) return false;
+    }
+    return true;
+  }
+
+  static bool _buffersEqual(CellBuffer a, CellBuffer b, {CellRect? bounds}) {
     final size = a.size;
     if (b.size != size) return false;
-    for (var row = 0; row < size.rows; row++) {
-      for (var col = 0; col < size.cols; col++) {
+    final top = bounds?.top ?? 0;
+    final bottom = bounds?.bottom ?? size.rows;
+    final left = bounds?.left ?? 0;
+    final right = bounds?.right ?? size.cols;
+    for (var row = top; row < bottom; row++) {
+      for (var col = left; col < right; col++) {
         if (a.atColRow(col, row) != b.atColRow(col, row)) return false;
       }
     }
@@ -371,39 +507,152 @@ final class AnsiRenderer {
 
   // ---- Style encoding ----------------------------------------------------
 
-  String _encodeStyle(CellStyle style, {required bool resetFirst}) {
-    final buf = StringBuffer();
-    if (resetFirst) buf.write('\x1B[0m');
+  String _encodeStyleTransition(
+    CellStyle? from,
+    CellStyle to, {
+    required bool resetFirst,
+  }) {
+    if (resetFirst || from == null || from == CellStyle.empty) {
+      return _encodeStyle(to, resetFirst: resetFirst);
+    }
 
-    final fg = style.foreground;
-    if (fg != null) buf.write(_encodeColor(fg, isBackground: false));
-
-    final bg = style.background;
-    if (bg != null) buf.write(_encodeColor(bg, isBackground: true));
-
-    if (style.bold) buf.write('\x1B[1m');
-    if (style.dim) buf.write('\x1B[2m');
-    if (style.italic) buf.write('\x1B[3m');
-    if (style.underline) buf.write('\x1B[4m');
-    if (style.inverse) buf.write('\x1B[7m');
-    if (style.strikethrough) buf.write('\x1B[9m');
-
-    return buf.toString();
+    final params = <String>[];
+    _appendColorDelta(
+      params,
+      from.foreground,
+      to.foreground,
+      isBackground: false,
+    );
+    _appendColorDelta(
+      params,
+      from.background,
+      to.background,
+      isBackground: true,
+    );
+    _appendIntensityDelta(params, from, to);
+    _appendBoolAttrDelta(
+      params,
+      from.italic,
+      to.italic,
+      setCode: '3',
+      resetCode: '23',
+    );
+    _appendBoolAttrDelta(
+      params,
+      from.underline,
+      to.underline,
+      setCode: '4',
+      resetCode: '24',
+    );
+    _appendBoolAttrDelta(
+      params,
+      from.inverse,
+      to.inverse,
+      setCode: '7',
+      resetCode: '27',
+    );
+    _appendBoolAttrDelta(
+      params,
+      from.strikethrough,
+      to.strikethrough,
+      setCode: '9',
+      resetCode: '29',
+    );
+    return _sgr(params);
   }
 
-  String _encodeColor(Color color, {required bool isBackground}) {
-    final c = quantizeColor(color, colorMode);
-    if (c == null) return ''; // ColorMode.none — drop the color, keep attrs
-    return switch (c) {
-      AnsiColor(:final index) when index < 8 =>
-        '\x1B[${(isBackground ? 40 : 30) + index}m',
-      AnsiColor(:final index) =>
-        '\x1B[${(isBackground ? 100 : 90) + index - 8}m',
-      IndexedColor(:final index) =>
-        '\x1B[${isBackground ? 48 : 38};5;${index}m',
-      RgbColor(:final r, :final g, :final b) =>
-        '\x1B[${isBackground ? 48 : 38};2;$r;$g;${b}m',
-    };
+  String _encodeStyle(CellStyle style, {required bool resetFirst}) {
+    final params = <String>[];
+    if (resetFirst) params.add('0');
+    _appendStyleSetParams(params, style);
+    return _sgr(params);
+  }
+
+  void _appendStyleSetParams(List<String> params, CellStyle style) {
+    _appendColorSet(params, style.foreground, isBackground: false);
+    _appendColorSet(params, style.background, isBackground: true);
+    if (style.bold) params.add('1');
+    if (style.dim) params.add('2');
+    if (style.italic) params.add('3');
+    if (style.underline) params.add('4');
+    if (style.inverse) params.add('7');
+    if (style.strikethrough) params.add('9');
+  }
+
+  void _appendColorDelta(
+    List<String> params,
+    Color? from,
+    Color? to, {
+    required bool isBackground,
+  }) {
+    final fromColor = from == null ? null : quantizeColor(from, colorMode);
+    final toColor = to == null ? null : quantizeColor(to, colorMode);
+    if (fromColor == toColor) return;
+    if (toColor == null) {
+      params.add(isBackground ? '49' : '39');
+    } else {
+      _appendEncodedColor(params, toColor, isBackground: isBackground);
+    }
+  }
+
+  void _appendColorSet(
+    List<String> params,
+    Color? color, {
+    required bool isBackground,
+  }) {
+    if (color == null) return;
+    final effective = quantizeColor(color, colorMode);
+    if (effective == null) return; // ColorMode.none: drop color, keep attrs.
+    _appendEncodedColor(params, effective, isBackground: isBackground);
+  }
+
+  void _appendEncodedColor(
+    List<String> params,
+    Color color, {
+    required bool isBackground,
+  }) {
+    switch (color) {
+      case AnsiColor(:final index) when index < 8:
+        params.add('${(isBackground ? 40 : 30) + index}');
+      case AnsiColor(:final index):
+        params.add('${(isBackground ? 100 : 90) + index - 8}');
+      case IndexedColor(:final index):
+        params.add('${isBackground ? 48 : 38};5;$index');
+      case RgbColor(:final r, :final g, :final b):
+        params.add('${isBackground ? 48 : 38};2;$r;$g;$b');
+    }
+  }
+
+  void _appendIntensityDelta(
+    List<String> params,
+    CellStyle from,
+    CellStyle to,
+  ) {
+    if (from.bold == to.bold && from.dim == to.dim) return;
+    if ((from.bold && !to.bold) || (from.dim && !to.dim)) {
+      params.add('22');
+      if (to.bold) params.add('1');
+      if (to.dim) params.add('2');
+      return;
+    }
+    if (!from.bold && to.bold) params.add('1');
+    if (!from.dim && to.dim) params.add('2');
+  }
+
+  void _appendBoolAttrDelta(
+    List<String> params,
+    bool from,
+    bool to, {
+    required String setCode,
+    required String resetCode,
+  }) {
+    if (from == to) return;
+    params.add(to ? setCode : resetCode);
+  }
+
+  static String _sgr(List<String> params) {
+    if (params.isEmpty) return '';
+    return '\x1B[${params.join(';')}m';
   }
 }
 
