@@ -2,3 +2,4 @@
 pubspec.lock
 caps/
 *.bin
+web/runs/

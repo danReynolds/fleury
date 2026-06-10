@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryWebAutomatedValidation",
+  "generatedAt": "2026-06-09T13:24:38.587231Z",
+  "commandWorkingDirectory": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web",
+  "strictPass": true,
+  "sourceInputGroup": "webAutomatedTestFiles",
+  "browserTestFiles": [
+    "test/browser_frame_flush_scheduler_test.dart",
+    "test/cell_metrics_test.dart",
+    "test/dom_grid_surface_test.dart",
+    "test/dom_input_source_test.dart",
+    "test/dom_input_trace_fixture_test.dart",
+    "test/run_tui_surface_test.dart",
+    "test/run_tui_web_dom_test.dart",
+    "test/semantic_dom_presenter_test.dart",
+    "test/web_clipboard_test.dart"
+  ],
+  "vmTestFiles": [
+    "test/frame_presentation_test.dart",
+    "test/web_focus_coordinator_test.dart",
+    "test/web_host_instrumentation_test.dart",
+    "test/web_public_api_boundary_test.dart"
+  ],
+  "fixtureFiles": [
+    "test/fixtures/browser_input_traces.dart"
+  ],
+  "sourceInputFingerprints": {
+    "webAutomatedTestFiles": [
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/browser_frame_flush_scheduler_test.dart",
+        "fingerprint": "fnv1a64:b2ffca8b2669a2d5"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/cell_metrics_test.dart",
+        "fingerprint": "fnv1a64:2f34652812c6925f"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/dom_grid_surface_test.dart",
+        "fingerprint": "fnv1a64:c7988a1ee9c01dae"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/dom_input_source_test.dart",
+        "fingerprint": "fnv1a64:279978107faef0cc"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/dom_input_trace_fixture_test.dart",
+        "fingerprint": "fnv1a64:6af28a1ef57df13c"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/fixtures/browser_input_traces.dart",
+        "fingerprint": "fnv1a64:f1c1df04b671249f"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/frame_presentation_test.dart",
+        "fingerprint": "fnv1a64:87a35efb0c60e9b3"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/run_tui_surface_test.dart",
+        "fingerprint": "fnv1a64:63bb6c4abf360bfd"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/run_tui_web_dom_test.dart",
+        "fingerprint": "fnv1a64:2f6cd5a6907946df"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/semantic_dom_presenter_test.dart",
+        "fingerprint": "fnv1a64:2459e4814f207789"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/web_clipboard_test.dart",
+        "fingerprint": "fnv1a64:e97db721aa6d7fcd"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/web_focus_coordinator_test.dart",
+        "fingerprint": "fnv1a64:3904ffc57a90822c"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/web_host_instrumentation_test.dart",
+        "fingerprint": "fnv1a64:608aacdf8c0722da"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/web_public_api_boundary_test.dart",
+        "fingerprint": "fnv1a64:1be40f6e71a6a657"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "id": "browser",
+      "label": "Retained DOM browser tests",
+      "command": [
+        "dart",
+        "test",
+        "-p",
+        "chrome",
+        "test/browser_frame_flush_scheduler_test.dart",
+        "test/cell_metrics_test.dart",
+        "test/dom_grid_surface_test.dart",
+        "test/dom_input_source_test.dart",
+        "test/dom_input_trace_fixture_test.dart",
+        "test/run_tui_surface_test.dart",
+        "test/run_tui_web_dom_test.dart",
+        "test/semantic_dom_presenter_test.dart",
+        "test/web_clipboard_test.dart"
+      ],
+      "testFiles": [
+        "test/browser_frame_flush_scheduler_test.dart",
+        "test/cell_metrics_test.dart",
+        "test/dom_grid_surface_test.dart",
+        "test/dom_input_source_test.dart",
+        "test/dom_input_trace_fixture_test.dart",
+        "test/run_tui_surface_test.dart",
+        "test/run_tui_web_dom_test.dart",
+        "test/semantic_dom_presenter_test.dart",
+        "test/web_clipboard_test.dart"
+      ],
+      "testFileCount": 9,
+      "durationMs": 112353,
+      "exitCode": 0,
+      "strictPass": true,
+      "stdoutTail": "n_tui_web_dom_test.dart: runTuiWebDom rejects disabled semantics without diagnostics acknowledgement\n01:03 +53: test/semantic_dom_presenter_test.dart: SemanticDomPresenter keeps unsafe semantic links non-navigating\n01:05 +54: test/run_tui_surface_test.dart: focused caret geometry is synced after presentation\n01:05 +55: test/web_clipboard_test.dart: WebClipboard reports browser write success\n01:05 +56: test/dom_input_source_test.dart: DomInputSource positions textarea from caret geometry\n01:05 +57: test/run_tui_web_dom_test.dart: runTuiWebDom allows disabled semantics only for acknowledged diagnostics\n01:06 +58: test/semantic_dom_presenter_test.dart: SemanticDomPresenter keeps disabled safe semantic links non-navigating\n01:07 +59: test/run_tui_surface_test.dart: semantic DOM presenter receives current frame semantics\n01:08 +60: test/web_clipboard_test.dart: WebClipboard falls back when browser write is denied\n01:08 +61: test/semantic_dom_presenter_test.dart: SemanticDomPresenter does not dispatch actions from disabled semantic nodes\n01:09 +62: test/run_tui_surface_test.dart: semantic presenter receives retained owner updates\n01:10 +63: test/web_clipboard_test.dart: WebClipboard records insecure-context fallback without attempting write\n01:10 +64: test/semantic_dom_presenter_test.dart: SemanticDomPresenter disabled semantic nodes do not bubble to ancestor actions\n01:10 +65: test/run_tui_surface_test.dart: records per-frame instrumentation for visual and semantic presenters\n01:12 +66: test/web_clipboard_test.dart: WebClipboard records unavailable API fallback without attempting write\n01:12 +67: test/semantic_dom_presenter_test.dart: SemanticDomPresenter dispose clears retained action listeners and callbacks\n01:13 +68: test/run_tui_surface_test.dart: semantic DOM receives text fallback for uncovered painted cells\n01:15 +69: test/semantic_dom_presenter_test.dart: SemanticDomPresenter replaces the prior snapshot on each present\n01:15 +70: test/run_tui_surface_test.dart: unchanged semantic and visual output skips semantic presentation\n01:15 +71: test/semantic_dom_presenter_test.dart: SemanticDomPresenter skips DOM work for unchanged semantic updates\n01:16 +72: test/run_tui_surface_test.dart: unchanged raw painted fallback still presents semantic coverage\n01:17 +73: test/semantic_dom_presenter_test.dart: SemanticDomPresenter updates changed leaf semantics without rebuilding the tree\n01:17 +74: test/run_tui_surface_test.dart: semantic DOM activation is queued and dispatched during a frame\n01:17 +75: test/semantic_dom_presenter_test.dart: SemanticDomPresenter falls back to full rebuild for structural semantic changes\n01:17 +76: test/run_tui_surface_test.dart: semantic action request sink records unsupported and notFound statuses\n01:18 +77: test/run_tui_surface_test.dart: semantic action request sink records unsupported and notFound statuses\n01:18 +78: test/semantic_dom_presenter_test.dart: SemanticDomPresenter replaces same-id elements when the required tag changes\n01:18 +79: test/run_tui_surface_test.dart: semantic action request before first semantic tree records notFound\n01:18 +80: test/run_tui_surface_test.dart: semantic DOM activation records failed action status\n01:18 +81: test/run_tui_surface_test.dart: semantic DOM activation still records status after capture failure\n01:18 +82: test/run_tui_surface_test.dart: semantic DOM activation does not fake keyboard focus without capture target\n01:18 +83: test/run_tui_surface_test.dart: clipboard backend is installed for the host lifetime\n01:19 +84: test/run_tui_surface_test.dart: setup failures restore clipboard and dispose partial host state\n01:19 +85: test/run_tui_surface_test.dart: dispose restores clipboard and generated host resources after cleanup error\n01:19 +86: test/run_tui_surface_test.dart: frame presentation failures dispose host resources and stop frames\n01:20 +87: test/run_tui_surface_test.dart: dispose waits for in-flight frame-failure cleanup\n01:20 +88: All tests passed!\n",
+      "stderrTail": ""
+    },
+    {
+      "id": "vm",
+      "label": "Retained DOM VM tests",
+      "command": [
+        "dart",
+        "test",
+        "test/frame_presentation_test.dart",
+        "test/web_focus_coordinator_test.dart",
+        "test/web_host_instrumentation_test.dart",
+        "test/web_public_api_boundary_test.dart"
+      ],
+      "testFiles": [
+        "test/frame_presentation_test.dart",
+        "test/web_focus_coordinator_test.dart",
+        "test/web_host_instrumentation_test.dart",
+        "test/web_public_api_boundary_test.dart"
+      ],
+      "testFileCount": 4,
+      "durationMs": 2652,
+      "exitCode": 0,
+      "strictPass": true,
+      "stdoutTail": "00:00 +0: loading test/frame_presentation_test.dart\n00:00 +0: test/web_focus_coordinator_test.dart: WebFocusCoordinator tracks browser and Fleury focus state\n00:00 +1: test/frame_presentation_test.dart: FramePresentationPlanner first frame is a full repaint with all row models\n00:00 +2: test/frame_presentation_test.dart: FramePresentationPlanner first frame is a full repaint with all row models\n00:00 +3: test/frame_presentation_test.dart: FramePresentationPlanner first frame is a full repaint with all row models\n00:00 +4: test/frame_presentation_test.dart: FramePresentationPlanner first frame is a full repaint with all row models\n00:00 +5: test/frame_presentation_test.dart: FramePresentationPlanner first frame is a full repaint with all row models\n00:00 +6: test/web_public_api_boundary_test.dart: retained DOM web public boundary is intentionally narrow\n00:00 +7: test/web_public_api_boundary_test.dart: retained DOM web public boundary is intentionally narrow\n00:00 +8: test/web_public_api_boundary_test.dart: retained DOM web public boundary is intentionally narrow\n00:00 +9: test/web_public_api_boundary_test.dart: retained DOM web public boundary is intentionally narrow\n00:00 +10: test/web_public_api_boundary_test.dart: retained DOM web public boundary is intentionally narrow\n00:00 +11: test/web_public_api_boundary_test.dart: retained DOM web public boundary is intentionally narrow\n00:00 +12: test/web_public_api_boundary_test.dart: retained DOM web public boundary is intentionally narrow\n00:00 +13: test/web_public_api_boundary_test.dart: retained DOM web public boundary is intentionally narrow\n00:00 +14: test/web_public_api_boundary_test.dart: retained DOM web public boundary is intentionally narrow\n00:00 +15: test/web_public_api_boundary_test.dart: retained DOM web public boundary is intentionally narrow\n00:00 +16: test/web_public_api_boundary_test.dart: retained DOM web public boundary is intentionally narrow\n00:00 +17: test/web_host_instrumentation_test.dart: recording sink serializes frames with summary\n00:00 +18: test/web_public_api_boundary_test.dart: browser layout reads stay isolated to DOM metrics\n00:00 +19: test/web_public_api_boundary_test.dart: browser layout reads stay isolated to DOM metrics\n00:00 +20: All tests passed!\n",
+      "stderrTail": ""
+    }
+  ]
+}

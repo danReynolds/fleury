@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryWebManualValidationEntry",
+  "targetId": "chrome-ime-macos",
+  "target": {
+    "id": "chrome-ime-macos",
+    "label": "Chrome primary-browser IME smoke on macOS",
+    "phase": "Phase 3",
+    "category": "ime",
+    "browser": "Chrome",
+    "platform": "macOS",
+    "inputMethod": "Any real composing IME, such as Japanese Romaji",
+    "requiredCheckCount": 6
+  },
+  "reviewInstructions": {
+    "manualValidationPage": "manual_validation.html",
+    "manualPageCommandWorkingDirectory": "packages/fleury_web",
+    "readySignal": "document.body data-fleury-manual-validation=\"ready\"",
+    "manualPageBuildCommand": [
+      "dart",
+      "compile",
+      "js",
+      "web/manual_validation.dart",
+      "-o",
+      "web/manual_validation.dart.js"
+    ],
+    "manualPageSmokeCommand": [
+      "dart",
+      "test",
+      "-p",
+      "chrome",
+      "test/manual_validation_page_test.dart"
+    ],
+    "manualPageServeSetupCommand": [
+      "dart",
+      "pub",
+      "global",
+      "activate",
+      "dhttpd"
+    ],
+    "manualPageServeCommand": [
+      "dart",
+      "pub",
+      "global",
+      "run",
+      "dhttpd",
+      "--path",
+      "web"
+    ],
+    "manualPageLocalUrl": "http://localhost:8080/manual_validation.html",
+    "manualPageServeNote": "Run manualPageServeSetupCommand if dhttpd is not active, keep manualPageServeCommand running, open http://localhost:8080/manual_validation.html from that local server, and start checks only after the ready signal.",
+    "provenanceAttributes": [
+      "data-fleury-manual-browser-version",
+      "data-fleury-manual-platform",
+      "data-fleury-manual-user-agent",
+      "data-fleury-manual-page"
+    ],
+    "requiredPageSignals": [
+      {
+        "id": "retained-dom-ready",
+        "selector": "body",
+        "attribute": "data-fleury-manual-validation",
+        "expectedValue": "ready",
+        "description": "The manual validation page has presented its first retained DOM frame."
+      },
+      {
+        "id": "ime-caret-positioned",
+        "selector": "textarea",
+        "attribute": "data-fleury-caret-state",
+        "expectedValue": "positioned",
+        "description": "The hidden textarea is positioned at the focused Fleury caret for IME candidate windows."
+      }
+    ],
+    "statusValues": [
+      "pass",
+      "fail",
+      "blocked",
+      "needsReview"
+    ],
+    "requiredEnvironmentKeys": [
+      "browser",
+      "browserVersion",
+      "platform",
+      "fleuryWebPage",
+      "inputMethod"
+    ],
+    "completionRule": "Set top-level status to pass only after provenance is filled, every required page signal has the expected observed value, every required check has status pass, and every passed check has reviewer observation notes rather than copied instructions."
+  },
+  "observedPageSignals": [
+    {
+      "id": "retained-dom-ready",
+      "selector": "body",
+      "attribute": "data-fleury-manual-validation",
+      "expectedValue": "ready",
+      "description": "The manual validation page has presented its first retained DOM frame.",
+      "observedValue": "",
+      "status": "needsReview",
+      "notes": "The manual validation page has presented its first retained DOM frame."
+    },
+    {
+      "id": "ime-caret-positioned",
+      "selector": "textarea",
+      "attribute": "data-fleury-caret-state",
+      "expectedValue": "positioned",
+      "description": "The hidden textarea is positioned at the focused Fleury caret for IME candidate windows.",
+      "observedValue": "",
+      "status": "needsReview",
+      "notes": "The hidden textarea is positioned at the focused Fleury caret for IME candidate windows."
+    }
+  ],
+  "capturedAt": "",
+  "status": "needsReview",
+  "reviewedBy": "",
+  "environment": {
+    "browser": "Chrome",
+    "browserVersion": "",
+    "platform": "macOS",
+    "inputMethod": "Any real composing IME, such as Japanese Romaji",
+    "fleuryWebPage": "manual_validation.html"
+  },
+  "checks": [
+    {
+      "id": "manual-page-loads-dom-host",
+      "status": "needsReview",
+      "notes": "manual_validation.html reaches data-fleury-manual-validation=\"ready\", retained DOM host output is visible, and no xterm element is present."
+    },
+    {
+      "id": "keyboard-capture-focused",
+      "status": "needsReview",
+      "notes": "The hidden textarea keeps browser focus while the Fleury text field is focused."
+    },
+    {
+      "id": "composition-start-update-visible",
+      "status": "needsReview",
+      "notes": "Starting and updating a real IME composition updates the focused Fleury field without committing duplicate text."
+    },
+    {
+      "id": "composition-end-commits-once",
+      "status": "needsReview",
+      "notes": "Ending composition commits the selected text exactly once into the Fleury text field."
+    },
+    {
+      "id": "candidate-window-near-caret",
+      "status": "needsReview",
+      "notes": "The hidden textarea reports data-fleury-caret-state=\"positioned\", and the browser IME candidate window appears near the Fleury caret, not at the page origin."
+    },
+    {
+      "id": "typing-continues-after-composition",
+      "status": "needsReview",
+      "notes": "Normal keyboard input continues after composition without manually refocusing the page."
+    }
+  ],
+  "notes": []
+}

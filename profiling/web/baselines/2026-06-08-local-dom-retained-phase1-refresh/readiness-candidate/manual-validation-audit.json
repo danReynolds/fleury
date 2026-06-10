@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryWebManualValidationAudit",
+  "generatedAt": "2026-06-09T13:35:35.278344Z",
+  "targetCount": 2,
+  "entryCount": 2,
+  "invalidEntryCount": 0,
+  "ignoredFileCount": 3,
+  "ignoredFiles": [
+    {
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/templates/chrome-ime-macos.template.json",
+      "file": "chrome-ime-macos.template.json",
+      "reason": "template file"
+    },
+    {
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/templates/chrome-voiceover-macos.template.json",
+      "file": "chrome-voiceover-macos.template.json",
+      "reason": "template file"
+    },
+    {
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/manual-validation-audit.json",
+      "file": "manual-validation-audit.json",
+      "reason": "generated audit"
+    }
+  ],
+  "passedTargetCount": 0,
+  "missingTargets": [],
+  "failedTargets": [],
+  "blockedTargets": [],
+  "needsReviewTargets": [
+    "chrome-ime-macos",
+    "chrome-voiceover-macos"
+  ],
+  "strictPass": false,
+  "targets": [
+    {
+      "id": "chrome-ime-macos",
+      "label": "Chrome primary-browser IME smoke on macOS",
+      "phase": "Phase 3",
+      "category": "ime",
+      "browser": "Chrome",
+      "platform": "macOS",
+      "inputMethod": "Any real composing IME, such as Japanese Romaji",
+      "status": "needsReview",
+      "strictPass": false,
+      "requiredCheckCount": 6,
+      "passedRequiredCheckCount": 0,
+      "missingCheckIds": [
+        "manual-page-loads-dom-host",
+        "keyboard-capture-focused",
+        "composition-start-update-visible",
+        "composition-end-commits-once",
+        "candidate-window-near-caret",
+        "typing-continues-after-composition"
+      ],
+      "failedCheckIds": [],
+      "blockedCheckIds": [],
+      "provenanceBlockers": [
+        "reviewedBy",
+        "capturedAt",
+        "environment.browserVersion"
+      ],
+      "latestEntryPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/evidence/chrome-ime-macos.review.json",
+      "latestEntryFile": "chrome-ime-macos.review.json",
+      "latestEntryFingerprint": "fnv1a64:b974789710154c43",
+      "latestCapturedAt": "",
+      "reviewedBy": "",
+      "environment": {
+        "browser": "Chrome",
+        "browserVersion": "",
+        "platform": "macOS",
+        "inputMethod": "Any real composing IME, such as Japanese Romaji",
+        "fleuryWebPage": "manual_validation.html"
+      },
+      "notes": []
+    },
+    {
+      "id": "chrome-voiceover-macos",
+      "label": "Chrome VoiceOver screen-reader smoke on macOS",
+      "phase": "Phase 4",
+      "category": "screenReader",
+      "browser": "Chrome",
+      "platform": "macOS",
+      "assistiveTechnology": "VoiceOver",
+      "status": "needsReview",
+      "strictPass": false,
+      "requiredCheckCount": 7,
+      "passedRequiredCheckCount": 0,
+      "missingCheckIds": [
+        "manual-page-ready-semantic-host",
+        "visual-grid-hidden",
+        "semantic-root-exposed",
+        "focused-textbox-announced",
+        "semantic-action-works",
+        "keyboard-capture-restored",
+        "safe-link-announced"
+      ],
+      "failedCheckIds": [],
+      "blockedCheckIds": [],
+      "provenanceBlockers": [
+        "reviewedBy",
+        "capturedAt",
+        "environment.browserVersion"
+      ],
+      "latestEntryPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/evidence/chrome-voiceover-macos.review.json",
+      "latestEntryFile": "chrome-voiceover-macos.review.json",
+      "latestEntryFingerprint": "fnv1a64:412206c456b07902",
+      "latestCapturedAt": "",
+      "reviewedBy": "",
+      "environment": {
+        "browser": "Chrome",
+        "browserVersion": "",
+        "platform": "macOS",
+        "assistiveTechnology": "VoiceOver",
+        "fleuryWebPage": "manual_validation.html"
+      },
+      "notes": []
+    }
+  ]
+}

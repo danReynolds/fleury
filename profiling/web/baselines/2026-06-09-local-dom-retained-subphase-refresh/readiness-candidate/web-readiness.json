@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryWebReadinessAudit",
+  "generatedAt": "2026-06-09T22:05:48.049792Z",
+  "strictPass": true,
+  "checks": [
+    {
+      "id": "frameScoreboard",
+      "label": "Frame performance scoreboard",
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-local-dom-retained-subphase-refresh/readiness-candidate/scoreboard.json",
+      "strictPass": true,
+      "blockers": [],
+      "details": {
+        "scenarioCount": 11,
+        "runCount": 33,
+        "minRuns": 3,
+        "requireComparableRunEnvironment": true,
+        "thresholdPolicyPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-local-dom-retained-subphase-refresh/thresholds.json",
+        "thresholdPolicyReviewState": "reviewed",
+        "thresholdPolicyReviewedBy": "Dan interactive review",
+        "thresholdPolicyReviewedAt": "2026-06-09T22:05:26.089748Z",
+        "thresholdPolicyReviewContext": "Browser Chrome/149.0.7827.102, OS macos OS version Version 26.2 (Build 25C56), Dart 3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\", headless=true, frameBudgetMs=16.67, retained DOM product baseline",
+        "thresholdPolicyFingerprint": "fnv1a64:be9293460482d642",
+        "thresholdPolicyScenarioCount": 11,
+        "thresholdReviewPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-local-dom-retained-subphase-refresh/threshold-review.json"
+      }
+    },
+    {
+      "id": "semanticCoverage",
+      "label": "Semantic coverage audit",
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-local-dom-retained-subphase-refresh/readiness-candidate/semantic-coverage.json",
+      "strictPass": true,
+      "blockers": [],
+      "details": {
+        "scenarioCount": 11,
+        "captureCount": 33,
+        "frameCount": 912,
+        "fallbackCellCount": 0,
+        "fallbackNodeCount": 0
+      }
+    },
+    {
+      "id": "manualValidation",
+      "label": "Manual browser validation",
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-local-dom-retained-subphase-refresh/readiness-candidate/manual-validation-audit.json",
+      "strictPass": true,
+      "blockers": [],
+      "details": {
+        "targetCount": 0,
+        "passedTargetCount": 0,
+        "entryCount": 2,
+        "invalidEntryCount": 0
+      }
+    }
+  ]
+}

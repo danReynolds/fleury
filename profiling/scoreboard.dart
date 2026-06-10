@@ -162,6 +162,10 @@ Map<String, Object?> _scenarioScore(
     'runCount': {
       for (final entry in aggregates.entries) entry.key: entry.value.runCount,
     },
+    'byteSplits': {
+      for (final entry in aggregates.entries)
+        entry.key: entry.value.byteSplit.toJson(),
+    },
     'axes': axisScores,
     'position': _position(axisScores, fleury, expectedPeersSeen),
   };
@@ -305,6 +309,42 @@ String _scoreboardMarkdown(
     );
   }
 
+  buffer
+    ..writeln()
+    ..writeln('## Byte Splits')
+    ..writeln()
+    ..writeln(
+      'Median-total-run split per label: `content/sgr/cursor/sync/other`. '
+      'This is diagnostic only; the axis bands above remain the decision surface.',
+    )
+    ..writeln()
+    ..writeln(
+      '| Priority | Benchmark | Fleury split | Best-by-bytes split | Dominant Fleury overhead |',
+    )
+    ..writeln('| --- | --- | --- | --- | --- |');
+
+  for (final scenario in scenarios) {
+    final axes =
+        (scenario['axes'] as Map<String, Object?>).cast<String, Object?>();
+    final bytesAxis =
+        (axes['bytes'] as Map<String, Object?>?) ?? const <String, Object?>{};
+    final byteSplits = (scenario['byteSplits'] as Map<String, Object?>?)
+            ?.cast<String, Object?>() ??
+        const <String, Object?>{};
+    final benchmark =
+        '[${scenario['name']}]($matrixLink#${scenario['matrixAnchor']})';
+    final fleurySplit = _splitMap(byteSplits['fleury']);
+    final bestLabel = (bytesAxis['bestLabel'] as String?) ??
+        (fleurySplit == null ? null : 'fleury');
+    final bestSplit = _splitMap(byteSplits[bestLabel]);
+    final bestCell =
+        bestLabel == null ? '-' : '$bestLabel<br>${_splitCell(bestSplit)}';
+    buffer.writeln(
+      '| ${scenario['priority']} | $benchmark | ${_splitCell(fleurySplit)} | '
+      '$bestCell | ${_dominantOverheadCell(fleurySplit)} |',
+    );
+  }
+
   void bucket(String title, String positionPrefix) {
     final rows = scenarios
         .where(
@@ -352,6 +392,50 @@ String _axisCell(Object? raw, String Function(double) format) {
       ? ''
       : '<br>best $bestLabel ${format(best)}';
   return '$status<br>${format(fleury)}$comparison';
+}
+
+Map<String, Object?>? _splitMap(Object? raw) {
+  if (raw is! Map) return null;
+  return raw.cast<String, Object?>();
+}
+
+String _splitCell(Map<String, Object?>? split) {
+  if (split == null) return '-';
+  return [
+    _splitPart(split, 'content'),
+    _splitPart(split, 'sgr'),
+    _splitPart(split, 'cursor'),
+    _splitPart(split, 'sync'),
+    _splitPart(split, 'other'),
+  ].join('/');
+}
+
+String _splitPart(Map<String, Object?> split, String key) {
+  final value = (split[key] as num?)?.round();
+  return value == null ? '-' : '$value';
+}
+
+String _dominantOverheadCell(Map<String, Object?>? split) {
+  if (split == null) return '-';
+  final overhead = <String, double>{
+    'sgr': _splitValue(split, 'sgr'),
+    'cursor': _splitValue(split, 'cursor'),
+    'sync': _splitValue(split, 'sync'),
+    'other': _splitValue(split, 'other'),
+  };
+  final largest = overhead.entries.reduce(
+    (a, b) => a.value >= b.value ? a : b,
+  );
+  if (largest.value <= 0) return '-';
+  final other = overhead['other']!;
+  final otherNote = other > 0 && largest.key != 'other'
+      ? '<br>other ${_fmtBytes(other)}'
+      : '';
+  return '${largest.key} ${_fmtBytes(largest.value)}$otherNote';
+}
+
+double _splitValue(Map<String, Object?> split, String key) {
+  return (split[key] as num?)?.toDouble() ?? 0;
 }
 
 List<_CaptureAxes> _loadCaptures(String inputDir) {
@@ -566,6 +650,7 @@ final class _Aggregate {
   _Aggregate({
     required this.runCount,
     required this.bytes,
+    required this.byteSplit,
     required this.bytesPerFrame,
     required this.overheadPercent,
     required this.ttfbMs,
@@ -576,6 +661,7 @@ final class _Aggregate {
 
   final int runCount;
   final double? bytes;
+  final AnsiByteBreakdown byteSplit;
   final double? bytesPerFrame;
   final double? overheadPercent;
   final double? ttfbMs;
@@ -601,6 +687,7 @@ final class _Aggregate {
       runCount: captures.length,
       bytes: _median(
           [for (final capture in captures) capture.bytes.total.toDouble()]),
+      byteSplit: _representativeByteSplit(captures),
       bytesPerFrame: _median([
         for (final capture in captures) capture.bytesPerFrame,
       ]),
@@ -615,4 +702,11 @@ final class _Aggregate {
       fps: _median([for (final capture in captures) capture.fps]),
     );
   }
+}
+
+AnsiByteBreakdown _representativeByteSplit(List<_CaptureAxes> captures) {
+  if (captures.isEmpty) return const AnsiByteBreakdown();
+  final sorted = [...captures]
+    ..sort((a, b) => a.bytes.total.compareTo(b.bytes.total));
+  return sorted[sorted.length ~/ 2].bytes;
 }
