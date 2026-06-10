@@ -193,6 +193,11 @@ final class TuiDirtyRows {
     final clippedStart = _clipRow(startRow, rowCount);
     final clippedEnd = _clipRow(endRow, rowCount);
     if (clippedStart >= clippedEnd) return const TuiDirtyRows.none();
+    // A range covering every row IS full damage; report it as such so
+    // full-damage consumers (scroll detection, coverage) see the truth.
+    if (clippedStart == 0 && clippedEnd == rowCount) {
+      return TuiDirtyRows.full(rowCount);
+    }
     return TuiDirtyRows._(
       isFull: false,
       ranges: List.unmodifiable([TuiDirtyRowRange(clippedStart, clippedEnd)]),

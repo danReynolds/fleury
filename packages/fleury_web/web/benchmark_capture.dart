@@ -151,6 +151,7 @@ void _driveStep({
     case WebBenchmarkScenarioKind.dirtyRow:
     case WebBenchmarkScenarioKind.fullFrameChurn:
     case WebBenchmarkScenarioKind.scrollRowChurn:
+    case WebBenchmarkScenarioKind.scrollKeyed:
     case WebBenchmarkScenarioKind.cursorBlink:
       appState?.advance(step);
   }

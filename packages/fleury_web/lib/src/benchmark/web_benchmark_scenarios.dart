@@ -8,6 +8,7 @@ enum WebBenchmarkScenarioKind {
   dirtyRow,
   fullFrameChurn,
   scrollRowChurn,
+  scrollKeyed,
   cursorBlink,
   textInputBurst,
   resizeBurst,
@@ -122,6 +123,18 @@ const webBenchmarkScenarios = <WebBenchmarkScenario>[
     description: 'Log viewport shifts by one row per frame.',
   ),
   WebBenchmarkScenario(
+    id: 'scroll-keyed-160x50',
+    label: '160x50 keyed scrolling log',
+    kind: WebBenchmarkScenarioKind.scrollKeyed,
+    cols: 160,
+    rows: 50,
+    defaultFrames: 32,
+    description:
+        'Same shifting viewport as scroll-row-churn, written the idiomatic '
+        'way: rows keyed by absolute log index behind per-row repaint '
+        'boundaries, so unchanged lines move instead of rebuilding.',
+  ),
+  WebBenchmarkScenario(
     id: 'cursor-blink-80x24',
     label: '80x24 cursor blink',
     kind: WebBenchmarkScenarioKind.cursorBlink,
@@ -196,6 +209,7 @@ final class DrivenWebBenchmarkScenarioState
       case WebBenchmarkScenarioKind.noOp:
       case WebBenchmarkScenarioKind.fullFrameChurn:
       case WebBenchmarkScenarioKind.scrollRowChurn:
+      case WebBenchmarkScenarioKind.scrollKeyed:
       case WebBenchmarkScenarioKind.cursorBlink:
       case WebBenchmarkScenarioKind.textInputBurst:
       case WebBenchmarkScenarioKind.resizeBurst:
@@ -372,6 +386,7 @@ Widget buildWebBenchmarkScenarioWidget(
     WebBenchmarkScenarioKind.dirtyRow => _dirtyRowGrid(scenario, step),
     WebBenchmarkScenarioKind.fullFrameChurn => _fullFrameGrid(scenario, step),
     WebBenchmarkScenarioKind.scrollRowChurn => _scrollGrid(scenario, step),
+    WebBenchmarkScenarioKind.scrollKeyed => _scrollKeyedGrid(scenario, step),
     WebBenchmarkScenarioKind.cursorBlink => _cursorBlink(
       scenario,
       step,
@@ -465,8 +480,30 @@ Widget _fullFrameGrid(WebBenchmarkScenario scenario, int step) {
 Widget _scrollGrid(WebBenchmarkScenario scenario, int step) {
   return Column(
     children: [
+      // A line's content is keyed by its ABSOLUTE log index only (step 0):
+      // stepping the viewport shows the same lines one row higher, which is
+      // what "Log viewport shifts by one row per frame" means. Content that
+      // also mutates per step is the full-frame-churn scenario's job.
       for (var row = 0; row < scenario.rows; row++)
-        Text(_line(_logLine(row + step, step), scenario.cols)),
+        Text(_line(_logLine(row + step, 0), scenario.cols)),
+    ],
+  );
+}
+
+Widget _scrollKeyedGrid(WebBenchmarkScenario scenario, int step) {
+  return Column(
+    children: [
+      // The idiomatic scrolling log: each visible line is keyed by its
+      // ABSOLUTE log index behind its own repaint boundary. Stepping the
+      // viewport shifts which keys are visible; keyed reconciliation moves
+      // the 49 surviving elements (their widgets compare equal, so no
+      // rebuild) and the boundary caches blit at the new offsets instead of
+      // re-walking paint.
+      for (var row = 0; row < scenario.rows; row++)
+        RepaintBoundary(
+          key: ValueKey(row + step),
+          child: Text(_line(_logLine(row + step, 0), scenario.cols)),
+        ),
     ],
   );
 }

@@ -174,7 +174,8 @@ void main() {
     test('dirty row ranges clip to the viewport', () {
       final rows = TuiDirtyRows.range(-5, 10, rowCount: 3);
 
-      expect(rows.isFull, isFalse);
+      // Clipped to every row: full damage, reported as such.
+      expect(rows.isFull, isTrue);
       expect(rows.ranges.single.startRow, 0);
       expect(rows.ranges.single.endRow, 3);
       expect(rows.dirtyRowCount, 3);

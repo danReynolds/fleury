@@ -14260,3 +14260,63 @@ Verification: analyze clean; core 1613 VM + web 195 VM + 149 Chrome
 tests passing (new: needsRender/visual-change consumption, web skip
 record, planner scroll detection + non-scroll pruning, DOM row-move
 identity).
+
+## 2026-06-10 (frame-path plan, Phase 3b: scroll detection live end-to-end)
+
+Two fixes made the scroll path actually fire on the benchmark:
+
+- **Scenario fidelity**: `scroll-row-churn-160x50` claimed "log viewport
+  shifts by one row per frame" but salted every line's content with the
+  step (`_logLine(row + step, step)`), mutating the whole screen each
+  frame — that is full-frame-churn's job, not a scroll. Lines are now
+  keyed by absolute log index only, so stepping shows the same lines one
+  row higher (what a real log viewport does).
+- **Range semantics**: scroll frames arrive as bounded paint damage
+  covering every row, and `TuiDirtyRows.range` reported `isFull: false`
+  for a range clipped to the entire viewport — so the planner's
+  full-dirty gate never saw them. A range covering every row now upgrades
+  to `TuiDirtyRows.full` (the truth), which also benefits coverage
+  consumers.
+
+With both fixed, detection fires on every steady scroll frame:
+`rowsReplaced = 1` (24/24 frames — 49 rows MOVED, one entering row
+rebuilt), spanBuild median 0.0ms, domApply median 0.1ms.
+
+Remaining scroll cost is now purely core build+paint: a typical steady
+frame is `runtimeRender 27.7ms = build 18.4 + paint 9.3` — 50 Text
+widgets rebuilt with shifted strings plus a full-viewport repaint into
+the cell buffer. The presentation layer is no longer the scroll story;
+the next lever is the plan's build-side item (keyed row reuse so
+unchanged lines' elements move instead of rebuilding, and per-row
+repaint-boundary blits), plus Phase 4 GC work (this capture contained a
+2.5s GC stall outlier).
+
+### Phase 3c: build-side scroll story — measured verdict
+
+Added `scroll-keyed-160x50`: the same shifting viewport written the
+"idiomatic recycling" way (rows keyed by absolute log index behind
+per-row repaint boundaries) to measure whether widget-level reuse beats
+positional rebuild. It does not — it is roughly 2x worse:
+
+- keyed:  p50 28.2ms, p95 215.7ms, build med 10.65, layout med 2.85
+- naive:  p50 13.9ms, p95 76.0ms,  build med  7.35, layout med 0.00
+
+Keyed reconciliation's per-frame key maps + element moves + 50 per-row
+boundary caches cost more (and allocate far more — the p95 gap is GC)
+than positionally updating 50 Text render objects. With presentation-layer
+scroll reuse live (rowsReplaced=1 on both variants), the NAIVE pattern is
+the fast path: scroll p50 is now ~14ms — at the budget — and its p95 is
+tail/GC-dominated (Phase 4).
+
+Verdict recorded for the framework: scrolling content should NOT be
+hand-recycled with keys/boundaries; positional updates plus the shared
+scroll detection at the presentation layer are the design. The keyed
+scenario stays in the suite as a keyed-reconciliation cost canary.
+
+Phase 3 wrap: noop skip (P-4 met), scroll presentation reuse (both
+targets, one detector), range-truth fix, scenario fidelity fixes. Span
+patching is dropped from the plan: with rowsReplaced at 1-2 and domApply
+medians at 0.1-0.3ms suite-wide, there is nothing left for it to win.
+Documented adversarial budgets move to the Phase 4 re-baseline (the
+remaining heavy-tier p95s are GC-dominated; budgets set before the
+allocation work would be loose and immediately stale).
