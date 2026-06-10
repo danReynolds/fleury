@@ -697,8 +697,8 @@ void main() {
 
       expect(instrumentation.frames, hasLength(1));
       final frame = instrumentation.frames.single;
-      expect(frame.reason, 'initial+build');
-      expect(frame.coalescedReasons, ['initial', 'build']);
+      expect(frame.reason, 'initial');
+      expect(frame.coalescedReasons, ['initial']);
       expect(frame.viewportSize, const CellSize(16, 2));
       expect(frame.fullRepaint, isTrue);
       expect(frame.metricsChanged, isFalse);
