@@ -1,4 +1,6 @@
 import '../rendering/cell_buffer.dart';
+import '../rendering/render_object.dart';
+import '../semantics/semantics.dart';
 import '../widgets/focus.dart';
 import '../widgets/framework.dart';
 import '../widgets/pointer.dart';
@@ -33,6 +35,18 @@ final class TuiRuntime {
 
   /// Pointer hit-test registry for the current frame.
   final PointerRouter pointerRouter;
+
+  /// This runtime's frame damage signal (owned by [owner], attached at the
+  /// root render object each frame). Hosts hand it to their [TuiFrameLoop]
+  /// so presenter diff-bounds decisions consume this runtime's damage only.
+  RenderDamageTracker get renderDamageTracker => owner.renderDamageTracker;
+
+  /// This runtime's semantic dirty tracker (owned per [BuildOwner]).
+  ///
+  /// Marks accumulate across frames until [SemanticDirtyTracker
+  /// .takeDirtySnapshot] consumes them, so a deferred semantic presenter can
+  /// coalesce multiple frames into one flush.
+  SemanticDirtyTracker get semanticDirtyTracker => owner.semanticDirtyTracker;
 
   Element? _rootElement;
   var _disposed = false;

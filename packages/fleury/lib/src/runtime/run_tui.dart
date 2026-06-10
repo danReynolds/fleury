@@ -22,7 +22,6 @@ import '../rendering/ansi_renderer.dart';
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/render_layout_stats.dart';
-import '../rendering/render_object.dart';
 import '../rendering/render_repaint_boundary.dart';
 import '../semantics/semantics.dart';
 import '../terminal/diagnostics.dart';
@@ -154,9 +153,6 @@ Future<void> runTui(
     );
   }
 
-  RenderDamageTracker.reset();
-  SemanticDirtyTracker.reset();
-
   final runtime = TuiRuntime();
   final owner = runtime.owner;
   final focusManager = runtime.focusManager;
@@ -195,7 +191,7 @@ Future<void> runTui(
 
   // Shared double-buffer and damage lifecycle. The host still owns
   // presentation, debug timings, input, and post-frame behavior.
-  final frameLoop = TuiFrameLoop();
+  final frameLoop = TuiFrameLoop(renderDamage: runtime.renderDamageTracker);
   var frameCounter = 0;
   // Cells we tinted green in the previous frame's paint-flash pass.
   // Empty when paint-flash is off; populated each frame the flash is

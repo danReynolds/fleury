@@ -979,6 +979,15 @@ final class BuildFlushStats {
 /// Drives the build pipeline. Holds the set of dirty elements and flushes
 /// them in shallow-first order.
 class BuildOwner {
+  /// Per-runtime frame damage signal for this owner's render tree.
+  ///
+  /// [renderFrame] attaches it at the root render object, where layout and
+  /// conservative-paint invalidation walks publish. Owning it here (rather
+  /// than as global static state) keeps two Fleury runtimes in one isolate
+  /// fully isolated and lets deferred consumers accumulate damage across
+  /// frames until they take it.
+  final RenderDamageTracker renderDamageTracker = RenderDamageTracker();
+
   final Set<Element> _dirtyElements = <Element>{};
 
   /// Roots of subtrees detached this build pass (via [Element._deactivateChild])
@@ -1191,6 +1200,12 @@ class BuildOwner {
         'BuildOwner.renderFrame: root element ${root.widget.runtimeType} '
         'produced no render object.',
       );
+    }
+    if (rootRender.attachFrameDamageTracker(renderDamageTracker)) {
+      // A root this owner has not driven before: invalidations recorded while
+      // its subtree was built detached never reached the tracker, so start
+      // the frame with conservative damage.
+      renderDamageTracker.recordLayoutOrConservativePaint();
     }
     // Loose constraints at root: the root widget chooses its own size up
     // to the buffer's dimensions. Anything it doesn't claim stays empty.

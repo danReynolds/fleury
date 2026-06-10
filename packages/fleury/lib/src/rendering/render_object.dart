@@ -14,22 +14,26 @@ import 'render_layout_stats.dart';
 /// buffer. Layout-affecting mutations cannot: cells may disappear or move
 /// without being rewritten, so the presenter must fall back to full-buffer
 /// diffing for that frame.
+///
+/// One instance is owned per [BuildOwner]/runtime: render objects publish
+/// into the tracker attached at their tree's root, so two Fleury runtimes in
+/// one isolate never observe each other's damage. The signal accumulates
+/// across frames until [takeRequiresFullDiff] consumes it, so deferred
+/// consumers can coalesce several invalidations into one read.
 final class RenderDamageTracker {
-  RenderDamageTracker._();
+  bool _requiresFullDiff = false;
 
-  static bool _requiresFullDiff = false;
-
-  static void recordLayoutOrConservativePaint() {
+  void recordLayoutOrConservativePaint() {
     _requiresFullDiff = true;
   }
 
-  static bool takeRequiresFullDiff() {
+  bool takeRequiresFullDiff() {
     final result = _requiresFullDiff;
     _requiresFullDiff = false;
     return result;
   }
 
-  static void reset() {
+  void reset() {
     _requiresFullDiff = false;
   }
 }
@@ -179,20 +183,55 @@ abstract class RenderObject {
   /// true in subclasses that implement the cache discipline.
   bool get isRepaintBoundary => false;
 
+  /// The frame damage tracker for this render tree, held at the root.
+  ///
+  /// Set by the frame driver (via [attachFrameDamageTracker]) on the root
+  /// render object only. Invalidation walks ([_markNeedsLayoutUp]) terminate
+  /// at the root and publish there, so per-object storage stays nil and two
+  /// runtimes in one isolate never share damage state.
+  RenderDamageTracker? _frameDamage;
+
+  /// Attaches the per-runtime damage tracker at this (root) render object.
+  ///
+  /// Returns true when the tracker was not already attached — a fresh root —
+  /// so callers can record conservative damage for invalidations that may
+  /// have happened while the subtree was being built detached.
+  bool attachFrameDamageTracker(RenderDamageTracker tracker) {
+    final isNew = !identical(_frameDamage, tracker);
+    _frameDamage = tracker;
+    return isNew;
+  }
+
+  /// The damage tracker attached at this tree's root, if any.
+  RenderDamageTracker? get _rootFrameDamage {
+    RenderObject node = this;
+    while (true) {
+      final parent = node._parent;
+      if (parent == null) return node._frameDamage;
+      node = parent;
+    }
+  }
+
   /// Marks this render object and its ancestors as needing layout, and marks
   /// the nearest enclosing repaint boundary as dirty. Use this for changes
   /// that can affect size, child constraints, child offsets, or layout-derived
   /// paint state.
   void markNeedsLayout() {
     DebugInvalidations.recordLayout(runtimeType.toString());
-    RenderDamageTracker.recordLayoutOrConservativePaint();
     _markNeedsLayoutUp();
     _markNearestRepaintBoundaryDirty();
   }
 
   void _markNeedsLayoutUp() {
     _needsLayout = true;
-    _parent?._markNeedsLayoutUp();
+    final parent = _parent;
+    if (parent == null) {
+      // Terminal node of the invalidation walk: publish frame damage at the
+      // root so the presenter falls back to a full diff this frame.
+      _frameDamage?.recordLayoutOrConservativePaint();
+      return;
+    }
+    parent._markNeedsLayoutUp();
   }
 
   /// Marks this render object as visually stale and conservatively marks
@@ -204,7 +243,6 @@ abstract class RenderObject {
   /// after verifying that the value cannot affect layout.
   void markNeedsPaint() {
     DebugInvalidations.recordPaint(runtimeType.toString());
-    RenderDamageTracker.recordLayoutOrConservativePaint();
     _markNeedsLayoutUp();
     _markNearestRepaintBoundaryDirty();
   }
@@ -333,7 +371,7 @@ abstract class RenderObject {
     _needsLayout = false;
     RenderLayoutDebugStats.recordPerformed();
     if (previousSize != null && previousSize != result) {
-      RenderDamageTracker.recordLayoutOrConservativePaint();
+      _rootFrameDamage?.recordLayoutOrConservativePaint();
       _markNearestRepaintBoundaryDirty();
     }
     return result;

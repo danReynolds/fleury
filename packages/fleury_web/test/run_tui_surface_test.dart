@@ -895,6 +895,60 @@ void main() {
   );
 
   test(
+    'two hosts on one page have isolated frame and semantic state',
+    () async {
+      final rootA = web.document.createElement('div');
+      final rootB = web.document.createElement('div');
+      final semanticRootA = web.document.createElement('div');
+      final semanticRootB = web.document.createElement('div');
+      final surfaceA = DomGridSurface(root: rootA, size: const CellSize(24, 2));
+      final surfaceB = DomGridSurface(root: rootB, size: const CellSize(24, 2));
+      final semanticsA = SemanticDomPresenter(root: semanticRootA);
+      final semanticsB = SemanticDomPresenter(root: semanticRootB);
+      final instrumentationB = RecordingWebHostInstrumentation();
+      final flushA = _FakeFlush();
+      final flushB = _FakeFlush();
+      final keyA = GlobalKey<_CounterState>();
+
+      final hostA = await runTuiSurface(
+        () => _Counter(key: keyA),
+        surface: surfaceA,
+        semanticPresenter: semanticsA,
+        flushScheduler: flushA.schedule,
+      );
+      final hostB = await runTuiSurface(
+        () => const Text('steady'),
+        surface: surfaceB,
+        semanticPresenter: semanticsB,
+        instrumentation: instrumentationB,
+        flushScheduler: flushB.schedule,
+      );
+
+      flushA.fire();
+      flushB.fire();
+
+      // Drive host A only. With shared static trackers, A's dirt would have
+      // been consumed (or corrupted) by whichever host's frame ran first.
+      keyA.currentState!.increment();
+      flushA.fire();
+      expect(semanticRootA.textContent, contains('count 1'));
+
+      // Host B re-renders after A's update: its retained semantic output must
+      // be untouched (no spurious updates from A's dirty state).
+      hostB.requestFrame('noop');
+      flushB.fire();
+      final retained = instrumentationB.frames.last;
+      expect(retained.semanticAddedNodeCount, 0);
+      expect(retained.semanticRemovedNodeCount, 0);
+      expect(retained.semanticUpdatedNodeCount, 0);
+      expect(semanticRootB.textContent, contains('steady'));
+
+      await hostA.dispose();
+      await hostB.dispose();
+    },
+  );
+
+  test(
     'semantic DOM activation is queued and dispatched during a frame',
     () async {
       var calls = 0;

@@ -8,11 +8,10 @@ void main() {
   const size = CellSize(6, 3);
   const planner = FramePresentationPlanner();
 
-  setUp(RenderDamageTracker.reset);
-
   group('FramePresentationPlanner', () {
     test('first frame is a full repaint with all row models', () {
-      final loop = TuiFrameLoop();
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
       final frame = loop.render(
         size: size,
         paint: (buffer) => buffer.writeText(const CellOffset(0, 1), 'hello'),
@@ -31,7 +30,8 @@ void main() {
     });
 
     test('bounded paint damage builds only affected row models', () {
-      final loop = TuiFrameLoop();
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
       final first = loop.render(
         size: size,
         paint: (buffer) => buffer.writeText(const CellOffset(0, 1), 'hello'),
@@ -57,7 +57,8 @@ void main() {
     });
 
     test('conservative damage uses buffer diff to select changed rows', () {
-      final loop = TuiFrameLoop();
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
       final first = loop.render(
         size: size,
         paint: (buffer) {
@@ -77,7 +78,7 @@ void main() {
             rows: const [0, 2],
           );
           buffer.writeText(const CellOffset(0, 1), 'hullo');
-          RenderDamageTracker.recordLayoutOrConservativePaint();
+          damage.recordLayoutOrConservativePaint();
         },
       )!;
 
@@ -92,7 +93,8 @@ void main() {
     });
 
     test('missing paint damage with unchanged buffers presents no rows', () {
-      final loop = TuiFrameLoop();
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
       final first = loop.render(size: size, paint: (_) {})!;
       loop.commit(first);
 
@@ -107,7 +109,8 @@ void main() {
     });
 
     test('missing paint damage falls back to row diff oracle', () {
-      final loop = TuiFrameLoop();
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
       final first = loop.render(
         size: size,
         paint: (buffer) {
@@ -143,7 +146,8 @@ void main() {
     });
 
     test('metricsChanged is carried into the plan', () {
-      final loop = TuiFrameLoop();
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
       final frame = loop.render(size: size, paint: (_) {})!;
 
       final plan = planner.build(
@@ -169,7 +173,8 @@ void main() {
 
   group('FrameSurface', () {
     test('fake surface can consume a presentation plan', () {
-      final loop = TuiFrameLoop();
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
       final frame = loop.render(
         size: size,
         paint: (buffer) => buffer.writeText(const CellOffset(0, 0), 'ok'),

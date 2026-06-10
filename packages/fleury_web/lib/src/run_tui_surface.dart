@@ -113,8 +113,6 @@ Future<TuiSurfaceHost> runTuiSurface(
   WebFocusCoordinator? focusCoordinator,
   FutureOr<void> Function()? disposeHostResources,
 }) async {
-  RenderDamageTracker.reset();
-  SemanticDirtyTracker.reset();
   Clipboard? previousClipboard;
   if (clipboard != null) {
     previousClipboard = _tryReadClipboardInstance();
@@ -132,7 +130,7 @@ Future<TuiSurfaceHost> runTuiSurface(
   final semanticsOwner = semanticPresenter == null ? null : SemanticsOwner();
   final pendingInput = <TuiEvent>[];
   final pendingSemanticActions = <_PendingSemanticAction>[];
-  final frameLoop = TuiFrameLoop();
+  final frameLoop = TuiFrameLoop(renderDamage: runtime.renderDamageTracker);
   Element.errorBuilder ??= (error, stack) => ErrorWidget.builder(error, stack);
 
   Element? root;
@@ -300,7 +298,8 @@ Future<TuiSurfaceHost> runTuiSurface(
     );
     runtimeRenderStopwatch.stop();
     if (frame == null) return;
-    final semanticDirtySnapshot = SemanticDirtyTracker.takeDirtySnapshot();
+    final semanticDirtySnapshot = runtime.semanticDirtyTracker
+        .takeDirtySnapshot();
     final plan = planner.build(
       reason: reason,
       frame: frame,

@@ -120,7 +120,7 @@ final class _DomDemoAppState extends State<_DomDemoApp> {
               onSubmit: _submit,
             ),
             ListenableBuilder(
-              animation: _controller,
+              listenable: _controller,
               builder: (context, child) {
                 final text = _controller.text;
                 return Text(

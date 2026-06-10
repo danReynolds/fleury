@@ -922,18 +922,16 @@ abstract interface class SemanticActionContributor {
 /// child-inclusive semantics, moves, mounts, unmounts, or stale elements force
 /// hosts back to [SemanticTree.fromElement].
 final class SemanticDirtyTracker {
-  SemanticDirtyTracker._();
-
-  static bool _requiresFullRebuild = false;
-  static final Map<SemanticNodeId, SemanticsElement> _dirtyLeafElements =
+  bool _requiresFullRebuild = false;
+  final Map<SemanticNodeId, SemanticsElement> _dirtyLeafElements =
       <SemanticNodeId, SemanticsElement>{};
 
-  static void recordStructureDirty() {
+  void recordStructureDirty() {
     _requiresFullRebuild = true;
     _dirtyLeafElements.clear();
   }
 
-  static void recordLeafDirty(SemanticsElement element) {
+  void recordLeafDirty(SemanticsElement element) {
     if (_requiresFullRebuild) return;
     if (!element._canBuildRetainedLeaf) {
       recordStructureDirty();
@@ -942,7 +940,7 @@ final class SemanticDirtyTracker {
     _dirtyLeafElements[element._nodeId] = element;
   }
 
-  static SemanticDirtySnapshot takeDirtySnapshot() {
+  SemanticDirtySnapshot takeDirtySnapshot() {
     if (_requiresFullRebuild) {
       _requiresFullRebuild = false;
       _dirtyLeafElements.clear();
@@ -969,10 +967,27 @@ final class SemanticDirtyTracker {
     return SemanticDirtySnapshot.leafUpdates(leafUpdates);
   }
 
-  static void reset() {
+  void reset() {
     _requiresFullRebuild = false;
     _dirtyLeafElements.clear();
   }
+}
+
+final Expando<SemanticDirtyTracker> _semanticDirtyTrackers =
+    Expando<SemanticDirtyTracker>('fleury.BuildOwner.semanticDirtyTracker');
+
+/// Per-[BuildOwner] semantic dirty tracking.
+///
+/// [SemanticsElement]s record into their owner's tracker, so two Fleury
+/// runtimes in one isolate never observe each other's semantic dirt. The
+/// tracker accumulates marks across frames until [SemanticDirtyTracker
+/// .takeDirtySnapshot] consumes them, which lets deferred semantic
+/// presentation coalesce several frames into one flush. Attached lazily via
+/// an [Expando] (the same per-instance idiom [SemanticTree]'s caches use) so
+/// the widgets layer takes no dependency on semantics.
+extension SemanticDirtyOwner on BuildOwner {
+  SemanticDirtyTracker get semanticDirtyTracker =>
+      _semanticDirtyTrackers[this] ??= SemanticDirtyTracker();
 }
 
 /// Semantic dirty state captured for one rendered frame.
@@ -1073,7 +1088,7 @@ final class SemanticsElement extends ComponentElement
   @override
   void mount(Element? parent) {
     super.mount(parent);
-    SemanticDirtyTracker.recordStructureDirty();
+    owner.semanticDirtyTracker.recordStructureDirty();
   }
 
   @override
@@ -1082,28 +1097,28 @@ final class SemanticsElement extends ComponentElement
     final oldIncludeChildren = widget.includeChildren;
     super.update(newWidget);
     if (oldId != _nodeId || oldIncludeChildren || newWidget.includeChildren) {
-      SemanticDirtyTracker.recordStructureDirty();
+      owner.semanticDirtyTracker.recordStructureDirty();
     } else {
-      SemanticDirtyTracker.recordLeafDirty(this);
+      owner.semanticDirtyTracker.recordLeafDirty(this);
     }
     rebuild(force: true);
   }
 
   @override
   void deactivate() {
-    SemanticDirtyTracker.recordStructureDirty();
+    owner.semanticDirtyTracker.recordStructureDirty();
     super.deactivate();
   }
 
   @override
   void activate() {
     super.activate();
-    SemanticDirtyTracker.recordStructureDirty();
+    owner.semanticDirtyTracker.recordStructureDirty();
   }
 
   @override
   void unmount() {
-    SemanticDirtyTracker.recordStructureDirty();
+    owner.semanticDirtyTracker.recordStructureDirty();
     super.unmount();
   }
 
@@ -1133,9 +1148,9 @@ final class SemanticsElement extends ComponentElement
     _bounds = bounds;
     _cachedSemanticNode = null;
     if (_canBuildRetainedLeaf) {
-      SemanticDirtyTracker.recordLeafDirty(this);
+      owner.semanticDirtyTracker.recordLeafDirty(this);
     } else {
-      SemanticDirtyTracker.recordStructureDirty();
+      owner.semanticDirtyTracker.recordStructureDirty();
     }
   }
 

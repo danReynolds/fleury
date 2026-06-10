@@ -171,7 +171,7 @@ void main() {
   testWidgets('leaf semantic updates are captured as retained dirty nodes', (
     tester,
   ) {
-    SemanticDirtyTracker.reset();
+    tester.owner.semanticDirtyTracker.reset();
     tester.pumpWidget(
       const Semantics(
         id: SemanticNodeId('message'),
@@ -184,10 +184,10 @@ void main() {
     tester.render(size: const CellSize(20, 4));
 
     expect(
-      SemanticDirtyTracker.takeDirtySnapshot().requiresFullRebuild,
+      tester.owner.semanticDirtyTracker.takeDirtySnapshot().requiresFullRebuild,
       isTrue,
     );
-    SemanticDirtyTracker.reset();
+    tester.owner.semanticDirtyTracker.reset();
 
     tester.pumpWidget(
       const Semantics(
@@ -200,8 +200,8 @@ void main() {
     );
     tester.render(size: const CellSize(20, 4));
 
-    final SemanticDirtySnapshot snapshot =
-        SemanticDirtyTracker.takeDirtySnapshot();
+    final SemanticDirtySnapshot snapshot = tester.owner.semanticDirtyTracker
+        .takeDirtySnapshot();
     expect(snapshot.requiresFullRebuild, isFalse);
     expect(snapshot.leafUpdates.keys, {const SemanticNodeId('message')});
     final node = snapshot.leafUpdates[const SemanticNodeId('message')]!;
@@ -234,7 +234,7 @@ void main() {
       ),
     );
     tester.render(size: const CellSize(20, 6));
-    SemanticDirtyTracker.reset();
+    tester.owner.semanticDirtyTracker.reset();
 
     tester.pumpWidget(
       const Column(
@@ -266,7 +266,7 @@ void main() {
     tester.render(size: const CellSize(20, 6));
 
     expect(
-      SemanticDirtyTracker.takeDirtySnapshot().requiresFullRebuild,
+      tester.owner.semanticDirtyTracker.takeDirtySnapshot().requiresFullRebuild,
       isTrue,
     );
   });
@@ -293,7 +293,7 @@ void main() {
       ),
     );
     tester.render(size: const CellSize(20, 6));
-    SemanticDirtyTracker.reset();
+    tester.owner.semanticDirtyTracker.reset();
 
     tester.pumpWidget(
       const Column(
@@ -311,7 +311,7 @@ void main() {
     tester.render(size: const CellSize(20, 6));
 
     expect(
-      SemanticDirtyTracker.takeDirtySnapshot().requiresFullRebuild,
+      tester.owner.semanticDirtyTracker.takeDirtySnapshot().requiresFullRebuild,
       isTrue,
     );
   });
@@ -327,7 +327,7 @@ void main() {
       ),
     );
     tester.render(size: const CellSize(20, 4));
-    SemanticDirtyTracker.reset();
+    tester.owner.semanticDirtyTracker.reset();
 
     tester.pumpWidget(
       const Semantics(
@@ -341,7 +341,7 @@ void main() {
     tester.render(size: const CellSize(20, 4));
 
     expect(
-      SemanticDirtyTracker.takeDirtySnapshot().requiresFullRebuild,
+      tester.owner.semanticDirtyTracker.takeDirtySnapshot().requiresFullRebuild,
       isTrue,
     );
   });
@@ -358,7 +358,7 @@ void main() {
         ),
       );
       tester.render(size: const CellSize(20, 4));
-      SemanticDirtyTracker.reset();
+      tester.owner.semanticDirtyTracker.reset();
 
       tester.pumpWidget(
         const Semantics(
@@ -371,7 +371,9 @@ void main() {
       tester.render(size: const CellSize(20, 4));
 
       expect(
-        SemanticDirtyTracker.takeDirtySnapshot().requiresFullRebuild,
+        tester.owner.semanticDirtyTracker
+            .takeDirtySnapshot()
+            .requiresFullRebuild,
         isTrue,
       );
     },
@@ -393,7 +395,7 @@ void main() {
       ),
     );
     tester.render(size: const CellSize(20, 4));
-    SemanticDirtyTracker.reset();
+    tester.owner.semanticDirtyTracker.reset();
 
     tester.pumpWidget(
       const Padding(
@@ -409,8 +411,8 @@ void main() {
     );
     tester.render(size: const CellSize(20, 4));
 
-    final SemanticDirtySnapshot snapshot =
-        SemanticDirtyTracker.takeDirtySnapshot();
+    final SemanticDirtySnapshot snapshot = tester.owner.semanticDirtyTracker
+        .takeDirtySnapshot();
     expect(snapshot.requiresFullRebuild, isFalse);
     expect(snapshot.leafUpdates.keys, {const SemanticNodeId('message')});
     expect(
@@ -441,7 +443,7 @@ void main() {
       ),
     );
     tester.render(size: const CellSize(20, 6));
-    SemanticDirtyTracker.reset();
+    tester.owner.semanticDirtyTracker.reset();
 
     tester.pumpWidget(
       const Column(
@@ -465,8 +467,8 @@ void main() {
     );
     tester.render(size: const CellSize(20, 6));
 
-    final SemanticDirtySnapshot snapshot =
-        SemanticDirtyTracker.takeDirtySnapshot();
+    final SemanticDirtySnapshot snapshot = tester.owner.semanticDirtyTracker
+        .takeDirtySnapshot();
     expect(snapshot.requiresFullRebuild, isFalse);
     expect(snapshot.leafUpdates.keys, {
       const SemanticNodeId('a'),
@@ -474,6 +476,55 @@ void main() {
     });
     expect(snapshot.leafUpdates[const SemanticNodeId('a')]!.label, 'A2');
     expect(snapshot.leafUpdates[const SemanticNodeId('b')]!.label, 'B2');
+  });
+
+  testWidgets('semantic dirty tracking is isolated per runtime', (tester) {
+    // A second, independent tester: its dirty state must not observe this
+    // tester's semantic updates. With the old static tracker these two
+    // runtimes shared one dirty map.
+    final other = FleuryTester();
+    addTearDown(other.dispose);
+    other.pumpWidget(
+      const Semantics(
+        id: SemanticNodeId('other'),
+        role: SemanticRole.status,
+        label: 'Quiet',
+        includeChildren: false,
+        child: SizedBox.fromSize(cols: 4, rows: 1),
+      ),
+    );
+    other.render(size: const CellSize(20, 4));
+    other.owner.semanticDirtyTracker.reset();
+
+    tester.pumpWidget(
+      const Semantics(
+        id: SemanticNodeId('message'),
+        role: SemanticRole.status,
+        label: 'Before',
+        includeChildren: false,
+        child: SizedBox.fromSize(cols: 6, rows: 1),
+      ),
+    );
+    tester.render(size: const CellSize(20, 4));
+    tester.owner.semanticDirtyTracker.reset();
+
+    tester.pumpWidget(
+      const Semantics(
+        id: SemanticNodeId('message'),
+        role: SemanticRole.status,
+        label: 'After',
+        includeChildren: false,
+        child: SizedBox.fromSize(cols: 6, rows: 1),
+      ),
+    );
+    tester.render(size: const CellSize(20, 4));
+
+    final otherSnapshot = other.owner.semanticDirtyTracker.takeDirtySnapshot();
+    expect(otherSnapshot.isClean, isTrue);
+
+    final snapshot = tester.owner.semanticDirtyTracker.takeDirtySnapshot();
+    expect(snapshot.requiresFullRebuild, isFalse);
+    expect(snapshot.leafUpdates.keys, {const SemanticNodeId('message')});
   });
 
   testWidgets('IndexedStack contributes only visible child semantics', (

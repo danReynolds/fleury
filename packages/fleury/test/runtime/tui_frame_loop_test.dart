@@ -4,11 +4,10 @@ import 'package:test/test.dart';
 void main() {
   const size = CellSize(5, 2);
 
-  setUp(RenderDamageTracker.reset);
-
   group('TuiFrameLoop', () {
     test('first frame allocates buffers and requires a full repaint', () {
-      final loop = TuiFrameLoop();
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
 
       final frame = loop.render(
         size: size,
@@ -31,7 +30,8 @@ void main() {
     });
 
     test('commit makes the rendered buffer the next previous frame', () {
-      final loop = TuiFrameLoop();
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
       final first = loop.render(
         size: size,
         paint: (buffer) => buffer.writeText(const CellOffset(1, 0), 'a'),
@@ -56,7 +56,8 @@ void main() {
     });
 
     test('resetBuffers forces the next frame to be presented as full', () {
-      final loop = TuiFrameLoop();
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
       final first = loop.render(
         size: size,
         paint: (buffer) => buffer.writeText(const CellOffset(1, 0), 'a'),
@@ -75,7 +76,8 @@ void main() {
     });
 
     test('markFullRepaint preserves buffers but disables one bounded diff', () {
-      final loop = TuiFrameLoop();
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
       final first = loop.render(
         size: size,
         paint: (buffer) => buffer.writeText(const CellOffset(1, 0), 'a'),
@@ -103,7 +105,8 @@ void main() {
     });
 
     test('conservative layout damage disables bounded diffs for the frame', () {
-      final loop = TuiFrameLoop();
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
       final first = loop.render(
         size: size,
         paint: (buffer) => buffer.writeText(const CellOffset(1, 0), 'a'),
@@ -114,7 +117,7 @@ void main() {
         size: size,
         paint: (buffer) {
           buffer.writeText(const CellOffset(1, 0), 'b');
-          RenderDamageTracker.recordLayoutOrConservativePaint();
+          damage.recordLayoutOrConservativePaint();
         },
       )!;
 
@@ -126,7 +129,8 @@ void main() {
     });
 
     test('empty sizes do not invoke paint', () {
-      final loop = TuiFrameLoop();
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
       var painted = false;
 
       final frame = loop.render(

@@ -31,6 +31,7 @@ export 'src/semantics/semantics.dart'
         SemanticActionInvocationResult,
         SemanticActionInvocationStatus,
         SemanticContributor,
+        SemanticDirtyOwner,
         SemanticDirtySnapshot,
         SemanticDirtyTracker,
         SemanticsElement,

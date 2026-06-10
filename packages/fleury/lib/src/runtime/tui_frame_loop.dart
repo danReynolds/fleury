@@ -19,6 +19,16 @@ typedef TuiFramePaintCallback = void Function(CellBuffer buffer);
 /// 5. expose the previous/next buffers to the presenter;
 /// 6. swap buffers only after the presenter has consumed the frame.
 final class TuiFrameLoop {
+  /// [renderDamage] should be the runtime's tracker
+  /// (`TuiRuntime.renderDamageTracker`) so layout/conservative-paint
+  /// invalidation from that runtime's render tree reaches this loop's frame
+  /// damage. A loop constructed without one sees no layout-damage signal and
+  /// conservatively treats every frame as requiring a full diff.
+  TuiFrameLoop({RenderDamageTracker? renderDamage})
+    : _renderDamage = renderDamage;
+
+  final RenderDamageTracker? _renderDamage;
+
   CellBuffer? _frontBuffer;
   CellBuffer? _backBuffer;
   var _requireFullRepaint = true;
@@ -64,7 +74,7 @@ final class TuiFrameLoop {
 
     final damage = TuiFrameDamage(
       fullRepaint: _requireFullRepaint,
-      requiresFullDiff: RenderDamageTracker.takeRequiresFullDiff(),
+      requiresFullDiff: _renderDamage?.takeRequiresFullDiff() ?? true,
       paintDamageBounds: next.takeDamageBounds(),
     );
     _requireFullRepaint = false;

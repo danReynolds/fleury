@@ -14050,3 +14050,87 @@ bundle + preflights. Suggested review-note framing: regression floor for
 the measured environment only, not production acceptance; strict 16.67ms
 steady budget remains the tracked optimization target with per-frame
 build-stat attribution.
+
+## 2026-06-10 (frame-path plan, Phases 0-1)
+
+Executing `docs/implementation/web-industry-leading-plan.md`.
+
+### Phase 0 — merge + native parity baseline (complete)
+
+- Merged main (storybook/DX commit `772af70`, benchmark diagnostics
+  `78155a1`) into the web branch and fast-forwarded main to `e30aebf`.
+  Notable resolutions: main's renderer rewrite (screen-diff stats,
+  `appendCell`, C0 cursor moves, plain-gap write-through) kept as the base
+  with the branch's `dirtyBounds` bounded diffing ported onto it; bounded
+  path skips whole-screen stats and scroll-detection passes. The branch's
+  broader same-style gap write-through was dropped in favor of main's
+  plain-only tactic (main has the opposing styled-gap test); revisit only
+  with byte-budget evidence.
+- Post-merge verification: core 1610 VM tests, web 193 VM + 142 Chrome —
+  all passing after one stale expectation fix (mount no longer coalesces a
+  redundant build-reason frame into the initial frame).
+- Native parity baseline (P-7 reference) recorded at the merge point:
+  `profiling/caps/2026-06-10-native-parity-phase0/SB.*.json`
+  (11 scenarios, 3 iterations each). SB.10 (demo-app journey) is EXCLUDED:
+  it fails with "Expected exactly one semantic node, found 0" at
+  `scenario_benchmarks.dart:450`, and the failure reproduces at `772af70`
+  before the web merge — pre-existing demo-app drift from the storybook
+  refactor, flagged for a separate fix (note `_invoke` ignores failed
+  command invocations, so the journey breaks silently).
+
+### Phase 1 — per-runtime frame-state trackers (implementation complete)
+
+`RenderDamageTracker` and `SemanticDirtyTracker` are no longer static
+globals:
+
+- `RenderDamageTracker` is instance-owned by `BuildOwner`
+  (`renderDamageTracker`) and attached at the root render object by
+  `BuildOwner.renderFrame`. Layout/conservative-paint invalidation walks
+  (`_markNeedsLayoutUp`) publish at their terminal (root) node, so
+  per-object storage stays nil. A root the owner has not driven before
+  starts with conservative damage (detached-subtree invalidations cannot
+  have reached the tracker).
+- `TuiFrameLoop` takes the runtime's tracker
+  (`TuiFrameLoop(renderDamage: runtime.renderDamageTracker)`); without one
+  it conservatively treats every frame as requiring a full diff.
+- `SemanticDirtyTracker` is per-`BuildOwner` via an `Expando` extension
+  (`owner.semanticDirtyTracker`, exported as `SemanticDirtyOwner`) — the
+  same per-instance idiom the `SemanticTree` caches use, so the widgets
+  layer takes no semantics dependency. `SemanticsElement` records into its
+  owner's tracker.
+- Hosts no longer call static `reset()`s — a fresh runtime IS fresh
+  tracker state. `TuiRuntime` exposes both trackers.
+- Both trackers now accumulate across frames until taken — the
+  cross-frame coalescing contract Phase 2 (deferred semantics) needs.
+
+Isolation proven (the A-2 gate):
+
+- Core: `semantic dirty tracking is isolated per runtime` — two
+  `FleuryTester` runtimes; leaf dirt in one never appears in the other's
+  snapshot (the old statics shared one dirty map).
+- Web: `two hosts on one page have isolated frame and semantic state` —
+  two `runTuiSurface` hosts; driving one leaves the other's retained
+  semantic output untouched (0 added/removed/updated on its next frame).
+
+### Phase 1 verification
+
+- `dart analyze`: clean on both packages.
+- Suites: core 1611 VM tests, web 193 VM + 142 Chrome — all passing (one
+  dom_demo timeout under full-suite load re-ran green in isolation).
+- Web within-noise check (32 frames, warmup 8):
+  `dirty-row-160x50-phase1-trackers.json` steady p50 2.55ms / p95 19.4ms /
+  3/24 over vs pre-change confirms (p50 2.7-6.8 / p95 23.2-26.1 / 3-4
+  over); `single-dirty-cell-160x50-phase1-trackers.json` p50 5.1 / p95
+  32.4 / 3/24 over, inside the established single-cell variance band.
+  No regression signal.
+- Native parity (P-7, 3 iterations, vs
+  `profiling/caps/2026-06-10-native-parity-phase0`): SB.2 journey +3.5%,
+  SB.4 journey -6.8%, SB.6 journey -6.2%, update/frame micro-metrics flat;
+  all scenarios pass. Sub-millisecond metrics jitter +-45% at 3 samples
+  (noise floor); SB.6 rssDeltaBytes +0.9MB is within RSS measurement noise
+  (SB.4's moved -3.3MB the other way).
+
+Phase 1 exit gate met: per-runtime trackers, isolation proven on both
+targets, suites green, benchmarks within noise. Next: Phase 2 (semantics
+off the visual frame) per the plan; Phase 1's cross-frame accumulation
+contract is in place for it.

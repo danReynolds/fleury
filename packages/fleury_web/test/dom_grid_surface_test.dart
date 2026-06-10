@@ -12,8 +12,6 @@ void main() {
   const size = CellSize(8, 3);
   const planner = FramePresentationPlanner();
 
-  setUp(RenderDamageTracker.reset);
-
   group('DomGridSurface', () {
     test('configures an aria-hidden retained visual grid', () {
       final root = web.document.createElement('div');
@@ -41,7 +39,8 @@ void main() {
     test('retains row elements and replaces only dirty row children', () {
       final root = web.document.createElement('div');
       final surface = DomGridSurface(root: root, size: size);
-      final loop = TuiFrameLoop();
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
 
       final first = loop.render(
         size: size,
@@ -91,7 +90,8 @@ void main() {
     test('reports DOM node creation and style cache stats', () {
       final root = web.document.createElement('div');
       final surface = DomGridSurface(root: root, size: size);
-      final loop = TuiFrameLoop();
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
       final frame = loop.render(
         size: size,
         paint: (buffer) {
@@ -112,7 +112,8 @@ void main() {
     test('uses textContent, preserving unsafe-looking text as text', () {
       final root = web.document.createElement('div');
       final surface = DomGridSurface(root: root, size: const CellSize(8, 1));
-      final loop = TuiFrameLoop();
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
       final frame = loop.render(
         size: const CellSize(8, 1),
         paint: (buffer) => buffer.writeText(const CellOffset(0, 0), '<a&b>'),
@@ -131,7 +132,8 @@ void main() {
     test('marks protocol cells as unsupported inline-image placeholders', () {
       final root = web.document.createElement('div');
       final surface = DomGridSurface(root: root, size: const CellSize(4, 1));
-      final loop = TuiFrameLoop();
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
       final frame = loop.render(
         size: const CellSize(4, 1),
         paint: (buffer) => buffer.writeProtocol(
@@ -175,7 +177,8 @@ void main() {
       final root = web.document.createElement('div');
       final surface = DomGridSurface(root: root, size: const CellSize(6, 1));
       surface.resize(const CellSize(6, 1), metrics: metrics);
-      final loop = TuiFrameLoop();
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
       final frame = loop.render(
         size: const CellSize(6, 1),
         paint: (buffer) {

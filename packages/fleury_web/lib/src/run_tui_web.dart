@@ -20,7 +20,6 @@ Future<void> runTuiWeb(
   FrameFlushScheduler? flushScheduler,
 }) async {
   final usedDriver = driver ?? WebTerminalDriver();
-  RenderDamageTracker.reset();
   final runtime = TuiRuntime();
   final owner = runtime.owner;
   final focusManager = runtime.focusManager;
@@ -34,7 +33,7 @@ Future<void> runTuiWeb(
   final renderer = AnsiRenderer(colorMode: usedDriver.capabilities.colorMode);
 
   Element? root;
-  final frameLoop = TuiFrameLoop();
+  final frameLoop = TuiFrameLoop(renderDamage: runtime.renderDamageTracker);
   final pendingEvents = <TuiEvent>[];
   StreamSubscription<TuiEvent>? eventSub;
   var disposed = false;
