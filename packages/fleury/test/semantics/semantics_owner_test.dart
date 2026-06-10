@@ -135,6 +135,59 @@ void main() {
     expect(update.hasChanges, isTrue);
   });
 
+  test('debugSemanticTreeDivergence returns null for equivalent trees', () {
+    final divergence = debugSemanticTreeDivergence(
+      _tree(label: 'Save'),
+      _tree(label: 'Save'),
+    );
+
+    expect(divergence, isNull);
+  });
+
+  test('debugSemanticTreeDivergence reports the first differing node', () {
+    final divergence = debugSemanticTreeDivergence(
+      _tree(label: 'Save'),
+      _tree(label: 'Run'),
+    );
+
+    expect(divergence, isNotNull);
+    expect(divergence, contains('button'));
+  });
+
+  test('debugSemanticTreeDivergence reports child reorder at the parent', () {
+    const first = SemanticNode(
+      id: SemanticNodeId('first'),
+      role: SemanticRole.text,
+      label: 'First',
+    );
+    const second = SemanticNode(
+      id: SemanticNodeId('second'),
+      role: SemanticRole.text,
+      label: 'Second',
+    );
+    const root = SemanticNodeId('root');
+
+    final divergence = debugSemanticTreeDivergence(
+      const SemanticTree(
+        root: SemanticNode(
+          id: root,
+          role: SemanticRole.app,
+          children: [first, second],
+        ),
+      ),
+      const SemanticTree(
+        root: SemanticNode(
+          id: root,
+          role: SemanticRole.app,
+          children: [second, first],
+        ),
+      ),
+    );
+
+    expect(divergence, isNotNull);
+    expect(divergence, startsWith('root:'));
+  });
+
   test('SemanticsOwner dispose clears retained node index', () {
     final owner = SemanticsOwner();
     owner.update(_tree(label: 'Save'));

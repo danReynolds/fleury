@@ -24,7 +24,7 @@ export 'src/runtime/tui_frame_loop.dart'
         TuiRenderedFrame;
 export 'src/runtime/tui_runtime.dart' show TuiRuntime;
 export 'src/semantics/semantics_owner.dart'
-    show SemanticsOwner, SemanticTreeUpdate;
+    show SemanticsOwner, SemanticTreeUpdate, debugSemanticTreeDivergence;
 export 'src/semantics/semantics.dart'
     show
         SemanticActionContributor,

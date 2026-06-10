@@ -315,6 +315,35 @@ final class _ThrowingDisposeSurface implements FrameSurface {
   }
 }
 
+class _LeafWithRawText extends StatefulWidget {
+  const _LeafWithRawText({super.key});
+
+  @override
+  State<_LeafWithRawText> createState() => _LeafWithRawTextState();
+}
+
+class _LeafWithRawTextState extends State<_LeafWithRawText> {
+  var generation = 0;
+
+  void advance() => setState(() => generation += 1);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Semantics(
+          id: const SemanticNodeId('status'),
+          role: SemanticRole.status,
+          label: 'gen $generation',
+          includeChildren: false,
+          child: const SizedBox.fromSize(cols: 6, rows: 1),
+        ),
+        _RawPaintedText('raw$generation'),
+      ],
+    );
+  }
+}
+
 final class _RawPaintedText extends LeafRenderObjectWidget {
   const _RawPaintedText(this.text);
 
@@ -812,6 +841,54 @@ void main() {
       expect(instrumentation.frames, hasLength(2));
       expect(instrumentation.frames.last.semanticFallbackNodeCount, 1);
       expect(instrumentation.frames.last.semanticUncoveredCellCount, 3);
+
+      await host.dispose();
+    },
+  );
+
+  test(
+    'leaf update with active text fallback refreshes fallback from the buffer',
+    () async {
+      final visualRoot = web.document.createElement('div');
+      final semanticRoot = web.document.createElement('div');
+      final surface = DomGridSurface(
+        root: visualRoot,
+        size: const CellSize(10, 2),
+      );
+      final semantics = SemanticDomPresenter(root: semanticRoot);
+      final instrumentation = RecordingWebHostInstrumentation();
+      final flush = _FakeFlush();
+      final key = GlobalKey<_LeafWithRawTextState>();
+
+      final host = await runTuiSurface(
+        () => _LeafWithRawText(key: key),
+        surface: surface,
+        semanticPresenter: semantics,
+        instrumentation: instrumentation,
+        flushScheduler: flush.schedule,
+      );
+
+      flush.fire();
+
+      final fallbackSelector =
+          '[data-fleury-semantic-id="__fleury_text_fallback_1_0"]';
+      expect(semanticRoot.querySelector(fallbackSelector)!.textContent, 'raw0');
+      expect(instrumentation.frames.single.semanticFallbackNodeCount, 1);
+
+      // A retained leaf patch of the fallback-bearing tree would keep the
+      // stale 'raw0' fallback "covering" the repainted cells; the host must
+      // take the full-rebuild path and regenerate fallback from the buffer.
+      key.currentState!.advance();
+      flush.fire();
+
+      expect(semanticRoot.querySelector(fallbackSelector)!.textContent, 'raw1');
+      expect(
+        semanticRoot
+            .querySelector('[data-fleury-semantic-id="status"]')!
+            .textContent,
+        contains('gen 1'),
+      );
+      expect(instrumentation.frames.last.semanticFallbackNodeCount, 1);
 
       await host.dispose();
     },

@@ -205,6 +205,41 @@ final class SemanticTreeUpdate {
       added.isNotEmpty || removed.isNotEmpty || updated.isNotEmpty;
 }
 
+/// Debug-only structural comparison between two semantic trees.
+///
+/// Returns a description of the first divergence (depth-first), or `null`
+/// when the trees are equivalent. Hosts that take an incremental path
+/// (such as retained leaf replacement) can assert against a full
+/// [SemanticTree.fromElement] rebuild with this; a non-null result means
+/// the incremental path missed a change the full walk would have produced —
+/// an escalation gap in the dirty tracking, not presentation noise.
+String? debugSemanticTreeDivergence(
+  SemanticTree expected,
+  SemanticTree actual,
+) {
+  return _semanticNodeDivergence(expected.root, actual.root, path: 'root');
+}
+
+String? _semanticNodeDivergence(
+  SemanticNode expected,
+  SemanticNode actual, {
+  required String path,
+}) {
+  if (!_semanticNodeEquals(expected, actual)) {
+    return '$path: expected $expected, got $actual';
+  }
+  // _semanticNodeEquals guarantees matching child count and id order here.
+  for (var i = 0; i < expected.children.length; i++) {
+    final divergence = _semanticNodeDivergence(
+      expected.children[i],
+      actual.children[i],
+      path: '$path.children[$i](${expected.children[i].id})',
+    );
+    if (divergence != null) return divergence;
+  }
+  return null;
+}
+
 bool _semanticNodeEquals(SemanticNode a, SemanticNode b) {
   if (identical(a, b)) return true;
   return a.id == b.id &&

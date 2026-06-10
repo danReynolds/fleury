@@ -210,6 +210,272 @@ void main() {
     expect(node.bounds, CellRect.fromLTWH(0, 0, 6, 1));
   });
 
+  testWidgets('sibling semantic insertion escalates to a full rebuild', (
+    tester,
+  ) {
+    tester.pumpWidget(
+      const Column(
+        children: [
+          Semantics(
+            id: SemanticNodeId('one'),
+            role: SemanticRole.status,
+            label: 'One',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+          Semantics(
+            id: SemanticNodeId('two'),
+            role: SemanticRole.status,
+            label: 'Two',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(20, 6));
+    SemanticDirtyTracker.reset();
+
+    tester.pumpWidget(
+      const Column(
+        children: [
+          Semantics(
+            id: SemanticNodeId('one'),
+            role: SemanticRole.status,
+            label: 'One',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+          Semantics(
+            id: SemanticNodeId('two'),
+            role: SemanticRole.status,
+            label: 'Two',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+          Semantics(
+            id: SemanticNodeId('three'),
+            role: SemanticRole.status,
+            label: 'Three',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(20, 6));
+
+    expect(
+      SemanticDirtyTracker.takeDirtySnapshot().requiresFullRebuild,
+      isTrue,
+    );
+  });
+
+  testWidgets('sibling semantic removal escalates to a full rebuild', (tester) {
+    tester.pumpWidget(
+      const Column(
+        children: [
+          Semantics(
+            id: SemanticNodeId('one'),
+            role: SemanticRole.status,
+            label: 'One',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+          Semantics(
+            id: SemanticNodeId('two'),
+            role: SemanticRole.status,
+            label: 'Two',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(20, 6));
+    SemanticDirtyTracker.reset();
+
+    tester.pumpWidget(
+      const Column(
+        children: [
+          Semantics(
+            id: SemanticNodeId('one'),
+            role: SemanticRole.status,
+            label: 'One',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(20, 6));
+
+    expect(
+      SemanticDirtyTracker.takeDirtySnapshot().requiresFullRebuild,
+      isTrue,
+    );
+  });
+
+  testWidgets('semantic id change escalates to a full rebuild', (tester) {
+    tester.pumpWidget(
+      const Semantics(
+        id: SemanticNodeId('before'),
+        role: SemanticRole.status,
+        label: 'Stable',
+        includeChildren: false,
+        child: SizedBox.fromSize(cols: 4, rows: 1),
+      ),
+    );
+    tester.render(size: const CellSize(20, 4));
+    SemanticDirtyTracker.reset();
+
+    tester.pumpWidget(
+      const Semantics(
+        id: SemanticNodeId('after'),
+        role: SemanticRole.status,
+        label: 'Stable',
+        includeChildren: false,
+        child: SizedBox.fromSize(cols: 4, rows: 1),
+      ),
+    );
+    tester.render(size: const CellSize(20, 4));
+
+    expect(
+      SemanticDirtyTracker.takeDirtySnapshot().requiresFullRebuild,
+      isTrue,
+    );
+  });
+
+  testWidgets(
+    'updates on includeChildren semantics escalate to a full rebuild',
+    (tester) {
+      tester.pumpWidget(
+        const Semantics(
+          id: SemanticNodeId('region'),
+          role: SemanticRole.region,
+          label: 'Before',
+          child: Text('content'),
+        ),
+      );
+      tester.render(size: const CellSize(20, 4));
+      SemanticDirtyTracker.reset();
+
+      tester.pumpWidget(
+        const Semantics(
+          id: SemanticNodeId('region'),
+          role: SemanticRole.region,
+          label: 'After',
+          child: Text('content'),
+        ),
+      );
+      tester.render(size: const CellSize(20, 4));
+
+      expect(
+        SemanticDirtyTracker.takeDirtySnapshot().requiresFullRebuild,
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets('geometry-only movement is captured as a retained leaf update', (
+    tester,
+  ) {
+    tester.pumpWidget(
+      const Padding(
+        padding: EdgeInsets.only(left: 1),
+        child: Semantics(
+          id: SemanticNodeId('message'),
+          role: SemanticRole.status,
+          label: 'Steady',
+          includeChildren: false,
+          child: SizedBox.fromSize(cols: 6, rows: 1),
+        ),
+      ),
+    );
+    tester.render(size: const CellSize(20, 4));
+    SemanticDirtyTracker.reset();
+
+    tester.pumpWidget(
+      const Padding(
+        padding: EdgeInsets.only(left: 4),
+        child: Semantics(
+          id: SemanticNodeId('message'),
+          role: SemanticRole.status,
+          label: 'Steady',
+          includeChildren: false,
+          child: SizedBox.fromSize(cols: 6, rows: 1),
+        ),
+      ),
+    );
+    tester.render(size: const CellSize(20, 4));
+
+    final SemanticDirtySnapshot snapshot =
+        SemanticDirtyTracker.takeDirtySnapshot();
+    expect(snapshot.requiresFullRebuild, isFalse);
+    expect(snapshot.leafUpdates.keys, {const SemanticNodeId('message')});
+    expect(
+      snapshot.leafUpdates[const SemanticNodeId('message')]!.bounds,
+      CellRect.fromLTWH(4, 0, 6, 1),
+    );
+  });
+
+  testWidgets('multiple leaf updates in one frame are all captured', (tester) {
+    tester.pumpWidget(
+      const Column(
+        children: [
+          Semantics(
+            id: SemanticNodeId('a'),
+            role: SemanticRole.status,
+            label: 'A1',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+          Semantics(
+            id: SemanticNodeId('b'),
+            role: SemanticRole.status,
+            label: 'B1',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(20, 6));
+    SemanticDirtyTracker.reset();
+
+    tester.pumpWidget(
+      const Column(
+        children: [
+          Semantics(
+            id: SemanticNodeId('a'),
+            role: SemanticRole.status,
+            label: 'A2',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+          Semantics(
+            id: SemanticNodeId('b'),
+            role: SemanticRole.status,
+            label: 'B2',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(20, 6));
+
+    final SemanticDirtySnapshot snapshot =
+        SemanticDirtyTracker.takeDirtySnapshot();
+    expect(snapshot.requiresFullRebuild, isFalse);
+    expect(snapshot.leafUpdates.keys, {
+      const SemanticNodeId('a'),
+      const SemanticNodeId('b'),
+    });
+    expect(snapshot.leafUpdates[const SemanticNodeId('a')]!.label, 'A2');
+    expect(snapshot.leafUpdates[const SemanticNodeId('b')]!.label, 'B2');
+  });
+
   testWidgets('IndexedStack contributes only visible child semantics', (
     tester,
   ) {

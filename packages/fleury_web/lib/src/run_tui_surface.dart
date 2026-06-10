@@ -339,8 +339,13 @@ Future<TuiSurfaceHost> runTuiSurface(
         );
       } else {
         Map<SemanticNodeId, SemanticNode>? retainedLeafUpdates;
+        // Leaf replacement requires a fallback-free retained tree: coverage
+        // fallback nodes mirror painted buffer text, and patching around one
+        // would keep its stale label "covering" cells whose text has since
+        // changed. A full rebuild regenerates fallback from the live buffer.
         final canApplyRetainedLeafUpdates =
             retainedTree != null &&
+            !lastSemanticCoverageAudit.hasUncoveredText &&
             !semanticDirtySnapshot.requiresFullRebuild &&
             semanticDirtySnapshot.leafUpdates.isNotEmpty &&
             _semanticTreeContainsAll(
@@ -356,6 +361,25 @@ Future<TuiSurfaceHost> runTuiSurface(
         }
         semanticTreeBuildStopwatch.stop();
         semanticTreeBuildTime = semanticTreeBuildStopwatch.elapsed;
+        assert(() {
+          // The retained path must be indistinguishable from a full rebuild.
+          // A divergence here means SemanticDirtyTracker failed to escalate a
+          // structural change, which would silently corrupt the accessible
+          // projection; fail loudly in debug builds instead.
+          if (canApplyRetainedLeafUpdates) {
+            final divergence = debugSemanticTreeDivergence(
+              SemanticTree.fromElement(currentRoot),
+              semanticTree,
+            );
+            if (divergence != null) {
+              throw StateError(
+                'Retained semantic leaf replacement diverged from a full '
+                'semantic rebuild at $divergence',
+              );
+            }
+          }
+          return true;
+        }());
 
         final semanticCoverageStopwatch = Stopwatch()..start();
         final semanticCoverage = applySemanticTextFallback(
