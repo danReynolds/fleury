@@ -98,9 +98,9 @@ void main() {
       );
 
       final link = tester.semantics().single(
-            role: SemanticRole.link,
-            label: 'docs',
-          );
+        role: SemanticRole.link,
+        label: 'docs',
+      );
 
       expect(link.value, 'https://fleury.dev');
       expect(link.state.terminalCapability, 'osc8Hyperlinks');
@@ -120,9 +120,9 @@ void main() {
       );
 
       final link = tester.semantics().single(
-            role: SemanticRole.link,
-            label: 'local',
-          );
+        role: SemanticRole.link,
+        label: 'local',
+      );
 
       expect(link.value, 'myapp://open/project');
       expect(link.state.capabilityResolution, 'disabledByPolicy');
@@ -158,16 +158,13 @@ void main() {
       tester.pumpWidget(const MarkdownText('# Title\nbody'));
       final buf = tester.render(size: const CellSize(20, 2));
       expect(
-        _anyCellMatches(
-            buf,
-            {
-              'T',
-              'i',
-              't',
-              'l',
-              'e',
-            },
-            (s) => s.bold && s.inverse),
+        _anyCellMatches(buf, {
+          'T',
+          'i',
+          't',
+          'l',
+          'e',
+        }, (s) => s.bold && s.inverse),
         isTrue,
       );
     });
@@ -176,14 +173,11 @@ void main() {
       tester.pumpWidget(const MarkdownText('## Sub'));
       final buf = tester.render(size: const CellSize(20, 1));
       expect(
-        _anyCellMatches(
-            buf,
-            {
-              'S',
-              'u',
-              'b',
-            },
-            (s) => s.bold && s.underline && !s.inverse),
+        _anyCellMatches(buf, {
+          'S',
+          'u',
+          'b',
+        }, (s) => s.bold && s.underline && !s.inverse),
         isTrue,
       );
     });

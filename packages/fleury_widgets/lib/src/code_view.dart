@@ -433,13 +433,17 @@ class _CodeViewState extends State<CodeView> {
             focusNode: _focusNode,
             autofocus: widget.autofocus,
             itemCount: lines.length,
-            itemBuilder: (context, index, selected) => _CodeLineWidget(
-              line: lines[index],
-              selected: selected,
-              copyEnabled: copyEnabled,
-              onActivate: () => _selectLineAt(index),
-              onCopy: () => _copyLineAt(index),
-            ),
+            itemBuilder: (context, index, activeSelected) {
+              final selected = index == _controller.selectedIndex;
+              return _CodeLineWidget(
+                line: lines[index],
+                selected: selected,
+                activeSelection: activeSelected,
+                copyEnabled: copyEnabled,
+                onActivate: () => _selectLineAt(index),
+                onCopy: () => _copyLineAt(index),
+              );
+            },
           );
 
     if (copyEnabled) {
@@ -504,6 +508,7 @@ class _CodeLineWidget extends StatelessWidget {
   const _CodeLineWidget({
     required this.line,
     required this.selected,
+    required this.activeSelection,
     required this.copyEnabled,
     required this.onActivate,
     required this.onCopy,
@@ -511,6 +516,7 @@ class _CodeLineWidget extends StatelessWidget {
 
   final CodeLine line;
   final bool selected;
+  final bool activeSelection;
   final bool copyEnabled;
   final VoidCallback onActivate;
   final Future<void> Function() onCopy;
@@ -519,11 +525,13 @@ class _CodeLineWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final widgetTheme = FleuryWidgetTheme.from(theme);
-    final style = _styleForKind(
-      line.kind,
-      theme,
-      widgetTheme,
-    ).merge(selected ? theme.selectionStyle : CellStyle.empty);
+    final style = _styleForKind(line.kind, theme, widgetTheme).merge(
+      activeSelection
+          ? theme.selectionStyle
+          : selected
+          ? theme.mutedStyle
+          : CellStyle.empty,
+    );
     return Semantics(
       role: SemanticRole.codeLine,
       label: line.text,

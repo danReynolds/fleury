@@ -26,42 +26,45 @@ class _FakeFlush {
 }
 
 void main() {
-  group('FrameScheduler — uncapped (Duration.zero) preserves current behavior', () {
-    test('a single request flushes once, asap', () {
-      final clock = FakeClock();
-      final flush = _FakeFlush();
-      final reasons = <String>[];
-      final s = FrameScheduler(
-        clock: clock,
-        onRender: reasons.add,
-        flushScheduler: flush.schedule,
-      );
+  group(
+    'FrameScheduler — uncapped (Duration.zero) preserves current behavior',
+    () {
+      test('a single request flushes once, asap', () {
+        final clock = FakeClock();
+        final flush = _FakeFlush();
+        final reasons = <String>[];
+        final s = FrameScheduler(
+          clock: clock,
+          onRender: reasons.add,
+          flushScheduler: flush.schedule,
+        );
 
-      s.requestFrame('build');
-      expect(flush.delay, Duration.zero, reason: 'no cap → asap');
-      expect(s.hasPendingFrame, isTrue);
-      flush.fire();
-      expect(reasons, ['build']);
-      expect(s.hasPendingFrame, isFalse);
-    });
+        s.requestFrame('build');
+        expect(flush.delay, Duration.zero, reason: 'no cap → asap');
+        expect(s.hasPendingFrame, isTrue);
+        flush.fire();
+        expect(reasons, ['build']);
+        expect(s.hasPendingFrame, isFalse);
+      });
 
-    test('requests before the flush coalesce into one, merging reasons', () {
-      final clock = FakeClock();
-      final flush = _FakeFlush();
-      final reasons = <String>[];
-      final s = FrameScheduler(
-        clock: clock,
-        onRender: reasons.add,
-        flushScheduler: flush.schedule,
-      );
+      test('requests before the flush coalesce into one, merging reasons', () {
+        final clock = FakeClock();
+        final flush = _FakeFlush();
+        final reasons = <String>[];
+        final s = FrameScheduler(
+          clock: clock,
+          onRender: reasons.add,
+          flushScheduler: flush.schedule,
+        );
 
-      s.requestFrame('build');
-      s.requestFrame('post-frame');
-      s.requestFrame('build'); // dedup
-      flush.fire();
-      expect(reasons, ['build+post-frame']);
-    });
-  });
+        s.requestFrame('build');
+        s.requestFrame('post-frame');
+        s.requestFrame('build'); // dedup
+        flush.fire();
+        expect(reasons, ['build+post-frame']);
+      });
+    },
+  );
 
   group('FrameScheduler — capped at 16ms coalesces bursts', () {
     FrameScheduler make(FakeClock clock, _FakeFlush flush, List<String> out) =>
@@ -96,8 +99,10 @@ void main() {
 
       clock.advance(const Duration(milliseconds: 12));
       flush.fire();
-      expect(out, ['initial', 'build'],
-          reason: '10 updates coalesced into a single render');
+      expect(out, [
+        'initial',
+        'build',
+      ], reason: '10 updates coalesced into a single render');
     });
 
     test('a request after the interval has elapsed renders immediately', () {

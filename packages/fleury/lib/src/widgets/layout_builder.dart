@@ -27,6 +27,14 @@ class LayoutBuilder extends RenderObjectWidget {
   @override
   RenderObject createRenderObject(BuildContext context) =>
       RenderLayoutBuilder();
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant RenderLayoutBuilder renderObject,
+  ) {
+    renderObject.markNeedsLayout();
+  }
 }
 
 class _LayoutBuilderElement extends RenderObjectElement {

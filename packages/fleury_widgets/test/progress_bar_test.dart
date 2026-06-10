@@ -71,4 +71,13 @@ void main() {
     expect(node.state.progressTotal, 1.0);
     expect(node.state.progressLabel, '45%');
   });
+
+  testWidgets('accepts a custom semantic label', (tester) {
+    tester.pumpWidget(
+      const ProgressBar(value: 0.45, semanticLabel: 'Download progress'),
+    );
+
+    final node = tester.semantics().single(role: SemanticRole.progress);
+    expect(node.label, 'Download progress');
+  });
 }

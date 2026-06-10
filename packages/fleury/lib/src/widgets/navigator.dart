@@ -582,13 +582,17 @@ class _RouteHost extends StatelessWidget {
         ? route.screen
         : Align(alignment: align, child: route.screen);
 
-    // The chrome provides the focus trap (modal FocusScope) and the Esc
-    // binding, but does NOT claim focus itself — the screen's own content
-    // (e.g. a TextInput) autofocuses. Focus is restored to the route's
-    // priorFocus on pop.
+    // Presented routes trap focus like modals. Normal page routes still let
+    // ancestor app-level bindings participate, which keeps global commands
+    // such as "open command palette" available while a page has focus.
+    //
+    // The chrome does NOT claim focus itself — the screen's own content
+    // (e.g. a TextInput) autofocuses. Focus is restored to the route beneath
+    // on pop.
+    final modal = active && align != null;
     Widget content = FocusScope(
-      modal: active,
-      suppressGlobals: active,
+      modal: modal,
+      suppressGlobals: modal,
       child: KeyBindings(
         bindings: active
             ? [

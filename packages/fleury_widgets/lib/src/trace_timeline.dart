@@ -565,11 +565,13 @@ class _TraceTimelineState extends State<TraceTimeline> {
             autofocus: widget.autofocus,
             itemCount: widget.events.length,
             onSelect: (_) => _selectCurrent(),
-            itemBuilder: (context, index, selected) {
+            itemBuilder: (context, index, activeSelected) {
+              final selected = index == _controller.selectedIndex;
               return _TraceTimelineRow(
                 event: widget.events[index],
                 index: index,
                 selected: selected,
+                activeSelection: activeSelected,
                 canSelect: canSelect,
                 copyEnabled: copyEnabled,
                 onSelect: () => _selectAt(index),
@@ -631,6 +633,7 @@ class _TraceTimelineRow extends StatelessWidget {
     required this.event,
     required this.index,
     required this.selected,
+    required this.activeSelection,
     required this.canSelect,
     required this.copyEnabled,
     required this.onSelect,
@@ -640,6 +643,7 @@ class _TraceTimelineRow extends StatelessWidget {
   final TraceTimelineEntry event;
   final int index;
   final bool selected;
+  final bool activeSelection;
   final bool canSelect;
   final bool copyEnabled;
   final Future<void> Function() onSelect;
@@ -697,8 +701,13 @@ class _TraceTimelineRow extends StatelessWidget {
         'outputSanitized': _eventWasSanitized(event),
       }),
       child: Text(
-        _rowText(label: label, event: event, selected: selected),
-        style: _rowStyle(Theme.of(context), selected, event),
+        _rowText(label: label, event: event, activeSelection: activeSelection),
+        style: _rowStyle(
+          Theme.of(context),
+          selected: selected,
+          activeSelection: activeSelection,
+          event: event,
+        ),
       ),
     );
   }
@@ -725,9 +734,9 @@ Map<String, Object?> _selectedTraceState(TraceTimelineEntry event) {
 String _rowText({
   required String label,
   required TraceTimelineEntry event,
-  required bool selected,
+  required bool activeSelection,
 }) {
-  final prefix = selected ? '> ' : '  ';
+  final prefix = activeSelection ? '> ' : '  ';
   final meta = <String>[
     event.kind.name,
     event.status.name,
@@ -774,9 +783,15 @@ String _sanitizeTraceText(String text) {
 
 final _traceLineBreakPattern = RegExp(r'[\r\n\t]');
 
-CellStyle _rowStyle(ThemeData theme, bool selected, TraceTimelineEntry event) {
+CellStyle _rowStyle(
+  ThemeData theme, {
+  required bool selected,
+  required bool activeSelection,
+  required TraceTimelineEntry event,
+}) {
   if (!event.enabled) return theme.mutedStyle;
-  if (selected) return theme.selectionStyle;
+  if (activeSelection) return theme.selectionStyle;
+  if (selected) return theme.mutedStyle;
   return switch (event.status) {
     TraceTimelineStatus.queued => theme.mutedStyle,
     TraceTimelineStatus.running => const CellStyle(foreground: AnsiColor(11)),

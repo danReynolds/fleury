@@ -50,7 +50,7 @@ This environment is non-TTY (`TERM=dumb`), so it cannot produce these. On a real
 machine, for each target terminal (macOS Terminal, iTerm2, Kitty, Ghostty,
 Alacritty, WezTerm) and over SSH (LAN and WAN):
 
-1. Run a Fleury app driving a known scenario (e.g. the proof app, or a scripted
+1. Run a Fleury app driving a known scenario (e.g. the demo app, or a scripted
    scroll/dashboard) with telemetry on:
 
    ```sh

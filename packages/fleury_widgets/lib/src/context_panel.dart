@@ -400,11 +400,13 @@ class _ContextPanelState extends State<ContextPanel> {
             autofocus: widget.autofocus,
             itemCount: widget.items.length,
             onSelect: (_) => _selectCurrent(),
-            itemBuilder: (context, index, selected) {
+            itemBuilder: (context, index, activeSelected) {
+              final selected = index == _controller.selectedIndex;
               return _ContextItemRow(
                 item: widget.items[index],
                 index: index,
                 selected: selected,
+                activeSelection: activeSelected,
                 canSelect: canSelect,
                 copyEnabled: copyEnabled,
                 onSelect: () => _selectAt(index),
@@ -477,6 +479,7 @@ class _ContextItemRow extends StatelessWidget {
     required this.item,
     required this.index,
     required this.selected,
+    required this.activeSelection,
     required this.canSelect,
     required this.copyEnabled,
     required this.onSelect,
@@ -486,6 +489,7 @@ class _ContextItemRow extends StatelessWidget {
   final ContextItem item;
   final int index;
   final bool selected;
+  final bool activeSelection;
   final bool canSelect;
   final bool copyEnabled;
   final Future<void> Function() onSelect;
@@ -537,8 +541,13 @@ class _ContextItemRow extends StatelessWidget {
         'outputSanitized': _itemWasSanitized(item),
       }),
       child: Text(
-        _rowText(label: label, item: item, selected: selected),
-        style: _rowStyle(Theme.of(context), selected, item),
+        _rowText(label: label, item: item, activeSelection: activeSelection),
+        style: _rowStyle(
+          Theme.of(context),
+          selected: selected,
+          activeSelection: activeSelection,
+          item: item,
+        ),
       ),
     );
   }
@@ -605,9 +614,9 @@ String _usageSummary(TokenUsage usage) {
 String _rowText({
   required String label,
   required ContextItem item,
-  required bool selected,
+  required bool activeSelection,
 }) {
-  final prefix = selected ? '> ' : '  ';
+  final prefix = activeSelection ? '> ' : '  ';
   final meta = <String>[
     item.kind.name,
     item.priority.name,
@@ -662,9 +671,15 @@ String _sanitizeContextText(String text) {
 
 final _contextLineBreakPattern = RegExp(r'[\r\n\t]');
 
-CellStyle _rowStyle(ThemeData theme, bool selected, ContextItem item) {
+CellStyle _rowStyle(
+  ThemeData theme, {
+  required bool selected,
+  required bool activeSelection,
+  required ContextItem item,
+}) {
   if (!item.enabled) return theme.mutedStyle;
-  if (selected) return theme.selectionStyle;
+  if (activeSelection) return theme.selectionStyle;
+  if (selected) return theme.mutedStyle;
   return switch (item.priority) {
     ContextItemPriority.low => theme.mutedStyle,
     ContextItemPriority.normal => CellStyle.empty,

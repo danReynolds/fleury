@@ -432,7 +432,7 @@
     },
     {
       "id": "SB.10",
-      "name": "Proof-App Journey",
+      "name": "Demo-App Journey",
       "local": {
         "workingDirectory": "packages/fleury_example_console",
         "command": [

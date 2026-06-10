@@ -555,6 +555,7 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
     final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && selected != null;
     final canSelect = widget.onSelect != null;
+    final panelFocused = _queryFocusNode.hasFocus || _listFocusNode.hasFocus;
 
     Widget panel = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -578,15 +579,18 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
               : ListView.builder(
                   controller: _controller._listController,
                   focusNode: _listFocusNode,
+                  selectionActive: panelFocused,
                   itemCount: order.length,
                   onSelect: (_) => _selectCurrent(),
-                  itemBuilder: (context, viewIndex, selected) {
+                  itemBuilder: (context, viewIndex, activeSelected) {
                     final entryIndex = order[viewIndex];
+                    final selected = viewIndex == _controller.selectedIndex;
                     return _ConversationRow(
                       entry: widget.conversations[entryIndex],
                       entryIndex: entryIndex,
                       viewIndex: viewIndex,
                       selected: selected,
+                      activeSelection: activeSelected,
                       canSelect: canSelect,
                       copyEnabled: copyEnabled,
                       onSelect: () => _selectAt(viewIndex),
@@ -684,6 +688,7 @@ class _ConversationRow extends StatelessWidget {
     required this.entryIndex,
     required this.viewIndex,
     required this.selected,
+    required this.activeSelection,
     required this.canSelect,
     required this.copyEnabled,
     required this.onSelect,
@@ -694,6 +699,7 @@ class _ConversationRow extends StatelessWidget {
   final int entryIndex;
   final int viewIndex;
   final bool selected;
+  final bool activeSelection;
   final bool canSelect;
   final bool copyEnabled;
   final Future<void> Function() onSelect;
@@ -718,7 +724,7 @@ class _ConversationRow extends StatelessWidget {
       unreadCount: entry.unreadCount,
       pinned: entry.pinned,
       latestMessage: latest,
-      selected: selected,
+      activeSelection: activeSelection,
     );
 
     return Semantics(
@@ -762,7 +768,12 @@ class _ConversationRow extends StatelessWidget {
       }),
       child: Text(
         rowText,
-        style: _rowStyle(Theme.of(context), selected, entry),
+        style: _rowStyle(
+          Theme.of(context),
+          selected: selected,
+          activeSelection: activeSelection,
+          entry: entry,
+        ),
       ),
     );
   }
@@ -774,9 +785,9 @@ String _rowText({
   required int unreadCount,
   required bool pinned,
   required String? latestMessage,
-  required bool selected,
+  required bool activeSelection,
 }) {
-  final prefix = selected ? '> ' : '  ';
+  final prefix = activeSelection ? '> ' : '  ';
   final meta = <String>[
     status.name,
     if (unreadCount > 0) '$unreadCount unread',
@@ -871,9 +882,15 @@ String _truncateGraphemes(String text, int? maxLength) {
 
 final _conversationLineBreakPattern = RegExp(r'[\r\n\t]');
 
-CellStyle _rowStyle(ThemeData theme, bool selected, ConversationEntry entry) {
+CellStyle _rowStyle(
+  ThemeData theme, {
+  required bool selected,
+  required bool activeSelection,
+  required ConversationEntry entry,
+}) {
   if (!entry.enabled) return theme.mutedStyle;
-  if (selected) return theme.selectionStyle;
+  if (activeSelection) return theme.selectionStyle;
+  if (selected) return theme.mutedStyle;
   return switch (entry.status) {
     ConversationStatus.waiting => const CellStyle(foreground: AnsiColor(11)),
     ConversationStatus.streaming => const CellStyle(foreground: AnsiColor(14)),

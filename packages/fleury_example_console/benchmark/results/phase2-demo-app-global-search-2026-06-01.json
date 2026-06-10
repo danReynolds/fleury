@@ -5,7 +5,7 @@
     {
       "schemaVersion": 1,
       "scenarioId": "SB.10",
-      "scenarioName": "Proof-App Journey",
+      "scenarioName": "Demo-App Journey",
       "packageVersion": "0.0.0",
       "gitSha": "unknown",
       "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
@@ -156,7 +156,7 @@
       "pass": true,
       "notes": [
         "Candidate thresholds are informational until stable baselines exist.",
-        "Scenario measures the integrated proof app, including app shell, command palette, debounced global search, DataTable, LogRegion, process task, diagnostics, semantics, accessibility, and debug capture.",
+        "Scenario measures the integrated demo app, including app shell, command palette, debounced global search, DataTable, LogRegion, process task, diagnostics, semantics, accessibility, and debug capture.",
         "The native process step runs the current Dart executable with --version, so process timing includes OS spawn variance."
       ]
     }

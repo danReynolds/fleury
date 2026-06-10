@@ -1,0 +1,18 @@
+name: fleury_storybook
+description: Interactive widget storybook for the Fleury TUI framework.
+version: 0.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  fleury:
+    path: ../fleury
+  fleury_widgets:
+    path: ../fleury_widgets
+  image: ^4.5.4
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.26.3

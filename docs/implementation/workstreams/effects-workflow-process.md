@@ -29,10 +29,10 @@ and terminal lifecycle handoff framework-native.
   long-running task work. Large index builders can report progress, observe
   cancellation, and yield back to input/render handling without claiming
   isolate-backed execution.
-- The proof app Global Search screen now uses `DebouncedTaskController` as the
+- The demo app Global Search screen now uses `DebouncedTaskController` as the
   app-owned search task feeding `SearchPanel`, proving the primitive in an
   integrated workflow rather than only focused task tests.
-- The proof app Indexed Logs screen now uses `TaskController` plus
+- The demo app Indexed Logs screen now uses `TaskController` plus
   `TaskYieldPolicy` to build and refresh a `LogRegionSearchIndex`, proving
   cooperative progress/cancellation/yield checkpoints in an integrated app
   workflow.
@@ -53,7 +53,7 @@ and terminal lifecycle handoff framework-native.
   fallbacks; writes an editable temp buffer; runs the editor with inherited
   stdio; suspends/resumes the TUI through `TerminalHandoffDriver`; and returns
   edited text plus command/exit metadata.
-- The proof app now includes a Process screen that runs `dart --version`
+- The demo app now includes a Process screen that runs `dart --version`
   through `ProcessCommandScope`, displays it through `ProcessPanel`, and
   asserts command semantics, exit code, output log semantics, and status bar
   updates.
@@ -67,10 +67,10 @@ and terminal lifecycle handoff framework-native.
   not silently mutate captured state.
 - `fleury_widgets` now includes `ApprovalPrompt`, the first protocol-neutral
   approval workflow surface. It exposes semantic submit/cancel actions and is
-  wired into the proof app command flow without adding ACP-specific models.
+  wired into the demo app command flow without adding ACP-specific models.
 - `fleury_widgets` now includes `ToolCallCard`, the first protocol-neutral
   tool execution surface. It exposes tool-call status/progress/output
-  semantics, sanitized copy, cancellation, and proof-app Process screen
+  semantics, sanitized copy, cancellation, and demo-app Process screen
   adoption without owning protocol transport.
 - `fleury_widgets` now includes `TaskGraph`, the first protocol-neutral
   plan/task graph surface. It exposes workflow status/progress/dependency
@@ -89,7 +89,7 @@ and terminal lifecycle handoff framework-native.
   targeted workflow artifacts without recording wall-clock timestamps.
 - M1.6 is complete for the MVP: task success/failure/cancellation/progress,
   bounded output, process execution, terminal handoff, task events, semantic
-  state, and proof-app binding all have targeted test evidence.
+  state, and demo-app binding all have targeted test evidence.
 - M0.7 defines prototype-first tracks for a deterministic fake task worker and
   subprocess handoff boundary before a broad public API is frozen.
 
@@ -135,9 +135,9 @@ and terminal lifecycle handoff framework-native.
     [worker tests](../../../packages/fleury/test/effects/task_test.dart).
   - Notes: V0 intentionally does not leak isolate/process details. Phase 1
     covers controller/context ownership, lifecycle cleanup, cancellation,
-    progress, output, semantic state, and proof-app binding. Current Phase 2
+    progress, output, semantic state, and demo-app binding. Current Phase 2
     slice adds `DebouncedTaskController` for restartable typeahead/search/index
-    work without inventing a second task state model. The proof app Global
+    work without inventing a second task state model. The demo app Global
     Search screen is the first integrated consumer. Current cooperative-yield
     slice adds progress/cancellation/yield checkpoints for CPU-heavy work and
     proves them through `LogRegionSearchIndex` and `TreeTableSearchIndex`.
@@ -182,7 +182,7 @@ and terminal lifecycle handoff framework-native.
   - Evidence: `TaskStatusView` in
     [task.dart](../../../packages/fleury/lib/src/effects/task.dart), semantic
     assertions in [task_test.dart](../../../packages/fleury/test/effects/task_test.dart)
-    and [proof_console_test.dart](../../../packages/fleury_example_console/test/proof_console_test.dart),
+    and [demo_console_test.dart](../../../packages/fleury_example_console/test/demo_console_test.dart),
     plus [ProcessPanel tests](../../../packages/fleury_widgets/test/process_panel_test.dart)
     [approval prompt tests](../../../packages/fleury_widgets/test/approval_prompt_test.dart),
     [tool call card tests](../../../packages/fleury_widgets/test/tool_call_card_test.dart),
@@ -201,10 +201,10 @@ and terminal lifecycle handoff framework-native.
     ownership in the app or effects layer. `TaskGraph` exposes plan/task
     status semantics while leaving scheduling, dependency execution, and task
     ownership in app or effects code. `TraceTimeline` now exposes live
-    task-event history as safe workflow semantics in the proof app, linking
+    task-event history as safe workflow semantics in the demo app, linking
     the worker/effects model to diagnostics without turning traces into raw
     output logs. EWP.4 is complete for the MVP; permission-specific lifecycle
-    models remain future proof-driven widgets or adapter-package work.
+    models remain future evidence-driven widgets or adapter-package work.
 
 ## Implementation Notes
 
@@ -224,7 +224,7 @@ and terminal lifecycle handoff framework-native.
 - [Prototype-first tracks](../prototype-first-tracks.md) defines the fake task
   worker and subprocess handoff prototype scenarios. Use those to shape the
   worker/task model before designing broad process APIs.
-- The proof console now uses `TaskController` for its deterministic fake worker
+- The demo console now uses `TaskController` for its deterministic fake worker
   instead of ad hoc booleans. This gives command enablement, status bar output,
   progress UI, transcript evidence, and semantic task state one source of
   truth.
@@ -271,7 +271,7 @@ and terminal lifecycle handoff framework-native.
   execution, retries, dependencies, and persistence app-owned until measured
   scenarios justify a framework engine.
 - The Phase 1 exit review reran task, process-task, fake terminal-handoff, and
-  proof-app tests; all passed for the worker/process MVP.
+  demo-app tests; all passed for the worker/process MVP.
 - The first `SB.9` baseline runs a 1,000,000-byte target subprocess fixture
   plus failure, cancellation, external editor handoff, and captured-output
   streaming. Saved results show process-run p95 647254 us, cancellation p95
@@ -290,7 +290,7 @@ and terminal lifecycle handoff framework-native.
   next necessary abstraction.
 - `ProcessPanel`, `ProcessCommandRunner`, `TerminalOutputRegion`, and
   `editTextInExternalEditor` prove status/output/cancel UX, command binding,
-  native-process proof-app pressure, captured-output convergence, and external
+  native-process demo-app pressure, captured-output convergence, and external
   editor handoff. Further benchmark pressure should come only from concrete
   app scenarios that exceed existing log/output workloads.
 - Handoff suppresses framework writes and forces repaint after resume. Process
@@ -317,8 +317,8 @@ and terminal lifecycle handoff framework-native.
 - [Worker tests](../../../packages/fleury/test/effects/task_test.dart).
 - [Cooperative LogRegion index baseline](../../../packages/fleury_widgets/benchmark/results/phase2-logregion-cooperative-index-2026-06-01.json).
 - [Cooperative TreeTable index baseline](../../../packages/fleury_widgets/benchmark/results/phase2-treetable-cooperative-index-2026-06-01.json).
-- [Proof app Global Search usage](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
-- [Proof app Global Search test](../../../packages/fleury_example_console/test/proof_console_test.dart).
+- [Demo app Global Search usage](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
+- [Demo app Global Search test](../../../packages/fleury_example_console/test/demo_console_test.dart).
 - [Process task event tests](../../../packages/fleury/test/effects/process_task_test.dart).
 - [Terminal handoff contract](../../../packages/fleury/lib/src/terminal/terminal_driver.dart).
 - [Fake driver handoff tests](../../../packages/fleury/test/terminal/fake_driver_test.dart).
@@ -340,9 +340,9 @@ and terminal lifecycle handoff framework-native.
 - [TerminalOutputRegion tests](../../../packages/fleury_widgets/test/terminal_output_region_test.dart).
 - [SB.9 subprocess/output baseline](../../../packages/fleury_widgets/benchmark/results/phase2-subprocess-output-2026-06-01.json).
 - [Task output security semantics](../../../packages/fleury/lib/src/semantics/semantics.dart).
-- [Proof app task wiring](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
-- [Proof app Process screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
-- [Proof app workflow tests](../../../packages/fleury_example_console/test/proof_console_test.dart).
+- [Demo app task wiring](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
+- [Demo app Process screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
+- [Demo app workflow tests](../../../packages/fleury_example_console/test/demo_console_test.dart).
 - External-editor handoff tests cover command resolution, fake-driver
   suspend/resume, edited text metadata, temp cleanup, shell command wrapping,
   and non-zero editor exits.

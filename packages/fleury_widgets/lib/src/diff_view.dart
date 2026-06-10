@@ -463,13 +463,17 @@ class _DiffViewState extends State<DiffView> {
             focusNode: _focusNode,
             autofocus: widget.autofocus,
             itemCount: rows.length,
-            itemBuilder: (context, index, selected) => _DiffLineWidget(
-              row: rows[index],
-              selected: selected,
-              copyEnabled: copyEnabled,
-              onActivate: () => _selectRowAt(index),
-              onCopy: () => _copyRowAt(index),
-            ),
+            itemBuilder: (context, index, activeSelected) {
+              final selected = index == _controller.selectedIndex;
+              return _DiffLineWidget(
+                row: rows[index],
+                selected: selected,
+                activeSelection: activeSelected,
+                copyEnabled: copyEnabled,
+                onActivate: () => _selectRowAt(index),
+                onCopy: () => _copyRowAt(index),
+              );
+            },
           );
 
     if (copyEnabled) {
@@ -533,6 +537,7 @@ class _DiffLineWidget extends StatelessWidget {
   const _DiffLineWidget({
     required this.row,
     required this.selected,
+    required this.activeSelection,
     required this.copyEnabled,
     required this.onActivate,
     required this.onCopy,
@@ -540,6 +545,7 @@ class _DiffLineWidget extends StatelessWidget {
 
   final DiffLine row;
   final bool selected;
+  final bool activeSelection;
   final bool copyEnabled;
   final VoidCallback onActivate;
   final Future<void> Function() onCopy;
@@ -548,11 +554,13 @@ class _DiffLineWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final widgetTheme = FleuryWidgetTheme.from(theme);
-    final style = _styleForKind(
-      row.kind,
-      widgetTheme,
-      theme,
-    ).merge(selected ? theme.selectionStyle : CellStyle.empty);
+    final style = _styleForKind(row.kind, widgetTheme, theme).merge(
+      activeSelection
+          ? theme.selectionStyle
+          : selected
+          ? theme.mutedStyle
+          : CellStyle.empty,
+    );
     return Semantics(
       role: SemanticRole.diffLine,
       label: row.displayText,

@@ -3,6 +3,9 @@ description: A Dart-native terminal UI framework with Flutter ergonomics and ter
 version: 0.0.0
 publish_to: none
 
+executables:
+  fleury: fleury
+
 environment:
   sdk: ^3.10.4
 

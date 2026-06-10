@@ -36,18 +36,15 @@ enum CapabilityLevel { required, preferred, optional, prohibited }
 /// Human-readable fallback metadata for a capability requirement.
 @immutable
 final class CapabilityFallback {
-  const CapabilityFallback({
-    required this.label,
-    this.description,
-  });
+  const CapabilityFallback({required this.label, this.description});
 
   final String label;
   final String? description;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'label': label,
-        if (description != null) 'description': description,
-      };
+    'label': label,
+    if (description != null) 'description': description,
+  };
 }
 
 /// A widget or service request for one terminal feature.
@@ -66,11 +63,11 @@ final class CapabilityRequirement {
   final CapabilityFallback? fallback;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'feature': feature.name,
-        'level': level.name,
-        if (reason != null) 'reason': reason,
-        if (fallback != null) 'fallback': fallback!.toJson(),
-      };
+    'feature': feature.name,
+    'level': level.name,
+    if (reason != null) 'reason': reason,
+    if (fallback != null) 'fallback': fallback!.toJson(),
+  };
 }
 
 /// Outcome of resolving a requirement against terminal capabilities and policy.
@@ -116,13 +113,13 @@ final class CapabilityResolution {
   }
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'feature': feature.name,
-        'level': level.name,
-        'state': state.name,
-        'blocking': isBlocking,
-        if (fallbackLabel != null) 'fallbackLabel': fallbackLabel,
-        if (warning != null) 'warning': warning,
-      };
+    'feature': feature.name,
+    'level': level.name,
+    'state': state.name,
+    'blocking': isBlocking,
+    if (fallbackLabel != null) 'fallbackLabel': fallbackLabel,
+    if (warning != null) 'warning': warning,
+  };
 }
 
 /// Resolves one capability requirement against current terminal capabilities.

@@ -58,6 +58,37 @@ void main() {
       expect(controller.selection, 3);
     });
 
+    testWidgets('horizontal arrows bubble at text edges for focus traversal', (
+      tester,
+    ) {
+      final controller = TextEditingController(text: 'abc');
+      final next = FocusNode(debugLabel: 'next');
+      addTearDown(next.dispose);
+
+      tester.pumpWidget(
+        FocusTraversalGroup(
+          child: Row(
+            children: [
+              SizedBox(
+                width: 6,
+                child: TextInput(controller: controller, autofocus: true),
+              ),
+              const SizedBox(width: 2),
+              Focus(focusNode: next, child: const Text('Next')),
+            ],
+          ),
+        ),
+      );
+
+      tester.render(size: const CellSize(20, 3));
+      expect(controller.selection, 3);
+
+      tester.sendKey(_code(KeyCode.arrowRight));
+      tester.pump();
+
+      expect(next.hasFocus, isTrue);
+    });
+
     testWidgets('backspace and arrows respect grapheme clusters', (tester) {
       final controller = TextEditingController(text: 'a🙂b');
       tester.pumpWidget(TextInput(controller: controller, autofocus: true));

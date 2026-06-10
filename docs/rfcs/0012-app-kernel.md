@@ -1,10 +1,17 @@
 # RFC 0012: App Kernel
 
-**Status:** Proposal  
+**Status:** Accepted with 2026-06-08 amendment
 **Date:** 2026-05-31  
 **Decision point for:** M1.3 `FleuryApp` shell, command registry, action
-dispatch, screen structure, status binding, command palette integration, and
-proof-app implementation.
+dispatch, status binding, command palette integration, and demo-app
+implementation.
+
+**Amendment, 2026-06-08:** The original registered-screen design was removed
+from core after the DX review. `FleuryApp` remains the app-services shell for
+commands, status, extensions, and app semantics. Tabs, sidebars, top-level
+sections, and their controllers are ordinary app/widget state; they can expose
+`SemanticRole.screen` nodes and register navigation commands, but Fleury no
+longer provides `FleuryScreen`, `ScreenController`, or `ActiveScreenView`.
 
 ## 1. Summary
 
@@ -17,21 +24,21 @@ This RFC proposes the **Fleury app kernel**: a small app-shell contract centered
 on:
 
 - `FleuryApp`
-- screen registry
 - command/action registry
 - command scopes and shortcuts
 - status model
 - lifecycle hooks
-- semantic contributions for commands, screens, status, and active actions
+- semantic contributions for commands, app-owned screen nodes, status, and
+  active actions
 
 The kernel should be small enough to implement in Phase 1, but strong enough
-that the proof-app scenario can stop hand-wiring global shortcuts, command
+that the demo-app scenario can stop hand-wiring global shortcuts, command
 palette entries, active screen state, and status display in every widget.
 
 ## 2. Motivation
 
-The proof app in
-[../implementation/proof-app-scenario.md](../implementation/proof-app-scenario.md)
+The demo app in
+[../implementation/demo-app-scenario.md](../implementation/demo-app-scenario.md)
 needs app-scale structure:
 
 - A sidebar that switches between Overview, Runs, Transcript, Logs, and
@@ -73,10 +80,12 @@ palette, while preserving the existing retained widget model.
 ## 4. Goals
 
 - Provide a canonical `FleuryApp` shell for production TUIs.
-- Define screen identity and screen switching without replacing `Navigator`.
+- Leave screen/tab/sidebar identity in app-owned widgets instead of replacing
+  `Navigator` or adding a second route system.
 - Define command identity, metadata, enabled/visible state, shortcuts, and
   invocation.
-- Let commands be contributed globally, per screen, and by focused subtrees.
+- Let commands be contributed globally, by app-owned section predicates/scopes,
+  and by focused subtrees.
 - Let `KeyBindings` dispatch commands rather than duplicating callback logic.
 - Let command palettes and key hint bars query active commands.
 - Let tests invoke commands by ID.
@@ -104,19 +113,12 @@ Names are proposed, not final.
 void main() => runTui(
   FleuryApp(
     title: 'Fleury Example Console',
-    home: OverviewScreen(),
-    screens: [
-      FleuryScreen(id: .overview, title: 'Overview', builder: (_) => OverviewScreen()),
-      FleuryScreen(id: .runs, title: 'Runs', builder: (_) => RunsScreen()),
-      FleuryScreen(id: .transcript, title: 'Transcript', builder: (_) => TranscriptScreen()),
-      FleuryScreen(id: .diagnostics, title: 'Diagnostics', builder: (_) => DiagnosticsScreen()),
-    ],
     commands: [
       AppCommand(
         id: .goRuns,
         title: 'Go to Runs',
         shortcuts: const [KeyChord.ctrl.r],
-        run: (ctx) => ctx.screens.activate(.runs),
+        run: (_) => sections.activate('runs'),
       ),
       AppCommand(
         id: .startFakeTask,
@@ -126,50 +128,24 @@ void main() => runTui(
       ),
     ],
     status: (ctx) => [
-      StatusItem.text(ctx.screens.active.title),
+      StatusItem.text('Section', value: sections.activeTitle),
       StatusItem.text(ctx.tasks.activeSummary),
       StatusItem.warning(ctx.capabilities.activeFallbackSummary),
     ],
-    child: ExampleConsoleShell(),
+    child: ExampleConsoleShell(sections: sections),
   ),
 );
 ```
 
-The app kernel is a shell and registry. Layout remains ordinary widgets.
+The app kernel is a shell and registry. Layout, app sections, tabs, sidebars,
+and section retention remain ordinary widgets.
 
 ## 7. Core Types
 
 ```dart
-final class ScreenId {
-  const ScreenId(this.value);
-  final String value;
-}
-
 final class CommandId {
   const CommandId(this.value);
   final String value;
-}
-```
-
-```dart
-final class FleuryScreen {
-  const FleuryScreen({
-    required this.id,
-    required this.title,
-    required this.builder,
-    this.shortTitle,
-    this.description,
-    this.icon,
-    this.commands = const [],
-  });
-
-  final ScreenId id;
-  final String title;
-  final String? shortTitle;
-  final String? description;
-  final String? icon;
-  final WidgetBuilder builder;
-  final List<AppCommand> commands;
 }
 ```
 
@@ -205,7 +181,6 @@ work, the app should update ordinary state and rebuild.
 ```dart
 abstract interface class CommandContext {
   FleuryAppController get app;
-  ScreenController get screens;
   NavigatorState? get navigator;
   FocusManager get focus;
   TuiBinding get binding;
@@ -217,7 +192,6 @@ abstract interface class CommandContext {
 `FleuryApp` is a widget that installs app-kernel services into the tree:
 
 - `FleuryAppController`
-- `ScreenController`
 - `CommandRegistry`
 - status provider
 - app-level semantic contribution
@@ -226,45 +200,36 @@ It should not own every pixel. Apps still compose their own layout:
 
 ```dart
 FleuryApp(
-  screens: screens,
   commands: commands,
   child: ConsoleScaffold(
     sidebar: AppSidebar(),
-    body: ActiveScreenView(),
+    body: SectionView(controller: sections),
     statusBar: AppStatusBar(),
   ),
 )
 ```
 
 For simple apps, `FleuryApp.simple(home: ...)` can wrap `Navigator` and a
-default command palette. But the proof app should use the explicit shell form
+default command palette. But the demo app should use the explicit shell form
 so the APIs are pressured.
 
-## 9. Screen Model
+## 9. App-Owned Sections And Navigator
 
-The kernel should support two complementary screen shapes:
+The kernel should support two complementary navigation shapes:
 
-1. **Registered app screens** for persistent top-level sections like Overview,
-   Runs, Transcript, and Diagnostics.
+1. **App-owned sections** for persistent top-level areas like Overview, Runs,
+   Transcript, and Diagnostics. These can be implemented as tabs, sidebars,
+   split panes, or any other widget composition.
 2. **Navigator routes/modals** for push flows, dialogs, details, and transient
    overlays.
 
 This avoids overloading `Navigator` as both a route stack and an app tab/screen
-registry.
+registry while also avoiding a Fleury-specific screen registry that duplicates
+ordinary widget state.
 
-`ScreenController` responsibilities:
-
-- current `ScreenId`
-- activate screen
-- expose active screen metadata
-- produce navigation commands
-- contribute semantic route/screen nodes
-- optionally preserve screen state by keeping screen widgets mounted with an
-  indexed stack in the app shell
-
-The v0 implementation can let the shell choose whether inactive screens remain
-mounted. The RFC requirement is stable screen identity and command/semantic
-visibility.
+App section controllers are responsible for active IDs, retention policy, and
+navigation commands. Fleury's role is to make those commands discoverable and
+to let apps expose screen semantics through ordinary `Semantics` nodes.
 
 ## 10. Commands And Actions
 
@@ -335,12 +300,11 @@ The existing `fleury_widgets.CommandPalette` takes widget-local `Command`
 objects. Phase 1 should add a registry-backed path:
 
 ```dart
-context.present<void>(
-  AppCommandPalette(commands: FleuryApp.of(context).commands.active()),
-);
+CommandPalette.open(context);
 ```
 
-or evolve `CommandPalette` to accept both simple commands and app commands.
+`CommandPalette` should support both widget-local `Command` rows and
+registry-backed `AppCommand` discovery.
 
 The palette should show:
 
@@ -382,7 +346,7 @@ Status items should be:
 - exposed in the semantic graph
 - useful for diagnostics and debug capture
 
-The proof app should use status for active screen, task progress, and
+The demo app should use status for active screen, task progress, and
 capability fallback summary.
 
 ## 14. Lifecycle
@@ -403,14 +367,14 @@ place for local UI state.
 The app kernel must contribute semantic nodes for:
 
 - app root
-- active screen and registered screens
+- child-derived active screen summary when apps expose screen semantic nodes
 - command registry and active commands
 - command enabled/disabled state
 - shortcuts
 - status items
 - command errors
 
-This is required for RFC 0011 and the proof-app tests.
+This is required for RFC 0011 and the demo-app tests.
 
 ## 16. Implementation Plan
 
@@ -418,23 +382,21 @@ This is required for RFC 0011 and the proof-app tests.
 2. Add `CommandRegistry` and `CommandScope` over existing focus/binding
    machinery.
 3. Add `FleuryApp` inherited scope and `FleuryAppController`.
-4. Add `ScreenController` and registered-screen metadata.
-5. Add `AppStatusBar`/status model, or a minimal status provider consumed by
-   the proof app.
-6. Add registry-backed command palette adapter in `fleury_widgets` or core,
+4. Add `AppStatusBar`/status model, or a minimal status provider consumed by
+   the demo app.
+5. Add registry-backed command palette adapter in `fleury_widgets` or core,
    depending on dependency direction.
-7. Add semantic contributions for commands, screens, and status.
-8. Prove the flow in `packages/fleury_example_console`.
+6. Add semantic contributions for commands, child screen summaries, and status.
+7. Prove the flow in `packages/fleury_example_console` with app-owned
+   navigation state.
 
 ## 17. Open Questions
 
-- Should `CommandRegistry` live in core while `AppCommandPalette` lives in
+- Should `CommandRegistry` live in core while `CommandPalette` lives in
   `fleury_widgets`, or should a minimal palette live in core?
-- Should screen switching be part of `FleuryAppController`, or should it be a
-  separate `ScreenController` service from the beginning?
 - Should `AppCommand.run` be allowed to return `Future<void>` in v0, or should
   async behavior go exclusively through the worker/effects model?
-- How much default UI should `FleuryApp.simple` provide before the proof app
+- How much default UI should `FleuryApp.simple` provide before the demo app
   hardens the shape?
 - Should command IDs be strings, typed const objects, or generated enum-like
   values?
@@ -447,6 +409,6 @@ M0.3 is complete when:
   lifecycle, focus, navigation, and command palette compose.
 - The RFC preserves existing `Navigator`, `KeyBindings`, and retained widget
   architecture.
-- The proof-app scenario can map every required command and screen onto the
+- The demo-app scenario can map every required command and screen onto the
   proposed kernel.
 - Open questions that block M1.3 are recorded in the implementation tracker.

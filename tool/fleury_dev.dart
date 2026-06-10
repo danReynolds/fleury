@@ -23,8 +23,11 @@ Future<void> main(List<String> rawArgs) async {
     case 'check':
       await runner.check(quick: args.contains('--quick'));
       return;
-    case 'proof':
-      await runner.proofApp();
+    case 'demo':
+      await runner.demoApp();
+      return;
+    case 'storybook':
+      await runner.storybookApp(args);
       return;
     case 'core-demo':
       await runner.coreDemo(_requiredName(args, 'core-demo'));
@@ -100,26 +103,39 @@ void _printUsage() {
     'Usage: dart tool/fleury_dev.dart [--dry-run] <command> [args]',
   );
   stdout.writeln('');
-  stdout.writeln('Commands:');
-  stdout.writeln('  list                         Show runnable examples');
   stdout.writeln(
-    '  bootstrap                    Run dart pub get in local packages',
+    'Canonical CLI forms after local activation: `fleury dev <command>` and '
+    '`fleury benchmark <subcommand>`.',
+  );
+  stdout.writeln('');
+  stdout.writeln('Primary contributor commands:');
+  stdout.writeln('  list                          Show runnable demos');
+  stdout.writeln(
+    '  bootstrap                     Run dart pub get in local packages',
   );
   stdout.writeln(
-    '  check [--quick]              Analyze and test local packages',
+    '  check [--quick]               Analyze and test local packages',
   );
-  stdout.writeln('  proof                        Run the proof app');
+  stdout.writeln('  demo                          Run the integrated demo app');
   stdout.writeln(
-    '  core-demo <name>             Run a packages/fleury example',
-  );
-  stdout.writeln(
-    '  widget-demo <name>           Run a packages/fleury_widgets example',
+    '  storybook [command/options]   Run, inspect, verify, or snapshot storybook',
   );
   stdout.writeln(
-    '  cli <args...>                Run packages/fleury/bin/fleury.dart',
+    '  core-demo <name>              Run a packages/fleury example',
   );
   stdout.writeln(
-    '  terminal-matrix [options]    Capture diagnose JSON as a matrix entry',
+    '  widget-demo <name>            Run a packages/fleury_widgets example',
+  );
+  stdout.writeln(
+    '  cli <args...>                 Run packages/fleury/bin/fleury.dart',
+  );
+  stdout.writeln(
+    '  benchmark <subcommand>        Run benchmark/profiling workflows',
+  );
+  stdout.writeln('');
+  stdout.writeln('Evidence and release commands:');
+  stdout.writeln(
+    '  terminal-matrix [options]     Capture diagnose JSON as a matrix entry',
   );
   stdout.writeln(
     '  terminal-matrix-audit [options] '
@@ -137,19 +153,8 @@ void _printUsage() {
   stdout.writeln(
     '  mvp-evidence-refresh [options] Regenerate MVP evidence artifacts',
   );
-  stdout.writeln(
-    '  benchmark <subcommand>         Run benchmark and profiling workflows',
-  );
-  stdout.writeln(
-    '  benchmark-manifest [options] '
-    'Print the comparative benchmark contract',
-  );
-  stdout.writeln(
-    '  benchmark-result [options]   Validate and merge one peer benchmark run',
-  );
-  stdout.writeln(
-    '  benchmark-variance [options] Summarize repeated peer benchmark runs',
-  );
+  stdout.writeln('');
+  stdout.writeln('Maintenance commands:');
   stdout.writeln(
     '  activate-cli                 dart pub global activate --source path packages/fleury',
   );
@@ -157,19 +162,25 @@ void _printUsage() {
     '  build-cli                    Compile build/fleury from the local CLI',
   );
   stdout.writeln('');
+  stdout.writeln('Legacy benchmark aliases:');
+  stdout.writeln(
+    '  benchmark-manifest [options]  Prefer `benchmark manifest [options]`',
+  );
+  stdout.writeln(
+    '  benchmark-result [options]    Prefer `benchmark result [options]`',
+  );
+  stdout.writeln(
+    '  benchmark-variance [options]  Prefer `benchmark variance [options]`',
+  );
+  stdout.writeln('');
   stdout.writeln('Examples:');
   stdout.writeln('  dart tool/fleury_dev.dart bootstrap');
-  stdout.writeln('  dart tool/fleury_dev.dart proof');
+  stdout.writeln('  dart tool/fleury_dev.dart demo');
+  stdout.writeln('  dart tool/fleury_dev.dart storybook');
+  stdout.writeln('  dart tool/fleury_dev.dart storybook verify');
+  stdout.writeln('  dart tool/fleury_dev.dart storybook coverage --strict');
   stdout.writeln('  dart tool/fleury_dev.dart core-demo counter');
   stdout.writeln('  dart tool/fleury_dev.dart cli diagnose --json');
-  stdout.writeln('  dart tool/fleury_dev.dart terminal-matrix --label=iterm2');
-  stdout.writeln('  dart tool/fleury_dev.dart terminal-matrix-audit');
-  stdout.writeln(
-    '  dart tool/fleury_dev.dart terminal-matrix-accept --label=iterm2 --note="Reviewed"',
-  );
-  stdout.writeln('  dart tool/fleury_dev.dart mvp-readiness');
-  stdout.writeln('  dart tool/fleury_dev.dart mvp-final-gate');
-  stdout.writeln('  dart tool/fleury_dev.dart mvp-evidence-refresh');
   stdout.writeln('  dart tool/fleury_dev.dart benchmark list');
   stdout.writeln(
     '  dart tool/fleury_dev.dart benchmark local SB.4 --warmup=1 --iterations=3 --json',
@@ -178,13 +189,15 @@ void _printUsage() {
   stdout.writeln(
     '  dart tool/fleury_dev.dart benchmark wire sb3 --peers=ratatui,opentui --runs=3',
   );
-  stdout.writeln('  dart tool/fleury_dev.dart benchmark-manifest --json');
+  stdout.writeln('  dart tool/fleury_dev.dart benchmark manifest --json');
   stdout.writeln(
-    '  dart tool/fleury_dev.dart benchmark-result --input=peer-run.json --json',
+    '  dart tool/fleury_dev.dart benchmark result --input=peer-run.json --json',
   );
   stdout.writeln(
-    '  dart tool/fleury_dev.dart benchmark-variance --input=peer-runs --json',
+    '  dart tool/fleury_dev.dart benchmark variance --input=peer-runs --json',
   );
+  stdout.writeln('  dart tool/fleury_dev.dart terminal-matrix --label=iterm2');
+  stdout.writeln('  dart tool/fleury_dev.dart mvp-readiness');
 }
 
 void _printCatalog() {
@@ -194,10 +207,13 @@ void _printCatalog() {
   stdout.writeln('Widget demos:');
   _widgetDemos.forEach((name, path) => stdout.writeln('  $name -> $path'));
   stdout.writeln('');
-  stdout.writeln('Proof app:');
+  stdout.writeln('Demo app:');
   stdout.writeln(
-    '  proof -> packages/fleury_example_console/bin/fleury_example_console.dart',
+    '  demo -> packages/fleury_example_console/bin/fleury_example_console.dart',
   );
+  stdout.writeln('');
+  stdout.writeln('Storybook:');
+  stdout.writeln('  storybook -> packages/storybook/bin/storybook.dart');
 }
 
 final _coreDemos = <String, String>{
@@ -262,11 +278,12 @@ class _Runner {
   String get widgets => '$root/packages/fleury_widgets';
   String get web => '$root/packages/fleury_web';
   String get git => '$root/packages/fleury_git';
-  String get proof => '$root/packages/fleury_example_console';
+  String get demo => '$root/packages/fleury_example_console';
+  String get storybook => '$root/packages/storybook';
   String get profiling => '$root/profiling';
 
   Future<void> bootstrap() async {
-    for (final dir in [fleury, widgets, web, git, proof]) {
+    for (final dir in [fleury, widgets, web, git, demo, storybook]) {
       await _run('dart', ['pub', 'get'], workingDirectory: dir);
     }
   }
@@ -299,18 +316,28 @@ class _Runner {
     );
     await _run('dart', ['analyze'], workingDirectory: git);
     await _run('dart', ['test'], workingDirectory: git);
-    await _run('dart', ['analyze'], workingDirectory: proof);
+    await _run('dart', ['analyze'], workingDirectory: demo);
     await _run('dart', [
       'test',
-      'test/proof_console_test.dart',
-    ], workingDirectory: proof);
+      'test/demo_console_test.dart',
+    ], workingDirectory: demo);
+    await _run('dart', ['analyze'], workingDirectory: storybook);
+    await _run('dart', ['test'], workingDirectory: storybook);
   }
 
-  Future<void> proofApp() {
+  Future<void> demoApp() {
     return _run('dart', [
       'run',
       'bin/fleury_example_console.dart',
-    ], workingDirectory: proof);
+    ], workingDirectory: demo);
+  }
+
+  Future<void> storybookApp(List<String> args) {
+    return _run('dart', [
+      'run',
+      'bin/storybook.dart',
+      ...args,
+    ], workingDirectory: storybook);
   }
 
   Future<void> coreDemo(String name) {
@@ -1543,8 +1570,8 @@ const _widgetBenchmarkTarget = _LocalBenchmarkTarget(
   ],
 );
 
-const _proofBenchmarkTarget = _LocalBenchmarkTarget(
-  label: 'Proof app',
+const _demoBenchmarkTarget = _LocalBenchmarkTarget(
+  label: 'Demo app',
   packagePath: 'packages/fleury_example_console',
   scenarios: <String>['SB.10'],
 );
@@ -1552,7 +1579,7 @@ const _proofBenchmarkTarget = _LocalBenchmarkTarget(
 const _localBenchmarkTargets = <_LocalBenchmarkTarget>[
   _coreBenchmarkTarget,
   _widgetBenchmarkTarget,
-  _proofBenchmarkTarget,
+  _demoBenchmarkTarget,
 ];
 
 _LocalBenchmarkTarget? _localBenchmarkTargetFor(String scenarioId) {
@@ -2218,12 +2245,12 @@ const _wireScenarioConfigs = <String, _WireScenarioConfig>{
   ),
   'sb10-textual': _WireScenarioConfig(
     shortName: 'sb10',
-    scenarioName: 'SB.10 Proof-App Journey',
+    scenarioName: 'SB.10 Demo-App Journey',
     peerId: 'textual',
     peerKind: 'python',
     fleurySource: 'bin/fleury_sb10_wire.dart',
-    peerFixturePath: 'peer-fixtures/textual/sb10_proof_app',
-    peerWireScript: 'sb10_proof_app_benchmark.py',
+    peerFixturePath: 'peer-fixtures/textual/sb10_demo_app',
+    peerWireScript: 'sb10_demo_app_benchmark.py',
     defaultRows: 1000,
     usesAppend: false,
     defaultAppend: 0,
@@ -2233,11 +2260,11 @@ const _wireScenarioConfigs = <String, _WireScenarioConfig>{
   ),
   'sb10-bubbletea': _WireScenarioConfig(
     shortName: 'sb10',
-    scenarioName: 'SB.10 Proof-App Journey',
+    scenarioName: 'SB.10 Demo-App Journey',
     peerId: 'bubbletea',
     peerKind: 'go',
     fleurySource: 'bin/fleury_sb10_wire.dart',
-    peerFixturePath: 'peer-fixtures/bubbletea/sb10_proof_app',
+    peerFixturePath: 'peer-fixtures/bubbletea/sb10_demo_app',
     defaultRows: 1000,
     usesAppend: false,
     defaultAppend: 0,
@@ -2247,12 +2274,12 @@ const _wireScenarioConfigs = <String, _WireScenarioConfig>{
   ),
   'sb10-ink': _WireScenarioConfig(
     shortName: 'sb10',
-    scenarioName: 'SB.10 Proof-App Journey',
+    scenarioName: 'SB.10 Demo-App Journey',
     peerId: 'ink',
     peerKind: 'node',
     fleurySource: 'bin/fleury_sb10_wire.dart',
-    peerFixturePath: 'peer-fixtures/ink/sb10_proof_app',
-    peerWireScript: 'bin/sb10_proof_app_benchmark.js',
+    peerFixturePath: 'peer-fixtures/ink/sb10_demo_app',
+    peerWireScript: 'bin/sb10_demo_app_benchmark.js',
     defaultRows: 1000,
     usesAppend: false,
     defaultAppend: 0,
@@ -3463,9 +3490,15 @@ void _printBenchmarkUsage() {
   stdout.writeln(
     '  scoreboard [options]    Build the generated benchmark scoreboard',
   );
-  stdout.writeln('  manifest [options]     Alias for benchmark-manifest');
-  stdout.writeln('  result [options]       Alias for benchmark-result');
-  stdout.writeln('  variance [options]     Alias for benchmark-variance');
+  stdout.writeln(
+    '  manifest [options]     Print the comparative benchmark contract',
+  );
+  stdout.writeln(
+    '  result [options]       Validate and merge one peer benchmark run',
+  );
+  stdout.writeln(
+    '  variance [options]     Summarize repeated peer benchmark runs',
+  );
   stdout.writeln('');
   stdout.writeln('Examples:');
   stdout.writeln('  fleury benchmark list');

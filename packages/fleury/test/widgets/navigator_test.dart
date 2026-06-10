@@ -152,6 +152,48 @@ void main() {
     expect(homeInput.text, 'ac', reason: 'focus restored to home');
   });
 
+  testWidgets(
+    'page routes allow ancestor bindings while modals suppress them',
+    (tester) {
+      BuildContext? home;
+      final focus = FocusNode(debugLabel: 'home-focus');
+      addTearDown(focus.dispose);
+      final calls = <String>[];
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [
+            KeyBinding(
+              KeyChord.ctrl.k,
+              onEvent: (_) {
+                calls.add('ancestor');
+              },
+            ),
+          ],
+          child: Navigator(
+            home: Focus(
+              focusNode: focus,
+              autofocus: true,
+              child: _Capture(sink: (x) => home = x, label: 'home'),
+            ),
+          ),
+        ),
+      );
+      tester.render();
+      focus.requestFocus();
+      tester.pump();
+
+      tester.sendKey(const KeyEvent(char: 'k', modifiers: {KeyModifier.ctrl}));
+      expect(calls, ['ancestor']);
+
+      home!.present<void>(const Focus(autofocus: true, child: Text('modal')));
+      tester.pump(const Duration(milliseconds: 300));
+      tester.render();
+      tester.sendKey(const KeyEvent(char: 'k', modifiers: {KeyModifier.ctrl}));
+
+      expect(calls, ['ancestor']);
+    },
+  );
+
   testWidgets('exposes navigator and route semantics', (tester) {
     BuildContext? home;
     tester.pumpWidget(

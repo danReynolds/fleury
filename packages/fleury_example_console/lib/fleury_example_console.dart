@@ -6,66 +6,66 @@ import 'dart:io' show Platform;
 import 'package:fleury/fleury.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 
-const proofScreenOverview = ScreenId('overview');
-const proofScreenSearch = ScreenId('search');
-const proofScreenIndex = ScreenId('index');
-const proofScreenConnection = ScreenId('connection');
-const proofScreenRuns = ScreenId('runs');
-const proofScreenTree = ScreenId('tree');
-const proofScreenPayload = ScreenId('payload');
-const proofScreenChanges = ScreenId('changes');
-const proofScreenSource = ScreenId('source');
-const proofScreenDocs = ScreenId('docs');
-const proofScreenTranscript = ScreenId('transcript');
-const proofScreenProcess = ScreenId('process');
-const proofScreenDiagnostics = ScreenId('diagnostics');
+const demoScreenOverview = 'overview';
+const demoScreenSearch = 'search';
+const demoScreenIndex = 'index';
+const demoScreenConnection = 'connection';
+const demoScreenRuns = 'runs';
+const demoScreenTree = 'tree';
+const demoScreenPayload = 'payload';
+const demoScreenChanges = 'changes';
+const demoScreenSource = 'source';
+const demoScreenDocs = 'docs';
+const demoScreenTranscript = 'transcript';
+const demoScreenProcess = 'process';
+const demoScreenDiagnostics = 'diagnostics';
 
-const proofCommandOpenPalette = CommandId('app.openPalette');
-const proofCommandGoOverview = CommandId('screen.overview');
-const proofCommandGoSearch = CommandId('screen.search');
-const proofCommandGoIndex = CommandId('screen.index');
-const proofCommandGoConnection = CommandId('screen.connection');
-const proofCommandGoRuns = CommandId('screen.runs');
-const proofCommandGoTree = CommandId('screen.tree');
-const proofCommandGoPayload = CommandId('screen.payload');
-const proofCommandGoChanges = CommandId('screen.changes');
-const proofCommandGoSource = CommandId('screen.source');
-const proofCommandGoDocs = CommandId('screen.docs');
-const proofCommandGoTranscript = CommandId('screen.transcript');
-const proofCommandGoProcess = CommandId('screen.process');
-const proofCommandGoDiagnostics = CommandId('screen.diagnostics');
-const proofCommandStartTask = CommandId('task.startFake');
-const proofCommandCancelTask = CommandId('task.cancelFake');
-const proofCommandRunProcess = CommandId('process.dartVersion.start');
-const proofCommandCancelProcess = CommandId('process.dartVersion.cancel');
-const proofCommandRequestApproval = CommandId('approval.deploy.request');
-const proofCommandToggleStream = CommandId('logs.toggleStream');
-const proofCommandDiagnose = CommandId('terminal.diagnose');
-const proofCommandCaptureDebug = CommandId('debug.captureSnapshot');
-const proofCommandFocusRunsFilter = CommandId('runs.focusFilter');
-const proofCommandFocusRunsTable = CommandId('runs.focusTable');
-const proofCommandFocusTreeTable = CommandId('tree.focusTable');
-const proofCommandFocusPayload = CommandId('payload.focusJson');
-const proofCommandFocusChanges = CommandId('changes.focusDiff');
-const proofCommandFocusSource = CommandId('source.focusCode');
-const proofCommandFocusDocs = CommandId('docs.focusMarkdown');
-const proofCommandFocusSearch = CommandId('search.focusQuery');
-const proofCommandBuildLogIndex = CommandId('index.buildLogs');
-const proofCommandAppendIndexedLogBurst = CommandId('index.appendLogBurst');
-const proofCommandFocusIndexFilter = CommandId('index.focusFilter');
-const proofCommandFocusIndexLog = CommandId('index.focusLog');
-const proofCommandFocusComposer = CommandId('transcript.focusComposer');
-const proofCommandAppendLogBurst = CommandId('transcript.appendLogBurst');
+const demoCommandOpenPalette = CommandId('app.openPalette');
+const demoCommandGoOverview = CommandId('screen.overview');
+const demoCommandGoSearch = CommandId('screen.search');
+const demoCommandGoIndex = CommandId('screen.index');
+const demoCommandGoConnection = CommandId('screen.connection');
+const demoCommandGoRuns = CommandId('screen.runs');
+const demoCommandGoTree = CommandId('screen.tree');
+const demoCommandGoPayload = CommandId('screen.payload');
+const demoCommandGoChanges = CommandId('screen.changes');
+const demoCommandGoSource = CommandId('screen.source');
+const demoCommandGoDocs = CommandId('screen.docs');
+const demoCommandGoTranscript = CommandId('screen.transcript');
+const demoCommandGoProcess = CommandId('screen.process');
+const demoCommandGoDiagnostics = CommandId('screen.diagnostics');
+const demoCommandStartTask = CommandId('task.startFake');
+const demoCommandCancelTask = CommandId('task.cancelFake');
+const demoCommandRunProcess = CommandId('process.dartVersion.start');
+const demoCommandCancelProcess = CommandId('process.dartVersion.cancel');
+const demoCommandRequestApproval = CommandId('approval.deploy.request');
+const demoCommandToggleStream = CommandId('logs.toggleStream');
+const demoCommandDiagnose = CommandId('terminal.diagnose');
+const demoCommandCaptureDebug = CommandId('debug.captureSnapshot');
+const demoCommandFocusRunsFilter = CommandId('runs.focusFilter');
+const demoCommandFocusRunsTable = CommandId('runs.focusTable');
+const demoCommandFocusTreeTable = CommandId('tree.focusTable');
+const demoCommandFocusPayload = CommandId('payload.focusJson');
+const demoCommandFocusChanges = CommandId('changes.focusDiff');
+const demoCommandFocusSource = CommandId('source.focusCode');
+const demoCommandFocusDocs = CommandId('docs.focusMarkdown');
+const demoCommandFocusSearch = CommandId('search.focusQuery');
+const demoCommandBuildLogIndex = CommandId('index.buildLogs');
+const demoCommandAppendIndexedLogBurst = CommandId('index.appendLogBurst');
+const demoCommandFocusIndexFilter = CommandId('index.focusFilter');
+const demoCommandFocusIndexLog = CommandId('index.focusLog');
+const demoCommandFocusComposer = CommandId('transcript.focusComposer');
+const demoCommandAppendLogBurst = CommandId('transcript.appendLogBurst');
 
-const proofIndexedLogInitialCount = 192;
-const proofIndexedLogAppendCount = 3;
+const demoIndexedLogInitialCount = 192;
+const demoIndexedLogAppendCount = 3;
 
-const _proofIndexYieldPolicy = TaskYieldPolicy(
+const _demoIndexYieldPolicy = TaskYieldPolicy(
   itemBudget: 16,
   elapsedBudget: Duration(days: 1),
 );
 
-const _proofWidgetTheme = FleuryWidgetTheme(
+const _demoWidgetTheme = FleuryWidgetTheme(
   controlFocusStyle: CellStyle(bold: true, foreground: AnsiColor(14)),
   progressFilledStyle: CellStyle(foreground: AnsiColor(10)),
   progressTrackStyle: CellStyle(dim: true),
@@ -85,7 +85,7 @@ const _proofWidgetTheme = FleuryWidgetTheme(
   markdownCodeBlockStyle: CellStyle(background: AnsiColor(8)),
 );
 
-const _proofTheme = ThemeData(
+const _demoTheme = ThemeData(
   colorScheme: ColorScheme(
     primary: AnsiColor(14),
     success: AnsiColor(10),
@@ -132,9 +132,9 @@ final class TranscriptEvent {
 }
 
 /// Package-owned global-search read model contributed by
-/// [ProofConsoleExtension].
-final class ProofSearchDataSource {
-  const ProofSearchDataSource({required this.runs, required this.transcript});
+/// [DemoConsoleExtension].
+final class DemoSearchDataSource {
+  const DemoSearchDataSource({required this.runs, required this.transcript});
 
   final List<RunRecord> runs;
   final List<TranscriptEvent> transcript;
@@ -144,27 +144,29 @@ final class ProofSearchDataSource {
   }
 }
 
-/// App-level proof extension registered through `FleuryApp.extensions`.
+/// App-level demo extension registered through `FleuryApp.extensions`.
 ///
-/// The proof app uses this as an integration handle for package-owned workflow
+/// The demo app uses this as an integration handle for package-owned workflow
 /// state. Core Fleury only provides typed lookup; this package owns the model
 /// shape and lifecycle.
-final class ProofConsoleExtension extends FleuryAppExtension {
-  const ProofConsoleExtension({
+final class DemoConsoleExtension extends FleuryAppExtension {
+  const DemoConsoleExtension({
     required this.workflowId,
     required this.streaming,
     required this.debugCaptures,
     required this.transcriptCount,
     required this.search,
     required this.recordDiagnostic,
+    required this.activateScreen,
   });
 
   final String workflowId;
   final bool streaming;
   final int debugCaptures;
   final int transcriptCount;
-  final ProofSearchDataSource search;
+  final DemoSearchDataSource search;
   final void Function() recordDiagnostic;
+  final bool Function(String screenId) activateScreen;
 
   String get streamStatusValue => streaming ? 'on' : 'paused';
   String get debugStatusValue => 'captures $debugCaptures';
@@ -172,14 +174,16 @@ final class ProofConsoleExtension extends FleuryAppExtension {
   @override
   List<AppCommand> get commands => [
     AppCommand(
-      id: proofCommandDiagnose,
+      id: demoCommandDiagnose,
       title: 'Run Terminal Diagnose',
       description: 'Open diagnostics and record a synthetic report',
       category: 'Diagnostics',
       semanticAction: SemanticAction.diagnose,
       run: (context) {
-        context.screens!.activate(proofScreenDiagnostics);
-        context.appExtension<ProofConsoleExtension>().recordDiagnostic();
+        context.appExtension<DemoConsoleExtension>().activateScreen(
+          demoScreenDiagnostics,
+        );
+        context.appExtension<DemoConsoleExtension>().recordDiagnostic();
       },
     ),
   ];
@@ -190,36 +194,73 @@ final class ProofConsoleExtension extends FleuryAppExtension {
       'Stream',
       id: 'stream',
       value: streamStatusValue,
-      action: proofCommandToggleStream,
+      action: demoCommandToggleStream,
     ),
     StatusItem.text(
       'Debug',
       id: 'debug',
       value: debugStatusValue,
-      action: proofCommandCaptureDebug,
+      action: demoCommandCaptureDebug,
     ),
   ];
 
   @override
-  List<Object> get themeExtensions => const [_proofWidgetTheme];
+  List<Object> get themeExtensions => const [_demoWidgetTheme];
 
   @override
   List<Object> get dataSources => [search];
 }
 
-/// First proof app for the Phase 1 Fleury framework loop.
+/// First demo app for the Phase 1 Fleury framework loop.
 ///
 /// This is an internal integration harness, not a polished public example.
 /// It deliberately uses app-shell commands, screens, status, command palette,
 /// text input, table, progress, key hints, and semantic/test surfaces together.
-class ProofConsoleApp extends StatefulWidget {
-  const ProofConsoleApp({super.key});
+class DemoConsoleApp extends StatefulWidget {
+  const DemoConsoleApp({super.key});
 
   @override
-  State<ProofConsoleApp> createState() => _ProofConsoleAppState();
+  State<DemoConsoleApp> createState() => _DemoConsoleAppState();
 }
 
-class _ProofConsoleAppState extends State<ProofConsoleApp> {
+typedef _DemoScreenBuilder = Widget Function(BuildContext context);
+
+final class _DemoScreenSpec {
+  const _DemoScreenSpec({
+    required this.id,
+    required this.title,
+    required this.builder,
+    this.shortTitle,
+    this.description,
+    this.commands = const <AppCommand>[],
+  });
+
+  final String id;
+  final String title;
+  final _DemoScreenBuilder builder;
+  final String? shortTitle;
+  final String? description;
+  final List<AppCommand> commands;
+}
+
+final class _DemoNavigationController extends ChangeNotifier {
+  _DemoNavigationController(this.activeScreenId);
+
+  String activeScreenId;
+
+  bool activate(String screenId) {
+    if (activeScreenId == screenId) return true;
+    activeScreenId = screenId;
+    notifyListeners();
+    return true;
+  }
+
+  void refresh() {
+    notifyListeners();
+  }
+}
+
+class _DemoConsoleAppState extends State<DemoConsoleApp> {
   final _runsFilter = TextEditingController();
   final _globalSearchQuery = TextEditingController();
   final _indexedLogFilter = TextEditingController();
@@ -253,8 +294,8 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
   final _connectionForm = FormController(_connectionFormDefinition);
   final _task = TaskController<void>(id: 'fake-task', label: 'Fake task');
   final _logIndexTask = TaskController<LogRegionSearchIndex>(
-    id: 'proof-log-index',
-    label: 'Proof log index',
+    id: 'demo-log-index',
+    label: 'Demo log index',
   );
   final _globalSearchTask = DebouncedTaskController<List<SearchResult>>(
     delay: const Duration(milliseconds: 60),
@@ -267,6 +308,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
   );
   late final ProcessCommandRunner _processRunner;
 
+  final _navigation = _DemoNavigationController(demoScreenOverview);
   Completer<void>? _fakeTaskCompleter;
   bool _streaming = true;
   int _debugCaptures = 0;
@@ -274,8 +316,8 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
   int _nextTranscriptEventId = 2;
   String _globalSearchResolvedQuery = '';
   List<SearchResult> _globalSearchResults = const <SearchResult>[];
-  late final List<LogEntry> _indexedLogs = _buildProofIndexedLogs(
-    proofIndexedLogInitialCount,
+  late final List<LogEntry> _indexedLogs = _buildDemoIndexedLogs(
+    demoIndexedLogInitialCount,
   );
   LogRegionSearchIndex? _indexedLogSearchIndex;
 
@@ -323,7 +365,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
       id: 0,
       source: 'system',
       kind: 'info',
-      text: 'Proof console booted with deterministic fixtures.',
+      text: 'Demo console booted with deterministic fixtures.',
     ),
     const TranscriptEvent(
       id: 1,
@@ -339,8 +381,8 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
     _processRunner = ProcessCommandRunner(
       controller: _process,
       command: ProcessTaskCommand(Platform.resolvedExecutable, ['--version']),
-      startCommandId: proofCommandRunProcess,
-      cancelCommandId: proofCommandCancelProcess,
+      startCommandId: demoCommandRunProcess,
+      cancelCommandId: demoCommandCancelProcess,
       title: 'Run Dart Version',
       cancelTitle: 'Cancel Dart Version',
       category: 'Process',
@@ -419,54 +461,66 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
     _logIndexTask.dispose();
     _globalSearchTask.dispose();
     _process.dispose();
+    _navigation.dispose();
     super.dispose();
   }
 
   void _rebuild() {
-    setState(() {});
+    _mutate(() {});
+  }
+
+  void _mutate(void Function() update) {
+    setState(update);
+    _navigation.refresh();
   }
 
   bool get _taskRunning => _task.isRunning;
 
   int get _taskProgress => (_task.progress?.current ?? 0).round();
 
-  ProofSearchDataSource get _searchDataSource {
-    return ProofSearchDataSource(runs: _runs, transcript: _transcript);
+  DemoSearchDataSource get _searchDataSource {
+    return DemoSearchDataSource(runs: _runs, transcript: _transcript);
   }
 
   @override
   Widget build(BuildContext context) {
     final searchDataSource = _searchDataSource;
-    final extension = ProofConsoleExtension(
-      workflowId: 'proof-console',
+    final extension = DemoConsoleExtension(
+      workflowId: 'demo-console',
       streaming: _streaming,
       debugCaptures: _debugCaptures,
       transcriptCount: _transcript.length,
       search: searchDataSource,
       recordDiagnostic: _recordDiagnostic,
+      activateScreen: _activateScreen,
     );
     return Theme(
-      data: _proofTheme,
+      data: _demoTheme,
       child: FleuryApp(
-        title: 'Fleury Proof Console',
+        title: 'Fleury Demo Console',
         extensions: <Object>[extension],
-        screens: _screens,
         commands: _commands,
         status: _status,
-        child: Navigator(home: const _ConsoleShell()),
+        child: Navigator(
+          home: _ConsoleShell(
+            screens: _screens,
+            navigation: _navigation,
+            onActivateScreen: _activateScreen,
+          ),
+        ),
       ),
     );
   }
 
-  List<FleuryScreen> get _screens => [
-    FleuryScreen(
-      id: proofScreenOverview,
+  List<_DemoScreenSpec> get _screens => [
+    _DemoScreenSpec(
+      id: demoScreenOverview,
       title: 'Overview',
       shortTitle: 'Home',
       description: 'Summary, task progress, and recent activity',
       commands: [
         AppCommand(
-          id: proofCommandStartTask,
+          id: demoCommandStartTask,
           title: 'Start Fake Task',
           category: 'Task',
           enabled: (_) => !_taskRunning,
@@ -477,7 +531,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
         ),
       ],
       builder: (context) {
-        final extension = FleuryApp.extension<ProofConsoleExtension>(context);
+        final extension = FleuryApp.extension<DemoConsoleExtension>(context);
         return _OverviewScreen(
           task: _task,
           process: _process,
@@ -485,7 +539,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
           transcript: _transcript,
           debugCaptures: extension.debugCaptures,
           streaming: extension.streaming,
-          contextItems: _proofContextItems(
+          contextItems: _demoContextItems(
             task: _task,
             transcript: _transcript,
             debugCaptures: extension.debugCaptures,
@@ -494,13 +548,13 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
         );
       },
     ),
-    FleuryScreen(
-      id: proofScreenSearch,
+    _DemoScreenSpec(
+      id: demoScreenSearch,
       title: 'Search',
-      description: 'Debounced global search across proof app surfaces',
+      description: 'Debounced global search across demo app surfaces',
       commands: [
         AppCommand(
-          id: proofCommandFocusSearch,
+          id: demoCommandFocusSearch,
           title: 'Focus Global Search',
           category: 'Search',
           shortcuts: const [KeyChord.char('/')],
@@ -518,27 +572,28 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
         task: _globalSearchTask,
         resolvedQuery: _globalSearchResolvedQuery,
         results: _globalSearchResults,
+        onActivateScreen: _activateScreen,
         onActivate: _activateSearchResult,
       ),
     ),
-    FleuryScreen(
-      id: proofScreenIndex,
+    _DemoScreenSpec(
+      id: demoScreenIndex,
       title: 'Indexed Logs',
       shortTitle: 'Index',
       description: 'Cooperative retained-log indexing and filtering',
       commands: [
         AppCommand(
-          id: proofCommandBuildLogIndex,
-          title: 'Build Proof Log Index',
+          id: demoCommandBuildLogIndex,
+          title: 'Build Demo Log Index',
           category: 'Index',
           semanticAction: SemanticAction.start,
           enabled: (_) => !_logIndexTask.isRunning,
           run: (_) {
-            _buildProofLogIndex();
+            _buildDemoLogIndex();
           },
         ),
         AppCommand(
-          id: proofCommandAppendIndexedLogBurst,
+          id: demoCommandAppendIndexedLogBurst,
           title: 'Append Indexed Log Burst',
           description: 'Append logs and refresh the search index cooperatively',
           category: 'Index',
@@ -549,7 +604,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
           },
         ),
         AppCommand(
-          id: proofCommandFocusIndexFilter,
+          id: demoCommandFocusIndexFilter,
           title: 'Focus Indexed Log Filter',
           category: 'Index',
           shortcuts: const [KeyChord.char('/')],
@@ -559,7 +614,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
           },
         ),
         AppCommand(
-          id: proofCommandFocusIndexLog,
+          id: demoCommandFocusIndexLog,
           title: 'Focus Indexed Log Region',
           category: 'Index',
           semanticAction: SemanticAction.focus,
@@ -578,8 +633,8 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
         task: _logIndexTask,
       ),
     ),
-    FleuryScreen(
-      id: proofScreenConnection,
+    _DemoScreenSpec(
+      id: demoScreenConnection,
       title: 'Connection',
       description: 'Shared form definition with full-screen and prompt parity',
       builder: (_) => _ConnectionScreen(
@@ -587,13 +642,13 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
         onSubmit: _submitConnection,
       ),
     ),
-    FleuryScreen(
-      id: proofScreenRuns,
+    _DemoScreenSpec(
+      id: demoScreenRuns,
       title: 'Runs',
       description: 'Dense run records with filtering and selection',
       commands: [
         AppCommand(
-          id: proofCommandFocusRunsFilter,
+          id: demoCommandFocusRunsFilter,
           title: 'Focus Run Filter',
           category: 'Runs',
           shortcuts: const [KeyChord.char('/')],
@@ -603,7 +658,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
           },
         ),
         AppCommand(
-          id: proofCommandFocusRunsTable,
+          id: demoCommandFocusRunsTable,
           title: 'Focus Runs Table',
           category: 'Runs',
           semanticAction: SemanticAction.focus,
@@ -621,13 +676,13 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
         onSelect: _selectRun,
       ),
     ),
-    FleuryScreen(
-      id: proofScreenTree,
+    _DemoScreenSpec(
+      id: demoScreenTree,
       title: 'Tree',
       description: 'Hierarchical subsystem table with expansion and copy',
       commands: [
         AppCommand(
-          id: proofCommandFocusTreeTable,
+          id: demoCommandFocusTreeTable,
           title: 'Focus Tree Table',
           category: 'Tree',
           semanticAction: SemanticAction.focus,
@@ -643,13 +698,13 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
         onSelect: _selectTreeNode,
       ),
     ),
-    FleuryScreen(
-      id: proofScreenPayload,
+    _DemoScreenSpec(
+      id: demoScreenPayload,
       title: 'Payload',
       description: 'Structured JSON payload with path semantics and copy',
       commands: [
         AppCommand(
-          id: proofCommandFocusPayload,
+          id: demoCommandFocusPayload,
           title: 'Focus Payload JSON',
           category: 'Payload',
           semanticAction: SemanticAction.focus,
@@ -664,13 +719,13 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
         onCopy: _copyPayload,
       ),
     ),
-    FleuryScreen(
-      id: proofScreenChanges,
+    _DemoScreenSpec(
+      id: demoScreenChanges,
       title: 'Changes',
       description: 'Unified diff with file, hunk, and line semantics',
       commands: [
         AppCommand(
-          id: proofCommandFocusChanges,
+          id: demoCommandFocusChanges,
           title: 'Focus Changes Diff',
           category: 'Changes',
           semanticAction: SemanticAction.focus,
@@ -687,13 +742,13 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
         onCopy: _copyChange,
       ),
     ),
-    FleuryScreen(
-      id: proofScreenSource,
+    _DemoScreenSpec(
+      id: demoScreenSource,
       title: 'Source',
       description: 'Code fixture with source-line semantics and safe copy',
       commands: [
         AppCommand(
-          id: proofCommandFocusSource,
+          id: demoCommandFocusSource,
           title: 'Focus Source Code',
           category: 'Source',
           semanticAction: SemanticAction.focus,
@@ -708,13 +763,13 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
         onCopy: _copySource,
       ),
     ),
-    FleuryScreen(
-      id: proofScreenDocs,
+    _DemoScreenSpec(
+      id: demoScreenDocs,
       title: 'Docs',
       description: 'Markdown fixture with link semantics and safe copy',
       commands: [
         AppCommand(
-          id: proofCommandFocusDocs,
+          id: demoCommandFocusDocs,
           title: 'Focus Docs Markdown',
           category: 'Docs',
           semanticAction: SemanticAction.focus,
@@ -729,25 +784,25 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
         onCopy: _copyDocs,
       ),
     ),
-    FleuryScreen(
-      id: proofScreenTranscript,
+    _DemoScreenSpec(
+      id: demoScreenTranscript,
       title: 'Transcript',
       description: 'Streamed transcript, logs, and command composer',
       commands: [
         AppCommand(
-          id: proofCommandToggleStream,
+          id: demoCommandToggleStream,
           title: 'Toggle Log Stream',
           category: 'Transcript',
           enabled: (_) => true,
           run: (_) {
-            setState(() {
+            _mutate(() {
               _streaming = !_streaming;
               _append('logs', _streaming ? 'stream resumed' : 'stream paused');
             });
           },
         ),
         AppCommand(
-          id: proofCommandFocusComposer,
+          id: demoCommandFocusComposer,
           title: 'Focus Composer',
           category: 'Transcript',
           semanticAction: SemanticAction.focus,
@@ -756,12 +811,12 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
           },
         ),
         AppCommand(
-          id: proofCommandAppendLogBurst,
+          id: demoCommandAppendLogBurst,
           title: 'Append Log Burst',
           description: 'Append deterministic streamed log lines',
           category: 'Transcript',
           enabled: (context) =>
-              context.appExtension<ProofConsoleExtension>().streaming,
+              context.appExtension<DemoConsoleExtension>().streaming,
           run: (_) {
             _appendLogBurst();
           },
@@ -769,13 +824,13 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
       ],
       builder: (_) => _TranscriptScreen(
         transcript: _transcript,
-        conversations: _proofConversations(
+        conversations: _demoConversations(
           task: _task,
           process: _process,
           transcript: _transcript,
           streaming: _streaming,
         ),
-        fileMentions: _proofFileMentions,
+        fileMentions: _demoFileMentions,
         composer: _composer,
         composerHistory: _composerHistory,
         composerFocus: _composerFocus,
@@ -787,8 +842,8 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
         onSubmit: _submitComposer,
       ),
     ),
-    FleuryScreen(
-      id: proofScreenProcess,
+    _DemoScreenSpec(
+      id: demoScreenProcess,
       title: 'Process',
       description: 'Native process command, output, and cancellation surface',
       builder: (_) => ProcessCommandScope(
@@ -796,13 +851,13 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
         child: _ProcessScreen(controller: _process, runner: _processRunner),
       ),
     ),
-    FleuryScreen(
-      id: proofScreenDiagnostics,
+    _DemoScreenSpec(
+      id: demoScreenDiagnostics,
       title: 'Diagnostics',
       description: 'Terminal capabilities and debug snapshot actions',
       commands: [
         AppCommand(
-          id: proofCommandCaptureDebug,
+          id: demoCommandCaptureDebug,
           title: 'Capture Debug Snapshot',
           category: 'Diagnostics',
           semanticAction: SemanticAction.captureDebug,
@@ -812,11 +867,11 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
         ),
       ],
       builder: (context) {
-        final extension = FleuryApp.extension<ProofConsoleExtension>(context);
+        final extension = FleuryApp.extension<DemoConsoleExtension>(context);
         return _DiagnosticsScreen(
           debugCaptures: extension.debugCaptures,
           streaming: extension.streaming,
-          traceEvents: _proofTraceEvents(
+          traceEvents: _demoTraceEvents(
             task: _task,
             process: _process,
             transcript: _transcript,
@@ -831,7 +886,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
 
   List<AppCommand> get _commands => [
     AppCommand(
-      id: proofCommandOpenPalette,
+      id: demoCommandOpenPalette,
       title: 'Open Command Palette',
       description: 'Search and run available commands',
       category: 'App',
@@ -840,85 +895,85 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
       run: _openPalette,
     ),
     _goCommand(
-      id: proofCommandGoOverview,
+      id: demoCommandGoOverview,
       title: 'Go to Overview',
-      screen: proofScreenOverview,
+      screen: demoScreenOverview,
       shortcut: KeyChord.ctrl.o,
     ),
     _goCommand(
-      id: proofCommandGoSearch,
+      id: demoCommandGoSearch,
       title: 'Go to Search',
-      screen: proofScreenSearch,
+      screen: demoScreenSearch,
       shortcut: KeyChord.ctrl.f,
     ),
     _goCommand(
-      id: proofCommandGoIndex,
+      id: demoCommandGoIndex,
       title: 'Go to Indexed Logs',
-      screen: proofScreenIndex,
+      screen: demoScreenIndex,
       shortcut: KeyChord.ctrl.i,
     ),
     _goCommand(
-      id: proofCommandGoConnection,
+      id: demoCommandGoConnection,
       title: 'Go to Connection',
-      screen: proofScreenConnection,
+      screen: demoScreenConnection,
       shortcut: KeyChord.ctrl.l,
     ),
     _goCommand(
-      id: proofCommandGoRuns,
+      id: demoCommandGoRuns,
       title: 'Go to Runs',
-      screen: proofScreenRuns,
+      screen: demoScreenRuns,
       shortcut: KeyChord.ctrl.r,
     ),
     _goCommand(
-      id: proofCommandGoTree,
+      id: demoCommandGoTree,
       title: 'Go to Tree',
-      screen: proofScreenTree,
+      screen: demoScreenTree,
       shortcut: KeyChord.ctrl.y,
     ),
     _goCommand(
-      id: proofCommandGoPayload,
+      id: demoCommandGoPayload,
       title: 'Go to Payload',
-      screen: proofScreenPayload,
+      screen: demoScreenPayload,
       shortcut: KeyChord.ctrl.j,
     ),
     _goCommand(
-      id: proofCommandGoChanges,
+      id: demoCommandGoChanges,
       title: 'Go to Changes',
-      screen: proofScreenChanges,
+      screen: demoScreenChanges,
       shortcut: KeyChord.ctrl.g,
     ),
     _goCommand(
-      id: proofCommandGoSource,
+      id: demoCommandGoSource,
       title: 'Go to Source',
-      screen: proofScreenSource,
+      screen: demoScreenSource,
       shortcut: KeyChord.ctrl.s,
     ),
     _goCommand(
-      id: proofCommandGoDocs,
+      id: demoCommandGoDocs,
       title: 'Go to Docs',
-      screen: proofScreenDocs,
+      screen: demoScreenDocs,
       shortcut: KeyChord.ctrl.h,
     ),
     _goCommand(
-      id: proofCommandGoTranscript,
+      id: demoCommandGoTranscript,
       title: 'Go to Transcript',
-      screen: proofScreenTranscript,
+      screen: demoScreenTranscript,
       shortcut: KeyChord.ctrl.t,
     ),
     _goCommand(
-      id: proofCommandGoProcess,
+      id: demoCommandGoProcess,
       title: 'Go to Process',
-      screen: proofScreenProcess,
+      screen: demoScreenProcess,
       shortcut: KeyChord.ctrl.p,
     ),
     _goCommand(
-      id: proofCommandGoDiagnostics,
+      id: demoCommandGoDiagnostics,
       title: 'Go to Diagnostics',
-      screen: proofScreenDiagnostics,
+      screen: demoScreenDiagnostics,
       shortcut: KeyChord.ctrl.d,
     ),
     AppCommand(
-      id: proofCommandStartTask,
+      id: demoCommandStartTask,
       title: 'Start Fake Task',
       description: 'Start deterministic worker progress',
       category: 'Task',
@@ -929,7 +984,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
       },
     ),
     AppCommand(
-      id: proofCommandCancelTask,
+      id: demoCommandCancelTask,
       title: 'Cancel Active Task',
       description: 'Stop the fake worker if it is active',
       category: 'Task',
@@ -940,7 +995,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
       },
     ),
     AppCommand(
-      id: proofCommandRequestApproval,
+      id: demoCommandRequestApproval,
       title: 'Request Deploy Approval',
       description: 'Open a protocol-neutral approval prompt',
       category: 'Approvals',
@@ -948,7 +1003,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
       run: _requestApproval,
     ),
     AppCommand(
-      id: proofCommandCaptureDebug,
+      id: demoCommandCaptureDebug,
       title: 'Capture Debug Snapshot',
       description: 'Record a small debug snapshot counter',
       category: 'Diagnostics',
@@ -957,12 +1012,41 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
         _captureDebug();
       },
     ),
+    ..._activeScreenCommands(),
   ];
+
+  Iterable<AppCommand> _activeScreenCommands() sync* {
+    for (final screen in _screens) {
+      for (final command in screen.commands) {
+        yield _activeScreenCommand(screen.id, command);
+      }
+    }
+  }
+
+  AppCommand _activeScreenCommand(String screenId, AppCommand command) {
+    return AppCommand(
+      id: command.id,
+      title: command.title,
+      description: command.description,
+      category: command.category,
+      shortcuts: command.shortcuts,
+      semanticAction: command.semanticAction,
+      visible: (context) {
+        return _navigation.activeScreenId == screenId &&
+            command.visible(context);
+      },
+      enabled: (context) {
+        return _navigation.activeScreenId == screenId &&
+            command.enabled(context);
+      },
+      run: command.run,
+    );
+  }
 
   AppCommand _goCommand({
     required CommandId id,
     required String title,
-    required ScreenId screen,
+    required String screen,
     required KeyChord shortcut,
   }) {
     return AppCommand(
@@ -971,16 +1055,29 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
       category: 'Navigation',
       shortcuts: [shortcut],
       semanticAction: SemanticAction.navigate,
-      run: (context) {
-        context.screens!.activate(screen);
+      run: (_) {
+        _activateScreen(screen);
       },
     );
   }
 
-  List<StatusItem> _status(FleuryAppController app) {
-    final screen = app.screens.hasScreens
-        ? app.screens.activeScreen.title
-        : '-';
+  bool _activateScreen(String screenId) {
+    if (!_screens.any((screen) => screen.id == screenId)) return false;
+    final previous = _navigation.activeScreenId;
+    _navigation.activate(screenId);
+    if (previous != screenId && mounted) setState(() {});
+    return true;
+  }
+
+  _DemoScreenSpec get _activeScreen {
+    return _screens.firstWhere(
+      (screen) => screen.id == _navigation.activeScreenId,
+      orElse: () => _screens.first,
+    );
+  }
+
+  List<StatusItem> _status(FleuryAppController _) {
+    final screen = _activeScreen.title;
     final taskStatus = _task.status;
     return [
       StatusItem.text('Screen', id: 'screen', value: screen),
@@ -989,25 +1086,25 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
           'Task',
           id: 'task',
           value: 'running $_taskProgress%',
-          action: proofCommandCancelTask,
+          action: demoCommandCancelTask,
         ),
         TaskStatus.failed => StatusItem.warning(
           'Task',
           id: 'task',
           value: 'failed',
-          action: proofCommandStartTask,
+          action: demoCommandStartTask,
         ),
         TaskStatus.canceled => StatusItem.text(
           'Task',
           id: 'task',
           value: 'canceled',
-          action: proofCommandStartTask,
+          action: demoCommandStartTask,
         ),
         TaskStatus.succeeded => StatusItem.success(
           'Task',
           id: 'task',
           value: 'done',
-          action: proofCommandStartTask,
+          action: demoCommandStartTask,
         ),
         TaskStatus.idle => StatusItem.success(
           'Task',
@@ -1020,31 +1117,31 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
           'Process',
           id: 'process',
           value: 'running',
-          action: proofCommandGoProcess,
+          action: demoCommandGoProcess,
         ),
         TaskStatus.failed => StatusItem.warning(
           'Process',
           id: 'process',
           value: 'failed',
-          action: proofCommandGoProcess,
+          action: demoCommandGoProcess,
         ),
         TaskStatus.canceled => StatusItem.text(
           'Process',
           id: 'process',
           value: 'canceled',
-          action: proofCommandGoProcess,
+          action: demoCommandGoProcess,
         ),
         TaskStatus.succeeded => StatusItem.success(
           'Process',
           id: 'process',
           value: 'done',
-          action: proofCommandGoProcess,
+          action: demoCommandGoProcess,
         ),
         TaskStatus.idle => StatusItem.text(
           'Process',
           id: 'process',
           value: 'idle',
-          action: proofCommandGoProcess,
+          action: demoCommandGoProcess,
         ),
       },
     ];
@@ -1053,7 +1150,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
   void _openPalette(CommandContext context) {
     final buildContext = context.buildContext;
     if (buildContext == null) return;
-    Navigator.of(buildContext).present<void>(const AppCommandPalette());
+    unawaited(CommandPalette.open(buildContext));
   }
 
   void _startTask() {
@@ -1066,7 +1163,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
     final completer = Completer<void>();
     _fakeTaskCompleter = completer;
 
-    setState(() {
+    _mutate(() {
       _append('worker', message);
     });
 
@@ -1089,7 +1186,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
     final progress = _taskProgress;
     _task.cancel();
     _completeFakeTask();
-    setState(() {
+    _mutate(() {
       _append('worker', 'fake task canceled at $progress%');
     });
   }
@@ -1103,14 +1200,14 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
   }
 
   void _captureDebug() {
-    setState(() {
+    _mutate(() {
       _debugCaptures += 1;
       _append('debug', 'captured semantic snapshot #$_debugCaptures');
     });
   }
 
   void _recordDiagnostic() {
-    setState(() {
+    _mutate(() {
       _append('diagnose', 'terminal profile: ansi-256, mouse pending');
     });
   }
@@ -1119,7 +1216,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
     final query = _globalSearchQuery.text;
     if (query.trim().isEmpty) {
       _globalSearchTask.reset();
-      setState(() {
+      _mutate(() {
         _globalSearchResolvedQuery = '';
         _globalSearchResults = const <SearchResult>[];
       });
@@ -1152,7 +1249,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
                 _globalSearchQuery.text != query) {
               return;
             }
-            setState(() {
+            _mutate(() {
               _globalSearchResolvedQuery = query;
               _globalSearchResults = result.value ?? const <SearchResult>[];
             });
@@ -1162,14 +1259,14 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
 
   void _activateSearchResult(SearchResult result) {
     final id = result.id?.toString() ?? result.title;
-    setState(() {
+    _mutate(() {
       _append('search', 'activated $id');
     });
   }
 
-  void _buildProofLogIndex() {
+  void _buildDemoLogIndex() {
     if (_logIndexTask.isRunning) return;
-    setState(() {
+    _mutate(() {
       _indexedLogSearchIndex = null;
     });
     unawaited(
@@ -1178,20 +1275,20 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
             final index = await LogRegionSearchIndex.buildCooperatively(
               _indexedLogs,
               context: context,
-              yieldPolicy: _proofIndexYieldPolicy,
-              progressLabel: 'index proof logs',
+              yieldPolicy: _demoIndexYieldPolicy,
+              progressLabel: 'index demo logs',
             );
             context.write(
-              'indexed ${index.length} proof log rows',
+              'indexed ${index.length} demo log rows',
               source: 'index',
             );
             return index;
           })
           .then((result) {
             if (!mounted || !result.succeeded || result.value == null) return;
-            setState(() {
+            _mutate(() {
               _indexedLogSearchIndex = result.value;
-              _append('index', 'built ${result.value!.length} proof log rows');
+              _append('index', 'built ${result.value!.length} demo log rows');
             });
           }),
     );
@@ -1202,9 +1299,9 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
     final start = _indexedLogs.length;
     final index =
         _indexedLogSearchIndex ?? LogRegionSearchIndex.empty(_indexedLogs);
-    setState(() {
-      for (var i = 0; i < proofIndexedLogAppendCount; i++) {
-        _indexedLogs.add(_proofIndexedLogEntry(start + i));
+    _mutate(() {
+      for (var i = 0; i < demoIndexedLogAppendCount; i++) {
+        _indexedLogs.add(_demoIndexedLogEntry(start + i));
       }
       _indexedLogSearchIndex = null;
     });
@@ -1213,22 +1310,22 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
           .start((context) async {
             await index.refreshCooperatively(
               context: context,
-              yieldPolicy: _proofIndexYieldPolicy,
-              progressLabel: 'refresh proof logs',
+              yieldPolicy: _demoIndexYieldPolicy,
+              progressLabel: 'refresh demo logs',
             );
             context.write(
-              'refreshed ${index.length} proof log rows',
+              'refreshed ${index.length} demo log rows',
               source: 'index',
             );
             return index;
           })
           .then((result) {
             if (!mounted || !result.succeeded || result.value == null) return;
-            setState(() {
+            _mutate(() {
               _indexedLogSearchIndex = result.value;
               _append(
                 'index',
-                'refreshed ${result.value!.length} proof log rows',
+                'refreshed ${result.value!.length} demo log rows',
               );
             });
           }),
@@ -1236,7 +1333,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
   }
 
   void _selectRun(RunRecord run) {
-    setState(() {
+    _mutate(() {
       _append('runs', 'selected run ${run.id} ${run.status}');
     });
   }
@@ -1249,7 +1346,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
         request: const ApprovalRequest(
           id: 'deploy.prod',
           title: 'Approve deploy?',
-          message: 'Deploy the latest proof build to production.',
+          message: 'Deploy the latest demo build to production.',
           subject: 'prod',
           details: ['run RUN-1002 failed smoke', 'requires operator review'],
           severity: ApprovalSeverity.warning,
@@ -1265,7 +1362,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
   }
 
   void _recordApproval(ApprovalDecision decision) {
-    setState(() {
+    _mutate(() {
       _append(
         'approval',
         decision == ApprovalDecision.approved
@@ -1276,7 +1373,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
   }
 
   void _submitConnection(FormSubmitResult result) {
-    setState(() {
+    _mutate(() {
       if (result.valid) {
         _append(
           'connection',
@@ -1284,7 +1381,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
               '${result.values['environment']} ${result.values['region']} '
               'features ${result.values.listValue('features').join(',')} '
               'config ${result.values.path('configPath')} '
-              '${_proofDate(result.values.dateValue('launchDate'))} '
+              '${_demoDate(result.values.dateValue('launchDate'))} '
               'retries ${result.values['retries']}',
         );
       } else {
@@ -1294,19 +1391,19 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
   }
 
   void _selectTreeNode(TreeTableRow<String> row) {
-    setState(() {
+    _mutate(() {
       _append('tree', 'selected ${row.key} ${row.node.cells['status'] ?? ''}');
     });
   }
 
   void _copyPayload(JsonViewCopyResult result) {
-    setState(() {
+    _mutate(() {
       _append('payload', 'copied ${result.row.path}');
     });
   }
 
   void _copyChange(DiffViewCopyResult result) {
-    setState(() {
+    _mutate(() {
       _append(
         'changes',
         'copied ${result.row.filePath ?? 'diff'} ${result.row.kind.name}',
@@ -1315,13 +1412,13 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
   }
 
   void _selectPatchFile(PatchReviewFileSelectResult result) {
-    setState(() {
+    _mutate(() {
       _append('patch', 'selected ${result.file.path}');
     });
   }
 
   void _copySource(CodeViewCopyResult result) {
-    setState(() {
+    _mutate(() {
       _append(
         'source',
         'copied line ${result.line.lineNumber} ${result.line.kind.name}',
@@ -1330,7 +1427,7 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
   }
 
   void _copyDocs(MarkdownViewCopyResult result) {
-    setState(() {
+    _mutate(() {
       _append(
         'docs',
         'copied block ${result.block.index + 1} ${result.block.kind.name}',
@@ -1341,14 +1438,14 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
   void _submitComposer(String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
-    setState(() {
+    _mutate(() {
       _append('user', trimmed);
       _composer.text = '';
     });
   }
 
   void _pickFileMention(FileMentionPickResult result) {
-    setState(() {
+    _mutate(() {
       if (_composer.text.trim().isNotEmpty && !_composer.text.endsWith(' ')) {
         _composer.insert(' ');
       }
@@ -1358,25 +1455,25 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
   }
 
   void _selectConversation(ConversationNavigatorSelectResult result) {
-    setState(() {
+    _mutate(() {
       _append('conversation', 'selected ${result.entry.displayId}');
     });
   }
 
   void _selectContextItem(ContextPanelSelectResult result) {
-    setState(() {
+    _mutate(() {
       _append('context', 'selected ${result.item.displayId}');
     });
   }
 
   void _selectTraceEvent(TraceTimelineSelectResult result) {
-    setState(() {
+    _mutate(() {
       _append('trace', 'selected ${result.event.displayId}');
     });
   }
 
   void _appendLogBurst() {
-    setState(() {
+    _mutate(() {
       _logBurst += 1;
       for (var i = 1; i <= 3; i++) {
         _append('stream', 'burst $_logBurst.$i');
@@ -1398,79 +1495,117 @@ class _ProofConsoleAppState extends State<ProofConsoleApp> {
 }
 
 class _ConsoleShell extends StatelessWidget {
-  const _ConsoleShell();
+  const _ConsoleShell({
+    required this.screens,
+    required this.navigation,
+    required this.onActivateScreen,
+  });
+
+  final List<_DemoScreenSpec> screens;
+  final _DemoNavigationController navigation;
+  final bool Function(String screenId) onActivateScreen;
+
+  _DemoScreenSpec get activeScreen {
+    return screens.firstWhere(
+      (screen) => screen.id == navigation.activeScreenId,
+      orElse: () => screens.first,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final app = FleuryApp.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(1),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Fleury Proof Console',
-            style: const CellStyle(bold: true, foreground: AnsiColor(14)),
+    return ListenableBuilder(
+      listenable: navigation,
+      builder: (context, _) {
+        final active = activeScreen;
+        return Padding(
+          padding: const EdgeInsets.all(1),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Fleury Demo Console',
+                style: const CellStyle(bold: true, foreground: AnsiColor(14)),
+              ),
+              const SizedBox(height: 1),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      width: 22,
+                      child: _Sidebar(
+                        screens: screens,
+                        activeScreenId: active.id,
+                        onActivateScreen: onActivateScreen,
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    Expanded(
+                      child: _DemoScreenSlot(
+                        key: ValueKey<String>('screen:${active.id}'),
+                        screen: active,
+                        onActivateScreen: onActivateScreen,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 1),
+              AppStatusBar(),
+              KeyHintBar(),
+            ],
           ),
-          const SizedBox(height: 1),
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(width: 22, child: _Sidebar(app: app)),
-                const SizedBox(width: 2),
-                const Expanded(child: ActiveScreenView()),
-              ],
-            ),
-          ),
-          const SizedBox(height: 1),
-          AppStatusBar(),
-          KeyHintBar(),
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
 class _Sidebar extends StatelessWidget {
-  const _Sidebar({required this.app});
+  const _Sidebar({
+    required this.screens,
+    required this.activeScreenId,
+    required this.onActivateScreen,
+  });
 
-  final FleuryAppController app;
+  final List<_DemoScreenSpec> screens;
+  final String activeScreenId;
+  final bool Function(String screenId) onActivateScreen;
 
   @override
   Widget build(BuildContext context) {
-    final active = app.screens.activeId;
     return Semantics(
       role: SemanticRole.navigation,
-      label: 'Proof console navigation',
+      label: 'Demo console navigation',
       state: SemanticState({
-        'screenCount': app.screens.screens.length,
-        if (active != null) 'activeScreenId': active.value,
+        'screenCount': screens.length,
+        'activeScreenId': activeScreenId,
       }),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text('Screens', style: CellStyle(bold: true)),
           const SizedBox(height: 1),
-          for (final screen in app.screens.screens)
+          for (final screen in screens)
             Semantics(
               role: SemanticRole.listItem,
               label: screen.title,
-              selected: screen.id == active,
+              selected: screen.id == activeScreenId,
               actions: const {SemanticAction.navigate},
               state: SemanticState({
-                'screenId': screen.id.value,
+                'screenId': screen.id,
                 if (screen.shortTitle != null)
                   'screenShortTitle': screen.shortTitle,
               }),
               onAction: (action) {
                 if (action == SemanticAction.navigate) {
-                  app.screens.activate(screen.id);
+                  onActivateScreen(screen.id);
                 }
               },
               child: Text(
-                '${screen.id == active ? '>' : ' '} ${screen.title}',
-                style: screen.id == active
+                '${screen.id == activeScreenId ? '>' : ' '} ${screen.title}',
+                style: screen.id == activeScreenId
                     ? const CellStyle(foreground: AnsiColor(10), bold: true)
                     : CellStyle.empty,
               ),
@@ -1481,6 +1616,48 @@ class _Sidebar extends StatelessWidget {
       ),
     );
   }
+}
+
+class _DemoScreenSlot extends StatelessWidget {
+  const _DemoScreenSlot({
+    super.key,
+    required this.screen,
+    required this.onActivateScreen,
+  });
+
+  final _DemoScreenSpec screen;
+  final bool Function(String screenId) onActivateScreen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      id: SemanticNodeId('screen:${screen.id}'),
+      role: SemanticRole.screen,
+      label: screen.title,
+      value: screen.description,
+      selected: true,
+      actions: const {SemanticAction.navigate},
+      state: SemanticState({
+        'screenId': screen.id,
+        if (screen.shortTitle != null) 'screenShortTitle': screen.shortTitle,
+      }),
+      onAction: (action) {
+        if (action == SemanticAction.navigate) {
+          onActivateScreen(screen.id);
+        }
+      },
+      child: _DemoScreenBuilderWidget(builder: screen.builder),
+    );
+  }
+}
+
+class _DemoScreenBuilderWidget extends StatelessWidget {
+  const _DemoScreenBuilderWidget({required this.builder});
+
+  final _DemoScreenBuilder builder;
+
+  @override
+  Widget build(BuildContext context) => builder(context);
 }
 
 class _OverviewScreen extends StatelessWidget {
@@ -1508,8 +1685,8 @@ class _OverviewScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final latest = transcript.reversed.take(3).toList(growable: false);
     final progress = task.progress?.fraction ?? 0;
-    final modelStatus = _proofModelStatus(task, transcript);
-    final workflow = _proofWorkflowSnapshot(
+    final modelStatus = _demoModelStatus(task, transcript);
+    final workflow = _demoWorkflowSnapshot(
       task: task,
       process: process,
       processCommand: processCommand,
@@ -1521,7 +1698,7 @@ class _OverviewScreen extends StatelessWidget {
     );
     return Semantics(
       role: SemanticRole.region,
-      label: 'Proof workflow snapshot',
+      label: 'Demo workflow snapshot',
       state: workflow.toSemanticState(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1532,7 +1709,7 @@ class _OverviewScreen extends StatelessWidget {
           SizedBox(
             height: 4,
             child: ContextPanel(
-              label: 'Proof context',
+              label: 'Demo context',
               items: contextItems,
               usage: modelStatus.tokenUsage,
               maxVisible: 3,
@@ -1558,7 +1735,7 @@ class _OverviewScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 1),
-          _ProofTelemetry(
+          _DemoTelemetry(
             progress: progress,
             transcript: transcript,
             debugCaptures: debugCaptures,
@@ -1570,8 +1747,8 @@ class _OverviewScreen extends StatelessWidget {
           SizedBox(
             height: 4,
             child: TaskGraph(
-              label: 'Proof workflow plan',
-              nodes: _proofWorkflowPlan(task, debugCaptures),
+              label: 'Demo workflow plan',
+              nodes: _demoWorkflowPlan(task, debugCaptures),
             ),
           ),
           const SizedBox(height: 1),
@@ -1587,8 +1764,8 @@ class _OverviewScreen extends StatelessWidget {
   }
 }
 
-class _ProofTelemetry extends StatelessWidget {
-  const _ProofTelemetry({
+class _DemoTelemetry extends StatelessWidget {
+  const _DemoTelemetry({
     required this.progress,
     required this.transcript,
     required this.debugCaptures,
@@ -1607,7 +1784,7 @@ class _ProofTelemetry extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text('Proof telemetry', style: CellStyle(bold: true)),
+        const Text('Demo telemetry', style: CellStyle(bold: true)),
         SizedBox(
           width: 36,
           child: Gauge(
@@ -1619,7 +1796,7 @@ class _ProofTelemetry extends StatelessWidget {
         SizedBox(
           width: 36,
           child: Sparkline(
-            data: _proofTranscriptTrend(transcript),
+            data: _demoTranscriptTrend(transcript),
             max: 80,
             semanticLabel: 'Transcript trend',
           ),
@@ -1628,7 +1805,7 @@ class _ProofTelemetry extends StatelessWidget {
           width: 18,
           height: 4,
           child: BarChart(
-            bars: _proofActivityBars(
+            bars: _demoActivityBars(
               progress: progress,
               transcript: transcript,
               debugCaptures: debugCaptures,
@@ -1645,14 +1822,14 @@ class _ProofTelemetry extends StatelessWidget {
   }
 }
 
-List<num> _proofTranscriptTrend(List<TranscriptEvent> transcript) {
+List<num> _demoTranscriptTrend(List<TranscriptEvent> transcript) {
   if (transcript.isEmpty) return const <num>[0];
   return [
     for (final event in transcript.take(12)) event.text.length.clamp(0, 80),
   ];
 }
 
-List<Bar> _proofActivityBars({
+List<Bar> _demoActivityBars({
   required double progress,
   required List<TranscriptEvent> transcript,
   required int debugCaptures,
@@ -1664,7 +1841,7 @@ List<Bar> _proofActivityBars({
   ];
 }
 
-WorkflowSnapshot _proofWorkflowSnapshot({
+WorkflowSnapshot _demoWorkflowSnapshot({
   required TaskController<void> task,
   required ProcessTaskController process,
   required ProcessTaskCommand processCommand,
@@ -1675,8 +1852,8 @@ WorkflowSnapshot _proofWorkflowSnapshot({
   required ModelStatusInfo modelStatus,
 }) {
   return WorkflowSnapshot(
-    id: 'proof-console',
-    title: 'Fleury Proof Console',
+    id: 'demo-console',
+    title: 'Fleury Demo Console',
     messages: [
       for (final event in transcript)
         MessageEntry(
@@ -1689,37 +1866,37 @@ WorkflowSnapshot _proofWorkflowSnapshot({
         ),
     ],
     toolCalls: [_toolCallForProcess(process, processCommand)],
-    tasks: _proofWorkflowPlan(task, debugCaptures),
+    tasks: _demoWorkflowPlan(task, debugCaptures),
     modelStatus: modelStatus,
     contextItems: contextItems,
-    fileMentions: _proofFileMentions,
-    conversations: _proofConversations(
+    fileMentions: _demoFileMentions,
+    conversations: _demoConversations(
       task: task,
       process: process,
       transcript: transcript,
       streaming: streaming,
     ),
-    traceEvents: _proofTraceEvents(
+    traceEvents: _demoTraceEvents(
       task: task,
       process: process,
       transcript: transcript,
       debugCaptures: debugCaptures,
       streaming: streaming,
     ),
-    patchFiles: _proofPatchFiles,
+    patchFiles: _demoPatchFiles,
     logEntries: const <LogEntry>[],
     metadata: {'debugCaptures': debugCaptures, 'streaming': streaming},
   );
 }
 
-List<TaskGraphNode> _proofWorkflowPlan(
+List<TaskGraphNode> _demoWorkflowPlan(
   TaskController<void> task,
   int debugCaptures,
 ) {
   return [
     const TaskGraphNode(
       id: 'setup',
-      title: 'Open proof console',
+      title: 'Open demo console',
       status: TaskGraphStatus.succeeded,
     ),
     TaskGraphNode(
@@ -1758,7 +1935,7 @@ TaskGraphStatus _taskGraphStatusForTask(TaskStatus status) {
   };
 }
 
-ModelStatusInfo _proofModelStatus(
+ModelStatusInfo _demoModelStatus(
   TaskController<void> task,
   List<TranscriptEvent> transcript,
 ) {
@@ -1771,7 +1948,7 @@ ModelStatusInfo _proofModelStatus(
     model: 'fleury-prover',
     provider: 'local',
     status: _modelStatusForTask(task.status),
-    mode: 'proof',
+    mode: 'demo',
     detail: task.isRunning ? 'working' : 'ready',
     latency: const Duration(milliseconds: 42),
     queueDepth: task.isRunning ? 1 : 0,
@@ -1784,7 +1961,7 @@ ModelStatusInfo _proofModelStatus(
   );
 }
 
-List<ContextItem> _proofContextItems({
+List<ContextItem> _demoContextItems({
   required TaskController<void> task,
   required List<TranscriptEvent> transcript,
   required int debugCaptures,
@@ -1795,9 +1972,9 @@ List<ContextItem> _proofContextItems({
   );
   return [
     const ContextItem(
-      id: 'ctx.proof-console',
-      label: 'Proof console source',
-      detail: 'App shell, screens, commands, and proof fixtures',
+      id: 'ctx.demo-console',
+      label: 'Demo console source',
+      detail: 'App shell, screens, commands, and demo fixtures',
       kind: ContextItemKind.file,
       priority: ContextItemPriority.high,
       tokenCount: 1200,
@@ -1806,27 +1983,27 @@ List<ContextItem> _proofContextItems({
       metadata: {'screenId': 'source'},
     ),
     const ContextItem(
-      id: 'ctx.proof-scenario',
-      label: 'Proof-app scenario',
+      id: 'ctx.demo-scenario',
+      label: 'Demo-app scenario',
       detail: 'Scenario that constrains Fleury launch implementation',
       kind: ContextItemKind.note,
       priority: ContextItemPriority.high,
       tokenCount: 900,
-      source: 'docs/implementation/proof-app-scenario.md',
+      source: 'docs/implementation/demo-app-scenario.md',
       pinned: true,
       metadata: {'screenId': 'docs'},
     ),
     ContextItem(
       id: 'ctx.transcript-tail',
       label: 'Transcript tail',
-      detail: 'Recent transcript events available to the local proof model',
+      detail: 'Recent transcript events available to the local demo model',
       kind: ContextItemKind.message,
       priority: transcript.length > 4
           ? ContextItemPriority.normal
           : ContextItemPriority.low,
       tokenCount: transcriptTokens,
       source: 'transcript',
-      metadata: {'screenId': proofScreenTranscript.value},
+      metadata: {'screenId': demoScreenTranscript},
     ),
     ContextItem(
       id: 'ctx.worker-state',
@@ -1855,7 +2032,7 @@ ModelRuntimeStatus _modelStatusForTask(TaskStatus status) {
   };
 }
 
-List<ConversationEntry> _proofConversations({
+List<ConversationEntry> _demoConversations({
   required TaskController<void> task,
   required ProcessTaskController process,
   required List<TranscriptEvent> transcript,
@@ -1866,13 +2043,13 @@ List<ConversationEntry> _proofConversations({
     ConversationEntry(
       id: 'thread.transcript',
       title: 'Transcript thread',
-      subtitle: 'Composer and streamed proof events',
+      subtitle: 'Composer and streamed demo events',
       status: streaming ? ConversationStatus.active : ConversationStatus.idle,
       latestMessage: latest,
       author: transcript.isEmpty ? null : transcript.last.source,
       messageCount: transcript.length,
       pinned: true,
-      metadata: {'screenId': proofScreenTranscript.value},
+      metadata: {'screenId': demoScreenTranscript},
     ),
     ConversationEntry(
       id: 'thread.worker',
@@ -1882,7 +2059,7 @@ List<ConversationEntry> _proofConversations({
       latestMessage: 'Fake task ${task.status.name}',
       unreadCount: task.isRunning ? 1 : 0,
       messageCount: task.events.length,
-      metadata: {'screenId': proofScreenOverview.value, 'taskId': 'fake-task'},
+      metadata: {'screenId': demoScreenOverview, 'taskId': 'fake-task'},
     ),
     ConversationEntry(
       id: 'thread.process',
@@ -1892,10 +2069,7 @@ List<ConversationEntry> _proofConversations({
       latestMessage: 'Process ${process.status.name}',
       unreadCount: process.status == TaskStatus.failed ? 1 : 0,
       messageCount: process.events.length,
-      metadata: {
-        'screenId': proofScreenProcess.value,
-        'taskId': 'dart-version',
-      },
+      metadata: {'screenId': demoScreenProcess, 'taskId': 'dart-version'},
     ),
     const ConversationEntry(
       id: 'thread.diagnostics',
@@ -1920,7 +2094,7 @@ ConversationStatus _conversationStatusForTask(TaskStatus status) {
   };
 }
 
-List<TraceTimelineEntry> _proofTraceEvents({
+List<TraceTimelineEntry> _demoTraceEvents({
   required TaskController<void> task,
   required ProcessTaskController process,
   required List<TranscriptEvent> transcript,
@@ -1931,8 +2105,8 @@ List<TraceTimelineEntry> _proofTraceEvents({
   return [
     const TraceTimelineEntry(
       id: 'trace.boot',
-      label: 'Boot proof console',
-      detail: 'App shell, screens, commands, and proof fixtures mounted',
+      label: 'Boot demo console',
+      detail: 'App shell, screens, commands, and demo fixtures mounted',
       kind: TraceTimelineKind.app,
       status: TraceTimelineStatus.succeeded,
       source: 'app',
@@ -1949,7 +2123,7 @@ List<TraceTimelineEntry> _proofTraceEvents({
       status: _traceStatusForTask(task.status),
       source: 'fake-task',
       duration: Duration(milliseconds: 40 + task.events.length * 8),
-      metadata: {'taskId': 'fake-task', 'screenId': proofScreenOverview.value},
+      metadata: {'taskId': 'fake-task', 'screenId': demoScreenOverview},
     ),
     ...traceTimelineEntriesForTaskEvents(
       task.events,
@@ -1968,10 +2142,7 @@ List<TraceTimelineEntry> _proofTraceEvents({
       status: _traceStatusForTask(process.status),
       source: 'dart-version',
       duration: Duration(milliseconds: 60 + process.events.length * 10),
-      metadata: {
-        'taskId': 'dart-version',
-        'screenId': proofScreenProcess.value,
-      },
+      metadata: {'taskId': 'dart-version', 'screenId': demoScreenProcess},
     ),
     ...traceTimelineEntriesForTaskEvents(
       process.events,
@@ -1995,7 +2166,7 @@ List<TraceTimelineEntry> _proofTraceEvents({
       duration: debugCaptures == 0
           ? null
           : Duration(milliseconds: 18 + debugCaptures * 4),
-      metadata: {'screenId': proofScreenDiagnostics.value},
+      metadata: {'screenId': demoScreenDiagnostics},
     ),
     TraceTimelineEntry(
       id: 'trace.transcript',
@@ -2009,7 +2180,7 @@ List<TraceTimelineEntry> _proofTraceEvents({
           : TraceTimelineStatus.cancelled,
       source: 'transcript',
       duration: Duration(milliseconds: transcript.length * 6),
-      metadata: {'screenId': proofScreenTranscript.value},
+      metadata: {'screenId': demoScreenTranscript},
     ),
   ];
 }
@@ -2024,21 +2195,21 @@ TraceTimelineStatus _traceStatusForTask(TaskStatus status) {
   };
 }
 
-const _proofFileMentions = [
+const _demoFileMentions = [
   FileMentionEntry(
     path: 'packages/fleury_example_console/lib/fleury_example_console.dart',
-    label: 'Proof console app',
-    detail: 'App shell, screens, commands, and proof fixtures',
+    label: 'Demo console app',
+    detail: 'App shell, screens, commands, and demo fixtures',
     language: 'dart',
     line: 1,
-    mentionText: '@proof-console',
+    mentionText: '@demo-console',
   ),
   FileMentionEntry(
-    path: 'docs/implementation/proof-app-scenario.md',
-    label: 'Proof-app scenario',
+    path: 'docs/implementation/demo-app-scenario.md',
+    label: 'Demo-app scenario',
     detail: 'Implementation scenario that constrains Fleury launch work',
     language: 'markdown',
-    mentionText: '@proof-scenario',
+    mentionText: '@demo-scenario',
   ),
   FileMentionEntry(
     path: 'packages/fleury_widgets/lib/src/message_list.dart',
@@ -2104,8 +2275,8 @@ final _connectionFormDefinition = FormDefinition(
     FormFieldSpec.path(
       id: 'configPath',
       label: 'Config path',
-      initialValue: 'config/proof.yaml',
-      placeholder: 'config/proof.yaml',
+      initialValue: 'config/demo.yaml',
+      placeholder: 'config/demo.yaml',
       required: true,
       pathKind: FormPathKind.file,
       mustExist: false,
@@ -2171,7 +2342,7 @@ Future<String?> _validateConnectionProject(
   return null;
 }
 
-String _proofDate(DateTime? value) {
+String _demoDate(DateTime? value) {
   if (value == null) return 'no-date';
   final month = value.month.toString().padLeft(2, '0');
   final day = value.day.toString().padLeft(2, '0');
@@ -2204,6 +2375,7 @@ class _SearchScreen extends StatelessWidget {
     required this.task,
     required this.resolvedQuery,
     required this.results,
+    required this.onActivateScreen,
     required this.onActivate,
   });
 
@@ -2214,6 +2386,7 @@ class _SearchScreen extends StatelessWidget {
   final DebouncedTaskController<List<SearchResult>> task;
   final String resolvedQuery;
   final List<SearchResult> results;
+  final bool Function(String screenId) onActivateScreen;
   final void Function(SearchResult result) onActivate;
 
   @override
@@ -2245,7 +2418,7 @@ class _SearchScreen extends StatelessWidget {
             onActivate: (result, _) {
               final screenId = result.metadata['screenId'];
               if (screenId is String) {
-                FleuryApp.of(context).screens.activate(ScreenId(screenId));
+                onActivateScreen(screenId);
               }
               onActivate(result);
             },
@@ -2301,7 +2474,7 @@ class _IndexedLogsScreen extends StatelessWidget {
         const SizedBox(height: 1),
         Expanded(
           child: LogRegion(
-            label: 'Indexed proof logs',
+            label: 'Indexed demo logs',
             entries: entries,
             controller: controller,
             focusNode: logFocus,
@@ -2320,11 +2493,11 @@ class _IndexedLogsScreen extends StatelessWidget {
   }
 }
 
-List<LogEntry> _buildProofIndexedLogs(int count) {
-  return List<LogEntry>.generate(count, _proofIndexedLogEntry, growable: true);
+List<LogEntry> _buildDemoIndexedLogs(int count) {
+  return List<LogEntry>.generate(count, _demoIndexedLogEntry, growable: true);
 }
 
-LogEntry _proofIndexedLogEntry(int row) {
+LogEntry _demoIndexedLogEntry(int row) {
   const targets = [
     'target:payment',
     'target:renderer',
@@ -2354,7 +2527,7 @@ LogEntry _proofIndexedLogEntry(int row) {
       'fixtureRow': row,
       'target': target,
       'unsafeFixture': unsafe,
-      'screenId': proofScreenIndex.value,
+      'screenId': demoScreenIndex,
     },
   );
 }
@@ -2391,7 +2564,7 @@ class _RunsScreen extends StatelessWidget {
         const SizedBox(height: 1),
         Expanded(
           child: ListenableBuilder(
-            animation: filter,
+            listenable: filter,
             builder: (context, _) {
               final query = filter.text.trim();
               final sourceCell = (int row, String columnId) =>
@@ -2456,79 +2629,79 @@ List<SearchResult> _globalSearchCorpus({
 }) {
   final results = <SearchResult>[
     _screenSearchResult(
-      screen: proofScreenOverview,
+      screen: demoScreenOverview,
       title: 'Overview',
       subtitle: 'Task progress and recent activity',
       detail: 'summary fake worker status transcript debug captures',
     ),
     _screenSearchResult(
-      screen: proofScreenSearch,
+      screen: demoScreenSearch,
       title: 'Global Search',
       subtitle: 'Debounced search across app surfaces',
       detail: 'typeahead DebouncedTaskController SearchPanel results',
     ),
     _screenSearchResult(
-      screen: proofScreenIndex,
+      screen: demoScreenIndex,
       title: 'Indexed Logs',
       subtitle: 'Cooperative retained-log indexing',
       detail: 'TaskYieldPolicy LogRegionSearchIndex progress cancellation',
     ),
     _screenSearchResult(
-      screen: proofScreenConnection,
+      screen: demoScreenConnection,
       title: 'Connection',
       subtitle: 'Shared form definition',
       detail: 'project environment region API key prompt fallback',
     ),
     _screenSearchResult(
-      screen: proofScreenRuns,
+      screen: demoScreenRuns,
       title: 'Runs',
       subtitle: 'Dense run records',
       detail: 'DataTable filtering selection copy',
     ),
     _screenSearchResult(
-      screen: proofScreenTree,
+      screen: demoScreenTree,
       title: 'Tree',
       subtitle: 'Framework component hierarchy',
       detail: 'TreeTable semantic graph app kernel widgets',
     ),
     _screenSearchResult(
-      screen: proofScreenPayload,
+      screen: demoScreenPayload,
       title: 'Payload',
       subtitle: 'Structured JSON payload',
       detail: 'JsonView JSON pointer parse errors safe copy',
     ),
     _screenSearchResult(
-      screen: proofScreenChanges,
+      screen: demoScreenChanges,
       title: 'Changes',
       subtitle: 'Unified diff review',
       detail: 'DiffView hunk additions deletions safe copy',
     ),
     _screenSearchResult(
-      screen: proofScreenSource,
+      screen: demoScreenSource,
       title: 'Source',
       subtitle: 'Source-code fixture',
       detail: 'CodeView line numbers source semantics',
     ),
     _screenSearchResult(
-      screen: proofScreenDocs,
+      screen: demoScreenDocs,
       title: 'Docs',
       subtitle: 'Markdown launch notes',
-      detail: _proofMarkdown,
+      detail: _demoMarkdown,
     ),
     _screenSearchResult(
-      screen: proofScreenTranscript,
+      screen: demoScreenTranscript,
       title: 'Transcript',
       subtitle: 'Log stream and composer',
       detail: 'LogRegion tailing scrollback composer copy',
     ),
     _screenSearchResult(
-      screen: proofScreenProcess,
+      screen: demoScreenProcess,
       title: 'Process',
       subtitle: 'Native process command',
       detail: 'ProcessPanel subprocess output cancellation terminal handoff',
     ),
     _screenSearchResult(
-      screen: proofScreenDiagnostics,
+      screen: demoScreenDiagnostics,
       title: 'Diagnostics',
       subtitle: 'Terminal capabilities',
       detail: 'capability policy probe debug capture terminal matrix',
@@ -2542,17 +2715,17 @@ List<SearchResult> _globalSearchCorpus({
         source: 'runs',
         detail:
             'duration ${run.duration} warnings ${run.warnings} owner ${run.owner}',
-        metadata: {'screenId': proofScreenRuns.value, 'runId': run.id},
+        metadata: {'screenId': demoScreenRuns, 'runId': run.id},
       ),
     ..._treeSearchResults(_frameworkTreeNodes),
     SearchResult(
-      id: 'payload.proof-json',
-      title: 'Proof JSON payload',
+      id: 'payload.demo-json',
+      title: 'Demo JSON payload',
       subtitle: 'capabilities semanticGraph forms jsonView',
       category: 'Payload',
       source: 'payload',
       detail: 'structured app state and safe terminal-control output',
-      metadata: {'screenId': proofScreenPayload.value},
+      metadata: {'screenId': demoScreenPayload},
     ),
     SearchResult(
       id: 'changes.framework-diff',
@@ -2561,7 +2734,7 @@ List<SearchResult> _globalSearchCorpus({
       category: 'Diff',
       source: 'changes',
       detail: 'unified diff hunk addition deletion copy',
-      metadata: {'screenId': proofScreenChanges.value},
+      metadata: {'screenId': demoScreenChanges},
     ),
     SearchResult(
       id: 'source.launch-shell',
@@ -2570,7 +2743,7 @@ List<SearchResult> _globalSearchCorpus({
       category: 'Source',
       source: 'source',
       detail: 'CodeView source inspection line copy',
-      metadata: {'screenId': proofScreenSource.value},
+      metadata: {'screenId': demoScreenSource},
     ),
     SearchResult(
       id: 'docs.launch-notes',
@@ -2578,8 +2751,8 @@ List<SearchResult> _globalSearchCorpus({
       subtitle: 'Reactive TUI docs fixture',
       category: 'Docs',
       source: 'docs',
-      detail: _proofMarkdown,
-      metadata: {'screenId': proofScreenDocs.value},
+      detail: _demoMarkdown,
+      metadata: {'screenId': demoScreenDocs},
     ),
     for (final event in transcript)
       SearchResult(
@@ -2588,9 +2761,9 @@ List<SearchResult> _globalSearchCorpus({
         subtitle: '${event.source} ${event.kind}',
         category: 'Transcript',
         source: event.source,
-        metadata: {'screenId': proofScreenTranscript.value},
+        metadata: {'screenId': demoScreenTranscript},
       ),
-    for (final entry in _buildProofIndexedLogs(12))
+    for (final entry in _buildDemoIndexedLogs(12))
       SearchResult(
         id: 'indexed-log.${entry.id}',
         title: entry.id?.toString() ?? entry.message,
@@ -2598,26 +2771,26 @@ List<SearchResult> _globalSearchCorpus({
         category: 'Indexed Log',
         source: entry.source,
         detail: entry.message,
-        metadata: {'screenId': proofScreenIndex.value, 'rowKey': entry.id},
+        metadata: {'screenId': demoScreenIndex, 'rowKey': entry.id},
       ),
   ];
   return List<SearchResult>.unmodifiable(results);
 }
 
 SearchResult _screenSearchResult({
-  required ScreenId screen,
+  required String screen,
   required String title,
   required String subtitle,
   required String detail,
 }) {
   return SearchResult(
-    id: 'screen.${screen.value}',
+    id: 'screen.$screen',
     title: title,
     subtitle: subtitle,
     category: 'Screen',
     source: 'app',
     detail: detail,
-    metadata: {'screenId': screen.value},
+    metadata: {'screenId': screen},
   );
 }
 
@@ -2634,7 +2807,7 @@ List<SearchResult> _treeSearchResults(List<TreeTableNode<String>> nodes) {
         category: 'Component',
         source: 'tree',
         detail: node.value,
-        metadata: {'screenId': proofScreenTree.value, 'rowKey': node.key},
+        metadata: {'screenId': demoScreenTree, 'rowKey': node.key},
       ),
     );
     for (final child in node.children) {
@@ -2742,8 +2915,8 @@ class _TreeTableScreen extends StatelessWidget {
   }
 }
 
-const _proofPayload = {
-  'app': 'Fleury Proof Console',
+const _demoPayload = {
+  'app': 'Fleury Demo Console',
   'activeScreen': 'payload',
   'runs': [
     {'id': 'RUN-1001', 'status': 'running', 'progress': 42},
@@ -2774,8 +2947,8 @@ class _PayloadScreen extends StatelessWidget {
         const SizedBox(height: 1),
         Expanded(
           child: JsonView(
-            label: 'Proof payload',
-            value: _proofPayload,
+            label: 'Demo payload',
+            value: _demoPayload,
             controller: controller,
             focusNode: focusNode,
             autofocus: true,
@@ -2791,7 +2964,7 @@ class _PayloadScreen extends StatelessWidget {
   }
 }
 
-const _proofDiff = '''
+const _demoDiff = '''
 diff --git a/lib/framework.dart b/lib/framework.dart
 index 111..222 100644
 --- a/lib/framework.dart
@@ -2804,9 +2977,9 @@ index 111..222 100644
  }
 ''';
 
-final _proofPatchDocument = parseUnifiedDiff(_proofDiff);
-final _proofPatchFiles = buildPatchReviewFiles(
-  _proofPatchDocument,
+final _demoPatchDocument = parseUnifiedDiff(_demoDiff);
+final _demoPatchFiles = buildPatchReviewFiles(
+  _demoPatchDocument,
   statusByPath: const {'lib/framework.dart': PatchReviewStatus.reviewing},
   summariesByPath: const {
     'lib/framework.dart': 'Retained framework mode update',
@@ -2838,10 +3011,10 @@ class _ChangesScreen extends StatelessWidget {
         const SizedBox(height: 1),
         PatchReview.document(
           label: 'Framework patch review',
-          patchId: 'proof.framework.patch',
+          patchId: 'demo.framework.patch',
           status: PatchReviewStatus.reviewing,
-          document: _proofPatchDocument,
-          files: _proofPatchFiles,
+          document: _demoPatchDocument,
+          files: _demoPatchFiles,
           controller: reviewController,
           diffController: controller,
           diffFocusNode: focusNode,
@@ -2862,7 +3035,7 @@ class _ChangesScreen extends StatelessWidget {
   }
 }
 
-const _proofSource = '''
+const _demoSource = '''
 import 'package:fleury/fleury.dart';
 
 final class LaunchShell extends StatelessWidget {
@@ -2897,7 +3070,7 @@ class _SourceScreen extends StatelessWidget {
         Expanded(
           child: CodeView(
             label: 'Framework source',
-            source: _proofSource,
+            source: _demoSource,
             language: 'dart',
             filePath: 'lib/launch_shell.dart',
             controller: controller,
@@ -2914,7 +3087,7 @@ class _SourceScreen extends StatelessWidget {
   }
 }
 
-const _proofMarkdown =
+const _demoMarkdown =
     '# Fleury Launch Notes\n'
     '\n'
     'Build **reactive** TUIs with [docs](https://fleury.dev).\n'
@@ -2947,7 +3120,7 @@ class _DocsScreen extends StatelessWidget {
         Expanded(
           child: MarkdownView(
             label: 'Launch docs',
-            markdown: _proofMarkdown,
+            markdown: _demoMarkdown,
             controller: controller,
             focusNode: focusNode,
             autofocus: true,
@@ -3004,7 +3177,7 @@ class _TranscriptScreen extends StatelessWidget {
         SizedBox(
           height: 5,
           child: ConversationNavigator(
-            label: 'Proof conversations',
+            label: 'Demo conversations',
             conversations: conversations,
             maxVisible: 3,
             placeholder: 'Search conversations...',
@@ -3036,7 +3209,7 @@ class _TranscriptScreen extends StatelessWidget {
           ),
         ),
         CompletionTextInput(
-          provider: _proofComposerCompletionProvider,
+          provider: _demoComposerCompletionProvider,
           controller: composer,
           historyController: composerHistory,
           focusNode: composerFocus,
@@ -3049,7 +3222,7 @@ class _TranscriptScreen extends StatelessWidget {
   }
 }
 
-const _proofComposerSlashCompletions = [
+const _demoComposerSlashCompletions = [
   TextCompletionOption(
     id: 'summarize',
     label: '/summarize',
@@ -3066,18 +3239,18 @@ const _proofComposerSlashCompletions = [
     id: 'run-task',
     label: '/run-task',
     replacement: '/run-task ',
-    detail: 'Queue the fake proof task',
+    detail: 'Queue the fake demo task',
   ),
 ];
 
-Iterable<TextCompletionOption> _proofComposerCompletionProvider(
+Iterable<TextCompletionOption> _demoComposerCompletionProvider(
   TextCompletionRequest request,
 ) {
   final query = request.query.toLowerCase();
   if (query.isEmpty) return const <TextCompletionOption>[];
 
   final mentionOptions = [
-    for (final entry in _proofFileMentions)
+    for (final entry in _demoFileMentions)
       TextCompletionOption(
         id: entry.path,
         label: entry.displayMention,
@@ -3085,7 +3258,7 @@ Iterable<TextCompletionOption> _proofComposerCompletionProvider(
       ),
   ];
   return [
-    ..._proofComposerSlashCompletions,
+    ..._demoComposerSlashCompletions,
     ...mentionOptions,
   ].where((option) => option.label.toLowerCase().startsWith(query));
 }
@@ -3139,7 +3312,7 @@ class _ProcessScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      animation: controller,
+      listenable: controller,
       builder: (context, _) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3194,7 +3367,7 @@ ToolCallRecord _toolCallForProcess(
     error: controller.error?.toString(),
     progressCurrent: controller.progress?.current,
     progressTotal: controller.progress?.total,
-    metadata: {'processCommandId': proofCommandRunProcess.value},
+    metadata: {'processCommandId': demoCommandRunProcess.value},
   );
 }
 
@@ -3233,7 +3406,7 @@ class _DiagnosticsScreen extends StatelessWidget {
         SizedBox(
           height: 5,
           child: TraceTimeline(
-            label: 'Proof trace timeline',
+            label: 'Demo trace timeline',
             events: traceEvents,
             copyOptions: const TraceTimelineCopyOptions(
               clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
@@ -3258,7 +3431,7 @@ class _DiagnosticReport extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final snapshot = _ProofDiagnosticSnapshot.fromContext(
+    final snapshot = _DemoDiagnosticSnapshot.fromContext(
       context,
       debugCaptures: debugCaptures,
       streaming: streaming,
@@ -3270,10 +3443,10 @@ class _DiagnosticReport extends StatelessWidget {
       onAction: (action) async {
         switch (action) {
           case SemanticAction.diagnose:
-            await _invokeProofCommand(context, proofCommandDiagnose);
+            await _invokeDemoCommand(context, demoCommandDiagnose);
             return;
           case SemanticAction.captureDebug:
-            await _invokeProofCommand(context, proofCommandCaptureDebug);
+            await _invokeDemoCommand(context, demoCommandCaptureDebug);
             return;
           case _:
             return;
@@ -3302,14 +3475,14 @@ class _DiagnosticReport extends StatelessWidget {
   }
 }
 
-final class _ProofDiagnosticSnapshot {
-  const _ProofDiagnosticSnapshot({
+final class _DemoDiagnosticSnapshot {
+  const _DemoDiagnosticSnapshot({
     required this.diagnosis,
     required this.capabilities,
     required this.semanticState,
   });
 
-  factory _ProofDiagnosticSnapshot.fromContext(
+  factory _DemoDiagnosticSnapshot.fromContext(
     BuildContext context, {
     required int debugCaptures,
     required bool streaming,
@@ -3424,7 +3597,7 @@ final class _ProofDiagnosticSnapshot {
         },
       ),
     ];
-    return _ProofDiagnosticSnapshot(
+    return _DemoDiagnosticSnapshot(
       diagnosis: diagnosis,
       capabilities: rows,
       semanticState: SemanticState({
@@ -3488,7 +3661,7 @@ class _DiagnosticCapabilityRow extends StatelessWidget {
       actions: const {SemanticAction.diagnose},
       onAction: (action) async {
         if (action == SemanticAction.diagnose) {
-          await _invokeProofCommand(context, proofCommandDiagnose);
+          await _invokeDemoCommand(context, demoCommandDiagnose);
         }
       },
       state: item.resolution.toSemanticState().merge(item.extraState),
@@ -3497,7 +3670,7 @@ class _DiagnosticCapabilityRow extends StatelessWidget {
   }
 }
 
-Future<void> _invokeProofCommand(BuildContext context, CommandId id) async {
+Future<void> _invokeDemoCommand(BuildContext context, CommandId id) async {
   final registry = CommandRegistryScope.maybeOf(context);
   if (registry == null) return;
   await registry.invoke(id, buildContext: context);

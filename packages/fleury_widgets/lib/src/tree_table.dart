@@ -1080,8 +1080,9 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
               autofocus: widget.autofocus,
               itemCount: rows.length,
               onSelect: (_) => _activateSelected(rows),
-              itemBuilder: (context, index, selected) {
+              itemBuilder: (context, index, activeSelected) {
                 final row = rows[index];
+                final selected = index == _controller.selectedIndex;
                 return _TreeTableRowWidget<T>(
                   row: row,
                   rowIndex: index,
@@ -1089,6 +1090,7 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
                   treeColumnId: _treeColumnId,
                   cellBuilder: widget.cellBuilder,
                   selected: selected,
+                  activeSelection: activeSelected,
                   expanded: _isVisiblyExpanded(rows, index),
                   selectedStyle: selectedStyle,
                   columnSpacing: widget.columnSpacing,
@@ -1193,6 +1195,7 @@ class _TreeTableRowWidget<T> extends StatelessWidget {
     required this.treeColumnId,
     required this.cellBuilder,
     required this.selected,
+    required this.activeSelection,
     required this.expanded,
     required this.selectedStyle,
     required this.columnSpacing,
@@ -1209,6 +1212,7 @@ class _TreeTableRowWidget<T> extends StatelessWidget {
   final String treeColumnId;
   final TreeTableCellBuilder<T>? cellBuilder;
   final bool selected;
+  final bool activeSelection;
   final bool expanded;
   final CellStyle selectedStyle;
   final int columnSpacing;
@@ -1271,6 +1275,7 @@ class _TreeTableRowWidget<T> extends StatelessWidget {
               treeColumnId: treeColumnId,
               cellBuilder: cellBuilder,
               selected: selected,
+              activeSelection: activeSelection,
               expanded: expanded,
               selectedStyle: selectedStyle,
             ),
@@ -1289,6 +1294,7 @@ class _TreeTableCell<T> extends StatelessWidget {
     required this.treeColumnId,
     required this.cellBuilder,
     required this.selected,
+    required this.activeSelection,
     required this.expanded,
     required this.selectedStyle,
   });
@@ -1300,6 +1306,7 @@ class _TreeTableCell<T> extends StatelessWidget {
   final String treeColumnId;
   final TreeTableCellBuilder<T>? cellBuilder;
   final bool selected;
+  final bool activeSelection;
   final bool expanded;
   final CellStyle selectedStyle;
 
@@ -1315,7 +1322,11 @@ class _TreeTableCell<T> extends StatelessWidget {
       includeTreeMarker: true,
       expanded: expanded,
     );
-    final style = selected ? column.style.merge(selectedStyle) : column.style;
+    final style = activeSelection
+        ? column.style.merge(selectedStyle)
+        : selected
+        ? column.style.merge(Theme.of(context).mutedStyle)
+        : column.style;
     return Semantics(
       role: SemanticRole.tableCell,
       label: text,

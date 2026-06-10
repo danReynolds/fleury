@@ -197,6 +197,42 @@ void main() {
       expect(received, (2, 10));
     });
 
+    testWidgets('null onChanged disables the slider', (tester) async {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 11,
+          height: 1,
+          child: RangeSlider(
+            values: (2, 8),
+            min: 0,
+            max: 10,
+            label: 'window',
+            autofocus: true,
+            onChanged: null,
+          ),
+        ),
+      );
+
+      final node = tester.semantics().single(
+        role: SemanticRole.slider,
+        label: 'window',
+        enabled: false,
+      );
+      expect(node.actions, isEmpty);
+      expect(node.value, '2-8');
+      expect(node.state['canIncrement'], isFalse);
+      expect(node.state['canDecrement'], isFalse);
+
+      final buf = tester.render(size: const CellSize(11, 1));
+      expect(buf.atColRow(2, 0).style.dim, isTrue);
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.increment,
+        node: node,
+      );
+      expect(result.status, SemanticActionInvocationStatus.disabled);
+    });
+
     testWidgets('exposes slider semantics and increment/decrement actions', (
       tester,
     ) async {

@@ -408,13 +408,15 @@ class _LogRegionState extends State<LogRegion> {
       focusNode: _focusNode,
       autofocus: widget.autofocus,
       itemCount: order.length,
-      itemBuilder: (context, viewIndex, selected) {
+      itemBuilder: (context, viewIndex, activeSelected) {
         final sourceIndex = order[viewIndex];
+        final selected = viewIndex == _controller.selectedIndex;
         return _LogRow(
           entry: widget.entries[sourceIndex],
           sourceIndex: sourceIndex,
           viewIndex: viewIndex,
           selected: selected,
+          activeSelection: activeSelected,
           showPrefix: widget.showPrefix,
           maxLineLength: widget.maxLineLength,
           copyEnabled: copyEnabled,
@@ -885,6 +887,7 @@ class _LogRow extends StatelessWidget {
     required this.sourceIndex,
     required this.viewIndex,
     required this.selected,
+    required this.activeSelection,
     required this.showPrefix,
     required this.maxLineLength,
     required this.copyEnabled,
@@ -896,6 +899,7 @@ class _LogRow extends StatelessWidget {
   final int sourceIndex;
   final int viewIndex;
   final bool selected;
+  final bool activeSelection;
   final bool showPrefix;
   final int? maxLineLength;
   final bool copyEnabled;
@@ -911,11 +915,13 @@ class _LogRow extends StatelessWidget {
       includePrefix: showPrefix,
       maxLineLength: maxLineLength,
     );
-    final style = _styleForSeverity(
-      entry.severity,
-      widgetTheme,
-      theme,
-    ).merge(selected ? theme.selectionStyle : CellStyle.empty);
+    final style = _styleForSeverity(entry.severity, widgetTheme, theme).merge(
+      activeSelection
+          ? theme.selectionStyle
+          : selected
+          ? theme.mutedStyle
+          : CellStyle.empty,
+    );
     return Semantics(
       role: SemanticRole.listItem,
       label: line.message,

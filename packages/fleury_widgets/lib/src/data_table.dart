@@ -544,6 +544,7 @@ class DataTable extends StatefulWidget {
     this.sortColumnId,
     this.sortDirection,
     this.filterText,
+    this.label = 'Data table',
   });
 
   final int rowCount;
@@ -565,6 +566,7 @@ class DataTable extends StatefulWidget {
   final String? sortColumnId;
   final DataTableSortDirection? sortDirection;
   final String? filterText;
+  final String? label;
 
   @override
   State<DataTable> createState() => _DataTableState();
@@ -613,6 +615,8 @@ class _DataTableState extends State<DataTable> {
   }
 
   void _onChange() => setState(() {});
+
+  void _onFocusWithinChange(bool focused) => setState(() {});
 
   @override
   void dispose() {
@@ -768,10 +772,14 @@ class _DataTableState extends State<DataTable> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final widgetTheme = FleuryWidgetTheme.from(theme);
+    final selectedStyle = _focusNode.hasFocus
+        ? widget.selectedStyle ?? widgetTheme.resolveDataSelected(theme)
+        : theme.mutedStyle;
     final table = _DataTableRenderWidget(
       rowCount: widget.rowCount < 0 ? 0 : widget.rowCount,
       columns: widget.columns,
       cellBuilder: widget.cellBuilder,
+      label: widget.label,
       rowKeyBuilder: widget.rowKeyBuilder,
       selectedRow: _controller.selectedIndex,
       selectedColumn: _controller.selectedColumnIndex,
@@ -782,8 +790,7 @@ class _DataTableState extends State<DataTable> {
       headerSeparator: widget.headerSeparator,
       separatorStyle:
           widget.separatorStyle ?? widgetTheme.resolveDataSeparator(theme),
-      selectedStyle:
-          widget.selectedStyle ?? widgetTheme.resolveDataSelected(theme),
+      selectedStyle: selectedStyle,
       sortColumnId: widget.sortColumnId,
       sortDirection: widget.sortDirection,
       filterText: widget.filterText,
@@ -796,31 +803,34 @@ class _DataTableState extends State<DataTable> {
       onSelect: widget.onSelect,
       onSemanticAction: _handleSemanticAction,
     );
-    return Focus(
-      focusNode: _focusNode,
-      autofocus: widget.autofocus,
-      onKey: _onKey,
-      child: GestureDetector(
-        onTapDownWithModifiers: (col, row, modifiers) {
-          _pendingPointerHit = _hitTestPointer(col, row, modifiers);
-        },
-        onTap: () {
-          final hit = _pendingPointerHit;
-          _pendingPointerHit = null;
-          if (hit == null) return;
-          _focusNode.requestFocus();
-          if (widget.selectionMode == DataTableSelectionMode.cell &&
-              hit.columnIndex != null) {
-            _controller.selectCell(
-              hit.rowIndex,
-              hit.columnIndex!,
-              extend: hit.extend,
-            );
-          } else {
-            _controller.selectedIndex = hit.rowIndex;
-          }
-        },
-        child: table,
+    return FocusWithin(
+      onFocusChange: _onFocusWithinChange,
+      child: Focus(
+        focusNode: _focusNode,
+        autofocus: widget.autofocus,
+        onKey: _onKey,
+        child: GestureDetector(
+          onTapDownWithModifiers: (col, row, modifiers) {
+            _pendingPointerHit = _hitTestPointer(col, row, modifiers);
+          },
+          onTap: () {
+            final hit = _pendingPointerHit;
+            _pendingPointerHit = null;
+            if (hit == null) return;
+            _focusNode.requestFocus();
+            if (widget.selectionMode == DataTableSelectionMode.cell &&
+                hit.columnIndex != null) {
+              _controller.selectCell(
+                hit.rowIndex,
+                hit.columnIndex!,
+                extend: hit.extend,
+              );
+            } else {
+              _controller.selectedIndex = hit.rowIndex;
+            }
+          },
+          child: table,
+        ),
       ),
     );
   }
@@ -918,6 +928,7 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
     required this.rowCount,
     required this.columns,
     required this.cellBuilder,
+    required this.label,
     required this.rowKeyBuilder,
     required this.selectedRow,
     required this.selectedColumn,
@@ -941,6 +952,7 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
   final int rowCount;
   final List<DataTableColumn> columns;
   final DataTableCellBuilder cellBuilder;
+  final String? label;
   final DataTableRowKeyBuilder? rowKeyBuilder;
   final int selectedRow;
   final int selectedColumn;
@@ -1042,6 +1054,7 @@ class _DataTableElement extends LeafRenderObjectElement
     return SemanticNode(
       id: SemanticNodeId('datatable-$hashCode'),
       role: SemanticRole.table,
+      label: widget.label,
       value: selectedKey,
       focused: widget.focusNode.hasFocus,
       selected: widget.rowCount > 0,

@@ -18,7 +18,7 @@ import 'calendar_heatmap.dart' show CalendarWeekStart;
 ///
 /// Controlled — hold the value yourself and update it from [onChanged].
 /// Days outside `[firstDate, lastDate]` (when provided) are dimmed and
-/// the cursor skips them.
+/// the cursor skips them. Passing null for [onChanged] disables the picker.
 ///
 /// ```dart
 /// DatePicker(
@@ -45,7 +45,7 @@ class DatePicker extends StatefulWidget {
   final DateTime value;
 
   /// Called with the new day on each cursor move and on Enter.
-  final void Function(DateTime date) onChanged;
+  final void Function(DateTime date)? onChanged;
 
   /// Lower bound (inclusive). Days before this are dimmed and skipped.
   final DateTime? firstDate;
@@ -70,6 +70,8 @@ class DatePicker extends StatefulWidget {
 class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
   late FocusNode _node;
   bool _owns = false;
+
+  bool get _enabled => widget.onChanged != null;
 
   static const _months = [
     'January',
@@ -123,6 +125,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
 
   @override
   KeyEventResult onTextInput(String text) {
+    if (!_enabled) return KeyEventResult.ignored;
     if (text == '[') {
       _shiftMonth(-12);
       return KeyEventResult.handled;
@@ -169,12 +172,14 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
   }
 
   void _move(Duration delta) {
+    if (!_enabled) return;
     var next = _midnight(widget.value).add(delta);
     if (!_inBounds(next)) return; // clamp by ignoring
-    widget.onChanged(next);
+    widget.onChanged!(next);
   }
 
   void _shiftMonth(int delta) {
+    if (!_enabled) return;
     final v = widget.value;
     // Use day 1 to avoid Feb 31 etc., then re-clamp the day.
     final targetYear = v.year + ((v.month - 1 + delta) ~/ 12);
@@ -183,18 +188,20 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     final day = v.day > lastDayOfTarget ? lastDayOfTarget : v.day;
     final next = DateTime(targetYear, targetMonth, day);
     if (!_inBounds(next)) return;
-    widget.onChanged(next);
+    widget.onChanged!(next);
   }
 
   void _jumpInMonth(int day) {
+    if (!_enabled) return;
     final v = widget.value;
     final lastDay = DateTime(v.year, v.month + 1, 0).day;
     final next = DateTime(v.year, v.month, day.clamp(1, lastDay));
     if (!_inBounds(next)) return;
-    widget.onChanged(next);
+    widget.onChanged!(next);
   }
 
   KeyEventResult _onKey(KeyEvent event) {
+    if (!_enabled) return KeyEventResult.ignored;
     switch (event.keyCode) {
       case KeyCode.arrowLeft:
         _move(const Duration(days: -1));
@@ -237,15 +244,17 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final focused = _node.hasFocus;
+    final enabled = _enabled;
+    final focused = enabled && _node.hasFocus;
+    final disabledStyle = theme.mutedStyle;
     final v = widget.value;
     final firstOfMonth = DateTime(v.year, v.month, 1);
     final lastDay = DateTime(v.year, v.month + 1, 0).day;
     final leadingBlanks = _backToWeekStart(firstOfMonth);
-    final canDecrement = _inBounds(
-      _midnight(v).subtract(const Duration(days: 1)),
-    );
-    final canIncrement = _inBounds(_midnight(v).add(const Duration(days: 1)));
+    final canDecrement =
+        enabled && _inBounds(_midnight(v).subtract(const Duration(days: 1)));
+    final canIncrement =
+        enabled && _inBounds(_midnight(v).add(const Duration(days: 1)));
 
     // Build the 7-column day grid as rows. Each row is a List<Widget>
     // of cells (blank, in-bounds day, or out-of-bounds dimmed day).
@@ -264,11 +273,17 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
         row.add(
           _Cell(
             cellText,
-            style: focused ? theme.focusedStyle : theme.selectionStyle,
+            style: !enabled
+                ? disabledStyle
+                : focused
+                ? theme.focusedStyle
+                : theme.selectionStyle,
           ),
         );
       } else if (!inB) {
         row.add(_Cell(cellText, style: const CellStyle(dim: true)));
+      } else if (!enabled) {
+        row.add(_Cell(cellText, style: disabledStyle));
       } else {
         row.add(_Cell(cellText));
       }
@@ -282,6 +297,62 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
         row.add(const _Cell('   '));
       }
       rows.add(row);
+    }
+
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Header: `< January 2024 >`. Left-anchored so flex layout
+        // can't push children to negative columns at tight widths.
+        Row(
+          children: [
+            Text('< ', style: enabled ? theme.mutedStyle : disabledStyle),
+            Text(
+              '${_months[v.month - 1]} ${v.year}',
+              style: !enabled
+                  ? disabledStyle
+                  : focused
+                  ? theme.focusedStyle
+                  : const CellStyle(bold: true),
+            ),
+            Text(' >', style: enabled ? theme.mutedStyle : disabledStyle),
+          ],
+        ),
+        // Day-of-week labels.
+        Row(
+          children: [
+            for (final label in _dayLabels)
+              _Cell(
+                ' $label',
+                style: enabled ? theme.mutedStyle : disabledStyle,
+              ),
+          ],
+        ),
+        // The day grid.
+        for (final r in rows) Row(children: r),
+      ],
+    );
+
+    if (!enabled) {
+      return Semantics(
+        role: SemanticRole.datePicker,
+        label: widget.label,
+        value: _formatDate(v),
+        enabled: false,
+        state: SemanticState({
+          'selectedDate': _formatDate(v),
+          'visibleMonth': _formatMonth(v),
+          'visibleYear': v.year,
+          'weekStartsOn': widget.weekStartsOn.name,
+          if (widget.firstDate != null)
+            'firstDate': _formatDate(_midnight(widget.firstDate!)),
+          if (widget.lastDate != null)
+            'lastDate': _formatDate(_midnight(widget.lastDate!)),
+          'canIncrement': false,
+          'canDecrement': false,
+        }),
+        child: body,
+      );
     }
 
     return Semantics(
@@ -327,37 +398,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
         focusNode: _node,
         autofocus: widget.autofocus,
         onKey: _onKey,
-        child: GestureDetector(
-          onTap: () => _node.requestFocus(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header: `< January 2024 >`. Left-anchored so flex layout
-              // can't push children to negative columns at tight widths.
-              Row(
-                children: [
-                  Text('< ', style: theme.mutedStyle),
-                  Text(
-                    '${_months[v.month - 1]} ${v.year}',
-                    style: focused
-                        ? theme.focusedStyle
-                        : const CellStyle(bold: true),
-                  ),
-                  Text(' >', style: theme.mutedStyle),
-                ],
-              ),
-              // Day-of-week labels.
-              Row(
-                children: [
-                  for (final label in _dayLabels)
-                    _Cell(' $label', style: theme.mutedStyle),
-                ],
-              ),
-              // The day grid.
-              for (final r in rows) Row(children: r),
-            ],
-          ),
-        ),
+        child: GestureDetector(onTap: () => _node.requestFocus(), child: body),
       ),
     );
   }

@@ -112,6 +112,43 @@ void main() {
       expect(received, const AnsiColor(5));
     });
 
+    testWidgets('null onChanged disables the picker and swatches', (
+      tester,
+    ) async {
+      tester.pumpWidget(
+        const ColorPicker(
+          value: AnsiColor(4),
+          semanticLabel: 'Accent color',
+          autofocus: true,
+          onChanged: null,
+        ),
+      );
+
+      final picker = tester.semantics().single(
+        role: SemanticRole.list,
+        label: 'Accent color',
+        enabled: false,
+      );
+      expect(picker.actions, isEmpty);
+      expect(picker.value, 'ANSI color 4 blue');
+
+      final swatch = tester.semantics().single(
+        role: SemanticRole.radio,
+        label: 'ANSI color 5 magenta',
+        enabled: false,
+      );
+      expect(swatch.actions, isEmpty);
+
+      final buf = tester.render(size: const CellSize(80, 2));
+      expect(buf.atColRow(20, 0).style.dim, isTrue);
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.select,
+        node: swatch,
+      );
+      expect(result.status, SemanticActionInvocationStatus.disabled);
+    });
+
     testWidgets('exposes list and swatch semantics', (tester) {
       tester.pumpWidget(
         ColorPicker(

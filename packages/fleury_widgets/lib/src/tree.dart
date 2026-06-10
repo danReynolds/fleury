@@ -232,12 +232,14 @@ class _TreeState<T> extends State<Tree<T>> {
           autofocus: widget.autofocus,
           itemCount: _flat.length,
           onSelect: _onEnter,
-          itemBuilder: (context, i, selected) {
+          itemBuilder: (context, i, activeSelected) {
             final row = _flat[i];
+            final selected = i == _list.selectedIndex;
             return _TreeRowWidget<T>(
               row: row,
               rowIndex: i,
               selected: selected,
+              activeSelection: activeSelected,
               expanded: _expanded.contains(row.node),
               selectedStyle: selectedStyle,
               hasOnSelect: widget.onSelect != null,
@@ -264,6 +266,7 @@ class _TreeRowWidget<T> extends StatelessWidget {
     required this.row,
     required this.rowIndex,
     required this.selected,
+    required this.activeSelection,
     required this.expanded,
     required this.selectedStyle,
     required this.hasOnSelect,
@@ -274,6 +277,7 @@ class _TreeRowWidget<T> extends StatelessWidget {
   final _TreeRow<T> row;
   final int rowIndex;
   final bool selected;
+  final bool activeSelection;
   final bool expanded;
   final CellStyle selectedStyle;
   final bool hasOnSelect;
@@ -317,7 +321,11 @@ class _TreeRowWidget<T> extends StatelessWidget {
       }),
       child: Text(
         '${'  ' * row.depth}$marker$label',
-        style: selected ? selectedStyle : CellStyle.empty,
+        style: activeSelection
+            ? selectedStyle
+            : selected
+            ? Theme.of(context).mutedStyle
+            : CellStyle.empty,
       ),
     );
   }

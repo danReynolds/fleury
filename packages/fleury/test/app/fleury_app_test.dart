@@ -2,8 +2,6 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
-const _overview = ScreenId('overview');
-const _runs = ScreenId('runs');
 const _goRuns = CommandId('go.runs');
 const _refresh = CommandId('refresh');
 const _diagnose = CommandId('diagnose');
@@ -109,6 +107,154 @@ final class _Capture extends StatelessWidget {
   }
 }
 
+final class _ScreenShell extends StatefulWidget {
+  const _ScreenShell({super.key});
+
+  @override
+  State<_ScreenShell> createState() => _ScreenShellState();
+}
+
+final class _ScreenShellState extends State<_ScreenShell> {
+  String active = 'overview';
+  var overviewRefreshes = 0;
+  var runRefreshes = 0;
+
+  void openScreen(String screenId) {
+    if (active == screenId) return;
+    setState(() {
+      active = screenId;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final body = active == 'runs'
+        ? _ScreenPane(
+            id: 'runs',
+            title: 'Runs',
+            selected: true,
+            commands: [
+              AppCommand(
+                id: _refresh,
+                title: 'Refresh Runs',
+                shortcuts: [KeyChord.ctrl.f],
+                run: (_) {
+                  runRefreshes += 1;
+                },
+              ),
+            ],
+            child: const Focus(autofocus: true, child: Text('Runs body')),
+          )
+        : _ScreenPane(
+            id: 'overview',
+            title: 'Overview',
+            selected: true,
+            commands: [
+              AppCommand(
+                id: _refresh,
+                title: 'Refresh Overview',
+                shortcuts: [KeyChord.ctrl.f],
+                run: (_) {
+                  overviewRefreshes += 1;
+                },
+              ),
+            ],
+            child: const Focus(autofocus: true, child: Text('Overview body')),
+          );
+
+    return Column(
+      children: [
+        Semantics(
+          role: SemanticRole.navigation,
+          label: 'Shell navigation',
+          state: SemanticState({'screenCount': 2, 'activeScreenId': active}),
+          child: Row(
+            children: [
+              _ScreenNavItem(
+                id: 'overview',
+                title: 'Overview',
+                selected: active == 'overview',
+                onActivate: openScreen,
+              ),
+              _ScreenNavItem(
+                id: 'runs',
+                title: 'Runs',
+                selected: active == 'runs',
+                onActivate: openScreen,
+              ),
+            ],
+          ),
+        ),
+        Expanded(child: body),
+      ],
+    );
+  }
+}
+
+final class _ScreenNavItem extends StatelessWidget {
+  const _ScreenNavItem({
+    required this.id,
+    required this.title,
+    required this.selected,
+    required this.onActivate,
+  });
+
+  final String id;
+  final String title;
+  final bool selected;
+  final void Function(String id) onActivate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      role: SemanticRole.listItem,
+      label: title,
+      selected: selected,
+      actions: const {SemanticAction.navigate},
+      state: SemanticState({'screenId': id}),
+      onAction: (action) {
+        if (action == SemanticAction.navigate) {
+          onActivate(id);
+        }
+      },
+      child: Text(title),
+    );
+  }
+}
+
+final class _ScreenPane extends StatelessWidget {
+  const _ScreenPane({
+    required this.id,
+    required this.title,
+    required this.selected,
+    required this.commands,
+    required this.child,
+  });
+
+  final String id;
+  final String title;
+  final bool selected;
+  final List<AppCommand> commands;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      id: SemanticNodeId('screen:$id'),
+      role: SemanticRole.screen,
+      label: title,
+      selected: selected,
+      actions: const {SemanticAction.navigate},
+      state: SemanticState({'screenId': id}),
+      child: CommandScope(
+        commands: commands,
+        label: '$title commands',
+        child: child,
+      ),
+    );
+  }
+}
+
 Matcher _stateError(String message) {
   return throwsA(
     isA<StateError>().having((error) => error.message, 'message', message),
@@ -116,61 +262,6 @@ Matcher _stateError(String message) {
 }
 
 void main() {
-  group('ScreenController', () {
-    test('tracks active screen and rejects unknown screens', () {
-      final controller = ScreenController(
-        screens: [
-          FleuryScreen(
-            id: _overview,
-            title: 'Overview',
-            builder: (_) => const Text('Overview'),
-          ),
-          FleuryScreen(
-            id: _runs,
-            title: 'Runs',
-            builder: (_) => const Text('Runs'),
-          ),
-        ],
-      );
-
-      expect(controller.activeId, _overview);
-      expect(controller.activeScreen.title, 'Overview');
-
-      expect(controller.activate(_runs), isTrue);
-      expect(controller.activeId, _runs);
-      expect(controller.activeIndex, 1);
-
-      expect(controller.activate(const ScreenId('missing')), isFalse);
-      expect(controller.activeId, _runs);
-
-      controller.dispose();
-    });
-
-    test('post-dispose screen mutations throw', () {
-      final controller = ScreenController(
-        screens: [
-          FleuryScreen(
-            id: _overview,
-            title: 'Overview',
-            builder: (_) => const Text('Overview'),
-          ),
-        ],
-      );
-
-      controller.dispose();
-      controller.dispose();
-
-      expect(
-        () => controller.activate(_overview),
-        _stateError('ScreenController has been disposed.'),
-      );
-      expect(
-        () => controller.updateScreens(const <FleuryScreen>[]),
-        _stateError('ScreenController has been disposed.'),
-      );
-    });
-  });
-
   group('StatusController', () {
     test('updates status items and skips equal updates', () {
       final controller = StatusController();
@@ -213,25 +304,10 @@ void main() {
     test(
       'post-dispose app mutations throw and child listeners are removed',
       () {
-        final screens = ScreenController(
-          screens: [
-            FleuryScreen(
-              id: _overview,
-              title: 'Overview',
-              builder: (_) => const Text('Overview'),
-            ),
-            FleuryScreen(
-              id: _runs,
-              title: 'Runs',
-              builder: (_) => const Text('Runs'),
-            ),
-          ],
-        );
         final commands = CommandRegistry();
         final status = StatusController();
         final controller = FleuryAppController(
           title: 'Ops Console',
-          screens: screens,
           commands: commands,
           status: status,
         );
@@ -240,7 +316,6 @@ void main() {
 
         controller.dispose();
         controller.dispose();
-        screens.activate(_runs);
         status.update([StatusItem.text('Screen', value: 'Runs')]);
 
         expect(notifications, 0);
@@ -255,32 +330,13 @@ void main() {
 
         commands.dispose();
         status.dispose();
-        screens.dispose();
       },
     );
   });
 
-  testWidgets('FleuryApp renders the active screen and app semantics', (
-    tester,
-  ) {
+  testWidgets('FleuryApp renders child content and app semantics', (tester) {
     tester.pumpWidget(
-      FleuryApp(
-        title: 'Ops Console',
-        screens: [
-          FleuryScreen(
-            id: _overview,
-            title: 'Overview',
-            description: 'Summary screen',
-            shortTitle: 'Home',
-            builder: (_) => const Text('Overview body'),
-          ),
-          FleuryScreen(
-            id: _runs,
-            title: 'Runs',
-            builder: (_) => const Text('Runs body'),
-          ),
-        ],
-      ),
+      FleuryApp(title: 'Ops Console', child: const _ScreenShell()),
     );
 
     expect(tester.exists(text('Overview body')), isTrue);
@@ -298,9 +354,7 @@ void main() {
 
     expect(app.state.screenCount, 2);
     expect(app.state.activeScreenId, 'overview');
-    expect(screen.value, 'Summary screen');
     expect(screen.state.screenId, 'overview');
-    expect(screen.state.screenShortTitle, 'Home');
   });
 
   testWidgets('FleuryApp exposes typed extensions to descendants', (tester) {
@@ -312,24 +366,16 @@ void main() {
       FleuryApp(
         title: 'Ops Console',
         extensions: const <Object>[_WorkspaceExtension('/repo/fleury')],
-        screens: [
-          FleuryScreen(
-            id: _overview,
-            title: 'Overview',
-            builder: (context) {
-              controller = FleuryApp.of(context);
-              workspace = FleuryApp.extension<_WorkspaceExtension>(context);
-              agent = FleuryApp.maybeExtension<_AgentExtension>(context);
-              return Text(workspace!.root);
-            },
-          ),
-        ],
+        child: _Capture((context) {
+          controller = FleuryApp.of(context);
+          workspace = FleuryApp.extension<_WorkspaceExtension>(context);
+          agent = FleuryApp.maybeExtension<_AgentExtension>(context);
+        }),
       ),
     );
 
     expect(workspace, const _WorkspaceExtension('/repo/fleury'));
     expect(agent, isNull);
-    expect(tester.exists(text('/repo/fleury')), isTrue);
     expect(controller.extension<_WorkspaceExtension>(), same(workspace));
     expect(controller.maybeExtension<_AgentExtension>(), isNull);
     expect(controller.extensions, [const _WorkspaceExtension('/repo/fleury')]);
@@ -349,28 +395,18 @@ void main() {
       return FleuryApp(
         title: 'Ops Console',
         extensions: <Object>[_WorkspaceExtension(root)],
-        screens: [
-          FleuryScreen(
-            id: _overview,
-            title: 'Overview',
-            builder: (context) {
-              builds += 1;
-              workspace = FleuryApp.extension<_WorkspaceExtension>(context);
-              return Text(workspace!.root);
-            },
-          ),
-        ],
+        child: _Capture((context) {
+          builds += 1;
+          workspace = FleuryApp.extension<_WorkspaceExtension>(context);
+        }),
       );
     }
 
     tester.pumpWidget(buildApp('/repo/one'));
     expect(workspace, const _WorkspaceExtension('/repo/one'));
-    expect(tester.exists(text('/repo/one')), isTrue);
 
     tester.pumpWidget(buildApp('/repo/two'));
     expect(workspace, const _WorkspaceExtension('/repo/two'));
-    expect(tester.exists(text('/repo/two')), isTrue);
-    expect(tester.exists(text('/repo/one')), isFalse);
     expect(builds, greaterThanOrEqualTo(2));
   });
 
@@ -610,7 +646,10 @@ void main() {
     expect(controller?.maybeDataSource<_AgentExtension>(), isNull);
   });
 
-  testWidgets('global command shortcut can activate another screen', (tester) {
+  testWidgets('global command shortcut can activate app-owned navigation', (
+    tester,
+  ) {
+    final shellKey = GlobalKey<_ScreenShellState>();
     tester.pumpWidget(
       FleuryApp(
         title: 'Ops Console',
@@ -620,25 +659,12 @@ void main() {
             title: 'Go to Runs',
             shortcuts: [KeyChord.ctrl.r],
             semanticAction: SemanticAction.navigate,
-            run: (context) {
-              context.screens!.activate(_runs);
+            run: (_) {
+              shellKey.currentState!.openScreen('runs');
             },
           ),
         ],
-        screens: [
-          FleuryScreen(
-            id: _overview,
-            title: 'Overview',
-            builder: (_) =>
-                const Focus(autofocus: true, child: Text('Overview body')),
-          ),
-          FleuryScreen(
-            id: _runs,
-            title: 'Runs',
-            builder: (_) =>
-                const Focus(autofocus: true, child: Text('Runs body')),
-          ),
-        ],
+        child: _ScreenShell(key: shellKey),
       ),
     );
 
@@ -663,6 +689,7 @@ void main() {
   });
 
   testWidgets('semantic command action invokes app command', (tester) async {
+    final shellKey = GlobalKey<_ScreenShellState>();
     tester.pumpWidget(
       FleuryApp(
         title: 'Ops Console',
@@ -671,23 +698,12 @@ void main() {
             id: _goRuns,
             title: 'Go to Runs',
             semanticAction: SemanticAction.navigate,
-            run: (context) {
-              context.screens!.activate(_runs);
+            run: (_) {
+              shellKey.currentState!.openScreen('runs');
             },
           ),
         ],
-        screens: [
-          FleuryScreen(
-            id: _overview,
-            title: 'Overview',
-            builder: (_) => const Text('Overview body'),
-          ),
-          FleuryScreen(
-            id: _runs,
-            title: 'Runs',
-            builder: (_) => const Text('Runs body'),
-          ),
-        ],
+        child: _ScreenShell(key: shellKey),
       ),
     );
 
@@ -702,29 +718,15 @@ void main() {
     expect(tester.lastCommandResult?.status, CommandInvocationStatus.completed);
   });
 
-  testWidgets('semantic screen navigation activates the screen', (
+  testWidgets('semantic screen navigation is owned by the app shell', (
     tester,
   ) async {
     tester.pumpWidget(
-      FleuryApp(
-        title: 'Ops Console',
-        screens: [
-          FleuryScreen(
-            id: _overview,
-            title: 'Overview',
-            builder: (_) => const Text('Overview body'),
-          ),
-          FleuryScreen(
-            id: _runs,
-            title: 'Runs',
-            builder: (_) => const Text('Runs body'),
-          ),
-        ],
-      ),
+      FleuryApp(title: 'Ops Console', child: const _ScreenShell()),
     );
 
     final runs = tester.semantics().single(
-      role: SemanticRole.screen,
+      role: SemanticRole.listItem,
       label: 'Runs',
       selected: false,
     );
@@ -737,12 +739,46 @@ void main() {
     expect(tester.exists(text('Runs body')), isTrue);
   });
 
-  testWidgets('active screen-local command scope follows screen changes', (
+  testWidgets('focused scoped commands shadow app commands', (tester) async {
+    final calls = <String>[];
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Ops Console',
+        commands: [
+          AppCommand(
+            id: _refresh,
+            title: 'Global Refresh',
+            run: (_) {
+              calls.add('global');
+            },
+          ),
+        ],
+        child: CommandScope(
+          commands: [
+            AppCommand(
+              id: _refresh,
+              title: 'Refresh Local',
+              run: (_) {
+                calls.add('local');
+              },
+            ),
+          ],
+          child: const Focus(autofocus: true, child: Text('Local')),
+        ),
+      ),
+    );
+
+    final result = await tester.invokeCommand(_refresh);
+
+    expect(result.status, CommandInvocationStatus.completed);
+    expect(result.command?.title, 'Refresh Local');
+    expect(calls, ['local']);
+  });
+
+  testWidgets('active app-owned screen command scope follows navigation', (
     tester,
   ) {
-    var overviewRefreshes = 0;
-    var runRefreshes = 0;
-
+    final shellKey = GlobalKey<_ScreenShellState>();
     tester.pumpWidget(
       FleuryApp(
         title: 'Ops Console',
@@ -751,45 +787,12 @@ void main() {
             id: _goRuns,
             title: 'Go to Runs',
             shortcuts: [KeyChord.ctrl.r],
-            run: (context) {
-              context.screens!.activate(_runs);
+            run: (_) {
+              shellKey.currentState!.openScreen('runs');
             },
           ),
         ],
-        screens: [
-          FleuryScreen(
-            id: _overview,
-            title: 'Overview',
-            commands: [
-              AppCommand(
-                id: _refresh,
-                title: 'Refresh Overview',
-                shortcuts: [KeyChord.ctrl.f],
-                run: (_) {
-                  overviewRefreshes += 1;
-                },
-              ),
-            ],
-            builder: (_) =>
-                const Focus(autofocus: true, child: Text('Overview body')),
-          ),
-          FleuryScreen(
-            id: _runs,
-            title: 'Runs',
-            commands: [
-              AppCommand(
-                id: _refresh,
-                title: 'Refresh Runs',
-                shortcuts: [KeyChord.ctrl.f],
-                run: (_) {
-                  runRefreshes += 1;
-                },
-              ),
-            ],
-            builder: (_) =>
-                const Focus(autofocus: true, child: Text('Runs body')),
-          ),
-        ],
+        child: _ScreenShell(key: shellKey),
       ),
     );
 
@@ -797,22 +800,19 @@ void main() {
     tester.sendKey(const KeyEvent(char: 'r', modifiers: {KeyModifier.ctrl}));
     tester.sendKey(const KeyEvent(char: 'f', modifiers: {KeyModifier.ctrl}));
 
-    expect(overviewRefreshes, 1);
-    expect(runRefreshes, 1);
+    expect(shellKey.currentState!.overviewRefreshes, 1);
+    expect(shellKey.currentState!.runRefreshes, 1);
   });
 
   testWidgets('FleuryApp status builder renders and exposes semantics', (
     tester,
-  ) {
+  ) async {
+    var active = 'Overview';
     tester.pumpWidget(
       FleuryApp(
         title: 'Ops Console',
-        status: (app) => [
-          StatusItem.text(
-            'Screen',
-            id: 'active-screen',
-            value: app.screens.activeScreen.title,
-          ),
+        status: (_) => [
+          StatusItem.text('Screen', id: 'active-screen', value: active),
           StatusItem.warning(
             'Fallback',
             id: 'capability-fallback',
@@ -825,29 +825,15 @@ void main() {
             id: _goRuns,
             title: 'Go to Runs',
             shortcuts: [KeyChord.ctrl.r],
-            run: (context) {
-              context.screens!.activate(_runs);
+            run: (_) {
+              active = 'Runs';
             },
           ),
           AppCommand(id: _diagnose, title: 'Diagnose Terminal', run: (_) {}),
         ],
-        screens: [
-          FleuryScreen(
-            id: _overview,
-            title: 'Overview',
-            builder: (_) =>
-                const Focus(autofocus: true, child: Text('Overview body')),
-          ),
-          FleuryScreen(
-            id: _runs,
-            title: 'Runs',
-            builder: (_) =>
-                const Focus(autofocus: true, child: Text('Runs body')),
-          ),
-        ],
         child: const Column(
           children: [
-            Expanded(child: ActiveScreenView()),
+            Expanded(child: Focus(autofocus: true, child: Text('Body'))),
             AppStatusBar(),
           ],
         ),
@@ -877,7 +863,8 @@ void main() {
     expect(fallback.state.commandId, 'diagnose');
     expect(fallback.actions, contains(SemanticAction.activate));
 
-    tester.sendKey(const KeyEvent(char: 'r', modifiers: {KeyModifier.ctrl}));
+    await tester.invokeCommand(_goRuns);
+    tester.pump();
 
     expect(tester.exists(text('Screen: Runs')), isTrue);
   });
@@ -936,17 +923,9 @@ void main() {
             },
           ),
         ],
-        screens: [
-          FleuryScreen(
-            id: _overview,
-            title: 'Overview',
-            builder: (_) =>
-                const Focus(autofocus: true, child: Text('Overview body')),
-          ),
-        ],
         child: const Column(
           children: [
-            Expanded(child: ActiveScreenView()),
+            Expanded(child: Focus(autofocus: true, child: Text('Body'))),
             AppStatusBar(emptyText: 'Idle'),
           ],
         ),
@@ -969,6 +948,7 @@ void main() {
   testWidgets('tester invokes commands by id and records results', (
     tester,
   ) async {
+    final shellKey = GlobalKey<_ScreenShellState>();
     tester.pumpWidget(
       FleuryApp(
         title: 'Ops Console',
@@ -976,23 +956,12 @@ void main() {
           AppCommand(
             id: _goRuns,
             title: 'Go to Runs',
-            run: (context) {
-              context.screens!.activate(_runs);
+            run: (_) {
+              shellKey.currentState!.openScreen('runs');
             },
           ),
         ],
-        screens: [
-          FleuryScreen(
-            id: _overview,
-            title: 'Overview',
-            builder: (_) => const Text('Overview body'),
-          ),
-          FleuryScreen(
-            id: _runs,
-            title: 'Runs',
-            builder: (_) => const Text('Runs body'),
-          ),
-        ],
+        child: _ScreenShell(key: shellKey),
       ),
     );
 
@@ -1008,49 +977,6 @@ void main() {
     expect(app.state.lastCommandId, 'go.runs');
     expect(app.state.lastCommandStatus, 'completed');
     expect(app.state.activeScreenId, 'runs');
-  });
-
-  testWidgets('tester invokes active screen command before app command', (
-    tester,
-  ) async {
-    final calls = <String>[];
-    tester.pumpWidget(
-      FleuryApp(
-        title: 'Ops Console',
-        commands: [
-          AppCommand(
-            id: _refresh,
-            title: 'Global Refresh',
-            run: (_) {
-              calls.add('global');
-            },
-          ),
-        ],
-        screens: [
-          FleuryScreen(
-            id: _overview,
-            title: 'Overview',
-            commands: [
-              AppCommand(
-                id: _refresh,
-                title: 'Refresh Overview',
-                run: (_) {
-                  calls.add('screen');
-                },
-              ),
-            ],
-            builder: (_) => const Text('Overview body'),
-          ),
-        ],
-        child: const Text('Shell chrome'),
-      ),
-    );
-
-    final result = await tester.invokeCommand(_refresh);
-
-    expect(result.status, CommandInvocationStatus.completed);
-    expect(result.command?.title, 'Refresh Overview');
-    expect(calls, ['screen']);
   });
 
   testWidgets('app command shortcuts appear in KeyHintBar', (tester) {
@@ -1079,5 +1005,32 @@ void main() {
       emptyMark: ' ',
     );
     expect(out.contains('[Ctrl+R] Go to Runs'), isTrue);
+  });
+
+  testWidgets('app shell provides root focus traversal', (tester) {
+    final right = FocusNode(debugLabel: 'right pane');
+    addTearDown(right.dispose);
+
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Traversal',
+        child: Row(
+          children: [
+            SizedBox(
+              width: 8,
+              child: Focus(autofocus: true, child: const Text('Left')),
+            ),
+            const SizedBox(width: 2),
+            Focus(focusNode: right, child: const Text('Right')),
+          ],
+        ),
+      ),
+    );
+
+    tester.render(size: const CellSize(24, 3));
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    tester.pump();
+
+    expect(right.hasFocus, isTrue);
   });
 }

@@ -6,13 +6,13 @@ import { Box, Text, render as renderInk } from 'ink'
 const screens = ['home', 'search', 'task', 'logs', 'diagnostics']
 const options = parseArgs(process.argv.slice(2))
 if (options.wire) await runWire(options)
-else console.log('Ink SB.10 proof app fixture: use --wire for PTY capture')
+else console.log('Ink SB.10 demo app fixture: use --wire for PTY capture')
 
 async function runWire(options) {
   let instance
   const done = new Promise((resolve) => {
     instance = renderInk(
-      React.createElement(WireProofApp, {
+      React.createElement(WireDemoApp, {
         options,
         onDone: () => {
           instance.unmount()
@@ -32,9 +32,9 @@ async function runWire(options) {
   await instance.waitUntilExit()
 }
 
-function WireProofApp({ options, onDone }) {
+function WireDemoApp({ options, onDone }) {
   const [step, setStep] = React.useState(0)
-  const [events, setEvents] = React.useState(['boot proof app'])
+  const [events, setEvents] = React.useState(['boot demo app'])
   const screen = screens[step % screens.length]
 
   React.useEffect(() => {
@@ -56,7 +56,7 @@ function WireProofApp({ options, onDone }) {
   return React.createElement(
     Box,
     { flexDirection: 'column' },
-    React.createElement(Text, null, `SB.10 proof app screen=${screen} step=${step}`),
+    React.createElement(Text, null, `SB.10 demo app screen=${screen} step=${step}`),
     React.createElement(Text, null, ''),
     React.createElement(
       Text,

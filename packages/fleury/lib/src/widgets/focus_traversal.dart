@@ -15,11 +15,14 @@
 //   1. Filter to focusable, attached, non-skip-traversal candidates
 //      whose center lies strictly past the current node's center in
 //      the pressed direction. Ignore the currently-focused node.
-//   2. Score each candidate by `perpendicular * 4 + parallel`:
-//      perpendicular distance (axis-orthogonal offset) dominates so
-//      the user moves toward what they're "looking at," with
-//      parallel distance breaking ties.
-//   3. Pick the lowest score.
+//   2. Prefer candidates that share deeper widget-tree ancestry with
+//      the current node, so pane siblings beat far-away app chrome.
+//   3. Prefer a focusable descendant over a focusable viewport/shell
+//      ancestor when both are eligible in the same direction.
+//   4. Use weighted spatial distance: cross-axis distance is expensive,
+//      but not an absolute winner over a much nearer pane.
+//   5. Break ties by major-axis distance, minor-axis distance, then
+//      stable traversal order.
 //
 // If no candidate fits, the key is returned ignored so an ancestor
 // can still react (or it drops on the floor).
@@ -48,9 +51,9 @@ enum TraversalDirection { left, right, up, down }
 /// Catches arrow chords that bubble out of the focused widget and
 /// moves focus to the spatially nearest focusable in that direction.
 ///
-/// Place one near the root of your app — it wraps a `KeyBindings`
-/// internally, so the four arrow bindings are visible to the input
-/// dispatcher and consume chords whenever a target exists.
+/// [FleuryApp] installs a root traversal group automatically. Add explicit
+/// groups when a pane, modal, embedded surface, or framework-level test needs
+/// its own traversal scope without an app shell.
 class FocusTraversalGroup extends StatelessWidget {
   const FocusTraversalGroup({super.key, required this.child});
 
@@ -131,10 +134,10 @@ class FocusTraversalGroup extends StatelessWidget {
 
     final target = nearestFocusableInDirection(
       from: currentRect,
-      // Confine directional moves to the active modal scope; without
-      // this, an arrow press inside a modal could land on a focusable
-      // spatially adjacent to but outside the dialog.
-      candidates: manager.traversalCandidates(),
+      // Confine directional moves to this traversal group and the active
+      // modal scope; without this, an arrow press in one pane can jump to
+      // a visually-near control in a sibling chrome/header area.
+      candidates: manager.traversalCandidates(scopeContext: context),
       excluding: current,
       direction: direction,
     );
@@ -160,10 +163,14 @@ FocusNode? nearestFocusableInDirection({
   final fromCx = (from.left + from.right) ~/ 2;
   final fromCy = (from.top + from.bottom) ~/ 2;
 
-  FocusNode? best;
-  int? bestScore;
+  var traversalOrder = 0;
+  final ancestry = _SourceAncestry.from(excluding);
+  final eligible = <_TraversalCandidate>[];
+  var minElementDepth = 1 << 30;
+  var maxElementDepth = -1;
 
   for (final node in candidates) {
+    traversalOrder++;
     if (identical(node, excluding)) continue;
     if (!node.canRequestFocus || node.skipTraversal) continue;
     final rect = node.rect;
@@ -172,36 +179,170 @@ FocusNode? nearestFocusableInDirection({
     final cx = (rect.left + rect.right) ~/ 2;
     final cy = (rect.top + rect.bottom) ~/ 2;
 
-    final int parallel;
-    final int perpendicular;
+    final int majorDistance;
+    final int minorDistance;
     switch (direction) {
       case TraversalDirection.left:
         if (cx >= fromCx) continue;
-        parallel = fromCx - cx;
-        perpendicular = (cy - fromCy).abs();
+        majorDistance = _rangeGap(rect.right, rect.right, from.left, from.left);
+        minorDistance = _rangeGap(from.top, from.bottom, rect.top, rect.bottom);
       case TraversalDirection.right:
         if (cx <= fromCx) continue;
-        parallel = cx - fromCx;
-        perpendicular = (cy - fromCy).abs();
+        majorDistance = _rangeGap(from.right, from.right, rect.left, rect.left);
+        minorDistance = _rangeGap(from.top, from.bottom, rect.top, rect.bottom);
       case TraversalDirection.up:
         if (cy >= fromCy) continue;
-        parallel = fromCy - cy;
-        perpendicular = (cx - fromCx).abs();
+        majorDistance = _rangeGap(rect.bottom, rect.bottom, from.top, from.top);
+        minorDistance = _rangeGap(from.left, from.right, rect.left, rect.right);
       case TraversalDirection.down:
         if (cy <= fromCy) continue;
-        parallel = cy - fromCy;
-        perpendicular = (cx - fromCx).abs();
+        majorDistance = _rangeGap(from.bottom, from.bottom, rect.top, rect.top);
+        minorDistance = _rangeGap(from.left, from.right, rect.left, rect.right);
     }
 
-    // Heavy weight on perpendicular distance: moving "left" should
-    // prefer the widget directly to the left over one that's left-and-
-    // far-down, even if the latter has a smaller raw distance.
-    final score = perpendicular * 4 + parallel;
-    if (bestScore == null || score < bestScore) {
+    final context = node.context;
+    final element = context is Element ? context : null;
+    final elementDepth = element?.depth;
+    if (elementDepth != null) {
+      if (elementDepth < minElementDepth) minElementDepth = elementDepth;
+      if (elementDepth > maxElementDepth) maxElementDepth = elementDepth;
+    }
+
+    eligible.add(
+      _TraversalCandidate(
+        node: node,
+        element: element,
+        structuralPenalty: ancestry.climbDistanceToCommonAncestor(node),
+        majorDistance: majorDistance,
+        minorDistance: minorDistance,
+        traversalOrder: traversalOrder,
+      ),
+    );
+  }
+
+  Set<Element>? shellAncestors;
+  if (maxElementDepth > minElementDepth) {
+    shellAncestors = <Element>{};
+    for (final candidate in eligible) {
+      Element? element = candidate.element?.elementParent;
+      while (element != null) {
+        shellAncestors.add(element);
+        element = element.elementParent;
+      }
+    }
+  }
+
+  FocusNode? best;
+  _TraversalScore? bestScore;
+  for (final candidate in eligible) {
+    final score = _TraversalScore(
+      structuralPenalty: candidate.structuralPenalty,
+      shellPenalty:
+          candidate.element != null &&
+              (shellAncestors?.contains(candidate.element) ?? false)
+          ? 1
+          : 0,
+      spatialDistance: candidate.minorDistance * 4 + candidate.majorDistance,
+      majorDistance: candidate.majorDistance,
+      minorDistance: candidate.minorDistance,
+      traversalOrder: candidate.traversalOrder,
+    );
+    if (bestScore == null || score.compareTo(bestScore) < 0) {
       bestScore = score;
-      best = node;
+      best = candidate.node;
     }
   }
 
   return best;
+}
+
+int _rangeGap(int aStart, int aEnd, int bStart, int bEnd) {
+  if (aEnd < bStart) return bStart - aEnd;
+  if (bEnd < aStart) return aStart - bEnd;
+  return 0;
+}
+
+final class _TraversalScore implements Comparable<_TraversalScore> {
+  const _TraversalScore({
+    required this.structuralPenalty,
+    required this.shellPenalty,
+    required this.spatialDistance,
+    required this.majorDistance,
+    required this.minorDistance,
+    required this.traversalOrder,
+  });
+
+  final int structuralPenalty;
+  final int shellPenalty;
+  final int spatialDistance;
+  final int majorDistance;
+  final int minorDistance;
+  final int traversalOrder;
+
+  @override
+  int compareTo(_TraversalScore other) {
+    var result = structuralPenalty.compareTo(other.structuralPenalty);
+    if (result != 0) return result;
+    result = shellPenalty.compareTo(other.shellPenalty);
+    if (result != 0) return result;
+    result = spatialDistance.compareTo(other.spatialDistance);
+    if (result != 0) return result;
+    result = majorDistance.compareTo(other.majorDistance);
+    if (result != 0) return result;
+    result = minorDistance.compareTo(other.minorDistance);
+    if (result != 0) return result;
+    return traversalOrder.compareTo(other.traversalOrder);
+  }
+}
+
+final class _TraversalCandidate {
+  const _TraversalCandidate({
+    required this.node,
+    required this.element,
+    required this.structuralPenalty,
+    required this.majorDistance,
+    required this.minorDistance,
+    required this.traversalOrder,
+  });
+
+  final FocusNode node;
+  final Element? element;
+  final int structuralPenalty;
+  final int majorDistance;
+  final int minorDistance;
+  final int traversalOrder;
+}
+
+final class _SourceAncestry {
+  const _SourceAncestry(this._climbDistanceByElement);
+
+  factory _SourceAncestry.from(FocusNode node) {
+    final context = node.context;
+    if (context is! Element) return const _SourceAncestry(null);
+    final distances = <Element, int>{};
+    var distance = 0;
+    Element? element = context;
+    while (element != null) {
+      distances[element] = distance;
+      distance++;
+      element = element.elementParent;
+    }
+    return _SourceAncestry(distances);
+  }
+
+  final Map<Element, int>? _climbDistanceByElement;
+
+  int climbDistanceToCommonAncestor(FocusNode candidate) {
+    final sourceDistances = _climbDistanceByElement;
+    if (sourceDistances == null) return 0;
+    final context = candidate.context;
+    if (context is! Element) return 1 << 30;
+    Element? element = context;
+    while (element != null) {
+      final distance = sourceDistances[element];
+      if (distance != null) return distance;
+      element = element.elementParent;
+    }
+    return 1 << 30;
+  }
 }

@@ -227,6 +227,179 @@ void main() {
       tester.sendKey(_code(KeyCode.arrowUp));
       expect(topNode.hasFocus, isTrue);
     });
+
+    testWidgets('root traversal prefers body sibling over closer toolbar', (
+      tester,
+    ) {
+      final leftNode = FocusNode(debugLabel: 'left pane');
+      final rightNode = FocusNode(debugLabel: 'right pane');
+      final toolbarNode = FocusNode(debugLabel: 'toolbar control');
+
+      tester.pumpWidget(
+        FocusTraversalGroup(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                height: 1,
+                child: Row(
+                  children: [
+                    const SizedBox(width: 10),
+                    SizedBox(
+                      width: 8,
+                      child: Focus(
+                        focusNode: toolbarNode,
+                        child: const Text('Toolbar'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 1),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      width: 8,
+                      child: Focus(
+                        focusNode: leftNode,
+                        autofocus: true,
+                        child: const Text('Left'),
+                      ),
+                    ),
+                    const SizedBox(width: 24),
+                    SizedBox(
+                      width: 8,
+                      child: Focus(
+                        focusNode: rightNode,
+                        child: const Text('Right'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(50, 8));
+      expect(leftNode.hasFocus, isTrue);
+
+      tester.sendKey(_code(KeyCode.arrowRight));
+      expect(rightNode.hasFocus, isTrue);
+      expect(toolbarNode.hasFocus, isFalse);
+    });
+
+    testWidgets('traversal prefers focusable descendant over shell ancestor', (
+      tester,
+    ) {
+      final leftNode = FocusNode(debugLabel: 'left');
+      final shellNode = FocusNode(debugLabel: 'shell');
+      final childNode = FocusNode(debugLabel: 'child');
+
+      tester.pumpWidget(
+        FocusTraversalGroup(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: 8,
+                child: Focus(
+                  focusNode: leftNode,
+                  autofocus: true,
+                  child: const Text('Left'),
+                ),
+              ),
+              SizedBox(
+                width: 16,
+                child: Focus(
+                  focusNode: shellNode,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 2),
+                    child: Focus(focusNode: childNode, child: const Text('C')),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(30, 4));
+      expect(leftNode.hasFocus, isTrue);
+
+      tester.sendKey(_code(KeyCode.arrowRight));
+      expect(childNode.hasFocus, isTrue);
+      expect(shellNode.hasFocus, isFalse);
+    });
+
+    testWidgets('nested groups keep lateral traversal in the active pane set', (
+      tester,
+    ) {
+      final leftNode = FocusNode(debugLabel: 'left pane');
+      final rightNode = FocusNode(debugLabel: 'right pane');
+      final headerNode = FocusNode(debugLabel: 'header control');
+
+      tester.pumpWidget(
+        FocusTraversalGroup(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                height: 1,
+                child: Row(
+                  children: [
+                    const SizedBox(width: 14),
+                    SizedBox(
+                      width: 8,
+                      child: Focus(
+                        focusNode: headerNode,
+                        child: const Text('Header'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 1),
+              Expanded(
+                child: FocusTraversalGroup(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        width: 8,
+                        child: Focus(
+                          focusNode: leftNode,
+                          autofocus: true,
+                          child: const Text('Left'),
+                        ),
+                      ),
+                      const SizedBox(width: 24),
+                      SizedBox(
+                        width: 8,
+                        child: Focus(
+                          focusNode: rightNode,
+                          child: const Text('Right'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(50, 8));
+      expect(leftNode.hasFocus, isTrue);
+
+      tester.sendKey(_code(KeyCode.arrowRight));
+      expect(rightNode.hasFocus, isTrue);
+      expect(headerNode.hasFocus, isFalse);
+
+      tester.sendKey(_code(KeyCode.arrowUp));
+      expect(headerNode.hasFocus, isTrue);
+    });
   });
 
   group('Tab cycling', () {

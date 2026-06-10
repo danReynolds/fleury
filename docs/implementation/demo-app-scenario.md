@@ -1,14 +1,14 @@
-# Fleury Proof-App Scenario
+# Fleury Demo-App Scenario
 
 **Status:** M0.1 scenario spec  
 **Working package:** `packages/fleury_example_console`  
-**Current-cycle role:** First realistic proof surface for Fleury core.  
+**Current-cycle role:** First realistic demo surface for Fleury core.  
 **Later product role:** Dune/`dune_cli` follows after this example proves the
 framework foundations.
 
 ## Purpose
 
-The proof app should make Fleury prove the framework qualities that would cause
+The demo app should make Fleury prove the framework qualities that would cause
 a serious TUI developer to choose it: Flutter-like retained UI in Dart,
 app-scale command/action/screen structure, strong text input, terminal
 correctness, inspectable semantics, data-heavy widgets, and testable behavior.
@@ -49,31 +49,31 @@ greenfield rewrite:
   toaster live in `packages/fleury_widgets`.
 - `packages/fleury/example/chat_demo.dart` already exercises a three-pane app,
   composer, command palette, focus traversal, modal help, and key hints.
-- The new proof app should promote that pressure from one example file into a
+- The new demo app should promote that pressure from one example file into a
   package-level integration harness that can grow with Phase 1.
 
 Peer pressure also points at this shape:
 
 - Nocterm already claims the Flutter-like Dart TUI position with hot reload,
-  testing, and built example apps, so Fleury needs a proof app that shows
+  testing, and built example apps, so Fleury needs a demo app that shows
   stronger app structure, semantic testing, terminal correctness, and
   data-heavy behavior.
 - Bubble Tea's examples cover chat, forms, command execution, help, lists,
-  tables, tabs, progress, text input, and realtime updates; Fleury's proof app
+  tables, tabs, progress, text input, and realtime updates; Fleury's demo app
   should exercise those categories in one retained app rather than as isolated
   examples.
 - Textual makes app structure, widgets, command palette, testing, and snapshot
-  testing first-class; Fleury's proof app should make semantic testing and
+  testing first-class; Fleury's demo app should make semantic testing and
   tester-driven interactions part of the acceptance path.
 - Ratatui's table and widget examples set the expectation that terminal data
   widgets are serious, stateful, and keyboard navigable.
 - OpenTUI emphasizes correctness, stability, high performance, layered
-  keymaps, and production usage; Fleury's proof app should expose capability,
+  keymaps, and production usage; Fleury's demo app should expose capability,
   diagnostics, and performance evidence early.
 
 ## Screen Model
 
-The first proof-app slice should have these screens:
+The first demo-app slice should have these screens:
 
 | Screen | Purpose | Core pressure |
 | --- | --- | --- |
@@ -93,7 +93,7 @@ The first proof-app slice should have these screens:
 Only Overview, Runs, Transcript, and Diagnostics are required for Phase 1 v0.
 Logs can start as a region inside Transcript if schedule requires it.
 Process is a Phase 2 pressure screen added after fake-worker and process
-primitives exist; it is intentionally not part of the first proof slice.
+primitives exist; it is intentionally not part of the first demo slice.
 
 ## Interaction Model
 
@@ -109,7 +109,7 @@ Required key paths:
 - `/`: focus filter field on data-heavy screens.
 - `Ctrl+C`: runtime exit guard remains framework-level.
 
-The proof app should use current `KeyBindings`, `KeyHintBar`, focus traversal,
+The demo app should use current `KeyBindings`, `KeyHintBar`, focus traversal,
 and overlay APIs first. If global commands, action dispatch, or screen-scoped
 shortcuts become awkward, that is input for the app-kernel RFC.
 
@@ -159,7 +159,7 @@ Use deterministic in-memory fixtures:
 The fixtures should support repeatable tests and benchmarks. Random-looking
 data should come from fixed seeds.
 
-## Phase 1 Proof Slice
+## Phase 1 Demo Slice
 
 The first runnable version should prove this workflow:
 
@@ -201,7 +201,7 @@ Phase 0 RFCs.
 Phase 1 v0 is complete when evidence exists for:
 
 - Runnable example package at `packages/fleury_example_console`.
-- Tester workflow covering the proof slice above.
+- Tester workflow covering the demo slice above.
 - Golden or snapshot for the main overview/runs layout.
 - Semantic queries for sidebar, command palette, table rows, composer,
   progress, diagnostics, and debug capture action.
@@ -225,7 +225,7 @@ Phase 1 v0 is complete when evidence exists for:
   `fleury_example_ops`, or something more product-neutral?
 - Should the composer be single-line first, or should Phase 1 force multiline
   `TextArea` immediately?
-- Should table filtering live in the proof app, `Table`, or a future
+- Should table filtering live in the demo app, `Table`, or a future
   data-controller abstraction?
 - What is the first stable shape for command IDs and command semantic actions?
 - What minimal debug snapshot is useful before the full inspector/replay work?

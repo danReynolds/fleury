@@ -7,10 +7,8 @@ typedef FrameRenderCallback = void Function(String reason);
 
 /// Schedules [flush] to run after [delay]. `Duration.zero` means "as soon as
 /// possible" (a microtask). Injectable so tests drive timing deterministically.
-typedef FrameFlushScheduler = void Function(
-  Duration delay,
-  void Function() flush,
-);
+typedef FrameFlushScheduler =
+    void Function(Duration delay, void Function() flush);
 
 void _defaultFlushScheduler(Duration delay, void Function() flush) {
   if (delay <= Duration.zero) {
@@ -40,9 +38,9 @@ class FrameScheduler {
     required FrameRenderCallback onRender,
     this.minFrameInterval = Duration.zero,
     FrameFlushScheduler? flushScheduler,
-  })  : _clock = clock,
-        _onRender = onRender,
-        _flushScheduler = flushScheduler ?? _defaultFlushScheduler;
+  }) : _clock = clock,
+       _onRender = onRender,
+       _flushScheduler = flushScheduler ?? _defaultFlushScheduler;
 
   final Clock _clock;
   final FrameRenderCallback _onRender;

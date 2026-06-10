@@ -7,7 +7,7 @@ next to the package or peer fixture that owns its dependencies:
 | --- | --- | --- |
 | Core Fleury scenarios | `packages/fleury/benchmark` | `fleury benchmark local SB.1` / `SB.2` / `SB.12` |
 | Fleury widget scenarios | `packages/fleury_widgets/benchmark` | `fleury benchmark local SB.3` / `SB.4` / `SB.5` / `SB.6` / `SB.7` / `SB.8` / `SB.9` / `SB.11` |
-| Proof app scenario | `packages/fleury_example_console/benchmark` | `fleury benchmark local SB.10` |
+| Demo app scenario | `packages/fleury_example_console/benchmark` | `fleury benchmark local SB.10` |
 | Peer fixtures | `peer-fixtures` | peer-specific commands plus manifest tooling |
 | PTY wire profiling | `profiling` | `fleury benchmark wire ...` |
 | Scenario contract | `docs/implementation/comparative-benchmark-manifest.json` | `fleury benchmark manifest` |
@@ -42,7 +42,7 @@ Run these from the repo root or any subdirectory in a framework checkout.
 | Run P2 SB.12 layout dirtiness PTY peer comparisons | `fleury benchmark wire sb12 --runs=3` |
 | Run P3 SB.8 overlay/palette PTY peer comparisons | `fleury benchmark wire sb8 --runs=3` |
 | Run P3 SB.9 subprocess-output PTY peer comparisons | `fleury benchmark wire sb9 --runs=3` |
-| Run P3 SB.10 proof-app PTY peer comparisons | `fleury benchmark wire sb10 --runs=3` |
+| Run P3 SB.10 demo-app PTY peer comparisons | `fleury benchmark wire sb10 --runs=3` |
 | Run P4 SB.7 resize-storm PTY peer comparisons | `fleury benchmark wire sb7 --runs=3` |
 | Run P4 SB.11 TreeTable PTY peer comparisons | `fleury benchmark wire sb11 --runs=3` |
 | Narrow a wire run to specific peers | `fleury benchmark wire sb6 --peers=ratatui,opentui --runs=3`; `fleury benchmark wire sb6-ratatui --runs=3` |
@@ -77,7 +77,7 @@ run, so new captures update the per-run scoreboard automatically.
 | P2 | <a id="sb12-layout-dirtiness-cache"></a>SB.12 Layout dirtiness cache | Local yes; primary fixtures 3/3; wire 3/3 | Incremental layout invalidation: mutate one region, avoid recomputing or rewriting unaffected regions, and preserve correctness. This directly tests Fleury's renderer/layout optimization thesis. | Nocterm, Ratatui, OpenTUI | Nocterm is the closest widget-tree comparison; Ratatui and OpenTUI are strong low-level references for minimal redraw behavior. |
 | P3 | <a id="sb8-overlaypalette-churn"></a>SB.8 Overlay/palette churn | Local yes; primary fixtures 3/3; wire 3/3 | Command palette, modal/overlay open-close churn, focus restoration, fuzzy filtering, and repeated transient UI creation. This protects app-shell ergonomics. | Textual, Ink, Bubble Tea | Textual is strong for rich app UI; Ink/React stresses component churn; Bubble Tea represents command-mode MUV patterns. |
 | P3 | <a id="sb9-subprocessuntrusted-output"></a>SB.9 Subprocess/untrusted output | Local yes; primary fixtures 3/3; wire 3/3 | Running subprocesses, ingesting untrusted terminal output, redaction/sanitization, and handoff back to app state. This tests shell-adjacent safety and output pressure. | Textual, Bubble Tea, OpenTUI | Textual and Bubble Tea are common full-app shells for process output; OpenTUI gives a high-throughput renderer comparison for output ingestion. |
-| P3 | <a id="sb10-proof-app-journey"></a>SB.10 Proof-app journey | Local yes; primary fixtures 3/3; wire 3/3 | End-to-end realistic app flow across navigation, command execution, async work, widgets, copy/export, diagnostics, and test hooks. This is the product-readiness smoke benchmark. | Textual, Bubble Tea, Ink | These are the broadest full-app peers across Python, Go, and React/Node, so they best match a complete Fleury app journey. |
+| P3 | <a id="sb10-demo-app-journey"></a>SB.10 Demo-app journey | Local yes; primary fixtures 3/3; wire 3/3 | End-to-end realistic app flow across navigation, command execution, async work, widgets, copy/export, diagnostics, and test hooks. This is the product-readiness smoke benchmark. | Textual, Bubble Tea, Ink | These are the broadest full-app peers across Python, Go, and React/Node, so they best match a complete Fleury app journey. |
 | P4 | <a id="sb7-resize-storm"></a>SB.7 Resize storm | Local yes; primary fixtures 3/3; wire 3/3 | Repeated terminal resizes across nested layout, focus, and scroll state. This tests layout correctness, invalidation, and recovery from terminal churn. | Textual, Ratatui, OpenTUI | Textual stresses full app layout; Ratatui exposes low-level buffer/layout behavior; OpenTUI covers a high-performance retained renderer. |
 | P4 | <a id="sb11-treetablefiltercopy"></a>SB.11 TreeTable/filter/copy | Local yes; primary fixtures 3/3; wire 3/3 | Hierarchical data with expansion, filtering, selection preservation, and copy/export. This targets dense operational data browsers. | Textual, Ratatui, OpenTUI | Textual has rich structured widgets; Ratatui is the Rust table/tree buffer baseline; OpenTUI is the high-performance TS structured-renderer peer. Current peer fixtures render computed visible rows; Fleury's fixture exercises the real retained `TreeTable` plus 100k-row search index, so treat SB.11 RSS/CPU as data/index attribution until fixture parity or a lazy TreeTable source lands. |
 
@@ -100,7 +100,7 @@ configured primary peers for that scenario; use `--peer=<id>`,
 | P2 | SB.12 Layout dirtiness cache | `fleury benchmark local SB.12` | Nocterm, Ratatui, OpenTUI | `fleury benchmark wire sb12 --runs=3` |
 | P3 | SB.8 Overlay/palette churn | `fleury benchmark local SB.8` | Textual, Ink, Bubble Tea | `fleury benchmark wire sb8 --runs=3` |
 | P3 | SB.9 Subprocess/untrusted output | `fleury benchmark local SB.9` | Textual, Bubble Tea, OpenTUI | `fleury benchmark wire sb9 --runs=3` |
-| P3 | SB.10 Proof-app journey | `fleury benchmark local SB.10` | Textual, Bubble Tea, Ink | `fleury benchmark wire sb10 --runs=3` |
+| P3 | SB.10 Demo-app journey | `fleury benchmark local SB.10` | Textual, Bubble Tea, Ink | `fleury benchmark wire sb10 --runs=3` |
 | P4 | SB.7 Resize storm | `fleury benchmark local SB.7` | Textual, Ratatui, OpenTUI | `fleury benchmark wire sb7 --runs=3` |
 | P4 | SB.11 TreeTable/filter/copy | `fleury benchmark local SB.11` | Textual, Ratatui, OpenTUI | `fleury benchmark wire sb11 --runs=3` |
 

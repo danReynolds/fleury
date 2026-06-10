@@ -66,7 +66,7 @@ reactive TUI vision.
 
 - [Leading reactive TUI roadmap](../leading-reactive-tui-roadmap.md)
 - [Execution journal](execution-journal.md)
-- [Proof-app scenario](proof-app-scenario.md)
+- [Demo-app scenario](demo-app-scenario.md)
 - [Scenario benchmark lab](scenario-benchmark-lab.md)
 - [Terminal compatibility matrix](terminal-compatibility-matrix.md)
 - [Terminal matrix external handoff](terminal-matrix-external-handoff.md)
@@ -83,6 +83,8 @@ reactive TUI vision.
 - [Local distribution path](local-distribution-path.md)
 - [Peer scorecards](peer-scorecards.md)
 - [Performance architecture recommendations](perf-architecture-recommendations.md)
+- [DX peer assessment](dx-peer-assessment-2026-06-08.md)
+- [Widget API ergonomics audit](widget-api-ergonomics-audit-2026-06-08.md)
 - [Comparative benchmark manifest](comparative-benchmark-manifest.json)
 - [Why Fleury?](why-fleury.md)
 - [Scope cut list](cut-list.md)
@@ -120,7 +122,7 @@ reactive TUI vision.
   first-widget semantics, and a first debug semantic summary.
 - [x] Complete M1.2 Text editing v2 with keymap scaffolding; the core
   editing, paste, completion, history, policy, and composition seams are ready
-  for proof-app pressure. The proof app Transcript composer now exercises
+  for demo-app pressure. The demo app Transcript composer now exercises
   `CompletionTextInput` with slash-command/mention suggestions and opt-in
   submission history.
 - [x] Complete M1.3 `FleuryApp` shell with commands, screens, status,
@@ -242,16 +244,16 @@ reactive TUI vision.
   app-level extensions to `FleuryApp`, `FleuryAppController`, descendant widget
   lookup, and command-context lookup. This is a package/domain integration
   seam, not plugin loading or adapter lifecycle.
-- [x] Prove the M3.8 extension seam in the proof-app package with
-  `ProofConsoleExtension`, used by screen builders, command enablement/action
+- [x] Prove the M3.8 extension seam in the demo-app package with
+  `DemoConsoleExtension`, used by screen builders, command enablement/action
   code, extension-owned diagnostics command registration, and extension-owned
   status items.
 - [x] Continue M3.8 by letting extension packages contribute `ThemeData`
-  extension defaults, proving the path by moving the proof app's
-  `FleuryWidgetTheme` defaults onto `ProofConsoleExtension`.
+  extension defaults, proving the path by moving the demo app's
+  `FleuryWidgetTheme` defaults onto `DemoConsoleExtension`.
 - [x] Continue M3.8 by letting extension packages contribute typed
-  data/read-model sources, proving the path with `ProofSearchDataSource` for
-  the proof app's global search corpus.
+  data/read-model sources, proving the path with `DemoSearchDataSource` for
+  the demo app's global search corpus.
 - [x] Complete the M3.8 launch extension story with `packages/fleury_git`, a
   reusable non-example package that contributes Git commands, status, widget
   theme defaults, and a typed repository data source through the existing
@@ -438,11 +440,11 @@ reactive TUI vision.
   [Why Fleury?](why-fleury.md) positioning draft, 2026-06-01 peer source
   refresh, local distribution plan, peer-scorecard skeleton, and explicit
   public-collateral deferral until API freeze.
-- [x] Complete M1.4 by creating the example subpackage proof app skeleton and
+- [x] Complete M1.4 by creating the example subpackage demo app skeleton and
   validating the app shell, command palette, status, text input, semantics, and
   debug surfaces under realistic workflow pressure.
 - [x] Complete M1.6 with a core `TaskController`/`TaskContext` model and wire the
-  proof app's fake worker through it; `TaskStatusView` semantic cancel now
+  demo app's fake worker through it; `TaskStatusView` semantic cancel now
   dispatches through the same controller cancellation path.
 - [x] Complete M1.6 with terminal handoff support and a native subprocess
   task wrapper exported only from `package:fleury/fleury.dart`.
@@ -463,7 +465,7 @@ reactive TUI vision.
   visible-URL fallback semantics with OSC 8 disabled by default.
 - [x] Continue clipboard/security integration with structured clipboard write
   reports plus text-field/text-area clipboard policy semantics.
-- [x] Surface M1.7 capability-resolution state in the proof app Diagnostics
+- [x] Surface M1.7 capability-resolution state in the demo app Diagnostics
   screen so the model is visible in an app-shaped workflow.
 - [x] Establish M1.8 scenario benchmark harness with core `SB.1 Time To Counter
   App`, widgets `SB.3 DataTable 100k Rows`, JSON output, filtering, save
@@ -477,14 +479,14 @@ reactive TUI vision.
   scenario runner, including selected-row copy latency.
 - [x] Complete M1.9 after selected-row TSV/CSV export, Ctrl+C copy,
   rectangular cell/range export and copy, owned sort/filter row-order helpers,
-  proof-app Runs-screen adoption, and proof-app command/status settling.
+  demo-app Runs-screen adoption, and demo-app command/status settling.
 - [x] Complete M1.10 debug inspector expansion with frame reason diagnostics,
   useful Rebuilds-tab frame costs, dirty bounds, task/capability semantic
   summaries, semantic graph outline browsing, source-level dirty causality, and
   terminal profile/capability diagnosis rows. Existing focus/command visibility
   remains semantic-backed. Bounded capture-to-test hooks now record terminal,
   input/resize, frame, redacted semantic, and output-summary records, and the
-  proof app can seed a capture-shaped regression.
+  demo app can seed a capture-shaped regression.
 - [x] Harden debug inspector controller lifecycle disposal:
   `DebugController` keeps final mode/tab/paint/cursor state readable after
   teardown, clears live semantic and terminal diagnosis providers, and rejects
@@ -496,11 +498,11 @@ reactive TUI vision.
   capture redaction, debug Tree-tab redaction, and explicit runtime
   `LogBuffer` lifecycle errors for post-teardown appends.
 - [x] Complete M1.12 initial distribution path after deciding the smallest local
-  run/install path needed for the proof app and examples.
+  run/install path needed for the demo app and examples.
 - [x] Complete the Phase 1 exit review and refresh the peer scorecard with
   current Nocterm, Bubble Tea v2, Textual, OpenTUI, Ratatui, and Ink entries.
 - [x] Complete Phase 2 M2.2 with `LogRegion`, the app-facing structured
-  log/transcript region in `fleury_widgets`, and wire it into the proof app
+  log/transcript region in `fleury_widgets`, and wire it into the demo app
   Transcript screen.
 - [x] Complete M2.4 after adding `ProcessPanel`, `ProcessCommandRunner`,
   `TerminalOutputRegion`, and native `editTextInExternalEditor` handoff
@@ -512,13 +514,13 @@ reactive TUI vision.
   existing task/event/semantic model. Focused lifecycle coverage now proves
   pending-work cancellation, post-dispose misuse errors, and external
   `TaskController` ownership.
-- [x] Wire `DebouncedTaskController` into the proof app Global Search screen
+- [x] Wire `DebouncedTaskController` into the demo app Global Search screen
   with `SearchPanel` result semantics, activation, and refreshed `SB.10`
   benchmark coverage.
-- [x] Add reusable `SearchResultIndex` ranking to `SearchPanel`, wire proof-app
+- [x] Add reusable `SearchResultIndex` ranking to `SearchPanel`, wire demo-app
   Global Search through it, and save
-  `phase2-proof-app-ranked-search-2026-06-01.json`.
-- [x] Wire cooperative `TaskYieldPolicy` indexing into the proof app Indexed
+  `phase2-demo-app-ranked-search-2026-06-01.json`.
+- [x] Wire cooperative `TaskYieldPolicy` indexing into the demo app Indexed
   Logs screen with `LogRegionSearchIndex`, filtered `LogRegion` semantics,
   append-refresh evidence, and refreshed `SB.10` benchmark coverage.
 - [x] Add `SB.4 LogRegion Tailing And Scrollback` to the widgets scenario
@@ -539,10 +541,10 @@ reactive TUI vision.
   layout p95 45 performed / 29 skipped.
 - [x] Add `SB.7 Resize Storm` to the widgets scenario runner and save the
   first 500-event Phase 2 baseline.
-- [x] Add `SB.10 Proof-App Journey` to the proof-app package and save the
+- [x] Add `SB.10 Demo-App Journey` to the demo-app package and save the
   first integrated app-shaped Phase 2 baseline.
-- [x] Refresh `SB.10 Proof-App Journey` after adding debounced Global Search
-  and save `phase2-proof-app-global-search-2026-06-01.json`.
+- [x] Refresh `SB.10 Demo-App Journey` after adding debounced Global Search
+  and save `phase2-demo-app-global-search-2026-06-01.json`.
 - [x] Add `SB.2 Text Editing Composer Stress` to the core benchmark runner and
   save the first 10k-character Phase 2 baseline.
 - [x] Add `SB.8 Overlay And Command Palette Churn` to the widgets scenario
@@ -559,59 +561,59 @@ reactive TUI vision.
   reset synchronization, and matching visual/prompt redaction semantics.
 - [x] Add the first richer M2.1 form field type with shared numeric-field
   support across snapshots, visual `FormPanel`, prompt fallback, semantics,
-  and the proof app connection workflow.
+  and the demo app connection workflow.
 - [x] Add shared M2.1 date-field support across typed snapshots, visual
   `DatePicker` projection, prompt fallback, semantics, validation, and the
-  proof app connection workflow.
+  demo app connection workflow.
 - [x] Add shared M2.1 multi-select-field support across typed snapshots,
   visual `FormPanel`, prompt fallback, semantics, accessibility state, and the
-  proof app connection workflow.
+  demo app connection workflow.
 - [x] Add shared M2.1 path-field support across typed snapshots, visual
   `FormPanel`, prompt fallback, optional filesystem validation, semantics,
-  accessibility state, and the proof app connection workflow.
+  accessibility state, and the demo app connection workflow.
 - [x] Add shared M2.1 async validation support across typed snapshots,
   `FormPanel` semantic submit, prompt fallback, busy/accessibility state, and
-  the proof app connection workflow.
+  the demo app connection workflow.
 - [x] Complete M2.1 with shared wizard/page-flow support over the existing
   form definition/controller, step-level validation gates, async-aware semantic
-  next/submit actions, and proof-app Connection screen adoption.
+  next/submit actions, and demo-app Connection screen adoption.
 - [x] Add the first protocol-neutral agent/developer workflow surface with
-  `ApprovalPrompt`, semantic approval state, submit/cancel actions, and proof
+  `ApprovalPrompt`, semantic approval state, submit/cancel actions, and demo
   app command coverage without pulling ACP into launch scope.
 - [x] Add protocol-neutral `MessageList` transcript UI with message
   roles/status, sanitized copy/export, semantic message nodes, aggregate
   focus/navigation, refresh-stable selected-message state when not following
-  the tail, accessibility fallback state, and proof-app transcript adoption.
+  the tail, accessibility fallback state, and demo-app transcript adoption.
 - [x] Add protocol-neutral `ToolCallCard` workflow UI with tool-call
   role/status/argument semantics, sanitized copy/export, cancel actions, and
-  proof-app Process screen adoption.
+  demo-app Process screen adoption.
 - [x] Add protocol-neutral `TaskGraph` plan/task UI with task graph summary,
   task status/progress/dependency semantics, aggregate focus/navigation,
-  refresh-stable selected-task state, sanitized copy/export, and proof-app
+  refresh-stable selected-task state, sanitized copy/export, and demo-app
   Overview adoption.
 - [x] Add protocol-neutral `ModelStatusBar` and `TokenMeter` UI with
   model/runtime/context-window semantics, safe accessibility fallback state,
-  and proof-app Overview adoption.
+  and demo-app Overview adoption.
 - [x] Add protocol-neutral `FileMentionPicker` UI with file/symbol mention
   semantics, aggregate query focus/result navigation, refresh-stable selected
   mention state, sanitized copy/pick behavior, accessibility fallback state,
-  and proof-app Transcript composer adoption.
+  and demo-app Transcript composer adoption.
 - [x] Add protocol-neutral `ConversationNavigator` UI with thread/session
   semantics, aggregate focus/navigation, refresh-stable selected-conversation
   state, sanitized copy/select behavior, accessibility fallback state, and
-  proof-app Transcript adoption.
+  demo-app Transcript adoption.
 - [x] Add protocol-neutral `ContextPanel` UI with context-pack item/budget
   semantics, sanitized copy/select behavior, accessibility fallback state, and
-  proof-app Overview adoption.
+  demo-app Overview adoption.
 - [x] Add protocol-neutral `TraceTimeline` UI with trace event
   kind/status/source/duration semantics, sanitized copy/select behavior,
-  accessibility fallback state, and proof-app Diagnostics adoption.
+  accessibility fallback state, and demo-app Diagnostics adoption.
 - [x] Add protocol-neutral `PatchReview` UI with patch/file review semantics,
   sanitized file-copy/select behavior, accessibility fallback state, and
-  proof-app Changes adoption while reusing `DiffView` for hunk review.
+  demo-app Changes adoption while reusing `DiffView` for hunk review.
 - [x] Add protocol-neutral `WorkflowSnapshot` / `WorkflowSummary` /
   `WorkflowHealth` reference model over first-party workflow records, with safe
-  semantic summary state, workflow accessibility fallback state, and proof-app
+  semantic summary state, workflow accessibility fallback state, and demo-app
   Overview adoption.
 - [x] Complete M2.5 component-theme expansion with CodeView line-kind tokens,
   closing the launch token set for controls, progress, data, logs, code, diff,
@@ -664,7 +666,7 @@ reactive TUI vision.
   `FileMentionPicker` now exposes file-mention picker/row state plus semantic
   focus/navigation/activate/copy actions and refreshed-list selected-mention
   preservation for protocol-neutral composer workflows.
-  The proof-app Transcript composer now uses `CompletionTextInput`, proving
+  The demo-app Transcript composer now uses `CompletionTextInput`, proving
   provider-backed slash-command and mention completions through semantic menu
   activation in the integrated workflow. It also wires
   `TextHistoryController`, proving submitted-note recall while preserving
@@ -705,7 +707,7 @@ reactive TUI vision.
   value redaction.
   `Tooltip` now exposes semantic help text and visible state while preserving
   its existing focus-triggered overlay behavior.
-  The proof-app Transcript surface now uses durable event IDs and an app-owned
+  The demo-app Transcript surface now uses durable event IDs and an app-owned
   `MessageListController`, proving selected-message identity across live
   appends, scrollback trimming, and screen changes.
   Broader action coverage for richer production widgets can follow concrete
@@ -714,7 +716,7 @@ reactive TUI vision.
   baseline exposed index construction as the hierarchy-search bottleneck.
   The saved follow-up baseline on the 100k-leaf fixture brings index-build p95
   to 1040888 us while preserving exact-token symbol behavior.
-- [x] Close RRE.3 semantic render-island proof after adding DataTable mouse hit
+- [x] Close RRE.3 semantic render-island demo after adding DataTable mouse hit
   selection for visible rows and Shift-click cell-range extension over the
   painted viewport metrics.
 - [x] Close RRE.4 debug frame insight with repaint-boundary cache metrics in
@@ -778,9 +780,9 @@ reactive TUI vision.
   Gauge, Sparkline, BarChart, Histogram, Heatmap, CalendarHeatmap, and
   interactive LineChart now expose `SemanticRole.chart`, typed chart state, and
   allow-listed chart fallback text. `Digits` exposes its underlying value as
-  semantic text. The proof app Overview screen includes a telemetry strip that
+  semantic text. The demo app Overview screen includes a telemetry strip that
   proves gauge, trend, and bar-chart semantics in the integrated scenario.
-  `TraceTimeline` now has a reusable task-event adapter and the proof app
+  `TraceTimeline` now has a reusable task-event adapter and the demo app
   Diagnostics screen surfaces live fake-worker progress/output events as
   metadata-only trace rows, including safe task run/sequence/progress/source
   and output-safety flags without duplicating raw task output.
@@ -789,7 +791,7 @@ reactive TUI vision.
   process workflows remain understandable in prompt fallback and debug
   artifacts without scraping cells.
 - [x] Complete M2.8 accessibility/fallback for the MVP. Future role-specific
-  summaries should be opened as proof-driven hardening slices, not as broad
+  summaries should be opened as demo-driven hardening slices, not as broad
   OS accessibility claims.
 - [x] Add wizard/page-flow form state to the semantic-derived
   accessibility/fallback projection, covering visible field count, active step

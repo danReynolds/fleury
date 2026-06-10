@@ -27,7 +27,7 @@ agent consoles, forms, command palettes, search boxes, and config editors.
 - `CompletionTextInput` now provides provider-backed rendered completion UI in
   `fleury_widgets`, including semantic menu close and row select/activate
   actions that use the same completion acceptance path as Tab.
-- The proof app Transcript composer now uses `CompletionTextInput` with
+- The demo app Transcript composer now uses `CompletionTextInput` with
   deterministic slash-command and mention suggestions plus
   `TextHistoryController` submission history, proving rendered completion and
   history navigation in an app-scale workflow rather than only focused widget
@@ -105,7 +105,7 @@ agent consoles, forms, command palettes, search boxes, and config editors.
     scheduling. The first rendered completion UI lives in `fleury_widgets` as
     a provider-backed wrapper around core `TextInput`/`TextCompletionController`.
     Its completion menu now exposes semantic close plus row select/activate
-    actions, preserving the controller-owned range replacement path. The proof
+    actions, preserving the controller-owned range replacement path. The demo
     app Transcript composer now adopts that widget for slash-command and
     mention completions, with semantic activation coverage over the same menu
     path. It also passes a `TextHistoryController` so submitted notes can be
@@ -161,9 +161,9 @@ agent consoles, forms, command palettes, search boxes, and config editors.
     safety.
     CompletionTextInput suggestion rows now dispatch semantic select/activate
     through the same controller/range replacement path as Tab acceptance, and
-    the proof app composer now uses that path for slash-command completion.
+    the demo app composer now uses that path for slash-command completion.
     The same composer now proves opt-in submission history semantics in the
-    integrated proof workflow.
+    integrated demo workflow.
 
 - [x] TEE.4 Add editing semantics and tests.
   - Intent: Make text fields testable above rendered cells.

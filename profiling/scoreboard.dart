@@ -69,7 +69,7 @@ const _scenarios = <_Scenario>[
     'bubbletea',
     'opentui',
   ]),
-  _Scenario('P3', 'sb10', 'SB.10 Proof-app journey', 'sb10-proof-app-journey', [
+  _Scenario('P3', 'sb10', 'SB.10 Demo-app journey', 'sb10-demo-app-journey', [
     'textual',
     'bubbletea',
     'ink',

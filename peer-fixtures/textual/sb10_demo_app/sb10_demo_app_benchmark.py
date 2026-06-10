@@ -13,18 +13,18 @@ SCREENS = ["home", "search", "task", "logs", "diagnostics"]
 def main() -> None:
     options = parse_args()
     if options.wire:
-        WireProofApp(options).run()
+        WireDemoApp(options).run()
     else:
-        print("Textual SB.10 proof app fixture: use --wire for PTY capture")
+        print("Textual SB.10 demo app fixture: use --wire for PTY capture")
 
 
-class WireProofApp(App[None]):
+class WireDemoApp(App[None]):
     def __init__(self, options: argparse.Namespace) -> None:
         super().__init__()
         self.options = options
         self.step = 0
         self.active_screen = "home"
-        self.events = ["boot proof app"]
+        self.events = ["boot demo app"]
 
     def compose(self) -> ComposeResult:
         yield Static(self.render_body(), id="body")
@@ -48,7 +48,7 @@ class WireProofApp(App[None]):
 
     def render_body(self) -> str:
         lines = [
-            f"SB.10 proof app screen={self.active_screen} step={self.step}",
+            f"SB.10 demo app screen={self.active_screen} step={self.step}",
             "",
             f"nav: home search task  command: {command_name(self.active_screen):<14} status: {status(self.step)}",
             "",

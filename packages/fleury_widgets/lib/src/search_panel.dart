@@ -287,11 +287,17 @@ class _SearchPanelState extends State<SearchPanel> {
     }
     if (widget.results != oldWidget.results ||
         widget.matcher != oldWidget.matcher) {
+      final previousResult = _selectedResultFor(
+        oldWidget.results,
+        SearchResultIndex(
+          oldWidget.results,
+        ).order(query: _query.text, matcher: oldWidget.matcher),
+      )?.result;
       if (widget.results != oldWidget.results) {
         _indexedResults = null;
         _searchIndex = null;
       }
-      _resetSelectionForOrder(_currentOrder);
+      _preserveSelectionForOrder(_currentOrder, previousResult);
     }
     if (widget.controller != oldWidget.controller) {
       _resetSelectionForOrder(_currentOrder);
@@ -325,6 +331,29 @@ class _SearchPanelState extends State<SearchPanel> {
 
   void _resetSelectionForOrder(List<int> order) {
     _list.selectedIndex = order.isEmpty ? null : 0;
+  }
+
+  void _preserveSelectionForOrder(
+    List<int> order,
+    SearchResult? previousResult,
+  ) {
+    if (order.isEmpty) {
+      _list.selectedIndex = null;
+      return;
+    }
+
+    if (previousResult != null) {
+      final preserved = _matchingViewIndex(order, previousResult);
+      if (preserved != null) {
+        _list.selectedIndex = preserved;
+        return;
+      }
+    }
+
+    final selectedIndex = _list.selectedIndex;
+    _list.selectedIndex = selectedIndex == null
+        ? 0
+        : selectedIndex.clamp(0, order.length - 1);
   }
 
   void _move(int delta) {
@@ -395,6 +424,13 @@ class _SearchPanelState extends State<SearchPanel> {
   }
 
   _SelectedSearchResult? _selectedResult(List<int> order) {
+    return _selectedResultFor(widget.results, order);
+  }
+
+  _SelectedSearchResult? _selectedResultFor(
+    List<SearchResult> results,
+    List<int> order,
+  ) {
     if (order.isEmpty) return null;
     final selectedIndex = _list.selectedIndex;
     if (selectedIndex == null) return null;
@@ -403,8 +439,18 @@ class _SearchPanelState extends State<SearchPanel> {
     return _SelectedSearchResult(
       viewIndex: viewIndex,
       sourceIndex: sourceIndex,
-      result: widget.results[sourceIndex],
+      result: results[sourceIndex],
     );
+  }
+
+  int? _matchingViewIndex(List<int> order, SearchResult previousResult) {
+    for (var viewIndex = 0; viewIndex < order.length; viewIndex++) {
+      final result = widget.results[order[viewIndex]];
+      if (_sameSearchResultIdentity(result, previousResult)) {
+        return viewIndex;
+      }
+    }
+    return null;
   }
 
   @override
@@ -429,6 +475,7 @@ class _SearchPanelState extends State<SearchPanel> {
     final selected = _selectedResult(order);
     final copyEnabled = widget.copySelection && selected != null;
     final canActivate = widget.onActivate != null;
+    final panelFocused = _queryFocusNode.hasFocus || _resultsFocusNode.hasFocus;
 
     Widget panel = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -453,14 +500,17 @@ class _SearchPanelState extends State<SearchPanel> {
                   controller: _list,
                   focusNode: _resultsFocusNode,
                   itemCount: order.length,
+                  selectionActive: panelFocused,
                   onSelect: (_) => _activateSelected(),
-                  itemBuilder: (context, viewIndex, selected) {
+                  itemBuilder: (context, viewIndex, activeSelected) {
                     final sourceIndex = order[viewIndex];
+                    final selected = viewIndex == _list.selectedIndex;
                     return _SearchResultRow(
                       result: widget.results[sourceIndex],
                       sourceIndex: sourceIndex,
                       viewIndex: viewIndex,
                       selected: selected,
+                      activeSelection: activeSelected,
                       copyEnabled: copyEnabled,
                       canActivate: canActivate,
                       onActivate: () => _activateResultAt(viewIndex),
@@ -543,12 +593,23 @@ final class _SelectedSearchResult {
   final SearchResult result;
 }
 
+bool _sameSearchResultIdentity(SearchResult a, SearchResult b) {
+  if (identical(a, b)) return true;
+  if (a.id != null || b.id != null) return a.id == b.id;
+  return a.title == b.title &&
+      a.subtitle == b.subtitle &&
+      a.category == b.category &&
+      a.source == b.source &&
+      a.detail == b.detail;
+}
+
 class _SearchResultRow extends StatelessWidget {
   const _SearchResultRow({
     required this.result,
     required this.sourceIndex,
     required this.viewIndex,
     required this.selected,
+    required this.activeSelection,
     required this.copyEnabled,
     required this.canActivate,
     required this.onActivate,
@@ -559,6 +620,7 @@ class _SearchResultRow extends StatelessWidget {
   final int sourceIndex;
   final int viewIndex;
   final bool selected;
+  final bool activeSelection;
   final bool copyEnabled;
   final bool canActivate;
   final Future<void> Function() onActivate;
@@ -576,11 +638,12 @@ class _SearchResultRow extends StatelessWidget {
       subtitle: subtitle,
       category: category,
       source: source,
-      selected: selected,
+      activeSelection: activeSelection,
     );
     final style = _searchResultStyle(
       Theme.of(context),
       selected: selected,
+      activeSelection: activeSelection,
       enabled: result.enabled,
     );
     return Semantics(
@@ -625,14 +688,14 @@ String _rowText({
   required String? subtitle,
   required String? category,
   required String? source,
-  required bool selected,
+  required bool activeSelection,
 }) {
   final meta = <String>[
     if (category != null && category.isNotEmpty) category,
     if (source != null && source.isNotEmpty) source,
     if (subtitle != null && subtitle.isNotEmpty) subtitle,
   ];
-  final prefix = selected ? '> ' : '  ';
+  final prefix = activeSelection ? '> ' : '  ';
   if (meta.isEmpty) return '$prefix$title';
   return '$prefix$title  ${meta.join('  ')}';
 }
@@ -725,8 +788,13 @@ bool _resultWasSanitized(SearchResult result) {
 CellStyle _searchResultStyle(
   ThemeData theme, {
   required bool selected,
+  required bool activeSelection,
   required bool enabled,
 }) {
-  final style = selected ? theme.selectionStyle : CellStyle.empty;
+  final style = activeSelection
+      ? theme.selectionStyle
+      : selected
+      ? theme.mutedStyle
+      : CellStyle.empty;
   return enabled ? style : style.merge(const CellStyle(dim: true));
 }

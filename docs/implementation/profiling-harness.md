@@ -163,7 +163,7 @@ Relative `--save` paths are resolved from the repository root by the wrapper.
 | P2 | SB.12 Layout Dirtiness Cache | Nocterm, Ratatui, OpenTUI | `fleury benchmark wire sb12 --runs=3` |
 | P3 | SB.8 Overlay/Palette Churn | Textual, Ink, Bubble Tea | `fleury benchmark wire sb8 --runs=3` |
 | P3 | SB.9 Subprocess/Untrusted Output | Textual, Bubble Tea, OpenTUI | `fleury benchmark wire sb9 --runs=3` |
-| P3 | SB.10 Proof-App Journey | Textual, Bubble Tea, Ink | `fleury benchmark wire sb10 --runs=3` |
+| P3 | SB.10 Demo-App Journey | Textual, Bubble Tea, Ink | `fleury benchmark wire sb10 --runs=3` |
 | P4 | SB.7 Resize Storm | Textual, Ratatui, OpenTUI | `fleury benchmark wire sb7 --runs=3` |
 | P4 | SB.11 TreeTable/filter/copy | Textual, Ratatui, OpenTUI | `fleury benchmark wire sb11 --runs=3` |
 

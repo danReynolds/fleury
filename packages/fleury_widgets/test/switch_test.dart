@@ -55,5 +55,28 @@ void main() {
       final out = tester.renderToString(size: const CellSize(16, 1));
       expect(out.contains('verbose'), isTrue);
     });
+
+    testWidgets('null onChanged disables switch', (tester) async {
+      tester.pumpWidget(
+        const Switch(value: true, label: 'verbose', onChanged: null),
+      );
+
+      final node = tester.semantics().single(
+        role: SemanticRole.toggle,
+        label: 'verbose',
+        enabled: false,
+      );
+      expect(node.actions, isEmpty);
+      expect(node.checked, isTrue);
+
+      final buf = tester.render(size: const CellSize(16, 1));
+      expect(buf.atColRow(1, 0).style.dim, isTrue);
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        node: node,
+      );
+      expect(result.status, SemanticActionInvocationStatus.disabled);
+    });
   });
 }

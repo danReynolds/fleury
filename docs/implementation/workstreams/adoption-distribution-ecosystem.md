@@ -12,9 +12,9 @@ core product is credible.
   Bubble Tea v2, Textual, OpenTUI, Ratatui, and Ink.
 - It does not yet have public positioning, distribution, a docs site,
   showcase, contributor process, or evidence-backed public comparison.
-- The example subpackage is the current-cycle proof app.
+- The example subpackage is the current-cycle demo app.
 - A repo-local launcher now gives developers stable local commands for
-  bootstrapping, proof-app runs, examples, CLI passthrough, quick checks, local
+  bootstrapping, demo-app runs, examples, CLI passthrough, quick checks, local
   path activation, and standalone CLI compilation.
 - An internal [Why Fleury?](../why-fleury.md) positioning draft now names the
   launch wedge, concrete peer-facing wins, claims that are ready, and claims
@@ -47,7 +47,7 @@ core product is credible.
 - [x] ADE.1 Write "Why Fleury?" positioning.
   - Intent: Explain why developers should choose Fleury.
   - Acceptance: Page names three concrete wins against Nocterm, three against
-    Bubble Tea v2, and the role of the example proof app and later
+    Bubble Tea v2, and the role of the example demo app and later
     Dune/`dune_cli` flagship.
   - Evidence: [Why Fleury?](../why-fleury.md).
   - Notes: Lead with developer-visible wins, not internal cell architecture.
@@ -62,7 +62,7 @@ core product is credible.
     [local distribution path](../local-distribution-path.md),
     [workspace README](../../../README.md),
     [repo-local launcher](../../../tool/fleury_dev.dart),
-    [proof app README](../../../packages/fleury_example_console/README.md).
+    [demo app README](../../../packages/fleury_example_console/README.md).
   - Notes: Public release work stays deferred, but the local path and future
     distribution tracks are now explicit.
 
@@ -89,13 +89,13 @@ core product is credible.
   first-class before public launch.
 - The first scorecard is a source snapshot and comparison skeleton, not a
   launch verdict. Move claims into public positioning only after tests,
-  scenario benchmarks, or proof-app evidence exists.
+  scenario benchmarks, or demo-app evidence exists.
 - Do not restart peer-comparison work as adoption work during MVP. The current
   cycle should spend evidence time on core API stability, local scenario
-  benchmarks, proof-app pressure, and terminal correctness.
-- The example subpackage is the first marketing/proof surface because it
+  benchmarks, demo-app pressure, and terminal correctness.
+- The example subpackage is the first marketing/demo surface because it
   shows Fleury capabilities under controlled app pressure. Dune/`dune_cli`
-  becomes the stronger product proof later.
+  becomes the stronger product evidence later.
 - Distribution can be planned early and executed when the APIs are stable
   enough not to embarrass the framework.
 - Public adoption work should restart after API freeze or when an external

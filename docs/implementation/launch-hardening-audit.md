@@ -14,7 +14,7 @@ framework, not every long-term research bet.
 
 - Keep semantic graph, app kernel, text editing, terminal
   capability/security, DataTable, diagnostics, benchmarks, and the example
-  subpackage proof-app slice in launch scope.
+  subpackage demo-app slice in launch scope.
 - Defer full replay, broad accessibility, Windows depth, public launch polish,
   plugin ecosystem, and `fleury_acp` implementation.
 - Keep only debug/replay hook points in launch scope so future replay is not
@@ -42,7 +42,7 @@ benchmark current peers, not stale versions.
   Ratatui, and Ink.
 - Treat performance as scenario-relative: raw render throughput may not be
   Fleury's first win, while retained ergonomics, semantic tests, diagnostics,
-  selection, and example-app proof can be.
+  selection, and example-app evidence can be.
 
 ## Pass 3: Architecture And Package Boundaries
 
@@ -65,7 +65,7 @@ split.
 - General widgets stay in core or `fleury_widgets` only when useful outside a
   single protocol.
 
-## Pass 4: Proof App Then Dune/`dune_cli`
+## Pass 4: Demo App Then Dune/`dune_cli`
 
 **Validated assumption:** Dune was already intended as a real consumer in
 earlier RFCs, but this implementation cycle should prove the framework first
@@ -73,12 +73,12 @@ through an example subpackage before moving to Dune/`dune_cli`.
 
 **Refinement:**
 
-- The Phase 1 proof-app slice should be narrow and product-shaped:
+- The Phase 1 demo-app slice should be narrow and product-shaped:
   sidebar/navigation, streamed content, composer/input, commands, status,
   output/log regions, selection, one dense data surface, capability fallbacks,
   diagnostics, and debug capture hooks.
 - Tool calls, approvals, ACP, and full replay are useful future pressure
-  tests, but should not block the example-proof cycle.
+  tests, but should not block the example-demo cycle.
 - Dune/`dune_cli` should follow once the example subpackage proves the core
   widgets and framework pieces are working well through tests.
 
@@ -88,7 +88,7 @@ through an example subpackage before moving to Dune/`dune_cli`.
 
 **Refinement:**
 
-- Phase 0 starts with the example proof-app scenario, then remains capped at
+- Phase 0 starts with the example demo-app scenario, then remains capped at
   three architecture RFCs: semantic graph, app kernel, and capability/security.
 - Phase 1 requires adapter-readiness, not ACP implementation.
 - Phase 2 can add targeted debug-capture/replay prototypes only if example or

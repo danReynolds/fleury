@@ -40,12 +40,24 @@ class _Scenario {
   final void Function(FleuryTester tester, _Capture capture) body;
 }
 
-MouseEvent _down(int c, int r) =>
-    MouseEvent(kind: MouseEventKind.down, button: MouseButton.left, col: c, row: r);
-MouseEvent _drag(int c, int r) =>
-    MouseEvent(kind: MouseEventKind.drag, button: MouseButton.left, col: c, row: r);
-MouseEvent _up(int c, int r) =>
-    MouseEvent(kind: MouseEventKind.up, button: MouseButton.left, col: c, row: r);
+MouseEvent _down(int c, int r) => MouseEvent(
+  kind: MouseEventKind.down,
+  button: MouseButton.left,
+  col: c,
+  row: r,
+);
+MouseEvent _drag(int c, int r) => MouseEvent(
+  kind: MouseEventKind.drag,
+  button: MouseButton.left,
+  col: c,
+  row: r,
+);
+MouseEvent _up(int c, int r) => MouseEvent(
+  kind: MouseEventKind.up,
+  button: MouseButton.left,
+  col: c,
+  row: r,
+);
 const _shiftRight = KeyEvent(
   keyCode: KeyCode.arrowRight,
   modifiers: {KeyModifier.shift},
@@ -63,8 +75,14 @@ const _palette = [
 Widget _styledRow(int i) => RichText(
   text: TextSpan(
     children: [
-      TextSpan(text: 'svc-${i.toString().padLeft(2, '0')} ', style: _palette[i % 6]),
-      TextSpan(text: 'ready ', style: const CellStyle(foreground: AnsiColor(2))),
+      TextSpan(
+        text: 'svc-${i.toString().padLeft(2, '0')} ',
+        style: _palette[i % 6],
+      ),
+      TextSpan(
+        text: 'ready ',
+        style: const CellStyle(foreground: AnsiColor(2)),
+      ),
       TextSpan(text: 'p95=${12 + i}ms ', style: _palette[(i + 2) % 6]),
       TextSpan(text: 'region=use1', style: const CellStyle(dim: true)),
     ],
@@ -116,7 +134,11 @@ final _scenarios = <_Scenario>[
           [for (var c = 0; c < 12; c++) (r * 12 + c + shift) % 10],
       ];
       tester.pumpWidget(
-        SizedBox(width: 24, height: 6, child: Heatmap(values: grid(0), cellWidth: 2)),
+        SizedBox(
+          width: 24,
+          height: 6,
+          child: Heatmap(values: grid(0), cellWidth: 2),
+        ),
       );
       capture();
       for (var i = 1; i <= 10; i++) {
@@ -142,9 +164,8 @@ final _scenarios = <_Scenario>[
       String line(int n) =>
           'log $n: event ${n * 31 % 997} shard ${n % 8} took ${n % 250}ms '
           'user=${n * 7 % 9973} status=ok';
-      Widget body(int off) => Column(
-        children: [for (var i = 0; i < 20; i++) Text(line(off + i))],
-      );
+      Widget body(int off) =>
+          Column(children: [for (var i = 0; i < 20; i++) Text(line(off + i))]);
       tester.pumpWidget(body(0));
       capture();
       for (var i = 1; i <= 10; i++) {
@@ -240,8 +261,9 @@ _ScenarioReport _run(_Scenario scenario, CellSize size) {
   return _ScenarioReport(scenario, first, updates);
 }
 
-String _pct(int part, int whole) =>
-    whole == 0 ? '  -  ' : '${(100 * part / whole).toStringAsFixed(0).padLeft(3)}%';
+String _pct(int part, int whole) => whole == 0
+    ? '  -  '
+    : '${(100 * part / whole).toStringAsFixed(0).padLeft(3)}%';
 
 /// Estimated wire time for a frame of [bytes] across the transport profiles —
 /// the bytes->latency mapping (a model; confirm on hardware per the handoff).
@@ -250,55 +272,74 @@ String _latency(int bytes) => TransportProfile.defaults
     .join('  ·  ');
 
 void _printHuman(List<_ScenarioReport> reports, CellSize size) {
-  stdout.writeln('Byte budget — terminal ${size.cols}x${size.rows}, '
-      'UTF-8 bytes on the wire\n');
+  stdout.writeln(
+    'Byte budget — terminal ${size.cols}x${size.rows}, '
+    'UTF-8 bytes on the wire\n',
+  );
 
   for (final r in reports) {
     stdout.writeln('▸ ${r.scenario.id}  —  ${r.scenario.name}');
     stdout.writeln('  ${r.scenario.note}');
 
     final fp = r.firstPaint;
-    stdout.writeln('  first paint : ${fp.total.toString().padLeft(6)} B   '
-        'content ${_pct(fp.content, fp.total)}  '
-        'sgr ${_pct(fp.sgr, fp.total)}  '
-        'cursor ${_pct(fp.cursor, fp.total)}  '
-        'sync ${_pct(fp.sync, fp.total)}');
+    stdout.writeln(
+      '  first paint : ${fp.total.toString().padLeft(6)} B   '
+      'content ${_pct(fp.content, fp.total)}  '
+      'sgr ${_pct(fp.sgr, fp.total)}  '
+      'cursor ${_pct(fp.cursor, fp.total)}  '
+      'sync ${_pct(fp.sync, fp.total)}',
+    );
 
     if (r.updateFrameCount == 0) {
       stdout.writeln('  est latency : ${_latency(fp.total)}  (first paint)\n');
       continue;
     }
     final u = r.updateTotal;
-    stdout.writeln('  updates     : ${r.avgUpdateBytes.toStringAsFixed(0).padLeft(6)} B/frame'
-        ' over ${r.updateFrameCount} frames   '
-        'content ${_pct(u.content, u.total)}  '
-        'sgr ${_pct(u.sgr, u.total)}  '
-        'cursor ${_pct(u.cursor, u.total)}  '
-        'sync ${_pct(u.sync, u.total)}');
-    stdout.writeln('  update overhead (non-content): '
-        '${(100 * u.overheadFraction).toStringAsFixed(0)}%');
-    stdout.writeln('  est latency : ${_latency(r.avgUpdateBytes.round())}  '
-        '(avg update frame)\n');
+    stdout.writeln(
+      '  updates     : ${r.avgUpdateBytes.toStringAsFixed(0).padLeft(6)} B/frame'
+      ' over ${r.updateFrameCount} frames   '
+      'content ${_pct(u.content, u.total)}  '
+      'sgr ${_pct(u.sgr, u.total)}  '
+      'cursor ${_pct(u.cursor, u.total)}  '
+      'sync ${_pct(u.sync, u.total)}',
+    );
+    stdout.writeln(
+      '  update overhead (non-content): '
+      '${(100 * u.overheadFraction).toStringAsFixed(0)}%',
+    );
+    stdout.writeln(
+      '  est latency : ${_latency(r.avgUpdateBytes.round())}  '
+      '(avg update frame)\n',
+    );
   }
 
   // Cross-scenario verdict: where does SGR dominate update bytes?
-  final allUpdates =
-      reports.fold(const AnsiByteBreakdown(), (a, r) => a + r.updateTotal);
+  final allUpdates = reports.fold(
+    const AnsiByteBreakdown(),
+    (a, r) => a + r.updateTotal,
+  );
   stdout.writeln('— Summary across update frames —');
   stdout.writeln('  total update bytes : ${allUpdates.total}');
-  stdout.writeln('  content ${_pct(allUpdates.content, allUpdates.total)}   '
-      'sgr ${_pct(allUpdates.sgr, allUpdates.total)}   '
-      'cursor ${_pct(allUpdates.cursor, allUpdates.total)}   '
-      'sync ${_pct(allUpdates.sync, allUpdates.total)}');
+  stdout.writeln(
+    '  content ${_pct(allUpdates.content, allUpdates.total)}   '
+    'sgr ${_pct(allUpdates.sgr, allUpdates.total)}   '
+    'cursor ${_pct(allUpdates.cursor, allUpdates.total)}   '
+    'sync ${_pct(allUpdates.sync, allUpdates.total)}',
+  );
   final sgrHeavy = reports
-      .where((r) => r.updateTotal.total > 0 &&
-          r.updateTotal.sgr / r.updateTotal.total >= 0.30)
+      .where(
+        (r) =>
+            r.updateTotal.total > 0 &&
+            r.updateTotal.sgr / r.updateTotal.total >= 0.30,
+      )
       .map((r) => r.scenario.id)
       .toList();
-  stdout.writeln(sgrHeavy.isEmpty
-      ? '  SGR is <30% of update bytes everywhere — incremental SGR is low value.'
-      : '  SGR ≥30% of update bytes in: ${sgrHeavy.join(', ')} '
-          '— incremental SGR would pay off here.');
+  stdout.writeln(
+    sgrHeavy.isEmpty
+        ? '  SGR is <30% of update bytes everywhere — incremental SGR is low value.'
+        : '  SGR ≥30% of update bytes in: ${sgrHeavy.join(', ')} '
+              '— incremental SGR would pay off here.',
+  );
 }
 
 void main(List<String> args) {
@@ -317,10 +358,12 @@ void main(List<String> args) {
   final reports = [for (final s in _scenarios) _run(s, size)];
 
   if (json) {
-    stdout.writeln(const JsonEncoder.withIndent('  ').convert(<String, Object>{
-      'terminalSize': {'cols': size.cols, 'rows': size.rows},
-      'scenarios': [for (final r in reports) r.toJson()],
-    }));
+    stdout.writeln(
+      const JsonEncoder.withIndent('  ').convert(<String, Object>{
+        'terminalSize': {'cols': size.cols, 'rows': size.rows},
+        'scenarios': [for (final r in reports) r.toJson()],
+      }),
+    );
   } else {
     _printHuman(reports, size);
   }

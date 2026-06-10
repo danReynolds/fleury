@@ -132,9 +132,7 @@ ImageProtocol detectImageProtocolFromEnvironment(
 }
 
 /// Detects whether a terminal multiplexer is likely to need passthrough.
-bool detectTerminalMultiplexerFromEnvironment(
-  Map<String, String> environment,
-) {
+bool detectTerminalMultiplexerFromEnvironment(Map<String, String> environment) {
   if ((environment['TMUX'] ?? '').isNotEmpty) return true;
   final term = environment['TERM']?.toLowerCase() ?? '';
   if (term.startsWith('screen') || term.startsWith('tmux')) return true;

@@ -15,6 +15,7 @@ dart run benchmark/render_benchmarks.dart
 dart run benchmark/paint_benchmarks.dart
 dart run benchmark/build_benchmarks.dart
 dart run benchmark/parser_benchmarks.dart
+dart run benchmark/focus_traversal_benchmarks.dart
 ```
 
 Each benchmark prints `<name>: <microseconds per run()>` on stdout.
@@ -62,7 +63,7 @@ dart run benchmark/scenario_benchmarks.dart --list
 dart run benchmark/scenario_benchmarks.dart --filter=SB.3 --json
 ```
 
-The integrated proof-app scenario lives in `fleury_example_console` because it
+The integrated demo-app scenario lives in `fleury_example_console` because it
 measures the app-shaped package rather than a reusable core or widget fixture:
 
 ```sh
@@ -138,6 +139,9 @@ Saved Phase 1 baseline:
   `reassembleApplication`. Drives H6 (sort-once flush) decisions.
 - **parser** — `InputParser.feed` throughput for ASCII / CSI / UTF-8
   / mixed input. Drives whether the parser is a bottleneck at all.
+- **focus traversal** — directional focus target selection over mounted focus
+  grids at reasonable and large candidate counts. Drives whether the default
+  tree-aware spatial policy needs indexing beyond a linear scan.
 
 ## Capturing baselines
 

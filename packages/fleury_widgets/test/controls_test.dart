@@ -106,6 +106,29 @@ void main() {
         isTrue,
       );
     });
+
+    testWidgets('null onChanged disables checkbox', (tester) async {
+      tester.pumpWidget(
+        const Checkbox(value: false, label: 'Wrap', onChanged: null),
+      );
+
+      final node = tester.semantics().single(
+        role: SemanticRole.checkbox,
+        label: 'Wrap',
+        enabled: false,
+      );
+      expect(node.actions, isEmpty);
+      expect(
+        tester.render(size: const CellSize(8, 1)).atColRow(0, 0).style.dim,
+        isTrue,
+      );
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        node: node,
+      );
+      expect(result.status, SemanticActionInvocationStatus.disabled);
+    });
   });
 
   group('Toggle', () {
@@ -145,6 +168,21 @@ void main() {
 
       expect(result.completed, isTrue);
       expect(changed, isFalse);
+    });
+
+    testWidgets('null onChanged disables toggle', (tester) {
+      tester.pumpWidget(
+        const Toggle(value: true, label: 'Feature', onChanged: null),
+      );
+
+      final node = tester.semantics().single(
+        role: SemanticRole.toggle,
+        label: 'Feature',
+        enabled: false,
+      );
+
+      expect(node.actions, isEmpty);
+      expect(node.checked, isTrue);
     });
   });
 
@@ -222,6 +260,26 @@ void main() {
 
       expect(result.completed, isTrue);
       expect(picked, 3);
+    });
+
+    testWidgets('null onChanged disables radio', (tester) {
+      tester.pumpWidget(
+        const Radio<int>(
+          value: 1,
+          groupValue: 2,
+          label: 'One',
+          onChanged: null,
+        ),
+      );
+
+      final node = tester.semantics().single(
+        role: SemanticRole.radio,
+        label: 'One',
+        enabled: false,
+      );
+
+      expect(node.actions, isEmpty);
+      expect(node.selected, isFalse);
     });
   });
 

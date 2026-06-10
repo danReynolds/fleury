@@ -85,6 +85,7 @@ void main() {
     final requestedRows = <int>{};
     tester.pumpWidget(
       DataTable(
+        label: 'Runs table',
         rowCount: 100000,
         columns: _columns(),
         rowKeyBuilder: (row) => 'RUN-$row',
@@ -108,7 +109,7 @@ void main() {
     expect(requestedRows, {0, 1, 2, 3});
 
     final tree = tester.semantics();
-    final table = tree.single(role: SemanticRole.table);
+    final table = tree.single(role: SemanticRole.table, label: 'Runs table');
     expect(table.state.collectionRowCount, 100000);
     expect(table.state.collectionColumnCount, 2);
     expect(table.state.values['hasHeader'], isTrue);

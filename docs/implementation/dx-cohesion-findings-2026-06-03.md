@@ -49,12 +49,15 @@ Testing DX is genuinely strong: headless `pumpWidget` → `renderToString()` →
 ## 1. The friction my newcomer build actually hit (empirical)
 
 In ~250 lines I hit **three "Flutter muscle-memory is wrong here" divergences**,
-each caught only at compile time:
+each caught only at compile time. The 2026-06-08 cleanup resolved the first
+two in different ways: `ListenableBuilder` gained the Flutter-shaped
+`listenable:` path, and the framework-level screen controller was removed
+rather than aliased.
 
 | # | I wrote (Flutter instinct) | Reality | Why it stings |
 | --- | --- | --- | --- |
 | 1 | `ListenableBuilder(listenable: x)` | param is `animation:` | The class is *named* after `Listenable`, but the param is `animation` — and a `Listenable` isn't an animation. Diverges from Flutter's exact same class. |
-| 2 | `ScreenController.of(context)` | `ScreenControllerScope.of(context)` | Flutter is `Foo.of(context)`; Fleury splits into `FooScope.of(context)` for app-kernel scopes. |
+| 2 | app-owned section controller / `Navigator` / commands | framework `ScreenController` | The original framework-owned screen controller was removed; apps now model tabs/sidebars/sections directly. |
 | 3 | `itemBuilder: (ctx, i) =>` | `(ctx, i, bool selected)` | Selection-aware (and documented), but breaks Flutter's `ListView.builder` arity. |
 
 These are the central DX theme: **Fleury is ~95% Flutter, so adopters bring full
@@ -68,9 +71,9 @@ Other friction logged while building:
 - **No app-kernel example to crib from.** None of the 8 core examples or 3 widget
   demos use `FleuryApp`/screens/commands — the headline differentiator vs Nocterm.
   I assembled it by reading `app.dart`/`commands.dart`/`status.dart`.
-- **Switching screens from a command is non-obvious.** `CommandContext` exposes
-  only `commands` + `buildContext`; reaching the `ScreenController` requires
-  `ScreenControllerScope.of(ctx.buildContext!)` — discovered by source-reading.
+- **Switching app sections from a command should stay app-owned.** The current
+  demo console does this by registering commands that call its own navigation
+  controller/callbacks. That is more idiomatic than a framework screen service.
 - **`snapshot.toString()` returns `Instance of 'SemanticInspectionSnapshot'`** —
   to see the differentiator you must call `toInspectionJson()`. Small, but it's
   the first thing a curious dev tries.
@@ -120,13 +123,13 @@ The work is to move bucket two into bucket one — propagation, not invention.
 
 **Tier 1 — highest leverage, mostly low effort:**
 
-1. **Kill the Flutter uncanny-valley divergences.** Rename/alias to match Flutter
-   exactly where the class *is* Flutter's: `ListenableBuilder` should accept
-   `listenable:` (keep `animation` as a deprecated alias). Add `FleuryApp.of` /
-   `ScreenController.of` aliases alongside the `…Scope.of` forms. Where a
-   divergence is intentional (selection-aware `itemBuilder`), surface it in the
-   error path or a lint, not just a doc comment. **This protects the entire
-   adoption thesis and is a day of work.**
+1. **Kill the Flutter uncanny-valley divergences.** Rename/alias to match
+   Flutter exactly where the class *is* Flutter's: `ListenableBuilder` should
+   accept `listenable:` (keep `animation` as a legacy alias). Avoid framework
+   constructs where ordinary app/widget state is clearer; the removed screen
+   controller is the example. Where a divergence is intentional
+   (selection-aware `itemBuilder`), surface it in the error path or a lint, not
+   just a doc comment. **This protects the entire adoption thesis.**
 2. **Ship the missing app-kernel example + a getting-started guide.** The headline
    differentiator has no demo. The probe app I built (`dx-probe/bin/main.dart`) is
    a ready-made seed — promote a cleaned version into `packages/fleury/example/`

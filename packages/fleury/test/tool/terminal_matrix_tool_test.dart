@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 void main() {
-  group('benchmark-manifest launcher', () {
+  group('benchmark manifest launcher', () {
     late Directory tempDir;
 
     setUp(() {
@@ -18,7 +18,7 @@ void main() {
     });
 
     test('prints the checked-in comparative benchmark manifest', () async {
-      final result = await _runTool(['benchmark-manifest', '--json']);
+      final result = await _runTool(['benchmark', 'manifest', '--json']);
 
       expect(result.exitCode, 0, reason: result.stderr.toString());
       final manifest = _jsonObject(result.stdout);
@@ -67,14 +67,14 @@ void main() {
         }),
       );
 
-      final result = await _runTool(['benchmark-manifest', '--input=$path']);
+      final result = await _runTool(['benchmark', 'manifest', '--input=$path']);
 
       expect(result.exitCode, 1);
       expect(result.stderr, contains('unknown peer'));
     });
   });
 
-  group('benchmark-result launcher', () {
+  group('benchmark result launcher', () {
     late Directory tempDir;
 
     setUp(() {
@@ -90,12 +90,13 @@ void main() {
     test(
       'accepts and merges a peer benchmark run into a manifest copy',
       () async {
-        final inputPath = '${tempDir.path}/nocterm-sb1.json';
+        final inputPath = '${tempDir.path}/bubbletea-sb1.json';
         final outputPath = '${tempDir.path}/manifest-with-peer.json';
-        _writeEntry(tempDir, 'nocterm-sb1.json', _peerRun());
+        _writeEntry(tempDir, 'bubbletea-sb1.json', _peerRun());
 
         final result = await _runTool([
-          'benchmark-result',
+          'benchmark',
+          'result',
           '--input=$inputPath',
           '--output=$outputPath',
           '--json',
@@ -104,7 +105,7 @@ void main() {
         expect(result.exitCode, 0, reason: result.stderr.toString());
         final summary = _jsonObject(result.stdout);
         expect(summary['accepted'], isTrue);
-        expect(summary['peerId'], 'nocterm');
+        expect(summary['peerId'], 'bubbletea');
         expect(summary['scenarioId'], 'SB.1');
         expect(summary['requiredMetricCount'], 6);
         expect(summary['claimGateCount'], 3);
@@ -119,19 +120,23 @@ void main() {
         expect(peerRuns, hasLength(1));
         expect(
           peerRuns.single as Map<String, Object?>,
-          containsPair('runId', 'nocterm-sb1-local-fixture'),
+          containsPair('runId', 'bubbletea-sb1-local-fixture'),
         );
       },
     );
 
     test('rejects a peer run missing required metrics', () async {
-      final inputPath = '${tempDir.path}/bad-nocterm-sb1.json';
+      final inputPath = '${tempDir.path}/bad-bubbletea-sb1.json';
       final run = _peerRun();
       final metrics = run['metrics'] as Map<String, Object?>;
       metrics.remove('commandToFrameUs');
-      _writeEntry(tempDir, 'bad-nocterm-sb1.json', run);
+      _writeEntry(tempDir, 'bad-bubbletea-sb1.json', run);
 
-      final result = await _runTool(['benchmark-result', '--input=$inputPath']);
+      final result = await _runTool([
+        'benchmark',
+        'result',
+        '--input=$inputPath',
+      ]);
 
       expect(result.exitCode, 1);
       expect(result.stderr, contains('missing required metric'));
@@ -139,7 +144,7 @@ void main() {
     });
   });
 
-  group('benchmark-variance launcher', () {
+  group('benchmark variance launcher', () {
     late Directory tempDir;
 
     setUp(() {
@@ -158,7 +163,7 @@ void main() {
         runsDir,
         'run-a.json',
         _peerRun(
-          runId: 'nocterm-sb1-run-a',
+          runId: 'bubbletea-sb1-run-a',
           firstFrameUsP95: 900,
           commandToFrameUsP95: 1100,
           semanticOrTestQueryUsP95: 700,
@@ -168,7 +173,7 @@ void main() {
         runsDir,
         'run-b.json',
         _peerRun(
-          runId: 'nocterm-sb1-run-b',
+          runId: 'bubbletea-sb1-run-b',
           firstFrameUsP95: 1000,
           commandToFrameUsP95: 1200,
           semanticOrTestQueryUsP95: 800,
@@ -178,7 +183,7 @@ void main() {
         runsDir,
         'run-c.json',
         _peerRun(
-          runId: 'nocterm-sb1-run-c',
+          runId: 'bubbletea-sb1-run-c',
           firstFrameUsP95: 1100,
           commandToFrameUsP95: 1300,
           semanticOrTestQueryUsP95: 900,
@@ -187,7 +192,8 @@ void main() {
       final outputPath = '${tempDir.path}/variance.json';
 
       final result = await _runTool([
-        'benchmark-variance',
+        'benchmark',
+        'variance',
         '--input=${runsDir.path}',
         '--min-runs=3',
         '--strict',
@@ -198,7 +204,7 @@ void main() {
       expect(result.exitCode, 0, reason: result.stderr.toString());
       final summary = _jsonObject(result.stdout);
       expect(summary['kind'], 'fleuryBenchmarkVariance');
-      expect(summary['peerId'], 'nocterm');
+      expect(summary['peerId'], 'bubbletea');
       expect(summary['scenarioId'], 'SB.1');
       expect(summary['runCount'], 3);
       expect(summary['sufficientRunCount'], isTrue);
@@ -224,11 +230,12 @@ void main() {
       _writeEntry(
         tempDir,
         'single-run.json',
-        _peerRun(runId: 'nocterm-sb1-single-run'),
+        _peerRun(runId: 'bubbletea-sb1-single-run'),
       );
 
       final result = await _runTool([
-        'benchmark-variance',
+        'benchmark',
+        'variance',
         '--input=$inputPath',
         '--min-runs=2',
         '--strict',
@@ -990,7 +997,7 @@ Map<String, Object?> _matrixEntry({
 }
 
 Map<String, Object?> _peerRun({
-  String runId = 'nocterm-sb1-local-fixture',
+  String runId = 'bubbletea-sb1-local-fixture',
   int firstFrameUsP95 = 1000,
   int commandToFrameUsP95 = 1500,
   int semanticOrTestQueryUsP95 = 900,
@@ -999,13 +1006,13 @@ Map<String, Object?> _peerRun({
     'schemaVersion': 1,
     'kind': 'fleuryPeerBenchmarkRun',
     'runId': runId,
-    'peerId': 'nocterm',
+    'peerId': 'bubbletea',
     'scenarioId': 'SB.1',
     'capturedAt': '2026-06-01T00:00:00.000000Z',
     'source': <String, Object?>{
-      'name': 'Nocterm',
-      'version': '0.6.0',
-      'url': 'https://pub.dev/packages/nocterm',
+      'name': 'Bubble Tea',
+      'version': '1.3.6',
+      'url': 'https://github.com/charmbracelet/bubbletea',
     },
     'environment': <String, Object?>{
       'machine': 'local-test-fixture',
@@ -1015,8 +1022,8 @@ Map<String, Object?> _peerRun({
       'terminalSize': <String, Object?>{'columns': 80, 'rows': 24},
     },
     'fixture': <String, Object?>{
-      'workingDirectory': 'peer-fixtures/nocterm/sb1_counter',
-      'command': <String>['dart', 'test', 'test/counter_benchmark_test.dart'],
+      'workingDirectory': 'peer-fixtures/bubbletea/sb1_counter',
+      'command': <String>['go', 'test', './...'],
       'warmupIterations': 2,
       'measuredIterations': 20,
     },

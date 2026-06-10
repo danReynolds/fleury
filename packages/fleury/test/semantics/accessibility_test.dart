@@ -401,7 +401,7 @@ void main() {
           children: [
             Semantics(
               role: SemanticRole.app,
-              label: 'Proof App',
+              label: 'Demo App',
               state: SemanticState({
                 'screenCount': 11,
                 'activeScreenId': 'runs',
@@ -462,7 +462,7 @@ void main() {
       );
 
       final snapshot = tester.accessibilitySnapshot();
-      final app = snapshot.single(role: SemanticRole.app, label: 'Proof App');
+      final app = snapshot.single(role: SemanticRole.app, label: 'Demo App');
       final command = snapshot.single(
         role: SemanticRole.command,
         label: 'Run Doctor',

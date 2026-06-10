@@ -30,7 +30,7 @@ display untrusted output or use advanced terminal features.
   capability, resolution, fallback, and redaction state.
 - `DataTable` selected-row copy uses sanitized export text, framework clipboard
   writes, and semantic copy/capability metadata.
-- The proof app Diagnostics screen now renders resolver-backed capability rows
+- The demo app Diagnostics screen now renders resolver-backed capability rows
   for color, inline images, markdown links, clipboard writes, and OSC 52.
 - Native subprocess task output is now sanitized with `sanitizeForDisplay`,
   capped by `ProcessTaskController.maxOutputLineLength`, decoded with
@@ -193,7 +193,7 @@ display untrusted output or use advanced terminal features.
     [capability requirements](../../../packages/fleury/lib/src/terminal/capability_requirements.dart),
     [capability requirement tests](../../../packages/fleury/test/terminal/capability_requirements_test.dart).
   - Notes: First slice is a pure model. `Image`, `MarkdownText`, clipboard
-    reports, text-control copy policy, and the proof app Diagnostics screen now
+    reports, text-control copy policy, and the demo app Diagnostics screen now
     consume it for semantic fallback state. Debug inspector integration is
     covered by the M1.10 terminal diagnosis rows; richer capability browsing
     can follow in Phase 2.
@@ -209,7 +209,7 @@ display untrusted output or use advanced terminal features.
   - Notes: `Image` proves native/glyph fallback semantics. `MarkdownText`
     proves policy-disabled OSC 8 semantics while preserving visible URL
     rendering. `TextInput` and `TextArea` now expose clipboard policy semantics,
-    and the proof app Diagnostics screen shows app-shaped capability rows.
+    and the demo app Diagnostics screen shows app-shaped capability rows.
 
 - [x] TCS.7 Add safe markdown link policy semantics.
   - Intent: Keep markdown links inspectable and safe without raw terminal
@@ -239,16 +239,16 @@ display untrusted output or use advanced terminal features.
     expose clipboard policy/capability semantics instead of inferring behavior
     from terminal transport alone.
 
-- [x] TCS.9 Surface capability diagnostics in the proof app.
+- [x] TCS.9 Surface capability diagnostics in the demo app.
   - Intent: Prove the capability model in an app workflow, not only unit tests
     and individual widgets.
-  - Acceptance: The proof app Diagnostics screen exposes terminal diagnosis
+  - Acceptance: The demo app Diagnostics screen exposes terminal diagnosis
     summary state and per-capability semantic rows for available, degraded, and
     policy-disabled outcomes.
   - Evidence:
-    [proof app diagnostics](../../../packages/fleury_example_console/lib/fleury_example_console.dart),
-    [proof app tests](../../../packages/fleury_example_console/test/proof_console_test.dart).
-  - Notes: The current proof screen uses deterministic `MediaQuery`-derived
+    [demo app diagnostics](../../../packages/fleury_example_console/lib/fleury_example_console.dart),
+    [demo app tests](../../../packages/fleury_example_console/test/demo_console_test.dart).
+  - Notes: The current demo screen uses deterministic `MediaQuery`-derived
     capabilities for stable tests. Real-terminal evidence remains a separate
     manual validation pass once the local Dart SDK matches package constraints.
 
@@ -446,7 +446,7 @@ display untrusted output or use advanced terminal features.
   inspector summaries, and future adapter surfaces must consume
   `redactedValue`, `obscureText`, and `clipboardRedacted` before displaying
   semantic values, validation errors, query strings, or token-shaped state.
-- The proof app Diagnostics screen should stay deterministic enough for tests
+- The demo app Diagnostics screen should stay deterministic enough for tests
   while still exercising the same resolver and diagnosis types that real app
   diagnostics will use.
 
@@ -480,8 +480,8 @@ display untrusted output or use advanced terminal features.
 - [Clipboard write reports](../../../packages/fleury/lib/src/runtime/clipboard.dart).
 - [Clipboard report tests](../../../packages/fleury/test/runtime/clipboard_test.dart).
 - [Text clipboard semantic tests](../../../packages/fleury/test/semantics/semantics_test.dart).
-- [Proof app Diagnostics screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
-- [Proof app Diagnostics tests](../../../packages/fleury_example_console/test/proof_console_test.dart).
+- [Demo app Diagnostics screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
+- [Demo app Diagnostics tests](../../../packages/fleury_example_console/test/demo_console_test.dart).
 - [Text sanitizer tests](../../../packages/fleury/test/rendering/text_sanitizer_test.dart).
 - [Process task sanitizer tests](../../../packages/fleury/test/effects/process_task_test.dart).
 - [Semantic redaction tests](../../../packages/fleury/test/semantics/semantics_test.dart).

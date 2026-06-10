@@ -90,7 +90,7 @@ without coupling Fleury core to ACP.
   prompt turns, plans, tool calls, permissions, terminal output, cancellation,
   and replay fixtures onto Fleury's protocol-neutral surfaces.
 - M1.5 is closed for launch scope. `fleury_acp` can start later from this
-  boundary once the example proof app and public API shape are stable enough.
+  boundary once the example demo app and public API shape are stable enough.
 
 ## Risks And Open Questions
 

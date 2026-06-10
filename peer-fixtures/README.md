@@ -91,8 +91,8 @@ Do not hand-edit `peerRuns` into
 - `textual/sb9_subprocess_output`, `bubbletea/sb9_subprocess_output`, and
   `opentui/sb9_subprocess_output` - wire-only `SB.9 Subprocess/Untrusted
   Output` fixtures for streaming process-output ingestion.
-- `textual/sb10_proof_app`, `bubbletea/sb10_proof_app`, and
-  `ink/sb10_proof_app` - wire-only `SB.10 Proof-App Journey` fixtures for a
+- `textual/sb10_demo_app`, `bubbletea/sb10_demo_app`, and
+  `ink/sb10_demo_app` - wire-only `SB.10 Demo-App Journey` fixtures for a
   compact full-app navigation/action/status flow.
 - `textual/sb11_treetable_filter_copy`,
   `ratatui/sb11_treetable_filter_copy`, and

@@ -38,7 +38,7 @@ func main() {
 		steps:    options.steps,
 		interval: time.Duration(options.intervalMs) * time.Millisecond,
 		screen:   "home",
-		events:   []string{"boot proof app"},
+		events:   []string{"boot demo app"},
 	}).Run(); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -80,7 +80,7 @@ func (m model) nextTick() tea.Cmd {
 
 func render(m model) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "SB.10 proof app screen=%s step=%d\n\n", m.screen, m.step)
+	fmt.Fprintf(&b, "SB.10 demo app screen=%s step=%d\n\n", m.screen, m.step)
 	fmt.Fprintf(&b, "nav: home search task  command: %-14s status: %s\n\n", commandName(m.screen), status(m.step))
 	fmt.Fprintf(&b, "results visible=%d selected=%d\n\n", (m.step*17)%m.rows, m.step%9)
 	for _, event := range m.events {

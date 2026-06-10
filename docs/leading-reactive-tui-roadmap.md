@@ -57,7 +57,7 @@ The long-term positioning:
 > reactive, testable, fast, terminal-correct, and batteries-included for
 > data-heavy developer tools and agent workflows.
 
-### Proof App Strategy
+### Demo App Strategy
 
 Fleury should be developed against real application pressure, not only toy
 examples.
@@ -1162,7 +1162,7 @@ selection, and scenario benchmarks.
   Bubble Tea v2, Textual, OpenTUI, and Ratatui.
 - A developer can create and run a counter app quickly once distribution work
   begins.
-- The example subpackage is maintained as the first showcase-quality proof app,
+- The example subpackage is maintained as the first showcase-quality demo app,
   with Dune/`dune_cli` promoted later when the core is proven.
 
 ### Active Execution Artifacts
@@ -1172,7 +1172,7 @@ The implementation tracker owns the operational details for this workstream:
 - [Execution journal](implementation/execution-journal.md) records the
   chronological implementation memory: changes, findings, validation, and next
   steps.
-- [Proof-app scenario](implementation/proof-app-scenario.md) defines the
+- [Demo-app scenario](implementation/demo-app-scenario.md) defines the
   current-cycle example subpackage and the Phase 1 proof slice.
 - [Scenario benchmark lab](implementation/scenario-benchmark-lab.md) defines
   app-shaped workloads, target metrics, fixtures, peer comparison targets, and
@@ -1210,7 +1210,7 @@ writing.
 
 Deliverables:
 
-1. Example subpackage proof-app scenario spec.
+1. Example subpackage demo-app scenario spec.
    - Define the first realistic workflow that will prove Fleury: sidebar
      navigation, streamed content, composer/input, commands, status, data
      views, output/log regions, selection, capability fallbacks, and debug
@@ -1235,7 +1235,7 @@ Deliverables:
 5. Scenario benchmark lab.
    - Time-to-counter app, text editing composer stress, 100k-row table,
      streaming log, streaming markdown, dashboard updates, resize storm,
-     overlay churn, subprocess handoff, and proof-app journey.
+     overlay churn, subprocess handoff, and demo-app journey.
    - Include moving-target peer comparisons against current Nocterm,
      Bubble Tea v2, Textual, OpenTUI, Ratatui, and Ink where feasible.
 
@@ -1253,7 +1253,7 @@ Exit criteria:
 - The core contracts are small enough to implement, but rich enough that
   semantic testing, prompt fallback, debug/replay hooks, and capability-aware
   widgets can share them.
-- The example subpackage has a concrete Phase 1 proof-app scenario.
+- The example subpackage has a concrete Phase 1 demo-app scenario.
 - Phase 0 has not expanded beyond the three architecture RFCs: semantic app
   graph, app kernel, and capability/security contract.
 
@@ -1268,7 +1268,7 @@ Deliverables:
 2. Text editing v2.
 3. `FleuryApp` shell with commands, shortcuts, command palette, and status
    binding.
-4. Example subpackage proof app v0 running on Fleury.
+4. Example subpackage demo app v0 running on Fleury.
 5. Agent-adapter readiness boundary for fast-follow packages such as
    `fleury_acp`; no ACP transport or ACP-specific widgets in launch scope.
 6. Worker/task model with structured status, cancellation, output, and future
@@ -1357,14 +1357,14 @@ Exit criteria:
 
 2. Write RFC: `FleuryApp`, commands, actions, and shortcuts.
    - Define app shell, screens, command registry, shortcut scopes, status
-     binding, command palette structure, lifecycle, and proof-app needs.
+     binding, command palette structure, lifecycle, and demo-app needs.
 
 3. Write RFC: capability and security contract.
    - Define required/preferred/optional capabilities, terminal profiles,
      fallback behavior, ANSI sanitizer, OSC policy, image policy, link policy,
      markdown policy, subprocess output policy, and secret redaction.
 
-4. Write example subpackage proof-app scenario spec.
+4. Write example subpackage demo-app scenario spec.
    - Use the example app as the forcing function for sidebar navigation,
      streamed content, composer/input, commands, data views, output/log
      regions, selection, capability fallbacks, and debug capture.
@@ -1416,7 +1416,7 @@ Exit criteria:
 15. Build `fleury diagnose`.
    - Make terminal capabilities visible, machine-readable, and testable.
 
-16. Build the example subpackage proof app v0.
+16. Build the example subpackage demo app v0.
    - Use it as the real forcing function for streamed content, data views,
      logs, commands, cancellation, semantics, diagnostics, and selection.
 

@@ -246,6 +246,8 @@ class FocusManager extends ChangeNotifier {
   /// frontier — never widget-level state that may be stale across a rebuild.
   final Set<_FocusScopeMarkerElement> _activeModalScopes =
       <_FocusScopeMarkerElement>{};
+  final Set<_ExcludeFocusMarkerElement> _activeExcludeFocusMarkers =
+      <_ExcludeFocusMarkerElement>{};
 
   void _registerModalScope(_FocusScopeMarkerElement element) {
     _checkNotDisposed();
@@ -255,6 +257,18 @@ class FocusManager extends ChangeNotifier {
   void _unregisterModalScope(_FocusScopeMarkerElement element) {
     if (_disposed) return;
     if (_activeModalScopes.remove(element)) _notifyManagerScopeChanged();
+  }
+
+  void _registerExcludeFocus(_ExcludeFocusMarkerElement element) {
+    _checkNotDisposed();
+    if (_activeExcludeFocusMarkers.add(element)) _notifyManagerScopeChanged();
+  }
+
+  void _unregisterExcludeFocus(_ExcludeFocusMarkerElement element) {
+    if (_disposed) return;
+    if (_activeExcludeFocusMarkers.remove(element)) {
+      _notifyManagerScopeChanged();
+    }
   }
 
   /// Notifies listeners that the modal frontier (or a `suppressGlobals`
@@ -287,6 +301,7 @@ class FocusManager extends ChangeNotifier {
   @internal
   bool isClickable(FocusNode node) {
     if (!node.canRequestFocus) return false;
+    if (_activeExcludeFocusMarkers.isEmpty) return true;
     Element? e = node._element?.elementParent;
     while (e != null) {
       if (e is _ExcludeFocusMarkerElement && e.excluding) return false;
@@ -475,14 +490,30 @@ class FocusManager extends ChangeNotifier {
   }
 
   /// Returns the candidate set [FocusTraversalGroup] should consider
-  /// for directional (arrow) traversal: traversable, attached, and —
-  /// when a modal scope is open — inside that scope.
+  /// for directional (arrow) traversal: traversable, attached, under
+  /// [scopeContext] when provided, and — when a modal scope is open —
+  /// inside that scope.
   @internal
-  Iterable<FocusNode> traversalCandidates() {
+  Iterable<FocusNode> traversalCandidates({BuildContext? scopeContext}) {
     final modal = _innermostModalScopeElement(_focusedNode);
-    final base = _attachedNodes.where(isTraversable);
-    if (modal == null) return base;
-    return base.where((n) => _isUnderScopeMarker(n, modal));
+    final scopeElement = scopeContext is Element ? scopeContext : null;
+    var base = _attachedNodes.where(isTraversable);
+    if (modal != null) {
+      base = base.where((n) => _isUnderScopeMarker(n, modal));
+    }
+    if (scopeElement != null) {
+      base = base.where((n) => _isUnderElement(n, scopeElement));
+    }
+    return base;
+  }
+
+  bool _isUnderElement(FocusNode node, Element ancestor) {
+    Element? element = node._element;
+    while (element != null) {
+      if (identical(element, ancestor)) return true;
+      element = element.elementParent;
+    }
+    return false;
   }
 
   /// Returns the focus chain from [focusedNode] up to the root, in
@@ -608,6 +639,7 @@ class FocusManager extends ChangeNotifier {
     }
     _attachedNodes.clear();
     _activeModalScopes.clear();
+    _activeExcludeFocusMarkers.clear();
     super.dispose();
   }
 
@@ -1100,9 +1132,69 @@ class _ExcludeFocusMarkerElement extends ComponentElement {
   _ExcludeFocusMarkerElement(_ExcludeFocusMarker super.widget);
 
   bool get excluding => (widget as _ExcludeFocusMarker).excluding;
+  bool _capturedExcluding = false;
+  FocusManager? _registeredManager;
 
   @override
-  Widget buildChild() => (widget as _ExcludeFocusMarker).child;
+  Widget buildChild() {
+    _registerIfExcluding();
+    return (widget as _ExcludeFocusMarker).child;
+  }
+
+  void _registerIfExcluding() {
+    if (!_capturedExcluding) return;
+    if (_registeredManager != null) return;
+    final manager =
+        getInheritedWidgetOfExactType<_FocusManagerProvider>()?.notifier;
+    if (manager == null) return;
+    manager._registerExcludeFocus(this);
+    _registeredManager = manager;
+  }
+
+  void _unregisterIfRegistered() {
+    final manager = _registeredManager;
+    if (manager == null) return;
+    manager._unregisterExcludeFocus(this);
+    _registeredManager = null;
+  }
+
+  @override
+  void mount(Element? parent) {
+    _capturedExcluding = (widget as _ExcludeFocusMarker).excluding;
+    super.mount(parent);
+    _registerIfExcluding();
+  }
+
+  @override
+  void update(Widget newWidget) {
+    super.update(newWidget);
+    final newExcluding = (newWidget as _ExcludeFocusMarker).excluding;
+    if (newExcluding == _capturedExcluding) return;
+    _capturedExcluding = newExcluding;
+    if (newExcluding) {
+      _registerIfExcluding();
+    } else {
+      _unregisterIfRegistered();
+    }
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _registerIfExcluding();
+  }
+
+  @override
+  void deactivate() {
+    _unregisterIfRegistered();
+    super.deactivate();
+  }
+
+  @override
+  void unmount() {
+    _unregisterIfRegistered();
+    super.unmount();
+  }
 }
 
 // ---------------------------------------------------------------------------

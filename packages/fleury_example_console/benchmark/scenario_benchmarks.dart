@@ -1,4 +1,4 @@
-// Scenario benchmarks for the integrated Fleury proof app.
+// Scenario benchmarks for the integrated Fleury demo app.
 //
 // This runner lives in the example package because SB.10 intentionally
 // measures the app-shaped integration surface, not a reusable widget fixture.
@@ -19,7 +19,7 @@ const _defaultIterations = 10;
 
 Future<void> main(List<String> args) async {
   final options = _ScenarioOptions.parse(args);
-  final scenarios = <_ScenarioBenchmark>[const _ProofAppJourneyScenario()];
+  final scenarios = <_ScenarioBenchmark>[const _DemoAppJourneyScenario()];
 
   if (options.list) {
     for (final scenario in scenarios) {
@@ -166,27 +166,27 @@ abstract interface class _ScenarioBenchmark {
   Future<_ScenarioResult> run(_ScenarioConfig config);
 }
 
-final class _ProofAppJourneyScenario implements _ScenarioBenchmark {
-  const _ProofAppJourneyScenario();
+final class _DemoAppJourneyScenario implements _ScenarioBenchmark {
+  const _DemoAppJourneyScenario();
 
   @override
   String get id => 'SB.10';
 
   @override
-  String get name => 'Proof-App Journey';
+  String get name => 'Demo-App Journey';
 
   @override
   Future<_ScenarioResult> run(_ScenarioConfig config) async {
     for (var i = 0; i < config.warmupIterations; i++) {
-      await _runProofAppJourney(config);
+      await _runDemoAppJourney(config);
     }
 
     final startedAt = DateTime.now().toUtc();
     final rssBefore = ProcessInfo.currentRss;
     final total = Stopwatch()..start();
-    final samples = <_ProofAppJourneySample>[];
+    final samples = <_DemoAppJourneySample>[];
     for (var i = 0; i < config.measuredIterations; i++) {
-      samples.add(await _runProofAppJourney(config));
+      samples.add(await _runDemoAppJourney(config));
     }
     total.stop();
     final rssAfter = ProcessInfo.currentRss;
@@ -288,16 +288,14 @@ final class _ProofAppJourneyScenario implements _ScenarioBenchmark {
       pass: correct,
       notes: const <String>[
         'Candidate thresholds are informational until stable baselines exist.',
-        'Scenario measures the integrated proof app, including app shell, command palette, debounced global search, cooperative indexed logs, DataTable, LogRegion, process task, diagnostics, semantics, accessibility, and debug capture.',
+        'Scenario measures the integrated demo app, including app shell, command palette, debounced global search, cooperative indexed logs, DataTable, LogRegion, process task, diagnostics, semantics, accessibility, and debug capture.',
         'The native process step runs the current Dart executable with --version, so process timing includes OS spawn variance.',
       ],
     );
   }
 }
 
-Future<_ProofAppJourneySample> _runProofAppJourney(
-  _ScenarioConfig config,
-) async {
+Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
   final tester = FleuryTester(viewportSize: config.terminalSize);
   final originalClipboard = Clipboard.instance;
   final clipboard = TestClipboard();
@@ -307,7 +305,7 @@ Future<_ProofAppJourneySample> _runProofAppJourney(
 
   try {
     final mount = Stopwatch()..start();
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
     mount.stop();
 
     final firstRender = Stopwatch()..start();
@@ -319,7 +317,7 @@ Future<_ProofAppJourneySample> _runProofAppJourney(
     );
 
     final palette = Stopwatch()..start();
-    await _invoke(tester, proofCommandOpenPalette);
+    await _invoke(tester, demoCommandOpenPalette);
     tester.pump(const Duration(milliseconds: 300));
     var frame = tester.render(size: config.terminalSize);
     unsafeFrameCount += _unsafeVisibleFrameCount(frame, config.terminalSize);
@@ -337,7 +335,7 @@ Future<_ProofAppJourneySample> _runProofAppJourney(
     palette.stop();
 
     final diagnostics = Stopwatch()..start();
-    await _invoke(tester, proofCommandCaptureDebug);
+    await _invoke(tester, demoCommandCaptureDebug);
     frame = tester.render(size: config.terminalSize);
     unsafeFrameCount += _unsafeVisibleFrameCount(frame, config.terminalSize);
     final diagnosticsTree = tester.semantics();
@@ -348,8 +346,8 @@ Future<_ProofAppJourneySample> _runProofAppJourney(
     diagnostics.stop();
 
     final globalSearch = Stopwatch()..start();
-    await _invoke(tester, proofCommandGoSearch);
-    await _invoke(tester, proofCommandFocusSearch);
+    await _invoke(tester, demoCommandGoSearch);
+    await _invoke(tester, demoCommandFocusSearch);
     tester.type('API deploy smoke');
     final searchTask = await _waitForTaskStatus(
       tester,
@@ -375,14 +373,14 @@ Future<_ProofAppJourneySample> _runProofAppJourney(
     globalSearch.stop();
 
     final indexedLogs = Stopwatch()..start();
-    await _invoke(tester, proofCommandGoIndex);
-    await _invoke(tester, proofCommandBuildLogIndex);
+    await _invoke(tester, demoCommandGoIndex);
+    await _invoke(tester, demoCommandBuildLogIndex);
     var indexTask = await _waitForTaskProgress(
       tester,
-      label: 'Proof log index',
-      current: proofIndexedLogInitialCount,
+      label: 'Demo log index',
+      current: demoIndexedLogInitialCount,
     );
-    await _invoke(tester, proofCommandFocusIndexFilter);
+    await _invoke(tester, demoCommandFocusIndexFilter);
     tester.type('target:payment');
     await _flushAsyncUi(tester);
     frame = tester.render(size: config.terminalSize);
@@ -390,16 +388,16 @@ Future<_ProofAppJourneySample> _runProofAppJourney(
     var indexedTree = tester.semantics();
     var indexedLog = indexedTree.single(
       role: SemanticRole.log,
-      label: 'Indexed proof logs',
+      label: 'Indexed demo logs',
     );
     final indexedLogFilterCount = indexedLog.state.collectionRowCount ?? -1;
     final indexedLogSelectedKey =
         indexedLog.state.selectedKey?.toString() ?? '';
-    await _invoke(tester, proofCommandAppendIndexedLogBurst);
+    await _invoke(tester, demoCommandAppendIndexedLogBurst);
     indexTask = await _waitForTaskProgress(
       tester,
-      label: 'Proof log index',
-      current: proofIndexedLogInitialCount + proofIndexedLogAppendCount,
+      label: 'Demo log index',
+      current: demoIndexedLogInitialCount + demoIndexedLogAppendCount,
     );
     await _flushAsyncUi(tester);
     frame = tester.render(size: config.terminalSize);
@@ -407,19 +405,19 @@ Future<_ProofAppJourneySample> _runProofAppJourney(
     indexedTree = tester.semantics();
     indexedLog = indexedTree.single(
       role: SemanticRole.log,
-      label: 'Indexed proof logs',
+      label: 'Indexed demo logs',
     );
     indexedLogs.stop();
 
     final startTask = Stopwatch()..start();
-    await _invoke(tester, proofCommandStartTask);
+    await _invoke(tester, demoCommandStartTask);
     frame = tester.render(size: config.terminalSize);
     unsafeFrameCount += _unsafeVisibleFrameCount(frame, config.terminalSize);
     startTask.stop();
 
     final runsFilter = Stopwatch()..start();
-    await _invoke(tester, proofCommandGoRuns);
-    await _invoke(tester, proofCommandFocusRunsFilter);
+    await _invoke(tester, demoCommandGoRuns);
+    await _invoke(tester, demoCommandFocusRunsFilter);
     tester.type('failed');
     tester.pump();
     frame = tester.render(size: config.terminalSize);
@@ -429,7 +427,7 @@ Future<_ProofAppJourneySample> _runProofAppJourney(
     runsFilter.stop();
 
     final runsCopy = Stopwatch()..start();
-    await _invoke(tester, proofCommandFocusRunsTable);
+    await _invoke(tester, demoCommandFocusRunsTable);
     tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
     await _flushAsyncUi(tester);
     frame = tester.render(size: config.terminalSize);
@@ -438,14 +436,14 @@ Future<_ProofAppJourneySample> _runProofAppJourney(
     runsCopy.stop();
 
     final transcript = Stopwatch()..start();
-    await _invoke(tester, proofCommandGoTranscript);
-    await _invoke(tester, proofCommandFocusComposer);
+    await _invoke(tester, demoCommandGoTranscript);
+    await _invoke(tester, demoCommandFocusComposer);
     tester.type('operator note ${config.seed}');
     tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
     await _flushAsyncUi(tester);
-    await _invoke(tester, proofCommandAppendLogBurst);
-    await _invoke(tester, proofCommandToggleStream);
-    final disabledBurst = await _invoke(tester, proofCommandAppendLogBurst);
+    await _invoke(tester, demoCommandAppendLogBurst);
+    await _invoke(tester, demoCommandToggleStream);
+    final disabledBurst = await _invoke(tester, demoCommandAppendLogBurst);
     frame = tester.render(size: config.terminalSize);
     unsafeFrameCount += _unsafeVisibleFrameCount(frame, config.terminalSize);
     final transcriptTree = tester.semantics();
@@ -456,8 +454,8 @@ Future<_ProofAppJourneySample> _runProofAppJourney(
     transcript.stop();
 
     final process = Stopwatch()..start();
-    await _invoke(tester, proofCommandGoProcess);
-    await _invoke(tester, proofCommandRunProcess);
+    await _invoke(tester, demoCommandGoProcess);
+    await _invoke(tester, demoCommandRunProcess);
     final processTask = await _waitForTaskStatus(
       tester,
       label: 'Dart version',
@@ -468,18 +466,18 @@ Future<_ProofAppJourneySample> _runProofAppJourney(
     process.stop();
 
     final debugCapture = Stopwatch()..start();
-    await _invoke(tester, proofCommandGoDiagnostics);
-    await _invoke(tester, proofCommandCaptureDebug);
+    await _invoke(tester, demoCommandGoDiagnostics);
+    await _invoke(tester, demoCommandCaptureDebug);
     final semanticTree = tester.semantics();
     final app = semanticTree.single(
       role: SemanticRole.app,
-      label: 'Fleury Proof Console',
+      label: 'Fleury Demo Console',
     );
     final capture = DebugCaptureRecorder()
       ..record(const InputDebugEvent(kind: 'command', summary: 'SB.10'))
       ..recordOutputSummary(
         DebugOutputSummary(
-          source: 'proof-app-journey',
+          source: 'demo-app-journey',
           lineCount: transcriptLog.state.collectionRowCount ?? 0,
         ),
       );
@@ -512,9 +510,9 @@ Future<_ProofAppJourneySample> _runProofAppJourney(
         searchPanel.state.selectedKey == 'run.RUN-1002' &&
         indexTask.state.taskStatus == 'succeeded' &&
         indexTask.state.progressCurrent ==
-            proofIndexedLogInitialCount + proofIndexedLogAppendCount &&
+            demoIndexedLogInitialCount + demoIndexedLogAppendCount &&
         indexedLog.state['totalEntryCount'] ==
-            proofIndexedLogInitialCount + proofIndexedLogAppendCount &&
+            demoIndexedLogInitialCount + demoIndexedLogAppendCount &&
         indexedLogFilterCount == 48 &&
         indexedLog.state.collectionRowCount == 49 &&
         indexedLogSelectedKey == 'IDX-1000' &&
@@ -530,11 +528,11 @@ Future<_ProofAppJourneySample> _runProofAppJourney(
         processTask.state.outputCount != null &&
         (processTask.state.outputCount ?? 0) > 0 &&
         debugCaptureBytes > 0 &&
-        accessibilityText.contains('Fleury Proof Console') &&
+        accessibilityText.contains('Fleury Demo Console') &&
         accessibilityText.contains('Diagnostics') &&
         unsafeFrameCount == 0;
 
-    return _ProofAppJourneySample(
+    return _DemoAppJourneySample(
       totalJourneyUs: total.elapsedMicroseconds,
       mountUs: mount.elapsedMicroseconds,
       firstRenderUs: firstRender.elapsedMicroseconds,
@@ -666,8 +664,8 @@ int _ansiBytes(CellBuffer buffer, CellSize size) {
   return sink.bytes;
 }
 
-final class _ProofAppJourneySample {
-  const _ProofAppJourneySample({
+final class _DemoAppJourneySample {
+  const _DemoAppJourneySample({
     required this.totalJourneyUs,
     required this.mountUs,
     required this.firstRenderUs,

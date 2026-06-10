@@ -1971,7 +1971,7 @@ final class _OverlayCommandPaletteScenario implements _ScenarioBenchmark {
       pass: correct,
       notes: const <String>[
         'Candidate thresholds are informational until stable baselines exist.',
-        'Scenario opens AppCommandPalette through Navigator.present so it exercises overlay lifecycle and app command discovery.',
+        'Scenario opens CommandPalette through Navigator.present so it exercises overlay lifecycle and app command discovery.',
         'Cycles alternate keyboard invocation, semantic submit, semantic activate, Escape dismissal, and semantic dismissal.',
         'A disabled command probe verifies visible-but-inert commands stay open and do not invoke stale actions.',
       ],
@@ -2018,18 +2018,14 @@ Future<_OverlayCommandPaletteJourneySample> _runOverlayCommandPaletteJourney(
       FleuryApp(
         title: 'Overlay Benchmark',
         commands: fixture.appCommands(invokedIds.add),
-        screens: [
-          FleuryScreen(
-            id: const ScreenId('overlay-benchmark'),
-            title: 'Overlay Benchmark',
-            commands: [fixture.screenCommand(invokedIds.add)],
-            builder: (_) => const Text('screen'),
-          ),
-        ],
         child: Navigator(
-          home: _OverlayContextCapture((context) {
-            routeContext = context;
-          }),
+          home: CommandScope(
+            commands: [fixture.screenCommand(invokedIds.add)],
+            label: 'Overlay benchmark commands',
+            child: _OverlayContextCapture((context) {
+              routeContext = context;
+            }),
+          ),
         ),
       ),
     );
@@ -2055,7 +2051,7 @@ Future<_OverlayCommandPaletteJourneySample> _runOverlayCommandPaletteJourney(
       final open = Stopwatch()..start();
       Navigator.of(
         route,
-      ).present<void>(const AppCommandPalette(width: 64, maxVisible: 10));
+      ).present<void>(const CommandPalette(width: 64, maxVisible: 10));
       tester.pump(const Duration(milliseconds: 300));
       final openFrame = tester.render(size: config.terminalSize);
       open.stop();
@@ -2310,7 +2306,7 @@ Future<_DisabledOverlayProbe> _runDisabledOverlayProbe(
 
   Navigator.of(
     route,
-  ).present<void>(const AppCommandPalette(width: 64, maxVisible: 10));
+  ).present<void>(const CommandPalette(width: 64, maxVisible: 10));
   tester.pump(const Duration(milliseconds: 300));
   final openFrame = tester.render(size: terminalSize);
   final target = fixture.disabledTarget;

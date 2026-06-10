@@ -455,13 +455,15 @@ class _FileBrowserState extends State<FileBrowser> {
               autofocus: widget.autofocus,
               itemCount: order.length,
               onSelect: (_) => _activateSelected(),
-              itemBuilder: (context, viewIndex, selected) {
+              itemBuilder: (context, viewIndex, activeSelected) {
                 final sourceIndex = order[viewIndex];
+                final selected = viewIndex == _controller.selectedIndex;
                 return _FileBrowserRow(
                   entry: _entries[sourceIndex],
                   sourceIndex: sourceIndex,
                   viewIndex: viewIndex,
                   selected: selected,
+                  activeSelection: activeSelected,
                   copyEnabled: copyEnabled,
                   canActivate:
                       widget.onActivate != null ||
@@ -551,6 +553,7 @@ class _FileBrowserRow extends StatelessWidget {
     required this.sourceIndex,
     required this.viewIndex,
     required this.selected,
+    required this.activeSelection,
     required this.copyEnabled,
     required this.canActivate,
     required this.onOpen,
@@ -561,6 +564,7 @@ class _FileBrowserRow extends StatelessWidget {
   final int sourceIndex;
   final int viewIndex;
   final bool selected;
+  final bool activeSelection;
   final bool copyEnabled;
   final bool canActivate;
   final void Function() onOpen;
@@ -576,8 +580,12 @@ class _FileBrowserRow extends StatelessWidget {
       FileBrowserEntryType.link => '@ ',
       FileBrowserEntryType.other => '? ',
     };
-    final prefix = selected ? '> ' : '  ';
-    final style = selected ? Theme.of(context).selectionStyle : CellStyle.empty;
+    final prefix = activeSelection ? '> ' : '  ';
+    final style = activeSelection
+        ? Theme.of(context).selectionStyle
+        : selected
+        ? Theme.of(context).mutedStyle
+        : CellStyle.empty;
     final sanitizedPath = _sanitizeFileText(entry.path);
     return Semantics(
       role: SemanticRole.treeItem,

@@ -114,6 +114,7 @@ class Table extends StatefulWidget {
     this.autofocus = false,
     this.onSelect,
     this.selectedStyle,
+    this.label = 'Table',
   }) : columnCount =
            header?.length ?? (rows.isNotEmpty ? rows.first.length : 0);
 
@@ -157,6 +158,9 @@ class Table extends StatefulWidget {
   /// Style merged into the highlighted row. Defaults to the theme's
   /// selection style (inverse video).
   final CellStyle? selectedStyle;
+
+  /// Label exposed through the semantic app graph.
+  final String? label;
 
   /// Columns, inferred from the header or first row.
   final int columnCount;
@@ -239,6 +243,11 @@ class _TableState extends State<Table> {
 
   void _onChange() => setState(() {});
 
+  void _onFocusWithinChange(bool focused) {
+    if (!_interactive) return;
+    setState(() {});
+  }
+
   @override
   void dispose() {
     _detachInteractive();
@@ -292,6 +301,7 @@ class _TableState extends State<Table> {
     if (c == 0) {
       return Semantics(
         role: SemanticRole.table,
+        label: widget.label,
         state: const SemanticState({
           'collectionRowCount': 0,
           'collectionColumnCount': 0,
@@ -324,6 +334,9 @@ class _TableState extends State<Table> {
             selected: _interactive && _controller?.selectedIndex == row,
           ),
     ];
+    final selectedStyle = (_focusNode?.hasFocus ?? false)
+        ? widget.selectedStyle ?? Theme.of(context).selectionStyle
+        : Theme.of(context).mutedStyle;
     final body = _TableBody(
       columnCount: c,
       columnWidths: widths,
@@ -332,7 +345,7 @@ class _TableState extends State<Table> {
       headerSeparator: widget.header != null && widget.headerSeparator,
       separatorStyle: widget.separatorStyle,
       selectedRow: _interactive ? _controller?.selectedIndex : null,
-      selectedStyle: widget.selectedStyle ?? Theme.of(context).selectionStyle,
+      selectedStyle: selectedStyle,
       onVisibleRange: (first, count) {
         _visibleFirst = first;
         _visibleRows = count < 1 ? 1 : count;
@@ -358,6 +371,7 @@ class _TableState extends State<Table> {
 
     final table = Semantics(
       role: SemanticRole.table,
+      label: widget.label,
       value: selectedIndex,
       focused: _focusNode?.hasFocus ?? false,
       actions: _interactive
@@ -372,11 +386,14 @@ class _TableState extends State<Table> {
       child: body,
     );
     if (!_interactive) return table;
-    return Focus(
-      focusNode: _focusNode,
-      autofocus: widget.autofocus,
-      onKey: _onKey,
-      child: table,
+    return FocusWithin(
+      onFocusChange: _onFocusWithinChange,
+      child: Focus(
+        focusNode: _focusNode,
+        autofocus: widget.autofocus,
+        onKey: _onKey,
+        child: table,
+      ),
     );
   }
 

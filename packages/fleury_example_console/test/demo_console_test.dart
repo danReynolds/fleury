@@ -4,10 +4,10 @@ import 'package:test/test.dart';
 
 import '../lib/fleury_example_console.dart';
 
-SemanticNode _proofApp(FleuryTester tester) {
+SemanticNode _demoApp(FleuryTester tester) {
   return tester.semantics().single(
     role: SemanticRole.app,
-    label: 'Fleury Proof Console',
+    label: 'Fleury Demo Console',
   );
 }
 
@@ -37,6 +37,7 @@ Future<CommandInvocationResult> _invoke(
 ) async {
   final result = await tester.invokeCommand(command);
   await _flushAsyncUi(tester);
+  tester.render(size: const CellSize(110, 32));
   return result;
 }
 
@@ -110,12 +111,12 @@ CellStyle? _styleForRenderedText(
 
 void main() {
   testWidgets('starts on overview and exposes app semantics', (tester) async {
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-    expect(tester.exists(text('Fleury Proof Console')), isTrue);
+    expect(tester.exists(text('Fleury Demo Console')), isTrue);
     expect(tester.exists(text('Overview')), isTrue);
 
-    final app = _proofApp(tester);
+    final app = _demoApp(tester);
     expect(app.state.screenCount, 13);
     expect(app.state.activeScreenId, 'overview');
     expect(app.state.commandCount, greaterThanOrEqualTo(8));
@@ -123,7 +124,7 @@ void main() {
 
     final navigation = tester.semantics().single(
       role: SemanticRole.navigation,
-      label: 'Proof console navigation',
+      label: 'Demo console navigation',
     );
     expect(navigation.state.screenCount, 13);
     expect(navigation.state.activeScreenId, 'overview');
@@ -143,16 +144,16 @@ void main() {
     );
     expect(model.state.modelName, 'fleury-prover');
     expect(model.state.modelProvider, 'local');
-    expect(model.state.modelMode, 'proof');
+    expect(model.state.modelMode, 'demo');
     expect(model.state.modelLatencyMs, 42);
     expect(model.state.contextLimit, 128000);
 
     final workflow = tester.semantics().single(
       role: SemanticRole.region,
-      label: 'Proof workflow snapshot',
+      label: 'Demo workflow snapshot',
     );
     expect(workflow.state.workflowHealth, 'needsAttention');
-    expect(workflow.state['workflowId'], 'proof-console');
+    expect(workflow.state['workflowId'], 'demo-console');
     expect(workflow.state.messageCount, 2);
     expect(workflow.state.toolCallCount, 1);
     expect(workflow.state.taskCount, 4);
@@ -165,12 +166,12 @@ void main() {
     final snapshot = tester.accessibilitySnapshot();
     final workflowFallback = snapshot.single(
       role: SemanticRole.region,
-      label: 'Proof workflow snapshot',
+      label: 'Demo workflow snapshot',
     );
     final workflowFallbackState = workflowFallback.states.join('\n');
     expect(
       workflowFallbackState,
-      contains('workflow id proof-console, title Fleury Proof Console'),
+      contains('workflow id demo-console, title Fleury Demo Console'),
     );
     expect(workflowFallbackState, contains('health needsAttention'));
     expect(workflowFallbackState, contains('2 messages'));
@@ -211,12 +212,12 @@ void main() {
 
     final contextPanel = tester.semantics().single(
       role: SemanticRole.contextPanel,
-      label: 'Proof context',
+      label: 'Demo context',
     );
     expect(contextPanel.state['contextItemCount'], 4);
     expect(contextPanel.state['contextTokenCount'], greaterThan(2300));
     expect(contextPanel.state.contextLimit, 128000);
-    expect(contextPanel.state.selectedContextItemId, 'ctx.proof-console');
+    expect(contextPanel.state.selectedContextItemId, 'ctx.demo-console');
 
     final contextPressure = tester.semantics().single(
       role: SemanticRole.chart,
@@ -253,7 +254,7 @@ void main() {
 
     var plan = tester.semantics().single(
       role: SemanticRole.taskGraph,
-      label: 'Proof workflow plan',
+      label: 'Demo workflow plan',
     );
     expect(plan.state['taskCount'], 4);
     expect(plan.state['succeededTaskCount'], 1);
@@ -264,14 +265,14 @@ void main() {
     final focusedPlan = await tester.invokeSemanticAction(
       SemanticAction.focus,
       role: SemanticRole.taskGraph,
-      label: 'Proof workflow plan',
+      label: 'Demo workflow plan',
     );
     expect(focusedPlan.completed, isTrue);
 
     tester.render(size: const CellSize(90, 26));
     plan = tester.semantics().single(
       role: SemanticRole.taskGraph,
-      label: 'Proof workflow plan',
+      label: 'Demo workflow plan',
       focused: true,
     );
     expect(plan.state.selectedTaskId, 'setup');
@@ -294,16 +295,16 @@ void main() {
 
     final updatedPlan = tester.semantics().single(
       role: SemanticRole.taskGraph,
-      label: 'Proof workflow plan',
+      label: 'Demo workflow plan',
       focused: true,
     );
     expect(updatedPlan.state.selectedTaskId, 'diagnostics');
   });
 
-  testWidgets('sidebar semantic navigation switches proof-app screens', (
+  testWidgets('sidebar semantic navigation switches demo-app screens', (
     tester,
   ) async {
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
     final runs = await tester.invokeSemanticAction(
       SemanticAction.navigate,
@@ -311,7 +312,7 @@ void main() {
       label: 'Runs',
     );
     expect(runs.completed, isTrue);
-    expect(_proofApp(tester).state.activeScreenId, 'runs');
+    expect(_demoApp(tester).state.activeScreenId, 'runs');
     expect(tester.exists(text('Runs')), isTrue);
 
     final overview = await tester.invokeSemanticAction(
@@ -320,16 +321,16 @@ void main() {
       label: 'Overview',
     );
     expect(overview.completed, isTrue);
-    expect(_proofApp(tester).state.activeScreenId, 'overview');
+    expect(_demoApp(tester).state.activeScreenId, 'overview');
   });
 
-  testWidgets('context panel selects proof context items', (tester) async {
-    tester.pumpWidget(const ProofConsoleApp());
+  testWidgets('context panel selects demo context items', (tester) async {
+    tester.pumpWidget(const DemoConsoleApp());
     tester.render(size: const CellSize(110, 32));
 
     final contextPanel = tester.semantics().single(
       role: SemanticRole.contextPanel,
-      label: 'Proof context',
+      label: 'Demo context',
       action: SemanticAction.focus,
     );
     expect(contextPanel.focused, isFalse);
@@ -338,7 +339,7 @@ void main() {
     final focusResult = await tester.invokeSemanticAction(
       SemanticAction.focus,
       role: SemanticRole.contextPanel,
-      label: 'Proof context',
+      label: 'Demo context',
     );
     expect(focusResult.completed, isTrue);
     tester.render(size: const CellSize(110, 32));
@@ -347,20 +348,20 @@ void main() {
           .semantics()
           .single(
             role: SemanticRole.contextPanel,
-            label: 'Proof context',
+            label: 'Demo context',
             focused: true,
           )
           .state
           .selectedContextItemId,
-      'ctx.proof-console',
+      'ctx.demo-console',
     );
 
     final item = tester.semantics().single(
       role: SemanticRole.contextItem,
-      label: 'Proof console source',
+      label: 'Demo console source',
       action: SemanticAction.activate,
     );
-    expect(item.state.contextItemId, 'ctx.proof-console');
+    expect(item.state.contextItemId, 'ctx.demo-console');
     expect(item.state.contextItemKind, 'file');
     expect(item.state.contextItemPriority, 'high');
     expect(item.state.contextItemTokenCount, 1200);
@@ -368,12 +369,12 @@ void main() {
 
     final fallback = tester.accessibilitySnapshot().single(
       role: SemanticRole.contextItem,
-      label: 'Proof console source',
+      label: 'Demo console source',
     );
     expect(
       fallback.states,
       contains(
-        'context id ctx.proof-console, kind file, 1200 tokens, priority high, '
+        'context id ctx.demo-console, kind file, 1200 tokens, priority high, '
         'pinned, source packages/fleury_example_console/lib/'
         'fleury_example_console.dart',
       ),
@@ -382,34 +383,34 @@ void main() {
     final result = await tester.invokeSemanticAction(
       SemanticAction.activate,
       role: SemanticRole.contextItem,
-      label: 'Proof console source',
+      label: 'Demo console source',
     );
     expect(result.completed, isTrue);
 
-    await _invoke(tester, proofCommandGoTranscript);
+    await _invoke(tester, demoCommandGoTranscript);
     tester.render(size: const CellSize(110, 32));
     expect(
-      tester.exists(text('[log] context: selected ctx.proof-console')),
+      tester.exists(text('[log] context: selected ctx.demo-console')),
       isTrue,
     );
   });
 
   testWidgets('commands navigate and start the fake task', (tester) async {
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-    final nav = await _invoke(tester, proofCommandGoRuns);
+    final nav = await _invoke(tester, demoCommandGoRuns);
     expect(nav.status, CommandInvocationStatus.completed);
-    expect(_proofApp(tester).state.activeScreenId, 'runs');
+    expect(_demoApp(tester).state.activeScreenId, 'runs');
 
-    final task = await _invoke(tester, proofCommandStartTask);
+    final task = await _invoke(tester, demoCommandStartTask);
     expect(task.status, CommandInvocationStatus.completed);
     expect(tester.exists(text('Task: running 15%')), isTrue);
 
-    final app = _proofApp(tester);
+    final app = _demoApp(tester);
     expect(app.state.lastCommandId, 'task.startFake');
     expect(app.state.lastCommandStatus, 'completed');
 
-    final overview = await _invoke(tester, proofCommandGoOverview);
+    final overview = await _invoke(tester, demoCommandGoOverview);
     expect(overview.status, CommandInvocationStatus.completed);
 
     final worker = tester.semantics().single(
@@ -429,13 +430,13 @@ void main() {
     expect(worker.state.outputSanitized, isFalse);
     expect(worker.state.outputTruncated, isFalse);
 
-    final diagnostics = await _invoke(tester, proofCommandGoDiagnostics);
+    final diagnostics = await _invoke(tester, demoCommandGoDiagnostics);
     expect(diagnostics.status, CommandInvocationStatus.completed);
     tester.render(size: const CellSize(100, 50));
 
     final taskTimeline = tester.semantics().single(
       role: SemanticRole.traceTimeline,
-      label: 'Proof trace timeline',
+      label: 'Demo trace timeline',
     );
     expect(taskTimeline.state.traceEventCount, greaterThan(5));
 
@@ -477,12 +478,12 @@ void main() {
       ),
     );
 
-    final overviewAgain = await _invoke(tester, proofCommandGoOverview);
+    final overviewAgain = await _invoke(tester, demoCommandGoOverview);
     expect(overviewAgain.status, CommandInvocationStatus.completed);
 
     final plan = tester.semantics().single(
       role: SemanticRole.taskGraph,
-      label: 'Proof workflow plan',
+      label: 'Demo workflow plan',
     );
     expect(plan.state['runningTaskCount'], 1);
 
@@ -511,7 +512,7 @@ void main() {
     expect(progress.value, closeTo(0.15, 0.0001));
     expect(progress.state.progressLabel, '15%');
 
-    final cancel = await _invoke(tester, proofCommandCancelTask);
+    final cancel = await _invoke(tester, demoCommandCancelTask);
     expect(cancel.status, CommandInvocationStatus.completed);
 
     final canceled = tester.semantics().single(
@@ -526,9 +527,9 @@ void main() {
   });
 
   testWidgets('command palette can drive app navigation', (tester) async {
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-    await _invoke(tester, proofCommandOpenPalette);
+    await _invoke(tester, demoCommandOpenPalette);
     tester.pump(const Duration(milliseconds: 300));
     tester.render(size: const CellSize(80, 24));
 
@@ -552,16 +553,16 @@ void main() {
     tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
     await _settleModal(tester);
 
-    expect(_proofApp(tester).state.activeScreenId, 'diagnostics');
+    expect(_demoApp(tester).state.activeScreenId, 'diagnostics');
     expect(tester.exists(text('Diagnostics')), isTrue);
   });
 
   testWidgets('approval command opens a semantic approval prompt', (
     tester,
   ) async {
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-    final opened = await _invoke(tester, proofCommandRequestApproval);
+    final opened = await _invoke(tester, demoCommandRequestApproval);
     expect(opened.status, CommandInvocationStatus.completed);
     await _settleModal(tester);
 
@@ -583,7 +584,7 @@ void main() {
     expect(approved.completed, isTrue);
     await _settleModal(tester);
 
-    await _invoke(tester, proofCommandGoTranscript);
+    await _invoke(tester, demoCommandGoTranscript);
     tester.render(size: const CellSize(90, 28));
     expect(
       tester.exists(text('[log] approval: deploy approval granted')),
@@ -594,11 +595,11 @@ void main() {
   testWidgets('process screen runs native command through scoped commands', (
     tester,
   ) async {
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-    final nav = await _invoke(tester, proofCommandGoProcess);
+    final nav = await _invoke(tester, demoCommandGoProcess);
     expect(nav.status, CommandInvocationStatus.completed);
-    expect(_proofApp(tester).state.activeScreenId, 'process');
+    expect(_demoApp(tester).state.activeScreenId, 'process');
     expect(tester.exists(text('Process')), isTrue);
     var toolCall = tester.semantics().single(
       role: SemanticRole.toolCall,
@@ -609,7 +610,7 @@ void main() {
     expect(toolCall.state['toolName'], contains('dart'));
     expect(toolCall.state['toolStatus'], 'queued');
     expect(toolCall.state['argumentCount'], 1);
-    expect(toolCall.state['processCommandId'], proofCommandRunProcess.value);
+    expect(toolCall.state['processCommandId'], demoCommandRunProcess.value);
 
     var runCommand = tester.semantics().single(
       role: SemanticRole.command,
@@ -626,7 +627,7 @@ void main() {
     expect(runCommand.state.commandCategory, 'Process');
     expect(cancelCommand.enabled, isFalse);
 
-    final run = await _invoke(tester, proofCommandRunProcess);
+    final run = await _invoke(tester, demoCommandRunProcess);
     expect(run.status, CommandInvocationStatus.completed);
 
     final process = await _waitForTaskStatus(
@@ -680,14 +681,14 @@ void main() {
   testWidgets('global search debounces query and activates result navigation', (
     tester,
   ) async {
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-    final nav = await _invoke(tester, proofCommandGoSearch);
+    final nav = await _invoke(tester, demoCommandGoSearch);
     expect(nav.status, CommandInvocationStatus.completed);
-    expect(_proofApp(tester).state.activeScreenId, 'search');
+    expect(_demoApp(tester).state.activeScreenId, 'search');
     expect(tester.exists(text('Global Search')), isTrue);
 
-    await _invoke(tester, proofCommandFocusSearch);
+    await _invoke(tester, demoCommandFocusSearch);
     tester.type('API deploy smoke');
 
     final task = await _waitForTaskStatus(
@@ -738,9 +739,9 @@ void main() {
     );
     expect(activated.completed, isTrue);
     await _flushAsyncUi(tester);
-    expect(_proofApp(tester).state.activeScreenId, 'runs');
+    expect(_demoApp(tester).state.activeScreenId, 'runs');
 
-    await _invoke(tester, proofCommandGoTranscript);
+    await _invoke(tester, demoCommandGoTranscript);
     tester.render(size: const CellSize(90, 26));
     expect(tester.exists(text('[log] search: activated run.RUN-1002')), isTrue);
   });
@@ -748,70 +749,70 @@ void main() {
   testWidgets('indexed logs build cooperative index and refresh appends', (
     tester,
   ) async {
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-    final nav = await _invoke(tester, proofCommandGoIndex);
+    final nav = await _invoke(tester, demoCommandGoIndex);
     expect(nav.status, CommandInvocationStatus.completed);
-    expect(_proofApp(tester).state.activeScreenId, 'index');
+    expect(_demoApp(tester).state.activeScreenId, 'index');
     expect(tester.exists(text('Indexed Logs')), isTrue);
 
-    final build = await _invoke(tester, proofCommandBuildLogIndex);
+    final build = await _invoke(tester, demoCommandBuildLogIndex);
     expect(build.status, CommandInvocationStatus.completed);
     await _waitForTaskProgress(
       tester,
-      label: 'Proof log index',
-      current: proofIndexedLogInitialCount,
+      label: 'Demo log index',
+      current: demoIndexedLogInitialCount,
     );
     var task = await _waitForTaskStatus(
       tester,
-      label: 'Proof log index',
+      label: 'Demo log index',
       status: 'succeeded',
     );
     expect(task.state.taskStatus, 'succeeded');
-    expect(task.state.progressCurrent, proofIndexedLogInitialCount);
-    expect(task.state.progressLabel, 'index proof logs complete');
+    expect(task.state.progressCurrent, demoIndexedLogInitialCount);
+    expect(task.state.progressLabel, 'index demo logs complete');
     expect(task.state.outputCount, 1);
     expect(task.state.source, 'index');
     expect(task.state.taskEventCount, greaterThan(4));
 
-    await _invoke(tester, proofCommandFocusIndexFilter);
+    await _invoke(tester, demoCommandFocusIndexFilter);
     tester.type('target:payment');
     await _flushAsyncUi(tester);
     tester.render(size: const CellSize(96, 28));
 
     var log = tester.semantics().single(
       role: SemanticRole.log,
-      label: 'Indexed proof logs',
+      label: 'Indexed demo logs',
       action: SemanticAction.focus,
     );
     expect(log.state.filterText, 'target:payment');
     expect(log.state.collectionRowCount, 48);
-    expect(log.state['totalEntryCount'], proofIndexedLogInitialCount);
+    expect(log.state['totalEntryCount'], demoIndexedLogInitialCount);
     expect(log.state.selectedKey, 'IDX-1000');
 
     final focusedLog = await tester.invokeSemanticAction(
       SemanticAction.focus,
       role: SemanticRole.log,
-      label: 'Indexed proof logs',
+      label: 'Indexed demo logs',
     );
     expect(focusedLog.completed, isTrue);
     tester.render(size: const CellSize(96, 28));
     log = tester.semantics().single(
       role: SemanticRole.log,
-      label: 'Indexed proof logs',
+      label: 'Indexed demo logs',
       focused: true,
     );
     expect(log.state.selectedKey, 'IDX-1000');
 
     final logFallback = tester.accessibilitySnapshot().single(
       role: SemanticRole.log,
-      label: 'Indexed proof logs',
+      label: 'Indexed demo logs',
     );
     expect(
       logFallback.states.any(
         (state) =>
             state.startsWith('log ') &&
-            state.contains('$proofIndexedLogInitialCount entries') &&
+            state.contains('$demoIndexedLogInitialCount entries') &&
             state.contains('48 filtered') &&
             state.contains('selected index 0'),
       ),
@@ -849,52 +850,49 @@ void main() {
 
     log = tester.semantics().single(
       role: SemanticRole.log,
-      label: 'Indexed proof logs',
+      label: 'Indexed demo logs',
     );
     expect(log.state.selectedKey, 'IDX-1004');
     expect(log.state['selectedIndex'], 1);
     expect(log.state['followTail'], isFalse);
     expect(log.focused, isTrue);
 
-    final append = await _invoke(tester, proofCommandAppendIndexedLogBurst);
+    final append = await _invoke(tester, demoCommandAppendIndexedLogBurst);
     expect(append.status, CommandInvocationStatus.completed);
     await _waitForTaskProgress(
       tester,
-      label: 'Proof log index',
-      current: proofIndexedLogInitialCount + proofIndexedLogAppendCount,
+      label: 'Demo log index',
+      current: demoIndexedLogInitialCount + demoIndexedLogAppendCount,
     );
     task = await _waitForTaskStatus(
       tester,
-      label: 'Proof log index',
+      label: 'Demo log index',
       status: 'succeeded',
     );
     expect(task.state.taskStatus, 'succeeded');
     expect(
       task.state.progressCurrent,
-      proofIndexedLogInitialCount + proofIndexedLogAppendCount,
+      demoIndexedLogInitialCount + demoIndexedLogAppendCount,
     );
-    expect(task.state.progressLabel, 'refresh proof logs complete');
+    expect(task.state.progressLabel, 'refresh demo logs complete');
     await _flushAsyncUi(tester);
     tester.render(size: const CellSize(96, 28));
 
     log = tester.semantics().single(
       role: SemanticRole.log,
-      label: 'Indexed proof logs',
+      label: 'Indexed demo logs',
     );
     expect(
       log.state['totalEntryCount'],
-      proofIndexedLogInitialCount + proofIndexedLogAppendCount,
+      demoIndexedLogInitialCount + demoIndexedLogAppendCount,
     );
     expect(log.state.collectionRowCount, 49);
 
-    await _invoke(tester, proofCommandGoTranscript);
+    await _invoke(tester, demoCommandGoTranscript);
     tester.render(size: const CellSize(96, 28));
+    expect(tester.exists(text('[log] index: built 192 demo log rows')), isTrue);
     expect(
-      tester.exists(text('[log] index: built 192 proof log rows')),
-      isTrue,
-    );
-    expect(
-      tester.exists(text('[log] index: refreshed 195 proof log rows')),
+      tester.exists(text('[log] index: refreshed 195 demo log rows')),
       isTrue,
     );
   });
@@ -902,11 +900,11 @@ void main() {
   testWidgets('connection screen proves shared form semantics and submit', (
     tester,
   ) async {
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-    final nav = await _invoke(tester, proofCommandGoConnection);
+    final nav = await _invoke(tester, demoCommandGoConnection);
     expect(nav.status, CommandInvocationStatus.completed);
-    expect(_proofApp(tester).state.activeScreenId, 'connection');
+    expect(_demoApp(tester).state.activeScreenId, 'connection');
     expect(tester.exists(text('Connection setup')), isTrue);
 
     tester.render(size: const CellSize(90, 28));
@@ -982,7 +980,7 @@ void main() {
     final configPath = tester.semantics().single(
       role: SemanticRole.formField,
       label: 'Config path',
-      value: 'config/proof.yaml',
+      value: 'config/demo.yaml',
     );
     expect(configPath.state['fieldType'], 'path');
     expect(configPath.state['pathKind'], 'file');
@@ -1063,13 +1061,13 @@ void main() {
     expect(form.state['valid'], isTrue);
     expect(form.state['errorCount'], 0);
 
-    await _invoke(tester, proofCommandGoTranscript);
+    await _invoke(tester, demoCommandGoTranscript);
     tester.render(size: const CellSize(90, 28));
     expect(
       tester.exists(
         text(
           '[log] connection: configured dune dev us-east-1 '
-          'features logs,metrics config config/proof.yaml 2026-01-15 '
+          'features logs,metrics config config/demo.yaml 2026-01-15 '
           'retries 3',
         ),
       ),
@@ -1078,10 +1076,10 @@ void main() {
   });
 
   testWidgets('runs screen filter narrows the table fixture', (tester) async {
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-    await _invoke(tester, proofCommandGoRuns);
-    await _invoke(tester, proofCommandFocusRunsFilter);
+    await _invoke(tester, demoCommandGoRuns);
+    await _invoke(tester, demoCommandFocusRunsFilter);
     tester.type('failed');
     tester.pump();
 
@@ -1096,10 +1094,10 @@ void main() {
   testWidgets('runs table selection activates a transcript event', (
     tester,
   ) async {
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-    await _invoke(tester, proofCommandGoRuns);
-    await _invoke(tester, proofCommandFocusRunsTable);
+    await _invoke(tester, demoCommandGoRuns);
+    await _invoke(tester, demoCommandFocusRunsTable);
     tester.render(size: const CellSize(80, 24));
     expect(
       _styleForRenderedText(
@@ -1138,8 +1136,8 @@ void main() {
     expect(selectedCells.first.state['rowKey'], 'RUN-1002');
 
     tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
-    await _invoke(tester, proofCommandGoTranscript);
-    tester.render(size: const CellSize(80, 24));
+    await _invoke(tester, demoCommandGoTranscript);
+    tester.render(size: const CellSize(110, 36));
 
     expect(
       tester.exists(text('[log] runs: selected run RUN-1002 failed')),
@@ -1152,10 +1150,10 @@ void main() {
     final clipboard = TestClipboard();
     Clipboard.instance = clipboard;
     try {
-      tester.pumpWidget(const ProofConsoleApp());
+      tester.pumpWidget(const DemoConsoleApp());
 
-      await _invoke(tester, proofCommandGoRuns);
-      await _invoke(tester, proofCommandFocusRunsTable);
+      await _invoke(tester, demoCommandGoRuns);
+      await _invoke(tester, demoCommandFocusRunsTable);
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
       tester.render(size: const CellSize(80, 24));
 
@@ -1186,14 +1184,14 @@ void main() {
     final clipboard = TestClipboard();
     Clipboard.instance = clipboard;
     try {
-      tester.pumpWidget(const ProofConsoleApp());
+      tester.pumpWidget(const DemoConsoleApp());
 
-      final nav = await _invoke(tester, proofCommandGoTree);
+      final nav = await _invoke(tester, demoCommandGoTree);
       expect(nav.status, CommandInvocationStatus.completed);
-      expect(_proofApp(tester).state.activeScreenId, 'tree');
+      expect(_demoApp(tester).state.activeScreenId, 'tree');
       expect(tester.exists(text('Tree')), isTrue);
 
-      await _invoke(tester, proofCommandFocusTreeTable);
+      await _invoke(tester, demoCommandFocusTreeTable);
       tester.render(size: const CellSize(90, 24));
 
       var tree = tester.semantics().single(
@@ -1230,7 +1228,7 @@ void main() {
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
       tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
       await _flushAsyncUi(tester);
-      await _invoke(tester, proofCommandGoTranscript);
+      await _invoke(tester, demoCommandGoTranscript);
       tester.render(size: const CellSize(90, 24));
       expect(
         tester.exists(text('[log] tree: selected semantic-graph active')),
@@ -1248,14 +1246,14 @@ void main() {
     final clipboard = TestClipboard();
     Clipboard.instance = clipboard;
     try {
-      tester.pumpWidget(const ProofConsoleApp());
+      tester.pumpWidget(const DemoConsoleApp());
 
-      final nav = await _invoke(tester, proofCommandGoPayload);
+      final nav = await _invoke(tester, demoCommandGoPayload);
       expect(nav.status, CommandInvocationStatus.completed);
-      expect(_proofApp(tester).state.activeScreenId, 'payload');
+      expect(_demoApp(tester).state.activeScreenId, 'payload');
       expect(tester.exists(text('Payload')), isTrue);
 
-      await _invoke(tester, proofCommandFocusPayload);
+      await _invoke(tester, demoCommandFocusPayload);
       final output = tester.renderToString(
         size: const CellSize(90, 26),
         emptyMark: ' ',
@@ -1266,7 +1264,7 @@ void main() {
 
       final json = tester.semantics().single(
         role: SemanticRole.json,
-        label: 'Proof payload',
+        label: 'Demo payload',
         action: SemanticAction.copy,
       );
       expect(json.focused, isTrue);
@@ -1291,7 +1289,7 @@ void main() {
       expect(clipboard.lastWritten, isNot(contains('token')));
       expect(clipboard.lastWritten, isNot(contains('\x1b]52')));
 
-      await _invoke(tester, proofCommandGoTranscript);
+      await _invoke(tester, demoCommandGoTranscript);
       tester.render(size: const CellSize(90, 26));
       expect(tester.exists(text(r'[log] payload: copied $')), isTrue);
     } finally {
@@ -1306,11 +1304,11 @@ void main() {
     final clipboard = TestClipboard();
     Clipboard.instance = clipboard;
     try {
-      tester.pumpWidget(const ProofConsoleApp());
+      tester.pumpWidget(const DemoConsoleApp());
 
-      final nav = await _invoke(tester, proofCommandGoChanges);
+      final nav = await _invoke(tester, demoCommandGoChanges);
       expect(nav.status, CommandInvocationStatus.completed);
-      expect(_proofApp(tester).state.activeScreenId, 'changes');
+      expect(_demoApp(tester).state.activeScreenId, 'changes');
       expect(tester.exists(text('Changes')), isTrue);
 
       tester.render(size: const CellSize(90, 26));
@@ -1342,7 +1340,7 @@ void main() {
         'lib/framework.dart',
       );
 
-      await _invoke(tester, proofCommandFocusChanges);
+      await _invoke(tester, demoCommandFocusChanges);
       final output = tester.renderToString(
         size: const CellSize(90, 26),
         emptyMark: ' ',
@@ -1366,7 +1364,7 @@ void main() {
         action: SemanticAction.copy,
       );
       expect(patch.value, 'reviewing');
-      expect(patch.state.patchId, 'proof.framework.patch');
+      expect(patch.state.patchId, 'demo.framework.patch');
       expect(patch.state.patchStatus, 'reviewing');
       expect(patch.state['patchFileCount'], 1);
       expect(patch.state['patchAdditionCount'], 2);
@@ -1448,7 +1446,7 @@ void main() {
       );
       expect(selectPatch.completed, isTrue);
 
-      await _invoke(tester, proofCommandGoTranscript);
+      await _invoke(tester, demoCommandGoTranscript);
       tester.render(size: const CellSize(90, 26));
       expect(
         tester.exists(
@@ -1472,14 +1470,14 @@ void main() {
     final clipboard = TestClipboard();
     Clipboard.instance = clipboard;
     try {
-      tester.pumpWidget(const ProofConsoleApp());
+      tester.pumpWidget(const DemoConsoleApp());
 
-      final nav = await _invoke(tester, proofCommandGoSource);
+      final nav = await _invoke(tester, demoCommandGoSource);
       expect(nav.status, CommandInvocationStatus.completed);
-      expect(_proofApp(tester).state.activeScreenId, 'source');
+      expect(_demoApp(tester).state.activeScreenId, 'source');
       expect(tester.exists(text('Source')), isTrue);
 
-      await _invoke(tester, proofCommandFocusSource);
+      await _invoke(tester, demoCommandFocusSource);
       final output = tester.renderToString(
         size: const CellSize(90, 26),
         emptyMark: ' ',
@@ -1544,7 +1542,7 @@ void main() {
       expect(updatedCode.state.selectedKey, 3);
       expect(updatedCode.state['selectedCodeLineKind'], 'declaration');
 
-      await _invoke(tester, proofCommandGoTranscript);
+      await _invoke(tester, demoCommandGoTranscript);
       tester.render(size: const CellSize(90, 26));
       expect(
         tester.exists(text('[log] source: copied line 8 keyword')),
@@ -1562,14 +1560,14 @@ void main() {
     final clipboard = TestClipboard();
     Clipboard.instance = clipboard;
     try {
-      tester.pumpWidget(const ProofConsoleApp());
+      tester.pumpWidget(const DemoConsoleApp());
 
-      final nav = await _invoke(tester, proofCommandGoDocs);
+      final nav = await _invoke(tester, demoCommandGoDocs);
       expect(nav.status, CommandInvocationStatus.completed);
-      expect(_proofApp(tester).state.activeScreenId, 'docs');
+      expect(_demoApp(tester).state.activeScreenId, 'docs');
       expect(tester.exists(text('Docs')), isTrue);
 
-      await _invoke(tester, proofCommandFocusDocs);
+      await _invoke(tester, demoCommandFocusDocs);
       final output = tester.renderToString(
         size: const CellSize(90, 26),
         emptyMark: ' ',
@@ -1660,7 +1658,7 @@ void main() {
       expect(selectedMarkdown.state['selectedIndex'], 4);
       expect(selectedMarkdown.state['selectedMarkdownBlockKind'], 'bullet');
 
-      await _invoke(tester, proofCommandGoTranscript);
+      await _invoke(tester, demoCommandGoTranscript);
       tester.render(size: const CellSize(90, 26));
       expect(
         tester.exists(text('[log] docs: copied block 6 blockquote')),
@@ -1671,7 +1669,7 @@ void main() {
     }
   });
 
-  testWidgets('debug capture snapshot can seed a proof-app regression', (
+  testWidgets('debug capture snapshot can seed a demo-app regression', (
     tester,
   ) async {
     final capture = DebugCaptureRecorder();
@@ -1679,7 +1677,7 @@ void main() {
       capture.record(InputDebugEvent(kind: 'command', summary: command.value));
     }
 
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
     tester.render(size: const CellSize(80, 24));
     capture.record(
       const FrameDebugEvent(
@@ -1695,14 +1693,14 @@ void main() {
             offset: CellOffset.zero,
             size: CellSize(80, 24),
           ),
-          dirtySources: ['build:ProofConsoleApp'],
+          dirtySources: ['build:DemoConsoleApp'],
           bufferSize: CellSize(80, 24),
         ),
       ),
     );
 
-    recordCommand(proofCommandGoRuns);
-    await _invoke(tester, proofCommandGoRuns);
+    recordCommand(demoCommandGoRuns);
+    await _invoke(tester, demoCommandGoRuns);
     capture.record(
       const InputDebugEvent(
         kind: 'resize',
@@ -1731,29 +1729,26 @@ void main() {
       ),
     );
 
-    recordCommand(proofCommandStartTask);
-    await _invoke(tester, proofCommandStartTask);
-    recordCommand(proofCommandFocusRunsTable);
-    await _invoke(tester, proofCommandFocusRunsTable);
+    recordCommand(demoCommandStartTask);
+    await _invoke(tester, demoCommandStartTask);
+    recordCommand(demoCommandFocusRunsTable);
+    await _invoke(tester, demoCommandFocusRunsTable);
     capture.record(const InputDebugEvent(kind: 'key', summary: 'arrowDown'));
     tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
     capture.record(const InputDebugEvent(kind: 'key', summary: 'enter'));
     tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
     await _flushAsyncUi(tester);
-    recordCommand(proofCommandCaptureDebug);
-    await _invoke(tester, proofCommandCaptureDebug);
+    recordCommand(demoCommandCaptureDebug);
+    await _invoke(tester, demoCommandCaptureDebug);
 
     capture.recordOutputSummary(
-      const DebugOutputSummary(
-        source: 'proof-console-transcript',
-        lineCount: 5,
-      ),
+      const DebugOutputSummary(source: 'demo-console-transcript', lineCount: 5),
     );
 
     expect(tester.exists(text('Debug: captures 1')), isTrue);
     expect(tester.exists(text('Task: running 15%')), isTrue);
     final tree = tester.semantics();
-    final app = _proofApp(tester);
+    final app = _demoApp(tester);
     expect(app.state.activeScreenId, 'runs');
     expect(app.state.lastCommandId, 'debug.captureSnapshot');
     expect(app.state.lastCommandStatus, 'completed');
@@ -1784,7 +1779,7 @@ void main() {
     expect(
       artifact.hasInput(
         kind: 'command',
-        summary: proofCommandCaptureDebug.value,
+        summary: demoCommandCaptureDebug.value,
       ),
       true,
     );
@@ -1795,7 +1790,7 @@ void main() {
       true,
     );
     expect(
-      artifact.outputSummariesFor(source: 'proof-console-transcript').single,
+      artifact.outputSummariesFor(source: 'demo-console-transcript').single,
       containsPair('lineCount', 5),
     );
 
@@ -1803,12 +1798,12 @@ void main() {
     expect(semantics['nodeCount'], greaterThan(40));
     final accessibility = snapshotJson['accessibility'] as Map<String, Object?>;
     expect(accessibility['nodeCount'], semantics['nodeCount']);
-    expect(artifact.accessibilityPlainText, contains('Fleury Proof Console'));
+    expect(artifact.accessibilityPlainText, contains('Fleury Demo Console'));
     expect(artifact.accessibilityPlainText, contains('API deploy smoke'));
     expect(artifact.accessibilityPlainText, contains('running 15%'));
     final capturedApp = artifact.singleSemanticNode(
       role: 'app',
-      label: 'Fleury Proof Console',
+      label: 'Fleury Demo Console',
     );
     expect(capturedApp.state, containsPair('activeScreenId', 'runs'));
     expect(
@@ -1835,10 +1830,10 @@ void main() {
   testWidgets('composer submission and log burst update transcript', (
     tester,
   ) async {
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-    await _invoke(tester, proofCommandGoTranscript);
-    await _invoke(tester, proofCommandFocusComposer);
+    await _invoke(tester, demoCommandGoTranscript);
+    await _invoke(tester, demoCommandFocusComposer);
     tester.type('operator note');
 
     var composer = tester.semantics().single(
@@ -1854,7 +1849,7 @@ void main() {
 
     expect(tester.exists(text('[log] user: operator note')), isTrue);
 
-    final burst = await _invoke(tester, proofCommandAppendLogBurst);
+    final burst = await _invoke(tester, demoCommandAppendLogBurst);
     expect(burst.status, CommandInvocationStatus.completed);
     tester.render(size: const CellSize(80, 24));
     expect(tester.exists(text('[log] stream: burst 1.3')), isTrue);
@@ -1882,8 +1877,8 @@ void main() {
     );
     expect(log.state['author'], 'stream');
 
-    await _invoke(tester, proofCommandToggleStream);
-    final disabled = await _invoke(tester, proofCommandAppendLogBurst);
+    await _invoke(tester, demoCommandToggleStream);
+    final disabled = await _invoke(tester, demoCommandAppendLogBurst);
     expect(disabled.status, CommandInvocationStatus.disabled);
     expect(tester.exists(text('[log] stream: burst 2.1')), isFalse);
 
@@ -1930,11 +1925,11 @@ void main() {
   testWidgets('transcript selection preserves stable identity across appends', (
     tester,
   ) async {
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-    await _invoke(tester, proofCommandGoTranscript);
-    await _invoke(tester, proofCommandAppendLogBurst);
-    await _invoke(tester, proofCommandAppendLogBurst);
+    await _invoke(tester, demoCommandGoTranscript);
+    await _invoke(tester, demoCommandAppendLogBurst);
+    await _invoke(tester, demoCommandAppendLogBurst);
     tester.render(size: const CellSize(110, 32));
 
     final target = tester.semantics().single(
@@ -1959,8 +1954,8 @@ void main() {
     );
     expect(selected.state.messageId, targetId);
 
-    await _invoke(tester, proofCommandGoOverview);
-    await _invoke(tester, proofCommandGoTranscript);
+    await _invoke(tester, demoCommandGoOverview);
+    await _invoke(tester, demoCommandGoTranscript);
     tester.render(size: const CellSize(110, 32));
 
     selected = tester.semantics().single(
@@ -1970,7 +1965,7 @@ void main() {
     );
     expect(selected.state.messageId, targetId);
 
-    await _invoke(tester, proofCommandAppendLogBurst);
+    await _invoke(tester, demoCommandAppendLogBurst);
     tester.render(size: const CellSize(110, 32));
 
     selected = tester.semantics().single(
@@ -1994,10 +1989,10 @@ void main() {
   testWidgets('composer completions accept slash commands semantically', (
     tester,
   ) async {
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-    await _invoke(tester, proofCommandGoTranscript);
-    await _invoke(tester, proofCommandFocusComposer);
+    await _invoke(tester, demoCommandGoTranscript);
+    await _invoke(tester, demoCommandFocusComposer);
     tester.type('/su');
     tester.render(size: const CellSize(110, 32));
 
@@ -2055,10 +2050,10 @@ void main() {
   });
 
   testWidgets('composer history restores submitted notes', (tester) async {
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-    await _invoke(tester, proofCommandGoTranscript);
-    await _invoke(tester, proofCommandFocusComposer);
+    await _invoke(tester, demoCommandGoTranscript);
+    await _invoke(tester, demoCommandFocusComposer);
     tester.type('first operator note');
 
     var composer = tester.semantics().single(
@@ -2130,9 +2125,9 @@ void main() {
   });
 
   testWidgets('file mention picker inserts composer mentions', (tester) async {
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-    await _invoke(tester, proofCommandGoTranscript);
+    await _invoke(tester, demoCommandGoTranscript);
     tester.render(size: const CellSize(110, 30));
 
     var picker = tester.semantics().single(
@@ -2168,17 +2163,17 @@ void main() {
 
     final mention = tester.semantics().single(
       role: SemanticRole.fileMention,
-      label: 'Proof console app',
+      label: 'Demo console app',
       action: SemanticAction.activate,
     );
     expect(mention.state.filePath, contains('fleury_example_console.dart'));
     expect(mention.state.fileLanguage, 'dart');
-    expect(mention.state.mentionText, '@proof-console');
+    expect(mention.state.mentionText, '@demo-console');
 
     final result = await tester.invokeSemanticAction(
       SemanticAction.activate,
       role: SemanticRole.fileMention,
-      label: 'Proof console app',
+      label: 'Demo console app',
     );
     expect(result.completed, isTrue);
 
@@ -2186,7 +2181,7 @@ void main() {
       role: SemanticRole.textField,
       label: 'Type a note and press Enter',
     );
-    expect(composer.value, '@proof-console');
+    expect(composer.value, '@demo-console');
 
     tester.render(size: const CellSize(110, 30));
     expect(
@@ -2209,22 +2204,22 @@ void main() {
 
     final fallback = tester.accessibilitySnapshot().single(
       role: SemanticRole.fileMention,
-      label: 'Proof console app',
+      label: 'Demo console app',
     );
-    expect(fallback.states.join('\n'), contains('mention @proof-console'));
+    expect(fallback.states.join('\n'), contains('mention @demo-console'));
   });
 
-  testWidgets('conversation navigator selects proof conversations', (
+  testWidgets('conversation navigator selects demo conversations', (
     tester,
   ) async {
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-    await _invoke(tester, proofCommandGoTranscript);
+    await _invoke(tester, demoCommandGoTranscript);
     tester.render(size: const CellSize(110, 32));
 
     var navigator = tester.semantics().single(
       role: SemanticRole.conversationNavigator,
-      label: 'Proof conversations',
+      label: 'Demo conversations',
     );
     expect(navigator.state['totalConversationCount'], 4);
     expect(navigator.state['filteredConversationCount'], 4);
@@ -2236,13 +2231,13 @@ void main() {
     final focusedNavigator = await tester.invokeSemanticAction(
       SemanticAction.navigate,
       role: SemanticRole.conversationNavigator,
-      label: 'Proof conversations',
+      label: 'Demo conversations',
     );
     expect(focusedNavigator.completed, isTrue);
     tester.render(size: const CellSize(110, 32));
     navigator = tester.semantics().single(
       role: SemanticRole.conversationNavigator,
-      label: 'Proof conversations',
+      label: 'Demo conversations',
       focused: true,
     );
     expect(navigator.state.selectedConversationId, 'thread.transcript');
@@ -2270,7 +2265,7 @@ void main() {
     );
     navigator = tester.semantics().single(
       role: SemanticRole.conversationNavigator,
-      label: 'Proof conversations',
+      label: 'Demo conversations',
       focused: true,
     );
     expect(navigator.state.selectedConversationId, 'thread.worker');
@@ -2290,10 +2285,10 @@ void main() {
   testWidgets('diagnostics capture updates status and transcript state', (
     tester,
   ) async {
-    tester.pumpWidget(const ProofConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-    await _invoke(tester, proofCommandGoDiagnostics);
-    await _invoke(tester, proofCommandCaptureDebug);
+    await _invoke(tester, demoCommandGoDiagnostics);
+    await _invoke(tester, demoCommandCaptureDebug);
 
     expect(tester.exists(text('Debug captures: 1')), isTrue);
     expect(tester.exists(text('Debug: captures 1')), isTrue);
@@ -2336,7 +2331,7 @@ void main() {
     expect(captureResult.completed, isTrue);
     await _flushAsyncUi(tester);
     expect(tester.exists(text('Debug captures: 2')), isTrue);
-    expect(_proofApp(tester).state.lastCommandId, 'debug.captureSnapshot');
+    expect(_demoApp(tester).state.lastCommandId, 'debug.captureSnapshot');
 
     final diagnoseResult = await tester.invokeSemanticAction(
       SemanticAction.diagnose,
@@ -2392,7 +2387,7 @@ void main() {
 
     final timeline = tester.semantics().single(
       role: SemanticRole.traceTimeline,
-      label: 'Proof trace timeline',
+      label: 'Demo trace timeline',
       action: SemanticAction.focus,
     );
     expect(timeline.state['traceEventCount'], 5);
@@ -2402,13 +2397,13 @@ void main() {
     final focusedTimeline = await tester.invokeSemanticAction(
       SemanticAction.focus,
       role: SemanticRole.traceTimeline,
-      label: 'Proof trace timeline',
+      label: 'Demo trace timeline',
     );
     expect(focusedTimeline.completed, isTrue);
     tester.render(size: const CellSize(80, 24));
     var updatedTimeline = tester.semantics().single(
       role: SemanticRole.traceTimeline,
-      label: 'Proof trace timeline',
+      label: 'Demo trace timeline',
       focused: true,
     );
     expect(updatedTimeline.state.selectedTraceId, 'trace.boot');
@@ -2432,7 +2427,7 @@ void main() {
     tester.render(size: const CellSize(80, 24));
     updatedTimeline = tester.semantics().single(
       role: SemanticRole.traceTimeline,
-      label: 'Proof trace timeline',
+      label: 'Demo trace timeline',
       focused: true,
     );
     expect(updatedTimeline.state.selectedTraceId, 'trace.diagnostics');
@@ -2446,8 +2441,8 @@ void main() {
       contains('trace id trace.diagnostics, kind diagnostic, status succeeded'),
     );
 
-    await _invoke(tester, proofCommandGoTranscript);
-    tester.render(size: const CellSize(80, 24));
+    await _invoke(tester, demoCommandGoTranscript);
+    tester.render(size: const CellSize(110, 36));
     expect(
       tester.exists(
         text('[log] diagnose: terminal profile: ansi-256, mouse pending'),

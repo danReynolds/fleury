@@ -8,7 +8,7 @@ Future<void> main(List<String> args) async {
   final options = _WireOptions.parse(args);
   final driver = WireTerminalDriver();
   await runTui(
-    _WireProofApp(
+    _WireDemoApp(
       driver: driver,
       rows: options.rows,
       steps: options.steps,
@@ -62,8 +62,8 @@ Never _printUsage() {
   );
 }
 
-final class _WireProofApp extends StatefulWidget {
-  const _WireProofApp({
+final class _WireDemoApp extends StatefulWidget {
+  const _WireDemoApp({
     required this.driver,
     required this.rows,
     required this.steps,
@@ -76,10 +76,10 @@ final class _WireProofApp extends StatefulWidget {
   final Duration interval;
 
   @override
-  State<_WireProofApp> createState() => _WireProofAppState();
+  State<_WireDemoApp> createState() => _WireDemoAppState();
 }
 
-final class _WireProofAppState extends State<_WireProofApp> {
+final class _WireDemoAppState extends State<_WireDemoApp> {
   final List<String> _events = <String>[];
   Timer? _timer;
   var _step = 0;
@@ -89,7 +89,7 @@ final class _WireProofAppState extends State<_WireProofApp> {
   @override
   void initState() {
     super.initState();
-    _events.add('boot proof app');
+    _events.add('boot demo app');
     _timer = Timer.periodic(widget.interval, (_) => _driveStep());
   }
 
@@ -142,7 +142,7 @@ final class _WireProofAppState extends State<_WireProofApp> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('SB.10 proof app screen=$_screen step=$_step'),
+          Text('SB.10 demo app screen=$_screen step=$_step'),
           const SizedBox(height: 1),
           Row(
             children: [

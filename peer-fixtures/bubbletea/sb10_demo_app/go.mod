@@ -1,4 +1,4 @@
-module fleury_peer_bubbletea_sb10_proof_app
+module fleury_peer_bubbletea_sb10_demo_app
 
 go 1.25.0
 

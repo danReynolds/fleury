@@ -48,6 +48,21 @@ void main() {
       expect(snapshot.actionCount, 3);
       expect(json.toString(), isNot(contains('secret-token')));
 
+      final debug = snapshot.debugTree();
+      expect(debug, contains('SemanticInspectionSnapshot('));
+      expect(debug, contains('nodeCount: 3'));
+      expect(debug, contains('actionCount: 3'));
+      expect(debug, contains('focusedNodeId: field:api-key'));
+      expect(debug, contains('textField#field:api-key'));
+      expect(debug, contains('label:"API key�"'));
+      expect(debug, contains('value:"<redacted>"'));
+      expect(debug, contains('actions:[copy, submit]'));
+      expect(debug, contains('apiToken: "<redacted>"'));
+      expect(debug, isNot(contains('secret-token')));
+      expect(snapshot.toDebugString(), debug);
+      expect(snapshot.toString(), debug);
+      expect(tree.debugTree(includeState: false), isNot(contains('state:')));
+
       final field = snapshot.single(
         role: 'textField',
         action: 'copy',
@@ -67,6 +82,54 @@ void main() {
       expect(button.actions, ['activate']);
     },
   );
+
+  test('single failure explains the query and includes a debug tree', () {
+    final snapshot = SemanticTree(
+      root: const SemanticNode(
+        id: SemanticNodeId('root'),
+        role: SemanticRole.app,
+        children: [
+          SemanticNode(
+            id: SemanticNodeId('button:save'),
+            role: SemanticRole.button,
+            label: 'Save',
+            actions: {SemanticAction.activate},
+          ),
+        ],
+      ),
+    ).toInspectionSnapshot();
+
+    expect(
+      () => snapshot.single(
+        role: 'command',
+        action: 'activate',
+        stateContains: const {'commandId': 'save'},
+      ),
+      throwsA(
+        isA<StateError>()
+            .having(
+              (error) => error.message,
+              'message',
+              contains('found 0 for role:"command" action:"activate"'),
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              contains('stateContains:{commandId: "save"}'),
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              contains('SemanticInspectionSnapshot('),
+            )
+            .having(
+              (error) => error.message,
+              'message',
+              contains('button#button:save label:"Save"'),
+            ),
+      ),
+    );
+  });
 
   test(
     'semantic inspection JSON parser ignores additive fields and recomputes summaries',
@@ -232,6 +295,14 @@ void main() {
     expect(json['schemaVersion'], 1);
     expect(json['focusedNodeId'], 'command:save');
     expect(json['roleCounts'], containsPair('command', 1));
+    expect(
+      tester.semanticTreeDebugString(includeState: false),
+      allOf(
+        contains('SemanticInspectionSnapshot('),
+        contains('command#command:save label:"Save" focused'),
+        isNot(contains('state:')),
+      ),
+    );
 
     final result = await tester.invokeSemanticAction(
       SemanticAction.activate,

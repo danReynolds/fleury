@@ -6,7 +6,7 @@ import 'package:test/test.dart';
 List<TraceTimelineEntry> _events() => [
   TraceTimelineEntry(
     id: 'trace.boot',
-    label: 'Boot proof console',
+    label: 'Boot demo console',
     detail: 'App shell mounted',
     kind: TraceTimelineKind.app,
     status: TraceTimelineStatus.succeeded,
@@ -93,7 +93,7 @@ void main() {
               includeTimestamp: false,
             ),
           ),
-          'Boot proof console | app | succeeded | 12ms',
+          'Boot demo console | app | succeeded | 12ms',
         );
       },
     );
@@ -181,7 +181,7 @@ void main() {
       TraceTimelineSelectResult? selected;
       tester.pumpWidget(
         TraceTimeline(
-          label: 'Proof trace',
+          label: 'Demo trace',
           events: _events(),
           autofocus: true,
           onSelect: (result) => selected = result,
@@ -196,7 +196,7 @@ void main() {
 
       final timeline = tester.semantics().single(
         role: SemanticRole.traceTimeline,
-        label: 'Proof trace',
+        label: 'Demo trace',
       );
       expect(timeline.state['traceEventCount'], 3);
       expect(timeline.state['runningTraceEventCount'], 1);
@@ -235,7 +235,7 @@ void main() {
       TraceTimelineSelectResult? selected;
       tester.pumpWidget(
         TraceTimeline(
-          label: 'Proof trace',
+          label: 'Demo trace',
           events: _events(),
           controller: controller,
           onSelect: (result) => selected = result,
@@ -245,7 +245,7 @@ void main() {
       tester.render(size: const CellSize(90, 5));
       var timeline = tester.semantics().single(
         role: SemanticRole.traceTimeline,
-        label: 'Proof trace',
+        label: 'Demo trace',
         action: SemanticAction.focus,
       );
       expect(timeline.focused, isFalse);
@@ -254,14 +254,14 @@ void main() {
       var result = await tester.invokeSemanticAction(
         SemanticAction.focus,
         role: SemanticRole.traceTimeline,
-        label: 'Proof trace',
+        label: 'Demo trace',
       );
       expect(result.completed, isTrue);
 
       tester.render(size: const CellSize(90, 5));
       timeline = tester.semantics().single(
         role: SemanticRole.traceTimeline,
-        label: 'Proof trace',
+        label: 'Demo trace',
         focused: true,
       );
       expect(timeline.state.selectedTraceId, 'trace.boot');
@@ -286,7 +286,7 @@ void main() {
 
       timeline = tester.semantics().single(
         role: SemanticRole.traceTimeline,
-        label: 'Proof trace',
+        label: 'Demo trace',
         focused: true,
       );
       expect(timeline.state.selectedTraceId, 'trace.diagnostics');
@@ -299,7 +299,7 @@ void main() {
       final controller = TraceTimelineController(selectedIndex: 2);
       tester.pumpWidget(
         TraceTimeline(
-          label: 'Proof trace',
+          label: 'Demo trace',
           events: _events(),
           controller: controller,
         ),
@@ -308,7 +308,7 @@ void main() {
 
       tester.pumpWidget(
         TraceTimeline(
-          label: 'Proof trace',
+          label: 'Demo trace',
           events: [
             _events()[0],
             const TraceTimelineEntry(
@@ -336,7 +336,7 @@ void main() {
       expect(controller.selectedIndex, 3);
       final timeline = tester.semantics().single(
         role: SemanticRole.traceTimeline,
-        label: 'Proof trace',
+        label: 'Demo trace',
       );
       expect(timeline.state.selectedTraceId, 'trace.diagnostics');
 
@@ -372,13 +372,13 @@ void main() {
         final result = await tester.invokeSemanticAction(
           SemanticAction.copy,
           role: SemanticRole.traceEvent,
-          label: 'Boot proof console',
+          label: 'Boot demo console',
         );
 
         expect(result.completed, isTrue);
         expect(
           clipboard.lastWritten,
-          'Boot proof console | app | succeeded | 12ms | app | '
+          'Boot demo console | app | succeeded | 12ms | app | '
           'App shell mounted',
         );
         expect(copied?.eventIndex, 0);

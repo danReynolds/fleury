@@ -61,7 +61,7 @@ class TerminalOutputRegion extends StatelessWidget {
   Widget build(BuildContext context) {
     final buffer = this.buffer ?? LogBufferScope.of(context);
     return ListenableBuilder(
-      animation: buffer,
+      listenable: buffer,
       builder: (context, _) {
         return LogRegion(
           entries: buildTerminalOutputLogEntries(buffer.lines),

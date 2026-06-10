@@ -424,11 +424,13 @@ class _MessageListState extends State<MessageList> {
       autofocus: widget.autofocus,
       itemCount: widget.messages.length,
       onSelect: _activateAt,
-      itemBuilder: (context, index, selected) {
+      itemBuilder: (context, index, activeSelected) {
+        final selected = index == _controller.selectedIndex;
         return _MessageRow(
           message: widget.messages[index],
           index: index,
           selected: selected,
+          activeSelection: activeSelected,
           showPrefix: widget.showPrefix,
           maxLineLength: widget.maxLineLength,
           copyEnabled: copyEnabled,
@@ -488,6 +490,7 @@ class _MessageRow extends StatelessWidget {
     required this.message,
     required this.index,
     required this.selected,
+    required this.activeSelection,
     required this.showPrefix,
     required this.maxLineLength,
     required this.copyEnabled,
@@ -498,6 +501,7 @@ class _MessageRow extends StatelessWidget {
   final MessageEntry message;
   final int index;
   final bool selected;
+  final bool activeSelection;
   final bool showPrefix;
   final int? maxLineLength;
   final bool copyEnabled;
@@ -512,9 +516,13 @@ class _MessageRow extends StatelessWidget {
       includePrefix: showPrefix,
       maxLineLength: maxLineLength,
     );
-    final style = _styleForMessage(
-      message,
-    ).merge(selected ? theme.selectionStyle : CellStyle.empty);
+    final style = _styleForMessage(message).merge(
+      activeSelection
+          ? theme.selectionStyle
+          : selected
+          ? theme.mutedStyle
+          : CellStyle.empty,
+    );
     return Semantics(
       role: SemanticRole.message,
       label: line.message,
