@@ -8,7 +8,7 @@
 
 Define the adoption argument Fleury should be able to make when the framework is
 ready to launch. This is not public copy yet. It is the evidence-backed internal
-positioning target that product, docs, benchmarks, and the proof app should make
+positioning target that product, docs, benchmarks, and the demo app should make
 true.
 
 ## Short Answer
@@ -62,11 +62,12 @@ already says that.
 
 Fleury's launch wins against Nocterm should be:
 
-1. **App kernel, not just widgets.** Fleury has `FleuryApp`, registered screens,
-   app/screen/scoped commands, status items, command palette integration,
-   key hints, semantic command nodes, and typed app extensions. The pitch is
+1. **App kernel, not just widgets.** Fleury has `FleuryApp`, app-owned section
+   patterns, scoped commands, status items, command palette integration, key
+   hints, semantic command nodes, and typed app extensions. The pitch is
    production app structure: commands can drive shortcuts, palette rows, status
-   actions, semantic actions, and tests through the same registry.
+   actions, semantic actions, and tests through the same registry while tabs,
+   sidebars, and sections remain ordinary app/widget state.
 2. **Semantic app graph as a developer-visible testing and automation surface.**
    Fleury exposes roles, labels, values, actions, focus, selection, capability
    state, redaction state, diagnostics, and inspectable snapshots. Tests and
@@ -74,7 +75,7 @@ Fleury's launch wins against Nocterm should be:
 3. **Production toolkit plus benchmark evidence.** Fleury now has measured
    scenarios for text editing, 100k-row tables, log tailing, streaming markdown,
    dashboard updates, resize storms, overlays, subprocess/output safety,
-   TreeTable, proof-app journeys, and layout dirtiness. The claim is not "more
+   TreeTable, demo-app journeys, and layout dirtiness. The claim is not "more
    widgets"; it is data/workflow widgets with semantics, copy/export, safety,
    and app-shaped baselines.
 
@@ -109,7 +110,7 @@ Fleury's launch wins against Bubble Tea v2 should be:
 
 Claims still needing peer evidence:
 
-- Equivalent Bubble Tea/Bubbles code for the proof-app workload.
+- Equivalent Bubble Tea/Bubbles code for the demo-app workload.
 - Terminal taste and raw renderer comparisons against Bubble Tea v2's current
   renderer stack.
 
@@ -144,9 +145,9 @@ full-screen app correctness: focus, commands, data widgets, terminal diagnostics
 safe output, and semantic tests designed for dense developer tools rather than
 React CLI composition alone.
 
-## Proof App And Dune Roles
+## Demo App And Dune Roles
 
-The example subpackage proof app is the current-cycle evidence vehicle. It
+The example subpackage demo app is the current-cycle evidence vehicle. It
 should remain internal/product-shaped rather than polished marketing:
 
 - prove `FleuryApp` screens, commands, status, command palette, key hints, and
@@ -158,9 +159,9 @@ should remain internal/product-shaped rather than polished marketing:
   scenario benchmarks;
 - keep Dune/`dune_cli` out of this cycle until the core toolkit is reliable.
 
-Dune/`dune_cli` should become the flagship after the proof app has stabilized the
+Dune/`dune_cli` should become the flagship after the demo app has stabilized the
 framework. The launch story can say Fleury is being built toward a real product,
-but the current evidence should come from the proof app, tests, and benchmarks.
+but the current evidence should come from the demo app, tests, and benchmarks.
 
 ## Launch-Ready Claims
 
@@ -190,13 +191,13 @@ Do not claim these externally until evidence exists:
   reviewed real-terminal entries.
 - Mature public ecosystem. Package docs, scaffolding, release process, third-party
   apps, and `fleury_acp` remain future work.
-- Dune/`dune_cli` as proof. It is the later flagship, not this cycle's evidence.
+- Dune/`dune_cli` as demo. It is the later flagship, not this cycle's evidence.
 
 ## Evidence Links
 
 - [Peer scorecards](peer-scorecards.md)
 - [Scenario benchmark lab](scenario-benchmark-lab.md)
-- [Proof-app scenario](proof-app-scenario.md)
+- [Demo-app scenario](demo-app-scenario.md)
 - [Terminal compatibility matrix](terminal-compatibility-matrix.md)
 - [Local distribution path](local-distribution-path.md)
 - [Launch hardening audit](launch-hardening-audit.md)

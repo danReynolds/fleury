@@ -6,7 +6,7 @@ Date: 2026-05-31
 ## Context
 
 Text editing is a trust test for Fleury. Developer tools, command palettes,
-agent consoles, config forms, commit editors, search boxes, and proof apps all
+agent consoles, config forms, commit editors, search boxes, and demo apps all
 depend on fields that behave predictably under Unicode, paste, selection,
 history, validation, and terminal constraints.
 

@@ -1,12 +1,12 @@
 # Fleury Example Console
 
-Internal proof app for Fleury's Phase 1 reactive TUI foundations.
+Internal demo app for Fleury's Phase 1 reactive TUI foundations.
 
 Run it from the workspace root:
 
 ```sh
 dart tool/fleury_dev.dart bootstrap
-dart tool/fleury_dev.dart proof
+dart tool/fleury_dev.dart demo
 ```
 
 Or run it directly from this package:

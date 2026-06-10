@@ -529,11 +529,13 @@ class _PatchReviewState extends State<PatchReview> {
             autofocus: widget.autofocus,
             itemCount: widget.files.length,
             onSelect: (_) => _selectCurrent(),
-            itemBuilder: (context, index, selected) {
+            itemBuilder: (context, index, activeSelected) {
+              final selected = index == _controller.selectedIndex;
               return _PatchFileRow(
                 file: widget.files[index],
                 index: index,
                 selected: selected,
+                activeSelection: activeSelected,
                 canSelect: canSelect,
                 copyEnabled: copyEnabled,
                 onSelect: () => _selectAt(index),
@@ -630,6 +632,7 @@ class _PatchFileRow extends StatelessWidget {
     required this.file,
     required this.index,
     required this.selected,
+    required this.activeSelection,
     required this.canSelect,
     required this.copyEnabled,
     required this.onSelect,
@@ -639,6 +642,7 @@ class _PatchFileRow extends StatelessWidget {
   final PatchReviewFile file;
   final int index;
   final bool selected;
+  final bool activeSelection;
   final bool canSelect;
   final bool copyEnabled;
   final Future<void> Function() onSelect;
@@ -690,8 +694,13 @@ class _PatchFileRow extends StatelessWidget {
         'outputSanitized': _fileWasSanitized(file),
       }),
       child: Text(
-        _rowText(file, selected: selected),
-        style: _rowStyle(Theme.of(context), selected, file),
+        _rowText(file, activeSelection: activeSelection),
+        style: _rowStyle(
+          Theme.of(context),
+          selected: selected,
+          activeSelection: activeSelection,
+          file: file,
+        ),
       ),
     );
   }
@@ -752,8 +761,8 @@ String _summaryText(
       '  ${status.name}';
 }
 
-String _rowText(PatchReviewFile file, {required bool selected}) {
-  final prefix = selected ? '> ' : '  ';
+String _rowText(PatchReviewFile file, {required bool activeSelection}) {
+  final prefix = activeSelection ? '> ' : '  ';
   final path = _sanitizePatchText(file.path);
   final parts = <String>[
     file.status.name,
@@ -799,9 +808,15 @@ String _sanitizePatchText(String text) {
 
 final _patchLineBreakPattern = RegExp(r'[\r\n\t]');
 
-CellStyle _rowStyle(ThemeData theme, bool selected, PatchReviewFile file) {
+CellStyle _rowStyle(
+  ThemeData theme, {
+  required bool selected,
+  required bool activeSelection,
+  required PatchReviewFile file,
+}) {
   if (!file.enabled) return theme.mutedStyle;
-  if (selected) return theme.selectionStyle;
+  if (activeSelection) return theme.selectionStyle;
+  if (selected) return theme.mutedStyle;
   return switch (file.status) {
     PatchReviewStatus.pending => CellStyle.empty,
     PatchReviewStatus.reviewing => const CellStyle(foreground: AnsiColor(14)),

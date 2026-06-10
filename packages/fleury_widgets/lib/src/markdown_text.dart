@@ -650,15 +650,19 @@ class _MarkdownViewState extends State<MarkdownView> {
             focusNode: _focusNode,
             autofocus: widget.autofocus,
             itemCount: blocks.length,
-            itemBuilder: (context, index, selected) => _MarkdownBlockWidget(
-              block: blocks[index],
-              selected: selected,
-              copyEnabled: copyEnabled,
-              baseStyle: widget.baseStyle ?? CellStyle.empty,
-              componentTheme: FleuryWidgetTheme.of(context),
-              onActivate: () => _selectBlockAt(index),
-              onCopy: () => _copyBlockAt(index),
-            ),
+            itemBuilder: (context, index, activeSelected) {
+              final selected = index == _controller.selectedIndex;
+              return _MarkdownBlockWidget(
+                block: blocks[index],
+                selected: selected,
+                activeSelection: activeSelected,
+                copyEnabled: copyEnabled,
+                baseStyle: widget.baseStyle ?? CellStyle.empty,
+                componentTheme: FleuryWidgetTheme.of(context),
+                onActivate: () => _selectBlockAt(index),
+                onCopy: () => _copyBlockAt(index),
+              );
+            },
           );
 
     if (copyEnabled) {
@@ -727,6 +731,7 @@ class _MarkdownBlockWidget extends StatelessWidget {
   const _MarkdownBlockWidget({
     required this.block,
     required this.selected,
+    required this.activeSelection,
     required this.copyEnabled,
     required this.baseStyle,
     required this.componentTheme,
@@ -736,6 +741,7 @@ class _MarkdownBlockWidget extends StatelessWidget {
 
   final MarkdownBlock block;
   final bool selected;
+  final bool activeSelection;
   final bool copyEnabled;
   final CellStyle baseStyle;
   final FleuryWidgetTheme componentTheme;
@@ -745,12 +751,14 @@ class _MarkdownBlockWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final style = _styleForMarkdownBlock(
-      block,
-      baseStyle,
-      theme,
-      componentTheme,
-    ).merge(selected ? theme.selectionStyle : CellStyle.empty);
+    final style =
+        _styleForMarkdownBlock(block, baseStyle, theme, componentTheme).merge(
+          activeSelection
+              ? theme.selectionStyle
+              : selected
+              ? theme.mutedStyle
+              : CellStyle.empty,
+        );
     final line =
         block.kind == MarkdownBlockKind.codeFence ||
             block.kind == MarkdownBlockKind.horizontalRule

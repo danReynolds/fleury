@@ -25,7 +25,7 @@ capability policy. The graph is not a second rendering system. It is the
 framework-owned source of meaning for testing, inspection, accessibility,
 prompt-mode/fallback UI, debug capture, and future automation.
 
-The v0 goal is deliberately small: provide enough semantics for the proof-app
+The v0 goal is deliberately small: provide enough semantics for the demo-app
 scenario and Phase 1 widgets without freezing a broad accessibility or agent
 protocol too early.
 
@@ -36,8 +36,8 @@ screen of characters. A golden can tell us that a table was painted, but not
 that the table's selected row has id `run-042`, that the filter text is
 `failed`, or that `Ctrl+K` exposes a disabled `Cancel Active Task` command.
 
-The proof-app scenario in
-[../implementation/proof-app-scenario.md](../implementation/proof-app-scenario.md)
+The demo-app scenario in
+[../implementation/demo-app-scenario.md](../implementation/demo-app-scenario.md)
 requires semantics for:
 
 - Sidebar routes and active screen.
@@ -356,9 +356,9 @@ Required for M1.1:
 | `LogView` | `log`, source/severity metadata where available, copy action. |
 | terminal diagnostics | `diagnostic`, capability/fallback nodes. |
 
-## 12. Proof-App Mapping
+## 12. Demo-App Mapping
 
-The proof app should produce semantic nodes for:
+The demo app should produce semantic nodes for:
 
 - App root: `app`, label `Fleury Example Console`.
 - Sidebar: `navigation`, active screen and selectable screen items.
@@ -410,7 +410,7 @@ Rules:
    `Button`, `CommandPalette`, `ProgressBar`, `Table`, and `LogView`.
 7. Add inspector/debug surface for focused node, role counts, commands, and
    capability fallbacks.
-8. Use the proof app to validate the graph before expanding public API.
+8. Use the demo app to validate the graph before expanding public API.
 
 ## 16. Open Questions
 
@@ -428,5 +428,5 @@ M0.2 is complete when:
 - This RFC defines node shape, ownership, lifecycle, and query model.
 - RFC examples show `FleuryTester` querying role, label, value, focus, action,
   error, selection, table, command, progress, and capability state.
-- The proof-app scenario has a concrete semantic mapping.
+- The demo-app scenario has a concrete semantic mapping.
 - Open questions that block M1.1 are recorded in the implementation tracker.

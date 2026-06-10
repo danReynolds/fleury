@@ -202,6 +202,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
           height: height,
           child: ListView.builder(
             controller: _list,
+            selectionActive: true,
             itemCount: _filtered.length,
             itemBuilder: (_, i, selected) {
               final label = _display(_filtered[i]);

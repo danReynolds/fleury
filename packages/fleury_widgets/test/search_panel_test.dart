@@ -112,6 +112,73 @@ void main() {
     expect(activated?.id, 'logs.deploy');
   });
 
+  testWidgets('keeps selection across equivalent result list rebuilds', (
+    tester,
+  ) {
+    List<SearchResult> freshResults() => [
+      for (final result in results())
+        SearchResult(
+          id: result.id,
+          title: result.title,
+          subtitle: result.subtitle,
+          category: result.category,
+          source: result.source,
+          detail: result.detail,
+          enabled: result.enabled,
+          metadata: result.metadata,
+        ),
+    ];
+
+    Widget panel() => SearchPanel(results: freshResults(), autofocus: true);
+
+    tester.pumpWidget(panel());
+    tester.render(size: const CellSize(60, 8));
+
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.pump();
+    tester.pumpWidget(panel());
+
+    final output = tester.renderToString(
+      size: const CellSize(60, 8),
+      emptyMark: ' ',
+    );
+    expect(output, isNot(contains('> Build local package')));
+    expect(output, contains('> Deploy production'));
+  });
+
+  testWidgets('dims retained selection when focus leaves the panel', (tester) {
+    final outside = FocusNode(debugLabel: 'outside');
+    tester.pumpWidget(
+      Row(
+        children: [
+          SearchPanel(results: results(), autofocus: true),
+          Focus(focusNode: outside, child: const Text('Outside')),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(80, 8));
+
+    var output = tester.renderToString(
+      size: const CellSize(80, 8),
+      emptyMark: ' ',
+    );
+    expect(output, contains('> Build local package'));
+
+    outside.requestFocus();
+    tester.pump();
+    output = tester.renderToString(size: const CellSize(80, 8), emptyMark: ' ');
+    expect(output, isNot(contains('> Build local package')));
+    expect(output, contains('Build local package'));
+
+    final row = tester.semantics().single(
+      role: SemanticRole.listItem,
+      label: 'Build local package',
+    );
+    expect(row.selected, isTrue);
+
+    outside.dispose();
+  });
+
   group('copy/export', () {
     late Clipboard originalClipboard;
     late TestClipboard clipboard;

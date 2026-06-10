@@ -69,7 +69,7 @@ Future<void> main(List<String> args) async {
 void _printUsage() {
   stderr.writeln('fleury <subcommand> [args]');
   stderr.writeln('');
-  stderr.writeln('Subcommands:');
+  stderr.writeln('App developer commands:');
   stderr.writeln(
     '  shell    Proxy fleury-app rendering through this terminal '
     'so the app can be',
@@ -95,17 +95,24 @@ void _printUsage() {
     '           Options: --json, --json-output=<path>, --probe, '
     '--probe-timeout=<ms>',
   );
+  stderr.writeln('');
+  stderr.writeln('Framework checkout commands:');
   stderr.writeln(
     '  dev      Fleury framework contributor commands. Requires a '
     'framework checkout.',
   );
-  stderr.writeln('           Example: fleury dev check --quick');
+  stderr.writeln(
+    '           Examples: fleury dev list; fleury dev check --quick; '
+    'fleury dev demo; fleury dev storybook verify',
+  );
   stderr.writeln(
     '  benchmark Run local and peer benchmark/profiling workflows. '
     'Requires a',
   );
   stderr.writeln('           framework checkout.');
-  stderr.writeln('           Example: fleury benchmark list');
+  stderr.writeln(
+    '           Examples: fleury benchmark list; fleury benchmark wire sb6 --help',
+  );
 }
 
 Future<int> _runDev(List<String> args) async {
@@ -1078,7 +1085,7 @@ class _BrowserClosedBeforeConnect extends _StartEvent {
 
 /// `fleury diagnose` prints terminal environment, capabilities, and
 /// shell/serve state. Markdown remains the default; `--json` is the stable
-/// machine-readable contract for bug reports, fixtures, and proof apps.
+/// machine-readable contract for bug reports, fixtures, and demo apps.
 Future<int> _runDiagnose(List<String> args) async {
   var json = false;
   String? jsonOutputPath;

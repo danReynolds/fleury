@@ -123,7 +123,7 @@ Saved Phase 2 baseline:
 ## SB.8 Overlay And Command Palette Churn
 
 `SB.8` mounts a `FleuryApp` with an active screen command and a 1000-command
-registry, then repeatedly presents `AppCommandPalette`, filters fuzzy results,
+registry, then repeatedly presents `CommandPalette`, filters fuzzy results,
 keyboard-selects the intended command when fuzzy matches are ambiguous, invokes
 commands through Enter, semantic submit, and semantic activate, dismisses with
 Escape and semantic dismiss, and probes a visible disabled command. Output

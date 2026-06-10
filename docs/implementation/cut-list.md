@@ -13,7 +13,7 @@ Phase 1 must be narrowed aggressively.
 
 Keep:
 
-- Example subpackage proof-app scenario spec.
+- Example subpackage demo-app scenario spec.
 - Semantic app graph RFC.
 - App kernel RFC.
 - Capability/security contract RFC.
@@ -37,7 +37,7 @@ Keep:
 - Example subpackage scenario slice that proves the chosen wedge.
 - Basic benchmark harness.
 - Debug capture hook points only where they are needed by tests or the example
-  proof app.
+  demo app.
 
 Defer:
 
@@ -59,7 +59,7 @@ Keep:
 - Agent-adapter readiness boundary.
 - Worker/task model v0.
 - Basic diagnose command.
-- Example subpackage proof app v0.
+- Example subpackage demo app v0.
 - Scenario benchmark harness.
 
 Defer:
@@ -75,7 +75,7 @@ Keep the full Phase 1 plan, but still avoid:
 
 - Seven-engine package split.
 - Broad plugin ecosystem.
-- Public launch before the example proof app and benchmark claims are
+- Public launch before the example demo app and benchmark claims are
   credible.
 - Full accessibility claims beyond semantic state, keyboard operation, copy
   state, high contrast, reduced motion, and prompt fallback.
@@ -89,7 +89,7 @@ If schedule slips, cut in this order:
 3. Broad terminal compatibility matrix.
 4. Full worker/process model depth.
 5. Data widget breadth beyond DataTable.
-6. Domain/protocol widget breadth beyond the example proof-app scenario.
+6. Domain/protocol widget breadth beyond the example demo-app scenario.
 7. Diagnostics polish.
 
 Do not cut:
@@ -97,5 +97,5 @@ Do not cut:
 - Semantic tree v0.
 - App kernel.
 - Text editing core.
-- Example proof-app slice.
+- Example demo-app slice.
 - Benchmark harness.

@@ -337,11 +337,13 @@ class _TaskGraphState extends State<TaskGraph> {
       autofocus: widget.autofocus,
       itemCount: widget.nodes.length,
       onSelect: _activateAt,
-      itemBuilder: (context, index, selected) {
+      itemBuilder: (context, index, activeSelected) {
+        final selected = index == _controller.selectedIndex;
         return _TaskGraphRow(
           node: widget.nodes[index],
           index: index,
           selected: selected,
+          activeSelection: activeSelected,
           copyEnabled: copyEnabled,
           onActivate: () => _activateAt(index),
           onCopy: () => _copyAt(index),
@@ -407,6 +409,7 @@ class _TaskGraphRow extends StatelessWidget {
     required this.node,
     required this.index,
     required this.selected,
+    required this.activeSelection,
     required this.copyEnabled,
     required this.onActivate,
     required this.onCopy,
@@ -415,6 +418,7 @@ class _TaskGraphRow extends StatelessWidget {
   final TaskGraphNode node;
   final int index;
   final bool selected;
+  final bool activeSelection;
   final bool copyEnabled;
   final VoidCallback onActivate;
   final Future<void> Function() onCopy;
@@ -422,9 +426,13 @@ class _TaskGraphRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final line = _renderLine(node);
-    final style = _styleForStatus(
-      node.status,
-    ).merge(selected ? Theme.of(context).selectionStyle : CellStyle.empty);
+    final style = _styleForStatus(node.status).merge(
+      activeSelection
+          ? Theme.of(context).selectionStyle
+          : selected
+          ? Theme.of(context).mutedStyle
+          : CellStyle.empty,
+    );
     return Semantics(
       role: SemanticRole.task,
       label: _sanitizeTaskText(node.title),

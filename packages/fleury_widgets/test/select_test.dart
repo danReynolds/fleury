@@ -64,6 +64,35 @@ class _HostState extends State<_Host> {
   }
 }
 
+class _MultiHost extends StatefulWidget {
+  const _MultiHost({this.initial = const <String>{}});
+  final Set<String> initial;
+  @override
+  State<_MultiHost> createState() => _MultiHostState();
+}
+
+class _MultiHostState extends State<_MultiHost> {
+  late Set<String> values;
+  @override
+  void initState() {
+    super.initState();
+    values = Set<String>.of(widget.initial);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiSelect<String>(
+      autofocus: true,
+      values: values,
+      options: _options,
+      semanticLabel: 'Colors',
+      onChanged: (next) {
+        setState(() => values = next);
+      },
+    );
+  }
+}
+
 void main() {
   group('Select', () {
     testWidgets('collapsed shows the placeholder when no value', (tester) {
@@ -77,6 +106,40 @@ void main() {
       final out = _screen(tester);
       expect(out.contains('Green'), isTrue);
       expect(out.contains('▾'), isTrue);
+    });
+
+    testWidgets('null onChanged disables the trigger', (tester) async {
+      tester.pumpWidget(
+        const Select<String>(
+          value: 'red',
+          options: _options,
+          semanticLabel: 'Color',
+          autofocus: true,
+          onChanged: null,
+        ),
+      );
+
+      final trigger = tester.semantics().single(
+        role: SemanticRole.button,
+        label: 'Color',
+        enabled: false,
+      );
+      expect(trigger.actions, isEmpty);
+      expect(trigger.value, 'Red');
+      expect(trigger.expanded, isFalse);
+      expect(
+        tester.render(size: const CellSize(16, 1)).atColRow(0, 0).style.dim,
+        isTrue,
+      );
+
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.open,
+        node: trigger,
+      );
+      expect(result.status, SemanticActionInvocationStatus.disabled);
     });
 
     testWidgets('Enter opens the list anchored below the trigger', (tester) {
@@ -310,6 +373,104 @@ void main() {
         expect(red.announcement, contains('checked'));
         expect(red.announcement, contains('actions: activate, select'));
       });
+    });
+  });
+
+  group('MultiSelect', () {
+    testWidgets('renders checked values', (tester) {
+      tester.pumpWidget(const _MultiHost(initial: {'red'}));
+
+      final out = _screen(tester, cols: 18, rows: 3);
+      expect(out.contains('[x] Red'), isTrue);
+      expect(out.contains('[ ] Green'), isTrue);
+      expect(out.contains('[ ] Blue'), isTrue);
+    });
+
+    testWidgets('Enter toggles the highlighted option', (tester) {
+      tester.pumpWidget(const _MultiHost());
+
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+
+      final out = _screen(tester, cols: 18, rows: 3);
+      expect(out.contains('[x] Red'), isTrue);
+    });
+
+    testWidgets('navigation skips disabled options', (tester) {
+      Set<String>? picked;
+      tester.pumpWidget(
+        MultiSelect<String>(
+          autofocus: true,
+          values: const {'red'},
+          semanticLabel: 'Colors',
+          options: const [
+            SelectOption(value: 'red', label: 'Red'),
+            SelectOption(value: 'green', label: 'Green', enabled: false),
+            SelectOption(value: 'blue', label: 'Blue'),
+          ],
+          onChanged: (values) => picked = values,
+        ),
+      );
+
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+
+      expect(picked, {'red', 'blue'});
+    });
+
+    testWidgets('semantic activate toggles an option', (tester) async {
+      tester.pumpWidget(const _MultiHost(initial: {'red'}));
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        role: SemanticRole.checkbox,
+        label: 'Blue',
+      );
+
+      expect(result.completed, isTrue);
+      final blue = tester.semantics().single(
+        role: SemanticRole.checkbox,
+        label: 'Blue',
+      );
+      expect(blue.checked, isTrue);
+      expect(blue.state['itemPosition'], 3);
+    });
+
+    testWidgets('null onChanged disables the list and options', (tester) async {
+      tester.pumpWidget(
+        const MultiSelect<String>(
+          values: {'red'},
+          options: _options,
+          semanticLabel: 'Colors',
+          autofocus: true,
+          onChanged: null,
+        ),
+      );
+
+      final list = tester.semantics().single(
+        role: SemanticRole.list,
+        label: 'Colors',
+        enabled: false,
+      );
+      expect(list.actions, isEmpty);
+      expect(list.state['selectedCount'], 1);
+
+      final red = tester.semantics().single(
+        role: SemanticRole.checkbox,
+        label: 'Red',
+        enabled: false,
+      );
+      expect(red.checked, isTrue);
+      expect(red.actions, isEmpty);
+      expect(
+        tester.render(size: const CellSize(18, 3)).atColRow(0, 0).style.dim,
+        isTrue,
+      );
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        node: red,
+      );
+      expect(result.status, SemanticActionInvocationStatus.disabled);
     });
   });
 }

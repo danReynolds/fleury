@@ -6,7 +6,7 @@ Define the smallest credible way for a developer to try Fleury from this
 workspace before public package/distribution polish begins.
 
 This is an M1.12 execution artifact, not a public launch plan. It should make
-the proof app, examples, and local CLI easy to run while keeping pub.dev,
+the demo app, examples, and local CLI easy to run while keeping pub.dev,
 Homebrew, npm wrappers, and app scaffolding deferred until the APIs stabilize.
 
 ## Current Local Path
@@ -16,7 +16,7 @@ Use the repo-local launcher from the workspace root:
 ```sh
 dart tool/fleury_dev.dart bootstrap
 dart tool/fleury_dev.dart list
-dart tool/fleury_dev.dart proof
+dart tool/fleury_dev.dart demo
 dart tool/fleury_dev.dart core-demo counter
 dart tool/fleury_dev.dart widget-demo dashboard
 dart tool/fleury_dev.dart cli diagnose --json
@@ -31,9 +31,10 @@ After `dart tool/fleury_dev.dart activate-cli` or `build-cli`, the public
 
 ```sh
 fleury dev check --quick
-fleury dev proof
+fleury dev demo
 fleury dev core-demo counter
-fleury dev mvp-readiness
+fleury benchmark list
+fleury benchmark manifest --json
 ```
 
 `fleury dev` searches upward from the current directory for a Fleury framework
@@ -45,8 +46,8 @@ checkout-scoped; public app-developer commands stay at top level.
 | Command | Purpose | Notes |
 | --- | --- | --- |
 | `bootstrap` | Runs `dart pub get` in local packages. | Keeps the workspace ready without introducing a monorepo tool. |
-| `list` | Shows runnable examples and proof-app names. | Use this before adding more demos. |
-| `proof` | Runs `packages/fleury_example_console`. | This is the current-cycle pressure app, not a marketing demo. |
+| `list` | Shows runnable examples and demo-app names. | Use this before adding more demos. |
+| `demo` | Runs `packages/fleury_example_console`. | This is the current-cycle pressure app, not a marketing demo. |
 | `core-demo <name>` | Runs a `packages/fleury/example` entrypoint. | Starts with `counter`, `chat`, `showcase`, animation, selection, and hot reload demos. |
 | `widget-demo <name>` | Runs a `packages/fleury_widgets/example` entrypoint. | Starts with dashboard, snapshot, and image demos. |
 | `cli <args...>` | Runs `packages/fleury/bin/fleury.dart`. | Example: `cli diagnose --json`. |
@@ -65,16 +66,16 @@ checkout-scoped; public app-developer commands stay at top level.
 | npm wrapper | Thin package that downloads or invokes the standalone CLI for JS-heavy teams. | Real demand from CLI developers appears. |
 | `create-fleury-app` | Scaffold a minimal app with tests and a first screen. | App-kernel APIs and example conventions stabilize. |
 | Docs site | Public docs, tutorials, and comparisons. | Core examples, benchmark evidence, and package metadata are ready. |
-| Dune/`dune_cli` | Later flagship proof for real product pressure. | The example subpackage proves the core widgets and runtime first. |
+| Dune/`dune_cli` | Later flagship evidence for real product pressure. | The example subpackage proves the core widgets and runtime first. |
 
 ## Acceptance Checklist
 
-- [x] Workspace root documents how to bootstrap, run examples, run the proof
+- [x] Workspace root documents how to bootstrap, run examples, run the demo
   app, and invoke the local CLI.
 - [x] A repo-local launcher provides stable command names for local trying.
 - [x] Local package checks include `fleury_git`, the first reusable
   non-example integration package proving app-extension package seams.
-- [x] Proof app package documents its direct command and launcher command.
+- [x] Demo app package documents its direct command and launcher command.
 - [x] Local CLI activation and standalone binary paths are documented without
   requiring public release packaging.
 - [~] Public distribution polish remains out of scope until launch APIs are

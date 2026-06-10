@@ -529,6 +529,7 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
     final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && selected != null;
     final canPick = widget.onPick != null;
+    final panelFocused = _queryFocusNode.hasFocus || _resultsFocusNode.hasFocus;
 
     Widget panel = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -552,15 +553,18 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
               : ListView.builder(
                   controller: _controller._listController,
                   focusNode: _resultsFocusNode,
+                  selectionActive: panelFocused,
                   itemCount: order.length,
                   onSelect: (_) => _pickSelected(),
-                  itemBuilder: (context, viewIndex, selected) {
+                  itemBuilder: (context, viewIndex, activeSelected) {
                     final entryIndex = order[viewIndex];
+                    final selected = viewIndex == _controller.selectedIndex;
                     return _FileMentionRow(
                       entry: widget.entries[entryIndex],
                       entryIndex: entryIndex,
                       viewIndex: viewIndex,
                       selected: selected,
+                      activeSelection: activeSelected,
                       canPick: canPick,
                       copyEnabled: copyEnabled,
                       onPick: () => _pickAt(viewIndex),
@@ -650,6 +654,7 @@ class _FileMentionRow extends StatelessWidget {
     required this.entryIndex,
     required this.viewIndex,
     required this.selected,
+    required this.activeSelection,
     required this.canPick,
     required this.copyEnabled,
     required this.onPick,
@@ -660,6 +665,7 @@ class _FileMentionRow extends StatelessWidget {
   final int entryIndex;
   final int viewIndex;
   final bool selected;
+  final bool activeSelection;
   final bool canPick;
   final bool copyEnabled;
   final Future<void> Function() onPick;
@@ -681,7 +687,7 @@ class _FileMentionRow extends StatelessWidget {
       path: path,
       kind: entry.kind,
       language: language,
-      selected: selected,
+      activeSelection: activeSelection,
     );
 
     return Semantics(
@@ -722,7 +728,12 @@ class _FileMentionRow extends StatelessWidget {
       }),
       child: Text(
         rowText,
-        style: _rowStyle(Theme.of(context), selected, entry.enabled),
+        style: _rowStyle(
+          Theme.of(context),
+          selected: selected,
+          activeSelection: activeSelection,
+          enabled: entry.enabled,
+        ),
       ),
     );
   }
@@ -733,9 +744,9 @@ String _rowText({
   required String path,
   required FileMentionKind kind,
   required String? language,
-  required bool selected,
+  required bool activeSelection,
 }) {
-  final prefix = selected ? '> ' : '  ';
+  final prefix = activeSelection ? '> ' : '  ';
   final meta = <String>[
     kind.name,
     if (language != null && language.isNotEmpty) language,
@@ -817,8 +828,14 @@ String _sanitizeMentionText(String text) {
 
 final _mentionLineBreakPattern = RegExp(r'[\r\n\t]');
 
-CellStyle _rowStyle(ThemeData theme, bool selected, bool enabled) {
+CellStyle _rowStyle(
+  ThemeData theme, {
+  required bool selected,
+  required bool activeSelection,
+  required bool enabled,
+}) {
   if (!enabled) return theme.mutedStyle;
-  if (selected) return theme.selectionStyle;
+  if (activeSelection) return theme.selectionStyle;
+  if (selected) return theme.mutedStyle;
   return CellStyle.empty;
 }

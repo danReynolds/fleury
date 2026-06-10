@@ -407,6 +407,7 @@ void main() {
     testWidgets('exposes table shape and cell coordinates', (tester) {
       tester.pumpWidget(
         Table(
+          label: 'People table',
           header: const [Text('Name'), Text('Age')],
           rows: const [
             [Text('Al'), Text('30')],
@@ -416,7 +417,10 @@ void main() {
       );
 
       final tree = tester.semantics();
-      final table = tree.single(role: SemanticRole.table);
+      final table = tree.single(
+        role: SemanticRole.table,
+        label: 'People table',
+      );
       expect(table.state.collectionRowCount, 2);
       expect(table.state.collectionColumnCount, 2);
       expect(table.state.values['hasHeader'], isTrue);

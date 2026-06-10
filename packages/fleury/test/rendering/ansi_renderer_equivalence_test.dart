@@ -19,9 +19,10 @@ import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
 /// A minimal terminal: tracks the cursor and writes single-width graphemes,
-/// understanding exactly the escapes AnsiRenderer emits (CUP `H`, CUU/CUD
-/// `A`/`B`, CUF/CUB `C`/`D`, CNL/CPL `E`/`F`, SU `S`; SGR `m` and private
-/// modes `?…h/l` are ignored as they don't move the cursor or place content).
+/// understanding the cursor controls relevant to renderer and byte-budget
+/// tests (CUP `H`, CUU/CUD `A`/`B`, CUF/CUB `C`/`D`, CNL/CPL `E`/`F`, SU `S`,
+/// plus C0 cursor controls BS/LF/CR; SGR `m` and private modes `?…h/l` are
+/// ignored as they don't move the cursor or place content).
 List<List<String>> _apply(List<List<String>> start, String output) {
   final grid = [
     for (final row in start) [...row],
@@ -35,6 +36,21 @@ List<List<String>> _apply(List<List<String>> start, String output) {
   final n = output.length;
   while (i < n) {
     final cu = output.codeUnitAt(i);
+    if (cu == 0x08) {
+      cc -= 1;
+      i++;
+      continue;
+    }
+    if (cu == 0x0A) {
+      cr += 1;
+      i++;
+      continue;
+    }
+    if (cu == 0x0D) {
+      cc = 0;
+      i++;
+      continue;
+    }
     if (cu == 0x1B) {
       i++;
       if (i >= n || output.codeUnitAt(i) != 0x5B) {

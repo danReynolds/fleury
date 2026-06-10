@@ -5,9 +5,9 @@ import 'package:test/test.dart';
 
 List<ContextItem> _items() => const [
   ContextItem(
-    id: 'ctx.proof',
-    label: 'Proof console source',
-    detail: 'App shell and proof fixtures',
+    id: 'ctx.demo',
+    label: 'Demo console source',
+    detail: 'App shell and demo fixtures',
     kind: ContextItemKind.file,
     priority: ContextItemPriority.high,
     tokenCount: 1200,
@@ -16,17 +16,17 @@ List<ContextItem> _items() => const [
   ),
   ContextItem(
     id: 'ctx.scenario',
-    label: 'Proof scenario',
+    label: 'Demo scenario',
     detail: 'Milestone scenario',
     kind: ContextItemKind.note,
     priority: ContextItemPriority.normal,
     tokenCount: 850,
-    source: 'docs/implementation/proof-app-scenario.md',
+    source: 'docs/implementation/demo-app-scenario.md',
   ),
   ContextItem(
     id: 'ctx.transcript',
     label: 'Transcript tail',
-    detail: 'Recent proof events',
+    detail: 'Recent demo events',
     kind: ContextItemKind.message,
     priority: ContextItemPriority.low,
     tokenCount: 320,
@@ -91,7 +91,7 @@ void main() {
             includeSource: false,
           ),
         ),
-        'Proof console source | file | high | pinned | 1200 tokens',
+        'Demo console source | file | high | pinned | 1200 tokens',
       );
     });
 
@@ -110,7 +110,7 @@ void main() {
       tester.render(size: const CellSize(100, 6));
       tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
 
-      expect(selected?.item.id, 'ctx.proof');
+      expect(selected?.item.id, 'ctx.demo');
       expect(selected?.itemIndex, 0);
 
       final panel = tester.semantics().single(
@@ -122,15 +122,15 @@ void main() {
       expect(panel.state['contextTokenCount'], 2370);
       expect(panel.state.contextUsed, 2370);
       expect(panel.state.contextLimit, 8000);
-      expect(panel.state.selectedContextItemId, 'ctx.proof');
+      expect(panel.state.selectedContextItemId, 'ctx.demo');
 
       final row = tester.semantics().single(
         role: SemanticRole.contextItem,
-        label: 'Proof console source',
+        label: 'Demo console source',
       );
       expect(row.selected, isTrue);
       expect(row.actions, contains(SemanticAction.activate));
-      expect(row.state.contextItemId, 'ctx.proof');
+      expect(row.state.contextItemId, 'ctx.demo');
       expect(row.state.contextItemKind, 'file');
       expect(row.state.contextItemTokenCount, 1200);
       expect(row.state.contextItemPriority, 'high');
@@ -138,12 +138,12 @@ void main() {
 
       final fallback = tester.accessibilitySnapshot().single(
         role: SemanticRole.contextItem,
-        label: 'Proof console source',
+        label: 'Demo console source',
       );
       expect(
         fallback.states,
         contains(
-          'context id ctx.proof, kind file, 1200 tokens, priority high, '
+          'context id ctx.demo, kind file, 1200 tokens, priority high, '
           'pinned, source packages/fleury_example_console/lib/'
           'fleury_example_console.dart',
         ),
@@ -186,12 +186,12 @@ void main() {
         label: 'Context pack',
         focused: true,
       );
-      expect(panel.state.selectedContextItemId, 'ctx.proof');
+      expect(panel.state.selectedContextItemId, 'ctx.demo');
 
       result = await tester.invokeSemanticAction(
         SemanticAction.activate,
         role: SemanticRole.contextItem,
-        label: 'Proof scenario',
+        label: 'Demo scenario',
       );
       expect(result.completed, isTrue);
       expect(controller.selectedIndex, 1);
@@ -200,7 +200,7 @@ void main() {
       tester.render(size: const CellSize(100, 6));
       final row = tester.semantics().single(
         role: SemanticRole.contextItem,
-        label: 'Proof scenario',
+        label: 'Demo scenario',
         selected: true,
         action: SemanticAction.copy,
       );
@@ -295,15 +295,15 @@ void main() {
         final result = await tester.invokeSemanticAction(
           SemanticAction.copy,
           role: SemanticRole.contextItem,
-          label: 'Proof console source',
+          label: 'Demo console source',
         );
 
         expect(result.completed, isTrue);
         expect(
           clipboard.lastWritten,
-          'Proof console source | file | high | pinned | 1200 tokens | '
+          'Demo console source | file | high | pinned | 1200 tokens | '
           'packages/fleury_example_console/lib/fleury_example_console.dart | '
-          'App shell and proof fixtures',
+          'App shell and demo fixtures',
         );
         expect(copied?.itemIndex, 0);
         expect(copied?.report.policy.name, 'inProcessOnly');

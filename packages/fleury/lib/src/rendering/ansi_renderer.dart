@@ -85,11 +85,11 @@ final class AnsiRenderer {
   /// [StringBuffer] and flushed to [sink] in a single `write` call.
   /// This reduces per-frame `sink.write` calls (and the IOSink queue
   /// operations they trigger downstream) from O(dirty cells) to one.
-  ///
   /// [dirtyBounds], when provided, must conservatively contain every cell that
   /// can differ between [previous] and [next]. The renderer then scans only
-  /// that rectangle. Pass null whenever layout, removal, scrolling, or any
-  /// other unsafe mutation can change cells outside the known painted region.
+  /// that rectangle and skips whole-screen passes (diff stats, scroll
+  /// detection). Pass null whenever layout, removal, scrolling, or any other
+  /// unsafe mutation can change cells outside the known painted region.
   void renderDiff(
     CellBuffer previous,
     CellBuffer next,
@@ -102,21 +102,32 @@ final class AnsiRenderer {
       'AnsiRenderer.renderDiff: buffer sizes differ '
       '(previous=${previous.size}, next=${next.size}).',
     );
-
     final diffBounds = dirtyBounds?.intersect(
       CellRect(offset: CellOffset.zero, size: next.size),
     );
     if (dirtyBounds != null && diffBounds == null) return;
-    if (diffBounds == null) {
-      if (_buffersEqual(previous, next)) return;
-    } else if (_buffersEqual(previous, next, bounds: diffBounds)) {
+    if (diffBounds != null) {
+      final buf = StringBuffer();
+      final anyDirty = _appendCellDiff(
+        previous,
+        next,
+        buf,
+        bounds: diffBounds,
+        onDirtyCell: onDirtyCell,
+      );
+      if (!anyDirty) return;
+      final output = StringBuffer();
+      if (synchronizedOutput) output.write(_beginSyncUpdate);
+      output.write(buf);
+      if (synchronizedOutput) output.write(_endSyncUpdate);
+      sink.write(output.toString());
       return;
     }
+    final screenStats = _screenDiffStats(previous, next);
+    if (screenStats.dirtyCells == 0) return;
 
     final size = next.size;
-    final scrollUpRows = diffBounds == null
-        ? _detectBeneficialScrollUp(previous, next)
-        : null;
+    final scrollUpRows = _detectBeneficialScrollUp(previous, next, screenStats);
     if (scrollUpRows != null) {
       final scrolledPrevious = CellBuffer(size);
       scrolledPrevious.copyRectFrom(
@@ -141,7 +152,6 @@ final class AnsiRenderer {
       previous,
       next,
       buf,
-      dirtyBounds: diffBounds,
       onDirtyCell: onDirtyCell,
     );
     if (!anyDirty) return;
@@ -156,14 +166,14 @@ final class AnsiRenderer {
     CellBuffer previous,
     CellBuffer next,
     StringBuffer buf, {
-    CellRect? dirtyBounds,
+    CellRect? bounds,
     void Function(int col, int row)? onDirtyCell,
   }) {
     final size = next.size;
-    final top = dirtyBounds?.top ?? 0;
-    final bottom = dirtyBounds?.bottom ?? size.rows;
-    final left = dirtyBounds?.left ?? 0;
-    final right = dirtyBounds?.right ?? size.cols;
+    final top = bounds?.top ?? 0;
+    final bottom = bounds?.bottom ?? size.rows;
+    final left = bounds?.left ?? 0;
+    final right = bounds?.right ?? size.cols;
     int? cursorRow;
     int? cursorCol;
     CellStyle? emittedStyle;
@@ -171,113 +181,116 @@ final class AnsiRenderer {
     var styleBytesEmitted = false;
     var anyDirty = false;
 
-    for (var row = top; row < bottom; row++) {
-      for (var col = left; col < right; col++) {
-        final newCell = next.atColRow(col, row);
+    void appendCell(int col, int row) {
+      final newCell = next.atColRow(col, row);
 
-        // Continuation cells emit nothing — the leading's grapheme
-        // advances the terminal cursor across them.
-        if (newCell.role == CellRole.continuation) continue;
+      // Continuation cells emit nothing — the leading's grapheme
+      // advances the terminal cursor across them.
+      if (newCell.role == CellRole.continuation) return;
 
-        // protocolCovered cells are owned by an adjacent protocol
-        // anchor — the terminal protocol has already painted them.
-        // Don't emit a cursor move, don't emit content, don't emit a
-        // clear.
-        if (newCell.role == CellRole.protocolCovered) continue;
+      // protocolCovered cells are owned by an adjacent protocol
+      // anchor — the terminal protocol has already painted them.
+      // Don't emit a cursor move, don't emit content, don't emit a
+      // clear.
+      if (newCell.role == CellRole.protocolCovered) return;
 
-        final oldCell = previous.atColRow(col, row);
-        if (newCell == oldCell) continue;
+      final oldCell = previous.atColRow(col, row);
+      if (newCell == oldCell) return;
 
-        anyDirty = true;
-        // Surfaces "this cell got emitted" for tools that need a
-        // dirty-cell list — paint-flashing overlay, etc. Null by
-        // default so production pays nothing.
-        onDirtyCell?.call(col, row);
+      anyDirty = true;
+      // Surfaces "this cell got emitted" for tools that need a
+      // dirty-cell list — paint-flashing overlay, etc. Null by
+      // default so production pays nothing.
+      onDirtyCell?.call(col, row);
 
-        // Cursor positioning. Pick the shortest encoding that lands the
-        // cursor at (row, col); see [_cursorMove]. Bytes-on-the-wire matter
-        // more than CPU here, and cursor moves are the dominant frame
-        // overhead on scroll/dashboard/sparse updates.
-        if (cursorRow == row && cursorCol != null && cursorCol < col) {
-          final gap = _sameStyleAsciiGap(
-            previous,
-            next,
-            row,
-            cursorCol,
-            col,
-            emittedStyle,
-          );
-          if (gap != null) {
-            final move = _cursorMove(cursorRow, cursorCol, row, col);
-            if (gap.length < move.length) {
-              buf.write(gap);
-              cursorCol = col;
-            }
+      // Cursor positioning. Pick the shortest encoding that lands the
+      // cursor at (row, col); see [_cursorMove]. Bytes-on-the-wire matter
+      // more than CPU here, and cursor moves are the dominant frame
+      // overhead on scroll/dashboard/sparse updates.
+      final fromCol = cursorCol;
+      if (cursorRow == row && fromCol != null && fromCol < col) {
+        final gap = _plainAsciiGap(
+          previous,
+          next,
+          row,
+          fromCol,
+          col,
+          emittedStyle,
+        );
+        if (gap != null) {
+          final move = _cursorMove(cursorRow, cursorCol, row, col);
+          if (gap.length < move.length) {
+            buf.write(gap);
+            cursorCol = col;
           }
         }
-        if (cursorRow != row || cursorCol != col) {
-          buf.write(_cursorMove(cursorRow, cursorCol, row, col));
-          cursorRow = row;
-          cursorCol = col;
-        }
+      }
+      if (cursorRow != row || cursorCol != col) {
+        buf.write(_cursorMove(cursorRow, cursorCol, row, col));
+        cursorRow = row;
+        cursorCol = col;
+      }
 
-        // Protocol anchors are emitted verbatim: the grapheme IS the
-        // escape sequence to send to the terminal. No SGR wrapping
-        // (the protocol carries its own colors), no cursor advance
-        // accounting (the protocol moves the cursor however it wants).
-        if (newCell.role == CellRole.protocolAnchor) {
-          buf.write(newCell.grapheme!);
-          // The terminal may leave the cursor anywhere after the
-          // protocol completes; invalidate our cached position/style so
-          // the next dirty cell re-emits a cursor move and resets SGR.
-          cursorRow = null;
-          cursorCol = null;
-          emittedStyle = null;
-          styleResetRequired = true;
-          continue;
-        }
+      // Protocol anchors are emitted verbatim: the grapheme IS the
+      // escape sequence to send to the terminal. No SGR wrapping
+      // (the protocol carries its own colors), no cursor advance
+      // accounting (the protocol moves the cursor however it wants).
+      if (newCell.role == CellRole.protocolAnchor) {
+        buf.write(newCell.grapheme!);
+        // The terminal may leave the cursor anywhere after the
+        // protocol completes; invalidate our cached position/style so
+        // the next dirty cell re-emits a cursor move and resets SGR.
+        cursorRow = null;
+        cursorCol = null;
+        emittedStyle = null;
+        styleResetRequired = true;
+        return;
+      }
 
-        // Style change. Emit a combined SGR delta where the terminal state is
-        // known; fall back to reset+set when a protocol anchor invalidated the
-        // cache. Empty-style runs only emit a reset when transitioning out of
-        // a previously emitted non-empty style, or after an invalidating
-        // protocol anchor.
-        if (newCell.style != emittedStyle) {
-          if (newCell.style == CellStyle.empty) {
-            if (styleResetRequired ||
-                (emittedStyle != null && emittedStyle != CellStyle.empty)) {
-              buf.write('\x1B[0m');
-              styleBytesEmitted = true;
-              styleResetRequired = false;
-            }
-          } else {
-            final encoded = _encodeStyleTransition(
-              emittedStyle,
-              newCell.style,
-              resetFirst: styleResetRequired,
-            );
-            if (encoded.isNotEmpty) {
-              buf.write(encoded);
-              styleBytesEmitted = true;
-            }
+      // Style change. Emit a combined SGR delta where the terminal state is
+      // known; fall back to reset+set when a protocol anchor invalidated the
+      // cache. Empty-style runs only emit a reset when transitioning out of
+      // a previously emitted non-empty style, or after an invalidating
+      // protocol anchor.
+      if (newCell.style != emittedStyle) {
+        if (newCell.style == CellStyle.empty) {
+          if (styleResetRequired ||
+              (emittedStyle != null && emittedStyle != CellStyle.empty)) {
+            buf.write('\x1B[0m');
+            styleBytesEmitted = true;
             styleResetRequired = false;
           }
-          emittedStyle = newCell.style;
+        } else {
+          final encoded = _encodeStyleTransition(
+            emittedStyle,
+            newCell.style,
+            resetFirst: styleResetRequired,
+          );
+          if (encoded.isNotEmpty) {
+            buf.write(encoded);
+            styleBytesEmitted = true;
+          }
+          styleResetRequired = false;
         }
+        emittedStyle = newCell.style;
+      }
 
-        // Emit the cell's content.
-        final grapheme = newCell.role == CellRole.empty
-            ? ' '
-            : newCell.grapheme!;
-        buf.write(grapheme);
+      // Emit the cell's content.
+      final grapheme = newCell.role == CellRole.empty ? ' ' : newCell.grapheme!;
+      buf.write(grapheme);
 
-        // Advance the cursor for next iteration. A leading cell with a
-        // continuation to its right is wide (2 columns); otherwise 1.
-        final isWide =
-            newCell.role == CellRole.leading &&
-            col + 1 < size.cols &&
-            next.atColRow(col + 1, row).role == CellRole.continuation;
-        cursorCol = col + (isWide ? 2 : 1);
+      // Advance the cursor for next iteration. A leading cell with a
+      // continuation to its right is wide (2 columns); otherwise 1.
+      final isWide =
+          newCell.role == CellRole.leading &&
+          col + 1 < size.cols &&
+          next.atColRow(col + 1, row).role == CellRole.continuation;
+      cursorCol = col + (isWide ? 2 : 1);
+    }
+
+    for (var row = top; row < bottom; row++) {
+      for (var col = left; col < right; col++) {
+        appendCell(col, row);
       }
     }
 
@@ -322,6 +335,10 @@ final class AnsiRenderer {
   ///     than an absolute reposition and preserves the column.
   ///   - Different row, target column 0: CNL/CPL (`CSI n E` / `CSI n F`) can
   ///     move vertically and return to line start in one escape.
+  ///   - One row down: LF and CRLF are shorter equivalents for same-column and
+  ///     line-start moves; CRLF can also beat CNL plus a horizontal move for
+  ///     indented next-line targets. Because the target row is in-bounds, LF
+  ///     cannot scroll the screen here.
   ///   - Otherwise: try a vertical relative move plus a horizontal relative
   ///     move, and fall back to absolute if that is shorter.
   ///
@@ -333,6 +350,16 @@ final class AnsiRenderer {
       if (fromRow == row) {
         shortest = _shorter(shortest, _horizontalMove(fromCol, col));
       } else {
+        if (row == fromRow + 1) {
+          if (fromCol == col) {
+            shortest = _shorter(shortest, '\n');
+          }
+          if (col == 0) {
+            shortest = _shorter(shortest, fromCol == 0 ? '\n' : '\r\n');
+          } else {
+            shortest = _shorter(shortest, '\r\n${_horizontalMove(0, col)}');
+          }
+        }
         if (fromCol == col) {
           shortest = _shorter(shortest, _verticalMove(fromRow, row));
         }
@@ -389,7 +416,7 @@ final class AnsiRenderer {
 
   static String _scrollUp(int rows) => rows == 1 ? '\x1B[S' : '\x1B[${rows}S';
 
-  static String? _sameStyleAsciiGap(
+  static String? _plainAsciiGap(
     CellBuffer previous,
     CellBuffer next,
     int row,
@@ -398,12 +425,12 @@ final class AnsiRenderer {
     CellStyle? emittedStyle,
   ) {
     if (fromCol >= toCol) return null;
-    final effectiveStyle = emittedStyle ?? CellStyle.empty;
+    if (emittedStyle != null && emittedStyle != CellStyle.empty) return null;
     final out = StringBuffer();
     for (var col = fromCol; col < toCol; col++) {
       final cell = next.atColRow(col, row);
       if (previous.atColRow(col, row) != cell) return null;
-      if (cell.style != effectiveStyle) return null;
+      if (cell.style != CellStyle.empty) return null;
       switch (cell.role) {
         case CellRole.empty:
           out.write(' ');
@@ -431,48 +458,52 @@ final class AnsiRenderer {
     return true;
   }
 
-  static bool _buffersEqual(CellBuffer a, CellBuffer b, {CellRect? bounds}) {
-    final size = a.size;
-    if (b.size != size) return false;
-    final top = bounds?.top ?? 0;
-    final bottom = bounds?.bottom ?? size.rows;
-    final left = bounds?.left ?? 0;
-    final right = bounds?.right ?? size.cols;
-    for (var row = top; row < bottom; row++) {
-      for (var col = left; col < right; col++) {
-        if (a.atColRow(col, row) != b.atColRow(col, row)) return false;
-      }
-    }
-    return true;
-  }
-
-  static int? _detectBeneficialScrollUp(CellBuffer previous, CellBuffer next) {
+  static int? _detectBeneficialScrollUp(
+    CellBuffer previous,
+    CellBuffer next,
+    ({int dirtyCells, bool hasProtocolCells}) stats,
+  ) {
     final size = previous.size;
     if (size != next.size || size.rows < 2) return null;
-    if (_containsProtocolCell(previous) || _containsProtocolCell(next)) {
-      return null;
-    }
 
-    final normalDirty = _dirtyCellCount(previous, next);
+    if (stats.hasProtocolCells) return null;
+    final normalDirty = stats.dirtyCells;
     var bestShift = 0;
     var bestDirty = normalDirty;
     for (var shift = 1; shift < size.rows; shift++) {
-      var retainedNonEmpty = false;
+      final retainedNonEmpty = _rowHasNonEmpty(previous, shift);
+      if (!retainedNonEmpty) continue;
+      if (!_rowsEqual(previous, shift, next, 0)) continue;
       var shiftedDirty = 0;
-      for (var row = 0; row < size.rows - shift; row++) {
+      var abandoned = false;
+      for (var row = 1; row < size.rows - shift; row++) {
         for (var col = 0; col < size.cols; col++) {
           final oldCell = previous.atColRow(col, row + shift);
           final newCell = next.atColRow(col, row);
-          if (oldCell != newCell) shiftedDirty++;
-          if (oldCell.role != CellRole.empty) retainedNonEmpty = true;
+          if (oldCell != newCell) {
+            shiftedDirty++;
+            if (shiftedDirty >= bestDirty) {
+              abandoned = true;
+              break;
+            }
+          }
         }
+        if (abandoned) break;
       }
+      if (abandoned) continue;
       for (var row = size.rows - shift; row < size.rows; row++) {
         for (var col = 0; col < size.cols; col++) {
-          if (next.atColRow(col, row) != const Cell.empty()) shiftedDirty++;
+          if (next.atColRow(col, row) != const Cell.empty()) {
+            shiftedDirty++;
+            if (shiftedDirty >= bestDirty) {
+              abandoned = true;
+              break;
+            }
+          }
         }
+        if (abandoned) break;
       }
-      if (retainedNonEmpty && shiftedDirty < bestDirty) {
+      if (!abandoned && shiftedDirty < bestDirty) {
         bestShift = shift;
         bestDirty = shiftedDirty;
       }
@@ -480,27 +511,48 @@ final class AnsiRenderer {
     return bestShift == 0 ? null : bestShift;
   }
 
-  static int _dirtyCellCount(CellBuffer previous, CellBuffer next) {
+  static ({int dirtyCells, bool hasProtocolCells}) _screenDiffStats(
+    CellBuffer previous,
+    CellBuffer next,
+  ) {
     final size = previous.size;
     var dirty = 0;
+    var hasProtocolCells = false;
     for (var row = 0; row < size.rows; row++) {
       for (var col = 0; col < size.cols; col++) {
-        if (previous.atColRow(col, row) != next.atColRow(col, row)) dirty++;
+        final previousCell = previous.atColRow(col, row);
+        final nextCell = next.atColRow(col, row);
+        if (previousCell != nextCell) dirty++;
+        hasProtocolCells =
+            hasProtocolCells ||
+            previousCell.role == CellRole.protocolAnchor ||
+            previousCell.role == CellRole.protocolCovered ||
+            nextCell.role == CellRole.protocolAnchor ||
+            nextCell.role == CellRole.protocolCovered;
       }
     }
-    return dirty;
+    return (dirtyCells: dirty, hasProtocolCells: hasProtocolCells);
   }
 
-  static bool _containsProtocolCell(CellBuffer buffer) {
-    final size = buffer.size;
-    for (var row = 0; row < size.rows; row++) {
-      for (var col = 0; col < size.cols; col++) {
-        final role = buffer.atColRow(col, row).role;
-        if (role == CellRole.protocolAnchor ||
-            role == CellRole.protocolCovered) {
-          return true;
-        }
+  static bool _rowsEqual(
+    CellBuffer previous,
+    int previousRow,
+    CellBuffer next,
+    int nextRow,
+  ) {
+    final size = previous.size;
+    for (var col = 0; col < size.cols; col++) {
+      if (previous.atColRow(col, previousRow) != next.atColRow(col, nextRow)) {
+        return false;
       }
+    }
+    return true;
+  }
+
+  static bool _rowHasNonEmpty(CellBuffer buffer, int row) {
+    final size = buffer.size;
+    for (var col = 0; col < size.cols; col++) {
+      if (buffer.atColRow(col, row).role != CellRole.empty) return true;
     }
     return false;
   }

@@ -132,9 +132,7 @@ abstract interface class TerminalDriver {
 /// suppress framework frame writes while the handoff is active and trigger a
 /// repaint after resume.
 abstract interface class TerminalHandoffDriver {
-  Future<T> runWithTerminalHandoff<T>(
-    FutureOr<T> Function() operation,
-  );
+  Future<T> runWithTerminalHandoff<T>(FutureOr<T> Function() operation);
 }
 
 /// Runs [operation] through [driver]'s handoff hook when supported.
@@ -147,9 +145,7 @@ Future<T> withTerminalHandoff<T>(
 ) {
   final handoff = driver;
   if (handoff is TerminalHandoffDriver) {
-    return (handoff as TerminalHandoffDriver).runWithTerminalHandoff(
-      operation,
-    );
+    return (handoff as TerminalHandoffDriver).runWithTerminalHandoff(operation);
   }
   return Future<T>.sync(operation);
 }

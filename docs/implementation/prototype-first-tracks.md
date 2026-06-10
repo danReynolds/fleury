@@ -5,7 +5,7 @@
 effects  
 **Owner:** Shared across semantic app graph, app kernel, effects/workflow,
 replay/devtools/testing, terminal capability/security, and the example
-subpackage proof app.
+subpackage demo app.
 
 ## Purpose
 
@@ -31,7 +31,7 @@ become RFCs later.
 - [RFC 0013: Capability and security contract](../rfcs/0013-capability-security-contract.md)
   defines capability and output-safety state that debug capture, subprocess
   output, and future replay must respect.
-- [Proof-app scenario](proof-app-scenario.md) defines the Phase 1 app pressure:
+- [Demo-app scenario](demo-app-scenario.md) defines the Phase 1 app pressure:
   screens, commands, composer input, data table, logs/output, diagnostics,
   selection, and debug capture.
 - [Scope cut list](cut-list.md) explicitly cuts full progressive-mode and full
@@ -40,7 +40,7 @@ become RFCs later.
 ## Prototype Rules
 
 - Prototype against the example subpackage and Phase 1 primitives.
-- Keep APIs internal or experimental until the proof app uses them twice.
+- Keep APIs internal or experimental until the demo app uses them twice.
 - Prefer semantic assertions over rendered-cell assertions for behavior.
 - Capture enough data to write a regression test; do not require shareable
   replay artifacts in Phase 1.
@@ -63,7 +63,7 @@ subpackage:
 
 - Fields: project name, environment select, region select, API key/password,
   confirm checkbox, and submit/cancel actions.
-- Full-screen projection: normal Fleury widgets inside the proof app.
+- Full-screen projection: normal Fleury widgets inside the demo app.
 - Prompt projection: sequential prompt-style fallback driven by the same field
   definitions, validation, labels, defaults, and submit result.
 - Test projection: semantic tester can fill fields and submit without relying
@@ -88,13 +88,13 @@ shared model is viable.
 
 - `FormDefinition`, `FormController`, `FormPanel`, and `FormPromptSession` now
   live in `fleury_widgets`.
-- The proof app Connection screen uses the shared connection setup definition
+- The demo app Connection screen uses the shared connection setup definition
   as a full-screen projection.
 - `test/form_test.dart` covers full-screen semantics, inline layout semantics,
   required-field validation, redacted secret values, valid submit, and
   prompt-mode progression, plus shared number/date field parsing, bounds,
   snapshots, visual projections, and accessibility output.
-- `proof_console_test.dart` covers proof-app navigation to the Connection
+- `demo_console_test.dart` covers demo-app navigation to the Connection
   screen, semantic form state, typed number/date field state, redacted API-key
   field state, keyboard filling, submit, and transcript feedback.
 
@@ -121,9 +121,9 @@ regression test without promising full replay artifacts?
 
 ### Narrow Prototype Scenario
 
-Capture a proof-app interaction around a flaky layout or workflow edge:
+Capture a demo-app interaction around a flaky layout or workflow edge:
 
-- Start proof app.
+- Start demo app.
 - Navigate to Runs.
 - Resize from `80x24` to `120x40`.
 - Start a fake worker.
@@ -158,7 +158,7 @@ The capture should include structured records only where useful.
 
 If successful, implement targeted hook points in RDT.2 and expose them in the
 debug inspector work. Full replay can remain Phase 2 or Phase 3 unless the
-proof app exposes bugs that require it earlier.
+demo app exposes bugs that require it earlier.
 
 ## Track C: Structured Effects And Workers
 
@@ -203,7 +203,7 @@ This is not the full process runner or shell API.
 
 If successful, feed the smallest useful state model into M1.6 worker/task
 model, M1.10 debug inspector, M1.11 sanitized output pipeline, and the
-proof-app journey scenario.
+demo-app journey scenario.
 
 ## Track D: Subprocess Handoff Boundary
 
@@ -270,7 +270,7 @@ Stop a prototype and defer it if:
 
 - It needs broad public API to prove the scenario.
 - It blocks semantic tree, app shell, text editing, DataTable, or the example
-  proof app.
+  demo app.
 - It requires full replay artifacts to be useful.
 - It weakens strict defaults for untrusted output.
 - It becomes a substitute for Phase 1 implementation rather than a de-risking

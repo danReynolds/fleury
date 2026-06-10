@@ -82,6 +82,19 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
     return int.tryParse(raw);
   }
 
+  StreamSubscription<ProcessSignal>? _watchSignal(
+    ProcessSignal signal,
+    void Function(ProcessSignal signal) onSignal,
+  ) {
+    try {
+      return signal.watch().listen(onSignal);
+    } on SignalException {
+      return null;
+    } on UnsupportedError {
+      return null;
+    }
+  }
+
   @override
   TerminalCapabilities get capabilities =>
       detectTerminalCapabilitiesFromEnvironment(Platform.environment);
@@ -133,15 +146,15 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
       cancelOnError: false,
     );
 
-    _resizeSubscription = ProcessSignal.sigwinch.watch().listen((_) {
+    _resizeSubscription = _watchSignal(ProcessSignal.sigwinch, (_) {
       _events.add(ResizeEvent(size));
     });
 
-    _intSubscription = ProcessSignal.sigint.watch().listen((_) async {
+    _intSubscription = _watchSignal(ProcessSignal.sigint, (_) async {
       await restore();
       exit(130); // 128 + SIGINT
     });
-    _termSubscription = ProcessSignal.sigterm.watch().listen((_) async {
+    _termSubscription = _watchSignal(ProcessSignal.sigterm, (_) async {
       await restore();
       exit(143); // 128 + SIGTERM
     });
@@ -150,8 +163,8 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
     // stopping; on `fg`, re-enter and repaint. SIGCONT is watched for the
     // whole session; SIGTSTP is dropped during the stop and re-armed on
     // resume (so the default stop action can fire).
-    _contSubscription = ProcessSignal.sigcont.watch().listen((_) => _resume());
-    _tstpSubscription = ProcessSignal.sigtstp.watch().listen((_) => _suspend());
+    _contSubscription = _watchSignal(ProcessSignal.sigcont, (_) => _resume());
+    _tstpSubscription = _watchSignal(ProcessSignal.sigtstp, (_) => _suspend());
 
     _active = true;
   }
@@ -242,7 +255,8 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
     if (mode == null || !_active) return;
     if (_changedStdin) _setRawMode();
     if (_wroteEnterSequences) _stdout.write(_enterSequences(mode));
-    _tstpSubscription ??= ProcessSignal.sigtstp.watch().listen(
+    _tstpSubscription ??= _watchSignal(
+      ProcessSignal.sigtstp,
       (_) => _suspend(),
     );
     _events.add(ResizeEvent(size));

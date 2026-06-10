@@ -16,6 +16,9 @@ Do not hand-edit `peerRuns` into
 
 - `nocterm/sb1_counter` - Nocterm `SB.1 Time To Counter App` fixture using
   Nocterm `0.6.0` and `NoctermTester`.
+- `bubbletea/sb1_counter`, `textual/sb1_counter`, and `ink/sb1_counter` -
+  wire-only `SB.1 Counter/Startup` fixtures for first-paint and runtime-floor
+  comparisons across Go, Python, and React/Node full-UI app paths.
 - `nocterm/sb2_text_editing` - Nocterm `SB.2 Text Editing Composer Stress`
   fixture using Nocterm `0.6.0` `TextField` plus fixture-owned adapters for
   undo/redo, history, and completion.
@@ -79,15 +82,23 @@ Do not hand-edit `peerRuns` into
 - `nocterm/sb12_layout_dirtiness`, `ratatui/sb12_layout_dirtiness`, and
   `opentui/sb12_layout_dirtiness` - wire-only `SB.12 Layout Dirtiness Cache`
   fixtures for layout/paint dirtiness and minimal redraw comparisons.
+- `textual/sb7_resize_storm`, `ratatui/sb7_resize_storm`, and
+  `opentui/sb7_resize_storm` - wire-only `SB.7 Resize Storm` fixtures for
+  repeated PTY resize events across table, log, and text-input state.
 - `textual/sb8_overlay_palette`, `ink/sb8_overlay_palette`, and
   `bubbletea/sb8_overlay_palette` - wire-only `SB.8 Overlay/Palette Churn`
   fixtures for transient command palette open/filter/close work.
 - `textual/sb9_subprocess_output`, `bubbletea/sb9_subprocess_output`, and
   `opentui/sb9_subprocess_output` - wire-only `SB.9 Subprocess/Untrusted
   Output` fixtures for streaming process-output ingestion.
-- `textual/sb10_proof_app`, `bubbletea/sb10_proof_app`, and
-  `ink/sb10_proof_app` - wire-only `SB.10 Proof-App Journey` fixtures for a
+- `textual/sb10_demo_app`, `bubbletea/sb10_demo_app`, and
+  `ink/sb10_demo_app` - wire-only `SB.10 Demo-App Journey` fixtures for a
   compact full-app navigation/action/status flow.
+- `textual/sb11_treetable_filter_copy`,
+  `ratatui/sb11_treetable_filter_copy`, and
+  `opentui/sb11_treetable_filter_copy` - wire-only `SB.11
+  TreeTable/filter/copy` fixtures for hierarchical expansion, movement,
+  filter-to-target, and selected-row copy output.
 
 Run from the fixture package:
 

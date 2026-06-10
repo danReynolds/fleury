@@ -8,14 +8,14 @@
 // other Listenables, or for scoping a rebuild to a small subtree via
 // the reused `child`.
 //
-// The optional `child` is reused across rebuilds — a performance
+// The optional `child` is reused across rebuilds - a performance
 // escape hatch for subtree content that doesn't depend on the
 // notifier. Common pattern: build expensive static content outside,
 // pass it as `child`, have the builder wrap it in something that
 // does depend on the notifier:
 //
 //   ListenableBuilder(
-//     animation: model,
+//     listenable: model,
 //     child: ExpensiveStatic(),
 //     builder: (ctx, child) => Padding(
 //       padding: EdgeInsets.only(left: model.indent),
@@ -31,14 +31,32 @@ import 'framework.dart';
 class ListenableBuilder extends StatefulWidget {
   const ListenableBuilder({
     super.key,
-    required this.animation,
+    Listenable? listenable,
+    @Deprecated('Use listenable instead. This alias will be removed later.')
+    Listenable? animation,
     required this.builder,
     this.child,
-  });
+  }) : assert(
+         listenable != null || animation != null,
+         'ListenableBuilder requires a listenable.',
+       ),
+       assert(
+         listenable == null || animation == null,
+         'Pass either listenable or animation, not both.',
+       ),
+       _listenable = listenable,
+       _animation = animation;
+
+  final Listenable? _listenable;
+  final Listenable? _animation;
 
   /// The notifier to listen to. An `Animation`, a `FrameTicker`, or any
   /// other [Listenable].
-  final Listenable animation;
+  Listenable get listenable => _listenable ?? _animation!;
+
+  /// Compatibility alias for older Fleury code.
+  @Deprecated('Use listenable instead. This alias will be removed later.')
+  Listenable get animation => listenable;
 
   /// Called on every notification. Receives the BuildContext of
   /// the builder's location in the tree and the (unchanged) [child]
@@ -59,25 +77,25 @@ class _ListenableBuilderState extends State<ListenableBuilder> {
   @override
   void initState() {
     super.initState();
-    widget.animation.addListener(_onAnimationTick);
+    widget.listenable.addListener(_onListenableChanged);
   }
 
   @override
   void didUpdateWidget(ListenableBuilder oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(widget.animation, oldWidget.animation)) {
-      oldWidget.animation.removeListener(_onAnimationTick);
-      widget.animation.addListener(_onAnimationTick);
+    if (!identical(widget.listenable, oldWidget.listenable)) {
+      oldWidget.listenable.removeListener(_onListenableChanged);
+      widget.listenable.addListener(_onListenableChanged);
     }
   }
 
   @override
   void dispose() {
-    widget.animation.removeListener(_onAnimationTick);
+    widget.listenable.removeListener(_onListenableChanged);
     super.dispose();
   }
 
-  void _onAnimationTick() {
+  void _onListenableChanged() {
     if (!mounted) return;
     setState(() {});
   }

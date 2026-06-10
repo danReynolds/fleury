@@ -15,6 +15,12 @@ void main() {
           diff: const Duration(microseconds: 40),
           dirtyCells: 2,
           dirtyBounds: CellRect.fromLTWH(1, 2, 3, 4),
+          dirtySpans: const DirtySpanFrameStats(
+            rowCount: 1,
+            spanCount: 1,
+            coveredCellCount: 2,
+            longestSpan: 2,
+          ),
           dirtySources: const ['build:SecretField/_SecretFieldState'],
           layoutStats: const RenderLayoutFrameStats(
             performedCount: 8,
@@ -138,6 +144,8 @@ void main() {
     final frames = json['frames'] as List<Object?>;
     expect(frames.single, containsPair('reason', 'key:enter'));
     final frame = frames.single as Map<String, Object?>;
+    expect(frame['dirtySpans'], containsPair('spanCount', 1));
+    expect(frame['dirtySpans'], containsPair('averageSpanLength', 2.0));
     expect(frame['layoutStats'], containsPair('skippedCount', 3));
     expect(frame['repaintBoundaries'], containsPair('repaintedCount', 1));
     final outputs = json['outputSummaries'] as List<Object?>;
@@ -208,6 +216,25 @@ void main() {
       accessibilityField['states'],
       containsAll(<String>['focused', 'value redacted']),
     );
+  });
+
+  test('dirty span stats summarize row-contiguous dirty cells', () {
+    final stats = DirtySpanFrameStats.fromFlatCells(const [
+      0,
+      1,
+      4,
+      6,
+      7,
+      8,
+      12,
+    ], columns: 5);
+
+    expect(stats.rowCount, 3);
+    expect(stats.spanCount, 4);
+    expect(stats.coveredCellCount, 7);
+    expect(stats.longestSpan, 3);
+    expect(stats.averageSpanLength, closeTo(1.75, 0.001));
+    expect(stats.spansPerRow, closeTo(1.333, 0.001));
   });
 
   test('capture snapshot can serialize an explicit accessibility snapshot', () {

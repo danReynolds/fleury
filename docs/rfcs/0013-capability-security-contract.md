@@ -482,7 +482,7 @@ rule IDs in debug diagnostics without leaking the matched value.
 ```
 
 Human output can remain readable, but JSON is the contract for bug reports,
-CI fixtures, peer compatibility notes, and the proof-app Diagnostics screen.
+CI fixtures, peer compatibility notes, and the demo-app Diagnostics screen.
 
 ## 15. Semantics And Inspector Integration
 
@@ -540,7 +540,7 @@ practical in Phase 2.
 8. Expand inspector panels for terminal profile, requirements, fallbacks, and
    output sanitization.
 9. Implement `fleury diagnose --json`.
-10. Use the example proof app Diagnostics screen as the integration target.
+10. Use the example demo app Diagnostics screen as the integration target.
 
 ## 18. Open Questions
 

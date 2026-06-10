@@ -30,7 +30,15 @@ void main() {
     });
 
     test('relative cursor movement is categorized as cursor', () {
-      const sequence = '\x1B[2C\x1B[3D\x1B[1A\x1B[4B';
+      const sequence = '\x1B[2C\x1B[3D\x1B[1A\x1B[4B\x1B[E\x1B[2F';
+      final b = AnsiByteBreakdown.analyze(sequence);
+      expect(b.cursor, sequence.length);
+      expect(b.other, 0);
+      expect(b.content, 0);
+    });
+
+    test('C0 cursor controls are categorized as cursor', () {
+      const sequence = '\b\n\r';
       final b = AnsiByteBreakdown.analyze(sequence);
       expect(b.cursor, sequence.length);
       expect(b.other, 0);

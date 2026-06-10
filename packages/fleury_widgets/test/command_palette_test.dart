@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
@@ -23,10 +25,24 @@ void _open(FleuryTester tester, BuildContext ctx, List<Command> cmds) {
   tester.render();
 }
 
-void _openAppPalette(FleuryTester tester, BuildContext ctx) {
-  Navigator.of(ctx).present<void>(const AppCommandPalette());
+void _openRegistryPalette(FleuryTester tester, BuildContext ctx) {
+  unawaited(CommandPalette.open(ctx));
   tester.pump(const Duration(milliseconds: 300));
   tester.render();
+}
+
+AppCommand _openPaletteCommand() {
+  return AppCommand(
+    id: const CommandId('app.openPalette'),
+    title: 'Open Command Palette',
+    shortcuts: [KeyChord.ctrl.k],
+    semanticAction: SemanticAction.open,
+    run: (context) {
+      final buildContext = context.buildContext;
+      if (buildContext == null) return;
+      unawaited(CommandPalette.open(buildContext));
+    },
+  );
 }
 
 List<SemanticNode> _paletteCommandRows(FleuryTester tester) {
@@ -283,7 +299,7 @@ void main() {
     });
   });
 
-  group('AppCommandPalette', () {
+  group('CommandPalette registry mode', () {
     testWidgets('invokes active registry commands through the registry', (
       tester,
     ) async {
@@ -315,7 +331,7 @@ void main() {
         ),
       );
 
-      _openAppPalette(tester, ctx);
+      _openRegistryPalette(tester, ctx);
       tester.type('save');
       tester.pump();
       tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
@@ -350,7 +366,7 @@ void main() {
         ),
       );
 
-      _openAppPalette(tester, ctx);
+      _openRegistryPalette(tester, ctx);
       tester.type('workspace.reload');
       tester.pump();
 
@@ -363,51 +379,55 @@ void main() {
       expect(calls, ['reload']);
     });
 
-    testWidgets('repeated app palette cycles do not retain stale semantics', (
-      tester,
-    ) async {
-      final calls = <String>[];
-      tester.pumpWidget(
-        FleuryApp(
-          title: 'App',
-          commands: [
-            AppCommand(
-              id: const CommandId('cycle.one'),
-              title: 'Cycle One',
-              run: (_) {
-                calls.add('one');
-              },
-            ),
-            AppCommand(
-              id: const CommandId('cycle.two'),
-              title: 'Cycle Two',
-              run: (_) {
-                calls.add('two');
-              },
-            ),
-          ],
-          child: Navigator(home: _Capture((c) => ctx = c)),
-        ),
-      );
-
-      for (final title in ['Cycle One', 'Cycle Two', 'Cycle One']) {
-        _openAppPalette(tester, ctx);
-        tester.type(title);
-        tester.pump();
-        expect(
-          tester.semantics().byRole(SemanticRole.commandPalette),
-          hasLength(1),
+    testWidgets(
+      'repeated registry palette cycles do not retain stale semantics',
+      (tester) async {
+        final calls = <String>[];
+        tester.pumpWidget(
+          FleuryApp(
+            title: 'App',
+            commands: [
+              AppCommand(
+                id: const CommandId('cycle.one'),
+                title: 'Cycle One',
+                run: (_) {
+                  calls.add('one');
+                },
+              ),
+              AppCommand(
+                id: const CommandId('cycle.two'),
+                title: 'Cycle Two',
+                run: (_) {
+                  calls.add('two');
+                },
+              ),
+            ],
+            child: Navigator(home: _Capture((c) => ctx = c)),
+          ),
         );
-        tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
-        await _settleClose(tester);
-        expect(Navigator.of(ctx).depth, 1);
-        expect(tester.semantics().byRole(SemanticRole.commandPalette), isEmpty);
-      }
 
-      expect(calls, ['one', 'two', 'one']);
-    });
+        for (final title in ['Cycle One', 'Cycle Two', 'Cycle One']) {
+          _openRegistryPalette(tester, ctx);
+          tester.type(title);
+          tester.pump();
+          expect(
+            tester.semantics().byRole(SemanticRole.commandPalette),
+            hasLength(1),
+          );
+          tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+          await _settleClose(tester);
+          expect(Navigator.of(ctx).depth, 1);
+          expect(
+            tester.semantics().byRole(SemanticRole.commandPalette),
+            isEmpty,
+          );
+        }
 
-    testWidgets('app palette handles large repeated exact-query cycles', (
+        expect(calls, ['one', 'two', 'one']);
+      },
+    );
+
+    testWidgets('registry palette handles large repeated exact-query cycles', (
       tester,
     ) async {
       final calls = <String>[];
@@ -429,28 +449,12 @@ void main() {
                 },
               ),
           ],
-          screens: [
-            FleuryScreen(
-              id: const ScreenId('overview'),
-              title: 'Overview',
-              commands: [
-                AppCommand(
-                  id: const CommandId('screen.refresh'),
-                  title: 'Active Screen Refresh',
-                  run: (_) {
-                    calls.add('screen.refresh');
-                  },
-                ),
-              ],
-              builder: (_) => const Text('Overview body'),
-            ),
-          ],
           child: Navigator(home: _Capture((c) => ctx = c)),
         ),
       );
 
       for (final target in [1, 38, 75, 112]) {
-        _openAppPalette(tester, ctx);
+        _openRegistryPalette(tester, ctx);
         tester.type(title(target));
         tester.pump();
         final row = _paletteCommandRows(tester).single;
@@ -464,65 +468,72 @@ void main() {
       expect(calls, [id(1), id(38), id(75), id(112)]);
     });
 
-    testWidgets('app palette mixed repeated semantic and keyboard cycles', (
-      tester,
-    ) async {
-      final calls = <String>[];
-      tester.pumpWidget(
-        FleuryApp(
-          title: 'App',
-          commands: [
-            AppCommand(
-              id: const CommandId('cycle.alpha'),
-              title: 'Cycle Alpha',
-              run: (_) {
-                calls.add('alpha');
-              },
-            ),
-            AppCommand(
-              id: const CommandId('cycle.beta'),
-              title: 'Cycle Beta',
-              run: (_) {
-                calls.add('beta');
-              },
-            ),
-          ],
-          child: Navigator(home: _Capture((c) => ctx = c)),
-        ),
-      );
+    testWidgets(
+      'registry palette mixed repeated semantic and keyboard cycles',
+      (tester) async {
+        final calls = <String>[];
+        tester.pumpWidget(
+          FleuryApp(
+            title: 'App',
+            commands: [
+              AppCommand(
+                id: const CommandId('cycle.alpha'),
+                title: 'Cycle Alpha',
+                run: (_) {
+                  calls.add('alpha');
+                },
+              ),
+              AppCommand(
+                id: const CommandId('cycle.beta'),
+                title: 'Cycle Beta',
+                run: (_) {
+                  calls.add('beta');
+                },
+              ),
+            ],
+            child: Navigator(home: _Capture((c) => ctx = c)),
+          ),
+        );
 
-      for (var i = 0; i < 5; i++) {
-        final title = i.isEven ? 'Cycle Alpha' : 'Cycle Beta';
-        _openAppPalette(tester, ctx);
-        tester.type(title);
-        tester.pump();
-        if (i == 0) {
-          tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
-        } else if (i == 1) {
-          await tester.invokeSemanticAction(
-            SemanticAction.submit,
-            role: SemanticRole.commandPalette,
-          );
-        } else if (i == 2) {
-          final row = _paletteCommandRows(
-            tester,
-          ).where((node) => node.label == title).single;
-          await tester.invokeSemanticAction(SemanticAction.activate, node: row);
-        } else if (i == 3) {
-          tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
-        } else {
-          await tester.invokeSemanticAction(
-            SemanticAction.dismiss,
-            role: SemanticRole.commandPalette,
+        for (var i = 0; i < 5; i++) {
+          final title = i.isEven ? 'Cycle Alpha' : 'Cycle Beta';
+          _openRegistryPalette(tester, ctx);
+          tester.type(title);
+          tester.pump();
+          if (i == 0) {
+            tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+          } else if (i == 1) {
+            await tester.invokeSemanticAction(
+              SemanticAction.submit,
+              role: SemanticRole.commandPalette,
+            );
+          } else if (i == 2) {
+            final row = _paletteCommandRows(
+              tester,
+            ).where((node) => node.label == title).single;
+            await tester.invokeSemanticAction(
+              SemanticAction.activate,
+              node: row,
+            );
+          } else if (i == 3) {
+            tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+          } else {
+            await tester.invokeSemanticAction(
+              SemanticAction.dismiss,
+              role: SemanticRole.commandPalette,
+            );
+          }
+          await _settleClose(tester);
+          expect(Navigator.of(ctx).depth, 1, reason: 'cycle $i closed');
+          expect(
+            tester.semantics().byRole(SemanticRole.commandPalette),
+            isEmpty,
           );
         }
-        await _settleClose(tester);
-        expect(Navigator.of(ctx).depth, 1, reason: 'cycle $i closed');
-        expect(tester.semantics().byRole(SemanticRole.commandPalette), isEmpty);
-      }
 
-      expect(calls, ['alpha', 'beta', 'alpha']);
-    });
+        expect(calls, ['alpha', 'beta', 'alpha']);
+      },
+    );
 
     testWidgets('exposes app command metadata in palette semantics', (tester) {
       tester.pumpWidget(
@@ -542,7 +553,7 @@ void main() {
         ),
       );
 
-      _openAppPalette(tester, ctx);
+      _openRegistryPalette(tester, ctx);
 
       final command = _paletteCommandRows(tester).single;
       expect(command.label, 'Save File');
@@ -571,7 +582,7 @@ void main() {
         ),
       );
 
-      _openAppPalette(tester, ctx);
+      _openRegistryPalette(tester, ctx);
       tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
       await Future<void>.delayed(Duration.zero);
       tester.pump();
@@ -583,10 +594,74 @@ void main() {
       expect(command.enabled, isFalse);
     });
 
-    testWidgets('includes active screen commands before app commands', (
+    testWidgets('uses focused source context for scoped commands', (
+      tester,
+    ) async {
+      final focus = FocusNode(debugLabel: 'workspace-tabs');
+      addTearDown(focus.dispose);
+      final calls = <String>[];
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          commands: [_openPaletteCommand()],
+          child: Navigator(
+            home: CommandScope(
+              commands: [
+                AppCommand(
+                  id: const CommandId('tabs.runs'),
+                  title: 'Go to Runs',
+                  category: 'Navigation',
+                  semanticAction: SemanticAction.navigate,
+                  visible: (context) =>
+                      identical(context.buildContext, focus.context),
+                  run: (context) {
+                    calls.add(
+                      identical(context.buildContext, focus.context)
+                          ? 'source'
+                          : 'other',
+                    );
+                  },
+                ),
+              ],
+              child: Focus(
+                focusNode: focus,
+                autofocus: true,
+                child: const Text('Workspace tabs'),
+              ),
+            ),
+          ),
+        ),
+      );
+      tester.render();
+      focus.requestFocus();
+      tester.pump();
+      expect(focus.hasFocus, isTrue);
+
+      tester.sendKey(const KeyEvent(char: 'k', modifiers: {KeyModifier.ctrl}));
+      tester.pump(const Duration(milliseconds: 300));
+      tester.render();
+      expect(Navigator.of(focus.context!).depth, 2);
+      tester.type('Go to Runs');
+      tester.pump();
+
+      final paletteCommands = _paletteCommandRows(tester);
+      expect(paletteCommands.map((node) => node.label), ['Go to Runs']);
+      expect(paletteCommands.single.state.commandId, 'tabs.runs');
+      expect(paletteCommands.single.state.commandCategory, 'Navigation');
+
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      await _settleClose(tester);
+
+      expect(calls, ['source']);
+      expect(Navigator.of(focus.context!).depth, 1);
+    });
+
+    testWidgets('focused scoped commands shadow app commands with same id', (
       tester,
     ) async {
       const refresh = CommandId('refresh');
+      final focus = FocusNode(debugLabel: 'local-refresh');
+      addTearDown(focus.dispose);
       final calls = <String>[];
       tester.pumpWidget(
         FleuryApp(
@@ -600,38 +675,117 @@ void main() {
               },
             ),
           ],
-          screens: [
-            FleuryScreen(
-              id: const ScreenId('overview'),
-              title: 'Overview',
+          child: Navigator(
+            home: CommandScope(
               commands: [
                 AppCommand(
                   id: refresh,
-                  title: 'Refresh Overview',
+                  title: 'Refresh Local',
                   run: (_) {
-                    calls.add('screen');
+                    calls.add('local');
                   },
                 ),
               ],
-              builder: (_) => const Text('Overview body'),
+              child: Focus(
+                focusNode: focus,
+                autofocus: true,
+                child: _Capture((c) => ctx = c),
+              ),
             ),
-          ],
-          child: Navigator(home: _Capture((c) => ctx = c)),
+          ),
         ),
       );
+      tester.render();
+      focus.requestFocus();
+      tester.pump();
+      expect(focus.hasFocus, isTrue);
 
-      _openAppPalette(tester, ctx);
+      _openRegistryPalette(tester, ctx);
 
       final paletteCommands = _paletteCommandRows(tester);
-      expect(paletteCommands.map((node) => node.label), ['Refresh Overview']);
+      expect(paletteCommands.map((node) => node.label), ['Refresh Local']);
       expect(paletteCommands.single.state.commandId, 'refresh');
 
       tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
       await Future<void>.delayed(Duration.zero);
 
-      expect(calls, ['screen']);
+      expect(calls, ['local']);
       await _settleClose(tester);
       expect(Navigator.of(ctx).depth, 1);
+    });
+
+    testWidgets('global opener follows the currently focused command scope', (
+      tester,
+    ) async {
+      final leftFocus = FocusNode(debugLabel: 'left-pane');
+      final rightFocus = FocusNode(debugLabel: 'right-pane');
+      addTearDown(leftFocus.dispose);
+      addTearDown(rightFocus.dispose);
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          commands: [_openPaletteCommand()],
+          child: Navigator(
+            home: Row(
+              children: [
+                CommandScope(
+                  commands: [
+                    AppCommand(
+                      id: const CommandId('left.action'),
+                      title: 'Left Action',
+                      run: (_) {},
+                    ),
+                  ],
+                  child: Focus(
+                    focusNode: leftFocus,
+                    autofocus: true,
+                    child: const Text('Left pane'),
+                  ),
+                ),
+                CommandScope(
+                  commands: [
+                    AppCommand(
+                      id: const CommandId('right.action'),
+                      title: 'Right Action',
+                      run: (_) {},
+                    ),
+                  ],
+                  child: Focus(
+                    focusNode: rightFocus,
+                    child: const Text('Right pane'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      tester.render();
+      leftFocus.requestFocus();
+      tester.pump();
+
+      tester.sendKey(const KeyEvent(char: 'k', modifiers: {KeyModifier.ctrl}));
+      tester.pump(const Duration(milliseconds: 300));
+      tester.render();
+      tester.type('Action');
+      tester.pump();
+      expect(_paletteCommandRows(tester).map((node) => node.label), [
+        'Left Action',
+      ]);
+
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+      await _settleClose(tester);
+      rightFocus.requestFocus();
+      tester.pump();
+
+      tester.sendKey(const KeyEvent(char: 'k', modifiers: {KeyModifier.ctrl}));
+      tester.pump(const Duration(milliseconds: 300));
+      tester.render();
+      tester.type('Action');
+      tester.pump();
+      expect(_paletteCommandRows(tester).map((node) => node.label), [
+        'Right Action',
+      ]);
     });
   });
 }

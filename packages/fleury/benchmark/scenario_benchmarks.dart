@@ -87,6 +87,8 @@ final class _ScenarioOptions {
     var seed = 1;
     var size = const CellSize(80, 24);
     var textChars = _defaultTextChars;
+    var profileMemory = false;
+    var sb12Phase = _Sb12Phase.all;
 
     for (final arg in args) {
       if (arg == '--json') {
@@ -105,6 +107,10 @@ final class _ScenarioOptions {
         seed = _positiveInt(arg, '--seed=');
       } else if (arg.startsWith('--text-chars=')) {
         textChars = _positiveInt(arg, '--text-chars=');
+      } else if (arg == '--profile-memory') {
+        profileMemory = true;
+      } else if (arg.startsWith('--sb12-phase=')) {
+        sb12Phase = _parseSb12Phase(arg.substring('--sb12-phase='.length));
       } else if (arg.startsWith('--size=')) {
         size = _parseSize(arg.substring('--size='.length));
       } else if (arg == '--help' || arg == '-h') {
@@ -122,6 +128,8 @@ final class _ScenarioOptions {
         seed: seed,
         terminalSize: size,
         textChars: textChars,
+        profileMemory: profileMemory,
+        sb12Phase: sb12Phase,
       ),
       filter: filter.isEmpty ? null : filter,
       printJson: printJson,
@@ -153,6 +161,17 @@ String? _scenarioIdFilter(String query) {
   return digits.isEmpty ? null : 'sb.$digits';
 }
 
+enum _Sb12Phase { all, dirtiness, viewport }
+
+_Sb12Phase _parseSb12Phase(String value) {
+  return switch (value.trim().toLowerCase()) {
+    'all' => _Sb12Phase.all,
+    'dirtiness' || 'layout' => _Sb12Phase.dirtiness,
+    'viewport' || 'scrollview' || 'scroll' => _Sb12Phase.viewport,
+    _ => _usageError('--sb12-phase expects all, dirtiness, or viewport.'),
+  };
+}
+
 final class _ScenarioConfig {
   const _ScenarioConfig({
     required this.warmupIterations,
@@ -160,6 +179,8 @@ final class _ScenarioConfig {
     required this.seed,
     required this.terminalSize,
     required this.textChars,
+    required this.profileMemory,
+    required this.sb12Phase,
   });
 
   final int warmupIterations;
@@ -167,6 +188,8 @@ final class _ScenarioConfig {
   final int seed;
   final CellSize terminalSize;
   final int textChars;
+  final bool profileMemory;
+  final _Sb12Phase sb12Phase;
 }
 
 abstract interface class _ScenarioBenchmark {
@@ -624,15 +647,36 @@ final class _LayoutDirtinessScenario implements _ScenarioBenchmark {
 
   @override
   Future<_ScenarioResult> run(_ScenarioConfig config) async {
+    if (config.sb12Phase == _Sb12Phase.viewport) {
+      return _runViewportOnlyResult(config);
+    }
+    return _runLayoutDirtinessResult(
+      config,
+      includeViewport: config.sb12Phase == _Sb12Phase.all,
+    );
+  }
+
+  Future<_ScenarioResult> _runLayoutDirtinessResult(
+    _ScenarioConfig config, {
+    required bool includeViewport,
+  }) async {
     for (var i = 0; i < config.warmupIterations; i++) {
-      await _runLayoutDirtinessJourney(config);
+      await _runLayoutDirtinessJourney(
+        config,
+        includeViewport: includeViewport,
+      );
     }
 
     final startedAt = DateTime.now().toUtc();
     final total = Stopwatch()..start();
     final samples = <_LayoutDirtinessJourneySample>[];
     for (var i = 0; i < config.measuredIterations; i++) {
-      samples.add(await _runLayoutDirtinessJourney(config));
+      samples.add(
+        await _runLayoutDirtinessJourney(
+          config,
+          includeViewport: includeViewport,
+        ),
+      );
     }
     total.stop();
 
@@ -700,6 +744,122 @@ final class _LayoutDirtinessScenario implements _ScenarioBenchmark {
     );
     final correct = samples.every((sample) => sample.correct);
     final last = samples.last;
+    final memoryProfiles = samples
+        .map((sample) => sample.memoryMarkers)
+        .where((markers) => markers.isNotEmpty)
+        .toList(growable: false);
+
+    final metrics = <String, Object?>{
+      'phase': config.sb12Phase.name,
+      'journeyUs': journey.toJson(),
+      'firstFrameUs': firstFrame.toJson(),
+      'commandToFrameUs': commandToFrame.toJson(),
+      'idleFrameUs': idleFrame.toJson(),
+      'paintOnlyFrameUs': paintOnlyFrame.toJson(),
+      'textPaintOnlyFrameUs': textPaintOnlyFrame.toJson(),
+      'childListNoOpFrameUs': childListNoOpFrame.toJson(),
+      'viewportFirstFrameUs': viewportFirstFrame.toJson(),
+      'viewportScrollFrameUs': viewportScrollFrame.toJson(),
+      'viewportFirstPaintedRows': viewportFirstPaintedRows.toJson(),
+      'viewportScrolledPaintedRows': viewportScrolledPaintedRows.toJson(),
+      'updateLayoutPerformed': updatePerformed.toJson(),
+      'updateLayoutSkipped': updateSkipped.toJson(),
+      'idleLayoutPerformed': idlePerformed.toJson(),
+      'idleLayoutSkipped': idleSkipped.toJson(),
+      'paintOnlyLayoutPerformed': paintOnlyPerformed.toJson(),
+      'paintOnlyLayoutSkipped': paintOnlySkipped.toJson(),
+      'textPaintOnlyLayoutPerformed': textPaintOnlyPerformed.toJson(),
+      'textPaintOnlyLayoutSkipped': textPaintOnlySkipped.toJson(),
+      'childListNoOpLayoutPerformed': childListNoOpPerformed.toJson(),
+      'childListNoOpLayoutSkipped': childListNoOpSkipped.toJson(),
+      'semanticQueryUs': semanticQuery.toJson(),
+      'lastFirstFrameLayout': _layoutStatsToJson(last.firstFrameLayoutStats),
+      'lastUpdateFrameLayout': _layoutStatsToJson(last.updateLayoutStats),
+      'lastIdleFrameLayout': _layoutStatsToJson(last.idleLayoutStats),
+      'lastPaintOnlyFrameLayout': _layoutStatsToJson(last.paintOnlyLayoutStats),
+      'lastTextPaintOnlyFrameLayout': _layoutStatsToJson(
+        last.textPaintOnlyLayoutStats,
+      ),
+      'lastChildListNoOpFrameLayout': _layoutStatsToJson(
+        last.childListNoOpLayoutStats,
+      ),
+      'staticRows': _LayoutDirtinessScenarioApp.staticRows,
+      'viewportRows': last.viewportRows,
+      'viewportTotalRows': _viewportPaintRows,
+      'viewportScrollOffset': _viewportPaintScrollOffset,
+      'lastViewportFirstPaintedRows': last.viewportFirstPaintedRows,
+      'lastViewportScrolledPaintedRows': last.viewportScrolledPaintedRows,
+      'semanticNodeCount': last.semanticNodeCount,
+      'counterValue': last.counterValue,
+      'paintAccent': last.paintAccent,
+      'textVariant': last.textVariant,
+    };
+    if (memoryProfiles.isNotEmpty) {
+      metrics['memoryProfile'] = _memoryProfilesToJson(memoryProfiles);
+    }
+
+    return _ScenarioResult(
+      scenarioId: id,
+      scenarioName: name,
+      startedAt: startedAt,
+      duration: total.elapsed,
+      warmupIterations: config.warmupIterations,
+      measuredIterations: config.measuredIterations,
+      seed: config.seed,
+      terminalSize: config.terminalSize,
+      metrics: metrics,
+      thresholds: const <String, Object?>{
+        'candidateCommandToFrameP95Us': 16000,
+        'candidateIdleFrameP95Us': 8000,
+        'enforced': false,
+      },
+      pass: correct,
+      notes: includeViewport
+          ? const <String>[
+              'Measures layout dirtiness through a static pane plus a changing counter pane.',
+              'Update frames should skip clean static subtree layouts; idle frames should skip the root layout.',
+              'Paint-only style changes should repaint while skipping same-constraint layout.',
+              'Same-width single-line text swaps should repaint while skipping same-constraint layout.',
+              'Same-identity child-list rebuilds should preserve cached layout.',
+              'Viewport paint should visit visible non-selectable rows, not every row in a long ScrollView child.',
+            ]
+          : const <String>[
+              'Measures the SB.12 dirtiness phases without the viewport fixture.',
+              'Update frames should skip clean static subtree layouts; idle frames should skip the root layout.',
+              'Paint-only style changes should repaint while skipping same-constraint layout.',
+              'Same-width single-line text swaps should repaint while skipping same-constraint layout.',
+              'Same-identity child-list rebuilds should preserve cached layout.',
+            ],
+    );
+  }
+
+  Future<_ScenarioResult> _runViewportOnlyResult(_ScenarioConfig config) async {
+    for (var i = 0; i < config.warmupIterations; i++) {
+      _runViewportPaintCullingJourney(config);
+    }
+
+    final startedAt = DateTime.now().toUtc();
+    final total = Stopwatch()..start();
+    final samples = <_ViewportPaintCullingSample>[];
+    for (var i = 0; i < config.measuredIterations; i++) {
+      samples.add(_runViewportPaintCullingJourney(config));
+    }
+    total.stop();
+
+    final viewportFirstFrame = _Stats.from(
+      samples.map((sample) => sample.firstFrameUs),
+    );
+    final viewportScrollFrame = _Stats.from(
+      samples.map((sample) => sample.scrollFrameUs),
+    );
+    final viewportFirstPaintedRows = _Stats.from(
+      samples.map((sample) => sample.firstPaintedRows),
+    );
+    final viewportScrolledPaintedRows = _Stats.from(
+      samples.map((sample) => sample.scrolledPaintedRows),
+    );
+    final correct = samples.every((sample) => sample.correct);
+    final last = samples.last;
 
     return _ScenarioResult(
       scenarioId: id,
@@ -711,63 +871,28 @@ final class _LayoutDirtinessScenario implements _ScenarioBenchmark {
       seed: config.seed,
       terminalSize: config.terminalSize,
       metrics: <String, Object?>{
-        'journeyUs': journey.toJson(),
-        'firstFrameUs': firstFrame.toJson(),
-        'commandToFrameUs': commandToFrame.toJson(),
-        'idleFrameUs': idleFrame.toJson(),
-        'paintOnlyFrameUs': paintOnlyFrame.toJson(),
-        'textPaintOnlyFrameUs': textPaintOnlyFrame.toJson(),
-        'childListNoOpFrameUs': childListNoOpFrame.toJson(),
+        'phase': config.sb12Phase.name,
+        'journeyUs': _Stats.from(
+          samples.map((sample) => sample.firstFrameUs + sample.scrollFrameUs),
+        ).toJson(),
         'viewportFirstFrameUs': viewportFirstFrame.toJson(),
         'viewportScrollFrameUs': viewportScrollFrame.toJson(),
         'viewportFirstPaintedRows': viewportFirstPaintedRows.toJson(),
         'viewportScrolledPaintedRows': viewportScrolledPaintedRows.toJson(),
-        'updateLayoutPerformed': updatePerformed.toJson(),
-        'updateLayoutSkipped': updateSkipped.toJson(),
-        'idleLayoutPerformed': idlePerformed.toJson(),
-        'idleLayoutSkipped': idleSkipped.toJson(),
-        'paintOnlyLayoutPerformed': paintOnlyPerformed.toJson(),
-        'paintOnlyLayoutSkipped': paintOnlySkipped.toJson(),
-        'textPaintOnlyLayoutPerformed': textPaintOnlyPerformed.toJson(),
-        'textPaintOnlyLayoutSkipped': textPaintOnlySkipped.toJson(),
-        'childListNoOpLayoutPerformed': childListNoOpPerformed.toJson(),
-        'childListNoOpLayoutSkipped': childListNoOpSkipped.toJson(),
-        'semanticQueryUs': semanticQuery.toJson(),
-        'lastFirstFrameLayout': _layoutStatsToJson(last.firstFrameLayoutStats),
-        'lastUpdateFrameLayout': _layoutStatsToJson(last.updateLayoutStats),
-        'lastIdleFrameLayout': _layoutStatsToJson(last.idleLayoutStats),
-        'lastPaintOnlyFrameLayout': _layoutStatsToJson(
-          last.paintOnlyLayoutStats,
-        ),
-        'lastTextPaintOnlyFrameLayout': _layoutStatsToJson(
-          last.textPaintOnlyLayoutStats,
-        ),
-        'lastChildListNoOpFrameLayout': _layoutStatsToJson(
-          last.childListNoOpLayoutStats,
-        ),
-        'staticRows': _LayoutDirtinessScenarioApp.staticRows,
         'viewportRows': last.viewportRows,
         'viewportTotalRows': _viewportPaintRows,
         'viewportScrollOffset': _viewportPaintScrollOffset,
-        'lastViewportFirstPaintedRows': last.viewportFirstPaintedRows,
-        'lastViewportScrolledPaintedRows': last.viewportScrolledPaintedRows,
-        'semanticNodeCount': last.semanticNodeCount,
-        'counterValue': last.counterValue,
-        'paintAccent': last.paintAccent,
-        'textVariant': last.textVariant,
+        'lastViewportFirstPaintedRows': last.firstPaintedRows,
+        'lastViewportScrolledPaintedRows': last.scrolledPaintedRows,
       },
       thresholds: const <String, Object?>{
-        'candidateCommandToFrameP95Us': 16000,
-        'candidateIdleFrameP95Us': 8000,
+        'candidateViewportScrollFrameP95Us': 16000,
         'enforced': false,
       },
       pass: correct,
       notes: const <String>[
-        'Measures layout dirtiness through a static pane plus a changing counter pane.',
-        'Update frames should skip clean static subtree layouts; idle frames should skip the root layout.',
-        'Paint-only style changes should repaint while skipping same-constraint layout.',
-        'Same-width single-line text swaps should repaint while skipping same-constraint layout.',
-        'Same-identity child-list rebuilds should preserve cached layout.',
+        'Measures only the SB.12 viewport paint-culling fixture.',
+        'Use this phase when profiling ScrollView/Column child-list construction or viewport scroll cost.',
         'Viewport paint should visit visible non-selectable rows, not every row in a long ScrollView child.',
       ],
     );
@@ -825,43 +950,57 @@ Future<_CounterJourneySample> _runCounterJourney(_ScenarioConfig config) async {
 }
 
 Future<_LayoutDirtinessJourneySample> _runLayoutDirtinessJourney(
-  _ScenarioConfig config,
-) async {
+  _ScenarioConfig config, {
+  required bool includeViewport,
+}) async {
   final tester = FleuryTester(viewportSize: config.terminalSize);
   final counterModel = _CounterModel(initialValue: 9);
+  final memory = _MemoryProbe(enabled: config.profileMemory)..mark('start');
   final total = Stopwatch()..start();
   try {
     tester.pumpWidget(_LayoutDirtinessScenarioApp(counter: counterModel));
+    memory.mark('afterMount');
 
     final firstFrame = Stopwatch()..start();
     final firstFrameSample = _renderMeasured(tester, config);
     firstFrame.stop();
+    memory.mark('afterFirstFrame');
 
     final command = Stopwatch()..start();
     final result = await tester.invokeCommand(_layoutIncrement);
     final updateFrameSample = _renderMeasured(tester, config);
     command.stop();
+    memory.mark('afterCommandFrame');
 
     final paintOnly = Stopwatch()..start();
     counterModel.toggleAccent();
     final paintOnlyFrameSample = _renderMeasured(tester, config);
     paintOnly.stop();
+    memory.mark('afterPaintOnlyFrame');
 
     final textPaintOnly = Stopwatch()..start();
     counterModel.toggleTextVariant();
     final textPaintOnlyFrameSample = _renderMeasured(tester, config);
     textPaintOnly.stop();
+    memory.mark('afterTextPaintOnlyFrame');
 
     final childListNoOp = Stopwatch()..start();
     tester.pumpWidget(_LayoutDirtinessScenarioApp(counter: counterModel));
     final childListNoOpFrameSample = _renderMeasured(tester, config);
     childListNoOp.stop();
+    memory.mark('afterChildListNoOpFrame');
 
     final idle = Stopwatch()..start();
     final idleFrameSample = _renderMeasured(tester, config);
     idle.stop();
+    memory.mark('afterIdleFrame');
 
-    final viewportPaintSample = _runViewportPaintCullingJourney(config);
+    final viewportPaintSample = includeViewport
+        ? _runViewportPaintCullingJourney(config)
+        : _ViewportPaintCullingSample.skipped(
+            viewportRows: config.terminalSize.rows,
+          );
+    memory.mark(includeViewport ? 'afterViewportJourney' : 'afterViewportSkip');
 
     final semantics = Stopwatch()..start();
     final tree = tester.semantics();
@@ -871,6 +1010,8 @@ Future<_LayoutDirtinessJourneySample> _runLayoutDirtinessJourney(
     );
     semantics.stop();
     total.stop();
+    memory.mark('afterSemantics');
+    memory.mark('end');
 
     final counterValue = counter.state['counterValue'] as int? ?? -1;
     final paintAccent = counter.state['paintAccent'] == true;
@@ -899,6 +1040,7 @@ Future<_LayoutDirtinessJourneySample> _runLayoutDirtinessJourney(
       counterValue: counterValue,
       paintAccent: paintAccent,
       textVariant: textVariant,
+      memoryMarkers: memory.markers,
       correct:
           result.status == CommandInvocationStatus.completed &&
           counterValue == 10 &&
@@ -915,7 +1057,7 @@ Future<_LayoutDirtinessJourneySample> _runLayoutDirtinessJourney(
           childListNoOpFrameSample.layoutStats.skippedCount > 0 &&
           idleFrameSample.layoutStats.performedCount == 0 &&
           idleFrameSample.layoutStats.skippedCount > 0 &&
-          viewportPaintSample.correct,
+          (!includeViewport || viewportPaintSample.correct),
     );
   } finally {
     tester.dispose();
@@ -1225,6 +1367,7 @@ final class _LayoutDirtinessJourneySample {
     required this.counterValue,
     required this.paintAccent,
     required this.textVariant,
+    required this.memoryMarkers,
     required this.correct,
   });
 
@@ -1251,6 +1394,7 @@ final class _LayoutDirtinessJourneySample {
   final int counterValue;
   final bool paintAccent;
   final bool textVariant;
+  final Map<String, int> memoryMarkers;
   final bool correct;
 }
 
@@ -1263,6 +1407,13 @@ final class _ViewportPaintCullingSample {
     required this.scrolledPaintedRows,
     required this.correct,
   });
+
+  const _ViewportPaintCullingSample.skipped({required this.viewportRows})
+    : firstFrameUs = 0,
+      scrollFrameUs = 0,
+      firstPaintedRows = 0,
+      scrolledPaintedRows = 0,
+      correct = true;
 
   final int firstFrameUs;
   final int scrollFrameUs;
@@ -1304,12 +1455,15 @@ final class _ScenarioResult {
   String get summaryLine {
     final primary = switch (scenarioId) {
       'SB.2' => metrics['cursorMoveUs'],
+      'SB.12' when metrics['phase'] == 'viewport' =>
+        metrics['viewportScrollFrameUs'],
       _ => metrics['commandToFrameUs'],
     };
     final p95 = primary is Map<String, Object?> ? primary['p95'] : null;
     final status = pass ? 'pass' : 'fail';
     final label = switch (scenarioId) {
       'SB.2' => 'cursor_move_p95_us',
+      'SB.12' when metrics['phase'] == 'viewport' => 'viewport_scroll_p95_us',
       _ => 'command_to_frame_p95_us',
     };
     return '$scenarioId $scenarioName: $status, $label=$p95';
@@ -1392,6 +1546,58 @@ final class _Stats {
     'p99': p99,
     'max': max,
     'samples': samples,
+  };
+}
+
+final class _MemoryProbe {
+  _MemoryProbe({required this.enabled});
+
+  final bool enabled;
+  final Map<String, int> _markers = <String, int>{};
+
+  Map<String, int> get markers => Map<String, int>.unmodifiable(_markers);
+
+  void mark(String label) {
+    if (!enabled) return;
+    _markers[label] = ProcessInfo.currentRss;
+  }
+}
+
+Map<String, Object?> _memoryProfilesToJson(List<Map<String, int>> profiles) {
+  final starts = <int>[];
+  final ends = <int>[];
+  final journeyDeltas = <int>[];
+  final labels = <String>{};
+  for (final profile in profiles) {
+    labels.addAll(profile.keys);
+    final start = profile['start'];
+    final end = profile['end'];
+    if (start != null) starts.add(start);
+    if (end != null) ends.add(end);
+    if (start != null && end != null) journeyDeltas.add(end - start);
+  }
+
+  final deltasByMarker = <String, Object?>{};
+  final sortedLabels = labels.toList()..sort();
+  for (final label in sortedLabels) {
+    if (label == 'start') continue;
+    final values = <int>[];
+    for (final profile in profiles) {
+      final start = profile['start'];
+      final value = profile[label];
+      if (start != null && value != null) values.add(value - start);
+    }
+    if (values.isNotEmpty) deltasByMarker[label] = _Stats.from(values).toJson();
+  }
+
+  return <String, Object?>{
+    'kind': 'rssPhaseProfile',
+    'samples': profiles.length,
+    'rssStartBytes': _Stats.from(starts).toJson(),
+    'rssEndBytes': _Stats.from(ends).toJson(),
+    'rssJourneyDeltaBytes': _Stats.from(journeyDeltas).toJson(),
+    'rssDeltaFromStartByMarkerBytes': deltasByMarker,
+    'lastMarkersBytes': profiles.last,
   };
 }
 
@@ -1840,6 +2046,11 @@ CellSize _parseSize(String text) {
   return CellSize(cols, rows);
 }
 
+Never _usageError(String message) {
+  stderr.writeln(message);
+  _printUsageAndExit(exitCodeValue: 64);
+}
+
 Never _printUsageAndExit({int exitCodeValue = 0}) {
   stdout.writeln(
     'Usage: dart run benchmark/scenario_benchmarks.dart [options]',
@@ -1860,6 +2071,12 @@ Never _printUsageAndExit({int exitCodeValue = 0}) {
   stdout.writeln('  --size=COLSxROWS       Terminal size. Default 80x24.');
   stdout.writeln(
     '  --text-chars=N         SB.2 text fixture chars. Default $_defaultTextChars.',
+  );
+  stdout.writeln(
+    '  --profile-memory       Add RSS phase profiling metrics where supported.',
+  );
+  stdout.writeln(
+    '  --sb12-phase=PHASE     all, dirtiness, or viewport. Default all.',
   );
   exit(exitCodeValue);
 }

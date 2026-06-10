@@ -64,7 +64,7 @@ class ProcessPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      animation: controller,
+      listenable: controller,
       builder: (context, _) => _buildPanel(context),
     );
   }

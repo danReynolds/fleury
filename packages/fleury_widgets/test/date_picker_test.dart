@@ -167,6 +167,36 @@ void main() {
       expect(found, isTrue, reason: 'expected to find the selected "15"');
     });
 
+    testWidgets('null onChanged disables the date picker', (tester) async {
+      tester.pumpWidget(
+        DatePicker(
+          value: _d(2024, 3, 15),
+          label: 'Due date',
+          autofocus: true,
+          onChanged: null,
+        ),
+      );
+
+      final node = tester.semantics().single(
+        role: SemanticRole.datePicker,
+        label: 'Due date',
+        enabled: false,
+      );
+      expect(node.actions, isEmpty);
+      expect(node.value, '2024-03-15');
+      expect(node.state['canIncrement'], isFalse);
+      expect(node.state['canDecrement'], isFalse);
+
+      final buf = tester.render(size: const CellSize(24, 9));
+      expect(buf.atColRow(2, 0).style.dim, isTrue, reason: 'month is muted');
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.increment,
+        node: node,
+      );
+      expect(result.status, SemanticActionInvocationStatus.disabled);
+    });
+
     testWidgets('exposes date picker semantics and accessibility state', (
       tester,
     ) {

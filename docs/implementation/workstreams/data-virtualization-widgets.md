@@ -13,7 +13,7 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
 - Gauge, Sparkline, BarChart, Histogram, Heatmap, CalendarHeatmap, and
   LineChart now expose chart semantics and accessibility/fallback state instead
   of being visual-only render surfaces. Interactive LineChart also exposes
-  semantic focus/increment/decrement cursor actions, and the proof app Overview
+  semantic focus/increment/decrement cursor actions, and the demo app Overview
   telemetry strip exercises gauge, trend, and bar-chart semantics. `Digits`
   exposes its underlying value as semantic text so large clock/counter glyphs
   remain inspectable. Generic `Canvas` drawings now support opt-in image/chart
@@ -48,7 +48,7 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
   refresh paths via `TaskContext`/`TaskYieldPolicy`. The refreshed `SB.4`
   cooperative baseline proves progress and event-loop yield checkpoints on the
   same 100k-entry retained-log fixture.
-- The proof app now includes an Indexed Logs screen that builds and refreshes a
+- The demo app now includes an Indexed Logs screen that builds and refreshes a
   retained-log index through `TaskController` / `TaskYieldPolicy`, filters the
   retained rows through `LogRegionSearchIndex`, and renders the results with
   `LogRegion` semantics.
@@ -63,9 +63,9 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
   navigation, filtered descendant reveal, selected-row copy, semantic query,
   ANSI bytes, visible ranges, tree node count, sanitizer fixture rows, and RSS
   delta.
-- The proof app Runs screen now uses `DataTable` for stable-key row semantics,
+- The demo app Runs screen now uses `DataTable` for stable-key row semantics,
   keyboard selection, filtering, activation, and selected-row copy.
-- The proof app Transcript screen now uses `LogRegion`, an app-authored
+- The demo app Transcript screen now uses `LogRegion`, an app-authored
   structured log/transcript region in `fleury_widgets` with sanitized
   rendering, sanitized search/filter and export helpers, tail-following
   selection, copy/export helpers, clipboard policy reports, lazy visible-row
@@ -74,7 +74,7 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
   field, cached `SearchResultIndex` ranking, custom matcher injection, lazy
   result rows, activation, selected-result copy, sanitized search/render/copy,
   and semantic result state.
-- The proof app now includes a Global Search screen that uses app-owned
+- The demo app now includes a Global Search screen that uses app-owned
   debounced search results with `DebouncedTaskController`, ranks those results
   with `SearchResultIndex`, and renders them through `SearchPanel`; semantic
   row activation navigates into the matching app surface.
@@ -110,28 +110,28 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
   state, validation state, and wizard step remain readable after teardown,
   post-dispose form/step mutations fail explicitly, and late async validation
   results are ignored after disposal.
-- The proof app now includes a Tree screen that exercises TreeTable through app
+- The demo app now includes a Tree screen that exercises TreeTable through app
   navigation, a screen-local focus command, semantic tree/table-cell state,
   activation into the transcript, and selected-row copy.
 - `JsonView` now provides a Phase 2 structured payload surface with parsed or
   already-materialized JSON documents, collapsible object/array rows, JSON
   pointer/path state, subtree or line copy, parse-error semantics, safe
   string/key display, lazy visible-row mounting, and semantic JSON/node state.
-- The proof app now includes a Payload screen that exercises `JsonView` through
+- The demo app now includes a Payload screen that exercises `JsonView` through
   app navigation, a screen-local focus command, safe display of terminal-control
   payloads, selected-node copy, and transcript feedback.
 - `DiffView` now provides a Phase 2 unified-diff surface with parsed
   file/hunk/add/delete/context rows, old/new line numbers, file path state,
   selected-line or selected-hunk copy, safe display/copy of terminal-control
   payloads, lazy visible-row mounting, and semantic diff/line state.
-- The proof app now includes a Changes screen that exercises `DiffView` through
+- The demo app now includes a Changes screen that exercises `DiffView` through
   app navigation, a screen-local focus command, safe display of terminal-control
   payloads, selected-hunk copy, and transcript feedback.
 - `CodeView` now provides a Phase 2 source inspection surface with source-line
   classification, line-number rendering, indentation and source-shape counts,
   selected-line or whole-document copy, safe display/copy of terminal-control
   payloads, lazy visible-row mounting, and semantic code/line state.
-- The proof app now includes a Source screen that exercises `CodeView` through
+- The demo app now includes a Source screen that exercises `CodeView` through
   app navigation, a screen-local focus command, safe display of terminal-control
   payloads, selected-line copy, and transcript feedback.
 - `MarkdownView` now provides a Phase 2 document inspection surface with parsed
@@ -143,11 +143,11 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
   `MarkdownViewController` keep final selection/visible-range and JSON
   expansion state readable after teardown, while rejecting stale selection,
   jump, expand, collapse, and toggle mutations.
-- The proof app now includes a Docs screen that exercises `MarkdownView`
+- The demo app now includes a Docs screen that exercises `MarkdownView`
   through app navigation, a screen-local focus command, safe display of
   terminal-control payloads, selected-block copy, link semantics, and transcript
   feedback.
-- The full proof app test suite now passes with the Runs-screen `DataTable`,
+- The full demo app test suite now passes with the Runs-screen `DataTable`,
   Transcript-screen `LogRegion`, Tree-screen `TreeTable`, and Payload-screen
   `JsonView`, Changes-screen `DiffView`, Source-screen `CodeView`, and
   Docs-screen `MarkdownView` in place.
@@ -182,7 +182,7 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
   - Notes: Initial contract covers columns, row count, cell builder, stable row
     key builder, selected-row controller, focus, keyboard selection, selected-row
     activation, fixed/flex widths, fixed header, sort/filter metadata,
-    virtualized semantics, selected-row export, selected-row copy, and proof-app
+    virtualized semantics, selected-row export, selected-row copy, and demo-app
     Runs-screen adoption. Final v1 contract adds row/cell selection mode,
     Shift-extended rectangular ranges, selected cell/range copy, rectangular
     export, and first-party row-order helpers for filtering/sorting.
@@ -199,7 +199,7 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
   - Notes: The render object paints only visible body rows and the semantic
     contributor emits the header plus visible rows/cells with row keys, selected
     state, visible range, sort state, filter state, and copy action metadata.
-    Full proof-app integration is now green. Cell mode highlights and exposes
+    Full demo-app integration is now green. Cell mode highlights and exposes
     selected rectangular ranges without mounting per-cell widgets, while row
     mode preserves the original whole-row behavior. Semantic action handlers now
     let tests focus, select, activate, and copy the table or mounted visible
@@ -215,7 +215,7 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
   - Evidence:
     [LogRegion](../../../packages/fleury_widgets/lib/src/log_region.dart),
     [LogRegion tests](../../../packages/fleury_widgets/test/log_region_test.dart),
-    [proof app Transcript screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart),
+    [demo app Transcript screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart),
     [SB.4 LogRegion benchmark](../../../packages/fleury_widgets/benchmark/scenario_benchmarks.dart),
     [SB.4 indexed LogRegion baseline](../../../packages/fleury_widgets/benchmark/results/phase2-logregion-indexed-2026-06-01.json),
     [SB.5 Streaming Markdown benchmark](../../../packages/fleury_widgets/benchmark/scenario_benchmarks.dart),
@@ -250,42 +250,42 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
   - Evidence:
     [LogRegion](../../../packages/fleury_widgets/lib/src/log_region.dart),
     [LogRegion tests](../../../packages/fleury_widgets/test/log_region_test.dart),
-    [proof app Transcript usage](../../../packages/fleury_example_console/lib/fleury_example_console.dart),
+    [demo app Transcript usage](../../../packages/fleury_example_console/lib/fleury_example_console.dart),
     [LogRegion benchmark baseline](../../../packages/fleury_widgets/benchmark/results/phase2-logregion-2026-05-31.json),
     [SearchPanel](../../../packages/fleury_widgets/lib/src/search_panel.dart),
     [SearchPanel tests](../../../packages/fleury_widgets/test/search_panel_test.dart),
-    [proof app Global Search usage](../../../packages/fleury_example_console/lib/fleury_example_console.dart),
-    [proof app Global Search test](../../../packages/fleury_example_console/test/proof_console_test.dart),
-    [proof app ranked-search baseline](../../../packages/fleury_example_console/benchmark/results/phase2-proof-app-ranked-search-2026-06-01.json),
+    [demo app Global Search usage](../../../packages/fleury_example_console/lib/fleury_example_console.dart),
+    [demo app Global Search test](../../../packages/fleury_example_console/test/demo_console_test.dart),
+    [demo app ranked-search baseline](../../../packages/fleury_example_console/benchmark/results/phase2-demo-app-ranked-search-2026-06-01.json),
     [FileBrowser](../../../packages/fleury_widgets/lib/src/file_browser.dart),
     [FileBrowser tests](../../../packages/fleury_widgets/test/file_browser_test.dart),
     [Tree](../../../packages/fleury_widgets/lib/src/tree.dart),
     [Tree tests](../../../packages/fleury_widgets/test/tree_test.dart),
     [TreeTable](../../../packages/fleury_widgets/lib/src/tree_table.dart),
     [TreeTable tests](../../../packages/fleury_widgets/test/tree_table_test.dart),
-    [proof app Tree screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart),
-    [proof app Tree tests](../../../packages/fleury_example_console/test/proof_console_test.dart),
+    [demo app Tree screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart),
+    [demo app Tree tests](../../../packages/fleury_example_console/test/demo_console_test.dart),
     [TreeTable benchmark baseline](../../../packages/fleury_widgets/benchmark/results/phase2-treetable-2026-06-01.json),
     [TreeTable index-hardening baseline](../../../packages/fleury_widgets/benchmark/results/phase2-treetable-index-2026-06-01.json),
     [JsonView](../../../packages/fleury_widgets/lib/src/json_view.dart),
     [JsonView tests](../../../packages/fleury_widgets/test/json_view_test.dart),
-    [proof app Payload screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart),
-    [proof app Payload tests](../../../packages/fleury_example_console/test/proof_console_test.dart),
+    [demo app Payload screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart),
+    [demo app Payload tests](../../../packages/fleury_example_console/test/demo_console_test.dart),
     [DiffView](../../../packages/fleury_widgets/lib/src/diff_view.dart),
     [DiffView tests](../../../packages/fleury_widgets/test/diff_view_test.dart),
     [PatchReview](../../../packages/fleury_widgets/lib/src/patch_review.dart),
     [PatchReview tests](../../../packages/fleury_widgets/test/patch_review_test.dart),
-    [proof app Changes screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart),
-    [proof app Changes tests](../../../packages/fleury_example_console/test/proof_console_test.dart),
+    [demo app Changes screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart),
+    [demo app Changes tests](../../../packages/fleury_example_console/test/demo_console_test.dart),
     [CodeView](../../../packages/fleury_widgets/lib/src/code_view.dart),
     [CodeView tests](../../../packages/fleury_widgets/test/code_view_test.dart),
-    [proof app Source screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart),
-    [proof app Source tests](../../../packages/fleury_example_console/test/proof_console_test.dart),
+    [demo app Source screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart),
+    [demo app Source tests](../../../packages/fleury_example_console/test/demo_console_test.dart),
     [MarkdownView](../../../packages/fleury_widgets/lib/src/markdown_text.dart),
     [MarkdownView tests](../../../packages/fleury_widgets/test/markdown_view_test.dart),
     [Streaming Markdown benchmark baseline](../../../packages/fleury_widgets/benchmark/results/phase2-streaming-markdown-2026-06-01.json),
-    [proof app Docs screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart),
-    [proof app Docs tests](../../../packages/fleury_example_console/test/proof_console_test.dart).
+    [demo app Docs screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart),
+    [demo app Docs tests](../../../packages/fleury_example_console/test/demo_console_test.dart).
   - Notes: `LogRegion` is the first Phase 2 developer-tool widget slice. Reuse
     its sanitized copy/export, aggregate focus/navigation, semantic row
     activation, and semantic-state shape for terminal output, diff/code, and
@@ -294,7 +294,7 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
     M2.3 search-result slice and follows the same source-index plus view-index
     callback pattern as `LogRegion`; semantic focus, selected-result copy, and
     selected-result activation now invoke the same callbacks as keyboard
-    workflows. The proof app Global Search screen now proves the app-owned
+    workflows. The demo app Global Search screen now proves the app-owned
     async/debounced result pattern without putting task policy inside
     `SearchPanel`: `DebouncedTaskController` builds the result list,
     `SearchResultIndex` gives the reusable exact/prefix/contains/fuzzy ranking
@@ -310,7 +310,7 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
     browser surface for production filesystem tools. Base `Tree` is now
     semantic/sanitizer-safe enough to act as the hierarchy contract underneath a
     future TreeTable. `TreeTable` now completes the named M2.3 widget surface
-    at v0, and the proof app now puts it under app-kernel, semantics,
+    at v0, and the demo app now puts it under app-kernel, semantics,
     activation, and copy pressure. Semantic actions now cover Tree focus/open/
     activate, TreeTable open/activate/copy, and FileBrowser open/copy using the
     same visible-row semantics as their keyboard workflows. `SB.11` now adds
@@ -322,7 +322,7 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
     follow-up baseline measures index-build p95 at 1040888 us on the same
     100k-leaf fixture. Prefix-token filtering is now the indexed typeahead
     mode for durable identifiers; fuzzy contains/subsequence search remains an
-    explicit scan until larger proof workflows justify n-gram indexing,
+    explicit scan until larger demo workflows justify n-gram indexing,
     isolate-backed search, or cached flattened-row policy.
     `JsonView` is the first structured developer-document view in M2.2. It
     deliberately shares tree/list interaction mechanics but has first-party JSON
@@ -357,9 +357,9 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
     JSON-error, and Markdown-block styles without changing their semantic
     contracts or copy/export behavior. DVW.4 is complete for the MVP: the
     first production toolkit covers logs, search, files, tree tables, JSON,
-    diffs, code, Markdown, patch review, proof-app adoption, and benchmark or
+    diffs, code, Markdown, patch review, demo-app adoption, and benchmark or
     targeted test evidence. Future widgets should be opened as concrete
-    proof-app or product-driven additions.
+    demo-app or product-driven additions.
 
 ## Implementation Notes
 
@@ -372,7 +372,7 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
   image escapes, copy/export redaction, malformed Unicode, and huge-line
   behavior.
 - Virtualization must not erase semantic accessibility or testability.
-- The proof-app scenario uses the Runs screen as the first table forcing case:
+- The demo-app scenario uses the Runs screen as the first table forcing case:
   filtering, selection, copy, stable row identity, large deterministic fixture,
   and semantic row/cell queries.
 - Do not put `DataTable` benchmarks in the core `fleury` package runner unless
@@ -453,7 +453,7 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
   semantic-query p95 1979 us, and page-move p95 11640 us. This validates the
   explicit lookup path. Prefix-token filtering now covers indexed ID/path/
   symbol typeahead; broad fuzzy typeahead, worker indexing, and cache policy
-  remain proof-driven follow-ups.
+  remain evidence-driven follow-ups.
 - `JsonView` sanitizes string values and object keys before display, semantics,
   and copy/export. JSON escaping alone is not enough because active OSC/CSI/DCS
   payloads can otherwise become visible escaped secrets; the widget collapses
@@ -511,54 +511,54 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
 - [DataTable API](../../../packages/fleury_widgets/lib/src/data_table.dart).
 - [DataTable semantic/virtualization tests](../../../packages/fleury_widgets/test/data_table_test.dart).
 - [SB.3 DataTable 100k Rows benchmark](../../../packages/fleury_widgets/benchmark/scenario_benchmarks.dart).
-- [Proof app Runs screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
-- [Proof app Runs tests](../../../packages/fleury_example_console/test/proof_console_test.dart).
+- [Demo app Runs screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
+- [Demo app Runs tests](../../../packages/fleury_example_console/test/demo_console_test.dart).
 - [LogRegion API](../../../packages/fleury_widgets/lib/src/log_region.dart).
 - [LogRegion tests](../../../packages/fleury_widgets/test/log_region_test.dart).
-- [Proof app Transcript screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
+- [Demo app Transcript screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
 - [SB.4 LogRegion benchmark](../../../packages/fleury_widgets/benchmark/scenario_benchmarks.dart).
 - [SB.4 LogRegion baseline](../../../packages/fleury_widgets/benchmark/results/phase2-logregion-2026-05-31.json).
 - [SB.4 indexed LogRegion baseline](../../../packages/fleury_widgets/benchmark/results/phase2-logregion-indexed-2026-06-01.json).
 - [SB.4 cooperative LogRegion index baseline](../../../packages/fleury_widgets/benchmark/results/phase2-logregion-cooperative-index-2026-06-01.json).
 - [SearchPanel API](../../../packages/fleury_widgets/lib/src/search_panel.dart).
 - [SearchPanel tests](../../../packages/fleury_widgets/test/search_panel_test.dart).
-- [Proof app Global Search screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
-- [Proof app Global Search test](../../../packages/fleury_example_console/test/proof_console_test.dart).
-- [Proof app ranked-search baseline](../../../packages/fleury_example_console/benchmark/results/phase2-proof-app-ranked-search-2026-06-01.json).
-- [Proof app Indexed Logs screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
-- [Proof app Indexed Logs test](../../../packages/fleury_example_console/test/proof_console_test.dart).
+- [Demo app Global Search screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
+- [Demo app Global Search test](../../../packages/fleury_example_console/test/demo_console_test.dart).
+- [Demo app ranked-search baseline](../../../packages/fleury_example_console/benchmark/results/phase2-demo-app-ranked-search-2026-06-01.json).
+- [Demo app Indexed Logs screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
+- [Demo app Indexed Logs test](../../../packages/fleury_example_console/test/demo_console_test.dart).
 - [FileBrowser API](../../../packages/fleury_widgets/lib/src/file_browser.dart).
 - [FileBrowser tests](../../../packages/fleury_widgets/test/file_browser_test.dart).
 - [Tree API](../../../packages/fleury_widgets/lib/src/tree.dart).
 - [Tree semantic tests](../../../packages/fleury_widgets/test/tree_test.dart).
 - [TreeTable API](../../../packages/fleury_widgets/lib/src/tree_table.dart).
 - [TreeTable tests](../../../packages/fleury_widgets/test/tree_table_test.dart).
-- [Proof app Tree screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
-- [Proof app TreeTable regression](../../../packages/fleury_example_console/test/proof_console_test.dart).
+- [Demo app Tree screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
+- [Demo app TreeTable regression](../../../packages/fleury_example_console/test/demo_console_test.dart).
 - [SB.11 TreeTable benchmark](../../../packages/fleury_widgets/benchmark/scenario_benchmarks.dart).
 - [SB.11 TreeTable baseline](../../../packages/fleury_widgets/benchmark/results/phase2-treetable-2026-06-01.json).
 - [SB.11 cooperative TreeTable index baseline](../../../packages/fleury_widgets/benchmark/results/phase2-treetable-cooperative-index-2026-06-01.json).
 - [JsonView API](../../../packages/fleury_widgets/lib/src/json_view.dart).
 - [JsonView tests](../../../packages/fleury_widgets/test/json_view_test.dart).
-- [Proof app Payload screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
-- [Proof app Payload regression](../../../packages/fleury_example_console/test/proof_console_test.dart).
+- [Demo app Payload screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
+- [Demo app Payload regression](../../../packages/fleury_example_console/test/demo_console_test.dart).
 - [DiffView API](../../../packages/fleury_widgets/lib/src/diff_view.dart).
 - [DiffView tests](../../../packages/fleury_widgets/test/diff_view_test.dart).
-- [Proof app Changes screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
-- [Proof app Changes regression](../../../packages/fleury_example_console/test/proof_console_test.dart).
+- [Demo app Changes screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
+- [Demo app Changes regression](../../../packages/fleury_example_console/test/demo_console_test.dart).
 - [CodeView API](../../../packages/fleury_widgets/lib/src/code_view.dart).
 - [CodeView tests](../../../packages/fleury_widgets/test/code_view_test.dart).
-- [Proof app Source screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
-- [Proof app Source regression](../../../packages/fleury_example_console/test/proof_console_test.dart).
+- [Demo app Source screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
+- [Demo app Source regression](../../../packages/fleury_example_console/test/demo_console_test.dart).
 - [MarkdownView API](../../../packages/fleury_widgets/lib/src/markdown_text.dart).
 - [MarkdownView tests](../../../packages/fleury_widgets/test/markdown_view_test.dart).
 - [SB.5 Streaming Markdown baseline](../../../packages/fleury_widgets/benchmark/results/phase2-streaming-markdown-2026-06-01.json).
-- [Proof app Docs screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
-- [Proof app Docs regression](../../../packages/fleury_example_console/test/proof_console_test.dart).
-- Full proof app suite passes with `DataTable`, `LogRegion`, `TreeTable`,
+- [Demo app Docs screen](../../../packages/fleury_example_console/lib/fleury_example_console.dart).
+- [Demo app Docs regression](../../../packages/fleury_example_console/test/demo_console_test.dart).
+- Full demo app suite passes with `DataTable`, `LogRegion`, `TreeTable`,
   `JsonView`, `DiffView`, `CodeView`, and `MarkdownView` adoption under Dart
   3.12.1.
 - Pending later hidden-column copy policy, multi-range selection, fuzzy
   TreeTable filtering hardening, off-thread index construction policy, and
   document-view hardening such as Markdown filtering/typeahead, richer syntax,
-  folding, or indexing when proof workflows demand them.
+  folding, or indexing when demo workflows demand them.

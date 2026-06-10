@@ -23,8 +23,11 @@ Future<void> main(List<String> rawArgs) async {
     case 'check':
       await runner.check(quick: args.contains('--quick'));
       return;
-    case 'proof':
-      await runner.proofApp();
+    case 'demo':
+      await runner.demoApp();
+      return;
+    case 'storybook':
+      await runner.storybookApp(args);
       return;
     case 'core-demo':
       await runner.coreDemo(_requiredName(args, 'core-demo'));
@@ -100,26 +103,39 @@ void _printUsage() {
     'Usage: dart tool/fleury_dev.dart [--dry-run] <command> [args]',
   );
   stdout.writeln('');
-  stdout.writeln('Commands:');
-  stdout.writeln('  list                         Show runnable examples');
   stdout.writeln(
-    '  bootstrap                    Run dart pub get in local packages',
+    'Canonical CLI forms after local activation: `fleury dev <command>` and '
+    '`fleury benchmark <subcommand>`.',
+  );
+  stdout.writeln('');
+  stdout.writeln('Primary contributor commands:');
+  stdout.writeln('  list                          Show runnable demos');
+  stdout.writeln(
+    '  bootstrap                     Run dart pub get in local packages',
   );
   stdout.writeln(
-    '  check [--quick]              Analyze and test local packages',
+    '  check [--quick]               Analyze and test local packages',
   );
-  stdout.writeln('  proof                        Run the proof app');
+  stdout.writeln('  demo                          Run the integrated demo app');
   stdout.writeln(
-    '  core-demo <name>             Run a packages/fleury example',
-  );
-  stdout.writeln(
-    '  widget-demo <name>           Run a packages/fleury_widgets example',
+    '  storybook [command/options]   Run, inspect, verify, or snapshot storybook',
   );
   stdout.writeln(
-    '  cli <args...>                Run packages/fleury/bin/fleury.dart',
+    '  core-demo <name>              Run a packages/fleury example',
   );
   stdout.writeln(
-    '  terminal-matrix [options]    Capture diagnose JSON as a matrix entry',
+    '  widget-demo <name>            Run a packages/fleury_widgets example',
+  );
+  stdout.writeln(
+    '  cli <args...>                 Run packages/fleury/bin/fleury.dart',
+  );
+  stdout.writeln(
+    '  benchmark <subcommand>        Run benchmark/profiling workflows',
+  );
+  stdout.writeln('');
+  stdout.writeln('Evidence and release commands:');
+  stdout.writeln(
+    '  terminal-matrix [options]     Capture diagnose JSON as a matrix entry',
   );
   stdout.writeln(
     '  terminal-matrix-audit [options] '
@@ -137,19 +153,8 @@ void _printUsage() {
   stdout.writeln(
     '  mvp-evidence-refresh [options] Regenerate MVP evidence artifacts',
   );
-  stdout.writeln(
-    '  benchmark <subcommand>         Run benchmark and profiling workflows',
-  );
-  stdout.writeln(
-    '  benchmark-manifest [options] '
-    'Print the comparative benchmark contract',
-  );
-  stdout.writeln(
-    '  benchmark-result [options]   Validate and merge one peer benchmark run',
-  );
-  stdout.writeln(
-    '  benchmark-variance [options] Summarize repeated peer benchmark runs',
-  );
+  stdout.writeln('');
+  stdout.writeln('Maintenance commands:');
   stdout.writeln(
     '  activate-cli                 dart pub global activate --source path packages/fleury',
   );
@@ -157,19 +162,25 @@ void _printUsage() {
     '  build-cli                    Compile build/fleury from the local CLI',
   );
   stdout.writeln('');
+  stdout.writeln('Legacy benchmark aliases:');
+  stdout.writeln(
+    '  benchmark-manifest [options]  Prefer `benchmark manifest [options]`',
+  );
+  stdout.writeln(
+    '  benchmark-result [options]    Prefer `benchmark result [options]`',
+  );
+  stdout.writeln(
+    '  benchmark-variance [options]  Prefer `benchmark variance [options]`',
+  );
+  stdout.writeln('');
   stdout.writeln('Examples:');
   stdout.writeln('  dart tool/fleury_dev.dart bootstrap');
-  stdout.writeln('  dart tool/fleury_dev.dart proof');
+  stdout.writeln('  dart tool/fleury_dev.dart demo');
+  stdout.writeln('  dart tool/fleury_dev.dart storybook');
+  stdout.writeln('  dart tool/fleury_dev.dart storybook verify');
+  stdout.writeln('  dart tool/fleury_dev.dart storybook coverage --strict');
   stdout.writeln('  dart tool/fleury_dev.dart core-demo counter');
   stdout.writeln('  dart tool/fleury_dev.dart cli diagnose --json');
-  stdout.writeln('  dart tool/fleury_dev.dart terminal-matrix --label=iterm2');
-  stdout.writeln('  dart tool/fleury_dev.dart terminal-matrix-audit');
-  stdout.writeln(
-    '  dart tool/fleury_dev.dart terminal-matrix-accept --label=iterm2 --note="Reviewed"',
-  );
-  stdout.writeln('  dart tool/fleury_dev.dart mvp-readiness');
-  stdout.writeln('  dart tool/fleury_dev.dart mvp-final-gate');
-  stdout.writeln('  dart tool/fleury_dev.dart mvp-evidence-refresh');
   stdout.writeln('  dart tool/fleury_dev.dart benchmark list');
   stdout.writeln(
     '  dart tool/fleury_dev.dart benchmark local SB.4 --warmup=1 --iterations=3 --json',
@@ -178,13 +189,15 @@ void _printUsage() {
   stdout.writeln(
     '  dart tool/fleury_dev.dart benchmark wire sb3 --peers=ratatui,opentui --runs=3',
   );
-  stdout.writeln('  dart tool/fleury_dev.dart benchmark-manifest --json');
+  stdout.writeln('  dart tool/fleury_dev.dart benchmark manifest --json');
   stdout.writeln(
-    '  dart tool/fleury_dev.dart benchmark-result --input=peer-run.json --json',
+    '  dart tool/fleury_dev.dart benchmark result --input=peer-run.json --json',
   );
   stdout.writeln(
-    '  dart tool/fleury_dev.dart benchmark-variance --input=peer-runs --json',
+    '  dart tool/fleury_dev.dart benchmark variance --input=peer-runs --json',
   );
+  stdout.writeln('  dart tool/fleury_dev.dart terminal-matrix --label=iterm2');
+  stdout.writeln('  dart tool/fleury_dev.dart mvp-readiness');
 }
 
 void _printCatalog() {
@@ -194,10 +207,13 @@ void _printCatalog() {
   stdout.writeln('Widget demos:');
   _widgetDemos.forEach((name, path) => stdout.writeln('  $name -> $path'));
   stdout.writeln('');
-  stdout.writeln('Proof app:');
+  stdout.writeln('Demo app:');
   stdout.writeln(
-    '  proof -> packages/fleury_example_console/bin/fleury_example_console.dart',
+    '  demo -> packages/fleury_example_console/bin/fleury_example_console.dart',
   );
+  stdout.writeln('');
+  stdout.writeln('Storybook:');
+  stdout.writeln('  storybook -> packages/storybook/bin/storybook.dart');
 }
 
 final _coreDemos = <String, String>{
@@ -262,11 +278,12 @@ class _Runner {
   String get widgets => '$root/packages/fleury_widgets';
   String get web => '$root/packages/fleury_web';
   String get git => '$root/packages/fleury_git';
-  String get proof => '$root/packages/fleury_example_console';
+  String get demo => '$root/packages/fleury_example_console';
+  String get storybook => '$root/packages/storybook';
   String get profiling => '$root/profiling';
 
   Future<void> bootstrap() async {
-    for (final dir in [fleury, widgets, web, git, proof]) {
+    for (final dir in [fleury, widgets, web, git, demo, storybook]) {
       await _run('dart', ['pub', 'get'], workingDirectory: dir);
     }
   }
@@ -299,18 +316,28 @@ class _Runner {
     );
     await _run('dart', ['analyze'], workingDirectory: git);
     await _run('dart', ['test'], workingDirectory: git);
-    await _run('dart', ['analyze'], workingDirectory: proof);
+    await _run('dart', ['analyze'], workingDirectory: demo);
     await _run('dart', [
       'test',
-      'test/proof_console_test.dart',
-    ], workingDirectory: proof);
+      'test/demo_console_test.dart',
+    ], workingDirectory: demo);
+    await _run('dart', ['analyze'], workingDirectory: storybook);
+    await _run('dart', ['test'], workingDirectory: storybook);
   }
 
-  Future<void> proofApp() {
+  Future<void> demoApp() {
     return _run('dart', [
       'run',
       'bin/fleury_example_console.dart',
-    ], workingDirectory: proof);
+    ], workingDirectory: demo);
+  }
+
+  Future<void> storybookApp(List<String> args) {
+    return _run('dart', [
+      'run',
+      'bin/storybook.dart',
+      ...args,
+    ], workingDirectory: storybook);
   }
 
   Future<void> coreDemo(String name) {
@@ -754,6 +781,9 @@ class _Runner {
       case 'local':
         await benchmarkLocal(rest);
         return;
+      case 'profile':
+        await benchmarkProfile(rest);
+        return;
       case 'wire':
         await benchmarkWire(rest);
         return;
@@ -878,6 +908,22 @@ class _Runner {
     ]);
   }
 
+  Future<void> benchmarkProfile(List<String> args) async {
+    if (args.isEmpty ||
+        args.first == '-h' ||
+        args.first == '--help' ||
+        args.first == 'help') {
+      _printBenchmarkProfileUsage();
+      if (args.isEmpty) exit(2);
+      return;
+    }
+    await _run('dart', [
+      'run',
+      'tool/benchmark_profile.dart',
+      ...args,
+    ], workingDirectory: '$root/packages/fleury');
+  }
+
   Future<void> benchmarkWire(List<String> args) async {
     final options = _BenchmarkWireOptions.parse(root, args);
     final configs = <String, _WireScenarioConfig>{
@@ -942,29 +988,64 @@ class _Runner {
       final fleuryBase =
           '${outDir.path}/fleury-${firstConfig.shortName}-wire-$runStamp$suffix';
       stdout.writeln('wire run $run/${options.runs}: capture fleury');
-      await _run('dart', [
-        'run',
-        'capture_pty.dart',
-        '--out',
-        fleuryBase,
-        '--timeout',
-        '${_fleuryWireTimeoutSeconds(configs.values, options)}',
-        '--cols',
-        '${options.cols}',
-        '--rows',
-        '${options.ptyRows}',
-        '--ui-mode',
-        firstConfig.uiMode,
-        '--frame-count',
-        '${options.stepsFor(firstConfig) + 1}',
-        '--',
-        fleuryBinary,
-        '--rows=${options.rowsFor(firstConfig)}',
-        if (firstConfig.usesAppend)
-          '--append=${options.appendFor(firstConfig)}',
-        '--steps=${options.stepsFor(firstConfig)}',
-        '--interval-ms=${options.intervalMsFor(firstConfig)}',
-      ], workingDirectory: profiling);
+      final fleuryDebugCapturePath = options.debugCapture
+          ? '$fleuryBase.debug.json'
+          : null;
+      final fleuryRuntimeMarkersPath = options.runtimeMarkers
+          ? '$fleuryBase.runtime.json'
+          : null;
+      final fleuryEnvironment = <String, String>{
+        if (fleuryDebugCapturePath != null)
+          'FLEURY_DEBUG_CAPTURE': fleuryDebugCapturePath,
+        if (fleuryRuntimeMarkersPath != null)
+          'FLEURY_RUNTIME_MARKERS': fleuryRuntimeMarkersPath,
+      };
+      await _run(
+        'dart',
+        [
+          'run',
+          'capture_pty.dart',
+          '--out',
+          fleuryBase,
+          '--timeout',
+          '${_fleuryWireTimeoutSeconds(configs.values, options)}',
+          '--cols',
+          '${options.cols}',
+          '--rows',
+          '${options.ptyRows}',
+          '--ui-mode',
+          firstConfig.uiMode,
+          '--frame-count',
+          '${options.stepsFor(firstConfig) + 1}',
+          if (firstConfig.resizeSequence.isNotEmpty) ...[
+            '--resize-sequence',
+            firstConfig.resizeSequence.join(','),
+            '--resize-interval-ms',
+            '${options.intervalMsFor(firstConfig)}',
+          ],
+          '--',
+          fleuryBinary,
+          '--rows=${options.rowsFor(firstConfig)}',
+          if (firstConfig.usesAppend)
+            '--append=${options.appendFor(firstConfig)}',
+          '--steps=${options.stepsFor(firstConfig)}',
+          '--interval-ms=${options.intervalMsFor(firstConfig)}',
+        ],
+        workingDirectory: profiling,
+        environment: fleuryEnvironment.isEmpty ? null : fleuryEnvironment,
+      );
+      if (fleuryDebugCapturePath != null) {
+        stdout.writeln(
+          'wire run $run/${options.runs}: fleury debug capture '
+          '$fleuryDebugCapturePath',
+        );
+      }
+      if (fleuryRuntimeMarkersPath != null) {
+        stdout.writeln(
+          'wire run $run/${options.runs}: fleury runtime markers '
+          '$fleuryRuntimeMarkersPath',
+        );
+      }
 
       final analyzeArgs = <String>['fleury=$fleuryBase'];
       for (final entry in configs.entries) {
@@ -991,6 +1072,12 @@ class _Runner {
             config.uiMode,
             '--frame-count',
             '${options.stepsFor(config) + 1}',
+            if (config.resizeSequence.isNotEmpty) ...[
+              '--resize-sequence',
+              config.resizeSequence.join(','),
+              '--resize-interval-ms',
+              '${options.intervalMsFor(config)}',
+            ],
             '--',
             ..._peerWireCommand(
               config,
@@ -1801,11 +1888,26 @@ class _Runner {
     _LocalBenchmarkTarget target,
     List<String> args,
   ) {
+    final forwarded = args.map(_normalizeLocalBenchmarkArg).toList();
     return _run('dart', [
       'run',
       'benchmark/scenario_benchmarks.dart',
-      ...args,
+      ...forwarded,
     ], workingDirectory: '$root/${target.packagePath}');
+  }
+
+  String _normalizeLocalBenchmarkArg(String arg) {
+    const prefix = '--save=';
+    if (!arg.startsWith(prefix)) return arg;
+    final path = arg.substring(prefix.length);
+    if (path.isEmpty || _isAbsolutePath(path)) return arg;
+    return '$prefix$root/$path';
+  }
+
+  bool _isAbsolutePath(String path) {
+    if (path.startsWith('/')) return true;
+    if (path.startsWith(r'\\')) return true;
+    return RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path);
   }
 }
 
@@ -1842,8 +1944,8 @@ const _widgetBenchmarkTarget = _LocalBenchmarkTarget(
   ],
 );
 
-const _proofBenchmarkTarget = _LocalBenchmarkTarget(
-  label: 'Proof app',
+const _demoBenchmarkTarget = _LocalBenchmarkTarget(
+  label: 'Demo app',
   packagePath: 'packages/fleury_example_console',
   scenarios: <String>['SB.10'],
 );
@@ -1851,7 +1953,7 @@ const _proofBenchmarkTarget = _LocalBenchmarkTarget(
 const _localBenchmarkTargets = <_LocalBenchmarkTarget>[
   _coreBenchmarkTarget,
   _widgetBenchmarkTarget,
-  _proofBenchmarkTarget,
+  _demoBenchmarkTarget,
 ];
 
 _LocalBenchmarkTarget? _localBenchmarkTargetFor(String scenarioId) {
@@ -1876,6 +1978,20 @@ String _normalizeBenchmarkScenarioId(String value) {
 
 String _normalizeWireScenario(String value) {
   final normalized = value.trim().toLowerCase();
+  if (normalized == 'sb1' || normalized == 'sb.1') {
+    return 'sb1';
+  }
+  if (normalized == 'sb1-bt' || normalized == 'sb1-bubbletea') {
+    return 'sb1-bubbletea';
+  }
+  if (normalized == 'sb1-textual' ||
+      normalized == 'sb1-py' ||
+      normalized == 'sb.1-textual') {
+    return 'sb1-textual';
+  }
+  if (normalized == 'sb1-ink' || normalized == 'sb.1-ink') {
+    return 'sb1-ink';
+  }
   if (normalized == 'sb4' || normalized == 'sb.4') {
     return 'sb4';
   }
@@ -1919,6 +2035,22 @@ String _normalizeWireScenario(String value) {
       normalized == 'sb6-ot' ||
       normalized == 'sb.6-opentui') {
     return 'sb6-opentui';
+  }
+  if (normalized == 'sb7' || normalized == 'sb.7') {
+    return 'sb7';
+  }
+  if (normalized == 'sb7-textual' ||
+      normalized == 'sb7-py' ||
+      normalized == 'sb.7-textual') {
+    return 'sb7-textual';
+  }
+  if (normalized == 'sb7-ratatui' || normalized == 'sb.7-ratatui') {
+    return 'sb7-ratatui';
+  }
+  if (normalized == 'sb7-opentui' ||
+      normalized == 'sb7-ot' ||
+      normalized == 'sb.7-opentui') {
+    return 'sb7-opentui';
   }
   if (normalized == 'sb8' || normalized == 'sb.8') {
     return 'sb8';
@@ -1969,6 +2101,22 @@ String _normalizeWireScenario(String value) {
   }
   if (normalized == 'sb10-ink' || normalized == 'sb.10-ink') {
     return 'sb10-ink';
+  }
+  if (normalized == 'sb11' || normalized == 'sb.11') {
+    return 'sb11';
+  }
+  if (normalized == 'sb11-textual' ||
+      normalized == 'sb11-py' ||
+      normalized == 'sb.11-textual') {
+    return 'sb11-textual';
+  }
+  if (normalized == 'sb11-ratatui' || normalized == 'sb.11-ratatui') {
+    return 'sb11-ratatui';
+  }
+  if (normalized == 'sb11-opentui' ||
+      normalized == 'sb11-ot' ||
+      normalized == 'sb.11-opentui') {
+    return 'sb11-opentui';
   }
   if (normalized == 'sb12' || normalized == 'sb.12') {
     return 'sb12';
@@ -2034,6 +2182,7 @@ final class _WireScenarioConfig {
     required this.defaultSteps,
     required this.defaultIntervalMs,
     required this.defaultTimeoutSeconds,
+    this.resizeSequence = const <String>[],
   });
 
   final String shortName;
@@ -2051,9 +2200,65 @@ final class _WireScenarioConfig {
   final int defaultSteps;
   final int defaultIntervalMs;
   final double defaultTimeoutSeconds;
+  final List<String> resizeSequence;
 }
 
+const _sb7ResizeSequence = <String>[
+  '80x24',
+  '120x40',
+  '200x60',
+  '64x18',
+  '48x12',
+  '32x8',
+  '160x20',
+  '120x32',
+];
+
 const _wireScenarioConfigs = <String, _WireScenarioConfig>{
+  'sb1-bubbletea': _WireScenarioConfig(
+    shortName: 'sb1',
+    scenarioName: 'SB.1 Counter/Startup',
+    peerId: 'bubbletea',
+    peerKind: 'go',
+    fleurySource: 'bin/fleury_sb1_wire.dart',
+    peerFixturePath: 'peer-fixtures/bubbletea/sb1_counter',
+    defaultRows: 1,
+    usesAppend: false,
+    defaultAppend: 0,
+    defaultSteps: 1,
+    defaultIntervalMs: 60,
+    defaultTimeoutSeconds: 8,
+  ),
+  'sb1-textual': _WireScenarioConfig(
+    shortName: 'sb1',
+    scenarioName: 'SB.1 Counter/Startup',
+    peerId: 'textual',
+    peerKind: 'python',
+    fleurySource: 'bin/fleury_sb1_wire.dart',
+    peerFixturePath: 'peer-fixtures/textual/sb1_counter',
+    peerWireScript: 'sb1_counter_benchmark.py',
+    defaultRows: 1,
+    usesAppend: false,
+    defaultAppend: 0,
+    defaultSteps: 1,
+    defaultIntervalMs: 60,
+    defaultTimeoutSeconds: 15,
+  ),
+  'sb1-ink': _WireScenarioConfig(
+    shortName: 'sb1',
+    scenarioName: 'SB.1 Counter/Startup',
+    peerId: 'ink',
+    peerKind: 'node',
+    fleurySource: 'bin/fleury_sb1_wire.dart',
+    peerFixturePath: 'peer-fixtures/ink/sb1_counter',
+    peerWireScript: 'bin/sb1_counter_benchmark.js',
+    defaultRows: 1,
+    usesAppend: false,
+    defaultAppend: 0,
+    defaultSteps: 1,
+    defaultIntervalMs: 60,
+    defaultTimeoutSeconds: 15,
+  ),
   'sb2-bubbletea': _WireScenarioConfig(
     shortName: 'sb2',
     scenarioName: 'SB.2 Text Editing',
@@ -2276,6 +2481,54 @@ const _wireScenarioConfigs = <String, _WireScenarioConfig>{
     defaultIntervalMs: 16,
     defaultTimeoutSeconds: 20,
   ),
+  'sb7-textual': _WireScenarioConfig(
+    shortName: 'sb7',
+    scenarioName: 'SB.7 Resize Storm',
+    peerId: 'textual',
+    peerKind: 'python',
+    fleurySource: 'bin/fleury_sb7_wire.dart',
+    peerFixturePath: 'peer-fixtures/textual/sb7_resize_storm',
+    peerWireScript: 'sb7_resize_storm_benchmark.py',
+    defaultRows: 100000,
+    usesAppend: false,
+    defaultAppend: 0,
+    defaultSteps: 8,
+    defaultIntervalMs: 80,
+    defaultTimeoutSeconds: 20,
+    resizeSequence: _sb7ResizeSequence,
+  ),
+  'sb7-ratatui': _WireScenarioConfig(
+    shortName: 'sb7',
+    scenarioName: 'SB.7 Resize Storm',
+    peerId: 'ratatui',
+    peerKind: 'rust',
+    fleurySource: 'bin/fleury_sb7_wire.dart',
+    peerFixturePath: 'peer-fixtures/ratatui/sb7_resize_storm',
+    peerExecutable: 'ratatui_sb7_resize_storm',
+    defaultRows: 100000,
+    usesAppend: false,
+    defaultAppend: 0,
+    defaultSteps: 8,
+    defaultIntervalMs: 80,
+    defaultTimeoutSeconds: 15,
+    resizeSequence: _sb7ResizeSequence,
+  ),
+  'sb7-opentui': _WireScenarioConfig(
+    shortName: 'sb7',
+    scenarioName: 'SB.7 Resize Storm',
+    peerId: 'opentui',
+    peerKind: 'bun',
+    fleurySource: 'bin/fleury_sb7_wire.dart',
+    peerFixturePath: 'peer-fixtures/opentui/sb7_resize_storm',
+    peerWireScript: 'bin/sb7_resize_storm_benchmark.js',
+    defaultRows: 100000,
+    usesAppend: false,
+    defaultAppend: 0,
+    defaultSteps: 8,
+    defaultIntervalMs: 80,
+    defaultTimeoutSeconds: 20,
+    resizeSequence: _sb7ResizeSequence,
+  ),
   'sb8-textual': _WireScenarioConfig(
     shortName: 'sb8',
     scenarioName: 'SB.8 Overlay/Palette Churn',
@@ -2366,12 +2619,12 @@ const _wireScenarioConfigs = <String, _WireScenarioConfig>{
   ),
   'sb10-textual': _WireScenarioConfig(
     shortName: 'sb10',
-    scenarioName: 'SB.10 Proof-App Journey',
+    scenarioName: 'SB.10 Demo-App Journey',
     peerId: 'textual',
     peerKind: 'python',
     fleurySource: 'bin/fleury_sb10_wire.dart',
-    peerFixturePath: 'peer-fixtures/textual/sb10_proof_app',
-    peerWireScript: 'sb10_proof_app_benchmark.py',
+    peerFixturePath: 'peer-fixtures/textual/sb10_demo_app',
+    peerWireScript: 'sb10_demo_app_benchmark.py',
     defaultRows: 1000,
     usesAppend: false,
     defaultAppend: 0,
@@ -2381,11 +2634,11 @@ const _wireScenarioConfigs = <String, _WireScenarioConfig>{
   ),
   'sb10-bubbletea': _WireScenarioConfig(
     shortName: 'sb10',
-    scenarioName: 'SB.10 Proof-App Journey',
+    scenarioName: 'SB.10 Demo-App Journey',
     peerId: 'bubbletea',
     peerKind: 'go',
     fleurySource: 'bin/fleury_sb10_wire.dart',
-    peerFixturePath: 'peer-fixtures/bubbletea/sb10_proof_app',
+    peerFixturePath: 'peer-fixtures/bubbletea/sb10_demo_app',
     defaultRows: 1000,
     usesAppend: false,
     defaultAppend: 0,
@@ -2395,17 +2648,62 @@ const _wireScenarioConfigs = <String, _WireScenarioConfig>{
   ),
   'sb10-ink': _WireScenarioConfig(
     shortName: 'sb10',
-    scenarioName: 'SB.10 Proof-App Journey',
+    scenarioName: 'SB.10 Demo-App Journey',
     peerId: 'ink',
     peerKind: 'node',
     fleurySource: 'bin/fleury_sb10_wire.dart',
-    peerFixturePath: 'peer-fixtures/ink/sb10_proof_app',
-    peerWireScript: 'bin/sb10_proof_app_benchmark.js',
+    peerFixturePath: 'peer-fixtures/ink/sb10_demo_app',
+    peerWireScript: 'bin/sb10_demo_app_benchmark.js',
     defaultRows: 1000,
     usesAppend: false,
     defaultAppend: 0,
     defaultSteps: 10,
     defaultIntervalMs: 50,
+    defaultTimeoutSeconds: 20,
+  ),
+  'sb11-textual': _WireScenarioConfig(
+    shortName: 'sb11',
+    scenarioName: 'SB.11 TreeTable/Filter/Copy',
+    peerId: 'textual',
+    peerKind: 'python',
+    fleurySource: 'bin/fleury_sb11_wire.dart',
+    peerFixturePath: 'peer-fixtures/textual/sb11_treetable_filter_copy',
+    peerWireScript: 'sb11_treetable_filter_copy_benchmark.py',
+    defaultRows: 100000,
+    usesAppend: false,
+    defaultAppend: 0,
+    defaultSteps: 6,
+    defaultIntervalMs: 80,
+    defaultTimeoutSeconds: 20,
+  ),
+  'sb11-ratatui': _WireScenarioConfig(
+    shortName: 'sb11',
+    scenarioName: 'SB.11 TreeTable/Filter/Copy',
+    peerId: 'ratatui',
+    peerKind: 'rust',
+    fleurySource: 'bin/fleury_sb11_wire.dart',
+    peerFixturePath: 'peer-fixtures/ratatui/sb11_treetable_filter_copy',
+    peerExecutable: 'ratatui_sb11_treetable_filter_copy',
+    defaultRows: 100000,
+    usesAppend: false,
+    defaultAppend: 0,
+    defaultSteps: 6,
+    defaultIntervalMs: 80,
+    defaultTimeoutSeconds: 15,
+  ),
+  'sb11-opentui': _WireScenarioConfig(
+    shortName: 'sb11',
+    scenarioName: 'SB.11 TreeTable/Filter/Copy',
+    peerId: 'opentui',
+    peerKind: 'bun',
+    fleurySource: 'bin/fleury_sb11_wire.dart',
+    peerFixturePath: 'peer-fixtures/opentui/sb11_treetable_filter_copy',
+    peerWireScript: 'bin/sb11_treetable_filter_copy_benchmark.js',
+    defaultRows: 100000,
+    usesAppend: false,
+    defaultAppend: 0,
+    defaultSteps: 6,
+    defaultIntervalMs: 80,
     defaultTimeoutSeconds: 20,
   ),
   'sb12-nocterm': _WireScenarioConfig(
@@ -2894,8 +3192,18 @@ Map<String, Object?> _benchmarkCatalog() {
       },
       <String, Object?>{
         'peer': 'bubbletea',
-        'scenarios': ['SB.2', 'SB.4', 'SB.5', 'SB.6', 'SB.8', 'SB.9', 'SB.10'],
+        'scenarios': [
+          'SB.1',
+          'SB.2',
+          'SB.4',
+          'SB.5',
+          'SB.6',
+          'SB.8',
+          'SB.9',
+          'SB.10',
+        ],
         'wire': [
+          'SB.1 full-ui',
           'SB.2 full-ui',
           'SB.4 reduced full-ui',
           'SB.5 full-ui',
@@ -2907,37 +3215,60 @@ Map<String, Object?> _benchmarkCatalog() {
       },
       <String, Object?>{
         'peer': 'textual',
-        'scenarios': ['SB.2', 'SB.3', 'SB.4', 'SB.5', 'SB.8', 'SB.9', 'SB.10'],
+        'scenarios': [
+          'SB.1',
+          'SB.2',
+          'SB.3',
+          'SB.4',
+          'SB.5',
+          'SB.7',
+          'SB.8',
+          'SB.9',
+          'SB.10',
+          'SB.11',
+        ],
         'wire': [
+          'SB.1 full-ui',
           'SB.2 full-ui',
           'SB.3 full-ui',
           'SB.4 full-ui',
           'SB.5 full-ui',
+          'SB.7 full-ui',
           'SB.8 full-ui',
           'SB.9 full-ui',
           'SB.10 full-ui',
+          'SB.11 full-ui',
         ],
       },
       <String, Object?>{
         'peer': 'opentui',
-        'scenarios': ['SB.3', 'SB.4', 'SB.6', 'SB.9', 'SB.12'],
+        'scenarios': ['SB.3', 'SB.4', 'SB.6', 'SB.7', 'SB.9', 'SB.11', 'SB.12'],
         'wire': [
           'SB.3 full-ui',
           'SB.4 full-ui',
           'SB.6 full-ui',
+          'SB.7 full-ui',
           'SB.9 full-ui',
+          'SB.11 full-ui',
           'SB.12 full-ui',
         ],
       },
       <String, Object?>{
         'peer': 'ratatui',
-        'scenarios': ['SB.3', 'SB.6', 'SB.12'],
-        'wire': ['SB.3 full-ui', 'SB.6 full-ui', 'SB.12 full-ui'],
+        'scenarios': ['SB.3', 'SB.6', 'SB.7', 'SB.11', 'SB.12'],
+        'wire': [
+          'SB.3 full-ui',
+          'SB.6 full-ui',
+          'SB.7 full-ui',
+          'SB.11 full-ui',
+          'SB.12 full-ui',
+        ],
       },
       <String, Object?>{
         'peer': 'ink',
-        'scenarios': ['SB.2', 'SB.5', 'SB.8', 'SB.10'],
+        'scenarios': ['SB.1', 'SB.2', 'SB.5', 'SB.8', 'SB.10'],
         'wire': [
+          'SB.1 full-ui',
           'SB.2 full-ui',
           'SB.5 full-ui',
           'SB.8 full-ui',
@@ -3133,6 +3464,8 @@ final class _BenchmarkWireOptions {
     required this.cols,
     required this.ptyRows,
     required this.outDir,
+    required this.debugCapture,
+    required this.runtimeMarkers,
   });
 
   final List<String> scenarioIds;
@@ -3145,6 +3478,8 @@ final class _BenchmarkWireOptions {
   final int cols;
   final int ptyRows;
   final String outDir;
+  final bool debugCapture;
+  final bool runtimeMarkers;
 
   int rowsFor(_WireScenarioConfig config) => rowsOverride ?? config.defaultRows;
   int appendFor(_WireScenarioConfig config) =>
@@ -3225,6 +3560,8 @@ final class _BenchmarkWireOptions {
     var cols = 120;
     var ptyRows = 32;
     var outDir = '$root/profiling/caps';
+    var debugCapture = false;
+    var runtimeMarkers = false;
 
     for (final arg in rest) {
       if (arg.startsWith('--runs=')) {
@@ -3250,6 +3587,10 @@ final class _BenchmarkWireOptions {
         ptyRows = _positiveCliInt(arg, '--pty-rows=');
       } else if (arg.startsWith('--out-dir=')) {
         outDir = arg.substring('--out-dir='.length).trim();
+      } else if (arg == '--debug-capture') {
+        debugCapture = true;
+      } else if (arg == '--runtime-markers') {
+        runtimeMarkers = true;
       } else if (arg.startsWith('--peer=') || arg.startsWith('--peers=')) {
         continue;
       } else {
@@ -3270,6 +3611,8 @@ final class _BenchmarkWireOptions {
       cols: cols,
       ptyRows: ptyRows,
       outDir: _absolutePath(root, outDir),
+      debugCapture: debugCapture,
+      runtimeMarkers: runtimeMarkers,
     );
   }
 }
@@ -5432,6 +5775,9 @@ void _printBenchmarkUsage() {
     '  local <SB.id|all> [...] Run Fleury scenario benchmarks through package runners',
   );
   stdout.writeln(
+    '  profile <SB.id> [...]    Run local benchmark under VM CPU/allocation profiler',
+  );
+  stdout.writeln(
     '  wire <scenario> [...]   Build/capture/analyze real PTY peer runs',
   );
   stdout.writeln(
@@ -5470,14 +5816,23 @@ void _printBenchmarkUsage() {
   stdout.writeln(
     '  web-report [options]    Summarize retained DOM web frame captures',
   );
-  stdout.writeln('  manifest [options]     Alias for benchmark-manifest');
-  stdout.writeln('  result [options]       Alias for benchmark-result');
-  stdout.writeln('  variance [options]     Alias for benchmark-variance');
+  stdout.writeln(
+    '  manifest [options]     Print the comparative benchmark contract',
+  );
+  stdout.writeln(
+    '  result [options]       Validate and merge one peer benchmark run',
+  );
+  stdout.writeln(
+    '  variance [options]     Summarize repeated peer benchmark runs',
+  );
   stdout.writeln('');
   stdout.writeln('Examples:');
   stdout.writeln('  fleury benchmark list');
   stdout.writeln(
     '  fleury benchmark local SB.4 --warmup=1 --iterations=3 --json',
+  );
+  stdout.writeln(
+    '  fleury benchmark profile SB.6 --warmup=1 --iterations=5 --save=profiling/caps/sb6-vm-profile.json',
   );
   stdout.writeln('  fleury benchmark local --list');
   stdout.writeln('  fleury benchmark wire sb2 --runs=3');
@@ -5544,10 +5899,15 @@ void _printBenchmarkLocalUsage() {
   stdout.writeln('  --warmup=N              Warmup iterations');
   stdout.writeln('  --iterations=N          Measured iterations');
   stdout.writeln('  --json                  Print runner JSON');
-  stdout.writeln('  --save=PATH             Save runner JSON');
+  stdout.writeln(
+    '  --save=PATH             Save runner JSON; relative to repo root',
+  );
   stdout.writeln('  --size=COLSxROWS        Terminal size');
   stdout.writeln(
     '  --rows=N                Widget row count for widget scenarios',
+  );
+  stdout.writeln(
+    '  --profile-memory        Add RSS phase profiling metrics where supported',
   );
   stdout.writeln('');
   stdout.writeln('Examples:');
@@ -5555,7 +5915,46 @@ void _printBenchmarkLocalUsage() {
   stdout.writeln(
     '  fleury benchmark local SB.4 --rows=10000 --warmup=1 --iterations=3',
   );
+  stdout.writeln(
+    '  fleury benchmark local SB.6 --profile-memory --json --save=profiling/caps/sb6-local-memory.json',
+  );
   stdout.writeln('  fleury benchmark local all --warmup=1 --iterations=1');
+}
+
+void _printBenchmarkProfileUsage() {
+  stdout.writeln(
+    'Usage: dart tool/fleury_dev.dart benchmark profile <SB.id> [options] [runner options]',
+  );
+  stdout.writeln('');
+  stdout.writeln(
+    'Runs a local scenario benchmark under the Dart VM service profiler.',
+  );
+  stdout.writeln('Profiler options:');
+  stdout.writeln(
+    '  --save=PATH             Save profile JSON; relative to repo root',
+  );
+  stdout.writeln('  --json                  Print profile JSON');
+  stdout.writeln('  --cpu-top=N             CPU rows to keep');
+  stdout.writeln('  --allocation-top=N      Allocation rows to keep');
+  stdout.writeln('  --profile-period-us=N   CPU sample period');
+  stdout.writeln('  --runner-json           Forward --json to the runner');
+  stdout.writeln('  --runner-save=PATH      Forward --save to the runner');
+  stdout.writeln('');
+  stdout.writeln('Common runner options are forwarded:');
+  stdout.writeln(
+    '  --warmup=N --iterations=N --rows=N --size=COLSxROWS --sb12-phase=PHASE',
+  );
+  stdout.writeln('');
+  stdout.writeln('Examples:');
+  stdout.writeln(
+    '  fleury benchmark profile SB.6 --warmup=1 --iterations=5 --save=profiling/caps/sb6-vm-profile.json',
+  );
+  stdout.writeln(
+    '  fleury benchmark profile SB.12 --warmup=1 --iterations=20 --save=profiling/caps/sb12-vm-profile.json',
+  );
+  stdout.writeln(
+    '  fleury benchmark profile SB.12 --sb12-phase=viewport --warmup=1 --iterations=10',
+  );
 }
 
 void _printBenchmarkWireUsage() {
@@ -5610,6 +6009,12 @@ void _printBenchmarkWireUsage() {
   stdout.writeln('  --pty-rows=N            PTY rows, default 32');
   stdout.writeln(
     '  --out-dir=PATH          Capture directory, default profiling/caps',
+  );
+  stdout.writeln(
+    '  --debug-capture         Write Fleury DebugCapture JSON beside each run',
+  );
+  stdout.writeln(
+    '  --runtime-markers       Write Fleury runtime marker JSON beside each run',
   );
   stdout.writeln('');
   stdout.writeln('Examples:');
@@ -6357,6 +6762,12 @@ void _printBenchmarkWireScenarioUsage(String selector) {
   stdout.writeln('  --pty-rows=N            PTY rows, default 32');
   stdout.writeln(
     '  --out-dir=PATH          Capture directory, default profiling/caps',
+  );
+  stdout.writeln(
+    '  --debug-capture         Write Fleury DebugCapture JSON beside each run',
+  );
+  stdout.writeln(
+    '  --runtime-markers       Write Fleury runtime marker JSON beside each run',
   );
 }
 

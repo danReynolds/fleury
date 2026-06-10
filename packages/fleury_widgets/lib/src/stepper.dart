@@ -6,6 +6,7 @@ import 'package:fleury/fleury.dart';
 /// the value, so pointer users get the same affordance.
 ///
 /// Controlled — hold the value yourself and update it from [onChanged].
+/// Passing null for [onChanged] disables the stepper.
 ///
 /// ```dart
 /// Stepper(
@@ -34,7 +35,7 @@ class Stepper extends StatefulWidget {
   final num value;
 
   /// Called with the new value when the user nudges it.
-  final void Function(num value) onChanged;
+  final void Function(num value)? onChanged;
 
   /// Lower bound. `null` means unbounded below.
   final num? min;
@@ -66,6 +67,8 @@ class Stepper extends StatefulWidget {
 class _StepperState extends State<Stepper> implements TextInputClaimant {
   late FocusNode _node;
   bool _owns = false;
+
+  bool get _enabled => widget.onChanged != null;
 
   @override
   void initState() {
@@ -107,16 +110,19 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
   }
 
   void _nudge(num delta) {
+    if (!_enabled) return;
     final next = _clamp(widget.value + delta);
-    if (next != widget.value) widget.onChanged(next);
+    if (next != widget.value) widget.onChanged!(next);
   }
 
   void _jump(num target) {
+    if (!_enabled) return;
     final next = _clamp(target);
-    if (next != widget.value) widget.onChanged(next);
+    if (next != widget.value) widget.onChanged!(next);
   }
 
   KeyEventResult _onKey(KeyEvent event) {
+    if (!_enabled) return KeyEventResult.ignored;
     switch (event.keyCode) {
       case KeyCode.arrowUp:
         _nudge(widget.step);
@@ -143,6 +149,7 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
 
   @override
   KeyEventResult onTextInput(String text) {
+    if (!_enabled) return KeyEventResult.ignored;
     // +/= add, -/_ subtract, mirroring conventions in spreadsheet apps.
     switch (text) {
       case '+':
@@ -171,12 +178,67 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final enabled = _enabled;
     final focused = _node.hasFocus;
-    final canDec = widget.min == null || widget.value > widget.min!;
-    final canInc = widget.max == null || widget.value < widget.max!;
+    final canDec =
+        enabled && (widget.min == null || widget.value > widget.min!);
+    final canInc =
+        enabled && (widget.max == null || widget.value < widget.max!);
     final muted = theme.mutedStyle;
-    final focusStyle = focused ? theme.focusedStyle : CellStyle.empty;
+    final focusStyle = !enabled
+        ? muted
+        : focused
+        ? theme.focusedStyle
+        : CellStyle.empty;
     final dim = const CellStyle(dim: true);
+    Widget body() => Row(
+      children: [
+        if (widget.label != null) ...[
+          Text(widget.label!, style: muted),
+          const Text(' '),
+        ],
+        Text('[', style: focusStyle),
+        GestureDetector(
+          onTap: enabled
+              ? () {
+                  _node.requestFocus();
+                  _nudge(-widget.step);
+                }
+              : null,
+          child: Text(' − ', style: canDec ? focusStyle : dim),
+        ),
+        Text(_format(widget.value), style: focusStyle),
+        GestureDetector(
+          onTap: enabled
+              ? () {
+                  _node.requestFocus();
+                  _nudge(widget.step);
+                }
+              : null,
+          child: Text(' + ', style: canInc ? focusStyle : dim),
+        ),
+        Text(']', style: focusStyle),
+      ],
+    );
+
+    if (!enabled) {
+      return Semantics(
+        role: SemanticRole.spinButton,
+        label: widget.label,
+        value: widget.value,
+        enabled: false,
+        state: SemanticState({
+          'numericValue': widget.value,
+          if (widget.min != null) 'min': widget.min,
+          if (widget.max != null) 'max': widget.max,
+          'step': widget.step,
+          'largeStep': widget.largeStep,
+          'canIncrement': false,
+          'canDecrement': false,
+        }),
+        child: body(),
+      );
+    }
 
     return Semantics(
       role: SemanticRole.spinButton,
@@ -220,31 +282,7 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
         onKey: _onKey,
         child: GestureDetector(
           onTap: () => _node.requestFocus(),
-          child: Row(
-            children: [
-              if (widget.label != null) ...[
-                Text(widget.label!, style: muted),
-                const Text(' '),
-              ],
-              Text('[', style: focusStyle),
-              GestureDetector(
-                onTap: () {
-                  _node.requestFocus();
-                  _nudge(-widget.step);
-                },
-                child: Text(' − ', style: canDec ? focusStyle : dim),
-              ),
-              Text(_format(widget.value), style: focusStyle),
-              GestureDetector(
-                onTap: () {
-                  _node.requestFocus();
-                  _nudge(widget.step);
-                },
-                child: Text(' + ', style: canInc ? focusStyle : dim),
-              ),
-              Text(']', style: focusStyle),
-            ],
-          ),
+          child: body(),
         ),
       ),
     );

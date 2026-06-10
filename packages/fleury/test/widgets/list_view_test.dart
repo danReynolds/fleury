@@ -309,6 +309,48 @@ void main() {
       tester.sendKey(_code(KeyCode.arrowDown));
       expect(controller.selectedIndex, 1);
     });
+
+    testWidgets('builder selected flag is active only while list is focused', (
+      tester,
+    ) {
+      final controller = ListController();
+      final outside = FocusNode(debugLabel: 'outside');
+      tester.pumpWidget(
+        Row(
+          children: [
+            SizedBox(
+              width: 12,
+              child: ListView.builder(
+                controller: controller,
+                itemCount: 3,
+                autofocus: true,
+                itemBuilder: (context, index, selected) =>
+                    Text('${selected ? '>' : ' '} Item $index'),
+              ),
+            ),
+            Focus(focusNode: outside, child: const Text('Outside')),
+          ],
+        ),
+      );
+
+      var output = tester.renderToString(
+        size: const CellSize(40, 4),
+        emptyMark: ' ',
+      );
+      expect(output, contains('> Item 0'));
+
+      outside.requestFocus();
+      tester.pump();
+      output = tester.renderToString(
+        size: const CellSize(40, 4),
+        emptyMark: ' ',
+      );
+      expect(controller.selectedIndex, 0);
+      expect(output, isNot(contains('> Item 0')));
+      expect(output, contains('Item 0'));
+
+      outside.dispose();
+    });
   });
 
   group('PageUp / PageDown', () {

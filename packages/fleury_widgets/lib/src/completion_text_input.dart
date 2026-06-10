@@ -302,6 +302,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
           height: visible,
           child: ListView.builder(
             controller: _list,
+            selectionActive: true,
             itemCount: options.length,
             itemBuilder: (_, i, selected) {
               final option = options[i];

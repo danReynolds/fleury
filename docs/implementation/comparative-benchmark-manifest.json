@@ -101,7 +101,7 @@
           "--json"
         ]
       },
-      "peerTargets": ["nocterm", "bubbletea", "textual", "ink"],
+      "peerTargets": ["bubbletea", "textual", "ink"],
       "contract": [
         "mount one counter app",
         "render first frame",
@@ -179,7 +179,7 @@
           "--json"
         ]
       },
-      "peerTargets": ["textual", "ratatui", "opentui", "nocterm"],
+      "peerTargets": ["textual", "ratatui", "opentui"],
       "contract": [
         "mount a 100k-row tabular data set",
         "render first frame with visible virtualization",
@@ -331,7 +331,7 @@
           "--json"
         ]
       },
-      "peerTargets": ["nocterm", "textual", "ratatui", "opentui"],
+      "peerTargets": ["textual", "ratatui", "opentui"],
       "contract": [
         "keep a table/log/editor surface mounted",
         "alternate normal, wide, narrow, and short terminal sizes",
@@ -432,7 +432,7 @@
     },
     {
       "id": "SB.10",
-      "name": "Proof-App Journey",
+      "name": "Demo-App Journey",
       "local": {
         "workingDirectory": "packages/fleury_example_console",
         "command": [
@@ -481,7 +481,7 @@
           "--json"
         ]
       },
-      "peerTargets": ["textual", "ratatui", "opentui", "nocterm"],
+      "peerTargets": ["textual", "ratatui", "opentui"],
       "contract": [
         "mount a large hierarchical table with branch rows and leaves",
         "expand branches",

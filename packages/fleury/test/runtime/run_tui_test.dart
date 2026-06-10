@@ -387,6 +387,9 @@ void main() {
           expect(first.dirtyBounds, isNotNull);
           expect(first.dirtyBounds!.left, 0);
           expect(first.dirtyBounds!.top, 0);
+          expect(first.dirtySpans.hasDirtySpans, isTrue);
+          expect(first.dirtySpans.spanCount, greaterThan(0));
+          expect(first.dirtySpans.coveredCellCount, first.dirtyCells);
 
           driver.enqueue(
             const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),

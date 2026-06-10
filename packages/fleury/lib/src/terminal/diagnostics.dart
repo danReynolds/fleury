@@ -307,7 +307,7 @@ final class TerminalCompatibilityReport {
   };
 }
 
-/// Machine-readable terminal diagnosis used by the CLI, tests, and proof apps.
+/// Machine-readable terminal diagnosis used by the CLI, tests, and demo apps.
 @immutable
 final class TerminalDiagnosis {
   const TerminalDiagnosis({

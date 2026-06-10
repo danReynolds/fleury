@@ -34,7 +34,7 @@ This audit closes M1.5 as a boundary/readiness milestone. It does not start
     [PatchReview tests](../../packages/fleury_widgets/test/patch_review_test.dart),
     [ApprovalPrompt tests](../../packages/fleury_widgets/test/approval_prompt_test.dart),
     [DataTable tests](../../packages/fleury_widgets/test/data_table_test.dart),
-    [proof app tests](../../packages/fleury_example_console/test/proof_console_test.dart).
+    [demo app tests](../../packages/fleury_example_console/test/demo_console_test.dart).
 
 - [x] App kernel exposes command IDs, command invocation, screen state, status,
   command palette integration, and tester command routing.
@@ -53,7 +53,7 @@ This audit closes M1.5 as a boundary/readiness milestone. It does not start
     [process task controller](../../packages/fleury/lib/src/effects/process_task.dart),
     [task tests](../../packages/fleury/test/effects/task_test.dart),
     [process task tests](../../packages/fleury/test/effects/process_task_test.dart),
-    [proof app task workflow](../../packages/fleury_example_console/test/proof_console_test.dart).
+    [demo app task workflow](../../packages/fleury_example_console/test/demo_console_test.dart).
 
 - [x] Sanitized output pipeline handles active terminal sequences, unsafe
   OSC/DCS/APC payloads, malformed UTF-8, huge lines, markdown links,
@@ -76,7 +76,7 @@ This audit closes M1.5 as a boundary/readiness milestone. It does not start
     [DataTable tests](../../packages/fleury_widgets/test/data_table_test.dart),
     [PatchReview tests](../../packages/fleury_widgets/test/patch_review_test.dart),
     [DataTable baseline](../../packages/fleury_widgets/benchmark/results/phase1-widgets-2026-05-31.json),
-    [proof app Runs workflow](../../packages/fleury_example_console/test/proof_console_test.dart).
+    [demo app Runs workflow](../../packages/fleury_example_console/test/demo_console_test.dart).
 
 - [x] Debug capture and inspector hooks can snapshot terminal/input/frame
   events, semantic state, output summaries, capability state, tasks, and
@@ -87,16 +87,16 @@ This audit closes M1.5 as a boundary/readiness milestone. It does not start
     [debug panel](../../packages/fleury/lib/src/debug/debug_panel.dart),
     [debug capture tests](../../packages/fleury/test/debug/debug_capture_test.dart),
     [debug shell tests](../../packages/fleury/test/debug/debug_shell_test.dart),
-    [proof app capture-to-test workflow](../../packages/fleury_example_console/test/proof_console_test.dart).
+    [demo app capture-to-test workflow](../../packages/fleury_example_console/test/demo_console_test.dart).
 
 - [x] Capability/security policy is visible to widgets, semantics, diagnostics,
-  tests, and the proof app.
+  tests, and the demo app.
   - Evidence:
     [capability requirements](../../packages/fleury/lib/src/terminal/capability_requirements.dart),
     [diagnostics](../../packages/fleury/lib/src/terminal/diagnostics.dart),
     [diagnostics tests](../../packages/fleury/test/terminal/diagnostics_test.dart),
     [image tests](../../packages/fleury_widgets/test/image_test.dart),
-    [proof app diagnostics tests](../../packages/fleury_example_console/test/proof_console_test.dart).
+    [demo app diagnostics tests](../../packages/fleury_example_console/test/demo_console_test.dart).
 
 - [x] Fleury core and widgets have no ACP/JSON-RPC/protocol-schema imports.
   - Evidence: `rg -n "\bACP\b|agentclientprotocol|JSON-RPC|jsonrpc|session/prompt|session/update|terminal/output|Acp" packages/fleury packages/fleury_widgets`
@@ -117,12 +117,12 @@ deferred to `fleury_acp`.
 
 ## Remaining Fast-Follow Widgets
 
-These should follow proof-app or later flagship pressure rather than becoming
+These should follow demo-app or later flagship pressure rather than becoming
 launch blockers:
 
 - Richer protocol-neutral workflow surfaces beyond the current approval,
   transcript, tool-call, task-graph, model/status, file-reference,
-  conversation, context, trace, and patch-review set when proof-app or later
+  conversation, context, trace, and patch-review set when demo-app or later
   flagship pressure shows a concrete need.
 - ACP-specific permission widgets beyond generic `ApprovalPrompt`.
 
@@ -131,5 +131,5 @@ launch blockers:
 Fleury is adapter-ready for launch scope: a later `fleury_acp` package can map
 ACP concepts onto semantic nodes, app commands, task/effect state, sanitized
 output, workflow timelines, patch-review surfaces, capability policy,
-selection/copy, debug capture, and the proof-app tested widget/runtime surfaces
+selection/copy, debug capture, and the demo-app tested widget/runtime surfaces
 without changing Fleury core.

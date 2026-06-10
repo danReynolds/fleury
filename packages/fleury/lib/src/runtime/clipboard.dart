@@ -107,18 +107,18 @@ final class ClipboardWriteReport {
   }
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'result': result.name,
-        'policy': policy.name,
-        'payloadBytes': payloadBytes,
-        'osc52EncodedLength': osc52EncodedLength,
-        'overSsh': overSsh,
-        'inProcessUpdated': inProcessUpdated,
-        'platformToolAttempted': platformToolAttempted,
-        'osc52Attempted': osc52Attempted,
-        'osc52Emitted': osc52Emitted,
-        if (platformTool != null) 'platformTool': platformTool,
-        'resolution': resolution.toJson(),
-      };
+    'result': result.name,
+    'policy': policy.name,
+    'payloadBytes': payloadBytes,
+    'osc52EncodedLength': osc52EncodedLength,
+    'overSsh': overSsh,
+    'inProcessUpdated': inProcessUpdated,
+    'platformToolAttempted': platformToolAttempted,
+    'osc52Attempted': osc52Attempted,
+    'osc52Emitted': osc52Emitted,
+    if (platformTool != null) 'platformTool': platformTool,
+    'resolution': resolution.toJson(),
+  };
 }
 
 /// System-clipboard interop.
@@ -159,10 +159,10 @@ class SystemClipboard extends Clipboard {
     Map<String, String>? environment,
     void Function(String)? stdoutWrite,
     Future<bool> Function(String executable, List<String> args, String text)?
-        runTool,
-  })  : _env = environment ?? Platform.environment,
-        _stdoutWrite = stdoutWrite ?? stdout.write,
-        _runTool = runTool ?? _defaultRunTool;
+    runTool,
+  }) : _env = environment ?? Platform.environment,
+       _stdoutWrite = stdoutWrite ?? stdout.write,
+       _runTool = runTool ?? _defaultRunTool;
 
   final Map<String, String> _env;
   final void Function(String) _stdoutWrite;

@@ -101,6 +101,32 @@ void main() {
       expect(out.contains('qty'), isTrue);
     });
 
+    testWidgets('null onChanged disables the stepper', (tester) async {
+      tester.pumpWidget(
+        const Stepper(value: 7, label: 'qty', autofocus: true, onChanged: null),
+      );
+
+      final node = tester.semantics().single(
+        role: SemanticRole.spinButton,
+        label: 'qty',
+        enabled: false,
+      );
+      expect(node.actions, isEmpty);
+      expect(node.value, 7);
+      expect(node.state['canIncrement'], isFalse);
+      expect(node.state['canDecrement'], isFalse);
+      expect(
+        tester.render(size: const CellSize(16, 1)).atColRow(0, 0).style.dim,
+        isTrue,
+      );
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.increment,
+        node: node,
+      );
+      expect(result.status, SemanticActionInvocationStatus.disabled);
+    });
+
     testWidgets(
       'exposes spin button semantics and increment/decrement actions',
       (tester) async {

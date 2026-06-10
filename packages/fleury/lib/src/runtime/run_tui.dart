@@ -6,6 +6,7 @@
 // exception bubbles up.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show File, IOOverrides, Platform, stderr;
 
 import '../debug/debug_events.dart';
@@ -114,6 +115,8 @@ Future<void> runTui(
   DebugConfig debug = const DebugConfig(),
   Duration frameInterval = Duration.zero,
 }) async {
+  final runtimeMarkers = _RuntimeMarkerRecorder.fromEnvironment();
+  runtimeMarkers?.mark('runTui.entry');
   final usedDriver = driver ?? await _resolveDefaultDriver();
   // Long-lived shell-state holder. Survives setState / rebuilds; the
   // root is rebuilt whenever the viewport resizes, so a per-build
@@ -180,10 +183,11 @@ Future<void> runTui(
   // Optional byte telemetry: set FLEURY_BYTE_TELEMETRY=1 to wrap the live
   // output sink and print a per-frame byte budget on exit. Aggregate mode
   // (no per-frame list) so a long session stays bounded; zero cost when off.
+  final driverSink = _DriverSink(usedDriver, runtimeMarkers);
   final byteTelemetry = Platform.environment['FLEURY_BYTE_TELEMETRY'] == '1'
-      ? CountingAnsiSink.aggregate(_DriverSink(usedDriver))
+      ? CountingAnsiSink.aggregate(driverSink)
       : null;
-  final AnsiSink sink = byteTelemetry ?? _DriverSink(usedDriver);
+  final AnsiSink sink = byteTelemetry ?? driverSink;
   // Downsample colors to whatever the terminal actually supports.
   final renderer = AnsiRenderer(colorMode: usedDriver.capabilities.colorMode);
   Element? rootElement;
@@ -213,6 +217,7 @@ Future<void> runTui(
     if (r == null) return;
     final size = usedDriver.size;
     if (size.isEmpty) return;
+    runtimeMarkers?.markOnce('first.render.start');
 
     // Capture per-phase timings only when the debug stream has live
     // listeners — when no one's watching, we skip the Stopwatch
@@ -257,12 +262,10 @@ Future<void> runTui(
     // same byte output as renderFull, so the same path handles first
     // frame and resize without a separate branch.
     final diffSw = debugWatching ? (Stopwatch()..start()) : null;
-    // Paint-flash mode: capture every cell the diff emits so the next
-    // pass can overlay a green tint on top (terminal-level, no buffer
-    // mutation — keeps the diff machinery untouched). Production case
-    // pays nothing because debugController.paintFlash is false.
-    final wantFlashCapture = debugWatching && debugController.paintFlash;
-    final currentDirty = wantFlashCapture ? <int>[] : null;
+    // Debug mode captures every cell the diff emits. Paint flash uses the same
+    // stream to overlay a tint, while captures/panels use it for dirty-shape
+    // diagnostics.
+    final currentDirty = debugWatching ? <int>[] : null;
     var dirtyCellCount = 0;
     int? dirtyMinCol;
     int? dirtyMinRow;
@@ -294,6 +297,12 @@ Future<void> runTui(
             dirtyMaxCol! - dirtyMinCol! + 1,
             dirtyMaxRow! - dirtyMinRow! + 1,
           );
+    final dirtySpanStats = debugWatching
+        ? DirtySpanFrameStats.fromFlatCells(
+            currentDirty ?? const [],
+            columns: next.size.cols,
+          )
+        : DirtySpanFrameStats.empty;
 
     // Paint-flash overlay: emit ANSI directly to the sink (not into
     // the buffer) so the buffer state stays "the app's truth" and the
@@ -320,6 +329,7 @@ Future<void> runTui(
       );
       lastFlashedCells = const [];
     }
+    runtimeMarkers?.markOnce('first.render.end');
 
     frameLoop.commit(frame);
 
@@ -336,6 +346,7 @@ Future<void> runTui(
           diff: phaseDiff,
           dirtyCells: dirtyCellCount,
           dirtyBounds: dirtyBounds,
+          dirtySpans: dirtySpanStats,
           dirtySources: dirtySources,
           layoutStats: layoutStats,
           repaintBoundaries: repaintBoundaryStats,
@@ -402,7 +413,9 @@ Future<void> runTui(
     frameScheduler.dispose();
     dispatcher.dispose();
     runtime.dispose();
+    runtimeMarkers?.mark('terminal.restore.start');
     await usedDriver.restore();
+    runtimeMarkers?.mark('terminal.restore.end');
 
     // The terminal is back on the normal screen now. Unless the caller took
     // the lines live via onStrayOutput, replay everything captured during the
@@ -418,6 +431,8 @@ Future<void> runTui(
     if (byteTelemetry != null) {
       stderr.write(_formatByteTelemetry(byteTelemetry));
     }
+    runtimeMarkers?.mark('runTui.cleanup.complete');
+    runtimeMarkers?.write();
   }
 
   // Intercept stray output so it can't corrupt the frame. `print()` is
@@ -437,7 +452,9 @@ Future<void> runTui(
   IOOverrides.runZoned(
     () => runZonedGuarded(
       () async {
+        runtimeMarkers?.mark('terminal.enter.start');
         await usedDriver.enter(mode);
+        runtimeMarkers?.mark('terminal.enter.end');
         try {
           // Wrap the app in:
           //   - TuiBindingScope so animation (and future cross-cutting
@@ -488,6 +505,7 @@ Future<void> runTui(
             ),
           );
           rootElement = runtime.mountRoot(buildRoot());
+          runtimeMarkers?.mark('root.mounted');
           debugController.setSemanticTreeProvider(() {
             final root = rootElement;
             return root == null ? null : SemanticTree.fromElement(root);
@@ -614,14 +632,64 @@ String _frameReasonForEvent(TuiEvent event) {
 }
 
 class _DriverSink implements AnsiSink {
-  _DriverSink(this._driver);
+  _DriverSink(this._driver, this._runtimeMarkers);
   final TerminalDriver _driver;
+  final _RuntimeMarkerRecorder? _runtimeMarkers;
 
   @override
-  void write(String data) => _driver.write(data);
+  void write(String data) {
+    if (data.isNotEmpty) {
+      _runtimeMarkers?.markOnce('first.output.write');
+    }
+    _driver.write(data);
+  }
 
   @override
   Future<void> flush() async {}
+}
+
+final class _RuntimeMarkerRecorder {
+  _RuntimeMarkerRecorder._(this._path) : _watch = Stopwatch()..start();
+
+  static _RuntimeMarkerRecorder? fromEnvironment() {
+    final path = Platform.environment['FLEURY_RUNTIME_MARKERS']?.trim();
+    if (path == null || path.isEmpty) return null;
+    return _RuntimeMarkerRecorder._(path);
+  }
+
+  final String _path;
+  final Stopwatch _watch;
+  final List<Map<String, Object?>> _markers = <Map<String, Object?>>[];
+  final Set<String> _seenOnce = <String>{};
+
+  void mark(String label) {
+    final now = DateTime.now().toUtc();
+    _markers.add(<String, Object?>{
+      'label': label,
+      'epochMicros': now.microsecondsSinceEpoch,
+      'elapsedMicros': _watch.elapsedMicroseconds,
+    });
+  }
+
+  void markOnce(String label) {
+    if (_seenOnce.add(label)) mark(label);
+  }
+
+  void write() {
+    try {
+      final output = File(_path);
+      output.parent.createSync(recursive: true);
+      output.writeAsStringSync(
+        const JsonEncoder.withIndent('  ').convert(<String, Object?>{
+          'schemaVersion': 1,
+          'kind': 'fleuryRuntimeMarkers',
+          'markers': _markers,
+        }),
+      );
+    } on Object catch (error) {
+      stderr.writeln('[fleury runtime markers] failed to write $_path: $error');
+    }
+  }
 }
 
 /// Renders a one-shot byte-telemetry summary for the FLEURY_BYTE_TELEMETRY

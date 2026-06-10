@@ -5,8 +5,8 @@ final class TextPastePolicy {
   const TextPastePolicy({
     this.largePasteThreshold = 8192,
     this.chunkSize = 2048,
-  })  : assert(largePasteThreshold >= 0),
-        assert(chunkSize > 0);
+  }) : assert(largePasteThreshold >= 0),
+       assert(chunkSize > 0);
 
   /// Pasted text longer than this many Dart string code units is chunked.
   final int largePasteThreshold;
@@ -68,11 +68,9 @@ final class TextPasteProgress {
 
 /// Mutable iterator over one paste operation.
 final class TextPasteSession {
-  TextPasteSession({
-    required String text,
-    required TextPastePolicy policy,
-  })  : totalLength = text.length,
-        _chunks = policy.chunks(text).iterator;
+  TextPasteSession({required String text, required TextPastePolicy policy})
+    : totalLength = text.length,
+      _chunks = policy.chunks(text).iterator;
 
   final int totalLength;
   final Iterator<String> _chunks;

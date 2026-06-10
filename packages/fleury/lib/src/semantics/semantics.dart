@@ -1013,7 +1013,7 @@ final class SemanticDirtySnapshot {
 ///
 /// First-party widgets should contribute semantics automatically where
 /// possible. Use this wrapper for app-specific regions, custom controls, and
-/// early proof-app annotations.
+/// early demo-app annotations.
 final class Semantics extends ProxyWidget {
   const Semantics({
     super.key,

@@ -149,6 +149,7 @@ class _DebugPanelState extends State<DebugPanel> {
       _phaseRow('Diff  ', latest.diff, _history.map((f) => f.diff)),
       const Text(''),
       _row('Dirty', _dirtySummary(latest)),
+      _row('Spans', _dirtySpanSummary(latest.dirtySpans)),
       _row('Layouts', _layoutSummary(latest.layoutStats)),
       _row('Boundaries', _repaintBoundarySummary(latest.repaintBoundaries)),
       _row('Sources', _sourceSummary(latest.dirtySources)),
@@ -185,6 +186,7 @@ class _DebugPanelState extends State<DebugPanel> {
       _row('Total', _us(latest.total)),
       _row('Dirty cells', '${latest.dirtyCells}/$cells'),
       _row('Dirty bounds', _dirtyBoundsSummary(latest.dirtyBounds)),
+      _row('Dirty spans', _dirtySpanSummary(latest.dirtySpans)),
       _row('Layouts', _layoutSummary(latest.layoutStats)),
       _row('Boundaries', _repaintBoundarySummary(latest.repaintBoundaries)),
       _row('Sources', _sourceSummary(latest.dirtySources)),
@@ -852,6 +854,13 @@ class _DebugPanelState extends State<DebugPanel> {
   String _dirtyBoundsSummary(CellRect? rect) {
     if (rect == null) return '-';
     return '${rect.left},${rect.top} ${rect.size.cols}×${rect.size.rows}';
+  }
+
+  String _dirtySpanSummary(DirtySpanFrameStats stats) {
+    if (!stats.hasDirtySpans) return '-';
+    return '${stats.spanCount} spans / ${stats.rowCount} rows, '
+        'avg ${stats.averageSpanLength.toStringAsFixed(1)}, '
+        'max ${stats.longestSpan}';
   }
 
   String _repaintBoundarySummary(RepaintBoundaryFrameStats stats) {

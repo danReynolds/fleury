@@ -101,7 +101,8 @@ void main() {
       emptyMark: ' ',
     );
     expect(output, contains('Launch patch: 2 files  +3 -2  2 hunks'));
-    expect(output, contains('> lib/app.dart'));
+    expect(output, contains('  lib/app.dart'));
+    expect(output, isNot(contains('> lib/app.dart')));
     expect(output, contains('test/app_test.dart'));
     expect(output, contains('+  print("new");'));
 

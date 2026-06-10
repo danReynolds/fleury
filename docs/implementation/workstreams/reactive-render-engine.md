@@ -36,7 +36,7 @@ fast, predictable, and correct under dense app workloads.
   which keeps app command discovery, palette filtering, modal focus,
   route-depth restoration, semantic invoke/dismiss actions, and disabled
   command behavior under repeated overlay pressure.
-- The proof-app package now includes `SB.10 Proof-App Journey`, measuring the
+- The demo-app package now includes `SB.10 Demo-App Journey`, measuring the
   integrated example across app shell, command palette, DataTable, LogRegion,
   process task, diagnostics, semantics, accessibility, and debug capture.
 - A first hot-path render island now exists through `DataTable`, proving that a
@@ -53,7 +53,7 @@ fast, predictable, and correct under dense app workloads.
   debug-only `layout:` dirty-source labels. Audited core paint-only setters can
   now invalidate paint without relayout, while unaudited setters keep the
   conservative compatibility path.
-- Dirty layout/paint propagation now has first benchmark proof for static
+- Dirty layout/paint propagation now has first benchmark evidence for static
   subtree skips, idle root skips, and paint-only root skips. The remaining
   optimization work is a broader widget-package setter audit under scenario
   pressure.
@@ -182,8 +182,8 @@ fast, predictable, and correct under dense app workloads.
     [widgets Resize Storm baseline](../../../packages/fleury_widgets/benchmark/results/phase2-resize-storm-2026-06-01.json),
     [Overlay Command Palette baseline](../../../packages/fleury_widgets/benchmark/results/phase2-overlay-command-palette-2026-06-01.json),
     [optimized Overlay Command Palette baseline](../../../packages/fleury_widgets/benchmark/results/phase2-overlay-command-palette-optimized-2026-06-01.json),
-    [proof-app scenario benchmark runner](../../../packages/fleury_example_console/benchmark/scenario_benchmarks.dart),
-    [proof-app journey baseline](../../../packages/fleury_example_console/benchmark/results/phase2-proof-app-journey-2026-06-01.json).
+    [demo-app scenario benchmark runner](../../../packages/fleury_example_console/benchmark/scenario_benchmarks.dart),
+    [demo-app journey baseline](../../../packages/fleury_example_console/benchmark/results/phase2-demo-app-journey-2026-06-01.json).
   - Notes: Local Dart is now 3.12.1. `SB.1` saved a 20-iteration baseline
     with command-to-frame p95 254 us and semantic-query p95 102 us. `SB.3`
     saved a 20-iteration 100k-row DataTable baseline with page-move p95
@@ -209,7 +209,7 @@ fast, predictable, and correct under dense app workloads.
     baseline after lazy visible rows and ranked cached search drops filter p95
     to 1121 us, settle p95 to 227 us, and full-cycle p95 to 6429 us while
     preserving the same correctness counters.
-    `SB.10` saved a 10-iteration proof-app journey baseline with full-journey
+    `SB.10` saved a 10-iteration demo-app journey baseline with full-journey
     p95 101284 us, command-palette p95 13979 us, DataTable filter p95 6906 us,
     debug-capture p95 8400 us, process run-to-success p95 53184 us, and
     semantic-query p95 754 us.
@@ -243,7 +243,7 @@ fast, predictable, and correct under dense app workloads.
     [DataTable render island](../../../packages/fleury_widgets/lib/src/data_table.dart),
     [DataTable tests](../../../packages/fleury_widgets/test/data_table_test.dart),
     [DataTable scenario benchmark](../../../packages/fleury_widgets/benchmark/scenario_benchmarks.dart).
-  - Notes: First proof covers semantics, focus, keyboard selection,
+  - Notes: First evidence covers semantics, focus, keyboard selection,
     theme-derived selection styling, selected-row copy/export, rectangular
     cell/range copy/export, and tests. Final slice adds mouse hit selection
     over the painted render-island viewport: clicks select visible rows, and
@@ -274,7 +274,7 @@ fast, predictable, and correct under dense app workloads.
 
 - [x] RRE.5 Close launch high-performance API boundary.
   - Intent: Prevent internal optimization machinery from becoming accidental
-    public API before package/proof-app pressure proves the right extension
+    public API before package/demo-app pressure proves the right extension
     shape.
   - Acceptance: Production libraries do not expose layout-debug stats,
     child-list helper functions, paint-culling internals, or render-island
@@ -349,7 +349,7 @@ fast, predictable, and correct under dense app workloads.
   pure offscreen child paint, but selectable subtrees still need paint to
   refresh their full screen-space anchors even when `visibleBounds` is null.
 - Keep M3.7 internals private for launch. Public API growth should be driven by
-  stable examples, package integrations, and proof-app pain, not by exposing
+  stable examples, package integrations, and demo-app pain, not by exposing
   whichever helper shape happened to unlock the first performance slices.
 - Widget implementation render objects should be public only when app authors
   can use them independently. If the render object depends on a private element
@@ -400,13 +400,13 @@ fast, predictable, and correct under dense app workloads.
 - [Streaming Markdown Phase 2 baseline](../../../packages/fleury_widgets/benchmark/results/phase2-streaming-markdown-2026-06-01.json).
 - [Dashboard Update Phase 2 baseline](../../../packages/fleury_widgets/benchmark/results/phase2-dashboard-update-2026-06-01.json).
 - [Widgets Resize Storm baseline](../../../packages/fleury_widgets/benchmark/results/phase2-resize-storm-2026-06-01.json).
-- [Proof-app scenario benchmark runner](../../../packages/fleury_example_console/benchmark/scenario_benchmarks.dart).
+- [Demo-app scenario benchmark runner](../../../packages/fleury_example_console/benchmark/scenario_benchmarks.dart).
 - [Paint-only invalidation tests](../../../packages/fleury_widgets/test/paint_only_invalidation_test.dart).
 - [RenderText tests](../../../packages/fleury/test/rendering/render_text_test.dart).
 - [RenderFlex tests](../../../packages/fleury/test/rendering/render_flex_test.dart).
 - [Table render object](../../../packages/fleury_widgets/lib/src/table.dart).
 - [Table tests](../../../packages/fleury_widgets/test/table_test.dart).
-- [Proof-app journey baseline](../../../packages/fleury_example_console/benchmark/results/phase2-proof-app-journey-2026-06-01.json).
+- [Demo-app journey baseline](../../../packages/fleury_example_console/benchmark/results/phase2-demo-app-journey-2026-06-01.json).
 - [DataTable render island](../../../packages/fleury_widgets/lib/src/data_table.dart).
 - [DataTable tests](../../../packages/fleury_widgets/test/data_table_test.dart).
 - [Debug frame events](../../../packages/fleury/lib/src/debug/debug_events.dart).

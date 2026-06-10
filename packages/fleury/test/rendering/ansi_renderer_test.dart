@@ -129,53 +129,6 @@ void main() {
       expect(sink.output, '\x1B[Ha\x1B[2Cd');
     });
 
-    test('a same-style gap can be written through without a cursor move', () {
-      const style = CellStyle(bold: true);
-      final prev = CellBuffer(const CellSize(5, 1));
-      final next = CellBuffer(const CellSize(5, 1));
-      prev.writeGrapheme(const CellOffset(1, 0), 'b', style: style);
-      prev.writeGrapheme(const CellOffset(2, 0), 'c', style: style);
-      next.writeGrapheme(const CellOffset(0, 0), 'a', style: style);
-      next.writeGrapheme(const CellOffset(1, 0), 'b', style: style);
-      next.writeGrapheme(const CellOffset(2, 0), 'c', style: style);
-      next.writeGrapheme(const CellOffset(3, 0), 'd', style: style);
-      final sink = StringAnsiSink();
-
-      const AnsiRenderer(
-        synchronizedOutput: false,
-      ).renderDiff(prev, next, sink);
-
-      expect(sink.output, '\x1B[H\x1B[1mabcd\x1B[0m');
-    });
-
-    test('same-column row movement uses a vertical relative cursor move', () {
-      final prev = CellBuffer(const CellSize(3, 3));
-      final next = CellBuffer(const CellSize(3, 3));
-      next.writeGrapheme(const CellOffset(0, 0), 'a');
-      next.writeGrapheme(const CellOffset(1, 1), 'c');
-      final sink = StringAnsiSink();
-
-      const AnsiRenderer(
-        synchronizedOutput: false,
-      ).renderDiff(prev, next, sink);
-      // After 'a' the cursor is at col 1; moving to row 1, col 1 can use CUD.
-      expect(sink.output, '\x1B[Ha\x1B[Bc');
-    });
-
-    test('line-start row movement uses next-line cursor move', () {
-      final prev = CellBuffer(const CellSize(3, 3));
-      final next = CellBuffer(const CellSize(3, 3));
-      next.writeGrapheme(const CellOffset(0, 0), 'a');
-      next.writeGrapheme(const CellOffset(0, 1), 'b');
-      final sink = StringAnsiSink();
-
-      const AnsiRenderer(
-        synchronizedOutput: false,
-      ).renderDiff(prev, next, sink);
-      // After 'a' the cursor is at col 1; CNL moves down and returns to col 0.
-      expect(sink.output, '\x1B[Ha\x1B[Eb');
-    });
-
     test('dirtyBounds limits the scanned diff region', () {
       final prev = CellBuffer(const CellSize(6, 2));
       final next = CellBuffer(const CellSize(6, 2));
@@ -194,6 +147,51 @@ void main() {
       expect(sink.output, '\x1B[2;5HX');
       expect(dirty, const [CellOffset(4, 1)]);
     });
+
+    test('same-column row movement uses line feed', () {
+      final prev = CellBuffer(const CellSize(3, 3));
+      final next = CellBuffer(const CellSize(3, 3));
+      next.writeGrapheme(const CellOffset(0, 0), 'a');
+      next.writeGrapheme(const CellOffset(1, 1), 'c');
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer(
+        synchronizedOutput: false,
+      ).renderDiff(prev, next, sink);
+      // After 'a' the cursor is at col 1; LF moves one row down at same col.
+      expect(sink.output, '\x1B[Ha\nc');
+    });
+
+    test('line-start row movement uses carriage-return line-feed', () {
+      final prev = CellBuffer(const CellSize(3, 3));
+      final next = CellBuffer(const CellSize(3, 3));
+      next.writeGrapheme(const CellOffset(0, 0), 'a');
+      next.writeGrapheme(const CellOffset(0, 1), 'b');
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer(
+        synchronizedOutput: false,
+      ).renderDiff(prev, next, sink);
+      // After 'a' the cursor is at col 1; CRLF moves down to col 0.
+      expect(sink.output, '\x1B[Ha\r\nb');
+    });
+
+    test(
+      'indented next-row movement uses carriage-return line-feed plus CUF',
+      () {
+        final prev = CellBuffer(const CellSize(8, 3));
+        final next = CellBuffer(const CellSize(8, 3));
+        next.writeText(const CellOffset(0, 0), 'aaaa');
+        next.writeText(const CellOffset(1, 1), 'b');
+        final sink = StringAnsiSink();
+
+        const AnsiRenderer(
+          synchronizedOutput: false,
+        ).renderDiff(prev, next, sink);
+        // After 'aaaa' the cursor is at col 4; CRLF + CUF beats CNL + CUF by 1 B.
+        expect(sink.output, '\x1B[Haaaa\r\n\x1B[Cb');
+      },
+    );
   });
 
   group('renderDiff — wide content', () {
@@ -259,7 +257,7 @@ void main() {
         synchronizedOutput: false,
       ).renderDiff(prev, next, sink);
 
-      expect(sink.output, '\x1B[2S\x1B[3Heeee\x1B[Effff');
+      expect(sink.output, '\x1B[2S\x1B[3Heeee\r\nffff');
     });
 
     test('wraps scroll updates in synchronized-output markers', () {

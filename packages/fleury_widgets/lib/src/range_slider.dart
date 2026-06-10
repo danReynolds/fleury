@@ -10,6 +10,7 @@ enum _ActiveHandle { low, high }
 /// [max] (still clamped so the handles can't cross).
 ///
 /// Controlled — hold the values yourself and update them from [onChanged].
+/// Passing null for [onChanged] disables the slider.
 ///
 /// ```dart
 /// RangeSlider(
@@ -39,7 +40,7 @@ class RangeSlider extends StatefulWidget {
   final (num low, num high) values;
 
   /// Called with the new `(low, high)` tuple when either handle moves.
-  final void Function((num low, num high) values) onChanged;
+  final void Function((num low, num high) values)? onChanged;
 
   /// Lower and upper bounds of the slider's range.
   final num min;
@@ -65,6 +66,8 @@ class _RangeSliderState extends State<RangeSlider> {
   late FocusNode _node;
   bool _owns = false;
   _ActiveHandle _active = _ActiveHandle.low;
+
+  bool get _enabled => widget.onChanged != null;
 
   @override
   void initState() {
@@ -101,28 +104,31 @@ class _RangeSliderState extends State<RangeSlider> {
   }
 
   void _nudge(num delta) {
+    if (!_enabled) return;
     final (lo, hi) = _normalized;
     if (_active == _ActiveHandle.low) {
       final next = (lo + delta).clamp(widget.min, hi);
-      if (next != lo) widget.onChanged((next, hi));
+      if (next != lo) widget.onChanged!((next, hi));
     } else {
       final next = (hi + delta).clamp(lo, widget.max);
-      if (next != hi) widget.onChanged((lo, next));
+      if (next != hi) widget.onChanged!((lo, next));
     }
   }
 
   void _jump(num target) {
+    if (!_enabled) return;
     final (lo, hi) = _normalized;
     if (_active == _ActiveHandle.low) {
       final next = target.clamp(widget.min, hi);
-      if (next != lo) widget.onChanged((next, hi));
+      if (next != lo) widget.onChanged!((next, hi));
     } else {
       final next = target.clamp(lo, widget.max);
-      if (next != hi) widget.onChanged((lo, next));
+      if (next != hi) widget.onChanged!((lo, next));
     }
   }
 
   KeyEventResult _onKey(KeyEvent event) {
+    if (!_enabled) return KeyEventResult.ignored;
     switch (event.keyCode) {
       case KeyCode.arrowLeft:
         _nudge(-widget.step);
@@ -157,13 +163,45 @@ class _RangeSliderState extends State<RangeSlider> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final enabled = _enabled;
     final (lo, hi) = _normalized;
-    final canDecrement = _active == _ActiveHandle.low
+    final canDecrement = enabled && _active == _ActiveHandle.low
         ? lo > widget.min
-        : hi > lo;
-    final canIncrement = _active == _ActiveHandle.low
+        : enabled && hi > lo;
+    final canIncrement = enabled && _active == _ActiveHandle.low
         ? lo < hi
-        : hi < widget.max;
+        : enabled && hi < widget.max;
+    final slider = _RawRangeSlider(
+      values: _normalized,
+      min: widget.min,
+      max: widget.max,
+      active: _active,
+      focused: enabled && _node.hasFocus,
+      selectedStyle: enabled
+          ? CellStyle(foreground: theme.colorScheme.primary)
+          : theme.mutedStyle,
+      trackStyle: theme.mutedStyle,
+    );
+    if (!enabled) {
+      return Semantics(
+        role: SemanticRole.slider,
+        label: widget.label,
+        value: '$lo-$hi',
+        enabled: false,
+        state: SemanticState({
+          'lowValue': lo,
+          'highValue': hi,
+          'min': widget.min,
+          'max': widget.max,
+          'step': widget.step,
+          'largeStep': widget.largeStep,
+          'activeHandle': _active.name,
+          'canIncrement': false,
+          'canDecrement': false,
+        }),
+        child: slider,
+      );
+    }
     return Semantics(
       role: SemanticRole.slider,
       label: widget.label,
@@ -206,15 +244,7 @@ class _RangeSliderState extends State<RangeSlider> {
         focusNode: _node,
         autofocus: widget.autofocus,
         onKey: _onKey,
-        child: _RawRangeSlider(
-          values: _normalized,
-          min: widget.min,
-          max: widget.max,
-          active: _active,
-          focused: _node.hasFocus,
-          accent: theme.colorScheme.primary,
-          trackStyle: theme.mutedStyle,
-        ),
+        child: slider,
       ),
     );
   }
@@ -227,7 +257,7 @@ class _RawRangeSlider extends LeafRenderObjectWidget {
     required this.max,
     required this.active,
     required this.focused,
-    required this.accent,
+    required this.selectedStyle,
     required this.trackStyle,
   });
 
@@ -236,7 +266,7 @@ class _RawRangeSlider extends LeafRenderObjectWidget {
   final num max;
   final _ActiveHandle active;
   final bool focused;
-  final Color accent;
+  final CellStyle selectedStyle;
   final CellStyle trackStyle;
 
   @override
@@ -246,7 +276,7 @@ class _RawRangeSlider extends LeafRenderObjectWidget {
     max: max,
     active: active,
     focused: focused,
-    accent: accent,
+    selectedStyle: selectedStyle,
     trackStyle: trackStyle,
   );
 
@@ -261,7 +291,7 @@ class _RawRangeSlider extends LeafRenderObjectWidget {
       ..rmax = max
       ..active = active
       ..focused = focused
-      ..accent = accent
+      ..selectedStyle = selectedStyle
       ..trackStyle = trackStyle;
   }
 }
@@ -273,14 +303,14 @@ class _RenderRangeSlider extends RenderObject {
     required num max,
     required _ActiveHandle active,
     required bool focused,
-    required Color accent,
+    required CellStyle selectedStyle,
     required CellStyle trackStyle,
   }) : _values = values,
        _min = min,
        _max = max,
        _active = active,
        _focused = focused,
-       _accent = accent,
+       _selectedStyle = selectedStyle,
        _trackStyle = trackStyle;
 
   (num, num) _values;
@@ -318,10 +348,10 @@ class _RenderRangeSlider extends RenderObject {
     markNeedsPaintOnly();
   }
 
-  Color _accent;
-  set accent(Color v) {
-    if (_accent == v) return;
-    _accent = v;
+  CellStyle _selectedStyle;
+  set selectedStyle(CellStyle v) {
+    if (_selectedStyle == v) return;
+    _selectedStyle = v;
     markNeedsPaintOnly();
   }
 
@@ -356,8 +386,6 @@ class _RenderRangeSlider extends RenderObject {
     final span = _max - _min;
     final loCol = ((lo - _min) / span * (w - 1)).round();
     final hiCol = ((hi - _min) / span * (w - 1)).round();
-    final selStyle = CellStyle(foreground: _accent);
-
     const track = '─';
     const fill = '━';
     const handle = '●';
@@ -374,10 +402,10 @@ class _RenderRangeSlider extends RenderObject {
             ((c == loCol && _active == _ActiveHandle.low) ||
                 (c == hiCol && _active == _ActiveHandle.high));
         glyph = isActive ? handleActive : handle;
-        style = selStyle;
+        style = _selectedStyle;
       } else if (c > loCol && c < hiCol) {
         glyph = fill;
-        style = selStyle;
+        style = _selectedStyle;
       } else {
         glyph = track;
         style = _trackStyle;

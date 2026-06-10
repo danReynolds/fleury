@@ -1000,10 +1000,16 @@ class _TextInputState extends State<TextInput>
         _controller.delete();
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveLeft:
+        if (_shouldBubbleHorizontalBoundary(event, atStart: true)) {
+          return KeyEventResult.ignored;
+        }
         _cancelScheduledPaste();
         _controller.moveCursorLeft(extend: event.hasShift);
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveRight:
+        if (_shouldBubbleHorizontalBoundary(event, atStart: false)) {
+          return KeyEventResult.ignored;
+        }
         _cancelScheduledPaste();
         _controller.moveCursorRight(extend: event.hasShift);
         return KeyEventResult.handled;
@@ -1051,6 +1057,17 @@ class _TextInputState extends State<TextInput>
       case TextEditingKeyAction.insertNewline:
         return KeyEventResult.ignored;
     }
+  }
+
+  bool _shouldBubbleHorizontalBoundary(
+    KeyEvent event, {
+    required bool atStart,
+  }) {
+    if (event.hasShift || event.hasCtrl || event.hasAlt) return false;
+    final selection = _controller.textSelection;
+    if (!selection.isCollapsed) return false;
+    final offset = selection.extentOffset;
+    return atStart ? offset <= 0 : offset >= _controller.text.length;
   }
 
   @override

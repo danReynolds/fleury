@@ -26,7 +26,8 @@ final class SelectOption<T> {
 ///
 /// Controlled: hold [value] yourself and update it from [onChanged]. Built
 /// on the anchored-overlay primitive ([Anchor] + [Follower]) so it floats
-/// over everything and flips/clamps to stay on screen.
+/// over everything and flips/clamps to stay on screen. Passing null for
+/// [onChanged] disables the picker.
 class Select<T> extends StatefulWidget {
   const Select({
     super.key,
@@ -43,7 +44,7 @@ class Select<T> extends StatefulWidget {
 
   /// The currently-selected value, or null to show the [placeholder].
   final T? value;
-  final void Function(T value) onChanged;
+  final void Function(T value)? onChanged;
   final String placeholder;
   final FocusNode? focusNode;
   final bool autofocus;
@@ -78,6 +79,10 @@ class _SelectState<T> extends State<Select<T>> {
   @override
   void didUpdateWidget(Select<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.onChanged == null && oldWidget.onChanged != null) {
+      _entry?.remove();
+      _entry = null;
+    }
     if (widget.focusNode != oldWidget.focusNode) {
       if (_ownsFocus) _triggerFocus.dispose();
       _triggerFocus =
@@ -117,6 +122,7 @@ class _SelectState<T> extends State<Select<T>> {
   }
 
   KeyEventResult _onTriggerKey(KeyEvent event) {
+    if (widget.onChanged == null) return KeyEventResult.ignored;
     if (_isOpen) return KeyEventResult.ignored;
     if (event.keyCode == KeyCode.enter || event.keyCode == KeyCode.arrowDown) {
       _open();
@@ -126,6 +132,7 @@ class _SelectState<T> extends State<Select<T>> {
   }
 
   void _open() {
+    if (widget.onChanged == null) return;
     if (widget.options.isEmpty || _isOpen) return;
     final manager = Focus.of(context);
     final overlay = Overlay.of(context);
@@ -146,7 +153,7 @@ class _SelectState<T> extends State<Select<T>> {
           borderStyle: theme.borderStyle,
           onPicked: (value) {
             _close();
-            widget.onChanged(value);
+            widget.onChanged?.call(value);
           },
           onDismiss: _close,
         ),
@@ -177,8 +184,33 @@ class _SelectState<T> extends State<Select<T>> {
   Widget build(BuildContext context) {
     Focus.maybeOf(context); // Rebuild trigger semantics when focus moves.
     final theme = Theme.of(context);
+    final enabled = widget.onChanged != null;
     final focused = _triggerFocus.hasFocus;
-    final style = focused ? theme.selectionStyle : CellStyle.empty;
+    final style = !enabled
+        ? theme.mutedStyle
+        : focused
+        ? theme.selectionStyle
+        : CellStyle.empty;
+    final text = '$_currentLabel ${_isOpen ? '▴' : '▾'}';
+    if (!enabled) {
+      return Anchor(
+        link: _link,
+        child: Semantics(
+          role: SemanticRole.button,
+          label: widget.semanticLabel ?? _currentLabel,
+          value: _currentLabel,
+          enabled: false,
+          expanded: false,
+          state: SemanticState({
+            'menuItemCount': widget.options.length,
+            'open': false,
+            'selectedKey': widget.value,
+            'selectedOptionLabel': _currentLabel,
+          }),
+          child: Text(text, style: style),
+        ),
+      );
+    }
     return Anchor(
       link: _link,
       child: Semantics(
@@ -226,10 +258,294 @@ class _SelectState<T> extends State<Select<T>> {
             focusNode: _triggerFocus,
             autofocus: widget.autofocus,
             onKey: _onTriggerKey,
-            child: Text('$_currentLabel ${_isOpen ? '▴' : '▾'}', style: style),
+            child: Text(text, style: style),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A keyboard-navigable list of checkable options.
+///
+/// Controlled: hold [values] yourself and update them from [onChanged]. Enter,
+/// Space, or a click toggles the highlighted option. Disabled options remain
+/// visible but cannot be toggled. Passing null for [onChanged] disables the
+/// whole widget.
+class MultiSelect<T> extends StatefulWidget {
+  const MultiSelect({
+    super.key,
+    required this.options,
+    required this.values,
+    required this.onChanged,
+    this.semanticLabel = 'Multi-select',
+    this.emptyLabel = 'No options',
+    this.focusNode,
+    this.autofocus = false,
+  });
+
+  final List<SelectOption<T>> options;
+  final Set<T> values;
+  final void Function(Set<T> values)? onChanged;
+  final String semanticLabel;
+  final String emptyLabel;
+  final FocusNode? focusNode;
+  final bool autofocus;
+
+  @override
+  State<MultiSelect<T>> createState() => _MultiSelectState<T>();
+}
+
+class _MultiSelectState<T> extends State<MultiSelect<T>>
+    implements TextInputClaimant {
+  late FocusNode _focusNode;
+  bool _ownsFocusNode = false;
+  int _highlightedIndex = 0;
+
+  bool get _enabled => widget.onChanged != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _attachFocusNode(widget.focusNode);
+    _highlightedIndex = _initialIndex();
+  }
+
+  @override
+  void didUpdateWidget(covariant MultiSelect<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.focusNode != oldWidget.focusNode) {
+      _detachFocusNode();
+      _attachFocusNode(widget.focusNode);
+    }
+    _highlightedIndex = _clampToEnabled(_highlightedIndex);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    Focus.maybeOf(context);
+  }
+
+  void _attachFocusNode(FocusNode? node) {
+    _focusNode = node ?? FocusNode(debugLabel: 'multi-select');
+    _ownsFocusNode = node == null;
+    _focusNode.textInputClaimant = this;
+  }
+
+  void _detachFocusNode() {
+    _focusNode.textInputClaimant = null;
+    if (_ownsFocusNode) _focusNode.dispose();
+  }
+
+  int _initialIndex() {
+    for (var i = 0; i < widget.options.length; i++) {
+      if (widget.values.contains(widget.options[i].value) &&
+          widget.options[i].enabled) {
+        return i;
+      }
+    }
+    return _clampToEnabled(0);
+  }
+
+  int _clampToEnabled(int index) {
+    if (widget.options.isEmpty) return 0;
+    final clamped = index.clamp(0, widget.options.length - 1);
+    if (widget.options[clamped].enabled) return clamped;
+    for (var i = clamped + 1; i < widget.options.length; i++) {
+      if (widget.options[i].enabled) return i;
+    }
+    for (var i = clamped - 1; i >= 0; i--) {
+      if (widget.options[i].enabled) return i;
+    }
+    return clamped;
+  }
+
+  int? _step(int direction) {
+    var i = _highlightedIndex + direction;
+    while (i >= 0 && i < widget.options.length) {
+      if (widget.options[i].enabled) return i;
+      i += direction;
+    }
+    return null;
+  }
+
+  void _moveTo(int index) {
+    if (!_enabled) return;
+    setState(() => _highlightedIndex = _clampToEnabled(index));
+  }
+
+  void _toggle(int index) {
+    if (!_enabled || widget.options.isEmpty) return;
+    final option = widget.options[index];
+    if (!option.enabled) return;
+    final next = Set<T>.of(widget.values);
+    if (!next.add(option.value)) next.remove(option.value);
+    widget.onChanged!(Set<T>.unmodifiable(next));
+  }
+
+  void _toggleHighlighted() {
+    if (widget.options.isEmpty) return;
+    _toggle(_highlightedIndex);
+  }
+
+  KeyEventResult _onKey(KeyEvent event) {
+    if (!_enabled) return KeyEventResult.ignored;
+    switch (event.keyCode) {
+      case KeyCode.arrowUp:
+        final previous = _step(-1);
+        if (previous != null) _moveTo(previous);
+        return KeyEventResult.handled;
+      case KeyCode.arrowDown:
+        final next = _step(1);
+        if (next != null) _moveTo(next);
+        return KeyEventResult.handled;
+      case KeyCode.home:
+        _moveTo(0);
+        return KeyEventResult.handled;
+      case KeyCode.end:
+        _moveTo(widget.options.length - 1);
+        return KeyEventResult.handled;
+      case KeyCode.enter:
+        _toggleHighlighted();
+        return KeyEventResult.handled;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
+
+  @override
+  KeyEventResult onTextInput(String text) {
+    if (!_enabled) return KeyEventResult.ignored;
+    if (text == ' ') {
+      _toggleHighlighted();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  KeyEventResult onPaste(String text) => KeyEventResult.ignored;
+
+  @override
+  void dispose() {
+    _detachFocusNode();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Focus.maybeOf(context);
+    final theme = Theme.of(context);
+    final enabled = _enabled;
+    final focused = enabled && _focusNode.hasFocus;
+    final child = widget.options.isEmpty
+        ? Text(widget.emptyLabel, style: theme.mutedStyle)
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < widget.options.length; i++)
+                _optionRow(theme, i, focused, enabled),
+            ],
+          );
+    final semantics = Semantics(
+      role: SemanticRole.list,
+      label: widget.semanticLabel,
+      focused: focused,
+      enabled: enabled,
+      actions: enabled
+          ? const <SemanticAction>{
+              SemanticAction.focus,
+              SemanticAction.navigate,
+            }
+          : const <SemanticAction>{},
+      state: SemanticState({
+        'itemCount': widget.options.length,
+        'selectedCount': widget.values.length,
+        'highlightedIndex': widget.options.isEmpty ? null : _highlightedIndex,
+      }),
+      onAction: enabled
+          ? (action) {
+              switch (action) {
+                case SemanticAction.focus:
+                case SemanticAction.navigate:
+                  _focusNode.requestFocus();
+                  setState(() {});
+                  return;
+                case _:
+                  return;
+              }
+            }
+          : null,
+      child: child,
+    );
+    if (!enabled) return semantics;
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: widget.autofocus,
+      onKey: _onKey,
+      child: semantics,
+    );
+  }
+
+  Widget _optionRow(ThemeData theme, int index, bool focused, bool enabled) {
+    final option = widget.options[index];
+    final optionEnabled = enabled && option.enabled;
+    final selected = widget.values.contains(option.value);
+    final highlighted = focused && index == _highlightedIndex;
+    final style = !optionEnabled
+        ? theme.mutedStyle
+        : highlighted
+        ? theme.selectionStyle
+        : CellStyle.empty;
+    final text = '${selected ? '[x]' : '[ ]'} ${option.label}';
+    final row = optionEnabled
+        ? GestureDetector(
+            onTap: () {
+              _focusNode.requestFocus();
+              setState(() => _highlightedIndex = index);
+              _toggle(index);
+            },
+            child: Text(text, style: style),
+          )
+        : Text(text, style: style);
+    return Semantics(
+      role: SemanticRole.checkbox,
+      label: option.label,
+      value: option.value,
+      enabled: optionEnabled,
+      focused: highlighted,
+      selected: selected,
+      checked: selected,
+      actions: optionEnabled
+          ? const <SemanticAction>{
+              SemanticAction.focus,
+              SemanticAction.activate,
+            }
+          : const <SemanticAction>{},
+      state: SemanticState({
+        'itemIndex': index,
+        'itemPosition': index + 1,
+        'itemCount': widget.options.length,
+      }),
+      onAction: optionEnabled
+          ? (action) {
+              switch (action) {
+                case SemanticAction.focus:
+                  _focusNode.requestFocus();
+                  setState(() => _highlightedIndex = index);
+                  return;
+                case SemanticAction.activate:
+                  _focusNode.requestFocus();
+                  setState(() => _highlightedIndex = index);
+                  _toggle(index);
+                  return;
+                case _:
+                  return;
+              }
+            }
+          : null,
+      child: row,
     );
   }
 }
@@ -383,6 +699,7 @@ class _SelectListState<T> extends State<_SelectList<T>> {
               height: widget.options.length,
               child: ListView.builder(
                 controller: _list,
+                selectionActive: true,
                 itemCount: widget.options.length,
                 itemBuilder: (_, i, selected) {
                   final option = widget.options[i];

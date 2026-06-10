@@ -396,6 +396,7 @@ class _MenuBodyState extends State<_MenuBody> {
                 height: widget.entries.length,
                 child: ListView.builder(
                   controller: _list,
+                  selectionActive: true,
                   itemCount: widget.entries.length,
                   itemBuilder: (_, i, selected) {
                     final entry = widget.entries[i];

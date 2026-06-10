@@ -61,7 +61,13 @@ export 'src/debug/debug_capture.dart'
         DebugTaskEventSummary,
         DebugTimeMarker;
 export 'src/debug/debug_events.dart'
-    show DebugEvent, DebugEvents, FrameDebugEvent, FrameEvent, InputDebugEvent;
+    show
+        DebugEvent,
+        DebugEvents,
+        DirtySpanFrameStats,
+        FrameDebugEvent,
+        FrameEvent,
+        InputDebugEvent;
 export 'src/rendering/render_layout_stats.dart'
     show RenderLayoutDebugStats, RenderLayoutFrameStats;
 export 'src/rendering/ansi_byte_budget.dart'

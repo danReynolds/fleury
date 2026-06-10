@@ -79,6 +79,15 @@ class AnsiByteBreakdown {
     final n = data.length;
     while (i < n) {
       final cu = data.codeUnitAt(i);
+      if (cu == 0x08 || cu == 0x0A || cu == 0x0D) {
+        // BS, LF, and CR are printable-stream C0 controls that terminals use
+        // as cursor movement. Fleury's sanitized cell content cannot contain
+        // them, and peer captures use them for the same cursor-control role.
+        flushContent();
+        cursor += 1;
+        i++;
+        continue;
+      }
       if (cu != esc) {
         contentRun.writeCharCode(cu);
         i++;

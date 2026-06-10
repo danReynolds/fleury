@@ -181,9 +181,20 @@ final class SemanticInspectionSnapshot {
       stateContains: stateContains,
     ).toList(growable: false);
     if (matches.length == 1) return matches.single;
+    final query = _queryDescription(
+      id: id,
+      role: role,
+      label: label,
+      value: value,
+      action: action,
+      focused: focused,
+      selected: selected,
+      enabled: enabled,
+      stateContains: stateContains,
+    );
     throw StateError(
       'Expected exactly one semantic inspection node, found '
-      '${matches.length}.',
+      '${matches.length} for $query.\n\n${debugTree()}',
     );
   }
 
@@ -195,6 +206,37 @@ final class SemanticInspectionSnapshot {
     'actionCount': actionCount,
     'root': root.toJson(),
   };
+
+  /// Returns a deterministic, redaction-aware tree summary for humans.
+  ///
+  /// Use [toJson] for protocol consumers. This string is intentionally optimized
+  /// for failure messages, debug panels, and quick terminal output.
+  String debugTree({bool includeState = true}) {
+    final buffer = StringBuffer()
+      ..write('SemanticInspectionSnapshot(')
+      ..write('schemaVersion: ')
+      ..write(schemaVersion)
+      ..write(', nodeCount: ')
+      ..write(nodeCount)
+      ..write(', actionCount: ')
+      ..write(actionCount)
+      ..write(', focusedNodeId: ')
+      ..write(focusedNodeId ?? 'none')
+      ..write(', roleCounts: ')
+      ..write(_debugMap(roleCounts))
+      ..writeln(')');
+    root._writeDebugTree(buffer, depth: 0, includeState: includeState);
+    return buffer.toString().trimRight();
+  }
+
+  /// Alias for [debugTree] kept for call sites that prefer a string-conversion
+  /// name. Prefer [debugTree] in new tests and diagnostics.
+  String toDebugString({bool includeState = true}) {
+    return debugTree(includeState: includeState);
+  }
+
+  @override
+  String toString() => toDebugString();
 }
 
 /// Redacted, JSON-safe semantic node used by [SemanticInspectionSnapshot].
@@ -360,6 +402,46 @@ final class SemanticInspectionNode {
       'children': <Object?>[for (final child in children) child.toJson()],
   };
 
+  String _debugLine({required bool includeState}) {
+    final parts = <String>[
+      '$role#$id',
+      if (label != null) 'label:${_debugValue(label)}',
+      if (value != null) 'value:${_debugValue(value)}',
+      if (hint != null) 'hint:${_debugValue(hint)}',
+      if (!enabled) 'disabled',
+      if (focused) 'focused',
+      if (selected) 'selected',
+      if (checked != null) 'checked:$checked',
+      if (expanded != null) 'expanded:$expanded',
+      if (busy) 'busy',
+      if (validationError != null)
+        'validationError:${_debugValue(validationError)}',
+      if (actions.isNotEmpty) 'actions:[${actions.join(', ')}]',
+      if (includeState && state.isNotEmpty) 'state:${_debugMap(state)}',
+    ];
+    return parts.join(' ');
+  }
+
+  void _writeDebugTree(
+    StringBuffer buffer, {
+    required int depth,
+    required bool includeState,
+  }) {
+    buffer
+      ..write(_debugIndent(depth))
+      ..writeln(_debugLine(includeState: includeState));
+    for (final child in children) {
+      child._writeDebugTree(
+        buffer,
+        depth: depth + 1,
+        includeState: includeState,
+      );
+    }
+  }
+
+  @override
+  String toString() => _debugLine(includeState: true);
+
   bool _matches({
     String? id,
     String? role,
@@ -404,6 +486,73 @@ extension SemanticTreeInspection on SemanticTree {
   }) {
     return toInspectionSnapshot(schemaVersion: schemaVersion).toJson();
   }
+
+  /// Returns a deterministic, redaction-aware semantic tree summary for
+  /// humans. This is the quickest way to inspect what tests, accessibility,
+  /// command discovery, and debug capture can see.
+  String debugTree({bool includeState = true}) {
+    return toInspectionSnapshot().debugTree(includeState: includeState);
+  }
+}
+
+String _queryDescription({
+  required String? id,
+  required String? role,
+  required String? label,
+  required Object? value,
+  required String? action,
+  required bool? focused,
+  required bool? selected,
+  required bool? enabled,
+  required Map<String, Object?> stateContains,
+}) {
+  final parts = <String>[
+    if (id != null) 'id:${_debugValue(id)}',
+    if (role != null) 'role:${_debugValue(role)}',
+    if (label != null) 'label:${_debugValue(label)}',
+    if (value != null) 'value:${_debugValue(value)}',
+    if (action != null) 'action:${_debugValue(action)}',
+    if (focused != null) 'focused:$focused',
+    if (selected != null) 'selected:$selected',
+    if (enabled != null) 'enabled:$enabled',
+    if (stateContains.isNotEmpty) 'stateContains:${_debugMap(stateContains)}',
+  ];
+  return parts.isEmpty ? 'unfiltered query' : parts.join(' ');
+}
+
+String _debugMap(Map<Object?, Object?> map) {
+  if (map.isEmpty) return '{}';
+  final entries = [
+    for (final entry in map.entries)
+      MapEntry(entry.key.toString(), entry.value),
+  ]..sort((a, b) => a.key.compareTo(b.key));
+  final parts = [
+    for (final entry in entries) '${entry.key}: ${_debugValue(entry.value)}',
+  ];
+  return '{${parts.join(', ')}}';
+}
+
+String _debugIndent(int depth) => ''.padLeft(depth * 2);
+
+String _debugValue(Object? value) {
+  return switch (value) {
+    null => 'null',
+    String() => '"${_escapeDebugString(value)}"',
+    num() || bool() => value.toString(),
+    Iterable<Object?>() =>
+      '[${[for (final item in value) _debugValue(item)].join(', ')}]',
+    Map<Object?, Object?>() => _debugMap(value),
+    _ => _debugValue(value.toString()),
+  };
+}
+
+String _escapeDebugString(String value) {
+  return value
+      .replaceAll('\\', r'\\')
+      .replaceAll('"', r'\"')
+      .replaceAll('\n', r'\n')
+      .replaceAll('\r', r'\r')
+      .replaceAll('\t', r'\t');
 }
 
 bool _redactsNode(SemanticNode node) {

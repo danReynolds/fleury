@@ -89,6 +89,7 @@ final class _ScenarioOptions {
     var size = const CellSize(120, 32);
     var rows = _defaultRows;
     var resizeEvents = 500;
+    var profileMemory = false;
 
     for (final arg in args) {
       if (arg == '--json') {
@@ -109,6 +110,8 @@ final class _ScenarioOptions {
         rows = _positiveInt(arg, '--rows=');
       } else if (arg.startsWith('--resize-events=')) {
         resizeEvents = _positiveInt(arg, '--resize-events=');
+      } else if (arg == '--profile-memory') {
+        profileMemory = true;
       } else if (arg.startsWith('--size=')) {
         size = _parseSize(arg.substring('--size='.length));
       } else if (arg == '--help' || arg == '-h') {
@@ -127,6 +130,7 @@ final class _ScenarioOptions {
         terminalSize: size,
         rowCount: rows,
         resizeEvents: resizeEvents,
+        profileMemory: profileMemory,
       ),
       filter: filter.isEmpty ? null : filter,
       printJson: printJson,
@@ -166,6 +170,7 @@ final class _ScenarioConfig {
     required this.terminalSize,
     required this.rowCount,
     required this.resizeEvents,
+    required this.profileMemory,
   });
 
   final int warmupIterations;
@@ -174,6 +179,7 @@ final class _ScenarioConfig {
   final CellSize terminalSize;
   final int rowCount;
   final int resizeEvents;
+  final bool profileMemory;
 }
 
 abstract interface class _ScenarioBenchmark {
@@ -1468,6 +1474,47 @@ final class _DashboardUpdateScenario implements _ScenarioBenchmark {
     final journey = _Stats.from(samples.map((sample) => sample.totalJourneyUs));
     final correct = samples.every((sample) => sample.correct);
     final last = samples.last;
+    final memoryProfiles = samples
+        .map((sample) => sample.memoryMarkers)
+        .where((markers) => markers.isNotEmpty)
+        .toList(growable: false);
+
+    final metrics = <String, Object?>{
+      'journeyUs': journey.toJson(),
+      'mountUs': mount.toJson(),
+      'firstRenderUs': firstRender.toJson(),
+      'updatePumpUs': pump.toJson(),
+      'updateFrameUs': frame.toJson(),
+      'updateTotalUs': update.toJson(),
+      'updateLayoutPerformed': updateLayoutPerformed.toJson(),
+      'updateLayoutSkipped': updateLayoutSkipped.toJson(),
+      'semanticQueryUs': semanticQuery.toJson(),
+      'lastFirstFrameLayout': _layoutStatsToJson(last.firstFrameLayoutStats),
+      'lastUpdateFrameLayout': _layoutStatsToJson(last.lastUpdateLayoutStats),
+      'dashboardTickCount': last.dashboardTickCount,
+      'surfaceCount': last.surfaceCount,
+      'progressSurfaceCount': last.progressSurfaceCount,
+      'gaugeSurfaceCount': last.gaugeSurfaceCount,
+      'sparklineSurfaceCount': last.sparklineSurfaceCount,
+      'chartSurfaceCount': last.chartSurfaceCount,
+      'semanticNodeCount': last.semanticNodeCount,
+      'progressSemanticCount': last.progressSemanticCount,
+      'firstFrameAnsiBytes': last.firstFrameAnsiBytes,
+      'maxUpdateAnsiBytes': last.maxUpdateAnsiBytes,
+      'finalAnsiBytes': last.finalAnsiBytes,
+      'unsafeFrameCount': last.unsafeFrameCount,
+      'finalTick': last.finalTick,
+      'finalProgressLabel': last.finalProgressLabel,
+      'rssDeltaBytes': rssAfter - rssBefore,
+    };
+    if (memoryProfiles.isNotEmpty) {
+      metrics['memoryProfile'] = _memoryProfilesToJson(
+        memoryProfiles,
+        updateRssBytesBySample: [
+          for (final sample in samples) sample.updateRssBytes,
+        ],
+      );
+    }
 
     return _ScenarioResult(
       scenarioId: id,
@@ -1479,34 +1526,7 @@ final class _DashboardUpdateScenario implements _ScenarioBenchmark {
       seed: config.seed,
       terminalSize: config.terminalSize,
       rowCount: config.rowCount,
-      metrics: <String, Object?>{
-        'journeyUs': journey.toJson(),
-        'mountUs': mount.toJson(),
-        'firstRenderUs': firstRender.toJson(),
-        'updatePumpUs': pump.toJson(),
-        'updateFrameUs': frame.toJson(),
-        'updateTotalUs': update.toJson(),
-        'updateLayoutPerformed': updateLayoutPerformed.toJson(),
-        'updateLayoutSkipped': updateLayoutSkipped.toJson(),
-        'semanticQueryUs': semanticQuery.toJson(),
-        'lastFirstFrameLayout': _layoutStatsToJson(last.firstFrameLayoutStats),
-        'lastUpdateFrameLayout': _layoutStatsToJson(last.lastUpdateLayoutStats),
-        'dashboardTickCount': last.dashboardTickCount,
-        'surfaceCount': last.surfaceCount,
-        'progressSurfaceCount': last.progressSurfaceCount,
-        'gaugeSurfaceCount': last.gaugeSurfaceCount,
-        'sparklineSurfaceCount': last.sparklineSurfaceCount,
-        'chartSurfaceCount': last.chartSurfaceCount,
-        'semanticNodeCount': last.semanticNodeCount,
-        'progressSemanticCount': last.progressSemanticCount,
-        'firstFrameAnsiBytes': last.firstFrameAnsiBytes,
-        'maxUpdateAnsiBytes': last.maxUpdateAnsiBytes,
-        'finalAnsiBytes': last.finalAnsiBytes,
-        'unsafeFrameCount': last.unsafeFrameCount,
-        'finalTick': last.finalTick,
-        'finalProgressLabel': last.finalProgressLabel,
-        'rssDeltaBytes': rssAfter - rssBefore,
-      },
+      metrics: metrics,
       thresholds: const <String, Object?>{
         'candidateUpdateTotalP95Us': 16000,
         'candidateUpdateFrameP95Us': 16000,
@@ -1529,11 +1549,13 @@ Future<_DashboardUpdateJourneySample> _runDashboardUpdateJourney(
   final tester = FleuryTester(viewportSize: config.terminalSize);
   final fixture = _DashboardFixture(seed: config.seed);
   final tickCount = _dashboardTickCountFor(config.rowCount);
+  final memory = _MemoryProbe(enabled: config.profileMemory)..mark('start');
   final updatePumpUs = <int>[];
   final updateFrameUs = <int>[];
   final updateTotalUs = <int>[];
   final updateLayoutPerformed = <int>[];
   final updateLayoutSkipped = <int>[];
+  final updateRssBytes = <int>[];
   final total = Stopwatch()..start();
   var maxUpdateAnsiBytes = 0;
   var unsafeFrameCount = 0;
@@ -1541,11 +1563,13 @@ Future<_DashboardUpdateJourneySample> _runDashboardUpdateJourney(
     final mount = Stopwatch()..start();
     tester.pumpWidget(_DashboardHarness(fixture: fixture, tick: 0));
     mount.stop();
+    memory.mark('afterMount');
 
     final firstRender = Stopwatch()..start();
     final firstFrameSample = _renderMeasured(tester, config.terminalSize);
     final firstFrame = firstFrameSample.buffer;
     firstRender.stop();
+    memory.mark('afterFirstFrame');
     var lastUpdateLayoutStats = RenderLayoutFrameStats.empty;
 
     for (var tick = 1; tick <= tickCount; tick++) {
@@ -1566,19 +1590,25 @@ Future<_DashboardUpdateJourneySample> _runDashboardUpdateJourney(
       updateTotalUs.add(update.elapsedMicroseconds);
       updateLayoutPerformed.add(frameSample.layoutStats.performedCount);
       updateLayoutSkipped.add(frameSample.layoutStats.skippedCount);
+      final updateRss = memory.capture();
+      if (updateRss != null) updateRssBytes.add(updateRss);
 
       final ansiBytes = _ansiBytes(buffer, config.terminalSize);
       if (ansiBytes > maxUpdateAnsiBytes) maxUpdateAnsiBytes = ansiBytes;
       final visible = _visibleText(buffer, config.terminalSize);
       if (_containsUnsafeTerminalPayload(visible)) unsafeFrameCount += 1;
     }
+    memory.mark('afterUpdates');
 
     final finalFrame = tester.render(size: config.terminalSize);
+    memory.mark('afterFinalRender');
     final semantics = Stopwatch()..start();
     final tree = tester.semantics();
     final progressNodes = tree.byRole(SemanticRole.progress).toList();
     semantics.stop();
     total.stop();
+    memory.mark('afterSemantics');
+    memory.mark('end');
 
     final firstProgress = progressNodes.isEmpty ? null : progressNodes.first;
     final expectedLabel = fixture.semanticProgressLabel(tickCount, 0);
@@ -1623,6 +1653,8 @@ Future<_DashboardUpdateJourneySample> _runDashboardUpdateJourney(
       unsafeFrameCount: unsafeFrameCount,
       finalTick: tickCount,
       finalProgressLabel: firstProgress?.state.progressLabel ?? '',
+      memoryMarkers: memory.markers,
+      updateRssBytes: List<int>.unmodifiable(updateRssBytes),
       correct: correct,
     );
   } finally {
@@ -1796,6 +1828,8 @@ final class _DashboardUpdateJourneySample {
     required this.unsafeFrameCount,
     required this.finalTick,
     required this.finalProgressLabel,
+    required this.memoryMarkers,
+    required this.updateRssBytes,
     required this.correct,
   });
 
@@ -1824,6 +1858,8 @@ final class _DashboardUpdateJourneySample {
   final int unsafeFrameCount;
   final int finalTick;
   final String finalProgressLabel;
+  final Map<String, int> memoryMarkers;
+  final List<int> updateRssBytes;
   final bool correct;
 }
 
@@ -1935,7 +1971,7 @@ final class _OverlayCommandPaletteScenario implements _ScenarioBenchmark {
       pass: correct,
       notes: const <String>[
         'Candidate thresholds are informational until stable baselines exist.',
-        'Scenario opens AppCommandPalette through Navigator.present so it exercises overlay lifecycle and app command discovery.',
+        'Scenario opens CommandPalette through Navigator.present so it exercises overlay lifecycle and app command discovery.',
         'Cycles alternate keyboard invocation, semantic submit, semantic activate, Escape dismissal, and semantic dismissal.',
         'A disabled command probe verifies visible-but-inert commands stay open and do not invoke stale actions.',
       ],
@@ -1982,18 +2018,14 @@ Future<_OverlayCommandPaletteJourneySample> _runOverlayCommandPaletteJourney(
       FleuryApp(
         title: 'Overlay Benchmark',
         commands: fixture.appCommands(invokedIds.add),
-        screens: [
-          FleuryScreen(
-            id: const ScreenId('overlay-benchmark'),
-            title: 'Overlay Benchmark',
-            commands: [fixture.screenCommand(invokedIds.add)],
-            builder: (_) => const Text('screen'),
-          ),
-        ],
         child: Navigator(
-          home: _OverlayContextCapture((context) {
-            routeContext = context;
-          }),
+          home: CommandScope(
+            commands: [fixture.screenCommand(invokedIds.add)],
+            label: 'Overlay benchmark commands',
+            child: _OverlayContextCapture((context) {
+              routeContext = context;
+            }),
+          ),
         ),
       ),
     );
@@ -2019,7 +2051,7 @@ Future<_OverlayCommandPaletteJourneySample> _runOverlayCommandPaletteJourney(
       final open = Stopwatch()..start();
       Navigator.of(
         route,
-      ).present<void>(const AppCommandPalette(width: 64, maxVisible: 10));
+      ).present<void>(const CommandPalette(width: 64, maxVisible: 10));
       tester.pump(const Duration(milliseconds: 300));
       final openFrame = tester.render(size: config.terminalSize);
       open.stop();
@@ -2274,7 +2306,7 @@ Future<_DisabledOverlayProbe> _runDisabledOverlayProbe(
 
   Navigator.of(
     route,
-  ).present<void>(const AppCommandPalette(width: 64, maxVisible: 10));
+  ).present<void>(const CommandPalette(width: 64, maxVisible: 10));
   tester.pump(const Duration(milliseconds: 300));
   final openFrame = tester.render(size: terminalSize);
   final target = fixture.disabledTarget;
@@ -4414,6 +4446,92 @@ final class _Stats {
   };
 }
 
+final class _MemoryProbe {
+  _MemoryProbe({required this.enabled});
+
+  final bool enabled;
+  final Map<String, int> _markers = <String, int>{};
+
+  Map<String, int> get markers => Map<String, int>.unmodifiable(_markers);
+
+  void mark(String label) {
+    if (!enabled) return;
+    _markers[label] = ProcessInfo.currentRss;
+  }
+
+  int? capture() {
+    if (!enabled) return null;
+    return ProcessInfo.currentRss;
+  }
+}
+
+Map<String, Object?> _memoryProfilesToJson(
+  List<Map<String, int>> profiles, {
+  List<List<int>> updateRssBytesBySample = const <List<int>>[],
+}) {
+  final starts = <int>[];
+  final ends = <int>[];
+  final journeyDeltas = <int>[];
+  final labels = <String>{};
+  for (final profile in profiles) {
+    labels.addAll(profile.keys);
+    final start = profile['start'];
+    final end = profile['end'];
+    if (start != null) starts.add(start);
+    if (end != null) ends.add(end);
+    if (start != null && end != null) journeyDeltas.add(end - start);
+  }
+
+  final deltasByMarker = <String, Object?>{};
+  final sortedLabels = labels.toList()..sort();
+  for (final label in sortedLabels) {
+    if (label == 'start') continue;
+    final values = <int>[];
+    for (final profile in profiles) {
+      final start = profile['start'];
+      final value = profile[label];
+      if (start != null && value != null) values.add(value - start);
+    }
+    if (values.isNotEmpty) deltasByMarker[label] = _Stats.from(values).toJson();
+  }
+
+  final updateDeltasFromStart = <int>[];
+  final updateStepDeltas = <int>[];
+  for (
+    var i = 0;
+    i < updateRssBytesBySample.length && i < profiles.length;
+    i++
+  ) {
+    final updates = updateRssBytesBySample[i];
+    if (updates.isEmpty) continue;
+    final start = profiles[i]['start'];
+    if (start != null) {
+      updateDeltasFromStart.addAll(updates.map((rss) => rss - start));
+    }
+    var previous = start ?? updates.first;
+    for (final rss in updates) {
+      updateStepDeltas.add(rss - previous);
+      previous = rss;
+    }
+  }
+
+  return <String, Object?>{
+    'kind': 'rssPhaseProfile',
+    'samples': profiles.length,
+    'rssStartBytes': _Stats.from(starts).toJson(),
+    'rssEndBytes': _Stats.from(ends).toJson(),
+    'rssJourneyDeltaBytes': _Stats.from(journeyDeltas).toJson(),
+    'rssDeltaFromStartByMarkerBytes': deltasByMarker,
+    if (updateDeltasFromStart.isNotEmpty)
+      'rssDeltaFromStartAcrossUpdatesBytes': _Stats.from(
+        updateDeltasFromStart,
+      ).toJson(),
+    if (updateStepDeltas.isNotEmpty)
+      'rssStepDeltaAcrossUpdatesBytes': _Stats.from(updateStepDeltas).toJson(),
+    'lastMarkersBytes': profiles.last,
+  };
+}
+
 int _percentile(List<int> sorted, double p) {
   if (sorted.length == 1) return sorted.single;
   final rank = (sorted.length - 1) * p;
@@ -4484,5 +4602,8 @@ Never _printUsageAndExit({int exitCodeValue = 0}) {
     '  --resize-events=N      Resize events for SB.7. Default 500.',
   );
   stdout.writeln('  --size=COLSxROWS       Terminal size. Default 120x32.');
+  stdout.writeln(
+    '  --profile-memory       Add RSS phase profiling metrics where supported.',
+  );
   exit(exitCodeValue);
 }

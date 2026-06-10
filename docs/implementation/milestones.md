@@ -10,7 +10,7 @@ benchmark data arrive.
 
 | Phase | Success scorecard |
 | --- | --- |
-| Phase 0 | Example subpackage proof-app scenario committed; three architecture RFCs complete; peer scorecard skeleton exists; benchmark scenario list exists. |
+| Phase 0 | Example subpackage demo-app scenario committed; three architecture RFCs complete; peer scorecard skeleton exists; benchmark scenario list exists. |
 | Phase 1 | Example subpackage is created early and proves the MVP slice continuously; semantic tree, app kernel, text editing core, DataTable, agent-adapter readiness boundary, and benchmark harness are usable; time-to-counter-app target is defined and measured. |
 | Phase 2 | Dune/`dune_cli` first integration slice begins after the core is proven; targeted debug-capture/replay hooks are validated where needed; public package/distribution/docs assets are credible; benchmarks are compared against current peers. |
 | Phase 3 | Fleury has maintained showcase apps, repeatable peer benchmarks, and a visible ecosystem story beyond Dune. |
@@ -21,15 +21,15 @@ benchmark data arrive.
 large widget and app-shell work, without spending months writing RFCs before
 implementation.
 
-- [x] M0.1 Example subpackage proof-app scenario spec
+- [x] M0.1 Example subpackage demo-app scenario spec
   - Intent: Define the realistic workflow that will prove Fleury in this cycle.
   - Implementation context: Use an example subpackage as the forcing example
     for sidebar navigation, streamed content, composer/input, commands,
     status, output/log regions, one dense data surface, selection, capability
     fallbacks, and debug capture.
-  - Acceptance: Scenario identifies the Phase 1 proof-app slice and the Fleury
+  - Acceptance: Scenario identifies the Phase 1 demo-app slice and the Fleury
     primitives it must validate.
-  - Evidence: [Proof-app scenario](proof-app-scenario.md).
+  - Evidence: [Demo-app scenario](demo-app-scenario.md).
   - Notes: Completed as a developer operations console scenario. Dune/`dune_cli`,
     tool calls, approvals, ACP, and full replay are not current-cycle blockers.
 
@@ -42,13 +42,13 @@ implementation.
   - Evidence: [RFC 0011: Semantic app graph](../rfcs/0011-semantic-app-graph.md).
   - Notes: This is the first architecture gate because it affects testing,
     accessibility, replay, prompt fallback, and agent operation. Draft it
-    against the M0.1 proof-app scenario rather than as an abstract taxonomy.
+    against the M0.1 demo-app scenario rather than as an abstract taxonomy.
 
 - [x] M0.3 App kernel RFC
   - Intent: Define the application framework layer.
   - Implementation context: Cover `FleuryApp`, screens, command registry,
     actions, shortcut scopes, command palette structure, status binding,
-    lifecycle, and proof-app needs.
+    lifecycle, and demo-app needs.
   - Acceptance: RFC defines how commands, focus, navigation, status, and app
     lifecycle compose.
   - Evidence: [RFC 0012: App kernel](../rfcs/0012-app-kernel.md).
@@ -135,7 +135,7 @@ implementation.
 - [x] Open decisions that would block Phase 1 are recorded in
   [decision-log.md](decision-log.md).
 - [x] Phase 0 has not expanded beyond three architecture RFCs.
-- [x] The example subpackage has a concrete Phase 1 proof-app scenario.
+- [x] The example subpackage has a concrete Phase 1 demo-app scenario.
 
 ## Phase 1: Clear-Choice Foundations
 
@@ -154,7 +154,7 @@ terminal fallbacks, and performance evidence.
 | M1.1 Semantic tree v0 | [Semantic app graph](workstreams/semantic-app-graph.md) with [Replay, devtools, and testing](workstreams/replay-devtools-testing.md) for tester/inspector integration. |
 | M1.2 Text editing v2 | [Text editing engine](workstreams/text-editing-engine.md) with [Terminal capability and security](workstreams/terminal-capability-security.md) for paste, clipboard, password, and redaction policy. |
 | M1.3 `FleuryApp` shell | [App kernel and command shell](workstreams/app-kernel-command-shell.md). |
-| M1.4 Example subpackage proof app v0 | [Agent and developer workflows](workstreams/agent-developer-workflows.md), [App kernel and command shell](workstreams/app-kernel-command-shell.md), and the widget/runtime workstreams it exercises. |
+| M1.4 Example subpackage demo app v0 | [Agent and developer workflows](workstreams/agent-developer-workflows.md), [App kernel and command shell](workstreams/app-kernel-command-shell.md), and the widget/runtime workstreams it exercises. |
 | M1.5 Agent adapter-readiness boundary | [`fleury_acp` fast-follow package](workstreams/fleury-acp-fast-follow.md) and [Agent and developer workflows](workstreams/agent-developer-workflows.md). |
 | M1.6 Worker/task model | [Effects, workflow, and process](workstreams/effects-workflow-process.md). |
 | M1.7 Terminal diagnose and capability model | [Terminal capability and security](workstreams/terminal-capability-security.md). |
@@ -237,7 +237,7 @@ terminal fallbacks, and performance evidence.
     semantic completion state, plus provider-backed rendered completion UI in
     `fleury_widgets`; completion-menu rows now support semantic
     select/activate through the same range replacement path as Tab, and the
-    menu supports semantic close without clearing text. The proof app
+    menu supports semantic close without clearing text. The demo app
     Transcript composer now uses `CompletionTextInput` for slash-command and
     mention suggestions plus `TextHistoryController` for submitted-note recall,
     proving the rendered completion and submission-history paths in an
@@ -283,17 +283,18 @@ terminal fallbacks, and performance evidence.
     `CommandRegistryScope`, and `CommandScope`. Commands now have metadata,
     visible/enabled predicates, direct async-capable invocation with typed
     results, scoped parent/local resolution, shortcut emission through
-    `KeyBindings`, and semantic command nodes. Current screen-shell slice adds
-    `ScreenId`, `FleuryScreen`, `ScreenController`, `FleuryApp`,
-    `ActiveScreenView`, app/screen scopes, command-context app/screen
-    extensions, active screen rendering, screen-local command scopes, and
-    app/screen semantic state. Current status slice adds `StatusItem`,
+    `KeyBindings`, and semantic command nodes. The original registered-screen
+    slice was removed after the June 8 DX review; `FleuryApp` now stays focused
+    on app commands, status, extensions, child-derived screen semantic summary,
+    and app-scope lookup while section/tab/sidebar state remains app-owned.
+    Current status slice adds `StatusItem`,
     `StatusController`, `FleuryApp.status`, command-context status access,
     `AppStatusBar`, and semantic status nodes. Current palette/key-hint slice
-    adds registry-backed `AppCommandPalette`, command metadata/shortcut
-    semantics in palette rows, disabled-command handling, active-screen
-    command priority over app commands, direct concrete-command invocation,
-    and app command shortcut visibility in `KeyHintBar`. Final slice adds
+    adds registry-backed `CommandPalette`, command metadata/shortcut
+    semantics in palette rows, disabled-command handling, focused-scope
+    command priority over ancestor commands, direct concrete-command
+    invocation, and app command shortcut visibility in `KeyHintBar`. Final
+    slice adds
     tester command registry access, command invocation by ID, last invocation
     result visibility, app semantic last-command state, and debug Tree-tab app
     state/command summaries. Current launch hardening locks the async command
@@ -302,45 +303,45 @@ terminal fallbacks, and performance evidence.
     fire-and-forget and publishes the result after callback settlement.
     Registry lifecycle hardening prevents async command completions from
     publishing late `lastResult` state after disposal, while preserving the
-    in-flight future result for already-started callers. Screen, status, and
-    app-controller lifecycle hardening now rejects post-dispose mutations and
-    detaches child-controller listeners during app-controller teardown. M1.3
-    acceptance is met. Polished focus preservation across preserved screens is
-    deferred until the proof app or a focused preserved-screen scenario proves
-    the exact behavior needed.
+    in-flight future result for already-started callers. Status and app
+    controller lifecycle hardening now rejects post-dispose mutations where
+    applicable and detaches child-controller listeners during app-controller
+    teardown. M1.3 acceptance is met; future section retention/focus policy
+    belongs in app/widget patterns, not a core screen registry.
 
-- [x] M1.4 Example subpackage proof app v0
+- [x] M1.4 Example subpackage demo app v0
   - Intent: Keep Fleury under realistic app pressure before Dune/`dune_cli`.
-  - Implementation context: Use the Phase 0 proof-app scenario to validate app
+  - Implementation context: Use the Phase 0 demo-app scenario to validate app
     shell, semantic graph, text editing, selection, adapter-ready workflows,
     data views, capability fallback, and diagnostics.
   - Acceptance: A runnable example subpackage demonstrates the selected workflow
     and records what Fleury primitives were validated or found missing at each
     Phase 1 foundation step.
   - Evidence:
-    [proof app package](../../packages/fleury_example_console),
-    [proof app source](../../packages/fleury_example_console/lib/fleury_example_console.dart),
-    [proof app tests](../../packages/fleury_example_console/test/proof_console_test.dart).
+    [demo app package](../../packages/fleury_example_console),
+    [demo app source](../../packages/fleury_example_console/lib/fleury_example_console.dart),
+    [demo app tests](../../packages/fleury_example_console/test/demo_console_test.dart).
   - Notes: First skeleton adds a standalone package with path dependencies,
-    `ProofConsoleApp`, registered screens, app and screen commands, status,
-    registry-backed command palette access, key hints, text filters/composer,
-    table fixture, progress, diagnostics, debug capture counter, and tester
-    workflow coverage. Current workflow slice adds in-app command palette
+    `DemoConsoleApp`, app-owned sections, app commands with active-section
+    predicates, status, registry-backed command palette access, key hints, text
+    filters/composer, table fixture, progress, diagnostics, debug capture
+    counter, and tester workflow coverage. Current workflow slice adds in-app
+    command palette
     navigation, focusable runs table selection/activation, transcript composer
     submission, deterministic log bursts, disabled stream-command behavior,
     and debug snapshot evidence in the transcript. Current semantic-evidence
     slice adds app-authored navigation, transcript-log, and diagnostic semantic
     nodes, plus tests for command row metadata, selected table cells, composer
     value, progress state, diagnostics capability/fallback state, and debug
-    capture action. The proof-app settling slice fixed stale semantic proxy
+    capture action. The demo-app settling slice fixed stale semantic proxy
     subtrees, app-owned tester command routing, palette rendering under tight
-    constraints, and task/status assertions; the full proof app test now passes
-    under Dart 3.12.1. Later semantic-action settling routes the proof app's
+    constraints, and task/status assertions; the full demo app test now passes
+    under Dart 3.12.1. Later semantic-action settling routes the demo app's
     app-authored sidebar navigation and Diagnostics report actions through the
     existing screen-controller and command-registry paths. Exit validation on
     2026-05-31 reran
-    `dart analyze test/proof_console_test.dart` and
-    `dart test test/proof_console_test.dart` in
+    `dart analyze test/demo_console_test.dart` and
+    `dart test test/demo_console_test.dart` in
     `packages/fleury_example_console`; both passed. It is intentionally a
     pressure harness, not a polished public example. Dune/`dune_cli` follows
     after core confidence is higher.
@@ -375,8 +376,8 @@ terminal fallbacks, and performance evidence.
     [process task tests](../../packages/fleury/test/effects/process_task_test.dart),
     [terminal handoff driver contract](../../packages/fleury/lib/src/terminal/terminal_driver.dart),
     [fake driver handoff tests](../../packages/fleury/test/terminal/fake_driver_test.dart),
-    [proof app task wiring](../../packages/fleury_example_console/lib/fleury_example_console.dart),
-    [proof app workflow tests](../../packages/fleury_example_console/test/proof_console_test.dart).
+    [demo app task wiring](../../packages/fleury_example_console/lib/fleury_example_console.dart),
+    [demo app workflow tests](../../packages/fleury_example_console/test/demo_console_test.dart).
   - Notes: First slice adds a controller/context task model with status,
     progress, output, cancellation, restart, result/error state, and
     `SemanticRole.task` exposure. Second slice adds terminal handoff and a
@@ -417,8 +418,8 @@ terminal fallbacks, and performance evidence.
     [clipboard write reports](../../packages/fleury/lib/src/runtime/clipboard.dart),
     [clipboard report tests](../../packages/fleury/test/runtime/clipboard_test.dart),
     [text clipboard semantics](../../packages/fleury/test/semantics/semantics_test.dart),
-    [proof app diagnostics](../../packages/fleury_example_console/lib/fleury_example_console.dart),
-    [proof app diagnostics tests](../../packages/fleury_example_console/test/proof_console_test.dart).
+    [demo app diagnostics](../../packages/fleury_example_console/lib/fleury_example_console.dart),
+    [demo app diagnostics tests](../../packages/fleury_example_console/test/demo_console_test.dart).
   - Notes: First slice centralizes env-derived capability detection, adds
     structured `TerminalDiagnosis` JSON with fallbacks/warnings/unsupported
     features, and wires `fleury diagnose --json`. Second slice adds typed
@@ -428,9 +429,9 @@ terminal fallbacks, and performance evidence.
     `MarkdownText` link semantics with OSC 8 disabled by default and visible
     URL fallback. Fifth slice adds structured clipboard write reports plus
     text-field/text-area clipboard policy semantics. Sixth slice surfaces the
-    diagnosis/resolution model in the proof app Diagnostics screen. Exit
+    diagnosis/resolution model in the demo app Diagnostics screen. Exit
     validation on 2026-05-31 reran terminal diagnostics, capability
-    requirement, clipboard, proof-app diagnostics, and
+    requirement, clipboard, demo-app diagnostics, and
     `dart tool/fleury_dev.dart cli diagnose --json`; all passed. Real-terminal
     compatibility checks remain Phase 2 hardening.
 
@@ -461,8 +462,8 @@ terminal fallbacks, and performance evidence.
     2191 us, paste-complete p95 18573 us, and semantic-query p95 508 us. The
     first SB.7 baseline validates 500 alternating terminal sizes per iteration
     over a table/log/editor surface with resize-frame p95 488 us and zero unsafe
-    frames. The proof-app package now adds `SB.10`
-    Proof-App Journey, with a 10-iteration baseline over command palette,
+    frames. The demo-app package now adds `SB.10`
+    Demo-App Journey, with a 10-iteration baseline over command palette,
     debounced global search, diagnostics, fake task, DataTable filter/copy,
     transcript updates, native process success, debug capture, semantics, and
     accessibility.
@@ -504,23 +505,23 @@ terminal fallbacks, and performance evidence.
     [DataTable render island](../../packages/fleury_widgets/lib/src/data_table.dart),
     [DataTable tests](../../packages/fleury_widgets/test/data_table_test.dart),
     [DataTable scenario benchmark](../../packages/fleury_widgets/benchmark/scenario_benchmarks.dart),
-    [proof app Runs usage](../../packages/fleury_example_console/lib/fleury_example_console.dart),
-    [proof app workflow tests](../../packages/fleury_example_console/test/proof_console_test.dart).
+    [demo app Runs usage](../../packages/fleury_example_console/lib/fleury_example_console.dart),
+    [demo app workflow tests](../../packages/fleury_example_console/test/demo_console_test.dart).
   - Notes: First slice adds a separate `DataTable` in `fleury_widgets` rather
     than retrofitting the existing widget-composition `Table`. It paints only
     visible body rows, exposes virtualized table/row/cell semantics, supports
     stable row keys, keyboard movement, fixed headers, sort/filter semantic
     metadata, sanitized/clipped cell text, selected-row TSV/CSV export, and
-    Ctrl+C selected-row copy through the framework clipboard service. The proof
+    Ctrl+C selected-row copy through the framework clipboard service. The demo
     app Runs screen now uses `DataTable` with local filter updates, stable run
     keys, keyboard selection, activation, and selected-row copy coverage. SB.3
     now measures selected-row copy latency in addition to navigation and
-    semantic query latency. A follow-up proof-app settling pass fixed unrelated
+    semantic query latency. A follow-up demo-app settling pass fixed unrelated
     command/status/palette synchronization failures, so DataTable is now proven
-    inside the full proof app suite. Final v1 slice adds controller-backed
+    inside the full demo app suite. Final v1 slice adds controller-backed
     cell-selection mode, Shift-extended rectangular ranges, range-aware semantic
     state, selected cell/range copy and rectangular export, plus first-party
-    `buildDataTableRowOrder` filter/sort helpers used by the proof app's filter
+    `buildDataTableRowOrder` filter/sort helpers used by the demo app's filter
     flow. Later render-island hardening adds mouse hit selection over the
     painted viewport, including row-mode click selection and Shift-click cell
     range extension. Hidden-column policy, multi-range selection, and richer
@@ -546,7 +547,7 @@ terminal fallbacks, and performance evidence.
     [runtime debug event tests](../../packages/fleury/test/runtime/run_tui_test.dart),
     [render object layout tests](../../packages/fleury/test/rendering/render_object_test.dart),
     [debug capture tests](../../packages/fleury/test/debug/debug_capture_test.dart),
-    [proof app capture-to-test workflow](../../packages/fleury_example_console/test/proof_console_test.dart).
+    [demo app capture-to-test workflow](../../packages/fleury_example_console/test/demo_console_test.dart).
   - Notes: First slice adds best-effort frame schedule reasons, a useful
     Rebuilds tab with recent frame costs, dirty-cell counts, slow/worst-frame
     summaries, and recent frame reasons, plus Tree-tab summaries for task and
@@ -564,7 +565,7 @@ terminal fallbacks, and performance evidence.
     counts, and event counts before individual task rows. Sixth slice adds a
     bounded `DebugCaptureRecorder`, terminal/input debug events, redacted
     semantic snapshot serialization, output-summary hooks, and a `runTui`
-    capture test. Seventh slice wires that capture shape into the proof app:
+    capture test. Seventh slice wires that capture shape into the demo app:
     commands, resize metadata, DataTable selection, worker status, status bar,
     output summaries, and serialized semantic assertions now seed a concrete
     regression test. Eighth slice adds Tree-tab semantic cursor navigation,
@@ -608,7 +609,7 @@ terminal fallbacks, and performance evidence.
     [markdown policy tests](../../packages/fleury_widgets/test/markdown_text_test.dart),
     [image capability tests](../../packages/fleury_widgets/test/image_test.dart),
     [DataTable export tests](../../packages/fleury_widgets/test/data_table_test.dart),
-    [proof app workflow tests](../../packages/fleury_example_console/test/proof_console_test.dart).
+    [demo app workflow tests](../../packages/fleury_example_console/test/demo_console_test.dart).
   - Notes: First implementation slice covers native subprocess task output:
     control-sequence sanitization, line caps, and semantic metadata. Second
     slice tightens `sanitizeForDisplay` so CSI/OSC/DCS/APC terminal control
@@ -621,7 +622,7 @@ terminal fallbacks, and performance evidence.
     errors/query/token-shaped debug state in capture serialization, and makes
     the debug Tree tab honor semantic redaction flags. Markdown link policy,
     image fallback semantics, DataTable sanitized export/copy, clipboard
-    reports, process output, debug capture, and proof-app workflow coverage are
+    reports, process output, debug capture, and demo-app workflow coverage are
     now enough to close M1.11 for the MVP. Runtime `LogBuffer` lifecycle
     hardening now prevents stale appends after teardown while keeping final
     captured lines readable.
@@ -633,14 +634,14 @@ terminal fallbacks, and performance evidence.
     standalone binary path, and future Homebrew/npm wrapper plan without
     over-investing before launch readiness.
   - Acceptance: A developer can run a documented local path for examples and
-    the example proof app.
+    the example demo app.
   - Evidence:
     [workspace README](../../README.md),
     [local distribution path](local-distribution-path.md),
     [repo-local launcher](../../tool/fleury_dev.dart),
-    [proof app README](../../packages/fleury_example_console/README.md).
+    [demo app README](../../packages/fleury_example_console/README.md).
   - Notes: Added `dart tool/fleury_dev.dart` commands for bootstrap, list,
-    proof app, core demos, widget demos, CLI passthrough, quick checks, local
+    demo app, core demos, widget demos, CLI passthrough, quick checks, local
     CLI activation, and standalone CLI compilation. The standalone binary path
     generated `build/fleury` and successfully ran `diagnose --json`. Public
     launch polish remains deferred.
@@ -652,7 +653,7 @@ terminal fallbacks, and performance evidence.
   performance metrics.
 - [x] Phase 1 benchmark scenarios have baseline numbers.
 - [x] Phase 1 APIs are stable enough for first-party examples.
-- [x] The example subpackage v0 proves the chosen proof-app slice.
+- [x] The example subpackage v0 proves the chosen demo-app slice.
 - [x] Peer scorecard has current Nocterm, Bubble Tea v2, Textual, OpenTUI,
   Ratatui, and Ink entries.
 
@@ -668,7 +669,7 @@ terminal fallbacks, and performance evidence.
     projections, `FormPromptSession` for sequential prompt-mode fallback,
     `SemanticRole.form` and `SemanticRole.formField`, required/custom
     validation, redacted secret semantics, submit/cancel actions, and focused
-    tests. The proof app now includes a Connection screen backed by the same
+    tests. The demo app now includes a Connection screen backed by the same
     connection setup field definition used in the prompt-session tests. Second
     slice adds prompt-mode semantic and accessibility projections directly to
     `FormPromptSession`, so sequential fallback exposes the same form/form-field
@@ -684,31 +685,31 @@ terminal fallbacks, and performance evidence.
     state aligned with prompt-mode fallback. Latest richer-field slice adds
     `FormFieldSpec.number` / `FormFieldType.number` with min/max, decimal,
     negative-value policy, controlled `NumberInput` visual binding,
-    prompt-mode parsing, safe snapshots, semantics, validation, and proof-app
+    prompt-mode parsing, safe snapshots, semantics, validation, and demo-app
     connection workflow evidence. Latest date-field slice adds
     `FormFieldSpec.date` / `FormFieldType.date` with date-only typed values,
     first/last date bounds, week-start policy, visual `DatePicker`
     projection, prompt-mode `YYYY-MM-DD` parsing, safe snapshots, semantics,
-    validation, and proof-app connection workflow evidence. Latest
+    validation, and demo-app connection workflow evidence. Latest
     multi-select-field slice adds `FormFieldSpec.multiSelect` /
     `FormFieldType.multiSelect` with typed list values, min/max selected
     bounds, disabled-option validation, visual keyboard toggling,
     comma-separated prompt-mode parsing, safe snapshots, semantics,
-    accessibility state, and proof-app connection workflow evidence. Latest
+    accessibility state, and demo-app connection workflow evidence. Latest
     path-field slice adds `FormFieldSpec.path` / `FormFieldType.path` with
     file/directory/any path kind metadata, optional absolute-path,
     existence, and file/directory validation, text-entry visual binding,
     prompt-mode parsing, safe snapshots, semantics, accessibility state, and
-    proof-app connection workflow evidence. Latest async-validation slice adds
+    demo-app connection workflow evidence. Latest async-validation slice adds
     `FormFieldAsyncValidator`, validating field/form snapshot state,
     `validateAsync`, `validateFieldAsync`, `submitAsync`, visual `FormPanel`
     semantic-submit waiting, prompt-mode `submitCurrentAsync`, busy
-    semantics/accessibility output, stale-result cancellation, and proof-app
+    semantics/accessibility output, stale-result cancellation, and demo-app
     connection workflow evidence. Final wizard/page-flow slice adds
     `FormWizardStep`, `FormWizardController`, and `FormWizard` as a projection
     over the existing `FormDefinition`/`FormController`, with step-level
     validation gates, async-aware next/submit semantic actions, visible-field
-    form projection, step metadata, and proof-app Connection screen adoption
+    form projection, step metadata, and demo-app Connection screen adoption
     as a three-step setup flow. M2.1 is closed for the MVP; future form work
     should be driven by concrete product workflows rather than broadening the
     base contract speculatively.
@@ -719,7 +720,7 @@ terminal fallbacks, and performance evidence.
     selection, lazy visible-row mounting through `ListView.builder`, sanitized
     search/filter/copy/export, clipboard policy reports, semantic
     log/list-item state, semantic focus/navigation, and semantic row activation
-    for visible log selection. The proof app Transcript screen now uses
+    for visible log selection. The demo app Transcript screen now uses
     `LogRegion`.
     `SB.4 LogRegion Tailing And Scrollback` now records a 100k-entry baseline
     with append-burst, scrollback, copy, filter-query, semantic-query,
@@ -730,26 +731,26 @@ terminal fallbacks, and performance evidence.
     JSON payload inspection: parsed/already-materialized documents, collapsible
     object/array rows, JSON pointer/path state, safe string/key display, subtree
     or line copy, parse-error semantics, first-party `SemanticRole.json` and
-    `SemanticRole.jsonNode`, and proof-app Payload screen pressure. Third slice
+    `SemanticRole.jsonNode`, and demo-app Payload screen pressure. Third slice
     adds `DiffView` for unified diff inspection: parsed file/hunk/add/delete
     rows, old/new line numbers, file path state, selected-line or selected-hunk
     copy, terminal-control sanitization, first-party `SemanticRole.diff` and
-    `SemanticRole.diffLine`, and proof-app Changes screen pressure. Fourth
+    `SemanticRole.diffLine`, and demo-app Changes screen pressure. Fourth
     slice adds `CodeView` for source inspection: source-line classification,
     line-number display, indentation and non-empty/comment/blank counts,
     selected-line or whole-document copy, terminal-control sanitization,
-    first-party `SemanticRole.code` and `SemanticRole.codeLine`, and proof-app
+    first-party `SemanticRole.code` and `SemanticRole.codeLine`, and demo-app
     Source screen pressure. Fifth slice adds `MarkdownView` for document
     inspection: parsed Markdown rows, heading/list/link/code counts, visible
     URL fallback semantics, selected-block or whole-document copy,
     terminal-control sanitization, first-party `SemanticRole.markdown` and
-    `SemanticRole.markdownBlock`, and proof-app Docs screen pressure.
+    `SemanticRole.markdownBlock`, and demo-app Docs screen pressure.
     Patch-review follow-up adds `PatchReview` as the protocol-neutral review
     layer above `DiffView`: patch/file status, per-file stats, selected-file
     activation, sanitized file-summary copy, `SemanticRole.patchReview`,
-    `SemanticRole.patchFile`, and proof-app Changes pressure while keeping hunk
+    `SemanticRole.patchFile`, and demo-app Changes pressure while keeping hunk
     review inside `DiffView`. Further
-    filter/typeahead/indexing work should wait for a larger proof workflow.
+    filter/typeahead/indexing work should wait for a larger demo workflow.
     Semantic action coverage now routes `LogRegion` focus/row activation/copy,
     `JsonView` open/copy, `DiffView` focus/line activation/copy, `CodeView`
     focus/line activation/copy, and `MarkdownView` focus/block activation/copy
@@ -781,7 +782,7 @@ terminal fallbacks, and performance evidence.
     keys, DataTable-compatible columns/export formats, expansion/collapse
     navigation, filtered descendant discovery, visible-row laziness, semantic
     tree rows plus table cells, selected-row copy/export, and sanitizer-safe
-    rendering/search/semantics/export. The proof app now has a Tree screen that
+    rendering/search/semantics/export. The demo app now has a Tree screen that
     exercises TreeTable through app navigation, focus commands, semantics,
     activation into the transcript, and selected-row copy. `SB.11 TreeTable
     Hierarchy Filter And Copy` now records a 100k-leaf hierarchy baseline:
@@ -801,18 +802,18 @@ terminal fallbacks, and performance evidence.
     fast ID/path/symbol typeahead while preserving direct filtering parity and
     ancestor reveal. M2.3 search policy is now explicit: exact-token and
     prefix-token modes are index-backed for durable identifiers, while fuzzy
-    contains/subsequence remains an opt-in scan until a proof workflow justifies
+    contains/subsequence remains an opt-in scan until a demo workflow justifies
     richer n-gram indexing, isolate-backed execution, cached flattened rows,
     or render-island search support.
     Semantic action coverage now includes `SearchPanel` focus/activate/copy,
     `Tree` focus/open/activate, `TreeTable` open/activate/copy, and
-    `FileBrowser` open/copy over mounted visible rows. The proof app Global
+    `FileBrowser` open/copy over mounted visible rows. The demo app Global
     Search screen now uses `SearchPanel` as the result surface for an app-owned
     debounced search task, proving that async result production can stay
     outside the widget while reusable ranking, semantics, and activation stay
     first-party. The ranked-search follow-up saves a refreshed `SB.10` baseline
     with global-search p95 84221 us and selected result key `run.RUN-1002`.
-    The proof app Indexed Logs screen now proves cooperative retained-log
+    The demo app Indexed Logs screen now proves cooperative retained-log
     indexing in an integrated workflow: `TaskController` / `TaskYieldPolicy`
     build and refresh `LogRegionSearchIndex`, and `LogRegion` exposes filtered
     result semantics with append-refresh evidence.
@@ -824,7 +825,7 @@ terminal fallbacks, and performance evidence.
     Escape cancellation while preserving the core process model.
     `ProcessCommandRunner` and `ProcessCommandScope` now add start/cancel app
     commands, shortcuts, semantic actions, non-blocking command invocation, and
-    command-state refresh around the same controller. The proof app now has a
+    command-state refresh around the same controller. The demo app now has a
     Process screen that runs `dart --version` through `ProcessCommandScope` and
     displays output through `ProcessPanel`. `TerminalOutputRegion` now adapts
     runtime `LogBuffer` stdout/stderr capture into `LogRegion` so captured
@@ -849,7 +850,7 @@ terminal fallbacks, and performance evidence.
     typeahead, search, and index workloads can coalesce pending changes, cancel
     stale running work, run immediately when needed, and preserve progress,
     output, events, results, and task semantics through the same model as other
-    Fleury workers. The proof app Global Search screen now uses it to feed
+    Fleury workers. The demo app Global Search screen now uses it to feed
     `SearchPanel` and route selected results back into app navigation. It is not
     an isolate/off-main indexing story by itself; it is the shared policy
     primitive needed before wiring heavy indexes into production widgets.
@@ -864,7 +865,7 @@ terminal fallbacks, and performance evidence.
     `TreeTableSearchIndex.buildCooperatively` prove the model against retained
     log and hierarchy index workloads. This still is not isolate-backed
     execution; it is the launch-quality cooperative foundation before any
-    worker pool or isolate indexing API. The proof app now consumes this path
+    worker pool or isolate indexing API. The demo app now consumes this path
     directly in the Indexed Logs screen and refreshed `SB.10` benchmark.
 - [x] M2.5 Theme and component-theme expansion.
   - Notes: First slice adds `FleuryWidgetTheme` as a typed
@@ -873,26 +874,26 @@ terminal fallbacks, and performance evidence.
     on/off styles, progress filled/track styles, and Markdown document block
     styles. `Checkbox`, `Toggle`, `Radio`, `Switch`, disabled `Button`,
     `ProgressBar`, and `MarkdownView` now resolve these defaults while keeping
-    explicit widget styles authoritative. The proof app now runs under a
+    explicit widget styles authoritative. The demo app now runs under a
     custom `Theme` with `FleuryWidgetTheme` tokens and tests Markdown heading
     styling through the Docs screen. Second slice expands the same extension
     to production-toolkit surfaces that had repeated hardcoded styles:
     DataTable/TreeTable selection, separators, empty states, LogRegion
-    severities, DiffView line kinds, and JsonView parse errors. The proof app
+    severities, DiffView line kinds, and JsonView parse errors. The demo app
     now applies those tokens to Runs and Changes screens, and focused tests
     verify explicit widget styles still override theme defaults. Final slice
     adds CodeView line-kind tokens for blank/comment/import/declaration/
-    keyword/string/plain rows and applies them in the proof-app Source theme.
+    keyword/string/plain rows and applies them in the demo-app Source theme.
     The launch token set is intentionally limited to repeated production
     widget states: controls, progress, data, logs, code, diff, JSON, and
     markdown. Rich syntax theming, per-token highlighting, and broader design
-    system work are deferred until proof-app or widget-suite pressure shows
+    system work are deferred until demo-app or widget-suite pressure shows
     real duplication.
 - [~] M2.6 Dune/`dune_cli` first integration slice after the core framework is
   proven through the example subpackage.
-  - MVP status: Deferred by current-cycle scope. The proof app is the active
+  - MVP status: Deferred by current-cycle scope. The demo app is the active
     integration harness; Dune/`dune_cli` should start after the core APIs and
-    widget surfaces are stable under proof-app tests.
+    widget surfaces are stable under demo-app tests.
 - [~] M2.7 Optional `fleury_acp` fast-follow package if Dune/`dune_cli` later
   needs ACP integration.
   - MVP status: Deferred by current-cycle scope. Fleury core remains
@@ -915,7 +916,7 @@ terminal fallbacks, and performance evidence.
     accepting an explicit accessibility snapshot for non-widget fallback
     sessions. Current slice expands the semantic-derived accessibility
     projection with allow-listed app-kernel, command, task, output, view,
-    row/cell, and developer-document state used by the proof app and
+    row/cell, and developer-document state used by the demo app and
     production widgets, while preserving redaction for selected keys on
     redacted nodes. Current API-stabilization slice adds typed node fields and
     snapshot filters for enabled, focused, selected, checked, expanded, busy,
@@ -997,10 +998,10 @@ terminal fallbacks, and performance evidence.
     into image/chart semantics with marker/bounds state and text-first
     fallback output, so custom drawings are inspectable without duplicating
     richer semantics from first-party chart wrappers.
-    The proof app Overview telemetry strip proves dashboard chart semantics in
+    The demo app Overview telemetry strip proves dashboard chart semantics in
     the integrated scenario. Task-event trace rows
     now use typed task run/sequence/kind/progress/output-safety state plus
-    allow-listed fallback text, giving proof-app Diagnostics inspectable
+    allow-listed fallback text, giving demo-app Diagnostics inspectable
     effect history without serializing raw task output, result values, errors,
     or stack traces into trace metadata.
     Process task fallback now includes command display, exit code,
@@ -1008,7 +1009,7 @@ terminal fallbacks, and performance evidence.
     process workflows a useful text-first/debug artifact story without
     inventing a second process model.
     M2.8 is complete for the MVP: future widget-specific summaries should be
-    opened only when proof workflows demand them, and broad OS accessibility
+    opened only when demo workflows demand them, and broad OS accessibility
     claims remain out of scope until adapter evidence exists.
 - [x] M2.9 Windows driver.
   - Notes: First slice adds `WindowsTerminalDriver`,
@@ -1150,14 +1151,14 @@ terminal fallbacks, and performance evidence.
     JSON, so tests can assert on captured inputs, frames, output summaries,
     safe task-event summaries, deterministic time markers, accessibility
     narration, and semantic nodes without hand-walking nested maps. The
-    proof-app capture-to-test regression now uses this artifact surface,
+    demo-app capture-to-test regression now uses this artifact surface,
     proving the MVP replay-hook path as targeted evidence rather than broad
     replay.
 - [x] M2.12 MVP adoption positioning and public-scope disposition.
   - Notes: First M2.12 slice adds the internal
     [Why Fleury?](why-fleury.md) positioning draft and refreshes peer version
     facts on 2026-06-01. The draft names three concrete wins against Nocterm,
-    three against Bubble Tea v2, the proof-app role, the later Dune/`dune_cli`
+    three against Bubble Tea v2, the demo-app role, the later Dune/`dune_cli`
     flagship role, launch-ready claims, and claims not yet ready. The local
     distribution path and peer scorecard skeleton are also in place. Public
     package docs, public comparison copy, docs site, scaffolding, adoption
@@ -1171,7 +1172,7 @@ terminal fallbacks, and performance evidence.
 - [x] MVP real-terminal compatibility checks cover macOS Terminal and tmux.
   iTerm2, Kitty, Ghostty, Alacritty, WezTerm, SSH, Windows Terminal, and
   broader Windows host validation are post-MVP.
-- [x] The example proof app is strong enough to validate the framework before
+- [x] The example demo app is strong enough to validate the framework before
   Dune/`dune_cli` becomes the first product showcase.
 
 ## Phase 3: Ecosystem Leadership
@@ -1281,7 +1282,7 @@ terminal app development.
     `RenderRepaintBoundary`, while `fleury_test.dart` owns the diagnostics DTO.
     M3.7 is complete for MVP as a local core hardening milestone. Public
     render-island APIs, broader extension points, or stronger engine-boundary
-    claims should wait for post-MVP package/proof-app pressure. Current root
+    claims should wait for post-MVP package/demo-app pressure. Current root
     lifecycle hardening makes `BuildOwner.updateRoot` follow the same
     compatibility rule at the
     app root that subtree reconciliation already uses: preserve state for
@@ -1343,11 +1344,11 @@ terminal app development.
     contribution convention now lets extensions that opt into
     `FleuryAppExtension` provide app-level commands, status items, and
     package-owned theme extension defaults plus typed data sources; app-owned
-    commands and ambient host theme extensions still win collisions. The proof
-    app now registers `ProofConsoleExtension`, reads it from screen builders
+    commands and ambient host theme extensions still win collisions. The demo
+    app now registers `DemoConsoleExtension`, reads it from screen builders
     and command enablement/action code, and lets the extension contribute the
     diagnostics command, stream/debug status items, `FleuryWidgetTheme`
-    defaults, and `ProofSearchDataSource` global-search corpus in a separate
+    defaults, and `DemoSearchDataSource` global-search corpus in a separate
     package without broadening core. Current reusable-package slice adds
     `packages/fleury_git`, with `FleuryGitExtension`, Git command callbacks,
     app status, widget theme defaults, a typed repository data source,
@@ -1355,7 +1356,7 @@ terminal app development.
     disabled commands, semantic state, and theme override behavior. M3.8 is
     complete for the launch extension story: package-shaped integrations are
     static, typed, and app-owned; package discovery, loading, adapter
-    lifecycle, and provider protocols remain future proof-driven work.
+    lifecycle, and provider protocols remain future demo-driven work.
 - [~] M3.9 Cross-framework comparative benchmarks and showcase apps.
   - MVP status: The peer-benchmark governance/checkpoint slice is complete for
     this cycle, and further peer comparison work is intentionally deferred

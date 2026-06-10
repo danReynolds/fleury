@@ -1,5 +1,5 @@
 name: fleury_example_console
-description: Internal proof app for Fleury's reactive TUI foundations.
+description: Internal demo app for Fleury's reactive TUI foundations.
 version: 0.0.0
 publish_to: none
 

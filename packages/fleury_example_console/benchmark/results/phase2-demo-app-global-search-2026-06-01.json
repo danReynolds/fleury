@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-01T06:17:17.945937Z",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "scenarioId": "SB.10",
+      "scenarioName": "Demo-App Journey",
+      "packageVersion": "0.0.0",
+      "gitSha": "unknown",
+      "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+      "runMode": "test",
+      "os": "macos",
+      "cpu": 10,
+      "terminalProfile": {
+        "colorMode": "truecolor",
+        "imageProtocol": "halfBlock",
+        "tmuxPassthrough": false
+      },
+      "terminalSize": {
+        "columns": 100,
+        "rows": 28
+      },
+      "seed": 1,
+      "warmupIterations": 1,
+      "measuredIterations": 10,
+      "startedAt": "2026-06-01T06:17:16.202365Z",
+      "durationMs": 1731.694,
+      "metrics": {
+        "journeyUs": {
+          "min": 140315,
+          "median": 158324,
+          "p95": 227678,
+          "p99": 243526,
+          "max": 247488,
+          "samples": 10
+        },
+        "mountUs": {
+          "min": 749,
+          "median": 1044,
+          "p95": 8523,
+          "p99": 9329,
+          "max": 9530,
+          "samples": 10
+        },
+        "firstRenderUs": {
+          "min": 129,
+          "median": 194,
+          "p95": 579,
+          "p99": 677,
+          "max": 701,
+          "samples": 10
+        },
+        "commandPaletteUs": {
+          "min": 4998,
+          "median": 6530,
+          "p95": 15848,
+          "p99": 16914,
+          "max": 17180,
+          "samples": 10
+        },
+        "globalSearchUs": {
+          "min": 73915,
+          "median": 76878,
+          "p95": 89844,
+          "p99": 91919,
+          "max": 92438,
+          "samples": 10
+        },
+        "runsFilterUs": {
+          "min": 1580,
+          "median": 2756,
+          "p95": 5481,
+          "p99": 5833,
+          "max": 5921,
+          "samples": 10
+        },
+        "runsCopyUs": {
+          "min": 685,
+          "median": 909,
+          "p95": 4055,
+          "p99": 4159,
+          "max": 4185,
+          "samples": 10
+        },
+        "transcriptUs": {
+          "min": 3389,
+          "median": 4685,
+          "p95": 35255,
+          "p99": 53013,
+          "max": 57453,
+          "samples": 10
+        },
+        "processRunToSuccessUs": {
+          "min": 45973,
+          "median": 50300,
+          "p95": 71441,
+          "p99": 77685,
+          "max": 79246,
+          "samples": 10
+        },
+        "diagnosticsUs": {
+          "min": 1135,
+          "median": 1408,
+          "p95": 1895,
+          "p99": 1957,
+          "max": 1972,
+          "samples": 10
+        },
+        "debugCaptureUs": {
+          "min": 3810,
+          "median": 5994,
+          "p95": 15619,
+          "p99": 17409,
+          "max": 17856,
+          "samples": 10
+        },
+        "semanticQueryUs": {
+          "min": 382,
+          "median": 649,
+          "p95": 1328,
+          "p99": 1612,
+          "max": 1683,
+          "samples": 10
+        },
+        "firstFrameAnsiBytes": 1031,
+        "finalFrameAnsiBytes": 967,
+        "semanticNodeCount": 96,
+        "accessibilityNodeCount": 96,
+        "accessibilityPlainTextBytes": 7105,
+        "debugCaptureBytes": 39833,
+        "commandCount": 17,
+        "statusCount": 5,
+        "finalActiveScreenId": "diagnostics",
+        "lastCommandId": "debug.captureSnapshot",
+        "runsFilteredCount": 1,
+        "selectedRunKey": "RUN-1002",
+        "globalSearchResultCount": 1,
+        "globalSearchSelectedKey": "run.RUN-1002",
+        "transcriptRowCount": 8,
+        "processOutputCount": 1,
+        "diagnosticCapabilityRows": 5,
+        "unsafeFrameCount": 0,
+        "rssDeltaBytes": 14680064
+      },
+      "thresholds": {
+        "candidateCommandPaletteP95Us": 16000,
+        "candidateGlobalSearchP95Us": 100000,
+        "candidateRunsFilterP95Us": 16000,
+        "candidateRunsCopyP95Us": 16000,
+        "candidateTranscriptP95Us": 33000,
+        "candidateDiagnosticsP95Us": 16000,
+        "candidateSemanticQueryP95Us": 16000,
+        "enforced": false
+      },
+      "pass": true,
+      "notes": [
+        "Candidate thresholds are informational until stable baselines exist.",
+        "Scenario measures the integrated demo app, including app shell, command palette, debounced global search, DataTable, LogRegion, process task, diagnostics, semantics, accessibility, and debug capture.",
+        "The native process step runs the current Dart executable with --version, so process timing includes OS spawn variance."
+      ]
+    }
+  ]
+}

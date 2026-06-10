@@ -9,8 +9,10 @@ The standalone Fleury workspace is split into local Dart packages:
 - `packages/fleury_git` - small Git integration package proving app-extension
   package seams.
 - `packages/fleury_web` - browser/xterm.js driver and demo surface.
-- `packages/fleury_example_console` - internal proof app for the current
+- `packages/fleury_example_console` - internal demo app for the current
   implementation cycle.
+- `packages/storybook` - interactive widget storybook for browsing and
+  exercising supported Fleury widgets.
 - `docs/rfcs` - design notes and implementation RFCs from the original work.
 - `docs/implementation` - active milestone trackers, workstream notes, and the
   execution journal.
@@ -23,13 +25,18 @@ From the workspace root:
 ```sh
 dart tool/fleury_dev.dart bootstrap
 dart tool/fleury_dev.dart list
-dart tool/fleury_dev.dart proof
+dart tool/fleury_dev.dart demo
+dart tool/fleury_dev.dart storybook
+dart tool/fleury_dev.dart storybook list
+dart tool/fleury_dev.dart storybook verify
+dart tool/fleury_dev.dart storybook coverage --strict
+dart tool/fleury_dev.dart storybook run --story visualization.charts --theme dark --size 80x24
 dart tool/fleury_dev.dart core-demo counter
 dart tool/fleury_dev.dart widget-demo dashboard
 dart tool/fleury_dev.dart cli diagnose --json
-dart tool/fleury_dev.dart terminal-matrix --label=local-terminal
-dart tool/fleury_dev.dart benchmark-manifest --json
-dart tool/fleury_dev.dart benchmark-result --input=peer-run.json --json
+dart tool/fleury_dev.dart benchmark list
+dart tool/fleury_dev.dart benchmark manifest --json
+dart tool/fleury_dev.dart benchmark result --input=peer-run.json --json
 dart tool/fleury_dev.dart check --quick
 ```
 
@@ -48,14 +55,22 @@ public CLI namespace:
 
 ```sh
 fleury dev check --quick
-fleury dev proof
+fleury dev demo
+fleury dev storybook
+fleury dev storybook verify
 fleury dev core-demo counter
-fleury dev mvp-readiness
+fleury benchmark list
+fleury benchmark wire sb6 --help
+fleury benchmark manifest --json
 ```
 
 `fleury dev` requires a Fleury framework checkout and delegates to
 `tool/fleury_dev.dart`; public app-developer commands remain top-level
 commands such as `fleury diagnose`, `fleury shell`, and `fleury serve`.
+`fleury benchmark` is the canonical namespace for local scenario runners,
+peer-wire comparisons, profiling, scoreboards, and manifest/result/variance
+tools. Release and evidence commands such as terminal matrix capture and MVP
+readiness remain available through `fleury dev --help`.
 
 ## Validate
 

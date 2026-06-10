@@ -95,6 +95,7 @@ void main() {
         ),
         child: DataTable(
           rowCount: 1,
+          autofocus: true,
           columns: [
             DataTableColumn(
               id: 'name',
@@ -125,6 +126,7 @@ void main() {
         ),
         child: DataTable(
           rowCount: 1,
+          autofocus: true,
           selectedStyle: CellStyle(background: AnsiColor(2)),
           columns: [
             DataTableColumn(

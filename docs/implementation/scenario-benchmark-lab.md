@@ -189,17 +189,17 @@ Existing benchmark assets:
 - [Optimized Overlay Command Palette Phase 2 baseline](../../packages/fleury_widgets/benchmark/results/phase2-overlay-command-palette-optimized-2026-06-01.json)
   records the follow-up `SB.8` run after lazy visible rows, cached search text,
   stable command-id search, and ranked exact/prefix/contains/fuzzy matching.
-- [Proof-App Journey Phase 2 baseline](../../packages/fleury_example_console/benchmark/results/phase2-proof-app-journey-2026-06-01.json)
-  records a 10-iteration `SB.10 Proof-App Journey` run on Dart 3.12.1.
-- [Proof-App Journey Global Search Phase 2 baseline](../../packages/fleury_example_console/benchmark/results/phase2-proof-app-global-search-2026-06-01.json)
+- [Demo-App Journey Phase 2 baseline](../../packages/fleury_example_console/benchmark/results/phase2-demo-app-journey-2026-06-01.json)
+  records a 10-iteration `SB.10 Demo-App Journey` run on Dart 3.12.1.
+- [Demo-App Journey Global Search Phase 2 baseline](../../packages/fleury_example_console/benchmark/results/phase2-demo-app-global-search-2026-06-01.json)
   records the refreshed `SB.10` run after adding a debounced Global Search
   screen backed by `DebouncedTaskController` and `SearchPanel`.
-- [Proof-App Journey Indexed Logs Phase 2 baseline](../../packages/fleury_example_console/benchmark/results/phase2-proof-app-indexed-logs-2026-06-01.json)
+- [Demo-App Journey Indexed Logs Phase 2 baseline](../../packages/fleury_example_console/benchmark/results/phase2-demo-app-indexed-logs-2026-06-01.json)
   records the refreshed `SB.10` run after adding an Indexed Logs screen backed
   by `TaskController`, `TaskYieldPolicy`, `LogRegionSearchIndex`, and
   `LogRegion`.
-- [Proof-App Journey Ranked Search Phase 2 baseline](../../packages/fleury_example_console/benchmark/results/phase2-proof-app-ranked-search-2026-06-01.json)
-  records the refreshed `SB.10` run after routing `SearchPanel` and proof-app
+- [Demo-App Journey Ranked Search Phase 2 baseline](../../packages/fleury_example_console/benchmark/results/phase2-demo-app-ranked-search-2026-06-01.json)
+  records the refreshed `SB.10` run after routing `SearchPanel` and demo-app
   Global Search through reusable `SearchResultIndex` ranking.
 - [Cooperative LogRegion Index Phase 2 baseline](../../packages/fleury_widgets/benchmark/results/phase2-logregion-cooperative-index-2026-06-01.json)
   records the refreshed `SB.4` run after moving retained-log index build and
@@ -500,7 +500,7 @@ Useful lessons from the current baseline:
   across eight sizes from 32x8 to 200x60, with resize-frame p95 488 us,
   semantic-query p95 593 us, and zero unsafe visible frames over 2500 measured
   resize frames.
-- The integrated proof-app baseline now measures the actual example subpackage
+- The integrated demo-app baseline now measures the actual example subpackage
   instead of isolated widgets. The refreshed `SB.10` run covers command
   palette, debounced Global Search, cooperative Indexed Logs, diagnostics,
   fake task, DataTable
@@ -958,11 +958,11 @@ across commits and peer runs.
   in all four paths, and zero unsafe artifact leaks. This is still a
   capability/security scenario as much as a performance scenario.
 
-### SB.10 Proof-App Journey
+### SB.10 Demo-App Journey
 
 - Intent: Measure the actual Phase 1 example subpackage instead of only
   component fixtures.
-- Fixture: Start the proof app, navigate sidebar/screens, type in composer,
+- Fixture: Start the demo app, navigate sidebar/screens, type in composer,
   stream content, run debounced global search, filter/select/copy table rows,
   open command palette, inspect diagnostics, pause/resume log tail, and trigger
   one worker success/failure.
@@ -972,12 +972,12 @@ across commits and peer runs.
 - Peer targets: App-level comparison against Nocterm, Textual, Bubble Tea,
   OpenTUI, Ratatui wrappers, and Ink where equivalent examples can be built or
   found.
-- Candidate threshold: The proof app should remain responsive throughout the
+- Candidate threshold: The demo app should remain responsive throughout the
   journey; no action should require brittle cell-only assertions when a
   semantic assertion would be natural.
 - Implementation notes: This becomes the strongest launch evidence because it
   combines all core foundations. Current implementation lives in the
-  `fleury_example_console` package because it measures the integrated proof
+  `fleury_example_console` package because it measures the integrated demo
   app. It records per-action timings for command palette, debounced global
   search, table filter/copy, transcript updates, process run-to-success,
   diagnostics, debug capture, and semantic queries, plus debug-capture size,
@@ -1013,7 +1013,7 @@ The first implementation order should be:
 6. SB.6 Dashboard Update Pressure.
 7. SB.11 TreeTable Hierarchy Filter And Copy.
 8. SB.7 Resize Storm.
-9. SB.10 Proof-App Journey.
+9. SB.10 Demo-App Journey.
 10. SB.8 Overlay And Command Palette Churn.
 11. SB.9 Subprocess Handoff And Untrusted Output.
 12. SB.12 Layout Dirtiness Cache.

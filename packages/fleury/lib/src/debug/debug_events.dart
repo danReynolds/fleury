@@ -28,6 +28,7 @@ final class FrameEvent {
     required this.diff,
     required this.dirtyCells,
     this.dirtyBounds,
+    this.dirtySpans = DirtySpanFrameStats.empty,
     this.dirtySources = const <String>[],
     this.layoutStats = RenderLayoutFrameStats.empty,
     this.repaintBoundaries = RepaintBoundaryFrameStats.empty,
@@ -49,6 +50,10 @@ final class FrameEvent {
   /// produced no diff.
   final CellRect? dirtyBounds;
 
+  /// Row-span shape for emitted dirty cells. This is diagnostic data for
+  /// distinguishing sparse single-cell churn from contiguous row updates.
+  final DirtySpanFrameStats dirtySpans;
+
   /// Best-effort build/layout/paint invalidation sources that caused this
   /// frame.
   final List<String> dirtySources;
@@ -62,6 +67,90 @@ final class FrameEvent {
   final CellSize bufferSize;
 
   Duration get total => build + layout + paint + diff;
+}
+
+/// Compact shape summary for dirty cells emitted during one rendered frame.
+final class DirtySpanFrameStats {
+  const DirtySpanFrameStats({
+    required this.rowCount,
+    required this.spanCount,
+    required this.coveredCellCount,
+    required this.longestSpan,
+  });
+
+  static const empty = DirtySpanFrameStats(
+    rowCount: 0,
+    spanCount: 0,
+    coveredCellCount: 0,
+    longestSpan: 0,
+  );
+
+  factory DirtySpanFrameStats.fromFlatCells(
+    Iterable<int> cells, {
+    required int columns,
+  }) {
+    if (columns <= 0) return DirtySpanFrameStats.empty;
+    final sorted = cells.toSet().toList()..sort();
+    if (sorted.isEmpty) return DirtySpanFrameStats.empty;
+
+    var rowCount = 0;
+    var spanCount = 0;
+    var coveredCellCount = 0;
+    var longestSpan = 0;
+    int? currentRow;
+    int? previousCol;
+    var currentSpanLength = 0;
+
+    void closeSpan() {
+      if (currentSpanLength == 0) return;
+      spanCount += 1;
+      coveredCellCount += currentSpanLength;
+      if (currentSpanLength > longestSpan) {
+        longestSpan = currentSpanLength;
+      }
+      currentSpanLength = 0;
+    }
+
+    for (final cell in sorted) {
+      final row = cell ~/ columns;
+      final col = cell % columns;
+      if (row != currentRow) {
+        closeSpan();
+        rowCount += 1;
+        currentRow = row;
+        previousCol = col;
+        currentSpanLength = 1;
+        continue;
+      }
+      if (previousCol != null && col == previousCol + 1) {
+        currentSpanLength += 1;
+      } else {
+        closeSpan();
+        currentSpanLength = 1;
+      }
+      previousCol = col;
+    }
+    closeSpan();
+
+    return DirtySpanFrameStats(
+      rowCount: rowCount,
+      spanCount: spanCount,
+      coveredCellCount: coveredCellCount,
+      longestSpan: longestSpan,
+    );
+  }
+
+  final int rowCount;
+  final int spanCount;
+  final int coveredCellCount;
+  final int longestSpan;
+
+  bool get hasDirtySpans => spanCount > 0;
+
+  double get averageSpanLength =>
+      spanCount == 0 ? 0 : coveredCellCount / spanCount;
+
+  double get spansPerRow => rowCount == 0 ? 0 : spanCount / rowCount;
 }
 
 /// Sealed parent — gives consumers exhaustive switch coverage and

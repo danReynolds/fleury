@@ -106,10 +106,10 @@ final class _CommandEntry {
   final String searchText;
 }
 
-/// A fuzzy command palette: a filter input above a live-filtered list.
-/// Type to narrow (case-insensitive subsequence match), Up/Down to move,
-/// Enter to run the highlighted command. It is plain modal content — show
-/// it like any modal — `present` it — and it closes itself on invoke:
+/// A fuzzy command palette.
+///
+/// When [commands] is provided, the palette is a fixed-list UI over callback
+/// commands:
 ///
 /// ```dart
 /// context.present<void>(CommandPalette(commands: [
@@ -118,52 +118,128 @@ final class _CommandEntry {
 /// ]));
 /// ```
 ///
-/// (Esc dismissal comes from the modal route; the palette adds nothing
-/// there.) Built on core primitives — `TextInput` for the query,
-/// `ListView` for the results — so there's no bespoke "show" entry point.
-class CommandPalette extends StatefulWidget {
+/// Without [commands], the palette reads the active [CommandRegistry] and
+/// surfaces [AppCommand]s from the source command scope:
+///
+/// ```dart
+/// CommandPalette.open(context);
+/// ```
+///
+/// Apps that want a keyboard shortcut for the palette should register a normal
+/// [AppCommand] that calls [CommandPalette.open] with its command context.
+///
+/// Type to narrow (case-insensitive subsequence match), Up/Down to move, and
+/// Enter to run the highlighted command. Esc dismissal comes from the modal
+/// route; the palette adds nothing there.
+class CommandPalette extends StatelessWidget {
   const CommandPalette({
     super.key,
-    required this.commands,
+    this.commands,
+    this.sourceRegistry,
+    this.sourceContext,
     this.placeholder = 'Search commands…',
     this.width = 50,
     this.maxVisible = 8,
-  });
+  }) : assert(
+         commands == null || (sourceRegistry == null && sourceContext == null),
+         'sourceRegistry/sourceContext are only used by registry-backed '
+         'palettes. Omit commands to use the active command registry.',
+       );
 
-  final List<Command> commands;
+  /// Fixed callback commands to show.
+  ///
+  /// When null, the palette uses the active [CommandRegistry] instead.
+  final List<Command>? commands;
+
+  /// Registry to inspect for command rows.
+  ///
+  /// This is normally supplied by [open] so a palette rendered in an overlay
+  /// can still surface commands from the widget tree that opened it.
+  final CommandRegistry? sourceRegistry;
+
+  /// Context used for command visibility, enabled state, and invocation.
+  ///
+  /// This is intentionally separate from the palette's overlay context. The
+  /// overlay is only where the palette renders; [sourceContext] is where the
+  /// user was acting when the palette opened.
+  final BuildContext? sourceContext;
+
   final String placeholder;
   final int width;
   final int maxVisible;
 
-  @override
-  State<CommandPalette> createState() => _CommandPaletteState();
-}
-
-/// Registry-backed command palette for [FleuryApp] and [CommandScope].
-///
-/// This is the app-kernel bridge over the simple callback palette: command
-/// discovery, enabled state, IDs, categories, shortcuts, and invocation all
-/// come from the active [CommandRegistry].
-class AppCommandPalette extends StatelessWidget {
-  const AppCommandPalette({
-    super.key,
-    this.placeholder = 'Search commands…',
-    this.width = 50,
-    this.maxVisible = 8,
-  });
-
-  final String placeholder;
-  final int width;
-  final int maxVisible;
+  /// Opens a registry-backed command palette for the active source context.
+  ///
+  /// The source context defaults to the currently focused widget, falling back
+  /// to [context]. This lets a global "Open Command Palette" command discover
+  /// scoped commands owned by the active tab, sidebar, editor, or table while
+  /// still presenting the palette through a navigator.
+  static Future<void> open(
+    BuildContext context, {
+    bool rootNavigator = false,
+    Alignment alignment = Alignment.center,
+    RouteTransition? transition,
+    String placeholder = 'Search commands…',
+    int width = 50,
+    int maxVisible = 8,
+  }) async {
+    final sourceContext = _defaultCommandSourceContext(context);
+    final sourceRegistry = CommandRegistryScope.of(sourceContext);
+    final navigator =
+        Navigator.maybeOf(sourceContext, rootNavigator: rootNavigator) ??
+        Navigator.maybeOf(context, rootNavigator: rootNavigator) ??
+        Navigator.of(sourceContext, rootNavigator: true);
+    await navigator.present<void>(
+      CommandPalette(
+        sourceRegistry: sourceRegistry,
+        sourceContext: sourceContext,
+        placeholder: placeholder,
+        width: width,
+        maxVisible: maxVisible,
+      ),
+      alignment: alignment,
+      transition: transition,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final registry = CommandRegistryScope.of(context);
+    final fixedCommands = commands;
+    if (fixedCommands != null) {
+      return _CommandPaletteView(
+        commands: fixedCommands,
+        placeholder: placeholder,
+        width: width,
+        maxVisible: maxVisible,
+      );
+    }
+
+    final resolvedSourceContext = _resolvedCommandSourceContext(
+      context,
+      sourceContext: sourceContext,
+    );
+    final registry = _resolvedCommandRegistry(
+      context: resolvedSourceContext,
+      sourceRegistry: sourceRegistry,
+      sourceContext: sourceContext,
+    );
     return ListenableBuilder(
-      animation: registry,
+      listenable: registry,
       builder: (context, _) {
-        final commands = _activePaletteCommands(context, registry);
-        return CommandPalette(
+        final activeSourceContext = _resolvedCommandSourceContext(
+          context,
+          sourceContext: sourceContext,
+        );
+        final activeRegistry = _resolvedCommandRegistry(
+          context: activeSourceContext,
+          sourceRegistry: sourceRegistry,
+          sourceContext: sourceContext,
+        );
+        final commands = _activePaletteCommands(
+          activeSourceContext,
+          activeRegistry,
+        );
+        return _CommandPaletteView(
           commands: commands,
           placeholder: placeholder,
           width: width,
@@ -172,6 +248,37 @@ class AppCommandPalette extends StatelessWidget {
       },
     );
   }
+}
+
+BuildContext _defaultCommandSourceContext(BuildContext context) {
+  final focused = Focus.maybeOf(context)?.focusedNode?.context;
+  if (focused != null &&
+      focused.mounted &&
+      CommandRegistryScope.maybeOf(focused) != null) {
+    return focused;
+  }
+  return context;
+}
+
+BuildContext _resolvedCommandSourceContext(
+  BuildContext overlayContext, {
+  BuildContext? sourceContext,
+}) {
+  final source = sourceContext;
+  if (source == null || !source.mounted) return overlayContext;
+  return source;
+}
+
+CommandRegistry _resolvedCommandRegistry({
+  required BuildContext context,
+  required CommandRegistry? sourceRegistry,
+  required BuildContext? sourceContext,
+}) {
+  if (sourceRegistry != null &&
+      (sourceContext == null || sourceContext.mounted)) {
+    return sourceRegistry;
+  }
+  return CommandRegistryScope.of(context);
 }
 
 List<Command> _activePaletteCommands(
@@ -200,12 +307,6 @@ List<Command> _activePaletteCommands(
     );
   }
 
-  final app = FleuryApp.maybeOf(context);
-  if (app != null && app.screens.hasScreens) {
-    for (final command in app.screens.activeScreen.commands) {
-      add(command);
-    }
-  }
   for (final command in registry.activeCommands(buildContext: context)) {
     add(command);
   }
@@ -213,7 +314,24 @@ List<Command> _activePaletteCommands(
   return commands;
 }
 
-class _CommandPaletteState extends State<CommandPalette> {
+class _CommandPaletteView extends StatefulWidget {
+  const _CommandPaletteView({
+    required this.commands,
+    required this.placeholder,
+    required this.width,
+    required this.maxVisible,
+  });
+
+  final List<Command> commands;
+  final String placeholder;
+  final int width;
+  final int maxVisible;
+
+  @override
+  State<_CommandPaletteView> createState() => _CommandPaletteState();
+}
+
+class _CommandPaletteState extends State<_CommandPaletteView> {
   final _query = TextEditingController();
   final _queryFocus = FocusNode(debugLabel: 'command-palette-query');
   final _list = ListController(selectedIndex: 0);
@@ -227,7 +345,7 @@ class _CommandPaletteState extends State<CommandPalette> {
   }
 
   @override
-  void didUpdateWidget(covariant CommandPalette oldWidget) {
+  void didUpdateWidget(covariant _CommandPaletteView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.commands != oldWidget.commands) {
       _entries = _buildCommandEntries(widget.commands);
@@ -355,6 +473,7 @@ class _CommandPaletteState extends State<CommandPalette> {
                         )
                       : ListView.builder(
                           controller: _list,
+                          selectionActive: true,
                           itemCount: _filtered.length,
                           itemBuilder: (context, index, selected) =>
                               _CommandRow(

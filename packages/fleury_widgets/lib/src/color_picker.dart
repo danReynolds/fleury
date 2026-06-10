@@ -15,6 +15,8 @@ import 'package:fleury/fleury.dart';
 ///   onChanged: (c) => setState(() => accent = c),
 /// )
 /// ```
+///
+/// Passing null for [onChanged] disables the picker.
 class ColorPicker extends StatefulWidget {
   const ColorPicker({
     super.key,
@@ -35,7 +37,7 @@ class ColorPicker extends StatefulWidget {
   final Color value;
 
   /// Called with the new color when the cursor moves or on Enter.
-  final void Function(Color color) onChanged;
+  final void Function(Color color)? onChanged;
 
   /// Palette to pick from. `null` uses the 16 base ANSI colors.
   final List<Color>? colors;
@@ -64,6 +66,8 @@ class ColorPicker extends StatefulWidget {
 class _ColorPickerState extends State<ColorPicker> {
   late FocusNode _node;
   bool _owns = false;
+
+  bool get _enabled => widget.onChanged != null;
 
   // The 16 standard ANSI colors. Indices 0..15 match the terminal's
   // base palette: 0-7 normal, 8-15 bright.
@@ -123,12 +127,14 @@ class _ColorPickerState extends State<ColorPicker> {
   }
 
   void _moveTo(int index) {
+    if (!_enabled) return;
     if (index < 0 || index >= _palette.length) return;
     if (_palette[index] == widget.value) return;
-    widget.onChanged(_palette[index]);
+    widget.onChanged!(_palette[index]);
   }
 
   void _selectIndex(int index) {
+    if (!_enabled) return;
     if (index < 0 || index >= _palette.length) return;
     _node.requestFocus();
     _moveTo(index);
@@ -147,6 +153,7 @@ class _ColorPickerState extends State<ColorPicker> {
   }
 
   KeyEventResult _onKey(KeyEvent event) {
+    if (!_enabled) return KeyEventResult.ignored;
     final idx = _currentIndex;
     final cols = widget.columns;
     final n = _palette.length;
@@ -186,7 +193,9 @@ class _ColorPickerState extends State<ColorPicker> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final focused = _node.hasFocus;
+    final enabled = _enabled;
+    final focused = enabled && _node.hasFocus;
+    final disabledStyle = theme.mutedStyle;
     final selectedIdx = _currentIndex;
     final cols = widget.columns;
     final palette = _palette;
@@ -203,21 +212,31 @@ class _ColorPickerState extends State<ColorPicker> {
         // breathes.
         final swatch = Text(
           '█' * widget.swatchWidth,
-          style: CellStyle(foreground: color),
+          style: CellStyle(
+            foreground: color,
+          ).merge(enabled ? CellStyle.empty : disabledStyle),
         );
         final swatchParts = <Widget>[];
         if (isSelected) {
           swatchParts.add(
             Text(
               '[',
-              style: focused ? theme.focusedStyle : theme.selectionStyle,
+              style: !enabled
+                  ? disabledStyle
+                  : focused
+                  ? theme.focusedStyle
+                  : theme.selectionStyle,
             ),
           );
           swatchParts.add(swatch);
           swatchParts.add(
             Text(
               ']',
-              style: focused ? theme.focusedStyle : theme.selectionStyle,
+              style: !enabled
+                  ? disabledStyle
+                  : focused
+                  ? theme.focusedStyle
+                  : theme.selectionStyle,
             ),
           );
         } else {
@@ -232,18 +251,22 @@ class _ColorPickerState extends State<ColorPicker> {
             value: _colorValue(color),
             selected: isSelected,
             checked: isSelected,
-            enabled: true,
-            actions: const {SemanticAction.select, SemanticAction.activate},
-            onAction: (action) {
-              switch (action) {
-                case SemanticAction.select:
-                case SemanticAction.activate:
-                  _selectIndex(idx);
-                  return;
-                case _:
-                  return;
-              }
-            },
+            enabled: enabled,
+            actions: enabled
+                ? const {SemanticAction.select, SemanticAction.activate}
+                : const <SemanticAction>{},
+            onAction: enabled
+                ? (action) {
+                    switch (action) {
+                      case SemanticAction.select:
+                      case SemanticAction.activate:
+                        _selectIndex(idx);
+                        return;
+                      case _:
+                        return;
+                    }
+                  }
+                : null,
             state: SemanticState({
               'colorIndex': idx,
               'colorPosition': idx + 1,
@@ -261,6 +284,32 @@ class _ColorPickerState extends State<ColorPicker> {
     final rowCount = (palette.length + cols - 1) ~/ cols;
     final visibleColumns = palette.length < cols ? palette.length : cols;
     final selectedColor = palette.isEmpty ? null : palette[selectedIdx];
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: rows,
+    );
+    if (!enabled) {
+      return Semantics(
+        role: SemanticRole.list,
+        label: widget.semanticLabel,
+        value: selectedColor == null
+            ? null
+            : _colorLabel(selectedColor, selectedIdx),
+        enabled: false,
+        state: SemanticState({
+          'collectionRowCount': rowCount,
+          'collectionColumnCount': visibleColumns,
+          'colorCount': palette.length,
+          if (selectedColor != null) ...{
+            'selectedIndex': selectedIdx,
+            'selectedKey': _colorValue(selectedColor),
+            'selectedColorLabel': _colorLabel(selectedColor, selectedIdx),
+            'selectedColorKind': _colorKind(selectedColor),
+          },
+        }),
+        child: body,
+      );
+    }
     return Semantics(
       role: SemanticRole.list,
       label: widget.semanticLabel,
@@ -285,13 +334,7 @@ class _ColorPickerState extends State<ColorPicker> {
         focusNode: _node,
         autofocus: widget.autofocus,
         onKey: _onKey,
-        child: GestureDetector(
-          onTap: () => _node.requestFocus(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: rows,
-          ),
-        ),
+        child: GestureDetector(onTap: () => _node.requestFocus(), child: body),
       ),
     );
   }

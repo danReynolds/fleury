@@ -66,7 +66,7 @@ const Map<String, List<String>> _semanticCatalog = {
   'progress_bar': ['progress'],
   'range_slider': ['slider'],
   'search_panel': ['listItem', 'region'],
-  'select': ['button', 'menu', 'menuItem'],
+  'select': ['button', 'checkbox', 'list', 'menu', 'menuItem'],
   'sparkline': ['chart'],
   'stepper': ['spinButton'],
   'table': ['table', 'tableCell'],
@@ -94,7 +94,11 @@ void _expectRole(FleuryTester tester, Widget widget, SemanticRole role) {
 void main() {
   group('semantic role materializes at runtime', () {
     testWidgets('Button → button', (t) {
-      _expectRole(t, Button(label: 'OK', onPressed: () {}), SemanticRole.button);
+      _expectRole(
+        t,
+        Button(label: 'OK', onPressed: () {}),
+        SemanticRole.button,
+      );
     });
     testWidgets('ProgressBar → progress', (t) {
       _expectRole(t, const ProgressBar(value: 0.5), SemanticRole.progress);
@@ -112,10 +116,13 @@ void main() {
     testWidgets('Heatmap → chart', (t) {
       _expectRole(
         t,
-        const Heatmap(values: [
-          [0, 1],
-          [1, 0],
-        ], cellWidth: 1),
+        const Heatmap(
+          values: [
+            [0, 1],
+            [1, 0],
+          ],
+          cellWidth: 1,
+        ),
         SemanticRole.chart,
       );
     });
@@ -133,12 +140,29 @@ void main() {
         SemanticRole.slider,
       );
     });
-    testWidgets('Dialog → dialog', (t) {
-      _expectRole(
-        t,
-        const Dialog(child: Text('body')),
-        SemanticRole.dialog,
+    testWidgets('MultiSelect → checkbox list', (t) {
+      t.pumpWidget(
+        SizedBox(
+          width: 24,
+          height: 8,
+          child: MultiSelect<String>(
+            values: const {'red'},
+            options: const [
+              SelectOption(value: 'red', label: 'Red'),
+              SelectOption(value: 'green', label: 'Green'),
+            ],
+            onChanged: (_) {},
+          ),
+        ),
       );
+      t.render(size: const CellSize(24, 8));
+
+      final roles = t.semantics().nodes.map((n) => n.role).toSet();
+      expect(roles, contains(SemanticRole.list));
+      expect(roles, contains(SemanticRole.checkbox));
+    });
+    testWidgets('Dialog → dialog', (t) {
+      _expectRole(t, const Dialog(child: Text('body')), SemanticRole.dialog);
     });
     testWidgets('DataTable → table', (t) {
       _expectRole(
@@ -165,12 +189,13 @@ void main() {
       for (final entity in dir.listSync()) {
         if (entity is! File || !entity.path.endsWith('.dart')) continue;
         final name = entity.uri.pathSegments.last.replaceAll('.dart', '');
-        final roles = pattern
-            .allMatches(entity.readAsStringSync())
-            .map((m) => m.group(1)!)
-            .toSet()
-            .toList()
-          ..sort();
+        final roles =
+            pattern
+                .allMatches(entity.readAsStringSync())
+                .map((m) => m.group(1)!)
+                .toSet()
+                .toList()
+              ..sort();
         if (roles.isNotEmpty) fromSource[name] = roles;
       }
 
@@ -191,7 +216,8 @@ void main() {
       expect(
         [...newOrChanged, ...removed],
         isEmpty,
-        reason: 'Semantic-contract surface drifted. A widget gained, lost, or '
+        reason:
+            'Semantic-contract surface drifted. A widget gained, lost, or '
             'changed its SemanticRole(s). Update _semanticCatalog (and confirm '
             'the change is intended) — the catalog is the explicit contract '
             'registry.',

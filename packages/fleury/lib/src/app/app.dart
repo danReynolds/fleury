@@ -1,156 +1,17 @@
 import 'dart:async' show unawaited;
 
 import '../foundation/change_notifier.dart';
-import '../foundation/key.dart';
 import '../semantics/semantics.dart';
 import '../widgets/basic.dart';
+import '../widgets/focus_traversal.dart';
 import '../widgets/framework.dart';
 import '../widgets/inherited_notifier.dart';
 import '../widgets/key_bindings.dart';
-import '../widgets/listenable_builder.dart';
 import '../widgets/theme.dart';
 import 'commands.dart';
 import 'status.dart';
 
-typedef ScreenWidgetBuilder = Widget Function(BuildContext context);
 typedef AppStatusBuilder = List<StatusItem> Function(FleuryAppController app);
-
-/// Stable identifier for a registered app screen.
-final class ScreenId {
-  const ScreenId(this.value);
-
-  final String value;
-
-  @override
-  bool operator ==(Object other) => other is ScreenId && other.value == value;
-
-  @override
-  int get hashCode => value.hashCode;
-
-  @override
-  String toString() => value;
-}
-
-/// Metadata and builder for a top-level app screen.
-final class FleuryScreen {
-  const FleuryScreen({
-    required this.id,
-    required this.title,
-    required this.builder,
-    this.shortTitle,
-    this.description,
-    this.commands = const <AppCommand>[],
-  });
-
-  final ScreenId id;
-  final String title;
-  final ScreenWidgetBuilder builder;
-  final String? shortTitle;
-  final String? description;
-  final List<AppCommand> commands;
-}
-
-/// Mutable registry and active selection for app screens.
-class ScreenController extends ChangeNotifier {
-  ScreenController({
-    List<FleuryScreen> screens = const <FleuryScreen>[],
-    ScreenId? activeId,
-  }) : _screens = List<FleuryScreen>.of(screens) {
-    _activeId = _resolveActiveId(activeId);
-  }
-
-  List<FleuryScreen> _screens;
-  ScreenId? _activeId;
-  bool _disposed = false;
-
-  List<FleuryScreen> get screens => List<FleuryScreen>.unmodifiable(_screens);
-  ScreenId? get activeId => _activeId;
-  bool get hasScreens => _screens.isNotEmpty;
-
-  int get activeIndex {
-    final id = _activeId;
-    if (id == null) return -1;
-    return _screens.indexWhere((screen) => screen.id == id);
-  }
-
-  FleuryScreen get activeScreen {
-    final index = activeIndex;
-    if (index < 0) {
-      throw StateError('No active Fleury screen.');
-    }
-    return _screens[index];
-  }
-
-  FleuryScreen? screen(ScreenId id) {
-    for (final screen in _screens) {
-      if (screen.id == id) return screen;
-    }
-    return null;
-  }
-
-  bool activate(ScreenId id) {
-    _checkNotDisposed();
-    if (screen(id) == null) return false;
-    if (_activeId == id) return true;
-    _activeId = id;
-    notifyListeners();
-    return true;
-  }
-
-  void updateScreens(List<FleuryScreen> screens, {ScreenId? activeId}) {
-    _checkNotDisposed();
-    final previous = _activeId;
-    _screens = List<FleuryScreen>.of(screens);
-    _activeId = _resolveActiveId(activeId ?? previous);
-    if (previous != _activeId) {
-      notifyListeners();
-    } else {
-      notifyListeners();
-    }
-  }
-
-  ScreenId? _resolveActiveId(ScreenId? preferred) {
-    if (_screens.isEmpty) return null;
-    if (preferred != null && screen(preferred) != null) return preferred;
-    return _screens.first.id;
-  }
-
-  void _checkNotDisposed() {
-    if (_disposed) {
-      throw StateError('ScreenController has been disposed.');
-    }
-  }
-
-  @override
-  void dispose() {
-    if (_disposed) return;
-    _disposed = true;
-    super.dispose();
-  }
-}
-
-/// Shares a [ScreenController] with descendants.
-class ScreenControllerScope extends InheritedNotifier<ScreenController> {
-  const ScreenControllerScope({
-    super.key,
-    required ScreenController controller,
-    required super.child,
-  }) : super(notifier: controller);
-
-  static ScreenController of(BuildContext context) {
-    final controller = maybeOf(context);
-    if (controller == null) {
-      throw StateError('No ScreenControllerScope found in context.');
-    }
-    return controller;
-  }
-
-  static ScreenController? maybeOf(BuildContext context) {
-    return context
-        .dependOnInheritedWidgetOfExactType<ScreenControllerScope>()
-        ?.notifier;
-  }
-}
 
 /// Optional convention for app-level extension objects.
 ///
@@ -192,13 +53,11 @@ abstract class FleuryAppExtension {
 class FleuryAppController extends ChangeNotifier implements StatusHost {
   FleuryAppController({
     required String title,
-    required this.screens,
     required this.commands,
     required this.status,
     List<Object> extensions = const <Object>[],
   }) : _title = title,
        _extensions = List<Object>.unmodifiable(extensions) {
-    screens.addListener(_notifyChanged);
     commands.addListener(_notifyChanged);
     status.addListener(_notifyChanged);
   }
@@ -206,7 +65,6 @@ class FleuryAppController extends ChangeNotifier implements StatusHost {
   String _title;
   List<Object> _extensions;
   bool _disposed = false;
-  final ScreenController screens;
   final CommandRegistry commands;
   @override
   final StatusController status;
@@ -282,7 +140,6 @@ class FleuryAppController extends ChangeNotifier implements StatusHost {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    screens.removeListener(_notifyChanged);
     commands.removeListener(_notifyChanged);
     status.removeListener(_notifyChanged);
     super.dispose();
@@ -329,11 +186,6 @@ extension FleuryCommandContext on CommandContext {
     return context == null ? null : FleuryAppScope.maybeOf(context);
   }
 
-  ScreenController? get screens {
-    final context = buildContext;
-    return context == null ? null : ScreenControllerScope.maybeOf(context);
-  }
-
   StatusController? get status {
     final context = buildContext;
     return context == null ? null : FleuryAppScope.maybeOf(context)?.status;
@@ -364,28 +216,22 @@ extension FleuryCommandContext on CommandContext {
   }
 }
 
-/// App-scale shell for commands, screens, and future status/palette plumbing.
+/// App-scale shell for commands, status, and app-level extension plumbing.
 class FleuryApp extends StatefulWidget {
   const FleuryApp({
     super.key,
     required this.title,
-    this.screens = const <FleuryScreen>[],
-    this.initialScreen,
     this.commands = const <AppCommand>[],
     this.extensions = const <Object>[],
     this.status,
     this.child,
-    this.preserveScreenState = false,
   });
 
   final String title;
-  final List<FleuryScreen> screens;
-  final ScreenId? initialScreen;
   final List<AppCommand> commands;
   final List<Object> extensions;
   final AppStatusBuilder? status;
   final Widget? child;
-  final bool preserveScreenState;
 
   static FleuryAppController of(BuildContext context) =>
       FleuryAppScope.of(context);
@@ -422,7 +268,6 @@ class FleuryApp extends StatefulWidget {
 }
 
 class _FleuryAppState extends State<FleuryApp> {
-  late final ScreenController _screens;
   late final CommandRegistry _commands;
   late final StatusController _status;
   late final FleuryAppController _app;
@@ -430,20 +275,14 @@ class _FleuryAppState extends State<FleuryApp> {
   @override
   void initState() {
     super.initState();
-    _screens = ScreenController(
-      screens: widget.screens,
-      activeId: widget.initialScreen,
-    );
     _commands = CommandRegistry(commands: _appCommands(widget));
     _status = StatusController();
     _app = FleuryAppController(
       title: widget.title,
-      screens: _screens,
       commands: _commands,
       status: _status,
       extensions: widget.extensions,
     );
-    _screens.addListener(_syncStatus);
     _commands.addListener(_syncStatus);
     _syncStatus();
   }
@@ -460,12 +299,6 @@ class _FleuryAppState extends State<FleuryApp> {
     _app.title = widget.title;
     _app.updateExtensions(widget.extensions);
     _commands.localCommands = _appCommands(widget);
-    _screens.updateScreens(
-      widget.screens,
-      activeId: widget.initialScreen != oldWidget.initialScreen
-          ? widget.initialScreen
-          : null,
-    );
     _syncStatus();
   }
 
@@ -506,40 +339,33 @@ class _FleuryAppState extends State<FleuryApp> {
 
   @override
   void dispose() {
-    _screens.removeListener(_syncStatus);
     _commands.removeListener(_syncStatus);
     _app.dispose();
     _commands.dispose();
     _status.dispose();
-    _screens.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final body =
-        widget.child ??
-        ActiveScreenView(preserveState: widget.preserveScreenState);
+    final body = widget.child ?? const EmptyBox();
     final app = CommandRegistryScope(
       registry: _commands,
-      child: ScreenControllerScope(
-        controller: _screens,
-        child: StatusHostScope(
-          lookup: _app,
-          child: FleuryAppScope(
-            controller: _app,
-            child: _ContextBuilder(
-              builder: (innerContext) {
-                return _FleuryAppSemantics(
-                  controller: _app,
-                  buildContext: innerContext,
-                  child: KeyBindings(
-                    bindings: _bindings(innerContext),
-                    child: body,
-                  ),
-                );
-              },
-            ),
+      child: StatusHostScope(
+        lookup: _app,
+        child: FleuryAppScope(
+          controller: _app,
+          child: _ContextBuilder(
+            builder: (innerContext) {
+              return _FleuryAppSemantics(
+                controller: _app,
+                buildContext: innerContext,
+                child: KeyBindings(
+                  bindings: _bindings(innerContext),
+                  child: FocusTraversalGroup(child: body),
+                ),
+              );
+            },
           ),
         ),
       ),
@@ -619,77 +445,6 @@ bool _listEquals(List<Object> a, List<Object> b) {
     if (a[i] != b[i]) return false;
   }
   return true;
-}
-
-/// Renders the active registered screen.
-class ActiveScreenView extends StatelessWidget {
-  const ActiveScreenView({super.key, this.preserveState = false});
-
-  final bool preserveState;
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = ScreenControllerScope.of(context);
-    return ListenableBuilder(
-      animation: controller,
-      builder: (context, _) {
-        if (!controller.hasScreens) return const EmptyBox();
-        if (!preserveState) {
-          final screen = controller.activeScreen;
-          return _ScreenSlot(
-            key: ValueKey<String>('screen:${screen.id.value}'),
-            screen: screen,
-            active: true,
-          );
-        }
-        return IndexedStack(
-          index: controller.activeIndex,
-          children: [
-            for (final screen in controller.screens)
-              _ScreenSlot(
-                key: ValueKey<String>('screen:${screen.id.value}'),
-                screen: screen,
-                active: screen.id == controller.activeId,
-              ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-final class _ScreenSlot extends StatelessWidget {
-  const _ScreenSlot({super.key, required this.screen, required this.active});
-
-  final FleuryScreen screen;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      id: SemanticNodeId('screen:${screen.id.value}'),
-      role: SemanticRole.screen,
-      label: screen.title,
-      value: screen.description,
-      selected: active,
-      actions: const <SemanticAction>{SemanticAction.navigate},
-      state: SemanticState({
-        'screenId': screen.id.value,
-        if (screen.shortTitle != null) 'screenShortTitle': screen.shortTitle,
-      }),
-      onAction: (action) {
-        if (action == SemanticAction.navigate) {
-          ScreenControllerScope.of(context).activate(screen.id);
-        }
-      },
-      child: CommandScope(
-        commands: screen.commands,
-        label: '${screen.title} commands',
-        enabled: active,
-        child: _ContextBuilder(builder: screen.builder),
-      ),
-    );
-  }
 }
 
 final class _ScopedCommandContext implements CommandContext {
@@ -782,37 +537,18 @@ final class _FleuryAppSemanticsElement extends ComponentElement
       );
     }
 
-    final screens = widget.controller.screens;
-    final active = screens.activeId;
-    final contributedScreenIds = _contributedScreenIds(children);
-    final screenNodes = <SemanticNode>[];
-    for (final screen in screens.screens) {
-      if (contributedScreenIds.contains(screen.id.value)) continue;
-      screenNodes.add(
-        SemanticNode(
-          id: SemanticNodeId('screen:${screen.id.value}'),
-          role: SemanticRole.screen,
-          label: screen.title,
-          value: screen.description,
-          selected: screen.id == active,
-          actions: const <SemanticAction>{SemanticAction.navigate},
-          state: SemanticState({
-            'screenId': screen.id.value,
-            if (screen.shortTitle != null)
-              'screenShortTitle': screen.shortTitle,
-          }),
-        ),
-      );
-    }
     final lastCommand = widget.controller.commands.lastResult;
+    final screenSummary = _screenSummary(children);
     return SemanticNode(
       id: const SemanticNodeId('app'),
       role: SemanticRole.app,
       label: widget.controller.title,
-      children: <SemanticNode>[...commandNodes, ...screenNodes, ...children],
+      children: <SemanticNode>[...commandNodes, ...children],
       state: SemanticState({
-        'screenCount': screens.screens.length,
-        if (active != null) 'activeScreenId': active.value,
+        if (screenSummary.screenCount > 0)
+          'screenCount': screenSummary.screenCount,
+        if (screenSummary.activeScreenId != null)
+          'activeScreenId': screenSummary.activeScreenId,
         'commandCount': commandNodes.length,
         'statusCount': widget.controller.status.length,
         if (lastCommand != null) 'lastCommandId': lastCommand.id.value,
@@ -821,16 +557,23 @@ final class _FleuryAppSemanticsElement extends ComponentElement
     );
   }
 
-  Set<String> _contributedScreenIds(List<SemanticNode> children) {
+  _ScreenSemanticSummary _screenSummary(List<SemanticNode> children) {
     final ids = <String>{};
+    String? activeId;
     for (final child in children) {
       for (final node in child.selfAndDescendants) {
-        if (node.role != SemanticRole.screen) continue;
         final screenId = node.state.screenId;
-        if (screenId != null) ids.add(screenId);
+        if (screenId == null) continue;
+        ids.add(screenId);
+        if (activeId == null && node.selected) {
+          activeId = screenId;
+        }
       }
     }
-    return ids;
+    return _ScreenSemanticSummary(
+      screenCount: ids.length,
+      activeScreenId: activeId,
+    );
   }
 
   @override
@@ -838,13 +581,6 @@ final class _FleuryAppSemanticsElement extends ComponentElement
     SemanticNode target,
     SemanticAction action,
   ) async {
-    if (target.role == SemanticRole.screen) {
-      if (action != SemanticAction.navigate) return false;
-      final screenId = target.state.screenId;
-      if (screenId == null) return false;
-      return widget.controller.screens.activate(ScreenId(screenId));
-    }
-
     if (target.role != SemanticRole.command) return false;
     final commandId = target.state.commandId;
     if (commandId == null) return false;
@@ -862,4 +598,14 @@ final class _FleuryAppSemanticsElement extends ComponentElement
     }
     return false;
   }
+}
+
+final class _ScreenSemanticSummary {
+  const _ScreenSemanticSummary({
+    required this.screenCount,
+    required this.activeScreenId,
+  });
+
+  final int screenCount;
+  final String? activeScreenId;
 }

@@ -37,6 +37,26 @@ void main() {
     expect(buf.atColRow(0, 1).grapheme, 'B');
   });
 
+  testWidgets('rebuilds when the builder widget updates', (tester) {
+    Widget responsive(String label) => LayoutBuilder(
+      builder: (context, constraints) => Text(
+        '${(constraints.maxCols ?? 0) >= 10 ? 'wide' : 'narrow'} $label',
+      ),
+    );
+
+    tester.pumpWidget(responsive('first'));
+    expect(
+      tester.renderToString(size: const CellSize(20, 1)).trim(),
+      'wide first',
+    );
+
+    tester.pumpWidget(responsive('second'));
+    expect(
+      tester.renderToString(size: const CellSize(20, 1)).trim(),
+      'wide second',
+    );
+  });
+
   testWidgets('reads an inherited MediaQuery inside the builder', (tester) {
     tester.viewportSize = const CellSize(24, 6);
     tester.pumpWidget(

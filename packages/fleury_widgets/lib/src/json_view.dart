@@ -553,14 +553,18 @@ class _JsonViewState extends State<JsonView> {
         autofocus: widget.autofocus,
         itemCount: rows.length,
         onSelect: (index) => _toggleSelected(rows, index),
-        itemBuilder: (context, index, selected) => _JsonRowWidget(
-          row: rows[index],
-          rowIndex: index,
-          selected: selected,
-          copyEnabled: copyEnabled,
-          onOpen: () => _openRow(rows, index),
-          onCopy: () => _copyRow(rows, index),
-        ),
+        itemBuilder: (context, index, activeSelected) {
+          final selected = index == _controller.selectedIndex;
+          return _JsonRowWidget(
+            row: rows[index],
+            rowIndex: index,
+            selected: selected,
+            activeSelection: activeSelected,
+            copyEnabled: copyEnabled,
+            onOpen: () => _openRow(rows, index),
+            onCopy: () => _copyRow(rows, index),
+          );
+        },
       ),
     );
 
@@ -643,6 +647,7 @@ class _JsonRowWidget extends StatelessWidget {
     required this.row,
     required this.rowIndex,
     required this.selected,
+    required this.activeSelection,
     required this.copyEnabled,
     required this.onOpen,
     required this.onCopy,
@@ -651,6 +656,7 @@ class _JsonRowWidget extends StatelessWidget {
   final JsonViewRow row;
   final int rowIndex;
   final bool selected;
+  final bool activeSelection;
   final bool copyEnabled;
   final void Function() onOpen;
   final Future<void> Function() onCopy;
@@ -696,7 +702,11 @@ class _JsonRowWidget extends StatelessWidget {
       }),
       child: Text(
         row.line,
-        style: selected ? Theme.of(context).selectionStyle : CellStyle.empty,
+        style: activeSelection
+            ? Theme.of(context).selectionStyle
+            : selected
+            ? Theme.of(context).mutedStyle
+            : CellStyle.empty,
       ),
     );
   }

@@ -9,7 +9,7 @@ implementation goal complete.
 
 The local MVP implementation is complete for the scoped MVP cycle across the core
 reactive framework, production widget toolkit, semantic/testing surfaces,
-targeted debug capture, process/task workflows, extension seam, and proof-app
+targeted debug capture, process/task workflows, extension seam, and demo-app
 pressure harness.
 
 The final MVP gate passed after the terminal evidence scope was narrowed to
@@ -24,11 +24,11 @@ comparisons are explicitly deferred from this MVP cycle.
 - Phase 1 clear-choice foundations are complete: semantic tree, text editing,
   `FleuryApp`, task/effect model, terminal diagnose/capability model,
   scenario benchmarks, DataTable, debug inspector, sanitized output, local
-  distribution path, and proof app v0.
+  distribution path, and demo app v0.
 - Phase 2 production toolkit is locally strong: forms, logs, files, trees,
   search, JSON, diffs, code, Markdown, process panels, workflow widgets,
   component theme, accessibility/fallback, and targeted debug capture are
-  implemented and exercised by tests/proof scenarios.
+  implemented and exercised by tests/demo scenarios.
 - Core/API stabilization is locally complete for the current audit pass:
   controller/runtime disposal rules now preserve final readable state while
   rejecting stale post-dispose mutation across app kernel, text, task/effects,
@@ -55,7 +55,7 @@ comparisons are explicitly deferred from this MVP cycle.
   The gate includes package analysis, the local `fleury` non-integration
   suite, the integration-tagged `fleury` serve/shell fixtures run serially,
   the full local `fleury_widgets` test suite with 798 tests, the `fleury_git`
-  tests, and the `fleury_example_console` proof-app scenario suite with 26
+  tests, and the `fleury_example_console` demo-app scenario suite with 26
   tests.
 - The RC validation pass found and corrected two local test-artifact issues:
   the command-palette golden now reflects the visible `Search…` placeholder,

@@ -17,6 +17,7 @@ class ProgressBar extends StatelessWidget {
     required this.value,
     this.filledStyle,
     this.trackStyle,
+    this.semanticLabel = 'Progress',
   });
 
   /// Fraction filled, clamped to 0..1.
@@ -27,6 +28,9 @@ class ProgressBar extends StatelessWidget {
 
   /// Style for the unfilled track.
   final CellStyle? trackStyle;
+
+  /// Label exposed through the semantic app graph.
+  final String semanticLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +44,7 @@ class ProgressBar extends StatelessWidget {
         trackStyle ?? widgetTheme.resolveProgressTrack(theme);
     return Semantics(
       role: SemanticRole.progress,
-      label: 'Progress',
+      label: semanticLabel,
       value: clamped,
       state: SemanticState({
         'progressCurrent': clamped,

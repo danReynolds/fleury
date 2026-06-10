@@ -83,7 +83,7 @@ automation or agents.
   `SemanticRole.message`, safe message role/status/author/identity state,
   semantic focus/navigation, row activation, selected-message copy actions,
   and refresh-stable selected-message state for protocol-neutral transcript
-  workflows that are not following the tail. The proof app now uses durable
+  workflows that are not following the tail. The demo app now uses durable
   transcript event IDs for message semantics, so selected transcript identity
   survives live appends, scrollback trimming, and screen changes.
 - `ToolCallCard` now has `SemanticRole.toolCall`, safe tool name/status/
@@ -126,7 +126,7 @@ automation or agents.
 - `WorkflowSnapshot` now aggregates protocol-neutral workflow records into
   `WorkflowSummary` / `WorkflowHealth` and can publish safe workflow count,
   health, activity, failure, model, context, conversation, trace, patch, and
-  log summary state through `SemanticState`. The proof app Overview screen uses
+  log summary state through `SemanticState`. The demo app Overview screen uses
   this to expose a reference workflow summary without introducing a provider or
   ACP schema. The text-first accessibility/fallback projection now summarizes
   that workflow state through an allow-listed `workflow ...` state line rather
@@ -186,7 +186,7 @@ automation or agents.
   surface.
 - Custom semantic proxy elements now rebuild their child subtree when updated,
   which keeps semantic snapshots current after parent `setState` calls in app
-  shell, command scope, status, and proof-app workflows.
+  shell, command scope, status, and demo-app workflows.
 - Navigator route semantics now prune child semantics for inactive/leaving
   routes while keeping route nodes mounted, so preserved route state does not
   leak stale modal controls or command actions into semantic queries.
@@ -408,7 +408,7 @@ automation or agents.
     without inventing actions for an informational surface. Diagnostic nodes
     now add allow-listed terminal profile, capability-row count,
     fallback/warning/unsupported counts, debug-capture count, streaming state,
-    and OSC policy state for proof-app diagnostics and future adapter output.
+    and OSC policy state for demo-app diagnostics and future adapter output.
     App status bars now add allow-listed item count, item ID, severity, value,
     command identity, and action state for prompt fallback, debug capture, and
     future adapter output.
@@ -426,14 +426,14 @@ automation or agents.
     with marker and logical-bounds state when app code supplies semantic
     meaning, while default canvases remain silent to avoid duplicate semantics
     under higher-level visual widgets.
-    The proof app Overview telemetry strip proves these visual dashboard
+    The demo app Overview telemetry strip proves these visual dashboard
     surfaces are not silent in semantic snapshots or fallback output.
     Process task fallback now includes command display, exit code,
     success/failure, and cancelability from existing task semantic state, which
     keeps `ProcessPanel` useful to prompt fallback, debug capture, and future
     adapters without adding a process-specific accessibility model.
     SAG.5 is complete for the MVP. Future role-specific fallback summaries
-    should be proof-driven hardening work, while native platform accessibility
+    should be evidence-driven hardening work, while native platform accessibility
     adapters remain a later evidence-backed track.
 
 - [x] SAG.6 Add stable semantic inspection snapshot v1.
@@ -451,7 +451,7 @@ automation or agents.
     [debug capture tests](../../../packages/fleury/test/debug/debug_capture_test.dart).
   - Notes: The launch v1 protocol is stable at the envelope/node-field level,
     while richer role-specific state can continue to mature through
-    proof-driven evidence. Debug capture consumes the same serializer and now
+    evidence-driven evidence. Debug capture consumes the same serializer and now
     exposes a parsed `SemanticInspectionSnapshot`, so semantic JSON has one
     redaction/sanitization boundary and one parser boundary. `FleuryTester`
     exposes the same inspection shape so tests can verify adapter-facing
@@ -474,7 +474,7 @@ automation or agents.
 - Do not model every future accessibility field in v0; model enough to unlock
   testing, inspection, and prompt fallback.
 - Draft SAG.1 against the developer operations console in
-  [proof-app-scenario.md](../proof-app-scenario.md): sidebar routes,
+  [demo-app-scenario.md](../demo-app-scenario.md): sidebar routes,
   command palette commands, table rows/cells, composer value, progress state,
   diagnostics, focus, selection, and debug-capture action are the first
   semantic pressure points.

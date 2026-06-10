@@ -51,11 +51,18 @@ final _read = _libc.lookupFunction<
     int Function(int, Pointer<Uint8>, int)>('read');
 final _close =
     _libc.lookupFunction<Int32 Function(Int32), int Function(int)>('close');
-final _fcntl = _libc.lookupFunction<Int32 Function(Int32, Int32, Int32),
+final _fcntlGet =
+    _libc.lookupFunction<Int32 Function(Int32, Int32), int Function(int, int)>(
+        'fcntl');
+final _fcntlSetInt = _libc.lookupFunction<
+    Int32 Function(Int32, Int32, VarArgs<(Int32,)>),
     int Function(int, int, int)>('fcntl');
 final _kill =
     _libc.lookupFunction<Int32 Function(Int32, Int32), int Function(int, int)>(
         'kill');
+final _ioctlPointer = _libc.lookupFunction<
+    Int32 Function(Int32, Uint64, VarArgs<(Pointer<Void>,)>),
+    int Function(int, int, Pointer<Void>)>('ioctl');
 final _waitpid = _libc.lookupFunction<
     Int32 Function(Int32, Pointer<Int32>, Int32),
     int Function(int, Pointer<Int32>, int)>('waitpid');
@@ -89,6 +96,9 @@ const _fGetfl = 3;
 final int _oNonblock = Platform.isMacOS ? 0x0004 : 0x800;
 const _wnohang = 1;
 const _sigterm = 15;
+const _sigkill = 9;
+const _sigwinch = 28;
+final int _tioCSWINSZ = Platform.isMacOS ? 0x80087467 : 0x5414;
 
 void _fail(String m) {
   stderr.writeln('capture_pty: $m');
@@ -102,12 +112,81 @@ void _fail(String m) {
   return (exitCode: null, signal: signal);
 }
 
+List<Object?>? _loadRuntimeMarkers(
+  String? path,
+  int captureStartEpochMicros,
+) {
+  if (path == null || path.trim().isEmpty) return null;
+  final file = File(path.trim());
+  if (!file.existsSync()) return null;
+  final decoded = jsonDecode(file.readAsStringSync());
+  if (decoded is! Map<String, Object?>) return null;
+  final markers = decoded['markers'];
+  if (markers is! List<Object?>) return null;
+  return <Object?>[
+    for (final marker in markers)
+      if (marker is Map<String, Object?>)
+        <String, Object?>{
+          ...marker,
+          if (marker['epochMicros'] is num)
+            'captureOffsetMs': double.parse(
+              ((((marker['epochMicros']! as num).toInt() -
+                          captureStartEpochMicros) /
+                      1000.0))
+                  .toStringAsFixed(3),
+            ),
+        },
+  ];
+}
+
+({int cols, int rows}) _parseSize(String value, String optionName) {
+  final separator = value.indexOf('x');
+  if (separator <= 0 || separator == value.length - 1) {
+    _fail('$optionName must use COLSxROWS');
+  }
+  final cols = int.tryParse(value.substring(0, separator));
+  final rows = int.tryParse(value.substring(separator + 1));
+  if (cols == null || rows == null || cols <= 0 || rows <= 0) {
+    _fail('$optionName must use positive COLSxROWS');
+  }
+  return (cols: cols!, rows: rows!);
+}
+
+List<({int cols, int rows})> _parseResizeSequence(String value) {
+  final sizes = <({int cols, int rows})>[];
+  for (final part in value.split(',')) {
+    final trimmed = part.trim();
+    if (trimmed.isEmpty) continue;
+    sizes.add(_parseSize(trimmed, '--resize-sequence'));
+  }
+  if (sizes.isEmpty) {
+    _fail('--resize-sequence must include at least one COLSxROWS entry');
+  }
+  return List.unmodifiable(sizes);
+}
+
+void _setPtyWindowSize(
+  int fd,
+  Pointer<Uint16> win,
+  ({int cols, int rows}) size,
+) {
+  win[0] = size.rows;
+  win[1] = size.cols;
+  win[2] = 0;
+  win[3] = 0;
+  if (_ioctlPointer(fd, _tioCSWINSZ, win.cast<Void>()) != 0) {
+    _fail('ioctl TIOCSWINSZ failed for ${size.cols}x${size.rows}');
+  }
+}
+
 void main(List<String> args) {
   var out = 'capture';
   var timeout = 10.0;
   var cols = 100, rows = 30;
   int? logicalFrameCount;
   String? uiMode;
+  var resizeSequence = const <({int cols, int rows})>[];
+  var resizeIntervalMs = 50;
   final cmd = <String>[];
   for (var i = 0; i < args.length; i++) {
     final a = args[i];
@@ -128,6 +207,13 @@ void main(List<String> args) {
       logicalFrameCount = int.parse(args[++i]);
       if (logicalFrameCount <= 0) {
         _fail('--frame-count must be a positive integer');
+      }
+    } else if (a == '--resize-sequence') {
+      resizeSequence = _parseResizeSequence(args[++i]);
+    } else if (a == '--resize-interval-ms') {
+      resizeIntervalMs = int.parse(args[++i]);
+      if (resizeIntervalMs <= 0) {
+        _fail('--resize-interval-ms must be a positive integer');
       }
     } else if (a == '--') {
       cmd.addAll(args.sublist(i + 1));
@@ -187,6 +273,9 @@ void main(List<String> args) {
     envp[entries.length] = nullptr;
 
     final pidPtr = arena<Int32>();
+    final captureStartEpochMicros =
+        DateTime.now().toUtc().microsecondsSinceEpoch;
+    final sw = Stopwatch()..start();
     final rc = _spawnp(pidPtr, cmd.first.toNativeUtf8(allocator: arena), fa,
         nullptr, argv, envp);
     if (rc != 0) _fail('posix_spawnp failed (rc=$rc) for "${cmd.first}"');
@@ -194,25 +283,51 @@ void main(List<String> args) {
 
     _close(slaveFd); // parent doesn't use the slave end.
     // Non-blocking master so we can enforce a timeout + timestamp reads.
-    final flags = _fcntl(masterFd, _fGetfl, 0);
-    _fcntl(masterFd, _fSetfl, flags | _oNonblock);
+    final flags = _fcntlGet(masterFd, _fGetfl);
+    if (flags == -1) {
+      _fail('fcntl(F_GETFL) failed for PTY master');
+    }
+    if (_fcntlSetInt(masterFd, _fSetfl, flags | _oNonblock) == -1) {
+      _fail('fcntl(F_SETFL, O_NONBLOCK) failed for PTY master');
+    }
 
     final buf = arena<Uint8>(65536);
     final status = arena<Int32>();
     final raw = BytesBuilder();
     final reads = <List<num>>[];
+    final resizes = <Map<String, Object?>>[];
     double? ttfb;
-    final sw = Stopwatch()..start();
     var childExited = false;
     var timedOut = false;
     int? childStatus;
+    var nextResize = 0;
+    final resizeWin = arena<Uint16>(4);
 
     while (true) {
       final elapsedMs = sw.elapsedMicroseconds / 1000.0;
       if (elapsedMs > timeout * 1000) {
         timedOut = true;
         _kill(pid, _sigterm);
+        sleep(const Duration(milliseconds: 100));
+        if (_waitpid(pid, status, _wnohang) == pid) {
+          childStatus = status.value;
+          childExited = true;
+        } else {
+          _kill(pid, _sigkill);
+        }
         break;
+      }
+      while (nextResize < resizeSequence.length &&
+          elapsedMs >= resizeIntervalMs * (nextResize + 1)) {
+        final size = resizeSequence[nextResize];
+        _setPtyWindowSize(masterFd, resizeWin, size);
+        _kill(pid, _sigwinch);
+        resizes.add(<String, Object?>{
+          'tMs': double.parse(elapsedMs.toStringAsFixed(3)),
+          'cols': size.cols,
+          'rows': size.rows,
+        });
+        nextResize++;
       }
       final n = _read(masterFd, buf, 65536);
       if (n > 0) {
@@ -239,6 +354,10 @@ void main(List<String> args) {
         ? (exitCode: null, signal: null)
         : _decodeWaitStatus(childStatus);
     final usage = _childUsage(arena<Uint8>(256));
+    final runtimeMarkers = _loadRuntimeMarkers(
+      Platform.environment['FLEURY_RUNTIME_MARKERS'],
+      captureStartEpochMicros,
+    );
 
     final bytes = raw.toBytes();
     final durationMs = sw.elapsedMicroseconds / 1000;
@@ -246,6 +365,7 @@ void main(List<String> args) {
     File('$out.json').writeAsStringSync(
         const JsonEncoder.withIndent('  ').convert(<String, Object?>{
       'cmd': cmd,
+      'captureStartEpochMicros': captureStartEpochMicros,
       'totalBytes': bytes.length,
       'durationMs': double.parse(durationMs.toStringAsFixed(3)),
       'ttfbMs': ttfb,
@@ -256,6 +376,8 @@ void main(List<String> args) {
       if (decoded.signal != null) 'signal': decoded.signal,
       if (uiMode != null) 'uiMode': uiMode,
       if (logicalFrameCount != null) 'logicalFrameCount': logicalFrameCount,
+      if (resizes.isNotEmpty) 'resizes': resizes,
+      if (runtimeMarkers != null) 'runtimeMarkers': runtimeMarkers,
       'reads': reads,
     }));
     stdout.writeln(

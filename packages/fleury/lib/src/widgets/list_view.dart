@@ -159,9 +159,15 @@ class ListController extends ChangeNotifier {
 ///     coordinating sidebar + main pane focus traversal) can react.
 ///
 /// [itemBuilder] (lazy form) is invoked with `(context, index,
-/// selected)` for every visible item. The `selected` flag lets the
-/// builder style the active item differently. With `children:`
-/// (eager form), selection styling is the caller's responsibility.
+/// selected)` for every visible item. The `selected` flag is the
+/// active selected-row cue: by default it is true only while this
+/// [ListView] has focus. The [ListController.selectedIndex] still
+/// retains the logical selection while focus is elsewhere. Composite
+/// widgets that should keep the list visually active while another
+/// child owns focus can pass [selectionActive].
+///
+/// With `children:` (eager form), selection styling is the caller's
+/// responsibility.
 class ListView extends StatefulWidget {
   /// Eager constructor: build all items upfront from a fixed list
   /// of widgets. Use when you have a bounded set of widgets already
@@ -175,6 +181,7 @@ class ListView extends StatefulWidget {
     this.autofocus = false,
     this.edgeBehavior = EdgeBehavior.contain,
     this.onSelect,
+    this.selectionActive,
   }) : itemCount = null,
        itemBuilder = null;
 
@@ -190,6 +197,7 @@ class ListView extends StatefulWidget {
     this.autofocus = false,
     this.edgeBehavior = EdgeBehavior.contain,
     this.onSelect,
+    this.selectionActive,
   }) : assert(itemCount >= 0, 'itemCount must be non-negative'),
        children = null;
 
@@ -225,6 +233,14 @@ class ListView extends StatefulWidget {
   /// Enter. Not invoked when the list is empty or there's no
   /// selection.
   final void Function(int index)? onSelect;
+
+  /// Overrides whether the selected row should render as active.
+  ///
+  /// Null means "active while this list owns focus." Composite widgets
+  /// can pass a broader focus-within signal so the list keeps its
+  /// active row while a sibling control, such as a search input, owns
+  /// focus inside the same component.
+  final bool? selectionActive;
 
   /// Effective number of items, regardless of which constructor was
   /// used. Returns `children!.length` for eager, `itemCount!` for
@@ -393,21 +409,6 @@ class _ListViewState extends State<ListView> {
   @override
   Widget build(BuildContext context) {
     final selected = _controller.selectedIndex;
-    final Widget body;
-    if (widget.children != null) {
-      // Eager: build all children upfront, render object picks the
-      // visible window.
-      body = _ListViewBody(controller: _controller, children: widget.children!);
-    } else {
-      // Lazy: builder + count. Item subtrees are mounted on demand by
-      // the render object during layout.
-      body = _LazyListBody(
-        controller: _controller,
-        itemCount: widget.itemCount!,
-        itemBuilder: widget.itemBuilder!,
-        selectedIndex: selected,
-      );
-    }
     return PointerScrollListener(
       router: PointerRouterScope.maybeOf(context),
       onScrollUp: () => _scrollBy(-1),
@@ -416,9 +417,95 @@ class _ListViewState extends State<ListView> {
         focusNode: _focusNode,
         autofocus: widget.autofocus,
         onKey: _handleKey,
-        child: body,
+        child: _ListSelectionHost(
+          focusNode: _focusNode,
+          selectionActive: widget.selectionActive,
+          builder: (context, active) {
+            if (widget.children != null) {
+              // Eager: build all children upfront, render object picks the
+              // visible window.
+              return _ListViewBody(
+                controller: _controller,
+                children: widget.children!,
+              );
+            }
+
+            // Lazy: builder + count. Item subtrees are mounted on demand by
+            // the render object during layout.
+            return _LazyListBody(
+              controller: _controller,
+              itemCount: widget.itemCount!,
+              itemBuilder: widget.itemBuilder!,
+              selectedIndex: selected,
+              selectionActive: active,
+            );
+          },
+        ),
       ),
     );
+  }
+}
+
+class _ListSelectionHost extends StatefulWidget {
+  const _ListSelectionHost({
+    required this.focusNode,
+    required this.selectionActive,
+    required this.builder,
+  });
+
+  final FocusNode focusNode;
+  final bool? selectionActive;
+  final Widget Function(BuildContext context, bool selectionActive) builder;
+
+  @override
+  State<_ListSelectionHost> createState() => _ListSelectionHostState();
+}
+
+class _ListSelectionHostState extends State<_ListSelectionHost> {
+  FocusManager? _manager;
+  bool _active = false;
+
+  bool get _resolvedActive =>
+      widget.selectionActive ?? widget.focusNode.hasFocus;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final manager = Focus.maybeOf(context);
+    if (!identical(manager, _manager)) {
+      _manager?.removeListener(_onFocusChange);
+      _manager = manager;
+      _manager?.addListener(_onFocusChange);
+    }
+    _active = _resolvedActive;
+  }
+
+  @override
+  void didUpdateWidget(covariant _ListSelectionHost oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncActive();
+  }
+
+  void _onFocusChange() => _syncActive();
+
+  void _syncActive() {
+    final next = _resolvedActive;
+    if (next == _active) return;
+    setState(() {
+      _active = next;
+    });
+  }
+
+  @override
+  void dispose() {
+    _manager?.removeListener(_onFocusChange);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _active = _resolvedActive;
+    return widget.builder(context, _active);
   }
 }
 
@@ -662,12 +749,14 @@ class _LazyListBody extends RenderObjectWidget {
     required this.itemCount,
     required this.itemBuilder,
     required this.selectedIndex,
+    required this.selectionActive,
   });
 
   final ListController controller;
   final int itemCount;
   final Widget Function(BuildContext, int, bool) itemBuilder;
   final int? selectedIndex;
+  final bool selectionActive;
 
   @override
   _LazyListElement createElement() => _LazyListElement(this);
@@ -748,7 +837,11 @@ class _LazyListElement extends RenderObjectElement {
     for (final entry in _mountedChildren.entries.toList()) {
       final i = entry.key;
       final oldEl = entry.value;
-      final newWidget = widget.itemBuilder(this, i, i == widget.selectedIndex);
+      final newWidget = widget.itemBuilder(
+        this,
+        i,
+        widget.selectionActive && i == widget.selectedIndex,
+      );
       if (identical(oldEl.widget, newWidget)) continue;
       if (Widget.canUpdate(oldEl.widget, newWidget)) {
         oldEl.update(newWidget);
@@ -771,7 +864,7 @@ class _LazyListElement extends RenderObjectElement {
     final newWidget = widget.itemBuilder(
       this,
       index,
-      index == widget.selectedIndex,
+      widget.selectionActive && index == widget.selectedIndex,
     );
     final element = newWidget.createElement();
     element.mount(this);

@@ -433,6 +433,18 @@ class FleuryTester {
     return semantics().toInspectionJson();
   }
 
+  /// Returns a deterministic, redaction-aware semantic tree dump.
+  ///
+  /// Use this directly in failure messages or while authoring tests:
+  ///
+  /// ```dart
+  /// print(tester.semanticTreeDebugString());
+  /// ```
+  String semanticTreeDebugString({bool includeState = true}) {
+    _assertNotDisposed('semanticTreeDebugString');
+    return semantics().debugTree(includeState: includeState);
+  }
+
   /// Invokes a semantic action on a node in the current semantic tree.
   ///
   /// When [node] is omitted, the remaining filters must identify exactly one
@@ -616,14 +628,6 @@ class FleuryTester {
     final local = _localCommand(registry, id, buildContext);
     if (local != null && !identical(registry, app?.commands)) {
       return _CommandResolution(local, registry);
-    }
-
-    if (app != null && app.screens.hasScreens) {
-      for (final command in app.screens.activeScreen.commands) {
-        if (command.id != id) continue;
-        if (!registry.isVisible(command, buildContext: buildContext)) continue;
-        return _CommandResolution(command, registry);
-      }
     }
 
     final command = registry.command(id, buildContext: buildContext);

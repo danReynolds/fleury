@@ -385,12 +385,8 @@ final class _TreeTableSearchEntry<T> {
     required this.row,
     required this.parentIndex,
     required this.keyText,
-    required this.keyTextLower,
     required this.metadataText,
-    required this.metadataTextLower,
     required this.columnText,
-    required this.columnTextLower,
-    required this.allText,
     required this.allTextLower,
   });
 
@@ -420,11 +416,6 @@ final class _TreeTableSearchEntry<T> {
       '',
       growable: false,
     );
-    final columnTextLower = List<String>.filled(
-      columnIds.length,
-      '',
-      growable: false,
-    );
     for (var i = 0; i < columns.length; i++) {
       final column = columns[i];
       final raw = column.id == treeColumnId
@@ -434,36 +425,27 @@ final class _TreeTableSearchEntry<T> {
                 '';
       final sanitized = _sanitizeTreeTableText(raw);
       columnText[i] = sanitized;
-      columnTextLower[i] = sanitized.toLowerCase();
     }
-    final allText = _joinTreeTableFields([
-      keyText,
-      for (final text in columnText) text,
-      metadataText,
+    final allTextLower = _joinTreeTableFields([
+      _lowerTreeTableField(keyText),
+      for (final text in columnText) _lowerTreeTableField(text),
+      _lowerTreeTableField(metadataText),
     ]);
     return _TreeTableSearchEntry._(
       row: row,
       parentIndex: parentIndex,
       keyText: keyText,
-      keyTextLower: keyText.toLowerCase(),
       metadataText: metadataText,
-      metadataTextLower: metadataText.toLowerCase(),
       columnText: columnText,
-      columnTextLower: columnTextLower,
-      allText: allText,
-      allTextLower: allText.toLowerCase(),
+      allTextLower: allTextLower,
     );
   }
 
   final TreeTableRow<T> row;
   final int? parentIndex;
   final String keyText;
-  final String keyTextLower;
   final String metadataText;
-  final String metadataTextLower;
   final List<String> columnText;
-  final List<String> columnTextLower;
-  final String allText;
   final String allTextLower;
 
   bool matches(
@@ -474,16 +456,22 @@ final class _TreeTableSearchEntry<T> {
     if (query.isEmpty) return true;
     final columnIds = filter.columnIds;
     if (columnIds == null) {
-      final text = filter.caseSensitive ? allText : allTextLower;
+      final text = filter.caseSensitive ? _allText : allTextLower;
       return _matchesTreeTableQuery(text, query, filter.mode);
     }
     final fields = <String>[
-      filter.caseSensitive ? keyText : keyTextLower,
-      filter.caseSensitive ? metadataText : metadataTextLower,
+      filter.caseSensitive ? keyText : _lowerTreeTableField(keyText),
+      filter.caseSensitive ? metadataText : _lowerTreeTableField(metadataText),
       for (final id in columnIds) _columnTextFor(id, columnIndexes, filter),
     ];
     return _matchesTreeTableQuery(fields.join(' '), query, filter.mode);
   }
+
+  String get _allText => _joinTreeTableFields([
+    keyText,
+    for (final text in columnText) text,
+    metadataText,
+  ]);
 
   String _columnTextFor(
     String id,
@@ -492,9 +480,13 @@ final class _TreeTableSearchEntry<T> {
   ) {
     final index = columnIndexes[id];
     if (index == null) return '';
-    return filter.caseSensitive ? columnText[index] : columnTextLower[index];
+    final text = columnText[index];
+    return filter.caseSensitive ? text : _lowerTreeTableField(text);
   }
 }
+
+String _lowerTreeTableField(String value) =>
+    value.isEmpty ? '' : value.toLowerCase();
 
 String _joinTreeTableFields(Iterable<String> fields) {
   final buffer = StringBuffer();
@@ -1088,8 +1080,9 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
               autofocus: widget.autofocus,
               itemCount: rows.length,
               onSelect: (_) => _activateSelected(rows),
-              itemBuilder: (context, index, selected) {
+              itemBuilder: (context, index, activeSelected) {
                 final row = rows[index];
+                final selected = index == _controller.selectedIndex;
                 return _TreeTableRowWidget<T>(
                   row: row,
                   rowIndex: index,
@@ -1097,6 +1090,7 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
                   treeColumnId: _treeColumnId,
                   cellBuilder: widget.cellBuilder,
                   selected: selected,
+                  activeSelection: activeSelected,
                   expanded: _isVisiblyExpanded(rows, index),
                   selectedStyle: selectedStyle,
                   columnSpacing: widget.columnSpacing,
@@ -1201,6 +1195,7 @@ class _TreeTableRowWidget<T> extends StatelessWidget {
     required this.treeColumnId,
     required this.cellBuilder,
     required this.selected,
+    required this.activeSelection,
     required this.expanded,
     required this.selectedStyle,
     required this.columnSpacing,
@@ -1217,6 +1212,7 @@ class _TreeTableRowWidget<T> extends StatelessWidget {
   final String treeColumnId;
   final TreeTableCellBuilder<T>? cellBuilder;
   final bool selected;
+  final bool activeSelection;
   final bool expanded;
   final CellStyle selectedStyle;
   final int columnSpacing;
@@ -1279,6 +1275,7 @@ class _TreeTableRowWidget<T> extends StatelessWidget {
               treeColumnId: treeColumnId,
               cellBuilder: cellBuilder,
               selected: selected,
+              activeSelection: activeSelection,
               expanded: expanded,
               selectedStyle: selectedStyle,
             ),
@@ -1297,6 +1294,7 @@ class _TreeTableCell<T> extends StatelessWidget {
     required this.treeColumnId,
     required this.cellBuilder,
     required this.selected,
+    required this.activeSelection,
     required this.expanded,
     required this.selectedStyle,
   });
@@ -1308,6 +1306,7 @@ class _TreeTableCell<T> extends StatelessWidget {
   final String treeColumnId;
   final TreeTableCellBuilder<T>? cellBuilder;
   final bool selected;
+  final bool activeSelection;
   final bool expanded;
   final CellStyle selectedStyle;
 
@@ -1323,7 +1322,11 @@ class _TreeTableCell<T> extends StatelessWidget {
       includeTreeMarker: true,
       expanded: expanded,
     );
-    final style = selected ? column.style.merge(selectedStyle) : column.style;
+    final style = activeSelection
+        ? column.style.merge(selectedStyle)
+        : selected
+        ? column.style.merge(Theme.of(context).mutedStyle)
+        : column.style;
     return Semantics(
       role: SemanticRole.tableCell,
       label: text,

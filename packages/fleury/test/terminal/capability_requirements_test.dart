@@ -159,19 +159,17 @@ void main() {
     });
 
     test('resolves requirement lists in order', () {
-      final resolutions = resolveCapabilityRequirements(
-        const <CapabilityRequirement>[
-          CapabilityRequirement(
-            feature: TerminalFeature.colorAnsi16,
-            level: CapabilityLevel.required,
-          ),
-          CapabilityRequirement(
-            feature: TerminalFeature.imageKitty,
-            level: CapabilityLevel.optional,
-          ),
-        ],
-        const TerminalCapabilities(colorMode: ColorMode.ansi16),
-      );
+      final resolutions =
+          resolveCapabilityRequirements(const <CapabilityRequirement>[
+            CapabilityRequirement(
+              feature: TerminalFeature.colorAnsi16,
+              level: CapabilityLevel.required,
+            ),
+            CapabilityRequirement(
+              feature: TerminalFeature.imageKitty,
+              level: CapabilityLevel.optional,
+            ),
+          ], const TerminalCapabilities(colorMode: ColorMode.ansi16));
 
       expect(resolutions, hasLength(2));
       expect(resolutions[0].state, CapabilityResolutionState.available);

@@ -31,6 +31,7 @@ class _Axes {
     this.cpuMs,
     this.uiMode,
     this.frameSource,
+    this.runtimeMarkersMs,
   );
 
   final String label;
@@ -42,6 +43,7 @@ class _Axes {
   final double? cpuMs;
   final String? uiMode;
   final String frameSource;
+  final Map<String, double> runtimeMarkersMs;
 
   double get bytesPerFrame =>
       frames == 0 ? bytes.total.toDouble() : bytes.total / frames;
@@ -85,7 +87,22 @@ _Axes _load(String label, String base) {
     (meta['cpuMs'] as num?)?.toDouble(),
     meta['uiMode'] as String?,
     frameSource,
+    _runtimeMarkersMs(meta['runtimeMarkers']),
   );
+}
+
+Map<String, double> _runtimeMarkersMs(Object? value) {
+  if (value is! List<Object?>) return const <String, double>{};
+  final result = <String, double>{};
+  for (final marker in value) {
+    if (marker is! Map<String, Object?>) continue;
+    final label = marker['label'];
+    final offset = marker['captureOffsetMs'];
+    if (label is String && offset is num) {
+      result[label] = offset.toDouble();
+    }
+  }
+  return result;
 }
 
 // Band each value vs the best on that axis.
@@ -176,6 +193,25 @@ void main(List<String> args) {
     final b = a.bytes;
     stdout.writeln('    ${a.label.padRight(14)} '
         '${b.content}/${b.sgr}/${b.cursor}/${b.sync}/${b.other}');
+  }
+  final markerCaptures =
+      all.where((capture) => capture.runtimeMarkersMs.isNotEmpty).toList();
+  if (markerCaptures.isNotEmpty) {
+    stdout.writeln('\n  runtime markers (capture offset):');
+    final labels = <String>{
+      for (final capture in markerCaptures) ...capture.runtimeMarkersMs.keys,
+    }.toList()
+      ..sort();
+    for (final capture in markerCaptures) {
+      stdout.writeln('    ${capture.label}:');
+      for (final label in labels) {
+        final value = capture.runtimeMarkersMs[label];
+        if (value != null) {
+          stdout.writeln('      ${label.padRight(24)} '
+              '${value.toStringAsFixed(1)} ms');
+        }
+      }
+    }
   }
   if (all.length > 1) {
     stdout.writeln('\n  Bands are vs the best capture on each axis. "leading" '

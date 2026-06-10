@@ -41,6 +41,11 @@ const _scenarios = <_Scenario>[
     'ratatui',
     'opentui',
   ]),
+  _Scenario('P2', 'sb1', 'SB.1 Counter/startup', 'sb1-counterstartup', [
+    'bubbletea',
+    'textual',
+    'ink',
+  ]),
   _Scenario('P2', 'sb6', 'SB.6 Dashboard updates', 'sb6-dashboard-updates', [
     'ratatui',
     'opentui',
@@ -64,7 +69,7 @@ const _scenarios = <_Scenario>[
     'bubbletea',
     'opentui',
   ]),
-  _Scenario('P3', 'sb10', 'SB.10 Proof-app journey', 'sb10-proof-app-journey', [
+  _Scenario('P3', 'sb10', 'SB.10 Demo-app journey', 'sb10-demo-app-journey', [
     'textual',
     'bubbletea',
     'ink',
@@ -79,11 +84,6 @@ const _scenarios = <_Scenario>[
     'textual',
     'ratatui',
     'opentui',
-  ]),
-  _Scenario('P4', 'sb1', 'SB.1 Counter/startup', 'sb1-counterstartup', [
-    'nocterm',
-    'bubbletea',
-    'ink',
   ]),
 ];
 
@@ -165,6 +165,11 @@ Map<String, Object?> _scenarioScore(
     'byteSplits': {
       for (final entry in aggregates.entries)
         entry.key: entry.value.byteSplit.toJson(),
+    },
+    'runtimeMarkers': {
+      for (final entry in aggregates.entries)
+        if (entry.value.runtimeMarkersMs.isNotEmpty)
+          entry.key: entry.value.runtimeMarkersMs,
     },
     'axes': axisScores,
     'position': _position(axisScores, fleury, expectedPeersSeen),
@@ -345,6 +350,36 @@ String _scoreboardMarkdown(
     );
   }
 
+  final markerRows = scenarios.where((scenario) {
+    final markers = scenario['runtimeMarkers'];
+    return markers is Map<String, Object?> && markers.isNotEmpty;
+  }).toList();
+  if (markerRows.isNotEmpty) {
+    buffer
+      ..writeln()
+      ..writeln('## Runtime Markers')
+      ..writeln()
+      ..writeln(
+        'Fleury-only capture offsets from the PTY spawn. These decompose raw TTFB without affecting peer byte streams.',
+      )
+      ..writeln()
+      ..writeln('| Priority | Benchmark | Fleury deltas | Fleury markers |')
+      ..writeln('| --- | --- | --- | --- |');
+
+    for (final scenario in markerRows) {
+      final benchmark =
+          '[${scenario['name']}]($matrixLink#${scenario['matrixAnchor']})';
+      final runtimeMarkers =
+          (scenario['runtimeMarkers'] as Map<String, Object?>)
+              .cast<String, Object?>();
+      final fleuryMarkers = runtimeMarkers['fleury'];
+      buffer.writeln(
+        '| ${scenario['priority']} | $benchmark | '
+        '${_markerDeltaCell(fleuryMarkers)} | ${_markerCell(fleuryMarkers)} |',
+      );
+    }
+  }
+
   void bucket(String title, String positionPrefix) {
     final rows = scenarios
         .where(
@@ -432,6 +467,59 @@ String _dominantOverheadCell(Map<String, Object?>? split) {
       ? '<br>other ${_fmtBytes(other)}'
       : '';
   return '${largest.key} ${_fmtBytes(largest.value)}$otherNote';
+}
+
+String _markerCell(Object? value) {
+  if (value is! Map<String, Object?> || value.isEmpty) return '-';
+  const order = <String>[
+    'runTui.entry',
+    'terminal.enter.start',
+    'terminal.enter.end',
+    'root.mounted',
+    'first.render.start',
+    'first.output.write',
+    'first.render.end',
+  ];
+  final parts = <String>[];
+  for (final label in order) {
+    final marker = value[label];
+    if (marker is num) {
+      parts.add('$label ${_fmtMs(marker.toDouble())}');
+    }
+  }
+  for (final entry in value.entries) {
+    if (order.contains(entry.key)) continue;
+    final marker = entry.value;
+    if (marker is num) {
+      parts.add('${entry.key} ${_fmtMs(marker.toDouble())}');
+    }
+  }
+  return parts.isEmpty ? '-' : parts.join('<br>');
+}
+
+String _markerDeltaCell(Object? value) {
+  if (value is! Map<String, Object?> || value.isEmpty) return '-';
+  double? marker(String label) => (value[label] as num?)?.toDouble();
+
+  final entry = marker('runTui.entry');
+  final firstOutput = marker('first.output.write');
+  final firstRenderEnd = marker('first.render.end');
+  final cleanup = marker('runTui.cleanup.complete');
+  final parts = <String>[];
+
+  if (entry != null) {
+    parts.add('pre-runTui ${_fmtMs(entry)}');
+  }
+  if (entry != null && firstOutput != null) {
+    parts.add('entry->first output ${_fmtMs(firstOutput - entry)}');
+  }
+  if (entry != null && firstRenderEnd != null) {
+    parts.add('entry->first render end ${_fmtMs(firstRenderEnd - entry)}');
+  }
+  if (entry != null && cleanup != null) {
+    parts.add('entry->cleanup ${_fmtMs(cleanup - entry)}');
+  }
+  return parts.isEmpty ? '-' : parts.join('<br>');
 }
 
 double _splitValue(Map<String, Object?> split, String key) {
@@ -590,6 +678,7 @@ final class _CaptureAxes {
     required this.rssMiB,
     required this.cpuLoadPercent,
     required this.fps,
+    required this.runtimeMarkersMs,
   });
 
   final String label;
@@ -601,6 +690,7 @@ final class _CaptureAxes {
   final double? rssMiB;
   final double? cpuLoadPercent;
   final double? fps;
+  final Map<String, double> runtimeMarkersMs;
 
   double get bytesPerFrame =>
       frames == 0 ? bytes.total.toDouble() : bytes.total / frames;
@@ -642,6 +732,7 @@ final class _CaptureAxes {
       rssMiB: rssBytes == null ? null : rssBytes / (1024 * 1024),
       cpuLoadPercent: cpuLoad,
       fps: fps,
+      runtimeMarkersMs: _runtimeMarkersMs(meta['runtimeMarkers']),
     );
   }
 }
@@ -657,6 +748,7 @@ final class _Aggregate {
     required this.rssMiB,
     required this.cpuLoadPercent,
     required this.fps,
+    required this.runtimeMarkersMs,
   });
 
   final int runCount;
@@ -668,6 +760,7 @@ final class _Aggregate {
   final double? rssMiB;
   final double? cpuLoadPercent;
   final double? fps;
+  final Map<String, double> runtimeMarkersMs;
 
   double? value(String axisId) {
     return switch (axisId) {
@@ -683,6 +776,9 @@ final class _Aggregate {
   }
 
   factory _Aggregate.from(List<_CaptureAxes> captures) {
+    final markerLabels = <String>{
+      for (final capture in captures) ...capture.runtimeMarkersMs.keys,
+    };
     return _Aggregate(
       runCount: captures.length,
       bytes: _median(
@@ -700,8 +796,30 @@ final class _Aggregate {
         for (final capture in captures) capture.cpuLoadPercent,
       ]),
       fps: _median([for (final capture in captures) capture.fps]),
+      runtimeMarkersMs: <String, double>{
+        for (final label in markerLabels)
+          if (_median([
+            for (final capture in captures) capture.runtimeMarkersMs[label],
+          ])
+              case final value?)
+            label: value,
+      },
     );
   }
+}
+
+Map<String, double> _runtimeMarkersMs(Object? value) {
+  if (value is! List<Object?>) return const <String, double>{};
+  final result = <String, double>{};
+  for (final marker in value) {
+    if (marker is! Map<String, Object?>) continue;
+    final label = marker['label'];
+    final offset = marker['captureOffsetMs'];
+    if (label is String && offset is num) {
+      result[label] = offset.toDouble();
+    }
+  }
+  return result;
 }
 
 AnsiByteBreakdown _representativeByteSplit(List<_CaptureAxes> captures) {

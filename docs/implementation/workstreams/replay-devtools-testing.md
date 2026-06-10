@@ -17,7 +17,8 @@ real terminal.
   first-widget M1.1 targets.
 - Tests can now invoke supported semantic actions by current semantic node,
   role, label, and state filters for app-authored semantics, app commands,
-  registered screens, status items, text fields, text areas, buttons, and
+  app-owned screen/section nodes, status items, text fields, text areas,
+  buttons, and
   basic controls. Production-widget coverage now includes `DataTable`,
   `LogRegion`, `SearchPanel`, `Tree`, `TreeTable`, `FileBrowser`,
   `FilePicker`, `ColorPicker`, `NumberInput`, `PasswordInput`, and `Tooltip`
@@ -37,7 +38,7 @@ real terminal.
   accessibility fallback for Gauge, Sparkline, BarChart, Histogram, Heatmap,
   CalendarHeatmap, and LineChart, semantic text for Digits, plus semantic
   focus/increment/decrement cursor actions for interactive LineChart and
-  proof-app Overview telemetry assertions. Generic `Canvas` coverage now
+  demo-app Overview telemetry assertions. Generic `Canvas` coverage now
   proves plain canvases stay semantic-silent and app-authored custom drawings
   can opt into image/chart semantics with marker and bounds fallback state.
 - Model/context status testing now covers `ModelStatusBar` as
@@ -47,30 +48,30 @@ real terminal.
 - File-reference workflow testing now covers `FileMentionPicker` as
   `SemanticRole.fileMentionPicker` and file rows as
   `SemanticRole.fileMention`, including aggregate query focus/result
-  navigation, semantic activation into the proof-app composer, refreshed-list
+  navigation, semantic activation into the demo-app composer, refreshed-list
   selected-mention preservation, and sanitized selected-mention copy.
 - Conversation workflow testing now covers `ConversationNavigator` as
   `SemanticRole.conversationNavigator` and conversation rows as
   `SemanticRole.conversation`, including semantic focus/navigation, semantic
-  activation in the proof-app Transcript screen, refreshed-list
+  activation in the demo-app Transcript screen, refreshed-list
   selected-conversation preservation, and sanitized selected-conversation copy.
 - Context-pack workflow testing now covers `ContextPanel` as
   `SemanticRole.contextPanel` and context rows as `SemanticRole.contextItem`,
-  including semantic focus/navigation, semantic activation in the proof-app
+  including semantic focus/navigation, semantic activation in the demo-app
   Overview screen, refreshed-list selected-context preservation, and sanitized
   selected-context-item copy.
 - Trace workflow testing now covers `TraceTimeline` as
   `SemanticRole.traceTimeline` and trace rows as `SemanticRole.traceEvent`,
-  including semantic activation in the proof-app Diagnostics screen and
+  including semantic activation in the demo-app Diagnostics screen and
   sanitized selected-trace-event copy.
 - Patch-review workflow testing now covers `PatchReview` as
   `SemanticRole.patchReview` and file rows as `SemanticRole.patchFile`,
-  including semantic focus/navigation, semantic activation in the proof-app
+  including semantic focus/navigation, semantic activation in the demo-app
   Changes screen, refreshed-list selected-file preservation, sanitized
   selected-file copy, and nested `DiffView` hunk-copy behavior.
 - Reference workflow model testing now covers `WorkflowSnapshot`,
   `WorkflowSummary`, `WorkflowHealth`, immutable record aggregation, lookup
-  helpers, safe semantic-state projection, and proof-app Overview summary
+  helpers, safe semantic-state projection, and demo-app Overview summary
   adoption without provider or ACP schemas. Accessibility testing now also
   verifies the safe workflow fallback summary produced from the same semantic
   state.
@@ -115,8 +116,8 @@ real terminal.
   tests and future adapters to inspect a node from parsed protocol JSON and
   invoke one of its advertised actions without relying on role/label
   uniqueness.
-- `SB.10 Proof-App Journey` now records debug-capture artifact size and checks
-  that the integrated proof app can finish with semantics plus accessibility
+- `SB.10 Demo-App Journey` now records debug-capture artifact size and checks
+  that the integrated demo app can finish with semantics plus accessibility
   output intact after command, table, transcript, process, and diagnostics
   workflow pressure.
 - M0.7 defines a targeted debug-capture prototype and keeps full shareable
@@ -182,13 +183,13 @@ real terminal.
     [trace timeline semantic tests](../../../packages/fleury_widgets/test/trace_timeline_test.dart),
     [patch review semantic tests](../../../packages/fleury_widgets/test/patch_review_test.dart),
     [toaster semantic tests](../../../packages/fleury_widgets/test/toaster_test.dart),
-    [proof app approval workflow](../../../packages/fleury_example_console/test/proof_console_test.dart),
+    [demo app approval workflow](../../../packages/fleury_example_console/test/demo_console_test.dart),
     [command semantic tests](../../../packages/fleury_widgets/test/command_palette_test.dart).
   - Notes: Query coverage now exists for text, fields, controls, table,
     dialog, command palette, command entries, navigator routes, and progress.
     Semantic action invocation now dispatches through semantic contributors
     instead of widget internals and covers app-authored `Semantics`,
-    app/global commands, registered screens, status items, text fields,
+    app/global commands, app-owned screen/section nodes, status items, text fields,
     text areas, buttons, checkboxes, toggles, radios, composition `Table`,
     `DataTable`,
     `LogRegion`, `SearchPanel`, `Tree`, `TreeTable`, and `FileBrowser`.
@@ -211,52 +212,52 @@ real terminal.
     increment/decrement actions that reuse the existing date-move behavior.
     Approval workflow coverage now includes `ApprovalPrompt` as
     `SemanticRole.approval`, with semantic submit/cancel actions routed
-    through the same callbacks as visible approve/deny buttons and proof-app
+    through the same callbacks as visible approve/deny buttons and demo-app
     command coverage. Transcript workflow coverage now includes `MessageList`
     as `SemanticRole.messageList` / `SemanticRole.message`, with selected-row
     semantic copy routed through the same sanitized clipboard path as Ctrl+C,
     aggregate focus/navigation routed to the backing list, row semantic
     activation selecting messages through `MessageListController`, refreshed
     message-list selection preservation by stable ID when not following the
-    tail, tail-follow append preservation, and proof-app transcript adoption.
-    Proof-app coverage now also verifies durable transcript message IDs and an
+    tail, tail-follow append preservation, and demo-app transcript adoption.
+    Demo-app coverage now also verifies durable transcript message IDs and an
     app-owned controller preserve selected-message identity across live appends,
     scrollback trimming, and screen changes.
     Core task workflow coverage now includes `TaskStatusView` semantic cancel
     dispatch through `TaskController.cancel`. Tool-call workflow coverage now
     includes `ToolCallCard` as `SemanticRole.toolCall`, with semantic copy and
     cancel routed through the same sanitized copy/callback path as visible
-    controls and proof-app Process screen adoption. Plan/task workflow
+    controls and demo-app Process screen adoption. Plan/task workflow
     coverage now includes `TaskGraph` as `SemanticRole.taskGraph`, with
     aggregate focus/navigation routed to the backing list, task-node semantic
     activation selecting through `TaskGraphController`, refreshed-list
     selected-task preservation by stable ID, selected task-node semantic copy,
-    and proof-app Overview adoption.
+    and demo-app Overview adoption.
     Model/context workflow coverage now includes `ModelStatusBar` and
-    `TokenMeter` semantic and accessibility assertions plus proof-app Overview
+    `TokenMeter` semantic and accessibility assertions plus demo-app Overview
     adoption. File-reference workflow coverage now includes `FileMentionPicker`
     semantic focus/navigation/activate/copy, file path/kind/language/location/
     mention state, refreshed-list selected-mention preservation, sanitized
-    export, and proof-app Transcript composer adoption.
+    export, and demo-app Transcript composer adoption.
     Conversation workflow coverage now includes `ConversationNavigator`
     semantic focus/navigation/activate/copy, conversation ID/status/unread/
     message/pinned state, refreshed-list selected-conversation preservation,
-    sanitized export, and proof-app Transcript adoption.
+    sanitized export, and demo-app Transcript adoption.
     Context-pack workflow coverage now includes `ContextPanel` semantic
     focus/navigation/activate/copy, context item ID/kind/token/priority/
     pinned/source state, aggregate budget state, refreshed-list
-    selected-context preservation, sanitized export, and proof-app Overview
+    selected-context preservation, sanitized export, and demo-app Overview
     adoption.
     Trace workflow coverage now includes `TraceTimeline` semantic
     focus/navigation/activate/copy, trace event ID/kind/status/source/duration
     state, aggregate trace counts, refreshed-list selected-trace preservation,
-    sanitized export, and proof-app Diagnostics adoption.
+    sanitized export, and demo-app Diagnostics adoption.
     Patch-review workflow coverage now includes `PatchReview` semantic
     focus/navigation/activate/copy, patch ID/status, file path/status,
     addition/deletion/hunk state, refreshed-list selected-file preservation,
-    sanitized file export, nested `DiffView` hunk copy, and proof-app Changes
+    sanitized file export, nested `DiffView` hunk copy, and demo-app Changes
     adoption. Reference workflow coverage now includes `WorkflowSnapshot`
-    summary health/count state and proof-app Overview semantic assertions over
+    summary health/count state and demo-app Overview semantic assertions over
     the aggregate workflow model. Notification coverage now includes `Toaster` semantic
     dismiss/activate, severity, stack position, auto-dismiss timing, action
     label/key state, and accessibility fallback assertions. Tab coverage now
@@ -272,7 +273,7 @@ real terminal.
     suggestion state, suggestion count, and suggestion position/count fallback
     assertions. CompletionTextInput coverage now includes completion-menu
     focus/close state, selected-row metadata, and row select/activate through
-    the same completion acceptance path as Tab. Proof-app coverage now also
+    the same completion acceptance path as Tab. Demo-app coverage now also
     drives the Transcript composer through semantic completion-menu activation
     for slash-command completions and submitted-note history recall through
     `TextHistoryController`. FilePicker coverage now includes
@@ -292,7 +293,7 @@ real terminal.
     overlay-visible state, and hidden overlay pruning.
     Composition Table coverage now includes table focus/activate dispatch and
     body-cell select/activate dispatch through the same focus, selection, and
-    `onSelect` paths as keyboard interaction. Proof-app app-authored sidebar
+    `onSelect` paths as keyboard interaction. Demo-app app-authored sidebar
     navigation and diagnostic actions now dispatch through the existing
     screen-controller and command-registry paths.
     RDT.1 is complete for the MVP. A local semantic-action audit found no
@@ -313,7 +314,7 @@ real terminal.
     [debug capture artifact API](../../../packages/fleury/lib/src/debug/debug_capture.dart),
     [debug capture tests](../../../packages/fleury/test/debug/debug_capture_test.dart),
     [runtime debug capture test](../../../packages/fleury/test/runtime/run_tui_test.dart),
-    [proof app capture-to-test workflow](../../../packages/fleury_example_console/test/proof_console_test.dart).
+    [demo app capture-to-test workflow](../../../packages/fleury_example_console/test/demo_console_test.dart).
   - Notes: Input, resize, terminal profile, frame metadata, redacted semantic
     snapshots, text-first accessibility/fallback output, output-summary
     records, safe task-event summaries, and deterministic time markers now
@@ -322,7 +323,7 @@ real terminal.
     surface for targeted regression assertions without freezing a broad replay
     artifact format. `TraceTimeline` now has a reusable task-event adapter,
     giving tests and devtools a live inspectable effect-history surface with
-    safe task event metadata before full replay is in scope. The proof app
+    safe task event metadata before full replay is in scope. The demo app
     uses those hooks to capture and assert a command/table/worker/status
     workflow. Accessibility/fallback output now includes safe app, command,
     task, view, row/cell, and developer-document state from semantic nodes,
@@ -366,7 +367,7 @@ real terminal.
     on-demand terminal diagnosis provider with profile/capability rows. The
     task/effect section now aggregates task status counts and total event counts from
     semantic nodes. Bounded capture-to-test hooks now exist and are exercised by
-    the proof app. The Tree tab now supports semantic cursor navigation,
+    the demo app. The Tree tab now supports semantic cursor navigation,
     selected-node details, state/action/flag summaries, a bounded graph
     window, and inspection-protocol schema/action/focus summary over the same
     `SemanticInspectionSnapshot` serializer used by debug capture. RRE.4 adds
@@ -388,19 +389,19 @@ real terminal.
   - Evidence:
     [debug capture tests](../../../packages/fleury/test/debug/debug_capture_test.dart),
     [runtime debug capture test](../../../packages/fleury/test/runtime/run_tui_test.dart),
-    [proof app capture-to-test workflow](../../../packages/fleury_example_console/test/proof_console_test.dart).
+    [demo app capture-to-test workflow](../../../packages/fleury_example_console/test/demo_console_test.dart).
   - Notes: The recorder can produce a redacted JSON-shaped snapshot with
     frame/input/terminal/semantic/accessibility/output-summary/task-event/time
     marker records. The artifact query helper can then locate inputs, frame
     causes, output summaries, task-event summaries, deterministic time markers,
     semantic nodes, and accessibility text directly from that serialized shape.
     The
-    proof app now drives a deterministic Runs-screen workflow through command
+    demo app now drives a deterministic Runs-screen workflow through command
     invocation, resize metadata, worker start, DataTable focus/selection,
     debug capture, status semantics, accessibility narration, and
     output-summary assertions, then verifies the serialized snapshot contains
     enough app/table/status facts to seed a regression test. `SB.10` adds
-    benchmark pressure around the integrated proof-app capture size and
+    benchmark pressure around the integrated demo-app capture size and
     semantic/accessibility output after a longer app journey.
 
 ## Implementation Notes
@@ -409,8 +410,9 @@ real terminal.
 - Semantic action invocation is intentionally semantic-first: tests resolve a
   current semantic node, reject disabled/unsupported actions before dispatch,
   then walk contributor-owned semantic subtrees children-first. That lets
-  generated nodes such as command entries and registered screens invoke through
-  the app/scope owner without exposing widget internals.
+  generated nodes such as command entries invoke through the app/scope owner
+  without exposing widget internals; app-owned screen/section nodes dispatch
+  through the `Semantics` callbacks the app provides.
 - Lazy render-island widgets keep row-level semantic action support tied to
   mounted visible rows. Tester workflows should render before invoking
   visible-row actions after any rebuild that can remount a lazy list.
@@ -483,7 +485,7 @@ real terminal.
   filtered counts, selected result/source context, log filter details, and
   source/view row positions to the same safe text-first artifact path. Workflow
   summary projection now adds aggregate workflow health, activity, context,
-  trace, patch, review, and log-count state for proof-app/debug artifacts.
+  trace, patch, review, and log-count state for demo-app/debug artifacts.
   Process task projection now adds command display, exit code, success/failure,
   and cancelability to the same artifact path, so process regressions have
   structured fallback evidence without scraping rendered process cells.
@@ -497,7 +499,7 @@ real terminal.
 - Time-marker capture is deterministic by design. It keeps marker source,
   label, sequence, fake-time flag, and elapsed microseconds from a caller-owned
   clock, while avoiding wall-clock timestamps and host-specific timing.
-- The proof app capture-to-test workflow deliberately uses synthetic frame and
+- The demo app capture-to-test workflow deliberately uses synthetic frame and
   command records with a real semantic tree. That keeps the test deterministic
   while proving the captured artifact API is sufficient to reconstruct the
   important app facts from an app-shaped scenario.
@@ -548,5 +550,5 @@ real terminal.
 - [debug capture artifact API](../../../packages/fleury/lib/src/debug/debug_capture.dart).
 - [accessibility snapshot tests](../../../packages/fleury/test/semantics/accessibility_test.dart).
 - [Prototype-first tracks](../prototype-first-tracks.md).
-- [proof app capture-to-test workflow](../../../packages/fleury_example_console/test/proof_console_test.dart).
-- [proof app journey benchmark](../../../packages/fleury_example_console/benchmark/scenario_benchmarks.dart).
+- [demo app capture-to-test workflow](../../../packages/fleury_example_console/test/demo_console_test.dart).
+- [demo app journey benchmark](../../../packages/fleury_example_console/benchmark/scenario_benchmarks.dart).

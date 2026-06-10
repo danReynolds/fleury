@@ -47,7 +47,7 @@ void main() {
       final owner = BuildOwner();
       owner.mountRoot(
         ListenableBuilder(
-          animation: notifier,
+          listenable: notifier,
           builder: (ctx, child) {
             builds += 1;
             return const Text('x');
@@ -68,7 +68,7 @@ void main() {
       final owner = BuildOwner();
       final root = owner.mountRoot(
         ListenableBuilder(
-          animation: notifier,
+          listenable: notifier,
           child: const _Capture(),
           builder: (ctx, child) => child!,
         ),
@@ -101,7 +101,7 @@ void main() {
       final owner = BuildOwner();
       final root = owner.mountRoot(
         ListenableBuilder(
-          animation: a,
+          listenable: a,
           builder: (ctx, child) {
             builds += 1;
             return const Text('x');
@@ -114,7 +114,7 @@ void main() {
       owner.updateRoot(
         root,
         ListenableBuilder(
-          animation: b,
+          listenable: b,
           builder: (ctx, child) {
             builds += 1;
             return const Text('x');
@@ -141,7 +141,7 @@ void main() {
       final owner = BuildOwner();
       final root = owner.mountRoot(
         ListenableBuilder(
-          animation: notifier,
+          listenable: notifier,
           builder: (ctx, child) {
             builds += 1;
             return const Text('x');
@@ -154,6 +154,20 @@ void main() {
       // the listener should have been removed.
       notifier.poke();
       expect(builds, after);
+    });
+
+    test('animation parameter remains a compatibility alias', () {
+      final notifier = _CountingNotifier();
+      // ignore: deprecated_member_use_from_same_package
+      final widget = ListenableBuilder(
+        // ignore: deprecated_member_use_from_same_package
+        animation: notifier,
+        builder: (ctx, child) => const Text('x'),
+      );
+
+      expect(widget.listenable, same(notifier));
+      // ignore: deprecated_member_use_from_same_package
+      expect(widget.animation, same(notifier));
     });
   });
 }
