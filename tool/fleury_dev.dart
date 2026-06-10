@@ -1136,6 +1136,8 @@ class _Runner {
       if (options.headful) '--headful',
       if (options.keepTemp) '--keep-temp',
       if (options.compileOnly) '--compile-only',
+      if (options.heapProfile) '--heap-profile',
+      if (options.traceFrames) '--trace-frames',
       if (options.json) '--json',
     ], workingDirectory: '$root/packages/fleury_web');
     if (!options.compileOnly &&
@@ -3670,6 +3672,8 @@ final class _BenchmarkWebCaptureOptions {
     required this.headful,
     required this.keepTemp,
     required this.compileOnly,
+    required this.heapProfile,
+    required this.traceFrames,
     required this.json,
   });
 
@@ -3683,6 +3687,8 @@ final class _BenchmarkWebCaptureOptions {
   final bool headful;
   final bool keepTemp;
   final bool compileOnly;
+  final bool heapProfile;
+  final bool traceFrames;
   final bool json;
 
   static _BenchmarkWebCaptureOptions parse(String root, List<String> args) {
@@ -3696,6 +3702,8 @@ final class _BenchmarkWebCaptureOptions {
     var headful = false;
     var keepTemp = false;
     var compileOnly = false;
+    var heapProfile = false;
+    var traceFrames = false;
     var json = false;
 
     for (final arg in args) {
@@ -3718,6 +3726,10 @@ final class _BenchmarkWebCaptureOptions {
         timeoutSeconds = _positiveCliInt(arg, '--timeout=');
       } else if (arg == '--headful') {
         headful = true;
+      } else if (arg == '--heap-profile') {
+        heapProfile = true;
+      } else if (arg == '--trace-frames') {
+        traceFrames = true;
       } else if (arg == '--keep-temp') {
         keepTemp = true;
       } else if (arg == '--compile-only') {
@@ -3743,6 +3755,8 @@ final class _BenchmarkWebCaptureOptions {
       chromePath: chromePath,
       timeoutSeconds: timeoutSeconds,
       headful: headful,
+      heapProfile: heapProfile,
+      traceFrames: traceFrames,
       keepTemp: keepTemp,
       compileOnly: compileOnly,
       json: json,

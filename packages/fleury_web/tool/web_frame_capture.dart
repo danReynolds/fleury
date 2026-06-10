@@ -74,12 +74,20 @@ final class _CaptureRunner {
       );
 
       if (options.heapProfile) await page.startHeapSampling();
+      if (options.traceFrames) await page.startFrameTracing();
       final captureJson = await page.waitForCapture(
         Duration(seconds: options.timeoutSeconds),
       );
       Map<String, Object?>? heapProfileJson;
       if (options.heapProfile) {
         heapProfileJson = await page.stopHeapSampling();
+      }
+      Map<String, Object?>? browserFrameTiming;
+      if (options.traceFrames) {
+        final events = await page.stopFrameTracing(
+          Duration(seconds: options.timeoutSeconds),
+        );
+        browserFrameTiming = _analyzeFrameTrace(events);
       }
       final capture = jsonDecode(captureJson);
       if (capture is! Map<String, Object?>) {
@@ -88,6 +96,9 @@ final class _CaptureRunner {
       final browserMetrics = await page.captureBrowserMetrics();
       if (browserMetrics.isNotEmpty) {
         capture['browserMetrics'] = browserMetrics;
+      }
+      if (browserFrameTiming != null) {
+        capture['browserFrameTiming'] = browserFrameTiming;
       }
       capture['runEnvironment'] = chrome.runEnvironmentJson(
         options: options,
@@ -99,9 +110,9 @@ final class _CaptureRunner {
         '${const JsonEncoder.withIndent('  ').convert(capture)}\n',
       );
       if (heapProfileJson != null) {
-        File('$outputPath.heap.json').writeAsStringSync(
-          '${jsonEncode(heapProfileJson)}\n',
-        );
+        File(
+          '$outputPath.heap.json',
+        ).writeAsStringSync('${jsonEncode(heapProfileJson)}\n');
         stderr.writeln('heap profile written to $outputPath.heap.json');
       }
       await page.close();
@@ -321,6 +332,100 @@ File? resolveFrameCaptureStaticFile(Directory root, Uri requestUri) {
     safeSegments.add(segment);
   }
   return File([root.path, ...safeSegments].join(Platform.pathSeparator));
+}
+
+/// Aggregates devtools.timeline events into per-rAF browser-side frame
+/// timings.
+///
+/// Buckets main-thread rendering work (style recalc, layout, pre-paint,
+/// paint, layerize, compositing commit) between consecutive
+/// `FireAnimationFrame` events, which is the browser-side half of each
+/// Fleury frame: the part a Dart-side stopwatch cannot see.
+Map<String, Object?> _analyzeFrameTrace(List<Map<String, Object?>> events) {
+  const renderingNames = {
+    'UpdateLayoutTree': 'styleUs',
+    'Layout': 'layoutUs',
+    'PrePaint': 'paintUs',
+    'Paint': 'paintUs',
+    'Layerize': 'paintUs',
+    'Commit': 'paintUs',
+  };
+  // Find the main thread: the one that fires animation frames.
+  int? mainTid;
+  for (final event in events) {
+    if (event['name'] == 'FireAnimationFrame') {
+      final tid = event['tid'];
+      if (tid is int) mainTid = tid;
+      break;
+    }
+  }
+  final frameStarts = <int>[];
+  final completes = <(int ts, int dur, String bucket)>[];
+  for (final event in events) {
+    if (event['tid'] != mainTid) continue;
+    final name = event['name'];
+    final ts = event['ts'];
+    if (ts is! int) continue;
+    if (name == 'FireAnimationFrame') {
+      frameStarts.add(ts);
+      continue;
+    }
+    final bucket = renderingNames[name];
+    if (bucket == null) continue;
+    final dur = event['dur'];
+    if (event['ph'] == 'X' && dur is int) {
+      completes.add((ts, dur, bucket));
+    }
+  }
+  frameStarts.sort();
+  if (frameStarts.isEmpty) {
+    return {'frameCount': 0, 'note': 'no FireAnimationFrame events traced'};
+  }
+  final perFrame = List.generate(
+    frameStarts.length,
+    (_) => <String, int>{'styleUs': 0, 'layoutUs': 0, 'paintUs': 0},
+  );
+  for (final (ts, dur, bucket) in completes) {
+    // Frame index: last frame start at or before this event.
+    var lo = 0, hi = frameStarts.length - 1, index = -1;
+    while (lo <= hi) {
+      final mid = (lo + hi) >> 1;
+      if (frameStarts[mid] <= ts) {
+        index = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    if (index < 0) continue;
+    perFrame[index][bucket] = perFrame[index][bucket]! + dur;
+  }
+  final totals = [
+    for (final frame in perFrame)
+      frame['styleUs']! + frame['layoutUs']! + frame['paintUs']!,
+  ]..sort();
+  double percentile(List<int> sorted, double p) {
+    if (sorted.isEmpty) return 0;
+    final index = (sorted.length * p).round().clamp(1, sorted.length) - 1;
+    return sorted[index] / 1000.0;
+  }
+
+  return {
+    'frameCount': perFrame.length,
+    'frames': [
+      for (final frame in perFrame)
+        {
+          'styleUs': frame['styleUs'],
+          'layoutUs': frame['layoutUs'],
+          'paintUs': frame['paintUs'],
+        },
+    ],
+    'browserSideMs': {
+      'p50': percentile(totals, 0.50),
+      'p95': percentile(totals, 0.95),
+      'max': totals.isEmpty ? 0 : totals.last / 1000.0,
+    },
+  };
 }
 
 /// Pins Chrome to the HOST architecture on Apple Silicon.
@@ -606,6 +711,40 @@ final class _CdpPage {
     );
   }
 
+  /// Collected devtools.timeline trace events while tracing is active.
+  static final List<Map<String, Object?>> _traceEvents = [];
+  static Completer<void>? _tracingComplete;
+
+  Future<void> startFrameTracing() async {
+    _traceEvents.clear();
+    _tracingComplete = Completer<void>();
+    _client.on('Tracing.dataCollected', (params) {
+      final value = params['value'];
+      if (value is List) {
+        _traceEvents.addAll(value.whereType<Map<String, Object?>>());
+      }
+    });
+    _client.on('Tracing.tracingComplete', (_) {
+      final completer = _tracingComplete;
+      if (completer != null && !completer.isCompleted) completer.complete();
+    });
+    await _client.call('Tracing.start', {
+      'traceConfig': {
+        'includedCategories': ['devtools.timeline'],
+      },
+      'transferMode': 'ReportEvents',
+    });
+  }
+
+  Future<List<Map<String, Object?>>> stopFrameTracing(Duration timeout) async {
+    await _client.call('Tracing.end');
+    final completer = _tracingComplete;
+    if (completer != null) {
+      await completer.future.timeout(timeout, onTimeout: () {});
+    }
+    return List.of(_traceEvents);
+  }
+
   Future<void> startHeapSampling() async {
     await _client.call('HeapProfiler.enable', {});
     // 8KiB sampling interval: fine enough to rank per-frame allocators
@@ -727,7 +866,14 @@ final class _CdpClient {
   final WebSocket _socket;
   late final StreamSubscription<dynamic> _subscription;
   final Map<int, Completer<Map<String, Object?>>> _pending = {};
+  final Map<String, List<void Function(Map<String, Object?>)>> _eventListeners =
+      {};
   var _nextId = 1;
+
+  /// Registers [handler] for CDP events named [method].
+  void on(String method, void Function(Map<String, Object?> params) handler) {
+    _eventListeners.putIfAbsent(method, () => []).add(handler);
+  }
 
   static Future<_CdpClient> connect(String webSocketUrl) async {
     final socket = await WebSocket.connect(webSocketUrl);
@@ -759,7 +905,20 @@ final class _CdpClient {
   void _handleMessage(dynamic data) {
     final decoded = jsonDecode(data as String) as Map<String, Object?>;
     final id = decoded['id'];
-    if (id is! int) return;
+    if (id is! int) {
+      final method = decoded['method'];
+      final listeners = method is String ? _eventListeners[method] : null;
+      if (listeners != null) {
+        final params = decoded['params'];
+        final eventParams = params is Map<String, Object?>
+            ? params
+            : <String, Object?>{};
+        for (final listener in listeners) {
+          listener(eventParams);
+        }
+      }
+      return;
+    }
     final completer = _pending.remove(id);
     if (completer == null) return;
     final error = decoded['error'];
@@ -868,6 +1027,7 @@ final class _Options {
     required this.headless,
     required this.keepTemp,
     required this.heapProfile,
+    required this.traceFrames,
     required this.compileOnly,
     required this.disableSemantics,
   });
@@ -889,6 +1049,11 @@ final class _Options {
   /// Compile unminified and record a CDP allocation-sampling profile next to
   /// the capture (`<output>.heap.json`).
   final bool heapProfile;
+
+  /// Record a devtools.timeline trace and merge per-frame browser-side
+  /// style/layout/paint timings into the capture
+  /// (`browserFrameTiming` section).
+  final bool traceFrames;
   final bool compileOnly;
   final bool disableSemantics;
 
@@ -908,6 +1073,7 @@ final class _Options {
     var keepTemp = false;
     var compileOnly = false;
     var heapProfile = false;
+    var traceFrames = false;
     var disableSemantics = false;
 
     for (final arg in args) {
@@ -941,6 +1107,8 @@ final class _Options {
         headless = false;
       } else if (arg == '--heap-profile') {
         heapProfile = true;
+      } else if (arg == '--trace-frames') {
+        traceFrames = true;
       } else if (arg == '--keep-temp') {
         keepTemp = true;
       } else if (arg == '--compile-only') {
@@ -975,6 +1143,7 @@ final class _Options {
       headless: headless,
       keepTemp: keepTemp,
       heapProfile: heapProfile,
+      traceFrames: traceFrames,
       compileOnly: compileOnly,
       disableSemantics: disableSemantics,
     );

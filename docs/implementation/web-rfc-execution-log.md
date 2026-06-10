@@ -14383,3 +14383,39 @@ the promotion command (with fingerprint) is in its
 `threshold-review-plan.md`. P-1/P-2/P-3/P-4 of the sign-off bar are met
 on this evidence; remaining work is methodology (P-6 browser-inclusive
 timing), A-3 (multi-range damage), and P-5 (warmup budget).
+
+## 2026-06-10 (frame-path plan, Phase 5: browser-inclusive frame timing)
+
+P-6: gates are no longer script-side-only. The capture harness gains
+`--trace-frames`: a devtools.timeline CDP trace runs across the capture,
+and main-thread rendering events (UpdateLayoutTree, Layout, PrePaint,
+Paint, Layerize, Commit) are bucketed per FireAnimationFrame into a
+`browserFrameTiming` section (per-frame style/layout/paint micros +
+p50/p95/max summary). The CDP client now dispatches protocol events to
+registered listeners (previously request/response only).
+
+Measured on the arm-native stack (64 frames, warmup 8):
+
+| scenario          | script p95 | browser p95 | end-to-end bound |
+|-------------------|-----------:|------------:|-----------------:|
+| dirty-row         |     0.50ms |      1.28ms |           1.78ms |
+| scroll-row-churn  |     2.30ms |      1.25ms |           3.56ms |
+| full-frame-churn  |     2.30ms |      2.03ms |           4.33ms |
+| stress-300x100    |     7.40ms |      4.10ms |          11.50ms |
+
+The 16.67ms budget holds end-to-end in every scenario, worst case 11.5ms
+(stress at 300x100 = 30k cells). Browser-side maxima (15-21ms) are the
+first frame's initial full layout only. Note: raster runs on Chrome's
+raster threads (and `--disable-gpu` forces software raster); main-thread
+style/layout/paint is the share that contends with script and is what
+this measures.
+
+The native-side environment fix also landed its dividend:
+`profiling/caps/2026-06-10-native-parity-armnative` re-records the VM
+parity baselines on the arm64 SDK (Dan removed the x64 Homebrew Dart;
+non-interactive shells now resolve arm64 Dart 3.12.2). Versus the
+Rosetta-era baselines: SB.4 journey -44%, mount -91%, first render -85%;
+SB.2 journey -41%; SB.6 journey -14%.
+
+`--heap-profile` and `--trace-frames` are forwarded by the
+`fleury benchmark web-capture` launcher.
