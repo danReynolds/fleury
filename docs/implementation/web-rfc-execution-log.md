@@ -14371,3 +14371,15 @@ benchmark — including the Phase 0 native parity baselines — has been
 measuring Rosetta. Install the arm64 Dart SDK, then re-record
 `profiling/caps` parity baselines. All web evidence from today's
 re-baseline forward is native and trustworthy.
+
+### Canonical arm-native baseline
+
+`profiling/web/baselines/2026-06-10-arm-native` (11 scenarios x 3 runs,
+64 frames, warmup 8, native Chrome): every scenario median-of-3 p95
+between 0.1ms (noop) and 8.5ms (stress-300x100), over-budget 0.0%
+across the board. This supersedes every earlier baseline (all measured
+under Rosetta) and is the candidate for the one-time threshold review:
+the promotion command (with fingerprint) is in its
+`threshold-review-plan.md`. P-1/P-2/P-3/P-4 of the sign-off bar are met
+on this evidence; remaining work is methodology (P-6 browser-inclusive
+timing), A-3 (multi-range damage), and P-5 (warmup budget).
