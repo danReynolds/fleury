@@ -14320,3 +14320,54 @@ medians at 0.1-0.3ms suite-wide, there is nothing left for it to win.
 Documented adversarial budgets move to the Phase 4 re-baseline (the
 remaining heavy-tier p95s are GC-dominated; budgets set before the
 allocation work would be loose and immediately stale).
+
+## 2026-06-10 (frame-path plan, Phase 4: the tails were Rosetta)
+
+### Root cause of every heavy tail
+
+Phase 4 began as GC/allocation work and ended somewhere else entirely:
+
+1. A new `--heap-profile` capture mode (CDP allocation sampling +
+   unminified compile) measured TOTAL allocation at ~1.5MB per 40-frame
+   run (~40KB/frame), dominated by program startup — no per-frame
+   allocation firehose exists. The JS heap floats at ~4MB; major GC on a
+   4MB heap costs single-digit milliseconds. The "GC tail" hypothesis was
+   dead on arrival.
+2. Anti-throttling Chrome flags (`--disable-renderer-backgrounding`,
+   `--disable-background-timer-throttling`,
+   `--disable-backgrounding-occluded-windows`) did not move the tails.
+3. The spike anatomy gave it away: mega-stalls (839ms, 1409ms) inflate
+   EVERY pipeline slice proportionally — whole-process stalls, not hot
+   code. The clipboard test had already printed the answer: this Apple
+   Silicon machine runs an x86_64 Dart SDK under Rosetta, and a Rosetta
+   parent spawns universal binaries as their x64 slice — so benchmark
+   Chrome ran x64-emulated, with V8's freshly JIT-compiled code pages
+   hitting Rosetta translation. Those translations are the
+   multi-hundred-ms whole-process stalls.
+
+The harness now pins Chrome to the host architecture
+(`arch -arm64` when `hw.optional.arm64` is set, regardless of the Dart
+SDK's architecture).
+
+### Results on the native stack (median-of-3, 64-frame captures)
+
+- dirty-row p95 0.50ms; single-dirty-cell 0.40ms; scroll-row-churn
+  2.40ms; full-frame-churn 2.40ms; normal-80x24 0.90ms;
+  stress-300x100 7.40ms.
+- ZERO over-budget steady frames in all 18 runs (P-1 and P-3 met with no
+  documented exceptions; the adversarial budgets planned for this phase
+  are unnecessary).
+- Semantic flush presentation latency p95 <= 6.1ms in every scenario
+  (P-2 met, 16x under the 100ms budget).
+
+The wasm trial is dropped from the plan: it existed to chase tails that
+turned out to be emulation artifacts. The heap-profile mode stays as
+permanent tooling.
+
+### Environment action (Dan)
+
+The x86_64 Dart SDK on this arm64 machine means every NATIVE (VM)
+benchmark — including the Phase 0 native parity baselines — has been
+measuring Rosetta. Install the arm64 Dart SDK, then re-record
+`profiling/caps` parity baselines. All web evidence from today's
+re-baseline forward is native and trustworthy.

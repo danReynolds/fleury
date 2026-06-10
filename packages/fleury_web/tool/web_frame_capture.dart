@@ -49,6 +49,7 @@ final class _CaptureRunner {
         await _compileBenchmarkEntrypoint(
           packageRoot: packageRoot,
           outputPath: '${buildDir.path}/benchmark_capture.dart.js',
+          minify: !options.heapProfile,
         );
         _writeBenchmarkPage(buildDir);
       } else {
@@ -72,9 +73,14 @@ final class _CaptureRunner {
         ),
       );
 
+      if (options.heapProfile) await page.startHeapSampling();
       final captureJson = await page.waitForCapture(
         Duration(seconds: options.timeoutSeconds),
       );
+      Map<String, Object?>? heapProfileJson;
+      if (options.heapProfile) {
+        heapProfileJson = await page.stopHeapSampling();
+      }
       final capture = jsonDecode(captureJson);
       if (capture is! Map<String, Object?>) {
         throw const FormatException('Browser capture root was not an object.');
@@ -92,6 +98,12 @@ final class _CaptureRunner {
       output.writeAsStringSync(
         '${const JsonEncoder.withIndent('  ').convert(capture)}\n',
       );
+      if (heapProfileJson != null) {
+        File('$outputPath.heap.json').writeAsStringSync(
+          '${jsonEncode(heapProfileJson)}\n',
+        );
+        stderr.writeln('heap profile written to $outputPath.heap.json');
+      }
       await page.close();
       _printCaptureResult(capture, output.path, json: options.json);
     } finally {
@@ -111,12 +123,16 @@ final class _CaptureRunner {
 Future<void> _compileBenchmarkEntrypoint({
   required String packageRoot,
   required String outputPath,
+  bool minify = true,
 }) async {
   final result = await Process.run('dart', [
     'compile',
     'js',
     'web/benchmark_capture.dart',
     '-O2',
+    // Heap-profiling builds keep readable names so allocation stacks map
+    // back to Dart functions.
+    if (!minify) '--no-minify',
     '-o',
     outputPath,
   ], workingDirectory: packageRoot);
@@ -307,6 +323,33 @@ File? resolveFrameCaptureStaticFile(Directory root, Uri requestUri) {
   return File([root.path, ...safeSegments].join(Platform.pathSeparator));
 }
 
+/// Pins Chrome to the HOST architecture on Apple Silicon.
+///
+/// An x64 (Rosetta) parent process spawns universal binaries as their x64
+/// slice, which puts V8's JIT under Rosetta translation — benchmarks then
+/// show multi-hundred-ms whole-process stalls as freshly emitted code pages
+/// get translated. Launching through `arch -arm64` keeps the renderer
+/// native regardless of the Dart SDK's architecture.
+Future<({String executable, List<String> prefixArgs})> _nativeArchLaunch(
+  String chromePath,
+) async {
+  if (!Platform.isMacOS) {
+    return (executable: chromePath, prefixArgs: const <String>[]);
+  }
+  try {
+    final result = await Process.run('sysctl', ['-n', 'hw.optional.arm64']);
+    if (result.exitCode == 0 && result.stdout.toString().trim() == '1') {
+      return (
+        executable: '/usr/bin/arch',
+        prefixArgs: <String>['-arm64', chromePath],
+      );
+    }
+  } on Object {
+    // Fall through to a direct launch.
+  }
+  return (executable: chromePath, prefixArgs: const <String>[]);
+}
+
 final class _ChromeProcess {
   _ChromeProcess._({
     required this.process,
@@ -330,6 +373,7 @@ final class _ChromeProcess {
 
   static Future<_ChromeProcess> start(_Options options) async {
     final chromePath = options.chromePath ?? _findChromeExecutable();
+    final launch = await _nativeArchLaunch(chromePath);
     final debugPort = await _reservePort();
     final profileDir = Directory.systemTemp.createTempSync(
       'fleury_web_chrome_profile_',
@@ -337,9 +381,17 @@ final class _ChromeProcess {
     final stderrBuffer = StringBuffer();
     late final Process process;
     try {
-      process = await Process.start(chromePath, [
+      process = await Process.start(launch.executable, [
+        ...launch.prefixArgs,
         if (options.headless) '--headless=new',
         '--disable-background-networking',
+        // Benchmark fidelity: never deprioritize the page's renderer. The
+        // page is CDP-driven and effectively occluded, which otherwise
+        // invites timer/raf throttling and renderer backgrounding that show
+        // up as multi-hundred-ms stalls inside synchronous script sections.
+        '--disable-renderer-backgrounding',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
         '--disable-gpu',
         '--disable-search-engine-choice-screen',
         '--no-default-browser-check',
@@ -552,6 +604,21 @@ final class _CdpPage {
       'Timed out waiting for browser capture.$suffix',
       timeout,
     );
+  }
+
+  Future<void> startHeapSampling() async {
+    await _client.call('HeapProfiler.enable', {});
+    // 8KiB sampling interval: fine enough to rank per-frame allocators
+    // without measurably perturbing the run.
+    await _client.call('HeapProfiler.startSampling', {
+      'samplingInterval': 8192,
+    });
+  }
+
+  Future<Map<String, Object?>> stopHeapSampling() async {
+    final response = await _client.call('HeapProfiler.stopSampling', {});
+    final profile = response['profile'];
+    return profile is Map<String, Object?> ? profile : <String, Object?>{};
   }
 
   Future<Map<String, Object?>> captureBrowserMetrics() async {
@@ -800,6 +867,7 @@ final class _Options {
     required this.timeoutSeconds,
     required this.headless,
     required this.keepTemp,
+    required this.heapProfile,
     required this.compileOnly,
     required this.disableSemantics,
   });
@@ -817,6 +885,10 @@ final class _Options {
   final int timeoutSeconds;
   final bool headless;
   final bool keepTemp;
+
+  /// Compile unminified and record a CDP allocation-sampling profile next to
+  /// the capture (`<output>.heap.json`).
+  final bool heapProfile;
   final bool compileOnly;
   final bool disableSemantics;
 
@@ -835,6 +907,7 @@ final class _Options {
     var headless = true;
     var keepTemp = false;
     var compileOnly = false;
+    var heapProfile = false;
     var disableSemantics = false;
 
     for (final arg in args) {
@@ -866,6 +939,8 @@ final class _Options {
         timeoutSeconds = _positiveInt(arg, '--timeout=');
       } else if (arg == '--headful') {
         headless = false;
+      } else if (arg == '--heap-profile') {
+        heapProfile = true;
       } else if (arg == '--keep-temp') {
         keepTemp = true;
       } else if (arg == '--compile-only') {
@@ -899,6 +974,7 @@ final class _Options {
       timeoutSeconds: timeoutSeconds,
       headless: headless,
       keepTemp: keepTemp,
+      heapProfile: heapProfile,
       compileOnly: compileOnly,
       disableSemantics: disableSemantics,
     );
