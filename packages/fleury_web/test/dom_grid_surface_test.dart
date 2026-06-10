@@ -13,6 +13,60 @@ void main() {
   const planner = FramePresentationPlanner();
 
   group('DomGridSurface', () {
+    test('scroll plans move retained row elements instead of rebuilding', () {
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
+      const planner = FramePresentationPlanner();
+      final root = web.document.createElement('div');
+      const size = CellSize(6, 4);
+      final surface = DomGridSurface(root: root, size: size);
+
+      final first = loop.render(
+        size: size,
+        paint: (buffer) {
+          buffer.writeText(const CellOffset(0, 0), 'aaaa');
+          buffer.writeText(const CellOffset(0, 1), 'bbbb');
+          buffer.writeText(const CellOffset(0, 2), 'cccc');
+          buffer.writeText(const CellOffset(0, 3), 'dddd');
+        },
+      )!;
+      surface.present(
+        first.previous,
+        first.next,
+        planner.build(reason: 'initial', frame: first),
+      );
+      loop.commit(first);
+      final retainedRowB = surface.rowElements[1];
+
+      final second = loop.render(
+        size: size,
+        paint: (buffer) {
+          buffer.writeText(const CellOffset(0, 0), 'bbbb');
+          buffer.writeText(const CellOffset(0, 1), 'cccc');
+          buffer.writeText(const CellOffset(0, 2), 'dddd');
+          buffer.writeText(const CellOffset(0, 3), 'eeee');
+          damage.recordLayoutOrConservativePaint();
+        },
+      )!;
+      final plan = planner.build(reason: 'scroll', frame: second);
+      final stats = surface.present(second.previous, second.next, plan);
+
+      // Only the entering row was rebuilt; the rest MOVED.
+      expect(plan.scrollUpRows, 1);
+      expect(stats.rowsReplaced, 1);
+      expect(
+        [for (final row in surface.rowElements) row.textContent],
+        ['bbbb  ', 'cccc  ', 'dddd  ', 'eeee  '],
+      );
+      // The element that held row 1 ('bbbb') is now row 0 — moved, not
+      // recreated.
+      expect(identical(surface.rowElements[0], retainedRowB), isTrue);
+      expect(
+        [for (final row in surface.rowElements) row.getAttribute('data-row')],
+        ['0', '1', '2', '3'],
+      );
+    });
+
     test('configures an aria-hidden retained visual grid', () {
       final root = web.document.createElement('div');
       final surface = DomGridSurface(root: root, size: size);

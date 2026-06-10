@@ -244,6 +244,7 @@ final class WebFrameInstrumentation {
     required this.damageSource,
     required this.fullRepaint,
     required this.metricsChanged,
+    this.renderSkipped = false,
     required this.dirtyRowCount,
     required this.dirtyCellEstimate,
     required this.spanCount,
@@ -364,6 +365,51 @@ final class WebFrameInstrumentation {
     );
   }
 
+  /// A frame request that skipped build/layout/paint entirely: the runtime
+  /// reported no frame work and the committed front buffer was still exact.
+  factory WebFrameInstrumentation.skipped({
+    required String reason,
+    required CellSize viewportSize,
+    required int semanticNodeCount,
+    required int semanticFallbackNodeCount,
+    required int semanticUncoveredCellCount,
+    required Duration totalFrameTime,
+  }) {
+    return WebFrameInstrumentation(
+      reason: reason,
+      coalescedReasons: List.unmodifiable(
+        reason.split('+').where((part) => part.isNotEmpty),
+      ),
+      viewportSize: viewportSize,
+      damageSource: FrameDamageSource.none,
+      fullRepaint: false,
+      metricsChanged: false,
+      renderSkipped: true,
+      dirtyRowCount: 0,
+      dirtyCellEstimate: 0,
+      spanCount: 0,
+      domNodesCreated: 0,
+      rowsReplaced: 0,
+      styleCacheHits: 0,
+      styleCacheMisses: 0,
+      widthCacheHits: 0,
+      widthCacheMisses: 0,
+      metricsReadCount: 0,
+      semanticNodeCount: semanticNodeCount,
+      semanticAddedNodeCount: 0,
+      semanticRemovedNodeCount: 0,
+      semanticUpdatedNodeCount: 0,
+      semanticFallbackNodeCount: semanticFallbackNodeCount,
+      semanticUncoveredCellCount: semanticUncoveredCellCount,
+      runtimeRenderTime: Duration.zero,
+      runtimePhaseTimingAvailable: false,
+      spanBuildTime: Duration.zero,
+      domApplyTime: Duration.zero,
+      semanticApplyTime: Duration.zero,
+      totalFrameTime: totalFrameTime,
+    );
+  }
+
   factory WebFrameInstrumentation.fromJson(Map<String, Object?> json) {
     final viewport = _readMap(json, 'viewport');
     return WebFrameInstrumentation(
@@ -378,6 +424,7 @@ final class WebFrameInstrumentation {
       damageSource: _readDamageSource(json, 'damageSource'),
       fullRepaint: _readBool(json, 'fullRepaint'),
       metricsChanged: _readBool(json, 'metricsChanged'),
+      renderSkipped: json['renderSkipped'] == true,
       dirtyRowCount: _readInt(json, 'dirtyRowCount'),
       dirtyCellEstimate: _readInt(json, 'dirtyCellEstimate'),
       spanCount: _readInt(json, 'spanCount'),
@@ -451,6 +498,9 @@ final class WebFrameInstrumentation {
   final FrameDamageSource damageSource;
   final bool fullRepaint;
   final bool metricsChanged;
+
+  /// Whether this frame request skipped rendering entirely (no frame work).
+  final bool renderSkipped;
   final int dirtyRowCount;
   final int dirtyCellEstimate;
   final int spanCount;
@@ -503,6 +553,7 @@ final class WebFrameInstrumentation {
       'damageSource': damageSource.name,
       'fullRepaint': fullRepaint,
       'metricsChanged': metricsChanged,
+      'renderSkipped': renderSkipped,
       'dirtyRowCount': dirtyRowCount,
       'dirtyCellEstimate': dirtyCellEstimate,
       'spanCount': spanCount,

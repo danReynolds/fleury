@@ -9,6 +9,71 @@ void main() {
   const planner = FramePresentationPlanner();
 
   group('FramePresentationPlanner', () {
+    test('detects an upward scroll and builds only residual rows', () {
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
+      const scrollSize = CellSize(6, 4);
+      final first = loop.render(
+        size: scrollSize,
+        paint: (buffer) {
+          buffer.writeText(const CellOffset(0, 0), 'aaaa');
+          buffer.writeText(const CellOffset(0, 1), 'bbbb');
+          buffer.writeText(const CellOffset(0, 2), 'cccc');
+          buffer.writeText(const CellOffset(0, 3), 'dddd');
+        },
+      )!;
+      loop.commit(first);
+
+      final second = loop.render(
+        size: scrollSize,
+        paint: (buffer) {
+          buffer.writeText(const CellOffset(0, 0), 'bbbb');
+          buffer.writeText(const CellOffset(0, 1), 'cccc');
+          buffer.writeText(const CellOffset(0, 2), 'dddd');
+          buffer.writeText(const CellOffset(0, 3), 'eeee');
+          damage.recordLayoutOrConservativePaint();
+        },
+      )!;
+
+      final plan = planner.build(reason: 'scroll', frame: second);
+
+      expect(plan.scrollUpRows, 1);
+      // The TRUE damage stays full for semantic consumers...
+      expect(plan.damage.dirtyRows.isFull, isTrue);
+      // ...while the surface only rebuilds the entering row.
+      expect(plan.dirtyRowModels.map((row) => row.row), [3]);
+    });
+
+    test('non-scroll full-diff frames keep full row models', () {
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
+      const scrollSize = CellSize(6, 4);
+      final first = loop.render(
+        size: scrollSize,
+        paint: (buffer) {
+          buffer.writeText(const CellOffset(0, 0), 'aaaa');
+          buffer.writeText(const CellOffset(0, 1), 'bbbb');
+        },
+      )!;
+      loop.commit(first);
+
+      final second = loop.render(
+        size: scrollSize,
+        paint: (buffer) {
+          buffer.writeText(const CellOffset(0, 0), 'zzzz');
+          buffer.writeText(const CellOffset(0, 1), 'yyyy');
+          damage.recordLayoutOrConservativePaint();
+        },
+      )!;
+
+      final plan = planner.build(reason: 'layout', frame: second);
+
+      expect(plan.scrollUpRows, isNull);
+      // The conservative per-row diff prunes unchanged rows even on
+      // full-diff frames, so only the rewritten rows get models.
+      expect(plan.dirtyRowModels.map((row) => row.row), [0, 1]);
+    });
+
     test('first frame is a full repaint with all row models', () {
       final damage = RenderDamageTracker();
       final loop = TuiFrameLoop(renderDamage: damage);

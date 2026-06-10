@@ -10,6 +10,8 @@ library;
 
 export 'fleury_core.dart';
 export 'src/rendering/render_object.dart' show RenderDamageTracker;
+export 'src/rendering/scroll_detection.dart'
+    show detectBeneficialScrollUp, rowsEqual, screenDiffStats;
 export 'src/widgets/framework.dart' show BuildFlushStats;
 export 'src/runtime/frame_scheduler.dart'
     show FrameFlushScheduler, FrameRenderCallback, FrameScheduler;

@@ -62,6 +62,13 @@ final class DomGridSurface implements FrameSurface {
   ) {
     _presentCount += 1;
     if (plan.size != _size) resize(plan.size);
+    final scrollUpRows = plan.scrollUpRows;
+    if (scrollUpRows != null &&
+        scrollUpRows > 0 &&
+        scrollUpRows < _rows.length &&
+        !plan.fullRepaint) {
+      _scrollUp(scrollUpRows);
+    }
     var rowsReplaced = 0;
     var domNodesCreated = 0;
     var styleCacheHits = 0;
@@ -117,6 +124,21 @@ final class DomGridSurface implements FrameSurface {
   Future<void> dispose() async {
     _rows.clear();
     _root.callMethodVarArgs<JSAny?>('replaceChildren'.toJS, const <JSAny?>[]);
+  }
+
+  /// Moves the first [count] retained row elements to the bottom of the
+  /// grid (document order defines visual position), renumbering `data-row`.
+  /// The moved elements carry stale spans; the plan's residual dirty rows
+  /// cover them.
+  void _scrollUp(int count) {
+    for (var i = 0; i < count; i++) {
+      final element = _rows.removeAt(0);
+      _rows.add(element);
+      _root.appendChild(element);
+    }
+    for (var row = 0; row < _rows.length; row++) {
+      _rows[row].setAttribute('data-row', '$row');
+    }
   }
 
   void _configureRoot() {

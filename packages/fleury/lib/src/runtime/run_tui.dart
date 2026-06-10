@@ -213,6 +213,13 @@ Future<void> runTui(
     if (r == null) return;
     final size = usedDriver.size;
     if (size.isEmpty) return;
+    if (!frameLoop.needsRender(size) && !runtime.hasFrameWork) {
+      // No-change frame: nothing rebuilt, nothing invalidated, buffers warm.
+      // Skip build/layout/paint and write no bytes — the terminal already
+      // shows exactly this frame.
+      runtime.flushPostFrameCallbacks();
+      return;
+    }
     runtimeMarkers?.markOnce('first.render.start');
 
     // Capture per-phase timings only when the debug stream has live

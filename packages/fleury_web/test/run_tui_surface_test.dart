@@ -1031,6 +1031,45 @@ void main() {
     },
   );
 
+  test('no-change frame requests skip rendering entirely', () async {
+    final visualRoot = web.document.createElement('div');
+    final surface = DomGridSurface(
+      root: visualRoot,
+      size: const CellSize(16, 1),
+    );
+    final semantics = _FakeSemanticPresenter();
+    final instrumentation = RecordingWebHostInstrumentation();
+    final flush = _FakeFlush();
+
+    final host = await runTuiSurface(
+      () => const Text('stable'),
+      surface: surface,
+      semanticPresenter: semantics,
+      instrumentation: instrumentation,
+      flushScheduler: flush.schedule,
+    );
+
+    flush.fire();
+    await host.awaitSemanticIdle();
+    expect(instrumentation.frames.single.renderSkipped, isFalse);
+
+    host.requestFrame('noop');
+    flush.fire();
+    await host.awaitSemanticIdle();
+
+    final skipped = instrumentation.frames.last;
+    expect(skipped.renderSkipped, isTrue);
+    expect(skipped.rowsReplaced, 0);
+    expect(skipped.domNodesCreated, 0);
+    expect(skipped.runtimePhaseTimingAvailable, isFalse);
+    expect(skipped.semanticNodeCount, greaterThan(0));
+    // No semantic work either: the retained output is still exact.
+    expect(instrumentation.semanticFlushes, hasLength(1));
+    expect(visualRoot.textContent, contains('stable'));
+
+    await host.dispose();
+  });
+
   test('multiple visual frames coalesce into one semantic flush', () async {
     final visualRoot = web.document.createElement('div');
     final semanticRoot = web.document.createElement('div');

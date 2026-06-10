@@ -2,6 +2,7 @@ import '../foundation/geometry.dart';
 import '../terminal/capabilities.dart';
 import 'cell.dart';
 import 'cell_buffer.dart';
+import 'scroll_detection.dart';
 
 /// A destination for ANSI bytes. Production wiring sends them to stdout via
 /// `IoSinkAnsiSink`; tests capture them with [StringAnsiSink].
@@ -123,11 +124,11 @@ final class AnsiRenderer {
       sink.write(output.toString());
       return;
     }
-    final screenStats = _screenDiffStats(previous, next);
+    final screenStats = screenDiffStats(previous, next);
     if (screenStats.dirtyCells == 0) return;
 
     final size = next.size;
-    final scrollUpRows = _detectBeneficialScrollUp(previous, next, screenStats);
+    final scrollUpRows = detectBeneficialScrollUp(previous, next, screenStats);
     if (scrollUpRows != null) {
       final scrolledPrevious = CellBuffer(size);
       scrolledPrevious.copyRectFrom(
@@ -456,105 +457,6 @@ final class AnsiRenderer {
       if (text.codeUnitAt(i) > 0x7F) return false;
     }
     return true;
-  }
-
-  static int? _detectBeneficialScrollUp(
-    CellBuffer previous,
-    CellBuffer next,
-    ({int dirtyCells, bool hasProtocolCells}) stats,
-  ) {
-    final size = previous.size;
-    if (size != next.size || size.rows < 2) return null;
-
-    if (stats.hasProtocolCells) return null;
-    final normalDirty = stats.dirtyCells;
-    var bestShift = 0;
-    var bestDirty = normalDirty;
-    for (var shift = 1; shift < size.rows; shift++) {
-      final retainedNonEmpty = _rowHasNonEmpty(previous, shift);
-      if (!retainedNonEmpty) continue;
-      if (!_rowsEqual(previous, shift, next, 0)) continue;
-      var shiftedDirty = 0;
-      var abandoned = false;
-      for (var row = 1; row < size.rows - shift; row++) {
-        for (var col = 0; col < size.cols; col++) {
-          final oldCell = previous.atColRow(col, row + shift);
-          final newCell = next.atColRow(col, row);
-          if (oldCell != newCell) {
-            shiftedDirty++;
-            if (shiftedDirty >= bestDirty) {
-              abandoned = true;
-              break;
-            }
-          }
-        }
-        if (abandoned) break;
-      }
-      if (abandoned) continue;
-      for (var row = size.rows - shift; row < size.rows; row++) {
-        for (var col = 0; col < size.cols; col++) {
-          if (next.atColRow(col, row) != const Cell.empty()) {
-            shiftedDirty++;
-            if (shiftedDirty >= bestDirty) {
-              abandoned = true;
-              break;
-            }
-          }
-        }
-        if (abandoned) break;
-      }
-      if (!abandoned && shiftedDirty < bestDirty) {
-        bestShift = shift;
-        bestDirty = shiftedDirty;
-      }
-    }
-    return bestShift == 0 ? null : bestShift;
-  }
-
-  static ({int dirtyCells, bool hasProtocolCells}) _screenDiffStats(
-    CellBuffer previous,
-    CellBuffer next,
-  ) {
-    final size = previous.size;
-    var dirty = 0;
-    var hasProtocolCells = false;
-    for (var row = 0; row < size.rows; row++) {
-      for (var col = 0; col < size.cols; col++) {
-        final previousCell = previous.atColRow(col, row);
-        final nextCell = next.atColRow(col, row);
-        if (previousCell != nextCell) dirty++;
-        hasProtocolCells =
-            hasProtocolCells ||
-            previousCell.role == CellRole.protocolAnchor ||
-            previousCell.role == CellRole.protocolCovered ||
-            nextCell.role == CellRole.protocolAnchor ||
-            nextCell.role == CellRole.protocolCovered;
-      }
-    }
-    return (dirtyCells: dirty, hasProtocolCells: hasProtocolCells);
-  }
-
-  static bool _rowsEqual(
-    CellBuffer previous,
-    int previousRow,
-    CellBuffer next,
-    int nextRow,
-  ) {
-    final size = previous.size;
-    for (var col = 0; col < size.cols; col++) {
-      if (previous.atColRow(col, previousRow) != next.atColRow(col, nextRow)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  static bool _rowHasNonEmpty(CellBuffer buffer, int row) {
-    final size = buffer.size;
-    for (var col = 0; col < size.cols; col++) {
-      if (buffer.atColRow(col, row).role != CellRole.empty) return true;
-    }
-    return false;
   }
 
   // ---- Style encoding ----------------------------------------------------

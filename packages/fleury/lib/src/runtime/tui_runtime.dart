@@ -41,6 +41,16 @@ final class TuiRuntime {
   /// so presenter diff-bounds decisions consume this runtime's damage only.
   RenderDamageTracker get renderDamageTracker => owner.renderDamageTracker;
 
+  /// Whether the next frame can produce output that differs from the last
+  /// rendered frame.
+  ///
+  /// False means no element is waiting to rebuild and no render object has
+  /// recorded an invalidation since the last frame: a frame request may skip
+  /// build/layout/paint entirely (provided the host's buffer pool is warm —
+  /// see `TuiFrameLoop.needsRender`).
+  bool get hasFrameWork =>
+      owner.hasScheduledBuilds || owner.renderDamageTracker.hasVisualChange;
+
   /// This runtime's semantic dirty tracker (owned per [BuildOwner]).
   ///
   /// Marks accumulate across frames until [SemanticDirtyTracker

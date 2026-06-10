@@ -49,6 +49,7 @@ final class FramePresentationPlan {
     required this.metricsChanged,
     required this.dirtyRowDiffTime,
     required this.spanBuildTime,
+    this.scrollUpRows,
   });
 
   final String reason;
@@ -59,6 +60,15 @@ final class FramePresentationPlan {
   final bool metricsChanged;
   final Duration dirtyRowDiffTime;
   final Duration spanBuildTime;
+
+  /// When non-null, the frame is a detected upward scroll: the surface moves
+  /// its first [scrollUpRows] retained row elements to the bottom and then
+  /// applies [dirtyRowModels], which cover only the residual rows (entering
+  /// rows plus rows that changed beyond the shift).
+  ///
+  /// [damage] stays the TRUE dirty set (everything moved), so semantic
+  /// coverage and diff consumers remain exact.
+  final int? scrollUpRows;
 
   int get dirtyRowCount => damage.dirtyRows.dirtyRowCount;
 
@@ -114,6 +124,10 @@ enum FrameDamageSource {
   fullRepaint,
   conservativeFullDiff,
   unboundedFallback,
+
+  /// The frame request skipped rendering: no frame work was pending and the
+  /// committed front buffer was still exact.
+  none,
 }
 
 /// Builds [FramePresentationPlan]s from shared runtime frame output.
@@ -137,8 +151,25 @@ final class FramePresentationPlanner {
       dirtyRows: dirtyRows,
       source: _sourceFor(runtimeDamage),
     );
+
+    // A full-dirty frame may really be an upward scroll: the shared detector
+    // (the same one the ANSI renderer scrolls with) tells us the retained
+    // rows can be MOVED, leaving only residual rows to rebuild.
+    int? scrollUpRows;
+    var rowsToBuild = dirtyRows;
+    if (!runtimeDamage.fullRepaint &&
+        dirtyRows.isFull &&
+        frame.previous.size == frame.next.size) {
+      final stats = screenDiffStats(frame.previous, frame.next);
+      final shift = detectBeneficialScrollUp(frame.previous, frame.next, stats);
+      if (shift != null) {
+        scrollUpRows = shift;
+        rowsToBuild = _residualScrollRows(frame.previous, frame.next, shift);
+      }
+    }
+
     final spanBuildStopwatch = Stopwatch()..start();
-    final dirtyRowModels = spanBuilder.buildDirtyRows(frame.next, dirtyRows);
+    final dirtyRowModels = spanBuilder.buildDirtyRows(frame.next, rowsToBuild);
     spanBuildStopwatch.stop();
 
     return FramePresentationPlan(
@@ -150,7 +181,27 @@ final class FramePresentationPlanner {
       metricsChanged: metricsChanged,
       dirtyRowDiffTime: dirtyRowsResult.diffTime,
       spanBuildTime: spanBuildStopwatch.elapsed,
+      scrollUpRows: scrollUpRows,
     );
+  }
+
+  /// Rows that still need their spans rebuilt after scrolling up by [shift]:
+  /// every entering row at the bottom (the moved elements carry stale spans)
+  /// plus any retained row whose content changed beyond the shift.
+  TuiDirtyRows _residualScrollRows(
+    CellBuffer previous,
+    CellBuffer next,
+    int shift,
+  ) {
+    final rows = next.size.rows;
+    final residual = <int>[];
+    for (var row = 0; row < rows - shift; row++) {
+      if (!rowsEqual(previous, row + shift, next, row)) residual.add(row);
+    }
+    for (var row = rows - shift; row < rows; row++) {
+      residual.add(row);
+    }
+    return TuiDirtyRows.fromRows(residual, rowCount: rows);
   }
 
   FrameDamageSource _sourceFor(TuiFrameDamage damage) {

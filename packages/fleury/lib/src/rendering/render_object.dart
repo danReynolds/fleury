@@ -22,9 +22,29 @@ import 'render_layout_stats.dart';
 /// consumers can coalesce several invalidations into one read.
 final class RenderDamageTracker {
   bool _requiresFullDiff = false;
+  bool _visualChange = false;
 
   void recordLayoutOrConservativePaint() {
     _requiresFullDiff = true;
+    _visualChange = true;
+  }
+
+  /// Records that some render object's visual output may differ next frame
+  /// (audited paint-only invalidations included). Cleared when a frame
+  /// consumes it via [takeVisualChange].
+  void recordVisualChange() {
+    _visualChange = true;
+  }
+
+  /// Whether any invalidation has been recorded since the last rendered
+  /// frame. While false (and the buffer pool is warm), a frame request can
+  /// skip build/layout/paint entirely: the front buffer is still exact.
+  bool get hasVisualChange => _visualChange;
+
+  bool takeVisualChange() {
+    final result = _visualChange;
+    _visualChange = false;
+    return result;
   }
 
   bool takeRequiresFullDiff() {
@@ -35,6 +55,7 @@ final class RenderDamageTracker {
 
   void reset() {
     _requiresFullDiff = false;
+    _visualChange = false;
   }
 }
 
@@ -256,6 +277,7 @@ abstract class RenderObject {
   @protected
   void markNeedsPaintOnly() {
     DebugInvalidations.recordPaint(runtimeType.toString());
+    _rootFrameDamage?.recordVisualChange();
     _markNearestRepaintBoundaryDirty();
   }
 

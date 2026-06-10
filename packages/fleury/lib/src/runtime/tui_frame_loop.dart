@@ -48,6 +48,16 @@ final class TuiFrameLoop {
     _requireFullRepaint = true;
   }
 
+  /// Whether [render] must run for [size] regardless of runtime dirt.
+  ///
+  /// True when the buffer pool is cold or sized differently, or a full
+  /// repaint is forced. When false AND the runtime reports no frame work,
+  /// the front buffer is still exact and the host may skip the frame.
+  bool needsRender(CellSize size) {
+    final front = _frontBuffer;
+    return _requireFullRepaint || front == null || front.size != size;
+  }
+
   /// Prepares and paints one frame.
   ///
   /// Returns null when [size] is empty. The caller must pass the returned frame
@@ -72,6 +82,7 @@ final class TuiFrameLoop {
 
     paint(next);
 
+    _renderDamage?.takeVisualChange();
     final damage = TuiFrameDamage(
       fullRepaint: _requireFullRepaint,
       requiresFullDiff: _renderDamage?.takeRequiresFullDiff() ?? true,

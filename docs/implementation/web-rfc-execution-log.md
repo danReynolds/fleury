@@ -14204,3 +14204,59 @@ Verification: dart analyze clean on both packages; core 1611 VM, web 193
 VM + 145 Chrome tests passing (3 new: coalescing, action force-flush,
 plus migrated suites asserting via flush records/awaitSemanticIdle);
 page-test poll timeouts raised 2s -> 10s to de-flake full-suite runs.
+
+## 2026-06-10 (frame-path plan, Phase 3a: noop skip + scroll-shift reuse)
+
+### No-change frame skip (P-4: ACHIEVED)
+
+A frame request now renders only when there is frame work:
+
+- `RenderDamageTracker` gains a `visualChange` signal (set by every
+  layout/paint invalidation, including audited `markNeedsPaintOnly`,
+  published at the root via the existing walks); `BuildOwner` exposes
+  `hasScheduledBuilds`; `TuiRuntime.hasFrameWork` combines them;
+  `TuiFrameLoop.needsRender(size)` covers cold/resized/full-repaint pools.
+- Both hosts skip build/layout/paint/present when there is no work: the
+  native host writes no bytes; the web host records a
+  `WebFrameInstrumentation.skipped` frame (damage source `none`) so
+  captures keep counting frames. Semantic work owed by visually-inert
+  input still schedules a flush.
+- `noop-160x50`: steady p50 0.00ms, p95 1.00ms, max 4.4ms, 0/24 over
+  budget, 24/24 frames skipped (was p95 22.3ms with 9.6ms median paint).
+  P-4 (no-change frames < 1ms p95) met.
+
+### Scroll-shift reuse (shared detection, DOM row moves)
+
+- The ANSI renderer's scroll-up detection moved to a shared core module
+  (`scroll_detection.dart`: `screenDiffStats`,
+  `detectBeneficialScrollUp`, `rowsEqual`), exported via
+  `fleury_host.dart`; the ANSI path delegates (byte-equivalence suite
+  unchanged: 300-frame oracle green). One detector now drives both
+  targets' scroll behavior.
+- `FramePresentationPlanner` runs the detector on full-dirty frames and
+  emits `scrollUpRows` + residual-row span models only;
+  `plan.damage.dirtyRows` stays the TRUE dirty set so semantic
+  coverage/diff consumers remain exact. `DomGridSurface` MOVES its first
+  N retained row elements to the bottom (document order = position),
+  renumbers `data-row`, and rebuilds only residual rows.
+- Unit-proven: a shifted frame produces `scrollUpRows: 1`, one residual
+  row model, `rowsReplaced: 1`, and the moved element survives by
+  identity.
+
+### Measured (32 frames, warmup 8, vs the 2026-06-10-deferred-semantics
+### baseline median p95)
+
+- noop: 22.3 -> 1.0 p95 (skip).
+- dirty-row: 27.3 -> 15.9 p95, 1/24 over — at the 16.67ms gate.
+- full-frame-churn: 201.4 -> 105.1 p95 (one 608ms GC outlier).
+- scroll-row-churn: 227.0 -> 92.7 p95. NOTE: detection did not fire on
+  this scenario (median rowsReplaced 50) — its churn is not a clean
+  shift; the win came from the cheaper pipeline. Median runtimeBuild
+  (16.3ms) now dominates scroll: the remaining work is build-side
+  (recycling) and Phase 4 allocation, plus a scenario-shape
+  investigation for detection coverage.
+
+Verification: analyze clean; core 1613 VM + web 195 VM + 149 Chrome
+tests passing (new: needsRender/visual-change consumption, web skip
+record, planner scroll detection + non-scroll pruning, DOM row-move
+identity).

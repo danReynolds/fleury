@@ -534,6 +534,42 @@ Future<TuiSurfaceHost> runTuiSurface(
       frameLoop.resetBuffers();
     }
 
+    if (!metricsChanged &&
+        !frameLoop.needsRender(currentSize) &&
+        !runtime.hasFrameWork) {
+      // No-change frame: nothing rebuilt, nothing invalidated, buffers warm.
+      // Skip build/layout/paint/present entirely — the committed frame is
+      // still exact. Semantic work may still be owed (e.g. dispatched input
+      // that changed no visuals keeps the conservative rebuild contract).
+      if (semanticPresenter != null &&
+          semanticsOwner != null &&
+          (semanticDirty || runtime.semanticDirtyTracker.hasDirt)) {
+        coalescedFramesSinceFlush += 1;
+        if (!semanticFlushScheduled) {
+          semanticFlushScheduled = true;
+          semanticScheduleLatency
+            ..reset()
+            ..start();
+          semanticScheduler!.schedule(runScheduledSemanticFlush);
+        }
+      }
+      runtime.flushPostFrameCallbacks();
+      totalFrameStopwatch.stop();
+      instrumentation.recordFrame(
+        WebFrameInstrumentation.skipped(
+          reason: reason,
+          viewportSize: currentSize,
+          semanticNodeCount: semanticsOwner?.currentTree?.nodeCount ?? 0,
+          semanticFallbackNodeCount:
+              lastSemanticCoverageAudit.fallbackNodeCount,
+          semanticUncoveredCellCount:
+              lastSemanticCoverageAudit.uncoveredCellCount,
+          totalFrameTime: totalFrameStopwatch.elapsed,
+        ),
+      );
+      return;
+    }
+
     var runtimeBuildTime = Duration.zero;
     var runtimeLayoutTime = Duration.zero;
     var runtimePaintTime = Duration.zero;

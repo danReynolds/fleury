@@ -1059,6 +1059,9 @@ class BuildOwner {
     return mountRoot(newRoot);
   }
 
+  /// Whether any element is waiting to rebuild.
+  bool get hasScheduledBuilds => _dirtyElements.isNotEmpty;
+
   void scheduleBuildFor(Element element) {
     final wasEmpty = _dirtyElements.isEmpty;
     _dirtyElements.add(element);

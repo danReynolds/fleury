@@ -2,6 +2,35 @@ import 'package:fleury/fleury_host.dart';
 import 'package:test/test.dart';
 
 void main() {
+  group('needsRender', () {
+    test('cold pool and size changes need a render; warm pool does not', () {
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
+      const size = CellSize(4, 2);
+      expect(loop.needsRender(size), isTrue);
+
+      final frame = loop.render(size: size, paint: (_) {})!;
+      loop.commit(frame);
+      expect(loop.needsRender(size), isFalse);
+      expect(loop.needsRender(const CellSize(5, 2)), isTrue);
+
+      loop.markFullRepaint();
+      expect(loop.needsRender(size), isTrue);
+    });
+
+    test('render consumes the visual-change signal', () {
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
+      const size = CellSize(4, 2);
+      damage.recordVisualChange();
+      expect(damage.hasVisualChange, isTrue);
+
+      final frame = loop.render(size: size, paint: (_) {})!;
+      loop.commit(frame);
+      expect(damage.hasVisualChange, isFalse);
+    });
+  });
+
   const size = CellSize(5, 2);
 
   group('TuiFrameLoop', () {
