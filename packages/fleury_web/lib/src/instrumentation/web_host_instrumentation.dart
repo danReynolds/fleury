@@ -9,6 +9,11 @@ const double defaultWebFrameBudgetMs = 16.67;
 /// Receives structured per-frame data from the retained DOM web host.
 abstract interface class WebHostInstrumentation {
   void recordFrame(WebFrameInstrumentation frame);
+
+  /// Receives one deferred semantic flush (Phase 2: semantics run off the
+  /// visual frame, so their cost and latency are recorded separately from
+  /// [recordFrame]).
+  void recordSemanticFlush(WebSemanticFlushInstrumentation flush);
 }
 
 /// Default instrumentation sink used when callers do not request records.
@@ -17,21 +22,34 @@ final class NoopWebHostInstrumentation implements WebHostInstrumentation {
 
   @override
   void recordFrame(WebFrameInstrumentation frame) {}
+
+  @override
+  void recordSemanticFlush(WebSemanticFlushInstrumentation flush) {}
 }
 
 /// In-memory instrumentation sink for tests and benchmark adapters.
 final class RecordingWebHostInstrumentation implements WebHostInstrumentation {
   final List<WebFrameInstrumentation> _frames = [];
+  final List<WebSemanticFlushInstrumentation> _semanticFlushes = [];
 
   List<WebFrameInstrumentation> get frames => List.unmodifiable(_frames);
+
+  List<WebSemanticFlushInstrumentation> get semanticFlushes =>
+      List.unmodifiable(_semanticFlushes);
 
   @override
   void recordFrame(WebFrameInstrumentation frame) {
     _frames.add(frame);
   }
 
+  @override
+  void recordSemanticFlush(WebSemanticFlushInstrumentation flush) {
+    _semanticFlushes.add(flush);
+  }
+
   void clear() {
     _frames.clear();
+    _semanticFlushes.clear();
   }
 
   WebInstrumentationSummary summarize({
@@ -51,7 +69,168 @@ final class RecordingWebHostInstrumentation implements WebHostInstrumentation {
       'kind': 'fleuryWebFrameCapture',
       'frameBudgetMs': frameBudgetMs,
       'frames': [for (final frame in _frames) frame.toJson()],
+      'semanticFlushes': [for (final flush in _semanticFlushes) flush.toJson()],
       'summary': summarize(frameBudgetMs: frameBudgetMs).toJson(),
+      'semanticFlushSummary': WebSemanticFlushSummary.fromFlushes(
+        _semanticFlushes,
+      ).toJson(),
+    };
+  }
+}
+
+/// One deferred semantic flush's timing and count data.
+///
+/// A flush covers every visual frame presented since the previous flush
+/// ([coalescedFrameCount]); [scheduleLatency] is the time from the schedule
+/// request (the first contributing frame's commit) to the flush starting.
+final class WebSemanticFlushInstrumentation {
+  const WebSemanticFlushInstrumentation({
+    required this.reason,
+    required this.coalescedFrameCount,
+    required this.scheduleLatency,
+    required this.retainedOutput,
+    required this.semanticNodeCount,
+    required this.semanticAddedNodeCount,
+    required this.semanticRemovedNodeCount,
+    required this.semanticUpdatedNodeCount,
+    this.semanticDomCreatedElementCount = 0,
+    this.semanticDomReusedElementCount = 0,
+    this.semanticDomReplacedElementCount = 0,
+    required this.semanticFallbackNodeCount,
+    required this.semanticUncoveredCellCount,
+    this.semanticTreeBuildTime = Duration.zero,
+    this.semanticCoverageTime = Duration.zero,
+    this.semanticDiffTime = Duration.zero,
+    this.semanticPresenterTime = Duration.zero,
+    this.semanticFocusSyncTime = Duration.zero,
+    required this.totalFlushTime,
+  });
+
+  factory WebSemanticFlushInstrumentation.fromJson(Map<String, Object?> json) {
+    return WebSemanticFlushInstrumentation(
+      reason: _readString(json, 'reason'),
+      coalescedFrameCount: _readInt(json, 'coalescedFrameCount'),
+      scheduleLatency: _readMicros(json, 'scheduleLatencyMicros'),
+      retainedOutput: _readBool(json, 'retainedOutput'),
+      semanticNodeCount: _readInt(json, 'semanticNodeCount'),
+      semanticAddedNodeCount: _readInt(json, 'semanticAddedNodeCount'),
+      semanticRemovedNodeCount: _readInt(json, 'semanticRemovedNodeCount'),
+      semanticUpdatedNodeCount: _readInt(json, 'semanticUpdatedNodeCount'),
+      semanticDomCreatedElementCount: _readInt(
+        json,
+        'semanticDomCreatedElementCount',
+      ),
+      semanticDomReusedElementCount: _readInt(
+        json,
+        'semanticDomReusedElementCount',
+      ),
+      semanticDomReplacedElementCount: _readInt(
+        json,
+        'semanticDomReplacedElementCount',
+      ),
+      semanticFallbackNodeCount: _readInt(json, 'semanticFallbackNodeCount'),
+      semanticUncoveredCellCount: _readInt(json, 'semanticUncoveredCellCount'),
+      semanticTreeBuildTime: _readMicros(json, 'semanticTreeBuildMicros'),
+      semanticCoverageTime: _readMicros(json, 'semanticCoverageMicros'),
+      semanticDiffTime: _readMicros(json, 'semanticDiffMicros'),
+      semanticPresenterTime: _readMicros(json, 'semanticPresenterMicros'),
+      semanticFocusSyncTime: _readMicros(json, 'semanticFocusSyncMicros'),
+      totalFlushTime: _readMicros(json, 'totalFlushMicros'),
+    );
+  }
+
+  final String reason;
+  final int coalescedFrameCount;
+  final Duration scheduleLatency;
+  final bool retainedOutput;
+  final int semanticNodeCount;
+  final int semanticAddedNodeCount;
+  final int semanticRemovedNodeCount;
+  final int semanticUpdatedNodeCount;
+  final int semanticDomCreatedElementCount;
+  final int semanticDomReusedElementCount;
+  final int semanticDomReplacedElementCount;
+  final int semanticFallbackNodeCount;
+  final int semanticUncoveredCellCount;
+  final Duration semanticTreeBuildTime;
+  final Duration semanticCoverageTime;
+  final Duration semanticDiffTime;
+  final Duration semanticPresenterTime;
+  final Duration semanticFocusSyncTime;
+  final Duration totalFlushTime;
+
+  /// Schedule latency plus the flush's own duration: the end-to-end time
+  /// from "semantic dirt committed" to "assistive DOM updated".
+  Duration get presentationLatency => scheduleLatency + totalFlushTime;
+
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'reason': reason,
+      'coalescedFrameCount': coalescedFrameCount,
+      'scheduleLatencyMicros': scheduleLatency.inMicroseconds,
+      'retainedOutput': retainedOutput,
+      'semanticNodeCount': semanticNodeCount,
+      'semanticAddedNodeCount': semanticAddedNodeCount,
+      'semanticRemovedNodeCount': semanticRemovedNodeCount,
+      'semanticUpdatedNodeCount': semanticUpdatedNodeCount,
+      'semanticDomCreatedElementCount': semanticDomCreatedElementCount,
+      'semanticDomReusedElementCount': semanticDomReusedElementCount,
+      'semanticDomReplacedElementCount': semanticDomReplacedElementCount,
+      'semanticFallbackNodeCount': semanticFallbackNodeCount,
+      'semanticUncoveredCellCount': semanticUncoveredCellCount,
+      'semanticTreeBuildMicros': semanticTreeBuildTime.inMicroseconds,
+      'semanticCoverageMicros': semanticCoverageTime.inMicroseconds,
+      'semanticDiffMicros': semanticDiffTime.inMicroseconds,
+      'semanticPresenterMicros': semanticPresenterTime.inMicroseconds,
+      'semanticFocusSyncMicros': semanticFocusSyncTime.inMicroseconds,
+      'totalFlushMicros': totalFlushTime.inMicroseconds,
+      'presentationLatencyMicros': presentationLatency.inMicroseconds,
+    };
+  }
+}
+
+/// Aggregates over a capture's semantic flushes.
+final class WebSemanticFlushSummary {
+  const WebSemanticFlushSummary({
+    required this.flushCount,
+    required this.coalescedFrameTotal,
+    required this.retainedOutputCount,
+    required this.presentationLatency,
+    required this.totalFlushTime,
+  });
+
+  factory WebSemanticFlushSummary.fromFlushes(
+    List<WebSemanticFlushInstrumentation> flushes,
+  ) {
+    return WebSemanticFlushSummary(
+      flushCount: flushes.length,
+      coalescedFrameTotal: flushes.fold(
+        0,
+        (sum, flush) => sum + flush.coalescedFrameCount,
+      ),
+      retainedOutputCount: flushes.where((f) => f.retainedOutput).length,
+      presentationLatency: WebMetricSummary.fromDurations(
+        flushes.map((f) => f.presentationLatency),
+      ),
+      totalFlushTime: WebMetricSummary.fromDurations(
+        flushes.map((f) => f.totalFlushTime),
+      ),
+    );
+  }
+
+  final int flushCount;
+  final int coalescedFrameTotal;
+  final int retainedOutputCount;
+  final WebMetricSummary presentationLatency;
+  final WebMetricSummary totalFlushTime;
+
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'flushCount': flushCount,
+      'coalescedFrameTotal': coalescedFrameTotal,
+      'retainedOutputCount': retainedOutputCount,
+      'presentationLatencyMs': presentationLatency.toJson(),
+      'totalFlushMs': totalFlushTime.toJson(),
     };
   }
 }

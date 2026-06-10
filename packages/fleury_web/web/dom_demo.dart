@@ -49,6 +49,9 @@ final class _ReadyMarkerInstrumentation implements WebHostInstrumentation {
   void recordFrame(WebFrameInstrumentation frame) {
     if (!_firstFrame.isCompleted) _firstFrame.complete();
   }
+
+  @override
+  void recordSemanticFlush(WebSemanticFlushInstrumentation flush) {}
 }
 
 final class _DomDemoApp extends StatefulWidget {

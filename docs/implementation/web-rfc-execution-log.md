@@ -14134,3 +14134,73 @@ Phase 1 exit gate met: per-runtime trackers, isolation proven on both
 targets, suites green, benchmarks within noise. Next: Phase 2 (semantics
 off the visual frame) per the plan; Phase 1's cross-frame accumulation
 contract is in place for it.
+
+## 2026-06-10 (frame-path plan, Phase 2)
+
+Semantic presentation no longer runs inside the rAF visual frame (plan
+Phase 2, A-1).
+
+### Architecture
+
+- The visual frame ends at present/commit/caret-sync. Semantic work
+  (tree build/patch, coverage, focus sync, diff, presenter) moved into a
+  deferred flush scheduled through an injectable `SemanticFlushScheduler`
+  (default: macrotask via `TimerSemanticFlushScheduler`, optional
+  min-interval; tests inject manual schedulers or use
+  `TuiSurfaceHost.awaitSemanticIdle`).
+- Dirty state accumulates across frames (Phase 1's tracker contract):
+  semantic dirt in the per-runtime tracker, visually changed rows in a
+  pending-coverage set gated by the precise cell-equality check (plans may
+  be conservative; identical repaints schedule nothing — noop captures
+  record zero flushes).
+- One flush covers all frames since the previous flush
+  (`coalescedFrameCount`), reads the latest element tree + committed
+  buffer, and presents only the latest state (unit-proven: 3 frames -> 1
+  flush presenting only the final state).
+- Force-flush before semantic action dispatch keeps actions resolving
+  against the tree assistive technology actually saw; an activation's node
+  projection is restored after tree sync without stealing later browser
+  focus ownership (`WebFocusCoordinator.restoreSemanticActivationNode`).
+- The retained-vs-full divergence assertion moved to the flush.
+  Instrumentation gains per-flush records
+  (`WebSemanticFlushInstrumentation`: schedule latency, coalesced frames,
+  pipeline slices) and a capture-level `semanticFlushSummary`; the
+  benchmark harness awaits semantic idle per step.
+
+### Results (median-of-3 capture p95 ms, pre -> post deferral)
+
+dirty-row 52.8 -> 27.3 (-48%); single-dirty-cell 61.0 -> 28.3 (-54%);
+large 47.8 -> 27.5 (-42%); full-frame-churn 385.9 -> 201.4 (-48%);
+resize-burst 630.0 -> 326.4 (-48%); scroll-row-churn 393.4 -> 227.0
+(-42%); stress 487.7 -> 348.8 (-28%). `semanticApplyP95Ms` is 0.0 in
+every scenario — no semantic slice remains in any visual frame.
+Median over-budget rates dropped suite-wide (e.g. stress 100% -> 68.8%,
+dirty-row 18.8% -> 9.4%).
+
+Three scenarios moved against the trend on tails (text-input-burst
+111.6 -> 171.0, cursor-blink 112.4 -> 131.4, normal 261.7 -> 282.2):
+their growth is entirely in `runtimeBuildP95Ms`/`runtimePaintP95Ms`
+(e.g. text-input build 7.7 -> 20.8, paint 9.0 -> 41.8) with semanticApply
+at 0 — flush allocations between frames shift GC pauses into subsequent
+frames' build/paint. That is Phase 4 (allocation/GC) territory, not a
+deferral defect.
+
+### P-2 status (flush presentation latency)
+
+- noop: zero flushes (perfect skip). Row-local/moderate: p50 2-12ms,
+  p95 11-39ms — well under the 100ms budget.
+- Heavy tier exceeds it (full-frame-churn p95 495ms, stress 313ms,
+  normal 195ms): each flush still does a full `SemanticTree.fromElement`
+  rebuild + full presenter pass on large trees. Cutting that cost is
+  Phase 3/4 work (and the harness forces a flush per step, so capture
+  latencies are upper bounds — real bursts coalesce).
+- Per-capture maxima include first-flush warmup outliers (e.g.
+  text-input max 5.4s on its first flush); steady p95 is the gate metric.
+
+New baseline: `profiling/web/baselines/2026-06-10-deferred-semantics`
+(11 scenarios x 3 runs, warmup 8, candidate thresholds written).
+
+Verification: dart analyze clean on both packages; core 1611 VM, web 193
+VM + 145 Chrome tests passing (3 new: coalescing, action force-flush,
+plus migrated suites asserting via flush records/awaitSemanticIdle);
+page-test poll timeouts raised 2s -> 10s to de-flake full-suite runs.

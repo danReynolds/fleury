@@ -1,0 +1,3618 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryWebFrameScoreboard",
+  "inputDir": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics",
+  "generatedAt": "2026-06-10T16:36:57.976526Z",
+  "minRuns": 3,
+  "steadySkipFrames": 0,
+  "requireComparableRunEnvironment": true,
+  "scenarioCount": 11,
+  "runCount": 33,
+  "strictPass": true,
+  "scenarios": [
+    {
+      "id": "cursor-blink-80x24",
+      "label": "80x24 cursor blink",
+      "runCount": 3,
+      "sufficientRunCount": true,
+      "requireComparableRunEnvironment": true,
+      "runEnvironmentComparable": true,
+      "runEnvironmentSignatureCount": 1,
+      "missingRunEnvironmentCount": 0,
+      "runEnvironmentSignatures": {
+        "{\"chromeBrowser\":\"Chrome/149.0.7827.102\",\"chromeUserAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36\",\"devtoolsProtocolVersion\":\"1.3\",\"dartVersion\":\"3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \\\"macos_x64\\\"\",\"operatingSystem\":\"macos\",\"operatingSystemVersion\":\"Version 26.2 (Build 25C56)\",\"headless\":true,\"requestedFrames\":24,\"warmupFrames\":8,\"frameBudgetMs\":16.67,\"requestedSteps\":24}": 3
+      },
+      "latestRunEnvironment": {
+        "schemaVersion": 1,
+        "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "chromeBrowser": "Chrome/149.0.7827.102",
+        "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+        "devtoolsProtocolVersion": "1.3",
+        "v8Version": "14.9.207.27",
+        "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+        "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+        "operatingSystem": "macos",
+        "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+        "headless": true,
+        "requestedFrames": 24,
+        "requestedSteps": 24,
+        "warmupFrames": 8,
+        "frameBudgetMs": 16.67,
+        "semanticsEnabled": true
+      },
+      "frameCount": 72,
+      "steadySkipFrames": 0,
+      "steadyFrameCount": 72,
+      "requestedStepCount": 72,
+      "extraFrameCount": 0,
+      "framesPerStep": {
+        "median": 1.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "latestCapture": "cursor-blink-80x24-run-3.json",
+      "latestCapturedAt": "2026-06-10T16:33:38.851Z",
+      "totalFrameP95Ms": {
+        "median": 131.401,
+        "min": 113.0,
+        "max": 136.1
+      },
+      "runtimeRenderP95Ms": {
+        "median": 119.2,
+        "min": 100.9,
+        "max": 121.0
+      },
+      "runtimeBuildP95Ms": {
+        "median": 118.301,
+        "min": 100.4,
+        "max": 119.899
+      },
+      "runtimeLayoutP95Ms": {
+        "median": 0.1,
+        "min": 0.0,
+        "max": 0.101
+      },
+      "runtimePaintP95Ms": {
+        "median": 5.3,
+        "min": 4.5,
+        "max": 6.0
+      },
+      "dirtyRowDiffP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "spanBuildP95Ms": {
+        "median": 3.3,
+        "min": 1.899,
+        "max": 3.3
+      },
+      "domApplyP95Ms": {
+        "median": 8.0,
+        "min": 7.4,
+        "max": 13.0
+      },
+      "semanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "overBudgetPercent": {
+        "median": 41.666666666666664,
+        "min": 33.333333333333336,
+        "max": 45.833333333333336
+      },
+      "steadyTotalFrameP95Ms": {
+        "median": 131.401,
+        "min": 113.0,
+        "max": 136.1
+      },
+      "steadySemanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "steadyOverBudgetPercent": {
+        "median": 41.666666666666664,
+        "min": 33.333333333333336,
+        "max": 45.833333333333336
+      },
+      "browserLayoutDurationMs": {
+        "median": 1060.066,
+        "min": 893.267,
+        "max": 1244.0929999999998
+      },
+      "browserRecalcStyleDurationMs": {
+        "median": 138.91500000000002,
+        "min": 123.811,
+        "max": 184.401
+      },
+      "browserScriptDurationMs": {
+        "median": 10279.615,
+        "min": 8678.666,
+        "max": 10621.975
+      },
+      "browserTaskDurationMs": {
+        "median": 13442.921999999999,
+        "min": 12236.623,
+        "max": 14568.411
+      },
+      "browserJsHeapUsedBytes": {
+        "median": 5805252.0,
+        "min": 5069760.0,
+        "max": 5843916.0
+      },
+      "browserJsHeapTotalBytes": {
+        "median": 8650752.0,
+        "min": 8126464.0,
+        "max": 11534336.0
+      },
+      "browserDomDocumentCount": {
+        "median": 4.0,
+        "min": 4.0,
+        "max": 4.0
+      },
+      "browserDomNodeCount": {
+        "median": 1825.0,
+        "min": 1825.0,
+        "max": 1825.0
+      },
+      "browserJsEventListenerCount": {
+        "median": 88.0,
+        "min": 88.0,
+        "max": 88.0
+      },
+      "semanticUncoveredCellsMax": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "dominantP95Slices": {
+        "runtimeBuildMs": 3
+      },
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/cursor-blink-80x24-run-1.json",
+          "file": "cursor-blink-80x24-run-1.json",
+          "capturedAt": "2026-06-10T16:32:43.003Z",
+          "frameCount": 24,
+          "steadyFrameCount": 24,
+          "requestedStepCount": 24,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 113.0,
+          "runtimeRenderP95Ms": 100.9,
+          "runtimeBuildP95Ms": 100.4,
+          "runtimeLayoutP95Ms": 0.101,
+          "runtimePaintP95Ms": 5.3,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 1.899,
+          "domApplyP95Ms": 8.0,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 33.333333333333336,
+          "steadyTotalFrameP95Ms": 113.0,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 33.333333333333336,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimeBuildMs",
+          "browserMetrics": {
+            "layoutDurationMs": 1060.066,
+            "recalcStyleDurationMs": 184.401,
+            "scriptDurationMs": 10279.615,
+            "taskDurationMs": 13442.921999999999,
+            "jsHeapUsedBytes": 5843916.0,
+            "jsHeapTotalBytes": 8126464.0,
+            "domDocumentCount": 4,
+            "domNodeCount": 1825,
+            "jsEventListenerCount": 88
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 24,
+            "requestedSteps": 24,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/cursor-blink-80x24-run-2.json",
+          "file": "cursor-blink-80x24-run-2.json",
+          "capturedAt": "2026-06-10T16:33:09.502Z",
+          "frameCount": 24,
+          "steadyFrameCount": 24,
+          "requestedStepCount": 24,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 131.401,
+          "runtimeRenderP95Ms": 121.0,
+          "runtimeBuildP95Ms": 119.899,
+          "runtimeLayoutP95Ms": 0.1,
+          "runtimePaintP95Ms": 4.5,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 3.3,
+          "domApplyP95Ms": 7.4,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 45.833333333333336,
+          "steadyTotalFrameP95Ms": 131.401,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 45.833333333333336,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimeBuildMs",
+          "browserMetrics": {
+            "layoutDurationMs": 1244.0929999999998,
+            "recalcStyleDurationMs": 138.91500000000002,
+            "scriptDurationMs": 10621.975,
+            "taskDurationMs": 14568.411,
+            "jsHeapUsedBytes": 5069760.0,
+            "jsHeapTotalBytes": 8650752.0,
+            "domDocumentCount": 4,
+            "domNodeCount": 1825,
+            "jsEventListenerCount": 88
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 24,
+            "requestedSteps": 24,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/cursor-blink-80x24-run-3.json",
+          "file": "cursor-blink-80x24-run-3.json",
+          "capturedAt": "2026-06-10T16:33:38.851Z",
+          "frameCount": 24,
+          "steadyFrameCount": 24,
+          "requestedStepCount": 24,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 136.1,
+          "runtimeRenderP95Ms": 119.2,
+          "runtimeBuildP95Ms": 118.301,
+          "runtimeLayoutP95Ms": 0.0,
+          "runtimePaintP95Ms": 6.0,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 3.3,
+          "domApplyP95Ms": 13.0,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 41.666666666666664,
+          "steadyTotalFrameP95Ms": 136.1,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 41.666666666666664,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimeBuildMs",
+          "browserMetrics": {
+            "layoutDurationMs": 893.267,
+            "recalcStyleDurationMs": 123.811,
+            "scriptDurationMs": 8678.666,
+            "taskDurationMs": 12236.623,
+            "jsHeapUsedBytes": 5805252.0,
+            "jsHeapTotalBytes": 11534336.0,
+            "domDocumentCount": 4,
+            "domNodeCount": 1825,
+            "jsEventListenerCount": 88
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 24,
+            "requestedSteps": 24,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        }
+      ],
+      "gates": [],
+      "strictPass": true
+    },
+    {
+      "id": "dirty-row-160x50",
+      "label": "160x50 dirty row",
+      "runCount": 3,
+      "sufficientRunCount": true,
+      "requireComparableRunEnvironment": true,
+      "runEnvironmentComparable": true,
+      "runEnvironmentSignatureCount": 1,
+      "missingRunEnvironmentCount": 0,
+      "runEnvironmentSignatures": {
+        "{\"chromeBrowser\":\"Chrome/149.0.7827.102\",\"chromeUserAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36\",\"devtoolsProtocolVersion\":\"1.3\",\"dartVersion\":\"3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \\\"macos_x64\\\"\",\"operatingSystem\":\"macos\",\"operatingSystemVersion\":\"Version 26.2 (Build 25C56)\",\"headless\":true,\"requestedFrames\":32,\"warmupFrames\":8,\"frameBudgetMs\":16.67,\"requestedSteps\":32}": 3
+      },
+      "latestRunEnvironment": {
+        "schemaVersion": 1,
+        "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "chromeBrowser": "Chrome/149.0.7827.102",
+        "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+        "devtoolsProtocolVersion": "1.3",
+        "v8Version": "14.9.207.27",
+        "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+        "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+        "operatingSystem": "macos",
+        "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+        "headless": true,
+        "requestedFrames": 32,
+        "requestedSteps": 32,
+        "warmupFrames": 8,
+        "frameBudgetMs": 16.67,
+        "semanticsEnabled": true
+      },
+      "frameCount": 96,
+      "steadySkipFrames": 0,
+      "steadyFrameCount": 96,
+      "requestedStepCount": 96,
+      "extraFrameCount": 0,
+      "framesPerStep": {
+        "median": 1.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "latestCapture": "dirty-row-160x50-run-3.json",
+      "latestCapturedAt": "2026-06-10T16:28:56.788Z",
+      "totalFrameP95Ms": {
+        "median": 27.299,
+        "min": 24.5,
+        "max": 33.6
+      },
+      "runtimeRenderP95Ms": {
+        "median": 19.9,
+        "min": 19.699,
+        "max": 23.401
+      },
+      "runtimeBuildP95Ms": {
+        "median": 8.3,
+        "min": 7.8,
+        "max": 12.7
+      },
+      "runtimeLayoutP95Ms": {
+        "median": 2.4,
+        "min": 0.1,
+        "max": 9.9
+      },
+      "runtimePaintP95Ms": {
+        "median": 11.699,
+        "min": 8.6,
+        "max": 11.899
+      },
+      "dirtyRowDiffP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "spanBuildP95Ms": {
+        "median": 0.7,
+        "min": 0.199,
+        "max": 1.201
+      },
+      "domApplyP95Ms": {
+        "median": 1.0,
+        "min": 0.8,
+        "max": 1.8
+      },
+      "semanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "overBudgetPercent": {
+        "median": 9.375,
+        "min": 9.375,
+        "max": 9.375
+      },
+      "steadyTotalFrameP95Ms": {
+        "median": 27.299,
+        "min": 24.5,
+        "max": 33.6
+      },
+      "steadySemanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "steadyOverBudgetPercent": {
+        "median": 9.375,
+        "min": 9.375,
+        "max": 9.375
+      },
+      "browserLayoutDurationMs": {
+        "median": 592.592,
+        "min": 564.174,
+        "max": 670.271
+      },
+      "browserRecalcStyleDurationMs": {
+        "median": 116.675,
+        "min": 109.789,
+        "max": 123.032
+      },
+      "browserScriptDurationMs": {
+        "median": 7045.243,
+        "min": 6903.206,
+        "max": 7817.093
+      },
+      "browserTaskDurationMs": {
+        "median": 9811.985,
+        "min": 9577.759,
+        "max": 11452.036
+      },
+      "browserJsHeapUsedBytes": {
+        "median": 5941848.0,
+        "min": 5940748.0,
+        "max": 6043360.0
+      },
+      "browserJsHeapTotalBytes": {
+        "median": 10485760.0,
+        "min": 9175040.0,
+        "max": 10485760.0
+      },
+      "browserDomDocumentCount": {
+        "median": 4.0,
+        "min": 4.0,
+        "max": 4.0
+      },
+      "browserDomNodeCount": {
+        "median": 462.0,
+        "min": 462.0,
+        "max": 462.0
+      },
+      "browserJsEventListenerCount": {
+        "median": 140.0,
+        "min": 140.0,
+        "max": 140.0
+      },
+      "semanticUncoveredCellsMax": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "dominantP95Slices": {
+        "runtimeBuildMs": 1,
+        "runtimePaintMs": 2
+      },
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/dirty-row-160x50-run-1.json",
+          "file": "dirty-row-160x50-run-1.json",
+          "capturedAt": "2026-06-10T16:28:06.438Z",
+          "frameCount": 32,
+          "steadyFrameCount": 32,
+          "requestedStepCount": 32,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 24.5,
+          "runtimeRenderP95Ms": 19.9,
+          "runtimeBuildP95Ms": 12.7,
+          "runtimeLayoutP95Ms": 9.9,
+          "runtimePaintP95Ms": 8.6,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 0.7,
+          "domApplyP95Ms": 0.8,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 9.375,
+          "steadyTotalFrameP95Ms": 24.5,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 9.375,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimeBuildMs",
+          "browserMetrics": {
+            "layoutDurationMs": 592.592,
+            "recalcStyleDurationMs": 123.032,
+            "scriptDurationMs": 7045.243,
+            "taskDurationMs": 9811.985,
+            "jsHeapUsedBytes": 6043360.0,
+            "jsHeapTotalBytes": 10485760.0,
+            "domDocumentCount": 4,
+            "domNodeCount": 462,
+            "jsEventListenerCount": 140
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 32,
+            "requestedSteps": 32,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/dirty-row-160x50-run-2.json",
+          "file": "dirty-row-160x50-run-2.json",
+          "capturedAt": "2026-06-10T16:28:31.008Z",
+          "frameCount": 32,
+          "steadyFrameCount": 32,
+          "requestedStepCount": 32,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 27.299,
+          "runtimeRenderP95Ms": 19.699,
+          "runtimeBuildP95Ms": 8.3,
+          "runtimeLayoutP95Ms": 0.1,
+          "runtimePaintP95Ms": 11.899,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 1.201,
+          "domApplyP95Ms": 1.0,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 9.375,
+          "steadyTotalFrameP95Ms": 27.299,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 9.375,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimePaintMs",
+          "browserMetrics": {
+            "layoutDurationMs": 564.174,
+            "recalcStyleDurationMs": 116.675,
+            "scriptDurationMs": 6903.206,
+            "taskDurationMs": 9577.759,
+            "jsHeapUsedBytes": 5941848.0,
+            "jsHeapTotalBytes": 9175040.0,
+            "domDocumentCount": 4,
+            "domNodeCount": 462,
+            "jsEventListenerCount": 140
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 32,
+            "requestedSteps": 32,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/dirty-row-160x50-run-3.json",
+          "file": "dirty-row-160x50-run-3.json",
+          "capturedAt": "2026-06-10T16:28:56.788Z",
+          "frameCount": 32,
+          "steadyFrameCount": 32,
+          "requestedStepCount": 32,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 33.6,
+          "runtimeRenderP95Ms": 23.401,
+          "runtimeBuildP95Ms": 7.8,
+          "runtimeLayoutP95Ms": 2.4,
+          "runtimePaintP95Ms": 11.699,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 0.199,
+          "domApplyP95Ms": 1.8,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 9.375,
+          "steadyTotalFrameP95Ms": 33.6,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 9.375,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimePaintMs",
+          "browserMetrics": {
+            "layoutDurationMs": 670.271,
+            "recalcStyleDurationMs": 109.789,
+            "scriptDurationMs": 7817.093,
+            "taskDurationMs": 11452.036,
+            "jsHeapUsedBytes": 5940748.0,
+            "jsHeapTotalBytes": 10485760.0,
+            "domDocumentCount": 4,
+            "domNodeCount": 462,
+            "jsEventListenerCount": 140
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 32,
+            "requestedSteps": 32,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        }
+      ],
+      "gates": [],
+      "strictPass": true
+    },
+    {
+      "id": "full-frame-churn-160x50",
+      "label": "160x50 full-frame churn",
+      "runCount": 3,
+      "sufficientRunCount": true,
+      "requireComparableRunEnvironment": true,
+      "runEnvironmentComparable": true,
+      "runEnvironmentSignatureCount": 1,
+      "missingRunEnvironmentCount": 0,
+      "runEnvironmentSignatures": {
+        "{\"chromeBrowser\":\"Chrome/149.0.7827.102\",\"chromeUserAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36\",\"devtoolsProtocolVersion\":\"1.3\",\"dartVersion\":\"3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \\\"macos_x64\\\"\",\"operatingSystem\":\"macos\",\"operatingSystemVersion\":\"Version 26.2 (Build 25C56)\",\"headless\":true,\"requestedFrames\":24,\"warmupFrames\":8,\"frameBudgetMs\":16.67,\"requestedSteps\":24}": 3
+      },
+      "latestRunEnvironment": {
+        "schemaVersion": 1,
+        "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "chromeBrowser": "Chrome/149.0.7827.102",
+        "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+        "devtoolsProtocolVersion": "1.3",
+        "v8Version": "14.9.207.27",
+        "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+        "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+        "operatingSystem": "macos",
+        "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+        "headless": true,
+        "requestedFrames": 24,
+        "requestedSteps": 24,
+        "warmupFrames": 8,
+        "frameBudgetMs": 16.67,
+        "semanticsEnabled": true
+      },
+      "frameCount": 72,
+      "steadySkipFrames": 0,
+      "steadyFrameCount": 72,
+      "requestedStepCount": 72,
+      "extraFrameCount": 0,
+      "framesPerStep": {
+        "median": 1.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "latestCapture": "full-frame-churn-160x50-run-3.json",
+      "latestCapturedAt": "2026-06-10T16:30:37.102Z",
+      "totalFrameP95Ms": {
+        "median": 201.399,
+        "min": 195.201,
+        "max": 363.801
+      },
+      "runtimeRenderP95Ms": {
+        "median": 164.399,
+        "min": 145.799,
+        "max": 216.599
+      },
+      "runtimeBuildP95Ms": {
+        "median": 104.199,
+        "min": 102.8,
+        "max": 119.4
+      },
+      "runtimeLayoutP95Ms": {
+        "median": 10.9,
+        "min": 0.1,
+        "max": 13.299
+      },
+      "runtimePaintP95Ms": {
+        "median": 19.2,
+        "min": 16.6,
+        "max": 57.3
+      },
+      "dirtyRowDiffP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "spanBuildP95Ms": {
+        "median": 28.9,
+        "min": 13.0,
+        "max": 37.5
+      },
+      "domApplyP95Ms": {
+        "median": 14.199,
+        "min": 11.299,
+        "max": 25.6
+      },
+      "semanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.099
+      },
+      "overBudgetPercent": {
+        "median": 66.66666666666667,
+        "min": 62.5,
+        "max": 70.83333333333333
+      },
+      "steadyTotalFrameP95Ms": {
+        "median": 201.399,
+        "min": 195.201,
+        "max": 363.801
+      },
+      "steadySemanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.099
+      },
+      "steadyOverBudgetPercent": {
+        "median": 66.66666666666667,
+        "min": 62.5,
+        "max": 70.83333333333333
+      },
+      "browserLayoutDurationMs": {
+        "median": 849.678,
+        "min": 832.934,
+        "max": 879.51
+      },
+      "browserRecalcStyleDurationMs": {
+        "median": 133.385,
+        "min": 126.39200000000001,
+        "max": 143.368
+      },
+      "browserScriptDurationMs": {
+        "median": 14879.376,
+        "min": 12588.925,
+        "max": 16427.381
+      },
+      "browserTaskDurationMs": {
+        "median": 19894.269,
+        "min": 17420.581,
+        "max": 20374.167
+      },
+      "browserJsHeapUsedBytes": {
+        "median": 7977988.0,
+        "min": 3807116.0,
+        "max": 8257536.0
+      },
+      "browserJsHeapTotalBytes": {
+        "median": 25690112.0,
+        "min": 25427968.0,
+        "max": 27525120.0
+      },
+      "browserDomDocumentCount": {
+        "median": 1.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "browserDomNodeCount": {
+        "median": 1153.0,
+        "min": 888.0,
+        "max": 1188.0
+      },
+      "browserJsEventListenerCount": {
+        "median": 140.0,
+        "min": 0.0,
+        "max": 140.0
+      },
+      "semanticUncoveredCellsMax": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "dominantP95Slices": {
+        "runtimeBuildMs": 3
+      },
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/full-frame-churn-160x50-run-1.json",
+          "file": "full-frame-churn-160x50-run-1.json",
+          "capturedAt": "2026-06-10T16:29:30.953Z",
+          "frameCount": 24,
+          "steadyFrameCount": 24,
+          "requestedStepCount": 24,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 195.201,
+          "runtimeRenderP95Ms": 145.799,
+          "runtimeBuildP95Ms": 102.8,
+          "runtimeLayoutP95Ms": 13.299,
+          "runtimePaintP95Ms": 16.6,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 13.0,
+          "domApplyP95Ms": 25.6,
+          "semanticApplyP95Ms": 0.099,
+          "overBudgetPercent": 70.83333333333333,
+          "steadyTotalFrameP95Ms": 195.201,
+          "steadySemanticApplyP95Ms": 0.099,
+          "steadyOverBudgetPercent": 70.83333333333333,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimeBuildMs",
+          "browserMetrics": {
+            "layoutDurationMs": 832.934,
+            "recalcStyleDurationMs": 133.385,
+            "scriptDurationMs": 14879.376,
+            "taskDurationMs": 19894.269,
+            "jsHeapUsedBytes": 8257536.0,
+            "jsHeapTotalBytes": 25690112.0,
+            "domDocumentCount": 1,
+            "domNodeCount": 1188,
+            "jsEventListenerCount": 140
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 24,
+            "requestedSteps": 24,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/full-frame-churn-160x50-run-2.json",
+          "file": "full-frame-churn-160x50-run-2.json",
+          "capturedAt": "2026-06-10T16:30:06.144Z",
+          "frameCount": 24,
+          "steadyFrameCount": 24,
+          "requestedStepCount": 24,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 201.399,
+          "runtimeRenderP95Ms": 164.399,
+          "runtimeBuildP95Ms": 119.4,
+          "runtimeLayoutP95Ms": 0.1,
+          "runtimePaintP95Ms": 19.2,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 37.5,
+          "domApplyP95Ms": 11.299,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 66.66666666666667,
+          "steadyTotalFrameP95Ms": 201.399,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 66.66666666666667,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimeBuildMs",
+          "browserMetrics": {
+            "layoutDurationMs": 849.678,
+            "recalcStyleDurationMs": 143.368,
+            "scriptDurationMs": 16427.381,
+            "taskDurationMs": 20374.167,
+            "jsHeapUsedBytes": 7977988.0,
+            "jsHeapTotalBytes": 27525120.0,
+            "domDocumentCount": 1,
+            "domNodeCount": 888,
+            "jsEventListenerCount": 140
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 24,
+            "requestedSteps": 24,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/full-frame-churn-160x50-run-3.json",
+          "file": "full-frame-churn-160x50-run-3.json",
+          "capturedAt": "2026-06-10T16:30:37.102Z",
+          "frameCount": 24,
+          "steadyFrameCount": 24,
+          "requestedStepCount": 24,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 363.801,
+          "runtimeRenderP95Ms": 216.599,
+          "runtimeBuildP95Ms": 104.199,
+          "runtimeLayoutP95Ms": 10.9,
+          "runtimePaintP95Ms": 57.3,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 28.9,
+          "domApplyP95Ms": 14.199,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 62.5,
+          "steadyTotalFrameP95Ms": 363.801,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 62.5,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimeBuildMs",
+          "browserMetrics": {
+            "layoutDurationMs": 879.51,
+            "recalcStyleDurationMs": 126.39200000000001,
+            "scriptDurationMs": 12588.925,
+            "taskDurationMs": 17420.581,
+            "jsHeapUsedBytes": 3807116.0,
+            "jsHeapTotalBytes": 25427968.0,
+            "domDocumentCount": 1,
+            "domNodeCount": 1153,
+            "jsEventListenerCount": 0
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 24,
+            "requestedSteps": 24,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        }
+      ],
+      "gates": [],
+      "strictPass": true
+    },
+    {
+      "id": "large-160x50",
+      "label": "160x50 large viewport",
+      "runCount": 3,
+      "sufficientRunCount": true,
+      "requireComparableRunEnvironment": true,
+      "runEnvironmentComparable": true,
+      "runEnvironmentSignatureCount": 1,
+      "missingRunEnvironmentCount": 0,
+      "runEnvironmentSignatures": {
+        "{\"chromeBrowser\":\"Chrome/149.0.7827.102\",\"chromeUserAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36\",\"devtoolsProtocolVersion\":\"1.3\",\"dartVersion\":\"3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \\\"macos_x64\\\"\",\"operatingSystem\":\"macos\",\"operatingSystemVersion\":\"Version 26.2 (Build 25C56)\",\"headless\":true,\"requestedFrames\":32,\"warmupFrames\":8,\"frameBudgetMs\":16.67,\"requestedSteps\":32}": 3
+      },
+      "latestRunEnvironment": {
+        "schemaVersion": 1,
+        "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "chromeBrowser": "Chrome/149.0.7827.102",
+        "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+        "devtoolsProtocolVersion": "1.3",
+        "v8Version": "14.9.207.27",
+        "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+        "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+        "operatingSystem": "macos",
+        "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+        "headless": true,
+        "requestedFrames": 32,
+        "requestedSteps": 32,
+        "warmupFrames": 8,
+        "frameBudgetMs": 16.67,
+        "semanticsEnabled": true
+      },
+      "frameCount": 96,
+      "steadySkipFrames": 0,
+      "steadyFrameCount": 96,
+      "requestedStepCount": 96,
+      "extraFrameCount": 0,
+      "framesPerStep": {
+        "median": 1.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "latestCapture": "large-160x50-run-3.json",
+      "latestCapturedAt": "2026-06-10T16:23:19.206Z",
+      "totalFrameP95Ms": {
+        "median": 27.5,
+        "min": 27.0,
+        "max": 27.9
+      },
+      "runtimeRenderP95Ms": {
+        "median": 19.799,
+        "min": 17.0,
+        "max": 25.799
+      },
+      "runtimeBuildP95Ms": {
+        "median": 9.1,
+        "min": 7.5,
+        "max": 12.201
+      },
+      "runtimeLayoutP95Ms": {
+        "median": 0.1,
+        "min": 0.0,
+        "max": 0.1
+      },
+      "runtimePaintP95Ms": {
+        "median": 8.9,
+        "min": 8.1,
+        "max": 19.0
+      },
+      "dirtyRowDiffP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "spanBuildP95Ms": {
+        "median": 0.101,
+        "min": 0.1,
+        "max": 0.101
+      },
+      "domApplyP95Ms": {
+        "median": 1.3,
+        "min": 0.201,
+        "max": 1.301
+      },
+      "semanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "overBudgetPercent": {
+        "median": 9.375,
+        "min": 9.375,
+        "max": 12.5
+      },
+      "steadyTotalFrameP95Ms": {
+        "median": 27.5,
+        "min": 27.0,
+        "max": 27.9
+      },
+      "steadySemanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "steadyOverBudgetPercent": {
+        "median": 9.375,
+        "min": 9.375,
+        "max": 12.5
+      },
+      "browserLayoutDurationMs": {
+        "median": 643.242,
+        "min": 602.9949999999999,
+        "max": 698.326
+      },
+      "browserRecalcStyleDurationMs": {
+        "median": 65.133,
+        "min": 52.497,
+        "max": 111.301
+      },
+      "browserScriptDurationMs": {
+        "median": 7377.896,
+        "min": 7064.817,
+        "max": 8416.758
+      },
+      "browserTaskDurationMs": {
+        "median": 10610.222,
+        "min": 9478.01,
+        "max": 11273.163999999999
+      },
+      "browserJsHeapUsedBytes": {
+        "median": 5844836.0,
+        "min": 5521576.0,
+        "max": 6348520.0
+      },
+      "browserJsHeapTotalBytes": {
+        "median": 9961472.0,
+        "min": 8126464.0,
+        "max": 10485760.0
+      },
+      "browserDomDocumentCount": {
+        "median": 4.0,
+        "min": 4.0,
+        "max": 4.0
+      },
+      "browserDomNodeCount": {
+        "median": 462.0,
+        "min": 462.0,
+        "max": 462.0
+      },
+      "browserJsEventListenerCount": {
+        "median": 140.0,
+        "min": 140.0,
+        "max": 140.0
+      },
+      "semanticUncoveredCellsMax": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "dominantP95Slices": {
+        "runtimePaintMs": 2,
+        "runtimeBuildMs": 1
+      },
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/large-160x50-run-1.json",
+          "file": "large-160x50-run-1.json",
+          "capturedAt": "2026-06-10T16:22:27.504Z",
+          "frameCount": 32,
+          "steadyFrameCount": 32,
+          "requestedStepCount": 32,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 27.9,
+          "runtimeRenderP95Ms": 17.0,
+          "runtimeBuildP95Ms": 7.5,
+          "runtimeLayoutP95Ms": 0.1,
+          "runtimePaintP95Ms": 8.9,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 0.1,
+          "domApplyP95Ms": 1.3,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 9.375,
+          "steadyTotalFrameP95Ms": 27.9,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 9.375,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimePaintMs",
+          "browserMetrics": {
+            "layoutDurationMs": 602.9949999999999,
+            "recalcStyleDurationMs": 52.497,
+            "scriptDurationMs": 8416.758,
+            "taskDurationMs": 11273.163999999999,
+            "jsHeapUsedBytes": 6348520.0,
+            "jsHeapTotalBytes": 8126464.0,
+            "domDocumentCount": 4,
+            "domNodeCount": 462,
+            "jsEventListenerCount": 140
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 32,
+            "requestedSteps": 32,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/large-160x50-run-2.json",
+          "file": "large-160x50-run-2.json",
+          "capturedAt": "2026-06-10T16:22:54.800Z",
+          "frameCount": 32,
+          "steadyFrameCount": 32,
+          "requestedStepCount": 32,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 27.0,
+          "runtimeRenderP95Ms": 19.799,
+          "runtimeBuildP95Ms": 9.1,
+          "runtimeLayoutP95Ms": 0.1,
+          "runtimePaintP95Ms": 8.1,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 0.101,
+          "domApplyP95Ms": 0.201,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 9.375,
+          "steadyTotalFrameP95Ms": 27.0,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 9.375,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimeBuildMs",
+          "browserMetrics": {
+            "layoutDurationMs": 643.242,
+            "recalcStyleDurationMs": 111.301,
+            "scriptDurationMs": 7377.896,
+            "taskDurationMs": 10610.222,
+            "jsHeapUsedBytes": 5844836.0,
+            "jsHeapTotalBytes": 10485760.0,
+            "domDocumentCount": 4,
+            "domNodeCount": 462,
+            "jsEventListenerCount": 140
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 32,
+            "requestedSteps": 32,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/large-160x50-run-3.json",
+          "file": "large-160x50-run-3.json",
+          "capturedAt": "2026-06-10T16:23:19.206Z",
+          "frameCount": 32,
+          "steadyFrameCount": 32,
+          "requestedStepCount": 32,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 27.5,
+          "runtimeRenderP95Ms": 25.799,
+          "runtimeBuildP95Ms": 12.201,
+          "runtimeLayoutP95Ms": 0.0,
+          "runtimePaintP95Ms": 19.0,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 0.101,
+          "domApplyP95Ms": 1.301,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 12.5,
+          "steadyTotalFrameP95Ms": 27.5,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 12.5,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimePaintMs",
+          "browserMetrics": {
+            "layoutDurationMs": 698.326,
+            "recalcStyleDurationMs": 65.133,
+            "scriptDurationMs": 7064.817,
+            "taskDurationMs": 9478.01,
+            "jsHeapUsedBytes": 5521576.0,
+            "jsHeapTotalBytes": 9961472.0,
+            "domDocumentCount": 4,
+            "domNodeCount": 462,
+            "jsEventListenerCount": 140
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 32,
+            "requestedSteps": 32,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        }
+      ],
+      "gates": [],
+      "strictPass": true
+    },
+    {
+      "id": "noop-160x50",
+      "label": "160x50 no-op frame",
+      "runCount": 3,
+      "sufficientRunCount": true,
+      "requireComparableRunEnvironment": true,
+      "runEnvironmentComparable": true,
+      "runEnvironmentSignatureCount": 1,
+      "missingRunEnvironmentCount": 0,
+      "runEnvironmentSignatures": {
+        "{\"chromeBrowser\":\"Chrome/149.0.7827.102\",\"chromeUserAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36\",\"devtoolsProtocolVersion\":\"1.3\",\"dartVersion\":\"3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \\\"macos_x64\\\"\",\"operatingSystem\":\"macos\",\"operatingSystemVersion\":\"Version 26.2 (Build 25C56)\",\"headless\":true,\"requestedFrames\":24,\"warmupFrames\":8,\"frameBudgetMs\":16.67,\"requestedSteps\":24}": 3
+      },
+      "latestRunEnvironment": {
+        "schemaVersion": 1,
+        "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "chromeBrowser": "Chrome/149.0.7827.102",
+        "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+        "devtoolsProtocolVersion": "1.3",
+        "v8Version": "14.9.207.27",
+        "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+        "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+        "operatingSystem": "macos",
+        "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+        "headless": true,
+        "requestedFrames": 24,
+        "requestedSteps": 24,
+        "warmupFrames": 8,
+        "frameBudgetMs": 16.67,
+        "semanticsEnabled": true
+      },
+      "frameCount": 72,
+      "steadySkipFrames": 0,
+      "steadyFrameCount": 72,
+      "requestedStepCount": 72,
+      "extraFrameCount": 0,
+      "framesPerStep": {
+        "median": 1.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "latestCapture": "noop-160x50-run-3.json",
+      "latestCapturedAt": "2026-06-10T16:26:21.814Z",
+      "totalFrameP95Ms": {
+        "median": 22.3,
+        "min": 14.701,
+        "max": 31.3
+      },
+      "runtimeRenderP95Ms": {
+        "median": 16.0,
+        "min": 14.301,
+        "max": 20.5
+      },
+      "runtimeBuildP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.101
+      },
+      "runtimeLayoutP95Ms": {
+        "median": 2.5,
+        "min": 0.101,
+        "max": 2.701
+      },
+      "runtimePaintP95Ms": {
+        "median": 10.6,
+        "min": 10.099,
+        "max": 15.9
+      },
+      "dirtyRowDiffP95Ms": {
+        "median": 2.0,
+        "min": 1.0,
+        "max": 3.301
+      },
+      "spanBuildP95Ms": {
+        "median": 0.1,
+        "min": 0.1,
+        "max": 0.1
+      },
+      "domApplyP95Ms": {
+        "median": 0.1,
+        "min": 0.0,
+        "max": 1.599
+      },
+      "semanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.1
+      },
+      "overBudgetPercent": {
+        "median": 12.5,
+        "min": 4.166666666666667,
+        "max": 12.5
+      },
+      "steadyTotalFrameP95Ms": {
+        "median": 22.3,
+        "min": 14.701,
+        "max": 31.3
+      },
+      "steadySemanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.1
+      },
+      "steadyOverBudgetPercent": {
+        "median": 12.5,
+        "min": 4.166666666666667,
+        "max": 12.5
+      },
+      "browserLayoutDurationMs": {
+        "median": 473.185,
+        "min": 397.804,
+        "max": 501.209
+      },
+      "browserRecalcStyleDurationMs": {
+        "median": 109.709,
+        "min": 109.413,
+        "max": 114.18499999999999
+      },
+      "browserScriptDurationMs": {
+        "median": 6008.728,
+        "min": 5313.433,
+        "max": 8623.868
+      },
+      "browserTaskDurationMs": {
+        "median": 8735.583,
+        "min": 7241.294,
+        "max": 11433.737000000001
+      },
+      "browserJsHeapUsedBytes": {
+        "median": 5548484.0,
+        "min": 5503340.0,
+        "max": 5638528.0
+      },
+      "browserJsHeapTotalBytes": {
+        "median": 6815744.0,
+        "min": 6553600.0,
+        "max": 6815744.0
+      },
+      "browserDomDocumentCount": {
+        "median": 4.0,
+        "min": 4.0,
+        "max": 4.0
+      },
+      "browserDomNodeCount": {
+        "median": 302.0,
+        "min": 302.0,
+        "max": 302.0
+      },
+      "browserJsEventListenerCount": {
+        "median": 140.0,
+        "min": 140.0,
+        "max": 140.0
+      },
+      "semanticUncoveredCellsMax": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "dominantP95Slices": {
+        "runtimePaintMs": 3
+      },
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/noop-160x50-run-1.json",
+          "file": "noop-160x50-run-1.json",
+          "capturedAt": "2026-06-10T16:25:32.286Z",
+          "frameCount": 24,
+          "steadyFrameCount": 24,
+          "requestedStepCount": 24,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 14.701,
+          "runtimeRenderP95Ms": 14.301,
+          "runtimeBuildP95Ms": 0.101,
+          "runtimeLayoutP95Ms": 0.101,
+          "runtimePaintP95Ms": 10.6,
+          "dirtyRowDiffP95Ms": 3.301,
+          "spanBuildP95Ms": 0.1,
+          "domApplyP95Ms": 1.599,
+          "semanticApplyP95Ms": 0.1,
+          "overBudgetPercent": 4.166666666666667,
+          "steadyTotalFrameP95Ms": 14.701,
+          "steadySemanticApplyP95Ms": 0.1,
+          "steadyOverBudgetPercent": 4.166666666666667,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimePaintMs",
+          "browserMetrics": {
+            "layoutDurationMs": 397.804,
+            "recalcStyleDurationMs": 109.709,
+            "scriptDurationMs": 5313.433,
+            "taskDurationMs": 7241.294,
+            "jsHeapUsedBytes": 5548484.0,
+            "jsHeapTotalBytes": 6815744.0,
+            "domDocumentCount": 4,
+            "domNodeCount": 302,
+            "jsEventListenerCount": 140
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 24,
+            "requestedSteps": 24,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/noop-160x50-run-2.json",
+          "file": "noop-160x50-run-2.json",
+          "capturedAt": "2026-06-10T16:25:58.091Z",
+          "frameCount": 24,
+          "steadyFrameCount": 24,
+          "requestedStepCount": 24,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 22.3,
+          "runtimeRenderP95Ms": 20.5,
+          "runtimeBuildP95Ms": 0.0,
+          "runtimeLayoutP95Ms": 2.701,
+          "runtimePaintP95Ms": 10.099,
+          "dirtyRowDiffP95Ms": 2.0,
+          "spanBuildP95Ms": 0.1,
+          "domApplyP95Ms": 0.0,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 12.5,
+          "steadyTotalFrameP95Ms": 22.3,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 12.5,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimePaintMs",
+          "browserMetrics": {
+            "layoutDurationMs": 473.185,
+            "recalcStyleDurationMs": 109.413,
+            "scriptDurationMs": 8623.868,
+            "taskDurationMs": 11433.737000000001,
+            "jsHeapUsedBytes": 5638528.0,
+            "jsHeapTotalBytes": 6815744.0,
+            "domDocumentCount": 4,
+            "domNodeCount": 302,
+            "jsEventListenerCount": 140
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 24,
+            "requestedSteps": 24,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/noop-160x50-run-3.json",
+          "file": "noop-160x50-run-3.json",
+          "capturedAt": "2026-06-10T16:26:21.814Z",
+          "frameCount": 24,
+          "steadyFrameCount": 24,
+          "requestedStepCount": 24,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 31.3,
+          "runtimeRenderP95Ms": 16.0,
+          "runtimeBuildP95Ms": 0.0,
+          "runtimeLayoutP95Ms": 2.5,
+          "runtimePaintP95Ms": 15.9,
+          "dirtyRowDiffP95Ms": 1.0,
+          "spanBuildP95Ms": 0.1,
+          "domApplyP95Ms": 0.1,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 12.5,
+          "steadyTotalFrameP95Ms": 31.3,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 12.5,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimePaintMs",
+          "browserMetrics": {
+            "layoutDurationMs": 501.209,
+            "recalcStyleDurationMs": 114.18499999999999,
+            "scriptDurationMs": 6008.728,
+            "taskDurationMs": 8735.583,
+            "jsHeapUsedBytes": 5503340.0,
+            "jsHeapTotalBytes": 6553600.0,
+            "domDocumentCount": 4,
+            "domNodeCount": 302,
+            "jsEventListenerCount": 140
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 24,
+            "requestedSteps": 24,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        }
+      ],
+      "gates": [],
+      "strictPass": true
+    },
+    {
+      "id": "normal-80x24",
+      "label": "80x24 normal app interaction",
+      "runCount": 3,
+      "sufficientRunCount": true,
+      "requireComparableRunEnvironment": true,
+      "runEnvironmentComparable": true,
+      "runEnvironmentSignatureCount": 1,
+      "missingRunEnvironmentCount": 0,
+      "runEnvironmentSignatures": {
+        "{\"chromeBrowser\":\"Chrome/149.0.7827.102\",\"chromeUserAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36\",\"devtoolsProtocolVersion\":\"1.3\",\"dartVersion\":\"3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \\\"macos_x64\\\"\",\"operatingSystem\":\"macos\",\"operatingSystemVersion\":\"Version 26.2 (Build 25C56)\",\"headless\":true,\"requestedFrames\":24,\"warmupFrames\":8,\"frameBudgetMs\":16.67,\"requestedSteps\":24}": 3
+      },
+      "latestRunEnvironment": {
+        "schemaVersion": 1,
+        "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "chromeBrowser": "Chrome/149.0.7827.102",
+        "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+        "devtoolsProtocolVersion": "1.3",
+        "v8Version": "14.9.207.27",
+        "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+        "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+        "operatingSystem": "macos",
+        "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+        "headless": true,
+        "requestedFrames": 24,
+        "requestedSteps": 24,
+        "warmupFrames": 8,
+        "frameBudgetMs": 16.67,
+        "semanticsEnabled": true
+      },
+      "frameCount": 72,
+      "steadySkipFrames": 0,
+      "steadyFrameCount": 72,
+      "requestedStepCount": 72,
+      "extraFrameCount": 0,
+      "framesPerStep": {
+        "median": 1.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "latestCapture": "normal-80x24-run-3.json",
+      "latestCapturedAt": "2026-06-10T16:22:02.536Z",
+      "totalFrameP95Ms": {
+        "median": 282.199,
+        "min": 265.699,
+        "max": 794.801
+      },
+      "runtimeRenderP95Ms": {
+        "median": 166.401,
+        "min": 154.5,
+        "max": 700.9
+      },
+      "runtimeBuildP95Ms": {
+        "median": 63.401,
+        "min": 61.1,
+        "max": 81.9
+      },
+      "runtimeLayoutP95Ms": {
+        "median": 1.4,
+        "min": 0.0,
+        "max": 13.9
+      },
+      "runtimePaintP95Ms": {
+        "median": 61.5,
+        "min": 22.0,
+        "max": 247.399
+      },
+      "dirtyRowDiffP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "spanBuildP95Ms": {
+        "median": 28.8,
+        "min": 26.801,
+        "max": 32.899
+      },
+      "domApplyP95Ms": {
+        "median": 30.3,
+        "min": 22.5,
+        "max": 58.601
+      },
+      "semanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "overBudgetPercent": {
+        "median": 54.166666666666664,
+        "min": 54.166666666666664,
+        "max": 70.83333333333333
+      },
+      "steadyTotalFrameP95Ms": {
+        "median": 282.199,
+        "min": 265.699,
+        "max": 794.801
+      },
+      "steadySemanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "steadyOverBudgetPercent": {
+        "median": 54.166666666666664,
+        "min": 54.166666666666664,
+        "max": 70.83333333333333
+      },
+      "browserLayoutDurationMs": {
+        "median": 677.754,
+        "min": 670.862,
+        "max": 724.57
+      },
+      "browserRecalcStyleDurationMs": {
+        "median": 151.26000000000002,
+        "min": 132.905,
+        "max": 177.398
+      },
+      "browserScriptDurationMs": {
+        "median": 15403.385999999999,
+        "min": 12703.699999999999,
+        "max": 15907.064999999999
+      },
+      "browserTaskDurationMs": {
+        "median": 19044.294,
+        "min": 16561.073,
+        "max": 19313.761
+      },
+      "browserJsHeapUsedBytes": {
+        "median": 5290740.0,
+        "min": 5254192.0,
+        "max": 5301008.0
+      },
+      "browserJsHeapTotalBytes": {
+        "median": 9175040.0,
+        "min": 8650752.0,
+        "max": 12058624.0
+      },
+      "browserDomDocumentCount": {
+        "median": 1.0,
+        "min": 1.0,
+        "max": 2.0
+      },
+      "browserDomNodeCount": {
+        "median": 340.0,
+        "min": 340.0,
+        "max": 402.0
+      },
+      "browserJsEventListenerCount": {
+        "median": 86.0,
+        "min": 86.0,
+        "max": 86.0
+      },
+      "semanticUncoveredCellsMax": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "dominantP95Slices": {
+        "runtimeBuildMs": 1,
+        "runtimePaintMs": 2
+      },
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/normal-80x24-run-1.json",
+          "file": "normal-80x24-run-1.json",
+          "capturedAt": "2026-06-10T16:20:58.747Z",
+          "frameCount": 24,
+          "steadyFrameCount": 24,
+          "requestedStepCount": 24,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 265.699,
+          "runtimeRenderP95Ms": 154.5,
+          "runtimeBuildP95Ms": 81.9,
+          "runtimeLayoutP95Ms": 1.4,
+          "runtimePaintP95Ms": 22.0,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 28.8,
+          "domApplyP95Ms": 30.3,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 70.83333333333333,
+          "steadyTotalFrameP95Ms": 265.699,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 70.83333333333333,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimeBuildMs",
+          "browserMetrics": {
+            "layoutDurationMs": 724.57,
+            "recalcStyleDurationMs": 177.398,
+            "scriptDurationMs": 15403.385999999999,
+            "taskDurationMs": 19044.294,
+            "jsHeapUsedBytes": 5290740.0,
+            "jsHeapTotalBytes": 12058624.0,
+            "domDocumentCount": 2,
+            "domNodeCount": 402,
+            "jsEventListenerCount": 86
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 24,
+            "requestedSteps": 24,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/normal-80x24-run-2.json",
+          "file": "normal-80x24-run-2.json",
+          "capturedAt": "2026-06-10T16:21:27.350Z",
+          "frameCount": 24,
+          "steadyFrameCount": 24,
+          "requestedStepCount": 24,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 282.199,
+          "runtimeRenderP95Ms": 166.401,
+          "runtimeBuildP95Ms": 61.1,
+          "runtimeLayoutP95Ms": 0.0,
+          "runtimePaintP95Ms": 61.5,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 26.801,
+          "domApplyP95Ms": 22.5,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 54.166666666666664,
+          "steadyTotalFrameP95Ms": 282.199,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 54.166666666666664,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimePaintMs",
+          "browserMetrics": {
+            "layoutDurationMs": 677.754,
+            "recalcStyleDurationMs": 132.905,
+            "scriptDurationMs": 12703.699999999999,
+            "taskDurationMs": 16561.073,
+            "jsHeapUsedBytes": 5254192.0,
+            "jsHeapTotalBytes": 9175040.0,
+            "domDocumentCount": 1,
+            "domNodeCount": 340,
+            "jsEventListenerCount": 86
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 24,
+            "requestedSteps": 24,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/normal-80x24-run-3.json",
+          "file": "normal-80x24-run-3.json",
+          "capturedAt": "2026-06-10T16:22:02.536Z",
+          "frameCount": 24,
+          "steadyFrameCount": 24,
+          "requestedStepCount": 24,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 794.801,
+          "runtimeRenderP95Ms": 700.9,
+          "runtimeBuildP95Ms": 63.401,
+          "runtimeLayoutP95Ms": 13.9,
+          "runtimePaintP95Ms": 247.399,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 32.899,
+          "domApplyP95Ms": 58.601,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 54.166666666666664,
+          "steadyTotalFrameP95Ms": 794.801,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 54.166666666666664,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimePaintMs",
+          "browserMetrics": {
+            "layoutDurationMs": 670.862,
+            "recalcStyleDurationMs": 151.26000000000002,
+            "scriptDurationMs": 15907.064999999999,
+            "taskDurationMs": 19313.761,
+            "jsHeapUsedBytes": 5301008.0,
+            "jsHeapTotalBytes": 8650752.0,
+            "domDocumentCount": 1,
+            "domNodeCount": 340,
+            "jsEventListenerCount": 86
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 24,
+            "requestedSteps": 24,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        }
+      ],
+      "gates": [],
+      "strictPass": true
+    },
+    {
+      "id": "resize-burst",
+      "label": "Resize burst",
+      "runCount": 3,
+      "sufficientRunCount": true,
+      "requireComparableRunEnvironment": true,
+      "runEnvironmentComparable": true,
+      "runEnvironmentSignatureCount": 1,
+      "missingRunEnvironmentCount": 0,
+      "runEnvironmentSignatures": {
+        "{\"chromeBrowser\":\"Chrome/149.0.7827.102\",\"chromeUserAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36\",\"devtoolsProtocolVersion\":\"1.3\",\"dartVersion\":\"3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \\\"macos_x64\\\"\",\"operatingSystem\":\"macos\",\"operatingSystemVersion\":\"Version 26.2 (Build 25C56)\",\"headless\":true,\"requestedFrames\":12,\"warmupFrames\":8,\"frameBudgetMs\":16.67,\"requestedSteps\":12}": 3
+      },
+      "latestRunEnvironment": {
+        "schemaVersion": 1,
+        "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "chromeBrowser": "Chrome/149.0.7827.102",
+        "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+        "devtoolsProtocolVersion": "1.3",
+        "v8Version": "14.9.207.27",
+        "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+        "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+        "operatingSystem": "macos",
+        "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+        "headless": true,
+        "requestedFrames": 12,
+        "requestedSteps": 12,
+        "warmupFrames": 8,
+        "frameBudgetMs": 16.67,
+        "semanticsEnabled": true
+      },
+      "frameCount": 72,
+      "steadySkipFrames": 0,
+      "steadyFrameCount": 72,
+      "requestedStepCount": 36,
+      "extraFrameCount": 36,
+      "framesPerStep": {
+        "median": 2.0,
+        "min": 2.0,
+        "max": 2.0
+      },
+      "latestCapture": "resize-burst-run-3.json",
+      "latestCapturedAt": "2026-06-10T16:36:46.078Z",
+      "totalFrameP95Ms": {
+        "median": 326.399,
+        "min": 301.0,
+        "max": 419.9
+      },
+      "runtimeRenderP95Ms": {
+        "median": 222.1,
+        "min": 199.401,
+        "max": 302.4
+      },
+      "runtimeBuildP95Ms": {
+        "median": 79.299,
+        "min": 60.0,
+        "max": 122.8
+      },
+      "runtimeLayoutP95Ms": {
+        "median": 8.1,
+        "min": 7.8,
+        "max": 17.5
+      },
+      "runtimePaintP95Ms": {
+        "median": 96.2,
+        "min": 67.201,
+        "max": 241.1
+      },
+      "dirtyRowDiffP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "spanBuildP95Ms": {
+        "median": 22.9,
+        "min": 10.1,
+        "max": 24.699
+      },
+      "domApplyP95Ms": {
+        "median": 31.5,
+        "min": 20.2,
+        "max": 37.199
+      },
+      "semanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "overBudgetPercent": {
+        "median": 62.5,
+        "min": 54.166666666666664,
+        "max": 66.66666666666667
+      },
+      "steadyTotalFrameP95Ms": {
+        "median": 326.399,
+        "min": 301.0,
+        "max": 419.9
+      },
+      "steadySemanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "steadyOverBudgetPercent": {
+        "median": 62.5,
+        "min": 54.166666666666664,
+        "max": 66.66666666666667
+      },
+      "browserLayoutDurationMs": {
+        "median": 722.358,
+        "min": 674.249,
+        "max": 818.38
+      },
+      "browserRecalcStyleDurationMs": {
+        "median": 172.761,
+        "min": 162.946,
+        "max": 194.274
+      },
+      "browserScriptDurationMs": {
+        "median": 15130.179999999998,
+        "min": 11364.168,
+        "max": 15474.928
+      },
+      "browserTaskDurationMs": {
+        "median": 19216.844999999998,
+        "min": 15137.874,
+        "max": 19217.838
+      },
+      "browserJsHeapUsedBytes": {
+        "median": 8025852.0,
+        "min": 7634224.0,
+        "max": 8077648.0
+      },
+      "browserJsHeapTotalBytes": {
+        "median": 13369344.0,
+        "min": 12320768.0,
+        "max": 14942208.0
+      },
+      "browserDomDocumentCount": {
+        "median": 1.0,
+        "min": 1.0,
+        "max": 2.0
+      },
+      "browserDomNodeCount": {
+        "median": 1204.0,
+        "min": 1000.0,
+        "max": 1277.0
+      },
+      "browserJsEventListenerCount": {
+        "median": 86.0,
+        "min": 86.0,
+        "max": 86.0
+      },
+      "semanticUncoveredCellsMax": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "dominantP95Slices": {
+        "runtimePaintMs": 1,
+        "runtimeBuildMs": 2
+      },
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/resize-burst-run-1.json",
+          "file": "resize-burst-run-1.json",
+          "capturedAt": "2026-06-10T16:35:42.856Z",
+          "frameCount": 24,
+          "steadyFrameCount": 24,
+          "requestedStepCount": 12,
+          "extraFrameCount": 12,
+          "framesPerStep": 2.0,
+          "totalFrameP95Ms": 419.9,
+          "runtimeRenderP95Ms": 302.4,
+          "runtimeBuildP95Ms": 60.0,
+          "runtimeLayoutP95Ms": 8.1,
+          "runtimePaintP95Ms": 241.1,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 10.1,
+          "domApplyP95Ms": 20.2,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 66.66666666666667,
+          "steadyTotalFrameP95Ms": 419.9,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 66.66666666666667,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimePaintMs",
+          "browserMetrics": {
+            "layoutDurationMs": 674.249,
+            "recalcStyleDurationMs": 172.761,
+            "scriptDurationMs": 11364.168,
+            "taskDurationMs": 15137.874,
+            "jsHeapUsedBytes": 7634224.0,
+            "jsHeapTotalBytes": 12320768.0,
+            "domDocumentCount": 1,
+            "domNodeCount": 1000,
+            "jsEventListenerCount": 86
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 12,
+            "requestedSteps": 12,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/resize-burst-run-2.json",
+          "file": "resize-burst-run-2.json",
+          "capturedAt": "2026-06-10T16:36:14.240Z",
+          "frameCount": 24,
+          "steadyFrameCount": 24,
+          "requestedStepCount": 12,
+          "extraFrameCount": 12,
+          "framesPerStep": 2.0,
+          "totalFrameP95Ms": 326.399,
+          "runtimeRenderP95Ms": 199.401,
+          "runtimeBuildP95Ms": 79.299,
+          "runtimeLayoutP95Ms": 17.5,
+          "runtimePaintP95Ms": 67.201,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 24.699,
+          "domApplyP95Ms": 37.199,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 62.5,
+          "steadyTotalFrameP95Ms": 326.399,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 62.5,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimeBuildMs",
+          "browserMetrics": {
+            "layoutDurationMs": 818.38,
+            "recalcStyleDurationMs": 162.946,
+            "scriptDurationMs": 15130.179999999998,
+            "taskDurationMs": 19216.844999999998,
+            "jsHeapUsedBytes": 8077648.0,
+            "jsHeapTotalBytes": 14942208.0,
+            "domDocumentCount": 2,
+            "domNodeCount": 1277,
+            "jsEventListenerCount": 86
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 12,
+            "requestedSteps": 12,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/resize-burst-run-3.json",
+          "file": "resize-burst-run-3.json",
+          "capturedAt": "2026-06-10T16:36:46.078Z",
+          "frameCount": 24,
+          "steadyFrameCount": 24,
+          "requestedStepCount": 12,
+          "extraFrameCount": 12,
+          "framesPerStep": 2.0,
+          "totalFrameP95Ms": 301.0,
+          "runtimeRenderP95Ms": 222.1,
+          "runtimeBuildP95Ms": 122.8,
+          "runtimeLayoutP95Ms": 7.8,
+          "runtimePaintP95Ms": 96.2,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 22.9,
+          "domApplyP95Ms": 31.5,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 54.166666666666664,
+          "steadyTotalFrameP95Ms": 301.0,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 54.166666666666664,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimeBuildMs",
+          "browserMetrics": {
+            "layoutDurationMs": 722.358,
+            "recalcStyleDurationMs": 194.274,
+            "scriptDurationMs": 15474.928,
+            "taskDurationMs": 19217.838,
+            "jsHeapUsedBytes": 8025852.0,
+            "jsHeapTotalBytes": 13369344.0,
+            "domDocumentCount": 1,
+            "domNodeCount": 1204,
+            "jsEventListenerCount": 86
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 12,
+            "requestedSteps": 12,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        }
+      ],
+      "gates": [],
+      "strictPass": true
+    },
+    {
+      "id": "scroll-row-churn-160x50",
+      "label": "160x50 scroll-like row churn",
+      "runCount": 3,
+      "sufficientRunCount": true,
+      "requireComparableRunEnvironment": true,
+      "runEnvironmentComparable": true,
+      "runEnvironmentSignatureCount": 1,
+      "missingRunEnvironmentCount": 0,
+      "runEnvironmentSignatures": {
+        "{\"chromeBrowser\":\"Chrome/149.0.7827.102\",\"chromeUserAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36\",\"devtoolsProtocolVersion\":\"1.3\",\"dartVersion\":\"3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \\\"macos_x64\\\"\",\"operatingSystem\":\"macos\",\"operatingSystemVersion\":\"Version 26.2 (Build 25C56)\",\"headless\":true,\"requestedFrames\":32,\"warmupFrames\":8,\"frameBudgetMs\":16.67,\"requestedSteps\":32}": 3
+      },
+      "latestRunEnvironment": {
+        "schemaVersion": 1,
+        "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "chromeBrowser": "Chrome/149.0.7827.102",
+        "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+        "devtoolsProtocolVersion": "1.3",
+        "v8Version": "14.9.207.27",
+        "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+        "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+        "operatingSystem": "macos",
+        "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+        "headless": true,
+        "requestedFrames": 32,
+        "requestedSteps": 32,
+        "warmupFrames": 8,
+        "frameBudgetMs": 16.67,
+        "semanticsEnabled": true
+      },
+      "frameCount": 96,
+      "steadySkipFrames": 0,
+      "steadyFrameCount": 96,
+      "requestedStepCount": 96,
+      "extraFrameCount": 0,
+      "framesPerStep": {
+        "median": 1.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "latestCapture": "scroll-row-churn-160x50-run-3.json",
+      "latestCapturedAt": "2026-06-10T16:32:15.704Z",
+      "totalFrameP95Ms": {
+        "median": 227.0,
+        "min": 121.9,
+        "max": 428.3
+      },
+      "runtimeRenderP95Ms": {
+        "median": 186.2,
+        "min": 89.9,
+        "max": 365.401
+      },
+      "runtimeBuildP95Ms": {
+        "median": 86.699,
+        "min": 58.8,
+        "max": 87.601
+      },
+      "runtimeLayoutP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 1.3
+      },
+      "runtimePaintP95Ms": {
+        "median": 51.6,
+        "min": 22.099,
+        "max": 120.9
+      },
+      "dirtyRowDiffP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "spanBuildP95Ms": {
+        "median": 11.301,
+        "min": 7.899,
+        "max": 16.0
+      },
+      "domApplyP95Ms": {
+        "median": 26.7,
+        "min": 18.6,
+        "max": 31.0
+      },
+      "semanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "overBudgetPercent": {
+        "median": 71.875,
+        "min": 62.5,
+        "max": 78.125
+      },
+      "steadyTotalFrameP95Ms": {
+        "median": 227.0,
+        "min": 121.9,
+        "max": 428.3
+      },
+      "steadySemanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "steadyOverBudgetPercent": {
+        "median": 71.875,
+        "min": 62.5,
+        "max": 78.125
+      },
+      "browserLayoutDurationMs": {
+        "median": 711.527,
+        "min": 686.297,
+        "max": 718.7620000000001
+      },
+      "browserRecalcStyleDurationMs": {
+        "median": 135.44500000000002,
+        "min": 127.499,
+        "max": 139.067
+      },
+      "browserScriptDurationMs": {
+        "median": 14328.545,
+        "min": 11617.759,
+        "max": 14431.388
+      },
+      "browserTaskDurationMs": {
+        "median": 18669.017,
+        "min": 16764.399999999998,
+        "max": 19110.498
+      },
+      "browserJsHeapUsedBytes": {
+        "median": 6562580.0,
+        "min": 3763252.0,
+        "max": 10337648.0
+      },
+      "browserJsHeapTotalBytes": {
+        "median": 24641536.0,
+        "min": 23592960.0,
+        "max": 25165824.0
+      },
+      "browserDomDocumentCount": {
+        "median": 1.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "browserDomNodeCount": {
+        "median": 1688.0,
+        "min": 1088.0,
+        "max": 1888.0
+      },
+      "browserJsEventListenerCount": {
+        "median": 140.0,
+        "min": 140.0,
+        "max": 140.0
+      },
+      "semanticUncoveredCellsMax": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "dominantP95Slices": {
+        "runtimeBuildMs": 2,
+        "runtimePaintMs": 1
+      },
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/scroll-row-churn-160x50-run-1.json",
+          "file": "scroll-row-churn-160x50-run-1.json",
+          "capturedAt": "2026-06-10T16:31:11.274Z",
+          "frameCount": 32,
+          "steadyFrameCount": 32,
+          "requestedStepCount": 32,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 428.3,
+          "runtimeRenderP95Ms": 365.401,
+          "runtimeBuildP95Ms": 87.601,
+          "runtimeLayoutP95Ms": 0.0,
+          "runtimePaintP95Ms": 51.6,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 11.301,
+          "domApplyP95Ms": 26.7,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 78.125,
+          "steadyTotalFrameP95Ms": 428.3,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 78.125,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimeBuildMs",
+          "browserMetrics": {
+            "layoutDurationMs": 686.297,
+            "recalcStyleDurationMs": 135.44500000000002,
+            "scriptDurationMs": 14328.545,
+            "taskDurationMs": 19110.498,
+            "jsHeapUsedBytes": 10337648.0,
+            "jsHeapTotalBytes": 24641536.0,
+            "domDocumentCount": 1,
+            "domNodeCount": 1688,
+            "jsEventListenerCount": 140
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 32,
+            "requestedSteps": 32,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/scroll-row-churn-160x50-run-2.json",
+          "file": "scroll-row-churn-160x50-run-2.json",
+          "capturedAt": "2026-06-10T16:31:42.697Z",
+          "frameCount": 32,
+          "steadyFrameCount": 32,
+          "requestedStepCount": 32,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 121.9,
+          "runtimeRenderP95Ms": 89.9,
+          "runtimeBuildP95Ms": 58.8,
+          "runtimeLayoutP95Ms": 1.3,
+          "runtimePaintP95Ms": 22.099,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 16.0,
+          "domApplyP95Ms": 18.6,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 62.5,
+          "steadyTotalFrameP95Ms": 121.9,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 62.5,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimeBuildMs",
+          "browserMetrics": {
+            "layoutDurationMs": 711.527,
+            "recalcStyleDurationMs": 127.499,
+            "scriptDurationMs": 11617.759,
+            "taskDurationMs": 16764.399999999998,
+            "jsHeapUsedBytes": 6562580.0,
+            "jsHeapTotalBytes": 25165824.0,
+            "domDocumentCount": 1,
+            "domNodeCount": 1088,
+            "jsEventListenerCount": 140
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 32,
+            "requestedSteps": 32,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/scroll-row-churn-160x50-run-3.json",
+          "file": "scroll-row-churn-160x50-run-3.json",
+          "capturedAt": "2026-06-10T16:32:15.704Z",
+          "frameCount": 32,
+          "steadyFrameCount": 32,
+          "requestedStepCount": 32,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 227.0,
+          "runtimeRenderP95Ms": 186.2,
+          "runtimeBuildP95Ms": 86.699,
+          "runtimeLayoutP95Ms": 0.0,
+          "runtimePaintP95Ms": 120.9,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 7.899,
+          "domApplyP95Ms": 31.0,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 71.875,
+          "steadyTotalFrameP95Ms": 227.0,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 71.875,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimePaintMs",
+          "browserMetrics": {
+            "layoutDurationMs": 718.7620000000001,
+            "recalcStyleDurationMs": 139.067,
+            "scriptDurationMs": 14431.388,
+            "taskDurationMs": 18669.017,
+            "jsHeapUsedBytes": 3763252.0,
+            "jsHeapTotalBytes": 23592960.0,
+            "domDocumentCount": 1,
+            "domNodeCount": 1888,
+            "jsEventListenerCount": 140
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 32,
+            "requestedSteps": 32,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        }
+      ],
+      "gates": [],
+      "strictPass": true
+    },
+    {
+      "id": "single-dirty-cell-160x50",
+      "label": "160x50 single dirty cell",
+      "runCount": 3,
+      "sufficientRunCount": true,
+      "requireComparableRunEnvironment": true,
+      "runEnvironmentComparable": true,
+      "runEnvironmentSignatureCount": 1,
+      "missingRunEnvironmentCount": 0,
+      "runEnvironmentSignatures": {
+        "{\"chromeBrowser\":\"Chrome/149.0.7827.102\",\"chromeUserAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36\",\"devtoolsProtocolVersion\":\"1.3\",\"dartVersion\":\"3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \\\"macos_x64\\\"\",\"operatingSystem\":\"macos\",\"operatingSystemVersion\":\"Version 26.2 (Build 25C56)\",\"headless\":true,\"requestedFrames\":32,\"warmupFrames\":8,\"frameBudgetMs\":16.67,\"requestedSteps\":32}": 3
+      },
+      "latestRunEnvironment": {
+        "schemaVersion": 1,
+        "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "chromeBrowser": "Chrome/149.0.7827.102",
+        "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+        "devtoolsProtocolVersion": "1.3",
+        "v8Version": "14.9.207.27",
+        "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+        "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+        "operatingSystem": "macos",
+        "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+        "headless": true,
+        "requestedFrames": 32,
+        "requestedSteps": 32,
+        "warmupFrames": 8,
+        "frameBudgetMs": 16.67,
+        "semanticsEnabled": true
+      },
+      "frameCount": 96,
+      "steadySkipFrames": 0,
+      "steadyFrameCount": 96,
+      "requestedStepCount": 96,
+      "extraFrameCount": 0,
+      "framesPerStep": {
+        "median": 1.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "latestCapture": "single-dirty-cell-160x50-run-3.json",
+      "latestCapturedAt": "2026-06-10T16:27:41.542Z",
+      "totalFrameP95Ms": {
+        "median": 28.301,
+        "min": 28.1,
+        "max": 30.801
+      },
+      "runtimeRenderP95Ms": {
+        "median": 20.5,
+        "min": 17.6,
+        "max": 24.9
+      },
+      "runtimeBuildP95Ms": {
+        "median": 14.8,
+        "min": 13.201,
+        "max": 21.1
+      },
+      "runtimeLayoutP95Ms": {
+        "median": 0.1,
+        "min": 0.0,
+        "max": 0.101
+      },
+      "runtimePaintP95Ms": {
+        "median": 13.8,
+        "min": 12.6,
+        "max": 22.299
+      },
+      "dirtyRowDiffP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "spanBuildP95Ms": {
+        "median": 0.1,
+        "min": 0.1,
+        "max": 0.101
+      },
+      "domApplyP95Ms": {
+        "median": 0.201,
+        "min": 0.201,
+        "max": 0.201
+      },
+      "semanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "overBudgetPercent": {
+        "median": 15.625,
+        "min": 9.375,
+        "max": 15.625
+      },
+      "steadyTotalFrameP95Ms": {
+        "median": 28.301,
+        "min": 28.1,
+        "max": 30.801
+      },
+      "steadySemanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "steadyOverBudgetPercent": {
+        "median": 15.625,
+        "min": 9.375,
+        "max": 15.625
+      },
+      "browserLayoutDurationMs": {
+        "median": 573.6170000000001,
+        "min": 549.9300000000001,
+        "max": 621.727
+      },
+      "browserRecalcStyleDurationMs": {
+        "median": 112.714,
+        "min": 109.185,
+        "max": 115.11200000000001
+      },
+      "browserScriptDurationMs": {
+        "median": 9452.552000000001,
+        "min": 7492.173,
+        "max": 9893.140000000001
+      },
+      "browserTaskDurationMs": {
+        "median": 12331.92,
+        "min": 10276.434,
+        "max": 12712.044
+      },
+      "browserJsHeapUsedBytes": {
+        "median": 5996704.0,
+        "min": 5400648.0,
+        "max": 6480312.0
+      },
+      "browserJsHeapTotalBytes": {
+        "median": 8650752.0,
+        "min": 7602176.0,
+        "max": 10485760.0
+      },
+      "browserDomDocumentCount": {
+        "median": 4.0,
+        "min": 4.0,
+        "max": 4.0
+      },
+      "browserDomNodeCount": {
+        "median": 382.0,
+        "min": 382.0,
+        "max": 382.0
+      },
+      "browserJsEventListenerCount": {
+        "median": 140.0,
+        "min": 140.0,
+        "max": 140.0
+      },
+      "semanticUncoveredCellsMax": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "dominantP95Slices": {
+        "runtimeBuildMs": 2,
+        "runtimePaintMs": 1
+      },
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/single-dirty-cell-160x50-run-1.json",
+          "file": "single-dirty-cell-160x50-run-1.json",
+          "capturedAt": "2026-06-10T16:26:46.660Z",
+          "frameCount": 32,
+          "steadyFrameCount": 32,
+          "requestedStepCount": 32,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 28.301,
+          "runtimeRenderP95Ms": 17.6,
+          "runtimeBuildP95Ms": 13.201,
+          "runtimeLayoutP95Ms": 0.0,
+          "runtimePaintP95Ms": 12.6,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 0.1,
+          "domApplyP95Ms": 0.201,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 9.375,
+          "steadyTotalFrameP95Ms": 28.301,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 9.375,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimeBuildMs",
+          "browserMetrics": {
+            "layoutDurationMs": 549.9300000000001,
+            "recalcStyleDurationMs": 115.11200000000001,
+            "scriptDurationMs": 7492.173,
+            "taskDurationMs": 10276.434,
+            "jsHeapUsedBytes": 6480312.0,
+            "jsHeapTotalBytes": 10485760.0,
+            "domDocumentCount": 4,
+            "domNodeCount": 382,
+            "jsEventListenerCount": 140
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 32,
+            "requestedSteps": 32,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/single-dirty-cell-160x50-run-2.json",
+          "file": "single-dirty-cell-160x50-run-2.json",
+          "capturedAt": "2026-06-10T16:27:14.254Z",
+          "frameCount": 32,
+          "steadyFrameCount": 32,
+          "requestedStepCount": 32,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 28.1,
+          "runtimeRenderP95Ms": 24.9,
+          "runtimeBuildP95Ms": 21.1,
+          "runtimeLayoutP95Ms": 0.1,
+          "runtimePaintP95Ms": 22.299,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 0.101,
+          "domApplyP95Ms": 0.201,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 15.625,
+          "steadyTotalFrameP95Ms": 28.1,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 15.625,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimePaintMs",
+          "browserMetrics": {
+            "layoutDurationMs": 573.6170000000001,
+            "recalcStyleDurationMs": 112.714,
+            "scriptDurationMs": 9893.140000000001,
+            "taskDurationMs": 12331.92,
+            "jsHeapUsedBytes": 5996704.0,
+            "jsHeapTotalBytes": 8650752.0,
+            "domDocumentCount": 4,
+            "domNodeCount": 382,
+            "jsEventListenerCount": 140
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 32,
+            "requestedSteps": 32,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/single-dirty-cell-160x50-run-3.json",
+          "file": "single-dirty-cell-160x50-run-3.json",
+          "capturedAt": "2026-06-10T16:27:41.542Z",
+          "frameCount": 32,
+          "steadyFrameCount": 32,
+          "requestedStepCount": 32,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 30.801,
+          "runtimeRenderP95Ms": 20.5,
+          "runtimeBuildP95Ms": 14.8,
+          "runtimeLayoutP95Ms": 0.101,
+          "runtimePaintP95Ms": 13.8,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 0.1,
+          "domApplyP95Ms": 0.201,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 15.625,
+          "steadyTotalFrameP95Ms": 30.801,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 15.625,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimeBuildMs",
+          "browserMetrics": {
+            "layoutDurationMs": 621.727,
+            "recalcStyleDurationMs": 109.185,
+            "scriptDurationMs": 9452.552000000001,
+            "taskDurationMs": 12712.044,
+            "jsHeapUsedBytes": 5400648.0,
+            "jsHeapTotalBytes": 7602176.0,
+            "domDocumentCount": 4,
+            "domNodeCount": 382,
+            "jsEventListenerCount": 140
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 32,
+            "requestedSteps": 32,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        }
+      ],
+      "gates": [],
+      "strictPass": true
+    },
+    {
+      "id": "stress-300x100",
+      "label": "300x100 stress viewport",
+      "runCount": 3,
+      "sufficientRunCount": true,
+      "requireComparableRunEnvironment": true,
+      "runEnvironmentComparable": true,
+      "runEnvironmentSignatureCount": 1,
+      "missingRunEnvironmentCount": 0,
+      "runEnvironmentSignatures": {
+        "{\"chromeBrowser\":\"Chrome/149.0.7827.102\",\"chromeUserAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36\",\"devtoolsProtocolVersion\":\"1.3\",\"dartVersion\":\"3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \\\"macos_x64\\\"\",\"operatingSystem\":\"macos\",\"operatingSystemVersion\":\"Version 26.2 (Build 25C56)\",\"headless\":true,\"requestedFrames\":16,\"warmupFrames\":8,\"frameBudgetMs\":16.67,\"requestedSteps\":16}": 3
+      },
+      "latestRunEnvironment": {
+        "schemaVersion": 1,
+        "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "chromeBrowser": "Chrome/149.0.7827.102",
+        "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+        "devtoolsProtocolVersion": "1.3",
+        "v8Version": "14.9.207.27",
+        "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+        "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+        "operatingSystem": "macos",
+        "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+        "headless": true,
+        "requestedFrames": 16,
+        "requestedSteps": 16,
+        "warmupFrames": 8,
+        "frameBudgetMs": 16.67,
+        "semanticsEnabled": true
+      },
+      "frameCount": 48,
+      "steadySkipFrames": 0,
+      "steadyFrameCount": 48,
+      "requestedStepCount": 48,
+      "extraFrameCount": 0,
+      "framesPerStep": {
+        "median": 1.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "latestCapture": "stress-300x100-run-3.json",
+      "latestCapturedAt": "2026-06-10T16:25:10.545Z",
+      "totalFrameP95Ms": {
+        "median": 348.801,
+        "min": 279.5,
+        "max": 423.601
+      },
+      "runtimeRenderP95Ms": {
+        "median": 192.899,
+        "min": 158.6,
+        "max": 283.701
+      },
+      "runtimeBuildP95Ms": {
+        "median": 149.6,
+        "min": 111.2,
+        "max": 243.801
+      },
+      "runtimeLayoutP95Ms": {
+        "median": 16.0,
+        "min": 15.801,
+        "max": 18.301
+      },
+      "runtimePaintP95Ms": {
+        "median": 20.899,
+        "min": 16.601,
+        "max": 76.901
+      },
+      "dirtyRowDiffP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "spanBuildP95Ms": {
+        "median": 15.7,
+        "min": 12.6,
+        "max": 24.0
+      },
+      "domApplyP95Ms": {
+        "median": 28.5,
+        "min": 13.199,
+        "max": 216.5
+      },
+      "semanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.1
+      },
+      "overBudgetPercent": {
+        "median": 68.75,
+        "min": 62.5,
+        "max": 93.75
+      },
+      "steadyTotalFrameP95Ms": {
+        "median": 348.801,
+        "min": 279.5,
+        "max": 423.601
+      },
+      "steadySemanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.1
+      },
+      "steadyOverBudgetPercent": {
+        "median": 68.75,
+        "min": 62.5,
+        "max": 93.75
+      },
+      "browserLayoutDurationMs": {
+        "median": 1036.448,
+        "min": 975.769,
+        "max": 1184.094
+      },
+      "browserRecalcStyleDurationMs": {
+        "median": 139.133,
+        "min": 135.846,
+        "max": 140.996
+      },
+      "browserScriptDurationMs": {
+        "median": 17108.381,
+        "min": 14335.564,
+        "max": 18865.468
+      },
+      "browserTaskDurationMs": {
+        "median": 23052.425,
+        "min": 22868.721,
+        "max": 23441.773999999998
+      },
+      "browserJsHeapUsedBytes": {
+        "median": 7898640.0,
+        "min": 3785556.0,
+        "max": 12158000.0
+      },
+      "browserJsHeapTotalBytes": {
+        "median": 42729472.0,
+        "min": 41418752.0,
+        "max": 44040192.0
+      },
+      "browserDomDocumentCount": {
+        "median": 1.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "browserDomNodeCount": {
+        "median": 938.0,
+        "min": 29.0,
+        "max": 2138.0
+      },
+      "browserJsEventListenerCount": {
+        "median": 240.0,
+        "min": 0.0,
+        "max": 240.0
+      },
+      "semanticUncoveredCellsMax": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "dominantP95Slices": {
+        "domApplyMs": 1,
+        "runtimeBuildMs": 2
+      },
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/stress-300x100-run-1.json",
+          "file": "stress-300x100-run-1.json",
+          "capturedAt": "2026-06-10T16:23:55.456Z",
+          "frameCount": 16,
+          "steadyFrameCount": 16,
+          "requestedStepCount": 16,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 423.601,
+          "runtimeRenderP95Ms": 192.899,
+          "runtimeBuildP95Ms": 149.6,
+          "runtimeLayoutP95Ms": 16.0,
+          "runtimePaintP95Ms": 76.901,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 15.7,
+          "domApplyP95Ms": 216.5,
+          "semanticApplyP95Ms": 0.1,
+          "overBudgetPercent": 93.75,
+          "steadyTotalFrameP95Ms": 423.601,
+          "steadySemanticApplyP95Ms": 0.1,
+          "steadyOverBudgetPercent": 93.75,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "domApplyMs",
+          "browserMetrics": {
+            "layoutDurationMs": 1184.094,
+            "recalcStyleDurationMs": 139.133,
+            "scriptDurationMs": 17108.381,
+            "taskDurationMs": 22868.721,
+            "jsHeapUsedBytes": 3785556.0,
+            "jsHeapTotalBytes": 41418752.0,
+            "domDocumentCount": 1,
+            "domNodeCount": 29,
+            "jsEventListenerCount": 0
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 16,
+            "requestedSteps": 16,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/stress-300x100-run-2.json",
+          "file": "stress-300x100-run-2.json",
+          "capturedAt": "2026-06-10T16:24:33.443Z",
+          "frameCount": 16,
+          "steadyFrameCount": 16,
+          "requestedStepCount": 16,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 348.801,
+          "runtimeRenderP95Ms": 283.701,
+          "runtimeBuildP95Ms": 243.801,
+          "runtimeLayoutP95Ms": 15.801,
+          "runtimePaintP95Ms": 16.601,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 24.0,
+          "domApplyP95Ms": 13.199,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 68.75,
+          "steadyTotalFrameP95Ms": 348.801,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 68.75,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimeBuildMs",
+          "browserMetrics": {
+            "layoutDurationMs": 975.769,
+            "recalcStyleDurationMs": 140.996,
+            "scriptDurationMs": 14335.564,
+            "taskDurationMs": 23441.773999999998,
+            "jsHeapUsedBytes": 12158000.0,
+            "jsHeapTotalBytes": 44040192.0,
+            "domDocumentCount": 1,
+            "domNodeCount": 2138,
+            "jsEventListenerCount": 240
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 16,
+            "requestedSteps": 16,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/stress-300x100-run-3.json",
+          "file": "stress-300x100-run-3.json",
+          "capturedAt": "2026-06-10T16:25:10.545Z",
+          "frameCount": 16,
+          "steadyFrameCount": 16,
+          "requestedStepCount": 16,
+          "extraFrameCount": 0,
+          "framesPerStep": 1.0,
+          "totalFrameP95Ms": 279.5,
+          "runtimeRenderP95Ms": 158.6,
+          "runtimeBuildP95Ms": 111.2,
+          "runtimeLayoutP95Ms": 18.301,
+          "runtimePaintP95Ms": 20.899,
+          "dirtyRowDiffP95Ms": 0.0,
+          "spanBuildP95Ms": 12.6,
+          "domApplyP95Ms": 28.5,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 62.5,
+          "steadyTotalFrameP95Ms": 279.5,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 62.5,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimeBuildMs",
+          "browserMetrics": {
+            "layoutDurationMs": 1036.448,
+            "recalcStyleDurationMs": 135.846,
+            "scriptDurationMs": 18865.468,
+            "taskDurationMs": 23052.425,
+            "jsHeapUsedBytes": 7898640.0,
+            "jsHeapTotalBytes": 42729472.0,
+            "domDocumentCount": 1,
+            "domNodeCount": 938,
+            "jsEventListenerCount": 240
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 16,
+            "requestedSteps": 16,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        }
+      ],
+      "gates": [],
+      "strictPass": true
+    },
+    {
+      "id": "text-input-burst-80x24",
+      "label": "80x24 text input burst",
+      "runCount": 3,
+      "sufficientRunCount": true,
+      "requireComparableRunEnvironment": true,
+      "runEnvironmentComparable": true,
+      "runEnvironmentSignatureCount": 1,
+      "missingRunEnvironmentCount": 0,
+      "runEnvironmentSignatures": {
+        "{\"chromeBrowser\":\"Chrome/149.0.7827.102\",\"chromeUserAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36\",\"devtoolsProtocolVersion\":\"1.3\",\"dartVersion\":\"3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \\\"macos_x64\\\"\",\"operatingSystem\":\"macos\",\"operatingSystemVersion\":\"Version 26.2 (Build 25C56)\",\"headless\":true,\"requestedFrames\":20,\"warmupFrames\":8,\"frameBudgetMs\":16.67,\"requestedSteps\":20}": 3
+      },
+      "latestRunEnvironment": {
+        "schemaVersion": 1,
+        "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "chromeBrowser": "Chrome/149.0.7827.102",
+        "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+        "devtoolsProtocolVersion": "1.3",
+        "v8Version": "14.9.207.27",
+        "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+        "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+        "operatingSystem": "macos",
+        "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+        "headless": true,
+        "requestedFrames": 20,
+        "requestedSteps": 20,
+        "warmupFrames": 8,
+        "frameBudgetMs": 16.67,
+        "semanticsEnabled": true
+      },
+      "frameCount": 120,
+      "steadySkipFrames": 0,
+      "steadyFrameCount": 120,
+      "requestedStepCount": 60,
+      "extraFrameCount": 60,
+      "framesPerStep": {
+        "median": 2.0,
+        "min": 2.0,
+        "max": 2.0
+      },
+      "latestCapture": "text-input-burst-80x24-run-3.json",
+      "latestCapturedAt": "2026-06-10T16:35:12.199Z",
+      "totalFrameP95Ms": {
+        "median": 171.0,
+        "min": 47.901,
+        "max": 198.9
+      },
+      "runtimeRenderP95Ms": {
+        "median": 78.5,
+        "min": 31.4,
+        "max": 146.0
+      },
+      "runtimeBuildP95Ms": {
+        "median": 20.799,
+        "min": 13.7,
+        "max": 41.699
+      },
+      "runtimeLayoutP95Ms": {
+        "median": 5.101,
+        "min": 3.0,
+        "max": 11.201
+      },
+      "runtimePaintP95Ms": {
+        "median": 41.801,
+        "min": 14.399,
+        "max": 70.599
+      },
+      "dirtyRowDiffP95Ms": {
+        "median": 5.801,
+        "min": 1.5,
+        "max": 12.5
+      },
+      "spanBuildP95Ms": {
+        "median": 4.199,
+        "min": 1.5,
+        "max": 19.5
+      },
+      "domApplyP95Ms": {
+        "median": 9.201,
+        "min": 7.3,
+        "max": 18.201
+      },
+      "semanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "overBudgetPercent": {
+        "median": 42.5,
+        "min": 30.0,
+        "max": 52.5
+      },
+      "steadyTotalFrameP95Ms": {
+        "median": 171.0,
+        "min": 47.901,
+        "max": 198.9
+      },
+      "steadySemanticApplyP95Ms": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "steadyOverBudgetPercent": {
+        "median": 42.5,
+        "min": 30.0,
+        "max": 52.5
+      },
+      "browserLayoutDurationMs": {
+        "median": 1464.677,
+        "min": 896.865,
+        "max": 1682.205
+      },
+      "browserRecalcStyleDurationMs": {
+        "median": 151.42,
+        "min": 150.845,
+        "max": 198.41
+      },
+      "browserScriptDurationMs": {
+        "median": 13692.011,
+        "min": 8259.158,
+        "max": 15684.51
+      },
+      "browserTaskDurationMs": {
+        "median": 19322.962,
+        "min": 12606.822,
+        "max": 19336.286
+      },
+      "browserJsHeapUsedBytes": {
+        "median": 4608720.0,
+        "min": 3685912.0,
+        "max": 6732728.0
+      },
+      "browserJsHeapTotalBytes": {
+        "median": 11272192.0,
+        "min": 10485760.0,
+        "max": 12582912.0
+      },
+      "browserDomDocumentCount": {
+        "median": 4.0,
+        "min": 1.0,
+        "max": 4.0
+      },
+      "browserDomNodeCount": {
+        "median": 1881.0,
+        "min": 282.0,
+        "max": 1881.0
+      },
+      "browserJsEventListenerCount": {
+        "median": 88.0,
+        "min": 0.0,
+        "max": 88.0
+      },
+      "semanticUncoveredCellsMax": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "dominantP95Slices": {
+        "runtimePaintMs": 3
+      },
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/text-input-burst-80x24-run-1.json",
+          "file": "text-input-burst-80x24-run-1.json",
+          "capturedAt": "2026-06-10T16:34:13.594Z",
+          "frameCount": 40,
+          "steadyFrameCount": 40,
+          "requestedStepCount": 20,
+          "extraFrameCount": 20,
+          "framesPerStep": 2.0,
+          "totalFrameP95Ms": 171.0,
+          "runtimeRenderP95Ms": 146.0,
+          "runtimeBuildP95Ms": 41.699,
+          "runtimeLayoutP95Ms": 11.201,
+          "runtimePaintP95Ms": 70.599,
+          "dirtyRowDiffP95Ms": 12.5,
+          "spanBuildP95Ms": 19.5,
+          "domApplyP95Ms": 18.201,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 52.5,
+          "steadyTotalFrameP95Ms": 171.0,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 52.5,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimePaintMs",
+          "browserMetrics": {
+            "layoutDurationMs": 896.865,
+            "recalcStyleDurationMs": 198.41,
+            "scriptDurationMs": 15684.51,
+            "taskDurationMs": 19336.286,
+            "jsHeapUsedBytes": 4608720.0,
+            "jsHeapTotalBytes": 10485760.0,
+            "domDocumentCount": 1,
+            "domNodeCount": 282,
+            "jsEventListenerCount": 88
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 20,
+            "requestedSteps": 20,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/text-input-burst-80x24-run-2.json",
+          "file": "text-input-burst-80x24-run-2.json",
+          "capturedAt": "2026-06-10T16:34:39.813Z",
+          "frameCount": 40,
+          "steadyFrameCount": 40,
+          "requestedStepCount": 20,
+          "extraFrameCount": 20,
+          "framesPerStep": 2.0,
+          "totalFrameP95Ms": 47.901,
+          "runtimeRenderP95Ms": 31.4,
+          "runtimeBuildP95Ms": 13.7,
+          "runtimeLayoutP95Ms": 3.0,
+          "runtimePaintP95Ms": 14.399,
+          "dirtyRowDiffP95Ms": 1.5,
+          "spanBuildP95Ms": 1.5,
+          "domApplyP95Ms": 7.3,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 30.0,
+          "steadyTotalFrameP95Ms": 47.901,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 30.0,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimePaintMs",
+          "browserMetrics": {
+            "layoutDurationMs": 1464.677,
+            "recalcStyleDurationMs": 151.42,
+            "scriptDurationMs": 8259.158,
+            "taskDurationMs": 12606.822,
+            "jsHeapUsedBytes": 6732728.0,
+            "jsHeapTotalBytes": 12582912.0,
+            "domDocumentCount": 4,
+            "domNodeCount": 1881,
+            "jsEventListenerCount": 88
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 20,
+            "requestedSteps": 20,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-deferred-semantics/text-input-burst-80x24-run-3.json",
+          "file": "text-input-burst-80x24-run-3.json",
+          "capturedAt": "2026-06-10T16:35:12.199Z",
+          "frameCount": 40,
+          "steadyFrameCount": 40,
+          "requestedStepCount": 20,
+          "extraFrameCount": 20,
+          "framesPerStep": 2.0,
+          "totalFrameP95Ms": 198.9,
+          "runtimeRenderP95Ms": 78.5,
+          "runtimeBuildP95Ms": 20.799,
+          "runtimeLayoutP95Ms": 5.101,
+          "runtimePaintP95Ms": 41.801,
+          "dirtyRowDiffP95Ms": 5.801,
+          "spanBuildP95Ms": 4.199,
+          "domApplyP95Ms": 9.201,
+          "semanticApplyP95Ms": 0.0,
+          "overBudgetPercent": 42.5,
+          "steadyTotalFrameP95Ms": 198.9,
+          "steadySemanticApplyP95Ms": 0.0,
+          "steadyOverBudgetPercent": 42.5,
+          "semanticUncoveredCellsMax": 0.0,
+          "dominantP95Slice": "runtimePaintMs",
+          "browserMetrics": {
+            "layoutDurationMs": 1682.205,
+            "recalcStyleDurationMs": 150.845,
+            "scriptDurationMs": 13692.011,
+            "taskDurationMs": 19322.962,
+            "jsHeapUsedBytes": 3685912.0,
+            "jsHeapTotalBytes": 11272192.0,
+            "domDocumentCount": 4,
+            "domNodeCount": 1881,
+            "jsEventListenerCount": 0
+          },
+          "runEnvironment": {
+            "schemaVersion": 1,
+            "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "chromeBrowser": "Chrome/149.0.7827.102",
+            "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36",
+            "devtoolsProtocolVersion": "1.3",
+            "v8Version": "14.9.207.27",
+            "webkitVersion": "537.36 (@112f665d98a2fe84b156c74fbea2aed742f16c15)",
+            "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+            "operatingSystem": "macos",
+            "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+            "headless": true,
+            "requestedFrames": 20,
+            "requestedSteps": 20,
+            "warmupFrames": 8,
+            "frameBudgetMs": 16.67,
+            "semanticsEnabled": true
+          }
+        }
+      ],
+      "gates": [],
+      "strictPass": true
+    }
+  ]
+}

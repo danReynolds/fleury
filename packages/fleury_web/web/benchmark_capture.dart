@@ -39,6 +39,7 @@ Future<void> _run() async {
 
     await _waitForFrameCount(instrumentation, 1, timeout: options.timeout);
     await _waitForFrameQuiescence(instrumentation, timeout: options.timeout);
+    await host.awaitSemanticIdle();
     for (var index = 0; index < options.warmupFrames; index++) {
       final previousFrameCount = instrumentation.frames.length;
       _driveStep(
@@ -54,6 +55,7 @@ Future<void> _run() async {
         timeout: options.timeout,
       );
       await _waitForFrameQuiescence(instrumentation, timeout: options.timeout);
+      await host.awaitSemanticIdle();
     }
 
     instrumentation.clear();
@@ -72,6 +74,7 @@ Future<void> _run() async {
         timeout: options.timeout,
       );
       await _waitForFrameQuiescence(instrumentation, timeout: options.timeout);
+      await host.awaitSemanticIdle();
     }
 
     final capture = instrumentation.toJson(

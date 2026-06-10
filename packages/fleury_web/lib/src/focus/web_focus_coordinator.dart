@@ -45,6 +45,19 @@ final class WebFocusCoordinator {
     _browserFocusTarget = WebFocusTarget.semanticNode;
   }
 
+  /// Re-applies an activation's node projection after a tree sync built from
+  /// a snapshot that predates the activation.
+  ///
+  /// Deferred semantic flushes sync from a tree captured before the
+  /// activation, which would null the node out again. This restores the node
+  /// without stealing browser focus ownership: a later capture restoration
+  /// (keyboard/IME) keeps its target, and only a sync-cleared target falls
+  /// back to the semantic node.
+  void restoreSemanticActivationNode(SemanticNodeId id) {
+    _activeSemanticNode = id;
+    _browserFocusTarget ??= WebFocusTarget.semanticNode;
+  }
+
   void syncFromFleuryFocus(WebFocusSnapshot snapshot) {
     _activeSemanticNode = snapshot.activeSemanticNode;
     _activeCaretRect = snapshot.activeCaretRect;

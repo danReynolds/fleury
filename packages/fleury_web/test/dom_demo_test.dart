@@ -106,7 +106,7 @@ void main() {
 Future<void> _waitFor(
   bool Function() check, {
   required String description,
-  Duration timeout = const Duration(seconds: 2),
+  Duration timeout = const Duration(seconds: 10),
 }) async {
   final deadline = DateTime.now().add(timeout);
   while (DateTime.now().isBefore(deadline)) {

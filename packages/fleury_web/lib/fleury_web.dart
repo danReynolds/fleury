@@ -18,8 +18,12 @@ export 'src/instrumentation/web_host_instrumentation.dart'
         WebHostInstrumentation,
         WebInstrumentationSummary,
         WebMetricSummary,
+        WebSemanticFlushInstrumentation,
+        WebSemanticFlushSummary,
         defaultWebFrameBudgetMs;
 export 'src/run_tui_web_dom.dart' show runTuiWebDom;
+export 'src/semantics/semantic_flush_scheduler.dart'
+    show SemanticFlushScheduler, TimerSemanticFlushScheduler;
 export 'src/run_tui_surface.dart' show TuiSurfaceHost;
 export 'src/run_tui_web.dart' show runTuiWeb;
 export 'src/web_terminal_driver.dart' show WebTerminalDriver;

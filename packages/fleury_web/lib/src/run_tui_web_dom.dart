@@ -8,6 +8,7 @@ import 'input/dom_input_source.dart';
 import 'instrumentation/web_host_instrumentation.dart';
 import 'metrics/dom_cell_metrics.dart';
 import 'run_tui_surface.dart';
+import 'semantics/semantic_flush_scheduler.dart';
 import 'semantics/semantic_dom_presenter.dart';
 
 /// Runs a Fleury app through the retained DOM web host.
@@ -36,6 +37,7 @@ Future<TuiSurfaceHost> runTuiWebDom(
   Clipboard? clipboard,
   Duration frameInterval = Duration.zero,
   FrameFlushScheduler? flushScheduler,
+  SemanticFlushScheduler? semanticFlushScheduler,
   WebHostInstrumentation instrumentation = const NoopWebHostInstrumentation(),
   WebFocusCoordinator? focusCoordinator,
 }) async {
@@ -95,6 +97,7 @@ Future<TuiSurfaceHost> runTuiWebDom(
       cellMetrics: metrics,
       inputSource: input,
       semanticPresenter: semanticPresenter,
+      semanticFlushScheduler: semanticFlushScheduler,
       clipboard: webClipboard,
       frameInterval: frameInterval,
       flushScheduler: flushScheduler,

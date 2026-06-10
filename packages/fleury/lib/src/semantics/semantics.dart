@@ -926,6 +926,12 @@ final class SemanticDirtyTracker {
   final Map<SemanticNodeId, SemanticsElement> _dirtyLeafElements =
       <SemanticNodeId, SemanticsElement>{};
 
+  /// Whether any dirt has accumulated since the last [takeDirtySnapshot].
+  ///
+  /// A cheap peek for hosts deciding whether to schedule a deferred semantic
+  /// flush; it does not validate or consume the accumulated state.
+  bool get hasDirt => _requiresFullRebuild || _dirtyLeafElements.isNotEmpty;
+
   void recordStructureDirty() {
     _requiresFullRebuild = true;
     _dirtyLeafElements.clear();

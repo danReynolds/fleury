@@ -12,9 +12,37 @@ import 'package:fleury_web/src/instrumentation/web_host_instrumentation.dart';
 import 'package:fleury_web/src/metrics/cell_metrics.dart';
 import 'package:fleury_web/src/run_tui_surface.dart';
 import 'package:fleury_web/src/semantics/semantic_dom_presenter.dart';
+import 'package:fleury_web/src/semantics/semantic_flush_scheduler.dart';
 import 'package:fleury_web/src/semantics/semantic_presenter.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;
+
+class _FakeSemanticFlush implements SemanticFlushScheduler {
+  void Function()? _pending;
+  var scheduleCount = 0;
+  var disposed = false;
+
+  bool get pending => _pending != null;
+
+  @override
+  void schedule(void Function() flush) {
+    scheduleCount += 1;
+    _pending ??= flush;
+  }
+
+  @override
+  void dispose() {
+    disposed = true;
+    _pending = null;
+  }
+
+  void fire() {
+    final flush = _pending;
+    if (flush == null) throw StateError('No pending semantic flush.');
+    _pending = null;
+    flush();
+  }
+}
 
 class _FakeFlush {
   Duration? delay;
@@ -419,6 +447,7 @@ void main() {
     expect(root.textContent, isEmpty);
 
     flush.fire();
+    await host.awaitSemanticIdle();
 
     expect(root.textContent, contains('hello dom'));
     expect(surface.presentCount, 1);
@@ -439,6 +468,7 @@ void main() {
       flushScheduler: flush.schedule,
     );
     flush.fire();
+    await host.awaitSemanticIdle();
     expect(root.textContent, contains('count 0'));
     final replaceCountAfterInitial = surface.rowReplaceCount;
 
@@ -446,6 +476,7 @@ void main() {
 
     expect(flush.pending, isTrue);
     flush.fire();
+    await host.awaitSemanticIdle();
 
     expect(root.textContent, contains('count 1'));
     expect(surface.presentCount, 2);
@@ -474,6 +505,7 @@ void main() {
       expect(root.getAttribute('style'), contains('width:80px'));
       expect(root.getAttribute('style'), contains('height:40px'));
       flush.fire();
+      await host.awaitSemanticIdle();
 
       metrics.emitResize(_box(cols: 12, rows: 3));
 
@@ -482,6 +514,7 @@ void main() {
       expect(surface.rowElements, hasLength(2));
 
       flush.fire();
+      await host.awaitSemanticIdle();
 
       expect(surface.size, const CellSize(12, 3));
       expect(surface.rowElements, hasLength(3));
@@ -510,6 +543,7 @@ void main() {
         flushScheduler: flush.schedule,
       );
       flush.fire();
+      await host.awaitSemanticIdle();
       expect(controller.text, isEmpty);
 
       input.emit(const TextInputEvent('a'));
@@ -518,6 +552,7 @@ void main() {
       expect(controller.text, isEmpty);
 
       flush.fire();
+      await host.awaitSemanticIdle();
 
       expect(controller.text, 'a');
       expect(root.textContent, contains('a'));
@@ -543,6 +578,7 @@ void main() {
         flushScheduler: flush.schedule,
       );
       flush.fire();
+      await host.awaitSemanticIdle();
       expect(controller.text, 'git ');
 
       input.emit(const TextCompositionEvent.update('che'));
@@ -551,12 +587,14 @@ void main() {
       expect(controller.text, 'git ');
 
       flush.fire();
+      await host.awaitSemanticIdle();
 
       expect(controller.text, 'git che');
       expect(controller.hasComposingRange, isTrue);
 
       input.emit(const TextCompositionEvent.commit('checkout'));
       flush.fire();
+      await host.awaitSemanticIdle();
 
       expect(controller.text, 'git checkout');
       expect(controller.hasComposingRange, isFalse);
@@ -584,6 +622,7 @@ void main() {
     );
 
     flush.fire();
+    await host.awaitSemanticIdle();
 
     expect(input.caretSyncCount, greaterThan(0));
     expect(input.caretRect, CellRect.fromLTWH(3, 0, 1, 1));
@@ -615,6 +654,7 @@ void main() {
     );
 
     flush.fire();
+    await host.awaitSemanticIdle();
 
     final field =
         semanticRoot.querySelector('[role="textbox"]')! as web.HTMLInputElement;
@@ -649,6 +689,7 @@ void main() {
     );
 
     flush.fire();
+    await host.awaitSemanticIdle();
 
     expect(semantics.updates, hasLength(1));
     expect(semantics.updates.single?.previous, isNull);
@@ -660,6 +701,7 @@ void main() {
 
     key.currentState!.increment();
     flush.fire();
+    await host.awaitSemanticIdle();
 
     expect(semantics.updates, hasLength(2));
     expect(semantics.updates.last?.previous, isNotNull);
@@ -694,6 +736,7 @@ void main() {
       );
 
       flush.fire();
+      await host.awaitSemanticIdle();
 
       expect(instrumentation.frames, hasLength(1));
       final frame = instrumentation.frames.single;
@@ -710,10 +753,21 @@ void main() {
       expect(frame.domNodesCreated, greaterThan(0));
       expect(frame.styleCacheMisses, greaterThan(0));
       expect(frame.styleCacheHits, greaterThan(0));
-      expect(frame.semanticNodeCount, greaterThan(0));
-      expect(frame.semanticAddedNodeCount, greaterThan(0));
       expect(frame.semanticFallbackNodeCount, 0);
       expect(frame.semanticUncoveredCellCount, 0);
+      expect(instrumentation.semanticFlushes, hasLength(1));
+      final semanticFlush = instrumentation.semanticFlushes.single;
+      expect(semanticFlush.coalescedFrameCount, 1);
+      expect(semanticFlush.retainedOutput, isFalse);
+      expect(semanticFlush.semanticNodeCount, greaterThan(0));
+      expect(semanticFlush.semanticAddedNodeCount, greaterThan(0));
+      expect(semanticFlush.semanticFallbackNodeCount, 0);
+      expect(semanticFlush.semanticUncoveredCellCount, 0);
+      expect(semanticFlush.totalFlushTime, greaterThanOrEqualTo(Duration.zero));
+      expect(
+        semanticFlush.presentationLatency,
+        greaterThanOrEqualTo(semanticFlush.totalFlushTime),
+      );
       expect(frame.runtimeRenderTime, greaterThanOrEqualTo(Duration.zero));
       expect(frame.runtimeBuildTime, greaterThanOrEqualTo(Duration.zero));
       expect(frame.runtimeLayoutTime, greaterThanOrEqualTo(Duration.zero));
@@ -750,6 +804,7 @@ void main() {
       );
 
       flush.fire();
+      await host.awaitSemanticIdle();
 
       final fallback = semanticRoot.querySelector(
         '[data-fleury-semantic-id="__fleury_text_fallback_0_0"]',
@@ -759,8 +814,14 @@ void main() {
       expect(fallback.textContent, 'raw');
       expect(fallback.getAttribute('data-fleury-bounds-left'), '0');
       expect(fallback.getAttribute('data-fleury-bounds-width'), '3');
-      expect(instrumentation.frames.single.semanticFallbackNodeCount, 1);
-      expect(instrumentation.frames.single.semanticUncoveredCellCount, 3);
+      expect(
+        instrumentation.semanticFlushes.single.semanticFallbackNodeCount,
+        1,
+      );
+      expect(
+        instrumentation.semanticFlushes.single.semanticUncoveredCellCount,
+        3,
+      );
 
       await host.dispose();
     },
@@ -787,17 +848,22 @@ void main() {
       );
 
       flush.fire();
+      await host.awaitSemanticIdle();
       expect(semantics.trees, hasLength(1));
       expect(
-        instrumentation.frames.single.semanticAddedNodeCount,
+        instrumentation.semanticFlushes.single.semanticAddedNodeCount,
         greaterThan(0),
       );
 
       host.requestFrame('noop');
       flush.fire();
+      await host.awaitSemanticIdle();
 
       expect(semantics.trees, hasLength(1));
       expect(instrumentation.frames, hasLength(2));
+      // The noop frame replaced no rows and carried no semantic dirt, so no
+      // second flush was even scheduled.
+      expect(instrumentation.semanticFlushes, hasLength(1));
       final retained = instrumentation.frames.last;
       expect(retained.semanticNodeCount, greaterThan(0));
       expect(retained.semanticAddedNodeCount, 0);
@@ -831,14 +897,22 @@ void main() {
       );
 
       flush.fire();
+      await host.awaitSemanticIdle();
       expect(semantics.trees, hasLength(1));
-      expect(instrumentation.frames.single.semanticFallbackNodeCount, 1);
+      expect(
+        instrumentation.semanticFlushes.single.semanticFallbackNodeCount,
+        1,
+      );
 
       host.requestFrame('noop');
       flush.fire();
+      await host.awaitSemanticIdle();
 
-      expect(semantics.trees, hasLength(2));
+      // The buffer did not change, so the retained fallback persists without
+      // another semantic flush or presentation.
+      expect(semantics.trees, hasLength(1));
       expect(instrumentation.frames, hasLength(2));
+      expect(instrumentation.semanticFlushes, hasLength(1));
       expect(instrumentation.frames.last.semanticFallbackNodeCount, 1);
       expect(instrumentation.frames.last.semanticUncoveredCellCount, 3);
 
@@ -869,17 +943,22 @@ void main() {
       );
 
       flush.fire();
+      await host.awaitSemanticIdle();
 
       final fallbackSelector =
           '[data-fleury-semantic-id="__fleury_text_fallback_1_0"]';
       expect(semanticRoot.querySelector(fallbackSelector)!.textContent, 'raw0');
-      expect(instrumentation.frames.single.semanticFallbackNodeCount, 1);
+      expect(
+        instrumentation.semanticFlushes.single.semanticFallbackNodeCount,
+        1,
+      );
 
       // A retained leaf patch of the fallback-bearing tree would keep the
       // stale 'raw0' fallback "covering" the repainted cells; the host must
       // take the full-rebuild path and regenerate fallback from the buffer.
       key.currentState!.advance();
       flush.fire();
+      await host.awaitSemanticIdle();
 
       expect(semanticRoot.querySelector(fallbackSelector)!.textContent, 'raw1');
       expect(
@@ -888,7 +967,7 @@ void main() {
             .textContent,
         contains('gen 1'),
       );
-      expect(instrumentation.frames.last.semanticFallbackNodeCount, 1);
+      expect(instrumentation.semanticFlushes.last.semanticFallbackNodeCount, 1);
 
       await host.dispose();
     },
@@ -925,18 +1004,22 @@ void main() {
       );
 
       flushA.fire();
+      await hostA.awaitSemanticIdle();
       flushB.fire();
+      await hostB.awaitSemanticIdle();
 
       // Drive host A only. With shared static trackers, A's dirt would have
       // been consumed (or corrupted) by whichever host's frame ran first.
       keyA.currentState!.increment();
       flushA.fire();
+      await hostA.awaitSemanticIdle();
       expect(semanticRootA.textContent, contains('count 1'));
 
       // Host B re-renders after A's update: its retained semantic output must
       // be untouched (no spurious updates from A's dirty state).
       hostB.requestFrame('noop');
       flushB.fire();
+      await hostB.awaitSemanticIdle();
       final retained = instrumentationB.frames.last;
       expect(retained.semanticAddedNodeCount, 0);
       expect(retained.semanticRemovedNodeCount, 0);
@@ -945,6 +1028,120 @@ void main() {
 
       await hostA.dispose();
       await hostB.dispose();
+    },
+  );
+
+  test('multiple visual frames coalesce into one semantic flush', () async {
+    final visualRoot = web.document.createElement('div');
+    final semanticRoot = web.document.createElement('div');
+    final surface = DomGridSurface(
+      root: visualRoot,
+      size: const CellSize(24, 2),
+    );
+    final semantics = SemanticDomPresenter(root: semanticRoot);
+    final instrumentation = RecordingWebHostInstrumentation();
+    final flush = _FakeFlush();
+    final semanticFlush = _FakeSemanticFlush();
+    final key = GlobalKey<_CounterState>();
+
+    final host = await runTuiSurface(
+      () => _Counter(key: key),
+      surface: surface,
+      semanticPresenter: semantics,
+      semanticFlushScheduler: semanticFlush,
+      flushScheduler: flush.schedule,
+      instrumentation: instrumentation,
+    );
+
+    // Three visual frames land before the deferred flush gets to run.
+    flush.fire();
+    key.currentState!.increment();
+    flush.fire();
+    key.currentState!.increment();
+    flush.fire();
+
+    expect(instrumentation.frames, hasLength(3));
+    expect(instrumentation.semanticFlushes, isEmpty);
+    expect(semanticRoot.textContent, isEmpty);
+
+    semanticFlush.fire();
+
+    // One flush covered all three frames and presented only the latest state.
+    expect(instrumentation.semanticFlushes, hasLength(1));
+    final coalesced = instrumentation.semanticFlushes.single;
+    expect(coalesced.coalescedFrameCount, 3);
+    expect(coalesced.retainedOutput, isFalse);
+    expect(semanticRoot.textContent, contains('count 2'));
+    expect(semanticRoot.textContent, isNot(contains('count 1')));
+    expect(semanticFlush.pending, isFalse);
+
+    await host.dispose();
+    expect(semanticFlush.disposed, isTrue);
+  });
+
+  test(
+    'semantic actions force-flush pending semantics before dispatch',
+    () async {
+      var calls = 0;
+      final visualRoot = web.document.createElement('div');
+      final semanticRoot = web.document.createElement('div');
+      final surface = DomGridSurface(
+        root: visualRoot,
+        size: const CellSize(16, 2),
+      );
+      final semantics = SemanticDomPresenter(root: semanticRoot);
+      final instrumentation = RecordingWebHostInstrumentation();
+      final flush = _FakeFlush();
+      final semanticFlush = _FakeSemanticFlush();
+      final key = GlobalKey<_CounterState>();
+
+      final host = await runTuiSurface(
+        () => Column(
+          children: [
+            _Counter(key: key),
+            Semantics(
+              id: const SemanticNodeId('run'),
+              role: SemanticRole.button,
+              label: 'Run',
+              actions: const {SemanticAction.activate},
+              onAction: (action) => calls += 1,
+              child: const Text('Run'),
+            ),
+          ],
+        ),
+        surface: surface,
+        semanticPresenter: semantics,
+        semanticFlushScheduler: semanticFlush,
+        flushScheduler: flush.schedule,
+        instrumentation: instrumentation,
+      );
+
+      flush.fire();
+      semanticFlush.fire();
+      final button = semanticRoot.querySelector(
+        '[data-fleury-semantic-id="run"]',
+      )!;
+
+      // Leave a semantic flush pending (stale tree) when the action arrives:
+      // the action frame must force-flush before dispatching.
+      key.currentState!.increment();
+      flush.fire();
+      expect(semanticFlush.pending, isTrue);
+
+      button.dispatchEvent(
+        web.Event('click', web.EventInit(bubbles: true, cancelable: true)),
+      );
+      flush.fire();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        instrumentation.semanticFlushes.map((f) => f.reason),
+        contains('semantic-action'),
+      );
+      expect(semanticRoot.textContent, contains('count 1'));
+      expect(calls, 1);
+
+      await host.dispose();
     },
   );
 
@@ -985,6 +1182,7 @@ void main() {
       );
 
       flush.fire();
+      await host.awaitSemanticIdle();
 
       final button = semanticRoot.querySelector(
         '[data-fleury-semantic-id="run"]',
@@ -1001,6 +1199,7 @@ void main() {
       expect(flush.pending, isTrue);
 
       flush.fire();
+      await host.awaitSemanticIdle();
 
       expect(focusCoordinator.activeSemanticNode, const SemanticNodeId('run'));
 
@@ -1015,6 +1214,7 @@ void main() {
       );
       expect(flush.pending, isTrue);
       flush.fire();
+      await host.awaitSemanticIdle();
 
       expect(
         instrumentation.frames.last.reason,
@@ -1052,16 +1252,19 @@ void main() {
       );
 
       flush.fire();
+      await host.awaitSemanticIdle();
 
       semantics.requestAction(
         const SemanticNodeId('run'),
         SemanticAction.focus,
       );
       flush.fire();
+      await host.awaitSemanticIdle();
       await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(Duration.zero);
       expect(flush.pending, isTrue);
       flush.fire();
+      await host.awaitSemanticIdle();
       expect(
         instrumentation.frames.last.reason,
         'semantic-action:focus:unsupported',
@@ -1072,10 +1275,12 @@ void main() {
         SemanticAction.activate,
       );
       flush.fire();
+      await host.awaitSemanticIdle();
       await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(Duration.zero);
       expect(flush.pending, isTrue);
       flush.fire();
+      await host.awaitSemanticIdle();
       expect(
         instrumentation.frames.last.reason,
         'semantic-action:activate:notFound',
@@ -1117,8 +1322,10 @@ void main() {
       );
 
       flush.fire();
+      await host.awaitSemanticIdle();
       expect(flush.pending, isTrue);
       flush.fire();
+      await host.awaitSemanticIdle();
       expect(
         instrumentation.frames.last.reason,
         'semantic-action:activate:notFound',
@@ -1160,6 +1367,7 @@ void main() {
     );
 
     flush.fire();
+    await host.awaitSemanticIdle();
 
     final button = semanticRoot.querySelector(
       '[data-fleury-semantic-id="run"]',
@@ -1169,12 +1377,14 @@ void main() {
     );
 
     flush.fire();
+    await host.awaitSemanticIdle();
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
 
     expect(calls, 1);
     expect(flush.pending, isTrue);
     flush.fire();
+    await host.awaitSemanticIdle();
     expect(
       instrumentation.frames.last.reason,
       'semantic-action:activate:failed',
@@ -1222,6 +1432,7 @@ void main() {
       );
 
       flush.fire();
+      await host.awaitSemanticIdle();
 
       final button = semanticRoot.querySelector(
         '[data-fleury-semantic-id="run"]',
@@ -1231,6 +1442,7 @@ void main() {
       );
 
       flush.fire();
+      await host.awaitSemanticIdle();
       await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(Duration.zero);
 
@@ -1238,6 +1450,7 @@ void main() {
       expect(focusCoordinator.browserFocusTarget, WebFocusTarget.semanticNode);
       expect(flush.pending, isTrue);
       flush.fire();
+      await host.awaitSemanticIdle();
       expect(
         instrumentation.frames.last.reason,
         'semantic-action:activate:completed',
@@ -1280,6 +1493,7 @@ void main() {
       );
 
       flush.fire();
+      await host.awaitSemanticIdle();
 
       final button = semanticRoot.querySelector(
         '[data-fleury-semantic-id="run"]',
@@ -1289,6 +1503,7 @@ void main() {
       );
 
       flush.fire();
+      await host.awaitSemanticIdle();
       expect(focusCoordinator.activeSemanticNode, const SemanticNodeId('run'));
       expect(focusCoordinator.browserFocusTarget, WebFocusTarget.semanticNode);
 

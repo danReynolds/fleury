@@ -95,6 +95,7 @@ void main() {
       expect(flush.pending, isTrue);
 
       flush.fire();
+      await host.awaitSemanticIdle();
       expect(instrumentation.frames, hasLength(1));
       expect(controller.text, isEmpty);
       final semanticsRoot = hostElement.querySelector('.fleury-semantics')!;
@@ -127,6 +128,7 @@ void main() {
       expect(fallbackPaste.defaultPrevented, isTrue);
       expect(flush.pending, isTrue);
       flush.fire();
+      await host.awaitSemanticIdle();
       expect(controller.text, 'fallback');
       expect(instrumentation.frames, hasLength(2));
 
@@ -146,6 +148,7 @@ void main() {
       expect(controller.text, 'fallback');
 
       flush.fire();
+      await host.awaitSemanticIdle();
 
       expect(controller.text, 'fallbackz');
       expect(instrumentation.frames, hasLength(3));
@@ -204,6 +207,7 @@ void main() {
       expect(Clipboard.instance, isNot(same(previousClipboard)));
 
       flush.fire();
+      await host.awaitSemanticIdle();
       expect(hostElement.textContent, contains('root build failed'));
 
       await host.dispose();
@@ -254,6 +258,7 @@ void main() {
       expect(hostElement.querySelector('textarea'), isNotNull);
 
       flush.fire();
+      await host.awaitSemanticIdle();
       expect(surfaceElement.textContent, contains('supplied roots'));
       expect(semanticElement.textContent, contains('supplied roots'));
 
@@ -347,6 +352,7 @@ void main() {
       );
 
       flush.fire();
+      await host.awaitSemanticIdle();
       expect(hostElement.textContent, contains('diagnostics only'));
 
       await host.dispose();
