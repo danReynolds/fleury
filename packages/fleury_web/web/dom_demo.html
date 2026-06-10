@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fleury retained DOM demo</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #050505;
+        color: #f5f5f5;
+      }
+
+      #fleury-app {
+        position: absolute;
+        inset: 0;
+        width: 96ch;
+        max-width: calc(100vw - 24px);
+        height: 420px;
+        max-height: calc(100vh - 24px);
+        padding: 12px;
+        box-sizing: border-box;
+        overflow: hidden;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 16px;
+        line-height: 18px;
+        background: #050505;
+        color: #f5f5f5;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="fleury-app"></div>
+    <script defer src="dom_demo.dart.js"></script>
+  </body>
+</html>
