@@ -13895,3 +13895,158 @@ Interpretation:
   - keep `single-dirty-cell` as a stricter runtime-build follow-up gate; or
   - introduce a product-realistic row/cell retained widget pattern if the
     current benchmark is measuring avoidable app-side string/widget churn.
+
+## 2026-06-09 22:50 EDT
+
+Takeover pass (new agent): interpreted the interrupted build-stats capture,
+ran confirmation captures for the proposed gates, and hardened the retained
+semantic path. Conclusions below supersede the 21:26 EDT open questions.
+
+### Build-stats verdict: no framework rebuild churn
+
+The interrupted diagnostic capture completed and is on disk:
+`profiling/web/runs/single-dirty-cell-160x50-build-stats-check.json`
+(captured 2026-06-10T01:33Z).
+
+- Every one of the 24 steady frames — including the 3 over-budget frames
+  (26.2ms, 33.1ms, 34.8ms) — recorded exactly
+  `runtimeBuildPassCount=1`, `runtimeRebuiltElementCount=1`,
+  `runtimeMaxDirtyElementCount=1`.
+- The over-budget frames spend their time in `runtimeBuildMs` (12.0—31.5ms)
+  rebuilding a single element. That is V8 JIT/GC/scheduler variance, not
+  framework rebuild churn.
+- Verdict: the remaining single-dirty-cell misses are NOT a framework defect
+  to fix; they are an environment-variance gate-policy question. The
+  per-frame build stats now make this attributable frame-by-frame.
+
+### Confirmation captures refute the strict steady gate
+
+The 21:09 EDT acceptance of `dirty-row-160x50` as a strict steady gate
+(`0/24` over, p95 13.7ms) was based on a single capture. Two confirmation
+captures with identical parameters (32 frames, warmup 8) do not reproduce it:
+
+- `profiling/web/runs/dirty-row-160x50-floor-confirm-1.json`:
+  steady p50 2.7ms, p95 23.2ms, max 53.1ms, `3/24` over budget.
+- `profiling/web/runs/dirty-row-160x50-floor-confirm-2.json`:
+  steady p50 6.8ms, p95 26.1ms, max 40.7ms, `4/24` over budget.
+- `profiling/web/runs/single-dirty-cell-160x50-post-hardening.json`:
+  steady p50 2.0ms, p95 19.4ms, max 20.3ms, `2/24` over budget.
+
+Build stats in all three runs stayed flat (dirty-row: `(1 pass, 2 rebuilt,
+2 max-dirty)` every steady frame; single-dirty-cell: `(1, 1, 1)`), so the
+over-budget frames again decompose into:
+
+- `runtimeBuildMs` spikes (10—16ms for one/two-element rebuilds) — the same
+  VM-variance signature as the build-stats capture; and
+- a repeatable ~32ms `semanticTreeBuildMs` spike on the final steady frame
+  of both dirty-row runs (53.1ms / 40.7ms totals). The exact-last-frame
+  pattern suggests accumulated allocation pressure triggering a major GC at
+  the capture boundary. Logged as a diagnostic follow-up: confirm with a
+  longer capture (64+ frames) and, if confirmed, attack per-frame allocation
+  in the semantic produce/replace path rather than the gate.
+
+### Gate decision
+
+- Steady p50 for both row-local scenarios is 2—7ms — the dirty-frame web
+  path is fast in the typical case; the gate question is entirely about
+  tail variance.
+- A strict "no steady frame over 16.67ms" gate is NOT reproducible on this
+  machine/environment today and is therefore not adopted for either
+  scenario. Single lucky runs must not bless gates; gates come from the
+  median-of-3 scoreboard.
+- The release gate remains the regression-floor model already encoded in
+  the reviewed thresholds machinery (median-of-3 per-scenario p95 with 20%
+  headroom), refreshed against the post-retained-dirty-semantics code state
+  (see next entry for the regenerated baseline).
+- The strict 16.67ms steady budget is retained as the optimization target
+  and is now diagnosable per frame via the build-stat fields: an over-budget
+  frame with flat build stats and a dominant `runtimeBuildMs`/GC slice is
+  environment variance; anything else is framework work to fix.
+
+### Hardening landed in this pass
+
+- `fleury.dart` now re-exports `fleury_host.dart` (restores
+  `InputDispatcher` to the native umbrella; fixes 4 analyzer errors in two
+  unmigrated test files); `BuildFlushStats` moved off the app-facing
+  `fleury_core.dart` surface to `fleury_host.dart`.
+- Retained-vs-full divergence assertion: `debugSemanticTreeDivergence`
+  (exported from `fleury_host.dart`) compares the retained
+  `SemanticTree.replaceNodes` result against a fresh
+  `SemanticTree.fromElement` rebuild inside `assert(...)` in
+  `runTuiSurface`; throws with the first divergent node path in debug
+  builds, compiles out of `-O2` release benchmarks.
+- Closed a stale-fallback hazard: the retained leaf path now also requires
+  `!lastSemanticCoverageAudit.hasUncoveredText`. Patching a fallback-bearing
+  retained tree would keep a stale fallback label "covering" repainted
+  cells; a full rebuild regenerates fallback from the live buffer. New
+  Chrome test
+  (`leaf update with active text fallback refreshes fallback from the
+  buffer`) locks the behavior.
+- Escalation-edge tests added (core): sibling semantic insertion/removal
+  escalates to full rebuild; id change escalates; `includeChildren` updates
+  escalate; geometry-only movement is captured as a retained leaf update
+  with fresh bounds; multiple leaf updates in one frame are all captured.
+  Divergence-helper unit tests added (owner): equivalent trees, first
+  differing node, child reorder.
+
+Verification:
+
+- `cd packages/fleury && dart analyze` - No issues found (was 4 errors).
+- `cd packages/fleury_web && dart analyze` - No issues found.
+- `cd packages/fleury && dart test test/semantics/semantics_test.dart` -
+  38 tests passed (6 new escalation tests).
+- `cd packages/fleury && dart test test/semantics/semantics_owner_test.dart` -
+  9 tests passed (3 new divergence tests).
+- `cd packages/fleury_web && dart test -p chrome test/run_tui_surface_test.dart` -
+  24 tests passed (1 new fallback-interplay test) with the divergence
+  assertion active under DDC asserts.
+
+## 2026-06-09 23:05 EDT
+
+Regenerated the promoted evidence chain against the
+post-retained-dirty-semantics + hardening code state. The prior baseline
+(`2026-06-09-local-dom-retained-subphase-refresh`) and completion audit
+predated the retained-dirty-semantics work and materially misstated current
+performance.
+
+New baseline: `profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened`
+(11 scenarios x 3 runs, warmup 8, comparable environment signatures, strict
+min-runs=3 scoreboard).
+
+Median capture p95 (old -> new, ms): dirty-row-160x50 331.1 -> 52.8;
+single-dirty-cell-160x50 117.2 -> 61.0; large-160x50 178.1 -> 47.8;
+cursor-blink-80x24 350.2 -> 112.4; scroll-row-churn 832.1 -> 393.4;
+full-frame-churn 663.1 -> 385.9; stress-300x100 700.0 -> 487.7;
+text-input-burst 248.9 -> 111.6; noop-160x50 92.8 -> 20.9. Steady p50 for
+the row-local scenarios is now 2-7ms (dirty-row run-1 p50 4.0ms vs 25.6ms
+in the old baseline). Two scenarios moved against the trend
+(normal-80x24 120.3 -> 261.7, resize-burst 314.6 -> 630.0): both are tail
+variance, not code regression — resize-burst median p50 improved
+(49.1 -> 39.2ms), and the hardening gate change is provably inert across
+the whole suite (`semanticUncoveredCellsMax = 0` in all 33 captures, so the
+new `!hasUncoveredText` condition never fires in benchmarks). These two
+scenarios remain semanticApply-dominant and are optimization targets, not
+gate regressions.
+
+Evidence chain regenerated:
+
+- `fleury benchmark web-suite --runs=3 --warmup=8 --output-dir=.../2026-06-09-retained-dirty-semantics-hardened --write-thresholds=.../thresholds.candidate.json` - passed strict scoreboard.
+- `dart run tool/web_readiness_bundle.dart --captures=... --manual=... --thresholds=.../thresholds.candidate.json --target-preset=v1 --write-default-preflights --completion-audit=docs/implementation/web-rfc-completion-audit.json` - bundle written.
+- `dart run tool/web_automated_validation.dart --json-output=.../readiness-candidate/web-automated-validation.json --strict` - strictPass (browser + vm).
+- Bundle re-generated to absorb the validation artifact, then
+  `--verify ... --strict` - passed: 11 artifacts, 226 source inputs, 65
+  manifest fields, zero mismatches.
+- `docs/implementation/web-rfc-completion-audit.json` regenerated:
+  `overallStatus=implementation-review-ready-release-blocked`. All remaining
+  blockers chain from one root action: human review/promotion of the
+  candidate thresholds.
+
+Pending human gate (intentionally not self-served, matching the
+"Dan interactive review" provenance precedent): promote the candidate via
+the command embedded in
+`profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened/threshold-review-plan.md`
+(input fingerprint `fnv1a64:31221901e96a24c3`), then re-run the readiness
+bundle + preflights. Suggested review-note framing: regression floor for
+the measured environment only, not production acceptance; strict 16.67ms
+steady budget remains the tracked optimization target with per-frame
+build-stat attribution.

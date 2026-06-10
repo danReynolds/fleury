@@ -3,3 +3,5 @@ pubspec.lock
 caps/
 *.bin
 web/runs/
+web/scoreboard.json
+web/scoreboard.md
