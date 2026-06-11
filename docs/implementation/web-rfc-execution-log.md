@@ -14467,3 +14467,30 @@ audit now reads `release-evidence-ready-default-actions-pending` with
 `releaseEvidenceReady: true` — the only remaining blockers are the two
 intentionally-parked release actions (make-dom-default,
 retire-temporary-paths).
+
+## 2026-06-11 (wire plan Phase A: full native evidence)
+
+- All 12 wire scenarios captured native, 3 runs each (GOARCH=arm64 for
+  Go fixtures): `profiling/caps/2026-06-11-native-full` is the canonical
+  scoreboard input (sb6/multi/batch capture dirs preserved for
+  provenance).
+- SB.10 unblocked: the demo journey's transcript query used the stale
+  `SemanticRole.log`; the storybook refactor had (correctly) refined
+  MessageList to `messageList`. Query fixed; `_invoke` now fails loudly
+  per step (with an expected-status escape for the intentionally
+  disabled re-burst), so journey drift can never be silent again.
+- Scoreboard rollup fixes: (1) RSS/CPU — the runtime-confounded axes —
+  band against the best non-native participant, with the absolute native
+  best still printed in the cell, so positions measure
+  framework-controllable work; (2) a measured scenario with WAY OFF on a
+  non-severe axis now reads `catch up: <axes>` instead of `needs data`.
+- Resulting full-suite standings: push leading 8/12 (SB.1, SB.2, SB.3,
+  SB.5, SB.6, SB.7, SB.10, SB.12), parity ok 2/12 (SB.4, SB.8),
+  catch up 2/12 — SB.9 (`overheadPercent`, the cursor/sync byte target)
+  and SB.11 (RSS 143MiB — 7x fleury's usual footprint on
+  tree-table/filter, a real Phase D target — plus TTFB/FPS).
+- Transcript histograms (from the .bin streams) confirm the Phase B
+  thesis: fleury's overhead is cursor moves (SB.6: 3,582 CSI-C + 2,903
+  CR + 781 CSI-H = 25KB; SB.9: 249 CSI-C where bubbletea uses 84 cursor
+  bytes total) and per-frame sync wrappers; SGR is already near-zero
+  where styling is sparse.

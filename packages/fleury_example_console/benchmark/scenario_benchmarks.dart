@@ -447,8 +447,10 @@ Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
     frame = tester.render(size: config.terminalSize);
     unsafeFrameCount += _unsafeVisibleFrameCount(frame, config.terminalSize);
     final transcriptTree = tester.semantics();
+    // MessageList contributes the precise messageList role (storybook/DX
+    // refinement); the transcript is not a raw log region.
     final transcriptLog = transcriptTree.single(
-      role: SemanticRole.log,
+      role: SemanticRole.messageList,
       label: 'Transcript events',
     );
     transcript.stop();
