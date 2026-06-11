@@ -1,5 +1,7 @@
 import 'package:fleury/fleury.dart';
 
+import 'option_label.dart';
+
 /// A row in a [Menu]: a selectable [MenuItem], a nested [SubMenu], or a
 /// [MenuSeparator].
 sealed class MenuEntry {
@@ -344,11 +346,11 @@ class _MenuBodyState extends State<_MenuBody> {
     // is a submenu, the trailing ' ▸' indicator (2).
     var labelWidth = 0;
     for (final e in widget.entries) {
-      final label = switch (e) {
+      final label = sanitizeOptionLabel(switch (e) {
         MenuItem(:final label) => label,
         SubMenu(:final label) => label,
         MenuSeparator() => '',
-      };
+      });
       if (label.length > labelWidth) labelWidth = label.length;
     }
     final width = labelWidth + 2 + (hasSubmenu ? 2 : 0);
@@ -404,14 +406,15 @@ class _MenuBodyState extends State<_MenuBody> {
                       case MenuSeparator():
                         return Text('─' * width, style: widget.mutedStyle);
                       case MenuItem(:final label, :final enabled):
+                        final safeLabel = sanitizeOptionLabel(label);
                         final child = enabled
                             ? Text(
-                                '${selected ? '› ' : '  '}$label',
+                                '${selected ? '› ' : '  '}$safeLabel',
                                 style: selected
                                     ? widget.selectionStyle
                                     : CellStyle.empty,
                               )
-                            : Text('  $label', style: widget.mutedStyle);
+                            : Text('  $safeLabel', style: widget.mutedStyle);
                         return _semanticMenuItem(
                           entry: entry,
                           index: i,
@@ -419,14 +422,15 @@ class _MenuBodyState extends State<_MenuBody> {
                           child: child,
                         );
                       case SubMenu(:final label, :final enabled):
+                        final safeLabel = sanitizeOptionLabel(label);
                         final child = enabled
                             ? Text(
-                                '${selected ? '› ' : '  '}$label ▸',
+                                '${selected ? '› ' : '  '}$safeLabel ▸',
                                 style: selected
                                     ? widget.selectionStyle
                                     : CellStyle.empty,
                               )
-                            : Text('  $label ▸', style: widget.mutedStyle);
+                            : Text('  $safeLabel ▸', style: widget.mutedStyle);
                         return _semanticMenuItem(
                           entry: entry,
                           index: i,
@@ -450,11 +454,11 @@ class _MenuBodyState extends State<_MenuBody> {
     required bool selected,
     required Widget child,
   }) {
-    final label = switch (entry) {
+    final label = sanitizeOptionLabel(switch (entry) {
       MenuItem(:final label) => label,
       SubMenu(:final label) => label,
       MenuSeparator() => '',
-    };
+    });
     final enabled = switch (entry) {
       MenuItem(:final enabled) => enabled,
       SubMenu(:final enabled) => enabled,

@@ -1,5 +1,7 @@
 import 'package:fleury/fleury.dart';
 
+import 'option_label.dart';
+
 /// A text field with an anchored, live-filtered suggestion list.
 ///
 /// As the user types, options whose display string matches the text
@@ -159,7 +161,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
   Widget _suggestions() {
     var width = 0;
     for (final o in _filtered) {
-      final len = _display(o).length;
+      final len = sanitizeOptionLabel(_display(o)).length;
       if (len > width) width = len;
     }
     final height = _filtered.length > widget.maxVisible
@@ -205,7 +207,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
             selectionActive: true,
             itemCount: _filtered.length,
             itemBuilder: (_, i, selected) {
-              final label = _display(_filtered[i]);
+              final label = sanitizeOptionLabel(_display(_filtered[i]));
               return Semantics(
                 role: SemanticRole.menuItem,
                 label: label,

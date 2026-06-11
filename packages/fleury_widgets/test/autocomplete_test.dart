@@ -233,6 +233,21 @@ void main() {
       expect(apple.announcement, contains('actions: activate, select'));
     });
   });
+
+  testWidgets('sanitizes unsafe option labels for display and semantics', (
+    tester,
+  ) {
+    const unsafe = ['bad\x1b]52;c;secret\x07ge\nname'];
+    tester.pumpWidget(const Autocomplete(options: unsafe, autofocus: true));
+    tester.type('bad');
+    final out = _screen(tester, cols: 32);
+    expect(out, isNot(contains('secret')));
+    expect(out, isNot(contains('\x1b]52')));
+    expect(out, contains(replacementCharacter));
+    final row = tester.semantics().single(role: SemanticRole.menuItem);
+    expect(row.label, contains(replacementCharacter));
+    expect(row.label, isNot(contains('secret')));
+  });
 }
 
 class _Person {

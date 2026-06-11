@@ -225,4 +225,26 @@ void main() {
     expect(controller.text, 'ch');
     expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
   });
+
+  testWidgets('sanitizes unsafe completion labels and details', (tester) {
+    tester.pumpWidget(
+      CompletionTextInput(
+        provider: (_) => const [
+          TextCompletionOption(
+            label: 'run\x1b]52;c;secret\x07cmd',
+            detail: 'det\nail\x1b[2J',
+          ),
+        ],
+        autofocus: true,
+      ),
+    );
+    tester.type('r');
+    final out = _screen(tester);
+    expect(out, isNot(contains('secret')));
+    expect(out, isNot(contains('\x1b[2J')));
+    expect(out, contains(replacementCharacter));
+    final row = tester.semantics().single(role: SemanticRole.menuItem);
+    expect(row.label, contains(replacementCharacter));
+    expect(row.label, isNot(contains('secret')));
+  });
 }

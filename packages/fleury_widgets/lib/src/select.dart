@@ -1,5 +1,7 @@
 import 'package:fleury/fleury.dart';
 
+import 'option_label.dart';
+
 /// One choice in a [Select]. A disabled option is shown dimmed and skipped
 /// by arrow navigation and Enter.
 final class SelectOption<T> {
@@ -99,7 +101,7 @@ class _SelectState<T> extends State<Select<T>> {
 
   String get _currentLabel {
     for (final o in widget.options) {
-      if (o.value == widget.value) return o.label;
+      if (o.value == widget.value) return sanitizeOptionLabel(o.label);
     }
     return widget.placeholder;
   }
@@ -498,7 +500,8 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
         : highlighted
         ? theme.selectionStyle
         : CellStyle.empty;
-    final text = '${selected ? '[x]' : '[ ]'} ${option.label}';
+    final safeLabel = sanitizeOptionLabel(option.label);
+    final text = '${selected ? '[x]' : '[ ]'} $safeLabel';
     final row = optionEnabled
         ? GestureDetector(
             onTap: () {
@@ -511,7 +514,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
         : Text(text, style: style);
     return Semantics(
       role: SemanticRole.checkbox,
-      label: option.label,
+      label: safeLabel,
       value: option.value,
       enabled: optionEnabled,
       focused: highlighted,
@@ -653,7 +656,8 @@ class _SelectListState<T> extends State<_SelectList<T>> {
     Focus.maybeOf(context); // Rebuild list/item semantics when focus moves.
     var labelWidth = 0;
     for (final o in widget.options) {
-      if (o.label.length > labelWidth) labelWidth = o.label.length;
+      final labelLength = sanitizeOptionLabel(o.label).length;
+      if (labelLength > labelWidth) labelWidth = labelLength;
     }
     // Leading marker (2 cells: check + space) plus the label.
     final width = labelWidth + 2;
@@ -706,7 +710,8 @@ class _SelectListState<T> extends State<_SelectList<T>> {
                   // A width-1 marker keeps every row aligned and within the
                   // computed panel width (a width-2 glyph would wrap).
                   final marker = i == widget.appliedIndex ? '• ' : '  ';
-                  final text = '$marker${option.label}';
+                  final safeLabel = sanitizeOptionLabel(option.label);
+                  final text = '$marker$safeLabel';
                   final row = option.enabled
                       ? GestureDetector(
                           onTap: () => _pick(i),
@@ -720,7 +725,7 @@ class _SelectListState<T> extends State<_SelectList<T>> {
                       : Text(text, style: widget.mutedStyle);
                   return Semantics(
                     role: SemanticRole.menuItem,
-                    label: option.label,
+                    label: safeLabel,
                     value: option.value,
                     enabled: option.enabled,
                     focused: _focus.hasFocus && selected,

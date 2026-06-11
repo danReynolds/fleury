@@ -390,4 +390,25 @@ void main() {
       expect(cut.announcement, contains('actions: activate'));
     });
   });
+
+  testWidgets('sanitizes unsafe item labels for display and semantics', (
+    tester,
+  ) {
+    tester.pumpWidget(
+      Menu(
+        trigger: const Text('Edit'),
+        autofocus: true,
+        items: [
+          MenuItem(label: 'Cut\x1b]52;c;secret\x07here', onSelected: () {}),
+        ],
+      ),
+    );
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open
+    final out = _screen(tester, cols: 32);
+    expect(out, isNot(contains('secret')));
+    expect(out, contains(replacementCharacter));
+    final row = tester.semantics().single(role: SemanticRole.menuItem);
+    expect(row.label, contains(replacementCharacter));
+    expect(row.label, isNot(contains('secret')));
+  });
 }

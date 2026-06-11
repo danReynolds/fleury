@@ -473,4 +473,22 @@ void main() {
       expect(result.status, SemanticActionInvocationStatus.disabled);
     });
   });
+
+  testWidgets('sanitizes unsafe option labels in trigger, list, and '
+      'semantics', (tester) {
+    const unsafe = <SelectOption<String>>[
+      SelectOption(value: 'x', label: 'Bad\x1b]52;c;secret\x07ge'),
+    ];
+    tester.pumpWidget(const _Host(initial: 'x', options: unsafe));
+    final closed = _screen(tester, cols: 32);
+    expect(closed, isNot(contains('secret')), reason: 'trigger label');
+    expect(closed, contains(replacementCharacter));
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open
+    final open = _screen(tester, cols: 32);
+    expect(open, isNot(contains('secret')), reason: 'list row label');
+    final rows = tester.semantics().byRole(SemanticRole.menuItem);
+    for (final row in rows) {
+      expect(row.label, isNot(contains('secret')));
+    }
+  });
 }
