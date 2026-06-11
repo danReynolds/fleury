@@ -239,11 +239,30 @@ Fleury exists because of this field, not in spite of it.
   performance lives in the whole pipeline, not in any single fast layer.
   A native core can only be as fast as the path that feeds it.
 
-## The measurements that surprised us
+## Performance: where fleury lands
 
-Everything here is from our native-toolchain benchmark harness — three
-runs, medians, real PTYs, every framework driven through equivalent
-scenario fixtures. The harness and transcripts ship in the repo.
+First the picture, then the stories. Everything below comes from our
+benchmark harness — three runs, medians, real PTYs, a native toolchain,
+equivalent scenario fixtures per framework — and the harness, fixtures,
+and transcripts ship in the repo. Regressions are gated: the build fails
+if frame cost or bytes-per-frame move.
+
+In absolute terms: interactive updates render in well under a
+millisecond — a keystroke in a 10,000-character editor costs 0.8 ms —
+and the heaviest stress scenario we run (full-screen churn on a 300×100
+grid, in the browser backend) holds 8.5 ms, comfortably inside a 60 fps
+budget, with zero over-budget frames across the suite. A fleury binary
+goes from launch to first frame in about 20 ms, of which the framework's
+own share is 2.5 ms. A minimal app idles around 17 MB, nearly all of it
+the runtime's baseline — the framework itself retains 85 KB. And on the
+wire — the bytes a TUI actually sends the terminal — fleury measures at
+or ahead of the most efficient renderers in the field on most workloads,
+including the systems-language ones.
+
+No single number is the point. The point is that the architecture holds
+up under measurement on every axis a framework controls, and sits where
+you'd expect on the axes the runtime controls. Three of those
+measurements taught us something worth sharing.
 
 **Retained mode pays for itself on the wire.** Going in, we treated the
 damage-tracking machinery as a tax we'd gladly pay for the developer
@@ -275,10 +294,11 @@ scroll reuse, byte accounting — rather than into micro-optimizing any
 single layer, and it's why we'd expect the same architecture to pay off
 in any language that hosts it.
 
-**And the browser target held up.** The same damage pipeline drives
-retained DOM rows to 0% over-budget frames across every web scenario,
-with browser-inclusive end-to-end under 12 ms. Browser-inclusive frame
-numbers are rare in this space; we'd like to help make them normal.
+**And the browser target held up.** The same damage pipeline drives the
+retained DOM backend, with browser-inclusive end-to-end latency under
+12 ms — measured through the real browser frame pipeline, not just our
+own timers. Browser-inclusive frame numbers are rare in this space;
+we'd like to help make them normal.
 
 ## Keeping ourselves honest
 
