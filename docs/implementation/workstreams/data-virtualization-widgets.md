@@ -505,6 +505,21 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
   claims, decide whether fuzzy fallback scans need a richer query index,
   isolate-backed execution, cached flattened rows, or a dedicated TreeTable
   render island using the current API as the contract.
+- Core-audit input (2026-06-11, from the SB.11 wire profile): at 100k nodes
+  the measured costs split into (a) fixture-owned eager node data — the
+  recorded column-provider recommendation stands; (b) framework-owned
+  `TreeTableSearchIndex` memory: each `_TreeTableSearchEntry` retains a
+  `TreeTableRow` AND a concatenated `allTextLower` string per node, roughly
+  doubling resident data (~36 MiB of strings at 100k nodes) on top of token
+  postings; and (c) one-time O(N) index construction (~0.7 s CPU at 100k),
+  which dominates short sessions. Steady-state render is NOT implicated —
+  measured ~3 ms busy per step with damage-tracked paint. The peer lesson
+  (Textual's DataTable) is that lazy row/column providers must be the
+  default ergonomic path: index entries should derive text on demand or
+  store offsets into source data instead of retaining parallel rows+text,
+  and `buildTreeTableRows` should expose a windowed/provider form so apps
+  cannot accidentally materialize O(expanded) rows when only `maxVisible`
+  are shown.
 
 ## Acceptance Evidence
 

@@ -14584,3 +14584,32 @@ rather than framework memory. No framework code change lands from this
 round: retained state is 85 KB, churn is already damage-disciplined,
 and the remaining share is runtime policy with a documented deployment
 lever.
+
+## 2026-06-11 (later): SB.11 churn profile — fixture vs framework, separated
+
+Method: `fleury_heap_probe` (allocation + CPU sampling via `--profiler`)
+against the JIT SB.11 fixture under capture_pty, cross-read with the
+final harness captures.
+
+- The 4.3 fps is CADENCE, not throughput: the harness run renders 7
+  logical frames over ~1.6 s because the fixture drives 6 steps at
+  80 ms with heavy one-time init; each step coalesces to one frame.
+  No steady-state throughput problem exists — busy time is ~3 ms per
+  step in the CPU profile, and the differ (Cell.==/CellStyle.==/
+  atColRow) is the only render-path code that even registers.
+- The ~700 ms CPU (46% of the short run) is one-time O(N) work:
+  fixture data construction plus `TreeTableSearchIndex.build` over
+  100k nodes (tokenize + concatenate text per node + sort).
+- The 143 MiB RSS splits into fixture-owned eager node data AND a
+  framework share: the search index retains a `TreeTableRow` and an
+  `allTextLower` concatenated string per node (~36 MiB strings,
+  100,100 retained rows = 4.8 MiB, plus postings) — the index roughly
+  doubles resident data.
+- Framework follow-ups recorded in the data-virtualization workstream
+  (index should derive text on demand / store offsets; windowed row
+  building) as core-audit inputs — API design work, not patches here.
+
+SB.11's scoreboard row stands as-is: fixtures are not slimmed, and the
+"catch up" label now has a complete causal account (fixture data +
+index memory + short-run cadence), none of which is steady-state
+render performance.

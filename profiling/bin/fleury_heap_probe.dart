@@ -22,11 +22,14 @@ import 'package:vm_service/vm_service_io.dart';
 Future<void> main(List<String> args) async {
   var sampleAfterMs = 1500;
   var windowMs = 1500;
+  var cpuWindowMs = 0;
   var top = 25;
   String? filter;
   String? wsUri;
   for (final arg in args) {
-    if (arg.startsWith('--sample-after-ms=')) {
+    if (arg.startsWith('--cpu-window-ms=')) {
+      cpuWindowMs = int.parse(arg.substring('--cpu-window-ms='.length));
+    } else if (arg.startsWith('--sample-after-ms=')) {
       sampleAfterMs = int.parse(arg.substring('--sample-after-ms='.length));
     } else if (arg.startsWith('--window-ms=')) {
       windowMs = int.parse(arg.substring('--window-ms='.length));
@@ -84,8 +87,64 @@ Future<void> main(List<String> args) async {
       '\nheap usage: ${usage.heapUsage} bytes used / '
       '${usage.heapCapacity} capacity / ${usage.externalUsage} external',
     );
+    if (cpuWindowMs > 0) {
+      final t0 = (await service.getVMTimelineMicros()).timestamp!;
+      await Future<void>.delayed(Duration(milliseconds: cpuWindowMs));
+      final t1 = (await service.getVMTimelineMicros()).timestamp!;
+      final samples = await service.getCpuSamples(isolateId, t0, t1 - t0);
+      _printCpuTop(samples, top);
+    }
   } finally {
     await service.dispose();
+  }
+}
+
+void _printCpuTop(CpuSamples samples, int top) {
+  final functions = samples.functions ?? const [];
+  final exclusive = <int, int>{};
+  final inclusive = <int, int>{};
+  for (final sample in samples.samples ?? const <CpuSample>[]) {
+    final stack = sample.stack;
+    if (stack == null || stack.isEmpty) continue;
+    exclusive.update(stack.first, (n) => n + 1, ifAbsent: () => 1);
+    for (final fn in {...stack}) {
+      inclusive.update(fn, (n) => n + 1, ifAbsent: () => 1);
+    }
+  }
+  final total = (samples.samples ?? const <CpuSample>[]).length;
+  String nameOf(int index) {
+    if (index < 0 || index >= functions.length) return '<unknown>';
+    final f = functions[index].function;
+    if (f is FuncRef) {
+      final owner = f.owner;
+      final ownerName = owner is ClassRef
+          ? '${owner.name}.'
+          : owner is LibraryRef
+              ? ''
+              : '';
+      final uri = f.location?.script?.uri ?? '';
+      return '$ownerName${f.name}  $uri';
+    }
+    if (f is NativeFunction) return '[native] ${f.name}';
+    return '$f';
+  }
+
+  stdout.writeln('\ncpu samples: $total in window');
+  stdout.writeln('top $top by exclusive samples:');
+  final rankedEx = exclusive.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  for (final e in rankedEx.take(top)) {
+    final pct = total == 0 ? 0 : (e.value * 1000 ~/ total) / 10;
+    stdout.writeln('  ${e.value.toString().padLeft(6)}  '
+        '${pct.toString().padLeft(5)}%  ${nameOf(e.key)}');
+  }
+  stdout.writeln('top $top by inclusive samples:');
+  final rankedIn = inclusive.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  for (final e in rankedIn.take(top)) {
+    final pct = total == 0 ? 0 : (e.value * 1000 ~/ total) / 10;
+    stdout.writeln('  ${e.value.toString().padLeft(6)}  '
+        '${pct.toString().padLeft(5)}%  ${nameOf(e.key)}');
   }
 }
 
