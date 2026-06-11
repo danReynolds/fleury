@@ -14671,3 +14671,37 @@ reproducibility: SB.1/SB.9 byte-exact across runs, SB.6 within 0.8%.
 This is the wire-side counterpart of the web readiness gate; the
 encoder remains the highest-regression-risk code in the repo and now
 has a cost gate, not just the byte-equivalence correctness oracle.
+
+## 2026-06-11 (later): TreeTableSearchIndex diet — blob + spans, rows on demand
+
+The framework share of SB.11 identified in the churn profile is now
+fixed. `TreeTableSearchIndex` no longer retains a `TreeTableRow`, an
+`allTextLower` string, and per-column text per node; it retains ONE
+shared lowercase text blob plus a `Uint32List` of per-row field spans,
+with slim structure-only entries. Rows materialize per result set
+(ancestor paths memoized); case-insensitive queries match inside blob
+ranges with allocation-free range matchers; the rare case-sensitive
+scan derives original-case text on demand. The eager build pre-counts
+nodes so the span buffer allocates exactly once (the growable-list +
+copy transient was ~19 MiB of peak at 100k rows). Public API
+unchanged; all 16 tree-table tests + 829 widget tests green.
+
+Measured at 100k rows (SB.11-shaped fixture):
+
+- Live heap after GC: 119.7 -> 107.7 MB (-12 MB; retained rows
+  eliminated, -200k strings, -100k lists).
+- Index build: 379 -> 305 ms (-19%).
+- Fuzzy query: 52.6 -> 26.7 ms (-49%). exactToken/prefixToken
+  unchanged (~0.6 ms). fuzzy-columns +12% (substring per node).
+  Case-sensitive fuzzy 79 -> 166 ms — the documented trade on the
+  rare path (original-case text no longer retained).
+- SB.11 wire re-run (3 runs, all peers, in
+  `caps/2026-06-11-sb11-postdiet2`): CPU 714 -> 534 ms (-25%),
+  fps 4.3 -> 7.5, TTFB median 42 -> 17 ms. Peak RSS ~par
+  (142.9 -> 145.7 MiB): the steady-state win is offset at peak by the
+  blob's one-time toString transient, and the absolute number remains
+  fixture-data-dominated — the column-provider recommendation stands
+  as the fixture-side fix. Position stays "catch up" honestly.
+
+Remaining for the core audit (recorded in the readiness doc): the
+windowed/provider row-building API and the render-island question.

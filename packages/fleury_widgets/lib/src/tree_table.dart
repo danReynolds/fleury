@@ -1,4 +1,5 @@
 import 'dart:async' show unawaited;
+import 'dart:typed_data' show Uint32List;
 
 import 'package:fleury/fleury.dart';
 
@@ -99,10 +100,18 @@ final class TreeTableSearchIndex<T> {
     required List<String> sortedTokens,
     required Map<String, int> columnIndexes,
     required this.treeColumnId,
+    required String textBlob,
+    required Uint32List spans,
+    required List<DataTableColumn> columns,
+    required TreeTableCellBuilder<T>? cellBuilder,
   }) : _entries = entries,
        _tokenIndex = tokenIndex,
        _sortedTokens = sortedTokens,
-       _columnIndexes = columnIndexes;
+       _columnIndexes = columnIndexes,
+       _textBlob = textBlob,
+       _spans = spans,
+       _columns = columns,
+       _cellBuilder = cellBuilder;
 
   factory TreeTableSearchIndex.build({
     required List<TreeTableNode<T>> roots,
@@ -110,56 +119,29 @@ final class TreeTableSearchIndex<T> {
     String? treeColumnId,
     TreeTableCellBuilder<T>? cellBuilder,
   }) {
-    final effectiveTreeColumnId = treeColumnId ?? _firstColumnId(columns);
-    final columnIds = [for (final column in columns) column.id];
-    final columnIndexes = <String, int>{
-      for (var i = 0; i < columnIds.length; i++) columnIds[i]: i,
-    };
-    final entries = <_TreeTableSearchEntry<T>>[];
-    final tokenIndex = <String, List<int>>{};
+    final builder = _TreeTableIndexBuilder<T>(
+      columns: columns,
+      treeColumnId: treeColumnId ?? _firstColumnId(columns),
+      cellBuilder: cellBuilder,
+      expectedRows: _countTreeTableNodes(roots),
+    );
 
-    void visit(
-      TreeTableNode<T> node,
-      int depth,
-      String path,
-      Object? parentKey,
-      int? parentIndex,
-    ) {
-      final row = TreeTableRow<T>(
-        node: node,
+    void visit(TreeTableNode<T> node, int depth, int ordinal, int? parent) {
+      final index = builder.addNode(
+        node,
         depth: depth,
-        path: path,
-        parentKey: parentKey,
+        ordinal: ordinal,
+        parentIndex: parent,
       );
-      final index = entries.length;
-      final entry = _TreeTableSearchEntry<T>.fromRow(
-        row: row,
-        parentIndex: parentIndex,
-        columns: columns,
-        columnIds: columnIds,
-        treeColumnId: effectiveTreeColumnId,
-        cellBuilder: cellBuilder,
-      );
-      entries.add(entry);
-      for (final token in _treeTableSearchTokens(entry.allTextLower)) {
-        (tokenIndex[token] ??= <int>[]).add(index);
-      }
       for (var i = 0; i < node.children.length; i++) {
-        visit(node.children[i], depth + 1, '$path.$i', node.key, index);
+        visit(node.children[i], depth + 1, i, index);
       }
     }
 
     for (var i = 0; i < roots.length; i++) {
-      visit(roots[i], 0, '$i', null, null);
+      visit(roots[i], 0, i, null);
     }
-    final sortedTokens = tokenIndex.keys.toList(growable: false)..sort();
-    return TreeTableSearchIndex<T>._(
-      entries: entries,
-      tokenIndex: tokenIndex,
-      sortedTokens: List<String>.unmodifiable(sortedTokens),
-      columnIndexes: columnIndexes,
-      treeColumnId: effectiveTreeColumnId,
-    );
+    return builder.finish();
   }
 
   /// Builds a [TreeTableSearchIndex] cooperatively under [context].
@@ -176,13 +158,11 @@ final class TreeTableSearchIndex<T> {
     TaskYieldPolicy yieldPolicy = const TaskYieldPolicy(),
     String progressLabel = 'indexing tree',
   }) async {
-    final effectiveTreeColumnId = treeColumnId ?? _firstColumnId(columns);
-    final columnIds = [for (final column in columns) column.id];
-    final columnIndexes = <String, int>{
-      for (var i = 0; i < columnIds.length; i++) columnIds[i]: i,
-    };
-    final entries = <_TreeTableSearchEntry<T>>[];
-    final tokenIndex = <String, List<int>>{};
+    final builder = _TreeTableIndexBuilder<T>(
+      columns: columns,
+      treeColumnId: treeColumnId ?? _firstColumnId(columns),
+      cellBuilder: cellBuilder,
+    );
     final stack = <_TreeTableBuildFrame<T>>[];
 
     for (var i = roots.length - 1; i >= 0; i--) {
@@ -190,8 +170,7 @@ final class TreeTableSearchIndex<T> {
         _TreeTableBuildFrame<T>(
           node: roots[i],
           depth: 0,
-          path: '$i',
-          parentKey: null,
+          ordinal: i,
           parentIndex: null,
         ),
       );
@@ -200,53 +179,34 @@ final class TreeTableSearchIndex<T> {
     final checkpoint = yieldPolicy.start(context);
     while (stack.isNotEmpty) {
       final frame = stack.removeLast();
-      final row = TreeTableRow<T>(
-        node: frame.node,
+      final index = builder.addNode(
+        frame.node,
         depth: frame.depth,
-        path: frame.path,
-        parentKey: frame.parentKey,
-      );
-      final index = entries.length;
-      _appendTreeTableSearchEntry<T>(
-        entries: entries,
-        tokenIndex: tokenIndex,
-        row: row,
+        ordinal: frame.ordinal,
         parentIndex: frame.parentIndex,
-        columns: columns,
-        columnIds: columnIds,
-        treeColumnId: effectiveTreeColumnId,
-        cellBuilder: cellBuilder,
       );
       for (var i = frame.node.children.length - 1; i >= 0; i--) {
         stack.add(
           _TreeTableBuildFrame<T>(
             node: frame.node.children[i],
             depth: frame.depth + 1,
-            path: '${frame.path}.$i',
-            parentKey: frame.node.key,
+            ordinal: i,
             parentIndex: index,
           ),
         );
       }
       await checkpoint.tick(
-        current: entries.length,
-        label: '$progressLabel ${entries.length} rows',
+        current: builder.length,
+        label: '$progressLabel ${builder.length} rows',
       );
     }
 
     context.reportProgress(
-      current: entries.length,
-      total: entries.length,
+      current: builder.length,
+      total: builder.length,
       label: '$progressLabel complete',
     );
-    final sortedTokens = tokenIndex.keys.toList(growable: false)..sort();
-    return TreeTableSearchIndex<T>._(
-      entries: entries,
-      tokenIndex: tokenIndex,
-      sortedTokens: List<String>.unmodifiable(sortedTokens),
-      columnIndexes: columnIndexes,
-      treeColumnId: effectiveTreeColumnId,
-    );
+    return builder.finish();
   }
 
   final List<_TreeTableSearchEntry<T>> _entries;
@@ -254,17 +214,36 @@ final class TreeTableSearchIndex<T> {
   final List<String> _sortedTokens;
   final Map<String, int> _columnIndexes;
 
+  /// All searchable text, lowercase and sanitized, one region per row
+  /// terminated by a newline (which sanitization removes from content, so
+  /// in-range matches cannot cross rows). The index retains this ONE shared
+  /// string plus integer spans instead of per-row text and row objects —
+  /// at 100k rows that is the difference between ~60 MiB and ~25 MiB of
+  /// index overhead.
+  final String _textBlob;
+
+  /// Per-row `[start, end)` offsets into [_textBlob]. Slot 0 is the row's
+  /// full joined text, slot 1 the key, slots `2..2+N-1` the N columns, and
+  /// slot `2+N` the metadata. Empty fields store `[0, 0)`.
+  final Uint32List _spans;
+
+  final List<DataTableColumn> _columns;
+  final TreeTableCellBuilder<T>? _cellBuilder;
+
   /// Tree column used when this index was built.
   final String treeColumnId;
 
   /// Number of indexed tree rows, including descendants hidden by expansion.
   int get rowCount => _entries.length;
 
+  int get _spanStride => (3 + _columns.length) * 2;
+
   List<TreeTableRow<T>> filter(TreeTableFilterDescriptor filter) {
     if (filter.isEmpty) {
-      return List<TreeTableRow<T>>.unmodifiable(
-        _entries.map((entry) => entry.row),
-      );
+      final paths = <int, String>{};
+      return List<TreeTableRow<T>>.unmodifiable([
+        for (var i = 0; i < _entries.length; i++) _rowAt(i, paths),
+      ]);
     }
     final sanitizedQuery = _sanitizeTreeTableText(filter.query.trim());
     final query = filter.caseSensitive
@@ -285,7 +264,7 @@ final class TreeTableSearchIndex<T> {
     }
     final matches = <int>[];
     for (var i = 0; i < _entries.length; i++) {
-      if (_entries[i].matches(filter, query, _columnIndexes)) matches.add(i);
+      if (_entryMatches(i, filter, query)) matches.add(i);
     }
     return _rowsWithAncestors(matches);
   }
@@ -332,157 +311,384 @@ final class TreeTableSearchIndex<T> {
       }
     }
     if (included.isEmpty) return const [];
+    final paths = <int, String>{};
     return List<TreeTableRow<T>>.unmodifiable([
       for (var i = 0; i < _entries.length; i++)
-        if (included.contains(i)) _entries[i].row,
+        if (included.contains(i)) _rowAt(i, paths),
     ]);
+  }
+
+  /// Materializes the row for [index]. Rows are not retained by the index;
+  /// they are rebuilt for result sets only. Ancestor paths memoize into
+  /// [paths] — callers iterate ascending, and entries are preorder, so an
+  /// included row's parent is already memoized; [_pathOf] covers the rest.
+  TreeTableRow<T> _rowAt(int index, Map<int, String> paths) {
+    final entry = _entries[index];
+    final parent = entry.parentIndex;
+    final path = parent == null
+        ? '${entry.ordinal}'
+        : '${paths[parent] ?? _pathOf(parent, paths)}.${entry.ordinal}';
+    paths[index] = path;
+    return TreeTableRow<T>(
+      node: entry.node,
+      depth: entry.depth,
+      path: path,
+      parentKey: parent == null ? null : _entries[parent].node.key,
+    );
+  }
+
+  String _pathOf(int index, Map<int, String> paths) {
+    final memoized = paths[index];
+    if (memoized != null) return memoized;
+    final entry = _entries[index];
+    final parent = entry.parentIndex;
+    final path = parent == null
+        ? '${entry.ordinal}'
+        : '${_pathOf(parent, paths)}.${entry.ordinal}';
+    paths[index] = path;
+    return path;
+  }
+
+  bool _entryMatches(
+    int index,
+    TreeTableFilterDescriptor filter,
+    String query,
+  ) {
+    if (query.isEmpty) return true;
+    final base = index * _spanStride;
+    final columnIds = filter.columnIds;
+    if (columnIds == null) {
+      if (!filter.caseSensitive) {
+        final from = _spans[base];
+        final to = _spans[base + 1];
+        return switch (filter.mode) {
+          TreeTableFilterMode.exactToken => _rangeContainsToken(
+            _textBlob,
+            from,
+            to,
+            query,
+          ),
+          TreeTableFilterMode.prefixToken => _rangeContainsTokenPrefix(
+            _textBlob,
+            from,
+            to,
+            query,
+          ),
+          TreeTableFilterMode.fuzzy =>
+            _rangeContains(_textBlob, from, to, query) ||
+                _rangeIsSubsequence(query, _textBlob, from, to),
+        };
+      }
+      // Original-case text is not retained; derive it for this scan.
+      final texts = _entryTexts(index);
+      final all = _joinTreeTableFields([
+        texts.keyText,
+        ...texts.columnText,
+        texts.metadataText,
+      ]);
+      return _matchesTreeTableQuery(all, query, filter.mode);
+    }
+    final fields = <String>[];
+    if (!filter.caseSensitive) {
+      fields.add(_spanText(base, 1));
+      fields.add(_spanText(base, 2 + _columns.length));
+      for (final id in columnIds) {
+        final column = _columnIndexes[id];
+        fields.add(column == null ? '' : _spanText(base, 2 + column));
+      }
+    } else {
+      final texts = _entryTexts(index);
+      fields.add(texts.keyText);
+      fields.add(texts.metadataText);
+      for (final id in columnIds) {
+        final column = _columnIndexes[id];
+        fields.add(column == null ? '' : texts.columnText[column]);
+      }
+    }
+    return _matchesTreeTableQuery(fields.join(' '), query, filter.mode);
+  }
+
+  String _spanText(int base, int slot) {
+    final start = _spans[base + slot * 2];
+    final end = _spans[base + slot * 2 + 1];
+    return start == end ? '' : _textBlob.substring(start, end);
+  }
+
+  ({String keyText, String metadataText, List<String> columnText}) _entryTexts(
+    int index,
+  ) => _treeTableEntryTexts(
+    _entries[index].node,
+    _columns,
+    treeColumnId,
+    _cellBuilder,
+  );
+}
+
+/// Accumulates entries, token postings, and the shared text blob for both
+/// [TreeTableSearchIndex.build] paths.
+final class _TreeTableIndexBuilder<T> {
+  /// [expectedRows] sizes the span buffer exactly (the eager build path
+  /// pre-counts nodes), keeping peak memory at the retained size instead of
+  /// a growable list plus a final copy — at 100k rows that transient was
+  /// ~19 MiB of peak RSS.
+  _TreeTableIndexBuilder({
+    required this.columns,
+    required this.treeColumnId,
+    required this.cellBuilder,
+    int expectedRows = 0,
+  }) : columnIds = [for (final column in columns) column.id],
+       _spans = Uint32List(
+         (expectedRows > 0 ? expectedRows : 16) * (3 + columns.length) * 2,
+       );
+
+  final List<DataTableColumn> columns;
+  final String treeColumnId;
+  final TreeTableCellBuilder<T>? cellBuilder;
+  final List<String> columnIds;
+
+  final List<_TreeTableSearchEntry<T>> _entries = [];
+  final Map<String, List<int>> _tokenIndex = {};
+  final StringBuffer _blob = StringBuffer();
+  Uint32List _spans;
+  int _spanCount = 0;
+
+  int get length => _entries.length;
+
+  void _spanAdd(int value) {
+    if (_spanCount == _spans.length) {
+      final grown = Uint32List(_spans.length * 2);
+      grown.setRange(0, _spanCount, _spans);
+      _spans = grown;
+    }
+    _spans[_spanCount++] = value;
+  }
+
+  int addNode(
+    TreeTableNode<T> node, {
+    required int depth,
+    required int ordinal,
+    required int? parentIndex,
+  }) {
+    final index = _entries.length;
+    _entries.add(
+      _TreeTableSearchEntry<T>(
+        node: node,
+        parentIndex: parentIndex,
+        depth: depth,
+        ordinal: ordinal,
+      ),
+    );
+    final texts = _treeTableEntryTexts(
+      node,
+      columns,
+      treeColumnId,
+      cellBuilder,
+    );
+    final spanBase = _spanCount;
+    final allStart = _blob.length;
+    _spanAdd(0);
+    _spanAdd(0);
+
+    void appendField(String text) {
+      final lower = _lowerTreeTableField(text);
+      if (lower.isEmpty) {
+        _spanAdd(0);
+        _spanAdd(0);
+        return;
+      }
+      if (_blob.length > allStart) _blob.write(' ');
+      final start = _blob.length;
+      _blob.write(lower);
+      _spanAdd(start);
+      _spanAdd(_blob.length);
+      _addTokens(lower, index);
+    }
+
+    appendField(texts.keyText);
+    for (final text in texts.columnText) {
+      appendField(text);
+    }
+    appendField(texts.metadataText);
+    _spans[spanBase] = allStart;
+    _spans[spanBase + 1] = _blob.length;
+    _blob.write('\n');
+    return index;
+  }
+
+  /// Direct-loop tokenizer (no generator): called once per field per node,
+  /// so iterator allocation would show up at 100k-row build scale.
+  void _addTokens(String lower, int index) {
+    var start = -1;
+    for (var i = 0; i < lower.length; i++) {
+      if (_isTreeTableTokenCodeUnit(lower.codeUnitAt(i))) {
+        if (start < 0) start = i;
+        continue;
+      }
+      if (start >= 0) {
+        (_tokenIndex[lower.substring(start, i)] ??= <int>[]).add(index);
+        start = -1;
+      }
+    }
+    if (start >= 0) {
+      (_tokenIndex[lower.substring(start)] ??= <int>[]).add(index);
+    }
+  }
+
+  TreeTableSearchIndex<T> finish() {
+    final sortedTokens = _tokenIndex.keys.toList(growable: false)..sort();
+    return TreeTableSearchIndex<T>._(
+      entries: _entries,
+      tokenIndex: _tokenIndex,
+      sortedTokens: List<String>.unmodifiable(sortedTokens),
+      columnIndexes: {
+        for (var i = 0; i < columnIds.length; i++) columnIds[i]: i,
+      },
+      treeColumnId: treeColumnId,
+      textBlob: _blob.toString(),
+      spans: _spanCount == _spans.length
+          ? _spans
+          : (Uint32List(_spanCount)..setRange(0, _spanCount, _spans)),
+      columns: columns,
+      cellBuilder: cellBuilder,
+    );
   }
 }
 
-void _appendTreeTableSearchEntry<T>({
-  required List<_TreeTableSearchEntry<T>> entries,
-  required Map<String, List<int>> tokenIndex,
-  required TreeTableRow<T> row,
-  required int? parentIndex,
-  required List<DataTableColumn> columns,
-  required List<String> columnIds,
-  required String treeColumnId,
-  required TreeTableCellBuilder<T>? cellBuilder,
-}) {
-  final index = entries.length;
-  final entry = _TreeTableSearchEntry<T>.fromRow(
-    row: row,
-    parentIndex: parentIndex,
-    columns: columns,
-    columnIds: columnIds,
-    treeColumnId: treeColumnId,
-    cellBuilder: cellBuilder,
-  );
-  entries.add(entry);
-  for (final token in _treeTableSearchTokens(entry.allTextLower)) {
-    (tokenIndex[token] ??= <int>[]).add(index);
+int _countTreeTableNodes<T>(List<TreeTableNode<T>> roots) {
+  var count = 0;
+  void visit(TreeTableNode<T> node) {
+    count++;
+    for (final child in node.children) {
+      visit(child);
+    }
   }
+
+  for (final root in roots) {
+    visit(root);
+  }
+  return count;
 }
 
 final class _TreeTableBuildFrame<T> {
   const _TreeTableBuildFrame({
     required this.node,
     required this.depth,
-    required this.path,
-    required this.parentKey,
+    required this.ordinal,
     required this.parentIndex,
   });
 
   final TreeTableNode<T> node;
   final int depth;
-  final String path;
-  final Object? parentKey;
+  final int ordinal;
   final int? parentIndex;
 }
 
+/// One indexed row: just tree structure. Searchable text lives in the
+/// index's shared blob; [TreeTableRow]s are materialized per result set.
 final class _TreeTableSearchEntry<T> {
-  _TreeTableSearchEntry._({
-    required this.row,
+  const _TreeTableSearchEntry({
+    required this.node,
     required this.parentIndex,
-    required this.keyText,
-    required this.metadataText,
-    required this.columnText,
-    required this.allTextLower,
+    required this.depth,
+    required this.ordinal,
   });
 
-  factory _TreeTableSearchEntry.fromRow({
-    required TreeTableRow<T> row,
-    required int? parentIndex,
-    required List<DataTableColumn> columns,
-    required List<String> columnIds,
-    required String treeColumnId,
-    required TreeTableCellBuilder<T>? cellBuilder,
-  }) {
-    final keyText = _sanitizeTreeTableText(row.key.toString());
-    final metadataBuffer = StringBuffer();
-    void appendMetadata(String value) {
-      if (value.isEmpty) return;
-      if (metadataBuffer.length > 0) metadataBuffer.write(' ');
-      metadataBuffer.write(value);
-    }
-
-    for (final value in row.node.metadata.values) {
-      if (value == null) continue;
-      appendMetadata(_sanitizeTreeTableText(value.toString()));
-    }
-    final metadataText = metadataBuffer.toString();
-    final columnText = List<String>.filled(
-      columnIds.length,
-      '',
-      growable: false,
-    );
-    for (var i = 0; i < columns.length; i++) {
-      final column = columns[i];
-      final raw = column.id == treeColumnId
-          ? row.node.label
-          : cellBuilder?.call(row.node, column.id) ??
-                row.node.cells[column.id] ??
-                '';
-      final sanitized = _sanitizeTreeTableText(raw);
-      columnText[i] = sanitized;
-    }
-    final allTextLower = _joinTreeTableFields([
-      _lowerTreeTableField(keyText),
-      for (final text in columnText) _lowerTreeTableField(text),
-      _lowerTreeTableField(metadataText),
-    ]);
-    return _TreeTableSearchEntry._(
-      row: row,
-      parentIndex: parentIndex,
-      keyText: keyText,
-      metadataText: metadataText,
-      columnText: columnText,
-      allTextLower: allTextLower,
-    );
-  }
-
-  final TreeTableRow<T> row;
+  final TreeTableNode<T> node;
   final int? parentIndex;
-  final String keyText;
-  final String metadataText;
-  final List<String> columnText;
-  final String allTextLower;
+  final int depth;
+  final int ordinal;
+}
 
-  bool matches(
-    TreeTableFilterDescriptor filter,
-    String query,
-    Map<String, int> columnIndexes,
-  ) {
-    if (query.isEmpty) return true;
-    final columnIds = filter.columnIds;
-    if (columnIds == null) {
-      final text = filter.caseSensitive ? _allText : allTextLower;
-      return _matchesTreeTableQuery(text, query, filter.mode);
+/// Sanitized searchable text for one node, in indexed-column order.
+({String keyText, String metadataText, List<String> columnText})
+_treeTableEntryTexts<T>(
+  TreeTableNode<T> node,
+  List<DataTableColumn> columns,
+  String treeColumnId,
+  TreeTableCellBuilder<T>? cellBuilder,
+) {
+  final keyText = _sanitizeTreeTableText(node.key.toString());
+  final metadataBuffer = StringBuffer();
+  for (final value in node.metadata.values) {
+    if (value == null) continue;
+    final sanitized = _sanitizeTreeTableText(value.toString());
+    if (sanitized.isEmpty) continue;
+    if (metadataBuffer.length > 0) metadataBuffer.write(' ');
+    metadataBuffer.write(sanitized);
+  }
+  final columnText = List<String>.filled(columns.length, '', growable: false);
+  for (var i = 0; i < columns.length; i++) {
+    final column = columns[i];
+    final raw = column.id == treeColumnId
+        ? node.label
+        : cellBuilder?.call(node, column.id) ?? node.cells[column.id] ?? '';
+    columnText[i] = _sanitizeTreeTableText(raw);
+  }
+  return (
+    keyText: keyText,
+    metadataText: metadataBuffer.toString(),
+    columnText: columnText,
+  );
+}
+
+bool _rangeContains(String text, int from, int to, String query) {
+  if (query.isEmpty) return true;
+  // No String.indexOf here: it has no end bound, so a non-matching row
+  // would scan the rest of the shared blob. startsWith early-exits on the
+  // first mismatched character, keeping this O(range) in practice.
+  final last = to - query.length;
+  for (var i = from; i <= last; i++) {
+    if (text.startsWith(query, i)) return true;
+  }
+  return false;
+}
+
+bool _rangeIsSubsequence(String needle, String text, int from, int to) {
+  var i = 0;
+  for (var j = from; j < to && i < needle.length; j++) {
+    if (text.codeUnitAt(j) == needle.codeUnitAt(i)) i++;
+  }
+  return i == needle.length;
+}
+
+bool _rangeContainsToken(String text, int from, int to, String query) {
+  if (query.isEmpty) return true;
+  var start = -1;
+  for (var i = from; i < to; i++) {
+    if (_isTreeTableTokenCodeUnit(text.codeUnitAt(i))) {
+      if (start < 0) start = i;
+      continue;
     }
-    final fields = <String>[
-      filter.caseSensitive ? keyText : _lowerTreeTableField(keyText),
-      filter.caseSensitive ? metadataText : _lowerTreeTableField(metadataText),
-      for (final id in columnIds) _columnTextFor(id, columnIndexes, filter),
-    ];
-    return _matchesTreeTableQuery(fields.join(' '), query, filter.mode);
+    if (start >= 0) {
+      if (i - start == query.length && text.startsWith(query, start)) {
+        return true;
+      }
+      start = -1;
+    }
   }
+  return start >= 0 &&
+      to - start == query.length &&
+      text.startsWith(query, start);
+}
 
-  String get _allText => _joinTreeTableFields([
-    keyText,
-    for (final text in columnText) text,
-    metadataText,
-  ]);
-
-  String _columnTextFor(
-    String id,
-    Map<String, int> columnIndexes,
-    TreeTableFilterDescriptor filter,
-  ) {
-    final index = columnIndexes[id];
-    if (index == null) return '';
-    final text = columnText[index];
-    return filter.caseSensitive ? text : _lowerTreeTableField(text);
+bool _rangeContainsTokenPrefix(String text, int from, int to, String query) {
+  if (query.isEmpty) return true;
+  var start = -1;
+  for (var i = from; i < to; i++) {
+    if (_isTreeTableTokenCodeUnit(text.codeUnitAt(i))) {
+      if (start < 0) start = i;
+      continue;
+    }
+    if (start >= 0) {
+      if (i - start >= query.length && text.startsWith(query, start)) {
+        return true;
+      }
+      start = -1;
+    }
   }
+  return start >= 0 &&
+      to - start >= query.length &&
+      text.startsWith(query, start);
 }
 
 String _lowerTreeTableField(String value) =>
@@ -1464,21 +1670,6 @@ bool _matchesTreeTableQuery(
     TreeTableFilterMode.fuzzy =>
       text.contains(query) || _isSubsequence(query, text),
   };
-}
-
-Iterable<String> _treeTableSearchTokens(String text) sync* {
-  var start = -1;
-  for (var i = 0; i < text.length; i++) {
-    if (_isTreeTableTokenCodeUnit(text.codeUnitAt(i))) {
-      if (start < 0) start = i;
-      continue;
-    }
-    if (start >= 0) {
-      yield text.substring(start, i);
-      start = -1;
-    }
-  }
-  if (start >= 0) yield text.substring(start);
 }
 
 bool _treeTableContainsSearchToken(String text, String query) {

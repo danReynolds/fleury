@@ -519,7 +519,11 @@ tables, trees, logs, markdown, code, JSON, diff, file, and search surfaces.
   store offsets into source data instead of retaining parallel rows+text,
   and `buildTreeTableRows` should expose a windowed/provider form so apps
   cannot accidentally materialize O(expanded) rows when only `maxVisible`
-  are shown.
+  are shown. UPDATE 2026-06-11: the index half LANDED — the search index
+  now retains a shared text blob + span offsets (live heap −12 MB, build
+  −19%, fuzzy −49% at 100k rows; execution-log entry has the full
+  ledger). The windowed/provider row-building API and the render-island
+  decision remain core-audit items.
 
 ## Acceptance Evidence
 
