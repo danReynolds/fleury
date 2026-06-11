@@ -14539,3 +14539,48 @@ against textual/bubbletea/opentui everywhere measured).
   column values (~1.3 KB/node). Recommendation recorded (computed/typed
   column providers); the benchmark fixture is NOT being slimmed just to
   move its own scoreboard row.
+
+## 2026-06-11 (later): RSS decomposition round 2 — measured to the page level
+
+Follow-up to Phase D after the wire plan closed: decompose the
+"~8 MiB attributable" share properly, with every number from the same
+measurement context (capture_pty, getrusage RUSAGE_CHILDREN, 120x32
+PTY unless noted). New tool: `profiling/bin/fleury_heap_probe.dart`
+(VM-service allocation profile against a JIT fixture running under
+capture_pty; live-after-GC ranks retained owners, windowed accumulation
+ranks churn).
+
+Decomposition (all same harness — supersedes the Phase D estimate,
+which mixed measurement contexts):
+
+- AOT hello-world floor: 13.8 MiB.
+- Minimal runTui app (one Text): 17.1 MiB -> +3.3 MiB framework share.
+  Binary is 8.0 MB vs hello's 5.7 MB; the init share is mostly touched
+  code pages plus first-frame heap, NOT retained framework state.
+- SB.6 dashboard under churn: 20.2 MiB -> +3.1 MiB over minimal.
+- SB.6 at 220x60: 26.5 MiB.
+
+Heap-probe verdicts:
+
+- Fleury's retained heap at steady state is ~85 KB (Cell buffers 61 KB,
+  everything else < 5 KB/class). There is NOTHING to lazy-init; the
+  "diet" has no retained-memory target.
+- Per-frame churn at steady state is ~20 KB/frame (geometry value
+  objects CellOffset/CellRect/CellSize ~150 each/frame from per-paint
+  call overhead, ~85 Cell writes/frame). Damage-tracked paint is
+  confirmed working at the allocation level: an 13,200-cell grid
+  rewrites ~85 cells/frame.
+- The churn-dependent RSS share is the VM's new-generation semispaces:
+  any steady allocation rate eventually touches them up to the default
+  max. `DART_VM_OPTIONS=--new_gen_semi_max_size=1` drops SB.6 RSS by
+  1.0 MiB at 120x32 and 7.0 MiB at 220x60, costing ~6% CPU at the large
+  grid (more frequent scavenges). `dart compile exe` cannot embed VM
+  flags, so this is deployment guidance, not a framework change.
+
+W-4 re-read: the fleury-attributable share over the floor is 3.3 MiB
+for a minimal app (target was <= 5 MiB — met), 6.4 MiB for the SB.6
+dashboard of which ~1-7 MiB (grid-dependent) is VM GC sizing policy
+rather than framework memory. No framework code change lands from this
+round: retained state is 85 KB, churn is already damage-disciplined,
+and the remaining share is runtime policy with a documented deployment
+lever.

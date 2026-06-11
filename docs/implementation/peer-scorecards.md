@@ -241,10 +241,14 @@ the execution log, 2026-06-11 entries):
   entry); the Dart AOT boot floor (~29-39ms hello-world) is the entire
   TTFB gap vs ratatui. Startup claims scope to managed-runtime peers,
   where fleury leads everywhere measured.
-- RSS floor: 11.7 MiB bare AOT; typical fleury fixtures carry ~8 MiB
-  above it. SB.11's 143 MiB is its fixture's 100k eager node maps
-  (recommendation recorded; fixtures are not slimmed to move their own
-  scoreboard rows).
+- RSS floor (re-measured 2026-06-11, single consistent harness): bare
+  AOT hello-world 13.8 MiB; minimal fleury app +3.3 MiB (mostly touched
+  code pages — retained framework heap is ~85 KB); SB.6 dashboard
+  +6.4 MiB total, of which ~1-7 MiB (grid-dependent) is VM new-gen GC
+  sizing, reclaimable via `DART_VM_OPTIONS=--new_gen_semi_max_size=1`
+  at ~6% CPU on large grids. SB.11's 143 MiB is its fixture's 100k
+  eager node maps (recommendation recorded; fixtures are not slimmed to
+  move their own scoreboard rows).
 
 Claims language for public use: "Fleury leads wire efficiency (bytes,
 bytes/frame, FPS) against every measured peer including the Rust and
