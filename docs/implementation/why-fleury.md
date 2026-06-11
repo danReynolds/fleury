@@ -11,6 +11,10 @@ ready to launch. This is not public copy yet. It is the evidence-backed internal
 positioning target that product, docs, benchmarks, and the demo app should make
 true.
 
+For the architecture narrative behind this argument — the system's shape,
+how it got there, peer influences, and the measured evidence — see
+[docs/architecture.md](../architecture.md).
+
 ## Short Answer
 
 Fleury is for Dart developers who want to build serious terminal applications
