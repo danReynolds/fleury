@@ -43,24 +43,25 @@ no formal audit milestone exists in `milestones.md` yet.
 
 ## Open inputs the audit must rule on (inventory)
 
-Contract-propagation rollouts (from the June 3 findings — the
-percentages are that audit's measurements and need re-verification):
+RE-VERIFIED 2026-06-11 — see
+[dx-cohesion-reaudit-2026-06-11](dx-cohesion-reaudit-2026-06-11.md) for
+the full matrix. CLOSED since June 3: copy/export (converged on
+`onCopy` + typed results — record the decision), disposal lifecycle
+(34/34 correct), snapshot `toString()` (readable now), dead chart
+tokens (deleted), doc inversion (core ~67% now), `itemBuilder` arity
+(documented as intentional). Still open:
 
-- Capability fallback: ~6% of widgets (3/52); Canvas, charts,
-  ColorPicker, JsonView lack it. The single most critical drift.
-- Copy/selection API: three incompatible patterns
-  (`controller.copy()` vs `onCopy` callback vs absent). Pick one
-  (June 3 recommendation: `controller.copy() -> Result`).
-- Disposal lifecycle: strong pattern, ~35% rollout; missing on
-  Autocomplete, CompletionTextInput, CommandPalette, SearchPanel.
-- Theming: dead chart-palette tokens defined but never consumed;
-  uneven coverage.
-- Sanitization: Autocomplete `displayStringForOption` injection gap.
-- Semantic differentiator visibility:
-  `SemanticInspectionSnapshot.toString()` unreadable; no
-  copy-paste-able semantic-drive demo.
-- `itemBuilder` arity divergence from Flutter (documented, accepted —
-  re-confirm at audit time).
+- Capability fallback: 3/57 widgets — unchanged since June 3, still
+  the single most critical drift; 15 glyph-rendering widgets lack it.
+- Sanitization: the option-label class — autocomplete,
+  completion_text_input, menu, select all render provider-supplied
+  labels unsanitized (wider than the June 3 finding).
+- Charts theming decision: palette tokens were deleted rather than
+  consumed; charts hardcode styles with no theme surface. Decide:
+  themed tokens or constructor-props-by-design.
+- Chart semantic shallowness still undocumented as intentional.
+- App-kernel multi-screen example still missing from
+  `packages/fleury/example/` (last June 3 Tier-1 item standing).
 
 Design questions recorded as core-audit inputs by the perf line:
 
