@@ -69,8 +69,14 @@ each: sanitize the label on the render path, plus a regression test per
 widget asserting escape-sequence stripping. This closes the June 3 gap
 and its three newly-found siblings in one pass.
 
-**P0b — capability-fallback rollout (the big one, unchanged since
-June 3).** 15 glyph-rendering widgets (canvas, line_chart, bar_chart,
+**P0b — capability fallback: DESIGN FIRST (see
+[capability-fallback-design](capability-fallback-design.md), 2026-06-11).**
+The 3/57 number conflates three problems: color fallback is already
+centralized in the renderer (100%, zero widget code), behavioral
+capabilities are 3/3 covered, and the real gap is glyph-repertoire
+fallback — generalized via a GlyphTier in MediaQuery + ascii tiers in
+the shared painting primitives, NOT per-widget requirement plumbing.
+Original framing kept below for the record:** 15 glyph-rendering widgets (canvas, line_chart, bar_chart,
 sparkline, gauge, heatmap, calendar_heatmap, histogram, braille,
 half_block_buffer, digits, color_picker, json_view, diff_view,
 code_view) assume glyph/color support with no
