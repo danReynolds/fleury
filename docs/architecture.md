@@ -34,20 +34,32 @@ in four specific ways:
    render into a browser (dashboards, remote sessions, docs) without a
    second implementation.
 
-The peer landscape solves for older constraints. Ratatui (Rust) is
-immediate-mode: rebuild the whole view every frame, diff double buffers —
-minimal, fast floors, everything else app-owned. Bubble Tea v2 (Go) is the
-Elm architecture: one model, one update function, one view-to-string —
-unbeatable simplicity, whole-view rebuilds, no structure behind the
-string. Textual (Python) is the mature app framework: widget DOM, CSS,
-compositor, workers — the breadth bar, on an interpreter floor, with
-queries but no semantics contract. Ink (React/Node) is React reconciled to
-line-based stdout — familiarity for scrollback CLIs, weak full-screen.
-OpenTUI (Zig core, TypeScript bindings) bets on a native buffer behind a
-bridge. Nocterm (Dart) offers Flutter-style surface syntax without the
-machinery underneath. None of the six has a semantics tree; none has a
-capability/sanitization contract; none renders a second surface from the
-same pipeline.
+## The landscape, and why a new framework
+
+Six frameworks define the field today. Each is genuinely good at what it
+set out to be — the gaps only show up when you hold them against the four
+requirements above.
+
+| Framework | Stack | The model, in a sentence | At its best | Where it stops |
+| --- | --- | --- | --- | --- |
+| Ratatui | Rust, single binary | Immediate mode: rebuild the view every frame, diff buffers | Tiny footprint, instant start, total control | Everything above drawing is app code — state, focus, testing, accessibility |
+| Bubble Tea v2 | Go, single binary | Elm architecture: one model, one update function, one view-to-string | The cleanest mental model in the field, and the best ecosystem | Every update rebuilds the whole view; no structure behind the string |
+| Textual | Python | Widget DOM with CSS and a compositor | The most complete app framework: widgets, theming, devtools, docs | Interpreter-bound; rich structure for humans, no contract for machines |
+| Ink | React on Node | React reconciled to lines of stdout | Instant familiarity; ideal for streaming CLI output | Line-oriented — dense full-screen apps fight it |
+| OpenTUI | Zig core, TypeScript API | Components over a native buffer, across a language bridge | Native-core ambition, proven inside a real product (OpenCode) | The bridge hands back what the core wins |
+| Nocterm | Dart AOT, single binary | Flutter-style widget API | The familiar surface for Flutter developers | The syntax without the machinery: no damage tracking, no semantics |
+
+The case for a new framework was never that any of these is bad. It is
+that the four requirements are structural, and structure does not
+retrofit. A semantics tree needs a real tree to derive from — there is
+nothing to attach one to in a view that is a string, or a buffer
+repainted from scratch each frame. Security-by-default has to *be* the
+paint path, not a wrapper around it. A second render surface requires
+that "what the UI is" and "how it gets emitted" were separated from the
+beginning. The one UI architecture with all of those joints already
+existed — Flutter's — and nobody had built it for terminals with the
+machinery intact. Dart AOT made it shippable the way terminal users
+expect, as one static binary. That was the bet.
 
 ## The architecture
 
@@ -126,97 +138,89 @@ it. One environmental discovery mattered as much as any code: the
 original toolchain ran under Rosetta, and every pre-campaign benchmark
 was emulated. All standing evidence is native-stack, 3-run medians.
 
-## Influences and lessons from peers
+## What we took from each
 
-- **Flutter** — the architecture itself: three trees, repaint boundaries,
-  semantics layering, deferred accessibility flush. The lesson taken was
-  structural, and the proof it transferred is below.
-- **Ratatui** — the adversarial benchmark. Immediate mode is the null
-  hypothesis ("retained trees are overhead"); beating it on wire
-  efficiency is what makes the retained claim defensible. Its runtime
-  floors (2 MiB, instant boot) remain the honest ceiling Dart cannot
-  reach; fleury documents the floor instead of chasing it.
-- **Bubble Tea / Elm** — the simplicity benchmark. TEA's near-zero
-  per-frame protocol constants exposed fleury's bookkeeping floor on
-  near-empty frames and directly motivated the small-diff sync skip. The
-  counter-lesson runs the other way: TEA's whole-view rebuild is why its
-  10k-character textarea moves the cursor in 718 ms where fleury's takes
-  0.8 ms. Simplicity and incrementality trade; fleury chose incrementality
-  and minimized the tax.
-- **Textual** — the maturity bar and one genuine import: its DataTable
-  virtualization beat fleury's TreeTable *fixture*, which became the
-  lazy-provider API lesson now recorded for the core audit (and the
-  search-index diet already landed from it).
-- **Ink/React** — confirmation that reconciliation-to-lines serves
-  scrollback CLIs, not dense full-screen apps; no architectural import.
-- **OpenTUI** — a negative result worth keeping: a native core behind a
-  language bridge showed no wire advantage in any shared scenario. The
-  whole pipeline is the unit of performance, which validates fleury's
-  single-runtime choice.
-- **Nocterm** — the controlled experiment. Same language, same runtime
-  floors, Flutter-style API without damage tracking, paint isolation, or
-  semantics: 8–30x slower on app-shaped operations. The machinery, not
-  the syntax, is the architecture.
+- **Flutter** — the largest debt by far: the machinery itself. The tree
+  separation, repaint boundaries, and semantics layering described above
+  are Flutter's joints, rebuilt for cells. Not the syntax; the
+  structure.
+- **Bubble Tea** — frugality as a discipline. Its per-frame protocol
+  cost is near zero, and that number set fleury's bar: it is the direct
+  reason tiny updates skip the synchronized-output wrapper today. Its
+  ecosystem is also the standing proof that taste and cohesion, not
+  features, drive adoption in this space.
+- **Ratatui** — the evidence bar. It made buffer-diff efficiency table
+  stakes and benchmark rigor the norm; fleury's measure-first culture is
+  in part an answer to it.
+- **Textual** — the definition of "complete," and one concrete import:
+  its data tables beat fleury's tree table at 100k rows because its API
+  makes lazy data the easy path. We took the lesson — the tree-search
+  index now keeps one shared text blob instead of per-row copies (12 MB
+  less live heap, fuzzy search twice as fast at that scale), and
+  provider-style row building is queued as the default API shape.
+- **Ink** — the reminder that mental-model familiarity is adoption
+  fuel. Fleury reads as Flutter for the same reason Ink reads as React:
+  on purpose.
+- **OpenTUI** — a caution rather than an import: a native core behind a
+  language bridge showed no wire advantage on any shared workload. The
+  pipeline, not the kernel, is the unit of performance.
 
-## What the benchmarks actually taught us
+## How we differentiated
 
-The full standings live in the scoreboards; quoting them all here would
-bury the signal. These are the results that shaped the architecture's
-story — the upsets, the losses worth respecting, and the lessons we paid
-for. (All native-stack, 3-run medians; wire evidence in
-`profiling/caps/2026-06-11-final`, web in
+Four statements, each carrying the one measurement that earns it.
+
+**Work proportional to change — proven against the hardest opponent.**
+The safe bet going in was that immediate-mode Rust would own raw wire
+throughput and a managed-runtime retained tree would chase it. Measured
+natively, fleury emits fewer bytes per frame and sustains higher frame
+rates than ratatui on nearly every shared workload. The mechanism is the
+point: immediate mode redraws everything and diffs the result to
+*recover* what changed; the damage tracker never forgot, so the
+unchanged screen is never painted at all. Under continuous churn, a
+13,200-cell grid rewrites about 85 cells a frame. Knowing-what-changed
+beats being-fast-at-everything — and that result retires the oldest
+objection to retained UI in terminals.
+
+**State with a home.** A keystroke in a 10,000-character editor costs
+fleury 0.8 ms. The same operation on the Elm-architecture peer measured
+718 ms. Nothing in that gap is Go versus Dart; it is O(whole view)
+versus O(changed path) — the element tree doing its job. The peers'
+own benchmark fixtures argue the same point from the other side: they
+hand-implement selection, undo, and focus as app code, because their
+architectures have nowhere to keep state the app didn't build itself.
+
+**The machinery is the moat — and it is separable from the language.**
+Nocterm shares fleury's language, runtime floors, and surface syntax,
+and measures 8–30x slower on app-shaped operations: same Dart, no
+damage spine. OpenTUI has the native core and not the pipeline, and
+shows no advantage. Together they isolate the claim cleanly: not the
+language, not the syntax — the machinery.
+
+**Structure no peer has.** Fleury is the only framework in the field
+with a semantics tree — agents and tests query roles, state, and
+actions instead of scraping ANSI — the only one with a capability and
+sanitization contract built into the default paint path, and the only
+one rendering terminal and browser from the same pipeline with an
+oracle asserting the two surfaces agree. All of it ships as a single
+AOT binary, which only the systems-language peers can otherwise say.
+
+## Keeping ourselves honest
+
+The claims above are measured, and so are the places where the
+measurements favor someone else. (All evidence native-stack, 3-run
+medians: wire standings in `profiling/caps/2026-06-11-final`, web in
 `profiling/web/baselines/2026-06-10-arm-native`.)
 
-### Three results we would have bet against
-
-**The retained tree out-emits immediate-mode Rust.** Going in, the safe
-money said ratatui — the field's performance-credibility peer, a
-systems language, the leanest possible library — would own raw wire
-throughput, and fleury's goal would be "respectably close." The opposite
-happened: fleury leads bytes, bytes-per-frame, and FPS on nearly every
-shared scenario. The reason is architectural, not heroic optimization.
-Immediate mode rebuilds the whole view every frame and diffs buffers to
-recover what changed; the damage tracker never forgets what changed in
-the first place, so the unchanged 99% of the screen is never painted at
-all — confirmed at the allocation level, where a 13,200-cell grid under
-churn rewrites ~85 cells a frame. Knowing-what-changed beat
-being-fast-at-everything. That result is what makes the retained-mode
-bet defensible against its oldest objection.
-
-**Three orders of magnitude on a text editor.** Bubble Tea is a
-well-built framework with the cleanest mental model in the field, and on
-a 10k-character editor its cursor-move p95 measured 718 ms to fleury's
-0.8 ms. Nothing in that gap is Go vs Dart; it is the Elm architecture
-paying O(entire view) per keystroke while the element tree pays
-O(changed path). Architecture determines the *shape* of the work, and no
-amount of language speed buys back a shape that redoes everything. The
-same structural story repeated in every peer fixture that had to
-hand-implement selection, undo, and focus state as app code — the
-element tree is the layer the others don't have.
-
-**The native-core peer showed no native advantage.** OpenTUI's Zig
-buffer core behind a TypeScript bridge — on paper the
-"best of both worlds" design — trailed fleury on every shared wire axis.
-The pipeline, not the kernel, is the unit of performance; a fast core
-behind a bridge inherits the bridge. Nocterm closes the loop from the
-other side: same language, same runtime floors, Flutter-style API
-without the damage spine underneath, 8–30x slower on app-shaped
-operations. Between them, the two Dart-adjacent comparisons isolate the
-claim cleanly: the machinery is the architecture; the syntax and the
-language are not.
-
-### Where peers genuinely win, and what we did about it
-
 **TEA's simplicity is a real architectural virtue.** On a counter app
-emitting nine content bytes, Bubble Tea's near-zero per-frame protocol
-constants make fleury's tree bookkeeping look heavy as a ratio (the
-absolute cost is ~23 bytes). We trimmed the tax where it was real — tiny
-diffs no longer pay the synchronized-output wrapper — and accepted the
-floor that remains: a retained tree cannot match a string diff's
-constants on near-empty frames, and for single-purpose micro-CLIs that
-trade favors TEA. Fleury's bet is that terminal apps are becoming real
-applications, where the trade inverts by orders of magnitude (see the
-editor above).
+emitting nine content bytes, Bubble Tea's near-zero per-frame constants
+make fleury's tree bookkeeping look heavy as a ratio (the absolute cost
+is ~23 bytes). We trimmed the tax where it was real — tiny diffs no
+longer pay the synchronized-output wrapper — and accepted the floor that
+remains: a retained tree cannot match a string diff's constants on
+near-empty frames. For single-purpose micro-CLIs that trade favors TEA;
+fleury's bet is that terminal apps are becoming real applications, where
+the editor result above shows the trade inverting by three orders of
+magnitude.
 
 **Rust's runtime floors are not contestable.** Ratatui boots in
 single-digit milliseconds and idles at ~2 MiB; Dart AOT's warm floor is
@@ -226,17 +230,7 @@ them: fleury's own share is 2.5 ms of startup (first byte at 0.5 ms) and
 runtime costs. Startup and footprint claims are scoped to
 managed-runtime peers, where fleury leads everywhere measured.
 
-**Textual beat us where maturity matters — and we imported the lesson.**
-Its DataTable virtualization outperformed fleury's TreeTable fixture at
-100k rows: the framework whose API makes lazy data the easy path wins,
-regardless of engine speed. The first half of that lesson already landed
-(the search index now retains one shared text blob plus spans instead of
-per-row rows-and-text: −12 MB live, fuzzy queries 2x faster, SB.11 CPU
-−25%); the second half — provider-style row building as the default API
-shape — is queued for the core audit. The best architectural import of
-the campaign came from the Python peer, not the systems-language ones.
-
-### Lessons we paid for
+**Lessons we paid for:**
 
 - **Flutter intuitions can be anti-patterns here.** Keyed-row
   "recycling" — the standard DOM/Flutter pattern for moving lists —
@@ -248,11 +242,13 @@ the campaign came from the Python peer, not the systems-language ones.
   documents the trap where it bites (`RepaintBoundary` docs).
 - **Measure the floor before chasing the gap.** Twice, the "obvious"
   optimization target dissolved under measurement: the cursor encoder
-  was proven byte-minimal from transcripts (the remaining SB.9 delta is
-  fixture surface area, not waste), and the RSS "diet" found 85 KB of
-  retained framework heap — nothing to diet. Both times the honest
-  output was a documented verdict, not a patch. The discipline cuts both
-  ways: it also found the real wins (the index diet, the sync skip).
+  was proven byte-minimal from transcripts (the byte gap that remained
+  on one subprocess-output workload traced to the benchmark fixture
+  rendering more live regions, not to encoder waste), and the RSS "diet"
+  found 85 KB of retained framework heap — nothing to diet. Both times
+  the honest output was a documented verdict, not a patch. The
+  discipline cuts both ways: it also found the real wins (the index
+  diet, the sync skip).
 - **The toolchain can lie at the process level.** Every pre-campaign
   benchmark — ours and the harness's — ran under Rosetta translation
   without anyone noticing, inflating tails by whole multiples. The fix
@@ -262,10 +258,10 @@ the campaign came from the Python peer, not the systems-language ones.
   architecture, because numbers you can't trust are worse than no
   numbers.
 
-The bottom line on standings, in one sentence: fleury pushes leading on
-8 of 12 wire scenarios against every peer including the Rust and Zig
-ones, holds parity on 2, and trails on 2 for fully-explained
-fixture-and-floor reasons — with public claims language maintained in
+The standings, in one sentence: fleury pushes leading on 8 of 12 wire
+scenarios against every peer including the Rust and Zig ones, holds
+parity on 2, and trails on 2 for fully-explained fixture-and-floor
+reasons — with public claims language maintained in
 [peer-scorecards](implementation/peer-scorecards.md), to be quoted, not
 paraphrased upward.
 
