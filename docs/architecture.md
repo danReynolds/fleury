@@ -15,9 +15,9 @@ architecture this moment needs already exists — it's Flutter's — and
 nobody had built it for terminals with the machinery intact.
 
 This post is the story of that bet: what changed about terminals, what
-the existing frameworks solve and where they stop, what we took from
-each of them, and the measurements that surprised us — including one
-where we'd have bet against ourselves.
+we learned from the frameworks that shaped this field, how the
+architecture came together, and the measurements that surprised us —
+including one where we'd have bet against ourselves.
 
 ## What changed about terminals
 
@@ -41,29 +41,29 @@ mattered much five years ago:
 
 ## The landscape
 
-Six frameworks define the field, and each is genuinely good at what it
-set out to be. The gaps only show up when you hold them against those
-four requirements.
+Six frameworks define the field, each excellent at what it set out to
+be, and each shaped fleury in some way.
 
-| Framework | Stack | The model, in a sentence | At its best | Where it stops |
-| --- | --- | --- | --- | --- |
-| Ratatui | Rust, single binary | Immediate mode: rebuild the view every frame, diff buffers | Tiny footprint, instant start, total control | Everything above drawing is app code — state, focus, testing, accessibility |
-| Bubble Tea v2 | Go, single binary | Elm architecture: one model, one update function, one view-to-string | The cleanest mental model in the field, and the best ecosystem | Every update rebuilds the whole view; no structure behind the string |
-| Textual | Python | Widget DOM with CSS and a compositor | The most complete app framework: widgets, theming, devtools, docs | Interpreter-bound; rich structure for humans, no contract for machines |
-| Ink | React on Node | React reconciled to lines of stdout | Instant familiarity; ideal for streaming CLI output | Line-oriented — dense full-screen apps fight it |
-| OpenTUI | Zig core, TypeScript API | Components over a native buffer, across a language bridge | Native-core ambition, proven inside a real product (OpenCode) | Young; spanning two runtimes adds cost and complexity |
-| Nocterm | Dart AOT, single binary | Flutter-style widget API | The familiar surface for Flutter developers | Familiar surface without damage tracking or a semantics layer |
+| Framework | Stack | The model, in a sentence | At its best |
+| --- | --- | --- | --- |
+| Ratatui | Rust, single binary | Immediate mode: rebuild the view every frame, diff buffers | Tiny footprint, instant start, total control |
+| Bubble Tea v2 | Go, single binary | Elm architecture: one model, one update function, one view-to-string | The cleanest mental model in the field, and the best ecosystem |
+| Textual | Python | Widget DOM with CSS and a compositor | The most complete app framework: widgets, theming, devtools, docs |
+| Ink | React on Node | React reconciled to lines of stdout | Instant familiarity; ideal for streaming CLI output |
+| OpenTUI | Zig core, TypeScript API | Components over a native buffer, across a language bridge | Native-core ambition, proven inside a real product (OpenCode) |
+| Nocterm | Dart AOT, single binary | Flutter-style widget API | The familiar surface for Flutter developers |
 
-The case for a new framework was never that any of these is bad. It's
-that the four requirements are *structural*, and structure doesn't
-retrofit. A semantics tree needs a real tree to derive from — there is
-nothing to attach one to in a view that's a string, or a buffer
-repainted from scratch each frame. Security-by-default has to *be* the
-paint path, not a wrapper around it. A second render surface requires
-that "what the UI is" and "how it gets emitted" were separated from the
-beginning. The one UI architecture with all of those joints already
-existed — Flutter's three trees — and Dart AOT could ship it the way
-terminal users expect: as one static binary. That was the bet.
+So why build another one? Because the four requirements above are
+*day-one decisions*, and we wanted all four from day one. We wanted a
+semantics tree, which needs a persistent widget tree to derive from. We
+wanted untrusted-output safety to *be* the paint path, not a layer over
+it. We wanted the terminal and the browser as two backends of one
+pipeline, which means "what the UI is" and "how it gets emitted" have to
+be separated from the first commit. Those wants pointed at an
+architecture rather than a feature list — and the architecture with all
+of those joints already existed in Flutter's three trees. Dart AOT could
+ship it the way terminal users expect: as one static binary. That was
+the bet.
 
 ## The architecture
 
@@ -78,8 +78,9 @@ trees, each with one job:
   skipped entirely.
 - **The element tree** is identity and state — the durable spine that
   survives rebuilds. Your `setState` lives here. It's what lets a
-  keystroke rebuild one dirty path instead of the world, and it's the
-  layer other frameworks make you hand-build (more on that below).
+  keystroke rebuild one dirty path instead of the world, and what gives
+  application state — focus, selection, undo — a durable home the app
+  doesn't have to build for itself.
 - **The render tree** does layout and paint over a cell grid —
   constraints down, sizes up, exactly like Flutter but with cells
   instead of pixels. Its persistent identity is what change-tracking
@@ -177,8 +178,8 @@ running TUI rebuilds in place on save, terminal state intact.
 Edit-and-see, in a terminal.
 
 **Start from an app-grade catalog, not a box of parts.** Forty-plus
-widgets, including the data-heavy ones peers make you build — tables and
-trees proven at 100k rows, log regions, markdown, code and diff views —
+widgets, including the data-heavy ones — tables and trees proven at
+100k rows, log regions, markdown, code and diff views —
 and a set shaped for what terminal apps are becoming: message lists,
 approval prompts, patch review, conversation navigation, process panels,
 a command palette. Text editing is engine-grade: grapheme-correct,
@@ -244,40 +245,40 @@ Everything here is from our native-toolchain benchmark harness — three
 runs, medians, real PTYs, every framework driven through equivalent
 scenario fixtures. The harness and transcripts ship in the repo.
 
-**The retained tree out-emits immediate-mode Rust.** Going in, the safe
-money said ratatui — a systems language, the leanest possible library —
-would own raw wire throughput, and our retained tree would chase it. The
-opposite happened: fleury emits fewer bytes per frame and sustains
-higher frame rates on nearly every shared workload. The mechanism is the
-point: immediate mode redraws everything and diffs the result to
-*recover* what changed; the damage tracker never forgot, so the
-unchanged screen is never painted at all. Under continuous churn, a
-13,200-cell grid rewrites about 85 cells a frame. Knowing-what-changed
-beats being-fast-at-everything — and it retires the oldest objection to
-retained UI in terminals.
+**Retained mode pays for itself on the wire.** Going in, we treated the
+damage-tracking machinery as a tax we'd gladly pay for the developer
+model — we assumed the leanest immediate-mode renderers set a
+wire-efficiency bar we could only approach. Measured natively against
+the best of the field, the assumption ran backwards: fleury emitted
+fewer bytes per frame and sustained higher frame rates on most shared
+workloads. The mechanism is the interesting part: a renderer that
+rebuilds each frame must diff the result to *recover* what changed,
+while the damage tracker never forgot — so the unchanged screen is never
+painted at all. Under continuous churn, a 13,200-cell grid rewrites
+about 85 cells a frame. For us, that settled retained UI's oldest open
+question in terminals: the machinery isn't a tax, it's the engine.
 
-**Three orders of magnitude on a keystroke.** A cursor move in a
-10,000-character editor costs fleury 0.8 ms. The same operation on the
-Elm-architecture peer measured 718 ms. Nothing in that gap is Go versus
-Dart — it's O(whole view) versus O(changed path), the element tree doing
-its job. The peers' own benchmark fixtures argue the same point from the
-other side: they hand-implement selection, undo, and focus as app code,
-because their architectures have nowhere to keep state the app didn't
-build itself.
+**Keystrokes that follow the change, not the document.** A cursor move
+in a 10,000-character editor costs fleury 0.8 ms, and the cost tracks
+what changed rather than how much is on screen — the element tree doing
+its job. Rebuilding the whole view per update is a perfectly reasonable
+trade for small tools, and several great frameworks make it; the element
+tree is what removes that trade for applications, the same way it did
+for Flutter on phones.
 
 **The machinery, not the language, is where the performance lives.**
-The field gave us a natural controlled experiment: frameworks that share
-fleury's language or its surface style, without the damage-tracking
-spine underneath, measure an order of magnitude or more slower on
-app-shaped operations — and a native-language core doesn't close that
-gap when the rest of the pipeline can't feed it. Whatever else we got
-right or wrong, the work proportional-to-change machinery is the part
-that pays, and it would pay in any language.
+Every measurement we took pointed the same way: wire efficiency and
+latency track how much a framework's update pipeline knows about change,
+far more than they track its implementation language. That conviction is
+why our effort went into the spine — damage tracking, paint isolation,
+scroll reuse, byte accounting — rather than into micro-optimizing any
+single layer, and it's why we'd expect the same architecture to pay off
+in any language that hosts it.
 
 **And the browser target held up.** The same damage pipeline drives
 retained DOM rows to 0% over-budget frames across every web scenario,
-with browser-inclusive end-to-end under 12 ms. No terminal framework
-publishes browser-inclusive frame numbers; we'd like that to change.
+with browser-inclusive end-to-end under 12 ms. Browser-inclusive frame
+numbers are rare in this space; we'd like to help make them normal.
 
 ## Keeping ourselves honest
 
@@ -291,8 +292,8 @@ bytes). We trimmed the tax where it was real and accepted the floor that
 remains: a retained tree cannot match a string diff's constants on
 near-empty frames. For single-purpose micro-CLIs, that trade favors
 Bubble Tea. Our bet is that terminal apps are becoming real
-applications, where the keystroke result above shows the same trade
-inverting by three orders of magnitude.
+applications, where work-that-follows-change wins by a widening margin
+as screens grow.
 
 **Rust's runtime floors are not contestable.** Ratatui boots in
 single-digit milliseconds and idles at ~2 MiB; Dart AOT's warm floor is
