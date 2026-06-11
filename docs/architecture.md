@@ -109,6 +109,55 @@ build), a web readiness gate with promoted thresholds, and a wire byte
 gate against a committed baseline. Incremental layers that can drift get
 oracles; perf that can regress gets gates.
 
+## What this buys a developer
+
+The architecture is the means; this is the offer it exists to make.
+
+**Build the way a million Flutter developers already build.** Declarative
+widget composition, `setState`, controllers, `const` optimization — the
+mental model transfers wholesale, and divergences from Flutter are
+treated as bugs unless deliberate. With hot reload: fleury attaches a
+reassemble handler (`ext.fleury.reassemble`) so a running TUI rebuilds
+in place on save, terminal state intact — edit-and-see, in a terminal.
+
+**Start from an app-grade catalog, not a box of parts.** Forty-plus
+widgets including the data-heavy ones peers make you build — tables and
+trees proven at 100k rows, log regions, markdown/code/diff views — and a
+set shaped for what terminal apps are becoming: message lists, approval
+prompts, patch review, conversation navigation, process panels, command
+palette. Text editing is engine-grade: grapheme-correct, selection and
+undo, paste policy, completion seams, configurable keymaps.
+
+**Ship apps machines can drive.** The semantics layer means tests query
+roles, state, and actions instead of scraping bytes — and so can agents.
+The same structure that makes the test suite readable makes every fleury
+app automatable by default, with a protocol adapter (ACP) scoped as a
+fast-follow package rather than a rewrite.
+
+**Trust the output path.** Subprocess and LLM output is sanitized by
+default; clipboard, links, and images are policy-gated; redaction has
+hooks; terminal capabilities are detected and degrade by contract rather
+than by accident. Suspend (Ctrl+Z), subprocess handoff, and crash paths
+restore the user's terminal — the unglamorous correctness that decides
+whether a TUI feels professional.
+
+**Run it anywhere a binary runs, and beyond the terminal.** One static
+AOT executable — boots in ~20 ms, no runtime to install — plus the same
+app rendering into a browser as a first-class DOM target, and a remote
+driver for serving an app session over a socket. Long work runs as
+tasks with progress and cancellation; effects are structured, not
+ad hoc.
+
+**Develop with instruments on.** Headless testing against a fake
+terminal, semantic assertions, debug capture, `fleury diagnose --json`
+for capability triage, and the benchmark/gate harness this document's
+evidence comes from — the same rigor the framework holds itself to is
+available to apps.
+
+(Scope honesty: Windows has a driver but validation is deferred
+post-MVP; IME and screen-reader evidence is parked; see
+"What the architecture still owes.")
+
 ## How it got this shape
 
 **Origin: Flutter's three trees, taken seriously.** The starting decision
