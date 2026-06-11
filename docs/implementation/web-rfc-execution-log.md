@@ -14494,3 +14494,48 @@ retire-temporary-paths).
   CR + 781 CSI-H = 25KB; SB.9: 249 CSI-C where bubbletea uses 84 cursor
   bytes total) and per-frame sync wrappers; SGR is already near-zero
   where styling is sparse.
+
+## 2026-06-11 (wire plan Phases B-D: encoder, startup, RSS — measured verdicts)
+
+### Phase B — cursor/sync encoder
+
+Landed: (1) small-diff sync skip (<= 48 bytes forgoes the 16-byte
+BSU/ESU wrapper); (2) gap write-through generalized from plain-only to
+same-style; (3) byte-accounted STYLED gap rewriting — gaps crossing
+style boundaries rewrite with their SGR delta included in the byte
+comparison against the cursor move (reset-free by construction).
+269 rendering tests + the 300-frame equivalence oracle green.
+
+Measured verdict (transcript histograms, before/after): the remaining
+cursor moves do NOT yield — SB.9's 249 forward-moves average 5.6 bytes
+across 10+ column gaps; rewriting those gaps costs more than the moves.
+fleury's cursor encoding is byte-minimal for its diff granularity. The
+residual SB.9 delta vs bubbletea decomposes as: fleury UPDATES MORE
+CELLS (310 more content bytes — its fixture renders more live regions
+than the peer fixture) and paints more frames. Recorded as a
+fixture-surface-area finding, not an encoder gap. W-1 exits with
+"verified byte-minimal"; W-2 (SB.4 1.17x) likewise traces to fixture
+surface, not waste.
+
+### Phase C — startup decomposition (W-3 met outright)
+
+Runtime markers on a native SB.6 wire run: `runTui.entry` -> terminal
+entered at 0.2ms -> root mounted 0.4ms -> FIRST BYTE OUT at 0.5ms ->
+first render complete at 2.5ms. Fleury-attributable startup is 2.5ms
+(target was <= 5ms). A bare `dart compile exe` hello-world measures
+~29-39ms spawn-to-first-byte on this machine — the Dart AOT runtime
+boot IS the TTFB gap vs ratatui (30.7 vs 14.2ms). Floor documented;
+startup claims scope to managed-runtime peers (fleury leads TTFB
+against textual/bubbletea/opentui everywhere measured).
+
+### Phase D — RSS floors (documented exits)
+
+- Bare AOT hello-world RSS: 11.7 MiB (the runtime floor).
+- Standard fleury wire fixtures: ~20 MiB total -> ~8 MiB attributable
+  (framework + fixture state). Near the aspirational 5 MiB; no leak
+  signature.
+- SB.11's 143 MiB outlier is the wire fixture's data representation:
+  100,000 TreeTableNode objects with eager per-node `Map<String,String>`
+  column values (~1.3 KB/node). Recommendation recorded (computed/typed
+  column providers); the benchmark fixture is NOT being slimmed just to
+  move its own scoreboard row.
