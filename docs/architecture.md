@@ -51,8 +51,8 @@ four requirements.
 | Bubble Tea v2 | Go, single binary | Elm architecture: one model, one update function, one view-to-string | The cleanest mental model in the field, and the best ecosystem | Every update rebuilds the whole view; no structure behind the string |
 | Textual | Python | Widget DOM with CSS and a compositor | The most complete app framework: widgets, theming, devtools, docs | Interpreter-bound; rich structure for humans, no contract for machines |
 | Ink | React on Node | React reconciled to lines of stdout | Instant familiarity; ideal for streaming CLI output | Line-oriented — dense full-screen apps fight it |
-| OpenTUI | Zig core, TypeScript API | Components over a native buffer, across a language bridge | Native-core ambition, proven inside a real product (OpenCode) | The bridge hands back what the core wins |
-| Nocterm | Dart AOT, single binary | Flutter-style widget API | The familiar surface for Flutter developers | The syntax without the machinery: no damage tracking, no semantics |
+| OpenTUI | Zig core, TypeScript API | Components over a native buffer, across a language bridge | Native-core ambition, proven inside a real product (OpenCode) | Young; spanning two runtimes adds cost and complexity |
+| Nocterm | Dart AOT, single binary | Flutter-style widget API | The familiar surface for Flutter developers | Familiar surface without damage tracking or a semantics layer |
 
 The case for a new framework was never that any of these is bad. It's
 that the four requirements are *structural*, and structure doesn't
@@ -234,9 +234,9 @@ Fleury exists because of this field, not in spite of it.
 - **Ink** — the reminder that mental-model familiarity is adoption fuel.
   Fleury reads as Flutter for the same reason Ink reads as React: on
   purpose.
-- **OpenTUI** — a caution rather than an import: a native core behind a
-  language bridge showed no wire advantage on any shared workload. The
-  pipeline, not the kernel, is the unit of performance.
+- **OpenTUI** — a lesson we took seriously before writing much code:
+  performance lives in the whole pipeline, not in any single fast layer.
+  A native core can only be as fast as the path that feeds it.
 
 ## The measurements that surprised us
 
@@ -265,12 +265,14 @@ other side: they hand-implement selection, undo, and focus as app code,
 because their architectures have nowhere to keep state the app didn't
 build itself.
 
-**The machinery is separable from the language — and it's the part that
-matters.** Nocterm shares fleury's language, runtime floors, and surface
-syntax, and measures 8–30x slower on app-shaped operations: same Dart,
-no damage spine. OpenTUI has the native core and not the pipeline, and
-shows no advantage. Together they isolate the claim: not the language,
-not the syntax — the machinery.
+**The machinery, not the language, is where the performance lives.**
+The field gave us a natural controlled experiment: frameworks that share
+fleury's language or its surface style, without the damage-tracking
+spine underneath, measure an order of magnitude or more slower on
+app-shaped operations — and a native-language core doesn't close that
+gap when the rest of the pipeline can't feed it. Whatever else we got
+right or wrong, the work proportional-to-change machinery is the part
+that pays, and it would pay in any language.
 
 **And the browser target held up.** The same damage pipeline drives
 retained DOM rows to 0% over-budget frames across every web scenario,
@@ -300,7 +302,7 @@ them: fleury's own share is 2.5 ms of startup (first byte at 0.5 ms) and
 runtime costs. Our startup and footprint claims are scoped to
 managed-runtime peers, where fleury leads everywhere we measured.
 
-**And three lessons we paid for:**
+**And two lessons we paid for:**
 
 - **Flutter intuitions can be anti-patterns here.** Keyed-row
   "recycling" — the standard DOM/Flutter pattern for moving lists —
@@ -316,20 +318,10 @@ managed-runtime peers, where fleury leads everywhere we measured.
   traced to a benchmark fixture, not encoder waste), and a planned
   memory diet found 85 KB of retained framework heap — nothing to diet.
   Both times the honest output was a documented verdict, not a patch.
-- **The toolchain can lie at the process level.** Every early benchmark
-  — ours and the harness's — ran under Rosetta translation without
-  anyone noticing, inflating tail latencies by whole multiples. Pinning
-  the native stack mattered more than most optimizations. The evidence
-  discipline that followed — medians, oracles, regression gates — is now
-  part of the architecture, because numbers you can't trust are worse
-  than no numbers.
-
-Where do the standings land? Fleury pushes leading on 8 of 12 wire
-scenarios against every peer including the Rust and Zig ones, holds
-parity on 2, and trails on 2 for reasons we can name precisely (a
-fixture that renders more live regions than its peer equivalent, and a
-fixture whose data representation we won't slim just to move our own
-score).
+The full scenario-by-scenario standings — including the two workloads
+where fleury trails today, and exactly why — live with the benchmark
+harness in the repo. We'd rather you read those than a summary line
+here; the per-scenario detail is where comparisons stay honest.
 
 ## The trades we accepted
 
