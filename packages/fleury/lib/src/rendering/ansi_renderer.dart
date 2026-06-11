@@ -78,6 +78,23 @@ final class AnsiRenderer {
   static const _beginSyncUpdate = '\x1B[?2026h';
   static const _endSyncUpdate = '\x1B[?2026l';
 
+  /// Diffs at or below this many bytes skip the BSU/ESU wrapper.
+  ///
+  /// Synchronized output exists to stop the terminal rendering a partially
+  /// applied frame; a payload this small arrives (and paints) in one read,
+  /// so the 16-byte wrapper is a third of the frame for nothing. Wire
+  /// transcripts showed sync overhead at 3-5x peers on sparse-update
+  /// scenarios.
+  static const _syncSkipThresholdBytes = 48;
+
+  /// Wraps [payload] in synchronized-output markers when warranted.
+  String _wrapSync(String payload) {
+    if (!synchronizedOutput || payload.length <= _syncSkipThresholdBytes) {
+      return payload;
+    }
+    return '$_beginSyncUpdate$payload$_endSyncUpdate';
+  }
+
   /// Writes the diff between [previous] and [next] to [sink].
   ///
   /// Both buffers must have the same size; an assertion fires otherwise.
@@ -117,11 +134,7 @@ final class AnsiRenderer {
         onDirtyCell: onDirtyCell,
       );
       if (!anyDirty) return;
-      final output = StringBuffer();
-      if (synchronizedOutput) output.write(_beginSyncUpdate);
-      output.write(buf);
-      if (synchronizedOutput) output.write(_endSyncUpdate);
-      sink.write(output.toString());
+      sink.write(_wrapSync(buf.toString()));
       return;
     }
     final screenStats = screenDiffStats(previous, next);
@@ -140,11 +153,9 @@ final class AnsiRenderer {
         const CellOffset(0, 0),
       );
       final buf = StringBuffer();
-      if (synchronizedOutput) buf.write(_beginSyncUpdate);
       buf.write(_scrollUp(scrollUpRows));
       _appendCellDiff(scrolledPrevious, next, buf, onDirtyCell: onDirtyCell);
-      if (synchronizedOutput) buf.write(_endSyncUpdate);
-      sink.write(buf.toString());
+      sink.write(_wrapSync(buf.toString()));
       return;
     }
 
@@ -156,11 +167,7 @@ final class AnsiRenderer {
       onDirtyCell: onDirtyCell,
     );
     if (!anyDirty) return;
-    final output = StringBuffer();
-    if (synchronizedOutput) output.write(_beginSyncUpdate);
-    output.write(buf);
-    if (synchronizedOutput) output.write(_endSyncUpdate);
-    sink.write(output.toString());
+    sink.write(_wrapSync(buf.toString()));
   }
 
   bool _appendCellDiff(
@@ -210,7 +217,7 @@ final class AnsiRenderer {
       // overhead on scroll/dashboard/sparse updates.
       final fromCol = cursorCol;
       if (cursorRow == row && fromCol != null && fromCol < col) {
-        final gap = _plainAsciiGap(
+        final gap = _sameStyleAsciiGap(
           previous,
           next,
           row,
@@ -417,7 +424,12 @@ final class AnsiRenderer {
 
   static String _scrollUp(int rows) => rows == 1 ? '\x1B[S' : '\x1B[${rows}S';
 
-  static String? _plainAsciiGap(
+  /// ASCII text that can be rewritten in place of a cursor move when every
+  /// gap cell is unchanged and carries exactly the CURRENTLY EMITTED style —
+  /// rewriting such cells costs zero SGR bytes and leaves terminal state
+  /// untouched. (Wire transcripts show forward cursor moves are fleury's
+  /// dominant overhead; this is the cheapest counter.)
+  static String? _sameStyleAsciiGap(
     CellBuffer previous,
     CellBuffer next,
     int row,
@@ -426,12 +438,12 @@ final class AnsiRenderer {
     CellStyle? emittedStyle,
   ) {
     if (fromCol >= toCol) return null;
-    if (emittedStyle != null && emittedStyle != CellStyle.empty) return null;
+    final effectiveStyle = emittedStyle ?? CellStyle.empty;
     final out = StringBuffer();
     for (var col = fromCol; col < toCol; col++) {
       final cell = next.atColRow(col, row);
       if (previous.atColRow(col, row) != cell) return null;
-      if (cell.style != CellStyle.empty) return null;
+      if (cell.style != effectiveStyle) return null;
       switch (cell.role) {
         case CellRole.empty:
           out.write(' ');
