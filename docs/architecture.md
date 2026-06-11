@@ -158,39 +158,116 @@ was emulated. All standing evidence is native-stack, 3-run medians.
   semantics: 8–30x slower on app-shaped operations. The machinery, not
   the syntax, is the architecture.
 
-## The evidence (important callouts)
+## What the benchmarks actually taught us
 
-All native-stack, 3-run medians. Wire standings:
-`profiling/caps/2026-06-11-final` (+ `2026-06-11-sb11-postdiet2` for the
-TreeTable re-run); web: `profiling/web/baselines/2026-06-10-arm-native`.
+The full standings live in the scoreboards; quoting them all here would
+bury the signal. These are the results that shaped the architecture's
+story — the upsets, the losses worth respecting, and the lessons we paid
+for. (All native-stack, 3-run medians; wire evidence in
+`profiling/caps/2026-06-11-final`, web in
+`profiling/web/baselines/2026-06-10-arm-native`.)
 
-| Callout | Result | Why it matters architecturally |
-| --- | --- | --- |
-| Wire standings vs 6 peers, 12 scenarios | 8 push-leading, 2 parity, 2 catch-up (both causally explained) | Leads bytes/frame/FPS against every peer including Rust and Zig |
-| Retained vs immediate mode (vs ratatui) | Leads bytes, bytes/frame, FPS on SB.3/6/7/12 | The damage tracker out-emits rebuild-everything-and-diff |
-| App-shaped latency (SB.2 editing) | cursor-move p95 0.8 ms vs Bubble Tea 718 ms | The element tree: state survives, only the dirty path rebuilds |
-| Same-runtime control (vs nocterm) | 8–30x faster on counter/editor/table/log ops | Isolates machinery from language: same Dart floors, no damage spine |
-| Web backend frame cost | Worst scenario 8.5 ms p95 at 300x100; 0% over 60fps budget on all 11 scenarios (inherited: up to 2.7 s) | One damage spine drives a second surface to sub-budget |
-| Browser-inclusive end-to-end | ≤ 11.5 ms (CDP-traced, real frame pipeline) | No peer publishes browser-inclusive numbers at all |
-| Update granularity, measured at the heap | ~85 cells rewritten/frame on a 13,200-cell grid; ~20 KB/frame churn | Damage discipline confirmed at the allocation level, not inferred |
-| Startup decomposition | 2.5 ms fleury-attributable (first byte 0.5 ms); warm AOT floor ~15–17.5 ms | The TTFB gap vs Rust is the runtime floor, not the framework |
-| Memory decomposition | Retained framework heap 85 KB; +3.3 MiB over the 13.8 MiB AOT floor for a minimal app | The retained architecture retains almost nothing |
-| TreeTable index (post-diet) | At 100k rows: live heap −12 MB, build −19%, fuzzy −49%; SB.11 CPU −25%, fps 4.3→7.5 | Index stores one text blob + spans; rows materialize on demand |
-| Semantics cost | Semantic apply 0.0 ms on the visual frame (deferred flush); divergence oracle green | The differentiator is free at frame time and verified correct |
+### Three results we would have bet against
 
-The honest column, kept honest: SB.9 and SB.11 remain "catch up" — SB.9's
-byte delta is fixture surface area over a verified byte-minimal encoder,
-SB.11's RSS is its fixture's eager 100k node maps (fixtures are not
-slimmed to move their own rows). SB.1's overhead *ratio* is structurally
-unflattering (23 absolute bytes of steady-state overhead against 9 bytes
-of content). RSS/CPU/TTFB absolutes vs Rust are runtime floor, measured
-and documented. The scoreboard bands RSS/CPU within runtime class and
-excludes session lifecycle bytes from the overhead axis — methodology
-changes applied symmetrically to every participant, changing no standing.
+**The retained tree out-emits immediate-mode Rust.** Going in, the safe
+money said ratatui — the field's performance-credibility peer, a
+systems language, the leanest possible library — would own raw wire
+throughput, and fleury's goal would be "respectably close." The opposite
+happened: fleury leads bytes, bytes-per-frame, and FPS on nearly every
+shared scenario. The reason is architectural, not heroic optimization.
+Immediate mode rebuilds the whole view every frame and diffs buffers to
+recover what changed; the damage tracker never forgets what changed in
+the first place, so the unchanged 99% of the screen is never painted at
+all — confirmed at the allocation level, where a 13,200-cell grid under
+churn rewrites ~85 cells a frame. Knowing-what-changed beat
+being-fast-at-everything. That result is what makes the retained-mode
+bet defensible against its oldest objection.
 
-Public claims language lives in
-[peer-scorecards](implementation/peer-scorecards.md) and should be quoted
-from there, not paraphrased upward.
+**Three orders of magnitude on a text editor.** Bubble Tea is a
+well-built framework with the cleanest mental model in the field, and on
+a 10k-character editor its cursor-move p95 measured 718 ms to fleury's
+0.8 ms. Nothing in that gap is Go vs Dart; it is the Elm architecture
+paying O(entire view) per keystroke while the element tree pays
+O(changed path). Architecture determines the *shape* of the work, and no
+amount of language speed buys back a shape that redoes everything. The
+same structural story repeated in every peer fixture that had to
+hand-implement selection, undo, and focus state as app code — the
+element tree is the layer the others don't have.
+
+**The native-core peer showed no native advantage.** OpenTUI's Zig
+buffer core behind a TypeScript bridge — on paper the
+"best of both worlds" design — trailed fleury on every shared wire axis.
+The pipeline, not the kernel, is the unit of performance; a fast core
+behind a bridge inherits the bridge. Nocterm closes the loop from the
+other side: same language, same runtime floors, Flutter-style API
+without the damage spine underneath, 8–30x slower on app-shaped
+operations. Between them, the two Dart-adjacent comparisons isolate the
+claim cleanly: the machinery is the architecture; the syntax and the
+language are not.
+
+### Where peers genuinely win, and what we did about it
+
+**TEA's simplicity is a real architectural virtue.** On a counter app
+emitting nine content bytes, Bubble Tea's near-zero per-frame protocol
+constants make fleury's tree bookkeeping look heavy as a ratio (the
+absolute cost is ~23 bytes). We trimmed the tax where it was real — tiny
+diffs no longer pay the synchronized-output wrapper — and accepted the
+floor that remains: a retained tree cannot match a string diff's
+constants on near-empty frames, and for single-purpose micro-CLIs that
+trade favors TEA. Fleury's bet is that terminal apps are becoming real
+applications, where the trade inverts by orders of magnitude (see the
+editor above).
+
+**Rust's runtime floors are not contestable.** Ratatui boots in
+single-digit milliseconds and idles at ~2 MiB; Dart AOT's warm floor is
+~15–17 ms and ~14 MiB. We measured the floors instead of arguing with
+them: fleury's own share is 2.5 ms of startup (first byte at 0.5 ms) and
+85 KB of retained heap — the framework adds almost nothing to what the
+runtime costs. Startup and footprint claims are scoped to
+managed-runtime peers, where fleury leads everywhere measured.
+
+**Textual beat us where maturity matters — and we imported the lesson.**
+Its DataTable virtualization outperformed fleury's TreeTable fixture at
+100k rows: the framework whose API makes lazy data the easy path wins,
+regardless of engine speed. The first half of that lesson already landed
+(the search index now retains one shared text blob plus spans instead of
+per-row rows-and-text: −12 MB live, fuzzy queries 2x faster, SB.11 CPU
+−25%); the second half — provider-style row building as the default API
+shape — is queued for the core audit. The best architectural import of
+the campaign came from the Python peer, not the systems-language ones.
+
+### Lessons we paid for
+
+- **Flutter intuitions can be anti-patterns here.** Keyed-row
+  "recycling" — the standard DOM/Flutter pattern for moving lists —
+  measured ~2x *slower* than letting positional rebuild repaint, because
+  keyed boundaries turn every moved row into a reconciled subtree and
+  defeat both the damage tracker and scroll reuse. Boundaries are for
+  expensive content that stays put. Living close to Flutter means
+  inheriting folklore that must be unlearned, and the framework now
+  documents the trap where it bites (`RepaintBoundary` docs).
+- **Measure the floor before chasing the gap.** Twice, the "obvious"
+  optimization target dissolved under measurement: the cursor encoder
+  was proven byte-minimal from transcripts (the remaining SB.9 delta is
+  fixture surface area, not waste), and the RSS "diet" found 85 KB of
+  retained framework heap — nothing to diet. Both times the honest
+  output was a documented verdict, not a patch. The discipline cuts both
+  ways: it also found the real wins (the index diet, the sync skip).
+- **The toolchain can lie at the process level.** Every pre-campaign
+  benchmark — ours and the harness's — ran under Rosetta translation
+  without anyone noticing, inflating tails by whole multiples. The fix
+  (pinning the native stack) mattered more than most optimizations. The
+  evidence discipline that followed — 3-run medians, oracles for
+  incremental layers, byte gates for the encoder — is now part of the
+  architecture, because numbers you can't trust are worse than no
+  numbers.
+
+The bottom line on standings, in one sentence: fleury pushes leading on
+8 of 12 wire scenarios against every peer including the Rust and Zig
+ones, holds parity on 2, and trails on 2 for fully-explained
+fixture-and-floor reasons — with public claims language maintained in
+[peer-scorecards](implementation/peer-scorecards.md), to be quoted, not
+paraphrased upward.
 
 ## Costs accepted (the trade ledger)
 
@@ -200,11 +277,9 @@ from there, not paraphrased upward.
 2. **A verification tax.** Incremental layers demanded their own oracles
    and gates. The architecture's correctness is maintained machinery, not
    a free property — that machinery is part of the architecture.
-3. **Imported intuitions that backfire.** Flutter/DOM habits like keyed
-   row "recycling" measure ~2x slower here because they defeat damage
-   tracking and scroll reuse. The anti-patterns are documented where they
-   bite (`RepaintBoundary` docs); the perf folklore is part of the DX
-   surface and still growing.
+3. **Imported intuitions that backfire.** Proximity to Flutter brings
+   folklore that must be unlearned (the keyed-recycling lesson above);
+   the perf folklore is part of the DX surface and still growing.
 
 ## What the architecture still owes
 
