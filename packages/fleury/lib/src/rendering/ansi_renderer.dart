@@ -216,8 +216,11 @@ final class AnsiRenderer {
       // more than CPU here, and cursor moves are the dominant frame
       // overhead on scroll/dashboard/sparse updates.
       final fromCol = cursorCol;
-      if (cursorRow == row && fromCol != null && fromCol < col) {
-        final gap = _sameStyleAsciiGap(
+      if (cursorRow == row &&
+          fromCol != null &&
+          fromCol < col &&
+          !styleResetRequired) {
+        final gap = _gapRewrite(
           previous,
           next,
           row,
@@ -227,9 +230,13 @@ final class AnsiRenderer {
         );
         if (gap != null) {
           final move = _cursorMove(cursorRow, cursorCol, row, col);
-          if (gap.length < move.length) {
-            buf.write(gap);
+          if (gap.bytes.length < move.length) {
+            buf.write(gap.bytes);
             cursorCol = col;
+            if (gap.emittedSgr) {
+              emittedStyle = gap.endStyle;
+              styleBytesEmitted = true;
+            }
           }
         }
       }
@@ -424,12 +431,16 @@ final class AnsiRenderer {
 
   static String _scrollUp(int rows) => rows == 1 ? '\x1B[S' : '\x1B[${rows}S';
 
-  /// ASCII text that can be rewritten in place of a cursor move when every
-  /// gap cell is unchanged and carries exactly the CURRENTLY EMITTED style —
-  /// rewriting such cells costs zero SGR bytes and leaves terminal state
-  /// untouched. (Wire transcripts show forward cursor moves are fleury's
-  /// dominant overhead; this is the cheapest counter.)
-  static String? _sameStyleAsciiGap(
+  /// ASCII text (with any required SGR transitions) that can be rewritten in
+  /// place of a cursor move across an unchanged gap.
+  ///
+  /// Unlike a same-style-only rewrite, style boundaries inside the gap are
+  /// allowed: the SGR delta bytes are included in the returned payload, and
+  /// the caller compares total bytes against the cursor move. Wire
+  /// transcripts show forward cursor moves are fleury's dominant overhead;
+  /// peers win these scenarios by rewriting through lines rather than
+  /// hopping precisely between dirty cells.
+  ({String bytes, CellStyle endStyle, bool emittedSgr})? _gapRewrite(
     CellBuffer previous,
     CellBuffer next,
     int row,
@@ -438,14 +449,24 @@ final class AnsiRenderer {
     CellStyle? emittedStyle,
   ) {
     if (fromCol >= toCol) return null;
-    final effectiveStyle = emittedStyle ?? CellStyle.empty;
+    var currentStyle = emittedStyle ?? CellStyle.empty;
+    var emittedSgr = false;
     final out = StringBuffer();
     for (var col = fromCol; col < toCol; col++) {
       final cell = next.atColRow(col, row);
       if (previous.atColRow(col, row) != cell) return null;
-      if (cell.style != effectiveStyle) return null;
       switch (cell.role) {
         case CellRole.empty:
+          // Rewriting an empty cell as a space is only exact when the
+          // current style's background/inverse matches the cell's (empty)
+          // style; require an exact style match like content cells.
+          if (cell.style != currentStyle) {
+            final encoded = _styleDelta(currentStyle, cell.style);
+            if (encoded == null) return null;
+            out.write(encoded);
+            currentStyle = cell.style;
+            emittedSgr = true;
+          }
           out.write(' ');
         case CellRole.leading:
           final grapheme = cell.grapheme!;
@@ -454,6 +475,13 @@ final class AnsiRenderer {
               col + 1 < next.size.cols &&
               next.atColRow(col + 1, row).role == CellRole.continuation;
           if (isWide) return null;
+          if (cell.style != currentStyle) {
+            final encoded = _styleDelta(currentStyle, cell.style);
+            if (encoded == null) return null;
+            out.write(encoded);
+            currentStyle = cell.style;
+            emittedSgr = true;
+          }
           out.write(grapheme);
         case CellRole.continuation:
         case CellRole.protocolAnchor:
@@ -461,7 +489,24 @@ final class AnsiRenderer {
           return null;
       }
     }
-    return out.toString();
+    return (
+      bytes: out.toString(),
+      endStyle: currentStyle,
+      emittedSgr: emittedSgr,
+    );
+  }
+
+  /// SGR delta from [from] to [to] without a reset, or null when [to] is the
+  /// empty style and a reset would be required (resets inside a gap rewrite
+  /// would interact with [_appendCellDiff]'s reset bookkeeping).
+  String? _styleDelta(CellStyle from, CellStyle to) {
+    if (to == CellStyle.empty) {
+      if (from == CellStyle.empty) return '';
+      // Transitioning to empty needs a reset; keep gap rewrites reset-free.
+      return null;
+    }
+    final encoded = _encodeStyleTransition(from, to, resetFirst: false);
+    return encoded;
   }
 
   static bool _isAscii(String text) {
