@@ -218,3 +218,36 @@ while leading on protocol efficiency. SB.9's 36% SGR overhead is a real
 remaining byte-optimization target. NOTE: the Rosetta-era harness masked
 ratatui's TTFB advantage (the capture tooling itself was emulated); native
 TTFB comparisons are now trustworthy.
+
+
+## Final Native Snapshot: 2026-06-11 (post wire-efficiency plan)
+
+Full 12-scenario re-run (3 runs each, all participants native, post
+encoder work) in `profiling/caps/2026-06-11-final`. Position rollup now
+bands RSS/CPU within runtime class (native best annotated in-cell).
+
+**Positions: push leading 8/12** (SB.1, SB.2, SB.3, SB.5, SB.6, SB.7,
+SB.10, SB.12), **parity ok 2/12** (SB.4, SB.8), **catch up 2/12**
+(SB.9, SB.11).
+
+Measured floors and verdicts behind the two catch-ups (full detail in
+the execution log, 2026-06-11 entries):
+
+- Fleury's cursor encoding is byte-minimal for its diff granularity
+  (verified by transcript histograms before/after byte-accounted styled
+  gap rewriting); SB.9's residual delta is fixture surface area — the
+  fleury fixture renders more live regions than the peer fixture.
+- Fleury-attributable startup is 2.5ms (first byte at 0.5ms after
+  entry); the Dart AOT boot floor (~29-39ms hello-world) is the entire
+  TTFB gap vs ratatui. Startup claims scope to managed-runtime peers,
+  where fleury leads everywhere measured.
+- RSS floor: 11.7 MiB bare AOT; typical fleury fixtures carry ~8 MiB
+  above it. SB.11's 143 MiB is its fixture's 100k eager node maps
+  (recommendation recorded; fixtures are not slimmed to move their own
+  scoreboard rows).
+
+Claims language for public use: "Fleury leads wire efficiency (bytes,
+bytes/frame, FPS) against every measured peer including the Rust and
+Zig ones, and leads startup against every managed-runtime peer; on
+memory and raw startup it is ballpark-of-systems-languages with a
+documented Dart-runtime floor and a 2.5ms framework-attributable share."

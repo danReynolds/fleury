@@ -1,6 +1,6 @@
 # Wire Efficiency & Startup Plan (post native-stack peer snapshot)
 
-Status: proposed 2026-06-11, from the first all-native wire captures
+Status: COMPLETE 2026-06-11 (same day; all phases executed, measured verdicts in the execution log and peer-scorecards final snapshot). Originally proposed from the first all-native wire captures
 (`profiling/caps/2026-06-11-native-*`). Companion to
 `peer-scorecards.md` and the completed
 `web-industry-leading-plan.md`.
