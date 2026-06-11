@@ -14453,3 +14453,17 @@ Rosetta was the warmup story. On the native stack:
 - P-5 budget set from data: first interactive frame <= 16.67ms (observed
   ~1.9ms worst), no frame over 50ms after frame 3 (observed max 8.5ms
   anywhere). No warmup engineering required.
+
+## 2026-06-11 (administrative closure)
+
+Threshold promotion executed (delegated by Dan): the
+`2026-06-10-arm-native` candidate is now the reviewed policy
+(`thresholds.json` + `threshold-review.json`, fingerprint
+`fnv1a64:c302fd6d810a24a6`), with a review note recording the
+native-stack basis and that no over-budget allowances are needed.
+Readiness bundle + strict automated validation regenerated against the
+reviewed policy; bundle verification: zero mismatches. The completion
+audit now reads `release-evidence-ready-default-actions-pending` with
+`releaseEvidenceReady: true` — the only remaining blockers are the two
+intentionally-parked release actions (make-dom-default,
+retire-temporary-paths).

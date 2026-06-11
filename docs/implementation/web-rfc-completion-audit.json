@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "kind": "fleuryWebRfcCompletionAudit",
-  "generatedAt": "2026-06-10T02:59:47.034909Z",
+  "generatedAt": "2026-06-11T13:35:27.605457Z",
   "worktree": "codex/fleury-web-phase1",
-  "baselineDirectory": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened",
-  "readinessBundlePath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened/readiness-candidate/web-readiness-bundle.json",
-  "overallStatus": "implementation-review-ready-release-blocked",
+  "baselineDirectory": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native",
+  "readinessBundlePath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/web-readiness-bundle.json",
+  "overallStatus": "release-evidence-ready-default-actions-pending",
   "architectureReviewReady": true,
-  "releaseEvidenceReady": false,
+  "releaseEvidenceReady": true,
   "releaseReady": false,
   "defaultFlipReady": false,
   "temporaryPathRetirementReady": false,
@@ -27,14 +27,13 @@
         "readiness-bundle-source-and-artifact-verification"
       ],
       "deferredReleaseGateIds": [
-        "release-evidence",
         "make-dom-default",
         "retire-temporary-paths"
       ]
     },
     "releaseEvidence": {
-      "ready": false,
-      "status": "blocked",
+      "ready": true,
+      "status": "ready",
       "requires": [
         "reviewed-threshold-policy",
         "scoped-manual-evidence",
@@ -42,10 +41,7 @@
         "strict-readiness-bundle-verification",
         "strict-retained-host-automated-validation"
       ],
-      "remainingReleaseActionIds": [
-        "review-threshold-policy",
-        "regenerate-readiness-bundle"
-      ],
+      "remainingReleaseActionIds": [],
       "satisfiedCurrentEvidenceActionIds": [
         "verify-readiness-bundle",
         "run-automated-web-host-tests"
@@ -60,7 +56,6 @@
         "bundle-bound-retire-temporary-paths-preflight"
       ],
       "remainingGateIds": [
-        "release-evidence",
         "run-default-preflight:make-dom-default",
         "run-default-preflight:retire-temporary-paths"
       ],
@@ -72,9 +67,6 @@
     }
   },
   "completionBlockers": [
-    "candidate thresholds need human review and promotion to thresholds.json plus threshold-review.json",
-    "strict Phase 6 readiness must pass after reviewed threshold policy and scoped evidence",
-    "release evidence prerequisites must pass before final default/retirement actions",
     "bundle-bound make-dom-default preflight must pass before changing the package default",
     "bundle-bound retire-temporary-paths preflight must pass before removing temporary/xterm-compatible paths"
   ],
@@ -135,28 +127,26 @@
     {
       "phase": "Phase 5",
       "name": "Benchmark Gate",
-      "status": "instrumentation-and-candidate-baseline-landed-threshold-review-blocked",
-      "releaseBlocking": true,
+      "status": "reviewed-thresholds-ready",
+      "releaseBlocking": false,
       "evidence": [
-        "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened/readiness-candidate/scoreboard.json",
-        "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened/thresholds.candidate.json",
-        "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened/threshold-review-plan.md"
-      ],
-      "remainingGate": "human review and promotion of per-scenario thresholds"
+        "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/scoreboard.json",
+        "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/thresholds.json"
+      ]
     },
     {
       "phase": "Phase 6",
       "name": "Harden and Retire Temporary Paths",
-      "status": "guards-landed-default-flip-and-retirement-blocked",
+      "status": "release-evidence-ready-default-actions-pending",
       "releaseBlocking": true,
       "evidence": [
         "packages/fleury_web/tool/web_readiness.dart",
         "packages/fleury_web/tool/web_readiness_bundle.dart",
         "packages/fleury_web/tool/web_automated_validation.dart",
         "packages/fleury_web/tool/web_default_preflight.dart",
-        "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened/readiness-candidate/web-readiness.json",
-        "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened/readiness-candidate/web-default-preflight-make-dom-default.json",
-        "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened/readiness-candidate/web-default-preflight-retire-temporary-paths.json"
+        "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/web-readiness.json",
+        "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/web-default-preflight-make-dom-default.json",
+        "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/web-default-preflight-retire-temporary-paths.json"
       ],
       "remainingGate": "strict readiness and bundle-bound default/retirement preflights must pass"
     }
@@ -165,8 +155,8 @@
     "strictBundleVerification": {
       "strictPass": true,
       "checkedArtifactCount": 11,
-      "checkedSourceInputCount": 226,
-      "checkedManifestFieldCount": 65,
+      "checkedSourceInputCount": 230,
+      "checkedManifestFieldCount": 61,
       "manifestMismatchCount": 0,
       "missingManifestFieldCount": 0
     },
@@ -174,14 +164,14 @@
       "strictPass": true,
       "scenarioCount": 11,
       "captureCount": 33,
-      "frameCount": 912,
+      "frameCount": 2496,
       "fallbackCellCount": 0,
       "fallbackNodeCount": 0
     },
     "automatedWebHostValidation": {
       "strictPass": true,
       "status": "pass",
-      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened/readiness-candidate/web-automated-validation.json",
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/web-automated-validation.json",
       "checks": [
         {
           "id": "browser",
@@ -197,14 +187,14 @@
     }
   },
   "releaseGateEvidence": {
-    "releaseEvidenceReady": false,
+    "releaseEvidenceReady": true,
     "defaultPreflights": {
       "make-dom-default": {
         "targetId": "make-dom-default",
         "ready": false,
         "status": "diagnostic-only",
-        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened/readiness-candidate/web-default-preflight-make-dom-default.json",
-        "strictPass": false,
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/web-default-preflight-make-dom-default.json",
+        "strictPass": true,
         "bundleBound": false,
         "bundleRequired": false,
         "automatedValidationBound": true,
@@ -217,8 +207,8 @@
         "targetId": "retire-temporary-paths",
         "ready": false,
         "status": "diagnostic-only",
-        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened/readiness-candidate/web-default-preflight-retire-temporary-paths.json",
-        "strictPass": false,
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/web-default-preflight-retire-temporary-paths.json",
+        "strictPass": true,
         "bundleBound": false,
         "bundleRequired": false,
         "automatedValidationBound": true,
@@ -239,17 +229,6 @@
   },
   "releaseActions": [
     {
-      "id": "review-threshold-policy",
-      "status": "required",
-      "kind": "human-review",
-      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened/threshold-review-plan.md"
-    },
-    {
-      "id": "regenerate-readiness-bundle",
-      "status": "waiting-on-human-gates",
-      "kind": "artifact-refresh"
-    },
-    {
       "id": "verify-readiness-bundle",
       "status": "passes-current-candidate-packet",
       "kind": "artifact-verification"
@@ -261,12 +240,12 @@
     },
     {
       "id": "run-default-preflight:make-dom-default",
-      "status": "waiting-on-strict-readiness",
+      "status": "pending-final-bundle-bound-preflight",
       "kind": "release-gate"
     },
     {
       "id": "run-default-preflight:retire-temporary-paths",
-      "status": "waiting-on-strict-readiness",
+      "status": "pending-final-bundle-bound-preflight",
       "kind": "release-gate"
     }
   ]

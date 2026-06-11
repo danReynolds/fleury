@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryWebManualValidationAudit",
+  "generatedAt": "2026-06-11T13:35:30.637156Z",
+  "targetCount": 0,
+  "entryCount": 2,
+  "invalidEntryCount": 0,
+  "ignoredFileCount": 3,
+  "ignoredFiles": [
+    {
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/templates/chrome-ime-macos.template.json",
+      "file": "chrome-ime-macos.template.json",
+      "reason": "template file"
+    },
+    {
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/templates/chrome-voiceover-macos.template.json",
+      "file": "chrome-voiceover-macos.template.json",
+      "reason": "template file"
+    },
+    {
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/manual-validation-audit.json",
+      "file": "manual-validation-audit.json",
+      "reason": "generated audit"
+    }
+  ],
+  "passedTargetCount": 0,
+  "missingTargets": [],
+  "failedTargets": [],
+  "blockedTargets": [],
+  "needsReviewTargets": [],
+  "strictPass": true,
+  "targets": []
+}

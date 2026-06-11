@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryWebReadinessAudit",
+  "generatedAt": "2026-06-11T13:35:31.039436Z",
+  "strictPass": true,
+  "checks": [
+    {
+      "id": "frameScoreboard",
+      "label": "Frame performance scoreboard",
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/scoreboard.json",
+      "strictPass": true,
+      "blockers": [],
+      "details": {
+        "scenarioCount": 11,
+        "runCount": 33,
+        "minRuns": 3,
+        "requireComparableRunEnvironment": true,
+        "thresholdPolicyPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/thresholds.json",
+        "thresholdPolicyReviewState": "reviewed",
+        "thresholdPolicyReviewedBy": "Dan Reynolds (promotion delegated to Claude advisory session, 2026-06-11)",
+        "thresholdPolicyReviewedAt": "2026-06-11T13:34:37.934757Z",
+        "thresholdPolicyReviewContext": "Browser Chrome/149.0.7827.102 pinned arm64-native via arch on Apple Silicon, OS macos Version 26.2 (Build 25C56), headless=new with anti-throttling flags, frameBudgetMs=16.67, 3x64-frame captures warmup 8, retained DOM product baseline (first native-stack baseline; supersedes all Rosetta-era evidence)",
+        "thresholdPolicyFingerprint": "fnv1a64:1641feb3f8354e6c",
+        "thresholdPolicyScenarioCount": 11,
+        "thresholdReviewPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/threshold-review.json"
+      }
+    },
+    {
+      "id": "semanticCoverage",
+      "label": "Semantic coverage audit",
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/semantic-coverage.json",
+      "strictPass": true,
+      "blockers": [],
+      "details": {
+        "scenarioCount": 11,
+        "captureCount": 33,
+        "frameCount": 2496,
+        "fallbackCellCount": 0,
+        "fallbackNodeCount": 0
+      }
+    },
+    {
+      "id": "manualValidation",
+      "label": "Manual browser validation",
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/manual-validation-audit.json",
+      "strictPass": true,
+      "blockers": [],
+      "details": {
+        "targetCount": 0,
+        "passedTargetCount": 0,
+        "entryCount": 2,
+        "invalidEntryCount": 0
+      }
+    }
+  ]
+}
