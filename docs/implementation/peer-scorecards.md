@@ -191,3 +191,30 @@ When refreshing this scorecard:
   should still measure semantic testing, retained-state ergonomics,
   capability diagnostics, terminal safety, and stability under demo-app
   workflows.
+
+## Native-Stack Wire Snapshot: 2026-06-11
+
+First wire runs with every participant native (arm64 Dart AOT for fleury,
+GOARCH=arm64 bubbletea, arm64 rustc ratatui, universal node/python for
+opentui/ink/textual). All earlier captures ran fleury (and bubbletea) under
+Rosetta; treat pre-2026-06-11 standings as superseded. Clean captures in
+`profiling/caps/2026-06-11-native-sb6-wire` and
+`profiling/caps/2026-06-11-native-multi-wire` (3 runs each).
+
+| Scenario | vs | Leading | Behind | Position |
+| --- | --- | --- | --- | --- |
+| SB.6 Dashboard | ratatui, opentui, bubbletea | bytes, bytes/frame, FPS | TTFB 2.2x / RSS 8x / CPU vs ratatui | catch up |
+| SB.12 Layout dirtiness | nocterm, ratatui, opentui | bytes, bytes/frame, SGR overhead, FPS | TTFB/RSS/CPU vs ratatui | catch up |
+| SB.4 Log region | textual, bubbletea, opentui | TTFB (19.7ms, beats all three), FPS | bytes 1.17x vs bubbletea; RSS vs Go | parity ok |
+| SB.9 Subprocess | textual, bubbletea, opentui | TTFB, FPS (~par with bubbletea) | bytes/SGR overhead vs bubbletea (36% — optimization target) | needs data |
+
+Reading: fleury LEADS on wire efficiency (bytes, bytes/frame, FPS) against
+every peer including the systems-language ones, and leads startup against
+every managed-runtime peer. The remaining "WAY OFF" axes are exclusively
+TTFB/RSS/CPU against ratatui (Rust): a language-runtime floor (Dart AOT
+~20MiB / ~20-30ms boot vs Rust ~2MiB / ~5-14ms), consistent with the
+maintainer's stated bar of "ballpark of perf-oriented peers" on footprint
+while leading on protocol efficiency. SB.9's 36% SGR overhead is a real
+remaining byte-optimization target. NOTE: the Rosetta-era harness masked
+ratatui's TTFB advantage (the capture tooling itself was emulated); native
+TTFB comparisons are now trustworthy.
