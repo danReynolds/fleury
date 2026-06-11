@@ -73,3 +73,26 @@ dep. `analyze.dart` runs every capture through fleury's `AnsiByteBreakdown`, so
 the byte comparison is fair across languages. `--ui-mode strict-ui|full-ui`
 keeps raw-buffer and layout-engine comparisons honest. Next phase:
 per-framework self-driving scenario apps + Tier-C (real-terminal/SSH) numbers.
+
+## Wire regression gate
+
+`bin/fleury_wire_gate.dart` (or `fleury benchmark wire-gate`) re-runs a
+fleury-only scenario subset — SB.1 (startup/session bytes), SB.6
+(dashboard steady state), SB.9 (untrusted-output encoding) — and
+compares medians against `wire_gate_baseline.json`. Byte axes
+(totalBytes, bytes/frame, overhead percent) FAIL on regression beyond
+tolerance; timing axes (TTFB, frame count) warn only, because PTY
+timing is machine- and load-sensitive. SB.1 and SB.9 reproduce to the
+byte; SB.6 varies under 1% run-to-run.
+
+After an intentional, measured encoder change, refresh the baseline in
+the same commit:
+
+```sh
+dart tool/fleury_dev.dart benchmark wire-gate --update-baseline
+```
+
+There is no CI in this repo yet; run the gate before any commit that
+touches `ansi_renderer.dart`, `cell_buffer.dart`, or
+`terminal_sequences.dart`. The byte-equivalence oracle covers
+correctness; this gate covers cost.

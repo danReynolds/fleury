@@ -1,0 +1,23 @@
+{
+  "sb1": {
+    "totalBytes": 117.0,
+    "bytesPerFrame": 58.5,
+    "overheadPercent": 71.875,
+    "ttfbMs": 19.798,
+    "frames": 2.0
+  },
+  "sb6": {
+    "totalBytes": 109059.0,
+    "bytesPerFrame": 901.3140495867768,
+    "overheadPercent": 30.855983996182573,
+    "ttfbMs": 17.456,
+    "frames": 121.0
+  },
+  "sb9": {
+    "totalBytes": 5250.0,
+    "bytesPerFrame": 477.27272727272725,
+    "overheadPercent": 34.23039690222652,
+    "ttfbMs": 17.268,
+    "frames": 11.0
+  }
+}

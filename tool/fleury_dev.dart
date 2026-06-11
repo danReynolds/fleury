@@ -787,6 +787,9 @@ class _Runner {
       case 'wire':
         await benchmarkWire(rest);
         return;
+      case 'wire-gate':
+        await benchmarkWireGate(rest);
+        return;
       case 'scoreboard':
         await benchmarkScoreboard(rest);
         return;
@@ -1101,6 +1104,16 @@ class _Runner {
 
     stdout.writeln('captures written under ${_relative(outDir.path)}');
     await _refreshWireScoreboard(outDir.path);
+  }
+
+  /// Fleury-only wire regression gate: re-runs a small scenario subset and
+  /// fails on byte-axis regression vs `profiling/wire_gate_baseline.json`.
+  Future<void> benchmarkWireGate(List<String> args) async {
+    await _run('dart', [
+      'run',
+      'bin/fleury_wire_gate.dart',
+      ...args,
+    ], workingDirectory: profiling);
   }
 
   Future<void> benchmarkScoreboard(List<String> args) async {
@@ -5855,6 +5868,8 @@ void _printBenchmarkUsage() {
   );
   stdout.writeln('  fleury benchmark wire sb4 --runs=3');
   stdout.writeln('  fleury benchmark wire sb5 --peer=ink --runs=3');
+  stdout.writeln('  fleury benchmark wire-gate');
+  stdout.writeln('  fleury benchmark wire-gate --update-baseline');
   stdout.writeln(
     '  fleury benchmark scoreboard --input=profiling/caps --output=profiling/caps/scoreboard.md',
   );

@@ -14660,3 +14660,14 @@ capture_pty (SB.1 fixture).
 
 Verdict: current packaging is optimal; no change lands. Floor exit
 documented, claims unchanged (startup scoped to managed-runtime peers).
+
+## 2026-06-11 (later): wire regression gate — protect, don't optimize
+
+New: `fleury benchmark wire-gate` (profiling/bin/fleury_wire_gate.dart)
++ committed `profiling/wire_gate_baseline.json`. Fleury-only subset
+(SB.1/SB.6/SB.9), warmup run + 3 measured runs, medians vs baseline:
+byte axes fail at +15% (overhead +5pt), timing axes warn-only. Verified
+reproducibility: SB.1/SB.9 byte-exact across runs, SB.6 within 0.8%.
+This is the wire-side counterpart of the web readiness gate; the
+encoder remains the highest-regression-risk code in the repo and now
+has a cost gate, not just the byte-equivalence correctness oracle.
