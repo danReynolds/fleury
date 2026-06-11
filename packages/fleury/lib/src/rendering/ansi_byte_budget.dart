@@ -15,8 +15,13 @@ import 'ansi_renderer.dart';
 ///   - [sgr]:     `CSI … m` — style set/reset (color, bold, inverse, …).
 ///   - [cursor]:  CSI cursor moves/positioning (`A`/`B`/`C`/`D`, `H`/`f`,
 ///                and related row/column positioning commands).
-///   - [sync]:    `CSI ? … h` / `CSI ? … l` — private modes (synchronized
-///                output 2026, and any other DEC private mode toggles).
+///   - [sync]:    `CSI ? 2026 h/l` — the per-frame synchronized-output
+///                wrapper.
+///   - [session]: session lifecycle private-mode toggles — alt screen
+///                (1049), cursor visibility (25), bracketed paste (2004),
+///                mouse modes (1000/1002/1003/1006), and Kitty keyboard
+///                push/pop (`CSI > … u` / `CSI < u`). Paid once per
+///                enter/suspend/restore, not per frame.
 ///   - [other]:   any other escape sequence (e.g. an image/protocol anchor
 ///                grapheme emitted verbatim, or an unrecognized CSI final).
 class AnsiByteBreakdown {
@@ -25,6 +30,7 @@ class AnsiByteBreakdown {
     this.sgr = 0,
     this.cursor = 0,
     this.sync = 0,
+    this.session = 0,
     this.other = 0,
   });
 
@@ -32,22 +38,31 @@ class AnsiByteBreakdown {
   final int sgr;
   final int cursor;
   final int sync;
+  final int session;
   final int other;
 
-  int get total => content + sgr + cursor + sync + other;
+  int get total => content + sgr + cursor + sync + session + other;
 
   /// Bytes that carry information (content) vs. control/formatting overhead
-  /// (everything else). A high overhead fraction on update frames is the
-  /// signal that byte-level encoding (e.g. incremental SGR) is worth tuning.
+  /// spent per frame (everything except content and [session]). A high
+  /// overhead fraction on update frames is the signal that byte-level
+  /// encoding (e.g. incremental SGR) is worth tuning. Session lifecycle
+  /// bytes are excluded: they are connection setup/teardown, paid once per
+  /// terminal enter/restore, and would otherwise dominate the fraction on
+  /// short runs without saying anything about frame encoding.
   int get overhead => sgr + cursor + sync + other;
 
-  double get overheadFraction => total == 0 ? 0 : overhead / total;
+  double get overheadFraction {
+    final steady = total - session;
+    return steady == 0 ? 0 : overhead / steady;
+  }
 
   AnsiByteBreakdown operator +(AnsiByteBreakdown o) => AnsiByteBreakdown(
     content: content + o.content,
     sgr: sgr + o.sgr,
     cursor: cursor + o.cursor,
     sync: sync + o.sync,
+    session: session + o.session,
     other: other + o.other,
   );
 
@@ -62,6 +77,7 @@ class AnsiByteBreakdown {
     var sgr = 0;
     var cursor = 0;
     var sync = 0;
+    var session = 0;
     var other = 0;
 
     final contentRun = StringBuffer();
@@ -104,7 +120,14 @@ class AnsiByteBreakdown {
       }
       i++; // consume '['
       var private = false;
+      var kittyMarker = false;
       if (i < n && data.codeUnitAt(i) == privateMarker) private = true;
+      if (i < n) {
+        final marker = data.codeUnitAt(i);
+        // '>' (push) / '<' (pop) — the Kitty keyboard-protocol prefixes.
+        if (marker == 0x3E || marker == 0x3C) kittyMarker = true;
+      }
+      final paramStart = i;
       var finalByte = 0;
       while (i < n) {
         final c = data.codeUnitAt(i);
@@ -116,7 +139,15 @@ class AnsiByteBreakdown {
       }
       final len = i - start; // CSI is ASCII: byte length == code-unit length
       if (private && (finalByte == 0x68 || finalByte == 0x6C)) {
-        sync += len; // h / l
+        // DEC private mode set/reset: synchronized output (2026) is the
+        // per-frame wrapper; every other private mode is session lifecycle.
+        if (_paramsAreSynchronizedOutput(data, paramStart + 1, i - 1)) {
+          sync += len;
+        } else {
+          session += len;
+        }
+      } else if (kittyMarker && finalByte == 0x75) {
+        session += len; // u: Kitty keyboard push/pop
       } else if (_isCursorCsiFinal(finalByte)) {
         cursor += len;
       } else if (finalByte == 0x6D) {
@@ -132,6 +163,7 @@ class AnsiByteBreakdown {
       sgr: sgr,
       cursor: cursor,
       sync: sync,
+      session: session,
       other: other,
     );
   }
@@ -142,6 +174,7 @@ class AnsiByteBreakdown {
     'sgr': sgr,
     'cursor': cursor,
     'sync': sync,
+    'session': session,
     'other': other,
     'overheadFraction': overheadFraction,
   };
@@ -149,7 +182,19 @@ class AnsiByteBreakdown {
   @override
   String toString() =>
       'AnsiByteBreakdown(total: $total, content: $content, sgr: $sgr, '
-      'cursor: $cursor, sync: $sync, other: $other)';
+      'cursor: $cursor, sync: $sync, session: $session, other: $other)';
+}
+
+/// True if the private-mode parameter list in `data[from..to)` is exactly
+/// `2026` (synchronized output). Any other parameter — or a list — makes the
+/// toggle session lifecycle, not a per-frame wrapper.
+bool _paramsAreSynchronizedOutput(String data, int from, int to) {
+  const expected = '2026';
+  if (to - from != expected.length) return false;
+  for (var i = 0; i < expected.length; i++) {
+    if (data.codeUnitAt(from + i) != expected.codeUnitAt(i)) return false;
+  }
+  return true;
 }
 
 bool _isCursorCsiFinal(int finalByte) {

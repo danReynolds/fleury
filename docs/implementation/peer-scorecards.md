@@ -225,6 +225,11 @@ TTFB comparisons are now trustworthy.
 Full 12-scenario re-run (3 runs each, all participants native, post
 encoder work) in `profiling/caps/2026-06-11-final`. Position rollup now
 bands RSS/CPU within runtime class (native best annotated in-cell).
+The overhead axis measures steady-state frame encoding: session
+lifecycle bytes (alt screen, cursor visibility, paste/mouse/Kitty
+toggles) are classified separately and excluded, symmetrically for all
+participants. Re-classifying changed no position; SB.2's overhead is
+`leading` under the honest axis.
 
 **Positions: push leading 8/12** (SB.1, SB.2, SB.3, SB.5, SB.6, SB.7,
 SB.10, SB.12), **parity ok 2/12** (SB.4, SB.8), **catch up 2/12**

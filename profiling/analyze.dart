@@ -188,11 +188,13 @@ void main(List<String> args) {
       (v) => '${v.toStringAsFixed(1)} fps',
       higherIsBetter: true);
 
-  stdout.writeln('\n  per-capture byte split (content/sgr/cursor/sync/other):');
+  stdout.writeln(
+      '\n  per-capture byte split '
+      '(content/sgr/cursor/sync/session/other):');
   for (final a in all) {
     final b = a.bytes;
     stdout.writeln('    ${a.label.padRight(14)} '
-        '${b.content}/${b.sgr}/${b.cursor}/${b.sync}/${b.other}');
+        '${b.content}/${b.sgr}/${b.cursor}/${b.sync}/${b.session}/${b.other}');
   }
   final markerCaptures =
       all.where((capture) => capture.runtimeMarkersMs.isNotEmpty).toList();

@@ -14613,3 +14613,30 @@ SB.11's scoreboard row stands as-is: fixtures are not slimmed, and the
 "catch up" label now has a complete causal account (fixture data +
 index memory + short-run cadence), none of which is steady-state
 render performance.
+
+## 2026-06-11 (later): overhead axis fixed — session lifecycle vs frame encoding
+
+The SB.1 investigation (117-byte total run) showed the overhead axis
+mislabeling: a transcript dump proved there are no synchronized-output
+wrappers left on small frames (the sync skip works), and the "92%
+overhead" was terminal session lifecycle — alt screen, cursor
+visibility, bracketed paste, Kitty keyboard push/pop, and the
+defensive mouse-mode resets — amortized over 9 content bytes.
+
+Two decisions:
+
+1. `AnsiByteBreakdown` now classifies session lifecycle bytes in their
+   own `session` bucket (DEC private modes other than 2026, plus Kitty
+   push/pop); `overheadFraction` measures steady-state frame encoding
+   only. Applied symmetrically to every participant at scan time, so
+   regenerating the final scoreboard from the existing transcripts
+   needed no re-benchmark. Standings: NO position changed. The axis is
+   just honest now — SB.2 overhead becomes `leading` (10%, tied with
+   ink), SB.1 drops 92% -> 72% (the residual is a 9-byte content
+   denominator; absolute steady-state overhead is 23 bytes).
+2. The unconditional mouse-mode exit resets STAY. They are the only
+   thing protecting the user's shell from a subprocess that enabled
+   mouse reporting and crashed during a terminal handoff (or a Ctrl+Z
+   suspend). Trimming 32 once-per-exit bytes to flatter a synthetic
+   ratio would be exactly the fixture-gaming this project refuses;
+   rationale recorded in `terminal_sequences.dart`.

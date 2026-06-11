@@ -365,7 +365,9 @@ String _scoreboardMarkdown(
     ..writeln('## Byte Splits')
     ..writeln()
     ..writeln(
-      'Median-total-run split per label: `content/sgr/cursor/sync/other`. '
+      'Median-total-run split per label: '
+      '`content/sgr/cursor/sync/session/other`. Session bytes (terminal '
+      'enter/restore lifecycle) are excluded from the overhead axis. '
       'This is diagnostic only; the axis bands above remain the decision surface.',
     )
     ..writeln()
@@ -492,6 +494,7 @@ String _splitCell(Map<String, Object?>? split) {
     _splitPart(split, 'sgr'),
     _splitPart(split, 'cursor'),
     _splitPart(split, 'sync'),
+    _splitPart(split, 'session'),
     _splitPart(split, 'other'),
   ].join('/');
 }
