@@ -14640,3 +14640,23 @@ Two decisions:
    suspend). Trimming 32 once-per-exit bytes to flatter a synthetic
    ratio would be exactly the fixture-gaming this project refuses;
    rationale recorded in `terminal_sequences.dart`.
+
+## 2026-06-11 (later): boot-floor shopping — exe is already right
+
+Bounded experiment per the perf-closeout plan: `dart compile exe` vs
+`dart compile aot-snapshot` + `dartaotruntime`, 3 warm runs each under
+capture_pty (SB.1 fixture).
+
+- exe: 17.3-17.7 ms TTFB warm, 17.1 MiB.
+- aot-snapshot: 22.3-25.1 ms TTFB warm (5-7 ms SLOWER — separate
+  runtime binary load + snapshot mmap), 16.5 MiB.
+- Warm hello-world exe floor, same harness: ~15-17.5 ms. The earlier
+  "~29-39 ms" floor estimate included cold-cache effects; the warm
+  floor is what 3-run-median benchmarks see. First run after a compile
+  pays 350-460 ms of page-cache warmup — benchmark discipline already
+  absorbs this via medians.
+- Recalibrated read: fleury SB.1 TTFB 19.6 ms = ~17 ms VM boot floor
+  + 2.5 ms fleury-attributable (matches the runtime markers exactly).
+
+Verdict: current packaging is optimal; no change lands. Floor exit
+documented, claims unchanged (startup scoped to managed-runtime peers).

@@ -243,9 +243,10 @@ the execution log, 2026-06-11 entries):
   gap rewriting); SB.9's residual delta is fixture surface area — the
   fleury fixture renders more live regions than the peer fixture.
 - Fleury-attributable startup is 2.5ms (first byte at 0.5ms after
-  entry); the Dart AOT boot floor (~29-39ms hello-world) is the entire
-  TTFB gap vs ratatui. Startup claims scope to managed-runtime peers,
-  where fleury leads everywhere measured.
+  entry); the Dart AOT boot floor (~15-17.5ms hello-world warm,
+  re-measured 2026-06-11; `dart compile exe` beats aot-snapshot by
+  5-7ms) is the entire TTFB gap vs ratatui. Startup claims scope to
+  managed-runtime peers, where fleury leads everywhere measured.
 - RSS floor (re-measured 2026-06-11, single consistent harness): bare
   AOT hello-world 13.8 MiB; minimal fleury app +3.3 MiB (mostly touched
   code pages — retained framework heap is ~85 KB); SB.6 dashboard
