@@ -92,20 +92,32 @@ walkthrough. The headline differentiator still has no crib-able example
 in the package a newcomer opens first. (June 3 Tier 1 item, last one
 standing.)
 
-**P1 — charts theming decision.** The dead tokens were deleted rather
-than consumed, leaving charts with hardcoded palettes and no theme
-surface. Decide once: either re-introduce chart palette tokens that the
-chart widgets actually consume, or record that charts are
-constructor-prop-styled by design. Either is defensible; the current
-state (neither) is the only wrong answer.
+**P1 — charts theming decision: CLOSED 2026-06-12 (and the finding was a
+false positive).** Source verification shows every chart-family widget
+already derives its default palette/style from
+`Theme.of(context).colorScheme` with constructor overrides — the deleted
+component tokens were redundant, not a gap. Decision recorded in the
+decision log: charts are themed through the color scheme by design.
 
-**P2 — small closeouts.**
-- Document chart semantic shallowness as intentional (one doc-comment
-  pass over the chart widgets).
-- Finish core doc stragglers (text_area, animation_builder, presence,
-  ticker_mode).
-- Decide the copy-stragglers list: `tree` (tree_table has copy, tree
-  does not) and `text_area` are the only real candidates.
+**P2 — small closeouts (CLOSED 2026-06-12).**
+- Chart semantic shallowness documented as intentional on all seven
+  chart-family widgets.
+- Core doc "stragglers" were a measurement artifact: text_area,
+  animation_builder, presence, and ticker_mode all carry accurate `///`
+  class docs with depth in `//` file headers; the audit counted lines,
+  not symbol coverage. No change needed.
+- Copy stragglers resolved by decision: text editing copy lives in the
+  editing engine (`clipboardPolicy` + copy/cut actions — already
+  present on TextArea); `Tree` defers copyable hierarchies to
+  `TreeTable`. Recorded in the decision log.
+
+**Storybook coverage (checked 2026-06-12, per maintainer direction to
+treat storybook as the demo surface):** 54/56 widget modules are
+referenced by storybook stories; the two unreferenced modules
+(half_block_buffer, quadrant_buffer) are painting primitives, not
+user-facing widgets. Worth adding a primitives story when the GlyphTier
+work lands so fallback tiers are demoable. Examples/guides remain
+deliberately deferred until storybook hardens.
 
 ## Relation to the core audit
 

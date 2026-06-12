@@ -29,6 +29,10 @@ enum CalendarWeekStart { sunday, monday }
 /// Months are labeled along the top row at the first week containing
 /// each new month. Days are labeled in the left gutter (Mon/Wed/Fri by
 /// default — every other row, the typical compact form).
+///
+/// Semantics: contributes one summary node (chart role, label, and data
+/// state) by design. Terminal charts are announced and asserted as
+/// summaries; per-element semantic children are intentionally omitted.
 class CalendarHeatmap extends StatelessWidget {
   const CalendarHeatmap({
     super.key,

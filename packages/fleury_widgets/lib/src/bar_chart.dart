@@ -74,6 +74,10 @@ class Bar {
 ///   Bar.stacked('host-b', [55, 25,  5]),
 /// ]);
 /// ```
+///
+/// Semantics: contributes one summary node (chart role, label, and data
+/// state) by design. Terminal charts are announced and asserted as
+/// summaries; per-element semantic children are intentionally omitted.
 class BarChart extends StatelessWidget {
   const BarChart({
     super.key,

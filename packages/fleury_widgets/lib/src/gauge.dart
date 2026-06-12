@@ -12,6 +12,10 @@ import 'package:fleury/fleury.dart';
 /// ```dart
 /// SizedBox(width: 32, child: Gauge(value: 0.78, label: 'CPU'));
 /// ```
+///
+/// Semantics: contributes one summary node (chart role, label, and data
+/// state) by design. Terminal charts are announced and asserted as
+/// summaries; per-element semantic children are intentionally omitted.
 class Gauge extends StatelessWidget {
   const Gauge({
     super.key,

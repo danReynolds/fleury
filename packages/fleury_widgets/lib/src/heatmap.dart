@@ -15,6 +15,10 @@ import 'package:fleury/fleury.dart';
 ///   colLabels: const ['J', 'F', 'M', 'A', 'M', 'J', ...],
 /// )
 /// ```
+///
+/// Semantics: contributes one summary node (chart role, label, and data
+/// state) by design. Terminal charts are announced and asserted as
+/// summaries; per-element semantic children are intentionally omitted.
 class Heatmap extends StatelessWidget {
   const Heatmap({
     super.key,

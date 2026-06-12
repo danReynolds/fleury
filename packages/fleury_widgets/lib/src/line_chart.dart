@@ -212,6 +212,10 @@ class LineSeries {
 /// When [interactive] is true, the chart becomes focusable: arrow chords
 /// move a vertical crosshair through the data points and a small tooltip
 /// box shows the y value of each series at the cursor's x.
+///
+/// Semantics: contributes one summary node (chart role, label, and data
+/// state) by design. Terminal charts are announced and asserted as
+/// summaries; per-element semantic children are intentionally omitted.
 class LineChart extends StatefulWidget {
   const LineChart({
     super.key,

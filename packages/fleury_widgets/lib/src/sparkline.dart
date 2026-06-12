@@ -11,6 +11,10 @@ import 'package:fleury/fleury.dart';
 /// ```dart
 /// SizedBox(width: 20, child: Sparkline(data: cpuHistory));
 /// ```
+///
+/// Semantics: contributes one summary node (chart role, label, and data
+/// state) by design. Terminal charts are announced and asserted as
+/// summaries; per-element semantic children are intentionally omitted.
 class Sparkline extends StatelessWidget {
   const Sparkline({
     super.key,
