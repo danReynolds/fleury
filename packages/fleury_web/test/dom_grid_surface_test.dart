@@ -3,7 +3,6 @@ library;
 
 import 'package:fleury/fleury_host.dart';
 import 'package:fleury_web/src/dom_grid/dom_grid_surface.dart';
-import 'package:fleury_web/src/frame_presentation.dart';
 import 'package:fleury_web/src/metrics/cell_metrics.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;

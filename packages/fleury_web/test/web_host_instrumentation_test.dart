@@ -1,5 +1,4 @@
 import 'package:fleury/fleury_host.dart';
-import 'package:fleury_web/src/frame_presentation.dart';
 import 'package:fleury_web/src/instrumentation/web_host_instrumentation.dart';
 import 'package:test/test.dart';
 

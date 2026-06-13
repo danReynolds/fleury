@@ -54,6 +54,7 @@ void main() {
           colorMode: ColorMode.truecolor,
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
+            protocolVersion: 1,
         ),
       );
       await entering;
@@ -108,6 +109,7 @@ void main() {
           colorMode: ColorMode.truecolor,
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
+            protocolVersion: 1,
         ),
       );
 

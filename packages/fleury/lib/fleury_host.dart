@@ -25,6 +25,12 @@ export 'src/rendering/cell_span.dart'
         protocolPlaceholderTitle,
         protocolPlaceholderUnsupported,
         protocolPlaceholderUnsupportedAttribute;
+export 'src/runtime/frame_presentation.dart'
+    show
+        FrameDamageSource,
+        FramePresentationDamage,
+        FramePresentationPlan,
+        FramePresentationPlanner;
 export 'src/widgets/framework.dart' show BuildFlushStats;
 export 'src/runtime/frame_scheduler.dart'
     show FrameFlushScheduler, FrameRenderCallback, FrameScheduler;

@@ -10,14 +10,25 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../foundation/geometry.dart';
+import '../runtime/frame_presentation.dart';
+import '../runtime/remote_surface_sink.dart';
 import '../terminal/capabilities.dart';
 import '../terminal/events.dart';
 import '../terminal/input_parser.dart';
 import '../terminal/terminal_driver.dart';
+import 'remote_codec.dart';
 import 'remote_protocol.dart';
 import 'remote_transport.dart';
 
-final class RemoteTerminalDriver implements TerminalDriver {
+/// The remote-rendering driver for `fleury shell` and `fleury serve`.
+///
+/// One driver covers both legacy (ANSI) and structured (presentation-plan)
+/// peers. The handshake's protocol version decides: a v1 peer (a real
+/// terminal, e.g. `fleury shell`) receives ANSI via [write]; a v2 peer (the
+/// browser surface client) receives [PlanFrame]s via [presentPlan] and
+/// sends structured input. [wantsPresentationPlans] reflects the negotiated
+/// version and is read by [runTui] after [enter] completes.
+final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
   RemoteTerminalDriver(this._transport);
 
   final RemoteFrameTransport _transport;
@@ -31,7 +42,11 @@ final class RemoteTerminalDriver implements TerminalDriver {
   TerminalCapabilities _capabilities = TerminalCapabilities.defaultCapabilities;
   bool _active = false;
   bool _handshakeReceived = false;
+  int _protocolVersion = 1;
   Completer<void>? _handshake;
+
+  @override
+  bool get wantsPresentationPlans => _protocolVersion >= 2;
 
   @override
   CellSize get size => _size;
@@ -95,14 +110,37 @@ final class RemoteTerminalDriver implements TerminalDriver {
 
   @override
   void write(String data) {
-    if (!_active) return;
+    if (!_active || wantsPresentationPlans) return;
     _transport.send(OutputFrame(Uint8List.fromList(utf8.encode(data))));
+  }
+
+  @override
+  void presentPlan(FramePresentationPlan plan) {
+    if (!_active) return;
+    _transport.send(
+      PlanFrame(
+        RemotePlan(
+          size: plan.size,
+          fullRepaint: plan.fullRepaint,
+          scrollUpRows: plan.scrollUpRows,
+          rows: plan.dirtyRowModels,
+        ),
+      ),
+    );
+  }
+
+  /// Sends a semantic snapshot (UTF-8 JSON) for the just-presented frame.
+  /// No-op on the ANSI path; used by the structured serve host.
+  void presentSemanticsJson(Uint8List jsonBytes) {
+    if (!_active || !wantsPresentationPlans) return;
+    _transport.send(SemanticsFrame(jsonBytes));
   }
 
   void _onFrame(RemoteFrame frame) {
     switch (frame) {
       case InitFrame f:
         _size = f.size;
+        _protocolVersion = f.protocolVersion;
         _capabilities = TerminalCapabilities(
           colorMode: f.colorMode,
           imageProtocol: f.imageProtocol,
@@ -124,10 +162,14 @@ final class RemoteTerminalDriver implements TerminalDriver {
         // malformed peer can't crash the session.
         break;
       case InputEventFrame f:
-        // Structured input from a v2 peer. The current ANSI-path driver
-        // dispatches via the parser; surface structured events directly so
-        // a v2 peer talking to this driver still drives the app.
-        if (_active) _events.add(f.event);
+        // Structured input from a v2 peer: surface the event directly
+        // instead of parsing ANSI. A resize event also updates the cached
+        // size so the next plan is built at the new viewport.
+        if (_active) {
+          final event = f.event;
+          if (event is ResizeEvent) _size = event.size;
+          _events.add(event);
+        }
       case ByeFrame():
         _onDisconnect();
     }

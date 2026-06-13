@@ -38,10 +38,12 @@ import '../widgets/navigator.dart';
 import '../widgets/overlay.dart';
 import '../widgets/pointer.dart';
 import '../widgets/tui_binding.dart';
+import 'frame_presentation.dart';
 import 'frame_scheduler.dart';
 import 'hot_reload.dart';
 import 'input_dispatcher.dart';
 import 'output_capture.dart';
+import 'remote_surface_sink.dart';
 import 'tui_frame_loop.dart';
 import 'tui_runtime.dart';
 
@@ -186,6 +188,18 @@ Future<void> runTui(
   final AnsiSink sink = byteTelemetry ?? driverSink;
   // Downsample colors to whatever the terminal actually supports.
   final renderer = AnsiRenderer(colorMode: usedDriver.capabilities.colorMode);
+  // When the driver wants structured presentation plans (the serve path,
+  // rendering through the fleury web surface instead of a terminal
+  // emulator), the render loop hands it plans instead of ANSI bytes. Null
+  // for every ordinary terminal session — that path is byte-unchanged.
+  // A driver may want structured presentation plans (the serve path) rather
+  // than ANSI. Whether it does is negotiated during the handshake, so the
+  // decision is finalized after enter() — see [surfaceSink] below.
+  final maybeSurfaceSink = usedDriver is RemoteSurfaceSink
+      ? usedDriver as RemoteSurfaceSink
+      : null;
+  RemoteSurfaceSink? surfaceSink;
+  const presentationPlanner = FramePresentationPlanner();
   Element? rootElement;
   var disposed = false;
 
@@ -255,6 +269,20 @@ Future<void> runTui(
     final next = frame.next;
     final layoutStats = RenderLayoutDebugStats.takeFrameStats();
     final repaintBoundaryStats = RepaintBoundaryDebugStats.takeFrameStats();
+
+    final activeSurfaceSink = surfaceSink;
+    if (activeSurfaceSink != null) {
+      // Structured serve path: build a presentation plan and hand it to the
+      // driver instead of emitting ANSI. The plan carries the same damage
+      // (dirty rows, scroll-up, full-repaint) the DOM surface consumes.
+      final plan = presentationPlanner.build(reason: reason, frame: frame);
+      activeSurfaceSink.presentPlan(plan);
+      runtimeMarkers?.markOnce('first.render.end');
+      frameLoop.commit(frame);
+      DebugInvalidations.reset();
+      runtime.flushPostFrameCallbacks();
+      return;
+    }
 
     if (frame.damage.fullRepaint) {
       // Clear screen + home so any stale content (from the alt-screen
@@ -458,6 +486,11 @@ Future<void> runTui(
         runtimeMarkers?.mark('terminal.enter.start');
         await usedDriver.enter(mode);
         runtimeMarkers?.mark('terminal.enter.end');
+        // The handshake has landed, so the driver now knows whether the
+        // peer negotiated the structured (plan) path.
+        if (maybeSurfaceSink != null && maybeSurfaceSink.wantsPresentationPlans) {
+          surfaceSink = maybeSurfaceSink;
+        }
         try {
           // Wrap the app in:
           //   - TuiBindingScope so animation (and future cross-cutting

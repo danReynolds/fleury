@@ -96,6 +96,7 @@ void main() {
             colorMode: ColorMode.truecolor,
             imageProtocol: ImageProtocol.halfBlock,
             tmuxPassthrough: false,
+            protocolVersion: 1,
           ),
         ),
       );
@@ -237,6 +238,7 @@ void main() {
             colorMode: ColorMode.truecolor,
             imageProtocol: ImageProtocol.halfBlock,
             tmuxPassthrough: false,
+            protocolVersion: 1,
           ),
         ),
       );
