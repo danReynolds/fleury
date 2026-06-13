@@ -92,12 +92,20 @@ Scenario _typing() => (name: 'typing (1 row)', cols: 80, rows: 24, frames: [
       for (var i = 0; i < 100; i++)
         (b) => b.writeText(const CellOffset(0, 10), 'x' * (i % 70 + 1)),
     ]);
-Scenario _logStream() => (name: 'log churn (30 rows)', cols: 100, rows: 30, frames: [
+Scenario _logStream() => (name: 'log tail (scroll)', cols: 100, rows: 30, frames: [
       for (var i = 0; i < 100; i++)
         (b) {
+          // Realistic varied lines so each scrolls (distinct content per
+          // line), not near-identical lines where cell-diff already wins.
           for (var r = 0; r < 30; r++) {
+            final n = i + r;
+            const words = ['connect', 'GET /api/v2/users', 'cache miss',
+              'retry backoff', 'flush wal', 'commit txn', 'timeout',
+              'parse json', 'spawn worker', 'gc pause', 'queue drain'];
             b.writeText(CellOffset(0, r),
-                'log line ${i + r}: event happened at some timestamp here');
+                '${n.toString().padLeft(6)} ${(n * 31) % 99999} '
+                '${words[(n * 7) % words.length]} shard=${n % 64} '
+                'lat=${(n * 13) % 900}ms');
           }
         },
     ]);

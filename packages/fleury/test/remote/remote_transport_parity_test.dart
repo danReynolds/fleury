@@ -124,6 +124,67 @@ void main() {
       }
     });
 
+    // A realistic log line: substantially different content per line so a
+    // scroll genuinely beats a per-cell diff (unlike near-identical lines,
+    // where the detector correctly prefers cell-diffing).
+    String logLine(int n) {
+      const words = [
+        'connect', 'GET /api', 'cache miss', 'retry', 'flush', 'commit',
+        'timeout', 'parse', 'spawn worker', 'gc pause', 'queue drain',
+      ];
+      final w = words[(n * 7) % words.length];
+      return '${n.toString().padLeft(5)} ${(n * 31) % 9999} $w '
+          'shard=${n % 64} latency=${(n * 13) % 900}ms';
+    }
+
+    test('upward scroll ships a shift + residual, mirror reproduces it', () {
+      const size = CellSize(60, 12);
+      final prev = CellBuffer(size);
+      for (var r = 0; r < 12; r++) {
+        prev.writeText(CellOffset(0, r), logLine(r));
+      }
+      // Scroll up by one: row r shows what was row r+1, plus a new bottom.
+      final next = CellBuffer(size);
+      for (var r = 0; r < 12; r++) {
+        next.writeText(CellOffset(0, r), logLine(r + 1));
+      }
+
+      final plan = buildRemotePlan(prev, next, fullRepaint: false);
+      expect(plan.scrollUpRows, 1, reason: 'detected the upward scroll');
+      expect(
+        plan.patches.length,
+        lessThan(4),
+        reason: 'only the entering row ships, not the whole screen',
+      );
+
+      final decoded = decodeRemotePlan(encodeRemotePlan(plan));
+      final mirror = CellBuffer(size);
+      _seed(prev, mirror);
+      applyRemotePlanToBuffer(decoded, mirror);
+      expect(_render(mirror), _render(next));
+    });
+
+    test('a scrolling log sequence stays in sync over many frames', () {
+      const size = CellSize(60, 20);
+      final mirror = CellBuffer(size);
+      var prev = CellBuffer(size);
+      var scrollFrames = 0;
+      for (var line = 0; line < 200; line++) {
+        final next = CellBuffer(size);
+        for (var r = 0; r < 20; r++) {
+          next.writeText(CellOffset(0, r), logLine(line + r));
+        }
+        final full = line == 0;
+        final plan = buildRemotePlan(prev, next, fullRepaint: full);
+        if (plan.scrollUpRows != null) scrollFrames++;
+        applyRemotePlanToBuffer(decodeRemotePlan(encodeRemotePlan(plan)), mirror);
+        expect(_render(mirror), _render(next), reason: 'frame $line');
+        prev = next;
+      }
+      // Almost every steady-state frame should be a detected scroll.
+      expect(scrollFrames, greaterThan(190), reason: 'scroll fired steadily');
+    });
+
     test('input round-trips through the full framing layer', () {
       const events = <TuiEvent>[
         KeyEvent(keyCode: KeyCode.arrowUp, modifiers: {KeyModifier.ctrl}),

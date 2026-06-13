@@ -104,6 +104,25 @@ final class CellBuffer {
     _cells.fillRange(0, _cells.length, const Cell.empty());
   }
 
+  /// Scrolls the buffer up by [rows] rows: row `r + rows` moves to row `r`,
+  /// and the bottom [rows] rows are cleared to [Cell.empty]. A non-positive
+  /// or oversized shift clears the whole buffer. Used by the remote client
+  /// to apply a scroll-up frame to its mirror before the residual patches.
+  void scrollUp(int rows) {
+    if (rows <= 0) return;
+    if (rows >= _size.rows) {
+      clear();
+      return;
+    }
+    final cols = _size.cols;
+    final retained = (_size.rows - rows) * cols;
+    // setRange handles the overlap correctly here: the destination range
+    // starts before the source range, so the ascending element copy is safe.
+    _cells.setRange(0, retained, _cells, rows * cols);
+    _cells.fillRange(retained, _cells.length, const Cell.empty());
+    _recordDamageRect(0, 0, _size.cols, _size.rows);
+  }
+
   /// Resizes the buffer to [newSize], discarding any existing content.
   /// The caller is expected to repaint after a resize.
   void resize(CellSize newSize) {

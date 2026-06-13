@@ -109,3 +109,28 @@ ANSI-relay incumbents (1.1–1.7x on interactive workloads), cheap on CPU,
 and closed against the OOM and slow-consumer DoS classes — while
 delivering a real DOM surface and a semantics path no xterm-relay tool
 can. The remaining items are bounded, measured, and recorded.
+
+## Update — scroll-up wire optimization landed (2026-06-12)
+
+The deferred scroll-up optimization is now implemented, and re-measuring
+corrected an earlier mistake: the original "log churn" profiler scenario
+used near-identical lines (only a number changed per line), where the
+detector *correctly* prefers cell-diffing — so it was never a real scroll
+case. With a realistic varied-line log (distinct content per line, the
+actual log-tailing shape):
+
+| Workload | before | after scroll-up |
+| --- | --- | --- |
+| log tail (scroll) | 3.3x | **1.06x** |
+| total deflated | 1.56x | **1.13x** |
+
+`buildRemotePlan` now runs the same `detectBeneficialScrollUp` the ANSI
+renderer uses; on a beneficial upward scroll it ships `scrollUpRows` + the
+residual rows only. The client's `CellBuffer.scrollUp` shifts the mirror,
+then residual patches land, and the DOM surface's existing scroll-up moves
+the rows visually. Parity proven: a 200-frame scrolling-log sequence stays
+byte-exact on the mirror, and every steady frame is a detected scroll.
+Every workload is now 1.06–2.09x deflated ANSI (the only >1.7x is the
+tiny counter, 54 vs 113 bytes — trivial absolute). fleury's structured
+wire is within 13% of the ANSI peers overall while delivering a real DOM
+surface and a semantics path they can't.

@@ -15,6 +15,7 @@ import 'dart:typed_data';
 import '../foundation/geometry.dart';
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
+import '../rendering/scroll_detection.dart';
 import '../terminal/events.dart';
 
 /// A frame reduced to its changed cells for the wire: the grid size,
@@ -395,39 +396,78 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
 /// changed column ranges only, grouped into same-style runs with a
 /// per-frame style table. On [fullRepaint] (or a size change) every row
 /// is treated as changed.
+///
+/// When the frame is a beneficial upward scroll (the shared detector the
+/// ANSI renderer uses), the plan carries `scrollUpRows` and the patches
+/// cover only the residual rows — the client shifts its mirror up by that
+/// amount before applying them, so a scrolling log ships one row instead
+/// of the whole screen.
 RemotePlan buildRemotePlan(
   CellBuffer prev,
   CellBuffer next, {
   required bool fullRepaint,
 }) {
   final full = fullRepaint || prev.size != next.size;
-  final cols = next.size.cols;
   final rows = next.size.rows;
   final styleIndices = <CellStyle, int>{};
   final styleTable = <CellStyle>[];
-  int styleIndex(CellStyle s) =>
-      styleIndices.putIfAbsent(s, () {
-        styleTable.add(s);
-        return styleTable.length - 1;
-      });
+  int styleIndex(CellStyle s) => styleIndices.putIfAbsent(s, () {
+    styleTable.add(s);
+    return styleTable.length - 1;
+  });
 
+  // Detect a beneficial upward scroll on steady-state frames. The residual
+  // patches then compare against prev shifted up by `shift`.
+  int? scrollUpRows;
+  if (!full && rows >= 2) {
+    final shift = detectBeneficialScrollUp(prev, next, screenDiffStats(prev, next));
+    if (shift != null && shift > 0) scrollUpRows = shift;
+  }
+  final shift = scrollUpRows ?? 0;
+
+  // The reference cell for (col, row): the cell `prev` holds at that
+  // position after the scroll shift. Off the top of `prev` reads empty.
+  Cell prevRef(int col, int row) {
+    final source = row + shift;
+    return source < rows ? prev.atColRow(col, source) : const Cell.empty();
+  }
+
+  final patches = _buildPatches(next, prevRef, full, styleIndex);
+
+  return RemotePlan(
+    size: next.size,
+    fullRepaint: full,
+    scrollUpRows: scrollUpRows,
+    styleTable: styleTable,
+    patches: patches,
+  );
+}
+
+List<RemoteRowPatch> _buildPatches(
+  CellBuffer next,
+  Cell Function(int col, int row) prevRef,
+  bool full,
+  int Function(CellStyle) styleIndex,
+) {
+  final cols = next.size.cols;
+  final rows = next.size.rows;
   final patches = <RemoteRowPatch>[];
+  bool unchanged(int col, int row) =>
+      !full && prevRef(col, row) == next.atColRow(col, row);
   for (var row = 0; row < rows; row++) {
     var col = 0;
     while (col < cols) {
-      // Find the start of the next changed run.
-      if (!full && _cellEqual(prev, next, col, row)) {
+      if (unchanged(col, row)) {
         col++;
         continue;
       }
       final startCol = col;
       final runs = <RemotePatchRun>[];
-      // Extend the patch over contiguous changed cells, grouping by style.
-      while (col < cols && (full || !_cellEqual(prev, next, col, row))) {
+      while (col < cols && !unchanged(col, row)) {
         final style = next.atColRow(col, row).style;
         final buffer = StringBuffer();
         while (col < cols &&
-            (full || !_cellEqual(prev, next, col, row)) &&
+            !unchanged(col, row) &&
             next.atColRow(col, row).style == style) {
           final cell = next.atColRow(col, row);
           // continuation cells contribute nothing (the leading cell's
@@ -441,28 +481,23 @@ RemotePlan buildRemotePlan(
           RemotePatchRun(styleIndex: styleIndex(style), text: buffer.toString()),
         );
       }
-      patches.add(
-        RemoteRowPatch(row: row, startCol: startCol, runs: runs),
-      );
+      patches.add(RemoteRowPatch(row: row, startCol: startCol, runs: runs));
     }
   }
-
-  return RemotePlan(
-    size: next.size,
-    fullRepaint: full,
-    styleTable: styleTable,
-    patches: patches,
-  );
+  return patches;
 }
-
-bool _cellEqual(CellBuffer a, CellBuffer b, int col, int row) =>
-    a.atColRow(col, row) == b.atColRow(col, row);
 
 /// Applies a decoded [plan] to a [CellBuffer] mirror, reproducing the
 /// server's frame. The client rebuilds the dirty DOM rows from the mirror
 /// afterward. Returns the row indices the plan touched.
 Set<int> applyRemotePlanToBuffer(RemotePlan plan, CellBuffer mirror) {
   final touched = <int>{};
+  final scroll = plan.scrollUpRows;
+  if (scroll != null && scroll > 0) {
+    // Shift the mirror up to match the server's retained region before the
+    // residual patches land on top.
+    mirror.scrollUp(scroll);
+  }
   for (final patch in plan.patches) {
     if (patch.row < 0 || patch.row >= mirror.size.rows) continue;
     touched.add(patch.row);

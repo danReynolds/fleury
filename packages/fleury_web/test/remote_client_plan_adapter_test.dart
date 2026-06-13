@@ -46,6 +46,39 @@ void main() {
       expect(presentation.dirtyRowModels, hasLength(4));
     });
 
+    test('scroll-up plan scrolls the mirror and carries the shift', () {
+      const size = CellSize(60, 8);
+      const words = ['connect', 'GET /api', 'cache miss', 'retry', 'flush',
+        'commit', 'timeout', 'parse', 'spawn', 'gc pause', 'drain'];
+      String line(int n) =>
+          '${n.toString().padLeft(5)} ${(n * 31) % 9999} '
+          '${words[(n * 7) % words.length]} shard=${n % 64} '
+          'lat=${(n * 13) % 900}ms';
+      final prev = CellBuffer(size);
+      for (var r = 0; r < 8; r++) {
+        prev.writeText(CellOffset(0, r), line(r));
+      }
+      final next = CellBuffer(size);
+      for (var r = 0; r < 8; r++) {
+        next.writeText(CellOffset(0, r), line(r + 1));
+      }
+      final plan = buildRemotePlan(prev, next, fullRepaint: false);
+      expect(plan.scrollUpRows, 1, reason: 'a real scroll was detected');
+
+      // Mirror seeded with prev; adapter scrolls it and applies residual.
+      final mirror = CellBuffer(size);
+      for (var r = 0; r < 8; r++) {
+        mirror.writeText(CellOffset(0, r), line(r));
+      }
+      final presentation = applyRemotePlan(plan, mirror);
+      expect(presentation.scrollUpRows, 1,
+          reason: 'the surface gets the DOM scroll hint');
+      // The mirror reproduces next exactly.
+      for (var r = 0; r < 8; r++) {
+        expect(_rowText(mirror, r), _rowText(next, r), reason: 'row $r');
+      }
+    });
+
     test('mirror tracks a multi-frame sequence exactly', () {
       final mirror = CellBuffer(const CellSize(20, 3));
       var prev = CellBuffer(const CellSize(20, 3));
