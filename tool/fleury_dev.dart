@@ -26,6 +26,9 @@ Future<void> main(List<String> rawArgs) async {
     case 'coverage':
       await runner.coverage(args);
       return;
+    case 'build-remote-client':
+      await runner.buildRemoteClient(args);
+      return;
     case 'demo':
       await runner.demoApp();
       return;
@@ -328,6 +331,66 @@ class _Runner {
     ], workingDirectory: demo);
     await _run('dart', ['analyze'], workingDirectory: storybook);
     await _run('dart', ['test'], workingDirectory: storybook);
+  }
+
+  /// Compiles the structured serve client (web/remote_client.dart) and
+  /// regenerates the embedded asset
+  /// (packages/fleury/lib/src/remote/remote_client_asset.dart). The
+  /// freshness test fails if this is stale; run it after touching the
+  /// remote-client source.
+  Future<void> buildRemoteClient(List<String> args) async {
+    final tmp = '$root/.dart_tool/remote_client.js';
+    stdout.writeln('compiling web/remote_client.dart -> JS (-O2)…');
+    await _run('dart', [
+      'compile',
+      'js',
+      'web/remote_client.dart',
+      '-o',
+      tmp,
+      '-O2',
+      // No source maps: production doesn't need them, and the
+      // sourceMappingURL comment names the output file, which would make
+      // the embedded bytes non-deterministic and break the freshness gate.
+      '--no-source-maps',
+    ], workingDirectory: web);
+    final js = File(tmp).readAsBytesSync();
+    final b64 = base64.encode(js);
+    final lines = <String>[];
+    for (var i = 0; i < b64.length; i += 100) {
+      lines.add(
+        "    '${b64.substring(i, math.min(i + 100, b64.length))}'",
+      );
+    }
+    final out =
+        '''// GENERATED — do not edit by hand.
+//
+// The compiled dart2js bundle for the structured serve client
+// (web/remote_client.dart), embedded so `fleury serve` ships it inside the
+// single binary. Regenerate with:
+//
+//     dart run tool/fleury_dev.dart build-remote-client
+//
+// The freshness test (remote_client_asset_test) recompiles the client and
+// fails if this asset is stale.
+
+import 'dart:convert';
+import 'dart:typed_data';
+
+/// Base64 of the compiled `remote_client.dart.js`.
+const String _remoteClientJsBase64 =
+${lines.join('\n')};
+
+/// The compiled client JavaScript bytes.
+Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
+''';
+    File('$fleury/lib/src/remote/remote_client_asset.dart')
+        .writeAsStringSync(out);
+    File(tmp).deleteSync();
+    final depsFile = File('$tmp.deps');
+    if (depsFile.existsSync()) depsFile.deleteSync();
+    stdout.writeln(
+      'wrote remote_client_asset.dart (${js.length} JS bytes)',
+    );
   }
 
   Future<void> coverage(List<String> args) async {

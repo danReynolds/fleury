@@ -30,6 +30,7 @@ import 'dart:io';
 import 'dart:typed_data' show Uint8List;
 
 import 'package:fleury/src/foundation/geometry.dart';
+import 'package:fleury/src/remote/remote_client_asset.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/remote/serve_index_html.dart';
 import 'package:fleury/src/remote/unix_socket_transport.dart';
@@ -573,9 +574,7 @@ Future<int> _runServeBridge({
       stderr.writeln('[serve] browser connected, waiting for an app');
       tryPair();
     } else {
-      req.response.headers.contentType = ContentType.html;
-      req.response.write(serveIndexHtml);
-      await req.response.close();
+      await _serveStaticAsset(req);
     }
   });
 
@@ -657,6 +656,30 @@ void _pumpBytes({
     onDone: stop,
     cancelOnError: false,
   );
+}
+
+/// Serves the index page and the embedded client bundle. Everything else
+/// 404s — the serve surface is exactly two files.
+Future<void> _serveStaticAsset(HttpRequest req) async {
+  final path = req.uri.path;
+  if (path == serveClientJsPath) {
+    req.response.headers.contentType = ContentType(
+      'application',
+      'javascript',
+      charset: 'utf-8',
+    );
+    req.response.add(remoteClientJs());
+    await req.response.close();
+    return;
+  }
+  if (path == '/' || path.isEmpty) {
+    req.response.headers.contentType = ContentType.html;
+    req.response.write(serveIndexHtml);
+    await req.response.close();
+    return;
+  }
+  req.response.statusCode = HttpStatus.notFound;
+  await req.response.close();
 }
 
 bool _isAllowedWebSocketOrigin(
@@ -824,9 +847,7 @@ Future<int> _runServeSpawn({
 
   httpServer.listen((req) async {
     if (req.uri.path != '/ws') {
-      req.response.headers.contentType = ContentType.html;
-      req.response.write(serveIndexHtml);
-      await req.response.close();
+      await _serveStaticAsset(req);
       return;
     }
     if (!WebSocketTransformer.isUpgradeRequest(req)) {

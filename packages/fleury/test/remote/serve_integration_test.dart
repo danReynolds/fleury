@@ -75,14 +75,31 @@ void main() {
         tempDir.deleteSync(recursive: true);
       });
 
-      test('GET / serves the xterm.js page', () async {
+      test('GET / serves the fleury renderer page (no xterm)', () async {
         final client = HttpClient();
         final req = await client.getUrl(Uri.parse('http://127.0.0.1:$port/'));
         final resp = await req.close();
         expect(resp.statusCode, 200);
         final body = await resp.transform(utf8.decoder).join();
-        expect(body, contains('xterm'));
-        expect(body, contains('/ws'));
+        expect(body, contains('fleury-remote'));
+        expect(body, contains('/remote_client.js'));
+        expect(body, isNot(contains('xterm')));
+        client.close();
+      });
+
+      test('GET /remote_client.js serves the embedded client bundle', () async {
+        final client = HttpClient();
+        final req = await client.getUrl(
+          Uri.parse('http://127.0.0.1:$port/remote_client.js'),
+        );
+        final resp = await req.close();
+        expect(resp.statusCode, 200);
+        expect(
+          resp.headers.contentType?.mimeType,
+          'application/javascript',
+        );
+        final bytes = await resp.fold<int>(0, (n, chunk) => n + chunk.length);
+        expect(bytes, greaterThan(10000));
         client.close();
       });
 
