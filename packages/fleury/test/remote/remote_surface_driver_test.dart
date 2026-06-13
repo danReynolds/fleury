@@ -4,10 +4,12 @@
 // through this driver produces PLAN frames instead of ANSI.
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/remote/remote_driver.dart';
+import 'package:fleury/src/remote/remote_semantics.dart';
 import 'package:fleury/src/remote/remote_transport.dart';
 import 'package:test/test.dart';
 
@@ -194,6 +196,50 @@ void main() {
           .map((run) => run.text)
           .join();
       expect(text, contains('hello'));
+
+      await transport.disconnect();
+      await done;
+    });
+
+    test('runTui ships the app semantics as a decodable SemanticsFrame',
+        () async {
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(transport);
+      scheduleMicrotask(() => transport.emit(_init));
+      final done = runTui(
+        Semantics(
+          id: const SemanticNodeId('btn:save'),
+          role: SemanticRole.button,
+          label: 'Save',
+          actions: const {SemanticAction.activate},
+          onAction: (_) {},
+          child: const Text('Save'),
+        ),
+        driver: driver,
+        requireInteractiveTerminal: false,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      final semFrames = transport.sent.whereType<SemanticsFrame>().toList();
+      expect(semFrames, isNotEmpty,
+          reason: 'the real run loop emits semantics on first paint');
+      // The first emission per connection is a FULL frame (patches need a base).
+      final firstEnv =
+          jsonDecode(utf8.decode(semFrames.first.json)) as Map<String, Object?>;
+      expect(firstEnv['mode'], 'full');
+
+      // Decode the stream exactly as RemoteSurfaceClient does; the app's real
+      // button — built by the framework, not hand-authored — comes through.
+      final decoder = SemanticsWireDecoder();
+      SemanticTree? tree;
+      for (final frame in semFrames) {
+        tree = decoder.apply(frame.json) ?? tree;
+      }
+      expect(tree, isNotNull);
+      final button = tree!.root.selfAndDescendants
+          .firstWhere((n) => n.role == SemanticRole.button);
+      expect(button.label, 'Save');
+      expect(button.actions, contains(SemanticAction.activate));
 
       await transport.disconnect();
       await done;

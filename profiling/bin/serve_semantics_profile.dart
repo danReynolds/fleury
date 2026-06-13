@@ -98,4 +98,58 @@ void main() {
   print('full = the old full-snapshot-on-change path (deflated /frame).');
   print('diff = SemanticsWireEncoder: full once, then patches (deflated /frame).');
   print('The diff is flat in tree size; full goes off the 32 KiB-window cliff.');
+  print('');
+  _cpu();
+}
+
+/// Server-side CPU per changed frame: build the redacted snapshot, then encode
+/// the wire diff. The encoder re-serializes every node each frame to detect
+/// what changed (O(tree) work for an O(changed) wire), so this is where the
+/// "is the diff cheap to compute?" assumption gets tested.
+void _cpu() {
+  print('Server CPU per changed frame (steady-state patch), µs:');
+  print('${'tree'.padRight(16)}  nodes  snapshot µs  encode µs  total µs');
+  print('-' * 56);
+  for (final messages in [24, 80, 240]) {
+    final nodeCount =
+        _appTree(messages: messages, tick: 0).toInspectionSnapshot().nodeCount;
+    final encoder = SemanticsWireEncoder()
+      ..encode(_appTree(messages: messages, tick: 0).toInspectionSnapshot());
+
+    const iters = 2000;
+    // Warm up the JIT.
+    for (var i = 0; i < 200; i++) {
+      final s = _appTree(messages: messages, tick: i).toInspectionSnapshot();
+      encoder.encode(s);
+    }
+
+    var snapNs = 0;
+    var encNs = 0;
+    final sw = Stopwatch();
+    for (var i = 0; i < iters; i++) {
+      final tree = _appTree(messages: messages, tick: 1000 + i);
+      sw
+        ..reset()
+        ..start();
+      final snapshot = tree.toInspectionSnapshot();
+      sw.stop();
+      snapNs += sw.elapsedMicroseconds;
+      sw
+        ..reset()
+        ..start();
+      encoder.encode(snapshot);
+      sw.stop();
+      encNs += sw.elapsedMicroseconds;
+    }
+    final snapUs = snapNs / iters;
+    final encUs = encNs / iters;
+    print('${'list of $messages'.padRight(16)}  '
+        '${nodeCount.toString().padLeft(5)}  '
+        '${snapUs.toStringAsFixed(1).padLeft(11)}  '
+        '${encUs.toStringAsFixed(1).padLeft(9)}  '
+        '${(snapUs + encUs).toStringAsFixed(1).padLeft(8)}');
+  }
+  print('');
+  print('At 60 fps one frame is 16667 µs; semantics is a tiny slice even at');
+  print('the top size. snapshot = redaction walk; encode = flatten+diff.');
 }

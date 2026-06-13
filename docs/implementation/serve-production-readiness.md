@@ -232,5 +232,27 @@ re-pointed through the encoder/decoder):
   arriving before any full (or a malformed/over-version payload) is ignored,
   keeping the last good tree rather than corrupting state. Correctness rests
   on the WebSocket being ordered and lossless.
+- The real run loop is now covered, not just synthetic frames: a `runTui`
+  session driven through `RemoteTerminalDriver` emits a decodable
+  `SemanticsFrame` on first paint whose framework-built button (label,
+  actions) reconstructs on the client (`remote_surface_driver_test`).
 
-Suites green: **core 1670, web VM 199, Chrome 154**; freshness gate matched.
+**Server CPU per changed frame** (the diff-detect cost, measured): the encoder
+detects changes by structural comparison against the last-sent flat nodes
+rather than re-serializing every node — an unchanged node early-exits and
+allocates nothing, so computing the diff is close to O(changed) in CPU and
+garbage. Measured cost (snapshot redaction walk + encode), µs per *changed*
+frame, steady-state patch:
+
+| tree | nodes | snapshot µs | encode µs | total µs |
+| --- | --- | --- | --- | --- |
+| 24 | 28 | 28 | 31 | 59 |
+| 80 | 84 | 82 | 86 | 168 |
+| 240 | 244 | 249 | 251 | 500 |
+
+Even the 244-node tree is ~3% of a 60 fps frame, and only on frames where the
+semantic tree actually changed. The structural-equality change halved the
+encode half (it was 469 µs at 244 nodes when it re-serialized every node) and
+removed its per-node string garbage.
+
+Suites green: **core 1671, web VM 199, Chrome 154**; freshness gate matched.

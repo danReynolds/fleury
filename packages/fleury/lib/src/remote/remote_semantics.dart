@@ -38,23 +38,24 @@ const int semanticsWireVersion = 1;
 /// wire payloads, emitting a full frame once per connection and patches
 /// thereafter. One instance per served session (it holds the last-sent state).
 final class SemanticsWireEncoder {
-  /// id -> canonical JSON of the node's flat form (own fields + childIds),
-  /// reflecting what the peer currently holds.
-  Map<String, String> _sent = const {};
+  /// id -> the node's flat form (own fields + childIds) as last sent to the
+  /// peer. Change detection compares structurally against this rather than
+  /// re-serializing every node per frame: an unchanged node (the overwhelming
+  /// majority each frame) early-exits the compare and allocates nothing, so
+  /// computing the diff stays close to O(changed) instead of O(tree) in both
+  /// CPU and garbage. Only the changed nodes are serialized, by the envelope.
+  Map<String, Map<String, Object?>> _sent = const {};
   bool _sentFull = false;
 
   /// Encodes [snapshot] for the wire, or returns null when the exposed
-  /// semantics are byte-for-byte unchanged since the last send (so a dirty
-  /// frame that didn't actually alter the accessible tree costs zero bytes).
+  /// semantics are unchanged since the last send (so a dirty frame that didn't
+  /// actually alter the accessible tree costs zero bytes).
   Uint8List? encode(SemanticInspectionSnapshot snapshot) {
     final flat = _flatten(snapshot.root);
-    final canonical = <String, String>{
-      for (final entry in flat.entries) entry.key: jsonEncode(entry.value),
-    };
 
     if (!_sentFull) {
       _sentFull = true;
-      _sent = canonical;
+      _sent = flat;
       return _bytes(<String, Object?>{
         'v': semanticsWireVersion,
         'mode': 'full',
@@ -66,17 +67,17 @@ final class SemanticsWireEncoder {
     final set = <Map<String, Object?>>[];
     for (final entry in flat.entries) {
       final prior = _sent[entry.key];
-      if (prior == null || prior != canonical[entry.key]) {
-        set.add(flat[entry.key]!);
+      if (prior == null || !_jsonEquals(prior, entry.value)) {
+        set.add(entry.value);
       }
     }
     final removed = <String>[
       for (final id in _sent.keys)
         if (!flat.containsKey(id)) id,
     ];
+    _sent = flat;
     if (set.isEmpty && removed.isEmpty) return null;
 
-    _sent = canonical;
     return _bytes(<String, Object?>{
       'v': semanticsWireVersion,
       'mode': 'patch',
@@ -95,6 +96,29 @@ final class SemanticsWireEncoder {
 
   static Uint8List _bytes(Map<String, Object?> payload) =>
       Uint8List.fromList(utf8.encode(jsonEncode(payload)));
+}
+
+/// Deep equality over JSON-shaped values (Map / List / scalars). Used to detect
+/// an unchanged semantic node without re-serializing it. The compared values
+/// come from `toJson()`, which emits deterministic key order, so structural
+/// equality here matches canonical-string equality.
+bool _jsonEquals(Object? a, Object? b) {
+  if (identical(a, b)) return true;
+  if (a is Map && b is Map) {
+    if (a.length != b.length) return false;
+    for (final key in a.keys) {
+      if (!b.containsKey(key) || !_jsonEquals(a[key], b[key])) return false;
+    }
+    return true;
+  }
+  if (a is List && b is List) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!_jsonEquals(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  return a == b;
 }
 
 /// Flattens a redacted inspection tree to an ordered id->node map. Each node
