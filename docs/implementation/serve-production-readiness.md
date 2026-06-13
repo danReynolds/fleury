@@ -289,3 +289,34 @@ falling off relative to them.
 
 Suites green after this work: **core 1673, web VM 199, Chrome 154**; freshness
 gate matched.
+
+## Update — browser render cost vs xterm.js, measured (2026-06-13)
+
+The wire and server-CPU axes were measured; the remaining open question was the
+*browser* render cost of the DOM surface versus a terminal emulator. Built a
+head-to-head in headless Chrome (`packages/fleury_web/benchmark/`): fleury's
+`DomGridSurface` and xterm.js (v6, default DOM renderer) fed the **same frame
+stream** — fleury from a presentation plan, xterm from the equivalent ANSI
+produced by fleury's own `AnsiRenderer`. Per-frame main-thread cost (median;
+60 fps budget 16.7 ms):
+
+| workload | fleury apply+render | xterm parse | xterm parse→render |
+| --- | --- | --- | --- |
+| typing 80×24 | ≤0.10 ms | 0.90 ms | 8.1 ms |
+| dashboard 80×24 | 0.30 ms | 1.00 ms | 7.9 ms |
+| big churn 120×40 | 0.20 ms | 1.00 ms | 7.0 ms |
+
+`fleury apply+render` is the full client path — `applyRemotePlan` + `present` +
+forced layout, all synchronous. `xterm parse` is its `write()`→buffer step;
+`parse→render` is wall time to its rAF-scheduled render (≈ one frame of
+scheduling latency on top of sub-frame render compute). GPU paint is excluded
+for both; xterm's optional WebGL renderer (not the default, typically
+unavailable headless) is not measured.
+
+The DOM surface is not the bottleneck it might be assumed to be: the client
+turns a received frame into rendered DOM in **≤0.4 ms p95** — under xterm's ANSI
+parse alone — because the structured protocol diffs server-side, so the client
+applies known patches rather than re-parsing an escape stream each frame. Both
+sit far under the 60 fps budget; on terminal workloads the limit is the display
+refresh, not the renderer. The benchmark vendors xterm.js on demand (not
+committed) and lives outside `test/`, so it never runs in CI.
