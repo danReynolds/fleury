@@ -1,0 +1,174 @@
+import 'dart:async';
+import 'dart:js_interop';
+import 'dart:typed_data';
+
+import 'package:fleury/fleury_host.dart';
+import 'package:fleury/src/remote/remote_protocol.dart';
+import 'package:web/web.dart' as web;
+
+import '../dom_grid/dom_grid_surface.dart';
+import '../input/dom_input_source.dart';
+import '../metrics/dom_cell_metrics.dart';
+import 'plan_adapter.dart';
+
+/// Browser-side client for the structured serve path.
+///
+/// Connects to a `fleury serve` WebSocket, performs the v2 INIT handshake,
+/// applies inbound [PlanFrame]s to a retained [DomGridSurface], and sends
+/// browser input back as structured [InputEventFrame]s. This is the
+/// renderer that replaces xterm.js: a served session renders through the
+/// same DOM surface the in-browser host uses, with the same span/scroll
+/// machinery.
+final class RemoteSurfaceClient {
+  RemoteSurfaceClient({
+    required web.Element hostElement,
+    required String url,
+  }) : _host = hostElement,
+       _url = url;
+
+  final web.Element _host;
+  final String _url;
+
+  web.WebSocket? _socket;
+  DomGridSurface? _surface;
+  DomCellMetrics? _metrics;
+  DomInputSource? _input;
+  final FrameDecoder _decoder = FrameDecoder();
+  CellSize _size = const CellSize(80, 24);
+  bool _handshakeSent = false;
+  CellBuffer _scratch = CellBuffer(const CellSize(80, 24));
+
+  /// Connects and begins rendering. Resolves once the socket is open and
+  /// the INIT handshake has been sent.
+  Future<void> start() async {
+    _metrics = DomCellMetrics(container: _host);
+    final socket = web.WebSocket(_url);
+    socket.binaryType = 'arraybuffer';
+    _socket = socket;
+
+    final opened = Completer<void>();
+    socket.onopen = ((web.Event _) {
+      _onOpen();
+      if (!opened.isCompleted) opened.complete();
+    }).toJS;
+    socket.onmessage = ((web.MessageEvent event) {
+      _onMessage(event);
+    }).toJS;
+    socket.onclose = ((web.CloseEvent _) {
+      _dispose();
+    }).toJS;
+    await opened.future;
+  }
+
+  void _onOpen() {
+    _size = _measureViewport();
+    _surface = DomGridSurface(root: _host, size: _size);
+    _scratch = CellBuffer(_size);
+    _input = DomInputSource(
+      hostElement: _host,
+      cellMetrics: _metrics!,
+    )..start(_sendInput);
+    _sendInit();
+    _observeResize();
+  }
+
+  CellSize _measureViewport() {
+    final box = _metrics!.measure();
+    final rect = _host.getBoundingClientRect();
+    final cols = box.cssCellWidth <= 0
+        ? 80
+        : (rect.width / box.cssCellWidth).floor().clamp(1, 1000);
+    final rows = box.cssCellHeight <= 0
+        ? 24
+        : (rect.height / box.cssCellHeight).floor().clamp(1, 1000);
+    return CellSize(cols, rows);
+  }
+
+  void _sendInit() {
+    if (_handshakeSent) return;
+    _handshakeSent = true;
+    _send(
+      encodeFrame(
+        InitFrame(
+          size: _size,
+          colorMode: ColorMode.truecolor,
+          imageProtocol: ImageProtocol.halfBlock,
+          tmuxPassthrough: false,
+          protocolVersion: remoteProtocolVersion,
+        ),
+      ),
+    );
+  }
+
+  void _sendInput(TuiEvent event) {
+    try {
+      _send(encodeFrame(InputEventFrame(event)));
+    } on Object {
+      // An event the serve protocol doesn't carry: drop it rather than
+      // tearing down the session.
+    }
+  }
+
+  void _observeResize() {
+    final observer = web.ResizeObserver(
+      ((JSArray<JSAny?> _, web.ResizeObserver __) {
+        final next = _measureViewport();
+        if (next == _size) return;
+        _size = next;
+        _surface?.resize(next);
+        _scratch = CellBuffer(next);
+        _send(encodeFrame(ResizeFrame(next)));
+      }).toJS,
+    );
+    observer.observe(_host);
+  }
+
+  void _onMessage(web.MessageEvent event) {
+    final data = event.data;
+    if (data == null) return;
+    final buffer = (data as JSArrayBuffer).toDart;
+    _decoder.feed(buffer.asUint8List());
+    for (final frame in _decoder.drain()) {
+      _handleFrame(frame);
+    }
+  }
+
+  void _handleFrame(RemoteFrame frame) {
+    switch (frame) {
+      case PlanFrame f:
+        final surface = _surface;
+        if (surface == null) return;
+        final plan = remotePlanToPresentation(f.plan);
+        if (plan.size != _size) {
+          _size = plan.size;
+          _scratch = CellBuffer(plan.size);
+        }
+        surface.present(_scratch, _scratch, plan);
+      case SemanticsFrame _:
+        // Semantic DOM presentation is wired in a follow-up; the visual
+        // surface renders without it.
+        break;
+      case ByeFrame():
+        _dispose();
+      case InitFrame _:
+      case ResizeFrame _:
+      case InputFrame _:
+      case OutputFrame _:
+      case InputEventFrame _:
+        // Not part of the server→client contract; ignore.
+        break;
+    }
+  }
+
+  void _send(Uint8List bytes) {
+    _socket?.send(bytes.toJS);
+  }
+
+  void _dispose() {
+    _input?.dispose();
+    _input = null;
+    unawaited(_surface?.dispose());
+    _surface = null;
+    _socket = null;
+  }
+}
