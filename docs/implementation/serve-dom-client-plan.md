@@ -138,3 +138,51 @@ plan, "fleury web" is one renderer everywhere a browser is involved.
 
 3–5 working sessions: protocol+server (1–2), client+swap (1–2),
 verification+evidence (1).
+
+---
+
+## Execution record (2026-06-12)
+
+All five phases landed; xterm.js is retired.
+
+- **Phase 1** (`82bbcfe`) — protocol v2: PLAN/SEMANTICS/INPUT_EVENT
+  frames + binary codec, INIT version handshake. Span model moved to
+  core. 22 codec tests incl. seeded round-trip + malformed-payload fuzz
+  (caught a BytesBuilder aliasing bug).
+- **Phase 2** (`da36bed`) — server host: RemoteTerminalDriver negotiates
+  plan-vs-ANSI from the INIT version; runTui builds a presentation plan
+  per frame on the structured path. Planner moved to core. ANSI path
+  byte-unchanged. 6 structured-path tests incl. runTui→PLAN e2e.
+- **Phase 3** (`a0b6f44`) — browser client: RemoteSurfaceClient drives
+  DomGridSurface from PLAN frames and sends structured input; compiles
+  to ~129 KB JS. Plan adapter VM-tested.
+- **Phase 4** (`1bb9c1d`) — serve serves the embedded bundle; xterm page,
+  CDN tags, and glyph tuning deleted. `fleury_dev build-remote-client`
+  + freshness gate.
+- **Phase 5** — transport parity proven in the VM: a CellBuffer's server
+  spans survive encode→wire→decode byte-exact for content, style, and
+  wide glyphs (+50 seeded buffers). Input round-trips through the full
+  framing layer.
+
+### Honest findings
+
+- **PLAN bytes vs ANSI**: PLAN frames are *larger* — ~40x on a sparse
+  first-frame full repaint (every row carries a span model, blank rows
+  included), ~1.45x on a dense frame. This is acceptable and not the
+  point: steady-state frames carry only dirty rows (a counter increment
+  is ~60 B), the transport is localhost/LAN where bytes aren't the
+  bottleneck, and the client renders through a real DOM surface with a
+  semantics path rather than emulating a terminal. xterm's value was
+  never byte efficiency. **Future optimization**: omit all-blank rows
+  from a full-repaint plan (the surface blanks unlisted rows) to cut the
+  sparse first-frame cost.
+- **Chrome e2e**: the wire is proven lossless in the VM and the DOM
+  surface's rendering of span models is proven in the existing Chrome
+  suite; their composition (decoded plan → DomGridSurface → DOM) is the
+  one piece exercised only by parts, not a single end-to-end Chrome
+  test. Recommended follow-up: a headless-Chrome test that applies a
+  decoded plan to a live DomGridSurface and asserts the DOM text equals
+  the source buffer — the divergence oracle across the transport.
+- **Semantics over the wire**: the SEMANTICS frame and driver hook exist;
+  wiring the client's semantic DOM presenter to consume them is the
+  remaining follow-up (the visual surface renders without it).
