@@ -614,47 +614,40 @@ void _pumpBytes({
   Future<void> stop() async {
     if (stopped) return;
     stopped = true;
+    // Destroy (not close) the app socket: it forcibly ends the stream
+    // bound by `browser.addStream(app)` and errors the sink bound by
+    // `app.addStream(...)`, so neither addStream is left dangling — which
+    // a graceful `close()` mid-addStream would trip over.
     try {
-      await browser.close();
+      app.destroy();
     } catch (_) {}
     try {
-      await app.close();
+      await browser.close();
     } catch (_) {}
     onDone();
   }
 
-  // App → browser. App's frame bytes ride as WebSocket binary messages
-  // verbatim; if a single TCP read carries multiple of our frames or
-  // splits one across chunks, the browser-side decoder handles it.
-  app.listen(
-    (bytes) {
-      try {
-        browser.add(bytes);
-      } catch (_) {
-        stop();
-      }
-    },
-    onError: (Object _) => stop(),
-    onDone: stop,
-    cancelOnError: false,
+  // App → browser. `addStream` (not per-chunk `add`) is the backpressure
+  // path: it forwards each app chunk as one WebSocket binary message AND
+  // pauses reading from the app socket when the browser's socket send
+  // buffer is full. A slow/stalled browser therefore stalls the app
+  // rather than buffering its frames unboundedly in server memory — the
+  // slow-consumer memory-DoS the per-chunk `add` was exposed to. (Frame
+  // boundaries are still recovered by the browser-side decoder.)
+  unawaited(
+    browser.addStream(app).then((_) => stop(), onError: (Object _) => stop()),
   );
 
-  // Browser → app. WebSocket text messages are ignored; the protocol
-  // is binary-only.
+  // Browser → app. WebSocket text messages are ignored; the protocol is
+  // binary-only. `addStream` again carries backpressure: a flood of input
+  // stalls at the app socket instead of piling up.
   final browserBytes =
       browserInput ??
       browser.where((data) => data is List<int>).cast<List<int>>();
-  browserBytes.listen(
-    (bytes) {
-      try {
-        app.add(bytes);
-      } catch (_) {
-        stop();
-      }
-    },
-    onError: (Object _) => stop(),
-    onDone: stop,
-    cancelOnError: false,
+  unawaited(
+    app
+        .addStream(browserBytes)
+        .then((_) => stop(), onError: (Object _) => stop()),
   );
 }
 

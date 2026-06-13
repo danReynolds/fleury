@@ -229,3 +229,27 @@ set the sign bit → negative length → `RangeError`; a decoded `KeyEvent`
 could have null keyCode AND char → constructor assert; an `AnsiColor`
 index could exceed 15 → assert. All three now throw a typed
 `RemoteCodecException` and are covered by the 500-iteration fuzz.
+
+## Production-hardening: Iteration 2 — DoS clamps + backpressure (2026-06-12)
+
+Audited the serve path's failure surface against a hostile or stalled
+client; two real gaps, now closed:
+
+- **Unbounded grid-size DoS** (OOM): the app allocated a cell buffer at
+  whatever size a peer's INIT/RESIZE claimed — `cols=100000,rows=100000`
+  → ten billion cells. The driver now clamps every peer-supplied size to
+  `maxRemoteGridCols/Rows` (4000×4000 = 16M cells, far above any real
+  viewport) before it reaches the runtime. Covered by hardening tests for
+  INIT, RESIZE, and structured resize events.
+- **Slow-consumer memory DoS** (unbounded buffering): the byte pump used
+  per-chunk `WebSocket.add`, which queues without bound — a stalled
+  browser made the app's frames pile up in server memory. Switched to
+  `addStream` in both directions, which propagates the underlying
+  socket's backpressure: a slow browser now stalls the app rather than
+  growing the server's heap. Shutdown destroys the app socket to release
+  both `addStream` bindings cleanly. Verified by the real-relay serve
+  integration tests.
+
+Already adequate (verified, not changed): WebSocket origin validation,
+the 64 MiB frame-payload cap (decoder rejects oversize), malformed-frame
+rejection (codec fuzz), single-session enforcement.

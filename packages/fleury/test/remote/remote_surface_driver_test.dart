@@ -199,4 +199,57 @@ void main() {
       await done;
     });
   });
+
+  group('hardening', () {
+    test('clamps a hostile INIT grid size to the safe maximum', () async {
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(transport);
+      final entered = driver.enter(TerminalMode.interactive);
+      transport.emit(const InitFrame(
+        size: CellSize(100000, 100000), // would be 10 billion cells
+        colorMode: ColorMode.truecolor,
+        imageProtocol: ImageProtocol.halfBlock,
+        tmuxPassthrough: false,
+      ));
+      await entered;
+      expect(driver.size.cols, lessThanOrEqualTo(maxRemoteGridCols));
+      expect(driver.size.rows, lessThanOrEqualTo(maxRemoteGridRows));
+      await driver.restore();
+    });
+
+    test('clamps a hostile RESIZE and surfaces the clamped size', () async {
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(transport);
+      final events = <TuiEvent>[];
+      final sub = driver.events.listen(events.add);
+      final entered = driver.enter(TerminalMode.interactive);
+      transport.emit(_init);
+      await entered;
+      transport.emit(const ResizeFrame(CellSize(999999, 1)));
+      await Future<void>.delayed(Duration.zero);
+      final resize = events.whereType<ResizeEvent>().single;
+      expect(resize.size.cols, maxRemoteGridCols);
+      expect(driver.size.cols, maxRemoteGridCols);
+      await sub.cancel();
+      await driver.restore();
+    });
+
+    test('clamps a hostile structured resize event too', () async {
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(transport);
+      final events = <TuiEvent>[];
+      final sub = driver.events.listen(events.add);
+      final entered = driver.enter(TerminalMode.interactive);
+      transport.emit(_init);
+      await entered;
+      transport.emit(
+        const InputEventFrame(ResizeEvent(CellSize(1, 888888))),
+      );
+      await Future<void>.delayed(Duration.zero);
+      final resize = events.whereType<ResizeEvent>().single;
+      expect(resize.size.rows, maxRemoteGridRows);
+      await sub.cancel();
+      await driver.restore();
+    });
+  });
 }

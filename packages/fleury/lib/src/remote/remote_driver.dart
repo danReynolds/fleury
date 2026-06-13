@@ -21,6 +21,13 @@ import 'remote_codec.dart';
 import 'remote_protocol.dart';
 import 'remote_transport.dart';
 
+/// Maximum grid dimensions the server will honor from a remote peer.
+/// A real terminal/browser viewport is well within this; the bound exists
+/// only to cap the cell-buffer allocation against a hostile RESIZE/INIT.
+/// 4000×4000 = 16M cells, generous and bounded.
+const int maxRemoteGridCols = 4000;
+const int maxRemoteGridRows = 4000;
+
 /// The remote-rendering driver for `fleury shell` and `fleury serve`.
 ///
 /// One driver covers both legacy (ANSI) and structured (presentation-plan)
@@ -137,7 +144,7 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
   void _onFrame(RemoteFrame frame) {
     switch (frame) {
       case InitFrame f:
-        _size = f.size;
+        _size = _clampSize(f.size);
         _protocolVersion = f.protocolVersion;
         _capabilities = TerminalCapabilities(
           colorMode: f.colorMode,
@@ -149,8 +156,8 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
           _handshake?.complete();
         }
       case ResizeFrame f:
-        _size = f.size;
-        if (_active) _events.add(ResizeEvent(f.size));
+        _size = _clampSize(f.size);
+        if (_active) _events.add(ResizeEvent(_size));
       case InputFrame f:
         _parser.feed(f.bytes, _sink);
       case OutputFrame _:
@@ -164,14 +171,26 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
         // instead of parsing ANSI. A resize event also updates the cached
         // size so the next plan is built at the new viewport.
         if (_active) {
-          final event = f.event;
-          if (event is ResizeEvent) _size = event.size;
+          var event = f.event;
+          if (event is ResizeEvent) {
+            event = ResizeEvent(_clampSize(event.size));
+            _size = event.size;
+          }
           _events.add(event);
         }
       case ByeFrame():
         _onDisconnect();
     }
   }
+
+  /// Clamps a peer-supplied grid size to a sane maximum so a malicious or
+  /// buggy client cannot make the app allocate an enormous cell buffer
+  /// (`RESIZE cols=100000,rows=100000` → ten billion cells). The bound is
+  /// far above any real terminal/browser viewport.
+  CellSize _clampSize(CellSize size) => CellSize(
+    size.cols.clamp(1, maxRemoteGridCols),
+    size.rows.clamp(1, maxRemoteGridRows),
+  );
 
   void _onTransportError(Object error, StackTrace stackTrace) {
     if (!_active) {
