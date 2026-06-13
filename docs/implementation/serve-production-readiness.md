@@ -86,18 +86,15 @@ Audited against a hostile or stalled peer. State after this work:
   build → encode → decode → apply-to-mirror byte-exact (80 seeded
   multi-frame sequences; content, style, wide glyphs, shrink-blanking).
 - Embedded-client freshness gate recompiles and compares on every run.
-- Full suites green: core 1653, web VM 198, Chrome 152.
+- Full suites green: core 1663, web VM 199, Chrome 154.
 
 ## Honest remaining gaps (documented, not blocking)
 
-1. **Scroll-up wire optimization** — the log-tailing case above. Deferred
-   with measured rationale.
-2. **Semantics over the wire** — the SEMANTICS frame and driver hook
-   exist; wiring the client's semantic DOM presenter to consume them is
-   a follow-up. The visual surface renders without it.
-3. **Single headless-Chrome e2e** — the wire is VM-proven lossless and
-   the DOM surface is Chrome-proven; one end-to-end test through a live
-   socket would close the composition gap.
+1. **Scroll-up wire optimization** — *closed*, see the 2026-06-12 update
+   below.
+2. **Semantics over the wire** — *closed*, see the 2026-06-13 update below.
+3. **Single headless-Chrome e2e** — *closed*, see the 2026-06-13 update
+   below.
 4. **Browser input fidelity** (IME, dead keys, exotic layouts) — handled
    by `dom_input_source`, filed against the IME workstream for
    edge-case hardening.
@@ -134,3 +131,49 @@ Every workload is now 1.06–2.09x deflated ANSI (the only >1.7x is the
 tiny counter, 54 vs 113 bytes — trivial absolute). fleury's structured
 wire is within 13% of the ANSI peers overall while delivering a real DOM
 surface and a semantics path they can't.
+
+## Update — semantics over the wire + end-to-end composition (2026-06-13)
+
+The two remaining composition gaps are closed.
+
+**Semantics over the wire (gap 2).** The serve host already shipped a
+`SemanticsFrame`; the client now consumes it. On each frame whose semantic
+tree changed (gated on `SemanticDirtyTracker.hasDirt`, so the tree build is
+paid only on real change), the host serializes a redacted
+`SemanticInspectionSnapshot` and sends it. The browser client decodes it,
+reconstructs a `SemanticTree` via the new
+`SemanticInspectionSnapshot.toSemanticTree()`, and drives the same
+`SemanticDomPresenter` the in-browser host uses — so a served session is
+screen-reader- and agent-readable, the differentiator an ANSI-to-xterm relay
+structurally cannot offer. The client lays the grid surface and the semantic
+tree out as sibling roots under the host (the grid root owns its children via
+`replaceChildren`, so semantics must not live inside it), mirroring
+`runTuiWebDom`. Reconstruction is redaction-preserving (sensitive values stay
+`<redacted>` across the wire) and additive-schema-tolerant: an unknown role
+degrades to `text`, an unknown action is dropped — never an exception. A
+malformed semantics frame is swallowed, never tearing down the visual session.
+
+**End-to-end through a live socket (gap 3).** Split across the two layers
+each proves best:
+
+- *Transport composition, VM, real socket* (`serve_e2e_socket_test`): a real
+  `HttpServer` + `WebSocketTransformer` (Dart's default permessage-deflate)
+  carries a full-paint plan, a partial-update plan, and a semantics frame; the
+  client decodes off the socket, applies patches to a cell mirror, and
+  reconstructs the semantic tree. The mirror reproduces the server's final
+  frame cell-for-cell and the semantics arrive intact.
+- *Browser-DOM composition, headless Chrome* (`remote_client_e2e_test`):
+  server-encoded wire bytes (the actual serve encoder) are decoded and rendered
+  through the real `DomGridSurface` **and** the real `SemanticDomPresenter` —
+  the two calls `RemoteSurfaceClient` makes per frame. Asserts both the visual
+  grid DOM (`status: running`, `[ Run ]`) and the accessible DOM (the button's
+  `role`/`aria-label`/`data-fleury-actions`, the status region's `aria-live`).
+
+Together they cover the literal socket transport (VM) and the browser's
+turning of those bytes into a real accessible DOM (Chrome). Parity also
+proven at the unit layer: a `SemanticsFrame` round-trips through
+`encodeFrame`/`FrameDecoder` and reconstructs to the same roles, labels,
+actions, and state.
+
+Suites green after this work: **core 1663, web VM 199, Chrome 154**; the
+embedded-client freshness gate recompiled and matched.
