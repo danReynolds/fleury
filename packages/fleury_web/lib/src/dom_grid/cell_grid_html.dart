@@ -17,7 +17,6 @@ library;
 
 import 'package:fleury/fleury_host.dart';
 
-import 'cell_span_builder.dart';
 import 'cell_style_css.dart';
 
 export 'cell_style_css.dart' show kDefaultBackground, kDefaultForeground;

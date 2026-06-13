@@ -1,5 +1,4 @@
 import 'package:fleury/fleury_host.dart';
-import 'package:fleury_web/src/dom_grid/cell_span_builder.dart';
 import 'package:test/test.dart';
 
 CellBuffer frame(int cols, int rows, void Function(CellBuffer b) paint) {

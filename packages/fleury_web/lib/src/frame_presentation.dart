@@ -1,6 +1,5 @@
 import 'package:fleury/fleury_host.dart';
 
-import 'dom_grid/cell_span_builder.dart';
 import 'metrics/cell_metrics.dart';
 
 /// Visual frame surface implemented by browser renderers.

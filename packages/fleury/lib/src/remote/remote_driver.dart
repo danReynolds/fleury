@@ -118,9 +118,16 @@ final class RemoteTerminalDriver implements TerminalDriver {
       case InputFrame f:
         _parser.feed(f.bytes, _sink);
       case OutputFrame _:
-        // App never receives OUTPUT; ignore so a malformed peer can't
-        // crash the session.
+      case PlanFrame _:
+      case SemanticsFrame _:
+        // App→peer render frames; an app never receives them. Ignore so a
+        // malformed peer can't crash the session.
         break;
+      case InputEventFrame f:
+        // Structured input from a v2 peer. The current ANSI-path driver
+        // dispatches via the parser; surface structured events directly so
+        // a v2 peer talking to this driver still drives the app.
+        if (_active) _events.add(f.event);
       case ByeFrame():
         _onDisconnect();
     }

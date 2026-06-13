@@ -242,6 +242,17 @@ final class CellStyle {
   bool get inverse => _inverse ?? false;
   bool get strikethrough => _strikethrough ?? false;
 
+  /// Raw tri-state attributes (null = unset, distinct from false). The
+  /// resolved getters above collapse null to false for rendering; these
+  /// preserve the distinction for exact serialization and inspection,
+  /// since [operator ==] compares the raw fields.
+  bool? get boldOrNull => _bold;
+  bool? get dimOrNull => _dim;
+  bool? get italicOrNull => _italic;
+  bool? get underlineOrNull => _underline;
+  bool? get inverseOrNull => _inverse;
+  bool? get strikethroughOrNull => _strikethrough;
+
   static const CellStyle empty = CellStyle();
 
   CellStyle copyWith({

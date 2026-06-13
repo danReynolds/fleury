@@ -5,7 +5,6 @@ import 'package:fleury/fleury_host.dart';
 import 'package:web/web.dart' as web;
 
 import '../metrics/cell_metrics.dart';
-import 'cell_span_builder.dart';
 import 'cell_style_css.dart';
 
 /// Creates live DOM nodes from [RowSpanModel]s.
