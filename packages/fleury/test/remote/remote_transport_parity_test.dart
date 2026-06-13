@@ -6,13 +6,12 @@
 // lossless. The DOM rendering of the mirror is covered by the surface's
 // own Chrome tests.
 
-import 'dart:convert';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/src/remote/remote_codec.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
+import 'package:fleury/src/remote/remote_semantics.dart';
 import 'package:test/test.dart';
 
 String _render(CellBuffer b) {
@@ -230,14 +229,13 @@ void main() {
           ],
         ),
       );
-      final json = utf8.encode(jsonEncode(tree.toInspectionSnapshot().toJson()));
-      final wire = encodeFrame(SemanticsFrame(Uint8List.fromList(json)));
+      final encoded = SemanticsWireEncoder().encode(tree.toInspectionSnapshot())!;
+      final wire = encodeFrame(SemanticsFrame(encoded));
 
-      // The client side: decode the frame, parse, reconstruct the tree — the
+      // The client side: decode the frame, then the semantic wire diff — the
       // exact path RemoteSurfaceClient drives into its SemanticDomPresenter.
       final frame = (FrameDecoder()..feed(wire)).drain().single as SemanticsFrame;
-      final decoded = jsonDecode(utf8.decode(frame.json)) as Map<String, Object?>;
-      final rebuilt = SemanticInspectionSnapshot.fromJson(decoded).toSemanticTree();
+      final rebuilt = SemanticsWireDecoder().apply(frame.json)!;
 
       expect(rebuilt.root.role, SemanticRole.app);
       final status = rebuilt.root.children[0];

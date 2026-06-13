@@ -9,13 +9,13 @@
 library;
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/src/remote/remote_codec.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
+import 'package:fleury/src/remote/remote_semantics.dart';
 import 'package:test/test.dart';
 
 String _row(CellBuffer b, int r) {
@@ -63,9 +63,8 @@ void main() {
         ],
       ),
     );
-    final semanticsBytes = Uint8List.fromList(
-      utf8.encode(jsonEncode(tree.toInspectionSnapshot().toJson())),
-    );
+    final semanticsBytes =
+        SemanticsWireEncoder().encode(tree.toInspectionSnapshot())!;
 
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
@@ -80,6 +79,7 @@ void main() {
     final client = await WebSocket.connect('ws://127.0.0.1:${server.port}/');
     final mirror = CellBuffer(size);
     final decoder = FrameDecoder();
+    final semanticsDecoder = SemanticsWireDecoder();
     SemanticTree? semantics;
     final done = Completer<void>();
     client.listen((data) {
@@ -91,10 +91,7 @@ void main() {
           case PlanFrame f:
             applyRemotePlanToBuffer(f.plan, mirror);
           case SemanticsFrame f:
-            final json =
-                jsonDecode(utf8.decode(f.json)) as Map<String, Object?>;
-            semantics =
-                SemanticInspectionSnapshot.fromJson(json).toSemanticTree();
+            semantics = semanticsDecoder.apply(f.json);
             if (!done.isCompleted) done.complete();
           default:
             break;

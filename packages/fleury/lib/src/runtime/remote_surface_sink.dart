@@ -1,4 +1,5 @@
 import '../rendering/cell_buffer.dart';
+import '../semantics/inspection.dart';
 import 'frame_presentation.dart';
 
 /// A driver that wants structured frames instead of ANSI bytes.
@@ -21,9 +22,10 @@ abstract interface class RemoteSurfaceSink {
   /// [plan] carries the damage classification (full-repaint, scroll).
   void presentFrame(CellBuffer prev, CellBuffer next, FramePresentationPlan plan);
 
-  /// Sends the semantic snapshot ([json] = UTF-8 of the
-  /// `SemanticInspectionSnapshot` JSON) for the current frame, so a served
-  /// session stays agent-drivable and accessible. Called only when the
-  /// semantic tree changed.
-  void presentSemantics(List<int> json);
+  /// Presents the current frame's semantic [snapshot], so a served session
+  /// stays agent-drivable and accessible. The sink diffs it against the last
+  /// sent snapshot and ships only what changed — a full frame once per peer,
+  /// patches after — because a full resend stops compressing past DEFLATE's
+  /// 32 KiB window. Called when the semantic tree changed.
+  void presentSemantics(SemanticInspectionSnapshot snapshot);
 }

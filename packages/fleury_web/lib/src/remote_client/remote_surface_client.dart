@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury_host.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
+import 'package:fleury/src/remote/remote_semantics.dart';
 import 'package:web/web.dart' as web;
 
 import '../dom_grid/dom_grid_surface.dart';
@@ -39,6 +39,7 @@ final class RemoteSurfaceClient {
   DomCellMetrics? _metrics;
   DomInputSource? _input;
   final FrameDecoder _decoder = FrameDecoder();
+  final SemanticsWireDecoder _semanticsDecoder = SemanticsWireDecoder();
   CellSize _size = const CellSize(80, 24);
   bool _handshakeSent = false;
   CellBuffer _mirror = CellBuffer(const CellSize(80, 24));
@@ -174,21 +175,17 @@ final class RemoteSurfaceClient {
     }
   }
 
-  /// Decodes a [SemanticsFrame] and drives the accessible DOM tree. A
-  /// malformed snapshot is swallowed: semantics are an accessibility
-  /// backstop, never a reason to tear down a rendering session.
+  /// Decodes a [SemanticsFrame] (full snapshot or diff patch) and drives the
+  /// accessible DOM tree. A malformed or out-of-order frame is swallowed: the
+  /// decoder returns null and the last good semantic tree stays on screen —
+  /// semantics are an accessibility backstop, never a reason to tear down a
+  /// rendering session.
   void _presentSemantics(SemanticsFrame frame) {
     final semantics = _semantics;
     if (semantics == null) return;
-    try {
-      final decoded = jsonDecode(utf8.decode(frame.json));
-      if (decoded is! Map<String, Object?>) return;
-      final snapshot = SemanticInspectionSnapshot.fromJson(decoded);
-      semantics.present(snapshot.toSemanticTree());
-    } on Object {
-      // Drop a malformed/oversized semantics frame; the visual surface and
-      // the last good semantic tree both remain intact.
-    }
+    final tree = _semanticsDecoder.apply(frame.json);
+    if (tree == null) return;
+    semantics.present(tree);
   }
 
   void _send(Uint8List bytes) {

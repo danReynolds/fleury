@@ -13,12 +13,14 @@ import '../foundation/geometry.dart';
 import '../rendering/cell_buffer.dart';
 import '../runtime/frame_presentation.dart';
 import '../runtime/remote_surface_sink.dart';
+import '../semantics/inspection.dart';
 import '../terminal/capabilities.dart';
 import '../terminal/events.dart';
 import '../terminal/input_parser.dart';
 import '../terminal/terminal_driver.dart';
 import 'remote_codec.dart';
 import 'remote_protocol.dart';
+import 'remote_semantics.dart';
 import 'remote_transport.dart';
 
 /// Maximum grid dimensions the server will honor from a remote peer.
@@ -44,6 +46,7 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
   final StreamController<TuiEvent> _events =
       StreamController<TuiEvent>.broadcast();
   final _RemoteParserSink _sink = _RemoteParserSink();
+  final SemanticsWireEncoder _semanticsEncoder = SemanticsWireEncoder();
 
   StreamSubscription<RemoteFrame>? _frameSub;
   CellSize _size = const CellSize(80, 24);
@@ -134,14 +137,15 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
     );
   }
 
-  /// Sends a semantic snapshot (UTF-8 JSON) for the just-presented frame.
-  /// No-op on the ANSI path; used by the structured serve host.
+  /// Diffs the semantic [snapshot] against the last one sent to this peer and
+  /// ships only what changed (a full frame once, patches after). No-op on the
+  /// ANSI path, and a no-op send when the exposed semantics are unchanged.
   @override
-  void presentSemantics(List<int> json) {
+  void presentSemantics(SemanticInspectionSnapshot snapshot) {
     if (!_active || !wantsPresentationPlans) return;
-    _transport.send(
-      SemanticsFrame(json is Uint8List ? json : Uint8List.fromList(json)),
-    );
+    final bytes = _semanticsEncoder.encode(snapshot);
+    if (bytes == null) return;
+    _transport.send(SemanticsFrame(bytes));
   }
 
   void _onFrame(RemoteFrame frame) {

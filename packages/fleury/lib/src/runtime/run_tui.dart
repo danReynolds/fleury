@@ -284,11 +284,13 @@ Future<void> runTui(
       // pay the tree build only on semantic changes, not every frame.
       final semanticRoot = rootElement;
       if (semanticRoot != null && runtime.semanticDirtyTracker.hasDirt) {
-        final snapshot = SemanticInspectionSnapshot.fromTree(
-          SemanticTree.fromElement(semanticRoot),
-        );
+        // The sink diffs this against the last snapshot and ships only the
+        // changed nodes; a full resend would stop compressing past DEFLATE's
+        // window on a large tree.
         activeSurfaceSink.presentSemantics(
-          utf8.encode(jsonEncode(snapshot.toJson())),
+          SemanticInspectionSnapshot.fromTree(
+            SemanticTree.fromElement(semanticRoot),
+          ),
         );
         // Consume the dirt so the next frame only re-sends on a real change.
         runtime.semanticDirtyTracker.takeDirtySnapshot();

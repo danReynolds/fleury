@@ -177,3 +177,60 @@ actions, and state.
 
 Suites green after this work: **core 1663, web VM 199, Chrome 154**; the
 embedded-client freshness gate recompiled and matched.
+
+## Update — semantics over the wire didn't scale; now it does (2026-06-13)
+
+Profiling the semantics path we'd just shipped surfaced a real defect: the
+host sent a **full** redacted snapshot on every changed frame, with no
+diffing, on the assumption that permessage-deflate's context takeover would
+crush the near-identical resends. It does — until the serialized tree exceeds
+DEFLATE's **32 KiB sliding window**, after which the compressor can no longer
+reference the previous frame and per-frame cost goes off a cliff. Measured
+(`profiling/bin/serve_semantics_profile.dart`, one small change per frame):
+
+| tree | nodes | full snapshot z/frame |
+| --- | --- | --- |
+| list of 80 | 84 | 106 |
+| list of 120 | 124 | 163 |
+| list of 160 | 164 | 400 |
+| list of 240 | 244 | **2180** |
+
+A 3× node increase (80→240) cost **20×** the bytes — the knee lands exactly
+where one frame's raw snapshot (~32 KiB) stops fitting the window alongside
+its predecessor. DEFLATE's window is the hard ceiling (permessage-deflate
+maxes at 15 window bits), so the compressor cannot be the fix; the wire must
+carry less.
+
+**Fix: a semantic wire diff** (`remote_semantics.dart`,
+`SemanticsWireEncoder`/`Decoder`). The tree is flattened to id-keyed nodes
+carrying `childIds` instead of nested `children`; the host ships a FULL flat
+node list once per connection, then PATCHes (only the nodes whose serialized
+form changed, plus removed ids). The client keeps the flat map, applies the
+patch, and rebuilds the nested tree. A localized change touches O(changed)
+nodes regardless of tree size. Re-profiled:
+
+| tree | nodes | full z/frame | diff z/frame | speedup |
+| --- | --- | --- | --- | --- |
+| list of 80 | 84 | 106 | 19 | 5.7x |
+| list of 160 | 164 | 400 | 28 | 14.1x |
+| list of 240 | 244 | 2180 | 38 | **57.2x** |
+
+The diff is **flat in tree size** (10→38 bytes/frame across 12→244 nodes)
+where full-resend was super-linear. Semantics is now a negligible constant on
+the wire, so the "wire-competitive" claim holds *including* the semantics
+traffic the visual profiler doesn't count.
+
+Properties proven (`remote_semantics_test`, plus the parity and both e2e tests
+re-pointed through the encoder/decoder):
+
+- A FULL→PATCH stream reproduces, frame for frame, the exact tree a full
+  resend would (50-frame streaming sequence; structural add/remove included).
+- Redaction is inherited from the snapshot and re-applied on decode — no
+  plaintext crosses the wire even via a patch; an all-redacted frame with no
+  visible change ships **zero bytes**.
+- Resync-safe: a fresh connection always begins with a FULL frame, so a patch
+  arriving before any full (or a malformed/over-version payload) is ignored,
+  keeping the last good tree rather than corrupting state. Correctness rests
+  on the WebSocket being ordered and lossless.
+
+Suites green: **core 1670, web VM 199, Chrome 154**; freshness gate matched.

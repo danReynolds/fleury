@@ -8,12 +8,12 @@
 @TestOn('browser')
 library;
 
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury_host.dart';
 import 'package:fleury/src/remote/remote_codec.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
+import 'package:fleury/src/remote/remote_semantics.dart';
 import 'package:fleury_web/src/dom_grid/dom_grid_surface.dart';
 import 'package:fleury_web/src/remote_client/plan_adapter.dart';
 import 'package:fleury_web/src/semantics/semantic_dom_presenter.dart';
@@ -59,9 +59,7 @@ void main() {
         ...encodeFrame(PlanFrame(buildRemotePlan(blank, frame0, fullRepaint: true))),
         ...encodeFrame(PlanFrame(buildRemotePlan(frame0, frame1, fullRepaint: false))),
         ...encodeFrame(
-          SemanticsFrame(
-            Uint8List.fromList(utf8.encode(jsonEncode(tree.toInspectionSnapshot().toJson()))),
-          ),
+          SemanticsFrame(SemanticsWireEncoder().encode(tree.toInspectionSnapshot())!),
         ),
       ];
 
@@ -79,6 +77,7 @@ void main() {
       final presenter = SemanticDomPresenter(root: semanticRoot);
       addTearDown(presenter.dispose);
       final mirror = CellBuffer(size);
+      final semanticsDecoder = SemanticsWireDecoder();
 
       for (final frame in (FrameDecoder()..feed(Uint8List.fromList(wire))).drain()) {
         switch (frame) {
@@ -86,10 +85,8 @@ void main() {
             final plan = applyRemotePlan(f.plan, mirror);
             surface.present(mirror, mirror, plan);
           case SemanticsFrame f:
-            final json = jsonDecode(utf8.decode(f.json)) as Map<String, Object?>;
-            presenter.present(
-              SemanticInspectionSnapshot.fromJson(json).toSemanticTree(),
-            );
+            final tree = semanticsDecoder.apply(f.json);
+            if (tree != null) presenter.present(tree);
           default:
             break;
         }
