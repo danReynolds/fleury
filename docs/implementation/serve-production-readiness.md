@@ -323,12 +323,28 @@ protocol diffs server-side, so the client applies known patches rather than
 re-parsing an escape stream each frame. Both sit far under the 60 fps budget; on
 terminal workloads the limit is the display refresh, not the renderer.
 
-**Honest scope:** xterm's canvas and WebGL tiers need a real GL context, which
-headless `dart test` Chrome does not provide — the harness detects this and
-reports those tiers `unavailable` (auto-running them on a GPU-backed browser)
-rather than silently falling back to DOM and reporting a fake number. The one
-regime where xterm's WebGL renderer could plausibly beat a DOM surface — very
-large, high-throughput grids on a GPU — is therefore the remaining unmeasured
-axis, runnable via the same benchmark on a non-headless GPU Chrome. The
-benchmark vendors xterm.js + addons on demand (not committed) and lives outside
-`test/`, so it never runs in CI.
+xterm's canvas and WebGL tiers need a real GL context, which headless `dart test`
+Chrome does not provide — the harness detects this and reports those tiers
+`unavailable` rather than silently falling back to DOM and faking a number.
+
+**Run on a real GPU (Apple M1 Pro, ANGLE Metal, 60 Hz), all three xterm tiers**
+— synchronous main-thread cost per frame, medians (the visible-window run is
+noisy, so only the cleanly-measurable `parse`/`apply` step and medians are
+quoted):
+
+| workload | fleury | xterm DOM | xterm canvas | xterm WebGL |
+| --- | --- | --- | --- | --- |
+| dashboard 80×24 | 0.50 ms | 1.8 ms | 1.4 ms | 0.9 ms |
+| churn 120×40 | 0.70 ms | 2.8 ms | 9.4 ms | 0.8 ms |
+| churn 200×60 | 0.70 ms | 2.8 ms | 6.5 ms | 0.8 ms |
+
+Two findings survive the noise: (1) fleury's synchronous cost is the lowest at
+every size — under all three xterm tiers — because the client applies
+server-diffed patches instead of re-parsing ANSI; (2) xterm's **WebGL CPU stays
+flat as the grid grows** (~0.8 ms) where its DOM (→2.8 ms) and canvas (→9.4 ms)
+tiers climb — the GPU offload is real and is the flattest-scaling xterm tier, but
+it still does not pull ahead of fleury. So even against GPU-accelerated WebGL on
+Apple Silicon, the DOM surface is comparable-to-lower per-frame main-thread cost;
+WebGL's advantage is flat scaling at large grids, not beating fleury. All tiers
+sit far under the 60 fps budget. The benchmark vendors xterm.js + addons on
+demand (not committed) and lives outside `test/`, so it never runs in CI.

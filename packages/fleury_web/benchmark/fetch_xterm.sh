@@ -4,14 +4,17 @@
 # reproducible numbers. Requires npm.
 set -euo pipefail
 
-VERSION="${XTERM_VERSION:-6.0.0}"
+# Pinned to a matched, stable xterm-5 set (the addons' stable releases peer
+# `@xterm/xterm: ^5.0.0`; the xterm-6 addons are still beta). xterm 5 is also
+# what the relay peers — ttyd/gotty/VS Code — actually ship today.
+VERSION="${XTERM_VERSION:-5.5.0}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 VENDOR="$DIR/vendor"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 CANVAS_VERSION="${XTERM_CANVAS_VERSION:-0.7.0}"
-WEBGL_VERSION="${XTERM_WEBGL_VERSION:-0.19.0}"
+WEBGL_VERSION="${XTERM_WEBGL_VERSION:-0.18.0}"
 
 fetch() { # <npm-spec> <tgz-glob> <src-in-package> <dest>
   ( cd "$TMP" && npm pack "$1" >/dev/null 2>&1 )
