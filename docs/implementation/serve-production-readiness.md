@@ -286,3 +286,6 @@ ANSI, inside the same band as the interactive workloads (1.06–2.09x). The
 visual path has no analogous cliff: it already ships only changed cells, and
 where everything changes it degrades gracefully alongside the peers rather than
 falling off relative to them.
+
+Suites green after this work: **core 1673, web VM 199, Chrome 154**; freshness
+gate matched.
