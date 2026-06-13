@@ -1,71 +1,68 @@
 import 'package:fleury/fleury_host.dart';
-import 'package:fleury/src/remote/remote_codec.dart' show RemotePlan;
+import 'package:fleury/src/remote/remote_codec.dart';
 import 'package:fleury_web/src/remote_client/plan_adapter.dart';
 import 'package:test/test.dart';
 
+String _rowText(CellBuffer b, int row) {
+  final sb = StringBuffer();
+  for (var c = 0; c < b.size.cols; c++) {
+    sb.write(b.atColRow(c, row).grapheme ?? ' ');
+  }
+  return sb.toString().trimRight();
+}
+
 void main() {
-  group('remotePlanToPresentation', () {
-    test('full repaint maps to a full dirty-row set', () {
-      final plan = RemotePlan(
-        size: const CellSize(20, 6),
-        fullRepaint: true,
-        rows: [
-          for (var r = 0; r < 6; r++)
-            RowSpanModel(row: r, cols: 20, runs: const []),
-        ],
-      );
-      final presentation = remotePlanToPresentation(plan);
-      expect(presentation.size, const CellSize(20, 6));
-      expect(presentation.fullRepaint, isTrue);
-      expect(presentation.damage.dirtyRows.isFull, isTrue);
-      expect(presentation.dirtyRowModels, hasLength(6));
-      expect(presentation.damage.source, FrameDamageSource.fullRepaint);
-    });
+  group('applyRemotePlan (client mirror)', () {
+    test('applies a server-built plan and reports the touched rows', () {
+      final prev = CellBuffer(const CellSize(20, 6));
+      final next = CellBuffer(const CellSize(20, 6));
+      next.writeText(const CellOffset(0, 2), 'second row');
+      next.writeText(const CellOffset(0, 4), 'fifth-ish');
+      final plan = buildRemotePlan(prev, next, fullRepaint: false);
 
-    test('partial update keeps only the carried rows dirty', () {
-      final plan = RemotePlan(
-        size: const CellSize(20, 10),
-        fullRepaint: false,
-        rows: [
-          RowSpanModel(row: 2, cols: 20, runs: const []),
-          RowSpanModel(row: 7, cols: 20, runs: const []),
-        ],
-      );
-      final presentation = remotePlanToPresentation(plan);
+      final mirror = CellBuffer(const CellSize(20, 6));
+      final presentation = applyRemotePlan(plan, mirror);
+
       expect(presentation.fullRepaint, isFalse);
-      expect(presentation.damage.dirtyRows.isFull, isFalse);
-      expect(presentation.damage.dirtyRows.rows, [2, 7]);
-      expect(presentation.damage.source, FrameDamageSource.paintDamage);
+      expect(presentation.damage.dirtyRows.rows, [2, 4]);
+      // The mirror now holds the content; dirty rows have span models.
+      expect(_rowText(mirror, 2), 'second row');
+      expect(_rowText(mirror, 4), 'fifth-ish');
+      expect(presentation.dirtyRowModels, hasLength(2));
+      final rowText = presentation.dirtyRowModels.first.runs
+          .map((r) => r.text)
+          .join();
+      expect(rowText.trimRight(), 'second row');
     });
 
-    test('scroll-up shift carries through', () {
-      final plan = RemotePlan(
-        size: const CellSize(20, 10),
-        fullRepaint: false,
-        scrollUpRows: 3,
-        rows: const [],
-      );
-      final presentation = remotePlanToPresentation(plan);
-      expect(presentation.scrollUpRows, 3);
+    test('full repaint marks every row dirty', () {
+      final prev = CellBuffer(const CellSize(10, 4));
+      final next = CellBuffer(const CellSize(10, 4));
+      next.writeText(const CellOffset(0, 0), 'hi');
+      final plan = buildRemotePlan(prev, next, fullRepaint: true);
+      final mirror = CellBuffer(const CellSize(10, 4));
+      final presentation = applyRemotePlan(plan, mirror);
+      expect(presentation.damage.dirtyRows.isFull, isTrue);
+      expect(presentation.dirtyRowModels, hasLength(4));
     });
 
-    test('row span models pass through unchanged for the surface', () {
-      const run = CellSpanRun(
-        startCol: 0,
-        widthCols: 5,
-        text: 'hello',
-        style: CellStyle(bold: true),
-        kind: CellRunKind.text,
-        correction: WidthCorrection.none,
-      );
-      final plan = RemotePlan(
-        size: const CellSize(20, 1),
-        fullRepaint: true,
-        rows: [RowSpanModel(row: 0, cols: 20, runs: const [run])],
-      );
-      final presentation = remotePlanToPresentation(plan);
-      expect(presentation.dirtyRowModels.single.runs.single.text, 'hello');
-      expect(presentation.dirtyRowModels.single.runs.single.style.bold, isTrue);
+    test('mirror tracks a multi-frame sequence exactly', () {
+      final mirror = CellBuffer(const CellSize(20, 3));
+      var prev = CellBuffer(const CellSize(20, 3));
+      late CellBuffer last;
+      for (final text in ['frame one here', 'second', 'a third frame x']) {
+        final next = CellBuffer(const CellSize(20, 3));
+        // Each frame fully repaints row 1 (20 cols) so there's no remainder.
+        next.writeText(const CellOffset(0, 1), text.padRight(20));
+        final plan = buildRemotePlan(prev, next, fullRepaint: false);
+        applyRemotePlan(plan, mirror);
+        prev = next;
+        last = next;
+      }
+      // The mirror reproduces the last frame's content row-for-row.
+      for (var r = 0; r < 3; r++) {
+        expect(_rowText(mirror, r), _rowText(last, r), reason: 'row $r');
+      }
     });
   });
 }

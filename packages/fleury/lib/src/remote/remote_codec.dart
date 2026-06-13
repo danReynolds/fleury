@@ -14,25 +14,56 @@ import 'dart:typed_data';
 
 import '../foundation/geometry.dart';
 import '../rendering/cell.dart';
-import '../rendering/cell_span.dart';
+import '../rendering/cell_buffer.dart';
 import '../terminal/events.dart';
 
-/// A presentation plan reduced to what the client needs to drive a visual
-/// surface: size, repaint/scroll flags, and the dirty row span models. The
-/// host-side diagnostics on `FramePresentationPlan` (timings, damage) are
-/// not on the wire.
+/// A frame reduced to its changed cells for the wire: the grid size,
+/// repaint/scroll flags, a per-frame style table, and the changed
+/// column-range patches. The client applies the patches to a [CellBuffer]
+/// mirror and rebuilds the dirty rows from it (reusing the span builder),
+/// so only changed cells travel — the efficiency ANSI gets implicitly.
 final class RemotePlan {
   const RemotePlan({
     required this.size,
     required this.fullRepaint,
-    required this.rows,
+    required this.styleTable,
+    required this.patches,
     this.scrollUpRows,
   });
 
   final CellSize size;
   final bool fullRepaint;
   final int? scrollUpRows;
-  final List<RowSpanModel> rows;
+
+  /// Distinct styles used by the patches, referenced by index from runs.
+  final List<CellStyle> styleTable;
+
+  /// Changed column-range patches.
+  final List<RemoteRowPatch> patches;
+}
+
+/// One contiguous changed column range in a row.
+final class RemoteRowPatch {
+  const RemoteRowPatch({
+    required this.row,
+    required this.startCol,
+    required this.runs,
+  });
+
+  final int row;
+  final int startCol;
+
+  /// Runs grouped by style, laid out left to right from [startCol]. The
+  /// run text's grapheme widths advance the column (wide glyphs occupy 2).
+  final List<RemotePatchRun> runs;
+}
+
+/// A run of same-style cells within a patch.
+final class RemotePatchRun {
+  const RemotePatchRun({required this.styleIndex, required this.text});
+
+  final int styleIndex;
+  final String text;
 }
 
 /// Thrown when a structured frame payload is malformed.
@@ -74,6 +105,25 @@ class _Writer {
     _b.add(bytes);
   }
 
+  /// LEB128 unsigned varint — small values (the common case: columns,
+  /// counts, style indices) cost one byte instead of the fixed 2–4.
+  void varint(int v) {
+    assert(v >= 0, 'varint is unsigned');
+    var x = v;
+    while (x >= 0x80) {
+      _b.addByte((x & 0x7F) | 0x80);
+      x >>= 7;
+    }
+    _b.addByte(x);
+  }
+
+  /// Varint-length-prefixed UTF-8 string.
+  void vstr(String s) {
+    final bytes = utf8.encode(s);
+    varint(bytes.length);
+    _b.add(bytes);
+  }
+
   void boolean(bool v) => u8(v ? 1 : 0);
 
   Uint8List take() => _b.toBytes();
@@ -112,6 +162,38 @@ class _Reader {
 
   String str() {
     final len = u32();
+    _need(len);
+    final s = utf8.decode(_data.sublist(_pos, _pos + len), allowMalformed: true);
+    _pos += len;
+    return s;
+  }
+
+  int varint() {
+    var result = 0;
+    var shift = 0;
+    while (true) {
+      final byte = u8();
+      result |= (byte & 0x7F) << shift;
+      if ((byte & 0x80) == 0) {
+        // Counts and lengths are well under this; a value that would set
+        // the sign bit (or otherwise exceed a sane bound) is malformed —
+        // reject it rather than let a negative length reach `sublist`.
+        if (result < 0 || result > 0x7FFFFFFF) {
+          throw const RemoteCodecException('varint out of range');
+        }
+        return result;
+      }
+      // 5 continuation bytes (35 bits) is far more than any real count;
+      // cap the shift so a malicious stream can't build a huge/negative int.
+      shift += 7;
+      if (shift > 35) {
+        throw const RemoteCodecException('varint too long');
+      }
+    }
+  }
+
+  String vstr() {
+    final len = varint();
     _need(len);
     final s = utf8.decode(_data.sublist(_pos, _pos + len), allowMalformed: true);
     _pos += len;
@@ -168,7 +250,11 @@ Color? _readColor(_Reader r) {
     case 0:
       return null;
     case 1:
-      return AnsiColor(r.u8());
+      final index = r.u8();
+      if (index > 15) {
+        throw RemoteCodecException('AnsiColor index $index out of range');
+      }
+      return AnsiColor(index);
     case 2:
       return IndexedColor(r.u8());
     case 3:
@@ -224,6 +310,13 @@ CellStyle _readStyle(_Reader r) {
 // ---- plan ------------------------------------------------------------------
 
 /// Encodes a [RemotePlan] to wire bytes.
+///
+/// Wire shape (the cell-patch design): only the changed column ranges
+/// ship, each as runs grouped by style, with styles deduplicated into a
+/// per-frame table referenced by varint index. Integers are varints. This
+/// keeps the wire close to "only changed cells, style once per run" — the
+/// efficiency ANSI gets implicitly — so it stays competitive with (and
+/// usually beats) a deflated ANSI stream over the socket.
 Uint8List encodeRemotePlan(RemotePlan plan) {
   final w = _Writer();
   var flags = 0;
@@ -231,23 +324,23 @@ Uint8List encodeRemotePlan(RemotePlan plan) {
   if (plan.scrollUpRows != null) flags |= 2;
   w
     ..u8(flags)
-    ..u16(plan.size.cols)
-    ..u16(plan.size.rows);
-  if (plan.scrollUpRows != null) w.u16(plan.scrollUpRows!);
-  w.u16(plan.rows.length);
-  for (final row in plan.rows) {
+    ..varint(plan.size.cols)
+    ..varint(plan.size.rows);
+  if (plan.scrollUpRows != null) w.varint(plan.scrollUpRows!);
+  w.varint(plan.styleTable.length);
+  for (final style in plan.styleTable) {
+    _writeStyle(w, style);
+  }
+  w.varint(plan.patches.length);
+  for (final patch in plan.patches) {
     w
-      ..u16(row.row)
-      ..u16(row.cols)
-      ..u16(row.runs.length);
-    for (final run in row.runs) {
+      ..varint(patch.row)
+      ..varint(patch.startCol)
+      ..varint(patch.runs.length);
+    for (final run in patch.runs) {
       w
-        ..u16(run.startCol)
-        ..u16(run.widthCols)
-        ..u8(run.kind.index)
-        ..u8(run.correction.index);
-      _writeStyle(w, run.style);
-      w.str(run.text);
+        ..varint(run.styleIndex)
+        ..vstr(run.text);
     }
   }
   return w.take();
@@ -257,36 +350,33 @@ Uint8List encodeRemotePlan(RemotePlan plan) {
 RemotePlan decodeRemotePlan(Uint8List bytes) {
   final r = _Reader(bytes);
   final flags = r.u8();
-  final cols = r.u16();
-  final rows = r.u16();
-  final scrollUp = (flags & 2) != 0 ? r.u16() : null;
-  final rowCount = r.u16();
-  final rowModels = <RowSpanModel>[];
-  for (var i = 0; i < rowCount; i++) {
-    final rowIndex = r.u16();
-    final rowCols = r.u16();
-    final runCount = r.u16();
-    final runs = <CellSpanRun>[];
+  final cols = r.varint();
+  final rows = r.varint();
+  final scrollUp = (flags & 2) != 0 ? r.varint() : null;
+  final styleCount = r.varint();
+  final styleTable = <CellStyle>[
+    for (var i = 0; i < styleCount; i++) _readStyle(r),
+  ];
+  final patchCount = r.varint();
+  final patches = <RemoteRowPatch>[];
+  for (var i = 0; i < patchCount; i++) {
+    final row = r.varint();
+    final startCol = r.varint();
+    final runCount = r.varint();
+    final runs = <RemotePatchRun>[];
     for (var j = 0; j < runCount; j++) {
-      final startCol = r.u16();
-      final widthCols = r.u16();
-      final kind = r.enumValue(CellRunKind.values);
-      final correction = r.enumValue(WidthCorrection.values);
-      final style = _readStyle(r);
-      final text = r.str();
-      runs.add(
-        CellSpanRun(
-          startCol: startCol,
-          widthCols: widthCols,
-          text: text,
-          style: style,
-          kind: kind,
-          correction: correction,
-        ),
-      );
+      final styleIndex = r.varint();
+      if (styleIndex >= styleTable.length) {
+        throw RemoteCodecException('style index $styleIndex out of range');
+      }
+      runs.add(RemotePatchRun(styleIndex: styleIndex, text: r.vstr()));
     }
-    rowModels.add(
-      RowSpanModel(row: rowIndex, cols: rowCols, runs: List.unmodifiable(runs)),
+    patches.add(
+      RemoteRowPatch(
+        row: row,
+        startCol: startCol,
+        runs: List.unmodifiable(runs),
+      ),
     );
   }
   r.expectEnd();
@@ -294,8 +384,103 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
     size: CellSize(cols, rows),
     fullRepaint: (flags & 1) != 0,
     scrollUpRows: scrollUp,
-    rows: rowModels,
+    styleTable: List.unmodifiable(styleTable),
+    patches: List.unmodifiable(patches),
   );
+}
+
+// ---- plan build / apply ----------------------------------------------------
+
+/// Builds a [RemotePlan] from the rendered [prev]/[next] buffers — the
+/// changed column ranges only, grouped into same-style runs with a
+/// per-frame style table. On [fullRepaint] (or a size change) every row
+/// is treated as changed.
+RemotePlan buildRemotePlan(
+  CellBuffer prev,
+  CellBuffer next, {
+  required bool fullRepaint,
+}) {
+  final full = fullRepaint || prev.size != next.size;
+  final cols = next.size.cols;
+  final rows = next.size.rows;
+  final styleIndices = <CellStyle, int>{};
+  final styleTable = <CellStyle>[];
+  int styleIndex(CellStyle s) =>
+      styleIndices.putIfAbsent(s, () {
+        styleTable.add(s);
+        return styleTable.length - 1;
+      });
+
+  final patches = <RemoteRowPatch>[];
+  for (var row = 0; row < rows; row++) {
+    var col = 0;
+    while (col < cols) {
+      // Find the start of the next changed run.
+      if (!full && _cellEqual(prev, next, col, row)) {
+        col++;
+        continue;
+      }
+      final startCol = col;
+      final runs = <RemotePatchRun>[];
+      // Extend the patch over contiguous changed cells, grouping by style.
+      while (col < cols && (full || !_cellEqual(prev, next, col, row))) {
+        final style = next.atColRow(col, row).style;
+        final buffer = StringBuffer();
+        while (col < cols &&
+            (full || !_cellEqual(prev, next, col, row)) &&
+            next.atColRow(col, row).style == style) {
+          final cell = next.atColRow(col, row);
+          // continuation cells contribute nothing (the leading cell's
+          // grapheme already spans them); empty/blank render as a space.
+          if (cell.role != CellRole.continuation) {
+            buffer.write(cell.grapheme ?? ' ');
+          }
+          col++;
+        }
+        runs.add(
+          RemotePatchRun(styleIndex: styleIndex(style), text: buffer.toString()),
+        );
+      }
+      patches.add(
+        RemoteRowPatch(row: row, startCol: startCol, runs: runs),
+      );
+    }
+  }
+
+  return RemotePlan(
+    size: next.size,
+    fullRepaint: full,
+    styleTable: styleTable,
+    patches: patches,
+  );
+}
+
+bool _cellEqual(CellBuffer a, CellBuffer b, int col, int row) =>
+    a.atColRow(col, row) == b.atColRow(col, row);
+
+/// Applies a decoded [plan] to a [CellBuffer] mirror, reproducing the
+/// server's frame. The client rebuilds the dirty DOM rows from the mirror
+/// afterward. Returns the row indices the plan touched.
+Set<int> applyRemotePlanToBuffer(RemotePlan plan, CellBuffer mirror) {
+  final touched = <int>{};
+  for (final patch in plan.patches) {
+    if (patch.row < 0 || patch.row >= mirror.size.rows) continue;
+    touched.add(patch.row);
+    var col = patch.startCol;
+    for (final run in patch.runs) {
+      if (run.styleIndex < 0 || run.styleIndex >= plan.styleTable.length) {
+        continue;
+      }
+      final style = plan.styleTable[run.styleIndex];
+      final advanced = mirror.writeText(
+        CellOffset(col, patch.row),
+        run.text,
+        style: style,
+      );
+      col += advanced == 0 ? run.text.length : advanced;
+    }
+  }
+  return touched;
 }
 
 // ---- input events ----------------------------------------------------------
@@ -376,6 +561,11 @@ TuiEvent decodeInputEvent(Uint8List bytes) {
       final char = r.boolean() ? r.str() : null;
       final mods = _readModifiers(r);
       final type = r.enumValue(KeyEventType.values);
+      if (keyCode == null && char == null) {
+        throw const RemoteCodecException(
+          'key event must carry a keyCode or char',
+        );
+      }
       event = KeyEvent(
         keyCode: keyCode,
         char: char,

@@ -272,11 +272,11 @@ Future<void> runTui(
 
     final activeSurfaceSink = surfaceSink;
     if (activeSurfaceSink != null) {
-      // Structured serve path: build a presentation plan and hand it to the
-      // driver instead of emitting ANSI. The plan carries the same damage
-      // (dirty rows, scroll-up, full-repaint) the DOM surface consumes.
+      // Structured serve path: hand the frame's buffers and damage plan to
+      // the driver instead of emitting ANSI. The driver encodes only the
+      // changed cells; the client applies them to a mirror and rebuilds.
       final plan = presentationPlanner.build(reason: reason, frame: frame);
-      activeSurfaceSink.presentPlan(plan);
+      activeSurfaceSink.presentFrame(prev, next, plan);
       runtimeMarkers?.markOnce('first.render.end');
       frameLoop.commit(frame);
       DebugInvalidations.reset();

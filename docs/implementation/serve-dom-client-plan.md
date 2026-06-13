@@ -186,3 +186,46 @@ All five phases landed; xterm.js is retired.
 - **Semantics over the wire**: the SEMANTICS frame and driver hook exist;
   wiring the client's semantic DOM presenter to consume them is the
   remaining follow-up (the visual surface renders without it).
+
+---
+
+## Production-hardening: Iteration 1 — V3 wire encoding (2026-06-12)
+
+**Assumption challenged and overturned:** "serve bytes don't matter
+(local/LAN)." Research confirmed every peer (ttyd, gotty, textual-web,
+VS Code) relays compact ANSI to xterm.js and is used over WAN routinely,
+so a heavy wire is a real competitive gap. Profiling the original
+span-model encoding ("v1") across realistic frame sequences showed it
+14x heavier than ANSI raw (16–20x on typing/scroll) — not acceptable.
+
+**The fix — V3 cell-patch encoding:** the wire now carries only changed
+column ranges, runs grouped by style, a per-frame style table referenced
+by varint index, and varint integers. The client maintains a `CellBuffer`
+mirror, applies patches, and rebuilds dirty rows with the same span
+builder the in-browser host uses — so the wire is "only changed cells,
+style once per run" (ANSI's implicit efficiency) in structured form.
+
+Measured (whole-stream deflate = permessage-deflate with context
+takeover, which Dart's serve WebSocket enables by default):
+
+| scenario | v1 raw | V3 raw | V3 deflated vs ANSI |
+| --- | --- | --- | --- |
+| counter | 9x | 3x | 2.1x |
+| typing | 16x | 5x | 1.7x |
+| dashboard | 8x | 1x | 1.1x |
+| log churn (no scroll-opt) | 20x | 1x | 3.3x |
+| full paint | 1.4x | 1x | 1.3x |
+| **total deflated** | — | — | **1.56x** |
+
+Result: competitive with the ANSI-relay peers on the wire (1.1–1.7x on
+interactive workloads, tiny absolute sizes) while delivering a real DOM
+surface and a semantics path they structurally cannot. The log-churn
+outlier (3.3x) is full-screen reship with scroll detection disabled on
+the serve path — the scroll-up optimization (recorded as a follow-up)
+targets it specifically.
+
+**Robustness bugs the codec fuzz caught (now fixed):** a varint could
+set the sign bit → negative length → `RangeError`; a decoded `KeyEvent`
+could have null keyCode AND char → constructor assert; an `AnsiColor`
+index could exceed 15 → assert. All three now throw a typed
+`RemoteCodecException` and are covered by the 500-iteration fuzz.

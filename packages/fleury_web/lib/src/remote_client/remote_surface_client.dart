@@ -36,7 +36,7 @@ final class RemoteSurfaceClient {
   final FrameDecoder _decoder = FrameDecoder();
   CellSize _size = const CellSize(80, 24);
   bool _handshakeSent = false;
-  CellBuffer _scratch = CellBuffer(const CellSize(80, 24));
+  CellBuffer _mirror = CellBuffer(const CellSize(80, 24));
 
   /// Connects and begins rendering. Resolves once the socket is open and
   /// the INIT handshake has been sent.
@@ -63,7 +63,7 @@ final class RemoteSurfaceClient {
   void _onOpen() {
     _size = _measureViewport();
     _surface = DomGridSurface(root: _host, size: _size);
-    _scratch = CellBuffer(_size);
+    _mirror = CellBuffer(_size);
     _input = DomInputSource(
       hostElement: _host,
       cellMetrics: _metrics!,
@@ -112,7 +112,7 @@ final class RemoteSurfaceClient {
         if (next == _size) return;
         _size = next;
         _surface?.resize(next);
-        _scratch = CellBuffer(next);
+        _mirror = CellBuffer(next);
         _send(encodeFrame(ResizeFrame(next)));
       }).toJS,
     );
@@ -134,12 +134,15 @@ final class RemoteSurfaceClient {
       case PlanFrame f:
         final surface = _surface;
         if (surface == null) return;
-        final plan = remotePlanToPresentation(f.plan);
-        if (plan.size != _size) {
-          _size = plan.size;
-          _scratch = CellBuffer(plan.size);
+        if (f.plan.size != _mirror.size) {
+          // The server is rendering at a new size; reset the mirror so the
+          // (full-repaint) frame lands on a correctly-sized buffer.
+          _mirror = CellBuffer(f.plan.size);
+          _size = f.plan.size;
+          surface.resize(f.plan.size);
         }
-        surface.present(_scratch, _scratch, plan);
+        final plan = applyRemotePlan(f.plan, _mirror);
+        surface.present(_mirror, _mirror, plan);
       case SemanticsFrame _:
         // Semantic DOM presentation is wired in a follow-up; the visual
         // surface renders without it.

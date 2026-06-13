@@ -111,35 +111,38 @@ void main() {
       await driver.restore();
     });
 
-    test('presentPlan emits a PLAN frame', () async {
+    test('presentFrame emits a PLAN frame with the changed cells', () async {
       final transport = _FakeTransport();
       final driver = RemoteTerminalDriver(transport);
       final entered = driver.enter(TerminalMode.interactive);
       transport.emit(_init);
       await entered;
       transport.sent.clear();
-      driver.presentPlan(
-        FramePresentationPlan(
-          reason: 'test',
-          fullRepaint: true,
-          size: const CellSize(40, 10),
-          damage: FramePresentationDamage(
-            fullRepaint: true,
-            requiresFullDiff: true,
-            dirtyBounds: null,
-            dirtyRows: TuiDirtyRows.full(10),
-            source: FrameDamageSource.fullRepaint,
-          ),
-          dirtyRowModels: const [],
-          metricsChanged: false,
-          dirtyRowDiffTime: Duration.zero,
-          spanBuildTime: Duration.zero,
+      final prev = CellBuffer(const CellSize(40, 10));
+      final next = CellBuffer(const CellSize(40, 10));
+      next.writeText(const CellOffset(0, 1), 'changed row');
+      final plan = FramePresentationPlan(
+        reason: 'test',
+        fullRepaint: false,
+        size: const CellSize(40, 10),
+        damage: FramePresentationDamage(
+          fullRepaint: false,
+          requiresFullDiff: false,
+          dirtyBounds: null,
+          dirtyRows: TuiDirtyRows.fromRows(const [1], rowCount: 10),
+          source: FrameDamageSource.paintDamage,
         ),
+        dirtyRowModels: const [],
+        metricsChanged: false,
+        dirtyRowDiffTime: Duration.zero,
+        spanBuildTime: Duration.zero,
       );
+      driver.presentFrame(prev, next, plan);
       final plans = transport.sent.whereType<PlanFrame>().toList();
       expect(plans, hasLength(1));
       expect(plans.single.plan.size, const CellSize(40, 10));
-      expect(plans.single.plan.fullRepaint, isTrue);
+      // Only the changed row ships.
+      expect(plans.single.plan.patches.map((p) => p.row), contains(1));
       await driver.restore();
     });
 
@@ -184,10 +187,10 @@ void main() {
       final first = plans.first.plan;
       expect(first.size, const CellSize(40, 10));
       expect(first.fullRepaint, isTrue);
-      expect(first.rows, isNotEmpty);
-      // The "hello" text shows up in some row's spans.
-      final text = first.rows
-          .expand((r) => r.runs)
+      expect(first.patches, isNotEmpty);
+      // The "hello" text shows up in some patch's runs.
+      final text = first.patches
+          .expand((p) => p.runs)
           .map((run) => run.text)
           .join();
       expect(text, contains('hello'));

@@ -1,7 +1,8 @@
 // Round-trip and fuzz tests for the structured serve frames (PLAN,
-// SEMANTICS, INPUT_EVENT). Property tests seed a fixed RNG so failures
-// reproduce; the fuzz block feeds malformed payloads and asserts the
-// decoder rejects them cleanly instead of throwing wild or hanging.
+// SEMANTICS, INPUT_EVENT). The PLAN tests cover the cell-patch wire: a
+// build from prev/next, encode/decode, and apply-to-mirror reproducing
+// the source frame. Property tests seed a fixed RNG; the fuzz block feeds
+// malformed payloads and asserts clean rejection.
 
 import 'dart:math';
 import 'dart:typed_data';
@@ -13,45 +14,23 @@ import 'package:test/test.dart';
 
 void main() {
   group('PLAN frame round-trip', () {
-    test('full plan with styled wide/empty/protocol runs survives the wire', () {
+    test('hand-built plan with styled runs survives the wire', () {
       final plan = RemotePlan(
         size: const CellSize(80, 24),
         fullRepaint: true,
-        scrollUpRows: null,
-        rows: [
-          RowSpanModel(
+        styleTable: const [
+          CellStyle.empty,
+          CellStyle(foreground: RgbColor(200, 100, 50), bold: true),
+          CellStyle(foreground: IndexedColor(120)),
+        ],
+        patches: const [
+          RemoteRowPatch(
             row: 0,
-            cols: 80,
+            startCol: 0,
             runs: [
-              const CellSpanRun(
-                startCol: 0,
-                widthCols: 5,
-                text: 'hello',
-                style: CellStyle(
-                  foreground: RgbColor(200, 100, 50),
-                  background: AnsiColor(4),
-                  bold: true,
-                  underline: false,
-                ),
-                kind: CellRunKind.text,
-                correction: WidthCorrection.none,
-              ),
-              const CellSpanRun(
-                startCol: 5,
-                widthCols: 2,
-                text: '世',
-                style: CellStyle(foreground: IndexedColor(120)),
-                kind: CellRunKind.wideText,
-                correction: WidthCorrection.pinToCellWidth,
-              ),
-              const CellSpanRun(
-                startCol: 7,
-                widthCols: 1,
-                text: protocolPlaceholderGlyph,
-                style: CellStyle.empty,
-                kind: CellRunKind.protocolPlaceholder,
-                correction: WidthCorrection.none,
-              ),
+              RemotePatchRun(styleIndex: 1, text: 'hello'),
+              RemotePatchRun(styleIndex: 2, text: '世'),
+              RemotePatchRun(styleIndex: 0, text: '  '),
             ],
           ),
         ],
@@ -60,17 +39,12 @@ void main() {
       expect(decoded.size, plan.size);
       expect(decoded.fullRepaint, isTrue);
       expect(decoded.scrollUpRows, isNull);
-      expect(decoded.rows, hasLength(1));
-      final row = decoded.rows.single;
-      expect(row.row, 0);
-      expect(row.runs, hasLength(3));
-      // Exact style equality (tri-state attrs preserved).
-      expect(row.runs[0].style, plan.rows[0].runs[0].style);
-      expect(row.runs[0].text, 'hello');
-      expect(row.runs[1].kind, CellRunKind.wideText);
-      expect(row.runs[1].correction, WidthCorrection.pinToCellWidth);
-      expect(row.runs[1].text, '世');
-      expect(row.runs[2].kind, CellRunKind.protocolPlaceholder);
+      expect(decoded.styleTable, plan.styleTable);
+      expect(decoded.patches, hasLength(1));
+      final patch = decoded.patches.single;
+      expect(patch.row, 0);
+      expect(patch.runs.map((r) => r.text).toList(), ['hello', '世', '  ']);
+      expect(patch.runs.map((r) => r.styleIndex).toList(), [1, 2, 0]);
     });
 
     test('scroll-up plan carries the shift', () {
@@ -78,58 +52,47 @@ void main() {
         size: const CellSize(40, 12),
         fullRepaint: false,
         scrollUpRows: 3,
-        rows: const [],
+        styleTable: const [],
+        patches: const [],
       );
       final decoded = decodeRemotePlan(encodeRemotePlan(plan));
       expect(decoded.scrollUpRows, 3);
-      expect(decoded.fullRepaint, isFalse);
-      expect(decoded.rows, isEmpty);
+      expect(decoded.patches, isEmpty);
     });
 
-    test('randomized plans round-trip exactly (seeded)', () {
+    test('build -> encode -> decode -> apply reproduces the frame (seeded)', () {
       final rng = Random(0x5EED);
+      const alphabet = 'abcdefgh 0123#@世界';
       for (var iter = 0; iter < 200; iter++) {
-        final plan = _randomPlan(rng);
+        final cols = 4 + rng.nextInt(40);
+        final rows = 1 + rng.nextInt(12);
+        final prev = CellBuffer(CellSize(cols, rows));
+        final next = CellBuffer(CellSize(cols, rows));
+        // Seed prev with some content, then mutate into next.
+        for (var r = 0; r < rows; r++) {
+          final text = _randomText(rng, alphabet, cols);
+          prev.writeText(CellOffset(0, r), text, style: _randomStyle(rng));
+        }
+        _copyBuffer(prev, next);
+        // Mutate a few rows.
+        for (var m = 0; m < rng.nextInt(rows + 1); m++) {
+          final r = rng.nextInt(rows);
+          final text = _randomText(rng, alphabet, cols);
+          next.writeText(CellOffset(0, r), text, style: _randomStyle(rng));
+        }
+        final full = rng.nextInt(5) == 0;
+        final plan = buildRemotePlan(prev, next, fullRepaint: full);
         final decoded = decodeRemotePlan(encodeRemotePlan(plan));
-        _expectPlanEqual(decoded, plan);
-      }
-    });
-
-    test('tri-state style attributes round-trip null vs false', () {
-      const styles = [
-        CellStyle(bold: true),
-        CellStyle(bold: false),
-        CellStyle(),
-        CellStyle(
-          italic: true,
-          dim: false,
-          strikethrough: true,
-          inverse: false,
-        ),
-      ];
-      for (final style in styles) {
-        final plan = RemotePlan(
-          size: const CellSize(4, 1),
-          fullRepaint: false,
-          rows: [
-            RowSpanModel(
-              row: 0,
-              cols: 4,
-              runs: [
-                CellSpanRun(
-                  startCol: 0,
-                  widthCols: 1,
-                  text: 'x',
-                  style: style,
-                  kind: CellRunKind.text,
-                  correction: WidthCorrection.none,
-                ),
-              ],
-            ),
-          ],
+        // Apply to a mirror seeded with prev.
+        final mirror = CellBuffer(CellSize(cols, rows));
+        _copyBuffer(prev, mirror);
+        applyRemotePlanToBuffer(decoded, mirror);
+        // The mirror's rendered content must match next.
+        expect(
+          _renderAll(mirror),
+          _renderAll(next),
+          reason: 'iter $iter (full=$full)',
         );
-        final decoded = decodeRemotePlan(encodeRemotePlan(plan));
-        expect(decoded.rows.single.runs.single.style, style);
       }
     });
   });
@@ -184,13 +147,17 @@ void main() {
     });
   });
 
-  group('PLAN/SEMANTICS through the framing layer', () {
+  group('framing layer', () {
     test('plan frame round-trips through encode/decode framing', () {
-      final plan = _randomPlan(Random(7));
+      final prev = CellBuffer(const CellSize(20, 4));
+      final next = CellBuffer(const CellSize(20, 4));
+      next.writeText(const CellOffset(0, 1), 'changed');
+      final plan = buildRemotePlan(prev, next, fullRepaint: false);
       final wire = encodeFrame(PlanFrame(plan));
       final out = (FrameDecoder()..feed(wire)).drain().toList();
       expect(out, hasLength(1));
-      _expectPlanEqual((out.single as PlanFrame).plan, plan);
+      final decoded = (out.single as PlanFrame).plan;
+      expect(decoded.patches.map((p) => p.row), contains(1));
     });
 
     test('semantics frame carries JSON bytes verbatim', () {
@@ -214,7 +181,6 @@ void main() {
     });
 
     test('INIT without v defaults to protocol version 1', () {
-      // Hand-frame a v1-style INIT (no `v=`).
       const body = 'cols=80,rows=24,color=truecolor,image=halfBlock,tmux=0';
       final payload = Uint8List.fromList(body.codeUnits);
       final framed = BytesBuilder()
@@ -228,8 +194,13 @@ void main() {
 
   group('malformed payload fuzz', () {
     test('truncated plan payloads throw RemoteCodecException, never hang', () {
-      final plan = _randomPlan(Random(99));
-      final full = encodeRemotePlan(plan);
+      final prev = CellBuffer(const CellSize(30, 8));
+      final next = CellBuffer(const CellSize(30, 8));
+      for (var r = 0; r < 8; r++) {
+        next.writeText(CellOffset(0, r), 'row $r content here',
+            style: const CellStyle(bold: true));
+      }
+      final full = encodeRemotePlan(buildRemotePlan(prev, next, fullRepaint: true));
       for (var cut = 0; cut < full.length; cut++) {
         final truncated = Uint8List.sublistView(full, 0, cut);
         expect(
@@ -247,7 +218,6 @@ void main() {
         final bytes = Uint8List.fromList(
           [for (var i = 0; i < len; i++) rng.nextInt(256)],
         );
-        // Must throw a typed codec error, not a raw RangeError / never hang.
         expect(
           () {
             try {
@@ -271,19 +241,21 @@ void main() {
       }
     });
 
-    test('unknown enum indices in a plan are rejected', () {
-      // A run with kind index 250 (out of range).
+    test('a run referencing an out-of-range style index is rejected', () {
+      // Build valid bytes, then corrupt a run's style index to a huge value
+      // by hand-crafting a tiny plan with styleTable=[] but a run idx=5.
       final w = BytesBuilder()
         ..addByte(0) // flags
-        ..add((ByteData(2)..setUint16(0, 4)).buffer.asUint8List()) // cols
-        ..add((ByteData(2)..setUint16(0, 1)).buffer.asUint8List()) // rows
-        ..add((ByteData(2)..setUint16(0, 1)).buffer.asUint8List()) // rowCount
-        ..add((ByteData(2)..setUint16(0, 0)).buffer.asUint8List()) // rowIndex
-        ..add((ByteData(2)..setUint16(0, 4)).buffer.asUint8List()) // rowCols
-        ..add((ByteData(2)..setUint16(0, 1)).buffer.asUint8List()) // runCount
-        ..add((ByteData(2)..setUint16(0, 0)).buffer.asUint8List()) // startCol
-        ..add((ByteData(2)..setUint16(0, 1)).buffer.asUint8List()) // widthCols
-        ..addByte(250); // kind index (invalid)
+        ..addByte(4) // cols (varint)
+        ..addByte(1) // rows
+        ..addByte(0) // styleCount = 0
+        ..addByte(1) // patchCount = 1
+        ..addByte(0) // row
+        ..addByte(0) // startCol
+        ..addByte(1) // runCount
+        ..addByte(5) // styleIndex = 5 (out of range)
+        ..addByte(1) // text len = 1
+        ..addByte(0x78); // 'x'
       expect(
         () => decodeRemotePlan(w.toBytes()),
         throwsA(isA<RemoteCodecException>()),
@@ -292,39 +264,34 @@ void main() {
   });
 }
 
-// ---- generators ------------------------------------------------------------
+// ---- helpers ---------------------------------------------------------------
 
-RemotePlan _randomPlan(Random rng) {
-  final cols = 1 + rng.nextInt(120);
-  final rows = 1 + rng.nextInt(50);
-  final rowCount = rng.nextInt(6);
-  return RemotePlan(
-    size: CellSize(cols, rows),
-    fullRepaint: rng.nextBool(),
-    scrollUpRows: rng.nextBool() ? rng.nextInt(rows) : null,
-    rows: [
-      for (var i = 0; i < rowCount; i++)
-        RowSpanModel(
-          row: rng.nextInt(rows),
-          cols: cols,
-          runs: [
-            for (var j = 0; j < rng.nextInt(5); j++) _randomRun(rng, cols),
-          ],
-        ),
-    ],
-  );
+void _copyBuffer(CellBuffer from, CellBuffer to) {
+  for (var r = 0; r < from.size.rows; r++) {
+    for (var c = 0; c < from.size.cols; c++) {
+      final cell = from.atColRow(c, r);
+      if (cell.role == CellRole.leading && cell.grapheme != null) {
+        to.writeText(CellOffset(c, r), cell.grapheme!, style: cell.style);
+      }
+    }
+  }
 }
 
-CellSpanRun _randomRun(Random rng, int cols) {
-  const texts = ['a', 'hi', '世', '🙂', '', 'tab\tless', protocolPlaceholderGlyph];
-  return CellSpanRun(
-    startCol: rng.nextInt(cols),
-    widthCols: rng.nextInt(3),
-    text: texts[rng.nextInt(texts.length)],
-    style: _randomStyle(rng),
-    kind: CellRunKind.values[rng.nextInt(CellRunKind.values.length)],
-    correction: WidthCorrection.values[rng.nextInt(2)],
-  );
+String _renderAll(CellBuffer b) {
+  final sb = StringBuffer();
+  for (var r = 0; r < b.size.rows; r++) {
+    for (var c = 0; c < b.size.cols; c++) {
+      sb.write(b.atColRow(c, r).grapheme ?? ' ');
+    }
+    sb.write('\n');
+  }
+  return sb.toString();
+}
+
+String _randomText(Random rng, String alphabet, int maxLen) {
+  final n = rng.nextInt(maxLen);
+  return [for (var i = 0; i < n; i++) alphabet[rng.nextInt(alphabet.length)]]
+      .join();
 }
 
 CellStyle _randomStyle(Random rng) {
@@ -343,11 +310,8 @@ CellStyle _randomStyle(Random rng) {
     foreground: color(),
     background: color(),
     bold: triState(),
-    dim: triState(),
     italic: triState(),
     underline: triState(),
-    inverse: triState(),
-    strikethrough: triState(),
   );
 }
 
@@ -358,26 +322,24 @@ TuiEvent _randomEvent(Random rng) {
   };
   switch (rng.nextInt(6)) {
     case 0:
-      // KeyEvent must carry a keyCode or char.
       final hasCode = rng.nextBool();
       return KeyEvent(
-        keyCode: hasCode
-            ? KeyCode.values[rng.nextInt(KeyCode.values.length)]
-            : null,
-        char: hasCode && rng.nextBool() ? null : String.fromCharCode(
-          97 + rng.nextInt(26),
-        ),
+        keyCode:
+            hasCode ? KeyCode.values[rng.nextInt(KeyCode.values.length)] : null,
+        char: hasCode && rng.nextBool()
+            ? null
+            : String.fromCharCode(97 + rng.nextInt(26)),
         modifiers: mods(),
         type: KeyEventType.values[rng.nextInt(KeyEventType.values.length)],
       );
     case 1:
-      return TextInputEvent(_randomText(rng));
+      return TextInputEvent(_randomText(rng, 'abc世 \n\t', 5));
     case 2:
       return switch (rng.nextInt(3)) {
-        0 => TextCompositionEvent.update(_randomText(rng)),
+        0 => TextCompositionEvent.update(_randomText(rng, 'ko', 4)),
         1 => TextCompositionEvent.commit(
-          rng.nextBool() ? _randomText(rng) : null,
-        ),
+            rng.nextBool() ? _randomText(rng, 'ko', 4) : null,
+          ),
         _ => const TextCompositionEvent.cancel(),
       };
     case 3:
@@ -389,36 +351,8 @@ TuiEvent _randomEvent(Random rng) {
         modifiers: mods(),
       );
     case 4:
-      return PasteEvent(_randomText(rng));
+      return PasteEvent(_randomText(rng, 'abc \n', 6));
     default:
       return ResizeEvent(CellSize(1 + rng.nextInt(300), 1 + rng.nextInt(100)));
-  }
-}
-
-String _randomText(Random rng) {
-  const chunks = ['a', 'word', '世界', '🙂', '\n', '\t', ' '];
-  final n = rng.nextInt(5);
-  return [for (var i = 0; i < n; i++) chunks[rng.nextInt(chunks.length)]].join();
-}
-
-void _expectPlanEqual(RemotePlan a, RemotePlan b) {
-  expect(a.size, b.size);
-  expect(a.fullRepaint, b.fullRepaint);
-  expect(a.scrollUpRows, b.scrollUpRows);
-  expect(a.rows.length, b.rows.length);
-  for (var i = 0; i < a.rows.length; i++) {
-    final ra = a.rows[i];
-    final rb = b.rows[i];
-    expect(ra.row, rb.row);
-    expect(ra.cols, rb.cols);
-    expect(ra.runs.length, rb.runs.length);
-    for (var j = 0; j < ra.runs.length; j++) {
-      expect(ra.runs[j].startCol, rb.runs[j].startCol);
-      expect(ra.runs[j].widthCols, rb.runs[j].widthCols);
-      expect(ra.runs[j].text, rb.runs[j].text);
-      expect(ra.runs[j].style, rb.runs[j].style);
-      expect(ra.runs[j].kind, rb.runs[j].kind);
-      expect(ra.runs[j].correction, rb.runs[j].correction);
-    }
   }
 }

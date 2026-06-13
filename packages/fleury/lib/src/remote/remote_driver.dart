@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../foundation/geometry.dart';
+import '../rendering/cell_buffer.dart';
 import '../runtime/frame_presentation.dart';
 import '../runtime/remote_surface_sink.dart';
 import '../terminal/capabilities.dart';
@@ -115,17 +116,14 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
   }
 
   @override
-  void presentPlan(FramePresentationPlan plan) {
+  void presentFrame(
+    CellBuffer prev,
+    CellBuffer next,
+    FramePresentationPlan plan,
+  ) {
     if (!_active) return;
     _transport.send(
-      PlanFrame(
-        RemotePlan(
-          size: plan.size,
-          fullRepaint: plan.fullRepaint,
-          scrollUpRows: plan.scrollUpRows,
-          rows: plan.dirtyRowModels,
-        ),
-      ),
+      PlanFrame(buildRemotePlan(prev, next, fullRepaint: plan.fullRepaint)),
     );
   }
 

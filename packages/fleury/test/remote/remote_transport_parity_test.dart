@@ -1,11 +1,10 @@
 // Transport parity: a frame rendered server-side must survive the wire
-// byte-exact. The server builds row span models from a CellBuffer (what
-// the surface host does), encodes them as a PLAN frame, and the client
-// decodes them back. This proves the structured serve path is lossless —
-// the divergence-oracle pattern applied to the transport. The DOM
-// rendering of those span models is covered by the surface's own
-// Chrome tests; this proves the wire preserves exactly what the renderer
-// produced.
+// and reproduce exactly on the client's mirror. The server builds a
+// cell-patch plan from prev/next, it round-trips through encode/decode,
+// and applying it to a mirror seeded with prev must reproduce next. This
+// is the divergence-oracle pattern applied to the transport: the wire is
+// lossless. The DOM rendering of the mirror is covered by the surface's
+// own Chrome tests.
 
 import 'dart:math';
 
@@ -14,129 +13,113 @@ import 'package:fleury/src/remote/remote_codec.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:test/test.dart';
 
-/// Flattens a row's spans back into a fixed-width line, the way the DOM
-/// surface lays them out by column.
-String _rowText(RowSpanModel row) {
-  final cells = List<String>.filled(row.cols, ' ');
-  for (final run in row.runs) {
-    var col = run.startCol;
-    // A run's text occupies widthCols columns; wide glyphs render in the
-    // leading cell with the continuation cell empty (the surface pins width).
-    final chars = run.text.runes.toList();
-    if (run.widthCols == run.text.length || chars.length == run.widthCols) {
-      for (final ch in chars) {
-        if (col >= 0 && col < row.cols) cells[col] = String.fromCharCode(ch);
-        col += 1;
-      }
-    } else {
-      // Wide text: place the whole run at startCol.
-      if (col >= 0 && col < row.cols) cells[col] = run.text;
+String _render(CellBuffer b) {
+  final sb = StringBuffer();
+  for (var r = 0; r < b.size.rows; r++) {
+    for (var c = 0; c < b.size.cols; c++) {
+      sb.write(b.atColRow(c, r).grapheme ?? ' ');
     }
+    sb.write('|');
   }
-  return cells.join();
+  return sb.toString();
 }
 
-List<RowSpanModel> _serverSpans(CellBuffer buffer) =>
-    const CellSpanBuilder().buildFrame(buffer);
+void _seed(CellBuffer from, CellBuffer to) {
+  for (var r = 0; r < from.size.rows; r++) {
+    for (var c = 0; c < from.size.cols; c++) {
+      final cell = from.atColRow(c, r);
+      if (cell.role == CellRole.leading && cell.grapheme != null) {
+        to.writeText(CellOffset(c, r), cell.grapheme!, style: cell.style);
+      }
+    }
+  }
+}
 
-RemotePlan _roundTrip(RemotePlan plan) =>
-    decodeRemotePlan(encodeRemotePlan(plan));
+/// Full pipeline: build plan from prev/next, encode, decode, apply to a
+/// mirror seeded with prev. Returns the mirror.
+CellBuffer _through(CellBuffer prev, CellBuffer next, {bool full = false}) {
+  final plan = buildRemotePlan(prev, next, fullRepaint: full);
+  final decoded = decodeRemotePlan(encodeRemotePlan(plan));
+  final mirror = CellBuffer(next.size);
+  _seed(prev, mirror);
+  applyRemotePlanToBuffer(decoded, mirror);
+  return mirror;
+}
 
 void main() {
   group('transport parity', () {
-    test('ASCII content survives server spans -> wire -> client', () {
-      final buffer = CellBuffer(const CellSize(20, 3));
-      buffer.writeText(const CellOffset(0, 0), 'hello world');
-      buffer.writeText(const CellOffset(2, 1), 'indented');
-
-      final plan = RemotePlan(
-        size: buffer.size,
-        fullRepaint: true,
-        rows: _serverSpans(buffer),
-      );
-      final decoded = _roundTrip(plan);
-
-      for (var r = 0; r < buffer.size.rows; r++) {
-        final wireRow = decoded.rows.firstWhere((row) => row.row == r);
-        // Compare the wire-reconstructed row text against the buffer.
-        final bufferRow = StringBuffer();
-        for (var c = 0; c < buffer.size.cols; c++) {
-          bufferRow.write(buffer.atColRow(c, r).grapheme ?? ' ');
-        }
-        expect(_rowText(wireRow), bufferRow.toString(), reason: 'row $r');
-      }
+    test('ASCII edits reproduce on the mirror', () {
+      final prev = CellBuffer(const CellSize(20, 3));
+      prev.writeText(const CellOffset(0, 0), 'hello world');
+      final next = CellBuffer(const CellSize(20, 3));
+      _seed(prev, next);
+      next.writeText(const CellOffset(0, 0), 'HELLO');
+      next.writeText(const CellOffset(2, 1), 'indented');
+      expect(_render(_through(prev, next)), _render(next));
     });
 
-    test('styled content preserves style through the wire', () {
-      final buffer = CellBuffer(const CellSize(10, 1));
-      buffer.writeText(
+    test('shrinking text blanks the freed cells', () {
+      final prev = CellBuffer(const CellSize(20, 1));
+      prev.writeText(const CellOffset(0, 0), 'a long line of text');
+      final next = CellBuffer(const CellSize(20, 1));
+      next.writeText(const CellOffset(0, 0), 'short');
+      expect(_render(_through(prev, next)), _render(next));
+    });
+
+    test('styled runs preserve style through the wire', () {
+      final prev = CellBuffer(const CellSize(10, 1));
+      final next = CellBuffer(const CellSize(10, 1));
+      next.writeText(
         const CellOffset(0, 0),
         'red',
         style: const CellStyle(foreground: RgbColor(220, 40, 40), bold: true),
       );
-      final plan = RemotePlan(
-        size: buffer.size,
-        fullRepaint: true,
-        rows: _serverSpans(buffer),
-      );
-      final decoded = _roundTrip(plan);
-      final firstRun = decoded.rows.single.runs.first;
-      expect(firstRun.text, 'red');
-      expect(firstRun.style.foreground, const RgbColor(220, 40, 40));
-      expect(firstRun.style.bold, isTrue);
+      final plan = buildRemotePlan(prev, next, fullRepaint: false);
+      final decoded = decodeRemotePlan(encodeRemotePlan(plan));
+      final mirror = CellBuffer(const CellSize(10, 1));
+      applyRemotePlanToBuffer(decoded, mirror);
+      expect(mirror.atColRow(0, 0).style.bold, isTrue);
+      expect(mirror.atColRow(0, 0).style.foreground, const RgbColor(220, 40, 40));
     });
 
-    test('wide glyphs keep their cell width across the wire', () {
-      final buffer = CellBuffer(const CellSize(10, 1));
-      buffer.writeText(const CellOffset(0, 0), '世界'); // 2 wide glyphs
-      final decoded = _roundTrip(
-        RemotePlan(
-          size: buffer.size,
-          fullRepaint: true,
-          rows: _serverSpans(buffer),
-        ),
-      );
-      final wideRuns = decoded.rows.single.runs
-          .where((r) => r.kind == CellRunKind.wideText)
-          .toList();
-      expect(wideRuns, hasLength(2));
-      expect(wideRuns.every((r) => r.widthCols == 2), isTrue);
-      expect(wideRuns.map((r) => r.text).join(), '世界');
+    test('wide glyphs reproduce with correct width', () {
+      final prev = CellBuffer(const CellSize(10, 1));
+      final next = CellBuffer(const CellSize(10, 1));
+      next.writeText(const CellOffset(0, 0), '世界');
+      final mirror = _through(prev, next);
+      expect(mirror.atColRow(0, 0).grapheme, '世');
+      expect(mirror.atColRow(1, 0).role, CellRole.continuation);
+      expect(mirror.atColRow(2, 0).grapheme, '界');
     });
 
-    test('randomized buffers round-trip with identical content (seeded)', () {
+    test('randomized frame sequences reproduce exactly (seeded)', () {
       final rng = Random(0x9A11);
-      const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789 ./:-';
-      for (var iter = 0; iter < 50; iter++) {
+      const alphabet = 'abcdefghij 0123#@世界';
+      for (var iter = 0; iter < 80; iter++) {
         final cols = 4 + rng.nextInt(40);
         final rows = 1 + rng.nextInt(12);
-        final buffer = CellBuffer(CellSize(cols, rows));
-        for (var r = 0; r < rows; r++) {
-          final len = rng.nextInt(cols);
-          final text = [
-            for (var i = 0; i < len; i++)
-              alphabet[rng.nextInt(alphabet.length)],
-          ].join();
-          buffer.writeText(CellOffset(0, r), text);
-        }
-        final decoded = _roundTrip(
-          RemotePlan(
-            size: buffer.size,
-            fullRepaint: true,
-            rows: _serverSpans(buffer),
-          ),
-        );
-        for (var r = 0; r < rows; r++) {
-          final wireRow = decoded.rows.firstWhere((row) => row.row == r);
-          final bufferRow = StringBuffer();
-          for (var c = 0; c < cols; c++) {
-            bufferRow.write(buffer.atColRow(c, r).grapheme ?? ' ');
+        var prev = CellBuffer(CellSize(cols, rows));
+        // Play a short sequence of frames; the mirror tracks it.
+        final mirror = CellBuffer(CellSize(cols, rows));
+        for (var f = 0; f < 5; f++) {
+          final next = CellBuffer(CellSize(cols, rows));
+          _seed(prev, next);
+          for (var m = 0; m < rng.nextInt(rows + 1); m++) {
+            final r = rng.nextInt(rows);
+            final n = rng.nextInt(cols);
+            final text = [
+              for (var i = 0; i < n; i++) alphabet[rng.nextInt(alphabet.length)],
+            ].join();
+            next.writeText(CellOffset(0, r), text, style: _style(rng));
           }
-          expect(
-            _rowText(wireRow),
-            bufferRow.toString(),
-            reason: 'iter $iter row $r',
+          final full = f == 0;
+          final plan = buildRemotePlan(prev, next, fullRepaint: full);
+          applyRemotePlanToBuffer(
+            decodeRemotePlan(encodeRemotePlan(plan)),
+            mirror,
           );
+          expect(_render(mirror), _render(next), reason: 'iter $iter frame $f');
+          prev = next;
         }
       }
     });
@@ -162,3 +145,9 @@ void main() {
     });
   });
 }
+
+CellStyle _style(Random rng) => switch (rng.nextInt(3)) {
+  0 => CellStyle.empty,
+  1 => const CellStyle(bold: true),
+  _ => CellStyle(foreground: RgbColor(rng.nextInt(256), 0, 0)),
+};
