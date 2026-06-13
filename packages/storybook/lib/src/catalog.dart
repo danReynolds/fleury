@@ -354,6 +354,7 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
     builder: (context) => _ChartsStory(
       distribution: context.option('mode') == 'Distribution',
       interactiveLine: context.enabled('interactive'),
+      selectedWidgetName: context.selectedWidgetName ?? context.story.title,
       samples: context.number('samples').round(),
     ),
   ),
@@ -1912,20 +1913,35 @@ class _ChartsStory extends StatelessWidget {
   const _ChartsStory({
     required this.distribution,
     required this.interactiveLine,
+    required this.selectedWidgetName,
     required this.samples,
   });
 
   final bool distribution;
   final bool interactiveLine;
+  final String selectedWidgetName;
   final int samples;
 
   @override
   Widget build(BuildContext context) {
+    final values = _distributionValues(samples);
+    final framePoints = _framePoints(samples);
+    final wirePoints = _wirePoints(samples);
+    final sparkline = _sparkline(samples);
+    final heatmap = _heatmap();
+    final calendarValues = _calendarValues();
+
     if (distribution) {
-      final values = <num>[
-        for (var i = 0; i < samples * 2; i += 1)
-          4 + ((i * 7) % 15) + (i.isEven ? 0 : 0.5),
-      ];
+      switch (selectedWidgetName) {
+        case 'Histogram':
+          return Histogram(values: values, bins: 8, showValues: true);
+        case 'Heatmap':
+          return Heatmap(
+            values: heatmap,
+            rowLabels: const <String>['CPU', 'IO', 'UI'],
+            colLabels: const <String>['A', 'B', 'C', 'D', 'E'],
+          );
+      }
       return Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -1946,16 +1962,82 @@ class _ChartsStory extends StatelessWidget {
       );
     }
 
-    final today = DateTime(2026, 6, 9);
-    final framePoints = <(num, num)>[
-      for (var i = 0; i < samples; i += 1) (i, 2 + ((i * 5) % 7)),
-    ];
-    final wirePoints = <(num, num)>[
-      for (var i = 0; i < samples; i += 1) (i, 1 + ((i * 3) % 5)),
-    ];
-    final sparkline = <num>[
-      for (var i = 0; i < samples; i += 1) 1 + ((i * 4) % 11),
-    ];
+    switch (selectedWidgetName) {
+      case 'BarChart':
+        return BarChart(
+          bars: _statusBars,
+          barWidth: 3,
+          gap: 2,
+          segmentLabels: const <String>['app', 'framework', 'driver'],
+          showLegend: true,
+          showValues: true,
+          palette: Palettes.categorical,
+        );
+      case 'LineChart':
+        return LineChart(
+          interactive: interactiveLine,
+          series: <LineSeries>[
+            LineSeries(framePoints, label: 'frame'),
+            LineSeries(wirePoints, label: 'wire'),
+          ],
+          showAxes: true,
+          showLegend: true,
+          showGrid: true,
+        );
+      case 'Sparkline':
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text('Frame time'),
+            Sparkline(data: sparkline),
+            const SizedBox(height: 1),
+            const Text('Wire latency'),
+            Sparkline(data: wirePoints.map((point) => point.$2).toList()),
+            const SizedBox(height: 1),
+            const Text('Queue depth'),
+            Sparkline(
+              data: <num>[for (var i = 0; i < samples; i += 1) (i * 2) % 9],
+            ),
+          ],
+        );
+      case 'Histogram':
+        return Histogram(values: values, bins: 8, showValues: true);
+      case 'Heatmap':
+        return Heatmap(
+          values: heatmap,
+          rowLabels: const <String>['CPU', 'IO', 'UI'],
+          colLabels: const <String>['A', 'B', 'C', 'D', 'E'],
+        );
+      case 'CalendarHeatmap':
+        return CalendarHeatmap(
+          start: _chartToday.subtract(const Duration(days: 56)),
+          end: _chartToday,
+          values: calendarValues,
+          cellWidth: 2,
+          showMonthLabels: true,
+        );
+      case 'Gauge':
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: const <Widget>[
+            Gauge(value: 0.82, label: 'RSS'),
+            SizedBox(height: 1),
+            Gauge(value: 0.64, label: 'CPU'),
+            SizedBox(height: 1),
+            Gauge(value: 0.38, label: 'IO'),
+          ],
+        );
+      case 'Digits':
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Digits('12:34', color: Theme.of(context).colorScheme.primary),
+            const SizedBox(height: 1),
+            const Text('elapsed runtime'),
+          ],
+        );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -1966,11 +2048,9 @@ class _ChartsStory extends StatelessWidget {
             children: <Widget>[
               Expanded(
                 child: BarChart(
-                  bars: const <Bar>[
-                    Bar.stacked('CPU', <num>[34, 12, 8]),
-                    Bar.stacked('Mem', <num>[26, 18, 5]),
-                    Bar.stacked('IO', <num>[18, 9, 3]),
-                  ],
+                  bars: _statusBars,
+                  barWidth: 3,
+                  gap: 2,
                   segmentLabels: const <String>['app', 'framework', 'driver'],
                   showLegend: true,
                   showValues: true,
@@ -2005,12 +2085,9 @@ class _ChartsStory extends StatelessWidget {
         ),
         const SizedBox(height: 1),
         CalendarHeatmap(
-          start: today.subtract(const Duration(days: 28)),
-          end: today,
-          values: <DateTime, num>{
-            for (var i = 0; i < 28; i += 1)
-              today.subtract(Duration(days: i)): (i * 7) % 6,
-          },
+          start: _chartToday.subtract(const Duration(days: 28)),
+          end: _chartToday,
+          values: calendarValues,
           cellWidth: 1,
           showMonthLabels: false,
         ),
@@ -2018,6 +2095,42 @@ class _ChartsStory extends StatelessWidget {
     );
   }
 }
+
+const List<Bar> _statusBars = <Bar>[
+  Bar.stacked('CPU', <num>[34, 12, 8]),
+  Bar.stacked('Mem', <num>[26, 18, 5]),
+  Bar.stacked('IO', <num>[18, 9, 3]),
+];
+
+final DateTime _chartToday = DateTime(2026, 6, 9);
+
+List<num> _distributionValues(int samples) => <num>[
+  for (var i = 0; i < samples * 2; i += 1)
+    4 + ((i * 7) % 15) + (i.isEven ? 0 : 0.5),
+];
+
+List<(num, num)> _framePoints(int samples) => <(num, num)>[
+  for (var i = 0; i < samples; i += 1) (i, 2 + ((i * 5) % 7)),
+];
+
+List<(num, num)> _wirePoints(int samples) => <(num, num)>[
+  for (var i = 0; i < samples; i += 1) (i, 1 + ((i * 3) % 5)),
+];
+
+List<num> _sparkline(int samples) => <num>[
+  for (var i = 0; i < samples; i += 1) 1 + ((i * 4) % 11),
+];
+
+List<List<num>> _heatmap() => const <List<num>>[
+  <num>[1, 4, 6, 8, 4],
+  <num>[2, 5, 7, 9, 5],
+  <num>[1, 3, 4, 6, 3],
+];
+
+Map<DateTime, num> _calendarValues() => <DateTime, num>{
+  for (var i = 0; i < 56; i += 1)
+    _chartToday.subtract(Duration(days: i)): (i * 7) % 6,
+};
 
 class _CanvasImageStory extends StatelessWidget {
   _CanvasImageStory({required this.marker});

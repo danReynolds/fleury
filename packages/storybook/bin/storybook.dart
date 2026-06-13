@@ -43,6 +43,7 @@ Future<void> _runInteractive(_StorybookCliOptions options) async {
       initialTheme: options.theme,
       initialViewport: options.viewport,
     ),
+    mode: const TerminalMode(mouse: true),
     onEvent: (event) {
       if (event is KeyEvent && event.hasCtrl && event.char == 'c') {
         return const ExitRequested();

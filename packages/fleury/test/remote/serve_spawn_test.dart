@@ -28,6 +28,7 @@ void main() {
       port = 5900 + Random.secure().nextInt(100);
       pkgRoot = Directory.current.path;
       stderrLines.clear();
+      final childCwd = Directory('${tempDir.path}/child-cwd')..createSync();
 
       // Spawn the CLI in spawn mode pointing at our fixture subprocess.
       serveProcess = await Process.start(Platform.resolvedExecutable, [
@@ -39,6 +40,8 @@ void main() {
         Platform.resolvedExecutable,
         'run',
         '$pkgRoot/test/fixtures/spawn_app.dart',
+        'spawn-app',
+        childCwd.path,
       ], workingDirectory: tempDir.path);
 
       final ready = Completer<void>();

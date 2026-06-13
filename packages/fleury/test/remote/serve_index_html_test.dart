@@ -27,6 +27,29 @@ void main() {
     test('loads xterm.js + the fit addon', () {
       expect(serveIndexHtml, contains('xterm@'));
       expect(serveIndexHtml, contains('addon-fit'));
+      expect(serveIndexHtml, contains('addon-canvas'));
+      expect(serveIndexHtml, contains('new CanvasAddon.CanvasAddon()'));
+    });
+
+    test('uses deterministic terminal font shaping', () {
+      expect(
+        serveIndexHtml,
+        contains(
+          "fontFamily: 'Menlo, Consolas, \"DejaVu Sans Mono\", monospace'",
+        ),
+      );
+      expect(serveIndexHtml, contains('letterSpacing: 0'));
+      expect(serveIndexHtml, contains('customGlyphs: true'));
+      expect(serveIndexHtml, contains('font-kerning: none'));
+      expect(serveIndexHtml, contains('font-variant-ligatures: none'));
+      expect(
+        serveIndexHtml,
+        contains('font-feature-settings: "liga" 0, "clig" 0'),
+      );
+    });
+
+    test('hides xterm cursor to match native runTui mode', () {
+      expect(serveIndexHtml, contains(r"term.write('\x1B[?25l')"));
     });
 
     test('opens a WebSocket to /ws (same host) and forwards INPUT/RESIZE', () {
@@ -34,6 +57,24 @@ void main() {
       expect(serveIndexHtml, contains('encodeFrame(FRAME.INPUT'));
       expect(serveIndexHtml, contains('encodeFrame(FRAME.RESIZE'));
       expect(serveIndexHtml, contains('encodeFrame(FRAME.INIT'));
+    });
+
+    test('forwards browser pointer events as SGR mouse input', () {
+      expect(serveIndexHtml, contains('function mouseCell(event)'));
+      expect(serveIndexHtml, contains('function sendSgrMouse('));
+      expect(
+        serveIndexHtml,
+        contains(
+          r'`\x1B[<${button + mouseModifiers(event)};${cell.col};${cell.row}${finalByte}`',
+        ),
+      );
+      expect(serveIndexHtml, contains("addEventListener('pointerdown'"));
+      expect(serveIndexHtml, contains("addEventListener('pointermove'"));
+      expect(serveIndexHtml, contains("addEventListener('pointerup'"));
+      expect(serveIndexHtml, contains("addEventListener('mousedown'"));
+      expect(serveIndexHtml, contains("addEventListener('mouseup'"));
+      expect(serveIndexHtml, contains("addEventListener('wheel'"));
+      expect(serveIndexHtml, contains('capture: true'));
     });
 
     test('uses binary WebSocket frames (arraybuffer), not text', () {

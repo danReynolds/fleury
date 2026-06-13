@@ -16,10 +16,16 @@ const String serveIndexHtml = r'''
   <link rel="stylesheet"
         href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-canvas@0.5.0/lib/xterm-addon-canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
   <style>
     html, body { margin: 0; padding: 0; height: 100%; background: #1a1b26; }
     #term { width: 100vw; height: 100vh; padding: 6px; box-sizing: border-box; }
+    #term .xterm-rows {
+      font-kerning: none;
+      font-variant-ligatures: none;
+      font-feature-settings: "liga" 0, "clig" 0;
+    }
     #status { position: fixed; bottom: 4px; right: 8px; color: #7f7f8a;
               font: 11px/1 ui-monospace, Menlo, monospace; }
   </style>
@@ -67,16 +73,26 @@ const String serveIndexHtml = r'''
 
     const term = new Terminal({
       cursorBlink: true,
-      fontFamily: 'ui-monospace, Menlo, "Cascadia Code", Consolas, monospace',
+      fontFamily: 'Menlo, Consolas, "DejaVu Sans Mono", monospace',
       fontSize: 13,
+      letterSpacing: 0,
+      customGlyphs: true,
       theme: {
         background: '#1a1b26', foreground: '#c0caf5', cursor: '#c0caf5',
       },
       allowProposedApi: true,
     });
     const fit = new FitAddon.FitAddon();
+    if (globalThis.CanvasAddon?.CanvasAddon) {
+      term.loadAddon(new CanvasAddon.CanvasAddon());
+    }
     term.loadAddon(fit);
-    term.open(document.getElementById('term'));
+    const termElement = document.getElementById('term');
+    term.open(termElement);
+    // Native runTui hides the terminal cursor by default. The web peer must
+    // mirror that mode locally; otherwise xterm's own cursor blinks on top of
+    // Fleury-rendered focus/selection state.
+    term.write('\x1B[?25l');
     fit.fit();
     const status = document.getElementById('status');
 
@@ -116,10 +132,143 @@ const String serveIndexHtml = r'''
     ws.onclose = () => { status.textContent = 'disconnected'; };
     ws.onerror = () => { status.textContent = 'connection error'; };
 
+    function sendInput(data) {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      ws.send(encodeFrame(FRAME.INPUT, enc.encode(data)));
+    }
+
     // Browser → app input.
     term.onData(data => {
-      ws.send(encodeFrame(FRAME.INPUT, enc.encode(data)));
+      sendInput(data);
     });
+
+    function mouseCell(event) {
+      const screen = termElement.querySelector('.xterm-screen');
+      if (!screen || term.cols <= 0 || term.rows <= 0) return null;
+      const rect = screen.getBoundingClientRect();
+      if (
+        event.clientX < rect.left || event.clientX >= rect.right ||
+        event.clientY < rect.top || event.clientY >= rect.bottom
+      ) {
+        return null;
+      }
+      const cellWidth = rect.width / term.cols;
+      const cellHeight = rect.height / term.rows;
+      const col = Math.floor((event.clientX - rect.left) / cellWidth) + 1;
+      const row = Math.floor((event.clientY - rect.top) / cellHeight) + 1;
+      return {
+        col: Math.min(term.cols, Math.max(1, col)),
+        row: Math.min(term.rows, Math.max(1, row)),
+      };
+    }
+
+    function buttonCode(button) {
+      switch (button) {
+        case 0: return 0; // left
+        case 1: return 1; // middle
+        case 2: return 2; // right
+        default: return null;
+      }
+    }
+
+    function mouseModifiers(event) {
+      let mods = 0;
+      if (event.shiftKey) mods += 4;
+      if (event.altKey) mods += 8;
+      if (event.ctrlKey) mods += 16;
+      return mods;
+    }
+
+    function sendSgrMouse(button, cell, finalByte, event) {
+      sendInput(`\x1B[<${button + mouseModifiers(event)};${cell.col};${cell.row}${finalByte}`);
+    }
+
+    let pointerButton = null;
+    let lastPointerEventAt = 0;
+
+    function rememberPointerEvent(event) {
+      if (event.pointerId !== undefined) lastPointerEventAt = Date.now();
+    }
+
+    function duplicateMouseEvent(event) {
+      return event.type.startsWith('mouse') &&
+        Date.now() - lastPointerEventAt < 80;
+    }
+
+    // xterm.js only forwards keyboard/paste bytes through `onData` unless a
+    // terminal app negotiates browser-side mouse reporting. The remote driver
+    // already parses SGR 1006 mouse reports, so synthesize those from browser
+    // events and keep pointer behavior consistent with a native terminal.
+    function handleMouseDown(event) {
+      if (duplicateMouseEvent(event)) return;
+      const button = buttonCode(event.button);
+      const cell = mouseCell(event);
+      if (button === null || cell === null) return;
+      event.preventDefault();
+      term.focus();
+      pointerButton = button;
+      rememberPointerEvent(event);
+      if (event.pointerId !== undefined) {
+        termElement.setPointerCapture?.(event.pointerId);
+      }
+      sendSgrMouse(button, cell, 'M', event);
+    }
+
+    function handleMouseMove(event) {
+      if (duplicateMouseEvent(event)) return;
+      if (pointerButton === null || event.buttons === 0) return;
+      const cell = mouseCell(event);
+      if (cell === null) return;
+      event.preventDefault();
+      rememberPointerEvent(event);
+      sendSgrMouse(pointerButton + 32, cell, 'M', event);
+    }
+
+    function handleMouseUp(event) {
+      if (duplicateMouseEvent(event)) return;
+      const button = pointerButton ?? buttonCode(event.button);
+      const cell = mouseCell(event);
+      if (event.pointerId !== undefined) {
+        termElement.releasePointerCapture?.(event.pointerId);
+      }
+      if (button === null || cell === null) {
+        pointerButton = null;
+        return;
+      }
+      event.preventDefault();
+      rememberPointerEvent(event);
+      sendSgrMouse(button, cell, 'm', event);
+      pointerButton = null;
+    }
+
+    function handleMouseCancel(event) {
+      pointerButton = null;
+      if (event.pointerId !== undefined) {
+        termElement.releasePointerCapture?.(event.pointerId);
+      }
+    }
+
+    const mouseCapture = { capture: true };
+    termElement.addEventListener('pointerdown', handleMouseDown, mouseCapture);
+    termElement.addEventListener('pointermove', handleMouseMove, mouseCapture);
+    termElement.addEventListener('pointerup', handleMouseUp, mouseCapture);
+    termElement.addEventListener('pointercancel', handleMouseCancel, mouseCapture);
+    termElement.addEventListener('mousedown', handleMouseDown, mouseCapture);
+    termElement.addEventListener('mousemove', handleMouseMove, mouseCapture);
+    termElement.addEventListener('mouseup', handleMouseUp, mouseCapture);
+    termElement.addEventListener('mouseleave', handleMouseCancel, mouseCapture);
+
+    termElement.addEventListener('wheel', event => {
+      const cell = mouseCell(event);
+      if (cell === null) return;
+      event.preventDefault();
+      term.focus();
+      sendSgrMouse(event.deltaY < 0 ? 64 : 65, cell, 'M', event);
+    }, { capture: true, passive: false });
+
+    termElement.addEventListener('contextmenu', event => {
+      event.preventDefault();
+    }, mouseCapture);
 
     // Window resize → fit xterm.js → notify app.
     let resizeT;

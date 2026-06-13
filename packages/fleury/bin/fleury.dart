@@ -809,8 +809,7 @@ Future<int> _runServeSpawn({
   required _ServeOriginPolicy originPolicy,
   required List<String> command,
 }) async {
-  final handleDir = Directory('.fleury');
-  if (!handleDir.existsSync()) handleDir.createSync(recursive: true);
+  final handleDir = _createSpawnHandleDir();
   final httpServer = await HttpServer.bind(host, port);
   stderr.writeln('fleury serve ready (spawn mode)');
   stderr.writeln('  browser: http://$host:$port');
@@ -872,6 +871,11 @@ Future<int> _runServeSpawn({
     // session sockets.
     final pending = sessions.toList();
     await Future.wait(pending.map((s) => s.shutdown()));
+    try {
+      handleDir.deleteSync(recursive: true);
+    } on FileSystemException {
+      // Best-effort cleanup; individual sessions also remove their sockets.
+    }
   }
 
   late StreamSubscription<ProcessSignal> intSub;
@@ -886,6 +890,15 @@ Future<int> _runServeSpawn({
   });
 
   return exitCode.future;
+}
+
+Directory _createSpawnHandleDir() {
+  final suffix = '$pid-${DateTime.now().microsecondsSinceEpoch}';
+  final shortTemp = Directory('/tmp');
+  final base = !Platform.isWindows && shortTemp.existsSync()
+      ? shortTemp
+      : Directory.systemTemp;
+  return Directory('${base.path}/fleury-spawn-$suffix')..createSync();
 }
 
 /// One spawn-mode session: a subprocess, its session socket, and the
@@ -915,7 +928,7 @@ class _SpawnSession {
     required String tag,
   }) async {
     _browser = browser;
-    _socketPath = '$handleDir/spawn-$pid-$id.sock';
+    _socketPath = '${Directory(handleDir).absolute.path}/spawn-$pid-$id.sock';
     try {
       File(_socketPath!).deleteSync();
     } on FileSystemException {

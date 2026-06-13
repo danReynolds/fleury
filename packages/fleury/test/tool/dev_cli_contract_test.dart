@@ -32,6 +32,7 @@ void main() {
       expect(output, contains('Evidence and release commands:'));
       expect(output, contains('Maintenance commands:'));
       expect(output, contains('Legacy benchmark aliases:'));
+      expect(output, contains('coverage [options]'));
       expect(output, contains('storybook'));
       expect(output, contains('benchmark manifest --json'));
       expect(output, contains('Prefer `benchmark manifest [options]`'));
@@ -106,6 +107,23 @@ void main() {
         expect(check.stdout, contains('(packages/storybook) dart analyze'));
         expect(check.stdout, contains('(packages/storybook) dart test'));
         expect(check.stdout, isNot(contains('proof_console_test.dart')));
+
+        final coverage = await _runTool(['--dry-run', 'coverage', '--strict']);
+        expect(coverage.exitCode, 0, reason: coverage.stderr.toString());
+        expect(
+          coverage.stdout,
+          contains('(packages/fleury) dart test -x integration'),
+        );
+        expect(coverage.stdout, contains('-x coverage-incompatible'));
+        expect(
+          coverage.stdout,
+          contains(
+            '(packages/fleury_widgets) dart test --concurrency=1 '
+            '--reporter=json',
+          ),
+        );
+        expect(coverage.stdout, contains('floor core >= 80%'));
+        expect(coverage.stdout, contains('floor widgets >= 85%'));
       },
     );
   });

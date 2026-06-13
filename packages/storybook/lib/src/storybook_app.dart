@@ -45,19 +45,21 @@ class _StorybookAppState extends State<StorybookApp> {
   StoryVariant? get _selectedVariant {
     final variants = _selectedStory.variants;
     if (variants.isEmpty) return null;
-    final index = _variantIndexes[_selectedStory.id] ?? 0;
-    return variants[index.clamp(0, variants.length - 1)];
+    final slot = _variantIndexes[_selectedStory.id] ?? 0;
+    if (slot <= 0) return null;
+    return variants[(slot - 1).clamp(0, variants.length - 1)];
   }
 
   Map<String, Object?> get _selectedControlValues {
     final story = _selectedStory;
     final variant = _selectedVariant;
     return _controlValues.putIfAbsent(_targetKey(story, variant), () {
+      final selectedVariantId = variant?.id ?? 'default';
+      final initialVariantId = widget.initialVariantId ?? 'default';
       final appliesInitialControls =
           widget.initialControlValues.isNotEmpty &&
           story.id == (widget.initialStoryId ?? widget.stories.first.id) &&
-          (widget.initialVariantId == null ||
-              widget.initialVariantId == variant?.id);
+          initialVariantId == selectedVariantId;
       return story.initialControlValues(
         variant: variant,
         overrides: appliesInitialControls
@@ -81,10 +83,14 @@ class _StorybookAppState extends State<StorybookApp> {
     final initialVariantId = widget.initialVariantId;
     if (initialVariantId != null && widget.stories.isNotEmpty) {
       final story = widget.stories[_selectedIndex];
-      final variantIndex = story.variants.indexWhere(
-        (variant) => variant.id == initialVariantId,
-      );
-      if (variantIndex >= 0) _variantIndexes[story.id] = variantIndex;
+      if (initialVariantId == 'default') {
+        _variantIndexes[story.id] = 0;
+      } else {
+        final variantIndex = story.variants.indexWhere(
+          (variant) => variant.id == initialVariantId,
+        );
+        if (variantIndex >= 0) _variantIndexes[story.id] = variantIndex + 1;
+      }
     }
   }
 
@@ -124,14 +130,15 @@ class _StorybookAppState extends State<StorybookApp> {
     final variants = story.variants;
     if (variants.isEmpty) return;
     setState(() {
+      final count = variants.length + 1;
       final current = _variantIndexes[story.id] ?? 0;
-      final next = (current + delta) % variants.length;
-      final resolved = next < 0 ? next + variants.length : next;
+      final next = (current + delta) % count;
+      final resolved = next < 0 ? next + count : next;
       _variantIndexes[story.id] = resolved;
       _resetGeneration += 1;
       _addAction('variant.selected', <String, Object?>{
         'storyId': story.id,
-        'variantId': variants[resolved].id,
+        'variantId': resolved == 0 ? 'default' : variants[resolved - 1].id,
       });
     });
   }
@@ -445,27 +452,36 @@ class _StorybookShell extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SizedBox(
-                      width: selectorWidth,
-                      child: _WidgetSelector(
-                        width: selectorWidth,
-                        stories: stories,
-                        selectedIndex: selectedIndex,
-                        selectedWidgetName: selectedWidgetName,
-                        onSelect: onSelectWidget,
-                      ),
-                    ),
-                    const SizedBox(width: 1),
                     Expanded(
-                      child: _PreviewPanel(
-                        key: ValueKey('${story.id}:$resetGeneration'),
-                        story: story,
-                        variant: variant,
-                        selectedWidgetName: selectedWidgetName,
-                        values: controlValues,
-                        recordAction: onRecordAction,
-                        viewport: viewport,
-                        compact: compactPreview,
+                      child: FocusTraversalGroup(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SizedBox(
+                              width: selectorWidth,
+                              child: _WidgetSelector(
+                                width: selectorWidth,
+                                stories: stories,
+                                selectedIndex: selectedIndex,
+                                selectedWidgetName: selectedWidgetName,
+                                onSelect: onSelectWidget,
+                              ),
+                            ),
+                            const SizedBox(width: 1),
+                            Expanded(
+                              child: _PreviewPanel(
+                                key: ValueKey('${story.id}:$resetGeneration'),
+                                story: story,
+                                variant: variant,
+                                selectedWidgetName: selectedWidgetName,
+                                values: controlValues,
+                                recordAction: onRecordAction,
+                                viewport: viewport,
+                                compact: compactPreview,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     if (showDetailsPanel) ...[
@@ -632,11 +648,7 @@ class _WidgetSelectorState extends State<_WidgetSelector> {
         for (final widgetName in widget.stories[i].widgets)
           SearchResult(
             id: '${widget.stories[i].id}:$widgetName',
-            title:
-                i == widget.selectedIndex &&
-                    widgetName == widget.selectedWidgetName
-                ? '* $widgetName'
-                : widgetName,
+            title: widgetName,
             category: widget.stories[i].category,
             detail:
                 '${widget.stories[i].title}: ${widget.stories[i].description}',

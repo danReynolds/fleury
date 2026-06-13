@@ -10,7 +10,7 @@ import 'package:fleury/src/runtime/hot_reload.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('HotReloadController', () {
+  group('HotReloadController', tags: ['coverage-incompatible'], () {
     test(
       'registers ext.fleury.reassemble — RPC call fires onReassemble',
       () async {

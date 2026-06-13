@@ -89,6 +89,27 @@ void main() {
     expect(controls['samples'], 16);
   }, timeout: cliTimeout);
 
+  test('verify accepts the explicit default variant target', () async {
+    final result = await _runStorybook(<String>[
+      'verify',
+      '--story',
+      'controls.boolean-buttons.button',
+      '--variant',
+      'default',
+      '--json',
+    ]);
+
+    expect(result.exitCode, 0, reason: result.stderr.toString());
+    final decoded =
+        jsonDecode(result.stdout.toString()) as Map<String, Object?>;
+    expect(decoded['passed'], isTrue);
+    final results = (decoded['results'] as List<Object?>)
+        .cast<Map<String, Object?>>();
+    expect(results.single['variantId'], 'default');
+    final controls = results.single['controls'] as Map<String, Object?>;
+    expect(controls['disabled'], 0);
+  }, timeout: cliTimeout);
+
   test('snapshot writes selected target file', () async {
     final tempDir = await Directory.systemTemp.createTemp(
       'fleury_storybook_snapshot_test_',

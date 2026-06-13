@@ -49,8 +49,60 @@ void main() {
       size: const CellSize(120, 40),
       emptyMark: ' ',
     );
+    expect(output, contains('variant: Plain cells'));
+    expect(output, contains('Plain cells: Layout primitives'));
+
+    commandResult = await tester.invokeCommand(
+      const CommandId('storybook.variant.next'),
+    );
+    expect(commandResult.completed, isTrue, reason: commandResult.toString());
+    tester.pump();
+    output = tester.renderToString(
+      size: const CellSize(120, 40),
+      emptyMark: ' ',
+    );
     expect(output, contains('variant: Long label'));
     expect(output, contains('Long label: Wrapping and clipping'));
+  });
+
+  testWidgets('storybook variant navigation includes the default target', (
+    tester,
+  ) async {
+    tester.pumpWidget(
+      StorybookApp(initialStoryId: 'controls.boolean-buttons.button'),
+    );
+
+    var output = tester.renderToString(
+      size: const CellSize(120, 40),
+      emptyMark: ' ',
+    );
+    expect(output, contains('Button'));
+    expect(output, contains('Variant id: default'));
+    expect(output, isNot(contains('variant: Disabled')));
+
+    var commandResult = await tester.invokeCommand(
+      const CommandId('storybook.variant.next'),
+    );
+    expect(commandResult.completed, isTrue, reason: commandResult.toString());
+    tester.pump();
+    output = tester.renderToString(
+      size: const CellSize(120, 40),
+      emptyMark: ' ',
+    );
+    expect(output, contains('variant: Disabled'));
+    expect(output, contains('Variant id: disabled'));
+
+    commandResult = await tester.invokeCommand(
+      const CommandId('storybook.variant.next'),
+    );
+    expect(commandResult.completed, isTrue, reason: commandResult.toString());
+    tester.pump();
+    output = tester.renderToString(
+      size: const CellSize(120, 40),
+      emptyMark: ' ',
+    );
+    expect(output, contains('Variant id: default'));
+    expect(output, isNot(contains('variant: Disabled')));
   });
 
   testWidgets('initial story, variant, and control values render', (tester) {
@@ -97,7 +149,7 @@ void main() {
 
     expect(output, contains('Button'));
     expect(output, contains('Selected Widget'));
-    expect(output, contains('> * Button  Input'));
+    expect(output, contains('> Button  Input'));
   });
 
   testWidgets('widget selector arrow keys move the highlighted row', (tester) {
@@ -111,7 +163,7 @@ void main() {
       size: const CellSize(120, 40),
       emptyMark: ' ',
     );
-    expect(output, contains('  * Text  Core'));
+    expect(output, contains('  Text  Core'));
     expect(output, contains('> RichText  Core'));
   });
 
@@ -140,9 +192,124 @@ void main() {
       emptyMark: ' ',
     );
     expect(output, contains('ListView'));
-    expect(output, isNot(contains('> * ListView  Core')));
-    expect(output, contains('  * ListView  Core'));
+    expect(output, isNot(contains('> ListView  Core')));
+    expect(output, contains('  ListView  Core'));
     expect(output, contains('> Lazy row 2'));
+  });
+
+  testWidgets('arrow traversal enters the ScrollView preview', (tester) {
+    tester.pumpWidget(StorybookApp(initialStoryId: 'core.selection-scroll'));
+    tester.render(size: const CellSize(120, 40));
+
+    for (var i = 0; i < 9; i += 1) {
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      tester.pump();
+    }
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.pump();
+    tester.render(size: const CellSize(120, 40));
+
+    for (var i = 0; i < 5; i += 1) {
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+      tester.pump();
+    }
+    var output = tester.renderToString(
+      size: const CellSize(120, 40),
+      emptyMark: ' ',
+    );
+    expect(output, contains('> Row  Core'));
+
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    tester.pump();
+    tester.render(size: const CellSize(120, 40));
+    expect(tester.focusManager.focusedNode.toString(), contains('ScrollView'));
+
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.pump();
+
+    output = tester.renderToString(
+      size: const CellSize(120, 40),
+      emptyMark: ' ',
+    );
+    expect(output, isNot(contains('SelectionArea + ScrollView')));
+    expect(output, contains('Selectable paragraph 1'));
+  });
+
+  testWidgets('arrow traversal prefers preview before details controls', (
+    tester,
+  ) {
+    tester.pumpWidget(
+      StorybookApp(initialStoryId: 'visualization.charts.line-chart'),
+    );
+    tester.render(size: const CellSize(120, 40));
+
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    tester.pump();
+    tester.render(size: const CellSize(120, 40));
+
+    expect(tester.focusManager.focusedNode.toString(), contains('LineChart'));
+  });
+
+  testWidgets('chart stories render focused widget previews', (tester) {
+    tester.pumpWidget(
+      StorybookApp(initialStoryId: 'visualization.charts.bar-chart'),
+    );
+
+    final output = tester.renderToString(
+      size: const CellSize(120, 40),
+      emptyMark: ' ',
+    );
+
+    expect(output, contains('BarChart'));
+    expect(output, contains('CPU'));
+    expect(output, contains('Mem'));
+    expect(output, contains('IO'));
+    expect(output, isNot(contains('CP Me IO')));
+  });
+
+  testWidgets('clicking the ScrollView preview focuses it', (tester) {
+    tester.pumpWidget(StorybookApp(initialStoryId: 'core.selection-scroll'));
+    tester.render(size: const CellSize(120, 40));
+
+    for (var i = 0; i < 9; i += 1) {
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      tester.pump();
+    }
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.pump();
+    tester.render(size: const CellSize(120, 40));
+
+    for (var i = 0; i < 5; i += 1) {
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+      tester.pump();
+    }
+    var output = tester.renderToString(
+      size: const CellSize(120, 40),
+      emptyMark: ' ',
+    );
+    expect(output, contains('> Row  Core'));
+
+    tester.sendMouse(
+      const MouseEvent(
+        kind: MouseEventKind.down,
+        button: MouseButton.left,
+        col: 42,
+        row: 14,
+      ),
+    );
+    tester.pump();
+    tester.render(size: const CellSize(120, 40));
+    expect(tester.focusManager.focusedNode.toString(), contains('ScrollView'));
+
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.pump();
+
+    output = tester.renderToString(
+      size: const CellSize(120, 40),
+      emptyMark: ' ',
+    );
+    expect(output, isNot(contains('SelectionArea + ScrollView')));
+    expect(output, contains('Selectable paragraph 1'));
   });
 
   testWidgets('narrow layout keeps the preview pane visible', (tester) {

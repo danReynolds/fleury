@@ -23,6 +23,9 @@ Future<void> main(List<String> rawArgs) async {
     case 'check':
       await runner.check(quick: args.contains('--quick'));
       return;
+    case 'coverage':
+      await runner.coverage(args);
+      return;
     case 'demo':
       await runner.demoApp();
       return;
@@ -116,6 +119,7 @@ void _printUsage() {
   stdout.writeln(
     '  check [--quick]               Analyze and test local packages',
   );
+  stdout.writeln('  coverage [options]            Run package coverage floors');
   stdout.writeln('  demo                          Run the integrated demo app');
   stdout.writeln(
     '  storybook [command/options]   Run, inspect, verify, or snapshot storybook',
@@ -175,6 +179,7 @@ void _printUsage() {
   stdout.writeln('');
   stdout.writeln('Examples:');
   stdout.writeln('  dart tool/fleury_dev.dart bootstrap');
+  stdout.writeln('  dart tool/fleury_dev.dart coverage --strict');
   stdout.writeln('  dart tool/fleury_dev.dart demo');
   stdout.writeln('  dart tool/fleury_dev.dart storybook');
   stdout.writeln('  dart tool/fleury_dev.dart storybook verify');
@@ -323,6 +328,137 @@ class _Runner {
     ], workingDirectory: demo);
     await _run('dart', ['analyze'], workingDirectory: storybook);
     await _run('dart', ['test'], workingDirectory: storybook);
+  }
+
+  Future<void> coverage(List<String> args) async {
+    final options = _CoverageOptions.parse(args);
+    final targets = <_CoveragePackageTarget>[
+      _CoveragePackageTarget(
+        label: 'core',
+        packageName: 'fleury',
+        packagePath: fleury,
+        floorPercent: options.coreMinPercent,
+        excludeIntegration: !options.includeIntegration,
+        excludeCoverageIncompatible: true,
+      ),
+      _CoveragePackageTarget(
+        label: 'widgets',
+        packageName: 'fleury_widgets',
+        packagePath: widgets,
+        floorPercent: options.widgetsMinPercent,
+        excludeIntegration: false,
+        excludeCoverageIncompatible: false,
+      ),
+    ];
+
+    if (dryRun) {
+      for (final target in targets) {
+        final args = _coverageTestArgs(target);
+        final display = ['dart', ...args].join(' ');
+        stdout.writeln('(${_relative(target.packagePath)}) $display');
+        stdout.writeln(
+          'floor ${target.label} >= ${_formatPercent(target.floorPercent)}%',
+        );
+      }
+      return;
+    }
+
+    final results = <_CoveragePackageResult>[];
+    for (final target in targets) {
+      results.add(await _runCoveragePackage(target));
+    }
+    final strictPass = results.every((result) => result.strictPass);
+    final summary = <String, Object?>{
+      'schemaVersion': 1,
+      'kind': 'fleuryCoverage',
+      'strictPass': strictPass,
+      'packages': <Object?>[for (final result in results) result.toJson(root)],
+    };
+
+    if (options.json) {
+      stdout.writeln(const JsonEncoder.withIndent('  ').convert(summary));
+    } else {
+      _printCoverageSummary(results, strictPass: strictPass);
+    }
+    if (options.strict && !strictPass) exit(1);
+  }
+
+  List<String> _coverageTestArgs(_CoveragePackageTarget target) {
+    return <String>[
+      'test',
+      if (target.excludeIntegration) ...['-x', 'integration'],
+      if (target.excludeCoverageIncompatible) ...[
+        '-x',
+        'coverage-incompatible',
+      ],
+      '--concurrency=1',
+      '--reporter=json',
+      '--coverage-path=coverage/lcov.info',
+      '--coverage-package=${target.packageName}',
+    ];
+  }
+
+  Future<_CoveragePackageResult> _runCoveragePackage(
+    _CoveragePackageTarget target,
+  ) async {
+    final lcovFile = File('${target.packagePath}/coverage/lcov.info');
+    if (lcovFile.existsSync()) lcovFile.deleteSync();
+    lcovFile.parent.createSync(recursive: true);
+
+    final args = _coverageTestArgs(target);
+    final result = await Process.run(
+      'dart',
+      args,
+      workingDirectory: target.packagePath,
+    );
+    final stdoutText = result.stdout.toString();
+    final stderrText = result.stderr.toString();
+    if (result.exitCode != 0) {
+      stderr.writeln(
+        'Coverage test command failed in ${_relative(target.packagePath)} '
+        'with exit code ${result.exitCode}: dart ${args.join(' ')}',
+      );
+      if (stdoutText.trim().isNotEmpty) stderr.writeln(stdoutText.trimRight());
+      if (stderrText.trim().isNotEmpty) stderr.writeln(stderrText.trimRight());
+      exit(result.exitCode);
+    }
+
+    final testCounts = _countJsonTestEvents(stdoutText);
+    if (testCounts.start == 0 || testCounts.done == 0) {
+      stderr.writeln(
+        'Coverage sanity check failed for ${target.label}: '
+        'JSON reporter saw ${testCounts.start} testStart and '
+        '${testCounts.done} testDone events.',
+      );
+      exit(1);
+    }
+    if (!lcovFile.existsSync() || lcovFile.lengthSync() == 0) {
+      stderr.writeln(
+        'Coverage sanity check failed for ${target.label}: '
+        'missing coverage/lcov.info.',
+      );
+      exit(1);
+    }
+
+    final lcov = _parseLcov(lcovFile.readAsStringSync());
+    if (lcov.linesFound == 0) {
+      stderr.writeln(
+        'Coverage sanity check failed for ${target.label}: '
+        'LCOV reported zero instrumented lines.',
+      );
+      exit(1);
+    }
+
+    final percent = (lcov.linesHit / lcov.linesFound) * 100;
+    return _CoveragePackageResult(
+      target: target,
+      lcovPath: lcovFile.path,
+      testStartCount: testCounts.start,
+      testDoneCount: testCounts.done,
+      linesHit: lcov.linesHit,
+      linesFound: lcov.linesFound,
+      linePercent: percent,
+    );
   }
 
   Future<void> demoApp() {
@@ -1924,6 +2060,245 @@ class _Runner {
     if (path.startsWith(r'\\')) return true;
     return RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path);
   }
+}
+
+final class _CoverageOptions {
+  const _CoverageOptions({
+    required this.strict,
+    required this.json,
+    required this.includeIntegration,
+    required this.coreMinPercent,
+    required this.widgetsMinPercent,
+  });
+
+  final bool strict;
+  final bool json;
+  final bool includeIntegration;
+  final double coreMinPercent;
+  final double widgetsMinPercent;
+
+  static _CoverageOptions parse(List<String> args) {
+    var strict = false;
+    var json = false;
+    var includeIntegration = false;
+    var coreMinPercent = 80.0;
+    var widgetsMinPercent = 85.0;
+    for (final arg in args) {
+      if (arg == '--help' || arg == '-h') {
+        _printCoverageUsage();
+        exit(0);
+      } else if (arg == '--strict') {
+        strict = true;
+      } else if (arg == '--json') {
+        json = true;
+      } else if (arg == '--include-integration') {
+        includeIntegration = true;
+      } else if (arg.startsWith('--core-min=')) {
+        coreMinPercent = _parseCoveragePercent(arg, '--core-min=');
+      } else if (arg.startsWith('--widgets-min=')) {
+        widgetsMinPercent = _parseCoveragePercent(arg, '--widgets-min=');
+      } else {
+        stderr.writeln('Unknown option for coverage: $arg');
+        _printCoverageUsage();
+        exit(2);
+      }
+    }
+    return _CoverageOptions(
+      strict: strict,
+      json: json,
+      includeIntegration: includeIntegration,
+      coreMinPercent: coreMinPercent,
+      widgetsMinPercent: widgetsMinPercent,
+    );
+  }
+}
+
+double _parseCoveragePercent(String arg, String prefix) {
+  final raw = arg.substring(prefix.length);
+  final parsed = double.tryParse(raw);
+  if (parsed == null || parsed < 0 || parsed > 100) {
+    stderr.writeln('$prefix requires a percentage from 0 to 100.');
+    exit(2);
+  }
+  return parsed;
+}
+
+void _printCoverageUsage() {
+  stdout.writeln('Usage: dart tool/fleury_dev.dart coverage [options]');
+  stdout.writeln('');
+  stdout.writeln('Options:');
+  stdout.writeln('  --strict                 Exit non-zero when a floor fails');
+  stdout.writeln(
+    '  --json                   Print machine-readable summary JSON',
+  );
+  stdout.writeln(
+    '  --include-integration    Include core integration-tagged tests',
+  );
+  stdout.writeln('  --core-min=PERCENT       Core package floor, default 80');
+  stdout.writeln(
+    '  --widgets-min=PERCENT    Widgets package floor, default 85',
+  );
+}
+
+final class _CoveragePackageTarget {
+  const _CoveragePackageTarget({
+    required this.label,
+    required this.packageName,
+    required this.packagePath,
+    required this.floorPercent,
+    required this.excludeIntegration,
+    required this.excludeCoverageIncompatible,
+  });
+
+  final String label;
+  final String packageName;
+  final String packagePath;
+  final double floorPercent;
+  final bool excludeIntegration;
+  final bool excludeCoverageIncompatible;
+}
+
+final class _CoveragePackageResult {
+  const _CoveragePackageResult({
+    required this.target,
+    required this.lcovPath,
+    required this.testStartCount,
+    required this.testDoneCount,
+    required this.linesHit,
+    required this.linesFound,
+    required this.linePercent,
+  });
+
+  final _CoveragePackageTarget target;
+  final String lcovPath;
+  final int testStartCount;
+  final int testDoneCount;
+  final int linesHit;
+  final int linesFound;
+  final double linePercent;
+
+  bool get strictPass => linePercent >= target.floorPercent;
+
+  Map<String, Object?> toJson(String root) {
+    return <String, Object?>{
+      'label': target.label,
+      'packageName': target.packageName,
+      'packagePath': _relativeToRoot(root, target.packagePath),
+      'lcovPath': _relativeToRoot(root, lcovPath),
+      'testStartCount': testStartCount,
+      'testDoneCount': testDoneCount,
+      'linesHit': linesHit,
+      'linesFound': linesFound,
+      'linePercent': _roundCoveragePercent(linePercent),
+      'floorPercent': _roundCoveragePercent(target.floorPercent),
+      'strictPass': strictPass,
+    };
+  }
+}
+
+({int start, int done}) _countJsonTestEvents(String output) {
+  var start = 0;
+  var done = 0;
+  for (final line in const LineSplitter().convert(output)) {
+    Object? decoded;
+    try {
+      decoded = jsonDecode(line);
+    } on FormatException {
+      continue;
+    }
+    if (decoded is! Map<String, Object?>) continue;
+    switch (decoded['type']) {
+      case 'testStart':
+        start += 1;
+      case 'testDone':
+        done += 1;
+    }
+  }
+  return (start: start, done: done);
+}
+
+({int linesHit, int linesFound}) _parseLcov(String text) {
+  var totalHit = 0;
+  var totalFound = 0;
+  var recordHit = 0;
+  var recordFound = 0;
+  var daHit = 0;
+  var daFound = 0;
+  var hasSummary = false;
+  var hasRecord = false;
+
+  void finishRecord() {
+    if (!hasRecord) return;
+    totalHit += hasSummary ? recordHit : daHit;
+    totalFound += hasSummary ? recordFound : daFound;
+    recordHit = 0;
+    recordFound = 0;
+    daHit = 0;
+    daFound = 0;
+    hasSummary = false;
+    hasRecord = false;
+  }
+
+  for (final line in const LineSplitter().convert(text)) {
+    if (line.startsWith('SF:')) {
+      finishRecord();
+      hasRecord = true;
+    } else if (line.startsWith('DA:')) {
+      hasRecord = true;
+      final parts = line.substring(3).split(',');
+      if (parts.length >= 2) {
+        final count = int.tryParse(parts[1]) ?? 0;
+        daFound += 1;
+        if (count > 0) daHit += 1;
+      }
+    } else if (line.startsWith('LH:')) {
+      hasRecord = true;
+      hasSummary = true;
+      recordHit = int.tryParse(line.substring(3)) ?? recordHit;
+    } else if (line.startsWith('LF:')) {
+      hasRecord = true;
+      hasSummary = true;
+      recordFound = int.tryParse(line.substring(3)) ?? recordFound;
+    } else if (line == 'end_of_record') {
+      finishRecord();
+    }
+  }
+  finishRecord();
+  return (linesHit: totalHit, linesFound: totalFound);
+}
+
+void _printCoverageSummary(
+  List<_CoveragePackageResult> results, {
+  required bool strictPass,
+}) {
+  stdout.writeln('Coverage summary');
+  for (final result in results) {
+    stdout.writeln(
+      '${result.target.label}: '
+      '${_formatPercent(result.linePercent)}% lines '
+      '(${result.linesHit}/${result.linesFound}), '
+      '${result.testDoneCount} tests, '
+      'floor ${_formatPercent(result.target.floorPercent)}%, '
+      '${result.strictPass ? 'pass' : 'fail'}',
+    );
+  }
+  stdout.writeln('Strict pass: $strictPass');
+}
+
+String _formatPercent(double value) {
+  final rounded = _roundCoveragePercent(value);
+  return rounded.roundToDouble() == rounded
+      ? rounded.toInt().toString()
+      : rounded.toStringAsFixed(1);
+}
+
+double _roundCoveragePercent(double value) =>
+    double.parse(value.toStringAsFixed(1));
+
+String _relativeToRoot(String root, String path) {
+  if (path == root) return '.';
+  if (path.startsWith('$root/')) return path.substring(root.length + 1);
+  return path;
 }
 
 final class _LocalBenchmarkTarget {

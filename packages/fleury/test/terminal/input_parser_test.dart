@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
@@ -485,4 +487,106 @@ void main() {
       expect(_parse([0x1B, 0x5B, ...'?5u'.codeUnits]), isEmpty);
     });
   });
+
+  group('Fuzzing', () {
+    test('seeded byte soup never throws and produces bounded events', () {
+      final rng = Random(0xF1EAF00D);
+
+      for (var caseIndex = 0; caseIndex < 250; caseIndex += 1) {
+        final parser = InputParser();
+        final sink = _ListSink();
+        final bytes = _randomInputBytes(rng);
+        var offset = 0;
+
+        while (offset < bytes.length) {
+          final remaining = bytes.length - offset;
+          final chunkLength = 1 + rng.nextInt(remaining.clamp(1, 12).toInt());
+          parser.feed(bytes.sublist(offset, offset + chunkLength), sink);
+          offset += chunkLength;
+          if (rng.nextInt(4) == 0) parser.flush(sink);
+        }
+        parser.flush(sink);
+
+        expect(
+          sink.events.length,
+          lessThanOrEqualTo(bytes.length + 1),
+          reason: 'fuzz case $caseIndex should not amplify input bytes',
+        );
+      }
+    });
+
+    test('large unterminated paste flushes as one PasteEvent', () {
+      final parser = InputParser();
+      final sink = _ListSink();
+      parser.feed([
+        0x1B,
+        0x5B,
+        ...'200~'.codeUnits,
+        ...List<int>.filled(4096, 0x78),
+      ], sink);
+
+      expect(sink.events, isEmpty);
+      parser.flush(sink);
+
+      expect(sink.events, hasLength(1));
+      expect(sink.events.single, isA<PasteEvent>());
+      expect((sink.events.single as PasteEvent).text.length, 4096);
+    });
+  });
+}
+
+List<int> _randomInputBytes(Random rng) {
+  final bytes = <int>[];
+  final targetLength = rng.nextInt(180);
+  while (bytes.length < targetLength) {
+    switch (rng.nextInt(8)) {
+      case 0:
+        bytes.add(rng.nextInt(256));
+        break;
+      case 1:
+        bytes.addAll([0x1B, 0x5B]);
+        final paramBytes = 1 + rng.nextInt(12);
+        for (var i = 0; i < paramBytes; i += 1) {
+          bytes.add([0x30 + rng.nextInt(10), 0x3B, 0x3A, 0x3F][rng.nextInt(4)]);
+        }
+        if (rng.nextBool()) bytes.add(0x40 + rng.nextInt(0x3F));
+        break;
+      case 2:
+        bytes.addAll([0x1B, 0x5D]);
+        for (var i = 0; i < rng.nextInt(24); i += 1) {
+          bytes.add(0x20 + rng.nextInt(0x5F));
+        }
+        if (rng.nextBool()) bytes.add(0x07);
+        break;
+      case 3:
+        bytes.addAll([0x1B, 0x5B, ...'200~'.codeUnits]);
+        for (var i = 0; i < rng.nextInt(80); i += 1) {
+          bytes.add(rng.nextInt(256));
+        }
+        if (rng.nextBool()) bytes.addAll([0x1B, 0x5B, ...'201~'.codeUnits]);
+        break;
+      case 4:
+        bytes.addAll([0xF0, 0x9F]);
+        if (rng.nextBool()) bytes.add(0x99);
+        break;
+      case 5:
+        bytes.addAll([0x1B, 0x4F, rng.nextInt(256)]);
+        break;
+      case 6:
+        bytes.addAll([0x1B, 0x5B, 0x3C]);
+        bytes.addAll(
+          '${rng.nextInt(200)};${rng.nextInt(200)};'
+                  '${rng.nextInt(80)}${rng.nextBool() ? 'M' : 'm'}'
+              .codeUnits,
+        );
+        break;
+      case 7:
+        final count = 1 + rng.nextInt(16);
+        for (var i = 0; i < count; i += 1) {
+          bytes.add(0x20 + rng.nextInt(0x5F));
+        }
+        break;
+    }
+  }
+  return bytes.take(targetLength).toList(growable: false);
 }
