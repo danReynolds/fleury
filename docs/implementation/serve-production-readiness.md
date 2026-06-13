@@ -294,29 +294,41 @@ gate matched.
 
 The wire and server-CPU axes were measured; the remaining open question was the
 *browser* render cost of the DOM surface versus a terminal emulator. Built a
-head-to-head in headless Chrome (`packages/fleury_web/benchmark/`): fleury's
-`DomGridSurface` and xterm.js (v6, default DOM renderer) fed the **same frame
-stream** — fleury from a presentation plan, xterm from the equivalent ANSI
-produced by fleury's own `AnsiRenderer`. Per-frame main-thread cost (median;
-60 fps budget 16.7 ms):
+head-to-head (`packages/fleury_web/benchmark/`): fleury's `DomGridSurface` versus
+xterm.js across **all three of its renderer tiers** (DOM, canvas addon, WebGL
+addon), fed the **same frame stream** — fleury from a presentation plan, xterm
+from the equivalent ANSI produced by fleury's own `AnsiRenderer`. The product
+peers (ttyd/gotty/textual-web/VS Code) all render through xterm.js or hterm, so
+the meaningful render axis is the renderer tier, not the product. Per-frame
+main-thread cost (median; 60 fps budget 16.7 ms):
 
-| workload | fleury apply+render | xterm parse | xterm parse→render |
+| workload | fleury apply+render | xterm DOM parse | xterm DOM parse→render |
 | --- | --- | --- | --- |
-| typing 80×24 | ≤0.10 ms | 0.90 ms | 8.1 ms |
-| dashboard 80×24 | 0.30 ms | 1.00 ms | 7.9 ms |
-| big churn 120×40 | 0.20 ms | 1.00 ms | 7.0 ms |
+| typing 80×24 | ≤0.10 ms | 1.2 ms | 8.1 ms |
+| dashboard 80×24 | 0.20 ms | 1.2 ms | 7.8 ms |
+| churn 120×40 | 0.20 ms | 0.7 ms | 7.2 ms |
+| churn 200×60 | 0.30 ms | 1.2 ms | 5.5 ms |
 
 `fleury apply+render` is the full client path — `applyRemotePlan` + `present` +
-forced layout, all synchronous. `xterm parse` is its `write()`→buffer step;
+forced layout, all synchronous. `xterm parse` is its `write()`→buffer step
+(renderer-independent — the same core ANSI parser for all three tiers);
 `parse→render` is wall time to its rAF-scheduled render (≈ one frame of
 scheduling latency on top of sub-frame render compute). GPU paint is excluded
-for both; xterm's optional WebGL renderer (not the default, typically
-unavailable headless) is not measured.
+for both.
 
 The DOM surface is not the bottleneck it might be assumed to be: the client
-turns a received frame into rendered DOM in **≤0.4 ms p95** — under xterm's ANSI
-parse alone — because the structured protocol diffs server-side, so the client
-applies known patches rather than re-parsing an escape stream each frame. Both
-sit far under the 60 fps budget; on terminal workloads the limit is the display
-refresh, not the renderer. The benchmark vendors xterm.js on demand (not
-committed) and lives outside `test/`, so it never runs in CI.
+turns a received frame into rendered DOM in **≤0.4 ms p95 even at 200×60
+(12 000 cells)** — under xterm's ANSI parse alone — because the structured
+protocol diffs server-side, so the client applies known patches rather than
+re-parsing an escape stream each frame. Both sit far under the 60 fps budget; on
+terminal workloads the limit is the display refresh, not the renderer.
+
+**Honest scope:** xterm's canvas and WebGL tiers need a real GL context, which
+headless `dart test` Chrome does not provide — the harness detects this and
+reports those tiers `unavailable` (auto-running them on a GPU-backed browser)
+rather than silently falling back to DOM and reporting a fake number. The one
+regime where xterm's WebGL renderer could plausibly beat a DOM surface — very
+large, high-throughput grids on a GPU — is therefore the remaining unmeasured
+axis, runnable via the same benchmark on a non-headless GPU Chrome. The
+benchmark vendors xterm.js + addons on demand (not committed) and lives outside
+`test/`, so it never runs in CI.

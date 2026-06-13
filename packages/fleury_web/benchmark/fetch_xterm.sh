@@ -10,11 +10,20 @@ VENDOR="$DIR/vendor"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-echo "fetching @xterm/xterm@$VERSION …"
-( cd "$TMP" && npm pack "@xterm/xterm@$VERSION" >/dev/null 2>&1 )
-tar xzf "$TMP"/xterm-xterm-*.tgz -C "$TMP"
+CANVAS_VERSION="${XTERM_CANVAS_VERSION:-0.7.0}"
+WEBGL_VERSION="${XTERM_WEBGL_VERSION:-0.19.0}"
+
+fetch() { # <npm-spec> <tgz-glob> <src-in-package> <dest>
+  ( cd "$TMP" && npm pack "$1" >/dev/null 2>&1 )
+  local d; d="$(mktemp -d "$TMP/x.XXXX")"
+  tar xzf "$TMP"/$2 -C "$d"
+  cp "$d/package/$3" "$VENDOR/$4"
+}
 
 mkdir -p "$VENDOR"
-cp "$TMP/package/lib/xterm.js" "$VENDOR/xterm.js"
-cp "$TMP/package/css/xterm.css" "$VENDOR/xterm.css"
-echo "vendored xterm.js ($(wc -c < "$VENDOR/xterm.js") bytes) + xterm.css into $VENDOR"
+echo "fetching @xterm/xterm@$VERSION + canvas/webgl addons …"
+fetch "@xterm/xterm@$VERSION"              'xterm-xterm-*.tgz'        lib/xterm.js          xterm.js
+fetch "@xterm/xterm@$VERSION"              'xterm-xterm-*.tgz'        css/xterm.css         xterm.css
+fetch "@xterm/addon-canvas@$CANVAS_VERSION" 'xterm-addon-canvas-*.tgz' lib/addon-canvas.js   addon-canvas.js
+fetch "@xterm/addon-webgl@$WEBGL_VERSION"   'xterm-addon-webgl-*.tgz'  lib/addon-webgl.js    addon-webgl.js
+echo "vendored xterm.js + css + canvas + webgl addons into $VENDOR"
