@@ -34,6 +34,7 @@ typedef Scenario = ({String name, int cols, int rows, List<void Function(CellBuf
 void main() {
   final scenarios = <Scenario>[
     _counter(), _typing(), _logStream(), _dashboard(), _fullPaint(),
+    _bigChurn(),
   ];
   final z = ZLibCodec(raw: true, level: 6);
   print('ANSI = bytes a peer (ttyd/gotty/textual-web) relays to xterm.');
@@ -124,4 +125,23 @@ Scenario _fullPaint() => (name: 'full paint (first)', cols: 80, rows: 24, frames
           b.writeText(CellOffset(0, r), 'row $r ${'content ' * 8}');
         }
       },
+    ]);
+// Worst case for *both* wires: a large grid where every cell changes every
+// frame (200x60 = 12k cells, ~36 KiB raw/frame — past DEFLATE's 32 KiB window).
+// Neither cell-diffing (fleury) nor ANSI relay (peers) can exploit cross-frame
+// redundancy here, so this is the apples-to-apples test that the "competitive
+// with ANSI" claim still holds when context takeover stops helping anyone.
+Scenario _bigChurn() => (name: 'big churn 200x60', cols: 200, rows: 60, frames: [
+      for (var i = 0; i < 60; i++)
+        (b) {
+          const glyphs = 'abcdefghijklmnopqrstuvwxyz0123456789 .,#@/\\|-+';
+          for (var r = 0; r < 60; r++) {
+            final sb = StringBuffer();
+            for (var c = 0; c < 200; c++) {
+              sb.writeCharCode(
+                  glyphs.codeUnitAt((i * 7 + r * 13 + c * 3) % glyphs.length));
+            }
+            b.writeText(CellOffset(0, r), sb.toString());
+          }
+        },
     ]);

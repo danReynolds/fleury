@@ -256,3 +256,33 @@ encode half (it was 469 µs at 244 nodes when it re-serialized every node) and
 removed its per-node string garbage.
 
 Suites green: **core 1671, web VM 199, Chrome 154**; freshness gate matched.
+
+## Update — robustness fuzz + the visual path past the window (2026-06-13)
+
+**Fuzzed the semantic decoder** (the codec-fuzz precedent applied to the new
+surface; `remote_semantics_test`). 1000 random envelopes found a real crash: a
+patch whose node dropped a required field made the final
+`SemanticInspectionSnapshot.fromJson` throw, and the catch only wrapped the
+initial `jsonDecode`, not the reconstruction — so a malformed/hostile patch
+could take down the decode path. Now caught and rejected. Also capped
+reconstruction depth (`maxSemanticTreeDepth = 1024`): `_nest` had only a cycle
+guard, so a deep *acyclic* `childIds` chain inside the 64 MiB payload cap could
+still overflow the stack; it now prunes. A deeper-than-cap chain and the fuzz
+both pass (tree-or-null, never a throw).
+
+**Re-probed the visual path with the same 32 KiB-window lens** that exposed the
+semantics cliff, to check the "competitive with ANSI" claim where context
+takeover stops helping anyone. Added a `big churn 200x60` scenario — every cell
+of a 12 000-cell grid changing every frame (~36 KiB raw/frame, past the window
+for both wires):
+
+| workload | deflated PLAN vs ANSI |
+| --- | --- |
+| big churn 200×60 (full repaint every frame) | **1.79x** |
+
+Neither cell-diffing (fleury) nor ANSI relay (peers) can exploit cross-frame
+redundancy in full churn, so this is apples-to-apples — and PLAN stays 1.79x
+ANSI, inside the same band as the interactive workloads (1.06–2.09x). The
+visual path has no analogous cliff: it already ships only changed cells, and
+where everything changes it degrades gracefully alongside the peers rather than
+falling off relative to them.
