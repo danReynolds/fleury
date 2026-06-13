@@ -6,7 +6,9 @@
 // lossless. The DOM rendering of the mirror is covered by the surface's
 // own Chrome tests.
 
+import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/src/remote/remote_codec.dart';
@@ -203,6 +205,50 @@ void main() {
         final out = (FrameDecoder()..feed(wire)).drain().toList();
         expect((out.single as InputEventFrame).event, event);
       }
+    });
+
+    test('a semantic snapshot survives the SemanticsFrame wire round-trip', () {
+      // The server side: snapshot the tree, serialize, wrap in a frame, encode.
+      final tree = SemanticTree(
+        root: SemanticNode(
+          id: const SemanticNodeId('root'),
+          role: SemanticRole.app,
+          children: [
+            const SemanticNode(
+              id: SemanticNodeId('status'),
+              role: SemanticRole.status,
+              label: 'Ready',
+            ),
+            SemanticNode(
+              id: const SemanticNodeId('btn:run'),
+              role: SemanticRole.button,
+              label: 'Run',
+              enabled: false,
+              actions: const {SemanticAction.activate, SemanticAction.focus},
+              state: const SemanticState({'commandId': 'run'}),
+            ),
+          ],
+        ),
+      );
+      final json = utf8.encode(jsonEncode(tree.toInspectionSnapshot().toJson()));
+      final wire = encodeFrame(SemanticsFrame(Uint8List.fromList(json)));
+
+      // The client side: decode the frame, parse, reconstruct the tree — the
+      // exact path RemoteSurfaceClient drives into its SemanticDomPresenter.
+      final frame = (FrameDecoder()..feed(wire)).drain().single as SemanticsFrame;
+      final decoded = jsonDecode(utf8.decode(frame.json)) as Map<String, Object?>;
+      final rebuilt = SemanticInspectionSnapshot.fromJson(decoded).toSemanticTree();
+
+      expect(rebuilt.root.role, SemanticRole.app);
+      final status = rebuilt.root.children[0];
+      expect(status.role, SemanticRole.status);
+      expect(status.label, 'Ready');
+      final button = rebuilt.root.children[1];
+      expect(button.role, SemanticRole.button);
+      expect(button.label, 'Run');
+      expect(button.enabled, isFalse);
+      expect(button.actions, {SemanticAction.activate, SemanticAction.focus});
+      expect(button.state['commandId'], 'run');
     });
   });
 }

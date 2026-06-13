@@ -136,9 +136,12 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
 
   /// Sends a semantic snapshot (UTF-8 JSON) for the just-presented frame.
   /// No-op on the ANSI path; used by the structured serve host.
-  void presentSemanticsJson(Uint8List jsonBytes) {
+  @override
+  void presentSemantics(List<int> json) {
     if (!_active || !wantsPresentationPlans) return;
-    _transport.send(SemanticsFrame(jsonBytes));
+    _transport.send(
+      SemanticsFrame(json is Uint8List ? json : Uint8List.fromList(json)),
+    );
   }
 
   void _onFrame(RemoteFrame frame) {

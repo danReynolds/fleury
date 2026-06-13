@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:typed_data';
 
@@ -9,6 +10,7 @@ import 'package:web/web.dart' as web;
 import '../dom_grid/dom_grid_surface.dart';
 import '../input/dom_input_source.dart';
 import '../metrics/dom_cell_metrics.dart';
+import '../semantics/semantic_dom_presenter.dart';
 import 'plan_adapter.dart';
 
 /// Browser-side client for the structured serve path.
@@ -31,6 +33,9 @@ final class RemoteSurfaceClient {
 
   web.WebSocket? _socket;
   DomGridSurface? _surface;
+  SemanticDomPresenter? _semantics;
+  web.Element? _surfaceRoot;
+  web.Element? _semanticRoot;
   DomCellMetrics? _metrics;
   DomInputSource? _input;
   final FrameDecoder _decoder = FrameDecoder();
@@ -62,10 +67,22 @@ final class RemoteSurfaceClient {
 
   void _onOpen() {
     _size = _measureViewport();
-    _surface = DomGridSurface(root: _host, size: _size);
+    // The grid surface owns its own root — `resize` calls `replaceChildren`
+    // on it — so the accessible semantic tree must live in a sibling element,
+    // not inside the grid root. This mirrors the in-browser host's layout
+    // (a surface div + a semantic div under one host).
+    final surfaceRoot = web.document.createElement('div');
+    _host.appendChild(surfaceRoot);
+    _surfaceRoot = surfaceRoot;
+    _surface = DomGridSurface(root: surfaceRoot, size: _size);
+    final semanticRoot = web.document.createElement('div');
+    _host.appendChild(semanticRoot);
+    _semanticRoot = semanticRoot;
+    _semantics = SemanticDomPresenter(root: semanticRoot);
     _mirror = CellBuffer(_size);
     _input = DomInputSource(
       hostElement: _host,
+      pointerTarget: surfaceRoot,
       cellMetrics: _metrics!,
     )..start(_sendInput);
     _sendInit();
@@ -143,10 +160,8 @@ final class RemoteSurfaceClient {
         }
         final plan = applyRemotePlan(f.plan, _mirror);
         surface.present(_mirror, _mirror, plan);
-      case SemanticsFrame _:
-        // Semantic DOM presentation is wired in a follow-up; the visual
-        // surface renders without it.
-        break;
+      case SemanticsFrame f:
+        _presentSemantics(f);
       case ByeFrame():
         _dispose();
       case InitFrame _:
@@ -159,6 +174,23 @@ final class RemoteSurfaceClient {
     }
   }
 
+  /// Decodes a [SemanticsFrame] and drives the accessible DOM tree. A
+  /// malformed snapshot is swallowed: semantics are an accessibility
+  /// backstop, never a reason to tear down a rendering session.
+  void _presentSemantics(SemanticsFrame frame) {
+    final semantics = _semantics;
+    if (semantics == null) return;
+    try {
+      final decoded = jsonDecode(utf8.decode(frame.json));
+      if (decoded is! Map<String, Object?>) return;
+      final snapshot = SemanticInspectionSnapshot.fromJson(decoded);
+      semantics.present(snapshot.toSemanticTree());
+    } on Object {
+      // Drop a malformed/oversized semantics frame; the visual surface and
+      // the last good semantic tree both remain intact.
+    }
+  }
+
   void _send(Uint8List bytes) {
     _socket?.send(bytes.toJS);
   }
@@ -168,6 +200,12 @@ final class RemoteSurfaceClient {
     _input = null;
     unawaited(_surface?.dispose());
     _surface = null;
+    unawaited(_semantics?.dispose());
+    _semantics = null;
+    _surfaceRoot?.remove();
+    _surfaceRoot = null;
+    _semanticRoot?.remove();
+    _semanticRoot = null;
     _socket = null;
   }
 }

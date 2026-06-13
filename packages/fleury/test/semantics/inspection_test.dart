@@ -257,6 +257,114 @@ void main() {
     expect(chart.state, containsPair('chartPointCount', 64));
   });
 
+  group('toSemanticTree reconstruction (the serve-wire consumer path)', () {
+    test('rebuilds a SemanticNode tree, preserving structure and state', () {
+      final original = SemanticTree(
+        root: SemanticNode(
+          id: const SemanticNodeId('root'),
+          role: SemanticRole.app,
+          children: [
+            SemanticNode(
+              id: const SemanticNodeId('btn:save'),
+              role: SemanticRole.button,
+              label: 'Save',
+              hint: 'Persist the document',
+              enabled: false,
+              actions: const {SemanticAction.activate, SemanticAction.focus},
+              state: const SemanticState({'commandId': 'save'}),
+            ),
+            const SemanticNode(
+              id: SemanticNodeId('chk:wrap'),
+              role: SemanticRole.checkbox,
+              label: 'Wrap',
+              checked: true,
+              focused: true,
+              expanded: false,
+            ),
+          ],
+        ),
+      );
+
+      final rebuilt = original.toInspectionSnapshot().toSemanticTree();
+
+      expect(rebuilt.root.role, SemanticRole.app);
+      expect(rebuilt.root.id, const SemanticNodeId('root'));
+      expect(rebuilt.root.children, hasLength(2));
+
+      final button = rebuilt.root.children[0];
+      expect(button.id, const SemanticNodeId('btn:save'));
+      expect(button.role, SemanticRole.button);
+      expect(button.label, 'Save');
+      expect(button.hint, 'Persist the document');
+      expect(button.enabled, isFalse);
+      expect(button.actions, {SemanticAction.activate, SemanticAction.focus});
+      expect(button.state['commandId'], 'save');
+
+      final checkbox = rebuilt.root.children[1];
+      expect(checkbox.role, SemanticRole.checkbox);
+      expect(checkbox.checked, isTrue);
+      expect(checkbox.focused, isTrue);
+      expect(checkbox.expanded, isFalse);
+    });
+
+    test('redaction survives reconstruction — no plaintext reaches the tree', () {
+      final rebuilt = SemanticTree(
+        root: SemanticNode(
+          id: const SemanticNodeId('root'),
+          role: SemanticRole.app,
+          children: [
+            SemanticNode(
+              id: const SemanticNodeId('field:key'),
+              role: SemanticRole.textField,
+              label: 'API key',
+              value: 'secret-token',
+              state: const SemanticState({
+                'redactedValue': true,
+                'apiToken': 'secret-token',
+              }),
+            ),
+          ],
+        ),
+      ).toInspectionSnapshot().toSemanticTree();
+
+      final field = rebuilt.root.children.single;
+      expect(field.value, '<redacted>');
+      expect(field.state['apiToken'], '<redacted>');
+      // The reconstructed tree, re-serialized, still carries no plaintext.
+      expect(
+        rebuilt.toInspectionSnapshot().toJson().toString(),
+        isNot(contains('secret-token')),
+      );
+    });
+
+    test('an unknown role degrades to text; unknown actions are dropped', () {
+      final snapshot = SemanticInspectionSnapshot.fromJson({
+        'schemaVersion': 1,
+        'root': {
+          'id': 'root',
+          'role': 'app',
+          'children': [
+            {
+              'id': 'mystery',
+              'role': 'hologram', // not a SemanticRole
+              'label': 'Future node',
+              'actions': ['activate', 'teleport'], // teleport is unknown
+            },
+          ],
+        },
+      });
+
+      final node = snapshot.toSemanticTree().root.children.single;
+      expect(node.role, SemanticRole.text, reason: 'unknown role falls back');
+      expect(node.label, 'Future node');
+      expect(
+        node.actions,
+        {SemanticAction.activate},
+        reason: 'the unrecognized action is dropped, not an error',
+      );
+    });
+  });
+
   testWidgets('tester exposes semantic inspection snapshot and JSON', (
     tester,
   ) async {

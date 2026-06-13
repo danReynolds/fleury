@@ -23,6 +23,7 @@ import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/render_layout_stats.dart';
 import '../rendering/render_repaint_boundary.dart';
+import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
 import '../terminal/diagnostics.dart';
 import '../terminal/events.dart';
@@ -277,6 +278,21 @@ Future<void> runTui(
       // changed cells; the client applies them to a mirror and rebuilds.
       final plan = presentationPlanner.build(reason: reason, frame: frame);
       activeSurfaceSink.presentFrame(prev, next, plan);
+      // Ship the semantic tree when it changed, so the served session stays
+      // agent-drivable and accessible — the differentiator an ANSI-to-xterm
+      // relay structurally cannot offer. Gated on the dirty tracker so we
+      // pay the tree build only on semantic changes, not every frame.
+      final semanticRoot = rootElement;
+      if (semanticRoot != null && runtime.semanticDirtyTracker.hasDirt) {
+        final snapshot = SemanticInspectionSnapshot.fromTree(
+          SemanticTree.fromElement(semanticRoot),
+        );
+        activeSurfaceSink.presentSemantics(
+          utf8.encode(jsonEncode(snapshot.toJson())),
+        );
+        // Consume the dirt so the next frame only re-sends on a real change.
+        runtime.semanticDirtyTracker.takeDirtySnapshot();
+      }
       runtimeMarkers?.markOnce('first.render.end');
       frameLoop.commit(frame);
       DebugInvalidations.reset();

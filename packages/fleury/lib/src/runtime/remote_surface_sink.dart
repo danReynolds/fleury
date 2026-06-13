@@ -20,4 +20,10 @@ abstract interface class RemoteSurfaceSink {
   /// the ANSI diff write. [prev]/[next] are the committed and new buffers;
   /// [plan] carries the damage classification (full-repaint, scroll).
   void presentFrame(CellBuffer prev, CellBuffer next, FramePresentationPlan plan);
+
+  /// Sends the semantic snapshot ([json] = UTF-8 of the
+  /// `SemanticInspectionSnapshot` JSON) for the current frame, so a served
+  /// session stays agent-drivable and accessible. Called only when the
+  /// semantic tree changed.
+  void presentSemantics(List<int> json);
 }
