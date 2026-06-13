@@ -73,15 +73,11 @@ final class RemoteSurfaceClient {
   }
 
   CellSize _measureViewport() {
+    // DomCellMetrics.measure() owns the browser layout read and derives
+    // the cols/rows that fit the container — the host read phase. The
+    // client never reads layout directly (boundary contract).
     final box = _metrics!.measure();
-    final rect = _host.getBoundingClientRect();
-    final cols = box.cssCellWidth <= 0
-        ? 80
-        : (rect.width / box.cssCellWidth).floor().clamp(1, 1000);
-    final rows = box.cssCellHeight <= 0
-        ? 24
-        : (rect.height / box.cssCellHeight).floor().clamp(1, 1000);
-    return CellSize(cols, rows);
+    return CellSize(box.cols.clamp(1, 1000), box.rows.clamp(1, 1000));
   }
 
   void _sendInit() {
