@@ -34,6 +34,13 @@ import '../semantics/semantics.dart';
 /// decoder rejects an unknown version rather than misreading it.
 const int semanticsWireVersion = 1;
 
+/// Maximum tree depth the decoder will reconstruct. The frame payload cap
+/// already bounds total bytes (and thus node count), but a hostile or corrupt
+/// patch could still encode a very deep `childIds` chain; capping recursion
+/// depth turns that into a pruned subtree instead of a stack overflow. Far
+/// beyond any real UI nesting.
+const int maxSemanticTreeDepth = 1024;
+
 /// Server side: turns a sequence of [SemanticInspectionSnapshot]s into compact
 /// wire payloads, emitting a full frame once per connection and patches
 /// thereafter. One instance per served session (it holds the last-sent state).
@@ -194,12 +201,19 @@ final class SemanticsWireDecoder {
         return null;
     }
 
-    final nested = _nest(_rootId, <String>{});
+    final nested = _nest(_rootId, <String>{}, 0);
     if (nested == null) return null;
-    return SemanticInspectionSnapshot.fromJson(<String, Object?>{
-      'schemaVersion': SemanticInspectionSnapshot.currentSchemaVersion,
-      'root': nested,
-    }).toSemanticTree();
+    try {
+      return SemanticInspectionSnapshot.fromJson(<String, Object?>{
+        'schemaVersion': SemanticInspectionSnapshot.currentSchemaVersion,
+        'root': nested,
+      }).toSemanticTree();
+    } on FormatException {
+      // A reconstructed node was missing a required field (e.g. a corrupt or
+      // hostile patch dropped a node's role). Reject this frame rather than
+      // throw; the last good tree stays on screen.
+      return null;
+    }
   }
 
   void _put(Map<Object?, Object?> node) {
@@ -212,12 +226,17 @@ final class SemanticsWireDecoder {
   }
 
   /// Rebuilds the nested node JSON for [id] from the flat map, guarding against
-  /// cycles and missing ids (a corrupt/partial patch yields a pruned subtree
-  /// rather than an infinite loop).
-  Map<String, Object?>? _nest(String id, Set<String> seen) {
+  /// cycles (the [seen] path set), missing ids, and excessive depth (a corrupt
+  /// or hostile patch yields a pruned subtree rather than an infinite loop or a
+  /// stack overflow).
+  Map<String, Object?>? _nest(String id, Set<String> seen, int depth) {
+    if (depth >= maxSemanticTreeDepth) return null;
     if (!seen.add(id)) return null;
     final flat = _flat[id];
-    if (flat == null) return null;
+    if (flat == null) {
+      seen.remove(id);
+      return null;
+    }
     final json = <String, Object?>{
       for (final entry in flat.entries)
         if (entry.key != 'childIds') entry.key: entry.value,
@@ -227,7 +246,7 @@ final class SemanticsWireDecoder {
       final children = <Map<String, Object?>>[];
       for (final childId in childIds) {
         if (childId is! String) continue;
-        final child = _nest(childId, seen);
+        final child = _nest(childId, seen, depth + 1);
         if (child != null) children.add(child);
       }
       if (children.isNotEmpty) json['children'] = children;
