@@ -948,11 +948,25 @@ class _RenderFocusBounds extends RenderObject
     CellOffset? screenOffset,
     CellRect? clipRect,
   }) {
-    _node.rect = CellRect(offset: offset, size: size);
+    // Record the focus bounds in *screen* space, not the local paint offset.
+    // Inside a ScrollView the child paints into a scratch buffer at a
+    // content-space, scroll-relative offset, so `offset` is not where the
+    // widget actually appears on screen. Directional traversal compares
+    // on-screen geometry, so feeding it the local offset put scrolled focus
+    // targets at phantom positions (e.g. a panel's controls reported over a
+    // sibling pane). `screenOffset` is the real screen origin.
+    final screen = screenOffset ?? offset;
+    final bounds = CellRect(offset: screen, size: size);
+    // A focusable that is fully clipped out of view (e.g. scrolled past the
+    // viewport) records no rect, so it can't act as a directional-traversal
+    // candidate while invisible — you scroll to it, you don't arrow to it.
+    _node.rect = clipRect == null || clipRect.intersect(bounds) != null
+        ? bounds
+        : null;
     _child?.paint(
       buffer,
       offset,
-      screenOffset: screenOffset ?? offset,
+      screenOffset: screen,
       clipRect: clipRect,
     );
   }

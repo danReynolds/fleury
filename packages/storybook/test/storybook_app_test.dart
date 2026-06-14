@@ -190,6 +190,47 @@ void main() {
     expect(output, contains('> Container'));
   });
 
+  testWidgets('left arrow returns focus from the details panel to the widgets '
+      'list', (tester) {
+    // Regression: the details panel used to sit outside the focus-traversal
+    // group, so once focus crossed into it (e.g. onto a control), Left/Right
+    // had no group to handle them and focus was stranded on the right.
+    tester.pumpWidget(
+      StorybookApp(initialStoryId: 'core.layout-text.text'),
+    );
+    tester.render(size: const CellSize(120, 40));
+
+    int? left() => tester.focusManager.focusedNode?.rect?.left;
+
+    // Walk Right into the details panel (its content starts past column ~76).
+    var enteredDetails = false;
+    for (var i = 0; i < 8 && !enteredDetails; i++) {
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      tester.pump();
+      tester.render(size: const CellSize(120, 40));
+      if ((left() ?? 0) > 76) enteredDetails = true;
+    }
+    expect(enteredDetails, isTrue,
+        reason: 'arrow-right should be able to reach the details panel');
+
+    // Now Left must carry focus back leftward and ultimately into the widgets
+    // panel (column < selector width ~34) — not get stuck on a details control.
+    var reachedWidgets = false;
+    var lastLeft = left() ?? 999;
+    for (var i = 0; i < 14 && !reachedWidgets; i++) {
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+      tester.pump();
+      tester.render(size: const CellSize(120, 40));
+      final l = left() ?? lastLeft;
+      expect(l, lessThanOrEqualTo(lastLeft),
+          reason: 'each Left should move focus leftward, never rightward');
+      lastLeft = l;
+      if (l < 34) reachedWidgets = true;
+    }
+    expect(reachedWidgets, isTrue,
+        reason: 'Left from the details panel should return to the widgets list');
+  });
+
   testWidgets('arrow traversal moves from selector into interactive preview', (
     tester,
   ) {
