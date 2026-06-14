@@ -244,6 +244,52 @@ void main() {
       await transport.disconnect();
       await done;
     });
+
+    test('a peer SEMANTIC_ACTION activates the live node', () async {
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(transport);
+      var activated = 0;
+      scheduleMicrotask(() => transport.emit(_init));
+      final done = runTui(
+        Semantics(
+          id: const SemanticNodeId('btn:go'),
+          role: SemanticRole.button,
+          label: 'Go',
+          actions: const {SemanticAction.activate},
+          onAction: (action) {
+            if (action == SemanticAction.activate) activated += 1;
+          },
+          child: const Text('Go'),
+        ),
+        driver: driver,
+        requireInteractiveTerminal: false,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      // The browser activates the button through its accessible DOM — the
+      // path that was previously a no-op over the wire.
+      transport.emit(
+        const SemanticActionFrame(
+          SemanticNodeId('btn:go'),
+          SemanticAction.activate,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(activated, 1, reason: 'the semantic action drove the live tree');
+
+      // An action for a missing node is a safe no-op (no crash).
+      transport.emit(
+        const SemanticActionFrame(
+          SemanticNodeId('btn:missing'),
+          SemanticAction.activate,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(activated, 1);
+
+      await transport.disconnect();
+      await done;
+    });
   });
 
   group('hardening', () {

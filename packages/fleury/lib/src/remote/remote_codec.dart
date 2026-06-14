@@ -16,6 +16,7 @@ import '../foundation/geometry.dart';
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/scroll_detection.dart';
+import '../semantics/semantics.dart';
 import '../terminal/events.dart';
 
 /// A frame reduced to its changed cells for the wire: the grid size,
@@ -641,4 +642,31 @@ TuiEvent decodeInputEvent(Uint8List bytes) {
   }
   r.expectEnd();
   return event;
+}
+
+/// Encodes a peer's semantic-action request — the browser activating a node in
+/// its accessible DOM — as the node id plus the action name.
+Uint8List encodeSemanticAction(SemanticNodeId id, SemanticAction action) {
+  final w = _Writer();
+  w.vstr(id.value);
+  w.vstr(action.name);
+  return w.take();
+}
+
+/// Decodes a semantic-action request. Throws [RemoteCodecException] on an
+/// unrecognized action name (e.g. a peer on a newer protocol) so the caller
+/// rejects it rather than misinterpreting it.
+({SemanticNodeId id, SemanticAction action}) decodeSemanticAction(
+  Uint8List bytes,
+) {
+  final r = _Reader(bytes);
+  final id = r.vstr();
+  final actionName = r.vstr();
+  r.expectEnd();
+  for (final action in SemanticAction.values) {
+    if (action.name == actionName) {
+      return (id: SemanticNodeId(id), action: action);
+    }
+  }
+  throw RemoteCodecException('unknown semantic action "$actionName"');
 }

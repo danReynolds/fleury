@@ -6,7 +6,9 @@
 // lossless. The DOM rendering of the mirror is covered by the surface's
 // own Chrome tests.
 
+import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/src/remote/remote_codec.dart';
@@ -204,6 +206,35 @@ void main() {
         final out = (FrameDecoder()..feed(wire)).drain().toList();
         expect((out.single as InputEventFrame).event, event);
       }
+    });
+
+    test('a semantic action round-trips through the framing layer', () {
+      const frame = SemanticActionFrame(
+        SemanticNodeId('btn:save'),
+        SemanticAction.activate,
+      );
+      final out = (FrameDecoder()..feed(encodeFrame(frame))).drain().single;
+      expect(out, isA<SemanticActionFrame>());
+      final decoded = out as SemanticActionFrame;
+      expect(decoded.id, const SemanticNodeId('btn:save'));
+      expect(decoded.action, SemanticAction.activate);
+    });
+
+    test('an unknown semantic action is rejected, not misread', () {
+      // A valid payload, with the action name swapped for an equal-length
+      // bogus one so the length prefixes stay valid (a peer on a newer
+      // protocol, or a corrupt frame).
+      final valid = encodeSemanticAction(
+        const SemanticNodeId('x'),
+        SemanticAction.activate,
+      );
+      final bogus = Uint8List.fromList(
+        utf8.encode(utf8.decode(valid).replaceFirst('activate', 'teleport')),
+      );
+      expect(
+        () => decodeSemanticAction(bogus),
+        throwsA(isA<RemoteCodecException>()),
+      );
     });
 
     test('a semantic snapshot survives the SemanticsFrame wire round-trip', () {

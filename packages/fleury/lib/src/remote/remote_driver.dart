@@ -47,6 +47,7 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
       StreamController<TuiEvent>.broadcast();
   final _RemoteParserSink _sink = _RemoteParserSink();
   final SemanticsWireEncoder _semanticsEncoder = SemanticsWireEncoder();
+  RemoteSemanticActionHandler? _onSemanticAction;
 
   StreamSubscription<RemoteFrame>? _frameSub;
   CellSize _size = const CellSize(80, 24);
@@ -148,6 +149,11 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
     _transport.send(SemanticsFrame(bytes));
   }
 
+  @override
+  set onSemanticAction(RemoteSemanticActionHandler? handler) {
+    _onSemanticAction = handler;
+  }
+
   void _onFrame(RemoteFrame frame) {
     switch (frame) {
       case InitFrame f:
@@ -173,6 +179,12 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
         // App→peer render frames; an app never receives them. Ignore so a
         // malformed peer can't crash the session.
         break;
+      case SemanticActionFrame f:
+        // The peer activated a node in its accessible DOM; invoke it on the
+        // live tree (only on the structured path, like the other v2 input).
+        if (_active && wantsPresentationPlans) {
+          _onSemanticAction?.call(f.id, f.action);
+        }
       case InputEventFrame f:
         // Structured input from a v2 peer: surface the event directly
         // instead of parsing ANSI. A resize event also updates the cached

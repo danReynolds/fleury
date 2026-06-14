@@ -79,7 +79,14 @@ final class RemoteSurfaceClient {
     final semanticRoot = web.document.createElement('div');
     _host.appendChild(semanticRoot);
     _semanticRoot = semanticRoot;
-    _semantics = SemanticDomPresenter(root: semanticRoot);
+    _semantics = SemanticDomPresenter(root: semanticRoot)
+      // Activating a node in the accessible DOM (screen reader / agent) sends
+      // the action back to the host, which invokes it on the live tree —
+      // completing the semantics round trip so a served session is operable
+      // through the a11y tree, not just the visual grid.
+      ..onSemanticActionRequest = (id, action) {
+        _send(encodeFrame(SemanticActionFrame(id, action)));
+      };
     _mirror = CellBuffer(_size);
     _input = DomInputSource(
       hostElement: _host,
@@ -170,6 +177,7 @@ final class RemoteSurfaceClient {
       case InputFrame _:
       case OutputFrame _:
       case InputEventFrame _:
+      case SemanticActionFrame _:
         // Not part of the server→client contract; ignore.
         break;
     }

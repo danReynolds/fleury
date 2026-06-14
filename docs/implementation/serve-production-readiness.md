@@ -348,3 +348,32 @@ Apple Silicon, the DOM surface is comparable-to-lower per-frame main-thread cost
 WebGL's advantage is flat scaling at large grids, not beating fleury. All tiers
 sit far under the 60 fps budget. The benchmark vendors xterm.js + addons on
 demand (not committed) and lives outside `test/`, so it never runs in CI.
+
+## Update — semantic actions now round-trip; the a11y tree is operable (2026-06-14)
+
+A live audit of a served storybook session caught a real gap: semantics flowed
+**one way**. The client built the accessible DOM and the `SemanticDomPresenter`
+wired click→`onSemanticActionRequest`, but `RemoteSurfaceClient` never set that
+handler and the protocol had no inbound action frame — so a screen reader or
+agent *activating* a node through the a11y tree was silently dropped. Reading
+worked; driving didn't, undercutting the "agent-drivable **and** accessible"
+claim from the gap-2 work (keyboard and pointer-on-grid still operated
+everything).
+
+**Fix — a `0x15 SEMANTIC_ACTION` frame** (peer → app), the structured
+counterpart to the app → peer `SemanticsFrame`. The client wires
+`onSemanticActionRequest` to send `(SemanticNodeId, SemanticAction)`; the driver
+surfaces it via `RemoteSurfaceSink.onSemanticAction`; `runTui` invokes it on the
+live tree with the core `invokeSemanticActionFromElement` (the same call the
+in-browser host uses) and re-renders — so the result streams back over the
+existing PLAN + SEMANTICS frames. An action for a missing/disabled node is a
+safe no-op; an unrecognized action name is rejected by the codec, not misread.
+
+Proven: a `runTui` session driven through `RemoteTerminalDriver` fires the
+widget's `onAction` when a `SemanticActionFrame` arrives
+(`remote_surface_driver_test`); the frame round-trips through the framing layer
+(`remote_transport_parity_test`); and **live** — clicking the accessible-DOM
+checkbox node in a served storybook now toggles it (`aria-checked` flips), where
+before it was a no-op. The embedded client asset was regenerated.
+
+Suites green: **core 1676, web VM 199, Chrome 154**; freshness gate matched.

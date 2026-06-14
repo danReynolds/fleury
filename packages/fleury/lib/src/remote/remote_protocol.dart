@@ -37,6 +37,10 @@
 //
 //   Peer (serve / shell) → App, structured input
 //     0x14 INPUT_EVENT payload = binary TuiEvent (see remote_codec)
+//     0x15 SEMANTIC_ACTION payload = `<nodeId><action>` (see remote_codec) —
+//                   the peer activating a node in its accessible DOM, so a
+//                   served session is operable through the a11y tree, not just
+//                   the visual grid
 //
 //   Either direction
 //     0x11 BYE      payload = empty, signals a clean shutdown
@@ -50,6 +54,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../foundation/geometry.dart';
+import '../semantics/semantics.dart';
 import '../terminal/capabilities.dart';
 import '../terminal/events.dart';
 import 'remote_codec.dart';
@@ -84,7 +89,8 @@ enum FrameType {
   bye(0x11),
   plan(0x12),
   semantics(0x13),
-  inputEvent(0x14);
+  inputEvent(0x14),
+  semanticAction(0x15);
 
   const FrameType(this.code);
   final int code;
@@ -172,6 +178,16 @@ final class InputEventFrame extends RemoteFrame {
   final TuiEvent event;
 }
 
+/// The peer activated a node in its accessible DOM (a screen reader or agent
+/// driving the semantics, not the visual grid). The host invokes [action] on
+/// the live node [id]. Peer → app; the structured counterpart to the
+/// app → peer [SemanticsFrame].
+final class SemanticActionFrame extends RemoteFrame {
+  const SemanticActionFrame(this.id, this.action);
+  final SemanticNodeId id;
+  final SemanticAction action;
+}
+
 /// Either side signals a clean shutdown. Empty payload.
 final class ByeFrame extends RemoteFrame {
   const ByeFrame();
@@ -190,6 +206,10 @@ Uint8List encodeFrame(RemoteFrame frame) {
     PlanFrame f => (FrameType.plan, encodeRemotePlan(f.plan)),
     SemanticsFrame f => (FrameType.semantics, f.json),
     InputEventFrame f => (FrameType.inputEvent, encodeInputEvent(f.event)),
+    SemanticActionFrame f => (
+      FrameType.semanticAction,
+      encodeSemanticAction(f.id, f.action),
+    ),
     ByeFrame() => (FrameType.bye, const <int>[]),
   };
   final out = BytesBuilder(copy: false);
@@ -291,6 +311,13 @@ final class FrameDecoder {
           return InputEventFrame(decodeInputEvent(payload));
         } on RemoteCodecException catch (e) {
           throw RemoteProtocolException('INPUT_EVENT frame: ${e.message}.');
+        }
+      case FrameType.semanticAction:
+        try {
+          final (:id, :action) = decodeSemanticAction(payload);
+          return SemanticActionFrame(id, action);
+        } on RemoteCodecException catch (e) {
+          throw RemoteProtocolException('SEMANTIC_ACTION frame: ${e.message}.');
         }
       case FrameType.bye:
         return const ByeFrame();

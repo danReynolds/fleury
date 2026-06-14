@@ -1,6 +1,12 @@
 import '../rendering/cell_buffer.dart';
 import '../semantics/inspection.dart';
+import '../semantics/semantics.dart';
 import 'frame_presentation.dart';
+
+/// Handles an inbound semantic-action request from the peer (the browser
+/// activating a node in its accessible DOM).
+typedef RemoteSemanticActionHandler =
+    void Function(SemanticNodeId id, SemanticAction action);
 
 /// A driver that wants structured frames instead of ANSI bytes.
 ///
@@ -28,4 +34,11 @@ abstract interface class RemoteSurfaceSink {
   /// patches after — because a full resend stops compressing past DEFLATE's
   /// 32 KiB window. Called when the semantic tree changed.
   void presentSemantics(SemanticInspectionSnapshot snapshot);
+
+  /// Registers a handler for inbound semantic-action requests from the peer —
+  /// the browser activating a node in its accessible DOM (a screen reader or
+  /// agent driving the a11y tree, not the visual grid). The host invokes the
+  /// action against the live tree. Set to null to clear. Completes the round
+  /// trip that [presentSemantics] starts.
+  set onSemanticAction(RemoteSemanticActionHandler? handler);
 }

@@ -508,6 +508,23 @@ Future<void> runTui(
         // peer negotiated the structured (plan) path.
         if (maybeSurfaceSink != null && maybeSurfaceSink.wantsPresentationPlans) {
           surfaceSink = maybeSurfaceSink;
+          // The peer can activate a node in its accessible DOM; invoke the
+          // action against the live tree and re-render, completing the
+          // semantics round trip (presentSemantics ships the tree out, this
+          // brings activations back). Mirrors the in-browser host.
+          maybeSurfaceSink.onSemanticAction = (id, action) {
+            final root = rootElement;
+            if (root == null) return;
+            unawaited(
+              invokeSemanticActionFromElement(
+                root: root,
+                tree: SemanticTree.fromElement(root),
+                id: id,
+                action: action,
+              ),
+            );
+            scheduleFrame('semantic-action:${action.name}');
+          };
         }
         try {
           // Wrap the app in:
