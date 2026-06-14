@@ -184,8 +184,10 @@ void main() {
       size: const CellSize(120, 40),
       emptyMark: ' ',
     );
-    expect(output, contains('  Column  Core'));
-    expect(output, contains('> Container  Core'));
+    // Grouped browse mode: a CORE section header, category tag suppressed.
+    expect(output, contains('CORE'));
+    expect(output, contains('  Column'));
+    expect(output, contains('> Container'));
   });
 
   testWidgets('arrow traversal moves from selector into interactive preview', (

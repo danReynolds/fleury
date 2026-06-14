@@ -731,6 +731,7 @@ class _WidgetSelectorState extends State<_WidgetSelector> {
         placeholder: 'Search widgets...',
         width: (widget.width - 3).clamp(20, 31),
         fillHeight: true,
+        groupByCategory: true,
         autofocus: true,
         copySelection: false,
         onActivate: (result, _) => _activateResult(result),
