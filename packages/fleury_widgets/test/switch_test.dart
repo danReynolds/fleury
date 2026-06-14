@@ -43,9 +43,9 @@ void main() {
       tester.pumpWidget(Switch(value: true, onChanged: (_) {}));
       final buf = tester.render(size: const CellSize(8, 1));
       // Look at the first track cell after the opening bracket; the
-      // foreground should be the theme primary (AnsiColor(4) default).
+      // foreground should be the theme primary (Colors.mint default).
       // Index 0 is '[', index 1 is the first track glyph.
-      expect(buf.atColRow(1, 0).style.foreground, const AnsiColor(4));
+      expect(buf.atColRow(1, 0).style.foreground, Colors.mint);
     });
 
     testWidgets('label renders after the track', (tester) {

@@ -7,7 +7,7 @@ enum StorybookThemeMode { cyber, terminal, dark, light, highContrast }
 // semantically obvious (amber warn, coral error, cyan info).
 const _cyberBg = RgbColor(0x0E, 0x0F, 0x13); // near-black, faint cool tint
 const _cyberFg = RgbColor(0xC8, 0xD3, 0xE0); // light cool grey
-const _cyberGreen = RgbColor(0x2E, 0xE6, 0xA6); // cool mint-green accent
+const _cyberGreen = Colors.mint; // cool mint-green accent (framework default primary)
 const _cyberMuted = RgbColor(0x6B, 0x73, 0x84); // readable secondary grey
 
 const ThemeData _cyberTheme = ThemeData(
