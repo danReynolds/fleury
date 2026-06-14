@@ -185,6 +185,7 @@ class SearchPanel extends StatefulWidget {
     this.placeholder = 'Search...',
     this.width = 60,
     this.maxVisible = 10,
+    this.fillHeight = false,
     this.queryFocusNode,
     this.resultsFocusNode,
     this.autofocus = false,
@@ -202,7 +203,16 @@ class SearchPanel extends StatefulWidget {
   final String label;
   final String placeholder;
   final int width;
+
+  /// Cap on the number of result rows when [fillHeight] is false. When
+  /// [fillHeight] is true this is ignored and the list grows to fill the
+  /// available vertical space.
   final int maxVisible;
+
+  /// When true the result list expands to fill the height handed down by the
+  /// parent (e.g. an [Expanded] panel slot) instead of being capped at
+  /// [maxVisible] rows. Requires a bounded-height parent.
+  final bool fillHeight;
   final FocusNode? queryFocusNode;
   final FocusNode? resultsFocusNode;
   final bool autofocus;
@@ -477,6 +487,35 @@ class _SearchPanelState extends State<SearchPanel> {
     final canActivate = widget.onActivate != null;
     final panelFocused = _queryFocusNode.hasFocus || _resultsFocusNode.hasFocus;
 
+    final Widget listArea = order.isEmpty
+        ? Text(
+            _query.text.trim().isEmpty
+                ? widget.placeholder
+                : 'No matching results',
+          )
+        : ListView.builder(
+            controller: _list,
+            focusNode: _resultsFocusNode,
+            itemCount: order.length,
+            selectionActive: panelFocused,
+            onSelect: (_) => _activateSelected(),
+            itemBuilder: (context, viewIndex, activeSelected) {
+              final sourceIndex = order[viewIndex];
+              final selected = viewIndex == _list.selectedIndex;
+              return _SearchResultRow(
+                result: widget.results[sourceIndex],
+                sourceIndex: sourceIndex,
+                viewIndex: viewIndex,
+                selected: selected,
+                activeSelection: activeSelected,
+                copyEnabled: copyEnabled,
+                canActivate: canActivate,
+                onActivate: () => _activateResultAt(viewIndex),
+                onCopy: () => _copyResultAt(viewIndex),
+              );
+            },
+          );
+
     Widget panel = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -488,37 +527,10 @@ class _SearchPanelState extends State<SearchPanel> {
           onSubmit: (_) => _activateSelected(),
         ),
         const SizedBox(height: 1),
-        SizedBox(
-          height: visible,
-          child: order.isEmpty
-              ? Text(
-                  _query.text.trim().isEmpty
-                      ? widget.placeholder
-                      : 'No matching results',
-                )
-              : ListView.builder(
-                  controller: _list,
-                  focusNode: _resultsFocusNode,
-                  itemCount: order.length,
-                  selectionActive: panelFocused,
-                  onSelect: (_) => _activateSelected(),
-                  itemBuilder: (context, viewIndex, activeSelected) {
-                    final sourceIndex = order[viewIndex];
-                    final selected = viewIndex == _list.selectedIndex;
-                    return _SearchResultRow(
-                      result: widget.results[sourceIndex],
-                      sourceIndex: sourceIndex,
-                      viewIndex: viewIndex,
-                      selected: selected,
-                      activeSelection: activeSelected,
-                      copyEnabled: copyEnabled,
-                      canActivate: canActivate,
-                      onActivate: () => _activateResultAt(viewIndex),
-                      onCopy: () => _copyResultAt(viewIndex),
-                    );
-                  },
-                ),
-        ),
+        if (widget.fillHeight)
+          Expanded(child: listArea)
+        else
+          SizedBox(height: visible, child: listArea),
       ],
     );
 

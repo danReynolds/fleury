@@ -643,7 +643,7 @@ class _WidgetSelectorState extends State<_WidgetSelector> {
   final ListController _listController = ListController(selectedIndex: 0);
 
   List<SearchResult> _results() {
-    return <SearchResult>[
+    final results = <SearchResult>[
       for (var i = 0; i < widget.stories.length; i++)
         for (final widgetName in widget.stories[i].widgets)
           SearchResult(
@@ -663,6 +663,36 @@ class _WidgetSelectorState extends State<_WidgetSelector> {
             },
           ),
     ];
+    // Browse order: group by category in a fixed foundational→specialized
+    // order, alphabetical within each group. Search re-ranks by match, so this
+    // only governs the no-query list — the predictable way to find a widget.
+    results.sort((a, b) {
+      final ca = _categoryRank(a.category);
+      final cb = _categoryRank(b.category);
+      if (ca != cb) return ca.compareTo(cb);
+      return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+    });
+    return results;
+  }
+
+  /// Fixed semantic order for category groups; unknown categories sort last,
+  /// then alphabetically among themselves.
+  static int _categoryRank(String? category) {
+    const order = [
+      'Core',
+      'Input',
+      'Forms',
+      'Navigation',
+      'Data',
+      'Content',
+      'Visualization',
+      'Files',
+      'Output',
+      'Agent',
+      'Workflow',
+    ];
+    final i = order.indexOf(category ?? '');
+    return i >= 0 ? i : order.length;
   }
 
   void _activateResult(SearchResult result) {
@@ -693,7 +723,7 @@ class _WidgetSelectorState extends State<_WidgetSelector> {
         label: 'Widget selector',
         placeholder: 'Search widgets...',
         width: (widget.width - 3).clamp(20, 31),
-        maxVisible: 24,
+        fillHeight: true,
         autofocus: true,
         copySelection: false,
         onActivate: (result, _) => _activateResult(result),

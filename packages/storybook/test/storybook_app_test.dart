@@ -163,8 +163,8 @@ void main() {
       size: const CellSize(120, 40),
       emptyMark: ' ',
     );
-    expect(output, contains('  Text  Core'));
-    expect(output, contains('> RichText  Core'));
+    expect(output, contains('  Column  Core'));
+    expect(output, contains('> Container  Core'));
   });
 
   testWidgets('arrow traversal moves from selector into interactive preview', (
@@ -201,23 +201,17 @@ void main() {
     tester.pumpWidget(StorybookApp(initialStoryId: 'core.selection-scroll'));
     tester.render(size: const CellSize(120, 40));
 
-    for (var i = 0; i < 9; i += 1) {
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-      tester.pump();
-    }
+    // Select the ScrollView widget by search (order-independent).
+    tester.type('ScrollView');
     tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
     tester.pump();
     tester.render(size: const CellSize(120, 40));
 
-    for (var i = 0; i < 5; i += 1) {
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
-      tester.pump();
-    }
     var output = tester.renderToString(
       size: const CellSize(120, 40),
       emptyMark: ' ',
     );
-    expect(output, contains('> Row  Core'));
+    expect(output, contains('> ScrollView  Core'));
 
     tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
     tester.pump();
@@ -271,23 +265,17 @@ void main() {
     tester.pumpWidget(StorybookApp(initialStoryId: 'core.selection-scroll'));
     tester.render(size: const CellSize(120, 40));
 
-    for (var i = 0; i < 9; i += 1) {
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-      tester.pump();
-    }
+    // Select the ScrollView widget by search (order-independent).
+    tester.type('ScrollView');
     tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
     tester.pump();
     tester.render(size: const CellSize(120, 40));
 
-    for (var i = 0; i < 5; i += 1) {
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
-      tester.pump();
-    }
     var output = tester.renderToString(
       size: const CellSize(120, 40),
       emptyMark: ' ',
     );
-    expect(output, contains('> Row  Core'));
+    expect(output, contains('> ScrollView  Core'));
 
     tester.sendMouse(
       const MouseEvent(
