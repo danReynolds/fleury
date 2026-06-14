@@ -66,11 +66,26 @@ final class DomCellMetrics implements CellMetrics {
     final containerRect = _container.getBoundingClientRect();
     _syncProbeFont();
     final probeRect = _probe.getBoundingClientRect();
+    // Snap the cell box to whole device pixels. Each grid row is laid out at
+    // `cssCellHeight`, so a fractional height — a 13px font at line-height
+    // 1.2 measures ~15.6px — never lands on an exact device pixel. The rows
+    // drift, and vertical box-drawing glyphs ('│', and rounded corners
+    // '╭╰') pick up a 1px gap every few rows: borders look dashed and the
+    // corners detach from their edges. Rounding width and height onto the
+    // device-pixel grid makes every cell identical so the glyphs tile
+    // seamlessly. (The glyphs themselves fill their natural line box, so the
+    // line-height stays as-is — tightening it would clip box-drawing.)
+    final dpr = _window.devicePixelRatio;
+    double snapToDevicePixels(double cssPx) =>
+        dpr > 0 ? (cssPx * dpr).roundToDouble() / dpr : cssPx;
     final cssCellWidth = math.max(
-      probeRect.width / _probeText.length,
+      snapToDevicePixels(probeRect.width / _probeText.length),
       _minimumCellWidth,
     );
-    final cssCellHeight = math.max(probeRect.height, _minimumCellHeight);
+    final cssCellHeight = math.max(
+      snapToDevicePixels(probeRect.height),
+      _minimumCellHeight,
+    );
     final cssCanvasWidth = math.max(containerRect.width.toDouble(), 0.0);
     final cssCanvasHeight = math.max(containerRect.height.toDouble(), 0.0);
     final cols = cssCellWidth <= 0
