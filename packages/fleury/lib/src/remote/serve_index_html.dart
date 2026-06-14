@@ -17,11 +17,11 @@ const String serveIndexHtml = r'''
   <meta charset="utf-8" />
   <title>fleury serve</title>
   <style>
-    html, body { margin: 0; padding: 0; height: 100%; background: #1a1b26; }
+    html, body { margin: 0; padding: 0; height: 100%; background: #0e0f13; }
     #fleury-remote {
       width: 100vw; height: 100vh; box-sizing: border-box; padding: 6px;
       font: 13px/1.2 Menlo, Consolas, "DejaVu Sans Mono", monospace;
-      color: #c0caf5; white-space: pre; overflow: hidden;
+      color: #c8d3e0; white-space: pre; overflow: hidden;
       font-kerning: none; font-variant-ligatures: none;
       font-feature-settings: "liga" 0, "clig" 0;
     }

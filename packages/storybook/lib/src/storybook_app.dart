@@ -12,7 +12,7 @@ class StorybookApp extends StatefulWidget {
     this.initialStoryId,
     this.initialVariantId,
     this.initialControlValues = const <String, Object?>{},
-    this.initialTheme = StorybookThemeMode.terminal,
+    this.initialTheme = StorybookThemeMode.cyber,
     this.initialViewport = StorybookViewportPreset.fit,
   }) : stories = stories ?? storybookStories;
 
@@ -315,46 +315,53 @@ class _StorybookAppState extends State<StorybookApp> {
   @override
   Widget build(BuildContext context) {
     final theme = storybookThemeFor(_themeMode);
-    return Theme(
-      data: theme,
-      child: FleuryApp(
-        title: 'Fleury Storybook',
-        status: (_) => [
-          StatusItem.text('Widget', value: _selectedWidgetName),
-          StatusItem.text('Story', value: _selectedStory.title),
-          StatusItem.text('Theme', value: storybookThemeLabel(_themeMode)),
-          StatusItem.text('Viewport', value: storybookViewportLabel(_viewport)),
-          StatusItem.text('Widgets', value: '${_widgetCount(widget.stories)}'),
-        ],
-        child: CommandScope(
-          label: 'Storybook commands',
+    final background = theme.colorScheme.background;
+    final app = FleuryApp(
+      title: 'Fleury Storybook',
+      status: (_) => [
+        StatusItem.text('Widget', value: _selectedWidgetName),
+        StatusItem.text('Story', value: _selectedStory.title),
+        StatusItem.text('Theme', value: storybookThemeLabel(_themeMode)),
+        StatusItem.text('Viewport', value: storybookViewportLabel(_viewport)),
+        StatusItem.text('Widgets', value: '${_widgetCount(widget.stories)}'),
+      ],
+      child: CommandScope(
+        label: 'Storybook commands',
+        commands: _commands(),
+        child: _StorybookShell(
+          stories: widget.stories,
+          selectedIndex: _selectedIndex,
+          selectedWidgetName: _selectedWidgetName,
+          story: _selectedStory,
+          variant: _selectedVariant,
+          controlValues: _selectedControlValues,
+          actionLog: _actionLog,
           commands: _commands(),
-          child: _StorybookShell(
-            stories: widget.stories,
-            selectedIndex: _selectedIndex,
-            selectedWidgetName: _selectedWidgetName,
-            story: _selectedStory,
-            variant: _selectedVariant,
-            controlValues: _selectedControlValues,
-            actionLog: _actionLog,
-            commands: _commands(),
-            themeMode: _themeMode,
-            viewport: _viewport,
-            compactPreview: _compactPreview,
-            showInspector: _showInspector,
-            resetGeneration: _resetGeneration,
-            onSelectWidget: _selectWidget,
-            onCycleTheme: _cycleTheme,
-            onCycleViewport: _cycleViewport,
-            onToggleInspector: _toggleInspector,
-            onToggleDensity: _toggleDensity,
-            onResetStory: _resetStory,
-            onChangeControl: _changeControl,
-            onSetControlValue: _setControlValue,
-            onRecordAction: _recordStoryAction,
-          ),
+          themeMode: _themeMode,
+          viewport: _viewport,
+          compactPreview: _compactPreview,
+          showInspector: _showInspector,
+          resetGeneration: _resetGeneration,
+          onSelectWidget: _selectWidget,
+          onCycleTheme: _cycleTheme,
+          onCycleViewport: _cycleViewport,
+          onToggleInspector: _toggleInspector,
+          onToggleDensity: _toggleDensity,
+          onResetStory: _resetStory,
+          onChangeControl: _changeControl,
+          onSetControlValue: _setControlValue,
+          onRecordAction: _recordStoryAction,
         ),
       ),
+    );
+    return Theme(
+      data: theme,
+      // The theme's background isn't auto-painted, so fill the whole surface
+      // with it (when set) before the panels render on top — this is what makes
+      // the cyber theme's dark backdrop show through transparent cells.
+      child: background == null
+          ? app
+          : Container(color: background, child: app),
     );
   }
 }

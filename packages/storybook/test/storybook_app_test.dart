@@ -4,6 +4,27 @@ import 'package:fleury_storybook/storybook.dart';
 import 'package:test/test.dart';
 
 void main() {
+  testWidgets('cyber theme is the default and paints its dark bg + green accent',
+      (tester) {
+    tester.pumpWidget(StorybookApp());
+    final buffer = tester.render(size: const CellSize(120, 40));
+    const green = RgbColor(0x2E, 0xE6, 0xA6);
+    const bg = RgbColor(0x0E, 0x0F, 0x13);
+    var greenCells = 0;
+    var bgCells = 0;
+    for (var r = 0; r < buffer.size.rows; r++) {
+      for (var c = 0; c < buffer.size.cols; c++) {
+        final style = buffer.atColRow(c, r).style;
+        if (style.foreground == green || style.background == green) greenCells++;
+        if (style.background == bg) bgCells++;
+      }
+    }
+    expect(greenCells, greaterThan(0),
+        reason: 'the cool-green accent should render (focus/selection/primary)');
+    expect(bgCells, greaterThan(1000),
+        reason: 'the dark cyber background should fill the surface');
+  });
+
   testWidgets('storybook commands navigate stories and variants', (
     tester,
   ) async {
