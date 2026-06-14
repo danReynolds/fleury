@@ -377,3 +377,45 @@ checkbox node in a served storybook now toggles it (`aria-checked` flips), where
 before it was a no-op. The embedded client asset was regenerated.
 
 Suites green: **core 1676, web VM 199, Chrome 154**; freshness gate matched.
+
+## Update — serve startup: warm-standby pre-spawn (2026-06-14)
+
+Profiling the time to first paint when a browser hits `fleury serve --spawn`
+(`profiling/bin/serve_startup_profile.dart`, WS connect → first PLAN frame)
+found the slowness was **entirely the per-connection app spawn**, not the wire
+or the client:
+
+| phase | cost |
+| --- | --- |
+| HTTP GET `/` + `/remote_client.js` | ~6 ms |
+| **spawn `dart run <app>` (VM cold start + JIT-compile the app from source)** | **~4–5 s** |
+| first paint (render + wire) | tens of ms |
+
+The spawn happened *inside* the `/ws` handler, so the browser blocked the whole
+~5 s. The Dart VM floor (`dart run` hello-world) is only ~0.46 s, so ~3.4 s was
+re-compiling the app's kernel on **every** connection.
+
+**Fix — a warm-standby pool.** Spawn mode now keeps one subprocess brought up
+*ahead* of the browser: it connects to its session socket and (for a runTui app)
+blocks awaiting INIT, so the cold start is paid before anyone connects. Each
+connection claims the standby, attaches instantly, and prepares the next — so
+sequential reloads stay warm. A connection that outruns the replenish (or a
+standby that failed) falls back to the old cold spawn; concurrent connects each
+get their own subprocess (isolation preserved).
+
+Measured (connect → first paint), storybook:
+
+| config | startup | vs baseline |
+| --- | --- | --- |
+| baseline (`dart run`, cold spawn per connect) | ~5000 ms | — |
+| warm standby + `dart run` (human reload cadence) | ~200–400 ms | ~13–25× |
+| warm standby + **AOT-compiled app** (`dart compile exe`) | **~20 ms** | **~250×** |
+
+The residual under `dart run` is the warm process JIT-compiling its first paint;
+an **AOT-compiled app** removes that *and* replenishes in ~0.3 s (so the pool
+keeps up even under tight cadence) *and* makes the cold fallback fast —
+recommended for production serve. The pre-spawn alone, with no app changes,
+takes the reload a human feels from ~5 s to a few hundred ms.
+
+Covered by `serve_spawn_test` (a warm standby is pre-spawned and pairs the first
+browser; isolation preserved). Suites green: spawn + serve integration pass.
