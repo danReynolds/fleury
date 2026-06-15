@@ -83,7 +83,7 @@ void main() {
   });
 
   group('box drawing', () {
-    test('a bordered box keeps every border glyph and column count', () {
+    test('a bordered box draws its border with CSS lines, not font glyphs', () {
       // 5 cols wide, 3 rows tall.
       final html = renderFrameHtml(
         frame(5, 3, (b) {
@@ -92,11 +92,41 @@ void main() {
           b.writeText(const CellOffset(0, 2), '└───┘');
         }),
       );
+      // Box-drawing glyphs don't tile vertically as DOM text (the glyph ink is
+      // shorter than the cell), so they're painted as CSS gradient lines and
+      // the literal glyphs are gone from the markup.
+      expect(html, contains('linear-gradient(currentColor,currentColor)'));
       for (final glyph in ['┌', '┐', '└', '┘', '─', '│']) {
-        expect(html, contains(glyph), reason: 'missing border glyph $glyph');
+        expect(html, isNot(contains(glyph)), reason: '$glyph should be CSS-drawn');
       }
       // Three rows emitted.
       expect('<div class="r">'.allMatches(html).length, 3);
+    });
+
+    test('vertical and horizontal runs paint full-length lines', () {
+      // A vertical bar and a horizontal run get a single full-length gradient
+      // (no centre seam); a horizontal run coalesces into one span.
+      final vertical = renderFrameHtml(
+        frame(1, 1, (b) => b.writeText(const CellOffset(0, 0), '│')),
+      );
+      expect(vertical, contains('background-size:1px 100%'));
+      expect(vertical, contains('display:inline-block'));
+
+      final horizontal = renderFrameHtml(
+        frame(4, 1, (b) => b.writeText(const CellOffset(0, 0), '────')),
+      );
+      expect(horizontal, contains('background-size:100% 1px'));
+      // One coalesced span for the whole run (4 spaces, no glyphs).
+      expect('linear-gradient'.allMatches(horizontal).length, 1);
+    });
+
+    test('a corner draws two half segments', () {
+      final html = renderFrameHtml(
+        frame(1, 1, (b) => b.writeText(const CellOffset(0, 0), '╭')),
+      );
+      // Rounded top-left = south + east half lines.
+      expect(html, contains('1px 50%'));
+      expect(html, contains('50% 1px'));
     });
   });
 
@@ -187,6 +217,9 @@ void main() {
 
   group('fidelity invariant', () {
     test('visible HTML text equals the buffer\'s own textInRange', () {
+      // Box-drawing glyphs are intentionally excluded: they're painted as CSS
+      // lines (rendered as spaces), so the visible text no longer mirrors them.
+      // Real text content must still round-trip exactly.
       final buffer = frame(24, 4, (b) {
         b.writeText(const CellOffset(0, 0), 'café 状態');
         b.writeText(
@@ -194,7 +227,6 @@ void main() {
           'naïve 日本語',
           style: const CellStyle(foreground: Colors.lime, bold: true),
         );
-        b.writeText(const CellOffset(0, 2), '┌──────┐');
         b.writeText(const CellOffset(5, 3), 'résumé');
       });
       final visible = _visibleText(renderFrameHtml(buffer));

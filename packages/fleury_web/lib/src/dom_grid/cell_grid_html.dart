@@ -67,6 +67,8 @@ void renderRowHtml(RowSpanModel row, StringBuffer out) {
       case CellRunKind.text:
       case CellRunKind.emptyText:
         _writeTextSpan(run, out);
+      case CellRunKind.boxDrawing:
+        _writeBoxDrawingSpan(run, out);
       case CellRunKind.wideText:
         _writeWideSpan(run, out);
       case CellRunKind.protocolPlaceholder:
@@ -103,6 +105,22 @@ void _writeTextSpan(CellSpanRun run, StringBuffer out) {
       ..write(_escape(run.text))
       ..write('</span>');
   }
+}
+
+void _writeBoxDrawingSpan(CellSpanRun run, StringBuffer out) {
+  final mask = boxDrawingMask(run.text);
+  if (mask == null) {
+    _writeTextSpan(run, out);
+    return;
+  }
+  // Spaces hold the cells; the line is painted with CSS gradients so the
+  // border tiles crisply instead of relying on the (non-tiling) font glyph.
+  out
+    ..write('<span style="')
+    ..write(boxDrawingCss(run.style, mask))
+    ..write('">')
+    ..write(''.padRight(run.widthCols, ' '))
+    ..write('</span>');
 }
 
 void _writeWideSpan(CellSpanRun run, StringBuffer out) {

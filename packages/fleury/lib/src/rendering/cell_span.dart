@@ -53,7 +53,10 @@ final class CellSpanBuilder {
       required CellRunKind kind,
     }) {
       final current = pending;
-      if (current != null && current.style == style && current.endCol == col) {
+      if (current != null &&
+          current.kind != CellRunKind.boxDrawing &&
+          current.style == style &&
+          current.endCol == col) {
         current
           ..text.write(text)
           ..widthCols += widthCols
@@ -67,6 +70,33 @@ final class CellSpanBuilder {
         style: style,
         kind: kind,
       )..text.write(text);
+    }
+
+    // Box-drawing cells coalesce only with an adjacent cell carrying the *same*
+    // grapheme and style (so a horizontal `────` run is one span, but `╭` and
+    // `╮` stay distinct). The run's text holds the single grapheme; widthCols
+    // counts the cells.
+    void appendBox({
+      required int col,
+      required String grapheme,
+      required CellStyle style,
+    }) {
+      final current = pending;
+      if (current != null &&
+          current.kind == CellRunKind.boxDrawing &&
+          current.style == style &&
+          current.endCol == col &&
+          current.text.toString() == grapheme) {
+        current.widthCols += 1;
+        return;
+      }
+      flushPending();
+      pending = _PendingTextRun(
+        startCol: col,
+        widthCols: 1,
+        style: style,
+        kind: CellRunKind.boxDrawing,
+      )..text.write(grapheme);
     }
 
     var col = 0;
@@ -103,6 +133,9 @@ final class CellSpanBuilder {
               ),
             );
             col += 2;
+          } else if (boxDrawingMask(cell.grapheme!) != null) {
+            appendBox(col: col, grapheme: cell.grapheme!, style: cell.style);
+            col += 1;
           } else {
             appendText(
               col: col,
@@ -187,7 +220,69 @@ final class CellSpanRun {
 }
 
 /// Span run categories understood by the DOM adapters.
-enum CellRunKind { text, wideText, emptyText, protocolPlaceholder }
+///
+/// [boxDrawing] runs carry a single box-drawing grapheme (repeated across
+/// [CellSpanRun.widthCols] cells); the DOM renderer paints them as crisp CSS
+/// lines rather than the font glyph, which in a browser does not tile
+/// vertically (the glyph ink is shorter than the cell, so stacked borders
+/// dash). See [boxDrawingMask].
+enum CellRunKind { text, wideText, emptyText, protocolPlaceholder, boxDrawing }
+
+/// Directional segment bits for a box-drawing grapheme.
+const int boxSegmentNorth = 1;
+const int boxSegmentSouth = 2;
+const int boxSegmentEast = 4;
+const int boxSegmentWest = 8;
+
+/// The line segments [grapheme] draws, as an OR of [boxSegmentNorth] etc., or
+/// null if it is not a box-drawing line/corner/junction. Double-line glyphs are
+/// mapped to their single-weight segment set (good enough for crisp borders).
+int? boxDrawingMask(String grapheme) {
+  switch (grapheme) {
+    case '│':
+    case '║':
+      return boxSegmentNorth | boxSegmentSouth;
+    case '─':
+    case '═':
+      return boxSegmentEast | boxSegmentWest;
+    case '╭':
+    case '┌':
+    case '╔':
+      return boxSegmentSouth | boxSegmentEast;
+    case '╮':
+    case '┐':
+    case '╗':
+      return boxSegmentSouth | boxSegmentWest;
+    case '╰':
+    case '└':
+    case '╚':
+      return boxSegmentNorth | boxSegmentEast;
+    case '╯':
+    case '┘':
+    case '╝':
+      return boxSegmentNorth | boxSegmentWest;
+    case '├':
+    case '╠':
+      return boxSegmentNorth | boxSegmentSouth | boxSegmentEast;
+    case '┤':
+    case '╣':
+      return boxSegmentNorth | boxSegmentSouth | boxSegmentWest;
+    case '┬':
+    case '╦':
+      return boxSegmentSouth | boxSegmentEast | boxSegmentWest;
+    case '┴':
+    case '╩':
+      return boxSegmentNorth | boxSegmentEast | boxSegmentWest;
+    case '┼':
+    case '╬':
+      return boxSegmentNorth |
+          boxSegmentSouth |
+          boxSegmentEast |
+          boxSegmentWest;
+    default:
+      return null;
+  }
+}
 
 /// DOM width correction needed for a span.
 enum WidthCorrection { none, pinToCellWidth }

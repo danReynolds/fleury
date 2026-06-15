@@ -54,11 +54,23 @@ final class DomRowFactory {
     required MeasuredCellBox? metrics,
   }) {
     final span = _document.createElement('span');
+
+    if (run.kind == CellRunKind.boxDrawing) {
+      final mask = boxDrawingMask(run.text);
+      if (mask != null) {
+        // Spaces hold the cells; the line is painted with CSS gradients.
+        span.textContent = ''.padRight(run.widthCols, ' ');
+        span.setAttribute('style', boxDrawingCss(run.style, mask));
+        return span;
+      }
+    }
+
     span.textContent = run.text;
 
     switch (run.kind) {
       case CellRunKind.text:
       case CellRunKind.emptyText:
+      case CellRunKind.boxDrawing:
         break;
       case CellRunKind.wideText:
         span.className = 'w2';
