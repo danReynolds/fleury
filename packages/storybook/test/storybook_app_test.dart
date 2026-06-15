@@ -169,6 +169,49 @@ void main() {
     expect(multiOutput, isNot(contains('Environment')));
   });
 
+  testWidgets('preview surfaces the description and a per-widget usage tip', (
+    tester,
+  ) async {
+    tester.pumpWidget(StorybookApp(initialStoryId: 'input.stepper.stepper'));
+    final output = tester.renderToString(
+      size: const CellSize(120, 40),
+      emptyMark: ' ',
+    );
+    // The description is in the always-visible preview, not just the inspector.
+    expect(output, contains('Incremental numeric control'));
+    // The footer carries the widget-specific keyboard tip (single-word tokens
+    // so the assertion survives footer line-wrapping at narrow widths).
+    expect(output, contains('step'));
+    expect(output, contains('Esc'));
+  });
+
+  testWidgets('completion menu opens beneath the field, clear of the footer', (
+    tester,
+  ) async {
+    tester.pumpWidget(
+      StorybookApp(
+        initialStoryId: 'controls.text-entry.completion-text-input',
+      ),
+    );
+    tester.render(size: const CellSize(120, 28));
+    // Move focus from the widget list into the preview, then type.
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    tester.pump();
+    tester.render(size: const CellSize(120, 28));
+    tester.type('c');
+    tester.pump();
+    final output = tester.renderToString(
+      size: const CellSize(120, 28),
+      emptyMark: ' ',
+    );
+    // Provider options render in the anchored menu, and the footer tip is still
+    // intact on its own row — the menu used to anchor to the bottom of a
+    // stretched field box and overprint the footer.
+    expect(output, contains('command-palette'));
+    expect(output, contains('semantic-tree'));
+    expect(output, contains('Type to filter'));
+  });
+
   testWidgets('initial story, variant, and control values render', (tester) {
     tester.pumpWidget(
       StorybookApp(

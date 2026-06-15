@@ -690,6 +690,7 @@ List<Story> _perWidgetStories(List<Story> groupedStories) {
             'Focused ${source.title} story for $widgetName.',
             ...source.notes,
           ],
+          usage: _widgetUsage[widgetName] ?? source.usage,
           initialHeight: source.initialHeight,
         ),
       );
@@ -928,6 +929,93 @@ const Map<String, Map<String, Object?>> _widgetDefaultControls =
       'WorkflowSnapshot': <String, Object?>{'view': 3},
       'WorkflowSummary': <String, Object?>{'view': 3},
     };
+
+/// One-line keyboard tip per widget, surfaced in the preview footer so the
+/// interaction model is discoverable. Sub-parts/controllers reuse their
+/// primary widget's tip (they render the same spotlight). Pure display
+/// widgets are intentionally absent — those fall back to the navigation hint.
+const Map<String, String> _widgetUsage = <String, String>{
+  // Core scroll / selection
+  'SelectionArea': 'Drag to select · Ctrl+A/C',
+  'ScrollView': '↑/↓ or PgUp/PgDn to scroll',
+  'ListView': '↑/↓ to move the selection',
+  'ListController': '↑/↓ to move the selection',
+  // Boolean + choice controls
+  'Button': 'Enter or Space to activate',
+  'Checkbox': 'Space to toggle',
+  'Toggle': 'Space to toggle',
+  'Switch': 'Space to toggle',
+  'Radio': '←/→ to choose',
+  'Select': 'Enter opens · ↑/↓ choose · Enter picks',
+  'SelectOption': 'Enter opens · ↑/↓ choose · Enter picks',
+  'MultiSelect': '↑/↓ to move · Space toggles each',
+  // Text entry
+  'TextInput': 'Type to edit · Enter submits',
+  'TextArea': 'Type to edit · Enter adds a line',
+  'NumberInput': 'Type a number · ↑/↓ to step',
+  'PasswordInput': 'Type to edit · Ctrl+R show / hide',
+  'Autocomplete': 'Type to filter · ↑/↓ · Enter accepts',
+  'CompletionTextInput': 'Type to filter · ↑/↓ choose · Tab accepts',
+  // Pickers
+  'DatePicker': '←/→ day · ↑/↓ week',
+  'ColorPicker': 'Arrows to move · Enter to select',
+  'Stepper': '↑/↓ or +/− to step · Home/End to ends',
+  'RangeSlider': '←/→ adjust · ↑/↓ switch handle',
+  // Navigation / overlays
+  'CommandPalette': 'Type to filter · ↑/↓ · Enter runs',
+  'Menu': 'Enter opens · ↑/↓ move · Esc closes',
+  'MenuItem': 'Enter opens · ↑/↓ move · Esc closes',
+  'SubMenu': 'Enter opens · → into submenu · Esc closes',
+  'Dialog': 'Tab between actions · Esc dismisses',
+  'Tooltip': 'Focus the target to reveal',
+  'Toaster': 'Activate a trigger to emit a toast',
+  'Tabs': '←/→ to switch tabs · Alt+1..9',
+  'TabItem': '←/→ to switch tabs · Alt+1..9',
+  'TabController': '←/→ to switch tabs · Alt+1..9',
+  // Data
+  'Table': '↑/↓ to select rows',
+  'TableController': '↑/↓ to select rows',
+  'DataTable': '↑/↓ rows · ←/→ cells in cell mode',
+  'DataTableColumn': '↑/↓ rows · ←/→ cells in cell mode',
+  'DataTableController': '↑/↓ rows · ←/→ cells in cell mode',
+  'Tree': '↑/↓ to move · ←/→ collapse / expand',
+  'TreeNode': '↑/↓ to move · ←/→ collapse / expand',
+  'TreeTable': '↑/↓ rows · ←/→ expand / collapse',
+  'TreeTableNode': '↑/↓ rows · ←/→ expand / collapse',
+  'TreeTableController': '↑/↓ rows · ←/→ expand / collapse',
+  // Forms
+  'FormPanel': 'Tab between fields · Enter submits',
+  'FormWizard': 'Tab fields · Enter advances steps',
+  'FormController': 'Tab between fields · Enter submits',
+  'FormDefinition': 'Tab between fields · Enter submits',
+  'FormFieldSpec': 'Tab between fields · Enter submits',
+  'FormWizardStep': 'Tab fields · Enter advances steps',
+  // Visualization (interactive only)
+  'LineChart': '←/→ moves the cursor when interactive',
+  // Files
+  'FileBrowser': '↑/↓ move · ←/→ or Enter opens a folder',
+  'FilePicker': '↑/↓ to move · Enter to choose',
+  'FileMentionPicker': 'Type to filter · ↑/↓ · Enter inserts',
+  'FileMentionEntry': 'Type to filter · ↑/↓ · Enter inserts',
+  // Content / output (scrollable documents)
+  'CodeView': '↑/↓ or PgUp/PgDn to scroll',
+  'DiffView': '↑/↓ or PgUp/PgDn to scroll',
+  'PatchReview': '↑/↓ or PgUp/PgDn to scroll',
+  'JsonView': '↑/↓ or PgUp/PgDn to scroll',
+  'MarkdownView': '↑/↓ or PgUp/PgDn to scroll',
+  'SearchPanel': 'Type to filter · ↑/↓ · Enter opens',
+  'LogRegion': '↑/↓ or PgUp/PgDn to scroll',
+  'TerminalOutputRegion': '↑/↓ or PgUp/PgDn to scroll',
+  // Agent / workflow
+  'ContextPanel': '↑/↓ to move through items',
+  'MessageList': '↑/↓ or PgUp/PgDn to scroll',
+  'ConversationNavigator': '↑/↓ to move · Enter to open',
+  'ToolCallCard': 'Enter to expand / collapse',
+  'ApprovalPrompt': 'Tab between choices · Enter decides',
+  'TaskGraph': '↑/↓ to move through tasks',
+  'ProcessPanel': '↑/↓ to scroll the task list',
+  'TraceTimeline': '↑/↓ or PgUp/PgDn to scroll',
+};
 
 CanvasMarker _canvasMarker(String label) {
   return switch (label) {
@@ -1606,7 +1694,8 @@ class _PickerStoryState extends State<_PickerStory> {
             values: _range,
             min: 0,
             max: 100,
-            label: 'Latency band',
+            label: 'Latency band (ms)',
+            showValues: true,
             onChanged: (value) {
               setState(() => _range = value);
               widget.onAction('range.changed', <String, Object?>{

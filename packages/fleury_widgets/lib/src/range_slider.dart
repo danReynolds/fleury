@@ -30,6 +30,7 @@ class RangeSlider extends StatefulWidget {
     this.step = 1,
     this.largeStep = 10,
     this.label,
+    this.showValues = false,
     this.focusNode,
     this.autofocus = false,
   }) : assert(min < max, 'min must be < max'),
@@ -54,6 +55,11 @@ class RangeSlider extends StatefulWidget {
 
   /// Optional label exposed through the semantic app graph.
   final String? label;
+
+  /// When true, renders a `low–high` readout above the track (the active
+  /// handle's value is emphasized) and the `min`/`max` endpoints below it, so
+  /// the numbers behind the bar are legible. Adds two rows of height.
+  final bool showValues;
 
   final FocusNode? focusNode;
   final bool autofocus;
@@ -207,26 +213,31 @@ class _RangeSliderState extends State<RangeSlider> {
       trackStyle: theme.mutedStyle,
     );
     if (!enabled) {
-      return Semantics(
-        role: SemanticRole.slider,
-        label: widget.label,
-        value: '$lo-$hi',
-        enabled: false,
-        state: SemanticState({
-          'lowValue': lo,
-          'highValue': hi,
-          'min': widget.min,
-          'max': widget.max,
-          'step': widget.step,
-          'largeStep': widget.largeStep,
-          'activeHandle': _active.name,
-          'canIncrement': false,
-          'canDecrement': false,
-        }),
-        child: slider,
+      return _decorate(
+        context,
+        Semantics(
+          role: SemanticRole.slider,
+          label: widget.label,
+          value: '$lo-$hi',
+          enabled: false,
+          state: SemanticState({
+            'lowValue': lo,
+            'highValue': hi,
+            'min': widget.min,
+            'max': widget.max,
+            'step': widget.step,
+            'largeStep': widget.largeStep,
+            'activeHandle': _active.name,
+            'canIncrement': false,
+            'canDecrement': false,
+          }),
+          child: slider,
+        ),
       );
     }
-    return Semantics(
+    return _decorate(
+      context,
+      Semantics(
       role: SemanticRole.slider,
       label: widget.label,
       value: '$lo-$hi',
@@ -270,8 +281,51 @@ class _RangeSliderState extends State<RangeSlider> {
         onKey: _onKey,
         child: slider,
       ),
+      ),
     );
   }
+
+  /// Wraps the interactive track with a value readout and endpoint labels when
+  /// [RangeSlider.showValues] is set; otherwise returns the track unchanged.
+  Widget _decorate(BuildContext context, Widget interactive) {
+    if (!widget.showValues) return interactive;
+    final theme = Theme.of(context);
+    final (lo, hi) = _normalized;
+    final active = CellStyle(
+      foreground: theme.colorScheme.primary,
+      bold: true,
+    );
+    final idle = theme.mutedStyle;
+    final lowActive = _enabled && _active == _ActiveHandle.low;
+    final highActive = _enabled && _active == _ActiveHandle.high;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            if (widget.label != null) ...[
+              Text(widget.label!),
+              const Text('  '),
+            ],
+            Text(_fmt(lo), style: lowActive ? active : idle),
+            Text(' – ', style: idle),
+            Text(_fmt(hi), style: highActive ? active : idle),
+          ],
+        ),
+        interactive,
+        Row(
+          children: <Widget>[
+            Text(_fmt(widget.min), style: idle),
+            const Expanded(child: SizedBox()),
+            Text(_fmt(widget.max), style: idle),
+          ],
+        ),
+      ],
+    );
+  }
+
+  String _fmt(num v) =>
+      v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
 }
 
 class _RawRangeSlider extends LeafRenderObjectWidget {

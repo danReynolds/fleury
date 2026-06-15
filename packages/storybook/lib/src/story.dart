@@ -142,6 +142,7 @@ final class Story {
     this.defaultControlValues = const <String, Object?>{},
     this.variants = const <StoryVariant>[],
     this.notes = const <String>[],
+    this.usage,
     this.initialHeight = 18,
   });
 
@@ -155,6 +156,12 @@ final class Story {
   final Map<String, Object?> defaultControlValues;
   final List<StoryVariant> variants;
   final List<String> notes;
+
+  /// A one-line interaction tip for the previewed widget — e.g.
+  /// `↑/↓ to step · PgUp/PgDn ±10`. Surfaced in the preview footer so the
+  /// keyboard model is discoverable without reading source.
+  final String? usage;
+
   final int initialHeight;
 
   Map<String, Object?> initialControlValues({

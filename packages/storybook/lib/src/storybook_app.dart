@@ -808,39 +808,70 @@ class _PreviewPanel extends StatelessWidget {
         recordAction: recordAction,
       ),
     );
+    final theme = Theme.of(context);
     final viewportSize = storybookViewportSize(viewport);
-    final Widget previewChild;
-    if (viewportSize == null && !compact) {
+    final bool fit = viewportSize == null && !compact;
+    final Widget body;
+    if (fit) {
       // Fit (the default): the preview viewport *is* the pane, so a second
       // rounded border inside it is redundant. It only added a smaller inner
       // box whose left edge and rounded corner stranded a few rows above the
       // footer, next to the full-height pane borders. Let the widget fill the
       // pane directly under the single pane border.
-      previewChild = content;
+      body = content;
     } else {
       // A specific viewport — a fixed-size preset or the compact toggle —
       // frames the widget at that size so its bounds are visible within the
       // larger pane.
       final height = viewportSize?.rows ?? story.initialHeight.clamp(8, 12);
       final width = viewportSize?.cols;
-      previewChild = SizedBox(
+      body = SizedBox(
         width: width,
         height: height,
         child: Container(
           border: BoxBorder(
             style: BorderStyle.rounded,
-            cellStyle: Theme.of(context).mutedStyle,
+            cellStyle: theme.mutedStyle,
           ),
           padding: const EdgeInsets.all(1),
           child: content,
         ),
       );
     }
+    // The description lives in the always-visible preview (not just the
+    // inspector-gated details panel) so every widget self-documents, and the
+    // footer carries a widget-specific interaction tip when there is one.
+    final previewChild = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        if (!compact && story.description.isNotEmpty) ...[
+          Text(
+            story.description,
+            style: theme.mutedStyle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 1),
+        ],
+        // Top-align via loose constraints: greedy widgets (ScrollView, tables)
+        // still fill, but an intrinsic-height widget keeps its natural height
+        // instead of stretching — otherwise an anchored popup (completion menu,
+        // dropdown) would attach to the bottom of a stretched box and collide
+        // with the footer.
+        if (fit)
+          Expanded(child: Align(alignment: Alignment.topLeft, child: body))
+        else
+          body,
+      ],
+    );
+    final usage = story.usage;
     return _Panel(
       title: 'Preview',
       child: previewChild,
       footer: Text(
-        'Arrows / Tab move between widgets · Esc back to the list',
+        usage == null
+            ? 'Arrows / Tab move between widgets · Esc back to the list'
+            : '$usage · Esc to list',
       ),
     );
   }
