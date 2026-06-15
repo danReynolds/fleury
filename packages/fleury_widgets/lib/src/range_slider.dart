@@ -127,15 +127,46 @@ class _RangeSliderState extends State<RangeSlider> {
     }
   }
 
+  /// Whether nudging the active handle by [delta] would actually move it
+  /// (i.e. it is not pinned against its bound).
+  bool _canNudge(num delta) {
+    final (lo, hi) = _normalized;
+    return _active == _ActiveHandle.low
+        ? (lo + delta).clamp(widget.min, hi) != lo
+        : (hi + delta).clamp(lo, widget.max) != hi;
+  }
+
   KeyEventResult _onKey(KeyEvent event) {
     if (!_enabled) return KeyEventResult.ignored;
     switch (event.keyCode) {
+      // Left/Right adjust the active handle and bubble (escape) once it's
+      // pinned against its bound, so the arrows that drive the slider also
+      // carry focus off it.
       case KeyCode.arrowLeft:
-        _nudge(-widget.step);
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: !_canNudge(-widget.step),
+          move: () => _nudge(-widget.step),
+        );
       case KeyCode.arrowRight:
-        _nudge(widget.step);
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: !_canNudge(widget.step),
+          move: () => _nudge(widget.step),
+        );
+      // The two handles form a 2-cell vertical axis (low below, high above):
+      // Up selects the high handle, Down the low one, and each bubbles once
+      // already at that end — so Up/Down both switch handles AND escape
+      // vertically, and Tab is free to move between widgets like everywhere
+      // else.
+      case KeyCode.arrowUp:
+        return moveOrEscape(
+          atEdge: _active == _ActiveHandle.high,
+          move: () => setState(() => _active = _ActiveHandle.high),
+        );
+      case KeyCode.arrowDown:
+        return moveOrEscape(
+          atEdge: _active == _ActiveHandle.low,
+          move: () => setState(() => _active = _ActiveHandle.low),
+        );
       case KeyCode.pageDown:
         _nudge(-widget.largeStep);
         return KeyEventResult.handled;
@@ -147,13 +178,6 @@ class _RangeSliderState extends State<RangeSlider> {
         return KeyEventResult.handled;
       case KeyCode.end:
         _jump(widget.max);
-        return KeyEventResult.handled;
-      case KeyCode.tab:
-        setState(
-          () => _active = _active == _ActiveHandle.low
-              ? _ActiveHandle.high
-              : _ActiveHandle.low,
-        );
         return KeyEventResult.handled;
       default:
         return KeyEventResult.ignored;

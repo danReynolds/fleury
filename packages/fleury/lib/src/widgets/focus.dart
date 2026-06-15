@@ -46,6 +46,26 @@ enum KeyEventResult {
 /// Signature for a key-event handler on a [Focus] or [FocusNode].
 typedef FocusOnKeyCallback = KeyEventResult Function(KeyEvent event);
 
+/// The keyboard convention for a widget that navigates with arrow keys.
+///
+/// Move within the widget on an interior arrow, but **bubble** — return
+/// [KeyEventResult.ignored] — at the widget's edge, so the arrow reaches the
+/// enclosing directional focus traversal and focus can *leave* the widget. The
+/// same arrow keys you navigate with also get you out, at a boundary. (Tab /
+/// Shift+Tab always move between widgets; this extends that to arrows.)
+///
+/// Returns ignored when [atEdge]; otherwise runs [move] and returns handled.
+/// Arrow-capturing widgets should route each directional key through this so a
+/// clamp at the edge becomes an escape rather than a dead key.
+KeyEventResult moveOrEscape({
+  required bool atEdge,
+  required void Function() move,
+}) {
+  if (atEdge) return KeyEventResult.ignored;
+  move();
+  return KeyEventResult.handled;
+}
+
 /// Marker interface for objects that contribute key bindings to the
 /// active focus chain.
 ///

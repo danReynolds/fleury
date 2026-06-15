@@ -242,7 +242,8 @@ export 'src/widgets/focus.dart'
         KeyBindingSource,
         KeyEventResult,
         TextCompositionClaimant,
-        TextInputClaimant;
+        TextInputClaimant,
+        moveOrEscape;
 export 'src/widgets/focus_traversal.dart'
     show FocusTraversalGroup, TraversalDirection, nearestFocusableInDirection;
 export 'src/widgets/inherited_notifier.dart' show InheritedNotifier;

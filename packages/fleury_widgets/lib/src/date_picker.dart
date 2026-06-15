@@ -212,21 +212,25 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     final lastDay = DateTime(value.year, value.month + 1, 0).day;
     switch (event.keyCode) {
       case KeyCode.arrowLeft:
-        if (column == 0 || value.day == 1) return KeyEventResult.ignored;
-        _move(const Duration(days: -1));
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: column == 0 || value.day == 1,
+          move: () => _move(const Duration(days: -1)),
+        );
       case KeyCode.arrowRight:
-        if (column == 6 || value.day == lastDay) return KeyEventResult.ignored;
-        _move(const Duration(days: 1));
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: column == 6 || value.day == lastDay,
+          move: () => _move(const Duration(days: 1)),
+        );
       case KeyCode.arrowUp:
-        if (value.day - 7 < 1) return KeyEventResult.ignored;
-        _move(const Duration(days: -7));
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: value.day - 7 < 1,
+          move: () => _move(const Duration(days: -7)),
+        );
       case KeyCode.arrowDown:
-        if (value.day + 7 > lastDay) return KeyEventResult.ignored;
-        _move(const Duration(days: 7));
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: value.day + 7 > lastDay,
+          move: () => _move(const Duration(days: 7)),
+        );
       case KeyCode.pageUp:
         _shiftMonth(-1);
         return KeyEventResult.handled;

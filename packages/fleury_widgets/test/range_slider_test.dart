@@ -104,9 +104,35 @@ void main() {
       expect(received, (1, 10));
     });
 
-    testWidgets('Tab swaps to the high handle; then arrow Left moves it', (
+    testWidgets('Up selects the high handle; then arrow Left moves it', (
       tester,
     ) {
+      // The two handles are a 2-cell vertical axis: Up = high, Down = low.
+      // Tab is reserved for moving between widgets.
+      (num, num)? received;
+      tester.pumpWidget(
+        SizedBox(
+          width: 11,
+          height: 1,
+          child: RangeSlider(
+            values: const (0, 10),
+            min: 0,
+            max: 10,
+            autofocus: true,
+            onChanged: (v) => received = v,
+          ),
+        ),
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+      expect(received, (0, 9));
+    });
+
+    testWidgets('Tab is not consumed — it bubbles so focus can leave', (
+      tester,
+    ) {
+      // Universal escape: the slider must NOT swallow Tab (it used to swap
+      // handles). With no traversal ancestor the key is simply unhandled.
       (num, num)? received;
       tester.pumpWidget(
         SizedBox(
@@ -122,8 +148,12 @@ void main() {
         ),
       );
       tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
+      // Tab changed nothing on the slider (it bubbled, not swapped handles),
+      // so the low handle is still active and at its min — Left then bubbles
+      // too. Neither fires onChanged.
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
-      expect(received, (0, 9));
+      expect(received, isNull,
+          reason: 'Tab and Left both bubble; nothing on the slider moved');
     });
 
     testWidgets('low handle clamps against high (no crossing)', (tester) {
@@ -192,7 +222,7 @@ void main() {
           ),
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.tab)); // active=high
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp)); // active=high
       tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
       expect(received, (2, 10));
     });
@@ -317,7 +347,7 @@ void main() {
       expect(low.actions, isNot(contains(SemanticAction.decrement)));
       expect(low.state['activeHandle'], 'low');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
       final high = tester.semantics().single(
         role: SemanticRole.slider,
         label: 'window',

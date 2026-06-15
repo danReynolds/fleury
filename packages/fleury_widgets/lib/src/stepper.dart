@@ -124,12 +124,19 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
   KeyEventResult _onKey(KeyEvent event) {
     if (!_enabled) return KeyEventResult.ignored;
     switch (event.keyCode) {
+      // Up/Down adjust the value and bubble (escape) once pinned at a bound,
+      // so the arrows that drive the stepper also carry focus off it.
+      // (Left/Right are unused and already bubble for horizontal escape.)
       case KeyCode.arrowUp:
-        _nudge(widget.step);
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: _clamp(widget.value + widget.step) == widget.value,
+          move: () => _nudge(widget.step),
+        );
       case KeyCode.arrowDown:
-        _nudge(-widget.step);
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: _clamp(widget.value - widget.step) == widget.value,
+          move: () => _nudge(-widget.step),
+        );
       case KeyCode.pageUp:
         _nudge(widget.largeStep);
         return KeyEventResult.handled;
