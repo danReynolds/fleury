@@ -661,12 +661,16 @@ Future<void> _serveStaticAsset(HttpRequest req) async {
       'javascript',
       charset: 'utf-8',
     );
+    // The bundle is regenerated per build and embedded in the binary; never
+    // let a browser serve a stale client against a freshly restarted server.
+    req.response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     req.response.add(remoteClientJs());
     await req.response.close();
     return;
   }
   if (path == '/' || path.isEmpty) {
     req.response.headers.contentType = ContentType.html;
+    req.response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     req.response.write(serveIndexHtml);
     await req.response.close();
     return;
