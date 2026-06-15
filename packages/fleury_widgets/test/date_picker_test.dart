@@ -128,6 +128,36 @@ void main() {
       expect(selected, _d(2024, 3, 2));
     });
 
+    testWidgets('arrow at a grid edge is unhandled so focus can leave', (
+      tester,
+    ) {
+      // Boundary escape: an arrow stepping off the grid edge must NOT move the
+      // selection (it bubbles to directional focus traversal). The DatePicker
+      // is controlled, so re-pump per case rather than chaining moves.
+      DateTime? selected;
+      Widget cal(DateTime v) => DatePicker(
+        value: v,
+        autofocus: true,
+        onChanged: (d) => selected = d,
+      );
+
+      // 2024-03-02 is a Saturday — the last column of a Sunday-start week.
+      tester.pumpWidget(cal(_d(2024, 3, 2)));
+      selected = null;
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      expect(selected, isNull, reason: 'Right at the last column bubbles out');
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      expect(selected, _d(2024, 3, 9), reason: 'Down stays inside the grid');
+
+      // 2024-03-03 is a Sunday — the first column.
+      selected = null;
+      tester.pumpWidget(cal(_d(2024, 3, 3)));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+      expect(selected, isNull, reason: 'Left at the first column bubbles out');
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      expect(selected, _d(2024, 3, 4), reason: 'Right stays inside the grid');
+    });
+
     testWidgets('Home / End jump within the month', (tester) {
       DateTime? selected;
       tester.pumpWidget(

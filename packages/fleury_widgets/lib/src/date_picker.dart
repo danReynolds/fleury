@@ -202,17 +202,29 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
 
   KeyEventResult _onKey(KeyEvent event) {
     if (!_enabled) return KeyEventResult.ignored;
+    // Boundary escape: the calendar is a grid, so an arrow that would step off
+    // its edge is returned *unhandled* and bubbles to the enclosing directional
+    // focus traversal — that's how you leave the calendar with the same arrow
+    // keys you navigate it with (Tab/Shift+Tab and Esc also leave). Month
+    // paging stays on PageUp/PageDown and the ‹ › header buttons.
+    final value = _midnight(widget.value);
+    final column = _backToWeekStart(value); // 0 = first column of the week
+    final lastDay = DateTime(value.year, value.month + 1, 0).day;
     switch (event.keyCode) {
       case KeyCode.arrowLeft:
+        if (column == 0 || value.day == 1) return KeyEventResult.ignored;
         _move(const Duration(days: -1));
         return KeyEventResult.handled;
       case KeyCode.arrowRight:
+        if (column == 6 || value.day == lastDay) return KeyEventResult.ignored;
         _move(const Duration(days: 1));
         return KeyEventResult.handled;
       case KeyCode.arrowUp:
+        if (value.day - 7 < 1) return KeyEventResult.ignored;
         _move(const Duration(days: -7));
         return KeyEventResult.handled;
       case KeyCode.arrowDown:
+        if (value.day + 7 > lastDay) return KeyEventResult.ignored;
         _move(const Duration(days: 7));
         return KeyEventResult.handled;
       case KeyCode.pageUp:
