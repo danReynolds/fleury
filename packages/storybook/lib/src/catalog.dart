@@ -142,20 +142,14 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
     initialHeight: 17,
     builder: (context) => _TextEntryStory(onAction: context.action),
   ),
+  // Each picker is its own 1:1 story — selecting it previews just that widget,
+  // with controls scoped to it (the calendar-week option only on DatePicker).
   Story(
-    id: 'controls.pickers',
-    title: 'Pickers, Sliders, and Progress',
+    id: 'input.date-picker',
+    title: 'DatePicker',
     category: 'Input',
-    description:
-        'Date, color, numeric range, stepper, task progress, and status gauge controls.',
-    widgets: const <String>[
-      'DatePicker',
-      'ColorPicker',
-      'RangeSlider',
-      'Stepper',
-      'ProgressBar',
-      'Gauge',
-    ],
+    description: 'Keyboard calendar with a configurable week start.',
+    widgets: const <String>['DatePicker'],
     controls: const <StoryControl>[
       StoryControl.option(
         id: 'calendar',
@@ -171,13 +165,64 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
         controlValues: <String, Object?>{'calendar': 1},
       ),
     ],
-    initialHeight: 18,
+    initialHeight: 16,
     builder: (context) => _PickerStory(
+      only: 'DatePicker',
       weekStartsOn: context.option('calendar') == 'Monday'
           ? CalendarWeekStart.monday
           : CalendarWeekStart.sunday,
       onAction: context.action,
     ),
+  ),
+  Story(
+    id: 'input.color-picker',
+    title: 'ColorPicker',
+    category: 'Input',
+    description: 'Swatch grid with keyboard selection.',
+    widgets: const <String>['ColorPicker'],
+    initialHeight: 8,
+    builder: (context) =>
+        _PickerStory(only: 'ColorPicker', onAction: context.action),
+  ),
+  Story(
+    id: 'input.range-slider',
+    title: 'RangeSlider',
+    category: 'Input',
+    description: 'Dual-handle numeric range with keyboard control.',
+    widgets: const <String>['RangeSlider'],
+    initialHeight: 6,
+    builder: (context) =>
+        _PickerStory(only: 'RangeSlider', onAction: context.action),
+  ),
+  Story(
+    id: 'input.stepper',
+    title: 'Stepper',
+    category: 'Input',
+    description: 'Numeric stepper with min/max and large steps.',
+    widgets: const <String>['Stepper'],
+    initialHeight: 5,
+    builder: (context) =>
+        _PickerStory(only: 'Stepper', onAction: context.action),
+  ),
+  Story(
+    id: 'visualization.progress-bar',
+    title: 'ProgressBar',
+    category: 'Visualization',
+    description: 'Determinate task progress bar.',
+    widgets: const <String>['ProgressBar'],
+    initialHeight: 5,
+    builder: (context) =>
+        _PickerStory(only: 'ProgressBar', onAction: context.action),
+  ),
+  Story(
+    id: 'visualization.gauge',
+    title: 'Gauge',
+    category: 'Visualization',
+    description: 'Labelled status gauge.',
+    widgets: const <String>['Gauge'],
+    initialHeight: 5,
+    builder: (context) =>
+        _PickerStory(only: 'Gauge', onAction: context.action),
   ),
   Story(
     id: 'overlays.commands',
@@ -1473,8 +1518,14 @@ class _TextEntryStoryState extends State<_TextEntryStory> {
 }
 
 class _PickerStory extends StatefulWidget {
-  const _PickerStory({required this.weekStartsOn, required this.onAction});
+  const _PickerStory({
+    required this.only,
+    required this.onAction,
+    this.weekStartsOn = CalendarWeekStart.sunday,
+  });
 
+  /// The single widget this story previews — each picker has its own 1:1 story.
+  final String only;
   final CalendarWeekStart weekStartsOn;
   final StoryActionRecorder onAction;
 
@@ -1490,10 +1541,9 @@ class _PickerStoryState extends State<_PickerStory> {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        SizedBox(
+    switch (widget.only) {
+      case 'DatePicker':
+        return SizedBox(
           width: 24,
           child: DatePicker(
             value: _date,
@@ -1507,63 +1557,54 @@ class _PickerStoryState extends State<_PickerStory> {
               });
             },
           ),
-        ),
-        const SizedBox(width: 2),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              ColorPicker(
-                value: _color,
-                onChanged: (value) {
-                  setState(() => _color = value);
-                  widget.onAction('color.changed', <String, Object?>{
-                    'color': value.toString(),
-                  });
-                },
-              ),
-              const SizedBox(height: 1),
-              Stepper(
-                value: _stepper,
-                min: 0,
-                max: 10,
-                label: 'Retries',
-                onChanged: (value) {
-                  setState(() => _stepper = value);
-                  widget.onAction('stepper.changed', <String, Object?>{
-                    'value': value,
-                  });
-                },
-              ),
-              const SizedBox(height: 1),
-              SizedBox(
-                width: 36,
-                child: RangeSlider(
-                  values: _range,
-                  min: 0,
-                  max: 100,
-                  label: 'Latency band',
-                  onChanged: (value) {
-                    setState(() => _range = value);
-                    widget.onAction('range.changed', <String, Object?>{
-                      'low': value.$1,
-                      'high': value.$2,
-                    });
-                  },
-                ),
-              ),
-              const SizedBox(height: 1),
-              const SizedBox(width: 36, child: ProgressBar(value: 0.64)),
-              const SizedBox(height: 1),
-              const SizedBox(
-                width: 36,
-                child: Gauge(value: 0.78, label: 'CPU'),
-              ),
-            ],
+        );
+      case 'ColorPicker':
+        return ColorPicker(
+          value: _color,
+          onChanged: (value) {
+            setState(() => _color = value);
+            widget.onAction('color.changed', <String, Object?>{
+              'color': value.toString(),
+            });
+          },
+        );
+      case 'Stepper':
+        return Stepper(
+          value: _stepper,
+          min: 0,
+          max: 10,
+          label: 'Retries',
+          onChanged: (value) {
+            setState(() => _stepper = value);
+            widget.onAction('stepper.changed', <String, Object?>{
+              'value': value,
+            });
+          },
+        );
+      case 'RangeSlider':
+        return SizedBox(
+          width: 36,
+          child: RangeSlider(
+            values: _range,
+            min: 0,
+            max: 100,
+            label: 'Latency band',
+            onChanged: (value) {
+              setState(() => _range = value);
+              widget.onAction('range.changed', <String, Object?>{
+                'low': value.$1,
+                'high': value.$2,
+              });
+            },
           ),
-        ),
-      ],
-    );
+        );
+      case 'ProgressBar':
+        return const SizedBox(width: 36, child: ProgressBar(value: 0.64));
+      case 'Gauge':
+        return const SizedBox(width: 36, child: Gauge(value: 0.78, label: 'CPU'));
+      default:
+        return const SizedBox.shrink();
+    }
   }
 }
 

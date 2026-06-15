@@ -234,7 +234,7 @@ void main() {
   testWidgets('Esc steps out of a focused widget back to the widget list', (
     tester,
   ) {
-    tester.pumpWidget(StorybookApp(initialStoryId: 'controls.pickers'));
+    tester.pumpWidget(StorybookApp(initialStoryId: 'input.date-picker'));
     const sz = CellSize(120, 40);
     tester.render(size: sz);
 
