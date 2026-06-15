@@ -2131,14 +2131,18 @@ class _ChartsStory extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             const Text('Frame time'),
-            Sparkline(data: sparkline),
+            Sparkline(data: sparkline, showValue: true),
             const SizedBox(height: 1),
             const Text('Wire latency'),
-            Sparkline(data: wirePoints.map((point) => point.$2).toList()),
+            Sparkline(
+              data: wirePoints.map((point) => point.$2).toList(),
+              showValue: true,
+            ),
             const SizedBox(height: 1),
             const Text('Queue depth'),
             Sparkline(
               data: <num>[for (var i = 0; i < samples; i += 1) (i * 2) % 9],
+              showValue: true,
             ),
           ],
         );
@@ -2149,6 +2153,7 @@ class _ChartsStory extends StatelessWidget {
           values: heatmap,
           rowLabels: const <String>['CPU', 'IO', 'UI'],
           colLabels: const <String>['A', 'B', 'C', 'D', 'E'],
+          showLegend: true,
         );
       case 'CalendarHeatmap':
         return CalendarHeatmap(
@@ -2157,16 +2162,18 @@ class _ChartsStory extends StatelessWidget {
           values: calendarValues,
           cellWidth: 2,
           showMonthLabels: true,
+          showLegend: true,
         );
       case 'Gauge':
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: const <Widget>[
-            Gauge(value: 0.82, label: 'RSS'),
-            SizedBox(height: 1),
-            Gauge(value: 0.64, label: 'CPU'),
-            SizedBox(height: 1),
-            Gauge(value: 0.38, label: 'IO'),
+          children: <Widget>[
+            // Threshold zones: amber past 80%, red past 95%.
+            Gauge(value: 0.82, label: 'RSS', thresholds: _gaugeZones(Theme.of(context))),
+            const SizedBox(height: 1),
+            Gauge(value: 0.64, label: 'CPU', thresholds: _gaugeZones(Theme.of(context))),
+            const SizedBox(height: 1),
+            Gauge(value: 0.98, label: 'IO', thresholds: _gaugeZones(Theme.of(context))),
           ],
         );
       case 'Digits':
@@ -2237,6 +2244,11 @@ class _ChartsStory extends StatelessWidget {
     );
   }
 }
+
+List<(double, Color)> _gaugeZones(ThemeData theme) => <(double, Color)>[
+  (0.8, theme.colorScheme.warning),
+  (0.95, theme.colorScheme.error),
+];
 
 const List<Bar> _statusBars = <Bar>[
   Bar.stacked('CPU', <num>[34, 12, 8]),

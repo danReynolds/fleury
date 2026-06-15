@@ -23,6 +23,7 @@ class Gauge extends StatelessWidget {
     this.label,
     this.showPercentage = true,
     this.color,
+    this.thresholds = const <(double, Color)>[],
     this.trackColor,
     this.semanticLabel,
   });
@@ -39,6 +40,12 @@ class Gauge extends StatelessWidget {
   /// Filled-bar color. Defaults to the theme's primary.
   final Color? color;
 
+  /// Optional `(fraction, color)` breakpoints, ascending. The fill takes the
+  /// color of the highest breakpoint whose fraction the value has reached — the
+  /// system-monitor convention (e.g. `[(0.8, warning), (0.95, error)]` turns
+  /// the bar amber then red) so "high" reads without parsing the number.
+  final List<(double, Color)> thresholds;
+
   /// Empty-track color. Defaults to the theme's muted style.
   final Color? trackColor;
 
@@ -47,10 +54,19 @@ class Gauge extends StatelessWidget {
   /// Defaults to [label] when present, otherwise `Gauge`.
   final String? semanticLabel;
 
+  Color _fillColor(ThemeData theme) {
+    var resolved = color ?? theme.colorScheme.primary;
+    final clamped = value.clamp(0.0, 1.0);
+    for (final (fraction, zoneColor) in thresholds) {
+      if (clamped >= fraction) resolved = zoneColor;
+    }
+    return resolved;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final filled = CellStyle(foreground: color ?? theme.colorScheme.primary);
+    final filled = CellStyle(foreground: _fillColor(theme));
     final track = CellStyle(
       foreground: trackColor ?? theme.mutedStyle.foreground,
       dim: true,

@@ -753,7 +753,8 @@ String _statusMarker(TraceTimelineStatus status) {
     TraceTimelineStatus.succeeded => '[x]',
     TraceTimelineStatus.failed => '[!]',
     TraceTimelineStatus.cancelled => '[-]',
-    TraceTimelineStatus.warning => '[!]',
+    // Distinct from failed's [!] so the two read apart without relying on color.
+    TraceTimelineStatus.warning => '[*]',
     TraceTimelineStatus.info => '[i]',
   };
 }

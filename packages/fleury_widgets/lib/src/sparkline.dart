@@ -23,11 +23,16 @@ class Sparkline extends StatelessWidget {
     this.min = 0,
     this.color,
     this.style,
+    this.showValue = false,
     this.semanticLabel = 'Sparkline',
   });
 
   /// The series of values to plot. The newest value goes on the right.
   final List<num> data;
+
+  /// When true, append the latest value as muted text to the right of the
+  /// sparkline — a shape alone doesn't convey magnitude (btop/bashtop show it).
+  final bool showValue;
 
   /// Top of the visible range. `null` autoscales to the data window.
   final num? max;
@@ -62,10 +67,27 @@ class Sparkline extends StatelessWidget {
         'chartMaxValue': ?resolvedMax,
         'chartLatestValue': ?latest,
       }),
-      child: _RawSparkline(data: data, max: max, min: min, style: resolved),
+      child: showValue && latest != null
+          ? Row(
+              children: <Widget>[
+                Expanded(
+                  child: _RawSparkline(
+                    data: data,
+                    max: max,
+                    min: min,
+                    style: resolved,
+                  ),
+                ),
+                Text(' ${_formatSparkValue(latest)}', style: theme.mutedStyle),
+              ],
+            )
+          : _RawSparkline(data: data, max: max, min: min, style: resolved),
     );
   }
 }
+
+String _formatSparkValue(num v) =>
+    v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
 
 num? _maxFinite(Iterable<num> values) {
   num? result;

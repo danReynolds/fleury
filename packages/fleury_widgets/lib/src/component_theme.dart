@@ -118,13 +118,16 @@ final class FleuryWidgetTheme {
   CellStyle resolveLogInfo(ThemeData theme) => logInfoStyle ?? CellStyle.empty;
 
   CellStyle resolveLogWarning(ThemeData theme) =>
-      logWarningStyle ?? const CellStyle(bold: true);
+      logWarningStyle ??
+      CellStyle(bold: true, foreground: theme.colorScheme.warning);
 
   CellStyle resolveLogError(ThemeData theme) =>
-      logErrorStyle ?? const CellStyle(bold: true);
+      logErrorStyle ??
+      CellStyle(bold: true, foreground: theme.colorScheme.error);
 
   CellStyle resolveLogSuccess(ThemeData theme) =>
-      logSuccessStyle ?? const CellStyle(bold: true);
+      logSuccessStyle ??
+      CellStyle(bold: true, foreground: theme.colorScheme.success);
 
   CellStyle resolveCodeBlank(ThemeData theme) =>
       codeBlankStyle ?? CellStyle.empty;

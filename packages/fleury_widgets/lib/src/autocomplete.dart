@@ -142,7 +142,9 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
   void _move(int delta) {
     if (_filtered.isEmpty) return;
     final current = _list.selectedIndex ?? 0;
-    _list.selectedIndex = (current + delta).clamp(0, _filtered.length - 1);
+    final n = _filtered.length;
+    // Wrap like fzf / gum filter — Up from the first item lands on the last.
+    _list.selectedIndex = ((current + delta) % n + n) % n;
     _entry?.markNeedsBuild();
   }
 
@@ -297,6 +299,20 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
               return;
             }
             _close();
+          },
+          hideFromHintBar: true,
+        ),
+        // Tab accepts the highlighted suggestion when the menu is open — the
+        // dominant shell/fzf completion convention. When closed, Tab bubbles
+        // so it still moves focus between widgets.
+        KeyBinding(
+          KeyChord.tab,
+          onEvent: (event) {
+            if (_entry == null) {
+              event.bubble();
+              return;
+            }
+            _pick();
           },
           hideFromHintBar: true,
         ),
