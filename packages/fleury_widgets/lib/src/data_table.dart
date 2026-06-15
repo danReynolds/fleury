@@ -435,6 +435,11 @@ class DataTableController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Total row / column counts, so callers can tell when the selection sits on
+  /// an edge (e.g. to bubble an arrow key for boundary focus escape).
+  int get rowCount => _rowCount;
+  int get columnCount => _columnCount;
+
   DataTableSelectionRange get selectionRange => DataTableSelectionRange(
     anchorRow: _anchorRow,
     anchorColumn: _anchorColumn,
@@ -727,24 +732,39 @@ class _DataTableState extends State<DataTable> {
     }
     final extend = event.hasShift;
     switch (event.keyCode) {
+      // Boundary escape: an arrow at the grid edge bubbles so focus can leave
+      // the table (Tab/Shift+Tab and Esc also leave). Shift-extends never
+      // escape — they're an editing gesture, not navigation.
       case KeyCode.arrowUp:
-        _controller.moveSelection(rowDelta: -1, extend: extend);
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: !extend && _controller.selectedIndex <= 0,
+          move: () => _controller.moveSelection(rowDelta: -1, extend: extend),
+        );
       case KeyCode.arrowDown:
-        _controller.moveSelection(rowDelta: 1, extend: extend);
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge:
+              !extend && _controller.selectedIndex >= _controller.rowCount - 1,
+          move: () => _controller.moveSelection(rowDelta: 1, extend: extend),
+        );
       case KeyCode.arrowLeft:
         if (widget.selectionMode != DataTableSelectionMode.cell) {
           return KeyEventResult.ignored;
         }
-        _controller.moveSelection(columnDelta: -1, extend: extend);
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: !extend && _controller.selectedColumnIndex <= 0,
+          move: () =>
+              _controller.moveSelection(columnDelta: -1, extend: extend),
+        );
       case KeyCode.arrowRight:
         if (widget.selectionMode != DataTableSelectionMode.cell) {
           return KeyEventResult.ignored;
         }
-        _controller.moveSelection(columnDelta: 1, extend: extend);
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: !extend &&
+              _controller.selectedColumnIndex >= _controller.columnCount - 1,
+          move: () =>
+              _controller.moveSelection(columnDelta: 1, extend: extend),
+        );
       case KeyCode.pageUp:
         _controller.moveSelection(rowDelta: -_visibleRows, extend: extend);
         return KeyEventResult.handled;
