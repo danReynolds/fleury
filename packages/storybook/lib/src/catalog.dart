@@ -89,11 +89,12 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       StoryVariant(
         id: 'disabled',
         label: 'Disabled',
-        description: 'All controls render in disabled state.',
+        description: 'The control renders in its disabled state.',
         controlValues: <String, Object?>{'disabled': 1},
       ),
     ],
     builder: (context) => _ControlsStory(
+      selectedWidgetName: context.selectedWidgetName,
       disabled: context.enabled('disabled'),
       onAction: context.action,
     ),
@@ -121,6 +122,7 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       ),
     ],
     builder: (context) => _SelectionInputsStory(
+      selectedWidgetName: context.selectedWidgetName,
       withDisabled: context.option('size') == 'With disabled',
       onAction: context.action,
     ),
@@ -140,7 +142,10 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       'CompletionTextInput',
     ],
     initialHeight: 17,
-    builder: (context) => _TextEntryStory(onAction: context.action),
+    builder: (context) => _TextEntryStory(
+      selectedWidgetName: context.selectedWidgetName,
+      onAction: context.action,
+    ),
   ),
   // Each picker is its own 1:1 story — selecting it previews just that widget,
   // with controls scoped to it (the calendar-week option only on DatePicker).
@@ -215,16 +220,6 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
         _PickerStory(only: 'ProgressBar', onAction: context.action),
   ),
   Story(
-    id: 'visualization.gauge',
-    title: 'Gauge',
-    category: 'Visualization',
-    description: 'Labelled status gauge.',
-    widgets: const <String>['Gauge'],
-    initialHeight: 5,
-    builder: (context) =>
-        _PickerStory(only: 'Gauge', onAction: context.action),
-  ),
-  Story(
     id: 'overlays.commands',
     title: 'Menus, Palette, and Overlays',
     category: 'Navigation',
@@ -240,7 +235,8 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       'Tooltip',
     ],
     initialHeight: 13,
-    builder: (_) => const _OverlayStory(),
+    builder: (context) =>
+        _OverlayStory(selectedWidgetName: context.selectedWidgetName),
   ),
   Story(
     id: 'navigation.tabs',
@@ -281,8 +277,10 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       ),
     ],
     initialHeight: 18,
-    builder: (context) =>
-        _TablesStory(cellMode: context.option('selection') == 'Cells'),
+    builder: (context) => _TablesStory(
+      selectedWidgetName: context.selectedWidgetName,
+      cellMode: context.option('selection') == 'Cells',
+    ),
   ),
   Story(
     id: 'data.trees',
@@ -313,8 +311,10 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       ),
     ],
     initialHeight: 18,
-    builder: (context) =>
-        _TreesStory(runtimeOnly: context.option('filter') == 'Runtime only'),
+    builder: (context) => _TreesStory(
+      selectedWidgetName: context.selectedWidgetName,
+      runtimeOnly: context.option('filter') == 'Runtime only',
+    ),
   ),
   Story(
     id: 'forms.panels',
@@ -438,8 +438,10 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       ),
     ],
     initialHeight: 16,
-    builder: (context) =>
-        _CanvasImageStory(marker: _canvasMarker(context.option('marker'))),
+    builder: (context) => _CanvasImageStory(
+      selectedWidgetName: context.selectedWidgetName,
+      marker: _canvasMarker(context.option('marker')),
+    ),
   ),
   Story(
     id: 'files.pickers',
@@ -465,7 +467,10 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       ),
     ],
     initialHeight: 18,
-    builder: (context) => _FilesStory(showHidden: context.enabled('hidden')),
+    builder: (context) => _FilesStory(
+      selectedWidgetName: context.selectedWidgetName,
+      showHidden: context.enabled('hidden'),
+    ),
   ),
   Story(
     id: 'content.source-documents',
@@ -613,7 +618,10 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       ),
     ],
     initialHeight: 19,
-    builder: (context) => _ModelToolsStory(status: context.option('status')),
+    builder: (context) => _ModelToolsStory(
+      selectedWidgetName: context.selectedWidgetName,
+      status: context.option('status'),
+    ),
   ),
   Story(
     id: 'workflow.process-trace',
@@ -1203,8 +1211,14 @@ class _SelectionScrollStoryState extends State<_SelectionScrollStory> {
 }
 
 class _ControlsStory extends StatefulWidget {
-  const _ControlsStory({required this.disabled, required this.onAction});
+  const _ControlsStory({
+    required this.selectedWidgetName,
+    required this.disabled,
+    required this.onAction,
+  });
 
+  /// The widget this 1:1 story previews; the shared builder renders only it.
+  final String? selectedWidgetName;
   final bool disabled;
   final StoryActionRecorder onAction;
 
@@ -1229,102 +1243,105 @@ class _ControlsStoryState extends State<_ControlsStory> {
               'count': _pressed,
             });
           };
+    final selected = widget.selectedWidgetName ?? 'Button';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Row(
-          children: <Widget>[
-            Button(label: 'Normal', onPressed: onPressed),
-            const Text(' '),
-            Button(
-              label: 'Primary',
-              variant: ButtonVariant.primary,
-              onPressed: onPressed,
-            ),
-            const Text(' '),
-            Button(
-              label: 'Warn',
-              variant: ButtonVariant.warning,
-              onPressed: onPressed,
-            ),
-            const Text(' '),
-            Button(
-              label: 'Error',
-              variant: ButtonVariant.error,
-              onPressed: onPressed,
-            ),
-          ],
-        ),
-        const SizedBox(height: 1),
-        Checkbox(
-          value: _checked,
-          label: 'Enable semantic graph',
-          onChanged: widget.disabled
-              ? null
-              : (value) {
-                  setState(() => _checked = value);
-                  widget.onAction('checkbox.changed', <String, Object?>{
-                    'value': value,
-                  });
-                },
-        ),
-        Toggle(
-          value: _toggle,
-          label: 'Compact rows',
-          onChanged: widget.disabled
-              ? null
-              : (value) {
-                  setState(() => _toggle = value);
-                  widget.onAction('toggle.changed', <String, Object?>{
-                    'value': value,
-                  });
-                },
-        ),
-        Switch(
-          value: _switch,
-          label: 'Streaming updates',
-          onChanged: widget.disabled
-              ? null
-              : (value) {
-                  setState(() => _switch = value);
-                  widget.onAction('switch.changed', <String, Object?>{
-                    'value': value,
-                  });
-                },
-        ),
-        const SizedBox(height: 1),
-        Row(
-          children: <Widget>[
-            Radio<String>(
-              value: 'fast',
-              groupValue: _radio,
-              label: 'Fast',
-              onChanged: widget.disabled
-                  ? null
-                  : (value) {
-                      setState(() => _radio = value);
-                      widget.onAction('radio.changed', <String, Object?>{
-                        'value': value,
-                      });
-                    },
-            ),
-            const Text('  '),
-            Radio<String>(
-              value: 'safe',
-              groupValue: _radio,
-              label: 'Safe',
-              onChanged: widget.disabled
-                  ? null
-                  : (value) {
-                      setState(() => _radio = value);
-                      widget.onAction('radio.changed', <String, Object?>{
-                        'value': value,
-                      });
-                    },
-            ),
-          ],
-        ),
-        Text('Pressed: $_pressed, mode: $_radio'),
+        if (selected == 'Button')
+          Row(
+            children: <Widget>[
+              Button(label: 'Normal', onPressed: onPressed),
+              const Text(' '),
+              Button(
+                label: 'Primary',
+                variant: ButtonVariant.primary,
+                onPressed: onPressed,
+              ),
+              const Text(' '),
+              Button(
+                label: 'Warn',
+                variant: ButtonVariant.warning,
+                onPressed: onPressed,
+              ),
+              const Text(' '),
+              Button(
+                label: 'Error',
+                variant: ButtonVariant.error,
+                onPressed: onPressed,
+              ),
+            ],
+          ),
+        if (selected == 'Checkbox')
+          Checkbox(
+            value: _checked,
+            label: 'Enable semantic graph',
+            onChanged: widget.disabled
+                ? null
+                : (value) {
+                    setState(() => _checked = value);
+                    widget.onAction('checkbox.changed', <String, Object?>{
+                      'value': value,
+                    });
+                  },
+          ),
+        if (selected == 'Toggle')
+          Toggle(
+            value: _toggle,
+            label: 'Compact rows',
+            onChanged: widget.disabled
+                ? null
+                : (value) {
+                    setState(() => _toggle = value);
+                    widget.onAction('toggle.changed', <String, Object?>{
+                      'value': value,
+                    });
+                  },
+          ),
+        if (selected == 'Switch')
+          Switch(
+            value: _switch,
+            label: 'Streaming updates',
+            onChanged: widget.disabled
+                ? null
+                : (value) {
+                    setState(() => _switch = value);
+                    widget.onAction('switch.changed', <String, Object?>{
+                      'value': value,
+                    });
+                  },
+          ),
+        if (selected == 'Radio')
+          Row(
+            children: <Widget>[
+              Radio<String>(
+                value: 'fast',
+                groupValue: _radio,
+                label: 'Fast',
+                onChanged: widget.disabled
+                    ? null
+                    : (value) {
+                        setState(() => _radio = value);
+                        widget.onAction('radio.changed', <String, Object?>{
+                          'value': value,
+                        });
+                      },
+              ),
+              const Text('  '),
+              Radio<String>(
+                value: 'safe',
+                groupValue: _radio,
+                label: 'Safe',
+                onChanged: widget.disabled
+                    ? null
+                    : (value) {
+                        setState(() => _radio = value);
+                        widget.onAction('radio.changed', <String, Object?>{
+                          'value': value,
+                        });
+                      },
+              ),
+            ],
+          ),
       ],
     );
   }
@@ -1332,10 +1349,12 @@ class _ControlsStoryState extends State<_ControlsStory> {
 
 class _SelectionInputsStory extends StatefulWidget {
   const _SelectionInputsStory({
+    required this.selectedWidgetName,
     required this.withDisabled,
     required this.onAction,
   });
 
+  final String? selectedWidgetName;
   final bool withDisabled;
   final StoryActionRecorder onAction;
 
@@ -1359,6 +1378,13 @@ class _SelectionInputsStoryState extends State<_SelectionInputsStory> {
 
   @override
   Widget build(BuildContext context) {
+    return switch (widget.selectedWidgetName) {
+      'MultiSelect' => _multiSelect(),
+      _ => _select(),
+    };
+  }
+
+  Widget _select() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -1379,13 +1405,26 @@ class _SelectionInputsStoryState extends State<_SelectionInputsStory> {
           ],
         ),
         const SizedBox(height: 1),
+        Text('Selected: ${_environment ?? 'none'}'),
+      ],
+    );
+  }
+
+  Widget _multiSelect() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
         const Text('Facets'),
         MultiSelect<String>(
-          options: const <SelectOption<String>>[
-            SelectOption<String>(value: 'logs', label: 'Logs'),
-            SelectOption<String>(value: 'traces', label: 'Traces'),
-            SelectOption<String>(value: 'metrics', label: 'Metrics'),
-            SelectOption<String>(value: 'profile', label: 'Profile samples'),
+          options: <SelectOption<String>>[
+            const SelectOption<String>(value: 'logs', label: 'Logs'),
+            const SelectOption<String>(value: 'traces', label: 'Traces'),
+            const SelectOption<String>(value: 'metrics', label: 'Metrics'),
+            SelectOption<String>(
+              value: 'profile',
+              label: 'Profile samples',
+              enabled: !widget.withDisabled,
+            ),
           ],
           values: _facets,
           onChanged: (values) {
@@ -1397,15 +1436,19 @@ class _SelectionInputsStoryState extends State<_SelectionInputsStory> {
           semanticLabel: 'Enabled facets',
         ),
         const SizedBox(height: 1),
-        Text('Selected: ${_environment ?? 'none'} / ${_facets.join(', ')}'),
+        Text('Selected: ${_facets.isEmpty ? 'none' : _facets.join(', ')}'),
       ],
     );
   }
 }
 
 class _TextEntryStory extends StatefulWidget {
-  const _TextEntryStory({required this.onAction});
+  const _TextEntryStory({
+    required this.selectedWidgetName,
+    required this.onAction,
+  });
 
+  final String? selectedWidgetName;
   final StoryActionRecorder onAction;
 
   @override
@@ -1445,75 +1488,50 @@ class _TextEntryStoryState extends State<_TextEntryStory> {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              TextInput(
-                controller: _single,
-                placeholder: 'Project name',
-                semanticLabel: 'Project name',
-              ),
-              const SizedBox(height: 1),
-              NumberInput(
-                initialValue: 42,
-                min: 0,
-                max: 100,
-                placeholder: 'Budget',
-                semanticLabel: 'Budget',
-              ),
-              const SizedBox(height: 1),
-              PasswordInput(
-                controller: _secret,
-                placeholder: 'Token',
-                semanticLabel: 'API token',
-              ),
-              const SizedBox(height: 1),
-              Autocomplete<String>(
-                options: const <String>[
-                  'fleury',
-                  'flutter',
-                  'ratatui',
-                  'bubble tea',
-                ],
-                placeholder: 'Type f...',
-                onSelected: (value) {
-                  setState(() => _selected = value);
-                  widget.onAction('autocomplete.selected', <String, Object?>{
-                    'value': value,
-                  });
-                },
-              ),
-              Text('Autocomplete selected: $_selected'),
-            ],
+    return switch (widget.selectedWidgetName) {
+      'TextArea' => SizedBox(
+        height: 5,
+        child: TextArea(controller: _multi, placeholder: 'Multi-line note'),
+      ),
+      'NumberInput' => NumberInput(
+        initialValue: 42,
+        min: 0,
+        max: 100,
+        placeholder: 'Budget',
+        semanticLabel: 'Budget',
+      ),
+      'PasswordInput' => PasswordInput(
+        controller: _secret,
+        placeholder: 'Token',
+        semanticLabel: 'API token',
+      ),
+      'Autocomplete' => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Autocomplete<String>(
+            options: const <String>['fleury', 'flutter', 'ratatui', 'bubble tea'],
+            placeholder: 'Type f...',
+            onSelected: (value) {
+              setState(() => _selected = value);
+              widget.onAction('autocomplete.selected', <String, Object?>{
+                'value': value,
+              });
+            },
           ),
-        ),
-        const SizedBox(width: 2),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              SizedBox(
-                height: 5,
-                child: TextArea(
-                  controller: _multi,
-                  placeholder: 'Multi-line note',
-                ),
-              ),
-              const SizedBox(height: 1),
-              CompletionTextInput(
-                provider: _complete,
-                placeholder: 'Completion query',
-                showOnEmptyQuery: true,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
+          Text('Autocomplete selected: $_selected'),
+        ],
+      ),
+      'CompletionTextInput' => CompletionTextInput(
+        provider: _complete,
+        placeholder: 'Completion query',
+        showOnEmptyQuery: true,
+      ),
+      _ => TextInput(
+        controller: _single,
+        placeholder: 'Project name',
+        semanticLabel: 'Project name',
+      ),
+    };
   }
 }
 
@@ -1600,8 +1618,6 @@ class _PickerStoryState extends State<_PickerStory> {
         );
       case 'ProgressBar':
         return const SizedBox(width: 36, child: ProgressBar(value: 0.64));
-      case 'Gauge':
-        return const SizedBox(width: 36, child: Gauge(value: 0.78, label: 'CPU'));
       default:
         return const SizedBox.shrink();
     }
@@ -1609,74 +1625,67 @@ class _PickerStoryState extends State<_PickerStory> {
 }
 
 class _OverlayStory extends StatelessWidget {
-  const _OverlayStory();
+  const _OverlayStory({required this.selectedWidgetName});
+
+  final String? selectedWidgetName;
 
   @override
   Widget build(BuildContext context) {
+    // Every overlay is hosted inside a Toaster so toast-driven cases work; the
+    // selected widget picks which trigger surface is shown on its own.
     return Toaster(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              Menu(
-                semanticLabel: 'Demo menu',
-                trigger: const Text('Open menu'),
-                items: <MenuEntry>[
-                  MenuItem(
-                    label: 'Show toast',
-                    onSelected: () => Toaster.show(
-                      context,
-                      'Saved story state',
-                      severity: ToastSeverity.success,
-                    ),
-                  ),
-                  const MenuSeparator(),
-                  SubMenu(
-                    label: 'Theme',
-                    items: <MenuEntry>[
-                      MenuItem(label: 'Dark', onSelected: () {}),
-                      MenuItem(label: 'Light', onSelected: () {}),
-                    ],
-                  ),
-                ],
+      child: switch (selectedWidgetName) {
+        'Menu' || 'MenuItem' || 'SubMenu' => Menu(
+          semanticLabel: 'Demo menu',
+          trigger: const Text('Open menu'),
+          items: <MenuEntry>[
+            MenuItem(
+              label: 'Show toast',
+              onSelected: () => Toaster.show(
+                context,
+                'Saved story state',
+                severity: ToastSeverity.success,
               ),
-              const SizedBox(width: 2),
-              Button(
-                label: 'Open palette',
-                onPressed: () => CommandPalette.open(context),
-              ),
-              const SizedBox(width: 2),
-              Button(
-                label: 'Toast',
-                onPressed: () => Toaster.show(
-                  context,
-                  'Storybook toast',
-                  severity: ToastSeverity.info,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 1),
-          Tooltip(
-            message: 'Focus the button to show this anchored tooltip.',
-            child: Button(label: 'Tooltip target', onPressed: () {}),
-          ),
-          const SizedBox(height: 1),
-          Dialog(
-            title: 'Dialog chrome',
-            width: 42,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: const <Widget>[
-                Text('Dialogs provide frame and semantics.'),
-                Text('Positioning is handled by Navigator.present.'),
+            ),
+            const MenuSeparator(),
+            SubMenu(
+              label: 'Theme',
+              items: <MenuEntry>[
+                MenuItem(label: 'Dark', onSelected: () {}),
+                MenuItem(label: 'Light', onSelected: () {}),
               ],
             ),
+          ],
+        ),
+        'Toaster' => Button(
+          label: 'Toast',
+          onPressed: () => Toaster.show(
+            context,
+            'Storybook toast',
+            severity: ToastSeverity.info,
           ),
-        ],
-      ),
+        ),
+        'Tooltip' => Tooltip(
+          message: 'Focus the button to show this anchored tooltip.',
+          child: Button(label: 'Tooltip target', onPressed: () {}),
+        ),
+        'Dialog' => Dialog(
+          title: 'Dialog chrome',
+          width: 42,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: const <Widget>[
+              Text('Dialogs provide frame and semantics.'),
+              Text('Positioning is handled by Navigator.present.'),
+            ],
+          ),
+        ),
+        _ => Button(
+          label: 'Open palette',
+          onPressed: () => CommandPalette.open(context),
+        ),
+      },
     );
   }
 }
@@ -1709,8 +1718,12 @@ class _TabsStory extends StatelessWidget {
 }
 
 class _TablesStory extends StatelessWidget {
-  const _TablesStory({required this.cellMode});
+  const _TablesStory({
+    required this.selectedWidgetName,
+    required this.cellMode,
+  });
 
+  final String? selectedWidgetName;
   final bool cellMode;
 
   static const _columns = <DataTableColumn>[
@@ -1749,47 +1762,52 @@ class _TablesStory extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        SizedBox(
-          width: 34,
-          child: Table(
-            selectable: true,
-            header: const <Widget>[
-              Text('Widget', style: CellStyle(bold: true)),
-              Text('Owner', style: CellStyle(bold: true)),
-            ],
-            rows: const <List<Widget>>[
-              <Widget>[Text('Button'), Text('Core')],
-              <Widget>[Text('DataTable'), Text('Widgets')],
-              <Widget>[Text('TraceTimeline'), Text('Widgets')],
-            ],
-          ),
-        ),
-        const SizedBox(width: 2),
-        Expanded(
-          child: DataTable(
-            rowCount: _rows.length,
-            columns: _columns,
-            selectionMode: cellMode
-                ? DataTableSelectionMode.cell
-                : DataTableSelectionMode.row,
-            cellBuilder: (rowIndex, columnId) =>
-                _rows[rowIndex][columnId] ?? '',
-            rowKeyBuilder: (rowIndex) => _rows[rowIndex]['name']!,
-            sortColumnId: 'latency',
-            sortDirection: DataTableSortDirection.ascending,
-          ),
-        ),
-      ],
+    return switch (selectedWidgetName) {
+      'Table' || 'TableController' => _table(),
+      _ => _dataTable(),
+    };
+  }
+
+  Widget _table() {
+    return SizedBox(
+      width: 34,
+      child: Table(
+        selectable: true,
+        header: const <Widget>[
+          Text('Widget', style: CellStyle(bold: true)),
+          Text('Owner', style: CellStyle(bold: true)),
+        ],
+        rows: const <List<Widget>>[
+          <Widget>[Text('Button'), Text('Core')],
+          <Widget>[Text('DataTable'), Text('Widgets')],
+          <Widget>[Text('TraceTimeline'), Text('Widgets')],
+        ],
+      ),
+    );
+  }
+
+  Widget _dataTable() {
+    return DataTable(
+      rowCount: _rows.length,
+      columns: _columns,
+      selectionMode: cellMode
+          ? DataTableSelectionMode.cell
+          : DataTableSelectionMode.row,
+      cellBuilder: (rowIndex, columnId) => _rows[rowIndex][columnId] ?? '',
+      rowKeyBuilder: (rowIndex) => _rows[rowIndex]['name']!,
+      sortColumnId: 'latency',
+      sortDirection: DataTableSortDirection.ascending,
     );
   }
 }
 
 class _TreesStory extends StatelessWidget {
-  const _TreesStory({required this.runtimeOnly});
+  const _TreesStory({
+    required this.selectedWidgetName,
+    required this.runtimeOnly,
+  });
 
+  final String? selectedWidgetName;
   final bool runtimeOnly;
 
   static const _treeRoots = <TreeNode<String>>[
@@ -1859,27 +1877,21 @@ class _TreesStory extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        SizedBox(
-          width: 28,
-          child: Tree<String>(roots: _treeRoots, label: 'Package tree'),
-        ),
-        const SizedBox(width: 2),
-        Expanded(
-          child: TreeTable<String>(
-            roots: _roots,
-            columns: _columns,
-            treeColumnId: 'name',
-            maxVisible: 10,
-            filter: runtimeOnly
-                ? const TreeTableFilterDescriptor(query: 'runtime')
-                : null,
-          ),
-        ),
-      ],
-    );
+    return switch (selectedWidgetName) {
+      'Tree' || 'TreeNode' => SizedBox(
+        width: 28,
+        child: Tree<String>(roots: _treeRoots, label: 'Package tree'),
+      ),
+      _ => TreeTable<String>(
+        roots: _roots,
+        columns: _columns,
+        treeColumnId: 'name',
+        maxVisible: 10,
+        filter: runtimeOnly
+            ? const TreeTableFilterDescriptor(query: 'runtime')
+            : null,
+      ),
+    };
   }
 }
 
@@ -2174,40 +2186,35 @@ Map<DateTime, num> _calendarValues() => <DateTime, num>{
 };
 
 class _CanvasImageStory extends StatelessWidget {
-  _CanvasImageStory({required this.marker});
+  _CanvasImageStory({required this.selectedWidgetName, required this.marker});
 
+  final String? selectedWidgetName;
   final CanvasMarker marker;
   final img.Image _image = _buildPreviewImage();
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Expanded(
-          child: Canvas(
-            marker: marker,
-            bounds: const CanvasBounds(
-              minX: 0,
-              maxX: math.pi * 2,
-              minY: -1,
-              maxY: 1,
-            ),
-            painter: _WavePainter(),
-            semanticRole: SemanticRole.chart,
-            semanticLabel: 'Sine wave canvas',
+    return switch (selectedWidgetName) {
+      'Image' || 'ImageSource' => SizedBox(
+        width: 28,
+        child: Image.decoded(_image, semanticLabel: 'Generated color preview'),
+      ),
+      _ => SizedBox(
+        height: 10,
+        child: Canvas(
+          marker: marker,
+          bounds: const CanvasBounds(
+            minX: 0,
+            maxX: math.pi * 2,
+            minY: -1,
+            maxY: 1,
           ),
+          painter: _WavePainter(),
+          semanticRole: SemanticRole.chart,
+          semanticLabel: 'Sine wave canvas',
         ),
-        const SizedBox(width: 2),
-        SizedBox(
-          width: 28,
-          child: Image.decoded(
-            _image,
-            semanticLabel: 'Generated color preview',
-          ),
-        ),
-      ],
-    );
+      ),
+    };
   }
 }
 
@@ -2242,62 +2249,53 @@ img.Image _buildPreviewImage() {
 }
 
 class _FilesStory extends StatelessWidget {
-  const _FilesStory({required this.showHidden});
+  const _FilesStory({
+    required this.selectedWidgetName,
+    required this.showHidden,
+  });
 
+  final String? selectedWidgetName;
   final bool showHidden;
 
   @override
   Widget build(BuildContext context) {
     final cwd = io.Directory.current.path;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Expanded(
-          child: FileBrowser(
-            initialDirectory: cwd,
-            filter: FileBrowserFilterDescriptor(showHidden: showHidden),
-            maxVisible: 10,
-            label: 'Repository files',
-          ),
+    return switch (selectedWidgetName) {
+      'FilePicker' => SizedBox(
+        height: 12,
+        child: FilePicker(
+          initialDirectory: cwd,
+          showHidden: showHidden,
+          onSelected: (_) {},
+          filter: (entity) =>
+              entity is io.Directory || entity.path.endsWith('.dart'),
         ),
-        const SizedBox(width: 2),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              Expanded(
-                child: FilePicker(
-                  initialDirectory: cwd,
-                  showHidden: showHidden,
-                  onSelected: (_) {},
-                  filter: (entity) =>
-                      entity is io.Directory || entity.path.endsWith('.dart'),
-                ),
-              ),
-              const SizedBox(height: 1),
-              FileMentionPicker(
-                width: 42,
-                maxVisible: 4,
-                entries: const <FileMentionEntry>[
-                  FileMentionEntry(
-                    path: 'packages/fleury/lib/fleury.dart',
-                    language: 'dart',
-                  ),
-                  FileMentionEntry(
-                    path: 'packages/fleury_widgets/lib/fleury_widgets.dart',
-                    language: 'dart',
-                  ),
-                  FileMentionEntry(
-                    path: 'packages/storybook/lib/storybook.dart',
-                    language: 'dart',
-                  ),
-                ],
-              ),
-            ],
+      ),
+      'FileMentionPicker' || 'FileMentionEntry' => FileMentionPicker(
+        width: 42,
+        maxVisible: 4,
+        entries: const <FileMentionEntry>[
+          FileMentionEntry(
+            path: 'packages/fleury/lib/fleury.dart',
+            language: 'dart',
           ),
-        ),
-      ],
-    );
+          FileMentionEntry(
+            path: 'packages/fleury_widgets/lib/fleury_widgets.dart',
+            language: 'dart',
+          ),
+          FileMentionEntry(
+            path: 'packages/storybook/lib/storybook.dart',
+            language: 'dart',
+          ),
+        ],
+      ),
+      _ => FileBrowser(
+        initialDirectory: cwd,
+        filter: FileBrowserFilterDescriptor(showHidden: showHidden),
+        maxVisible: 10,
+        label: 'Repository files',
+      ),
+    };
   }
 }
 
@@ -2412,9 +2410,20 @@ class _AgentStory extends StatelessWidget {
 }
 
 class _ModelToolsStory extends StatelessWidget {
-  const _ModelToolsStory({required this.status});
+  const _ModelToolsStory({
+    required this.selectedWidgetName,
+    required this.status,
+  });
 
+  final String? selectedWidgetName;
   final String status;
+
+  static const TokenUsage _usage = TokenUsage(
+    input: 2400,
+    output: 680,
+    cached: 1200,
+    contextLimit: 16000,
+  );
 
   ToolCallStatus get _toolStatus {
     return switch (status) {
@@ -2426,79 +2435,66 @@ class _ModelToolsStory extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return switch (selectedWidgetName) {
+      'TokenMeter' || 'TokenUsage' => const TokenMeter(
+        usage: _usage,
+        label: 'Context',
+        width: 24,
+      ),
+      'ToolCallCard' || 'ToolCallRecord' => _toolCard(),
+      'ApprovalPrompt' || 'ApprovalRequest' => _approval(),
+      _ => const ModelStatusBar(
+        info: ModelStatusInfo(
+          model: 'gpt-5-codex',
+          provider: 'OpenAI',
+          status: ModelRuntimeStatus.streaming,
+          mode: 'edit',
+          latency: Duration(milliseconds: 180),
+          tokenUsage: _usage,
+        ),
+      ),
+    };
+  }
+
+  Widget _toolCard() {
     final toolStatus = _toolStatus;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        const ModelStatusBar(
-          info: ModelStatusInfo(
-            model: 'gpt-5-codex',
-            provider: 'OpenAI',
-            status: ModelRuntimeStatus.streaming,
-            mode: 'edit',
-            latency: Duration(milliseconds: 180),
-            tokenUsage: TokenUsage(
-              input: 2400,
-              output: 680,
-              cached: 1200,
-              contextLimit: 16000,
-            ),
-          ),
-        ),
-        const SizedBox(height: 1),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Expanded(
-              child: ToolCallCard(
-                record: ToolCallRecord(
-                  id: 'tool-1',
-                  name: 'benchmark.run',
-                  title: 'Run benchmark',
-                  status: toolStatus,
-                  description: 'Capture peer comparison output.',
-                  arguments: const <String, Object?>{
-                    'scenario': 'sb6_data_table',
-                    'peers': <String>['ratatui', 'bubbletea'],
-                  },
-                  output: toolStatus == ToolCallStatus.succeeded
-                      ? 'median p95=4.8ms'
-                      : null,
-                  error: toolStatus == ToolCallStatus.failed
-                      ? 'peer fixture timed out'
-                      : null,
-                  progressCurrent: toolStatus == ToolCallStatus.running
-                      ? 2
-                      : null,
-                  progressTotal: toolStatus == ToolCallStatus.running
-                      ? 3
-                      : null,
-                ),
-                onCancel: toolStatus == ToolCallStatus.running ? () {} : null,
-              ),
-            ),
-            const SizedBox(width: 2),
-            Expanded(
-              child: ApprovalPrompt(
-                width: 44,
-                request: const ApprovalRequest(
-                  id: 'approval-1',
-                  title: 'Run on bare metal?',
-                  message:
-                      'This run will reserve the terminal and write benchmark artifacts.',
-                  subject: 'Tier-C benchmark',
-                  details: <String>[
-                    '3 replicates',
-                    'CPU/RSS/FPS capture enabled',
-                  ],
-                  severity: ApprovalSeverity.warning,
-                ),
-                onDecision: (_) {},
-              ),
-            ),
-          ],
-        ),
-      ],
+    return ToolCallCard(
+      record: ToolCallRecord(
+        id: 'tool-1',
+        name: 'benchmark.run',
+        title: 'Run benchmark',
+        status: toolStatus,
+        description: 'Capture peer comparison output.',
+        arguments: const <String, Object?>{
+          'scenario': 'sb6_data_table',
+          'peers': <String>['ratatui', 'bubbletea'],
+        },
+        output: toolStatus == ToolCallStatus.succeeded
+            ? 'median p95=4.8ms'
+            : null,
+        error: toolStatus == ToolCallStatus.failed
+            ? 'peer fixture timed out'
+            : null,
+        progressCurrent: toolStatus == ToolCallStatus.running ? 2 : null,
+        progressTotal: toolStatus == ToolCallStatus.running ? 3 : null,
+      ),
+      onCancel: toolStatus == ToolCallStatus.running ? () {} : null,
+    );
+  }
+
+  Widget _approval() {
+    return ApprovalPrompt(
+      width: 44,
+      request: const ApprovalRequest(
+        id: 'approval-1',
+        title: 'Run on bare metal?',
+        message:
+            'This run will reserve the terminal and write benchmark artifacts.',
+        subject: 'Tier-C benchmark',
+        details: <String>['3 replicates', 'CPU/RSS/FPS capture enabled'],
+        severity: ApprovalSeverity.warning,
+      ),
+      onDecision: (_) {},
     );
   }
 }

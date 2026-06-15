@@ -126,6 +126,49 @@ void main() {
     expect(output, isNot(contains('variant: Disabled')));
   });
 
+  testWidgets('every story previews only its own widget, not the group', (
+    tester,
+  ) async {
+    String renderStory(String id) {
+      tester.pumpWidget(
+        StorybookApp(key: ValueKey<String>(id), initialStoryId: id),
+      );
+      return tester.renderToString(
+        size: const CellSize(120, 40),
+        emptyMark: ' ',
+      );
+    }
+
+    // Tables: the DataTable's rows ("Frame scheduler") must appear only when the
+    // DataTable is selected — not crammed beside the composed Table story.
+    expect(renderStory('data.tables.data-table'), contains('Frame scheduler'));
+    expect(
+      renderStory('data.tables.table'),
+      isNot(contains('Frame scheduler')),
+      reason: 'the Table story must not also render the DataTable beside it',
+    );
+
+    // Model/tools: the status bar ("gpt-5-codex") used to always render; now
+    // TokenMeter — previously not shown at all — is its own focused spotlight.
+    expect(
+      renderStory('agent.model-tools-approval.model-status-bar'),
+      contains('gpt-5-codex'),
+    );
+    expect(
+      renderStory('agent.model-tools-approval.token-meter'),
+      isNot(contains('gpt-5-codex')),
+      reason: 'the TokenMeter story should render only the meter',
+    );
+
+    // Select and MultiSelect render independently of each other.
+    final selectOutput = renderStory('controls.select.select');
+    expect(selectOutput, contains('Environment'));
+    expect(selectOutput, isNot(contains('Facets')));
+    final multiOutput = renderStory('controls.select.multi-select');
+    expect(multiOutput, contains('Facets'));
+    expect(multiOutput, isNot(contains('Environment')));
+  });
+
   testWidgets('initial story, variant, and control values render', (tester) {
     tester.pumpWidget(
       StorybookApp(
