@@ -776,13 +776,21 @@ class _PreviewPanel extends StatelessWidget {
       ),
     );
     final viewportSize = storybookViewportSize(viewport);
-    final height =
-        viewportSize?.rows ??
-        (compact ? story.initialHeight.clamp(8, 12) : story.initialHeight);
-    final width = viewportSize?.cols;
-    return _Panel(
-      title: 'Preview',
-      child: SizedBox(
+    final Widget previewChild;
+    if (viewportSize == null && !compact) {
+      // Fit (the default): the preview viewport *is* the pane, so a second
+      // rounded border inside it is redundant. It only added a smaller inner
+      // box whose left edge and rounded corner stranded a few rows above the
+      // footer, next to the full-height pane borders. Let the widget fill the
+      // pane directly under the single pane border.
+      previewChild = content;
+    } else {
+      // A specific viewport — a fixed-size preset or the compact toggle —
+      // frames the widget at that size so its bounds are visible within the
+      // larger pane.
+      final height = viewportSize?.rows ?? story.initialHeight.clamp(8, 12);
+      final width = viewportSize?.cols;
+      previewChild = SizedBox(
         width: width,
         height: height,
         child: Container(
@@ -793,7 +801,11 @@ class _PreviewPanel extends StatelessWidget {
           padding: const EdgeInsets.all(1),
           child: content,
         ),
-      ),
+      );
+    }
+    return _Panel(
+      title: 'Preview',
+      child: previewChild,
       footer: Text('Tab or arrow into the preview to interact.'),
     );
   }

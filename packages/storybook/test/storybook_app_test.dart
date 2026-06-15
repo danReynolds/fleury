@@ -263,30 +263,30 @@ void main() {
 
   testWidgets('arrow traversal enters the ScrollView preview', (tester) {
     tester.pumpWidget(StorybookApp(initialStoryId: 'core.selection-scroll'));
-    tester.render(size: const CellSize(120, 40));
+    tester.render(size: const CellSize(120, 24));
 
     // Select the ScrollView widget by search (order-independent).
     tester.type('ScrollView');
     tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
     tester.pump();
-    tester.render(size: const CellSize(120, 40));
+    tester.render(size: const CellSize(120, 24));
 
     var output = tester.renderToString(
-      size: const CellSize(120, 40),
+      size: const CellSize(120, 24),
       emptyMark: ' ',
     );
     expect(output, contains('> ScrollView  Core'));
 
     tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
     tester.pump();
-    tester.render(size: const CellSize(120, 40));
+    tester.render(size: const CellSize(120, 24));
     expect(tester.focusManager.focusedNode.toString(), contains('ScrollView'));
 
     tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
     tester.pump();
 
     output = tester.renderToString(
-      size: const CellSize(120, 40),
+      size: const CellSize(120, 24),
       emptyMark: ' ',
     );
     expect(output, isNot(contains('SelectionArea + ScrollView')));
@@ -327,16 +327,16 @@ void main() {
 
   testWidgets('clicking the ScrollView preview focuses it', (tester) {
     tester.pumpWidget(StorybookApp(initialStoryId: 'core.selection-scroll'));
-    tester.render(size: const CellSize(120, 40));
+    tester.render(size: const CellSize(120, 24));
 
     // Select the ScrollView widget by search (order-independent).
     tester.type('ScrollView');
     tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
     tester.pump();
-    tester.render(size: const CellSize(120, 40));
+    tester.render(size: const CellSize(120, 24));
 
     var output = tester.renderToString(
-      size: const CellSize(120, 40),
+      size: const CellSize(120, 24),
       emptyMark: ' ',
     );
     expect(output, contains('> ScrollView  Core'));
@@ -350,14 +350,14 @@ void main() {
       ),
     );
     tester.pump();
-    tester.render(size: const CellSize(120, 40));
+    tester.render(size: const CellSize(120, 24));
     expect(tester.focusManager.focusedNode.toString(), contains('ScrollView'));
 
     tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
     tester.pump();
 
     output = tester.renderToString(
-      size: const CellSize(120, 40),
+      size: const CellSize(120, 24),
       emptyMark: ' ',
     );
     expect(output, isNot(contains('SelectionArea + ScrollView')));
@@ -376,5 +376,47 @@ void main() {
     expect(output, contains('Preview'));
     expect(output, isNot(contains('│ Details')));
     expect(output, contains('Details hidden in narrow layout'));
+  });
+
+  testWidgets('Fit preview drops the redundant inner viewport border', (
+    tester,
+  ) {
+    // Regression: in Fit mode the preview drew a second rounded box inside the
+    // pane, whose bottom corner stranded above the footer next to the
+    // full-height pane borders. Fit now renders the widget directly under the
+    // single pane border; a fixed-size preset still frames its viewport.
+    int roundedBoxes(String s) => '╭'.allMatches(s).length;
+
+    // Distinct keys force fresh State on the second pump so initialViewport is
+    // re-read (otherwise the State persists and both renders use Fit).
+    tester.pumpWidget(
+      StorybookApp(
+        key: const ValueKey('fit'),
+        initialStoryId: 'core.layout-text.text',
+      ),
+    );
+    final fit = tester.renderToString(
+      size: const CellSize(120, 40),
+      emptyMark: ' ',
+    );
+
+    tester.pumpWidget(
+      StorybookApp(
+        key: const ValueKey('framed'),
+        initialStoryId: 'core.layout-text.text',
+        initialViewport: StorybookViewportPreset.compact80x24,
+      ),
+    );
+    final framed = tester.renderToString(
+      size: const CellSize(120, 40),
+      emptyMark: ' ',
+    );
+
+    expect(
+      roundedBoxes(framed),
+      roundedBoxes(fit) + 1,
+      reason: 'the fixed-size preset adds exactly one rounded viewport box; '
+          'Fit must not draw a nested border of its own',
+    );
   });
 }
