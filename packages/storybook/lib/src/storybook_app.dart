@@ -40,6 +40,16 @@ class _StorybookAppState extends State<StorybookApp> {
   final Map<String, int> _variantIndexes = <String, int>{};
   final List<StoryAction> _actionLog = <StoryAction>[];
 
+  /// Esc anywhere focuses the widget list — the "step out to navigation" hatch
+  /// that complements arrow boundary-escape and Tab.
+  final FocusNode _selectorFocusNode = FocusNode(debugLabel: 'widget-list');
+
+  @override
+  void dispose() {
+    _selectorFocusNode.dispose();
+    super.dispose();
+  }
+
   Story get _selectedStory => widget.stories[_selectedIndex];
 
   StoryVariant? get _selectedVariant {
@@ -328,29 +338,43 @@ class _StorybookAppState extends State<StorybookApp> {
       child: CommandScope(
         label: 'Storybook commands',
         commands: _commands(),
-        child: _StorybookShell(
-          stories: widget.stories,
-          selectedIndex: _selectedIndex,
-          selectedWidgetName: _selectedWidgetName,
-          story: _selectedStory,
-          variant: _selectedVariant,
-          controlValues: _selectedControlValues,
-          actionLog: _actionLog,
-          commands: _commands(),
-          themeMode: _themeMode,
-          viewport: _viewport,
-          compactPreview: _compactPreview,
-          showInspector: _showInspector,
-          resetGeneration: _resetGeneration,
-          onSelectWidget: _selectWidget,
-          onCycleTheme: _cycleTheme,
-          onCycleViewport: _cycleViewport,
-          onToggleInspector: _toggleInspector,
-          onToggleDensity: _toggleDensity,
-          onResetStory: _resetStory,
-          onChangeControl: _changeControl,
-          onSetControlValue: _setControlValue,
-          onRecordAction: _recordStoryAction,
+        child: KeyBindings(
+          bindings: [
+            // Esc steps out of whatever widget has focus, back to the widget
+            // list — the coarse escape hatch alongside arrow boundary-escape
+            // and Tab. (Bubbled here: widgets that use Esc themselves consume
+            // it first.)
+            KeyBinding(
+              KeyChord.escape,
+              onEvent: (_) => _selectorFocusNode.requestFocus(),
+              hideFromHintBar: true,
+            ),
+          ],
+          child: _StorybookShell(
+            selectorFocusNode: _selectorFocusNode,
+            stories: widget.stories,
+            selectedIndex: _selectedIndex,
+            selectedWidgetName: _selectedWidgetName,
+            story: _selectedStory,
+            variant: _selectedVariant,
+            controlValues: _selectedControlValues,
+            actionLog: _actionLog,
+            commands: _commands(),
+            themeMode: _themeMode,
+            viewport: _viewport,
+            compactPreview: _compactPreview,
+            showInspector: _showInspector,
+            resetGeneration: _resetGeneration,
+            onSelectWidget: _selectWidget,
+            onCycleTheme: _cycleTheme,
+            onCycleViewport: _cycleViewport,
+            onToggleInspector: _toggleInspector,
+            onToggleDensity: _toggleDensity,
+            onResetStory: _resetStory,
+            onChangeControl: _changeControl,
+            onSetControlValue: _setControlValue,
+            onRecordAction: _recordStoryAction,
+          ),
         ),
       ),
     );
@@ -402,8 +426,10 @@ class _StorybookShell extends StatelessWidget {
     required this.onChangeControl,
     required this.onSetControlValue,
     required this.onRecordAction,
+    required this.selectorFocusNode,
   });
 
+  final FocusNode selectorFocusNode;
   final List<Story> stories;
   final int selectedIndex;
   final String selectedWidgetName;
@@ -472,6 +498,7 @@ class _StorybookShell extends StatelessWidget {
                                 selectedIndex: selectedIndex,
                                 selectedWidgetName: selectedWidgetName,
                                 onSelect: onSelectWidget,
+                                listFocusNode: selectorFocusNode,
                               ),
                             ),
                             const SizedBox(width: 1),
@@ -633,6 +660,7 @@ class _WidgetSelector extends StatefulWidget {
     required this.selectedIndex,
     required this.selectedWidgetName,
     required this.onSelect,
+    this.listFocusNode,
   });
 
   final int width;
@@ -640,6 +668,10 @@ class _WidgetSelector extends StatefulWidget {
   final int selectedIndex;
   final String selectedWidgetName;
   final void Function(int storyIndex, String widgetName) onSelect;
+
+  /// Focus node for the result list — Esc anywhere in the app focuses it to
+  /// step back out to widget navigation.
+  final FocusNode? listFocusNode;
 
   @override
   State<_WidgetSelector> createState() => _WidgetSelectorState();
@@ -734,6 +766,7 @@ class _WidgetSelectorState extends State<_WidgetSelector> {
         groupByCategory: true,
         autofocus: true,
         copySelection: false,
+        resultsFocusNode: widget.listFocusNode,
         onActivate: (result, _) => _activateResult(result),
       ),
       footer: Text(
@@ -806,7 +839,9 @@ class _PreviewPanel extends StatelessWidget {
     return _Panel(
       title: 'Preview',
       child: previewChild,
-      footer: Text('Tab or arrow into the preview to interact.'),
+      footer: Text(
+        'Arrows / Tab move between widgets · Esc back to the list',
+      ),
     );
   }
 }

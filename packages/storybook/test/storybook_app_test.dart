@@ -231,6 +231,29 @@ void main() {
         reason: 'Left from the details panel should return to the widgets list');
   });
 
+  testWidgets('Esc steps out of a focused widget back to the widget list', (
+    tester,
+  ) {
+    tester.pumpWidget(StorybookApp(initialStoryId: 'controls.pickers'));
+    const sz = CellSize(120, 40);
+    tester.render(size: sz);
+
+    // Focus a preview widget (the calendar, which captures arrows).
+    tester.type('DatePicker');
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.pump();
+    tester.render(size: sz);
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    tester.pump();
+    tester.render(size: sz);
+    expect(tester.focusManager.focusedNode.toString(), contains('date-picker'));
+
+    // Esc steps out to the widget list — the coarse escape hatch.
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.pump();
+    expect(tester.focusManager.focusedNode.toString(), contains('widget-list'));
+  });
+
   testWidgets('arrow traversal moves from selector into interactive preview', (
     tester,
   ) {
