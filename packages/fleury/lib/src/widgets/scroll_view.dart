@@ -145,7 +145,7 @@ class ScrollView extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
-    this.edgeBehavior = EdgeBehavior.contain,
+    this.edgeBehavior = EdgeBehavior.bubble,
   });
 
   final Widget child;

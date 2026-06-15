@@ -33,11 +33,14 @@ import 'pointer.dart';
 
 /// How a [ListView] handles up/down at the first/last item.
 enum EdgeBehavior {
-  /// The key is consumed (no-op) and focus stays in the list. Default.
+  /// The key is consumed (no-op) and focus stays in the list. Opt in for a
+  /// standalone/primary list that should keep focus at its edges.
   contain,
 
-  /// The key is returned as `ignored` so ancestor `KeyBindings` can
-  /// act on it — e.g. move focus to a sibling pane.
+  /// The key is returned as `ignored` so ancestor `KeyBindings` can act on it
+  /// — e.g. directional focus traversal moves to a sibling. Default: a list
+  /// embedded among other widgets shouldn't trap the arrow keys (the
+  /// boundary-escape convention, matching [moveOrEscape] for non-list widgets).
   bubble,
 }
 
@@ -179,7 +182,7 @@ class ListView extends StatefulWidget {
     this.focusNode,
     required List<Widget> this.children,
     this.autofocus = false,
-    this.edgeBehavior = EdgeBehavior.contain,
+    this.edgeBehavior = EdgeBehavior.bubble,
     this.onSelect,
     this.selectionActive,
   }) : itemCount = null,
@@ -195,7 +198,7 @@ class ListView extends StatefulWidget {
     required int this.itemCount,
     required Widget Function(BuildContext, int, bool) this.itemBuilder,
     this.autofocus = false,
-    this.edgeBehavior = EdgeBehavior.contain,
+    this.edgeBehavior = EdgeBehavior.bubble,
     this.onSelect,
     this.selectionActive,
   }) : assert(itemCount >= 0, 'itemCount must be non-negative'),

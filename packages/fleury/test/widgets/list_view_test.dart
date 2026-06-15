@@ -82,7 +82,9 @@ void main() {
   });
 
   group('boundary handling', () {
-    testWidgets('contain (default) consumes up at the first item', (tester) {
+    testWidgets('contain (opt-in) consumes up at the first item', (tester) {
+      // The default is now bubble (boundary escape); contain is the opt-in for
+      // a standalone/primary list that should keep focus at its edges.
       var bubbled = 0;
       tester.pumpWidget(
         KeyBindings(
@@ -96,6 +98,7 @@ void main() {
             itemCount: 3,
             itemBuilder: _itemBuilder,
             autofocus: true,
+            edgeBehavior: EdgeBehavior.contain,
           ),
         ),
       );
