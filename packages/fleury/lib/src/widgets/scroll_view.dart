@@ -229,6 +229,20 @@ class _ScrollViewState extends State<ScrollView> {
         _controller.scrollToBottom();
         return KeyEventResult.handled;
       default:
+        // Ctrl+D / Ctrl+U scroll a half page (the less / vim convention).
+        if (event.hasCtrl && !event.hasAlt) {
+          final half = page < 2 ? 1 : page ~/ 2;
+          if (event.char == 'd') {
+            if (_controller.atBottom) return _edge();
+            _controller.scrollBy(half);
+            return KeyEventResult.handled;
+          }
+          if (event.char == 'u') {
+            if (_controller.atTop) return _edge();
+            _controller.scrollBy(-half);
+            return KeyEventResult.handled;
+          }
+        }
         return KeyEventResult.ignored;
     }
   }

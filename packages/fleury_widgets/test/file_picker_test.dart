@@ -20,8 +20,38 @@ String _scratchDir() {
   return tmp.path;
 }
 
+String _bigDir(int count) {
+  final tmp = Directory.systemTemp.createTempSync('fleuryfpbig_');
+  for (var i = 0; i < count; i++) {
+    File('${tmp.path}/file_${i.toString().padLeft(2, '0')}.txt')
+        .writeAsStringSync('x');
+  }
+  addTearDown(() => tmp.deleteSync(recursive: true));
+  return tmp.path;
+}
+
 void main() {
   group('FilePicker', () {
+    testWidgets('scrolls to keep the cursor visible in a long directory', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        FilePicker(
+          initialDirectory: _bigDir(20),
+          autofocus: true,
+          maxVisible: 5,
+          onSelected: (_) {},
+        ),
+      );
+      tester.render(size: const CellSize(40, 7));
+      // End jumps to the last entry; the window must scroll it into view and
+      // push the top entry off (a plain Column would have clipped it).
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
+      final out = tester.renderToString(size: const CellSize(40, 7), emptyMark: ' ');
+      expect(out.contains('file_19.txt'), isTrue, reason: 'cursor scrolled in');
+      expect(out.contains('file_00.txt'), isFalse, reason: 'top scrolled off');
+    });
+
     testWidgets('lists files and directories in the initial dir', (tester) {
       final dir = _scratchDir();
       tester.pumpWidget(FilePicker(initialDirectory: dir, onSelected: (_) {}));
@@ -152,6 +182,7 @@ void main() {
           onSelected: (_) {},
         ),
       );
+      tester.render(size: const CellSize(40, 10)); // lay out the windowed list
 
       final tree = tester.semantics().single(
         role: SemanticRole.tree,
@@ -193,6 +224,7 @@ void main() {
       tester.pumpWidget(
         FilePicker(initialDirectory: dir, autofocus: true, onSelected: (_) {}),
       );
+      tester.render(size: const CellSize(40, 10));
 
       final result = await tester.invokeSemanticAction(
         SemanticAction.open,
@@ -225,6 +257,7 @@ void main() {
           onSelected: (file) => picked = file,
         ),
       );
+      tester.render(size: const CellSize(40, 10));
 
       final result = await tester.invokeSemanticAction(
         SemanticAction.open,

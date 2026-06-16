@@ -23,10 +23,11 @@ class FilePicker extends StatefulWidget {
     required this.onSelected,
     this.filter,
     this.showHidden = false,
+    this.maxVisible = 12,
     this.semanticLabel = 'Files',
     this.focusNode,
     this.autofocus = false,
-  });
+  }) : assert(maxVisible > 0);
 
   /// Directory the picker opens in. Must exist; missing dirs throw on
   /// first listing attempt.
@@ -45,6 +46,10 @@ class FilePicker extends StatefulWidget {
   /// hidden — matches the unix convention. Set `true` to include them.
   final bool showHidden;
 
+  /// Maximum rows shown at once; longer directories scroll within this height,
+  /// keeping the cursor in view.
+  final int maxVisible;
+
   /// Label exposed through the semantic app graph.
   final String semanticLabel;
 
@@ -60,7 +65,13 @@ class _FilePickerState extends State<FilePicker> {
   bool _owns = false;
   late Directory _cwd;
   late List<FileSystemEntity> _entries;
-  int _cursor = 0;
+
+  // The selected row lives on a ListController so the entries can render in a
+  // scrolling ListView that keeps the cursor in view (a plain Column clipped
+  // long directories and let the cursor move off-screen).
+  final ListController _list = ListController(selectedIndex: 0);
+  int get _cursor => _list.selectedIndex ?? 0;
+  set _cursor(int value) => _list.selectedIndex = value;
 
   @override
   void initState() {
@@ -93,6 +104,7 @@ class _FilePickerState extends State<FilePicker> {
 
   @override
   void dispose() {
+    _list.dispose();
     if (_owns) _node.dispose();
     super.dispose();
   }
@@ -118,7 +130,7 @@ class _FilePickerState extends State<FilePicker> {
       ).toLowerCase().compareTo(_basename(b.path).toLowerCase());
     });
     _entries = filtered;
-    _cursor = 0;
+    _list.selectedIndex = filtered.isEmpty ? null : 0;
   }
 
   String _basename(String path) {
@@ -224,64 +236,74 @@ class _FilePickerState extends State<FilePicker> {
     }
   }
 
+  Widget _entryRow(ThemeData theme, int i, bool focused) {
+    final e = _entries[i];
+    final isDir = e is Directory;
+    final isSelected = i == _cursor;
+    final marker = isDir ? '▸ ' : '  ';
+    final rawName = _basename(e.path) + (isDir ? '/' : '');
+    final name = _displayName(e);
+    final style = isSelected
+        ? (focused ? theme.selectionStyle : theme.mutedStyle)
+        : CellStyle.empty;
+    final safePath = _safeText(e.path);
+    final canOpen = _canOpen(e);
+    return Semantics(
+      role: SemanticRole.treeItem,
+      label: name,
+      value: safePath,
+      selected: isSelected,
+      enabled: true,
+      actions: {if (canOpen) SemanticAction.open},
+      onAction: (action) {
+        switch (action) {
+          case SemanticAction.open:
+            if (canOpen) _activateEntryAt(i);
+            return;
+          case _:
+            return;
+        }
+      },
+      state: SemanticState({
+        'rowIndex': i,
+        'rowKey': safePath,
+        'path': safePath,
+        'entryType': _entryType(e),
+        'isDirectory': isDir,
+        'hidden': _basename(e.path).startsWith('.'),
+        'outputSanitized': safePath != e.path || name != rawName,
+      }),
+      child: Row(
+        children: [
+          Text(' ', style: style),
+          Text(marker, style: style),
+          Text(name, style: style),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final focused = _node.hasFocus;
     final safeCwd = _safeText(_cwd.path);
     final selected = _entries.isEmpty ? null : _entries[_cursor];
-    final rows = <Widget>[Text(safeCwd, style: theme.mutedStyle)];
-    if (_entries.isEmpty) {
-      rows.add(const Text('  (empty)', style: CellStyle(dim: true)));
-    }
-    for (var i = 0; i < _entries.length; i++) {
-      final e = _entries[i];
-      final isDir = e is Directory;
-      final isSelected = i == _cursor;
-      final marker = isDir ? '▸ ' : '  ';
-      final rawName = _basename(e.path) + (isDir ? '/' : '');
-      final name = _displayName(e);
-      final style = isSelected
-          ? (focused ? theme.selectionStyle : theme.mutedStyle)
-          : CellStyle.empty;
-      final safePath = _safeText(e.path);
-      final canOpen = _canOpen(e);
-      rows.add(
-        Semantics(
-          role: SemanticRole.treeItem,
-          label: name,
-          value: safePath,
-          selected: isSelected,
-          enabled: true,
-          actions: {if (canOpen) SemanticAction.open},
-          onAction: (action) {
-            switch (action) {
-              case SemanticAction.open:
-                if (canOpen) _activateEntryAt(i);
-                return;
-              case _:
-                return;
-            }
-          },
-          state: SemanticState({
-            'rowIndex': i,
-            'rowKey': safePath,
-            'path': safePath,
-            'entryType': _entryType(e),
-            'isDirectory': isDir,
-            'hidden': _basename(e.path).startsWith('.'),
-            'outputSanitized': safePath != e.path || name != rawName,
-          }),
-          child: Row(
-            children: [
-              Text(' ', style: style),
-              Text(marker, style: style),
-              Text(name, style: style),
-            ],
-          ),
-        ),
-      );
-    }
+    final visible = _entries.isEmpty
+        ? 1
+        : (_entries.length > widget.maxVisible
+              ? widget.maxVisible
+              : _entries.length);
+    // A controller-driven ListView windows long directories and scrolls to keep
+    // the cursor in view; keys are still handled by the outer Focus (preserving
+    // the wrap-around Up/Down), so the list itself stays non-focusable.
+    final Widget listing = _entries.isEmpty
+        ? const Text('  (empty)', style: CellStyle(dim: true))
+        : ListView.builder(
+            controller: _list,
+            itemCount: _entries.length,
+            itemBuilder: (context, i, _) => _entryRow(theme, i, focused),
+          );
     return Semantics(
       role: SemanticRole.tree,
       label: widget.semanticLabel,
@@ -314,7 +336,10 @@ class _FilePickerState extends State<FilePicker> {
           onTap: () => _node.requestFocus(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: rows,
+            children: [
+              Text(safeCwd, style: theme.mutedStyle),
+              SizedBox(height: visible, child: listing),
+            ],
           ),
         ),
       ),

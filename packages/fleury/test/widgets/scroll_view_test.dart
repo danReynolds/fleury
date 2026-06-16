@@ -122,6 +122,19 @@ void main() {
     expect(_lines(tester, rows: 3), ['r2', 'r3', 'r4']);
   });
 
+  testWidgets('Ctrl+D / Ctrl+U scroll a half page', (tester) {
+    final ctl = ScrollController();
+    tester.pumpWidget(
+      ScrollView(controller: ctl, autofocus: true, child: _rows(20)),
+    );
+    _lines(tester, rows: 4); // viewport 4, content 20 → half page = 2
+    expect(ctl.offset, 0);
+    tester.sendKey(const KeyEvent(char: 'd', modifiers: {KeyModifier.ctrl}));
+    expect(ctl.offset, 2);
+    tester.sendKey(const KeyEvent(char: 'u', modifiers: {KeyModifier.ctrl}));
+    expect(ctl.offset, 0);
+  });
+
   testWidgets('paints the child into a viewport-sized scratch buffer', (
     tester,
   ) {
