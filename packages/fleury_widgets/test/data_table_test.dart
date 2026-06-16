@@ -215,6 +215,38 @@ void main() {
     expect(tester.semantics().single(role: SemanticRole.table).focused, isTrue);
   });
 
+  testWidgets('wheel scroll moves the DataTable selection', (tester) {
+    final controller = DataTableController();
+    tester.pumpWidget(
+      DataTable(
+        rowCount: 8,
+        columns: _columns(),
+        controller: controller,
+        rowKeyBuilder: (row) => 'RUN-$row',
+        cellBuilder: _cell,
+      ),
+    );
+    tester.render(size: const CellSize(20, 6));
+    tester.sendMouse(
+      const MouseEvent(
+        kind: MouseEventKind.scrollDown,
+        button: MouseButton.none,
+        col: 1,
+        row: 2,
+      ),
+    );
+    expect(controller.selectedIndex, 1, reason: 'scrolled down one row');
+    tester.sendMouse(
+      const MouseEvent(
+        kind: MouseEventKind.scrollUp,
+        button: MouseButton.none,
+        col: 1,
+        row: 2,
+      ),
+    );
+    expect(controller.selectedIndex, 0, reason: 'scrolled back up');
+  });
+
   testWidgets('mouse click selects cells and Shift-click extends range', (
     tester,
   ) {

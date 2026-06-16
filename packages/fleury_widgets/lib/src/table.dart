@@ -265,6 +265,19 @@ class _TableState extends State<Table> {
     super.dispose();
   }
 
+  /// Wheel scroll moves the selection (and the window follows it, since the
+  /// body window is derived from the selected row). Selection changes don't
+  /// fire onSelect — that's reserved for Enter / activate — so scrolling never
+  /// triggers row actions.
+  void _scrollBy(int delta) {
+    final controller = _controller;
+    final count = widget.rows.length;
+    if (controller == null || count == 0) return;
+    final selected = controller.selectedIndex ?? 0;
+    final next = (selected + delta).clamp(0, count - 1);
+    if (next != selected) controller.selectedIndex = next;
+  }
+
   KeyEventResult _onKey(KeyEvent event) {
     final controller = _controller;
     final count = widget.rows.length;
@@ -403,7 +416,13 @@ class _TableState extends State<Table> {
         focusNode: _focusNode,
         autofocus: widget.autofocus,
         onKey: _onKey,
-        child: table,
+        // Wheel over the table scrolls the row window by moving the selection.
+        child: PointerScrollListener(
+          router: PointerRouterScope.maybeOf(context),
+          onScrollUp: () => _scrollBy(-1),
+          onScrollDown: () => _scrollBy(1),
+          child: table,
+        ),
       ),
     );
   }
@@ -493,7 +512,14 @@ class _TableState extends State<Table> {
       onAction: interactiveBodyCell
           ? (action) => _handleCellAction(rowIndex, action)
           : null,
-      child: child,
+      // Click a body cell to select its row (focus + select) — the same select
+      // the keyboard performs; Enter / the activate action still activates.
+      child: interactiveBodyCell
+          ? GestureDetector(
+              onTap: () => _handleCellAction(rowIndex, SemanticAction.select),
+              child: child,
+            )
+          : child,
     );
   }
 }

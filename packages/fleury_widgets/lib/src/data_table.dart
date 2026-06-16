@@ -760,10 +760,10 @@ class _DataTableState extends State<DataTable> {
           return KeyEventResult.ignored;
         }
         return moveOrEscape(
-          atEdge: !extend &&
+          atEdge:
+              !extend &&
               _controller.selectedColumnIndex >= _controller.columnCount - 1,
-          move: () =>
-              _controller.moveSelection(columnDelta: 1, extend: extend),
+          move: () => _controller.moveSelection(columnDelta: 1, extend: extend),
         );
       case KeyCode.pageUp:
         _controller.moveSelection(rowDelta: -_visibleRows, extend: extend);
@@ -861,30 +861,47 @@ class _DataTableState extends State<DataTable> {
         focusNode: _focusNode,
         autofocus: widget.autofocus,
         onKey: _onKey,
-        child: GestureDetector(
-          onTapDownWithModifiers: (col, row, modifiers) {
-            _pendingPointerHit = _hitTestPointer(col, row, modifiers);
-          },
-          onTap: () {
-            final hit = _pendingPointerHit;
-            _pendingPointerHit = null;
-            if (hit == null) return;
-            _focusNode.requestFocus();
-            if (widget.selectionMode == DataTableSelectionMode.cell &&
-                hit.columnIndex != null) {
-              _controller.selectCell(
-                hit.rowIndex,
-                hit.columnIndex!,
-                extend: hit.extend,
-              );
-            } else {
-              _controller.selectedIndex = hit.rowIndex;
-            }
-          },
-          child: table,
+        // Wheel over the table scrolls the row window by moving the selection
+        // (the window follows the selected row; selection changes don't fire
+        // onSelect, so scrolling never triggers a row action).
+        child: PointerScrollListener(
+          router: PointerRouterScope.maybeOf(context),
+          onScrollUp: () => _scrollBy(-1),
+          onScrollDown: () => _scrollBy(1),
+          child: GestureDetector(
+            onTapDownWithModifiers: (col, row, modifiers) {
+              _pendingPointerHit = _hitTestPointer(col, row, modifiers);
+            },
+            onTap: () {
+              final hit = _pendingPointerHit;
+              _pendingPointerHit = null;
+              if (hit == null) return;
+              _focusNode.requestFocus();
+              if (widget.selectionMode == DataTableSelectionMode.cell &&
+                  hit.columnIndex != null) {
+                _controller.selectCell(
+                  hit.rowIndex,
+                  hit.columnIndex!,
+                  extend: hit.extend,
+                );
+              } else {
+                _controller.selectedIndex = hit.rowIndex;
+              }
+            },
+            child: table,
+          ),
         ),
       ),
     );
+  }
+
+  /// Wheel scroll moves the selection (the row window follows it). Selection
+  /// changes don't fire onSelect — that's reserved for Enter / activate.
+  void _scrollBy(int delta) {
+    final count = _controller.rowCount;
+    if (count == 0) return;
+    final next = (_controller.selectedIndex + delta).clamp(0, count - 1);
+    if (next != _controller.selectedIndex) _controller.selectedIndex = next;
   }
 
   _DataTablePointerHit? _hitTestPointer(
