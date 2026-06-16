@@ -38,8 +38,55 @@ class _HostedSliderState extends State<_HostedSlider> {
   }
 }
 
+void _press(FleuryTester tester, int col) => tester.sendMouse(
+  MouseEvent(kind: MouseEventKind.down, button: MouseButton.left, col: col, row: 0),
+);
+void _moveTo(FleuryTester tester, int col) => tester.sendMouse(
+  MouseEvent(kind: MouseEventKind.drag, button: MouseButton.left, col: col, row: 0),
+);
+void _release(FleuryTester tester, int col) => tester.sendMouse(
+  MouseEvent(kind: MouseEventKind.up, button: MouseButton.left, col: col, row: 0),
+);
+
+void _click(FleuryTester tester, int col) {
+  _press(tester, col);
+  _release(tester, col);
+}
+
 void main() {
   group('RangeSlider', () {
+    testWidgets('clicking the track moves the nearest handle there', (tester) {
+      _HostedSlider.lastValues = null;
+      tester.pumpWidget(const _HostedSlider(initial: (0, 10), min: 0, max: 10));
+      // Track is 11 cols wide at col 0, so column == value. Column 3 is nearer
+      // the low handle (col 0) than the high (col 10) → low jumps to 3.
+      tester.render(size: const CellSize(11, 1));
+      _click(tester, 3);
+      expect(_HostedSlider.lastValues, (3, 10));
+    });
+
+    testWidgets('clicking near the high handle moves it, not the low', (tester) {
+      _HostedSlider.lastValues = null;
+      tester.pumpWidget(const _HostedSlider(initial: (0, 10), min: 0, max: 10));
+      tester.render(size: const CellSize(11, 1));
+      _click(tester, 7); // nearer the high handle at col 10
+      expect(_HostedSlider.lastValues, (0, 7));
+    });
+
+    testWidgets('dragging slides the grabbed handle across the track', (
+      tester,
+    ) {
+      _HostedSlider.lastValues = null;
+      tester.pumpWidget(const _HostedSlider(initial: (0, 10), min: 0, max: 10));
+      tester.render(size: const CellSize(11, 1));
+      // Grab the low handle at col 0 and drag it right to col 5.
+      _press(tester, 0);
+      _moveTo(tester, 3);
+      _moveTo(tester, 5);
+      _release(tester, 5);
+      expect(_HostedSlider.lastValues, (5, 10));
+    });
+
     testWidgets('renders both handles on the track', (tester) {
       tester.pumpWidget(
         SizedBox(

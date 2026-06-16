@@ -3,6 +3,14 @@ import 'package:fleury/fleury.dart';
 /// Which of the two handles a [RangeSlider] is editing.
 enum _ActiveHandle { low, high }
 
+/// Painted track geometry: the render object writes it each paint and the
+/// pointer handlers read it to map an absolute column → slider value (the
+/// write-at-paint / read-elsewhere idiom shared with Scrollbar).
+class _SliderGeometry {
+  int left = 0;
+  int width = 0;
+}
+
 /// A two-handle slider for picking a numeric `(low, high)` range. The
 /// selected interval is a filled bar between a solid active handle (`●`)
 /// and a hollow inactive one (`○`). Left/Right move between the two
@@ -77,6 +85,11 @@ class _RangeSliderState extends State<RangeSlider> {
   bool _owns = false;
   _ActiveHandle _active = _ActiveHandle.low;
 
+  // Painted track geometry (written by the render object) and the handle a
+  // press grabbed, so a drag keeps moving that handle even past the track edge.
+  final _SliderGeometry _geom = _SliderGeometry();
+  _ActiveHandle? _dragHandle;
+
   bool get _enabled => widget.onChanged != null;
 
   @override
@@ -146,6 +159,67 @@ class _RangeSliderState extends State<RangeSlider> {
         : (hi + delta).clamp(lo, widget.max) != hi;
   }
 
+  /// Sets one handle to an absolute [value] (the other stays put), clamped so
+  /// the handles can't cross — used by click/drag, where the target isn't a
+  /// relative nudge.
+  void _setHandle(_ActiveHandle which, num value) {
+    if (!_enabled) return;
+    final (lo, hi) = _normalized;
+    if (which == _ActiveHandle.low) {
+      final next = value.clamp(widget.min, hi);
+      if (next != lo) widget.onChanged!((next, hi));
+    } else {
+      final next = value.clamp(lo, widget.max);
+      if (next != hi) widget.onChanged!((lo, next));
+    }
+  }
+
+  /// The slider value under absolute column [col], snapped to the [step] grid.
+  num _valueForColumn(int col) {
+    final width = _geom.width;
+    if (width <= 1) return widget.min;
+    final local = (col - _geom.left).clamp(0, width - 1);
+    final fraction = local / (width - 1);
+    final raw = widget.min + fraction * (widget.max - widget.min);
+    final steps = ((raw - widget.min) / widget.step).round();
+    final snapped = widget.min + steps * widget.step;
+    return snapped.clamp(widget.min, widget.max);
+  }
+
+  /// The handle whose painted column is nearest absolute column [col]; ties at
+  /// the edges resolve to the handle on that side.
+  _ActiveHandle _nearestHandle(int col) {
+    final width = _geom.width;
+    if (width <= 1) return _active;
+    final (lo, hi) = _normalized;
+    final span = widget.max - widget.min;
+    final loCol = _geom.left + ((lo - widget.min) / span * (width - 1)).round();
+    final hiCol = _geom.left + ((hi - widget.min) / span * (width - 1)).round();
+    if (col <= loCol) return _ActiveHandle.low;
+    if (col >= hiCol) return _ActiveHandle.high;
+    return (col - loCol) <= (hiCol - col)
+        ? _ActiveHandle.low
+        : _ActiveHandle.high;
+  }
+
+  /// A press or drag-start: grab the nearest handle, make it active, and move
+  /// it to the pressed value.
+  void _grabAt(int col) {
+    if (!_enabled) return;
+    _node.requestFocus();
+    final handle = _nearestHandle(col);
+    _dragHandle = handle;
+    if (_active != handle) setState(() => _active = handle);
+    _setHandle(handle, _valueForColumn(col));
+  }
+
+  /// Continuing a drag: keep moving the grabbed handle (no re-pick), so a drag
+  /// past the other handle doesn't hand off to it.
+  void _dragTo(int col) {
+    if (!_enabled) return;
+    _setHandle(_dragHandle ?? _active, _valueForColumn(col));
+  }
+
   KeyEventResult _onKey(KeyEvent event) {
     if (!_enabled) return KeyEventResult.ignored;
     switch (event.keyCode) {
@@ -211,6 +285,7 @@ class _RangeSliderState extends State<RangeSlider> {
       max: widget.max,
       active: _active,
       focused: enabled && _node.hasFocus,
+      geometry: _geom,
       selectedStyle: enabled
           ? CellStyle(foreground: theme.colorScheme.primary)
           : theme.mutedStyle,
@@ -283,7 +358,17 @@ class _RangeSliderState extends State<RangeSlider> {
         focusNode: _node,
         autofocus: widget.autofocus,
         onKey: _onKey,
-        child: slider,
+        // Click the track to move the nearest handle there; drag to slide it.
+        // The drag is captured, so the handle keeps following past the ends.
+        child: GestureDetector(
+          // A press grabs the nearest handle; the drag (always preceded by the
+          // press) then just slides that same grabbed handle.
+          onTapDown: (col, _) => _grabAt(col),
+          onDragStart: (col, _) => _dragTo(col),
+          onDragUpdate: (col, _) => _dragTo(col),
+          onDragEnd: () => _dragHandle = null,
+          child: slider,
+        ),
       ),
       ),
     );
@@ -343,6 +428,7 @@ class _RawRangeSlider extends LeafRenderObjectWidget {
     required this.max,
     required this.active,
     required this.focused,
+    required this.geometry,
     required this.selectedStyle,
     required this.trackStyle,
   });
@@ -352,6 +438,7 @@ class _RawRangeSlider extends LeafRenderObjectWidget {
   final num max;
   final _ActiveHandle active;
   final bool focused;
+  final _SliderGeometry geometry;
   final CellStyle selectedStyle;
   final CellStyle trackStyle;
 
@@ -362,6 +449,7 @@ class _RawRangeSlider extends LeafRenderObjectWidget {
     max: max,
     active: active,
     focused: focused,
+    geometry: geometry,
     selectedStyle: selectedStyle,
     trackStyle: trackStyle,
   );
@@ -377,6 +465,7 @@ class _RawRangeSlider extends LeafRenderObjectWidget {
       ..rmax = max
       ..active = active
       ..focused = focused
+      ..geometry = geometry
       ..selectedStyle = selectedStyle
       ..trackStyle = trackStyle;
   }
@@ -389,6 +478,7 @@ class _RenderRangeSlider extends RenderObject {
     required num max,
     required _ActiveHandle active,
     required bool focused,
+    required _SliderGeometry geometry,
     required CellStyle selectedStyle,
     required CellStyle trackStyle,
   }) : _values = values,
@@ -396,8 +486,16 @@ class _RenderRangeSlider extends RenderObject {
        _max = max,
        _active = active,
        _focused = focused,
+       _geometry = geometry,
        _selectedStyle = selectedStyle,
        _trackStyle = trackStyle;
+
+  _SliderGeometry _geometry;
+  set geometry(_SliderGeometry v) {
+    if (identical(_geometry, v)) return;
+    _geometry = v;
+    markNeedsPaintOnly();
+  }
 
   (num, num) _values;
   set values((num, num) v) {
@@ -465,6 +563,11 @@ class _RenderRangeSlider extends RenderObject {
     CellRect? clipRect,
   }) {
     final w = size.cols;
+    // Record the painted track span so the State's pointer handlers can map an
+    // absolute column back to a value (written even when off-screen below).
+    _geometry
+      ..left = offset.col
+      ..width = w;
     if (w == 0 || size.rows == 0) return;
     if (offset.row < 0 || offset.row >= buffer.size.rows) return;
 
