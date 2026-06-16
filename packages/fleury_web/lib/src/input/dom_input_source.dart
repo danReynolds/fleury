@@ -488,10 +488,25 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   CellOffset? _cellForPointer(web.MouseEvent event) {
     final box = _cellMetrics.cachedMeasurement;
     if (box == null || box.cols <= 0 || box.rows <= 0) return null;
-    final x = event.clientX - box.cssCanvasLeft;
-    final y = event.clientY - box.cssCanvasTop;
+    // Read coordinates as doubles: package:web types clientX/clientY as
+    // `int`, but pointer events deliver sub-pixel (fractional) values on
+    // HiDPI/Retina displays. Reading those as `int` makes dart2js assert
+    // integer-ness and throw, which would drop every pointer event (wheel
+    // events report integer coords, so they slip through — exactly the
+    // "scroll works, click doesn't" symptom).
+    final coords = _PointerCoords(event as JSObject);
+    final x = coords.clientX - box.cssCanvasLeft;
+    final y = coords.clientY - box.cssCanvasTop;
     return _cellMetrics.cellForPoint(x, y);
   }
+}
+
+/// Reinterprets a pointer/mouse event to read its coordinates as `double`,
+/// avoiding the integer assertion `package:web`'s `int`-typed `clientX`/
+/// `clientY` would trigger on fractional (sub-pixel) values.
+extension type _PointerCoords(JSObject _event) implements JSObject {
+  external double get clientX;
+  external double get clientY;
 }
 
 /// Maps a browser keydown event to a Fleury key event.
