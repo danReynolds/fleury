@@ -81,7 +81,15 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
     category: 'Input',
     description:
         'Focusable activation controls for actions, binary settings, and single-choice options.',
-    widgets: const <String>['Button', 'Checkbox', 'Toggle', 'Switch', 'Radio'],
+    widgets: const <String>[
+      'Button',
+      'Checkbox',
+      'Toggle',
+      'Switch',
+      'Radio',
+      'RadioGroup',
+      'RadioOption',
+    ],
     controls: const <StoryControl>[
       StoryControl.toggle(id: 'disabled', label: 'Disabled controls'),
     ],
@@ -761,6 +769,9 @@ const Map<String, String> _widgetDescriptions = <String, String>{
   'Switch':
       'Labeled binary switching with stronger visual state than a checkbox.',
   'Radio': 'Single-choice state across related options.',
+  'RadioGroup':
+      'Single-choice group with roving-arrow selection across its options.',
+  'RadioOption': 'Typed option metadata (value, label, enabled) for RadioGroup.',
   'Select': 'Single-value dropdown selection for compact option sets.',
   'SelectOption':
       'Typed select option metadata including labels and disabled states.',
@@ -946,6 +957,7 @@ const Map<String, String> _widgetUsage = <String, String>{
   'Toggle': 'Space to toggle',
   'Switch': 'Space to toggle',
   'Radio': '←/→ to choose',
+  'RadioGroup': '←/→ or ↑/↓ to move and select · wraps',
   'Select': 'Enter opens · ↑/↓ choose · Enter picks',
   'SelectOption': 'Enter opens · ↑/↓ choose · Enter picks',
   'MultiSelect': '↑/↓ to move · Space toggles each',
@@ -1398,37 +1410,24 @@ class _ControlsStoryState extends State<_ControlsStory> {
                     });
                   },
           ),
-        if (selected == 'Radio')
-          Row(
-            children: <Widget>[
-              Radio<String>(
-                value: 'fast',
-                groupValue: _radio,
-                label: 'Fast',
-                onChanged: widget.disabled
-                    ? null
-                    : (value) {
-                        setState(() => _radio = value);
-                        widget.onAction('radio.changed', <String, Object?>{
-                          'value': value,
-                        });
-                      },
-              ),
-              const Text('  '),
-              Radio<String>(
-                value: 'safe',
-                groupValue: _radio,
-                label: 'Safe',
-                onChanged: widget.disabled
-                    ? null
-                    : (value) {
-                        setState(() => _radio = value);
-                        widget.onAction('radio.changed', <String, Object?>{
-                          'value': value,
-                        });
-                      },
-              ),
+        if (selected == 'Radio' ||
+            selected == 'RadioGroup' ||
+            selected == 'RadioOption')
+          RadioGroup<String>(
+            value: _radio,
+            axis: Axis.horizontal,
+            options: const <RadioOption<String>>[
+              RadioOption(value: 'fast', label: 'Fast'),
+              RadioOption(value: 'safe', label: 'Safe'),
             ],
+            onChanged: widget.disabled
+                ? null
+                : (value) {
+                    setState(() => _radio = value);
+                    widget.onAction('radio.changed', <String, Object?>{
+                      'value': value,
+                    });
+                  },
           ),
       ],
     );

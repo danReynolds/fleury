@@ -370,6 +370,166 @@ class Radio<T> extends StatelessWidget {
   }
 }
 
+/// A typed option for a [RadioGroup].
+class RadioOption<T> {
+  const RadioOption({required this.value, this.label, this.enabled = true});
+
+  final T value;
+  final String? label;
+  final bool enabled;
+}
+
+/// A group of [Radio]s with the canonical roving-arrow behavior: arrow keys
+/// move focus *and* selection to the adjacent enabled option (wrapping), so the
+/// whole group is one Tab stop's worth of choice — the WAI-ARIA radiogroup
+/// pattern (and Textual's RadioSet). Up/Left select the previous, Down/Right the
+/// next. Controlled — hold the selected [value] and update it from [onChanged].
+///
+/// ```dart
+/// RadioGroup<String>(
+///   value: mode,
+///   options: const [RadioOption(value: 'fast', label: 'Fast'),
+///                   RadioOption(value: 'safe', label: 'Safe')],
+///   onChanged: (v) => setState(() => mode = v),
+/// )
+/// ```
+class RadioGroup<T> extends StatefulWidget {
+  const RadioGroup({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    required this.options,
+    this.axis = Axis.vertical,
+    this.spacing = 2,
+    this.label = 'Radio group',
+    this.autofocus = false,
+  });
+
+  /// The currently selected value.
+  final T? value;
+
+  /// Called with the new value when the user moves or activates a radio.
+  /// Passing null disables the whole group.
+  final void Function(T value)? onChanged;
+
+  final List<RadioOption<T>> options;
+
+  /// Vertical stacks the radios (arrows + Up/Down primary); horizontal lays
+  /// them in a row.
+  final Axis axis;
+
+  /// Horizontal gap between options when [axis] is horizontal.
+  final int spacing;
+
+  final String label;
+  final bool autofocus;
+
+  @override
+  State<RadioGroup<T>> createState() => _RadioGroupState<T>();
+}
+
+class _RadioGroupState<T> extends State<RadioGroup<T>> {
+  late List<FocusNode> _nodes;
+
+  @override
+  void initState() {
+    super.initState();
+    _nodes = _makeNodes(widget.options.length);
+  }
+
+  List<FocusNode> _makeNodes(int count) =>
+      List<FocusNode>.generate(count, (i) => FocusNode(debugLabel: 'radio-$i'));
+
+  @override
+  void didUpdateWidget(RadioGroup<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.options.length != widget.options.length) {
+      for (final node in _nodes) {
+        node.dispose();
+      }
+      _nodes = _makeNodes(widget.options.length);
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final node in _nodes) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  int get _selectedIndex =>
+      widget.options.indexWhere((option) => option.value == widget.value);
+
+  void _move(int dir) {
+    if (widget.onChanged == null) return;
+    final focused = _nodes.indexWhere((node) => node.hasFocus);
+    final from = focused >= 0
+        ? focused
+        : (_selectedIndex >= 0 ? _selectedIndex : 0);
+    final n = widget.options.length;
+    for (var k = 1; k <= n; k++) {
+      final i = ((from + dir * k) % n + n) % n;
+      if (widget.options[i].enabled) {
+        _nodes[i].requestFocus();
+        widget.onChanged!(widget.options[i].value);
+        return;
+      }
+    }
+  }
+
+  KeyEventResult _onKey(KeyEvent event) {
+    switch (event.keyCode) {
+      case KeyCode.arrowUp:
+      case KeyCode.arrowLeft:
+        _move(-1);
+        return KeyEventResult.handled;
+      case KeyCode.arrowDown:
+      case KeyCode.arrowRight:
+        _move(1);
+        return KeyEventResult.handled;
+      default:
+        return KeyEventResult.ignored;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final autofocusIndex = _selectedIndex >= 0 ? _selectedIndex : 0;
+    final radios = <Widget>[
+      for (var i = 0; i < widget.options.length; i++)
+        Radio<T>(
+          value: widget.options[i].value,
+          groupValue: widget.value,
+          label: widget.options[i].label,
+          focusNode: _nodes[i],
+          autofocus: widget.autofocus && i == autofocusIndex,
+          onChanged: widget.options[i].enabled && widget.onChanged != null
+              ? (value) => widget.onChanged!(value)
+              : null,
+        ),
+    ];
+    final Widget layout = widget.axis == Axis.vertical
+        ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: radios)
+        : Row(
+            children: <Widget>[
+              for (var i = 0; i < radios.length; i++) ...[
+                if (i > 0) SizedBox(width: widget.spacing),
+                radios[i],
+              ],
+            ],
+          );
+    // The group's onKey is closer to the focused radio than the app's root
+    // directional traversal, so consuming the arrows here adds selection.
+    return Semantics(
+      role: SemanticRole.region,
+      label: widget.label,
+      child: Focus(canRequestFocus: false, onKey: _onKey, child: layout),
+    );
+  }
+}
+
 /// Accent for a [Button], resolved against the active [ColorScheme].
 enum ButtonVariant { normal, primary, success, warning, error }
 
