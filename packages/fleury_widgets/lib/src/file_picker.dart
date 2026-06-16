@@ -273,12 +273,17 @@ class _FilePickerState extends State<FilePicker> {
         'hidden': _basename(e.path).startsWith('.'),
         'outputSanitized': safePath != e.path || name != rawName,
       }),
-      child: Row(
-        children: [
-          Text(' ', style: style),
-          Text(marker, style: style),
-          Text(name, style: style),
-        ],
+      // Click a row to activate it: a directory opens in place, a file is
+      // selected — the same single action the keyboard's Enter/Right performs.
+      child: GestureDetector(
+        onTap: canOpen ? () => _activateEntryAt(i) : null,
+        child: Row(
+          children: [
+            Text(' ', style: style),
+            Text(marker, style: style),
+            Text(name, style: style),
+          ],
+        ),
       ),
     );
   }
@@ -304,6 +309,37 @@ class _FilePickerState extends State<FilePicker> {
             itemCount: _entries.length,
             itemBuilder: (context, i, _) => _entryRow(theme, i, focused),
           );
+    // A clickable parent-directory row so the mouse can climb out of a folder
+    // without the keyboard (Backspace / Left). Hidden at the filesystem root.
+    final canGoUp = _cwd.parent.path != _cwd.path;
+    final Widget? upRow = canGoUp
+        ? Semantics(
+            role: SemanticRole.treeItem,
+            label: 'Parent directory',
+            value: _safeText(_cwd.parent.path),
+            enabled: true,
+            actions: {SemanticAction.open},
+            onAction: (action) {
+              if (action == SemanticAction.open) {
+                _node.requestFocus();
+                _goUp();
+              }
+            },
+            child: GestureDetector(
+              onTap: () {
+                _node.requestFocus();
+                _goUp();
+              },
+              child: Row(
+                children: [
+                  Text(' ', style: theme.mutedStyle),
+                  Text('▴ ', style: theme.mutedStyle),
+                  Text('..', style: theme.mutedStyle),
+                ],
+              ),
+            ),
+          )
+        : null;
     return Semantics(
       role: SemanticRole.tree,
       label: widget.semanticLabel,
@@ -338,6 +374,7 @@ class _FilePickerState extends State<FilePicker> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(safeCwd, style: theme.mutedStyle),
+              ?upRow,
               SizedBox(height: visible, child: listing),
             ],
           ),

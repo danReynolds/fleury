@@ -5,6 +5,27 @@ import 'package:test/test.dart';
 
 DateTime _d(int y, int m, int d) => DateTime(y, m, d);
 
+/// A full left-click (press + release) at one cell. Render first so the
+/// pointer router has the current paint-time rects.
+void _clickAt(FleuryTester tester, {required int col, required int row}) {
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.down,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.up,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+}
+
 void main() {
   group('DatePicker', () {
     testWidgets('renders the month / year header and day-of-week labels', (
@@ -65,6 +86,37 @@ void main() {
       );
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
       expect(selected, _d(2024, 3, 22));
+    });
+
+    testWidgets('clicking a day cell selects that day', (tester) {
+      DateTime? selected;
+      tester.pumpWidget(
+        DatePicker(
+          value: _d(2024, 3, 15),
+          autofocus: true,
+          onChanged: (d) => selected = d,
+        ),
+      );
+      // March 2024: day 1 renders in the grid's first row (render row 2) at
+      // columns 15-17 (a Friday, with five leading blanks).
+      tester.render(size: const CellSize(24, 9));
+      _clickAt(tester, col: 16, row: 2);
+      expect(selected, _d(2024, 3, 1));
+    });
+
+    testWidgets('clicking the > header arrow advances the month', (tester) {
+      DateTime? selected;
+      tester.pumpWidget(
+        DatePicker(
+          value: _d(2024, 3, 15),
+          autofocus: true,
+          onChanged: (d) => selected = d,
+        ),
+      );
+      // Header `< March 2024 >`: the › glyph sits at column 13, row 0.
+      tester.render(size: const CellSize(24, 9));
+      _clickAt(tester, col: 13, row: 0);
+      expect(selected, _d(2024, 4, 15));
     });
 
     testWidgets('PageDown advances by one month, preserving the day', (tester) {

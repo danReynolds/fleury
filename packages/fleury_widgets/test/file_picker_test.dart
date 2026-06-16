@@ -20,6 +20,27 @@ String _scratchDir() {
   return tmp.path;
 }
 
+/// A full left-click (press + release) at one cell. Render first so the
+/// pointer router has the current paint-time rects.
+void _clickAt(FleuryTester tester, {required int col, required int row}) {
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.down,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.up,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+}
+
 String _bigDir(int count) {
   final tmp = Directory.systemTemp.createTempSync('fleuryfpbig_');
   for (var i = 0; i < count; i++) {
@@ -43,13 +64,53 @@ void main() {
           onSelected: (_) {},
         ),
       );
-      tester.render(size: const CellSize(40, 7));
+      // Height accommodates the wrapped cwd path, the clickable '..' parent
+      // row, and the maxVisible window beneath them.
+      tester.render(size: const CellSize(40, 8));
       // End jumps to the last entry; the window must scroll it into view and
       // push the top entry off (a plain Column would have clipped it).
       tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
-      final out = tester.renderToString(size: const CellSize(40, 7), emptyMark: ' ');
+      final out = tester.renderToString(size: const CellSize(40, 8), emptyMark: ' ');
       expect(out.contains('file_19.txt'), isTrue, reason: 'cursor scrolled in');
       expect(out.contains('file_00.txt'), isFalse, reason: 'top scrolled off');
+    });
+
+    testWidgets('clicking an entry row opens a directory; the parent row '
+        'climbs back out — both with the mouse alone', (tester) {
+      final dir = _scratchDir();
+      tester.pumpWidget(
+        FilePicker(initialDirectory: dir, autofocus: true, onSelected: (_) {}),
+      );
+      // Layout at width 70: row0=path, row1='▴ ..', row2='▸ sub/', row3=a.txt.
+      tester.render(size: const CellSize(70, 8));
+      _clickAt(tester, col: 3, row: 2); // the sub/ directory row
+      expect(
+        tester.renderToString(size: const CellSize(70, 8)).contains('inside.dart'),
+        isTrue,
+        reason: 'clicking the directory opened it',
+      );
+
+      // The '..' parent row is back at row 1; clicking it returns to the root.
+      _clickAt(tester, col: 2, row: 1);
+      final out = tester.renderToString(size: const CellSize(70, 8));
+      expect(out.contains('a.txt'), isTrue, reason: 'climbed back to the root');
+      expect(out.contains('sub/'), isTrue);
+    });
+
+    testWidgets('clicking a file row selects it', (tester) {
+      final dir = _scratchDir();
+      File? picked;
+      tester.pumpWidget(
+        FilePicker(
+          initialDirectory: dir,
+          autofocus: true,
+          onSelected: (f) => picked = f,
+        ),
+      );
+      // row0=path, row1='▴ ..', row2='▸ sub/', row3='a.txt'.
+      tester.render(size: const CellSize(70, 8));
+      _clickAt(tester, col: 3, row: 3);
+      expect(picked?.path, endsWith('a.txt'));
     });
 
     testWidgets('lists files and directories in the initial dir', (tester) {
