@@ -199,13 +199,19 @@ class _NumberInputState extends State<NumberInput> {
     if (_suppress) return;
     final text = _controller.text;
     if (!_isValid(text)) {
-      // Revert to the last accepted value without firing onChanged.
-      // The cursor jumps to the end on revert — same UX as a paste of
-      // an invalid value being rejected.
+      // Revert to the last accepted value without firing onChanged, keeping the
+      // caret where the rejected character would have landed rather than
+      // jumping it to the end (readline / every peer field leaves it in place).
+      final priorOffset = _controller.selection;
+      final added = text.length - _lastAccepted.length;
+      final keepAt = (priorOffset - (added > 0 ? added : 0)).clamp(
+        0,
+        _lastAccepted.length,
+      );
       _suppress = true;
       _controller
         ..text = _lastAccepted
-        ..selection = _lastAccepted.length;
+        ..selection = keepAt;
       _suppress = false;
       return;
     }
