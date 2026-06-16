@@ -56,6 +56,29 @@ void main() {
       });
     });
 
+    testWidgets('a known total with unknown current renders "— / N"', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        TaskGraph(
+          nodes: const [
+            TaskGraphNode(
+              id: 'build',
+              title: 'Build',
+              status: TaskGraphStatus.running,
+              progressTotal: 5,
+            ),
+          ],
+        ),
+      );
+      final output = tester.renderToString(
+        size: const CellSize(60, 4),
+        emptyMark: ' ',
+      );
+      expect(output, contains('Progress: — / 5'));
+      expect(output, isNot(contains('Progress: pending')));
+    });
+
     testWidgets('renders sanitized tasks with graph semantics', (tester) {
       final controller = TaskGraphController(selectedIndex: 1);
       tester.pumpWidget(

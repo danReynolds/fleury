@@ -254,7 +254,10 @@ CellStyle _styleForStatus(BuildContext context, TaskStatus status) {
       bold: true,
       foreground: theme.colorScheme.primary,
     ),
-    TaskStatus.succeeded => const CellStyle(bold: true),
+    TaskStatus.succeeded => CellStyle(
+      bold: true,
+      foreground: theme.colorScheme.success,
+    ),
     TaskStatus.failed => CellStyle(
       bold: true,
       foreground: theme.colorScheme.error,
