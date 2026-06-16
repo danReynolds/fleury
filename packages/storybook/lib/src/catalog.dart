@@ -978,7 +978,7 @@ const Map<String, String> _widgetUsage = <String, String>{
   'Menu': 'Enter opens · ↑/↓ move · Esc closes',
   'MenuItem': 'Enter opens · ↑/↓ move · Esc closes',
   'SubMenu': 'Enter opens · → into submenu · Esc closes',
-  'Dialog': 'Tab between actions · Esc dismisses',
+  'Dialog': 'Enter opens · Tab between actions · Esc or a button dismisses',
   'Tooltip': 'Focus the target to reveal',
   'Toaster': 'Activate a trigger to emit a toast',
   'Tabs': '←/→ to switch tabs · Alt+1..9',
@@ -1769,17 +1769,54 @@ class _OverlayStory extends StatelessWidget {
           message: 'Focus the button to show this anchored tooltip.',
           child: Button(label: 'Tooltip target', onPressed: () {}),
         ),
-        'Dialog' => Dialog(
-          title: 'Dialog chrome',
-          width: 42,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: const <Widget>[
-              Text('Dialogs provide frame and semantics.'),
-              Text('Positioning is handled by Navigator.present.'),
-            ],
-          ),
+        // A Dialog is a modal route, not inline chrome — so the story is a
+        // trigger that presents it and a dialog that pops itself, letting you
+        // watch the navigation in and back out (and the result round-trip).
+        'Dialog' => Button(
+          label: 'Open dialog',
+          onPressed: () async {
+            final result = await context.present<String>(
+              Dialog(
+                title: 'Confirm deploy',
+                width: 44,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    const Text('Deploy the current build to production?'),
+                    const Text('Esc, Cancel, or Deploy closes the dialog.'),
+                    const SizedBox(height: 1),
+                    // The dialog is the navigator's top route, so popping from
+                    // this context dismisses it and hands the result back to
+                    // the awaiting `present` call above.
+                    Row(
+                      children: <Widget>[
+                        Button(
+                          label: 'Cancel',
+                          onPressed: () => context.pop('cancelled'),
+                        ),
+                        const SizedBox(width: 2),
+                        Button(
+                          label: 'Deploy',
+                          variant: ButtonVariant.primary,
+                          onPressed: () => context.pop('deployed'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+            if (result != null && context.mounted) {
+              Toaster.show(
+                context,
+                'Dialog result: $result',
+                severity: result == 'deployed'
+                    ? ToastSeverity.success
+                    : ToastSeverity.info,
+              );
+            }
+          },
         ),
         _ => Button(
           label: 'Open palette',
@@ -2557,7 +2594,7 @@ class _ModelToolsStory extends StatelessWidget {
         width: 24,
       ),
       'ToolCallCard' || 'ToolCallRecord' => _toolCard(),
-      'ApprovalPrompt' || 'ApprovalRequest' => _approval(),
+      'ApprovalPrompt' || 'ApprovalRequest' => _approval(context),
       _ => const ModelStatusBar(
         info: ModelStatusInfo(
           model: 'gpt-5-codex',
@@ -2597,19 +2634,31 @@ class _ModelToolsStory extends StatelessWidget {
     );
   }
 
-  Widget _approval() {
-    return ApprovalPrompt(
-      width: 44,
-      request: const ApprovalRequest(
-        id: 'approval-1',
-        title: 'Run on bare metal?',
-        message:
-            'This run will reserve the terminal and write benchmark artifacts.',
-        subject: 'Tier-C benchmark',
-        details: <String>['3 replicates', 'CPU/RSS/FPS capture enabled'],
-        severity: ApprovalSeverity.warning,
+  Widget _approval(BuildContext context) {
+    // Hosted in a Toaster so the decision has an observable outcome instead of
+    // a no-op — Tab to the buttons (or use the approve/deny shortcuts) and the
+    // choice surfaces as a toast.
+    return Toaster(
+      child: ApprovalPrompt(
+        width: 44,
+        request: const ApprovalRequest(
+          id: 'approval-1',
+          title: 'Run on bare metal?',
+          message:
+              'This run will reserve the terminal and write benchmark '
+              'artifacts.',
+          subject: 'Tier-C benchmark',
+          details: <String>['3 replicates', 'CPU/RSS/FPS capture enabled'],
+          severity: ApprovalSeverity.warning,
+        ),
+        onDecision: (decision) => Toaster.show(
+          context,
+          'Approval ${decision.name}',
+          severity: decision == ApprovalDecision.approved
+              ? ToastSeverity.success
+              : ToastSeverity.warning,
+        ),
       ),
-      onDecision: (_) {},
     );
   }
 }
