@@ -2124,6 +2124,7 @@ class _ChartsStory extends StatelessWidget {
           segmentLabels: const <String>['app', 'framework', 'driver'],
           showLegend: true,
           showValues: true,
+          showYAxis: true,
           palette: Palettes.categorical,
         );
       case 'LineChart':
@@ -2136,6 +2137,7 @@ class _ChartsStory extends StatelessWidget {
           showAxes: true,
           showLegend: true,
           showGrid: true,
+          yTickCount: 5,
         );
       case 'Sparkline':
         return Column(

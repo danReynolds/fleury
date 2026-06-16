@@ -226,6 +226,7 @@ class LineChart extends StatefulWidget {
     this.showAxes = true,
     this.showGrid = false,
     this.showLegend = false,
+    this.yTickCount = 3,
     this.palette,
     this.xTickFormat,
     this.yTickFormat,
@@ -262,6 +263,12 @@ class LineChart extends StatefulWidget {
   /// Draw a one-row legend at the top-right with a colored bullet and the
   /// label for each labeled series.
   final bool showLegend;
+
+  /// Number of evenly-spaced y-axis tick labels, including both ends.
+  /// Defaults to 3 (min / mid / max). Raise it for finer vertical reading
+  /// (e.g. 5 gives quarter ticks); values below 2 are treated as 2. Only
+  /// the two endpoints are drawn when the plot is shorter than 3 rows.
+  final int yTickCount;
 
   /// Colors to cycle through for series that don't set [LineSeries.color]
   /// explicitly. Defaults to a palette derived from the theme's color
@@ -409,6 +416,7 @@ class _LineChartState extends State<LineChart> {
       showAxes: widget.showAxes,
       showGrid: widget.showGrid,
       showLegend: widget.showLegend,
+      yTickCount: widget.yTickCount,
       palette: palette,
       defaultColor: palette.isNotEmpty ? palette.first : cs.primary,
       axisStyle: theme.mutedStyle,
@@ -545,6 +553,7 @@ class _RawLineChart extends LeafRenderObjectWidget {
     required this.showAxes,
     required this.showGrid,
     required this.showLegend,
+    required this.yTickCount,
     required this.palette,
     required this.defaultColor,
     required this.axisStyle,
@@ -561,6 +570,7 @@ class _RawLineChart extends LeafRenderObjectWidget {
   final bool showAxes;
   final bool showGrid;
   final bool showLegend;
+  final int yTickCount;
   final List<Color> palette;
   final Color defaultColor;
   final CellStyle axisStyle;
@@ -578,6 +588,7 @@ class _RawLineChart extends LeafRenderObjectWidget {
     showAxes: showAxes,
     showGrid: showGrid,
     showLegend: showLegend,
+    yTickCount: yTickCount,
     palette: palette,
     defaultColor: defaultColor,
     axisStyle: axisStyle,
@@ -600,6 +611,7 @@ class _RawLineChart extends LeafRenderObjectWidget {
       ..showAxes = showAxes
       ..showGrid = showGrid
       ..showLegend = showLegend
+      ..yTickCount = yTickCount
       ..palette = palette
       ..defaultColor = defaultColor
       ..axisStyle = axisStyle
@@ -620,6 +632,7 @@ class RenderLineChart extends RenderObject {
     required bool showAxes,
     required bool showGrid,
     required bool showLegend,
+    required int yTickCount,
     required List<Color> palette,
     required Color defaultColor,
     required CellStyle axisStyle,
@@ -634,6 +647,7 @@ class RenderLineChart extends RenderObject {
        _showAxes = showAxes,
        _showGrid = showGrid,
        _showLegend = showLegend,
+       _yTickCount = yTickCount,
        _palette = palette,
        _defaultColor = defaultColor,
        _axisStyle = axisStyle,
@@ -688,6 +702,13 @@ class RenderLineChart extends RenderObject {
   set showLegend(bool v) {
     if (_showLegend == v) return;
     _showLegend = v;
+    markNeedsPaintOnly();
+  }
+
+  int _yTickCount;
+  set yTickCount(int v) {
+    if (_yTickCount == v) return;
+    _yTickCount = v;
     markNeedsPaintOnly();
   }
 
@@ -1448,36 +1469,29 @@ class RenderLineChart extends RenderObject {
     double ymin,
     double ymax,
   ) {
-    // Y-axis: max at top row, mid in the middle, min just above the
-    // x-axis label row. Right-align inside the left gutter (minus 1 col
-    // of breathing room).
+    // Y-axis: `yTickCount` evenly-spaced labels from ymax (top) down to
+    // ymin (bottom). Right-align inside the left gutter (minus 1 col of
+    // breathing room). Interior ticks are dropped on plots shorter than
+    // 3 rows, where they'd collide with the endpoints. The (plotRows-1)
+    // mapping with round() reproduces the old min/mid/max layout exactly
+    // for the default count of 3.
     final yLabelWidth = _leftGutter - 1;
-    _writeRightAligned(
-      buffer,
-      0,
-      offset.row,
-      yLabelWidth,
-      _yTickFormat(ymax),
-      _axisStyle,
-    );
-    if (plotRows >= 3) {
+    final ticks = _yTickCount < 2 ? 2 : _yTickCount;
+    for (var i = 0; i < ticks; i++) {
+      final isEnd = i == 0 || i == ticks - 1;
+      if (!isEnd && plotRows < 3) continue;
+      final frac = i / (ticks - 1);
+      final value = ymax - (ymax - ymin) * frac;
+      final row = offset.row + ((plotRows - 1) * frac).round();
       _writeRightAligned(
         buffer,
         0,
-        offset.row + plotRows ~/ 2,
+        row,
         yLabelWidth,
-        _yTickFormat((ymin + ymax) / 2),
+        _yTickFormat(value),
         _axisStyle,
       );
     }
-    _writeRightAligned(
-      buffer,
-      0,
-      offset.row + plotRows - 1,
-      yLabelWidth,
-      _yTickFormat(ymin),
-      _axisStyle,
-    );
 
     // X-axis: min at left of plot, max at right, mid centered (if room).
     final xRow = offset.row + plotRows;
