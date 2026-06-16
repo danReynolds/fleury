@@ -2517,6 +2517,7 @@ class _AgentStory extends StatelessWidget {
           cached: 300,
           contextLimit: 8000,
         ),
+        showTokenShare: true,
         maxVisible: 8,
       ),
     };

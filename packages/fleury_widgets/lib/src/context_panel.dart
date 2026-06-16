@@ -169,6 +169,7 @@ class ContextPanel extends StatefulWidget {
     this.autofocus = false,
     this.label = 'Context',
     this.maxVisible = 6,
+    this.showTokenShare = false,
     this.copySelection = true,
     this.copyOptions = const ContextPanelCopyOptions(),
     this.onSelect,
@@ -182,6 +183,12 @@ class ContextPanel extends StatefulWidget {
   final bool autofocus;
   final String label;
   final int maxVisible;
+
+  /// Append each item's share of the panel's total token budget — e.g.
+  /// `1,024 tokens (12%)` — next to its count. Off by default. Makes it
+  /// obvious at a glance which items dominate the context window. Items
+  /// with no tokens, or when the total is zero, get no share suffix.
+  final bool showTokenShare;
   final bool copySelection;
   final ContextPanelCopyOptions copyOptions;
   final void Function(ContextPanelSelectResult result)? onSelect;
@@ -409,6 +416,9 @@ class _ContextPanelState extends State<ContextPanel> {
                 activeSelection: activeSelected,
                 canSelect: canSelect,
                 copyEnabled: copyEnabled,
+                tokenShareTotal: widget.showTokenShare
+                    ? _totalTokens(widget.items)
+                    : null,
                 onSelect: () => _selectAt(index),
                 onCopy: () => _copyAt(index),
               );
@@ -482,6 +492,7 @@ class _ContextItemRow extends StatelessWidget {
     required this.activeSelection,
     required this.canSelect,
     required this.copyEnabled,
+    required this.tokenShareTotal,
     required this.onSelect,
     required this.onCopy,
   });
@@ -492,6 +503,9 @@ class _ContextItemRow extends StatelessWidget {
   final bool activeSelection;
   final bool canSelect;
   final bool copyEnabled;
+
+  /// Panel-wide token total for the per-item share suffix, or null to omit it.
+  final int? tokenShareTotal;
   final Future<void> Function() onSelect;
   final Future<void> Function() onCopy;
 
@@ -541,7 +555,12 @@ class _ContextItemRow extends StatelessWidget {
         'outputSanitized': _itemWasSanitized(item),
       }),
       child: Text(
-        _rowText(label: label, item: item, activeSelection: activeSelection),
+        _rowText(
+          label: label,
+          item: item,
+          activeSelection: activeSelection,
+          tokenShareTotal: tokenShareTotal,
+        ),
         style: _rowStyle(
           Theme.of(context),
           selected: selected,
@@ -615,12 +634,19 @@ String _rowText({
   required String label,
   required ContextItem item,
   required bool activeSelection,
+  int? tokenShareTotal,
 }) {
   final prefix = activeSelection ? '> ' : '  ';
+  final tokens = item.tokenCount > 0 ? _formatTokenCount(item.tokenCount) : null;
+  final share = tokens != null &&
+          tokenShareTotal != null &&
+          tokenShareTotal > 0
+      ? ' (${(item.tokenCount / tokenShareTotal * 100).round()}%)'
+      : '';
   final meta = <String>[
     item.kind.name,
     item.priority.name,
-    if (item.tokenCount > 0) _formatTokenCount(item.tokenCount),
+    if (tokens != null) '$tokens$share',
     if (item.pinned) 'pinned',
   ];
   return '$prefix$label  ${meta.join('  ')}';
