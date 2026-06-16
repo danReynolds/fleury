@@ -302,6 +302,7 @@ class DiffView extends StatefulWidget {
     this.autofocus = false,
     this.label = 'Diff',
     this.maxLineLength = 1000,
+    this.showLineNumbers = true,
     this.copySelection = true,
     this.copyOptions = const DiffViewCopyOptions(),
     this.onCopy,
@@ -316,6 +317,7 @@ class DiffView extends StatefulWidget {
     this.autofocus = false,
     this.label = 'Diff',
     this.maxLineLength = 1000,
+    this.showLineNumbers = true,
     this.copySelection = true,
     this.copyOptions = const DiffViewCopyOptions(),
     this.onCopy,
@@ -327,6 +329,11 @@ class DiffView extends StatefulWidget {
   final bool autofocus;
   final String label;
   final int? maxLineLength;
+
+  /// Render an old | new line-number gutter (the universal unified-diff
+  /// convention — delta, GitHub, git pager). The data is tracked either way.
+  final bool showLineNumbers;
+
   final bool copySelection;
   final DiffViewCopyOptions copyOptions;
   final void Function(DiffViewCopyResult result)? onCopy;
@@ -456,6 +463,7 @@ class _DiffViewState extends State<DiffView> {
     final selected = _selectedRow();
     final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && rows.isNotEmpty;
+    final gutterWidth = widget.showLineNumbers ? _diffGutterWidth(rows) : 0;
     Widget list = rows.isEmpty
         ? const Text('  (empty diff)', style: CellStyle(dim: true))
         : ListView.builder(
@@ -470,6 +478,7 @@ class _DiffViewState extends State<DiffView> {
                 selected: selected,
                 activeSelection: activeSelected,
                 copyEnabled: copyEnabled,
+                gutterWidth: gutterWidth,
                 onActivate: () => _selectRowAt(index),
                 onCopy: () => _copyRowAt(index),
               );
@@ -539,6 +548,7 @@ class _DiffLineWidget extends StatelessWidget {
     required this.selected,
     required this.activeSelection,
     required this.copyEnabled,
+    required this.gutterWidth,
     required this.onActivate,
     required this.onCopy,
   });
@@ -547,6 +557,7 @@ class _DiffLineWidget extends StatelessWidget {
   final bool selected;
   final bool activeSelection;
   final bool copyEnabled;
+  final int gutterWidth;
   final VoidCallback onActivate;
   final Future<void> Function() onCopy;
 
@@ -597,9 +608,35 @@ class _DiffLineWidget extends StatelessWidget {
         'outputTruncated': row.outputTruncated,
         'outputOriginalLength': row.outputOriginalLength,
       }),
-      child: Text(row.displayText, style: style),
+      child: gutterWidth <= 0
+          ? Text(row.displayText, style: style)
+          : Row(
+              children: [
+                Text(_gutterFor(row, gutterWidth), style: theme.mutedStyle),
+                Text(row.displayText, style: style),
+              ],
+            ),
     );
   }
+}
+
+/// `old new │ ` — both columns right-aligned to [width]; blank where a side has
+/// no line number (additions have no old, deletions no new, hunk headers
+/// neither). Matches the unified-diff gutter of delta / GitHub.
+String _gutterFor(DiffLine row, int width) {
+  final old = (row.oldLine?.toString() ?? '').padLeft(width);
+  final neu = (row.newLine?.toString() ?? '').padLeft(width);
+  return '$old $neu │ ';
+}
+
+int _diffGutterWidth(List<DiffLine> rows) {
+  var max = 1;
+  for (final row in rows) {
+    final o = row.oldLine, n = row.newLine;
+    if (o != null && o.toString().length > max) max = o.toString().length;
+    if (n != null && n.toString().length > max) max = n.toString().length;
+  }
+  return max;
 }
 
 final _hunkPattern = RegExp(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@');

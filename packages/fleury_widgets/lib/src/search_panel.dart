@@ -563,7 +563,14 @@ class _SearchPanelState extends State<SearchPanel> {
           autofocus: widget.autofocus,
           onSubmit: (_) => _activateSelected(),
         ),
-        const SizedBox(height: 1),
+        // Match count — the primary "is the filter working?" feedback (fzf,
+        // VS Code, k9s all show it).
+        Text(
+          _query.text.trim().isEmpty
+              ? '${widget.results.length} results'
+              : '${order.length} of ${widget.results.length}',
+          style: Theme.of(context).mutedStyle,
+        ),
         if (widget.fillHeight)
           Expanded(child: listArea)
         else
