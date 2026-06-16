@@ -78,6 +78,12 @@ typedef SelectionChangedCallback = void Function(SelectedContent? content);
 /// the Shift+Arrow event bubbles so a different consumer (focus
 /// traversal, scroll) can claim it.
 ///
+/// **Shift+Home / Shift+End.** Extends the moving edge to the start
+/// or end of the cursor's current row (the Selectable it sits in),
+/// keeping the anchor — so Shift+End selects through the last
+/// character of the line. Like Shift+Arrow, this bubbles when no
+/// selection is active.
+///
 /// **Shift+Click.** When a selection is active, holding Shift while
 /// clicking moves the cursor to the click point without disturbing
 /// the anchor — extends the selection to the click. Shift+Click
@@ -483,6 +489,37 @@ class _SelectionAreaState extends State<SelectionArea> {
     _delegate.moveCursorTo(next);
   }
 
+  /// Extends the moving edge to the start ([dir] < 0) or end ([dir] > 0) of
+  /// the cursor's current row — the Shift+Home / Shift+End convention. The
+  /// target is the left / right edge of the Selectable the cursor sits in;
+  /// routing a point at the trailing edge through [moveCursorTo] maps it to
+  /// the end-of-content offset (the same path a mouse-drag-past-the-end
+  /// takes), so End reaches past the last character — which the
+  /// grapheme-by-grapheme walk deliberately can't.
+  void _extendToLineEdge(int dir, KeyBindingEvent event) {
+    final cursor = _delegate.cursor;
+    if (cursor == null) {
+      // No selection in flight — bubble so Home/End can reach another
+      // consumer (scroll-to-top/bottom, focus traversal).
+      event.bubble();
+      return;
+    }
+    for (final s in _delegate.selectables) {
+      final b = s.cellBounds;
+      if (b == null) continue;
+      final withinRows =
+          cursor.row >= b.offset.row && cursor.row < b.offset.row + b.size.rows;
+      final withinCols =
+          cursor.col >= b.offset.col &&
+          cursor.col <= b.offset.col + b.size.cols;
+      if (!withinRows || !withinCols) continue;
+      final col = dir < 0 ? b.offset.col : b.offset.col + b.size.cols;
+      final target = CellOffset(col, cursor.row);
+      if (target != cursor) _delegate.moveCursorTo(target);
+      return;
+    }
+  }
+
   void _onCopy(KeyBindingEvent event) {
     final text = _delegate.getSelectedText();
     if (text.isEmpty) {
@@ -527,6 +564,14 @@ class _SelectionAreaState extends State<SelectionArea> {
           KeyBinding(
             KeyChord.shift.down,
             onEvent: (e) => _extendCursor(0, 1, e),
+          ),
+          KeyBinding(
+            KeyChord.shift.home,
+            onEvent: (e) => _extendToLineEdge(-1, e),
+          ),
+          KeyBinding(
+            KeyChord.shift.end,
+            onEvent: (e) => _extendToLineEdge(1, e),
           ),
         ],
         child: GestureDetector(
