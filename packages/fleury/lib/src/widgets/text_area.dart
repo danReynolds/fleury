@@ -337,6 +337,26 @@ class _TextAreaState extends State<TextArea>
         _cancelScheduledPaste();
         _controller.delete();
         return KeyEventResult.handled;
+      case TextEditingKeyAction.killToLineEnd:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _controller.killToLineEnd();
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.killToLineStart:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _controller.killToLineStart();
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.killWordLeft:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _controller.killWordLeft();
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.yank:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _controller.yank();
+        return KeyEventResult.handled;
       case TextEditingKeyAction.moveLeft:
         _cancelScheduledPaste();
         _controller.moveCursorLeft(extend: event.hasShift);

@@ -188,6 +188,31 @@ class TextEditingController extends ChangeNotifier {
     _applyEdit(TextEditingModel.replaceSelection(_value, ''));
   }
 
+  /// Kill (cut to the shared kill ring) from the caret to the line end; if
+  /// already at the line end, kill the newline. Recover with [yank].
+  void killToLineEnd() {
+    _checkNotDisposed();
+    _applyEdit(TextEditingModel.killToLineEnd(_value));
+  }
+
+  /// Kill from the line start to the caret, into the kill ring.
+  void killToLineStart() {
+    _checkNotDisposed();
+    _applyEdit(TextEditingModel.killToLineStart(_value));
+  }
+
+  /// Kill the word before the caret, into the kill ring.
+  void killWordLeft() {
+    _checkNotDisposed();
+    _applyEdit(TextEditingModel.killWordLeft(_value));
+  }
+
+  /// Insert the kill ring at the caret (replacing any selection).
+  void yank({bool singleLine = false}) {
+    _checkNotDisposed();
+    _applyEdit(TextEditingModel.yank(_value, singleLine: singleLine));
+  }
+
   void replaceRange(
     TextRange range,
     String replacement, {
@@ -998,6 +1023,30 @@ class _TextInputState extends State<TextInput>
         _cancelScheduledPaste();
         _resetHistoryBrowsing();
         _controller.delete();
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.killToLineEnd:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _resetHistoryBrowsing();
+        _controller.killToLineEnd();
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.killToLineStart:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _resetHistoryBrowsing();
+        _controller.killToLineStart();
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.killWordLeft:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _resetHistoryBrowsing();
+        _controller.killWordLeft();
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.yank:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _resetHistoryBrowsing();
+        _controller.yank(singleLine: true);
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveLeft:
         if (_shouldBubbleHorizontalBoundary(event, atStart: true)) {

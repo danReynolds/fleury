@@ -27,6 +27,11 @@ enum TextEditingKeyAction {
   submit,
   insertNewline,
   escape,
+  // readline kill ring — kill (cut) to a shared buffer, yank (paste) it back.
+  killToLineEnd,
+  killToLineStart,
+  killWordLeft,
+  yank,
 }
 
 /// One key-to-action binding inside a [TextEditingKeymap].
@@ -347,6 +352,27 @@ const _emacsSingleLine = <TextEditingKeyBinding>[
     char: 'h',
     modifiers: {KeyModifier.ctrl},
   ),
+  // Kill ring (Ctrl+Y=yank wins over the default Ctrl+Y=redo in emacs mode).
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.killToLineEnd,
+    char: 'k',
+    modifiers: {KeyModifier.ctrl},
+  ),
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.killToLineStart,
+    char: 'u',
+    modifiers: {KeyModifier.ctrl},
+  ),
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.killWordLeft,
+    char: 'w',
+    modifiers: {KeyModifier.ctrl},
+  ),
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.yank,
+    char: 'y',
+    modifiers: {KeyModifier.ctrl},
+  ),
 ];
 
 const _emacsMultiline = <TextEditingKeyBinding>[
@@ -388,6 +414,26 @@ const _emacsMultiline = <TextEditingKeyBinding>[
   TextEditingKeyBinding(
     action: TextEditingKeyAction.backspace,
     char: 'h',
+    modifiers: {KeyModifier.ctrl},
+  ),
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.killToLineEnd,
+    char: 'k',
+    modifiers: {KeyModifier.ctrl},
+  ),
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.killToLineStart,
+    char: 'u',
+    modifiers: {KeyModifier.ctrl},
+  ),
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.killWordLeft,
+    char: 'w',
+    modifiers: {KeyModifier.ctrl},
+  ),
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.yank,
+    char: 'y',
     modifiers: {KeyModifier.ctrl},
   ),
 ];
