@@ -62,7 +62,7 @@ void main() {
       expect(out.endsWith('○'), isTrue);
     });
 
-    testWidgets('Up swaps the solid (active) handle to the high end', (
+    testWidgets('Right swaps the solid (active) handle to the high end', (
       tester,
     ) {
       tester.pumpWidget(
@@ -82,19 +82,19 @@ void main() {
       var buf = tester.render(size: const CellSize(11, 1));
       expect(buf.atColRow(0, 0).grapheme, '●');
       expect(buf.atColRow(10, 0).grapheme, '○');
-      // Up switches the active handle to the high end — the solid mark moves.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+      // Right moves to the high handle — the solid mark moves with it.
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
       buf = tester.render(size: const CellSize(11, 1));
       expect(buf.atColRow(0, 0).grapheme, '○');
       expect(buf.atColRow(10, 0).grapheme, '●');
     });
 
-    testWidgets('shows a switch-ends hint in the readout while focused', (
+    testWidgets('shows the key-model hint in the readout while focused', (
       tester,
     ) {
       tester.pumpWidget(
         SizedBox(
-          width: 40,
+          width: 44,
           height: 3,
           child: RangeSlider(
             values: const (2, 8),
@@ -106,8 +106,8 @@ void main() {
           ),
         ),
       );
-      final out = tester.renderToString(size: const CellSize(40, 3));
-      expect(out.contains('↕ switch ends'), isTrue);
+      final out = tester.renderToString(size: const CellSize(44, 3));
+      expect(out.contains('↑↓ value · ←→ ends'), isTrue);
     });
 
     testWidgets('fills the cells between the handles with ━', (tester) {
@@ -134,30 +134,7 @@ void main() {
       }
     });
 
-    testWidgets('arrow right moves the active (low) handle right', (tester) {
-      (num, num)? received;
-      tester.pumpWidget(
-        SizedBox(
-          width: 11,
-          height: 1,
-          child: RangeSlider(
-            values: const (0, 10),
-            min: 0,
-            max: 10,
-            autofocus: true,
-            onChanged: (v) => received = v,
-          ),
-        ),
-      );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
-      expect(received, (1, 10));
-    });
-
-    testWidgets('Up selects the high handle; then arrow Left moves it', (
-      tester,
-    ) {
-      // The two handles are a 2-cell vertical axis: Up = high, Down = low.
-      // Tab is reserved for moving between widgets.
+    testWidgets('Up increases the active (low) handle value', (tester) {
       (num, num)? received;
       tester.pumpWidget(
         SizedBox(
@@ -173,7 +150,30 @@ void main() {
         ),
       );
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+      expect(received, (1, 10));
+    });
+
+    testWidgets('Right switches to the high handle; then Down lowers it', (
+      tester,
+    ) {
+      // Left/Right move between the two handles (low-left, high-right);
+      // Up/Down change the active handle's value.
+      (num, num)? received;
+      tester.pumpWidget(
+        SizedBox(
+          width: 11,
+          height: 1,
+          child: RangeSlider(
+            values: const (0, 10),
+            min: 0,
+            max: 10,
+            autofocus: true,
+            onChanged: (v) => received = v,
+          ),
+        ),
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight)); // → high
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // lower high
       expect(received, (0, 9));
     });
 
@@ -210,9 +210,9 @@ void main() {
       // reflects each onChanged — otherwise the slider keeps seeing
       // the original `values` prop and "clamp" never gets exercised.
       tester.pumpWidget(_HostedSlider(initial: const (4, 5), min: 0, max: 10));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
-      // Two right-arrows from low=4 against high=5: first lands on 5,
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+      // Two Up-arrows raise low=4 against high=5: first lands on 5,
       // second is clamped and discarded. Final state stays at (5, 5).
       expect(_HostedSlider.lastValues, (5, 5));
     });
@@ -271,7 +271,7 @@ void main() {
           ),
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp)); // active=high
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight)); // active=high
       tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
       expect(received, (2, 10));
     });
@@ -396,7 +396,7 @@ void main() {
       expect(low.actions, isNot(contains(SemanticAction.decrement)));
       expect(low.state['activeHandle'], 'low');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
       final high = tester.semantics().single(
         role: SemanticRole.slider,
         label: 'window',

@@ -5,11 +5,13 @@ enum _ActiveHandle { low, high }
 
 /// A two-handle slider for picking a numeric `(low, high)` range. The
 /// selected interval is a filled bar between a solid active handle (`●`)
-/// — the one the arrows move — and a hollow inactive one (`○`). Up/Down
-/// switches which handle is active; Left/Right move it by [step];
-/// PageUp/PageDown by [largeStep]; Home/End jump to [min]/[max] (still
-/// clamped so the handles can't cross). Tab is left free to move focus
-/// between widgets.
+/// and a hollow inactive one (`○`). Left/Right move between the two
+/// handles (they sit low-left, high-right); Up/Down change the active
+/// handle's value by [step], PageUp/PageDown by [largeStep], Home/End jump
+/// to [min]/[max] (still clamped so the handles can't cross). Each arrow
+/// bubbles at its edge so focus can leave the widget — Left/Right past the
+/// outer handle, Up/Down once the value is pinned — and Tab is left free
+/// for traversal.
 ///
 /// Controlled — hold the values yourself and update them from [onChanged].
 /// Passing null for [onChanged] disables the slider.
@@ -147,39 +149,39 @@ class _RangeSliderState extends State<RangeSlider> {
   KeyEventResult _onKey(KeyEvent event) {
     if (!_enabled) return KeyEventResult.ignored;
     switch (event.keyCode) {
-      // Left/Right adjust the active handle and bubble (escape) once it's
-      // pinned against its bound, so the arrows that drive the slider also
-      // carry focus off it.
-      case KeyCode.arrowLeft:
-        return moveOrEscape(
-          atEdge: !_canNudge(-widget.step),
-          move: () => _nudge(-widget.step),
-        );
-      case KeyCode.arrowRight:
+      // Up/Down adjust the active handle's value — the universal slider
+      // convention (Up = increase, Down = decrease). They bubble (escape)
+      // once the handle is pinned against its bound, so arrow-based focus
+      // traversal can still pass through vertically.
+      case KeyCode.arrowUp:
         return moveOrEscape(
           atEdge: !_canNudge(widget.step),
           move: () => _nudge(widget.step),
         );
-      // The two handles form a 2-cell vertical axis (low below, high above):
-      // Up selects the high handle, Down the low one, and each bubbles once
-      // already at that end — so Up/Down both switch handles AND escape
-      // vertically, and Tab is free to move between widgets like everywhere
-      // else.
-      case KeyCode.arrowUp:
-        return moveOrEscape(
-          atEdge: _active == _ActiveHandle.high,
-          move: () => setState(() => _active = _ActiveHandle.high),
-        );
       case KeyCode.arrowDown:
+        return moveOrEscape(
+          atEdge: !_canNudge(-widget.step),
+          move: () => _nudge(-widget.step),
+        );
+      // Left/Right move between the two handles, which sit low-left and
+      // high-right on the track. At the outer handle the arrow bubbles so
+      // focus can leave the widget horizontally — Left past the low handle,
+      // Right past the high one.
+      case KeyCode.arrowLeft:
         return moveOrEscape(
           atEdge: _active == _ActiveHandle.low,
           move: () => setState(() => _active = _ActiveHandle.low),
         );
-      case KeyCode.pageDown:
-        _nudge(-widget.largeStep);
-        return KeyEventResult.handled;
+      case KeyCode.arrowRight:
+        return moveOrEscape(
+          atEdge: _active == _ActiveHandle.high,
+          move: () => setState(() => _active = _ActiveHandle.high),
+        );
       case KeyCode.pageUp:
         _nudge(widget.largeStep);
+        return KeyEventResult.handled;
+      case KeyCode.pageDown:
+        _nudge(-widget.largeStep);
         return KeyEventResult.handled;
       case KeyCode.home:
         _jump(widget.min);
@@ -312,10 +314,10 @@ class _RangeSliderState extends State<RangeSlider> {
             Text(_fmt(lo), style: lowActive ? active : idle),
             Text(' – ', style: idle),
             Text(_fmt(hi), style: highActive ? active : idle),
-            // Teach the non-obvious switch key, but only while focused so it
-            // doesn't clutter a resting slider.
+            // Teach the key model, but only while focused so it doesn't
+            // clutter a resting slider.
             if (_enabled && _node.hasFocus)
-              Text('   ↕ switch ends', style: idle),
+              Text('   ↑↓ value · ←→ ends', style: idle),
           ],
         ),
         interactive,
