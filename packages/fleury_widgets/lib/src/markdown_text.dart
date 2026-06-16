@@ -49,7 +49,19 @@ class MarkdownText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final result = _renderBlocks(data, baseStyle ?? CellStyle.empty);
+    final cs = Theme.of(context).colorScheme;
+    // Mirrors FleuryWidgetTheme.resolveMarkdownHeading: primary for H1,
+    // info for H2, no tint deeper — emphasis recedes with depth.
+    Color? headingColor(int level) => switch (level) {
+      1 => cs.primary,
+      2 => cs.info,
+      _ => null,
+    };
+    final result = _renderBlocks(
+      data,
+      baseStyle ?? CellStyle.empty,
+      headingColor: headingColor,
+    );
     if (result.lines.isEmpty && result.links.isEmpty) return const EmptyBox();
     final children = <Widget>[
       ...result.lines,
@@ -872,8 +884,9 @@ bool _safeUrlScheme(String? scheme) {
 
 ({List<Widget> lines, List<MarkdownLink> links}) _renderBlocks(
   String data,
-  CellStyle base,
-) {
+  CellStyle base, {
+  Color? Function(int level)? headingColor,
+}) {
   final out = <Widget>[];
   final links = <MarkdownLink>[];
   final lines = data.split('\n');
@@ -920,9 +933,11 @@ bool _safeUrlScheme(String? scheme) {
       final hStyle = base.merge(
         CellStyle(
           bold: true,
-          // H1 inverts for emphasis; H2/H3 just bold + underline.
+          // H1 inverts for emphasis; H2/H3 just bold + underline. A color
+          // tint (when provided) reinforces the depth hierarchy.
           underline: level > 1,
           inverse: level == 1,
+          foreground: headingColor?.call(level),
         ),
       );
       out.add(RichText(text: _inline(body, hStyle, links: links)));

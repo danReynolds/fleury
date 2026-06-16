@@ -172,10 +172,21 @@ final class FleuryWidgetTheme {
       jsonErrorStyle ?? CellStyle.empty;
 
   CellStyle resolveMarkdownHeading(ThemeData theme, int? level) {
+    final lvl = level ?? 1;
+    // Color reinforces the depth hierarchy on top of the structural cues
+    // (H1 inverse bar, H2+ underline): primary for H1, info for H2, and no
+    // tint for H3 so the emphasis recedes with depth. An explicit
+    // markdownHeadingStyle still overrides everything.
+    final color = switch (lvl) {
+      1 => theme.colorScheme.primary,
+      2 => theme.colorScheme.info,
+      _ => null,
+    };
     final fallback = CellStyle(
       bold: true,
-      underline: (level ?? 1) > 1,
-      inverse: level == 1,
+      underline: lvl > 1,
+      inverse: lvl == 1,
+      foreground: color,
     );
     return markdownHeadingStyle ?? fallback;
   }

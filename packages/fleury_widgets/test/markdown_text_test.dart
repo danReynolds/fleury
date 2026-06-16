@@ -154,7 +154,7 @@ void main() {
   });
 
   group('MarkdownText — blocks', () {
-    testWidgets('# heading renders bold + inverse', (tester) {
+    testWidgets('# heading renders bold + inverse + a color tint', (tester) {
       tester.pumpWidget(const MarkdownText('# Title\nbody'));
       final buf = tester.render(size: const CellSize(20, 2));
       expect(
@@ -164,20 +164,35 @@ void main() {
           't',
           'l',
           'e',
-        }, (s) => s.bold && s.inverse),
+        }, (s) => s.bold && s.inverse && s.foreground != null),
         isTrue,
       );
     });
 
-    testWidgets('## heading renders bold + underline (not inverse)', (tester) {
+    testWidgets('## heading renders bold + underline + a color tint', (
+      tester,
+    ) {
       tester.pumpWidget(const MarkdownText('## Sub'));
       final buf = tester.render(size: const CellSize(20, 1));
       expect(
-        _anyCellMatches(buf, {
-          'S',
-          'u',
-          'b',
-        }, (s) => s.bold && s.underline && !s.inverse),
+        _anyCellMatches(
+          buf,
+          {'S', 'u', 'b'},
+          (s) => s.bold && s.underline && !s.inverse && s.foreground != null,
+        ),
+        isTrue,
+      );
+    });
+
+    testWidgets('### heading recedes to bold + underline, no color', (tester) {
+      tester.pumpWidget(const MarkdownText('### Deep'));
+      final buf = tester.render(size: const CellSize(20, 1));
+      expect(
+        _anyCellMatches(
+          buf,
+          {'D', 'e', 'p'},
+          (s) => s.bold && s.underline && s.foreground == null,
+        ),
         isTrue,
       );
     });
