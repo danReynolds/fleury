@@ -49,6 +49,16 @@ void main() {
     expect(_lines(tester, rows: 4), ['▸ src', '  README', '', '']);
   });
 
+  testWidgets('typing jumps the selection to a matching node', (tester) {
+    TreeNode<String>? selected;
+    tester.pumpWidget(_tree(onSelect: (n) => selected = n));
+    tester.render(size: const CellSize(14, 4));
+    // 'r' moves the selection to README; Enter activates that leaf.
+    tester.sendKey(const KeyEvent(char: 'r'));
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    expect(selected?.label, 'README');
+  });
+
   testWidgets('Down + Enter toggles the focused branch', (tester) {
     tester.pumpWidget(_tree());
     // Move to README (a leaf) then back; expand src via Enter instead.

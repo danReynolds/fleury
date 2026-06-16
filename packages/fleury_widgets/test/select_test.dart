@@ -395,6 +395,21 @@ void main() {
       expect(out.contains('[x] Red'), isTrue);
     });
 
+    testWidgets('Ctrl+A selects all, then deselects all', (tester) {
+      tester.pumpWidget(const _MultiHost());
+
+      tester.sendKey(const KeyEvent(char: 'a', modifiers: {KeyModifier.ctrl}));
+      var out = _screen(tester, cols: 18, rows: 3);
+      expect(out.contains('[x] Red'), isTrue);
+      expect(out.contains('[x] Green'), isTrue);
+      expect(out.contains('[x] Blue'), isTrue);
+
+      tester.sendKey(const KeyEvent(char: 'a', modifiers: {KeyModifier.ctrl}));
+      out = _screen(tester, cols: 18, rows: 3);
+      expect(out.contains('[ ] Red'), isTrue);
+      expect(out.contains('[ ] Blue'), isTrue);
+    });
+
     testWidgets('navigation skips disabled options', (tester) {
       Set<String>? picked;
       tester.pumpWidget(

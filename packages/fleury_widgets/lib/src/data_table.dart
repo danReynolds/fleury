@@ -772,20 +772,52 @@ class _DataTableState extends State<DataTable> {
         _controller.moveSelection(rowDelta: _visibleRows, extend: extend);
         return KeyEventResult.handled;
       case KeyCode.home:
-        _controller.selectCell(0, _controller.selectedColumnIndex);
+        // Ctrl+Home → first cell (0,0) in cell mode; plain Home → top row,
+        // same column (WAI-ARIA grid).
+        final homeColumn =
+            event.hasCtrl && widget.selectionMode == DataTableSelectionMode.cell
+            ? 0
+            : _controller.selectedColumnIndex;
+        _controller.selectCell(0, homeColumn);
         return KeyEventResult.handled;
       case KeyCode.end:
-        _controller.selectCell(
-          widget.rowCount - 1,
-          _controller.selectedColumnIndex,
-        );
+        final endColumn =
+            event.hasCtrl && widget.selectionMode == DataTableSelectionMode.cell
+            ? _controller.columnCount - 1
+            : _controller.selectedColumnIndex;
+        _controller.selectCell(widget.rowCount - 1, endColumn);
         return KeyEventResult.handled;
       case KeyCode.enter:
         widget.onSelect?.call(_controller.selectedIndex);
         return KeyEventResult.handled;
       default:
+        final ch = event.char;
+        if (ch != null &&
+            ch.length == 1 &&
+            ch.codeUnitAt(0) >= 0x21 &&
+            !event.hasCtrl &&
+            !event.hasAlt &&
+            widget.columns.isNotEmpty) {
+          return _typeahead(ch);
+        }
         return KeyEventResult.ignored;
     }
+  }
+
+  /// Jump the selection to the next row whose first-column cell starts with
+  /// [ch] (wrapping) — spreadsheet/grid type-ahead.
+  KeyEventResult _typeahead(String ch) {
+    final columnId = widget.columns.first.id;
+    final lower = ch.toLowerCase();
+    final start = _controller.selectedIndex + 1;
+    for (var k = 0; k < widget.rowCount; k++) {
+      final i = (start + k) % widget.rowCount;
+      if (widget.cellBuilder(i, columnId).toLowerCase().startsWith(lower)) {
+        _controller.selectCell(i, _controller.selectedColumnIndex);
+        break;
+      }
+    }
+    return KeyEventResult.handled;
   }
 
   @override

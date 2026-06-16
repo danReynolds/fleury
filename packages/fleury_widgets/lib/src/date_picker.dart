@@ -134,7 +134,23 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
       _shiftMonth(12);
       return KeyEventResult.handled;
     }
+    if (text == 't' || text == 'T') {
+      _jumpToToday();
+      return KeyEventResult.handled;
+    }
     return KeyEventResult.ignored;
+  }
+
+  /// Jump to today, clamped into `[firstDate, lastDate]`. The most widely
+  /// recognized date-picker shortcut (jQuery UI, Bootstrap Datepicker, APG).
+  void _jumpToToday() {
+    if (!_enabled) return;
+    var today = _midnight(DateTime.now());
+    final first = widget.firstDate;
+    final last = widget.lastDate;
+    if (first != null && today.isBefore(_midnight(first))) today = _midnight(first);
+    if (last != null && today.isAfter(_midnight(last))) today = _midnight(last);
+    if (today != _midnight(widget.value)) widget.onChanged!(today);
   }
 
   @override

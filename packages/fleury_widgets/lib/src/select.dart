@@ -391,6 +391,25 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
     _toggle(_highlightedIndex);
   }
 
+  /// Ctrl+A toggles all enabled options on, or off if they are all already
+  /// selected — the standard multi-selection bulk action (W3C APG listbox).
+  void _selectAll() {
+    if (!_enabled) return;
+    final enabledValues = <T>{
+      for (final o in widget.options)
+        if (o.enabled) o.value,
+    };
+    if (enabledValues.isEmpty) return;
+    final allSelected = enabledValues.every(widget.values.contains);
+    final next = Set<T>.of(widget.values);
+    if (allSelected) {
+      next.removeAll(enabledValues);
+    } else {
+      next.addAll(enabledValues);
+    }
+    widget.onChanged!(Set<T>.unmodifiable(next));
+  }
+
   KeyEventResult _onKey(KeyEvent event) {
     if (!_enabled) return KeyEventResult.ignored;
     switch (event.keyCode) {
@@ -412,6 +431,10 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
         _toggleHighlighted();
         return KeyEventResult.handled;
       default:
+        if (event.char == 'a' && event.hasCtrl && !event.hasAlt) {
+          _selectAll();
+          return KeyEventResult.handled;
+        }
         return KeyEventResult.ignored;
     }
   }
@@ -640,8 +663,34 @@ class _SelectListState<T> extends State<_SelectList<T>> {
         widget.onDismiss();
         return KeyEventResult.handled;
       default:
+        final ch = event.char;
+        if (ch != null &&
+            ch.length == 1 &&
+            ch.codeUnitAt(0) >= 0x21 &&
+            !event.hasCtrl &&
+            !event.hasAlt) {
+          return _typeahead(ch);
+        }
         return KeyEventResult.ignored;
     }
+  }
+
+  /// Jump to the next enabled option whose label starts with [ch] (wrapping) —
+  /// the type-to-search convention (Textual Select, W3C APG combobox).
+  KeyEventResult _typeahead(String ch) {
+    final lower = ch.toLowerCase();
+    final start = (_list.selectedIndex ?? -1) + 1;
+    for (var k = 0; k < widget.options.length; k++) {
+      final i = (start + k) % widget.options.length;
+      if (!_enabled(i)) continue;
+      if (sanitizeOptionLabel(widget.options[i].label).toLowerCase().startsWith(
+        lower,
+      )) {
+        _list.selectedIndex = i;
+        break;
+      }
+    }
+    return KeyEventResult.handled;
   }
 
   @override
