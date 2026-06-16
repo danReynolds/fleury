@@ -27,6 +27,34 @@ void main() {
       expect(received, 13);
     });
 
+    testWidgets('wheel up/down nudge the value by step', (tester) {
+      num received = -1;
+      tester.pumpWidget(
+        Stepper(value: 10, step: 3, onChanged: (v) => received = v),
+      );
+      // Render first so the wheel region is registered; '[ − 10 + ]' is row 0.
+      tester.render(size: const CellSize(20, 1));
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.scrollUp,
+          button: MouseButton.none,
+          col: 4,
+          row: 0,
+        ),
+      );
+      expect(received, 13, reason: 'wheel up nudged by +step');
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.scrollDown,
+          button: MouseButton.none,
+          col: 4,
+          row: 0,
+        ),
+      );
+      // Value is uncontrolled here (stays 10), so wheel down nudges 10 → 7.
+      expect(received, 7, reason: 'wheel down nudged by -step');
+    });
+
     testWidgets('Arrow Down decrements by step', (tester) {
       num received = -1;
       tester.pumpWidget(

@@ -359,9 +359,17 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
           focusNode: _node,
           autofocus: widget.autofocus,
           onKey: _onKey,
-          child: GestureDetector(
-            onTap: () => _node.requestFocus(),
-            child: body(),
+          // Wheel over the stepper nudges the value (the spinner convention).
+          // It doesn't steal focus, so wheeling past it in a scrollable form
+          // isn't disruptive.
+          child: PointerScrollListener(
+            router: PointerRouterScope.maybeOf(context),
+            onScrollUp: () => _nudge(widget.step),
+            onScrollDown: () => _nudge(-widget.step),
+            child: GestureDetector(
+              onTap: () => _node.requestFocus(),
+              child: body(),
+            ),
           ),
         ),
       ),
