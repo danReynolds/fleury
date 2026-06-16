@@ -972,7 +972,7 @@ const Map<String, String> _widgetUsage = <String, String>{
   'DatePicker': '←/→ day · ↑/↓ week',
   'ColorPicker': 'Arrows to move · Enter to select',
   'Stepper': '↑/↓ or +/− to step · type digits + Enter · Home/End to ends',
-  'RangeSlider': '←/→ adjust · ↑/↓ switch handle',
+  'RangeSlider': '←/→ move the active (solid ●) end · ↑/↓ switch ends',
   // Navigation / overlays
   'CommandPalette': 'Type to filter · ↑/↓ · Enter runs',
   'Menu': 'Enter opens · ↑/↓ move · Esc closes',

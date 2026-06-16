@@ -4,10 +4,12 @@ import 'package:fleury/fleury.dart';
 enum _ActiveHandle { low, high }
 
 /// A two-handle slider for picking a numeric `(low, high)` range. The
-/// selected interval is shown as a filled bar on the track; the inactive
-/// region uses a dim block. Tab swaps the active handle; Left/Right move
-/// it by [step]; PageUp/PageDown by [largeStep]; Home/End jump to [min]/
-/// [max] (still clamped so the handles can't cross).
+/// selected interval is a filled bar between a solid active handle (`●`)
+/// — the one the arrows move — and a hollow inactive one (`○`). Up/Down
+/// switches which handle is active; Left/Right move it by [step];
+/// PageUp/PageDown by [largeStep]; Home/End jump to [min]/[max] (still
+/// clamped so the handles can't cross). Tab is left free to move focus
+/// between widgets.
 ///
 /// Controlled — hold the values yourself and update them from [onChanged].
 /// Passing null for [onChanged] disables the slider.
@@ -310,6 +312,10 @@ class _RangeSliderState extends State<RangeSlider> {
             Text(_fmt(lo), style: lowActive ? active : idle),
             Text(' – ', style: idle),
             Text(_fmt(hi), style: highActive ? active : idle),
+            // Teach the non-obvious switch key, but only while focused so it
+            // doesn't clutter a resting slider.
+            if (_enabled && _node.hasFocus)
+              Text('   ↕ switch ends', style: idle),
           ],
         ),
         interactive,
@@ -466,8 +472,8 @@ class _RenderRangeSlider extends RenderObject {
     final hiCol = ((hi - _min) / span * (w - 1)).round();
     const track = '─';
     const fill = '━';
-    const handle = '●';
-    const handleActive = '◉';
+    const activeHandle = '●'; // solid: the handle the arrows move
+    const inactiveHandle = '○'; // hollow: the handle Up/Down switches to
 
     for (var c = 0; c < w; c++) {
       final tgt = offset.col + c;
@@ -475,12 +481,15 @@ class _RenderRangeSlider extends RenderObject {
       String glyph;
       CellStyle style;
       if (c == loCol || c == hiCol) {
+        // The active handle is always the solid mark so it reads as the
+        // stronger of the two; focus only adds bold emphasis.
         final isActive =
-            _focused &&
-            ((c == loCol && _active == _ActiveHandle.low) ||
-                (c == hiCol && _active == _ActiveHandle.high));
-        glyph = isActive ? handleActive : handle;
-        style = _selectedStyle;
+            (c == loCol && _active == _ActiveHandle.low) ||
+            (c == hiCol && _active == _ActiveHandle.high);
+        glyph = isActive ? activeHandle : inactiveHandle;
+        style = isActive && _focused
+            ? _selectedStyle.merge(const CellStyle(bold: true))
+            : _selectedStyle;
       } else if (c > loCol && c < hiCol) {
         glyph = fill;
         style = _selectedStyle;

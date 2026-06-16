@@ -56,9 +56,58 @@ void main() {
       final out = tester
           .renderToString(size: const CellSize(10, 1), emptyMark: ' ')
           .trimRight();
-      // Both handles visible.
+      // Both handles visible: the active (default low) handle is the solid
+      // mark, the inactive high handle is hollow.
       expect(out.startsWith('●'), isTrue);
-      expect(out.endsWith('●'), isTrue);
+      expect(out.endsWith('○'), isTrue);
+    });
+
+    testWidgets('Up swaps the solid (active) handle to the high end', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        SizedBox(
+          width: 11,
+          height: 1,
+          child: RangeSlider(
+            values: const (0, 10),
+            min: 0,
+            max: 10,
+            autofocus: true,
+            onChanged: (_) {},
+          ),
+        ),
+      );
+      // Low is active by default: solid ● at col 0, hollow ○ at col 10.
+      var buf = tester.render(size: const CellSize(11, 1));
+      expect(buf.atColRow(0, 0).grapheme, '●');
+      expect(buf.atColRow(10, 0).grapheme, '○');
+      // Up switches the active handle to the high end — the solid mark moves.
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+      buf = tester.render(size: const CellSize(11, 1));
+      expect(buf.atColRow(0, 0).grapheme, '○');
+      expect(buf.atColRow(10, 0).grapheme, '●');
+    });
+
+    testWidgets('shows a switch-ends hint in the readout while focused', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        SizedBox(
+          width: 40,
+          height: 3,
+          child: RangeSlider(
+            values: const (2, 8),
+            min: 0,
+            max: 10,
+            showValues: true,
+            autofocus: true,
+            onChanged: (_) {},
+          ),
+        ),
+      );
+      final out = tester.renderToString(size: const CellSize(40, 3));
+      expect(out.contains('↕ switch ends'), isTrue);
     });
 
     testWidgets('fills the cells between the handles with ━', (tester) {
