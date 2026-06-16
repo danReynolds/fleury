@@ -971,7 +971,7 @@ const Map<String, String> _widgetUsage = <String, String>{
   // Pickers
   'DatePicker': '←/→ day · ↑/↓ week',
   'ColorPicker': 'Arrows to move · Enter to select',
-  'Stepper': '↑/↓ or +/− to step · Home/End to ends',
+  'Stepper': '↑/↓ or +/− to step · type digits + Enter · Home/End to ends',
   'RangeSlider': '←/→ adjust · ↑/↓ switch handle',
   // Navigation / overlays
   'CommandPalette': 'Type to filter · ↑/↓ · Enter runs',

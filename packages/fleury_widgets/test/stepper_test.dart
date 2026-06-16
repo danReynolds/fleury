@@ -95,6 +95,49 @@ void main() {
       expect(calls, [6, 4]);
     });
 
+    testWidgets('typing digits then Enter sets the value directly', (tester) {
+      final calls = <num>[];
+      tester.pumpWidget(
+        Stepper(value: 5, autofocus: true, onChanged: calls.add),
+      );
+      tester.type('4');
+      tester.type('2');
+      // Nothing committed while the entry is in flight, and the buffer shows.
+      expect(calls, isEmpty);
+      expect(
+        tester.renderToString(size: const CellSize(16, 1)).contains('42'),
+        isTrue,
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      expect(calls, [42]);
+    });
+
+    testWidgets('direct entry clamps to max on commit', (tester) {
+      final calls = <num>[];
+      tester.pumpWidget(
+        Stepper(value: 5, min: 0, max: 10, autofocus: true, onChanged: calls.add),
+      );
+      tester.type('9');
+      tester.type('9');
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      expect(calls, [10]);
+    });
+
+    testWidgets('Esc cancels a pending direct entry', (tester) {
+      final calls = <num>[];
+      tester.pumpWidget(
+        Stepper(value: 5, autofocus: true, onChanged: calls.add),
+      );
+      tester.type('9');
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+      expect(calls, isEmpty);
+      // Display reverts to the controlled value.
+      expect(
+        tester.renderToString(size: const CellSize(16, 1)).contains('5'),
+        isTrue,
+      );
+    });
+
     testWidgets('shows a label when provided', (tester) {
       tester.pumpWidget(Stepper(value: 7, label: 'qty', onChanged: (_) {}));
       final out = tester.renderToString(size: const CellSize(16, 1));
