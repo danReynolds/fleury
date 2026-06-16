@@ -41,6 +41,69 @@ void main() {
       expect(controller.selectedIndex, 2);
       expect(activated, [2]);
     });
+
+    testWidgets('tap survives a rebuild between press and release', (
+      tester,
+    ) {
+      // Over the serve wire, down and up arrive in separate frames, and the
+      // press triggers a click-to-focus rebuild in between — which recreates
+      // the lazy list's item render objects. Acting on the press (not a
+      // release-time identity match) keeps the selection working anyway.
+      final controller = ListController(selectedIndex: 0);
+      final activated = <int>[];
+      tester.pumpWidget(
+        SizedBox(
+          width: 12,
+          height: 4,
+          child: ListView.builder(
+            controller: controller,
+            itemCount: 4,
+            onSelect: activated.add,
+            itemBuilder: (context, index, selected) =>
+                SizedBox(width: 12, height: 1, child: Text('item $index')),
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(12, 4));
+
+      tester.sendMouse(_mouse(MouseEventKind.down, 1, 2));
+      tester.pump(); // full rebuild between down and up, as serve does
+      tester.render(size: const CellSize(12, 4));
+      tester.sendMouse(_mouse(MouseEventKind.up, 1, 2));
+
+      expect(controller.selectedIndex, 2);
+      expect(activated, [2]);
+    });
+
+    testWidgets('a drag wiggle between press and release still taps', (
+      tester,
+    ) {
+      // A real mouse click in the browser client emits a tiny drag between
+      // pointerdown and pointerup. That wiggle must not suppress the tap.
+      final controller = ListController(selectedIndex: 0);
+      final activated = <int>[];
+      tester.pumpWidget(
+        SizedBox(
+          width: 12,
+          height: 4,
+          child: ListView.builder(
+            controller: controller,
+            itemCount: 4,
+            onSelect: activated.add,
+            itemBuilder: (context, index, selected) =>
+                SizedBox(width: 12, height: 1, child: Text('item $index')),
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(12, 4));
+
+      tester.sendMouse(_mouse(MouseEventKind.down, 1, 2));
+      tester.sendMouse(_mouse(MouseEventKind.drag, 1, 2)); // wiggle, same cell
+      tester.sendMouse(_mouse(MouseEventKind.up, 1, 2));
+
+      expect(controller.selectedIndex, 2);
+      expect(activated, [2]);
+    });
   });
 
   group('selection movement', () {

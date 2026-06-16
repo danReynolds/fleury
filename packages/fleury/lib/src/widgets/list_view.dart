@@ -409,9 +409,15 @@ class _ListViewState extends State<ListView> {
     super.dispose();
   }
 
-  /// Pointer tap on an item: select it, take focus, and fire [onSelect] —
+  /// Pointer press on an item: select it, take focus, and fire [onSelect] —
   /// the click-to-activate convention, so a mouse reaches the same outcome
   /// as moving the selection and pressing Enter.
+  ///
+  /// Acts on the press (tap-down), not the release: the press triggers a
+  /// click-to-focus rebuild, and over the serve wire that rebuild lands
+  /// between the down and up events — recreating the item's pointer region
+  /// so a release-time identity match would miss. Selecting on press is
+  /// robust to that and gives instant feedback.
   void _handleItemTap(int index) {
     final count = widget.effectiveItemCount;
     if (index < 0 || index >= count) return;
@@ -443,7 +449,7 @@ class _ListViewState extends State<ListView> {
                 children: <Widget>[
                   for (var i = 0; i < widget.children!.length; i++)
                     GestureDetector(
-                      onTap: () => _handleItemTap(i),
+                      onTapDown: (_, _) => _handleItemTap(i),
                       child: widget.children![i],
                     ),
                 ],
@@ -451,12 +457,12 @@ class _ListViewState extends State<ListView> {
             }
 
             // Lazy: builder + count. Item subtrees are mounted on demand by
-            // the render object during layout; wrap each so a tap selects it.
+            // the render object during layout; wrap each so a press selects it.
             return _LazyListBody(
               controller: _controller,
               itemCount: widget.itemCount!,
               itemBuilder: (context, index, itemActive) => GestureDetector(
-                onTap: () => _handleItemTap(index),
+                onTapDown: (_, _) => _handleItemTap(index),
                 child: widget.itemBuilder!(context, index, itemActive),
               ),
               selectedIndex: selected,
