@@ -49,6 +49,50 @@ void main() {
     },
   );
 
+  test('DomCellMetrics maps the content box inside host padding', () {
+    // The serve/host surface renders into the host's *content* box, which a
+    // padding inset pushes in from the element's outer rect. Measuring the
+    // border box would offset every pointer hit-test by the padding (a
+    // constant, full-pixel error) and over-report cols/rows that overflow the
+    // visible area — clicks would land on the row/cell below the target.
+    final container = web.document.createElement('div');
+    container.setAttribute(
+      'style',
+      'position:absolute;left:0;top:0;width:200px;height:80px;'
+          'box-sizing:border-box;padding:8px;'
+          'font-family:monospace;font-size:16px;line-height:16px;',
+    );
+    web.document.body!.appendChild(container);
+    final metrics = DomCellMetrics(container: container);
+    addTearDown(() {
+      metrics.dispose();
+      container.parentNode?.removeChild(container);
+    });
+
+    final box = metrics.measure();
+
+    // Origin and size are the content box: outer 200x80 minus 8px padding
+    // on each edge → a 16px-narrower/shorter canvas offset by (8, 8).
+    expect(box.cssCanvasLeft, closeTo(8, 0.5));
+    expect(box.cssCanvasTop, closeTo(8, 0.5));
+    expect(box.cssCanvasWidth, closeTo(184, 0.5));
+    expect(box.cssCanvasHeight, closeTo(64, 0.5));
+
+    // Hit-testing maps against the unsnapped layout pitch, so it never drifts
+    // off the rendered grid the way the device-pixel-snapped box would.
+    expect(box.layoutCellWidth, greaterThan(0));
+    expect(box.layoutCellHeight, greaterThan(0));
+    final lastCol = box.cols - 1;
+    final lastRow = box.rows - 1;
+    expect(
+      metrics.cellForPoint(
+        box.layoutCellWidth * lastCol + box.layoutCellWidth * 0.5,
+        box.layoutCellHeight * lastRow + box.layoutCellHeight * 0.5,
+      ),
+      CellOffset(lastCol, lastRow),
+    );
+  });
+
   test('DomCellMetrics caches until explicitly marked dirty', () {
     final container = web.document.createElement('div');
     container.setAttribute(

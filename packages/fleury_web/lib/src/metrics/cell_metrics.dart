@@ -12,10 +12,24 @@ final class MeasuredCellBox {
     required this.rows,
     this.cssCanvasLeft = 0,
     this.cssCanvasTop = 0,
-  });
+    double? layoutCellWidth,
+    double? layoutCellHeight,
+  }) : layoutCellWidth = layoutCellWidth ?? cssCellWidth,
+       layoutCellHeight = layoutCellHeight ?? cssCellHeight;
 
+  /// Device-pixel-snapped cell box used for rendering. Every grid row/cell is
+  /// laid out against these so vertical box-drawing glyphs tile seamlessly
+  /// (a fractional height never lands on a device pixel, so borders dash).
   final double cssCellWidth;
   final double cssCellHeight;
+
+  /// Unsnapped natural cell advance — the pitch the browser actually lays text
+  /// out at (`white-space:pre` advances by the font's natural glyph width, and
+  /// a row's line box is its natural height, not the snapped value). Hit-testing
+  /// must use this: the snapped box drifts ~0.1px per cell from the rendered
+  /// grid, which accumulates into an off-by-one near the bottom of a long list.
+  final double layoutCellWidth;
+  final double layoutCellHeight;
   final double cssCanvasWidth;
   final double cssCanvasHeight;
   final double cssCanvasLeft;
@@ -31,6 +45,8 @@ final class MeasuredCellBox {
       other is MeasuredCellBox &&
       other.cssCellWidth == cssCellWidth &&
       other.cssCellHeight == cssCellHeight &&
+      other.layoutCellWidth == layoutCellWidth &&
+      other.layoutCellHeight == layoutCellHeight &&
       other.cssCanvasWidth == cssCanvasWidth &&
       other.cssCanvasHeight == cssCanvasHeight &&
       other.cssCanvasLeft == cssCanvasLeft &&
@@ -43,6 +59,8 @@ final class MeasuredCellBox {
   int get hashCode => Object.hash(
     cssCellWidth,
     cssCellHeight,
+    layoutCellWidth,
+    layoutCellHeight,
     cssCanvasWidth,
     cssCanvasHeight,
     cssCanvasLeft,

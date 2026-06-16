@@ -64,7 +64,7 @@ final class DomCellMetrics implements CellMetrics {
     }
 
     final containerRect = _container.getBoundingClientRect();
-    _syncProbeFont();
+    final style = _syncProbeFont();
     final probeRect = _probe.getBoundingClientRect();
     // Snap the cell box to whole device pixels. Each grid row is laid out at
     // `cssCellHeight`, so a fractional height — a 13px font at line-height
@@ -78,16 +78,49 @@ final class DomCellMetrics implements CellMetrics {
     final dpr = _window.devicePixelRatio;
     double snapToDevicePixels(double cssPx) =>
         dpr > 0 ? (cssPx * dpr).roundToDouble() / dpr : cssPx;
+    // Natural (unsnapped) advance: what the browser actually lays cells out at.
+    // `cssCell*` snaps this onto the device-pixel grid for seamless rendering,
+    // but hit-testing must map against the natural pitch the grid renders with,
+    // or the snap delta accumulates into an off-by-one down a long column.
+    final naturalCellWidth = math.max(
+      probeRect.width / _probeText.length,
+      _minimumCellWidth,
+    );
+    final naturalCellHeight = math.max(
+      probeRect.height,
+      _minimumCellHeight,
+    );
     final cssCellWidth = math.max(
-      snapToDevicePixels(probeRect.width / _probeText.length),
+      snapToDevicePixels(naturalCellWidth),
       _minimumCellWidth,
     );
     final cssCellHeight = math.max(
-      snapToDevicePixels(probeRect.height),
+      snapToDevicePixels(naturalCellHeight),
       _minimumCellHeight,
     );
-    final cssCanvasWidth = math.max(containerRect.width.toDouble(), 0.0);
-    final cssCanvasHeight = math.max(containerRect.height.toDouble(), 0.0);
+    // Measure the content box, not the border box. The host carries padding
+    // (a visual inset) and the surface renders into that padded area, so its
+    // top-left sits `padding+border` inside the element's outer rect. Mapping
+    // pointers against the outer rect offsets every hit-test by that inset — a
+    // constant, full-pixel error far larger than the sub-pixel snap drift, and
+    // the canvas would also report cells that overflow the visible area.
+    final insetLeft =
+        _edgePx(style, 'padding-left') + _edgePx(style, 'border-left-width');
+    final insetTop =
+        _edgePx(style, 'padding-top') + _edgePx(style, 'border-top-width');
+    final insetRight =
+        _edgePx(style, 'padding-right') + _edgePx(style, 'border-right-width');
+    final insetBottom =
+        _edgePx(style, 'padding-bottom') +
+        _edgePx(style, 'border-bottom-width');
+    final cssCanvasWidth = math.max(
+      containerRect.width - insetLeft - insetRight,
+      0.0,
+    );
+    final cssCanvasHeight = math.max(
+      containerRect.height - insetTop - insetBottom,
+      0.0,
+    );
     final cols = cssCellWidth <= 0
         ? 0
         : (cssCanvasWidth / cssCellWidth).floor();
@@ -100,11 +133,13 @@ final class DomCellMetrics implements CellMetrics {
       cssCellHeight: cssCellHeight,
       cssCanvasWidth: cssCanvasWidth,
       cssCanvasHeight: cssCanvasHeight,
-      cssCanvasLeft: containerRect.left.toDouble(),
-      cssCanvasTop: containerRect.top.toDouble(),
+      cssCanvasLeft: containerRect.left + insetLeft,
+      cssCanvasTop: containerRect.top + insetTop,
       devicePixelRatio: _window.devicePixelRatio,
       cols: cols,
       rows: rows,
+      layoutCellWidth: naturalCellWidth,
+      layoutCellHeight: naturalCellHeight,
     );
     _cached = result;
     _dirty = false;
@@ -136,8 +171,10 @@ final class DomCellMetrics implements CellMetrics {
     final box = _cached;
     if (box == null) return CellOffset.zero;
     if (box.cols <= 0 || box.rows <= 0) return CellOffset.zero;
-    final col = _clampCellIndex(x / box.cssCellWidth, box.cols);
-    final row = _clampCellIndex(y / box.cssCellHeight, box.rows);
+    // Map against the natural layout pitch the grid renders with, not the
+    // device-pixel-snapped box — see [MeasuredCellBox.layoutCellWidth].
+    final col = _clampCellIndex(x / box.layoutCellWidth, box.cols);
+    final row = _clampCellIndex(y / box.layoutCellHeight, box.rows);
     return CellOffset(col, row);
   }
 
@@ -202,7 +239,7 @@ final class DomCellMetrics implements CellMetrics {
     callback();
   }
 
-  void _syncProbeFont() {
+  web.CSSStyleDeclaration _syncProbeFont() {
     final style = _window.getComputedStyle(_container);
     final css = StringBuffer()
       ..write('position:absolute;visibility:hidden;pointer-events:none;')
@@ -214,6 +251,14 @@ final class DomCellMetrics implements CellMetrics {
       ..write('font-style:${style.getPropertyValue('font-style')};')
       ..write('line-height:${style.getPropertyValue('line-height')};');
     _probe.setAttribute('style', css.toString());
+    return style;
+  }
+
+  /// Parses a resolved CSS length (e.g. `'6px'`) to CSS pixels, defaulting to 0.
+  static double _edgePx(web.CSSStyleDeclaration style, String property) {
+    final raw = style.getPropertyValue(property);
+    final value = double.tryParse(raw.replaceAll('px', '').trim());
+    return (value != null && value.isFinite) ? value : 0;
   }
 
   int _clampCellIndex(double value, int extent) =>
