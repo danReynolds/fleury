@@ -46,7 +46,7 @@ class Toaster extends StatefulWidget {
     super.key,
     required this.child,
     this.alignment = Alignment.bottomRight,
-    this.duration = const Duration(seconds: 3),
+    this.duration = const Duration(seconds: 5),
   });
 
   final Widget child;
@@ -274,23 +274,39 @@ class _ToasterState extends State<Toaster> {
       for (final toast in _toasts.reversed)
         if (toast.action != null) toast,
     ];
-    Widget child = widget.child;
-    if (actionable.isNotEmpty) {
-      child = KeyBindings(
-        bindings: [
-          for (final toast in actionable)
-            KeyBinding(
-              toast.action!.key,
-              onEvent: (_) {
-                _activateAction(toast);
-              },
-              hideFromHintBar: true,
-            ),
-        ],
-        child: child,
-      );
-    }
-    return _ToasterScope(state: this, child: child);
+    final bindings = <KeyBinding>[
+      for (final toast in actionable)
+        KeyBinding(
+          toast.action!.key,
+          onEvent: (_) {
+            _activateAction(toast);
+          },
+          hideFromHintBar: true,
+        ),
+      // Esc dismisses the most recent toast so plain (action-less) toasts are
+      // keyboard-dismissible (WCAG 2.1.1). Bound at the app's outermost layer,
+      // so a modal/menu that uses Esc consumes it first; it only fires here
+      // when a toast is showing and nothing inner handled it.
+      if (_toasts.isNotEmpty)
+        KeyBinding(
+          KeyChord.escape,
+          onEvent: (event) {
+            if (_toasts.isEmpty) {
+              event.bubble();
+              return;
+            }
+            _dismiss(_toasts.last);
+          },
+          hideFromHintBar: true,
+        ),
+    ];
+    // Always wrap (even with no bindings) so the child's position in the tree
+    // is stable: conditionally adding/removing this wrapper as toasts come and
+    // go would re-parent the child and tear down e.g. an open menu's overlay.
+    return _ToasterScope(
+      state: this,
+      child: KeyBindings(bindings: bindings, child: widget.child),
+    );
   }
 }
 

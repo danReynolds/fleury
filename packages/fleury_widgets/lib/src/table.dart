@@ -114,6 +114,8 @@ class Table extends StatefulWidget {
     this.autofocus = false,
     this.onSelect,
     this.selectedStyle,
+    this.sortColumnIndex,
+    this.sortAscending = true,
     this.label = 'Table',
   }) : columnCount =
            header?.length ?? (rows.isNotEmpty ? rows.first.length : 0);
@@ -137,6 +139,15 @@ class Table extends StatefulWidget {
 
   /// Style for the header rule.
   final CellStyle separatorStyle;
+
+  /// The header column the data is sorted by (renders nothing on its own —
+  /// supply a `▲`/`▼` in your header cell — but exposes the sort state in the
+  /// header cell's semantics so assistive tech / the serve bridge can announce
+  /// it, the WAI-ARIA `aria-sort` analog).
+  final int? sortColumnIndex;
+
+  /// Direction of [sortColumnIndex]: ascending when true, descending otherwise.
+  final bool sortAscending;
 
   /// Whether the table is keyboard-navigable with a highlighted row.
   /// Implied when a [controller] or [onSelect] is supplied.
@@ -474,6 +485,10 @@ class _TableState extends State<Table> {
         'rowIndex': rowIndex,
         'columnIndex': columnIndex,
         'header': header,
+        if (header && widget.sortColumnIndex == columnIndex) ...{
+          'sortActive': true,
+          'sortDirection': widget.sortAscending ? 'ascending' : 'descending',
+        },
       }),
       onAction: interactiveBodyCell
           ? (action) => _handleCellAction(rowIndex, action)

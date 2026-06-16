@@ -46,6 +46,22 @@ void main() {
     expect(tester.overlay.entries.length, 1);
   });
 
+  testWidgets('Esc hides the tip but keeps focus on the trigger', (tester) {
+    final node = FocusNode(debugLabel: 'trigger');
+    tester.pumpWidget(
+      Tooltip(
+        message: 'Save file',
+        child: Focus(focusNode: node, autofocus: true, child: const Text('Save')),
+      ),
+    );
+    tester.render(size: const CellSize(20, 6));
+    expect(_screen(tester).contains('Save file'), isTrue);
+
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    expect(node.hasFocus, isTrue, reason: 'Esc must not move focus');
+    expect(_screen(tester).contains('Save file'), isFalse, reason: 'tip hidden');
+  });
+
   testWidgets('exposes tooltip region semantics and visible state', (tester) {
     tester.pumpWidget(
       const Tooltip(
