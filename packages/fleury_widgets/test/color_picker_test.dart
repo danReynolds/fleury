@@ -3,6 +3,25 @@ import 'package:fleury/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 
+void _clickAt(FleuryTester tester, {required int col, required int row}) {
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.down,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.up,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+}
+
 void main() {
   group('ColorPicker', () {
     testWidgets('renders one swatch per palette color', (tester) {
@@ -40,6 +59,21 @@ void main() {
         ),
       );
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      expect(received, const AnsiColor(1));
+    });
+
+    testWidgets('clicking a swatch selects that color', (tester) {
+      Color? received;
+      tester.pumpWidget(
+        ColorPicker(
+          value: const AnsiColor(0),
+          autofocus: true,
+          onChanged: (c) => received = c,
+        ),
+      );
+      tester.render(size: const CellSize(80, 2));
+      // Each cell is 5 wide; color index 1 occupies cols 5-9 — click its swatch.
+      _clickAt(tester, col: 7, row: 0);
       expect(received, const AnsiColor(1));
     });
 

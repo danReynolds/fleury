@@ -218,9 +218,17 @@ class _TabsState extends State<Tabs> {
                         return;
                     }
                   },
-                  child: Text(
-                    ' ${widget.tabs[i].label} ',
-                    style: i == active ? activeStyle : inactiveStyle,
+                  // Click a tab label to switch to it (Tab/arrows/Alt+N by
+                  // keyboard) — the same select the semantic action performs.
+                  child: GestureDetector(
+                    onTap: () {
+                      _controller.index = i;
+                      _focusNode.requestFocus();
+                    },
+                    child: Text(
+                      ' ${widget.tabs[i].label} ',
+                      style: i == active ? activeStyle : inactiveStyle,
+                    ),
                   ),
                 ),
             ],
