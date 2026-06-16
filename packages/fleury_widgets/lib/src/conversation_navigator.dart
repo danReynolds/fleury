@@ -214,6 +214,7 @@ class ConversationNavigator extends StatefulWidget {
     this.placeholder = 'Search conversations...',
     this.width = 60,
     this.maxVisible = 6,
+    this.showTimestamp = false,
     this.queryFocusNode,
     this.listFocusNode,
     this.autofocus = false,
@@ -232,6 +233,10 @@ class ConversationNavigator extends StatefulWidget {
   final String placeholder;
   final int width;
   final int maxVisible;
+
+  /// Prefix each row with the conversation's [ConversationEntry.timestamp]
+  /// as a local `HH:mm:ss` clock, when one is set. Off by default.
+  final bool showTimestamp;
   final FocusNode? queryFocusNode;
   final FocusNode? listFocusNode;
   final bool autofocus;
@@ -593,6 +598,7 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
                       activeSelection: activeSelected,
                       canSelect: canSelect,
                       copyEnabled: copyEnabled,
+                      showTimestamp: widget.showTimestamp,
                       onSelect: () => _selectAt(viewIndex),
                       onCopy: () => _copyAt(viewIndex),
                     );
@@ -691,6 +697,7 @@ class _ConversationRow extends StatelessWidget {
     required this.activeSelection,
     required this.canSelect,
     required this.copyEnabled,
+    required this.showTimestamp,
     required this.onSelect,
     required this.onCopy,
   });
@@ -702,6 +709,7 @@ class _ConversationRow extends StatelessWidget {
   final bool activeSelection;
   final bool canSelect;
   final bool copyEnabled;
+  final bool showTimestamp;
   final Future<void> Function() onSelect;
   final Future<void> Function() onCopy;
 
@@ -725,6 +733,7 @@ class _ConversationRow extends StatelessWidget {
       pinned: entry.pinned,
       latestMessage: latest,
       activeSelection: activeSelection,
+      timestamp: showTimestamp ? entry.timestamp : null,
     );
 
     return Semantics(
@@ -786,8 +795,10 @@ String _rowText({
   required bool pinned,
   required String? latestMessage,
   required bool activeSelection,
+  DateTime? timestamp,
 }) {
   final prefix = activeSelection ? '> ' : '  ';
+  final clock = timestamp == null ? '' : '${_formatClock(timestamp)} ';
   final meta = <String>[
     status.name,
     if (unreadCount > 0) '$unreadCount unread',
@@ -796,7 +807,13 @@ String _rowText({
   final latest = latestMessage == null || latestMessage.isEmpty
       ? ''
       : '  ${_truncateGraphemes(latestMessage, 80)}';
-  return '$prefix$title  ${meta.join('  ')}$latest';
+  return '$prefix$clock$title  ${meta.join('  ')}$latest';
+}
+
+/// Local `HH:mm:ss` clock for the optional per-row timestamp.
+String _formatClock(DateTime time) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
 }
 
 Map<String, Object?> _selectedConversationState(ConversationEntry entry) {

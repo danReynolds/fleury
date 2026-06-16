@@ -201,6 +201,7 @@ class MessageList extends StatefulWidget {
     this.autofocus = false,
     this.label = 'Messages',
     this.showPrefix = true,
+    this.showTimestamp = false,
     this.maxLineLength = 1000,
     this.copySelection = true,
     this.copyOptions = const MessageListCopyOptions(),
@@ -213,6 +214,13 @@ class MessageList extends StatefulWidget {
   final bool autofocus;
   final String label;
   final bool showPrefix;
+
+  /// Prefix each row with the message's [MessageEntry.timestamp] as a
+  /// local `HH:mm:ss` clock, when one is set. Off by default — a chat
+  /// transcript usually doesn't want it, but agent/log views do. Rows
+  /// without a timestamp are left unprefixed (no spacer), so a mixed list
+  /// stays aligned only where times exist.
+  final bool showTimestamp;
   final int? maxLineLength;
   final bool copySelection;
   final MessageListCopyOptions copyOptions;
@@ -432,6 +440,7 @@ class _MessageListState extends State<MessageList> {
           selected: selected,
           activeSelection: activeSelected,
           showPrefix: widget.showPrefix,
+          showTimestamp: widget.showTimestamp,
           maxLineLength: widget.maxLineLength,
           copyEnabled: copyEnabled,
           onActivate: () => _activateAt(index),
@@ -492,6 +501,7 @@ class _MessageRow extends StatelessWidget {
     required this.selected,
     required this.activeSelection,
     required this.showPrefix,
+    required this.showTimestamp,
     required this.maxLineLength,
     required this.copyEnabled,
     required this.onActivate,
@@ -503,6 +513,7 @@ class _MessageRow extends StatelessWidget {
   final bool selected;
   final bool activeSelection;
   final bool showPrefix;
+  final bool showTimestamp;
   final int? maxLineLength;
   final bool copyEnabled;
   final VoidCallback onActivate;
@@ -514,6 +525,7 @@ class _MessageRow extends StatelessWidget {
     final line = _formatMessageLine(
       message,
       includePrefix: showPrefix,
+      includeTimestamp: showTimestamp,
       maxLineLength: maxLineLength,
     );
     final style = _styleForMessage(message).merge(
@@ -599,13 +611,17 @@ _FormattedMessageLine _formatMessageLine(
   MessageEntry message, {
   required bool includePrefix,
   required int? maxLineLength,
+  bool includeTimestamp = false,
 }) {
   final original = message.text;
   final sanitized = _sanitizeMessageText(original);
   final truncatedMessage = _truncateGraphemes(sanitized, maxLineLength);
+  final clock = includeTimestamp && message.timestamp != null
+      ? '${_formatClock(message.timestamp!)} '
+      : '';
   final prefix = includePrefix ? _prefixFor(message) : '';
   return _FormattedMessageLine(
-    text: '$prefix$truncatedMessage',
+    text: '$clock$prefix$truncatedMessage',
     message: truncatedMessage,
     sanitized: sanitized != original,
     truncated: truncatedMessage != sanitized,
@@ -652,6 +668,12 @@ String _prefixFor(MessageEntry message) {
     if (message.author != null && message.author!.isNotEmpty) message.author!,
   ];
   return '[${parts.join(' ')}] ';
+}
+
+/// Local `HH:mm:ss` clock for the optional per-row timestamp.
+String _formatClock(DateTime time) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
 }
 
 CellStyle _styleForMessage(MessageEntry message) {

@@ -336,6 +336,7 @@ class TraceTimeline extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.label = 'Trace timeline',
+    this.showTimestamp = false,
     this.copySelection = true,
     this.copyOptions = const TraceTimelineCopyOptions(),
     this.onSelect,
@@ -347,6 +348,13 @@ class TraceTimeline extends StatefulWidget {
   final FocusNode? focusNode;
   final bool autofocus;
   final String label;
+
+  /// Prefix each row with the event's [TraceTimelineEntry.timestamp] as a
+  /// local `HH:mm:ss` clock, when one is set. Off by default — the row
+  /// already shows elapsed duration; turn this on to anchor events to wall
+  /// time as well.
+  final bool showTimestamp;
+
   final bool copySelection;
   final TraceTimelineCopyOptions copyOptions;
   final void Function(TraceTimelineSelectResult result)? onSelect;
@@ -574,6 +582,7 @@ class _TraceTimelineState extends State<TraceTimeline> {
                 activeSelection: activeSelected,
                 canSelect: canSelect,
                 copyEnabled: copyEnabled,
+                showTimestamp: widget.showTimestamp,
                 onSelect: () => _selectAt(index),
                 onCopy: () => _copyAt(index),
               );
@@ -636,6 +645,7 @@ class _TraceTimelineRow extends StatelessWidget {
     required this.activeSelection,
     required this.canSelect,
     required this.copyEnabled,
+    required this.showTimestamp,
     required this.onSelect,
     required this.onCopy,
   });
@@ -646,6 +656,7 @@ class _TraceTimelineRow extends StatelessWidget {
   final bool activeSelection;
   final bool canSelect;
   final bool copyEnabled;
+  final bool showTimestamp;
   final Future<void> Function() onSelect;
   final Future<void> Function() onCopy;
 
@@ -701,7 +712,12 @@ class _TraceTimelineRow extends StatelessWidget {
         'outputSanitized': _eventWasSanitized(event),
       }),
       child: Text(
-        _rowText(label: label, event: event, activeSelection: activeSelection),
+        _rowText(
+          label: label,
+          event: event,
+          activeSelection: activeSelection,
+          timestamp: showTimestamp ? event.timestamp : null,
+        ),
         style: _rowStyle(
           Theme.of(context),
           selected: selected,
@@ -735,15 +751,24 @@ String _rowText({
   required String label,
   required TraceTimelineEntry event,
   required bool activeSelection,
+  DateTime? timestamp,
 }) {
   final prefix = activeSelection ? '> ' : '  ';
+  final clock = timestamp == null ? '' : '${_formatClock(timestamp)} ';
   final meta = <String>[
     event.kind.name,
     event.status.name,
     if (event.duration != null) '${event.duration!.inMilliseconds}ms',
     if (event.source != null) _sanitizeTraceText(event.source!),
   ];
-  return '$prefix${_statusMarker(event.status)} $label  ${meta.join('  ')}';
+  return '$prefix$clock${_statusMarker(event.status)} $label  '
+      '${meta.join('  ')}';
+}
+
+/// Local `HH:mm:ss` clock for the optional per-row timestamp.
+String _formatClock(DateTime time) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
 }
 
 String _statusMarker(TraceTimelineStatus status) {
