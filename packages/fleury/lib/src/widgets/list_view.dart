@@ -409,6 +409,17 @@ class _ListViewState extends State<ListView> {
     super.dispose();
   }
 
+  /// Pointer tap on an item: select it, take focus, and fire [onSelect] —
+  /// the click-to-activate convention, so a mouse reaches the same outcome
+  /// as moving the selection and pressing Enter.
+  void _handleItemTap(int index) {
+    final count = widget.effectiveItemCount;
+    if (index < 0 || index >= count) return;
+    _controller.selectedIndex = index;
+    _focusNode.requestFocus();
+    widget.onSelect?.call(index);
+  }
+
   @override
   Widget build(BuildContext context) {
     final selected = _controller.selectedIndex;
@@ -426,19 +437,28 @@ class _ListViewState extends State<ListView> {
           builder: (context, active) {
             if (widget.children != null) {
               // Eager: build all children upfront, render object picks the
-              // visible window.
+              // visible window. Each is made tappable for pointer selection.
               return _ListViewBody(
                 controller: _controller,
-                children: widget.children!,
+                children: <Widget>[
+                  for (var i = 0; i < widget.children!.length; i++)
+                    GestureDetector(
+                      onTap: () => _handleItemTap(i),
+                      child: widget.children![i],
+                    ),
+                ],
               );
             }
 
             // Lazy: builder + count. Item subtrees are mounted on demand by
-            // the render object during layout.
+            // the render object during layout; wrap each so a tap selects it.
             return _LazyListBody(
               controller: _controller,
               itemCount: widget.itemCount!,
-              itemBuilder: widget.itemBuilder!,
+              itemBuilder: (context, index, itemActive) => GestureDetector(
+                onTap: () => _handleItemTap(index),
+                child: widget.itemBuilder!(context, index, itemActive),
+              ),
               selectedIndex: selected,
               selectionActive: active,
             );

@@ -7,11 +7,42 @@ import 'package:test/test.dart';
 
 KeyEvent _code(KeyCode kc) => KeyEvent(keyCode: kc);
 
+MouseEvent _mouse(MouseEventKind kind, int col, int row) =>
+    MouseEvent(kind: kind, button: MouseButton.left, col: col, row: row);
+
 Widget _itemBuilder(BuildContext context, int index, bool selected) {
   return Text('Item $index');
 }
 
 void main() {
+  group('pointer selection', () {
+    testWidgets('tapping an item selects it and fires onSelect', (tester) {
+      final controller = ListController(selectedIndex: 0);
+      final activated = <int>[];
+      tester.pumpWidget(
+        SizedBox(
+          width: 12,
+          height: 4,
+          child: ListView.builder(
+            controller: controller,
+            itemCount: 4,
+            onSelect: activated.add,
+            itemBuilder: (context, index, selected) =>
+                SizedBox(width: 12, height: 1, child: Text('item $index')),
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(12, 4)); // register gesture regions
+
+      // Tap the third row (index 2): press + release in the same cell.
+      tester.sendMouse(_mouse(MouseEventKind.down, 1, 2));
+      tester.sendMouse(_mouse(MouseEventKind.up, 1, 2));
+
+      expect(controller.selectedIndex, 2);
+      expect(activated, [2]);
+    });
+  });
+
   group('selection movement', () {
     testWidgets('arrowDown advances selectedIndex', (tester) {
       final controller = ListController();
