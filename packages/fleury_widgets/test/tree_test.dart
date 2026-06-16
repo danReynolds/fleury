@@ -3,6 +3,25 @@ import 'package:fleury/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 
+void _clickAt(FleuryTester tester, {required int col, required int row}) {
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.down,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.up,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+}
+
 List<String> _lines(FleuryTester tester, {int cols = 14, required int rows}) {
   final buf = tester.render(size: CellSize(cols, rows));
   return [
@@ -46,6 +65,23 @@ void main() {
     ]);
 
     tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+    expect(_lines(tester, rows: 4), ['▸ src', '  README', '', '']);
+  });
+
+  testWidgets('clicking a branch row toggles it', (tester) {
+    tester.pumpWidget(_tree());
+    tester.render(size: const CellSize(14, 4));
+    // The 'src' branch sits on row 0; clicking the row expands it (the whole
+    // row is the target, not just the ▸ glyph).
+    _clickAt(tester, col: 2, row: 0);
+    expect(_lines(tester, rows: 4), [
+      '▾ src',
+      '    a.dart',
+      '    b.dart',
+      '  README',
+    ]);
+    // Clicking the branch row again collapses it.
+    _clickAt(tester, col: 2, row: 0);
     expect(_lines(tester, rows: 4), ['▸ src', '  README', '', '']);
   });
 
