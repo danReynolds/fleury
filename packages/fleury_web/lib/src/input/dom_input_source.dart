@@ -410,23 +410,62 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     );
   }
 
+  // Accumulated wheel travel (CSS px) toward the next scroll step. Browsers —
+  // trackpads especially — fire many small wheel events per gesture; emitting
+  // one scroll step per event makes the list race. Accumulating pixel delta
+  // and stepping once per row of travel ties scroll speed to finger distance,
+  // not event count.
+  double _wheelAccumY = 0;
+
   void _handleWheel(web.Event raw) {
     final event = raw as web.WheelEvent;
     if (event.deltaY == 0) return;
     final cell = _cellForPointer(event);
     if (cell == null) return;
     raw.preventDefault();
-    _emit(
-      MouseEvent(
-        kind: event.deltaY < 0
-            ? MouseEventKind.scrollUp
-            : MouseEventKind.scrollDown,
-        button: MouseButton.none,
-        col: cell.col,
-        row: cell.row,
-        modifiers: _modifiersFromMouse(event),
-      ),
-    );
+
+    // One scroll step per row of travel (content-following). Fall back to a
+    // sane line height before the canvas has been measured.
+    final box = _cellMetrics.cachedMeasurement;
+    final stepPx = (box != null && box.cssCellHeight > 0)
+        ? box.cssCellHeight
+        : 18.0;
+    final px = _wheelDeltaToPixels(event);
+    // Reset on direction reversal so a stale remainder can't fire a late step
+    // the wrong way.
+    if (_wheelAccumY != 0 && px.sign != _wheelAccumY.sign) _wheelAccumY = 0;
+    _wheelAccumY += px;
+
+    var steps = _wheelAccumY.abs() ~/ stepPx;
+    if (steps == 0) return;
+    // Cap a single event's burst so a page-sized delta can't fire dozens.
+    if (steps > 8) steps = 8;
+    final up = _wheelAccumY < 0;
+    _wheelAccumY -= (up ? -1 : 1) * steps * stepPx;
+
+    final kind = up ? MouseEventKind.scrollUp : MouseEventKind.scrollDown;
+    for (var i = 0; i < steps; i++) {
+      _emit(
+        MouseEvent(
+          kind: kind,
+          button: MouseButton.none,
+          col: cell.col,
+          row: cell.row,
+          modifiers: _modifiersFromMouse(event),
+        ),
+      );
+    }
+  }
+
+  /// Normalizes a wheel event's deltaY to CSS pixels regardless of its
+  /// `deltaMode` (0 = pixel, 1 = line, 2 = page).
+  static double _wheelDeltaToPixels(web.WheelEvent event) {
+    final d = event.deltaY;
+    return switch (event.deltaMode) {
+      1 => d * 16.0, // DOM_DELTA_LINE — ~one text line
+      2 => d * 400.0, // DOM_DELTA_PAGE — ~one viewport
+      _ => d, // DOM_DELTA_PIXEL
+    };
   }
 
   void _clearTextArea() {

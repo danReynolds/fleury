@@ -257,7 +257,10 @@ void main() {
         web.WheelEventInit(
           clientX: 15,
           clientY: 25,
-          deltaY: -1,
+          // One cell height (cssCellHeight: 20) of travel = one scroll step;
+          // smaller deltas accumulate, so a trackpad's many tiny events don't
+          // each scroll a row.
+          deltaY: -20,
           bubbles: true,
           cancelable: true,
         ),

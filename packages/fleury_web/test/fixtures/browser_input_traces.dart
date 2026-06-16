@@ -304,19 +304,21 @@ const browserInputTraceFixtures = <TraceMap>[
   {
     'name': 'wheel up and down',
     'browserEvents': <TraceMap>[
+      // One cell height (cssCellHeight: 20) of travel = one scroll step;
+      // smaller deltas accumulate so trackpad momentum doesn't over-scroll.
       {
         'target': 'host',
         'event': 'wheel',
         'clientX': 15,
         'clientY': 25,
-        'deltaY': -1,
+        'deltaY': -20,
       },
       {
         'target': 'host',
         'event': 'wheel',
         'clientX': 15,
         'clientY': 25,
-        'deltaY': 1,
+        'deltaY': 20,
       },
     ],
     'expectedFleuryEvents': <TraceMap>[
