@@ -18,6 +18,17 @@ void main() {
     expect(_bar(tester), '█████░░░░░');
   });
 
+  testWidgets('indeterminate (null value) sweeps a block across the track', (
+    tester,
+  ) {
+    tester.pumpWidget(const ProgressBar(value: null));
+    final f0 = _bar(tester);
+    expect(f0.contains('█'), isTrue);
+    expect(f0.contains('░'), isTrue, reason: 'a partial block, not full/empty');
+    tester.pump(const Duration(milliseconds: 300)); // advance the marquee
+    expect(_bar(tester), isNot(f0), reason: 'the lit block moved');
+  });
+
   testWidgets('full and empty extremes', (tester) {
     tester.pumpWidget(const ProgressBar(value: 1));
     expect(_bar(tester), '██████████');

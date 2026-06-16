@@ -1706,7 +1706,19 @@ class _PickerStoryState extends State<_PickerStory> {
           ),
         );
       case 'ProgressBar':
-        return const SizedBox(width: 36, child: ProgressBar(value: 0.64));
+        return const SizedBox(
+          width: 36,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text('Determinate'),
+              ProgressBar(value: 0.64),
+              SizedBox(height: 1),
+              Text('Indeterminate (unknown duration)'),
+              ProgressBar(value: null),
+            ],
+          ),
+        );
       default:
         return const SizedBox.shrink();
     }
