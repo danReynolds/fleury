@@ -239,9 +239,17 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
                       return;
                   }
                 },
-                child: Text(
-                  '${selected ? '› ' : '  '}$label',
-                  style: selected ? _selectionStyle : CellStyle.empty,
+                // Click a suggestion to accept it — the same select+pick the
+                // keyboard's Tab/Enter performs.
+                child: GestureDetector(
+                  onTap: () {
+                    _list.selectedIndex = i;
+                    _pick();
+                  },
+                  child: Text(
+                    '${selected ? '› ' : '  '}$label',
+                    style: selected ? _selectionStyle : CellStyle.empty,
+                  ),
                 ),
               );
             },

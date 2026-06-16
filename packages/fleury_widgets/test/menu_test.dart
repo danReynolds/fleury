@@ -6,6 +6,27 @@ import 'package:test/test.dart';
 String _screen(FleuryTester tester, {int cols = 16, int rows = 8}) =>
     tester.renderToString(size: CellSize(cols, rows), emptyMark: ' ');
 
+/// A full left-click (press + release) at one cell. Render first so the
+/// pointer router has the current paint-time rects.
+void _clickAt(FleuryTester tester, {required int col, required int row}) {
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.down,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.up,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+}
+
 void main() {
   List<MenuItem> items(void Function(String) onRun) => [
     MenuItem(label: 'Cut', onSelected: () => onRun('cut')),
@@ -45,6 +66,24 @@ void main() {
     tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → Copy
     tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // run
     expect(ran, 'copy');
+    expect(_screen(tester).contains('Paste'), isFalse, reason: 'menu closed');
+  });
+
+  testWidgets('clicking a menu item runs it and closes', (tester) {
+    String? ran;
+    tester.pumpWidget(
+      Menu(
+        trigger: const Text('Edit'),
+        autofocus: true,
+        items: items((v) => ran = v),
+      ),
+    );
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open
+    // The menu opens anchored below the trigger inside a border; 'Copy' is the
+    // second item, at row 3, with its label past the left border at col 3.
+    tester.render(size: const CellSize(16, 8));
+    _clickAt(tester, col: 3, row: 3);
+    expect(ran, 'copy', reason: 'click activated the item under the pointer');
     expect(_screen(tester).contains('Paste'), isFalse, reason: 'menu closed');
   });
 

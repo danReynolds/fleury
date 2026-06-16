@@ -557,12 +557,16 @@ class _CommandRow extends StatelessWidget {
         }
       },
       state: SemanticState(state),
-      child: Text(
-        '${selected ? '› ' : '  '}$label',
-        style: _commandStyle(
-          theme,
-          selected: selected,
-          enabled: command.enabled,
+      // Click an enabled command to run it (same as Enter on the selection).
+      child: GestureDetector(
+        onTap: command.enabled ? () => onActivate(command) : null,
+        child: Text(
+          '${selected ? '› ' : '  '}$label',
+          style: _commandStyle(
+            theme,
+            selected: selected,
+            enabled: command.enabled,
+          ),
         ),
       ),
     );

@@ -726,13 +726,17 @@ class _FileMentionRow extends StatelessWidget {
         'column': ?entry.column,
         'outputSanitized': _entryWasSanitized(entry),
       }),
-      child: Text(
-        rowText,
-        style: _rowStyle(
-          Theme.of(context),
-          selected: selected,
-          activeSelection: activeSelection,
-          enabled: entry.enabled,
+      // Click an enabled mention to pick it (same as Enter on the selection).
+      child: GestureDetector(
+        onTap: (entry.enabled && canPick) ? () => unawaited(onPick()) : null,
+        child: Text(
+          rowText,
+          style: _rowStyle(
+            Theme.of(context),
+            selected: selected,
+            activeSelection: activeSelection,
+            enabled: entry.enabled,
+          ),
         ),
       ),
     );

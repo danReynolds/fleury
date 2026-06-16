@@ -739,7 +739,13 @@ class _SearchResultRow extends StatelessWidget {
         'resultSource': ?source,
         'outputSanitized': _resultWasSanitized(result),
       }),
-      child: Text(rowText, style: style),
+      // Click an enabled result to activate it (same as Enter on the row).
+      child: GestureDetector(
+        onTap: (result.enabled && canActivate)
+            ? () => unawaited(onActivate())
+            : null,
+        child: Text(rowText, style: style),
+      ),
     );
   }
 }

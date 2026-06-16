@@ -348,9 +348,16 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
                       return;
                   }
                 },
-                child: Text(
-                  '${selected ? '› ' : '  '}$label',
-                  style: selected ? _selectionStyle : CellStyle.empty,
+                // Click a completion to accept it (same as Tab/Enter).
+                child: GestureDetector(
+                  onTap: () {
+                    _list.selectedIndex = i;
+                    _acceptCompletionAt(i);
+                  },
+                  child: Text(
+                    '${selected ? '› ' : '  '}$label',
+                    style: selected ? _selectionStyle : CellStyle.empty,
+                  ),
                 ),
               );
             },

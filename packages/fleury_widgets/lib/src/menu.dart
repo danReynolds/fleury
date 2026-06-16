@@ -546,7 +546,17 @@ class _MenuBodyState extends State<_MenuBody> {
             return;
         }
       },
-      child: child,
+      // Click an enabled item to activate it (open a submenu or invoke a
+      // leaf) — the same outcome as Enter / Right, which run [_activate].
+      child: enabled
+          ? GestureDetector(
+              onTap: () {
+                _list.selectedIndex = index;
+                _activate(index);
+              },
+              child: child,
+            )
+          : child,
     );
   }
 }
