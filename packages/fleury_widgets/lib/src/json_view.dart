@@ -700,16 +700,39 @@ class _JsonRowWidget extends StatelessWidget {
         'outputTruncated': row.outputTruncated,
         'outputOriginalLength': row.outputOriginalLength,
       }),
-      child: Text(
-        row.line,
-        style: activeSelection
-            ? Theme.of(context).selectionStyle
-            : selected
-            ? Theme.of(context).mutedStyle
-            : CellStyle.empty,
+      child: _content(context),
+    );
+  }
+
+  Widget _content(BuildContext context) {
+    final theme = Theme.of(context);
+    if (activeSelection) return Text(row.line, style: theme.selectionStyle);
+    if (selected) return Text(row.line, style: theme.mutedStyle);
+    // Color just the value by type (jless / fx convention) without changing the
+    // text: the preview is the line's suffix, so split there.
+    if (row.preview.isEmpty || row.preview.length > row.line.length) {
+      return Text(row.line);
+    }
+    final prefix = row.line.substring(0, row.line.length - row.preview.length);
+    return RichText(
+      text: TextSpan(
+        text: prefix,
+        children: <TextSpan>[
+          TextSpan(text: row.preview, style: _jsonTypeStyle(row.type, theme)),
+        ],
       ),
     );
   }
+}
+
+CellStyle _jsonTypeStyle(JsonValueType type, ThemeData theme) {
+  return switch (type) {
+    JsonValueType.string => CellStyle(foreground: theme.colorScheme.success),
+    JsonValueType.number => const CellStyle(foreground: AnsiColor(14)),
+    JsonValueType.boolean => CellStyle(foreground: theme.colorScheme.warning),
+    JsonValueType.nullValue => const CellStyle(dim: true),
+    JsonValueType.object || JsonValueType.array => theme.mutedStyle,
+  };
 }
 
 Object? _normalizeJsonValue(Object? value) {

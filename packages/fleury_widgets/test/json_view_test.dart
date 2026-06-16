@@ -96,6 +96,18 @@ void main() {
     expect(meta.state['depth'], 1);
   });
 
+  testWidgets('colors a value by type, distinct from its label', (tester) {
+    tester.pumpWidget(JsonView(value: const {'name': 'fleury'}));
+    final buffer = tester.render(size: const CellSize(40, 4));
+    // Row 0 is the root object; row 1 is `name: "fleury"`. The label 'n' sits
+    // at col 0; the string value's opening quote at col 6.
+    final label = buffer.atColRow(0, 1);
+    final value = buffer.atColRow(6, 1);
+    expect(value.grapheme, '"');
+    expect(value.style.foreground, isNotNull);
+    expect(value.style.foreground, isNot(label.style.foreground));
+  });
+
   testWidgets('Right expands a branch and Left collapses it', (tester) {
     tester.pumpWidget(
       JsonView(
