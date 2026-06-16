@@ -9,19 +9,26 @@ import 'package:fleury/fleury.dart';
 /// Digits('12:34', color: theme.colorScheme.primary)
 /// ```
 ///
-/// Throws if [text] contains a character outside `[0-9: ]`.
+/// Throws if [text] contains a character outside `[0-9:.\- ]`.
 class Digits extends StatelessWidget {
   const Digits(
     this.text, {
     super.key,
     this.style,
     this.color,
+    this.offGlyph,
     this.semanticLabel = 'Digits',
   });
 
   final String text;
   final CellStyle? style;
   final Color? color;
+
+  /// When set, "off" segments are painted with this dim glyph (e.g. `·` or
+  /// `░`) for the two-tone calculator / flip-clock look, and so the digit
+  /// shape reads on bright backgrounds. Default null leaves them blank.
+  final String? offGlyph;
+
   final String semanticLabel;
 
   @override
@@ -33,20 +40,25 @@ class Digits extends StatelessWidget {
       role: SemanticRole.text,
       label: semanticLabel,
       value: text,
-      child: _RawDigits(text: text, style: resolved),
+      child: _RawDigits(text: text, style: resolved, offGlyph: offGlyph),
     );
   }
 }
 
 class _RawDigits extends LeafRenderObjectWidget {
-  const _RawDigits({required this.text, required this.style});
+  const _RawDigits({
+    required this.text,
+    required this.style,
+    required this.offGlyph,
+  });
 
   final String text;
   final CellStyle style;
+  final String? offGlyph;
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      RenderDigits(text: text, style: style);
+      RenderDigits(text: text, style: style, offGlyph: offGlyph);
 
   @override
   void updateRenderObject(
@@ -55,15 +67,27 @@ class _RawDigits extends LeafRenderObjectWidget {
   ) {
     renderObject
       ..text = text
-      ..style = style;
+      ..style = style
+      ..offGlyph = offGlyph;
   }
 }
 
 /// Render object behind [Digits]. See its docs.
 class RenderDigits extends RenderObject {
-  RenderDigits({required String text, required CellStyle style})
-    : _text = text,
-      _style = style;
+  RenderDigits({
+    required String text,
+    required CellStyle style,
+    required String? offGlyph,
+  }) : _text = text,
+       _style = style,
+       _offGlyph = offGlyph;
+
+  String? _offGlyph;
+  set offGlyph(String? v) {
+    if (_offGlyph == v) return;
+    _offGlyph = v;
+    markNeedsPaintOnly();
+  }
 
   String _text;
   set text(String v) {
@@ -101,6 +125,8 @@ class RenderDigits extends RenderObject {
     '8': ['███', '█ █', '███', '█ █', '███'],
     '9': ['███', '█ █', '███', '  █', '███'],
     ':': [' ', '█', ' ', '█', ' '],
+    '.': [' ', ' ', ' ', ' ', '█'],
+    '-': ['   ', '   ', '███', '   ', '   '],
     ' ': ['  ', '  ', '  ', '  ', '  '],
   };
 
@@ -129,7 +155,7 @@ class RenderDigits extends RenderObject {
         throw ArgumentError.value(
           _text,
           'text',
-          'Digits supports only characters in "0-9: ".',
+          'Digits supports only characters in "0-9:.- ".',
         );
       }
       glyphs.add(g);
@@ -185,6 +211,12 @@ class RenderDigits extends RenderObject {
               CellOffset(destCol, destRow),
               '█',
               style: _style,
+            );
+          } else if (_offGlyph != null) {
+            buffer.writeGrapheme(
+              CellOffset(destCol, destRow),
+              _offGlyph!,
+              style: const CellStyle(dim: true),
             );
           }
         }

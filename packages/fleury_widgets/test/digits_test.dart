@@ -22,6 +22,27 @@ void main() {
       expect(out[4], '███ ███   ███   █');
     });
 
+    testWidgets("renders '-' and '.' glyphs", (tester) {
+      tester.pumpWidget(
+        const SizedBox(width: 5, height: 5, child: Digits('-.')),
+      );
+      final out = _rows(tester, 5, 5);
+      // '-' is a mid-row bar (3 wide), gap, '.' is a bottom dot (1 wide).
+      expect(out[2], '███'); // dash mid-row (trailing blanks stripped)
+      expect(out[4], '    █'); // dot bottom-row
+    });
+
+    testWidgets('offGlyph paints dim off-segments', (tester) {
+      tester.pumpWidget(
+        const SizedBox(width: 3, height: 5, child: Digits('8', offGlyph: '·')),
+      );
+      final buf = tester.render(size: const CellSize(3, 5));
+      // '8' row 1 is "█ █" — the middle is an off cell, now the offGlyph.
+      final mid = buf.atColRow(1, 1);
+      expect(mid.grapheme, '·');
+      expect(mid.style.dim, isTrue);
+    });
+
     testWidgets('uses the explicit color', (tester) {
       tester.pumpWidget(
         const SizedBox(
