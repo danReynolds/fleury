@@ -380,12 +380,19 @@ class _StorybookAppState extends State<StorybookApp> {
     );
     return Theme(
       data: theme,
-      // The theme's background isn't auto-painted, so fill the whole surface
-      // with it (when set) before the panels render on top — this is what makes
-      // the cyber theme's dark backdrop show through transparent cells.
-      child: background == null
-          ? app
-          : Container(color: background, child: app),
+      // Provide an app-wide Toaster. Stories surface results via Toaster.show
+      // (e.g. the Dialog story toasting its result on dismiss); without a
+      // Toaster ancestor that call throws an unhandled exception that tears the
+      // whole session down — which, over `fleury serve`, drops the socket and
+      // blanks the browser until reload.
+      child: Toaster(
+        // The theme's background isn't auto-painted, so fill the whole surface
+        // with it (when set) before the panels render on top — this is what
+        // makes the cyber theme's dark backdrop show through transparent cells.
+        child: background == null
+            ? app
+            : Container(color: background, child: app),
+      ),
     );
   }
 }
