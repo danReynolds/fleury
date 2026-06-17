@@ -38,8 +38,55 @@ class _HostedSliderState extends State<_HostedSlider> {
   }
 }
 
+void _press(FleuryTester tester, int col) => tester.sendMouse(
+  MouseEvent(kind: MouseEventKind.down, button: MouseButton.left, col: col, row: 0),
+);
+void _moveTo(FleuryTester tester, int col) => tester.sendMouse(
+  MouseEvent(kind: MouseEventKind.drag, button: MouseButton.left, col: col, row: 0),
+);
+void _release(FleuryTester tester, int col) => tester.sendMouse(
+  MouseEvent(kind: MouseEventKind.up, button: MouseButton.left, col: col, row: 0),
+);
+
+void _click(FleuryTester tester, int col) {
+  _press(tester, col);
+  _release(tester, col);
+}
+
 void main() {
   group('RangeSlider', () {
+    testWidgets('clicking the track moves the nearest handle there', (tester) {
+      _HostedSlider.lastValues = null;
+      tester.pumpWidget(const _HostedSlider(initial: (0, 10), min: 0, max: 10));
+      // Track is 11 cols wide at col 0, so column == value. Column 3 is nearer
+      // the low handle (col 0) than the high (col 10) → low jumps to 3.
+      tester.render(size: const CellSize(11, 1));
+      _click(tester, 3);
+      expect(_HostedSlider.lastValues, (3, 10));
+    });
+
+    testWidgets('clicking near the high handle moves it, not the low', (tester) {
+      _HostedSlider.lastValues = null;
+      tester.pumpWidget(const _HostedSlider(initial: (0, 10), min: 0, max: 10));
+      tester.render(size: const CellSize(11, 1));
+      _click(tester, 7); // nearer the high handle at col 10
+      expect(_HostedSlider.lastValues, (0, 7));
+    });
+
+    testWidgets('dragging slides the grabbed handle across the track', (
+      tester,
+    ) {
+      _HostedSlider.lastValues = null;
+      tester.pumpWidget(const _HostedSlider(initial: (0, 10), min: 0, max: 10));
+      tester.render(size: const CellSize(11, 1));
+      // Grab the low handle at col 0 and drag it right to col 5.
+      _press(tester, 0);
+      _moveTo(tester, 3);
+      _moveTo(tester, 5);
+      _release(tester, 5);
+      expect(_HostedSlider.lastValues, (5, 10));
+    });
+
     testWidgets('renders both handles on the track', (tester) {
       tester.pumpWidget(
         SizedBox(
@@ -56,9 +103,58 @@ void main() {
       final out = tester
           .renderToString(size: const CellSize(10, 1), emptyMark: ' ')
           .trimRight();
-      // Both handles visible.
+      // Both handles visible: the active (default low) handle is the solid
+      // mark, the inactive high handle is hollow.
       expect(out.startsWith('●'), isTrue);
-      expect(out.endsWith('●'), isTrue);
+      expect(out.endsWith('○'), isTrue);
+    });
+
+    testWidgets('Right swaps the solid (active) handle to the high end', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        SizedBox(
+          width: 11,
+          height: 1,
+          child: RangeSlider(
+            values: const (0, 10),
+            min: 0,
+            max: 10,
+            autofocus: true,
+            onChanged: (_) {},
+          ),
+        ),
+      );
+      // Low is active by default: solid ● at col 0, hollow ○ at col 10.
+      var buf = tester.render(size: const CellSize(11, 1));
+      expect(buf.atColRow(0, 0).grapheme, '●');
+      expect(buf.atColRow(10, 0).grapheme, '○');
+      // Right moves to the high handle — the solid mark moves with it.
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      buf = tester.render(size: const CellSize(11, 1));
+      expect(buf.atColRow(0, 0).grapheme, '○');
+      expect(buf.atColRow(10, 0).grapheme, '●');
+    });
+
+    testWidgets('shows the key-model hint in the readout while focused', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        SizedBox(
+          width: 44,
+          height: 3,
+          child: RangeSlider(
+            values: const (2, 8),
+            min: 0,
+            max: 10,
+            showValues: true,
+            autofocus: true,
+            onChanged: (_) {},
+          ),
+        ),
+      );
+      final out = tester.renderToString(size: const CellSize(44, 3));
+      expect(out.contains('↑↓ value · ←→ ends'), isTrue);
     });
 
     testWidgets('fills the cells between the handles with ━', (tester) {
@@ -85,7 +181,7 @@ void main() {
       }
     });
 
-    testWidgets('arrow right moves the active (low) handle right', (tester) {
+    testWidgets('Up increases the active (low) handle value', (tester) {
       (num, num)? received;
       tester.pumpWidget(
         SizedBox(
@@ -100,13 +196,39 @@ void main() {
           ),
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
       expect(received, (1, 10));
     });
 
-    testWidgets('Tab swaps to the high handle; then arrow Left moves it', (
+    testWidgets('Right switches to the high handle; then Down lowers it', (
       tester,
     ) {
+      // Left/Right move between the two handles (low-left, high-right);
+      // Up/Down change the active handle's value.
+      (num, num)? received;
+      tester.pumpWidget(
+        SizedBox(
+          width: 11,
+          height: 1,
+          child: RangeSlider(
+            values: const (0, 10),
+            min: 0,
+            max: 10,
+            autofocus: true,
+            onChanged: (v) => received = v,
+          ),
+        ),
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight)); // → high
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // lower high
+      expect(received, (0, 9));
+    });
+
+    testWidgets('Tab is not consumed — it bubbles so focus can leave', (
+      tester,
+    ) {
+      // Universal escape: the slider must NOT swallow Tab (it used to swap
+      // handles). With no traversal ancestor the key is simply unhandled.
       (num, num)? received;
       tester.pumpWidget(
         SizedBox(
@@ -122,8 +244,12 @@ void main() {
         ),
       );
       tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
+      // Tab changed nothing on the slider (it bubbled, not swapped handles),
+      // so the low handle is still active and at its min — Left then bubbles
+      // too. Neither fires onChanged.
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
-      expect(received, (0, 9));
+      expect(received, isNull,
+          reason: 'Tab and Left both bubble; nothing on the slider moved');
     });
 
     testWidgets('low handle clamps against high (no crossing)', (tester) {
@@ -131,9 +257,9 @@ void main() {
       // reflects each onChanged — otherwise the slider keeps seeing
       // the original `values` prop and "clamp" never gets exercised.
       tester.pumpWidget(_HostedSlider(initial: const (4, 5), min: 0, max: 10));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
-      // Two right-arrows from low=4 against high=5: first lands on 5,
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+      // Two Up-arrows raise low=4 against high=5: first lands on 5,
       // second is clamped and discarded. Final state stays at (5, 5).
       expect(_HostedSlider.lastValues, (5, 5));
     });
@@ -192,7 +318,7 @@ void main() {
           ),
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.tab)); // active=high
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight)); // active=high
       tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
       expect(received, (2, 10));
     });
@@ -317,7 +443,7 @@ void main() {
       expect(low.actions, isNot(contains(SemanticAction.decrement)));
       expect(low.state['activeHandle'], 'low');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
       final high = tester.semantics().single(
         role: SemanticRole.slider,
         label: 'window',

@@ -68,6 +68,10 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
   late FocusNode _node;
   bool _owns = false;
 
+  /// In-progress direct numeric entry. Null when not typing; the typed
+  /// string otherwise (committed on Enter or focus loss, dropped on Esc).
+  String? _buffer;
+
   bool get _enabled => widget.onChanged != null;
 
   @override
@@ -88,6 +92,11 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
       _node.textInputClaimant = this;
       _owns = widget.focusNode == null;
     }
+  }
+
+  void _handleFocusChange(bool hasFocus) {
+    // Commit any pending entry when focus leaves the stepper.
+    if (!hasFocus && _buffer != null) _commitBuffer();
   }
 
   @override
@@ -121,15 +130,71 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
     if (next != widget.value) widget.onChanged!(next);
   }
 
+  /// Whether a single typed [text] character extends the entry buffer.
+  /// Digits always; a decimal point only for a fractional stepper and only
+  /// once. (A leading `-` is deliberately not consumed here — it keeps its
+  /// existing meaning of "decrement".)
+  bool _acceptsTyped(String text) {
+    if (text.length != 1) return false;
+    final code = text.codeUnitAt(0);
+    if (code >= 0x30 && code <= 0x39) return true; // 0-9
+    final fractional = widget.step != widget.step.truncate();
+    if (text == '.' && fractional && !(_buffer ?? '').contains('.')) {
+      return true;
+    }
+    return false;
+  }
+
+  void _commitBuffer() {
+    final raw = _buffer;
+    _buffer = null;
+    final parsed = raw == null ? null : num.tryParse(raw);
+    if (parsed != null) {
+      final next = _clamp(parsed);
+      if (next != widget.value) widget.onChanged!(next);
+    }
+    if (mounted) setState(() {});
+  }
+
   KeyEventResult _onKey(KeyEvent event) {
     if (!_enabled) return KeyEventResult.ignored;
+    // Buffer-control keys take effect only while a direct entry is in flight,
+    // so when idle they bubble (Esc closes overlays, Enter submits forms).
     switch (event.keyCode) {
+      case KeyCode.enter:
+        if (_buffer == null) return KeyEventResult.ignored;
+        _commitBuffer();
+        return KeyEventResult.handled;
+      case KeyCode.escape:
+        if (_buffer == null) return KeyEventResult.ignored;
+        setState(() => _buffer = null);
+        return KeyEventResult.handled;
+      case KeyCode.backspace:
+        if (_buffer == null) return KeyEventResult.ignored;
+        setState(() {
+          final next = _buffer!.substring(0, _buffer!.length - 1);
+          _buffer = next.isEmpty ? null : next;
+        });
+        return KeyEventResult.handled;
+      default:
+        break;
+    }
+    // Any step/jump key commits a pending entry first, then acts on the value.
+    if (_buffer != null) _commitBuffer();
+    switch (event.keyCode) {
+      // Up/Down adjust the value and bubble (escape) once pinned at a bound,
+      // so the arrows that drive the stepper also carry focus off it.
+      // (Left/Right are unused and already bubble for horizontal escape.)
       case KeyCode.arrowUp:
-        _nudge(widget.step);
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: _clamp(widget.value + widget.step) == widget.value,
+          move: () => _nudge(widget.step),
+        );
       case KeyCode.arrowDown:
-        _nudge(-widget.step);
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: _clamp(widget.value - widget.step) == widget.value,
+          move: () => _nudge(-widget.step),
+        );
       case KeyCode.pageUp:
         _nudge(widget.largeStep);
         return KeyEventResult.handled;
@@ -150,14 +215,23 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
   @override
   KeyEventResult onTextInput(String text) {
     if (!_enabled) return KeyEventResult.ignored;
+    // Direct numeric entry: typing digits builds a value, committed on Enter
+    // or focus loss — the spinbox convention. Checked before +/− so a typed
+    // digit doesn't fall through.
+    if (_acceptsTyped(text)) {
+      setState(() => _buffer = (_buffer ?? '') + text);
+      return KeyEventResult.handled;
+    }
     // +/= add, -/_ subtract, mirroring conventions in spreadsheet apps.
     switch (text) {
       case '+':
       case '=':
+        if (_buffer != null) _commitBuffer();
         _nudge(widget.step);
         return KeyEventResult.handled;
       case '-':
       case '_':
+        if (_buffer != null) _commitBuffer();
         _nudge(-widget.step);
         return KeyEventResult.handled;
       default:
@@ -207,7 +281,10 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
               : null,
           child: Text(' − ', style: canDec ? focusStyle : dim),
         ),
-        Text(_format(widget.value), style: focusStyle),
+        Text(
+          _buffer != null ? '$_buffer▏' : _format(widget.value),
+          style: focusStyle,
+        ),
         GestureDetector(
           onTap: enabled
               ? () {
@@ -276,13 +353,24 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
             return;
         }
       },
-      child: Focus(
-        focusNode: _node,
-        autofocus: widget.autofocus,
-        onKey: _onKey,
-        child: GestureDetector(
-          onTap: () => _node.requestFocus(),
-          child: body(),
+      child: FocusWithin(
+        onFocusChange: _handleFocusChange,
+        child: Focus(
+          focusNode: _node,
+          autofocus: widget.autofocus,
+          onKey: _onKey,
+          // Wheel over the stepper nudges the value (the spinner convention).
+          // It doesn't steal focus, so wheeling past it in a scrollable form
+          // isn't disruptive.
+          child: PointerScrollListener(
+            router: PointerRouterScope.maybeOf(context),
+            onScrollUp: () => _nudge(widget.step),
+            onScrollDown: () => _nudge(-widget.step),
+            child: GestureDetector(
+              onTap: () => _node.requestFocus(),
+              child: body(),
+            ),
+          ),
         ),
       ),
     );

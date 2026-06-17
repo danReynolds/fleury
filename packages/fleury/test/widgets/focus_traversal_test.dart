@@ -851,4 +851,74 @@ void main() {
       expect(b.hasFocus, isTrue, reason: 'reachable once excluding is off');
     });
   });
+
+  group('focus bounds in scrolled content', () {
+    testWidgets('records a screen-space rect, offset by ancestors and scroll', (
+      tester,
+    ) {
+      final node = FocusNode(debugLabel: 'scrolled');
+      tester.pumpWidget(
+        Padding(
+          // Shift the viewport so screen space differs from the ScrollView's
+          // content space (which is col 0, scroll-relative).
+          padding: const EdgeInsets.only(left: 20, top: 3),
+          child: SizedBox(
+            height: 4,
+            child: ScrollView(
+              child: Column(
+                children: [
+                  const Text('r0'),
+                  const Text('r1'),
+                  Focus(focusNode: node, child: const Text('target')),
+                  for (var i = 0; i < 10; i++) Text('row$i'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(40, 12));
+
+      final rect = node.rect;
+      expect(rect, isNotNull);
+      // 'target' is content row 2, visible at scroll 0. Its bounds must be the
+      // on-screen position, not the content-space origin (col 0) — feeding the
+      // latter to directional traversal put scrolled controls at phantom
+      // positions over sibling panes.
+      expect(rect!.left, 20, reason: 'screen col = left padding, not content 0');
+      expect(rect.top, 5, reason: 'screen row = top padding 3 + content row 2');
+    });
+
+    testWidgets('a focusable scrolled out of the viewport records no rect', (
+      tester,
+    ) {
+      final node = FocusNode(debugLabel: 'scrolled-away');
+      final ctl = ScrollController();
+      tester.pumpWidget(
+        SizedBox(
+          height: 3,
+          child: ScrollView(
+            controller: ctl,
+            child: Column(
+              children: [
+                Focus(focusNode: node, child: const Text('top')),
+                for (var i = 0; i < 20; i++) Text('row$i'),
+              ],
+            ),
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(20, 6));
+      expect(node.rect, isNotNull, reason: 'visible at the top of the content');
+
+      ctl.scrollBy(10);
+      tester.pump();
+      tester.render(size: const CellSize(20, 6));
+      expect(
+        node.rect,
+        isNull,
+        reason: 'scrolled past the viewport — not a directional target',
+      );
+    });
+  });
 }

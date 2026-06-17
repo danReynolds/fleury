@@ -1,0 +1,1924 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryWebReadinessBundle",
+  "generatedAt": "2026-06-09T13:35:28.923802Z",
+  "strictPass": false,
+  "input": {
+    "captureDir": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh",
+    "manualDir": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual",
+    "commandWorkingDirectory": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web",
+    "minRuns": 3,
+    "thresholdPolicyPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/thresholds.candidate.json",
+    "thresholdReviewPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/threshold-review.json",
+    "targetPreset": "primary",
+    "requireComparableRunEnvironment": true,
+    "requireThresholdReviewSummary": true,
+    "requireScenarioThresholds": true
+  },
+  "artifacts": {
+    "bundleJson": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness-bundle.json",
+    "scoreboard": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/scoreboard.json",
+    "semanticAudit": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/semantic-coverage.json",
+    "manualPlan": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/manual-validation-plan.md",
+    "manualAudit": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/manual-validation-audit.json",
+    "readinessJson": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness.json",
+    "readinessMarkdown": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness.md",
+    "defaultPreflights": {
+      "make-dom-default": {
+        "json": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-default-preflight-make-dom-default.json",
+        "markdown": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-default-preflight-make-dom-default.md"
+      },
+      "retire-temporary-paths": {
+        "json": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-default-preflight-retire-temporary-paths.json",
+        "markdown": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-default-preflight-retire-temporary-paths.md"
+      }
+    },
+    "releaseActionsMarkdown": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-release-actions.md"
+  },
+  "artifactFingerprints": {
+    "scoreboard": "fnv1a64:4841f11cf1160e5b",
+    "semanticAudit": "fnv1a64:712cd4b5792ac8b9",
+    "manualPlan": "fnv1a64:a5d03b737050336e",
+    "manualAudit": "fnv1a64:3774265fb6d17447",
+    "readinessJson": "fnv1a64:3b32c3e081acffb6",
+    "readinessMarkdown": "fnv1a64:c901b229c1794edc",
+    "defaultPreflights": {
+      "make-dom-default": {
+        "json": "fnv1a64:eed078dd26bf25a8",
+        "markdown": "fnv1a64:2dfd7e70f84f1de5"
+      },
+      "retire-temporary-paths": {
+        "json": "fnv1a64:0a75935a07cd1ab4",
+        "markdown": "fnv1a64:a3e7eeceff3baeff"
+      }
+    },
+    "releaseActionsMarkdown": "fnv1a64:e9b9e310af5ca2ca"
+  },
+  "sourceInputFingerprints": {
+    "captureFiles": [
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/cursor-blink-80x24-run-1.json",
+        "fingerprint": "fnv1a64:07d8763d727cd294"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/cursor-blink-80x24-run-2.json",
+        "fingerprint": "fnv1a64:d21f64c0655e45b3"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/cursor-blink-80x24-run-3.json",
+        "fingerprint": "fnv1a64:653111124b5b8ec0"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/dirty-row-160x50-run-1.json",
+        "fingerprint": "fnv1a64:53e33277308d8c9e"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/dirty-row-160x50-run-2.json",
+        "fingerprint": "fnv1a64:4c49b87e76ba69a2"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/dirty-row-160x50-run-3.json",
+        "fingerprint": "fnv1a64:e2d266929634ec47"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/full-frame-churn-160x50-run-1.json",
+        "fingerprint": "fnv1a64:d95358e3bc20124a"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/full-frame-churn-160x50-run-2.json",
+        "fingerprint": "fnv1a64:67a9fc0aef0925fa"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/full-frame-churn-160x50-run-3.json",
+        "fingerprint": "fnv1a64:e91d57b90d738ac9"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/large-160x50-run-1.json",
+        "fingerprint": "fnv1a64:0505972850eb200a"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/large-160x50-run-2.json",
+        "fingerprint": "fnv1a64:a7540b18b934bfed"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/large-160x50-run-3.json",
+        "fingerprint": "fnv1a64:5c55cdcace72e413"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/noop-160x50-run-1.json",
+        "fingerprint": "fnv1a64:8d5ad45d48dfc747"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/noop-160x50-run-2.json",
+        "fingerprint": "fnv1a64:517bb389f1ab9f82"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/noop-160x50-run-3.json",
+        "fingerprint": "fnv1a64:6b9cf1e955a5e7c0"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/normal-80x24-run-1.json",
+        "fingerprint": "fnv1a64:42e4cbb968188ee4"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/normal-80x24-run-2.json",
+        "fingerprint": "fnv1a64:a6c45cf53d906f8d"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/normal-80x24-run-3.json",
+        "fingerprint": "fnv1a64:f3967d44f6c84b59"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/resize-burst-run-1.json",
+        "fingerprint": "fnv1a64:389ef40b2112fefa"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/resize-burst-run-2.json",
+        "fingerprint": "fnv1a64:174b7de2ebf73fd0"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/resize-burst-run-3.json",
+        "fingerprint": "fnv1a64:1aee615d341fac5b"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/scroll-row-churn-160x50-run-1.json",
+        "fingerprint": "fnv1a64:4f009ae7e58b6e4e"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/scroll-row-churn-160x50-run-2.json",
+        "fingerprint": "fnv1a64:03080a764d40af97"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/scroll-row-churn-160x50-run-3.json",
+        "fingerprint": "fnv1a64:8ffa9857290de13e"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/single-dirty-cell-160x50-run-1.json",
+        "fingerprint": "fnv1a64:3c3d8952f026604a"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/single-dirty-cell-160x50-run-2.json",
+        "fingerprint": "fnv1a64:2d030a8c29581e42"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/single-dirty-cell-160x50-run-3.json",
+        "fingerprint": "fnv1a64:f057c8daedd6cfcb"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/stress-300x100-run-1.json",
+        "fingerprint": "fnv1a64:1c76e7064df74537"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/stress-300x100-run-2.json",
+        "fingerprint": "fnv1a64:3962cb84053f86a8"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/stress-300x100-run-3.json",
+        "fingerprint": "fnv1a64:61a94b1dd8129c2a"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/text-input-burst-80x24-run-1.json",
+        "fingerprint": "fnv1a64:c952f02c55f6f1ec"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/text-input-burst-80x24-run-2.json",
+        "fingerprint": "fnv1a64:d440df6d2687390e"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/text-input-burst-80x24-run-3.json",
+        "fingerprint": "fnv1a64:c0e6c6fa5076eb5a"
+      }
+    ],
+    "manualEvidenceFiles": [
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/evidence/chrome-ime-macos.review.json",
+        "fingerprint": "fnv1a64:2acd82e8d787287d"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/evidence/chrome-voiceover-macos.review.json",
+        "fingerprint": "fnv1a64:531bf23a21090ef0"
+      }
+    ],
+    "manualTemplateFiles": [
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/templates/chrome-ime-macos.template.json",
+        "fingerprint": "fnv1a64:2acd82e8d787287d"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/templates/chrome-voiceover-macos.template.json",
+        "fingerprint": "fnv1a64:531bf23a21090ef0"
+      }
+    ],
+    "manualValidationPageFiles": [
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/manual_validation_page_test.dart",
+        "fingerprint": "fnv1a64:95c9eafd85a18f96"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/web/manual_validation.dart",
+        "fingerprint": "fnv1a64:387fbe32155f6540"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/web/manual_validation.dart.js",
+        "fingerprint": "fnv1a64:f6f6cca5eb50e58a"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/web/manual_validation.html",
+        "fingerprint": "fnv1a64:877725d67a81a4c4"
+      }
+    ],
+    "webImplementationFiles": [
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/fleury_web.dart",
+        "fingerprint": "fnv1a64:75d987572d4293c6"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/benchmark/web_benchmark_scenarios.dart",
+        "fingerprint": "fnv1a64:38aed65200d8ca73"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/browser_frame_flush_scheduler.dart",
+        "fingerprint": "fnv1a64:5f6df6607c87aad5"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/clipboard/web_clipboard.dart",
+        "fingerprint": "fnv1a64:c3e812b99c48b1ec"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/dom_grid/cell_grid_html.dart",
+        "fingerprint": "fnv1a64:ef0c92f6239b1035"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/dom_grid/cell_span_builder.dart",
+        "fingerprint": "fnv1a64:2ef5c5a4412d2d65"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/dom_grid/cell_style_css.dart",
+        "fingerprint": "fnv1a64:a1939ddaf1faf30c"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/dom_grid/dom_grid_surface.dart",
+        "fingerprint": "fnv1a64:21b921f4e6642d96"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/dom_grid/dom_row_factory.dart",
+        "fingerprint": "fnv1a64:ed50371f9afdb54b"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/focus/web_focus_coordinator.dart",
+        "fingerprint": "fnv1a64:94f627ba0744fe8f"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/frame_presentation.dart",
+        "fingerprint": "fnv1a64:a6ddae6522d5589c"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/input/dom_input_source.dart",
+        "fingerprint": "fnv1a64:d6922e4d29fa09ef"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/input/input_source.dart",
+        "fingerprint": "fnv1a64:cea94c75b52e3baa"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/instrumentation/web_host_instrumentation.dart",
+        "fingerprint": "fnv1a64:894cf023068f8af4"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/manual_validation/manual_validation_targets.dart",
+        "fingerprint": "fnv1a64:aacf4efaf4f5ba27"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/metrics/cell_metrics.dart",
+        "fingerprint": "fnv1a64:e1b134c30739f649"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/metrics/dom_cell_metrics.dart",
+        "fingerprint": "fnv1a64:d5789d204426802c"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/run_tui_surface.dart",
+        "fingerprint": "fnv1a64:0199f0c3b99c889e"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/run_tui_web.dart",
+        "fingerprint": "fnv1a64:8788e6c0edd6fe0e"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/run_tui_web_dom.dart",
+        "fingerprint": "fnv1a64:52c16587fef2f1c7"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/semantics/semantic_coverage.dart",
+        "fingerprint": "fnv1a64:97d4c646e7ca2ad6"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/semantics/semantic_dom_presenter.dart",
+        "fingerprint": "fnv1a64:7c174926080d7140"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/semantics/semantic_presenter.dart",
+        "fingerprint": "fnv1a64:d517aa442fe67047"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/lib/src/web_terminal_driver.dart",
+        "fingerprint": "fnv1a64:81844485dd6da7c8"
+      }
+    ],
+    "webAutomatedTestFiles": [
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/browser_frame_flush_scheduler_test.dart",
+        "fingerprint": "fnv1a64:b2ffca8b2669a2d5"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/cell_metrics_test.dart",
+        "fingerprint": "fnv1a64:2f34652812c6925f"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/dom_grid_surface_test.dart",
+        "fingerprint": "fnv1a64:c7988a1ee9c01dae"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/dom_input_source_test.dart",
+        "fingerprint": "fnv1a64:279978107faef0cc"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/dom_input_trace_fixture_test.dart",
+        "fingerprint": "fnv1a64:6af28a1ef57df13c"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/fixtures/browser_input_traces.dart",
+        "fingerprint": "fnv1a64:f1c1df04b671249f"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/frame_presentation_test.dart",
+        "fingerprint": "fnv1a64:87a35efb0c60e9b3"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/run_tui_surface_test.dart",
+        "fingerprint": "fnv1a64:63bb6c4abf360bfd"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/run_tui_web_dom_test.dart",
+        "fingerprint": "fnv1a64:2f6cd5a6907946df"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/semantic_dom_presenter_test.dart",
+        "fingerprint": "fnv1a64:2459e4814f207789"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/web_clipboard_test.dart",
+        "fingerprint": "fnv1a64:e97db721aa6d7fcd"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/web_focus_coordinator_test.dart",
+        "fingerprint": "fnv1a64:3904ffc57a90822c"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/web_host_instrumentation_test.dart",
+        "fingerprint": "fnv1a64:608aacdf8c0722da"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/test/web_public_api_boundary_test.dart",
+        "fingerprint": "fnv1a64:1be40f6e71a6a657"
+      }
+    ],
+    "fleuryCoreImplementationFiles": [
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/fleury.dart",
+        "fingerprint": "fnv1a64:e192cd1b63340d30"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/fleury_core.dart",
+        "fingerprint": "fnv1a64:ca4343334bf53336"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/fleury_host.dart",
+        "fingerprint": "fnv1a64:55d5134f96d17530"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/fleury_test.dart",
+        "fingerprint": "fnv1a64:1ee54d2aca798de5"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/animation/animation.dart",
+        "fingerprint": "fnv1a64:f5c1c0e5a65894b2"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/animation/animation_policy.dart",
+        "fingerprint": "fnv1a64:b735ff22b9b903a3"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/animation/clock.dart",
+        "fingerprint": "fnv1a64:19f77695e31a1c61"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/animation/curves.dart",
+        "fingerprint": "fnv1a64:f7486b54eba008c0"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/animation/frame_ticker.dart",
+        "fingerprint": "fnv1a64:b5179249c7a9db6d"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/animation/lerp.dart",
+        "fingerprint": "fnv1a64:05b71dd6609c797e"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/animation/spring.dart",
+        "fingerprint": "fnv1a64:ab10cb587e48e7df"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/animation/ticker.dart",
+        "fingerprint": "fnv1a64:f9845b7640876be3"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/animation/ticker_future.dart",
+        "fingerprint": "fnv1a64:f534dc1c48c28892"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/animation/ticker_scheduler.dart",
+        "fingerprint": "fnv1a64:f5ef95ebb9c2762f"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/app/app.dart",
+        "fingerprint": "fnv1a64:d18d4081552f5392"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/app/commands.dart",
+        "fingerprint": "fnv1a64:da9fe1114945ab85"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/app/status.dart",
+        "fingerprint": "fnv1a64:17f7db49a13231eb"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/debug/debug_capture.dart",
+        "fingerprint": "fnv1a64:4f5d9ba24249d16c"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/debug/debug_events.dart",
+        "fingerprint": "fnv1a64:420f951d397b2b39"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/debug/debug_invalidation.dart",
+        "fingerprint": "fnv1a64:40de4ad36719a197"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/debug/debug_monitors.dart",
+        "fingerprint": "fnv1a64:c3497427c268c9f0"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/debug/debug_panel.dart",
+        "fingerprint": "fnv1a64:86a8b39a11d8eb8d"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/debug/debug_shell.dart",
+        "fingerprint": "fnv1a64:7dfb689c302d1047"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/debug/debug_state.dart",
+        "fingerprint": "fnv1a64:2aae52cf867eabd5"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/editing/text_completion.dart",
+        "fingerprint": "fnv1a64:558e7f370978d43e"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/editing/text_editing.dart",
+        "fingerprint": "fnv1a64:f7c84db49e8ec576"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/editing/text_history.dart",
+        "fingerprint": "fnv1a64:72035c1572bd601a"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/editing/text_keymap.dart",
+        "fingerprint": "fnv1a64:a9d7157f686f3448"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/editing/text_paste.dart",
+        "fingerprint": "fnv1a64:4d0fceb28ec54d14"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/effects/external_editor.dart",
+        "fingerprint": "fnv1a64:3f990911d243d20c"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/effects/process_command_runner.dart",
+        "fingerprint": "fnv1a64:8f3963a1f8b71f83"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/effects/process_task.dart",
+        "fingerprint": "fnv1a64:adcbb12bf873355e"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/effects/task.dart",
+        "fingerprint": "fnv1a64:e773ea4688ee19ee"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/foundation/change_notifier.dart",
+        "fingerprint": "fnv1a64:8511e13c8ef4c185"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/foundation/fleury_error.dart",
+        "fingerprint": "fnv1a64:3be6074dc053b8d6"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/foundation/geometry.dart",
+        "fingerprint": "fnv1a64:2cd4c5e9b19fd1df"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/foundation/key.dart",
+        "fingerprint": "fnv1a64:99e4257abedcfa22"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/remote/remote_driver.dart",
+        "fingerprint": "fnv1a64:b10a4bab17b3e84e"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/remote/remote_protocol.dart",
+        "fingerprint": "fnv1a64:2015eac35ef35896"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/remote/remote_transport.dart",
+        "fingerprint": "fnv1a64:bafd6b5b49cf9b8b"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/remote/serve_index_html.dart",
+        "fingerprint": "fnv1a64:3eb77ea034b0803d"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/remote/unix_socket_transport.dart",
+        "fingerprint": "fnv1a64:719d18ca5b78f083"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/ansi_byte_budget.dart",
+        "fingerprint": "fnv1a64:019c4cd43e925f20"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/ansi_renderer.dart",
+        "fingerprint": "fnv1a64:2a77c281eb236775"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/border.dart",
+        "fingerprint": "fnv1a64:67f30e1549810024"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/cell.dart",
+        "fingerprint": "fnv1a64:323f78f97e748d83"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/cell_buffer.dart",
+        "fingerprint": "fnv1a64:0983093018ba4f26"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/edge_insets.dart",
+        "fingerprint": "fnv1a64:d71626a36f922066"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/io_sink_ansi_sink.dart",
+        "fingerprint": "fnv1a64:7b74ce3348d1127d"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/layout.dart",
+        "fingerprint": "fnv1a64:a840eb93d949e821"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/render_effect.dart",
+        "fingerprint": "fnv1a64:97eb059efe1285ea"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/render_flex.dart",
+        "fingerprint": "fnv1a64:a8ae50cde5d25ad0"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/render_layout_stats.dart",
+        "fingerprint": "fnv1a64:8c553ec79cbd77ff"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/render_navigator.dart",
+        "fingerprint": "fnv1a64:8096c3a0add7fcad"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/render_object.dart",
+        "fingerprint": "fnv1a64:7526d37e280b2bc5"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/render_objects.dart",
+        "fingerprint": "fnv1a64:1137e009adf93afe"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/render_repaint_boundary.dart",
+        "fingerprint": "fnv1a64:10782c68838c41d3"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/render_stack.dart",
+        "fingerprint": "fnv1a64:d8a3ea6f670f0785"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/render_wrap.dart",
+        "fingerprint": "fnv1a64:9ab0482c00b35e7a"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/selectable_text_mixin.dart",
+        "fingerprint": "fnv1a64:442677c3f6c82824"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/text_sanitizer.dart",
+        "fingerprint": "fnv1a64:16388cf127bc0ce4"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/rendering/width_resolver.dart",
+        "fingerprint": "fnv1a64:b24975fd3ec9e101"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/runtime/clipboard.dart",
+        "fingerprint": "fnv1a64:2ce4e47fc80a50dc"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/runtime/frame_scheduler.dart",
+        "fingerprint": "fnv1a64:f2abf67093ff1134"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/runtime/hot_reload.dart",
+        "fingerprint": "fnv1a64:4fdb41ad8a5eeff7"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/runtime/input_dispatcher.dart",
+        "fingerprint": "fnv1a64:f12ea2e1c3110ceb"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/runtime/output_capture.dart",
+        "fingerprint": "fnv1a64:7805ec4516c7148a"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/runtime/run_tui.dart",
+        "fingerprint": "fnv1a64:280eddf20c30308b"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/runtime/tui_frame_loop.dart",
+        "fingerprint": "fnv1a64:db5d02372cefc556"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/runtime/tui_runtime.dart",
+        "fingerprint": "fnv1a64:be54335906e4675e"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/semantics/accessibility.dart",
+        "fingerprint": "fnv1a64:8a8b0fded1e4d050"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/semantics/inspection.dart",
+        "fingerprint": "fnv1a64:81a99e0bd295a1d9"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/semantics/semantics.dart",
+        "fingerprint": "fnv1a64:a886e1d386c48b71"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/semantics/semantics_owner.dart",
+        "fingerprint": "fnv1a64:6b789ad8466d9b30"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/terminal/capabilities.dart",
+        "fingerprint": "fnv1a64:2ae350cf4f78d09c"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/terminal/capability_requirements.dart",
+        "fingerprint": "fnv1a64:1d9b6af4b69039c7"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/terminal/diagnostics.dart",
+        "fingerprint": "fnv1a64:17d143572dd7d53c"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/terminal/events.dart",
+        "fingerprint": "fnv1a64:4485b13a96f85667"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/terminal/fake_driver.dart",
+        "fingerprint": "fnv1a64:afe86e952951848e"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/terminal/input_parser.dart",
+        "fingerprint": "fnv1a64:6a50ff23a1696f0d"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/terminal/native_driver.dart",
+        "fingerprint": "fnv1a64:0a50ea16c07e9db3"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/terminal/posix_driver.dart",
+        "fingerprint": "fnv1a64:b1853e3e118116e8"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/terminal/terminal_driver.dart",
+        "fingerprint": "fnv1a64:1f00b185266faccb"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/terminal/terminal_probe.dart",
+        "fingerprint": "fnv1a64:a8d4a9e3f4d50ac9"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/terminal/terminal_sequences.dart",
+        "fingerprint": "fnv1a64:6c9e3583cbe79975"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/terminal/windows_driver.dart",
+        "fingerprint": "fnv1a64:6e0f16d754136d50"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/testing/finders.dart",
+        "fingerprint": "fnv1a64:52c3393c758a24ab"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/testing/fleury_tester.dart",
+        "fingerprint": "fnv1a64:73ce416bc4ac41a3"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/testing/goldens.dart",
+        "fingerprint": "fnv1a64:6330c45609a8d0eb"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/align.dart",
+        "fingerprint": "fnv1a64:96c017d361ad4c93"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/anchor.dart",
+        "fingerprint": "fnv1a64:917e8b14dc9ff516"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/animation_builder.dart",
+        "fingerprint": "fnv1a64:e01326edeccd9eb1"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/async.dart",
+        "fingerprint": "fnv1a64:610493e06232fc84"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/basic.dart",
+        "fingerprint": "fnv1a64:57796d428947ac5e"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/blinking_cursor.dart",
+        "fingerprint": "fnv1a64:d8b12fa00eef229b"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/effects.dart",
+        "fingerprint": "fnv1a64:6058d430e36b33c9"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/focus.dart",
+        "fingerprint": "fnv1a64:225227a801981c61"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/focus_traversal.dart",
+        "fingerprint": "fnv1a64:cc4207bfec5c1b86"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/frame_builder.dart",
+        "fingerprint": "fnv1a64:39db8eee87fec399"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/framework.dart",
+        "fingerprint": "fnv1a64:b7a1316f1c814a5b"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/inherited_notifier.dart",
+        "fingerprint": "fnv1a64:bc936a3dec926807"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/intrinsic.dart",
+        "fingerprint": "fnv1a64:c49e7d3182c67138"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/key_bindings.dart",
+        "fingerprint": "fnv1a64:aba3e2409e22e032"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/key_hint_bar.dart",
+        "fingerprint": "fnv1a64:9ff71d254c05753d"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/layout_builder.dart",
+        "fingerprint": "fnv1a64:7ae2240758585b48"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/list_view.dart",
+        "fingerprint": "fnv1a64:79030f0a2131578e"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/listenable_builder.dart",
+        "fingerprint": "fnv1a64:c9326a6cc531f672"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/log_view.dart",
+        "fingerprint": "fnv1a64:e9bb341049e17563"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/media_query.dart",
+        "fingerprint": "fnv1a64:c505b1dde6841948"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/navigator.dart",
+        "fingerprint": "fnv1a64:829aa27a7ec92dd3"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/overlay.dart",
+        "fingerprint": "fnv1a64:d0de5f7313238a59"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/pointer.dart",
+        "fingerprint": "fnv1a64:a293646bec5d498e"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/presence.dart",
+        "fingerprint": "fnv1a64:e95215c21b9db7ee"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/repaint_boundary.dart",
+        "fingerprint": "fnv1a64:6ad916342727bf7d"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/rich_text.dart",
+        "fingerprint": "fnv1a64:1a5601f528bef965"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/scroll_view.dart",
+        "fingerprint": "fnv1a64:6d79099e0799bc32"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/scrollbar.dart",
+        "fingerprint": "fnv1a64:c8319f76957007a3"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/selection/selectable.dart",
+        "fingerprint": "fnv1a64:d35495aee0bbb466"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/selection/selection.dart",
+        "fingerprint": "fnv1a64:16b6e76318792615"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/selection/selection_area.dart",
+        "fingerprint": "fnv1a64:44e19f92df0c4ea2"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/selection/selection_container_delegate.dart",
+        "fingerprint": "fnv1a64:58dbb2a2138d6850"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/selection/selection_event.dart",
+        "fingerprint": "fnv1a64:3df70151196608bf"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/spinner.dart",
+        "fingerprint": "fnv1a64:bb9ea4c94df87395"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/text_area.dart",
+        "fingerprint": "fnv1a64:33f527bd0c0f5a1c"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/text_input.dart",
+        "fingerprint": "fnv1a64:e2d4f8dc5ce337fa"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/theme.dart",
+        "fingerprint": "fnv1a64:982f485e851b148a"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/ticker_mode.dart",
+        "fingerprint": "fnv1a64:64ed07e97d46ebf4"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/lib/src/widgets/tui_binding.dart",
+        "fingerprint": "fnv1a64:fa480c7b772ec1bb"
+      }
+    ],
+    "readinessToolFiles": [
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/tool/readiness_bundle_verifier.dart",
+        "fingerprint": "fnv1a64:1e2dddbbf0035ff1"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/tool/spike_gallery.dart",
+        "fingerprint": "fnv1a64:a18176f5d14593df"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/tool/web_automated_validation.dart",
+        "fingerprint": "fnv1a64:2a5dede68c541a60"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/tool/web_default_preflight.dart",
+        "fingerprint": "fnv1a64:d561208e6c7186f7"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/tool/web_frame_capture.dart",
+        "fingerprint": "fnv1a64:8ecbcf746fdc27d8"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/tool/web_frame_report.dart",
+        "fingerprint": "fnv1a64:da3647635de8dd8f"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/tool/web_frame_scoreboard.dart",
+        "fingerprint": "fnv1a64:acace57be420ee07"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/tool/web_frame_suite.dart",
+        "fingerprint": "fnv1a64:017b7a7aca2118c7"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/tool/web_manual_validation.dart",
+        "fingerprint": "fnv1a64:47d3ae2358b8225b"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/tool/web_readiness.dart",
+        "fingerprint": "fnv1a64:bfa1afa432665053"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/tool/web_readiness_bundle.dart",
+        "fingerprint": "fnv1a64:24909c223f3e6450"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/tool/web_semantic_coverage_audit.dart",
+        "fingerprint": "fnv1a64:15dc4733fb7e7bd1"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/tool/web_threshold_review.dart",
+        "fingerprint": "fnv1a64:5344b19607fb3c41"
+      }
+    ],
+    "rootReleaseLauncherFiles": [
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/tool/fleury_dev.dart",
+        "fingerprint": "fnv1a64:7ddd01959374ce65"
+      }
+    ],
+    "packageConfigurationFiles": [
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/.dart_tool/package_config.json",
+        "fingerprint": "fnv1a64:314c808b4333e616"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/pubspec.lock",
+        "fingerprint": "fnv1a64:5fb38c1469aff6fc"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury/pubspec.yaml",
+        "fingerprint": "fnv1a64:e669cbe9154c524c"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/.dart_tool/package_config.json",
+        "fingerprint": "fnv1a64:03db2071d6f74cda"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/pubspec.lock",
+        "fingerprint": "fnv1a64:78db085a67a6c80f"
+      },
+      {
+        "path": "/Users/dan/Coding/fleury-web-phase1/packages/fleury_web/pubspec.yaml",
+        "fingerprint": "fnv1a64:89fb4d73eb05bf13"
+      }
+    ],
+    "thresholdPolicy": {
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/thresholds.candidate.json",
+      "fingerprint": "fnv1a64:9a37e38006c33df3"
+    },
+    "thresholdReviewPlan": {
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/threshold-review-plan.md",
+      "fingerprint": "fnv1a64:20b212b5cc030e3a"
+    }
+  },
+  "remainingReleaseActions": [
+    {
+      "id": "review-threshold-policy",
+      "kind": "human-review",
+      "label": "Review and promote per-scenario web thresholds",
+      "blockingChecks": [
+        "frameScoreboard"
+      ],
+      "blockers": [
+        "frame scoreboard threshold policy reviewState is candidate; expected reviewed"
+      ],
+      "details": {
+        "candidateThresholdPolicyPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/thresholds.candidate.json",
+        "reviewedThresholdPolicyPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/thresholds.json",
+        "thresholdReviewPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/threshold-review.json",
+        "thresholdReviewPlanPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/threshold-review-plan.md",
+        "currentReviewState": "candidate",
+        "currentThresholdPolicyFingerprint": "fnv1a64:5e05148220c729cd",
+        "expectedInputFingerprint": "fnv1a64:5e05148220c729cd",
+        "captureEnvironment": {
+          "scenarioCount": 11,
+          "scenarioWithEnvironmentCount": 11,
+          "comparableScenarioCount": 11,
+          "allScenariosComparable": true,
+          "chromeBrowser": "Chrome/148.0.7778.217",
+          "operatingSystem": "macos",
+          "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+          "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+          "headless": true,
+          "frameBudgetMs": 16.67,
+          "requestedFrames": [
+            24,
+            32,
+            12,
+            16,
+            20
+          ],
+          "warmupFrames": 2,
+          "reviewContextHint": "Browser Chrome/148.0.7778.217, OS macos OS version Version 26.2 (Build 25C56), Dart 3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\", headless=true, frameBudgetMs=16.67, retained DOM product baseline"
+        },
+        "suggestedReviewContext": "Browser Chrome/148.0.7778.217, OS macos OS version Version 26.2 (Build 25C56), Dart 3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\", headless=true, frameBudgetMs=16.67, retained DOM product baseline",
+        "overBudgetThresholdScenarioCount": 11,
+        "overBudgetThresholdScenarios": [
+          {
+            "id": "cursor-blink-80x24",
+            "maxTotalFrameP95Ms": 1078.2,
+            "maxOverBudgetPercent": 100.0
+          },
+          {
+            "id": "dirty-row-160x50",
+            "maxTotalFrameP95Ms": 864.97,
+            "maxOverBudgetPercent": 97.5
+          },
+          {
+            "id": "full-frame-churn-160x50",
+            "maxTotalFrameP95Ms": 2692.08,
+            "maxOverBudgetPercent": 100.0
+          },
+          {
+            "id": "large-160x50",
+            "maxTotalFrameP95Ms": 499.69,
+            "maxOverBudgetPercent": 100.0
+          },
+          {
+            "id": "noop-160x50",
+            "maxTotalFrameP95Ms": 87.84,
+            "maxOverBudgetPercent": 35.0
+          },
+          {
+            "id": "normal-80x24",
+            "maxTotalFrameP95Ms": 466.56,
+            "maxOverBudgetPercent": 95.0
+          },
+          {
+            "id": "resize-burst",
+            "maxTotalFrameP95Ms": 949.92,
+            "maxOverBudgetPercent": 100.0
+          },
+          {
+            "id": "scroll-row-churn-160x50",
+            "maxTotalFrameP95Ms": 2411.65,
+            "maxOverBudgetPercent": 100.0
+          },
+          {
+            "id": "single-dirty-cell-160x50",
+            "maxTotalFrameP95Ms": 285.48,
+            "maxOverBudgetPercent": 100.0
+          },
+          {
+            "id": "stress-300x100",
+            "maxTotalFrameP95Ms": 3578.64,
+            "maxOverBudgetPercent": 100.0
+          },
+          {
+            "id": "text-input-burst-80x24",
+            "maxTotalFrameP95Ms": 408.85,
+            "maxOverBudgetPercent": 87.0
+          }
+        ],
+        "overBudgetAcknowledgementRequired": true,
+        "commandTemplateRunnable": false,
+        "commandTemplatePlaceholders": [
+          {
+            "name": "reviewer",
+            "argument": "--reviewed-by",
+            "placeholder": "<reviewer>",
+            "description": "human reviewer name or handle"
+          },
+          {
+            "name": "reviewNote",
+            "argument": "--review-note",
+            "placeholder": "<why these over-budget thresholds are acceptable for this reviewed baseline>",
+            "description": "explicit justification for accepting thresholds that allow over-budget frames"
+          }
+        ],
+        "reviewerNextStep": "replace commandTemplate placeholders, verify suggestedReviewContext if present, and keep --allow-over-budget-thresholds only after explicitly accepting the over-budget scenarios in --review-note",
+        "thresholdReviewPlanStatus": "current",
+        "thresholdReviewPlanInputFingerprint": "fnv1a64:5e05148220c729cd"
+      },
+      "planCommand": [
+        "dart",
+        "run",
+        "tool/web_threshold_review.dart",
+        "--input=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/thresholds.candidate.json",
+        "--write-plan=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/threshold-review-plan.md",
+        "--review-context-hint=Browser Chrome/148.0.7778.217, OS macos OS version Version 26.2 (Build 25C56), Dart 3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\", headless=true, frameBudgetMs=16.67, retained DOM product baseline"
+      ],
+      "rootPlanCommand": [
+        "dart",
+        "run",
+        "tool/fleury_dev.dart",
+        "benchmark",
+        "web-threshold-review",
+        "--input=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/thresholds.candidate.json",
+        "--write-plan=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/threshold-review-plan.md",
+        "--review-context-hint=Browser Chrome/148.0.7778.217, OS macos OS version Version 26.2 (Build 25C56), Dart 3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\", headless=true, frameBudgetMs=16.67, retained DOM product baseline"
+      ],
+      "commandTemplate": [
+        "dart",
+        "run",
+        "tool/web_threshold_review.dart",
+        "--input=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/thresholds.candidate.json",
+        "--output=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/thresholds.json",
+        "--json-output=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/threshold-review.json",
+        "--expect-input-fingerprint=fnv1a64:5e05148220c729cd",
+        "--reviewed-by=<reviewer>",
+        "--review-context=Browser Chrome/148.0.7778.217, OS macos OS version Version 26.2 (Build 25C56), Dart 3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\", headless=true, frameBudgetMs=16.67, retained DOM product baseline",
+        "--allow-over-budget-thresholds",
+        "--review-note=<why these over-budget thresholds are acceptable for this reviewed baseline>"
+      ],
+      "rootCommandTemplate": [
+        "dart",
+        "run",
+        "tool/fleury_dev.dart",
+        "benchmark",
+        "web-threshold-review",
+        "--input=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/thresholds.candidate.json",
+        "--output=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/thresholds.json",
+        "--json-output=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/threshold-review.json",
+        "--expect-input-fingerprint=fnv1a64:5e05148220c729cd",
+        "--reviewed-by=<reviewer>",
+        "--review-context=Browser Chrome/148.0.7778.217, OS macos OS version Version 26.2 (Build 25C56), Dart 3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\", headless=true, frameBudgetMs=16.67, retained DOM product baseline",
+        "--allow-over-budget-thresholds",
+        "--review-note=<why these over-budget thresholds are acceptable for this reviewed baseline>"
+      ]
+    },
+    {
+      "id": "collect-manual-evidence:chrome-ime-macos",
+      "kind": "manual-validation",
+      "label": "Collect reviewed manual web evidence for chrome-ime-macos",
+      "blockingChecks": [
+        "manualValidation"
+      ],
+      "targetId": "chrome-ime-macos",
+      "status": "needsReview",
+      "blockers": [
+        "manual validation audit strictPass is not true",
+        "manual validation passed 0 of 2 targets",
+        "needsReviewTargets: chrome-ime-macos, chrome-voiceover-macos",
+        "manual evidence provenance blockers: chrome-ime-macos: reviewedBy, capturedAt, environment.browserVersion; chrome-voiceover-macos: reviewedBy, capturedAt, environment.browserVersion",
+        "failing manual targets: chrome-ime-macos, chrome-voiceover-macos"
+      ],
+      "details": {
+        "requiredCheckCount": 6,
+        "passedRequiredCheckCount": 0,
+        "missingCheckIds": [
+          "manual-page-loads-dom-host",
+          "keyboard-capture-focused",
+          "composition-start-update-visible",
+          "composition-end-commits-once",
+          "candidate-window-near-caret",
+          "typing-continues-after-composition"
+        ],
+        "templatePath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/templates/chrome-ime-macos.template.json",
+        "templateStatus": "current",
+        "templateFingerprint": "fnv1a64:2acd82e8d787287d",
+        "manualValidationPage": "web/manual_validation.html",
+        "requiredEvidencePage": "manual_validation.html",
+        "manualPageCommandWorkingDirectory": "packages/fleury_web",
+        "manualValidationReadySignal": "document.body data-fleury-manual-validation=\"ready\"",
+        "manualPageSmokeCommand": [
+          "dart",
+          "test",
+          "-p",
+          "chrome",
+          "test/manual_validation_page_test.dart"
+        ],
+        "manualPageLocalUrl": "http://localhost:8080/manual_validation.html",
+        "manualPageServeNote": "Run manualPageServeSetupCommand if dhttpd is not active, keep manualPageServeCommand running, open http://localhost:8080/manual_validation.html from that local server, and start checks only after the ready signal.",
+        "manualPageProvenanceAttributes": [
+          "data-fleury-manual-browser-version",
+          "data-fleury-manual-platform",
+          "data-fleury-manual-user-agent",
+          "data-fleury-manual-page"
+        ],
+        "requiredPageSignals": [
+          {
+            "id": "retained-dom-ready",
+            "selector": "body",
+            "attribute": "data-fleury-manual-validation",
+            "expectedValue": "ready",
+            "description": "The manual validation page has presented its first retained DOM frame."
+          },
+          {
+            "id": "ime-caret-positioned",
+            "selector": "textarea",
+            "attribute": "data-fleury-caret-state",
+            "expectedValue": "positioned",
+            "description": "The hidden textarea is positioned at the focused Fleury caret for IME candidate windows."
+          }
+        ],
+        "evidenceDirectory": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/evidence",
+        "starterEvidencePath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/evidence/chrome-ime-macos.review.json",
+        "starterEvidenceStatus": "exists",
+        "starterEvidenceFingerprint": "fnv1a64:2acd82e8d787287d",
+        "suggestedEvidencePath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/evidence/chrome-ime-macos-YYYY-MM-DD.json",
+        "starterOverwritePolicy": "fail-if-destination-exists",
+        "provenanceCommandRunnable": false,
+        "provenanceCommandPlaceholders": [
+          {
+            "name": "reviewer",
+            "argument": "--reviewed-by",
+            "placeholder": "<reviewer>",
+            "description": "human reviewer name or handle"
+          },
+          {
+            "name": "browserVersion",
+            "argument": "--browser-version",
+            "placeholder": "<Chrome version used for manual validation>",
+            "description": "Chrome version from the browser used for the manual session"
+          }
+        ],
+        "reviewerNextStep": "replace provenanceCommandTemplate placeholders during or after the manual session, fill required checks in starterEvidencePath, then run auditCommand"
+      },
+      "manualPageBuildCommand": [
+        "dart",
+        "compile",
+        "js",
+        "web/manual_validation.dart",
+        "-o",
+        "web/manual_validation.dart.js"
+      ],
+      "manualPageSmokeCommand": [
+        "dart",
+        "test",
+        "-p",
+        "chrome",
+        "test/manual_validation_page_test.dart"
+      ],
+      "manualPageServeSetupCommand": [
+        "dart",
+        "pub",
+        "global",
+        "activate",
+        "dhttpd"
+      ],
+      "manualPageServeCommand": [
+        "dart",
+        "pub",
+        "global",
+        "run",
+        "dhttpd",
+        "--path",
+        "web"
+      ],
+      "provenanceCommandTemplate": [
+        "dart",
+        "run",
+        "tool/web_manual_validation.dart",
+        "--update-provenance=/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/evidence/chrome-ime-macos.review.json",
+        "--template-target=chrome-ime-macos",
+        "--reviewed-by=<reviewer>",
+        "--captured-at=now",
+        "--browser-version=<Chrome version used for manual validation>"
+      ],
+      "rootProvenanceCommandTemplate": [
+        "dart",
+        "run",
+        "tool/fleury_dev.dart",
+        "benchmark",
+        "web-manual-validation",
+        "--update-provenance=/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/evidence/chrome-ime-macos.review.json",
+        "--template-target=chrome-ime-macos",
+        "--reviewed-by=<reviewer>",
+        "--captured-at=now",
+        "--browser-version=<Chrome version used for manual validation>"
+      ],
+      "auditCommand": [
+        "dart",
+        "run",
+        "tool/web_manual_validation.dart",
+        "--input=/Users/dan/Coding/fleury-web-phase1/profiling/web/manual",
+        "--target-preset=primary",
+        "--json-output=/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/manual-validation-audit.json",
+        "--strict"
+      ],
+      "rootAuditCommand": [
+        "dart",
+        "run",
+        "tool/fleury_dev.dart",
+        "benchmark",
+        "web-manual-validation",
+        "--input=/Users/dan/Coding/fleury-web-phase1/profiling/web/manual",
+        "--target-preset=primary",
+        "--json-output=/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/manual-validation-audit.json",
+        "--strict"
+      ]
+    },
+    {
+      "id": "collect-manual-evidence:chrome-voiceover-macos",
+      "kind": "manual-validation",
+      "label": "Collect reviewed manual web evidence for chrome-voiceover-macos",
+      "blockingChecks": [
+        "manualValidation"
+      ],
+      "targetId": "chrome-voiceover-macos",
+      "status": "needsReview",
+      "blockers": [
+        "manual validation audit strictPass is not true",
+        "manual validation passed 0 of 2 targets",
+        "needsReviewTargets: chrome-ime-macos, chrome-voiceover-macos",
+        "manual evidence provenance blockers: chrome-ime-macos: reviewedBy, capturedAt, environment.browserVersion; chrome-voiceover-macos: reviewedBy, capturedAt, environment.browserVersion",
+        "failing manual targets: chrome-ime-macos, chrome-voiceover-macos"
+      ],
+      "details": {
+        "requiredCheckCount": 7,
+        "passedRequiredCheckCount": 0,
+        "missingCheckIds": [
+          "manual-page-ready-semantic-host",
+          "visual-grid-hidden",
+          "semantic-root-exposed",
+          "focused-textbox-announced",
+          "semantic-action-works",
+          "keyboard-capture-restored",
+          "safe-link-announced"
+        ],
+        "templatePath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/templates/chrome-voiceover-macos.template.json",
+        "templateStatus": "current",
+        "templateFingerprint": "fnv1a64:531bf23a21090ef0",
+        "manualValidationPage": "web/manual_validation.html",
+        "requiredEvidencePage": "manual_validation.html",
+        "manualPageCommandWorkingDirectory": "packages/fleury_web",
+        "manualValidationReadySignal": "document.body data-fleury-manual-validation=\"ready\"",
+        "manualPageSmokeCommand": [
+          "dart",
+          "test",
+          "-p",
+          "chrome",
+          "test/manual_validation_page_test.dart"
+        ],
+        "manualPageLocalUrl": "http://localhost:8080/manual_validation.html",
+        "manualPageServeNote": "Run manualPageServeSetupCommand if dhttpd is not active, keep manualPageServeCommand running, open http://localhost:8080/manual_validation.html from that local server, and start checks only after the ready signal.",
+        "manualPageProvenanceAttributes": [
+          "data-fleury-manual-browser-version",
+          "data-fleury-manual-platform",
+          "data-fleury-manual-user-agent",
+          "data-fleury-manual-page"
+        ],
+        "requiredPageSignals": [
+          {
+            "id": "retained-dom-ready",
+            "selector": "body",
+            "attribute": "data-fleury-manual-validation",
+            "expectedValue": "ready",
+            "description": "The manual validation page has presented its first retained DOM frame."
+          }
+        ],
+        "evidenceDirectory": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/evidence",
+        "starterEvidencePath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/evidence/chrome-voiceover-macos.review.json",
+        "starterEvidenceStatus": "exists",
+        "starterEvidenceFingerprint": "fnv1a64:531bf23a21090ef0",
+        "suggestedEvidencePath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/evidence/chrome-voiceover-macos-YYYY-MM-DD.json",
+        "starterOverwritePolicy": "fail-if-destination-exists",
+        "provenanceCommandRunnable": false,
+        "provenanceCommandPlaceholders": [
+          {
+            "name": "reviewer",
+            "argument": "--reviewed-by",
+            "placeholder": "<reviewer>",
+            "description": "human reviewer name or handle"
+          },
+          {
+            "name": "browserVersion",
+            "argument": "--browser-version",
+            "placeholder": "<Chrome version used for manual validation>",
+            "description": "Chrome version from the browser used for the manual session"
+          }
+        ],
+        "reviewerNextStep": "replace provenanceCommandTemplate placeholders during or after the manual session, fill required checks in starterEvidencePath, then run auditCommand"
+      },
+      "manualPageBuildCommand": [
+        "dart",
+        "compile",
+        "js",
+        "web/manual_validation.dart",
+        "-o",
+        "web/manual_validation.dart.js"
+      ],
+      "manualPageSmokeCommand": [
+        "dart",
+        "test",
+        "-p",
+        "chrome",
+        "test/manual_validation_page_test.dart"
+      ],
+      "manualPageServeSetupCommand": [
+        "dart",
+        "pub",
+        "global",
+        "activate",
+        "dhttpd"
+      ],
+      "manualPageServeCommand": [
+        "dart",
+        "pub",
+        "global",
+        "run",
+        "dhttpd",
+        "--path",
+        "web"
+      ],
+      "provenanceCommandTemplate": [
+        "dart",
+        "run",
+        "tool/web_manual_validation.dart",
+        "--update-provenance=/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/evidence/chrome-voiceover-macos.review.json",
+        "--template-target=chrome-voiceover-macos",
+        "--reviewed-by=<reviewer>",
+        "--captured-at=now",
+        "--browser-version=<Chrome version used for manual validation>"
+      ],
+      "rootProvenanceCommandTemplate": [
+        "dart",
+        "run",
+        "tool/fleury_dev.dart",
+        "benchmark",
+        "web-manual-validation",
+        "--update-provenance=/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/evidence/chrome-voiceover-macos.review.json",
+        "--template-target=chrome-voiceover-macos",
+        "--reviewed-by=<reviewer>",
+        "--captured-at=now",
+        "--browser-version=<Chrome version used for manual validation>"
+      ],
+      "auditCommand": [
+        "dart",
+        "run",
+        "tool/web_manual_validation.dart",
+        "--input=/Users/dan/Coding/fleury-web-phase1/profiling/web/manual",
+        "--target-preset=primary",
+        "--json-output=/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/manual-validation-audit.json",
+        "--strict"
+      ],
+      "rootAuditCommand": [
+        "dart",
+        "run",
+        "tool/fleury_dev.dart",
+        "benchmark",
+        "web-manual-validation",
+        "--input=/Users/dan/Coding/fleury-web-phase1/profiling/web/manual",
+        "--target-preset=primary",
+        "--json-output=/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/manual-validation-audit.json",
+        "--strict"
+      ]
+    },
+    {
+      "id": "regenerate-readiness-bundle",
+      "kind": "artifact-refresh",
+      "label": "Regenerate the readiness bundle from reviewed evidence",
+      "dependsOn": [
+        "review-threshold-policy",
+        "collect-manual-evidence:chrome-ime-macos",
+        "collect-manual-evidence:chrome-voiceover-macos"
+      ],
+      "details": {
+        "captureDir": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh",
+        "manualDir": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual",
+        "outputDir": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate",
+        "bundleJsonPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness-bundle.json",
+        "readinessJsonPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness.json",
+        "thresholdPolicyPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/thresholds.json",
+        "thresholdReviewPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/threshold-review.json",
+        "maxFallbackCells": 0,
+        "targetPreset": "primary",
+        "writeDefaultPreflights": true,
+        "strictRequired": true,
+        "jsonOutput": true,
+        "reviewerNextStep": "run after human-review and manual-validation dependencies pass"
+      },
+      "commandTemplate": [
+        "dart",
+        "run",
+        "tool/web_readiness_bundle.dart",
+        "--captures=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh",
+        "--manual=/Users/dan/Coding/fleury-web-phase1/profiling/web/manual",
+        "--output-dir=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate",
+        "--thresholds=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/thresholds.json",
+        "--threshold-review=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/threshold-review.json",
+        "--max-fallback-cells=0",
+        "--target-preset=primary",
+        "--write-default-preflights",
+        "--strict",
+        "--json"
+      ],
+      "rootCommandTemplate": [
+        "dart",
+        "run",
+        "tool/fleury_dev.dart",
+        "benchmark",
+        "web-readiness-bundle",
+        "--captures=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh",
+        "--manual=/Users/dan/Coding/fleury-web-phase1/profiling/web/manual",
+        "--output-dir=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate",
+        "--thresholds=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/thresholds.json",
+        "--threshold-review=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/threshold-review.json",
+        "--max-fallback-cells=0",
+        "--target-preset=primary",
+        "--write-default-preflights",
+        "--strict",
+        "--json"
+      ]
+    },
+    {
+      "id": "verify-readiness-bundle",
+      "kind": "artifact-verification",
+      "label": "Verify generated and source-input bundle fingerprints",
+      "dependsOn": [
+        "regenerate-readiness-bundle"
+      ],
+      "details": {
+        "bundleJsonPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness-bundle.json",
+        "strictRequired": true,
+        "jsonOutput": true,
+        "verificationScope": [
+          "generated-artifact-fingerprints",
+          "source-input-fingerprints",
+          "expected-source-input-path-coverage",
+          "command-working-directory-metadata"
+        ],
+        "reviewerNextStep": "run after regenerate-readiness-bundle and require strictPass true"
+      },
+      "commandTemplate": [
+        "dart",
+        "run",
+        "tool/web_readiness_bundle.dart",
+        "--verify=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness-bundle.json",
+        "--strict",
+        "--json"
+      ],
+      "rootCommandTemplate": [
+        "dart",
+        "run",
+        "tool/fleury_dev.dart",
+        "benchmark",
+        "web-readiness-bundle",
+        "--verify=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness-bundle.json",
+        "--strict",
+        "--json"
+      ]
+    },
+    {
+      "id": "run-automated-web-host-tests",
+      "kind": "automated-validation",
+      "label": "Run retained DOM automated host tests",
+      "dependsOn": [
+        "verify-readiness-bundle"
+      ],
+      "details": {
+        "sourceInputGroup": "webAutomatedTestFiles",
+        "automatedValidationJsonPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-automated-validation.json",
+        "browserTestFileCount": 9,
+        "vmTestFileCount": 4,
+        "fixtureFileCount": 1,
+        "browserTestFiles": [
+          "test/browser_frame_flush_scheduler_test.dart",
+          "test/cell_metrics_test.dart",
+          "test/dom_grid_surface_test.dart",
+          "test/dom_input_source_test.dart",
+          "test/dom_input_trace_fixture_test.dart",
+          "test/run_tui_surface_test.dart",
+          "test/run_tui_web_dom_test.dart",
+          "test/semantic_dom_presenter_test.dart",
+          "test/web_clipboard_test.dart"
+        ],
+        "vmTestFiles": [
+          "test/frame_presentation_test.dart",
+          "test/web_focus_coordinator_test.dart",
+          "test/web_host_instrumentation_test.dart",
+          "test/web_public_api_boundary_test.dart"
+        ],
+        "fixtureFiles": [
+          "test/fixtures/browser_input_traces.dart"
+        ],
+        "requiredPass": true,
+        "verificationScope": [
+          "retained-dom-host-assembly",
+          "browser-frame-flush-scheduling",
+          "browser-input-trace-replay",
+          "semantic-dom-projection",
+          "clipboard-and-focus-adapters",
+          "public-api-boundary"
+        ],
+        "reviewerNextStep": "run after strict bundle verification and require the generated JSON artifact to strict-pass before changing web defaults"
+      },
+      "commandTemplate": [
+        "dart",
+        "run",
+        "tool/web_automated_validation.dart",
+        "--json-output=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-automated-validation.json",
+        "--strict",
+        "--json"
+      ],
+      "rootCommandTemplate": [
+        "dart",
+        "run",
+        "tool/fleury_dev.dart",
+        "benchmark",
+        "web-automated-validation",
+        "--json-output=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-automated-validation.json",
+        "--strict",
+        "--json"
+      ],
+      "browserTestCommand": [
+        "dart",
+        "test",
+        "-p",
+        "chrome",
+        "test/browser_frame_flush_scheduler_test.dart",
+        "test/cell_metrics_test.dart",
+        "test/dom_grid_surface_test.dart",
+        "test/dom_input_source_test.dart",
+        "test/dom_input_trace_fixture_test.dart",
+        "test/run_tui_surface_test.dart",
+        "test/run_tui_web_dom_test.dart",
+        "test/semantic_dom_presenter_test.dart",
+        "test/web_clipboard_test.dart"
+      ],
+      "vmTestCommand": [
+        "dart",
+        "test",
+        "test/frame_presentation_test.dart",
+        "test/web_focus_coordinator_test.dart",
+        "test/web_host_instrumentation_test.dart",
+        "test/web_public_api_boundary_test.dart"
+      ]
+    },
+    {
+      "id": "run-default-preflight:make-dom-default",
+      "kind": "release-gate",
+      "label": "Run bundle-bound default preflight for make-dom-default",
+      "dependsOn": [
+        "regenerate-readiness-bundle",
+        "verify-readiness-bundle",
+        "run-automated-web-host-tests"
+      ],
+      "targetId": "make-dom-default",
+      "details": {
+        "targetId": "make-dom-default",
+        "readinessJsonPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness.json",
+        "bundleJsonPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness-bundle.json",
+        "automatedValidationJsonPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-automated-validation.json",
+        "strictRequired": true,
+        "jsonOutput": true,
+        "requiresBundleBinding": true,
+        "generatedPreviewStrictPass": false,
+        "generatedPreviewBundleBound": false,
+        "verificationScope": [
+          "generated-artifact-fingerprints",
+          "source-input-fingerprints",
+          "expected-source-input-path-coverage",
+          "command-working-directory-metadata",
+          "readiness-json-path-binding",
+          "automated-validation-artifact"
+        ],
+        "reviewerNextStep": "run after bundle verification and require strictPass true before changing this default"
+      },
+      "commandTemplate": [
+        "dart",
+        "run",
+        "tool/web_default_preflight.dart",
+        "--readiness=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness.json",
+        "--bundle=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness-bundle.json",
+        "--automated-validation=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-automated-validation.json",
+        "--target=make-dom-default",
+        "--strict",
+        "--json"
+      ],
+      "rootCommandTemplate": [
+        "dart",
+        "run",
+        "tool/fleury_dev.dart",
+        "benchmark",
+        "web-default-preflight",
+        "--readiness=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness.json",
+        "--bundle=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness-bundle.json",
+        "--automated-validation=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-automated-validation.json",
+        "--target=make-dom-default",
+        "--strict",
+        "--json"
+      ]
+    },
+    {
+      "id": "run-default-preflight:retire-temporary-paths",
+      "kind": "release-gate",
+      "label": "Run bundle-bound default preflight for retire-temporary-paths",
+      "dependsOn": [
+        "regenerate-readiness-bundle",
+        "verify-readiness-bundle",
+        "run-automated-web-host-tests"
+      ],
+      "targetId": "retire-temporary-paths",
+      "details": {
+        "targetId": "retire-temporary-paths",
+        "readinessJsonPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness.json",
+        "bundleJsonPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness-bundle.json",
+        "automatedValidationJsonPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-automated-validation.json",
+        "strictRequired": true,
+        "jsonOutput": true,
+        "requiresBundleBinding": true,
+        "generatedPreviewStrictPass": false,
+        "generatedPreviewBundleBound": false,
+        "verificationScope": [
+          "generated-artifact-fingerprints",
+          "source-input-fingerprints",
+          "expected-source-input-path-coverage",
+          "command-working-directory-metadata",
+          "readiness-json-path-binding",
+          "automated-validation-artifact"
+        ],
+        "reviewerNextStep": "run after bundle verification and require strictPass true before changing this default"
+      },
+      "commandTemplate": [
+        "dart",
+        "run",
+        "tool/web_default_preflight.dart",
+        "--readiness=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness.json",
+        "--bundle=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness-bundle.json",
+        "--automated-validation=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-automated-validation.json",
+        "--target=retire-temporary-paths",
+        "--strict",
+        "--json"
+      ],
+      "rootCommandTemplate": [
+        "dart",
+        "run",
+        "tool/fleury_dev.dart",
+        "benchmark",
+        "web-default-preflight",
+        "--readiness=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness.json",
+        "--bundle=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness-bundle.json",
+        "--automated-validation=/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-automated-validation.json",
+        "--target=retire-temporary-paths",
+        "--strict",
+        "--json"
+      ]
+    }
+  ],
+  "checks": {
+    "scoreboardStrictPass": true,
+    "semanticAuditStrictPass": true,
+    "manualAuditStrictPass": false,
+    "readinessStrictPass": false,
+    "defaultPreflightStrictPass": {
+      "make-dom-default": false,
+      "retire-temporary-paths": false
+    },
+    "defaultPreflightBundleBound": {
+      "make-dom-default": false,
+      "retire-temporary-paths": false
+    },
+    "defaultPreflightFinalGateRequiresBundle": true
+  },
+  "readiness": {
+    "schemaVersion": 1,
+    "kind": "fleuryWebReadinessAudit",
+    "generatedAt": "2026-06-09T13:35:36.343928Z",
+    "strictPass": false,
+    "checks": [
+      {
+        "id": "frameScoreboard",
+        "label": "Frame performance scoreboard",
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/scoreboard.json",
+        "strictPass": false,
+        "blockers": [
+          "frame scoreboard threshold policy reviewState is candidate; expected reviewed"
+        ],
+        "details": {
+          "scenarioCount": 11,
+          "runCount": 33,
+          "minRuns": 3,
+          "requireComparableRunEnvironment": true,
+          "thresholdPolicyPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/thresholds.candidate.json",
+          "thresholdPolicyReviewState": "candidate",
+          "thresholdPolicyFingerprint": "fnv1a64:5e05148220c729cd",
+          "thresholdPolicyScenarioCount": 11,
+          "thresholdReviewPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/threshold-review.json"
+        }
+      },
+      {
+        "id": "semanticCoverage",
+        "label": "Semantic coverage audit",
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/semantic-coverage.json",
+        "strictPass": true,
+        "blockers": [],
+        "details": {
+          "scenarioCount": 11,
+          "captureCount": 33,
+          "frameCount": 912,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0
+        }
+      },
+      {
+        "id": "manualValidation",
+        "label": "Manual IME and screen-reader validation",
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/manual-validation-audit.json",
+        "strictPass": false,
+        "blockers": [
+          "manual validation audit strictPass is not true",
+          "manual validation passed 0 of 2 targets",
+          "needsReviewTargets: chrome-ime-macos, chrome-voiceover-macos",
+          "manual evidence provenance blockers: chrome-ime-macos: reviewedBy, capturedAt, environment.browserVersion; chrome-voiceover-macos: reviewedBy, capturedAt, environment.browserVersion",
+          "failing manual targets: chrome-ime-macos, chrome-voiceover-macos"
+        ],
+        "details": {
+          "targetCount": 2,
+          "passedTargetCount": 0,
+          "entryCount": 2,
+          "invalidEntryCount": 0,
+          "needsReviewTargets": [
+            "chrome-ime-macos",
+            "chrome-voiceover-macos"
+          ],
+          "provenanceBlockers": {
+            "chrome-ime-macos": [
+              "reviewedBy",
+              "capturedAt",
+              "environment.browserVersion"
+            ],
+            "chrome-voiceover-macos": [
+              "reviewedBy",
+              "capturedAt",
+              "environment.browserVersion"
+            ]
+          },
+          "manualEvidence": [
+            {
+              "id": "chrome-ime-macos",
+              "latestEntryFile": "chrome-ime-macos.review.json",
+              "latestEntryPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/evidence/chrome-ime-macos.review.json",
+              "latestEntryFingerprint": "fnv1a64:b974789710154c43",
+              "latestCapturedAt": "",
+              "reviewedBy": ""
+            },
+            {
+              "id": "chrome-voiceover-macos",
+              "latestEntryFile": "chrome-voiceover-macos.review.json",
+              "latestEntryPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/evidence/chrome-voiceover-macos.review.json",
+              "latestEntryFingerprint": "fnv1a64:412206c456b07902",
+              "latestCapturedAt": "",
+              "reviewedBy": ""
+            }
+          ],
+          "failingTargetDetails": [
+            {
+              "id": "chrome-ime-macos",
+              "status": "needsReview",
+              "strictPass": false,
+              "requiredCheckCount": 6,
+              "passedRequiredCheckCount": 0,
+              "missingCheckIds": [
+                "manual-page-loads-dom-host",
+                "keyboard-capture-focused",
+                "composition-start-update-visible",
+                "composition-end-commits-once",
+                "candidate-window-near-caret",
+                "typing-continues-after-composition"
+              ],
+              "provenanceBlockers": [
+                "reviewedBy",
+                "capturedAt",
+                "environment.browserVersion"
+              ]
+            },
+            {
+              "id": "chrome-voiceover-macos",
+              "status": "needsReview",
+              "strictPass": false,
+              "requiredCheckCount": 7,
+              "passedRequiredCheckCount": 0,
+              "missingCheckIds": [
+                "manual-page-ready-semantic-host",
+                "visual-grid-hidden",
+                "semantic-root-exposed",
+                "focused-textbox-announced",
+                "semantic-action-works",
+                "keyboard-capture-restored",
+                "safe-link-announced"
+              ],
+              "provenanceBlockers": [
+                "reviewedBy",
+                "capturedAt",
+                "environment.browserVersion"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

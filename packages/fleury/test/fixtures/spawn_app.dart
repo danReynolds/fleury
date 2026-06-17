@@ -20,6 +20,9 @@ Future<void> main(List<String> args) async {
     exit(2);
   }
   final tag = args.isNotEmpty ? args.first : 'spawn-app';
+  if (args.length > 1) {
+    Directory.current = args[1];
+  }
   final transport = await UnixSocketFrameTransport.connect(handle);
 
   // Signal "I'm alive and connected to the right session socket"

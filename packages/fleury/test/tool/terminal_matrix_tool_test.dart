@@ -253,6 +253,1360 @@ void main() {
     });
   });
 
+  group('benchmark web-report launcher', () {
+    late Directory tempDir;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync(
+        'fleury_benchmark_web_report_tool_test_',
+      );
+    });
+
+    tearDown(() {
+      tempDir.deleteSync(recursive: true);
+    });
+
+    test('summarizes retained DOM web frame captures', () async {
+      final inputPath = '${tempDir.path}/web-frames.json';
+      final outputPath = '${tempDir.path}/web-frames.md';
+      File(inputPath).writeAsStringSync(
+        jsonEncode({
+          'schemaVersion': 1,
+          'kind': 'fleuryWebFrameCapture',
+          'browserMetrics': {
+            'layoutDurationMs': 1.5,
+            'recalcStyleDurationMs': 2.25,
+            'scriptDurationMs': 3.75,
+            'taskDurationMs': 7.5,
+            'jsHeapUsedBytes': 1048576,
+            'jsHeapTotalBytes': 2097152,
+            'domDocumentCount': 1,
+            'domNodeCount': 128,
+            'jsEventListenerCount': 9,
+          },
+          'frames': [
+            _webFrame(
+              totalFrameMicros: 10000,
+              dirtyRowDiffMicros: 800,
+              domApplyMicros: 3000,
+            ),
+            _webFrame(
+              totalFrameMicros: 22000,
+              dirtyRowDiffMicros: 1500,
+              domApplyMicros: 12000,
+            ),
+          ],
+        }),
+      );
+
+      final jsonResult = await _runTool([
+        'benchmark',
+        'web-report',
+        '--input=$inputPath',
+        '--budget-ms=16.67',
+        '--json',
+      ]);
+
+      expect(jsonResult.exitCode, 0, reason: jsonResult.stderr.toString());
+      final summary = _jsonObject(jsonResult.stdout);
+      expect(summary['kind'], 'fleuryWebFrameSummary');
+      expect(summary['frameCount'], 2);
+      expect(summary['overBudgetFrameCount'], 1);
+      expect(summary['dominantP95Slice'], 'domApplyMs');
+      final timings = summary['timings'] as Map<String, Object?>;
+      final dirtyRowDiff = timings['dirtyRowDiffMs'] as Map<String, Object?>;
+      expect(dirtyRowDiff['p95'], 1.5);
+      final browserMetrics = summary['browserMetrics'] as Map<String, Object?>;
+      expect(browserMetrics['domNodeCount'], 128);
+
+      final passingGate = await _runTool([
+        'benchmark',
+        'web-report',
+        '--input=$inputPath',
+        '--max-total-frame-p95-ms=25',
+        '--max-dom-apply-p95-ms=15',
+        '--max-semantic-apply-p95-ms=2',
+        '--max-semantic-uncovered-cells=0',
+        '--strict',
+        '--json',
+      ]);
+
+      expect(passingGate.exitCode, 0, reason: passingGate.stderr.toString());
+      final passingSummary = _jsonObject(passingGate.stdout);
+      expect(passingSummary['strictPass'], isTrue);
+      expect(passingSummary['gates'] as List<Object?>, hasLength(4));
+
+      final failingGate = await _runTool([
+        'benchmark',
+        'web-report',
+        '--input=$inputPath',
+        '--max-total-frame-p95-ms=15',
+        '--strict',
+        '--json',
+      ]);
+
+      expect(failingGate.exitCode, 1);
+      final failingSummary = _jsonObject(failingGate.stdout);
+      expect(failingSummary['strictPass'], isFalse);
+      expect(
+        failingSummary['gates'] as List<Object?>,
+        contains(
+          isA<Map<String, Object?>>()
+              .having((gate) => gate['id'], 'id', 'totalFrameP95Ms')
+              .having((gate) => gate['passed'], 'passed', isFalse),
+        ),
+      );
+
+      final markdownResult = await _runTool([
+        'benchmark',
+        'web-report',
+        '--input=$inputPath',
+        '--output=$outputPath',
+        '--max-total-frame-p95-ms=25',
+      ]);
+
+      expect(
+        markdownResult.exitCode,
+        0,
+        reason: markdownResult.stderr.toString(),
+      );
+      final markdown = File(outputPath).readAsStringSync();
+      expect(markdown, contains('Fleury Web Frame'));
+      expect(markdown, contains('dirtyRowDiffMs'));
+      expect(markdown, contains('domApplyMs'));
+      expect(markdown, contains('## Browser Metrics'));
+      expect(markdown, contains('DOM nodes'));
+      expect(markdown, contains('## Gates'));
+    });
+  });
+
+  group('benchmark web-capture launcher', () {
+    late Directory tempDir;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync(
+        'fleury_benchmark_web_capture_tool_test_',
+      );
+    });
+
+    tearDown(() {
+      tempDir.deleteSync(recursive: true);
+    });
+
+    test('forwards retained DOM browser capture options', () async {
+      final outputPath = '${tempDir.path}/capture.json';
+      final result = await _runTool([
+        '--dry-run',
+        'benchmark',
+        'web-capture',
+        '--scenario=single-dirty-cell-160x50',
+        '--frames=3',
+        '--warmup=0',
+        '--budget-ms=8',
+        '--output=$outputPath',
+        '--chrome=/tmp/chrome',
+        '--timeout=5',
+        '--headful',
+        '--keep-temp',
+        '--compile-only',
+        '--json',
+      ]);
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(result.stdout, contains('(packages/fleury_web) dart run'));
+      expect(result.stdout, contains('tool/web_frame_capture.dart'));
+      expect(result.stdout, contains('--scenario=single-dirty-cell-160x50'));
+      expect(result.stdout, contains('--frames=3'));
+      expect(result.stdout, contains('--warmup=0'));
+      expect(result.stdout, contains('--budget-ms=8.0'));
+      expect(result.stdout, contains('--output=$outputPath'));
+      expect(result.stdout, contains('--chrome=/tmp/chrome'));
+      expect(result.stdout, contains('--timeout=5'));
+      expect(result.stdout, contains('--headful'));
+      expect(result.stdout, contains('--keep-temp'));
+      expect(result.stdout, contains('--compile-only'));
+      expect(result.stdout, contains('--json'));
+    });
+
+    test(
+      'uses ignored generated bucket for default web capture output',
+      () async {
+        final result = await _runTool([
+          '--dry-run',
+          'benchmark',
+          'web-capture',
+          '--scenario=normal-80x24',
+          '--compile-only',
+        ]);
+
+        expect(result.exitCode, 0, reason: result.stderr.toString());
+        expect(
+          result.stdout.toString().replaceAll(Platform.pathSeparator, '/'),
+          contains('/profiling/web/runs/normal-80x24-'),
+        );
+      },
+    );
+  });
+
+  group('benchmark web-suite launcher', () {
+    late Directory tempDir;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync(
+        'fleury_benchmark_web_suite_tool_test_',
+      );
+    });
+
+    tearDown(() {
+      tempDir.deleteSync(recursive: true);
+    });
+
+    test('forwards retained DOM browser suite options', () async {
+      final outputDir = '${tempDir.path}/suite';
+      final scoreboardPath = '${tempDir.path}/scoreboard.md';
+      final scoreboardJsonPath = '${tempDir.path}/scoreboard.json';
+      final thresholdsPath = '${tempDir.path}/thresholds.json';
+      final candidateThresholdsPath =
+          '${tempDir.path}/candidate-thresholds.json';
+      final result = await _runTool([
+        '--dry-run',
+        'benchmark',
+        'web-suite',
+        '--scenarios=normal-80x24,single-dirty-cell-160x50',
+        '--runs=2',
+        '--frames=3',
+        '--warmup=0',
+        '--budget-ms=8',
+        '--output-dir=$outputDir',
+        '--scoreboard=$scoreboardPath',
+        '--scoreboard-json=$scoreboardJsonPath',
+        '--min-runs=2',
+        '--max-total-frame-p95-ms=25',
+        '--max-dom-apply-p95-ms=12',
+        '--max-semantic-apply-p95-ms=8',
+        '--max-over-budget-percent=10',
+        '--max-semantic-uncovered-cells=0',
+        '--thresholds=$thresholdsPath',
+        '--write-thresholds=$candidateThresholdsPath',
+        '--threshold-headroom-percent=10',
+        '--threshold-min-headroom-ms=0.5',
+        '--threshold-min-headroom-percent=0.5',
+        '--chrome=/tmp/chrome',
+        '--timeout=5',
+        '--no-strict',
+        '--no-require-comparable-environment',
+        '--no-compile-once',
+        '--headful',
+        '--keep-temp',
+        '--json',
+      ]);
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(result.stdout, contains('(packages/fleury_web) dart run'));
+      expect(result.stdout, contains('tool/web_frame_suite.dart'));
+      expect(
+        result.stdout,
+        contains('--scenarios=normal-80x24,single-dirty-cell-160x50'),
+      );
+      expect(result.stdout, contains('--runs=2'));
+      expect(result.stdout, contains('--frames=3'));
+      expect(result.stdout, contains('--warmup=0'));
+      expect(result.stdout, contains('--budget-ms=8.0'));
+      expect(result.stdout, contains('--output-dir=$outputDir'));
+      expect(result.stdout, contains('--scoreboard=$scoreboardPath'));
+      expect(result.stdout, contains('--scoreboard-json=$scoreboardJsonPath'));
+      expect(result.stdout, contains('--min-runs=2'));
+      expect(result.stdout, contains('--max-total-frame-p95-ms=25.0'));
+      expect(result.stdout, contains('--max-dom-apply-p95-ms=12.0'));
+      expect(result.stdout, contains('--max-semantic-apply-p95-ms=8.0'));
+      expect(result.stdout, contains('--max-over-budget-percent=10.0'));
+      expect(result.stdout, contains('--max-semantic-uncovered-cells=0.0'));
+      expect(result.stdout, contains('--thresholds=$thresholdsPath'));
+      expect(
+        result.stdout,
+        contains('--write-thresholds=$candidateThresholdsPath'),
+      );
+      expect(result.stdout, contains('--threshold-headroom-percent=10.0'));
+      expect(result.stdout, contains('--threshold-min-headroom-ms=0.5'));
+      expect(result.stdout, contains('--threshold-min-headroom-percent=0.5'));
+      expect(result.stdout, contains('--chrome=/tmp/chrome'));
+      expect(result.stdout, contains('--timeout=5'));
+      expect(result.stdout, contains('--no-strict'));
+      expect(result.stdout, contains('--no-require-comparable-environment'));
+      expect(result.stdout, contains('--no-compile-once'));
+      expect(result.stdout, contains('--headful'));
+      expect(result.stdout, contains('--keep-temp'));
+      expect(result.stdout, contains('--json'));
+    });
+
+    test(
+      'uses ignored generated bucket for default web suite output',
+      () async {
+        final result = await _runTool([
+          '--dry-run',
+          'benchmark',
+          'web-suite',
+          '--scenarios=normal-80x24',
+          '--runs=1',
+          '--frames=1',
+        ]);
+
+        expect(result.exitCode, 0, reason: result.stderr.toString());
+        final stdout = result.stdout.toString().replaceAll(
+          Platform.pathSeparator,
+          '/',
+        );
+        expect(stdout, contains('/profiling/web/runs/'));
+        expect(stdout, contains('-suite'));
+        expect(stdout, contains('/scoreboard.md'));
+        expect(stdout, contains('/scoreboard.json'));
+      },
+    );
+  });
+
+  group('benchmark web-scoreboard launcher', () {
+    late Directory tempDir;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync(
+        'fleury_benchmark_web_scoreboard_tool_test_',
+      );
+    });
+
+    tearDown(() {
+      tempDir.deleteSync(recursive: true);
+    });
+
+    test('aggregates retained DOM web frame capture directories', () async {
+      final outputPath = '${tempDir.path}/scoreboard.md';
+      final jsonOutputPath = '${tempDir.path}/scoreboard.json';
+      final thresholdsPath = '${tempDir.path}/thresholds.json';
+      final candidateThresholdsPath =
+          '${tempDir.path}/candidate-thresholds.json';
+      File(thresholdsPath).writeAsStringSync(
+        jsonEncode({
+          'schemaVersion': 1,
+          'kind': 'fleuryWebFrameThresholds',
+          'defaults': {'maxTotalFrameP95Ms': 25},
+        }),
+      );
+      File('${tempDir.path}/normal-80x24-a.json').writeAsStringSync(
+        jsonEncode({
+          'schemaVersion': 1,
+          'kind': 'fleuryWebFrameCapture',
+          'capturedAt': '2026-06-08T01:00:00.000000Z',
+          'scenario': {'id': 'normal-80x24'},
+          'frames': [
+            _webFrame(totalFrameMicros: 10000, domApplyMicros: 3000),
+            _webFrame(totalFrameMicros: 20000, domApplyMicros: 5000),
+          ],
+        }),
+      );
+
+      final jsonResult = await _runTool([
+        'benchmark',
+        'web-scoreboard',
+        '--input=${tempDir.path}',
+        '--json-output=$jsonOutputPath',
+        '--thresholds=$thresholdsPath',
+        '--write-thresholds=$candidateThresholdsPath',
+        '--threshold-headroom-percent=10',
+        '--threshold-min-headroom-ms=0.5',
+        '--threshold-min-headroom-percent=0.5',
+        '--max-dom-apply-p95-ms=6',
+        '--strict',
+        '--json',
+      ]);
+
+      expect(jsonResult.exitCode, 0, reason: jsonResult.stderr.toString());
+      final scoreboard = _jsonObject(jsonResult.stdout);
+      expect(scoreboard['kind'], 'fleuryWebFrameScoreboard');
+      expect(scoreboard['thresholdPolicyPath'], thresholdsPath);
+      expect(scoreboard['runCount'], 1);
+      final persistedScoreboard =
+          jsonDecode(File(jsonOutputPath).readAsStringSync())
+              as Map<String, Object?>;
+      expect(persistedScoreboard['kind'], 'fleuryWebFrameScoreboard');
+      expect(persistedScoreboard['runCount'], 1);
+      final candidateThresholds =
+          jsonDecode(File(candidateThresholdsPath).readAsStringSync())
+              as Map<String, Object?>;
+      expect(candidateThresholds['kind'], 'fleuryWebFrameThresholds');
+      final generatedFrom =
+          candidateThresholds['generatedFrom'] as Map<String, Object?>;
+      expect(generatedFrom['thresholdHeadroomPercent'], 10.0);
+      final scenarios = scoreboard['scenarios'] as List<Object?>;
+      final scenario = scenarios.single as Map<String, Object?>;
+      expect(scenario['id'], 'normal-80x24');
+      expect(scenario['frameCount'], 2);
+      expect(
+        scenario['gates'] as List<Object?>,
+        contains(
+          isA<Map<String, Object?>>()
+              .having((gate) => gate['id'], 'id', 'totalFrameP95MedianMs')
+              .having((gate) => gate['passed'], 'passed', isTrue),
+        ),
+      );
+
+      final markdownResult = await _runTool([
+        'benchmark',
+        'web-scoreboard',
+        '--input=${tempDir.path}',
+        '--output=$outputPath',
+        '--thresholds=$thresholdsPath',
+      ]);
+
+      expect(
+        markdownResult.exitCode,
+        0,
+        reason: markdownResult.stderr.toString(),
+      );
+      final markdown = File(outputPath).readAsStringSync();
+      expect(markdown, contains('Fleury Web Frame Scoreboard'));
+      expect(markdown, contains('normal-80x24'));
+      expect(markdown, contains('Gates'));
+    });
+
+    test('forwards comparable environment scoreboard gate', () async {
+      final result = await _runTool([
+        '--dry-run',
+        'benchmark',
+        'web-scoreboard',
+        '--input=${tempDir.path}',
+        '--require-comparable-environment',
+        '--strict',
+      ]);
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(result.stdout, contains('tool/web_frame_scoreboard.dart'));
+      expect(result.stdout, contains('--require-comparable-environment'));
+      expect(result.stdout, contains('--strict'));
+    });
+  });
+
+  group('benchmark web-threshold-review launcher', () {
+    late Directory tempDir;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync(
+        'fleury_benchmark_web_threshold_review_tool_test_',
+      );
+    });
+
+    tearDown(() {
+      tempDir.deleteSync(recursive: true);
+    });
+
+    test('promotes candidate thresholds with root-relative paths', () async {
+      final inputPath = '${tempDir.path}/thresholds.candidate.json';
+      final outputPath = '${tempDir.path}/thresholds.json';
+      final jsonOutputPath = '${tempDir.path}/threshold-review.json';
+      File(inputPath).writeAsStringSync(
+        jsonEncode({
+          'schemaVersion': 1,
+          'kind': 'fleuryWebFrameThresholds',
+          'generatedAt': '2026-06-08T12:00:00.000Z',
+          'reviewState': 'candidate',
+          'defaults': <String, Object?>{},
+          'scenarios': {
+            'normal-80x24': {
+              'maxTotalFrameP95Ms': 20,
+              'maxDomApplyP95Ms': 4,
+              'maxSemanticApplyP95Ms': 8,
+              'maxOverBudgetPercent': 0,
+              'maxSemanticUncoveredCells': 0,
+            },
+          },
+        }),
+      );
+
+      final result = await _runTool([
+        'benchmark',
+        'web-threshold-review',
+        '--input=$inputPath',
+        '--output=$outputPath',
+        '--json-output=$jsonOutputPath',
+        '--reviewed-by=tool reviewer',
+        '--reviewed-at=2026-06-08T12:00:00Z',
+        '--review-context=Chrome 127 macOS launcher test context',
+        '--review-note=Accepted for launcher test.',
+        '--json',
+      ]);
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      final summary = _jsonObject(result.stdout);
+      expect(summary['kind'], 'fleuryWebThresholdReview');
+      expect(summary['reviewState'], 'reviewed');
+      expect(summary['reviewedBy'], 'tool reviewer');
+      expect(summary['reviewedAt'], '2026-06-08T12:00:00.000Z');
+      expect(
+        summary['reviewContext'],
+        'Chrome 127 macOS launcher test context',
+      );
+      expect(summary['scenarioCount'], 1);
+      expect(
+        _jsonObject(File(jsonOutputPath).readAsStringSync())['reviewState'],
+        'reviewed',
+      );
+
+      final reviewed = _jsonObject(File(outputPath).readAsStringSync());
+      expect(reviewed['kind'], 'fleuryWebFrameThresholds');
+      expect(reviewed['reviewState'], 'reviewed');
+      expect(reviewed['reviewedBy'], 'tool reviewer');
+      expect(
+        reviewed['reviewContext'],
+        'Chrome 127 macOS launcher test context',
+      );
+      expect(reviewed['reviewNote'], 'Accepted for launcher test.');
+    });
+
+    test('writes threshold review plan without promotion provenance', () async {
+      final inputPath = '${tempDir.path}/thresholds.candidate.json';
+      final planPath = '${tempDir.path}/threshold-review-plan.md';
+      final outputPath = '${tempDir.path}/thresholds.json';
+      File(inputPath).writeAsStringSync(
+        jsonEncode({
+          'schemaVersion': 1,
+          'kind': 'fleuryWebFrameThresholds',
+          'generatedAt': '2026-06-08T12:00:00.000Z',
+          'reviewState': 'candidate',
+          'defaults': <String, Object?>{},
+          'scenarios': {
+            'normal-80x24': {
+              'maxTotalFrameP95Ms': 20,
+              'maxDomApplyP95Ms': 4,
+              'maxSemanticApplyP95Ms': 8,
+              'maxOverBudgetPercent': 0,
+              'maxSemanticUncoveredCells': 0,
+            },
+          },
+        }),
+      );
+
+      final result = await _runTool([
+        'benchmark',
+        'web-threshold-review',
+        '--input=$inputPath',
+        '--write-plan=$planPath',
+        '--review-context-hint=Browser Chrome/127, OS macos, retained DOM product baseline',
+      ]);
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(File(outputPath).existsSync(), isFalse);
+      final plan = File(planPath).readAsStringSync();
+      expect(plan, contains('Fleury Web Threshold Review Plan'));
+      expect(plan, contains('normal-80x24'));
+      expect(plan, contains('--reviewed-by=<reviewer>'));
+      expect(plan, contains('intentionally not runnable as written'));
+      expect(
+        plan,
+        contains(
+          'Review context hint: `Browser Chrome/127, OS macos, retained DOM product baseline`',
+        ),
+      );
+    });
+
+    test('writes threshold review plan with JSON summary path only', () async {
+      final inputPath = '${tempDir.path}/thresholds.candidate.json';
+      final planPath = '${tempDir.path}/threshold-review-plan.md';
+      final outputPath = '${tempDir.path}/thresholds.json';
+      final jsonOutputPath = '${tempDir.path}/threshold-review.json';
+      File(inputPath).writeAsStringSync(
+        jsonEncode({
+          'schemaVersion': 1,
+          'kind': 'fleuryWebFrameThresholds',
+          'generatedAt': '2026-06-08T12:00:00.000Z',
+          'reviewState': 'candidate',
+          'defaults': <String, Object?>{},
+          'scenarios': {
+            'normal-80x24': {
+              'maxTotalFrameP95Ms': 20,
+              'maxDomApplyP95Ms': 4,
+              'maxSemanticApplyP95Ms': 8,
+              'maxOverBudgetPercent': 0,
+              'maxSemanticUncoveredCells': 0,
+            },
+          },
+        }),
+      );
+
+      final result = await _runTool([
+        'benchmark',
+        'web-threshold-review',
+        '--input=$inputPath',
+        '--write-plan=$planPath',
+        '--json-output=$jsonOutputPath',
+        '--review-context-hint=Browser Chrome/127, OS macos, retained DOM product baseline',
+      ]);
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(File(outputPath).existsSync(), isFalse);
+      expect(File(jsonOutputPath).existsSync(), isFalse);
+      final plan = File(planPath).readAsStringSync();
+      expect(plan, contains('--json-output=$jsonOutputPath'));
+      expect(plan, contains('--reviewed-by=<reviewer>'));
+      expect(plan, contains('intentionally not runnable as written'));
+    });
+
+    test('forwards threshold review options in dry-run mode', () async {
+      final result = await _runTool([
+        '--dry-run',
+        'benchmark',
+        'web-threshold-review',
+        '--input=${tempDir.path}/thresholds.candidate.json',
+        '--write-plan=${tempDir.path}/threshold-review-plan.md',
+        '--output=${tempDir.path}/thresholds.json',
+        '--json-output=${tempDir.path}/threshold-review.json',
+        '--reviewed-by=tool reviewer',
+        '--reviewed-at=2026-06-08T12:00:00Z',
+        '--review-context=Chrome 127 macOS dry-run context',
+        '--review-context-hint=Browser Chrome/127, OS macos, retained DOM product baseline',
+        '--expect-input-fingerprint=fnv1a64:1111111111111111',
+        '--allow-over-budget-thresholds',
+        '--review-note=Accepted.',
+        '--json',
+      ]);
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(result.stdout, contains('tool/web_threshold_review.dart'));
+      expect(
+        result.stdout,
+        contains('--input=${tempDir.path}/thresholds.candidate.json'),
+      );
+      expect(
+        result.stdout,
+        contains('--output=${tempDir.path}/thresholds.json'),
+      );
+      expect(
+        result.stdout,
+        contains('--write-plan=${tempDir.path}/threshold-review-plan.md'),
+      );
+      expect(
+        result.stdout,
+        contains('--json-output=${tempDir.path}/threshold-review.json'),
+      );
+      expect(result.stdout, contains('--reviewed-by=tool reviewer'));
+      expect(result.stdout, contains('--reviewed-at=2026-06-08T12:00:00Z'));
+      expect(
+        result.stdout,
+        contains('--review-context=Chrome 127 macOS dry-run context'),
+      );
+      expect(
+        result.stdout,
+        contains(
+          '--review-context-hint=Browser Chrome/127, OS macos, retained DOM product baseline',
+        ),
+      );
+      expect(result.stdout, contains('--review-note=Accepted.'));
+      expect(
+        result.stdout,
+        contains('--expect-input-fingerprint=fnv1a64:1111111111111111'),
+      );
+      expect(result.stdout, contains('--allow-over-budget-thresholds'));
+      expect(result.stdout, contains('--json'));
+    });
+
+    test('rejects empty threshold review JSON output path', () async {
+      final result = await _runTool([
+        'benchmark',
+        'web-threshold-review',
+        '--input=${tempDir.path}/thresholds.candidate.json',
+        '--output=${tempDir.path}/thresholds.json',
+        '--json-output=',
+        '--reviewed-by=tool reviewer',
+        '--review-context=Chrome 127 macOS invalid JSON output path',
+      ]);
+
+      expect(result.exitCode, 2);
+      expect(
+        result.stderr,
+        contains(
+          'benchmark web-threshold-review --json-output requires a non-empty path.',
+        ),
+      );
+    });
+
+    test('rejects empty threshold review plan path', () async {
+      final result = await _runTool([
+        'benchmark',
+        'web-threshold-review',
+        '--input=${tempDir.path}/thresholds.candidate.json',
+        '--write-plan=',
+      ]);
+
+      expect(result.exitCode, 2);
+      expect(
+        result.stderr,
+        contains(
+          'benchmark web-threshold-review --write-plan requires a non-empty path.',
+        ),
+      );
+    });
+  });
+
+  group('benchmark web-semantic-audit launcher', () {
+    late Directory tempDir;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync(
+        'fleury_benchmark_web_semantic_audit_tool_test_',
+      );
+    });
+
+    tearDown(() {
+      tempDir.deleteSync(recursive: true);
+    });
+
+    test('summarizes retained DOM semantic fallback coverage', () async {
+      final outputPath = '${tempDir.path}/semantic-coverage.md';
+      File('${tempDir.path}/normal-80x24-a.json').writeAsStringSync(
+        jsonEncode({
+          'schemaVersion': 1,
+          'kind': 'fleuryWebFrameCapture',
+          'capturedAt': '2026-06-08T01:00:00.000000Z',
+          'scenario': {'id': 'normal-80x24'},
+          'frames': [
+            _webFrame(totalFrameMicros: 10000, domApplyMicros: 3000),
+            _webFrame(
+              totalFrameMicros: 20000,
+              domApplyMicros: 5000,
+              semanticFallbackNodeCount: 1,
+              semanticUncoveredCellCount: 4,
+            ),
+          ],
+        }),
+      );
+
+      final jsonResult = await _runTool([
+        'benchmark',
+        'web-semantic-audit',
+        '--input=${tempDir.path}',
+        '--max-fallback-cells=4',
+        '--json',
+      ]);
+
+      expect(jsonResult.exitCode, 0, reason: jsonResult.stderr.toString());
+      final audit = _jsonObject(jsonResult.stdout);
+      expect(audit['kind'], 'fleuryWebSemanticCoverageAudit');
+      expect(audit['captureCount'], 1);
+      expect(audit['frameCount'], 2);
+      expect(audit['fallbackCellCount'], 4);
+      final scenarios = audit['scenarios'] as List<Object?>;
+      final scenario = scenarios.single as Map<String, Object?>;
+      expect(scenario['id'], 'normal-80x24');
+      expect(scenario['fallbackNodeCount'], 1);
+
+      final markdownResult = await _runTool([
+        'benchmark',
+        'web-semantic-audit',
+        '--input=${tempDir.path}',
+        '--output=$outputPath',
+        '--max-fallback-cells=4',
+      ]);
+
+      expect(
+        markdownResult.exitCode,
+        0,
+        reason: markdownResult.stderr.toString(),
+      );
+      final markdown = File(outputPath).readAsStringSync();
+      expect(markdown, contains('Fleury Web Semantic Coverage Audit'));
+      expect(markdown, contains('normal-80x24'));
+      expect(markdown, contains('Fallback Cells'));
+    });
+
+    test('forwards semantic fallback audit gate options', () async {
+      final result = await _runTool([
+        '--dry-run',
+        'benchmark',
+        'web-semantic-audit',
+        '--input=${tempDir.path}',
+        '--max-fallback-cells=0',
+        '--max-fallback-frame-percent=0',
+        '--max-fallback-viewport-percent=0.5',
+        '--json-output=${tempDir.path}/semantic-coverage.json',
+        '--strict',
+        '--json',
+      ]);
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(result.stdout, contains('tool/web_semantic_coverage_audit.dart'));
+      expect(result.stdout, contains('--max-fallback-cells=0'));
+      expect(result.stdout, contains('--max-fallback-frame-percent=0.0'));
+      expect(result.stdout, contains('--max-fallback-viewport-percent=0.5'));
+      expect(
+        result.stdout,
+        contains('--json-output=${tempDir.path}/semantic-coverage.json'),
+      );
+      expect(result.stdout, contains('--strict'));
+      expect(result.stdout, contains('--json'));
+    });
+  });
+
+  group('benchmark web-manual-validation launcher', () {
+    late Directory tempDir;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync(
+        'fleury_benchmark_web_manual_validation_tool_test_',
+      );
+    });
+
+    tearDown(() {
+      tempDir.deleteSync(recursive: true);
+    });
+
+    test(
+      'generates retained DOM manual validation plan and template',
+      () async {
+        final planPath = '${tempDir.path}/plan.md';
+        final templatePath = '${tempDir.path}/chrome-ime-macos.json';
+        final templatesDir = '${tempDir.path}/templates';
+
+        final result = await _runTool([
+          'benchmark',
+          'web-manual-validation',
+          '--target=chrome-ime-macos',
+          '--write-plan=$planPath',
+          '--write-template=$templatePath',
+          '--write-templates=$templatesDir',
+          '--template-target=chrome-ime-macos',
+        ]);
+
+        expect(result.exitCode, 0, reason: result.stderr.toString());
+        final plan = File(planPath).readAsStringSync();
+        expect(plan, contains('Fleury Web Manual Validation Plan'));
+        expect(plan, contains('manual_validation.html'));
+        final template = _jsonObject(File(templatePath).readAsStringSync());
+        expect(template['kind'], 'fleuryWebManualValidationEntry');
+        expect(template['targetId'], 'chrome-ime-macos');
+        final batchTemplate = _jsonObject(
+          File(
+            '$templatesDir/chrome-ime-macos.template.json',
+          ).readAsStringSync(),
+        );
+        expect(batchTemplate['kind'], 'fleuryWebManualValidationEntry');
+        expect(batchTemplate['targetId'], 'chrome-ime-macos');
+      },
+    );
+
+    test('forwards manual validation audit options', () async {
+      final result = await _runTool([
+        '--dry-run',
+        'benchmark',
+        'web-manual-validation',
+        '--input=${tempDir.path}',
+        '--output=${tempDir.path}/review.md',
+        '--write-plan=${tempDir.path}/plan.md',
+        '--write-template=${tempDir.path}/template.json',
+        '--write-starter=${tempDir.path}/starter.json',
+        '--starter-template=${tempDir.path}/template.json',
+        '--update-provenance=${tempDir.path}/starter.json',
+        '--update-page-signal=${tempDir.path}/starter.json',
+        '--update-check=${tempDir.path}/starter.json',
+        '--reviewed-by=manual-reviewer',
+        '--captured-at=now',
+        '--browser-version=Chrome/148.0.7778.217',
+        '--signal-id=retained-dom-ready',
+        '--signal-status=pass',
+        '--observed-value=ready',
+        '--signal-notes=Observed retained DOM ready signal.',
+        '--check-id=composition-end-commits-once',
+        '--check-status=pass',
+        '--check-notes=Observed composition commit once.',
+        '--entry-status=needsReview',
+        '--write-templates=${tempDir.path}/templates',
+        '--template-target=chrome-voiceover-macos',
+        '--json-output=${tempDir.path}/manual-validation-audit.json',
+        '--target-preset=primary',
+        '--target=chrome-ime-macos',
+        '--strict',
+        '--json',
+      ]);
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(result.stdout, contains('tool/web_manual_validation.dart'));
+      expect(result.stdout, contains('--input=${tempDir.path}'));
+      expect(result.stdout, contains('--output=${tempDir.path}/review.md'));
+      expect(result.stdout, contains('--write-plan=${tempDir.path}/plan.md'));
+      expect(
+        result.stdout,
+        contains('--write-template=${tempDir.path}/template.json'),
+      );
+      expect(
+        result.stdout,
+        contains('--write-starter=${tempDir.path}/starter.json'),
+      );
+      expect(
+        result.stdout,
+        contains('--starter-template=${tempDir.path}/template.json'),
+      );
+      expect(
+        result.stdout,
+        contains('--update-provenance=${tempDir.path}/starter.json'),
+      );
+      expect(
+        result.stdout,
+        contains('--update-page-signal=${tempDir.path}/starter.json'),
+      );
+      expect(
+        result.stdout,
+        contains('--update-check=${tempDir.path}/starter.json'),
+      );
+      expect(result.stdout, contains('--reviewed-by=manual-reviewer'));
+      expect(result.stdout, contains('--captured-at=now'));
+      expect(
+        result.stdout,
+        contains('--browser-version=Chrome/148.0.7778.217'),
+      );
+      expect(result.stdout, contains('--signal-id=retained-dom-ready'));
+      expect(result.stdout, contains('--signal-status=pass'));
+      expect(result.stdout, contains('--observed-value=ready'));
+      expect(
+        result.stdout,
+        contains('--signal-notes=Observed retained DOM ready signal.'),
+      );
+      expect(
+        result.stdout,
+        contains('--check-id=composition-end-commits-once'),
+      );
+      expect(result.stdout, contains('--check-status=pass'));
+      expect(
+        result.stdout,
+        contains('--check-notes=Observed composition commit once.'),
+      );
+      expect(result.stdout, contains('--entry-status=needsReview'));
+      expect(
+        result.stdout,
+        contains('--write-templates=${tempDir.path}/templates'),
+      );
+      expect(
+        result.stdout,
+        contains('--template-target=chrome-voiceover-macos'),
+      );
+      expect(
+        result.stdout,
+        contains('--json-output=${tempDir.path}/manual-validation-audit.json'),
+      );
+      expect(result.stdout, contains('--target-preset=primary'));
+      expect(result.stdout, contains('--target=chrome-ime-macos'));
+      expect(result.stdout, contains('--strict'));
+      expect(result.stdout, contains('--json'));
+    });
+  });
+
+  group('benchmark web-readiness launcher', () {
+    late Directory tempDir;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync(
+        'fleury_benchmark_web_readiness_tool_test_',
+      );
+    });
+
+    tearDown(() {
+      tempDir.deleteSync(recursive: true);
+    });
+
+    test('appears in benchmark catalog', () async {
+      final result = await _runTool(['benchmark', 'list', '--json']);
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      final catalog = _jsonObject(result.stdout);
+      expect(catalog, contains('webReadiness'));
+      final readiness = catalog['webReadiness'] as Map<String, Object?>;
+      expect(readiness['purpose'], contains('Phase 6 web readiness gate'));
+      expect(catalog, contains('webReadinessBundle'));
+      final bundle = catalog['webReadinessBundle'] as Map<String, Object?>;
+      expect(bundle['purpose'], contains('JSON artifact manifest'));
+      final bundleArtifacts = bundle['artifacts'] as List<Object?>;
+      expect(bundleArtifacts, contains('web-readiness-bundle.json'));
+      expect(
+        bundleArtifacts,
+        contains('web-default-preflight-make-dom-default.json'),
+      );
+      expect(
+        bundleArtifacts,
+        contains('web-default-preflight-retire-temporary-paths.json'),
+      );
+      expect(catalog, contains('webAutomatedValidation'));
+      final automatedValidation =
+          catalog['webAutomatedValidation'] as Map<String, Object?>;
+      expect(
+        automatedValidation['purpose'],
+        contains(
+          'durable evidence consumed by bundle-bound default preflights',
+        ),
+      );
+      final automatedValidationCommand =
+          automatedValidation['command'] as List<Object?>;
+      expect(
+        automatedValidationCommand,
+        contains(
+          '--json-output=profiling/web/baselines/web-readiness-bundle/web-automated-validation.json',
+        ),
+      );
+      expect(catalog, contains('webDefaultPreflight'));
+      final preflight = catalog['webDefaultPreflight'] as Map<String, Object?>;
+      expect(preflight['purpose'], contains('temporary-path retirement'));
+      final preflightCommand = preflight['command'] as List<Object?>;
+      expect(
+        preflightCommand,
+        contains(
+          '--bundle=profiling/web/baselines/web-readiness-bundle/web-readiness-bundle.json',
+        ),
+      );
+      expect(
+        preflightCommand,
+        contains(
+          '--automated-validation=profiling/web/baselines/web-readiness-bundle/web-automated-validation.json',
+        ),
+      );
+      expect(catalog, contains('webThresholdReview'));
+      final thresholdReview =
+          catalog['webThresholdReview'] as Map<String, Object?>;
+      expect(thresholdReview['purpose'], contains('promote candidate'));
+      final thresholdReviewCommand =
+          thresholdReview['command'] as List<Object?>;
+      expect(thresholdReviewCommand, contains('--reviewed-by=REVIEWER'));
+      expect(
+        thresholdReviewCommand,
+        contains('--expect-input-fingerprint=FNV1A64_FROM_REVIEW_PLAN'),
+      );
+      expect(
+        thresholdReviewCommand,
+        contains('--allow-over-budget-thresholds'),
+      );
+      expect(
+        thresholdReviewCommand,
+        contains('--review-note=Explain any accepted over-budget thresholds.'),
+      );
+      expect(
+        thresholdReviewCommand,
+        contains(
+          '--review-context=Chrome VERSION on PLATFORM, retained DOM product baseline',
+        ),
+      );
+      expect(
+        thresholdReviewCommand,
+        isNot(contains('--reviewed-by=<reviewer>')),
+      );
+      final thresholdReviewPlanCommand =
+          thresholdReview['planCommand'] as List<Object?>;
+      expect(
+        thresholdReviewPlanCommand,
+        isNot(contains(startsWith('--review-context-hint='))),
+      );
+      final thresholdReviewArtifacts =
+          thresholdReview['artifacts'] as List<Object?>;
+      expect(thresholdReviewArtifacts, contains('threshold-review.json'));
+    });
+
+    test('prints release-grade benchmark help examples', () async {
+      final result = await _runTool(['benchmark', '--help']);
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(result.stdout, contains('--reviewed-by=REVIEWER'));
+      expect(result.stdout, contains('--allow-over-budget-thresholds'));
+      expect(result.stdout, contains('Chrome VERSION on PLATFORM'));
+      expect(result.stdout, isNot(contains('--reviewed-by=<reviewer>')));
+      expect(
+        result.stdout,
+        contains(
+          '--thresholds=profiling/web/baselines/2026-06-08-dom-retained/thresholds.json',
+        ),
+      );
+      expect(
+        result.stdout,
+        contains(
+          '--threshold-review=profiling/web/baselines/2026-06-08-dom-retained/threshold-review.json',
+        ),
+      );
+      expect(
+        result.stdout,
+        contains(
+          '--bundle=profiling/web/baselines/2026-06-08-dom-retained/readiness/web-readiness-bundle.json',
+        ),
+      );
+      expect(
+        result.stdout,
+        contains(
+          '--json-output=profiling/web/baselines/2026-06-08-dom-retained/readiness/web-automated-validation.json',
+        ),
+      );
+      expect(
+        result.stdout,
+        contains(
+          '--automated-validation=profiling/web/baselines/2026-06-08-dom-retained/readiness/web-automated-validation.json',
+        ),
+      );
+    });
+
+    test('forwards readiness audit artifact options', () async {
+      final result = await _runTool([
+        '--dry-run',
+        'benchmark',
+        'web-readiness',
+        '--scoreboard=${tempDir.path}/scoreboard.json',
+        '--semantic-audit=${tempDir.path}/semantic.json',
+        '--manual-audit=${tempDir.path}/manual.json',
+        '--threshold-review=${tempDir.path}/threshold-review.json',
+        '--output=${tempDir.path}/readiness.md',
+        '--json-output=${tempDir.path}/readiness.json',
+        '--min-scoreboard-runs=5',
+        '--no-require-comparable-environment',
+        '--no-require-scoreboard-gates',
+        '--no-require-total-frame-gate',
+        '--no-require-semantic-gates',
+        '--no-require-reviewed-threshold-policy',
+        '--no-require-threshold-review-summary',
+        '--no-require-scenario-thresholds',
+        '--strict',
+        '--json',
+      ]);
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(result.stdout, contains('tool/web_readiness.dart'));
+      expect(
+        result.stdout,
+        contains('--scoreboard=${tempDir.path}/scoreboard.json'),
+      );
+      expect(
+        result.stdout,
+        contains('--semantic-audit=${tempDir.path}/semantic.json'),
+      );
+      expect(
+        result.stdout,
+        contains('--manual-audit=${tempDir.path}/manual.json'),
+      );
+      expect(
+        result.stdout,
+        contains('--threshold-review=${tempDir.path}/threshold-review.json'),
+      );
+      expect(result.stdout, contains('--output=${tempDir.path}/readiness.md'));
+      expect(
+        result.stdout,
+        contains('--json-output=${tempDir.path}/readiness.json'),
+      );
+      expect(result.stdout, contains('--min-scoreboard-runs=5'));
+      expect(result.stdout, contains('--no-require-comparable-environment'));
+      expect(result.stdout, contains('--no-require-scoreboard-gates'));
+      expect(result.stdout, contains('--no-require-total-frame-gate'));
+      expect(result.stdout, contains('--no-require-semantic-gates'));
+      expect(result.stdout, contains('--no-require-reviewed-threshold-policy'));
+      expect(result.stdout, contains('--no-require-threshold-review-summary'));
+      expect(result.stdout, contains('--no-require-scenario-thresholds'));
+      expect(result.stdout, contains('--strict'));
+      expect(result.stdout, contains('--json'));
+    });
+
+    test('forwards readiness bundle options', () async {
+      final result = await _runTool([
+        '--dry-run',
+        'benchmark',
+        'web-readiness-bundle',
+        '--captures=${tempDir.path}/captures',
+        '--manual=${tempDir.path}/manual',
+        '--output-dir=${tempDir.path}/bundle',
+        '--min-runs=5',
+        '--max-total-frame-p95-ms=16.67',
+        '--max-dom-apply-p95-ms=8',
+        '--max-semantic-apply-p95-ms=4',
+        '--max-over-budget-percent=1',
+        '--max-semantic-uncovered-cells=0',
+        '--thresholds=${tempDir.path}/thresholds.json',
+        '--threshold-review=${tempDir.path}/threshold-review.json',
+        '--no-require-comparable-environment',
+        '--max-fallback-cells=0',
+        '--max-fallback-frame-percent=0',
+        '--max-fallback-viewport-percent=0',
+        '--target-preset=v1',
+        '--target=chrome-ime-macos',
+        '--no-require-scoreboard-gates',
+        '--no-require-total-frame-gate',
+        '--no-require-semantic-gates',
+        '--no-require-reviewed-threshold-policy',
+        '--no-require-threshold-review-summary',
+        '--no-require-scenario-thresholds',
+        '--write-default-preflights',
+        '--completion-audit=${tempDir.path}/completion-audit.json',
+        '--strict',
+        '--json',
+      ]);
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(result.stdout, contains('tool/web_readiness_bundle.dart'));
+      expect(result.stdout, contains('--captures=${tempDir.path}/captures'));
+      expect(result.stdout, contains('--manual=${tempDir.path}/manual'));
+      expect(result.stdout, contains('--output-dir=${tempDir.path}/bundle'));
+      expect(result.stdout, contains('--min-runs=5'));
+      expect(result.stdout, contains('--max-total-frame-p95-ms=16.67'));
+      expect(result.stdout, contains('--max-dom-apply-p95-ms=8.0'));
+      expect(result.stdout, contains('--max-semantic-apply-p95-ms=4.0'));
+      expect(result.stdout, contains('--max-over-budget-percent=1.0'));
+      expect(result.stdout, contains('--max-semantic-uncovered-cells=0.0'));
+      expect(
+        result.stdout,
+        contains('--thresholds=${tempDir.path}/thresholds.json'),
+      );
+      expect(
+        result.stdout,
+        contains('--threshold-review=${tempDir.path}/threshold-review.json'),
+      );
+      expect(result.stdout, contains('--no-require-comparable-environment'));
+      expect(result.stdout, contains('--max-fallback-cells=0'));
+      expect(result.stdout, contains('--max-fallback-frame-percent=0.0'));
+      expect(result.stdout, contains('--max-fallback-viewport-percent=0.0'));
+      expect(result.stdout, contains('--target-preset=v1'));
+      expect(result.stdout, contains('--target=chrome-ime-macos'));
+      expect(result.stdout, contains('--no-require-scoreboard-gates'));
+      expect(result.stdout, contains('--no-require-total-frame-gate'));
+      expect(result.stdout, contains('--no-require-semantic-gates'));
+      expect(result.stdout, contains('--no-require-reviewed-threshold-policy'));
+      expect(result.stdout, contains('--no-require-threshold-review-summary'));
+      expect(result.stdout, contains('--no-require-scenario-thresholds'));
+      expect(result.stdout, contains('--write-default-preflights'));
+      expect(
+        result.stdout,
+        contains('--completion-audit=${tempDir.path}/completion-audit.json'),
+      );
+      expect(result.stdout, contains('--strict'));
+      expect(result.stdout, contains('--json'));
+    });
+
+    test('forwards readiness bundle verification options', () async {
+      final result = await _runTool([
+        '--dry-run',
+        'benchmark',
+        'web-readiness-bundle',
+        '--verify=${tempDir.path}/web-readiness-bundle.json',
+        '--strict',
+        '--json',
+      ]);
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(result.stdout, contains('tool/web_readiness_bundle.dart'));
+      expect(
+        result.stdout,
+        contains('--verify=${tempDir.path}/web-readiness-bundle.json'),
+      );
+      expect(result.stdout, isNot(contains('--captures=')));
+      expect(result.stdout, contains('--strict'));
+      expect(result.stdout, contains('--json'));
+    });
+
+    test('forwards automated validation options', () async {
+      final result = await _runTool([
+        '--dry-run',
+        'benchmark',
+        'web-automated-validation',
+        '--json-output=${tempDir.path}/web-automated-validation.json',
+        '--strict',
+        '--json',
+      ]);
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(result.stdout, contains('tool/web_automated_validation.dart'));
+      expect(
+        result.stdout,
+        contains('--json-output=${tempDir.path}/web-automated-validation.json'),
+      );
+      expect(result.stdout, contains('--strict'));
+      expect(result.stdout, contains('--json'));
+    });
+
+    test('forwards default preflight options', () async {
+      final result = await _runTool([
+        '--dry-run',
+        'benchmark',
+        'web-default-preflight',
+        '--readiness=${tempDir.path}/web-readiness.json',
+        '--bundle=${tempDir.path}/web-readiness-bundle.json',
+        '--automated-validation=${tempDir.path}/web-automated-validation.json',
+        '--target=retire-temporary-paths',
+        '--output=${tempDir.path}/preflight.md',
+        '--json-output=${tempDir.path}/preflight.json',
+        '--strict',
+        '--json',
+      ]);
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(result.stdout, contains('tool/web_default_preflight.dart'));
+      expect(
+        result.stdout,
+        contains('--readiness=${tempDir.path}/web-readiness.json'),
+      );
+      expect(
+        result.stdout,
+        contains('--bundle=${tempDir.path}/web-readiness-bundle.json'),
+      );
+      expect(
+        result.stdout,
+        contains(
+          '--automated-validation=${tempDir.path}/web-automated-validation.json',
+        ),
+      );
+      expect(result.stdout, contains('--target=retire-temporary-paths'));
+      expect(result.stdout, contains('--output=${tempDir.path}/preflight.md'));
+      expect(
+        result.stdout,
+        contains('--json-output=${tempDir.path}/preflight.json'),
+      );
+      expect(result.stdout, contains('--strict'));
+      expect(result.stdout, contains('--json'));
+    });
+
+    test('forwards default preflight diagnostics mode', () async {
+      final result = await _runTool([
+        '--dry-run',
+        'benchmark',
+        'web-default-preflight',
+        '--readiness=${tempDir.path}/web-readiness.json',
+        '--allow-unbundled',
+        '--json',
+      ]);
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(result.stdout, contains('tool/web_default_preflight.dart'));
+      expect(
+        result.stdout,
+        contains('--readiness=${tempDir.path}/web-readiness.json'),
+      );
+      expect(result.stdout, contains('--allow-unbundled'));
+      expect(result.stdout, isNot(contains('--bundle=')));
+      expect(result.stdout, isNot(contains('--automated-validation=')));
+      expect(result.stdout, contains('--json'));
+    });
+
+    test('infers sibling default preflight bundle', () async {
+      final result = await _runTool([
+        '--dry-run',
+        'benchmark',
+        'web-default-preflight',
+        '--readiness=${tempDir.path}/web-readiness.json',
+        '--json',
+      ]);
+
+      expect(result.exitCode, 0, reason: result.stderr.toString());
+      expect(result.stdout, contains('tool/web_default_preflight.dart'));
+      expect(
+        result.stdout,
+        contains('--readiness=${tempDir.path}/web-readiness.json'),
+      );
+      expect(
+        result.stdout,
+        contains('--bundle=${tempDir.path}/web-readiness-bundle.json'),
+      );
+      expect(
+        result.stdout,
+        contains(
+          '--automated-validation=${tempDir.path}/web-automated-validation.json',
+        ),
+      );
+      expect(result.stdout, contains('--json'));
+    });
+  });
+
   group('terminal-matrix-audit launcher', () {
     late Directory tempDir;
 
@@ -916,6 +2270,45 @@ void _writeEntry(Directory directory, String name, Map<String, Object?> entry) {
   File(
     '${directory.path}/$name',
   ).writeAsStringSync('${encoder.convert(entry)}\n');
+}
+
+Map<String, Object?> _webFrame({
+  required int totalFrameMicros,
+  required int domApplyMicros,
+  int dirtyRowDiffMicros = 0,
+  int semanticFallbackNodeCount = 0,
+  int semanticUncoveredCellCount = 0,
+}) {
+  return <String, Object?>{
+    'reason': 'benchmark',
+    'coalescedReasons': ['benchmark'],
+    'viewport': {'cols': 120, 'rows': 32},
+    'damageSource': 'paintDamage',
+    'fullRepaint': false,
+    'metricsChanged': false,
+    'dirtyRowCount': 4,
+    'dirtyCellEstimate': 480,
+    'spanCount': 20,
+    'domNodesCreated': 24,
+    'rowsReplaced': 4,
+    'styleCacheHits': 10,
+    'styleCacheMisses': 2,
+    'widthCacheHits': 0,
+    'widthCacheMisses': 0,
+    'metricsReadCount': 1,
+    'semanticNodeCount': 8,
+    'semanticAddedNodeCount': 1,
+    'semanticRemovedNodeCount': 0,
+    'semanticUpdatedNodeCount': 2,
+    'semanticFallbackNodeCount': semanticFallbackNodeCount,
+    'semanticUncoveredCellCount': semanticUncoveredCellCount,
+    'runtimeRenderMicros': 3000,
+    'dirtyRowDiffMicros': dirtyRowDiffMicros,
+    'spanBuildMicros': 1000,
+    'domApplyMicros': domApplyMicros,
+    'semanticApplyMicros': 1000,
+    'totalFrameMicros': totalFrameMicros,
+  };
 }
 
 Map<String, Object?> _matrixEntry({

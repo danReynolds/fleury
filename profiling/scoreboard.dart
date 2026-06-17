@@ -10,6 +10,13 @@ import 'dart:io';
 import 'package:fleury/src/rendering/ansi_byte_budget.dart'
     show AnsiByteBreakdown;
 
+/// Peers whose runtime makes RSS/CPU a language statement, not a framework
+/// one (no VM, no GC). The runtime-confounded axes band against the best
+/// NON-native participant so the position label measures framework-
+/// controllable work; the absolute native best is still shown in the cell.
+const _nativeRuntimePeers = <String>{'ratatui'};
+const _runtimeConfoundedAxes = <String>{'rssMiB', 'cpuLoadPercent'};
+
 const _axes = <_Axis>[
   _Axis('bytes', higherIsBetter: false),
   _Axis('bytesPerFrame', higherIsBetter: false),
@@ -199,26 +206,58 @@ Map<String, Object?> _axisScore(
     };
   }
 
-  var bestLabel = values.keys.first;
-  var bestValue = values[bestLabel]!;
-  for (final entry in values.entries.skip(1)) {
-    final better =
-        axis.higherIsBetter ? entry.value > bestValue : entry.value < bestValue;
-    if (better) {
-      bestLabel = entry.key;
-      bestValue = entry.value;
+  (String, double) bestOf(Map<String, double> candidates) {
+    var label = candidates.keys.first;
+    var value = candidates[label]!;
+    for (final entry in candidates.entries.skip(1)) {
+      final better =
+          axis.higherIsBetter ? entry.value > value : entry.value < value;
+      if (better) {
+        label = entry.key;
+        value = entry.value;
+      }
+    }
+    return (label, value);
+  }
+
+  final (absoluteBestLabel, absoluteBestValue) = bestOf(values);
+
+  // Runtime-confounded axes band within runtime class (native peers
+  // excluded from the baseline, still reported alongside).
+  var bandLabel = absoluteBestLabel;
+  var bandValue = absoluteBestValue;
+  String? nativeBestLabel;
+  double? nativeBestValue;
+  if (_runtimeConfoundedAxes.contains(axis.id)) {
+    final classValues = <String, double>{
+      for (final entry in values.entries)
+        if (!_nativeRuntimePeers.contains(entry.key)) entry.key: entry.value,
+    };
+    if (classValues.length > 1 && classValues.length < values.length) {
+      final (classLabel, classValue) = bestOf(classValues);
+      bandLabel = classLabel;
+      bandValue = classValue;
+      if (!_nativeRuntimePeers.contains(absoluteBestLabel)) {
+        nativeBestLabel = null;
+      } else {
+        nativeBestLabel = absoluteBestLabel;
+        nativeBestValue = absoluteBestValue;
+      }
     }
   }
+
   final band = _band(
     fleuryValue,
-    bestValue,
+    bandValue,
     higherIsBetter: axis.higherIsBetter,
   );
   return <String, Object?>{
     'status': band,
     'fleury': fleuryValue,
-    'bestLabel': bestLabel,
-    'best': bestValue,
+    'bestLabel': bandLabel,
+    'best': bandValue,
+    if (nativeBestLabel != null) 'nativeBestLabel': nativeBestLabel,
+    if (nativeBestValue != null) 'nativeBest': nativeBestValue,
   };
 }
 
@@ -257,10 +296,17 @@ String _position(
       .map((axis) => status(axis.id))
       .where((value) => value != 'missing' && value != 'needs-peer')
       .toList();
-  if (allMeasured.isNotEmpty && !allMeasured.contains('WAY OFF')) {
+  if (allMeasured.isEmpty) return 'needs data';
+  if (!allMeasured.contains('WAY OFF')) {
     return 'parity ok';
   }
-  return 'needs data';
+  // Measured, with a WAY OFF on a non-severe axis: that is a named gap,
+  // not missing data.
+  final wayOffAxes = _axes
+      .where((axis) => status(axis.id) == 'WAY OFF')
+      .map((axis) => axis.id)
+      .join(', ');
+  return 'catch up: $wayOffAxes';
 }
 
 String _scoreboardMarkdown(
@@ -280,7 +326,7 @@ String _scoreboardMarkdown(
       'Each row links back to the benchmark matrix for scenario intent and peer selection rationale. '
       'Bands compare Fleury against the best observed capture for that axis: '
       '`leading <=1.15x`, `competitive <=1.5x`, `ballpark <=3x`, else `WAY OFF`. '
-      'RSS/CPU remain runtime-confounded.',
+      'RSS/CPU are runtime-confounded: their bands compare against the best non-native participant (the absolute native best is still shown in the cell), so position labels measure framework-controllable work rather than the Dart-vs-systems-language floor.',
     )
     ..writeln()
     ..writeln(
@@ -319,7 +365,9 @@ String _scoreboardMarkdown(
     ..writeln('## Byte Splits')
     ..writeln()
     ..writeln(
-      'Median-total-run split per label: `content/sgr/cursor/sync/other`. '
+      'Median-total-run split per label: '
+      '`content/sgr/cursor/sync/session/other`. Session bytes (terminal '
+      'enter/restore lifecycle) are excluded from the overhead axis. '
       'This is diagnostic only; the axis bands above remain the decision surface.',
     )
     ..writeln()
@@ -426,7 +474,12 @@ String _axisCell(Object? raw, String Function(double) format) {
   final comparison = bestLabel == null || best == null || bestLabel == 'fleury'
       ? ''
       : '<br>best $bestLabel ${format(best)}';
-  return '$status<br>${format(fleury)}$comparison';
+  final nativeBestLabel = score['nativeBestLabel'] as String?;
+  final nativeBest = (score['nativeBest'] as num?)?.toDouble();
+  final nativeNote = nativeBestLabel == null || nativeBest == null
+      ? ''
+      : '<br>native $nativeBestLabel ${format(nativeBest)}';
+  return '$status<br>${format(fleury)}$comparison$nativeNote';
 }
 
 Map<String, Object?>? _splitMap(Object? raw) {
@@ -441,6 +494,7 @@ String _splitCell(Map<String, Object?>? split) {
     _splitPart(split, 'sgr'),
     _splitPart(split, 'cursor'),
     _splitPart(split, 'sync'),
+    _splitPart(split, 'session'),
     _splitPart(split, 'other'),
   ].join('/');
 }

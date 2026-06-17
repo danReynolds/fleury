@@ -7,6 +7,133 @@ import 'cell_buffer.dart';
 import 'layout.dart';
 import 'render_layout_stats.dart';
 
+/// Frame-level signal for whether the terminal presenter can trust
+/// paint-buffer damage bounds.
+///
+/// Paint-only mutations can be bounded by the cells repainted into the frame
+/// buffer. Layout-affecting mutations cannot: cells may disappear or move
+/// without being rewritten, so the presenter must fall back to full-buffer
+/// diffing for that frame.
+///
+/// One instance is owned per [BuildOwner]/runtime: render objects publish
+/// into the tracker attached at their tree's root, so two Fleury runtimes in
+/// one isolate never observe each other's damage. The signal accumulates
+/// across frames until [takeRequiresFullDiff] consumes it, so deferred
+/// consumers can coalesce several invalidations into one read.
+final class RenderDamageTracker {
+  bool _requiresFullDiff = false;
+  bool _visualChange = false;
+
+  void recordLayoutOrConservativePaint() {
+    _requiresFullDiff = true;
+    _visualChange = true;
+  }
+
+  /// Records that some render object's visual output may differ next frame
+  /// (audited paint-only invalidations included). Cleared when a frame
+  /// consumes it via [takeVisualChange].
+  void recordVisualChange() {
+    _visualChange = true;
+  }
+
+  /// Whether any invalidation has been recorded since the last rendered
+  /// frame. While false (and the buffer pool is warm), a frame request can
+  /// skip build/layout/paint entirely: the front buffer is still exact.
+  bool get hasVisualChange => _visualChange;
+
+  bool takeVisualChange() {
+    final result = _visualChange;
+    _visualChange = false;
+    return result;
+  }
+
+  bool takeRequiresFullDiff() {
+    final result = _requiresFullDiff;
+    _requiresFullDiff = false;
+    return result;
+  }
+
+  void reset() {
+    _requiresFullDiff = false;
+    _visualChange = false;
+  }
+}
+
+typedef SemanticPaintBoundsCallback = void Function(CellRect? bounds);
+
+/// A paint-captured semantic bounds callback plus its cache-local bounds.
+///
+/// Repaint boundaries paint children into scratch buffers, then copy cached
+/// cells on later frames. Semantic bounds still need to be refreshed in
+/// screen coordinates on those cached frames. Records captured while painting
+/// into a boundary cache let the boundary replay the callback without
+/// re-walking the visual paint path.
+final class SemanticPaintBoundsRecord {
+  const SemanticPaintBoundsRecord({
+    required this.onPaintBounds,
+    required this.localBounds,
+  });
+
+  final SemanticPaintBoundsCallback onPaintBounds;
+  final CellRect localBounds;
+
+  void publishToActiveCapture(CellOffset paintOffset) {
+    SemanticPaintBoundsCapture.record(
+      onPaintBounds,
+      _translate(localBounds, paintOffset),
+    );
+  }
+
+  void replay({
+    required CellOffset paintOffset,
+    required CellOffset screenOffset,
+    required CellRect? clipRect,
+  }) {
+    publishToActiveCapture(paintOffset);
+    final screenBounds = _translate(localBounds, screenOffset);
+    onPaintBounds(
+      clipRect == null ? screenBounds : screenBounds.intersect(clipRect),
+    );
+  }
+
+  static CellRect _translate(CellRect rect, CellOffset offset) {
+    return CellRect(offset: offset + rect.offset, size: rect.size);
+  }
+}
+
+/// Stack-scoped collector for semantic bounds produced during paint.
+final class SemanticPaintBoundsCapture {
+  SemanticPaintBoundsCapture._();
+
+  static final List<List<SemanticPaintBoundsRecord>> _stack =
+      <List<SemanticPaintBoundsRecord>>[];
+
+  static void collect(
+    List<SemanticPaintBoundsRecord> records,
+    void Function() paint,
+  ) {
+    _stack.add(records);
+    try {
+      paint();
+    } finally {
+      _stack.removeLast();
+    }
+  }
+
+  static void record(
+    SemanticPaintBoundsCallback onPaintBounds,
+    CellRect localBounds,
+  ) {
+    if (_stack.isEmpty) return;
+    _stack.last.add(
+      SemanticPaintBoundsRecord(
+        onPaintBounds: onPaintBounds,
+        localBounds: localBounds,
+      ),
+    );
+  }
+}
+
 /// Parent-attached layout metadata.
 ///
 /// Multi-child render objects (Flex, Stack) keep per-child layout state
@@ -77,6 +204,35 @@ abstract class RenderObject {
   /// true in subclasses that implement the cache discipline.
   bool get isRepaintBoundary => false;
 
+  /// The frame damage tracker for this render tree, held at the root.
+  ///
+  /// Set by the frame driver (via [attachFrameDamageTracker]) on the root
+  /// render object only. Invalidation walks ([_markNeedsLayoutUp]) terminate
+  /// at the root and publish there, so per-object storage stays nil and two
+  /// runtimes in one isolate never share damage state.
+  RenderDamageTracker? _frameDamage;
+
+  /// Attaches the per-runtime damage tracker at this (root) render object.
+  ///
+  /// Returns true when the tracker was not already attached — a fresh root —
+  /// so callers can record conservative damage for invalidations that may
+  /// have happened while the subtree was being built detached.
+  bool attachFrameDamageTracker(RenderDamageTracker tracker) {
+    final isNew = !identical(_frameDamage, tracker);
+    _frameDamage = tracker;
+    return isNew;
+  }
+
+  /// The damage tracker attached at this tree's root, if any.
+  RenderDamageTracker? get _rootFrameDamage {
+    RenderObject node = this;
+    while (true) {
+      final parent = node._parent;
+      if (parent == null) return node._frameDamage;
+      node = parent;
+    }
+  }
+
   /// Marks this render object and its ancestors as needing layout, and marks
   /// the nearest enclosing repaint boundary as dirty. Use this for changes
   /// that can affect size, child constraints, child offsets, or layout-derived
@@ -89,7 +245,14 @@ abstract class RenderObject {
 
   void _markNeedsLayoutUp() {
     _needsLayout = true;
-    _parent?._markNeedsLayoutUp();
+    final parent = _parent;
+    if (parent == null) {
+      // Terminal node of the invalidation walk: publish frame damage at the
+      // root so the presenter falls back to a full diff this frame.
+      _frameDamage?.recordLayoutOrConservativePaint();
+      return;
+    }
+    parent._markNeedsLayoutUp();
   }
 
   /// Marks this render object as visually stale and conservatively marks
@@ -114,6 +277,7 @@ abstract class RenderObject {
   @protected
   void markNeedsPaintOnly() {
     DebugInvalidations.recordPaint(runtimeType.toString());
+    _rootFrameDamage?.recordVisualChange();
     _markNearestRepaintBoundaryDirty();
   }
 
@@ -229,6 +393,7 @@ abstract class RenderObject {
     _needsLayout = false;
     RenderLayoutDebugStats.recordPerformed();
     if (previousSize != null && previousSize != result) {
+      _rootFrameDamage?.recordLayoutOrConservativePaint();
       _markNearestRepaintBoundaryDirty();
     }
     return result;

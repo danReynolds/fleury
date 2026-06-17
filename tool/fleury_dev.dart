@@ -23,6 +23,12 @@ Future<void> main(List<String> rawArgs) async {
     case 'check':
       await runner.check(quick: args.contains('--quick'));
       return;
+    case 'coverage':
+      await runner.coverage(args);
+      return;
+    case 'build-remote-client':
+      await runner.buildRemoteClient(args);
+      return;
     case 'demo':
       await runner.demoApp();
       return;
@@ -116,6 +122,7 @@ void _printUsage() {
   stdout.writeln(
     '  check [--quick]               Analyze and test local packages',
   );
+  stdout.writeln('  coverage [options]            Run package coverage floors');
   stdout.writeln('  demo                          Run the integrated demo app');
   stdout.writeln(
     '  storybook [command/options]   Run, inspect, verify, or snapshot storybook',
@@ -175,6 +182,7 @@ void _printUsage() {
   stdout.writeln('');
   stdout.writeln('Examples:');
   stdout.writeln('  dart tool/fleury_dev.dart bootstrap');
+  stdout.writeln('  dart tool/fleury_dev.dart coverage --strict');
   stdout.writeln('  dart tool/fleury_dev.dart demo');
   stdout.writeln('  dart tool/fleury_dev.dart storybook');
   stdout.writeln('  dart tool/fleury_dev.dart storybook verify');
@@ -323,6 +331,197 @@ class _Runner {
     ], workingDirectory: demo);
     await _run('dart', ['analyze'], workingDirectory: storybook);
     await _run('dart', ['test'], workingDirectory: storybook);
+  }
+
+  /// Compiles the structured serve client (web/remote_client.dart) and
+  /// regenerates the embedded asset
+  /// (packages/fleury/lib/src/remote/remote_client_asset.dart). The
+  /// freshness test fails if this is stale; run it after touching the
+  /// remote-client source.
+  Future<void> buildRemoteClient(List<String> args) async {
+    final tmp = '$root/.dart_tool/remote_client.js';
+    stdout.writeln('compiling web/remote_client.dart -> JS (-O2)…');
+    await _run('dart', [
+      'compile',
+      'js',
+      'web/remote_client.dart',
+      '-o',
+      tmp,
+      '-O2',
+      // No source maps: production doesn't need them, and the
+      // sourceMappingURL comment names the output file, which would make
+      // the embedded bytes non-deterministic and break the freshness gate.
+      '--no-source-maps',
+    ], workingDirectory: web);
+    final js = File(tmp).readAsBytesSync();
+    final b64 = base64.encode(js);
+    final lines = <String>[];
+    for (var i = 0; i < b64.length; i += 100) {
+      lines.add(
+        "    '${b64.substring(i, math.min(i + 100, b64.length))}'",
+      );
+    }
+    final out =
+        '''// GENERATED — do not edit by hand.
+//
+// The compiled dart2js bundle for the structured serve client
+// (web/remote_client.dart), embedded so `fleury serve` ships it inside the
+// single binary. Regenerate with:
+//
+//     dart run tool/fleury_dev.dart build-remote-client
+//
+// The freshness test (remote_client_asset_test) recompiles the client and
+// fails if this asset is stale.
+
+import 'dart:convert';
+import 'dart:typed_data';
+
+/// Base64 of the compiled `remote_client.dart.js`.
+const String _remoteClientJsBase64 =
+${lines.join('\n')};
+
+/// The compiled client JavaScript bytes.
+Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
+''';
+    File('$fleury/lib/src/remote/remote_client_asset.dart')
+        .writeAsStringSync(out);
+    File(tmp).deleteSync();
+    final depsFile = File('$tmp.deps');
+    if (depsFile.existsSync()) depsFile.deleteSync();
+    stdout.writeln(
+      'wrote remote_client_asset.dart (${js.length} JS bytes)',
+    );
+  }
+
+  Future<void> coverage(List<String> args) async {
+    final options = _CoverageOptions.parse(args);
+    final targets = <_CoveragePackageTarget>[
+      _CoveragePackageTarget(
+        label: 'core',
+        packageName: 'fleury',
+        packagePath: fleury,
+        floorPercent: options.coreMinPercent,
+        excludeIntegration: !options.includeIntegration,
+        excludeCoverageIncompatible: true,
+      ),
+      _CoveragePackageTarget(
+        label: 'widgets',
+        packageName: 'fleury_widgets',
+        packagePath: widgets,
+        floorPercent: options.widgetsMinPercent,
+        excludeIntegration: false,
+        excludeCoverageIncompatible: false,
+      ),
+    ];
+
+    if (dryRun) {
+      for (final target in targets) {
+        final args = _coverageTestArgs(target);
+        final display = ['dart', ...args].join(' ');
+        stdout.writeln('(${_relative(target.packagePath)}) $display');
+        stdout.writeln(
+          'floor ${target.label} >= ${_formatPercent(target.floorPercent)}%',
+        );
+      }
+      return;
+    }
+
+    final results = <_CoveragePackageResult>[];
+    for (final target in targets) {
+      results.add(await _runCoveragePackage(target));
+    }
+    final strictPass = results.every((result) => result.strictPass);
+    final summary = <String, Object?>{
+      'schemaVersion': 1,
+      'kind': 'fleuryCoverage',
+      'strictPass': strictPass,
+      'packages': <Object?>[for (final result in results) result.toJson(root)],
+    };
+
+    if (options.json) {
+      stdout.writeln(const JsonEncoder.withIndent('  ').convert(summary));
+    } else {
+      _printCoverageSummary(results, strictPass: strictPass);
+    }
+    if (options.strict && !strictPass) exit(1);
+  }
+
+  List<String> _coverageTestArgs(_CoveragePackageTarget target) {
+    return <String>[
+      'test',
+      if (target.excludeIntegration) ...['-x', 'integration'],
+      if (target.excludeCoverageIncompatible) ...[
+        '-x',
+        'coverage-incompatible',
+      ],
+      '--concurrency=1',
+      '--reporter=json',
+      '--coverage-path=coverage/lcov.info',
+      '--coverage-package=${target.packageName}',
+    ];
+  }
+
+  Future<_CoveragePackageResult> _runCoveragePackage(
+    _CoveragePackageTarget target,
+  ) async {
+    final lcovFile = File('${target.packagePath}/coverage/lcov.info');
+    if (lcovFile.existsSync()) lcovFile.deleteSync();
+    lcovFile.parent.createSync(recursive: true);
+
+    final args = _coverageTestArgs(target);
+    final result = await Process.run(
+      'dart',
+      args,
+      workingDirectory: target.packagePath,
+    );
+    final stdoutText = result.stdout.toString();
+    final stderrText = result.stderr.toString();
+    if (result.exitCode != 0) {
+      stderr.writeln(
+        'Coverage test command failed in ${_relative(target.packagePath)} '
+        'with exit code ${result.exitCode}: dart ${args.join(' ')}',
+      );
+      if (stdoutText.trim().isNotEmpty) stderr.writeln(stdoutText.trimRight());
+      if (stderrText.trim().isNotEmpty) stderr.writeln(stderrText.trimRight());
+      exit(result.exitCode);
+    }
+
+    final testCounts = _countJsonTestEvents(stdoutText);
+    if (testCounts.start == 0 || testCounts.done == 0) {
+      stderr.writeln(
+        'Coverage sanity check failed for ${target.label}: '
+        'JSON reporter saw ${testCounts.start} testStart and '
+        '${testCounts.done} testDone events.',
+      );
+      exit(1);
+    }
+    if (!lcovFile.existsSync() || lcovFile.lengthSync() == 0) {
+      stderr.writeln(
+        'Coverage sanity check failed for ${target.label}: '
+        'missing coverage/lcov.info.',
+      );
+      exit(1);
+    }
+
+    final lcov = _parseLcov(lcovFile.readAsStringSync());
+    if (lcov.linesFound == 0) {
+      stderr.writeln(
+        'Coverage sanity check failed for ${target.label}: '
+        'LCOV reported zero instrumented lines.',
+      );
+      exit(1);
+    }
+
+    final percent = (lcov.linesHit / lcov.linesFound) * 100;
+    return _CoveragePackageResult(
+      target: target,
+      lcovPath: lcovFile.path,
+      testStartCount: testCounts.start,
+      testDoneCount: testCounts.done,
+      linesHit: lcov.linesHit,
+      linesFound: lcov.linesFound,
+      linePercent: percent,
+    );
   }
 
   Future<void> demoApp() {
@@ -787,8 +986,44 @@ class _Runner {
       case 'wire':
         await benchmarkWire(rest);
         return;
+      case 'wire-gate':
+        await benchmarkWireGate(rest);
+        return;
       case 'scoreboard':
         await benchmarkScoreboard(rest);
+        return;
+      case 'web-capture':
+        await benchmarkWebCapture(rest);
+        return;
+      case 'web-suite':
+        await benchmarkWebSuite(rest);
+        return;
+      case 'web-scoreboard':
+        await benchmarkWebScoreboard(rest);
+        return;
+      case 'web-threshold-review':
+        await benchmarkWebThresholdReview(rest);
+        return;
+      case 'web-semantic-audit':
+        await benchmarkWebSemanticAudit(rest);
+        return;
+      case 'web-manual-validation':
+        await benchmarkWebManualValidation(rest);
+        return;
+      case 'web-readiness':
+        await benchmarkWebReadiness(rest);
+        return;
+      case 'web-readiness-bundle':
+        await benchmarkWebReadinessBundle(rest);
+        return;
+      case 'web-automated-validation':
+        await benchmarkWebAutomatedValidation(rest);
+        return;
+      case 'web-default-preflight':
+        await benchmarkWebDefaultPreflight(rest);
+        return;
+      case 'web-report':
+        await benchmarkWebReport(rest);
         return;
       case 'manifest':
         await benchmarkManifest(rest);
@@ -1070,6 +1305,16 @@ class _Runner {
     await _refreshWireScoreboard(outDir.path);
   }
 
+  /// Fleury-only wire regression gate: re-runs a small scenario subset and
+  /// fails on byte-axis regression vs `profiling/wire_gate_baseline.json`.
+  Future<void> benchmarkWireGate(List<String> args) async {
+    await _run('dart', [
+      'run',
+      'bin/fleury_wire_gate.dart',
+      ...args,
+    ], workingDirectory: profiling);
+  }
+
   Future<void> benchmarkScoreboard(List<String> args) async {
     final options = _BenchmarkScoreboardOptions.parse(root, args);
     final matrixLink = options.outputPath == null
@@ -1086,6 +1331,349 @@ class _Runner {
       '--matrix-link=$matrixLink',
       if (options.json) '--json',
     ], workingDirectory: profiling);
+  }
+
+  Future<void> benchmarkWebCapture(List<String> args) async {
+    final options = _BenchmarkWebCaptureOptions.parse(root, args);
+    await _run('dart', [
+      'run',
+      'tool/web_frame_capture.dart',
+      '--scenario=${options.scenarioId}',
+      '--warmup=${options.warmupFrames}',
+      '--budget-ms=${options.frameBudgetMs}',
+      '--output=${options.outputPath}',
+      '--timeout=${options.timeoutSeconds}',
+      if (options.frames != null) '--frames=${options.frames}',
+      if (options.chromePath != null) '--chrome=${options.chromePath}',
+      if (options.headful) '--headful',
+      if (options.keepTemp) '--keep-temp',
+      if (options.compileOnly) '--compile-only',
+      if (options.heapProfile) '--heap-profile',
+      if (options.traceFrames) '--trace-frames',
+      if (options.json) '--json',
+    ], workingDirectory: '$root/packages/fleury_web');
+    if (!options.compileOnly &&
+        options.outputPath.startsWith('$root/profiling/web/')) {
+      await benchmarkWebScoreboard([
+        '--input=profiling/web',
+        '--output=profiling/web/scoreboard.md',
+        '--json-output=profiling/web/scoreboard.json',
+      ]);
+    }
+  }
+
+  Future<void> benchmarkWebSuite(List<String> args) async {
+    final options = _BenchmarkWebSuiteOptions.parse(root, args);
+    await _run('dart', [
+      'run',
+      'tool/web_frame_suite.dart',
+      '--scenarios=${options.scenarioIds.join(',')}',
+      '--runs=${options.runs}',
+      '--warmup=${options.warmupFrames}',
+      '--budget-ms=${options.frameBudgetMs}',
+      '--output-dir=${options.outputDir}',
+      '--scoreboard=${options.scoreboardPath}',
+      '--scoreboard-json=${options.scoreboardJsonPath}',
+      '--min-runs=${options.minRuns}',
+      '--timeout=${options.timeoutSeconds}',
+      if (options.maxTotalFrameP95Ms != null)
+        '--max-total-frame-p95-ms=${options.maxTotalFrameP95Ms}',
+      if (options.maxDomApplyP95Ms != null)
+        '--max-dom-apply-p95-ms=${options.maxDomApplyP95Ms}',
+      if (options.maxSemanticApplyP95Ms != null)
+        '--max-semantic-apply-p95-ms=${options.maxSemanticApplyP95Ms}',
+      if (options.maxOverBudgetPercent != null)
+        '--max-over-budget-percent=${options.maxOverBudgetPercent}',
+      if (options.maxSemanticUncoveredCells != null)
+        '--max-semantic-uncovered-cells=${options.maxSemanticUncoveredCells}',
+      if (options.thresholdsPath != null)
+        '--thresholds=${options.thresholdsPath}',
+      if (options.writeThresholdsPath != null)
+        '--write-thresholds=${options.writeThresholdsPath}',
+      '--threshold-headroom-percent=${options.thresholdHeadroomPercent}',
+      '--threshold-min-headroom-ms=${options.thresholdMinHeadroomMs}',
+      '--threshold-min-headroom-percent=${options.thresholdMinHeadroomPercent}',
+      if (options.frames != null) '--frames=${options.frames}',
+      if (options.chromePath != null) '--chrome=${options.chromePath}',
+      if (!options.strictScoreboard) '--no-strict',
+      if (!options.requireComparableRunEnvironment)
+        '--no-require-comparable-environment',
+      if (!options.compileOnce) '--no-compile-once',
+      if (options.headful) '--headful',
+      if (options.keepTemp) '--keep-temp',
+      if (options.json) '--json',
+    ], workingDirectory: '$root/packages/fleury_web');
+  }
+
+  Future<void> benchmarkWebScoreboard(List<String> args) async {
+    final options = _BenchmarkWebScoreboardOptions.parse(root, args);
+    await _run('dart', [
+      'run',
+      'tool/web_frame_scoreboard.dart',
+      '--input=${options.inputDir}',
+      if (options.outputPath != null) '--output=${options.outputPath}',
+      if (options.jsonOutputPath != null)
+        '--json-output=${options.jsonOutputPath}',
+      '--min-runs=${options.minRuns}',
+      if (options.maxTotalFrameP95Ms != null)
+        '--max-total-frame-p95-ms=${options.maxTotalFrameP95Ms}',
+      if (options.maxDomApplyP95Ms != null)
+        '--max-dom-apply-p95-ms=${options.maxDomApplyP95Ms}',
+      if (options.maxSemanticApplyP95Ms != null)
+        '--max-semantic-apply-p95-ms=${options.maxSemanticApplyP95Ms}',
+      if (options.maxOverBudgetPercent != null)
+        '--max-over-budget-percent=${options.maxOverBudgetPercent}',
+      if (options.maxSemanticUncoveredCells != null)
+        '--max-semantic-uncovered-cells=${options.maxSemanticUncoveredCells}',
+      if (options.thresholdsPath != null)
+        '--thresholds=${options.thresholdsPath}',
+      if (options.writeThresholdsPath != null)
+        '--write-thresholds=${options.writeThresholdsPath}',
+      '--threshold-headroom-percent=${options.thresholdHeadroomPercent}',
+      '--threshold-min-headroom-ms=${options.thresholdMinHeadroomMs}',
+      '--threshold-min-headroom-percent=${options.thresholdMinHeadroomPercent}',
+      if (options.requireComparableRunEnvironment)
+        '--require-comparable-environment',
+      if (options.strict) '--strict',
+      if (options.json) '--json',
+    ], workingDirectory: '$root/packages/fleury_web');
+  }
+
+  Future<void> benchmarkWebThresholdReview(List<String> args) async {
+    final options = _BenchmarkWebThresholdReviewOptions.parse(root, args);
+    await _run('dart', [
+      'run',
+      'tool/web_threshold_review.dart',
+      '--input=${options.inputPath}',
+      if (options.outputPath != null) '--output=${options.outputPath}',
+      if (options.writePlanPath != null)
+        '--write-plan=${options.writePlanPath}',
+      if (options.reviewedBy != null) '--reviewed-by=${options.reviewedBy}',
+      if (options.reviewedAt != null) '--reviewed-at=${options.reviewedAt}',
+      if (options.reviewContext != null)
+        '--review-context=${options.reviewContext}',
+      if (options.reviewContextHint != null)
+        '--review-context-hint=${options.reviewContextHint}',
+      if (options.reviewNote != null) '--review-note=${options.reviewNote}',
+      if (options.expectedInputFingerprint != null)
+        '--expect-input-fingerprint=${options.expectedInputFingerprint}',
+      if (options.allowOverBudgetThresholds) '--allow-over-budget-thresholds',
+      if (options.jsonOutputPath != null)
+        '--json-output=${options.jsonOutputPath}',
+      if (options.json) '--json',
+    ], workingDirectory: '$root/packages/fleury_web');
+  }
+
+  Future<void> benchmarkWebSemanticAudit(List<String> args) async {
+    final options = _BenchmarkWebSemanticAuditOptions.parse(root, args);
+    await _run('dart', [
+      'run',
+      'tool/web_semantic_coverage_audit.dart',
+      '--input=${options.inputDir}',
+      if (options.outputPath != null) '--output=${options.outputPath}',
+      if (options.jsonOutputPath != null)
+        '--json-output=${options.jsonOutputPath}',
+      if (options.maxFallbackCells != null)
+        '--max-fallback-cells=${options.maxFallbackCells}',
+      if (options.maxFallbackFramePercent != null)
+        '--max-fallback-frame-percent=${options.maxFallbackFramePercent}',
+      if (options.maxFallbackViewportPercent != null)
+        '--max-fallback-viewport-percent=${options.maxFallbackViewportPercent}',
+      if (options.strict) '--strict',
+      if (options.json) '--json',
+    ], workingDirectory: '$root/packages/fleury_web');
+  }
+
+  Future<void> benchmarkWebManualValidation(List<String> args) async {
+    final options = _BenchmarkWebManualValidationOptions.parse(root, args);
+    await _run('dart', [
+      'run',
+      'tool/web_manual_validation.dart',
+      '--input=${options.inputDir}',
+      if (options.outputPath != null) '--output=${options.outputPath}',
+      if (options.writePlanPath != null)
+        '--write-plan=${options.writePlanPath}',
+      if (options.writeTemplatePath != null)
+        '--write-template=${options.writeTemplatePath}',
+      if (options.writeStarterPath != null)
+        '--write-starter=${options.writeStarterPath}',
+      if (options.starterTemplatePath != null)
+        '--starter-template=${options.starterTemplatePath}',
+      if (options.updateProvenancePath != null)
+        '--update-provenance=${options.updateProvenancePath}',
+      if (options.updatePageSignalPath != null)
+        '--update-page-signal=${options.updatePageSignalPath}',
+      if (options.updateCheckPath != null)
+        '--update-check=${options.updateCheckPath}',
+      if (options.reviewedBy != null) '--reviewed-by=${options.reviewedBy}',
+      if (options.capturedAt != null) '--captured-at=${options.capturedAt}',
+      if (options.browserVersion != null)
+        '--browser-version=${options.browserVersion}',
+      if (options.signalId != null) '--signal-id=${options.signalId}',
+      if (options.signalStatus != null)
+        '--signal-status=${options.signalStatus}',
+      if (options.observedValue != null)
+        '--observed-value=${options.observedValue}',
+      if (options.signalNotes != null) '--signal-notes=${options.signalNotes}',
+      if (options.checkId != null) '--check-id=${options.checkId}',
+      if (options.checkStatus != null) '--check-status=${options.checkStatus}',
+      if (options.checkNotes != null) '--check-notes=${options.checkNotes}',
+      if (options.entryStatus != null) '--entry-status=${options.entryStatus}',
+      if (options.writeTemplatesDir != null)
+        '--write-templates=${options.writeTemplatesDir}',
+      if (options.templateTargetId != null)
+        '--template-target=${options.templateTargetId}',
+      if (options.jsonOutputPath != null)
+        '--json-output=${options.jsonOutputPath}',
+      '--target-preset=${options.targetPreset}',
+      for (final targetId in options.targetIds) '--target=$targetId',
+      if (options.strict) '--strict',
+      if (options.json) '--json',
+    ], workingDirectory: '$root/packages/fleury_web');
+  }
+
+  Future<void> benchmarkWebReadiness(List<String> args) async {
+    final options = _BenchmarkWebReadinessOptions.parse(root, args);
+    await _run('dart', [
+      'run',
+      'tool/web_readiness.dart',
+      '--scoreboard=${options.scoreboardPath}',
+      '--semantic-audit=${options.semanticAuditPath}',
+      '--manual-audit=${options.manualAuditPath}',
+      if (options.thresholdReviewPath != null)
+        '--threshold-review=${options.thresholdReviewPath}',
+      if (options.outputPath != null) '--output=${options.outputPath}',
+      if (options.jsonOutputPath != null)
+        '--json-output=${options.jsonOutputPath}',
+      '--min-scoreboard-runs=${options.minScoreboardRuns}',
+      if (!options.requireComparableEnvironment)
+        '--no-require-comparable-environment',
+      if (!options.requireScoreboardGates) '--no-require-scoreboard-gates',
+      if (!options.requireTotalFrameGate) '--no-require-total-frame-gate',
+      if (!options.requireSemanticGates) '--no-require-semantic-gates',
+      if (!options.requireReviewedThresholdPolicy)
+        '--no-require-reviewed-threshold-policy',
+      if (!options.requireThresholdReviewSummary)
+        '--no-require-threshold-review-summary',
+      if (!options.requireScenarioThresholds)
+        '--no-require-scenario-thresholds',
+      if (options.strict) '--strict',
+      if (options.json) '--json',
+    ], workingDirectory: '$root/packages/fleury_web');
+  }
+
+  Future<void> benchmarkWebReadinessBundle(List<String> args) async {
+    final options = _BenchmarkWebReadinessBundleOptions.parse(root, args);
+    if (options.verifyPath != null) {
+      await _run('dart', [
+        'run',
+        'tool/web_readiness_bundle.dart',
+        '--verify=${options.verifyPath}',
+        if (options.strict) '--strict',
+        if (options.json) '--json',
+      ], workingDirectory: '$root/packages/fleury_web');
+      return;
+    }
+    await _run('dart', [
+      'run',
+      'tool/web_readiness_bundle.dart',
+      '--captures=${options.captureDir}',
+      '--manual=${options.manualDir}',
+      '--output-dir=${options.outputDir}',
+      '--min-runs=${options.minRuns}',
+      if (options.maxTotalFrameP95Ms != null)
+        '--max-total-frame-p95-ms=${options.maxTotalFrameP95Ms}',
+      if (options.maxDomApplyP95Ms != null)
+        '--max-dom-apply-p95-ms=${options.maxDomApplyP95Ms}',
+      if (options.maxSemanticApplyP95Ms != null)
+        '--max-semantic-apply-p95-ms=${options.maxSemanticApplyP95Ms}',
+      if (options.maxOverBudgetPercent != null)
+        '--max-over-budget-percent=${options.maxOverBudgetPercent}',
+      if (options.maxSemanticUncoveredCells != null)
+        '--max-semantic-uncovered-cells=${options.maxSemanticUncoveredCells}',
+      if (options.thresholdsPath != null)
+        '--thresholds=${options.thresholdsPath}',
+      if (options.thresholdReviewPath != null)
+        '--threshold-review=${options.thresholdReviewPath}',
+      if (!options.requireComparableRunEnvironment)
+        '--no-require-comparable-environment',
+      if (options.maxFallbackCells != null)
+        '--max-fallback-cells=${options.maxFallbackCells}',
+      if (options.maxFallbackFramePercent != null)
+        '--max-fallback-frame-percent=${options.maxFallbackFramePercent}',
+      if (options.maxFallbackViewportPercent != null)
+        '--max-fallback-viewport-percent=${options.maxFallbackViewportPercent}',
+      '--target-preset=${options.targetPreset}',
+      for (final targetId in options.targetIds) '--target=$targetId',
+      if (!options.requireScoreboardGates) '--no-require-scoreboard-gates',
+      if (!options.requireTotalFrameGate) '--no-require-total-frame-gate',
+      if (!options.requireSemanticGates) '--no-require-semantic-gates',
+      if (!options.requireReviewedThresholdPolicy)
+        '--no-require-reviewed-threshold-policy',
+      if (!options.requireThresholdReviewSummary)
+        '--no-require-threshold-review-summary',
+      if (!options.requireScenarioThresholds)
+        '--no-require-scenario-thresholds',
+      if (options.writeDefaultPreflights) '--write-default-preflights',
+      if (options.completionAuditPath != null)
+        '--completion-audit=${options.completionAuditPath}',
+      if (options.strict) '--strict',
+      if (options.json) '--json',
+    ], workingDirectory: '$root/packages/fleury_web');
+  }
+
+  Future<void> benchmarkWebAutomatedValidation(List<String> args) async {
+    final options = _BenchmarkWebAutomatedValidationOptions.parse(root, args);
+    await _run('dart', [
+      'run',
+      'tool/web_automated_validation.dart',
+      if (options.jsonOutputPath != null)
+        '--json-output=${options.jsonOutputPath}',
+      if (options.strict) '--strict',
+      if (options.json) '--json',
+    ], workingDirectory: '$root/packages/fleury_web');
+  }
+
+  Future<void> benchmarkWebDefaultPreflight(List<String> args) async {
+    final options = _BenchmarkWebDefaultPreflightOptions.parse(root, args);
+    await _run('dart', [
+      'run',
+      'tool/web_default_preflight.dart',
+      '--readiness=${options.readinessPath}',
+      if (options.bundlePath != null) '--bundle=${options.bundlePath}',
+      if (options.automatedValidationPath != null)
+        '--automated-validation=${options.automatedValidationPath}',
+      '--target=${options.target}',
+      if (options.outputPath != null) '--output=${options.outputPath}',
+      if (options.jsonOutputPath != null)
+        '--json-output=${options.jsonOutputPath}',
+      if (options.strict) '--strict',
+      if (options.allowUnbundled) '--allow-unbundled',
+      if (options.json) '--json',
+    ], workingDirectory: '$root/packages/fleury_web');
+  }
+
+  Future<void> benchmarkWebReport(List<String> args) async {
+    final options = _BenchmarkWebReportOptions.parse(root, args);
+    await _run('dart', [
+      'run',
+      'tool/web_frame_report.dart',
+      '--input=${options.inputPath}',
+      '--budget-ms=${options.frameBudgetMs}',
+      if (options.outputPath != null) '--output=${options.outputPath}',
+      if (options.maxTotalFrameP95Ms != null)
+        '--max-total-frame-p95-ms=${options.maxTotalFrameP95Ms}',
+      if (options.maxDomApplyP95Ms != null)
+        '--max-dom-apply-p95-ms=${options.maxDomApplyP95Ms}',
+      if (options.maxSemanticApplyP95Ms != null)
+        '--max-semantic-apply-p95-ms=${options.maxSemanticApplyP95Ms}',
+      if (options.maxOverBudgetPercent != null)
+        '--max-over-budget-percent=${options.maxOverBudgetPercent}',
+      if (options.maxSemanticUncoveredCells != null)
+        '--max-semantic-uncovered-cells=${options.maxSemanticUncoveredCells}',
+      if (options.strict) '--strict',
+      if (options.json) '--json',
+    ], workingDirectory: '$root/packages/fleury_web');
   }
 
   Future<void> _refreshWireScoreboard(String outDir) async {
@@ -1535,6 +2123,245 @@ class _Runner {
     if (path.startsWith(r'\\')) return true;
     return RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path);
   }
+}
+
+final class _CoverageOptions {
+  const _CoverageOptions({
+    required this.strict,
+    required this.json,
+    required this.includeIntegration,
+    required this.coreMinPercent,
+    required this.widgetsMinPercent,
+  });
+
+  final bool strict;
+  final bool json;
+  final bool includeIntegration;
+  final double coreMinPercent;
+  final double widgetsMinPercent;
+
+  static _CoverageOptions parse(List<String> args) {
+    var strict = false;
+    var json = false;
+    var includeIntegration = false;
+    var coreMinPercent = 80.0;
+    var widgetsMinPercent = 85.0;
+    for (final arg in args) {
+      if (arg == '--help' || arg == '-h') {
+        _printCoverageUsage();
+        exit(0);
+      } else if (arg == '--strict') {
+        strict = true;
+      } else if (arg == '--json') {
+        json = true;
+      } else if (arg == '--include-integration') {
+        includeIntegration = true;
+      } else if (arg.startsWith('--core-min=')) {
+        coreMinPercent = _parseCoveragePercent(arg, '--core-min=');
+      } else if (arg.startsWith('--widgets-min=')) {
+        widgetsMinPercent = _parseCoveragePercent(arg, '--widgets-min=');
+      } else {
+        stderr.writeln('Unknown option for coverage: $arg');
+        _printCoverageUsage();
+        exit(2);
+      }
+    }
+    return _CoverageOptions(
+      strict: strict,
+      json: json,
+      includeIntegration: includeIntegration,
+      coreMinPercent: coreMinPercent,
+      widgetsMinPercent: widgetsMinPercent,
+    );
+  }
+}
+
+double _parseCoveragePercent(String arg, String prefix) {
+  final raw = arg.substring(prefix.length);
+  final parsed = double.tryParse(raw);
+  if (parsed == null || parsed < 0 || parsed > 100) {
+    stderr.writeln('$prefix requires a percentage from 0 to 100.');
+    exit(2);
+  }
+  return parsed;
+}
+
+void _printCoverageUsage() {
+  stdout.writeln('Usage: dart tool/fleury_dev.dart coverage [options]');
+  stdout.writeln('');
+  stdout.writeln('Options:');
+  stdout.writeln('  --strict                 Exit non-zero when a floor fails');
+  stdout.writeln(
+    '  --json                   Print machine-readable summary JSON',
+  );
+  stdout.writeln(
+    '  --include-integration    Include core integration-tagged tests',
+  );
+  stdout.writeln('  --core-min=PERCENT       Core package floor, default 80');
+  stdout.writeln(
+    '  --widgets-min=PERCENT    Widgets package floor, default 85',
+  );
+}
+
+final class _CoveragePackageTarget {
+  const _CoveragePackageTarget({
+    required this.label,
+    required this.packageName,
+    required this.packagePath,
+    required this.floorPercent,
+    required this.excludeIntegration,
+    required this.excludeCoverageIncompatible,
+  });
+
+  final String label;
+  final String packageName;
+  final String packagePath;
+  final double floorPercent;
+  final bool excludeIntegration;
+  final bool excludeCoverageIncompatible;
+}
+
+final class _CoveragePackageResult {
+  const _CoveragePackageResult({
+    required this.target,
+    required this.lcovPath,
+    required this.testStartCount,
+    required this.testDoneCount,
+    required this.linesHit,
+    required this.linesFound,
+    required this.linePercent,
+  });
+
+  final _CoveragePackageTarget target;
+  final String lcovPath;
+  final int testStartCount;
+  final int testDoneCount;
+  final int linesHit;
+  final int linesFound;
+  final double linePercent;
+
+  bool get strictPass => linePercent >= target.floorPercent;
+
+  Map<String, Object?> toJson(String root) {
+    return <String, Object?>{
+      'label': target.label,
+      'packageName': target.packageName,
+      'packagePath': _relativeToRoot(root, target.packagePath),
+      'lcovPath': _relativeToRoot(root, lcovPath),
+      'testStartCount': testStartCount,
+      'testDoneCount': testDoneCount,
+      'linesHit': linesHit,
+      'linesFound': linesFound,
+      'linePercent': _roundCoveragePercent(linePercent),
+      'floorPercent': _roundCoveragePercent(target.floorPercent),
+      'strictPass': strictPass,
+    };
+  }
+}
+
+({int start, int done}) _countJsonTestEvents(String output) {
+  var start = 0;
+  var done = 0;
+  for (final line in const LineSplitter().convert(output)) {
+    Object? decoded;
+    try {
+      decoded = jsonDecode(line);
+    } on FormatException {
+      continue;
+    }
+    if (decoded is! Map<String, Object?>) continue;
+    switch (decoded['type']) {
+      case 'testStart':
+        start += 1;
+      case 'testDone':
+        done += 1;
+    }
+  }
+  return (start: start, done: done);
+}
+
+({int linesHit, int linesFound}) _parseLcov(String text) {
+  var totalHit = 0;
+  var totalFound = 0;
+  var recordHit = 0;
+  var recordFound = 0;
+  var daHit = 0;
+  var daFound = 0;
+  var hasSummary = false;
+  var hasRecord = false;
+
+  void finishRecord() {
+    if (!hasRecord) return;
+    totalHit += hasSummary ? recordHit : daHit;
+    totalFound += hasSummary ? recordFound : daFound;
+    recordHit = 0;
+    recordFound = 0;
+    daHit = 0;
+    daFound = 0;
+    hasSummary = false;
+    hasRecord = false;
+  }
+
+  for (final line in const LineSplitter().convert(text)) {
+    if (line.startsWith('SF:')) {
+      finishRecord();
+      hasRecord = true;
+    } else if (line.startsWith('DA:')) {
+      hasRecord = true;
+      final parts = line.substring(3).split(',');
+      if (parts.length >= 2) {
+        final count = int.tryParse(parts[1]) ?? 0;
+        daFound += 1;
+        if (count > 0) daHit += 1;
+      }
+    } else if (line.startsWith('LH:')) {
+      hasRecord = true;
+      hasSummary = true;
+      recordHit = int.tryParse(line.substring(3)) ?? recordHit;
+    } else if (line.startsWith('LF:')) {
+      hasRecord = true;
+      hasSummary = true;
+      recordFound = int.tryParse(line.substring(3)) ?? recordFound;
+    } else if (line == 'end_of_record') {
+      finishRecord();
+    }
+  }
+  finishRecord();
+  return (linesHit: totalHit, linesFound: totalFound);
+}
+
+void _printCoverageSummary(
+  List<_CoveragePackageResult> results, {
+  required bool strictPass,
+}) {
+  stdout.writeln('Coverage summary');
+  for (final result in results) {
+    stdout.writeln(
+      '${result.target.label}: '
+      '${_formatPercent(result.linePercent)}% lines '
+      '(${result.linesHit}/${result.linesFound}), '
+      '${result.testDoneCount} tests, '
+      'floor ${_formatPercent(result.target.floorPercent)}%, '
+      '${result.strictPass ? 'pass' : 'fail'}',
+    );
+  }
+  stdout.writeln('Strict pass: $strictPass');
+}
+
+String _formatPercent(double value) {
+  final rounded = _roundCoveragePercent(value);
+  return rounded.roundToDouble() == rounded
+      ? rounded.toInt().toString()
+      : rounded.toStringAsFixed(1);
+}
+
+double _roundCoveragePercent(double value) =>
+    double.parse(value.toStringAsFixed(1));
+
+String _relativeToRoot(String root, String path) {
+  if (path == root) return '.';
+  if (path.startsWith('$root/')) return path.substring(root.length + 1);
+  return path;
 }
 
 final class _LocalBenchmarkTarget {
@@ -2388,6 +3215,15 @@ int _positiveCliInt(String arg, String prefix) {
   return value;
 }
 
+int _nonNegativeCliInt(String arg, String prefix) {
+  final value = int.tryParse(arg.substring(prefix.length));
+  if (value == null || value < 0) {
+    stderr.writeln('$prefix requires a non-negative integer.');
+    exit(2);
+  }
+  return value;
+}
+
 String _normalizeWirePeerId(String value) {
   final normalized = value.trim().toLowerCase();
   return switch (normalized) {
@@ -2482,6 +3318,278 @@ Map<String, Object?> _benchmarkCatalog() {
       'defaultInput': 'profiling/caps',
       'defaultOutput': 'stdout',
       'autoRefreshedByWireRuns': true,
+    },
+    'webReport': <String, Object?>{
+      'command': [
+        'fleury',
+        'benchmark',
+        'web-report',
+        '--input=profiling/web/<capture>.json',
+        '--output=profiling/web/<capture>.md',
+      ],
+      'frameBudgetMs': 16.67,
+      'axes': [
+        'total frame p95',
+        'runtime render p95',
+        'span build p95',
+        'DOM apply p95',
+        'semantic apply p95',
+        'dirty rows',
+        'DOM nodes created',
+        'style cache hit rate',
+        'width cache hit rate',
+        'semantic coverage fallback cells',
+      ],
+    },
+    'webCapture': <String, Object?>{
+      'command': [
+        'fleury',
+        'benchmark',
+        'web-capture',
+        '--scenario=normal-80x24',
+        '--output=profiling/web/runs/normal-80x24.json',
+      ],
+      'defaultOutput': 'profiling/web/runs/<scenario>-<timestamp>.json',
+      'harness': 'retained DOM browser host via headless Chrome + CDP',
+      'retention':
+          'generated default captures are ignored; promote reviewed baselines under profiling/web/baselines/',
+      'scenarios': [
+        'normal-80x24',
+        'large-160x50',
+        'stress-300x100',
+        'noop-160x50',
+        'single-dirty-cell-160x50',
+        'dirty-row-160x50',
+        'full-frame-churn-160x50',
+        'scroll-row-churn-160x50',
+        'cursor-blink-80x24',
+        'text-input-burst-80x24',
+        'resize-burst',
+      ],
+    },
+    'webSuite': <String, Object?>{
+      'command': [
+        'fleury',
+        'benchmark',
+        'web-suite',
+        '--runs=3',
+        '--output-dir=profiling/web/runs/<timestamp>-suite',
+      ],
+      'defaultOutput': 'profiling/web/runs/<timestamp>-suite',
+      'scoreboard': 'profiling/web/runs/<timestamp>-suite/scoreboard.md',
+      'scoreboardJson': 'profiling/web/runs/<timestamp>-suite/scoreboard.json',
+      'harness':
+          'repeated retained DOM browser captures plus strict scoreboard',
+      'retention':
+          'generated default runs are ignored; promote reviewed baselines under profiling/web/baselines/',
+      'defaultRunsPerScenario': 3,
+      'scenarios': [
+        'normal-80x24',
+        'large-160x50',
+        'stress-300x100',
+        'noop-160x50',
+        'single-dirty-cell-160x50',
+        'dirty-row-160x50',
+        'full-frame-churn-160x50',
+        'scroll-row-churn-160x50',
+        'cursor-blink-80x24',
+        'text-input-burst-80x24',
+        'resize-burst',
+      ],
+    },
+    'webScoreboard': <String, Object?>{
+      'command': [
+        'fleury',
+        'benchmark',
+        'web-scoreboard',
+        '--input=profiling/web',
+        '--output=profiling/web/scoreboard.md',
+        '--json-output=profiling/web/scoreboard.json',
+      ],
+      'defaultInput': 'profiling/web',
+      'defaultOutput': 'profiling/web/scoreboard.md',
+      'jsonOutput': 'profiling/web/scoreboard.json',
+      'autoRefreshedByWebCaptures': true,
+      'axes': [
+        'total frame p95',
+        'runtime render p95',
+        'span build p95',
+        'DOM apply p95',
+        'semantic apply p95',
+        'over-budget percent',
+        'semantic uncovered cells',
+      ],
+    },
+    'webThresholdReview': <String, Object?>{
+      'command': [
+        'fleury',
+        'benchmark',
+        'web-threshold-review',
+        '--input=profiling/web/baselines/2026-06-08-dom-retained/thresholds.candidate.json',
+        '--output=profiling/web/baselines/2026-06-08-dom-retained/thresholds.json',
+        '--json-output=profiling/web/baselines/2026-06-08-dom-retained/threshold-review.json',
+        '--expect-input-fingerprint=FNV1A64_FROM_REVIEW_PLAN',
+        '--reviewed-by=REVIEWER',
+        '--review-context=Chrome VERSION on PLATFORM, retained DOM product baseline',
+        '--allow-over-budget-thresholds',
+        '--review-note=Explain any accepted over-budget thresholds.',
+      ],
+      'planCommand': [
+        'fleury',
+        'benchmark',
+        'web-threshold-review',
+        '--input=profiling/web/baselines/2026-06-08-dom-retained/thresholds.candidate.json',
+        '--write-plan=profiling/web/baselines/2026-06-08-dom-retained/threshold-review-plan.md',
+      ],
+      'purpose':
+          'promote candidate web frame thresholds to a reviewed readiness policy without recapturing browser frames',
+      'requires': [
+        'candidate fleuryWebFrameThresholds policy',
+        'human reviewer provenance',
+        'accepted product/browser/environment review context',
+      ],
+      'artifacts': ['thresholds.json', 'threshold-review.json'],
+    },
+    'webSemanticAudit': <String, Object?>{
+      'command': [
+        'fleury',
+        'benchmark',
+        'web-semantic-audit',
+        '--input=profiling/web',
+        '--json-output=profiling/web/semantic-coverage.json',
+      ],
+      'defaultInput': 'profiling/web',
+      'defaultOutput': 'stdout',
+      'purpose': 'quantify semantic fallback reliance in retained DOM captures',
+      'axes': [
+        'fallback frames',
+        'fallback cells',
+        'fallback cells as viewport percent',
+        'max fallback cells per frame',
+        'max fallback nodes per frame',
+      ],
+      'artifacts': ['semantic-coverage.json', 'semantic-coverage.md'],
+    },
+    'webManualValidation': <String, Object?>{
+      'command': [
+        'fleury',
+        'benchmark',
+        'web-manual-validation',
+        '--input=profiling/web/manual',
+        '--json-output=profiling/web/manual/manual-validation-audit.json',
+      ],
+      'defaultInput': 'profiling/web/manual',
+      'defaultOutput': 'stdout',
+      'purpose':
+          'audit manual retained DOM web evidence; current release gate is Chrome/macOS IME',
+      'targetPreset': 'primary',
+      'targets': ['chrome-ime-macos'],
+      'artifacts': ['manual-validation-audit.json', 'review.md'],
+    },
+    'webReadiness': <String, Object?>{
+      'command': [
+        'fleury',
+        'benchmark',
+        'web-readiness',
+        '--scoreboard=profiling/web/baselines/web-frame-scoreboard.json',
+        '--semantic-audit=profiling/web/baselines/web-semantic-coverage.json',
+        '--manual-audit=profiling/web/manual/manual-validation-audit.json',
+        '--threshold-review=profiling/web/baselines/threshold-review.json',
+        '--strict',
+      ],
+      'defaultFrameScoreboard':
+          'profiling/web/baselines/web-frame-scoreboard.json',
+      'defaultSemanticAudit':
+          'profiling/web/baselines/web-semantic-coverage.json',
+      'defaultManualAudit': 'profiling/web/manual/manual-validation-audit.json',
+      'defaultThresholdReview': 'profiling/web/baselines/threshold-review.json',
+      'purpose':
+          'combine reviewed frame, semantic, and manual evidence into the Phase 6 web readiness gate',
+      'requires': [
+        'frame scoreboard strictPass with total-frame threshold gates',
+        'matching threshold-review promotion summary for reviewed thresholds',
+        'comparable run-environment enforcement',
+        'semantic fallback audit strictPass with threshold gates',
+        'manual primary IME evidence strictPass',
+      ],
+    },
+    'webReadinessBundle': <String, Object?>{
+      'command': [
+        'fleury',
+        'benchmark',
+        'web-readiness-bundle',
+        '--captures=profiling/web/baselines/2026-06-08-dom-retained',
+        '--manual=profiling/web/manual',
+        '--output-dir=profiling/web/baselines/2026-06-08-dom-retained/readiness',
+        '--thresholds=profiling/web/baselines/2026-06-08-dom-retained/thresholds.json',
+        '--threshold-review=profiling/web/baselines/2026-06-08-dom-retained/threshold-review.json',
+        '--max-total-frame-p95-ms=16.67',
+        '--max-fallback-cells=0',
+        '--write-default-preflights',
+        '--strict',
+      ],
+      'purpose':
+          'generate the JSON artifact manifest consumed by the Phase 6 web readiness and default preflight gates',
+      'verifyCommand': [
+        'fleury',
+        'benchmark',
+        'web-readiness-bundle',
+        '--verify=profiling/web/baselines/2026-06-08-dom-retained/readiness/web-readiness-bundle.json',
+        '--strict',
+      ],
+      'artifacts': [
+        'web-readiness-bundle.json',
+        'scoreboard.json',
+        'semantic-coverage.json',
+        'manual-validation-audit.json',
+        'web-readiness.json',
+        'web-readiness.md',
+        'web-default-preflight-make-dom-default.json',
+        'web-default-preflight-make-dom-default.md',
+        'web-default-preflight-retire-temporary-paths.json',
+        'web-default-preflight-retire-temporary-paths.md',
+      ],
+    },
+    'webAutomatedValidation': <String, Object?>{
+      'command': [
+        'fleury',
+        'benchmark',
+        'web-automated-validation',
+        '--json-output=profiling/web/baselines/web-readiness-bundle/web-automated-validation.json',
+        '--strict',
+      ],
+      'defaultOutput':
+          'profiling/web/baselines/web-readiness-bundle/web-automated-validation.json',
+      'purpose':
+          'run retained DOM automated host tests and write durable evidence consumed by bundle-bound default preflights',
+      'requires': [
+        'retained DOM browser host tests',
+        'retained DOM VM host tests',
+        'current webAutomatedTestFiles source fingerprints',
+      ],
+      'artifacts': ['web-automated-validation.json'],
+    },
+    'webDefaultPreflight': <String, Object?>{
+      'command': [
+        'fleury',
+        'benchmark',
+        'web-default-preflight',
+        '--readiness=profiling/web/baselines/web-readiness-bundle/web-readiness.json',
+        '--bundle=profiling/web/baselines/web-readiness-bundle/web-readiness-bundle.json',
+        '--automated-validation=profiling/web/baselines/web-readiness-bundle/web-automated-validation.json',
+        '--target=make-dom-default',
+        '--strict',
+      ],
+      'defaultInput':
+          'profiling/web/baselines/web-readiness-bundle/web-readiness.json',
+      'purpose':
+          'block retained DOM default flips and temporary-path retirement until Phase 6 readiness has strictly passed',
+      'requires': [
+        'strict web-readiness JSON',
+        'verified web-readiness-bundle.json',
+        'strict web-automated-validation.json',
+      ],
+      'targets': ['make-dom-default', 'retire-temporary-paths'],
     },
     'localScenarios': <Map<String, Object?>>[
       for (final target in _localBenchmarkTargets)
@@ -3003,6 +4111,1656 @@ final class _BenchmarkScoreboardOptions {
   }
 }
 
+final class _BenchmarkWebCaptureOptions {
+  const _BenchmarkWebCaptureOptions({
+    required this.scenarioId,
+    required this.frames,
+    required this.warmupFrames,
+    required this.frameBudgetMs,
+    required this.outputPath,
+    required this.chromePath,
+    required this.timeoutSeconds,
+    required this.headful,
+    required this.keepTemp,
+    required this.compileOnly,
+    required this.heapProfile,
+    required this.traceFrames,
+    required this.json,
+  });
+
+  final String scenarioId;
+  final int? frames;
+  final int warmupFrames;
+  final double frameBudgetMs;
+  final String outputPath;
+  final String? chromePath;
+  final int timeoutSeconds;
+  final bool headful;
+  final bool keepTemp;
+  final bool compileOnly;
+  final bool heapProfile;
+  final bool traceFrames;
+  final bool json;
+
+  static _BenchmarkWebCaptureOptions parse(String root, List<String> args) {
+    var scenarioId = 'normal-80x24';
+    int? frames;
+    var warmupFrames = 2;
+    var frameBudgetMs = 16.67;
+    String? outputPath;
+    String? chromePath;
+    var timeoutSeconds = 30;
+    var headful = false;
+    var keepTemp = false;
+    var compileOnly = false;
+    var heapProfile = false;
+    var traceFrames = false;
+    var json = false;
+
+    for (final arg in args) {
+      if (arg == '-h' || arg == '--help' || arg == 'help') {
+        _printBenchmarkWebCaptureUsage();
+        exit(0);
+      } else if (arg.startsWith('--scenario=')) {
+        scenarioId = arg.substring('--scenario='.length).trim();
+      } else if (arg.startsWith('--frames=')) {
+        frames = _positiveCliInt(arg, '--frames=');
+      } else if (arg.startsWith('--warmup=')) {
+        warmupFrames = _nonNegativeCliInt(arg, '--warmup=');
+      } else if (arg.startsWith('--budget-ms=')) {
+        frameBudgetMs = _positiveCliDouble(arg, '--budget-ms=');
+      } else if (arg.startsWith('--output=')) {
+        outputPath = _absolutePath(root, arg.substring('--output='.length));
+      } else if (arg.startsWith('--chrome=')) {
+        chromePath = _absolutePath(root, arg.substring('--chrome='.length));
+      } else if (arg.startsWith('--timeout=')) {
+        timeoutSeconds = _positiveCliInt(arg, '--timeout=');
+      } else if (arg == '--headful') {
+        headful = true;
+      } else if (arg == '--heap-profile') {
+        heapProfile = true;
+      } else if (arg == '--trace-frames') {
+        traceFrames = true;
+      } else if (arg == '--keep-temp') {
+        keepTemp = true;
+      } else if (arg == '--compile-only') {
+        compileOnly = true;
+      } else if (arg == '--json') {
+        json = true;
+      } else {
+        stderr.writeln('Unknown option for benchmark web-capture: $arg');
+        _printBenchmarkWebCaptureUsage();
+        exit(2);
+      }
+    }
+
+    outputPath ??=
+        '$root/profiling/web/runs/$scenarioId-${_timestampForFile(DateTime.now().toUtc())}.json';
+
+    return _BenchmarkWebCaptureOptions(
+      scenarioId: scenarioId,
+      frames: frames,
+      warmupFrames: warmupFrames,
+      frameBudgetMs: frameBudgetMs,
+      outputPath: outputPath,
+      chromePath: chromePath,
+      timeoutSeconds: timeoutSeconds,
+      headful: headful,
+      heapProfile: heapProfile,
+      traceFrames: traceFrames,
+      keepTemp: keepTemp,
+      compileOnly: compileOnly,
+      json: json,
+    );
+  }
+}
+
+final class _BenchmarkWebSuiteOptions {
+  const _BenchmarkWebSuiteOptions({
+    required this.scenarioIds,
+    required this.runs,
+    required this.frames,
+    required this.warmupFrames,
+    required this.frameBudgetMs,
+    required this.outputDir,
+    required this.scoreboardPath,
+    required this.scoreboardJsonPath,
+    required this.minRuns,
+    required this.maxTotalFrameP95Ms,
+    required this.maxDomApplyP95Ms,
+    required this.maxSemanticApplyP95Ms,
+    required this.maxOverBudgetPercent,
+    required this.maxSemanticUncoveredCells,
+    required this.thresholdsPath,
+    required this.writeThresholdsPath,
+    required this.thresholdHeadroomPercent,
+    required this.thresholdMinHeadroomMs,
+    required this.thresholdMinHeadroomPercent,
+    required this.strictScoreboard,
+    required this.requireComparableRunEnvironment,
+    required this.compileOnce,
+    required this.chromePath,
+    required this.timeoutSeconds,
+    required this.headful,
+    required this.keepTemp,
+    required this.json,
+  });
+
+  final List<String> scenarioIds;
+  final int runs;
+  final int? frames;
+  final int warmupFrames;
+  final double frameBudgetMs;
+  final String outputDir;
+  final String scoreboardPath;
+  final String scoreboardJsonPath;
+  final int minRuns;
+  final double? maxTotalFrameP95Ms;
+  final double? maxDomApplyP95Ms;
+  final double? maxSemanticApplyP95Ms;
+  final double? maxOverBudgetPercent;
+  final double? maxSemanticUncoveredCells;
+  final String? thresholdsPath;
+  final String? writeThresholdsPath;
+  final double thresholdHeadroomPercent;
+  final double thresholdMinHeadroomMs;
+  final double thresholdMinHeadroomPercent;
+  final bool strictScoreboard;
+  final bool requireComparableRunEnvironment;
+  final bool compileOnce;
+  final String? chromePath;
+  final int timeoutSeconds;
+  final bool headful;
+  final bool keepTemp;
+  final bool json;
+
+  static _BenchmarkWebSuiteOptions parse(String root, List<String> args) {
+    List<String>? scenarioIds;
+    var runs = 3;
+    int? frames;
+    var warmupFrames = 2;
+    var frameBudgetMs = 16.67;
+    String? outputDir;
+    String? scoreboardPath;
+    String? scoreboardJsonPath;
+    int? minRuns;
+    double? maxTotalFrameP95Ms;
+    double? maxDomApplyP95Ms;
+    double? maxSemanticApplyP95Ms;
+    double? maxOverBudgetPercent;
+    double? maxSemanticUncoveredCells;
+    String? thresholdsPath;
+    String? writeThresholdsPath;
+    var thresholdHeadroomPercent = 20.0;
+    var thresholdMinHeadroomMs = 1.0;
+    var thresholdMinHeadroomPercent = 1.0;
+    var strictScoreboard = true;
+    var requireComparableRunEnvironment = true;
+    var compileOnce = true;
+    String? chromePath;
+    var timeoutSeconds = 30;
+    var headful = false;
+    var keepTemp = false;
+    var json = false;
+
+    for (final arg in args) {
+      if (arg == '-h' || arg == '--help' || arg == 'help') {
+        _printBenchmarkWebSuiteUsage();
+        exit(0);
+      } else if (arg.startsWith('--scenarios=')) {
+        scenarioIds = _csvOption(arg.substring('--scenarios='.length));
+      } else if (arg.startsWith('--runs=')) {
+        runs = _positiveCliInt(arg, '--runs=');
+      } else if (arg.startsWith('--frames=')) {
+        frames = _positiveCliInt(arg, '--frames=');
+      } else if (arg.startsWith('--warmup=')) {
+        warmupFrames = _nonNegativeCliInt(arg, '--warmup=');
+      } else if (arg.startsWith('--budget-ms=')) {
+        frameBudgetMs = _positiveCliDouble(arg, '--budget-ms=');
+      } else if (arg.startsWith('--output-dir=')) {
+        outputDir = _absolutePath(root, arg.substring('--output-dir='.length));
+      } else if (arg.startsWith('--scoreboard=')) {
+        scoreboardPath = _absolutePath(
+          root,
+          arg.substring('--scoreboard='.length),
+        );
+      } else if (arg.startsWith('--scoreboard-json=')) {
+        final rawPath = arg.substring('--scoreboard-json='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--scoreboard-json requires a non-empty path.');
+          _printBenchmarkWebSuiteUsage();
+          exit(2);
+        }
+        scoreboardJsonPath = _absolutePath(root, rawPath);
+      } else if (arg.startsWith('--min-runs=')) {
+        minRuns = _positiveCliInt(arg, '--min-runs=');
+      } else if (arg.startsWith('--max-total-frame-p95-ms=')) {
+        maxTotalFrameP95Ms = _positiveCliDouble(
+          arg,
+          '--max-total-frame-p95-ms=',
+        );
+      } else if (arg.startsWith('--max-dom-apply-p95-ms=')) {
+        maxDomApplyP95Ms = _positiveCliDouble(arg, '--max-dom-apply-p95-ms=');
+      } else if (arg.startsWith('--max-semantic-apply-p95-ms=')) {
+        maxSemanticApplyP95Ms = _positiveCliDouble(
+          arg,
+          '--max-semantic-apply-p95-ms=',
+        );
+      } else if (arg.startsWith('--max-over-budget-percent=')) {
+        maxOverBudgetPercent = _nonNegativeCliDouble(
+          arg,
+          '--max-over-budget-percent=',
+        );
+      } else if (arg.startsWith('--max-semantic-uncovered-cells=')) {
+        maxSemanticUncoveredCells = _nonNegativeCliDouble(
+          arg,
+          '--max-semantic-uncovered-cells=',
+        );
+      } else if (arg.startsWith('--thresholds=')) {
+        thresholdsPath = _absolutePath(
+          root,
+          arg.substring('--thresholds='.length),
+        );
+      } else if (arg.startsWith('--write-thresholds=')) {
+        writeThresholdsPath = _absolutePath(
+          root,
+          arg.substring('--write-thresholds='.length),
+        );
+      } else if (arg.startsWith('--threshold-headroom-percent=')) {
+        thresholdHeadroomPercent = _nonNegativeCliDouble(
+          arg,
+          '--threshold-headroom-percent=',
+        );
+      } else if (arg.startsWith('--threshold-min-headroom-ms=')) {
+        thresholdMinHeadroomMs = _nonNegativeCliDouble(
+          arg,
+          '--threshold-min-headroom-ms=',
+        );
+      } else if (arg.startsWith('--threshold-min-headroom-percent=')) {
+        thresholdMinHeadroomPercent = _nonNegativeCliDouble(
+          arg,
+          '--threshold-min-headroom-percent=',
+        );
+      } else if (arg == '--no-strict') {
+        strictScoreboard = false;
+      } else if (arg == '--no-require-comparable-environment') {
+        requireComparableRunEnvironment = false;
+      } else if (arg == '--no-compile-once') {
+        compileOnce = false;
+      } else if (arg.startsWith('--chrome=')) {
+        chromePath = _absolutePath(root, arg.substring('--chrome='.length));
+      } else if (arg.startsWith('--timeout=')) {
+        timeoutSeconds = _positiveCliInt(arg, '--timeout=');
+      } else if (arg == '--headful') {
+        headful = true;
+      } else if (arg == '--keep-temp') {
+        keepTemp = true;
+      } else if (arg == '--json') {
+        json = true;
+      } else {
+        stderr.writeln('Unknown option for benchmark web-suite: $arg');
+        _printBenchmarkWebSuiteUsage();
+        exit(2);
+      }
+    }
+
+    outputDir ??=
+        '$root/profiling/web/runs/${_timestampForFile(DateTime.now().toUtc())}-suite';
+    scoreboardPath ??= '$outputDir/scoreboard.md';
+    scoreboardJsonPath ??= '$outputDir/scoreboard.json';
+    minRuns ??= runs;
+
+    return _BenchmarkWebSuiteOptions(
+      scenarioIds: List.unmodifiable(
+        scenarioIds ?? _defaultWebBenchmarkScenarioIds,
+      ),
+      runs: runs,
+      frames: frames,
+      warmupFrames: warmupFrames,
+      frameBudgetMs: frameBudgetMs,
+      outputDir: outputDir,
+      scoreboardPath: scoreboardPath,
+      scoreboardJsonPath: scoreboardJsonPath,
+      minRuns: minRuns,
+      maxTotalFrameP95Ms: maxTotalFrameP95Ms,
+      maxDomApplyP95Ms: maxDomApplyP95Ms,
+      maxSemanticApplyP95Ms: maxSemanticApplyP95Ms,
+      maxOverBudgetPercent: maxOverBudgetPercent,
+      maxSemanticUncoveredCells: maxSemanticUncoveredCells,
+      thresholdsPath: thresholdsPath,
+      writeThresholdsPath: writeThresholdsPath,
+      thresholdHeadroomPercent: thresholdHeadroomPercent,
+      thresholdMinHeadroomMs: thresholdMinHeadroomMs,
+      thresholdMinHeadroomPercent: thresholdMinHeadroomPercent,
+      strictScoreboard: strictScoreboard,
+      requireComparableRunEnvironment: requireComparableRunEnvironment,
+      compileOnce: compileOnce,
+      chromePath: chromePath,
+      timeoutSeconds: timeoutSeconds,
+      headful: headful,
+      keepTemp: keepTemp,
+      json: json,
+    );
+  }
+}
+
+final class _BenchmarkWebScoreboardOptions {
+  const _BenchmarkWebScoreboardOptions({
+    required this.inputDir,
+    required this.outputPath,
+    required this.jsonOutputPath,
+    required this.minRuns,
+    required this.maxTotalFrameP95Ms,
+    required this.maxDomApplyP95Ms,
+    required this.maxSemanticApplyP95Ms,
+    required this.maxOverBudgetPercent,
+    required this.maxSemanticUncoveredCells,
+    required this.thresholdsPath,
+    required this.writeThresholdsPath,
+    required this.thresholdHeadroomPercent,
+    required this.thresholdMinHeadroomMs,
+    required this.thresholdMinHeadroomPercent,
+    required this.requireComparableRunEnvironment,
+    required this.json,
+    required this.strict,
+  });
+
+  final String inputDir;
+  final String? outputPath;
+  final String? jsonOutputPath;
+  final int minRuns;
+  final double? maxTotalFrameP95Ms;
+  final double? maxDomApplyP95Ms;
+  final double? maxSemanticApplyP95Ms;
+  final double? maxOverBudgetPercent;
+  final double? maxSemanticUncoveredCells;
+  final String? thresholdsPath;
+  final String? writeThresholdsPath;
+  final double thresholdHeadroomPercent;
+  final double thresholdMinHeadroomMs;
+  final double thresholdMinHeadroomPercent;
+  final bool requireComparableRunEnvironment;
+  final bool json;
+  final bool strict;
+
+  static _BenchmarkWebScoreboardOptions parse(String root, List<String> args) {
+    var inputDir = '$root/profiling/web';
+    String? outputPath;
+    String? jsonOutputPath;
+    var minRuns = 1;
+    double? maxTotalFrameP95Ms;
+    double? maxDomApplyP95Ms;
+    double? maxSemanticApplyP95Ms;
+    double? maxOverBudgetPercent;
+    double? maxSemanticUncoveredCells;
+    String? thresholdsPath;
+    String? writeThresholdsPath;
+    var thresholdHeadroomPercent = 20.0;
+    var thresholdMinHeadroomMs = 1.0;
+    var thresholdMinHeadroomPercent = 1.0;
+    var requireComparableRunEnvironment = false;
+    var json = false;
+    var strict = false;
+
+    for (final arg in args) {
+      if (arg == '-h' || arg == '--help' || arg == 'help') {
+        _printBenchmarkWebScoreboardUsage();
+        exit(0);
+      } else if (arg.startsWith('--input=')) {
+        inputDir = _absolutePath(root, arg.substring('--input='.length));
+      } else if (arg.startsWith('--output=')) {
+        outputPath = _absolutePath(root, arg.substring('--output='.length));
+      } else if (arg.startsWith('--json-output=')) {
+        final rawPath = arg.substring('--json-output='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--json-output requires a non-empty path.');
+          _printBenchmarkWebScoreboardUsage();
+          exit(2);
+        }
+        jsonOutputPath = _absolutePath(root, rawPath);
+      } else if (arg.startsWith('--min-runs=')) {
+        minRuns = _positiveCliInt(arg, '--min-runs=');
+      } else if (arg.startsWith('--max-total-frame-p95-ms=')) {
+        maxTotalFrameP95Ms = _positiveCliDouble(
+          arg,
+          '--max-total-frame-p95-ms=',
+        );
+      } else if (arg.startsWith('--max-dom-apply-p95-ms=')) {
+        maxDomApplyP95Ms = _positiveCliDouble(arg, '--max-dom-apply-p95-ms=');
+      } else if (arg.startsWith('--max-semantic-apply-p95-ms=')) {
+        maxSemanticApplyP95Ms = _positiveCliDouble(
+          arg,
+          '--max-semantic-apply-p95-ms=',
+        );
+      } else if (arg.startsWith('--max-over-budget-percent=')) {
+        maxOverBudgetPercent = _nonNegativeCliDouble(
+          arg,
+          '--max-over-budget-percent=',
+        );
+      } else if (arg.startsWith('--max-semantic-uncovered-cells=')) {
+        maxSemanticUncoveredCells = _nonNegativeCliDouble(
+          arg,
+          '--max-semantic-uncovered-cells=',
+        );
+      } else if (arg.startsWith('--thresholds=')) {
+        thresholdsPath = _absolutePath(
+          root,
+          arg.substring('--thresholds='.length),
+        );
+      } else if (arg.startsWith('--write-thresholds=')) {
+        writeThresholdsPath = _absolutePath(
+          root,
+          arg.substring('--write-thresholds='.length),
+        );
+      } else if (arg.startsWith('--threshold-headroom-percent=')) {
+        thresholdHeadroomPercent = _nonNegativeCliDouble(
+          arg,
+          '--threshold-headroom-percent=',
+        );
+      } else if (arg.startsWith('--threshold-min-headroom-ms=')) {
+        thresholdMinHeadroomMs = _nonNegativeCliDouble(
+          arg,
+          '--threshold-min-headroom-ms=',
+        );
+      } else if (arg.startsWith('--threshold-min-headroom-percent=')) {
+        thresholdMinHeadroomPercent = _nonNegativeCliDouble(
+          arg,
+          '--threshold-min-headroom-percent=',
+        );
+      } else if (arg == '--require-comparable-environment') {
+        requireComparableRunEnvironment = true;
+      } else if (arg == '--json') {
+        json = true;
+      } else if (arg == '--strict') {
+        strict = true;
+      } else {
+        stderr.writeln('Unknown option for benchmark web-scoreboard: $arg');
+        _printBenchmarkWebScoreboardUsage();
+        exit(2);
+      }
+    }
+
+    return _BenchmarkWebScoreboardOptions(
+      inputDir: inputDir,
+      outputPath: outputPath,
+      jsonOutputPath: jsonOutputPath,
+      minRuns: minRuns,
+      maxTotalFrameP95Ms: maxTotalFrameP95Ms,
+      maxDomApplyP95Ms: maxDomApplyP95Ms,
+      maxSemanticApplyP95Ms: maxSemanticApplyP95Ms,
+      maxOverBudgetPercent: maxOverBudgetPercent,
+      maxSemanticUncoveredCells: maxSemanticUncoveredCells,
+      thresholdsPath: thresholdsPath,
+      writeThresholdsPath: writeThresholdsPath,
+      thresholdHeadroomPercent: thresholdHeadroomPercent,
+      thresholdMinHeadroomMs: thresholdMinHeadroomMs,
+      thresholdMinHeadroomPercent: thresholdMinHeadroomPercent,
+      requireComparableRunEnvironment: requireComparableRunEnvironment,
+      json: json,
+      strict: strict,
+    );
+  }
+}
+
+final class _BenchmarkWebThresholdReviewOptions {
+  const _BenchmarkWebThresholdReviewOptions({
+    required this.inputPath,
+    required this.outputPath,
+    required this.writePlanPath,
+    required this.reviewedBy,
+    required this.reviewedAt,
+    required this.reviewContext,
+    required this.reviewContextHint,
+    required this.reviewNote,
+    required this.expectedInputFingerprint,
+    required this.allowOverBudgetThresholds,
+    required this.jsonOutputPath,
+    required this.json,
+  });
+
+  final String inputPath;
+  final String? outputPath;
+  final String? writePlanPath;
+  final String? reviewedBy;
+  final String? reviewedAt;
+  final String? reviewContext;
+  final String? reviewContextHint;
+  final String? reviewNote;
+  final String? expectedInputFingerprint;
+  final bool allowOverBudgetThresholds;
+  final String? jsonOutputPath;
+  final bool json;
+
+  static _BenchmarkWebThresholdReviewOptions parse(
+    String root,
+    List<String> args,
+  ) {
+    String? inputPath;
+    String? outputPath;
+    String? writePlanPath;
+    String? reviewedBy;
+    String? reviewedAt;
+    String? reviewContext;
+    String? reviewContextHint;
+    String? reviewNote;
+    String? expectedInputFingerprint;
+    var allowOverBudgetThresholds = false;
+    String? jsonOutputPath;
+    var json = false;
+
+    for (final arg in args) {
+      if (arg == '-h' || arg == '--help' || arg == 'help') {
+        _printBenchmarkWebThresholdReviewUsage();
+        exit(0);
+      } else if (arg.startsWith('--input=')) {
+        inputPath = _absolutePath(root, arg.substring('--input='.length));
+      } else if (arg.startsWith('--output=')) {
+        outputPath = _absolutePath(root, arg.substring('--output='.length));
+      } else if (arg.startsWith('--write-plan=')) {
+        final raw = arg.substring('--write-plan='.length).trim();
+        if (raw.isEmpty) {
+          stderr.writeln(
+            'benchmark web-threshold-review --write-plan requires a non-empty path.',
+          );
+          _printBenchmarkWebThresholdReviewUsage();
+          exit(2);
+        }
+        writePlanPath = _absolutePath(root, raw);
+      } else if (arg.startsWith('--reviewed-by=')) {
+        reviewedBy = arg.substring('--reviewed-by='.length).trim();
+      } else if (arg.startsWith('--reviewed-at=')) {
+        reviewedAt = arg.substring('--reviewed-at='.length).trim();
+      } else if (arg.startsWith('--review-context=')) {
+        reviewContext = arg.substring('--review-context='.length).trim();
+      } else if (arg.startsWith('--review-context-hint=')) {
+        reviewContextHint = arg
+            .substring('--review-context-hint='.length)
+            .trim();
+      } else if (arg.startsWith('--review-note=')) {
+        reviewNote = arg.substring('--review-note='.length).trim();
+      } else if (arg.startsWith('--expect-input-fingerprint=')) {
+        expectedInputFingerprint = arg
+            .substring('--expect-input-fingerprint='.length)
+            .trim();
+        if (expectedInputFingerprint.isEmpty) {
+          stderr.writeln(
+            'benchmark web-threshold-review --expect-input-fingerprint requires a non-empty value.',
+          );
+          _printBenchmarkWebThresholdReviewUsage();
+          exit(2);
+        }
+      } else if (arg == '--allow-over-budget-thresholds') {
+        allowOverBudgetThresholds = true;
+      } else if (arg.startsWith('--json-output=')) {
+        final raw = arg.substring('--json-output='.length).trim();
+        if (raw.isEmpty) {
+          stderr.writeln(
+            'benchmark web-threshold-review --json-output requires a non-empty path.',
+          );
+          _printBenchmarkWebThresholdReviewUsage();
+          exit(2);
+        }
+        jsonOutputPath = _absolutePath(root, raw);
+      } else if (arg == '--json') {
+        json = true;
+      } else {
+        stderr.writeln(
+          'Unknown option for benchmark web-threshold-review: $arg',
+        );
+        _printBenchmarkWebThresholdReviewUsage();
+        exit(2);
+      }
+    }
+
+    if (inputPath == null || inputPath.isEmpty) {
+      stderr.writeln('benchmark web-threshold-review requires --input=PATH');
+      _printBenchmarkWebThresholdReviewUsage();
+      exit(2);
+    }
+    final promote =
+        writePlanPath == null ||
+        outputPath != null ||
+        reviewedBy != null ||
+        reviewedAt != null ||
+        reviewContext != null ||
+        reviewNote != null ||
+        json;
+    if (promote && (outputPath == null || outputPath.isEmpty)) {
+      stderr.writeln('benchmark web-threshold-review requires --output=PATH');
+      _printBenchmarkWebThresholdReviewUsage();
+      exit(2);
+    }
+    if (promote && (reviewedBy == null || reviewedBy.isEmpty)) {
+      stderr.writeln(
+        'benchmark web-threshold-review requires --reviewed-by=NAME',
+      );
+      _printBenchmarkWebThresholdReviewUsage();
+      exit(2);
+    }
+    if (promote && (reviewContext == null || reviewContext.isEmpty)) {
+      stderr.writeln(
+        'benchmark web-threshold-review requires --review-context=TEXT',
+      );
+      _printBenchmarkWebThresholdReviewUsage();
+      exit(2);
+    }
+
+    return _BenchmarkWebThresholdReviewOptions(
+      inputPath: inputPath,
+      outputPath: outputPath,
+      writePlanPath: writePlanPath,
+      reviewedBy: reviewedBy,
+      reviewedAt: reviewedAt == null || reviewedAt.isEmpty ? null : reviewedAt,
+      reviewContext: reviewContext,
+      reviewContextHint: reviewContextHint == null || reviewContextHint.isEmpty
+          ? null
+          : reviewContextHint,
+      reviewNote: reviewNote == null || reviewNote.isEmpty ? null : reviewNote,
+      expectedInputFingerprint:
+          expectedInputFingerprint == null || expectedInputFingerprint.isEmpty
+          ? null
+          : expectedInputFingerprint,
+      allowOverBudgetThresholds: allowOverBudgetThresholds,
+      jsonOutputPath: jsonOutputPath,
+      json: json,
+    );
+  }
+}
+
+final class _BenchmarkWebSemanticAuditOptions {
+  const _BenchmarkWebSemanticAuditOptions({
+    required this.inputDir,
+    required this.outputPath,
+    required this.jsonOutputPath,
+    required this.maxFallbackCells,
+    required this.maxFallbackFramePercent,
+    required this.maxFallbackViewportPercent,
+    required this.json,
+    required this.strict,
+  });
+
+  final String inputDir;
+  final String? outputPath;
+  final String? jsonOutputPath;
+  final int? maxFallbackCells;
+  final double? maxFallbackFramePercent;
+  final double? maxFallbackViewportPercent;
+  final bool json;
+  final bool strict;
+
+  static _BenchmarkWebSemanticAuditOptions parse(
+    String root,
+    List<String> args,
+  ) {
+    var inputDir = '$root/profiling/web';
+    String? outputPath;
+    String? jsonOutputPath;
+    int? maxFallbackCells;
+    double? maxFallbackFramePercent;
+    double? maxFallbackViewportPercent;
+    var json = false;
+    var strict = false;
+
+    for (final arg in args) {
+      if (arg == '-h' || arg == '--help' || arg == 'help') {
+        _printBenchmarkWebSemanticAuditUsage();
+        exit(0);
+      } else if (arg.startsWith('--input=')) {
+        inputDir = _absolutePath(root, arg.substring('--input='.length));
+      } else if (arg.startsWith('--output=')) {
+        outputPath = _absolutePath(root, arg.substring('--output='.length));
+      } else if (arg.startsWith('--json-output=')) {
+        final rawPath = arg.substring('--json-output='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--json-output requires a non-empty path.');
+          _printBenchmarkWebSemanticAuditUsage();
+          exit(2);
+        }
+        jsonOutputPath = _absolutePath(root, rawPath);
+      } else if (arg.startsWith('--max-fallback-cells=')) {
+        maxFallbackCells = _nonNegativeCliInt(arg, '--max-fallback-cells=');
+      } else if (arg.startsWith('--max-fallback-frame-percent=')) {
+        maxFallbackFramePercent = _nonNegativeCliDouble(
+          arg,
+          '--max-fallback-frame-percent=',
+        );
+      } else if (arg.startsWith('--max-fallback-viewport-percent=')) {
+        maxFallbackViewportPercent = _nonNegativeCliDouble(
+          arg,
+          '--max-fallback-viewport-percent=',
+        );
+      } else if (arg == '--json') {
+        json = true;
+      } else if (arg == '--strict') {
+        strict = true;
+      } else {
+        stderr.writeln('Unknown option for benchmark web-semantic-audit: $arg');
+        _printBenchmarkWebSemanticAuditUsage();
+        exit(2);
+      }
+    }
+
+    return _BenchmarkWebSemanticAuditOptions(
+      inputDir: inputDir,
+      outputPath: outputPath,
+      jsonOutputPath: jsonOutputPath,
+      maxFallbackCells: maxFallbackCells,
+      maxFallbackFramePercent: maxFallbackFramePercent,
+      maxFallbackViewportPercent: maxFallbackViewportPercent,
+      json: json,
+      strict: strict,
+    );
+  }
+}
+
+final class _BenchmarkWebManualValidationOptions {
+  const _BenchmarkWebManualValidationOptions({
+    required this.inputDir,
+    required this.outputPath,
+    required this.writePlanPath,
+    required this.writeTemplatePath,
+    required this.writeStarterPath,
+    required this.starterTemplatePath,
+    required this.updateProvenancePath,
+    required this.updatePageSignalPath,
+    required this.updateCheckPath,
+    required this.reviewedBy,
+    required this.capturedAt,
+    required this.browserVersion,
+    required this.signalId,
+    required this.signalStatus,
+    required this.observedValue,
+    required this.signalNotes,
+    required this.checkId,
+    required this.checkStatus,
+    required this.checkNotes,
+    required this.entryStatus,
+    required this.writeTemplatesDir,
+    required this.templateTargetId,
+    required this.jsonOutputPath,
+    required this.targetPreset,
+    required this.targetIds,
+    required this.json,
+    required this.strict,
+  });
+
+  final String inputDir;
+  final String? outputPath;
+  final String? writePlanPath;
+  final String? writeTemplatePath;
+  final String? writeStarterPath;
+  final String? starterTemplatePath;
+  final String? updateProvenancePath;
+  final String? updatePageSignalPath;
+  final String? updateCheckPath;
+  final String? reviewedBy;
+  final String? capturedAt;
+  final String? browserVersion;
+  final String? signalId;
+  final String? signalStatus;
+  final String? observedValue;
+  final String? signalNotes;
+  final String? checkId;
+  final String? checkStatus;
+  final String? checkNotes;
+  final String? entryStatus;
+  final String? writeTemplatesDir;
+  final String? templateTargetId;
+  final String? jsonOutputPath;
+  final String targetPreset;
+  final List<String> targetIds;
+  final bool json;
+  final bool strict;
+
+  static _BenchmarkWebManualValidationOptions parse(
+    String root,
+    List<String> args,
+  ) {
+    var inputDir = '$root/profiling/web/manual';
+    String? outputPath;
+    String? writePlanPath;
+    String? writeTemplatePath;
+    String? writeStarterPath;
+    String? starterTemplatePath;
+    String? updateProvenancePath;
+    String? updatePageSignalPath;
+    String? updateCheckPath;
+    String? reviewedBy;
+    String? capturedAt;
+    String? browserVersion;
+    String? signalId;
+    String? signalStatus;
+    String? observedValue;
+    String? signalNotes;
+    String? checkId;
+    String? checkStatus;
+    String? checkNotes;
+    String? entryStatus;
+    String? writeTemplatesDir;
+    String? templateTargetId;
+    String? jsonOutputPath;
+    var targetPreset = 'primary';
+    final targetIds = <String>[];
+    var json = false;
+    var strict = false;
+
+    for (final arg in args) {
+      if (arg == '-h' || arg == '--help' || arg == 'help') {
+        _printBenchmarkWebManualValidationUsage();
+        exit(0);
+      } else if (arg.startsWith('--input=')) {
+        inputDir = _absolutePath(root, arg.substring('--input='.length));
+      } else if (arg.startsWith('--output=')) {
+        outputPath = _absolutePath(root, arg.substring('--output='.length));
+      } else if (arg.startsWith('--write-plan=')) {
+        writePlanPath = _absolutePath(
+          root,
+          arg.substring('--write-plan='.length),
+        );
+      } else if (arg.startsWith('--write-template=')) {
+        writeTemplatePath = _absolutePath(
+          root,
+          arg.substring('--write-template='.length),
+        );
+      } else if (arg.startsWith('--write-starter=')) {
+        final rawPath = arg.substring('--write-starter='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--write-starter requires a non-empty path.');
+          _printBenchmarkWebManualValidationUsage();
+          exit(2);
+        }
+        writeStarterPath = _absolutePath(root, rawPath);
+      } else if (arg.startsWith('--starter-template=')) {
+        final rawPath = arg.substring('--starter-template='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--starter-template requires a non-empty path.');
+          _printBenchmarkWebManualValidationUsage();
+          exit(2);
+        }
+        starterTemplatePath = _absolutePath(root, rawPath);
+      } else if (arg.startsWith('--update-provenance=')) {
+        final rawPath = arg.substring('--update-provenance='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--update-provenance requires a non-empty path.');
+          _printBenchmarkWebManualValidationUsage();
+          exit(2);
+        }
+        updateProvenancePath = _absolutePath(root, rawPath);
+      } else if (arg.startsWith('--update-page-signal=')) {
+        final rawPath = arg.substring('--update-page-signal='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--update-page-signal requires a non-empty path.');
+          _printBenchmarkWebManualValidationUsage();
+          exit(2);
+        }
+        updatePageSignalPath = _absolutePath(root, rawPath);
+      } else if (arg.startsWith('--update-check=')) {
+        final rawPath = arg.substring('--update-check='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--update-check requires a non-empty path.');
+          _printBenchmarkWebManualValidationUsage();
+          exit(2);
+        }
+        updateCheckPath = _absolutePath(root, rawPath);
+      } else if (arg.startsWith('--reviewed-by=')) {
+        reviewedBy = arg.substring('--reviewed-by='.length);
+      } else if (arg.startsWith('--captured-at=')) {
+        capturedAt = arg.substring('--captured-at='.length);
+      } else if (arg.startsWith('--browser-version=')) {
+        browserVersion = arg.substring('--browser-version='.length);
+      } else if (arg.startsWith('--signal-id=')) {
+        signalId = arg.substring('--signal-id='.length);
+      } else if (arg.startsWith('--signal-status=')) {
+        signalStatus = arg.substring('--signal-status='.length);
+      } else if (arg.startsWith('--observed-value=')) {
+        observedValue = arg.substring('--observed-value='.length);
+      } else if (arg.startsWith('--signal-notes=')) {
+        signalNotes = arg.substring('--signal-notes='.length);
+      } else if (arg.startsWith('--check-id=')) {
+        checkId = arg.substring('--check-id='.length);
+      } else if (arg.startsWith('--check-status=')) {
+        checkStatus = arg.substring('--check-status='.length);
+      } else if (arg.startsWith('--check-notes=')) {
+        checkNotes = arg.substring('--check-notes='.length);
+      } else if (arg.startsWith('--entry-status=')) {
+        entryStatus = arg.substring('--entry-status='.length);
+      } else if (arg.startsWith('--write-templates=')) {
+        final rawPath = arg.substring('--write-templates='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--write-templates requires a non-empty path.');
+          _printBenchmarkWebManualValidationUsage();
+          exit(2);
+        }
+        writeTemplatesDir = _absolutePath(root, rawPath);
+      } else if (arg.startsWith('--template-target=')) {
+        templateTargetId = arg.substring('--template-target='.length);
+      } else if (arg.startsWith('--json-output=')) {
+        final rawPath = arg.substring('--json-output='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--json-output requires a non-empty path.');
+          _printBenchmarkWebManualValidationUsage();
+          exit(2);
+        }
+        jsonOutputPath = _absolutePath(root, rawPath);
+      } else if (arg.startsWith('--target-preset=')) {
+        targetPreset = arg.substring('--target-preset='.length);
+      } else if (arg.startsWith('--target=')) {
+        targetIds.add(arg.substring('--target='.length));
+      } else if (arg == '--json') {
+        json = true;
+      } else if (arg == '--strict') {
+        strict = true;
+      } else {
+        stderr.writeln(
+          'Unknown option for benchmark web-manual-validation: $arg',
+        );
+        _printBenchmarkWebManualValidationUsage();
+        exit(2);
+      }
+    }
+
+    return _BenchmarkWebManualValidationOptions(
+      inputDir: inputDir,
+      outputPath: outputPath,
+      writePlanPath: writePlanPath,
+      writeTemplatePath: writeTemplatePath,
+      writeStarterPath: writeStarterPath,
+      starterTemplatePath: starterTemplatePath,
+      updateProvenancePath: updateProvenancePath,
+      updatePageSignalPath: updatePageSignalPath,
+      updateCheckPath: updateCheckPath,
+      reviewedBy: reviewedBy,
+      capturedAt: capturedAt,
+      browserVersion: browserVersion,
+      signalId: signalId,
+      signalStatus: signalStatus,
+      observedValue: observedValue,
+      signalNotes: signalNotes,
+      checkId: checkId,
+      checkStatus: checkStatus,
+      checkNotes: checkNotes,
+      entryStatus: entryStatus,
+      writeTemplatesDir: writeTemplatesDir,
+      templateTargetId: templateTargetId,
+      jsonOutputPath: jsonOutputPath,
+      targetPreset: targetPreset,
+      targetIds: List.unmodifiable(targetIds),
+      json: json,
+      strict: strict,
+    );
+  }
+}
+
+final class _BenchmarkWebReadinessOptions {
+  const _BenchmarkWebReadinessOptions({
+    required this.scoreboardPath,
+    required this.semanticAuditPath,
+    required this.manualAuditPath,
+    required this.thresholdReviewPath,
+    required this.outputPath,
+    required this.jsonOutputPath,
+    required this.minScoreboardRuns,
+    required this.requireComparableEnvironment,
+    required this.requireScoreboardGates,
+    required this.requireTotalFrameGate,
+    required this.requireSemanticGates,
+    required this.requireReviewedThresholdPolicy,
+    required this.requireThresholdReviewSummary,
+    required this.requireScenarioThresholds,
+    required this.json,
+    required this.strict,
+  });
+
+  final String scoreboardPath;
+  final String semanticAuditPath;
+  final String manualAuditPath;
+  final String? thresholdReviewPath;
+  final String? outputPath;
+  final String? jsonOutputPath;
+  final int minScoreboardRuns;
+  final bool requireComparableEnvironment;
+  final bool requireScoreboardGates;
+  final bool requireTotalFrameGate;
+  final bool requireSemanticGates;
+  final bool requireReviewedThresholdPolicy;
+  final bool requireThresholdReviewSummary;
+  final bool requireScenarioThresholds;
+  final bool json;
+  final bool strict;
+
+  static _BenchmarkWebReadinessOptions parse(String root, List<String> args) {
+    var scoreboardPath =
+        '$root/profiling/web/baselines/web-frame-scoreboard.json';
+    var semanticAuditPath =
+        '$root/profiling/web/baselines/web-semantic-coverage.json';
+    var manualAuditPath =
+        '$root/profiling/web/manual/manual-validation-audit.json';
+    String? thresholdReviewPath;
+    String? outputPath;
+    String? jsonOutputPath;
+    var minScoreboardRuns = 3;
+    var requireComparableEnvironment = true;
+    var requireScoreboardGates = true;
+    var requireTotalFrameGate = true;
+    var requireSemanticGates = true;
+    var requireReviewedThresholdPolicy = true;
+    var requireThresholdReviewSummary = true;
+    var requireScenarioThresholds = true;
+    var json = false;
+    var strict = false;
+
+    for (final arg in args) {
+      if (arg == '-h' || arg == '--help' || arg == 'help') {
+        _printBenchmarkWebReadinessUsage();
+        exit(0);
+      } else if (arg.startsWith('--scoreboard=')) {
+        scoreboardPath = _absolutePath(
+          root,
+          arg.substring('--scoreboard='.length),
+        );
+      } else if (arg.startsWith('--semantic-audit=')) {
+        semanticAuditPath = _absolutePath(
+          root,
+          arg.substring('--semantic-audit='.length),
+        );
+      } else if (arg.startsWith('--manual-audit=')) {
+        manualAuditPath = _absolutePath(
+          root,
+          arg.substring('--manual-audit='.length),
+        );
+      } else if (arg.startsWith('--threshold-review=')) {
+        final rawPath = arg.substring('--threshold-review='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--threshold-review requires a non-empty path.');
+          _printBenchmarkWebReadinessUsage();
+          exit(2);
+        }
+        thresholdReviewPath = _absolutePath(root, rawPath);
+      } else if (arg.startsWith('--output=')) {
+        outputPath = _absolutePath(root, arg.substring('--output='.length));
+      } else if (arg.startsWith('--json-output=')) {
+        final rawPath = arg.substring('--json-output='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--json-output requires a non-empty path.');
+          _printBenchmarkWebReadinessUsage();
+          exit(2);
+        }
+        jsonOutputPath = _absolutePath(root, rawPath);
+      } else if (arg.startsWith('--min-scoreboard-runs=')) {
+        minScoreboardRuns = _positiveCliInt(arg, '--min-scoreboard-runs=');
+      } else if (arg == '--no-require-comparable-environment') {
+        requireComparableEnvironment = false;
+      } else if (arg == '--no-require-scoreboard-gates') {
+        requireScoreboardGates = false;
+      } else if (arg == '--no-require-total-frame-gate') {
+        requireTotalFrameGate = false;
+      } else if (arg == '--no-require-semantic-gates') {
+        requireSemanticGates = false;
+      } else if (arg == '--no-require-reviewed-threshold-policy') {
+        requireReviewedThresholdPolicy = false;
+      } else if (arg == '--no-require-threshold-review-summary') {
+        requireThresholdReviewSummary = false;
+      } else if (arg == '--no-require-scenario-thresholds') {
+        requireScenarioThresholds = false;
+      } else if (arg == '--json') {
+        json = true;
+      } else if (arg == '--strict') {
+        strict = true;
+      } else {
+        stderr.writeln('Unknown option for benchmark web-readiness: $arg');
+        _printBenchmarkWebReadinessUsage();
+        exit(2);
+      }
+    }
+
+    return _BenchmarkWebReadinessOptions(
+      scoreboardPath: scoreboardPath,
+      semanticAuditPath: semanticAuditPath,
+      manualAuditPath: manualAuditPath,
+      thresholdReviewPath: thresholdReviewPath,
+      outputPath: outputPath,
+      jsonOutputPath: jsonOutputPath,
+      minScoreboardRuns: minScoreboardRuns,
+      requireComparableEnvironment: requireComparableEnvironment,
+      requireScoreboardGates: requireScoreboardGates,
+      requireTotalFrameGate: requireTotalFrameGate,
+      requireSemanticGates: requireSemanticGates,
+      requireReviewedThresholdPolicy: requireReviewedThresholdPolicy,
+      requireThresholdReviewSummary: requireThresholdReviewSummary,
+      requireScenarioThresholds: requireScenarioThresholds,
+      json: json,
+      strict: strict,
+    );
+  }
+}
+
+final class _BenchmarkWebReadinessBundleOptions {
+  const _BenchmarkWebReadinessBundleOptions({
+    required this.verifyPath,
+    required this.captureDir,
+    required this.manualDir,
+    required this.outputDir,
+    required this.minRuns,
+    required this.maxTotalFrameP95Ms,
+    required this.maxDomApplyP95Ms,
+    required this.maxSemanticApplyP95Ms,
+    required this.maxOverBudgetPercent,
+    required this.maxSemanticUncoveredCells,
+    required this.thresholdsPath,
+    required this.thresholdReviewPath,
+    required this.requireComparableRunEnvironment,
+    required this.maxFallbackCells,
+    required this.maxFallbackFramePercent,
+    required this.maxFallbackViewportPercent,
+    required this.targetPreset,
+    required this.targetIds,
+    required this.requireScoreboardGates,
+    required this.requireTotalFrameGate,
+    required this.requireSemanticGates,
+    required this.requireReviewedThresholdPolicy,
+    required this.requireThresholdReviewSummary,
+    required this.requireScenarioThresholds,
+    required this.writeDefaultPreflights,
+    required this.completionAuditPath,
+    required this.json,
+    required this.strict,
+  });
+
+  final String? verifyPath;
+  final String captureDir;
+  final String manualDir;
+  final String outputDir;
+  final int minRuns;
+  final double? maxTotalFrameP95Ms;
+  final double? maxDomApplyP95Ms;
+  final double? maxSemanticApplyP95Ms;
+  final double? maxOverBudgetPercent;
+  final double? maxSemanticUncoveredCells;
+  final String? thresholdsPath;
+  final String? thresholdReviewPath;
+  final bool requireComparableRunEnvironment;
+  final int? maxFallbackCells;
+  final double? maxFallbackFramePercent;
+  final double? maxFallbackViewportPercent;
+  final String targetPreset;
+  final List<String> targetIds;
+  final bool requireScoreboardGates;
+  final bool requireTotalFrameGate;
+  final bool requireSemanticGates;
+  final bool requireReviewedThresholdPolicy;
+  final bool requireThresholdReviewSummary;
+  final bool requireScenarioThresholds;
+  final bool writeDefaultPreflights;
+  final String? completionAuditPath;
+  final bool json;
+  final bool strict;
+
+  static _BenchmarkWebReadinessBundleOptions parse(
+    String root,
+    List<String> args,
+  ) {
+    String? verifyPath;
+    var captureDir = '$root/profiling/web/baselines';
+    var manualDir = '$root/profiling/web/manual';
+    var outputDir = '$root/profiling/web/baselines/web-readiness-bundle';
+    var minRuns = 3;
+    double? maxTotalFrameP95Ms;
+    double? maxDomApplyP95Ms;
+    double? maxSemanticApplyP95Ms;
+    double? maxOverBudgetPercent;
+    double? maxSemanticUncoveredCells;
+    String? thresholdsPath;
+    String? thresholdReviewPath;
+    var requireComparableRunEnvironment = true;
+    int? maxFallbackCells;
+    double? maxFallbackFramePercent;
+    double? maxFallbackViewportPercent;
+    var targetPreset = 'primary';
+    final targetIds = <String>[];
+    var requireScoreboardGates = true;
+    var requireTotalFrameGate = true;
+    var requireSemanticGates = true;
+    var requireReviewedThresholdPolicy = true;
+    var requireThresholdReviewSummary = true;
+    var requireScenarioThresholds = true;
+    var writeDefaultPreflights = false;
+    String? completionAuditPath;
+    var json = false;
+    var strict = false;
+
+    for (final arg in args) {
+      if (arg == '-h' || arg == '--help' || arg == 'help') {
+        _printBenchmarkWebReadinessBundleUsage();
+        exit(0);
+      } else if (arg.startsWith('--verify=')) {
+        final rawPath = arg.substring('--verify='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--verify requires a non-empty path.');
+          _printBenchmarkWebReadinessBundleUsage();
+          exit(2);
+        }
+        verifyPath = _absolutePath(root, rawPath);
+      } else if (arg.startsWith('--captures=')) {
+        captureDir = _absolutePath(root, arg.substring('--captures='.length));
+      } else if (arg.startsWith('--manual=')) {
+        manualDir = _absolutePath(root, arg.substring('--manual='.length));
+      } else if (arg.startsWith('--output-dir=')) {
+        outputDir = _absolutePath(root, arg.substring('--output-dir='.length));
+      } else if (arg.startsWith('--min-runs=')) {
+        minRuns = _positiveCliInt(arg, '--min-runs=');
+      } else if (arg.startsWith('--max-total-frame-p95-ms=')) {
+        maxTotalFrameP95Ms = _positiveCliDouble(
+          arg,
+          '--max-total-frame-p95-ms=',
+        );
+      } else if (arg.startsWith('--max-dom-apply-p95-ms=')) {
+        maxDomApplyP95Ms = _positiveCliDouble(arg, '--max-dom-apply-p95-ms=');
+      } else if (arg.startsWith('--max-semantic-apply-p95-ms=')) {
+        maxSemanticApplyP95Ms = _positiveCliDouble(
+          arg,
+          '--max-semantic-apply-p95-ms=',
+        );
+      } else if (arg.startsWith('--max-over-budget-percent=')) {
+        maxOverBudgetPercent = _nonNegativeCliDouble(
+          arg,
+          '--max-over-budget-percent=',
+        );
+      } else if (arg.startsWith('--max-semantic-uncovered-cells=')) {
+        maxSemanticUncoveredCells = _nonNegativeCliDouble(
+          arg,
+          '--max-semantic-uncovered-cells=',
+        );
+      } else if (arg.startsWith('--thresholds=')) {
+        thresholdsPath = _absolutePath(
+          root,
+          arg.substring('--thresholds='.length),
+        );
+      } else if (arg.startsWith('--threshold-review=')) {
+        final rawPath = arg.substring('--threshold-review='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--threshold-review requires a non-empty path.');
+          _printBenchmarkWebReadinessBundleUsage();
+          exit(2);
+        }
+        thresholdReviewPath = _absolutePath(root, rawPath);
+      } else if (arg == '--no-require-comparable-environment') {
+        requireComparableRunEnvironment = false;
+      } else if (arg.startsWith('--max-fallback-cells=')) {
+        maxFallbackCells = _nonNegativeCliInt(arg, '--max-fallback-cells=');
+      } else if (arg.startsWith('--max-fallback-frame-percent=')) {
+        maxFallbackFramePercent = _nonNegativeCliDouble(
+          arg,
+          '--max-fallback-frame-percent=',
+        );
+      } else if (arg.startsWith('--max-fallback-viewport-percent=')) {
+        maxFallbackViewportPercent = _nonNegativeCliDouble(
+          arg,
+          '--max-fallback-viewport-percent=',
+        );
+      } else if (arg.startsWith('--target-preset=')) {
+        targetPreset = arg.substring('--target-preset='.length);
+      } else if (arg.startsWith('--target=')) {
+        targetIds.add(arg.substring('--target='.length));
+      } else if (arg == '--no-require-scoreboard-gates') {
+        requireScoreboardGates = false;
+      } else if (arg == '--no-require-total-frame-gate') {
+        requireTotalFrameGate = false;
+      } else if (arg == '--no-require-semantic-gates') {
+        requireSemanticGates = false;
+      } else if (arg == '--no-require-reviewed-threshold-policy') {
+        requireReviewedThresholdPolicy = false;
+      } else if (arg == '--no-require-threshold-review-summary') {
+        requireThresholdReviewSummary = false;
+      } else if (arg == '--no-require-scenario-thresholds') {
+        requireScenarioThresholds = false;
+      } else if (arg == '--write-default-preflights') {
+        writeDefaultPreflights = true;
+      } else if (arg.startsWith('--completion-audit=')) {
+        final rawPath = arg.substring('--completion-audit='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--completion-audit requires a non-empty path.');
+          _printBenchmarkWebReadinessBundleUsage();
+          exit(2);
+        }
+        completionAuditPath = _absolutePath(root, rawPath);
+      } else if (arg == '--json') {
+        json = true;
+      } else if (arg == '--strict') {
+        strict = true;
+      } else {
+        stderr.writeln(
+          'Unknown option for benchmark web-readiness-bundle: $arg',
+        );
+        _printBenchmarkWebReadinessBundleUsage();
+        exit(2);
+      }
+    }
+
+    return _BenchmarkWebReadinessBundleOptions(
+      verifyPath: verifyPath,
+      captureDir: captureDir,
+      manualDir: manualDir,
+      outputDir: outputDir,
+      minRuns: minRuns,
+      maxTotalFrameP95Ms: maxTotalFrameP95Ms,
+      maxDomApplyP95Ms: maxDomApplyP95Ms,
+      maxSemanticApplyP95Ms: maxSemanticApplyP95Ms,
+      maxOverBudgetPercent: maxOverBudgetPercent,
+      maxSemanticUncoveredCells: maxSemanticUncoveredCells,
+      thresholdsPath: thresholdsPath,
+      thresholdReviewPath: thresholdReviewPath,
+      requireComparableRunEnvironment: requireComparableRunEnvironment,
+      maxFallbackCells: maxFallbackCells,
+      maxFallbackFramePercent: maxFallbackFramePercent,
+      maxFallbackViewportPercent: maxFallbackViewportPercent,
+      targetPreset: targetPreset,
+      targetIds: List.unmodifiable(targetIds),
+      requireScoreboardGates: requireScoreboardGates,
+      requireTotalFrameGate: requireTotalFrameGate,
+      requireSemanticGates: requireSemanticGates,
+      requireReviewedThresholdPolicy: requireReviewedThresholdPolicy,
+      requireThresholdReviewSummary: requireThresholdReviewSummary,
+      requireScenarioThresholds: requireScenarioThresholds,
+      writeDefaultPreflights: writeDefaultPreflights,
+      completionAuditPath: completionAuditPath,
+      json: json,
+      strict: strict,
+    );
+  }
+}
+
+final class _BenchmarkWebDefaultPreflightOptions {
+  const _BenchmarkWebDefaultPreflightOptions({
+    required this.readinessPath,
+    required this.bundlePath,
+    required this.automatedValidationPath,
+    required this.target,
+    required this.outputPath,
+    required this.jsonOutputPath,
+    required this.json,
+    required this.strict,
+    required this.allowUnbundled,
+  });
+
+  final String readinessPath;
+  final String? bundlePath;
+  final String? automatedValidationPath;
+  final String target;
+  final String? outputPath;
+  final String? jsonOutputPath;
+  final bool json;
+  final bool strict;
+  final bool allowUnbundled;
+
+  static _BenchmarkWebDefaultPreflightOptions parse(
+    String root,
+    List<String> args,
+  ) {
+    var readinessPath =
+        '$root/profiling/web/baselines/web-readiness-bundle/web-readiness.json';
+    String? bundlePath;
+    String? automatedValidationPath;
+    var target = 'make-dom-default';
+    String? outputPath;
+    String? jsonOutputPath;
+    var json = false;
+    var strict = false;
+    var allowUnbundled = false;
+
+    for (final arg in args) {
+      if (arg == '-h' || arg == '--help' || arg == 'help') {
+        _printBenchmarkWebDefaultPreflightUsage();
+        exit(0);
+      } else if (arg.startsWith('--readiness=')) {
+        readinessPath = _absolutePath(
+          root,
+          arg.substring('--readiness='.length),
+        );
+      } else if (arg.startsWith('--bundle=')) {
+        final rawPath = arg.substring('--bundle='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--bundle requires a non-empty path.');
+          _printBenchmarkWebDefaultPreflightUsage();
+          exit(2);
+        }
+        bundlePath = _absolutePath(root, rawPath);
+      } else if (arg.startsWith('--automated-validation=')) {
+        final rawPath = arg.substring('--automated-validation='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--automated-validation requires a non-empty path.');
+          _printBenchmarkWebDefaultPreflightUsage();
+          exit(2);
+        }
+        automatedValidationPath = _absolutePath(root, rawPath);
+      } else if (arg.startsWith('--target=')) {
+        target = arg.substring('--target='.length);
+      } else if (arg.startsWith('--output=')) {
+        outputPath = _absolutePath(root, arg.substring('--output='.length));
+      } else if (arg.startsWith('--json-output=')) {
+        final rawPath = arg.substring('--json-output='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--json-output requires a non-empty path.');
+          _printBenchmarkWebDefaultPreflightUsage();
+          exit(2);
+        }
+        jsonOutputPath = _absolutePath(root, rawPath);
+      } else if (arg == '--json') {
+        json = true;
+      } else if (arg == '--strict') {
+        strict = true;
+      } else if (arg == '--allow-unbundled') {
+        allowUnbundled = true;
+      } else {
+        stderr.writeln(
+          'Unknown option for benchmark web-default-preflight: $arg',
+        );
+        _printBenchmarkWebDefaultPreflightUsage();
+        exit(2);
+      }
+    }
+
+    final effectiveBundlePath =
+        bundlePath ??
+        (allowUnbundled ? null : _siblingReadinessBundlePath(readinessPath));
+    final effectiveAutomatedValidationPath =
+        automatedValidationPath ??
+        (allowUnbundled
+            ? null
+            : _siblingWebAutomatedValidationPath(readinessPath));
+
+    return _BenchmarkWebDefaultPreflightOptions(
+      readinessPath: readinessPath,
+      bundlePath: effectiveBundlePath,
+      automatedValidationPath: effectiveAutomatedValidationPath,
+      target: target,
+      outputPath: outputPath,
+      jsonOutputPath: jsonOutputPath,
+      json: json,
+      strict: strict,
+      allowUnbundled: allowUnbundled,
+    );
+  }
+}
+
+final class _BenchmarkWebAutomatedValidationOptions {
+  const _BenchmarkWebAutomatedValidationOptions({
+    required this.jsonOutputPath,
+    required this.json,
+    required this.strict,
+  });
+
+  final String? jsonOutputPath;
+  final bool json;
+  final bool strict;
+
+  static _BenchmarkWebAutomatedValidationOptions parse(
+    String root,
+    List<String> args,
+  ) {
+    String? jsonOutputPath;
+    var json = false;
+    var strict = false;
+
+    for (final arg in args) {
+      if (arg == '-h' || arg == '--help' || arg == 'help') {
+        _printBenchmarkWebAutomatedValidationUsage();
+        exit(0);
+      } else if (arg.startsWith('--json-output=')) {
+        final rawPath = arg.substring('--json-output='.length).trim();
+        if (rawPath.isEmpty) {
+          stderr.writeln('--json-output requires a non-empty path.');
+          _printBenchmarkWebAutomatedValidationUsage();
+          exit(2);
+        }
+        jsonOutputPath = _absolutePath(root, rawPath);
+      } else if (arg == '--json') {
+        json = true;
+      } else if (arg == '--strict') {
+        strict = true;
+      } else {
+        stderr.writeln(
+          'Unknown option for benchmark web-automated-validation: $arg',
+        );
+        _printBenchmarkWebAutomatedValidationUsage();
+        exit(2);
+      }
+    }
+
+    return _BenchmarkWebAutomatedValidationOptions(
+      jsonOutputPath: jsonOutputPath,
+      json: json,
+      strict: strict,
+    );
+  }
+}
+
+String _siblingReadinessBundlePath(String readinessPath) {
+  return '${File(readinessPath).parent.path}${Platform.pathSeparator}web-readiness-bundle.json';
+}
+
+String _siblingWebAutomatedValidationPath(String readinessPath) {
+  return '${File(readinessPath).parent.path}${Platform.pathSeparator}web-automated-validation.json';
+}
+
+final class _BenchmarkWebReportOptions {
+  const _BenchmarkWebReportOptions({
+    required this.inputPath,
+    required this.outputPath,
+    required this.frameBudgetMs,
+    required this.maxTotalFrameP95Ms,
+    required this.maxDomApplyP95Ms,
+    required this.maxSemanticApplyP95Ms,
+    required this.maxOverBudgetPercent,
+    required this.maxSemanticUncoveredCells,
+    required this.json,
+    required this.strict,
+  });
+
+  final String inputPath;
+  final String? outputPath;
+  final double frameBudgetMs;
+  final double? maxTotalFrameP95Ms;
+  final double? maxDomApplyP95Ms;
+  final double? maxSemanticApplyP95Ms;
+  final double? maxOverBudgetPercent;
+  final double? maxSemanticUncoveredCells;
+  final bool json;
+  final bool strict;
+
+  static _BenchmarkWebReportOptions parse(String root, List<String> args) {
+    String? inputPath;
+    String? outputPath;
+    var frameBudgetMs = 16.67;
+    double? maxTotalFrameP95Ms;
+    double? maxDomApplyP95Ms;
+    double? maxSemanticApplyP95Ms;
+    double? maxOverBudgetPercent;
+    double? maxSemanticUncoveredCells;
+    var json = false;
+    var strict = false;
+
+    for (final arg in args) {
+      if (arg == '-h' || arg == '--help' || arg == 'help') {
+        _printBenchmarkWebReportUsage();
+        exit(0);
+      } else if (arg.startsWith('--input=')) {
+        inputPath = _absolutePath(root, arg.substring('--input='.length));
+      } else if (arg.startsWith('--output=')) {
+        outputPath = _absolutePath(root, arg.substring('--output='.length));
+      } else if (arg.startsWith('--budget-ms=')) {
+        frameBudgetMs = _positiveCliDouble(arg, '--budget-ms=');
+      } else if (arg.startsWith('--max-total-frame-p95-ms=')) {
+        maxTotalFrameP95Ms = _positiveCliDouble(
+          arg,
+          '--max-total-frame-p95-ms=',
+        );
+      } else if (arg.startsWith('--max-dom-apply-p95-ms=')) {
+        maxDomApplyP95Ms = _positiveCliDouble(arg, '--max-dom-apply-p95-ms=');
+      } else if (arg.startsWith('--max-semantic-apply-p95-ms=')) {
+        maxSemanticApplyP95Ms = _positiveCliDouble(
+          arg,
+          '--max-semantic-apply-p95-ms=',
+        );
+      } else if (arg.startsWith('--max-over-budget-percent=')) {
+        maxOverBudgetPercent = _nonNegativeCliDouble(
+          arg,
+          '--max-over-budget-percent=',
+        );
+      } else if (arg.startsWith('--max-semantic-uncovered-cells=')) {
+        maxSemanticUncoveredCells = _nonNegativeCliDouble(
+          arg,
+          '--max-semantic-uncovered-cells=',
+        );
+      } else if (arg == '--json') {
+        json = true;
+      } else if (arg == '--strict') {
+        strict = true;
+      } else {
+        stderr.writeln('Unknown option for benchmark web-report: $arg');
+        _printBenchmarkWebReportUsage();
+        exit(2);
+      }
+    }
+
+    if (inputPath == null) {
+      stderr.writeln('benchmark web-report requires --input=<path>.');
+      _printBenchmarkWebReportUsage();
+      exit(2);
+    }
+
+    return _BenchmarkWebReportOptions(
+      inputPath: inputPath,
+      outputPath: outputPath,
+      frameBudgetMs: frameBudgetMs,
+      maxTotalFrameP95Ms: maxTotalFrameP95Ms,
+      maxDomApplyP95Ms: maxDomApplyP95Ms,
+      maxSemanticApplyP95Ms: maxSemanticApplyP95Ms,
+      maxOverBudgetPercent: maxOverBudgetPercent,
+      maxSemanticUncoveredCells: maxSemanticUncoveredCells,
+      json: json,
+      strict: strict,
+    );
+  }
+}
+
+double _positiveCliDouble(String arg, String prefix) {
+  final value = double.tryParse(arg.substring(prefix.length));
+  if (value == null || value <= 0) {
+    stderr.writeln('$prefix requires a positive number.');
+    exit(2);
+  }
+  return value;
+}
+
+double _nonNegativeCliDouble(String arg, String prefix) {
+  final value = double.tryParse(arg.substring(prefix.length));
+  if (value == null || value < 0) {
+    stderr.writeln('$prefix requires a non-negative number.');
+    exit(2);
+  }
+  return value;
+}
+
 final class _TerminalMatrixOptions {
   const _TerminalMatrixOptions({
     required this.label,
@@ -3491,6 +6249,39 @@ void _printBenchmarkUsage() {
     '  scoreboard [options]    Build the generated benchmark scoreboard',
   );
   stdout.writeln(
+    '  web-capture [options]   Capture retained DOM browser frame metrics',
+  );
+  stdout.writeln(
+    '  web-suite [options]     Run repeated retained DOM capture scenarios',
+  );
+  stdout.writeln(
+    '  web-scoreboard [options] Aggregate retained DOM capture directories',
+  );
+  stdout.writeln(
+    '  web-threshold-review [options] Promote candidate web thresholds after review',
+  );
+  stdout.writeln(
+    '  web-semantic-audit [options] Audit retained DOM semantic fallback reliance',
+  );
+  stdout.writeln(
+    '  web-manual-validation [options] Audit manual retained DOM web evidence',
+  );
+  stdout.writeln(
+    '  web-readiness [options] Combine reviewed web release-gate artifacts',
+  );
+  stdout.writeln(
+    '  web-readiness-bundle [options] Generate web readiness JSON artifacts',
+  );
+  stdout.writeln(
+    '  web-automated-validation [options] Run retained DOM automated host tests',
+  );
+  stdout.writeln(
+    '  web-default-preflight [options] Gate DOM default/retirement release actions',
+  );
+  stdout.writeln(
+    '  web-report [options]    Summarize retained DOM web frame captures',
+  );
+  stdout.writeln(
     '  manifest [options]     Print the comparative benchmark contract',
   );
   stdout.writeln(
@@ -3515,8 +6306,41 @@ void _printBenchmarkUsage() {
   );
   stdout.writeln('  fleury benchmark wire sb4 --runs=3');
   stdout.writeln('  fleury benchmark wire sb5 --peer=ink --runs=3');
+  stdout.writeln('  fleury benchmark wire-gate');
+  stdout.writeln('  fleury benchmark wire-gate --update-baseline');
   stdout.writeln(
     '  fleury benchmark scoreboard --input=profiling/caps --output=profiling/caps/scoreboard.md',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-capture --scenario=normal-80x24 --output=profiling/web/baselines/normal-80x24.json',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-suite --scenarios=normal-80x24,large-160x50 --runs=3',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-scoreboard --input=profiling/web --output=profiling/web/scoreboard.md --json-output=profiling/web/scoreboard.json',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-threshold-review --input=profiling/web/baselines/2026-06-08-dom-retained/thresholds.candidate.json --output=profiling/web/baselines/2026-06-08-dom-retained/thresholds.json --json-output=profiling/web/baselines/2026-06-08-dom-retained/threshold-review.json --expect-input-fingerprint=FNV1A64_FROM_REVIEW_PLAN --reviewed-by=REVIEWER --review-context="Chrome VERSION on PLATFORM, retained DOM product baseline" --allow-over-budget-thresholds --review-note="Explain any accepted over-budget thresholds."',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-semantic-audit --input=profiling/web --max-fallback-cells=0 --strict',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-manual-validation --write-plan=profiling/web/manual/plan.md',
+  );
+  stdout.writeln('  fleury benchmark web-readiness --strict --json');
+  stdout.writeln(
+    '  fleury benchmark web-readiness-bundle --captures=profiling/web/baselines/2026-06-08-dom-retained --manual=profiling/web/manual --output-dir=profiling/web/baselines/2026-06-08-dom-retained/readiness --thresholds=profiling/web/baselines/2026-06-08-dom-retained/thresholds.json --threshold-review=profiling/web/baselines/2026-06-08-dom-retained/threshold-review.json --max-total-frame-p95-ms=16.67 --max-fallback-cells=0 --write-default-preflights --strict',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-automated-validation --json-output=profiling/web/baselines/2026-06-08-dom-retained/readiness/web-automated-validation.json --strict',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-default-preflight --readiness=profiling/web/baselines/2026-06-08-dom-retained/readiness/web-readiness.json --bundle=profiling/web/baselines/2026-06-08-dom-retained/readiness/web-readiness-bundle.json --automated-validation=profiling/web/baselines/2026-06-08-dom-retained/readiness/web-automated-validation.json --target=make-dom-default --strict',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-report --input=profiling/web/dom-frames.json --output=profiling/web/dom-frames.md',
   );
 }
 
@@ -3694,6 +6518,654 @@ void _printBenchmarkScoreboardUsage() {
   stdout.writeln('  fleury benchmark scoreboard');
   stdout.writeln(
     '  fleury benchmark scoreboard --input=profiling/caps/2026-06-05-baseline --output=profiling/caps/2026-06-05-baseline/scoreboard.md',
+  );
+}
+
+void _printBenchmarkWebCaptureUsage() {
+  stdout.writeln(
+    'Usage: dart tool/fleury_dev.dart benchmark web-capture [options]',
+  );
+  stdout.writeln('');
+  stdout.writeln(
+    'Compiles the retained DOM benchmark page, runs it in Chrome, and writes frame capture JSON.',
+  );
+  stdout.writeln('');
+  stdout.writeln('Options:');
+  stdout.writeln('  --scenario=ID           Scenario id, default normal-80x24');
+  stdout.writeln('  --frames=N              Driven benchmark steps');
+  stdout.writeln('  --warmup=N              Warmup frames, default 2');
+  stdout.writeln('  --budget-ms=N           Frame budget, default 16.67');
+  stdout.writeln(
+    '  --output=PATH           Capture JSON output, default profiling/web/runs/<scenario>-<timestamp>.json',
+  );
+  stdout.writeln('  --chrome=PATH           Chrome/Chromium executable');
+  stdout.writeln('  --timeout=N             Timeout seconds, default 30');
+  stdout.writeln('  --headful               Launch Chrome visibly');
+  stdout.writeln(
+    '  --compile-only          Compile and print temp page directory',
+  );
+  stdout.writeln(
+    '  --keep-temp             Keep generated temp page/profile files',
+  );
+  stdout.writeln(
+    '  --json                  Print machine-readable result JSON',
+  );
+  stdout.writeln('');
+  stdout.writeln('Examples:');
+  stdout.writeln(
+    '  fleury benchmark web-capture --scenario=large-160x50 --frames=32',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-capture --scenario=stress-300x100 --output=profiling/web/baselines/stress.json',
+  );
+}
+
+void _printBenchmarkWebScoreboardUsage() {
+  stdout.writeln(
+    'Usage: dart tool/fleury_dev.dart benchmark web-scoreboard [options]',
+  );
+  stdout.writeln('');
+  stdout.writeln(
+    'Aggregates retained DOM web frame captures into a scenario scoreboard.',
+  );
+  stdout.writeln('');
+  stdout.writeln('Options:');
+  stdout.writeln(
+    '  --input=DIR             Capture directory, default profiling/web',
+  );
+  stdout.writeln('  --output=PATH           Markdown output path');
+  stdout.writeln('  --json-output=PATH      JSON scoreboard output path');
+  stdout.writeln(
+    '  --min-runs=N            Required captures per scenario, default 1',
+  );
+  stdout.writeln('  --max-total-frame-p95-ms=N       Gate median total p95');
+  stdout.writeln(
+    '  --max-dom-apply-p95-ms=N         Gate median DOM apply p95',
+  );
+  stdout.writeln(
+    '  --max-semantic-apply-p95-ms=N    Gate median semantic apply p95',
+  );
+  stdout.writeln(
+    '  --max-over-budget-percent=N      Gate median percent over budget',
+  );
+  stdout.writeln(
+    '  --max-semantic-uncovered-cells=N Gate max uncovered semantic cells',
+  );
+  stdout.writeln(
+    '  --thresholds=PATH       JSON threshold policy with defaults/scenarios',
+  );
+  stdout.writeln(
+    '  --write-thresholds=PATH Write a candidate JSON threshold policy from observed aggregates',
+  );
+  stdout.writeln(
+    '  --threshold-headroom-percent=N      Candidate threshold headroom, default 20',
+  );
+  stdout.writeln(
+    '  --threshold-min-headroom-ms=N       Candidate minimum timing headroom, default 1',
+  );
+  stdout.writeln(
+    '  --threshold-min-headroom-percent=N  Candidate minimum over-budget headroom, default 1',
+  );
+  stdout.writeln(
+    '  --require-comparable-environment Require one complete run environment signature per scenario',
+  );
+  stdout.writeln(
+    '  --strict                Exit non-zero if run count, supplied gates, or required environment checks fail',
+  );
+  stdout.writeln(
+    '  --json                  Print machine-readable scoreboard JSON',
+  );
+  stdout.writeln('');
+  stdout.writeln('Examples:');
+  stdout.writeln(
+    '  fleury benchmark web-scoreboard --input=profiling/web --output=profiling/web/scoreboard.md --json-output=profiling/web/scoreboard.json',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-scoreboard --input=profiling/web --min-runs=3 --strict --json',
+  );
+}
+
+void _printBenchmarkWebThresholdReviewUsage() {
+  stdout.writeln(
+    'Usage: dart tool/fleury_dev.dart benchmark web-threshold-review [options]',
+  );
+  stdout.writeln('');
+  stdout.writeln(
+    'Promotes a candidate retained DOM threshold policy to reviewed release-gate evidence.',
+  );
+  stdout.writeln('');
+  stdout.writeln('Options:');
+  stdout.writeln('  --input=PATH        Candidate threshold policy JSON');
+  stdout.writeln(
+    '  --output=PATH       Reviewed threshold policy JSON to write',
+  );
+  stdout.writeln(
+    '  --write-plan=PATH   Write a non-promoting Markdown review plan',
+  );
+  stdout.writeln('  --reviewed-by=NAME  Human reviewer name or handle');
+  stdout.writeln(
+    '  --reviewed-at=TIME  ISO-8601 review time, default current UTC time',
+  );
+  stdout.writeln(
+    '  --review-context=TEXT Required product/browser/environment basis for approval',
+  );
+  stdout.writeln(
+    '  --review-context-hint=TEXT Override or supply fallback review context for review plans',
+  );
+  stdout.writeln('  --review-note=TEXT  Optional review note');
+  stdout.writeln(
+    '  --expect-input-fingerprint=FNV Require the loaded candidate policy to match a review-plan fingerprint',
+  );
+  stdout.writeln(
+    '  --allow-over-budget-thresholds  Required when any scenario threshold allows over-budget frames',
+  );
+  stdout.writeln(
+    '  --json-output=PATH  Promotion summary JSON path; with --write-plan only, embed this path in the generated command',
+  );
+  stdout.writeln('  --json              Print machine-readable summary JSON');
+  stdout.writeln('');
+  stdout.writeln('Examples:');
+  stdout.writeln(
+    '  fleury benchmark web-threshold-review --input=profiling/web/baselines/2026-06-08-dom-retained/thresholds.candidate.json --output=profiling/web/baselines/2026-06-08-dom-retained/thresholds.json --json-output=profiling/web/baselines/2026-06-08-dom-retained/threshold-review.json --expect-input-fingerprint=FNV1A64_FROM_REVIEW_PLAN --reviewed-by=REVIEWER --review-context="Chrome VERSION on PLATFORM, retained DOM product baseline" --allow-over-budget-thresholds --review-note="Explain any accepted over-budget thresholds."',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-threshold-review --input=profiling/web/baselines/2026-06-08-dom-retained/thresholds.candidate.json --write-plan=profiling/web/baselines/2026-06-08-dom-retained/threshold-review-plan.md',
+  );
+}
+
+void _printBenchmarkWebSuiteUsage() {
+  stdout.writeln(
+    'Usage: dart tool/fleury_dev.dart benchmark web-suite [options]',
+  );
+  stdout.writeln('');
+  stdout.writeln(
+    'Runs repeated retained DOM captures for a scenario set and refreshes a strict scoreboard.',
+  );
+  stdout.writeln('');
+  stdout.writeln('Options:');
+  stdout.writeln(
+    '  --scenarios=A,B         Scenario ids, default all web benchmark scenarios',
+  );
+  stdout.writeln('  --runs=N                Captures per scenario, default 3');
+  stdout.writeln(
+    '  --frames=N              Driven benchmark steps per capture',
+  );
+  stdout.writeln('  --warmup=N              Warmup frames, default 2');
+  stdout.writeln('  --budget-ms=N           Frame budget, default 16.67');
+  stdout.writeln(
+    '  --output-dir=DIR        Capture directory, default profiling/web/runs/<timestamp>-suite',
+  );
+  stdout.writeln(
+    '  --scoreboard=PATH       Scoreboard output, default <output-dir>/scoreboard.md',
+  );
+  stdout.writeln(
+    '  --scoreboard-json=PATH  Scoreboard JSON output, default <output-dir>/scoreboard.json',
+  );
+  stdout.writeln(
+    '  --min-runs=N            Scoreboard min runs, default same as --runs',
+  );
+  stdout.writeln('  --max-total-frame-p95-ms=N       Gate median total p95');
+  stdout.writeln(
+    '  --max-dom-apply-p95-ms=N         Gate median DOM apply p95',
+  );
+  stdout.writeln(
+    '  --max-semantic-apply-p95-ms=N    Gate median semantic apply p95',
+  );
+  stdout.writeln(
+    '  --max-over-budget-percent=N      Gate median percent over budget',
+  );
+  stdout.writeln(
+    '  --max-semantic-uncovered-cells=N Gate max uncovered semantic cells',
+  );
+  stdout.writeln(
+    '  --thresholds=PATH       JSON threshold policy with defaults/scenarios',
+  );
+  stdout.writeln(
+    '  --write-thresholds=PATH Write a candidate JSON threshold policy after captures',
+  );
+  stdout.writeln(
+    '  --threshold-headroom-percent=N      Candidate threshold headroom, default 20',
+  );
+  stdout.writeln(
+    '  --threshold-min-headroom-ms=N       Candidate minimum timing headroom, default 1',
+  );
+  stdout.writeln(
+    '  --threshold-min-headroom-percent=N  Candidate minimum over-budget headroom, default 1',
+  );
+  stdout.writeln(
+    '  --no-strict             Do not strict-gate scoreboard min runs or supplied gates',
+  );
+  stdout.writeln(
+    '  --no-require-comparable-environment Do not require identical run environment metadata',
+  );
+  stdout.writeln(
+    '  --no-compile-once     Compile benchmark JS separately for each capture',
+  );
+  stdout.writeln('  --chrome=PATH           Chrome/Chromium executable');
+  stdout.writeln(
+    '  --timeout=N             Per-capture timeout seconds, default 30',
+  );
+  stdout.writeln('  --headful               Launch Chrome visibly');
+  stdout.writeln(
+    '  --keep-temp             Keep generated temp page/profile files',
+  );
+  stdout.writeln(
+    '  --json                  Print machine-readable suite plan before running',
+  );
+  stdout.writeln('');
+  stdout.writeln('Examples:');
+  stdout.writeln(
+    '  fleury benchmark web-suite --scenarios=normal-80x24,large-160x50 --runs=3',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-suite --runs=5 --output-dir=profiling/web/baselines/2026-06-08-baseline',
+  );
+}
+
+void _printBenchmarkWebSemanticAuditUsage() {
+  stdout.writeln(
+    'Usage: dart tool/fleury_dev.dart benchmark web-semantic-audit [options]',
+  );
+  stdout.writeln('');
+  stdout.writeln(
+    'Audits retained DOM captures for semantic text fallback reliance.',
+  );
+  stdout.writeln('');
+  stdout.writeln('Options:');
+  stdout.writeln(
+    '  --input=DIR                         Capture directory, default profiling/web',
+  );
+  stdout.writeln('  --output=PATH                       Markdown output path');
+  stdout.writeln(
+    '  --json-output=PATH                  JSON audit output path',
+  );
+  stdout.writeln(
+    '  --max-fallback-cells=N              Gate max fallback cells in any frame',
+  );
+  stdout.writeln(
+    '  --max-fallback-frame-percent=N      Gate percent of frames needing fallback',
+  );
+  stdout.writeln(
+    '  --max-fallback-viewport-percent=N   Gate fallback cells as percent of viewport cells',
+  );
+  stdout.writeln(
+    '  --strict                            Exit non-zero if any gate fails',
+  );
+  stdout.writeln(
+    '  --json                              Print machine-readable audit JSON',
+  );
+  stdout.writeln('');
+  stdout.writeln('Examples:');
+  stdout.writeln(
+    '  fleury benchmark web-semantic-audit --input=profiling/web/baselines/2026-06-08-dom-retained --output=profiling/web/baselines/2026-06-08-dom-retained/semantic-coverage.md --json-output=profiling/web/baselines/2026-06-08-dom-retained/semantic-coverage.json',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-semantic-audit --input=profiling/web --max-fallback-cells=0 --strict --json',
+  );
+}
+
+void _printBenchmarkWebManualValidationUsage() {
+  stdout.writeln(
+    'Usage: dart tool/fleury_dev.dart benchmark web-manual-validation [options]',
+  );
+  stdout.writeln('');
+  stdout.writeln('Generates and audits manual retained DOM web evidence.');
+  stdout.writeln('');
+  stdout.writeln('Options:');
+  stdout.writeln(
+    '  --input=DIR                  Manual evidence directory, default profiling/web/manual',
+  );
+  stdout.writeln('  --output=PATH                Markdown audit output path');
+  stdout.writeln(
+    '  --write-plan=PATH            Write manual validation plan Markdown',
+  );
+  stdout.writeln(
+    '  --write-template=PATH        Write a JSON evidence template',
+  );
+  stdout.writeln(
+    '  --write-starter=PATH         Write a no-overwrite starter evidence file',
+  );
+  stdout.writeln(
+    '  --starter-template=PATH      Template source for --write-starter',
+  );
+  stdout.writeln(
+    '  --update-provenance=PATH     Update provenance fields on an evidence file',
+  );
+  stdout.writeln(
+    '  --update-page-signal=PATH    Update one required page signal in an evidence file',
+  );
+  stdout.writeln(
+    '  --update-check=PATH          Update one required check in an evidence file',
+  );
+  stdout.writeln(
+    '  --reviewed-by=NAME           Reviewer value for --update-provenance',
+  );
+  stdout.writeln(
+    '  --captured-at=ISO|now        Capture time for --update-provenance',
+  );
+  stdout.writeln(
+    '  --browser-version=VERSION    Browser version for --update-provenance',
+  );
+  stdout.writeln(
+    '  --signal-id=ID               Required page signal to update',
+  );
+  stdout.writeln(
+    '  --signal-status=STATUS       pass, fail, blocked, or needsReview',
+  );
+  stdout.writeln('  --observed-value=VALUE       Observed page signal value');
+  stdout.writeln(
+    '  --signal-notes=TEXT          Reviewer observation notes for the page signal',
+  );
+  stdout.writeln('  --check-id=ID                Required check to update');
+  stdout.writeln(
+    '  --check-status=STATUS        pass, fail, blocked, or needsReview',
+  );
+  stdout.writeln(
+    '  --check-notes=TEXT           Reviewer observation notes for the check',
+  );
+  stdout.writeln(
+    '  --entry-status=STATUS        Set top-level evidence status',
+  );
+  stdout.writeln(
+    '  --write-templates=DIR        Write selected target templates into DIR',
+  );
+  stdout.writeln(
+    '  --template-target=ID         Target for template generation',
+  );
+  stdout.writeln('  --json-output=PATH           JSON audit output path');
+  stdout.writeln(
+    '  --target-preset=v1|primary|all  Target preset, default primary',
+  );
+  stdout.writeln('  --target=ID                  Restrict audit to a target');
+  stdout.writeln(
+    '  --strict                     Exit non-zero unless targets pass',
+  );
+  stdout.writeln(
+    '  --json                       Print machine-readable audit JSON',
+  );
+  stdout.writeln('');
+  stdout.writeln('Examples:');
+  stdout.writeln(
+    '  fleury benchmark web-manual-validation --write-plan=profiling/web/manual/plan.md',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-manual-validation --write-template=profiling/web/manual/chrome-ime-macos.json --template-target=chrome-ime-macos',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-manual-validation --write-templates=profiling/web/manual/templates --target-preset=v1',
+  );
+  stdout.writeln(
+    "  fleury benchmark web-manual-validation --update-provenance=profiling/web/manual/evidence/chrome-ime-macos.review.json --template-target=chrome-ime-macos '--reviewed-by=<reviewer>' --captured-at=now '--browser-version=<Chrome version>'",
+  );
+  stdout.writeln(
+    "  fleury benchmark web-manual-validation --update-page-signal=profiling/web/manual/evidence/chrome-ime-macos.review.json --template-target=chrome-ime-macos --signal-id=retained-dom-ready --signal-status=pass --observed-value=ready '--signal-notes=<reviewer observation>'",
+  );
+  stdout.writeln(
+    "  fleury benchmark web-manual-validation --update-check=profiling/web/manual/evidence/chrome-ime-macos.review.json --template-target=chrome-ime-macos --check-id=composition-end-commits-once --check-status=pass '--check-notes=<reviewer observation>'",
+  );
+  stdout.writeln(
+    '  fleury benchmark web-manual-validation --input=profiling/web/manual --output=profiling/web/manual/review.md --json-output=profiling/web/manual/manual-validation-audit.json --strict',
+  );
+}
+
+void _printBenchmarkWebReadinessUsage() {
+  stdout.writeln(
+    'Usage: dart tool/fleury_dev.dart benchmark web-readiness [options]',
+  );
+  stdout.writeln('');
+  stdout.writeln(
+    'Combines reviewed retained DOM web gate artifacts into the Phase 6 readiness audit.',
+  );
+  stdout.writeln('');
+  stdout.writeln('Options:');
+  stdout.writeln(
+    '  --scoreboard=PATH                   Frame scoreboard JSON artifact',
+  );
+  stdout.writeln(
+    '  --semantic-audit=PATH               Semantic coverage audit JSON artifact',
+  );
+  stdout.writeln(
+    '  --manual-audit=PATH                 Manual validation audit JSON artifact',
+  );
+  stdout.writeln(
+    '  --threshold-review=PATH             Threshold promotion summary JSON artifact',
+  );
+  stdout.writeln('  --output=PATH                       Markdown output path');
+  stdout.writeln('  --json-output=PATH                  JSON output path');
+  stdout.writeln(
+    '  --min-scoreboard-runs=N             Minimum scoreboard minRuns, default 3',
+  );
+  stdout.writeln(
+    '  --no-require-comparable-environment Do not require comparable run environments',
+  );
+  stdout.writeln(
+    '  --no-require-scoreboard-gates       Do not require frame threshold gates',
+  );
+  stdout.writeln(
+    '  --no-require-total-frame-gate       Do not require total-frame p95 gate',
+  );
+  stdout.writeln(
+    '  --no-require-semantic-gates         Do not require semantic fallback gates',
+  );
+  stdout.writeln(
+    '  --no-require-reviewed-threshold-policy Do not require reviewed threshold policy metadata',
+  );
+  stdout.writeln(
+    '  --no-require-threshold-review-summary Do not require matching threshold-review JSON',
+  );
+  stdout.writeln(
+    '  --no-require-scenario-thresholds    Do not require per-scenario threshold policy matches',
+  );
+  stdout.writeln(
+    '  --strict                            Exit non-zero unless all checks pass',
+  );
+  stdout.writeln(
+    '  --json                              Print machine-readable audit JSON',
+  );
+  stdout.writeln('');
+  stdout.writeln('Examples:');
+  stdout.writeln(
+    '  fleury benchmark web-readiness --scoreboard=profiling/web/baselines/2026-06-08-dom-retained/scoreboard.json --semantic-audit=profiling/web/baselines/2026-06-08-dom-retained/semantic-coverage.json --manual-audit=profiling/web/manual/manual-validation-audit.json --threshold-review=profiling/web/baselines/2026-06-08-dom-retained/threshold-review.json --json-output=profiling/web/baselines/2026-06-08-dom-retained/web-readiness.json --strict',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-readiness --output=profiling/web/baselines/web-readiness.md --json',
+  );
+}
+
+void _printBenchmarkWebReadinessBundleUsage() {
+  stdout.writeln(
+    'Usage: dart tool/fleury_dev.dart benchmark web-readiness-bundle [options]',
+  );
+  stdout.writeln('');
+  stdout.writeln(
+    'Generates the reviewed JSON artifact bundle consumed by web-readiness.',
+  );
+  stdout.writeln('');
+  stdout.writeln('Options:');
+  stdout.writeln(
+    '  --captures=DIR                      Capture directory, default profiling/web/baselines',
+  );
+  stdout.writeln(
+    '  --manual=DIR                        Manual evidence directory, default profiling/web/manual',
+  );
+  stdout.writeln(
+    '  --output-dir=DIR                    Bundle output directory, default profiling/web/baselines/web-readiness-bundle',
+  );
+  stdout.writeln(
+    '  --verify=PATH                       Verify artifact fingerprints in an existing web-readiness-bundle.json',
+  );
+  stdout.writeln(
+    '  --min-runs=N                        Minimum runs, default 3',
+  );
+  stdout.writeln('  --max-total-frame-p95-ms=N          Frame gate');
+  stdout.writeln('  --max-dom-apply-p95-ms=N            DOM apply gate');
+  stdout.writeln('  --max-semantic-apply-p95-ms=N       Semantic apply gate');
+  stdout.writeln('  --max-over-budget-percent=N         Over-budget gate');
+  stdout.writeln(
+    '  --max-semantic-uncovered-cells=N    Semantic uncovered-cell gate',
+  );
+  stdout.writeln(
+    '  --thresholds=PATH                   JSON threshold policy with defaults/scenarios',
+  );
+  stdout.writeln(
+    '  --threshold-review=PATH             Threshold promotion summary JSON artifact',
+  );
+  stdout.writeln(
+    '  --no-require-comparable-environment Do not require comparable run environments',
+  );
+  stdout.writeln(
+    '  --max-fallback-cells=N              Semantic fallback gate',
+  );
+  stdout.writeln(
+    '  --max-fallback-frame-percent=N      Semantic fallback gate',
+  );
+  stdout.writeln(
+    '  --max-fallback-viewport-percent=N   Semantic fallback gate',
+  );
+  stdout.writeln('  --target-preset=v1|primary|all     Manual target preset');
+  stdout.writeln(
+    '  --target=ID                         Restrict manual target',
+  );
+  stdout.writeln('  --no-require-scoreboard-gates       Relax readiness gate');
+  stdout.writeln('  --no-require-total-frame-gate       Relax readiness gate');
+  stdout.writeln('  --no-require-semantic-gates         Relax readiness gate');
+  stdout.writeln(
+    '  --no-require-reviewed-threshold-policy Relax reviewed-threshold gate',
+  );
+  stdout.writeln(
+    '  --no-require-threshold-review-summary Relax threshold-review summary gate',
+  );
+  stdout.writeln(
+    '  --no-require-scenario-thresholds    Relax per-scenario threshold gate',
+  );
+  stdout.writeln(
+    '  --write-default-preflights          Write default/retirement preflight artifacts',
+  );
+  stdout.writeln(
+    '  --completion-audit=PATH             Write an RFC completion status audit JSON',
+  );
+  stdout.writeln(
+    '  --strict                            Exit non-zero unless readiness passes',
+  );
+  stdout.writeln(
+    '  --json                              Print machine-readable bundle JSON',
+  );
+  stdout.writeln('');
+  stdout.writeln('Examples:');
+  stdout.writeln(
+    '  fleury benchmark web-readiness-bundle --captures=profiling/web/baselines/2026-06-08-dom-retained --manual=profiling/web/manual --output-dir=profiling/web/baselines/2026-06-08-dom-retained/readiness --thresholds=profiling/web/baselines/2026-06-08-dom-retained/thresholds.json --threshold-review=profiling/web/baselines/2026-06-08-dom-retained/threshold-review.json --max-total-frame-p95-ms=16.67 --max-fallback-cells=0 --write-default-preflights --strict',
+  );
+}
+
+void _printBenchmarkWebDefaultPreflightUsage() {
+  stdout.writeln(
+    'Usage: dart tool/fleury_dev.dart benchmark web-default-preflight [options]',
+  );
+  stdout.writeln('');
+  stdout.writeln(
+    'Consumes a strict Phase 6 web-readiness JSON artifact before allowing',
+  );
+  stdout.writeln(
+    'retained DOM default flips or temporary-path retirement claims.',
+  );
+  stdout.writeln('');
+  stdout.writeln('Options:');
+  stdout.writeln(
+    '  --readiness=PATH  web-readiness JSON artifact, default profiling/web/baselines/web-readiness-bundle/web-readiness.json',
+  );
+  stdout.writeln(
+    '  --bundle=PATH     web-readiness-bundle.json manifest to verify',
+  );
+  stdout.writeln(
+    '                    Defaults to sibling web-readiness-bundle.json',
+  );
+  stdout.writeln('  --automated-validation=PATH');
+  stdout.writeln(
+    '                    web-automated-validation.json evidence to verify',
+  );
+  stdout.writeln(
+    '                    Defaults to sibling web-automated-validation.json',
+  );
+  stdout.writeln(
+    '  --allow-unbundled Permit readiness-only diagnostics; not a release gate',
+  );
+  stdout.writeln(
+    '  --target=ID       make-dom-default or retire-temporary-paths',
+  );
+  stdout.writeln('  --output=PATH     Markdown output path');
+  stdout.writeln('  --json-output=PATH Machine-readable JSON output path');
+  stdout.writeln('  --strict          Exit non-zero unless preflight passes');
+  stdout.writeln('  --json            Print machine-readable preflight JSON');
+  stdout.writeln('');
+  stdout.writeln('Examples:');
+  stdout.writeln(
+    '  fleury benchmark web-default-preflight --readiness=profiling/web/baselines/2026-06-08-dom-retained/readiness/web-readiness.json --bundle=profiling/web/baselines/2026-06-08-dom-retained/readiness/web-readiness-bundle.json --automated-validation=profiling/web/baselines/2026-06-08-dom-retained/readiness/web-automated-validation.json --target=make-dom-default --strict',
+  );
+}
+
+void _printBenchmarkWebAutomatedValidationUsage() {
+  stdout.writeln(
+    'Usage: dart tool/fleury_dev.dart benchmark web-automated-validation [options]',
+  );
+  stdout.writeln('');
+  stdout.writeln(
+    'Runs retained DOM browser and VM automated host tests and writes durable',
+  );
+  stdout.writeln(
+    'web-automated-validation.json evidence for bundle-bound default preflights.',
+  );
+  stdout.writeln('');
+  stdout.writeln('Options:');
+  stdout.writeln('  --json-output=PATH Machine-readable JSON output path');
+  stdout.writeln('  --strict          Exit non-zero unless validation passes');
+  stdout.writeln('  --json            Print machine-readable validation JSON');
+  stdout.writeln('');
+  stdout.writeln('Examples:');
+  stdout.writeln(
+    '  fleury benchmark web-automated-validation --json-output=profiling/web/baselines/2026-06-08-dom-retained/readiness/web-automated-validation.json --strict',
+  );
+}
+
+void _printBenchmarkWebReportUsage() {
+  stdout.writeln(
+    'Usage: dart tool/fleury_dev.dart benchmark web-report --input=<frames.json> [options]',
+  );
+  stdout.writeln('');
+  stdout.writeln(
+    'Summarizes retained DOM web host frame instrumentation into JSON or Markdown.',
+  );
+  stdout.writeln('');
+  stdout.writeln('Options:');
+  stdout.writeln(
+    '  --input=PATH            JSON capture with a `frames` array',
+  );
+  stdout.writeln(
+    '  --output=PATH           Markdown output, or JSON when PATH ends with .json',
+  );
+  stdout.writeln('  --budget-ms=N          Total-frame budget, default 16.67');
+  stdout.writeln('  --max-total-frame-p95-ms=N       Gate total frame p95');
+  stdout.writeln('  --max-dom-apply-p95-ms=N         Gate DOM apply p95');
+  stdout.writeln('  --max-semantic-apply-p95-ms=N    Gate semantic apply p95');
+  stdout.writeln(
+    '  --max-over-budget-percent=N      Gate percent of frames over budget',
+  );
+  stdout.writeln(
+    '  --max-semantic-uncovered-cells=N Gate max uncovered semantic cells',
+  );
+  stdout.writeln('  --strict                Exit non-zero if any gate fails');
+  stdout.writeln(
+    '  --json                  Also print machine-readable summary JSON',
+  );
+  stdout.writeln('');
+  stdout.writeln('Examples:');
+  stdout.writeln(
+    '  fleury benchmark web-report --input=profiling/web/dom-frames.json --output=profiling/web/dom-frames.md',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-report --input=profiling/web/dom-frames.json --json',
+  );
+  stdout.writeln(
+    '  fleury benchmark web-report --input=profiling/web/dom-frames.json --max-total-frame-p95-ms=16.67 --strict',
   );
 }
 
@@ -3914,6 +7386,27 @@ void _printBenchmarkVarianceUsage() {
 String _absolutePath(String root, String path) {
   if (path.startsWith('/')) return path;
   return '$root/$path';
+}
+
+const _defaultWebBenchmarkScenarioIds = <String>[
+  'normal-80x24',
+  'large-160x50',
+  'stress-300x100',
+  'noop-160x50',
+  'single-dirty-cell-160x50',
+  'dirty-row-160x50',
+  'full-frame-churn-160x50',
+  'scroll-row-churn-160x50',
+  'cursor-blink-80x24',
+  'text-input-burst-80x24',
+  'resize-burst',
+];
+
+List<String> _csvOption(String value) {
+  return [
+    for (final part in value.split(','))
+      if (part.trim().isNotEmpty) part.trim(),
+  ];
 }
 
 String _relativePath(String root, String path) {

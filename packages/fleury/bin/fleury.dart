@@ -30,6 +30,7 @@ import 'dart:io';
 import 'dart:typed_data' show Uint8List;
 
 import 'package:fleury/src/foundation/geometry.dart';
+import 'package:fleury/src/remote/remote_client_asset.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/remote/serve_index_html.dart';
 import 'package:fleury/src/remote/unix_socket_transport.dart';
@@ -573,9 +574,7 @@ Future<int> _runServeBridge({
       stderr.writeln('[serve] browser connected, waiting for an app');
       tryPair();
     } else {
-      req.response.headers.contentType = ContentType.html;
-      req.response.write(serveIndexHtml);
-      await req.response.close();
+      await _serveStaticAsset(req);
     }
   });
 
@@ -615,48 +614,69 @@ void _pumpBytes({
   Future<void> stop() async {
     if (stopped) return;
     stopped = true;
+    // Destroy (not close) the app socket: it forcibly ends the stream
+    // bound by `browser.addStream(app)` and errors the sink bound by
+    // `app.addStream(...)`, so neither addStream is left dangling — which
+    // a graceful `close()` mid-addStream would trip over.
     try {
-      await browser.close();
+      app.destroy();
     } catch (_) {}
     try {
-      await app.close();
+      await browser.close();
     } catch (_) {}
     onDone();
   }
 
-  // App → browser. App's frame bytes ride as WebSocket binary messages
-  // verbatim; if a single TCP read carries multiple of our frames or
-  // splits one across chunks, the browser-side decoder handles it.
-  app.listen(
-    (bytes) {
-      try {
-        browser.add(bytes);
-      } catch (_) {
-        stop();
-      }
-    },
-    onError: (Object _) => stop(),
-    onDone: stop,
-    cancelOnError: false,
+  // App → browser. `addStream` (not per-chunk `add`) is the backpressure
+  // path: it forwards each app chunk as one WebSocket binary message AND
+  // pauses reading from the app socket when the browser's socket send
+  // buffer is full. A slow/stalled browser therefore stalls the app
+  // rather than buffering its frames unboundedly in server memory — the
+  // slow-consumer memory-DoS the per-chunk `add` was exposed to. (Frame
+  // boundaries are still recovered by the browser-side decoder.)
+  unawaited(
+    browser.addStream(app).then((_) => stop(), onError: (Object _) => stop()),
   );
 
-  // Browser → app. WebSocket text messages are ignored; the protocol
-  // is binary-only.
+  // Browser → app. WebSocket text messages are ignored; the protocol is
+  // binary-only. `addStream` again carries backpressure: a flood of input
+  // stalls at the app socket instead of piling up.
   final browserBytes =
       browserInput ??
       browser.where((data) => data is List<int>).cast<List<int>>();
-  browserBytes.listen(
-    (bytes) {
-      try {
-        app.add(bytes);
-      } catch (_) {
-        stop();
-      }
-    },
-    onError: (Object _) => stop(),
-    onDone: stop,
-    cancelOnError: false,
+  unawaited(
+    app
+        .addStream(browserBytes)
+        .then((_) => stop(), onError: (Object _) => stop()),
   );
+}
+
+/// Serves the index page and the embedded client bundle. Everything else
+/// 404s — the serve surface is exactly two files.
+Future<void> _serveStaticAsset(HttpRequest req) async {
+  final path = req.uri.path;
+  if (path == serveClientJsPath) {
+    req.response.headers.contentType = ContentType(
+      'application',
+      'javascript',
+      charset: 'utf-8',
+    );
+    // The bundle is regenerated per build and embedded in the binary; never
+    // let a browser serve a stale client against a freshly restarted server.
+    req.response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    req.response.add(remoteClientJs());
+    await req.response.close();
+    return;
+  }
+  if (path == '/' || path.isEmpty) {
+    req.response.headers.contentType = ContentType.html;
+    req.response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+    req.response.write(serveIndexHtml);
+    await req.response.close();
+    return;
+  }
+  req.response.statusCode = HttpStatus.notFound;
+  await req.response.close();
 }
 
 bool _isAllowedWebSocketOrigin(
@@ -809,25 +829,57 @@ Future<int> _runServeSpawn({
   required _ServeOriginPolicy originPolicy,
   required List<String> command,
 }) async {
-  final handleDir = Directory('.fleury');
-  if (!handleDir.existsSync()) handleDir.createSync(recursive: true);
+  final handleDir = _createSpawnHandleDir();
   final httpServer = await HttpServer.bind(host, port);
   stderr.writeln('fleury serve ready (spawn mode)');
   stderr.writeln('  browser: http://$host:$port');
   stderr.writeln('  spawn:   ${command.join(' ')}');
   stderr.writeln(
-    'Each browser connection spawns a fresh process; sessions are isolated.',
+    'Sessions are isolated; a warm standby is kept ready so connections '
+    'skip the cold start.',
   );
 
   final exitCode = Completer<int>();
   final sessions = <_SpawnSession>{};
   var sessionCounter = 0;
 
+  // A single warm standby: its subprocess is spawned and connected ahead of
+  // the browser, so the expensive cold start (Dart VM + JIT compile of the
+  // app) is paid here, not on the connection. Each connect claims the standby
+  // and prepares the next, so sequential reloads stay warm.
+  _SpawnSession? warm;
+  Future<bool>? warmReady;
+
+  void prepareWarm() {
+    final id = ++sessionCounter;
+    final s = _SpawnSession(id: id);
+    warm = s;
+    sessions.add(s);
+    warmReady = s.bringUp(
+      command: command,
+      handleDir: handleDir.path,
+      tag: 's$id',
+    );
+    unawaited(
+      s.done.then((_) {
+        sessions.remove(s);
+        if (identical(warm, s)) {
+          warm = null;
+          warmReady = null;
+        }
+        stderr.writeln(
+          '[serve s${s.id}] session ended (active: ${sessions.length})',
+        );
+      }),
+    );
+  }
+
+  // Pre-spawn the first standby now, before anyone connects.
+  prepareWarm();
+
   httpServer.listen((req) async {
     if (req.uri.path != '/ws') {
-      req.response.headers.contentType = ContentType.html;
-      req.response.write(serveIndexHtml);
-      await req.response.close();
+      await _serveStaticAsset(req);
       return;
     }
     if (!WebSocketTransformer.isUpgradeRequest(req)) {
@@ -840,6 +892,28 @@ Future<int> _runServeSpawn({
       return;
     }
     final ws = await WebSocketTransformer.upgrade(req);
+
+    // Claim the warm standby and immediately prepare the next one.
+    final claimed = warm;
+    final claimedReady = warmReady;
+    warm = null;
+    warmReady = null;
+    prepareWarm();
+
+    if (claimed != null && claimedReady != null) {
+      // Usually already complete (instant); if a connect races the warmup,
+      // this waits out the remainder — still no worse than a cold spawn, and
+      // it avoids spawning a second process for the same browser.
+      final ready = await claimedReady;
+      if (ready && claimed.isReady) {
+        stderr.writeln('[serve s${claimed.id}] paired browser to warm standby');
+        claimed.attach(ws);
+        return; // cleanup runs via the done handler wired in prepareWarm
+      }
+      // The standby failed to come up; fall through to a cold spawn.
+    }
+
+    // Cold fallback: bind + spawn while the browser waits (legacy behavior).
     final id = ++sessionCounter;
     final session = _SpawnSession(id: id);
     sessions.add(session);
@@ -872,6 +946,11 @@ Future<int> _runServeSpawn({
     // session sockets.
     final pending = sessions.toList();
     await Future.wait(pending.map((s) => s.shutdown()));
+    try {
+      handleDir.deleteSync(recursive: true);
+    } on FileSystemException {
+      // Best-effort cleanup; individual sessions also remove their sockets.
+    }
   }
 
   late StreamSubscription<ProcessSignal> intSub;
@@ -888,6 +967,15 @@ Future<int> _runServeSpawn({
   return exitCode.future;
 }
 
+Directory _createSpawnHandleDir() {
+  final suffix = '$pid-${DateTime.now().microsecondsSinceEpoch}';
+  final shortTemp = Directory('/tmp');
+  final base = !Platform.isWindows && shortTemp.existsSync()
+      ? shortTemp
+      : Directory.systemTemp;
+  return Directory('${base.path}/fleury-spawn-$suffix')..createSync();
+}
+
 /// One spawn-mode session: a subprocess, its session socket, and the
 /// browser WebSocket that paired with it. Owns the full lifecycle.
 class _SpawnSession {
@@ -898,16 +986,122 @@ class _SpawnSession {
   ServerSocket? _server;
   String? _socketPath;
   WebSocket? _browser;
+  Socket? _appSocket;
   final _done = Completer<void>();
   var _shuttingDown = false;
 
   Future<void> get done => _done.future;
 
-  /// Bring up the session: bind the per-session socket, spawn the
-  /// command, wait briefly for it to connect, then pump bytes between
-  /// the subprocess socket and the browser WS. Returns false if the
-  /// subprocess didn't connect within the grace window (the WS should
-  /// be closed by the caller).
+  /// Whether this session's subprocess is up and connected (a warm standby
+  /// brought up ahead of a browser), so [attach] can pair instantly.
+  bool get isReady => _appSocket != null && !_shuttingDown;
+
+  /// Binds the per-session socket and spawns the command. Throws
+  /// [ProcessException] if the executable can't be started. Shared by the
+  /// cold ([start]) and warm ([bringUp]) paths.
+  Future<void> _bindAndSpawn({
+    required List<String> command,
+    required String handleDir,
+    required String tag,
+  }) async {
+    _socketPath = '${Directory(handleDir).absolute.path}/spawn-$pid-$id.sock';
+    try {
+      File(_socketPath!).deleteSync();
+    } on FileSystemException {
+      /* not there */
+    }
+    _server = await ServerSocket.bind(
+      InternetAddress(_socketPath!, type: InternetAddressType.unix),
+      0,
+    );
+    final env = Map<String, String>.from(Platform.environment);
+    env['FLEURY_HANDLE'] = _socketPath!;
+    // Pure cosmetic: most TUIs sniff $TERM to pick colors. The browser
+    // advertises truecolor, so encourage the subprocess to do the same.
+    env['COLORTERM'] = env['COLORTERM'] ?? 'truecolor';
+    _process = await Process.start(
+      command.first,
+      command.sublist(1),
+      environment: env,
+    );
+    stderr.writeln('[serve $tag] spawned ${command.first} (pid ${_process!.pid})');
+    // Forward the subprocess's own stdout/stderr to ours, prefixed. The TUI
+    // never writes to its own stdout (renders go via the socket), so anything
+    // here is print()/log output.
+    _process!.stdout
+        .transform(utf8.decoder)
+        .listen((line) => _forwardLog(tag, 'out', line));
+    _process!.stderr
+        .transform(utf8.decoder)
+        .listen((line) => _forwardLog(tag, 'err', line));
+  }
+
+  /// Brings the subprocess up *ahead of a browser* — a warm standby. The app
+  /// connects to its session socket and (for a runTui app) blocks awaiting
+  /// INIT, so the expensive `dart run`/VM cold start is paid here, before any
+  /// connection, and a later [attach] pairs instantly. Returns false if the
+  /// process couldn't start or never connected.
+  Future<bool> bringUp({
+    required List<String> command,
+    required String handleDir,
+    required String tag,
+  }) async {
+    try {
+      await _bindAndSpawn(command: command, handleDir: handleDir, tag: tag);
+    } on ProcessException catch (e) {
+      stderr.writeln('[serve $tag] failed to spawn ${command.first}: $e');
+      await _cleanupSocket();
+      if (!_done.isCompleted) _done.complete();
+      return false;
+    }
+    final firstEvent = await Future.any([
+      _server!.first.then((s) => _Connected(s)),
+      _process!.exitCode.then((_) => _ExitedBeforeConnect()),
+      Future<dynamic>.delayed(
+        const Duration(seconds: 10),
+        () => _ConnectTimeout(),
+      ),
+    ]);
+    if (firstEvent is! _Connected) {
+      stderr.writeln(
+        '[serve $tag] warm subprocess never connected ($firstEvent)',
+      );
+      await shutdown();
+      return false;
+    }
+    _appSocket = firstEvent.socket;
+    unawaited(_process!.exitCode.then((_) => shutdown()));
+    return true;
+  }
+
+  /// Pairs a browser with this (warm, [isReady]) session and starts pumping.
+  /// The browser's INIT — buffered by the WebSocket until listened — flows to
+  /// the waiting app, which renders its first frame straight away.
+  void attach(WebSocket browser) {
+    _browser = browser;
+    _attachPump(browser, _BufferedBrowserInput(browser), _appSocket!);
+  }
+
+  void _attachPump(
+    WebSocket browser,
+    _BufferedBrowserInput browserInput,
+    Socket app,
+  ) {
+    browserInput.markPaired();
+    _pumpBytes(
+      app: app,
+      browser: browser,
+      browserInput: browserInput.stream,
+      onDone: () {
+        unawaited(browserInput.dispose());
+        shutdown();
+      },
+    );
+  }
+
+  /// Cold path: bind, spawn, and bridge to an already-connected browser, all
+  /// while the browser waits. Used as the fallback when no warm standby is
+  /// ready. Returns false if the subprocess didn't come up.
   Future<bool> start({
     required List<String> command,
     required String handleDir,
@@ -915,74 +1109,28 @@ class _SpawnSession {
     required String tag,
   }) async {
     _browser = browser;
-    _socketPath = '$handleDir/spawn-$pid-$id.sock';
-    try {
-      File(_socketPath!).deleteSync();
-    } on FileSystemException {
-      /* not there */
-    }
-
-    _server = await ServerSocket.bind(
-      InternetAddress(_socketPath!, type: InternetAddressType.unix),
-      0,
-    );
-
-    // The browser client sends INIT immediately after the WebSocket opens,
-    // before a Dart subprocess can usually connect back to its session socket.
-    // Attach the WebSocket listener now and buffer bounded input so real
-    // runTui apps do not miss their remote handshake.
+    // The browser sends INIT immediately after the WebSocket opens, before the
+    // subprocess can connect back. Listen + buffer now so the handshake isn't
+    // missed.
     final browserInput = _BufferedBrowserInput(browser);
-
-    final env = Map<String, String>.from(Platform.environment);
-    env['FLEURY_HANDLE'] = _socketPath!;
-    // Pure cosmetic: most TUIs sniff $TERM to pick colors. The browser
-    // xterm.js advertises truecolor, so encourage the subprocess to
-    // do the same when it has no other signal.
-    env['COLORTERM'] = env['COLORTERM'] ?? 'truecolor';
-
     try {
-      _process = await Process.start(
-        command.first,
-        command.sublist(1),
-        environment: env,
-      );
+      await _bindAndSpawn(command: command, handleDir: handleDir, tag: tag);
     } on ProcessException catch (e) {
       stderr.writeln('[serve $tag] failed to spawn ${command.first}: $e');
       await browserInput.dispose();
       await _cleanupSocket();
-      _done.complete();
+      if (!_done.isCompleted) _done.complete();
       return false;
     }
-    stderr.writeln(
-      '[serve $tag] spawned ${command.first} '
-      '(pid ${_process!.pid})',
-    );
-
-    // Forward the subprocess's own stdout/stderr to ours, prefixed.
-    // The TUI never writes to its own stdout (its renders go via the
-    // socket), so anything we see here is print()/log output.
-    _process!.stdout
-        .transform(utf8.decoder)
-        .listen((line) => _forwardLog(tag, 'out', line));
-    _process!.stderr
-        .transform(utf8.decoder)
-        .listen((line) => _forwardLog(tag, 'err', line));
-
-    // Race: subprocess connects to its socket (success) vs. it exits
-    // first (e.g., couldn't find the runtime). Either way we don't
-    // hang.
-    final socketAccepted = _server!.first;
-    final processExitedFirst = _process!.exitCode.then((_) => null);
     final firstEvent = await Future.any([
-      socketAccepted.then((s) => _Connected(s)),
-      processExitedFirst.then((_) => _ExitedBeforeConnect()),
+      _server!.first.then((s) => _Connected(s)),
+      _process!.exitCode.then((_) => _ExitedBeforeConnect()),
       Future<dynamic>.delayed(
         const Duration(seconds: 10),
         () => _ConnectTimeout(),
       ),
       browserInput.closed.then((_) => const _BrowserClosedBeforeConnect()),
     ]);
-
     if (firstEvent is! _Connected) {
       stderr.writeln(
         '[serve $tag] subprocess never connected to session '
@@ -992,23 +1140,9 @@ class _SpawnSession {
       await shutdown();
       return false;
     }
-
-    final appSocket = firstEvent.socket;
-    browserInput.markPaired();
-    _pumpBytes(
-      app: appSocket,
-      browser: browser,
-      browserInput: browserInput.stream,
-      onDone: () {
-        unawaited(browserInput.dispose());
-        shutdown();
-      },
-    );
-
-    // Subprocess exiting is just as much a "session done" signal as
-    // browser disconnect.
+    _appSocket = firstEvent.socket;
+    _attachPump(browser, browserInput, _appSocket!);
     unawaited(_process!.exitCode.then((_) => shutdown()));
-
     return true;
   }
 

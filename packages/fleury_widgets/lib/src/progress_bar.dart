@@ -20,8 +20,10 @@ class ProgressBar extends StatelessWidget {
     this.semanticLabel = 'Progress',
   });
 
-  /// Fraction filled, clamped to 0..1.
-  final double value;
+  /// Fraction filled, clamped to 0..1. Pass `null` for an *indeterminate* bar
+  /// — a block sweeps across the track for work of unknown duration (the
+  /// convention is to never show a determinate shape when progress is unknown).
+  final double? value;
 
   /// Style for the filled portion (the blocks).
   final CellStyle? filledStyle;
@@ -32,16 +34,38 @@ class ProgressBar extends StatelessWidget {
   /// Label exposed through the semantic app graph.
   final String semanticLabel;
 
+  // Frames for one full sweep of the indeterminate marquee.
+  static const _sweepPeriod = 28;
+
   @override
   Widget build(BuildContext context) {
-    final clamped = value.clamp(0.0, 1.0);
-    final percent = (clamped * 100).round();
     final theme = Theme.of(context);
     final widgetTheme = FleuryWidgetTheme.from(theme);
     final resolvedFilledStyle =
         filledStyle ?? widgetTheme.resolveProgressFilled(theme);
     final resolvedTrackStyle =
         trackStyle ?? widgetTheme.resolveProgressTrack(theme);
+
+    final value = this.value;
+    if (value == null) {
+      return Semantics(
+        role: SemanticRole.progress,
+        label: semanticLabel,
+        state: const SemanticState({'indeterminate': true}),
+        child: FrameBuilder(
+          interval: const Duration(milliseconds: 90),
+          builder: (ctx, frame, elapsed, delta) => _RawProgressBar(
+            value: 0,
+            indeterminatePhase: (frame % _sweepPeriod) / _sweepPeriod,
+            filledStyle: resolvedFilledStyle,
+            trackStyle: resolvedTrackStyle,
+          ),
+        ),
+      );
+    }
+
+    final clamped = value.clamp(0.0, 1.0);
+    final percent = (clamped * 100).round();
     return Semantics(
       role: SemanticRole.progress,
       label: semanticLabel,
@@ -65,17 +89,20 @@ final class _RawProgressBar extends LeafRenderObjectWidget {
     required this.value,
     required this.filledStyle,
     required this.trackStyle,
+    this.indeterminatePhase,
   });
 
   final double value;
   final CellStyle filledStyle;
   final CellStyle trackStyle;
+  final double? indeterminatePhase;
 
   @override
   RenderObject createRenderObject(BuildContext context) => RenderProgressBar(
     value: value,
     filledStyle: filledStyle,
     trackStyle: trackStyle,
+    indeterminatePhase: indeterminatePhase,
   );
 
   @override
@@ -86,7 +113,8 @@ final class _RawProgressBar extends LeafRenderObjectWidget {
     renderObject
       ..value = value
       ..filledStyle = filledStyle
-      ..trackStyle = trackStyle;
+      ..trackStyle = trackStyle
+      ..indeterminatePhase = indeterminatePhase;
   }
 }
 
@@ -96,14 +124,23 @@ class RenderProgressBar extends RenderObject {
     required double value,
     required CellStyle filledStyle,
     required CellStyle trackStyle,
+    double? indeterminatePhase,
   }) : _value = value,
        _filledStyle = filledStyle,
-       _trackStyle = trackStyle;
+       _trackStyle = trackStyle,
+       _indeterminatePhase = indeterminatePhase;
 
   double _value;
   set value(double v) {
     if (_value == v) return;
     _value = v;
+    markNeedsPaintOnly();
+  }
+
+  double? _indeterminatePhase;
+  set indeterminatePhase(double? v) {
+    if (_indeterminatePhase == v) return;
+    _indeterminatePhase = v;
     markNeedsPaintOnly();
   }
 
@@ -143,11 +180,30 @@ class RenderProgressBar extends RenderObject {
   }) {
     final w = size.cols;
     if (w == 0 || size.rows == 0) return;
+    if (offset.row < 0 || offset.row >= buffer.size.rows) return;
+
+    final phase = _indeterminatePhase;
+    if (phase != null) {
+      // A lit block (~1/3 of the track) marquees across, wrapping at the ends.
+      final seg = w < 6 ? (w < 2 ? 1 : 2) : (w / 3).round();
+      final start = (phase * w).floor() % w;
+      for (var col = 0; col < w; col++) {
+        final tgtCol = offset.col + col;
+        if (tgtCol < 0 || tgtCol >= buffer.size.cols) continue;
+        final lit = ((col - start) % w + w) % w < seg;
+        buffer.writeGrapheme(
+          CellOffset(tgtCol, offset.row),
+          lit ? _full : _track,
+          style: lit ? _filledStyle : _trackStyle,
+        );
+      }
+      return;
+    }
+
     final fillCells = _value.clamp(0.0, 1.0) * w;
     final full = fillCells.floor();
     final partialIndex = ((fillCells - full) * 8).round();
 
-    if (offset.row < 0 || offset.row >= buffer.size.rows) return;
     for (var col = 0; col < w; col++) {
       final tgtCol = offset.col + col;
       if (tgtCol < 0 || tgtCol >= buffer.size.cols) continue;

@@ -1,0 +1,798 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryWebSemanticCoverageAudit",
+  "inputDir": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained",
+  "generatedAt": "2026-06-08T10:51:14.589099Z",
+  "scenarioCount": 11,
+  "captureCount": 33,
+  "frameCount": 912,
+  "fallbackFrameCount": 0,
+  "fallbackCellCount": 0,
+  "fallbackNodeCount": 0,
+  "fallbackFramePercent": 0.0,
+  "fallbackViewportCellPercent": 0.0,
+  "maxFallbackCellsInFrame": 0,
+  "maxFallbackNodesInFrame": 0,
+  "gates": [
+    {
+      "id": "maxFallbackCellsInFrame",
+      "actual": 0.0,
+      "maximum": 0.0,
+      "unit": "count",
+      "passed": true
+    }
+  ],
+  "strictPass": true,
+  "scenarios": [
+    {
+      "id": "cursor-blink-80x24",
+      "label": "80x24 cursor blink",
+      "captureCount": 3,
+      "frameCount": 72,
+      "viewportCellCount": 138240,
+      "fallbackFrameCount": 0,
+      "fallbackCellCount": 0,
+      "fallbackNodeCount": 0,
+      "fallbackFramePercent": 0.0,
+      "fallbackViewportCellPercent": 0.0,
+      "maxFallbackCellsInFrame": 0,
+      "maxFallbackNodesInFrame": 0,
+      "latestCapture": "cursor-blink-80x24-run-3.json",
+      "latestCapturedAt": "2026-06-08T10:45:04.551Z",
+      "gates": [
+        {
+          "id": "maxFallbackCellsInFrame",
+          "actual": 0.0,
+          "maximum": 0.0,
+          "unit": "count",
+          "passed": true
+        }
+      ],
+      "strictPass": true,
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/cursor-blink-80x24-run-1.json",
+          "file": "cursor-blink-80x24-run-1.json",
+          "capturedAt": "2026-06-08T10:43:33.233Z",
+          "frameCount": 24,
+          "viewportCellCount": 46080,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/cursor-blink-80x24-run-2.json",
+          "file": "cursor-blink-80x24-run-2.json",
+          "capturedAt": "2026-06-08T10:44:18.066Z",
+          "frameCount": 24,
+          "viewportCellCount": 46080,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/cursor-blink-80x24-run-3.json",
+          "file": "cursor-blink-80x24-run-3.json",
+          "capturedAt": "2026-06-08T10:45:04.551Z",
+          "frameCount": 24,
+          "viewportCellCount": 46080,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        }
+      ]
+    },
+    {
+      "id": "dirty-row-160x50",
+      "label": "160x50 dirty row",
+      "captureCount": 3,
+      "frameCount": 96,
+      "viewportCellCount": 768000,
+      "fallbackFrameCount": 0,
+      "fallbackCellCount": 0,
+      "fallbackNodeCount": 0,
+      "fallbackFramePercent": 0.0,
+      "fallbackViewportCellPercent": 0.0,
+      "maxFallbackCellsInFrame": 0,
+      "maxFallbackNodesInFrame": 0,
+      "latestCapture": "dirty-row-160x50-run-3.json",
+      "latestCapturedAt": "2026-06-08T10:38:09.836Z",
+      "gates": [
+        {
+          "id": "maxFallbackCellsInFrame",
+          "actual": 0.0,
+          "maximum": 0.0,
+          "unit": "count",
+          "passed": true
+        }
+      ],
+      "strictPass": true,
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/dirty-row-160x50-run-1.json",
+          "file": "dirty-row-160x50-run-1.json",
+          "capturedAt": "2026-06-08T10:36:34.620Z",
+          "frameCount": 32,
+          "viewportCellCount": 256000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/dirty-row-160x50-run-2.json",
+          "file": "dirty-row-160x50-run-2.json",
+          "capturedAt": "2026-06-08T10:37:24.812Z",
+          "frameCount": 32,
+          "viewportCellCount": 256000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/dirty-row-160x50-run-3.json",
+          "file": "dirty-row-160x50-run-3.json",
+          "capturedAt": "2026-06-08T10:38:09.836Z",
+          "frameCount": 32,
+          "viewportCellCount": 256000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        }
+      ]
+    },
+    {
+      "id": "full-frame-churn-160x50",
+      "label": "160x50 full-frame churn",
+      "captureCount": 3,
+      "frameCount": 72,
+      "viewportCellCount": 576000,
+      "fallbackFrameCount": 0,
+      "fallbackCellCount": 0,
+      "fallbackNodeCount": 0,
+      "fallbackFramePercent": 0.0,
+      "fallbackViewportCellPercent": 0.0,
+      "maxFallbackCellsInFrame": 0,
+      "maxFallbackNodesInFrame": 0,
+      "latestCapture": "full-frame-churn-160x50-run-3.json",
+      "latestCapturedAt": "2026-06-08T10:40:30.458Z",
+      "gates": [
+        {
+          "id": "maxFallbackCellsInFrame",
+          "actual": 0.0,
+          "maximum": 0.0,
+          "unit": "count",
+          "passed": true
+        }
+      ],
+      "strictPass": true,
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/full-frame-churn-160x50-run-1.json",
+          "file": "full-frame-churn-160x50-run-1.json",
+          "capturedAt": "2026-06-08T10:38:54.687Z",
+          "frameCount": 24,
+          "viewportCellCount": 192000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/full-frame-churn-160x50-run-2.json",
+          "file": "full-frame-churn-160x50-run-2.json",
+          "capturedAt": "2026-06-08T10:39:37.877Z",
+          "frameCount": 24,
+          "viewportCellCount": 192000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/full-frame-churn-160x50-run-3.json",
+          "file": "full-frame-churn-160x50-run-3.json",
+          "capturedAt": "2026-06-08T10:40:30.458Z",
+          "frameCount": 24,
+          "viewportCellCount": 192000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        }
+      ]
+    },
+    {
+      "id": "large-160x50",
+      "label": "160x50 large viewport",
+      "captureCount": 3,
+      "frameCount": 96,
+      "viewportCellCount": 768000,
+      "fallbackFrameCount": 0,
+      "fallbackCellCount": 0,
+      "fallbackNodeCount": 0,
+      "fallbackFramePercent": 0.0,
+      "fallbackViewportCellPercent": 0.0,
+      "maxFallbackCellsInFrame": 0,
+      "maxFallbackNodesInFrame": 0,
+      "latestCapture": "large-160x50-run-3.json",
+      "latestCapturedAt": "2026-06-08T10:28:43.238Z",
+      "gates": [
+        {
+          "id": "maxFallbackCellsInFrame",
+          "actual": 0.0,
+          "maximum": 0.0,
+          "unit": "count",
+          "passed": true
+        }
+      ],
+      "strictPass": true,
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/large-160x50-run-1.json",
+          "file": "large-160x50-run-1.json",
+          "capturedAt": "2026-06-08T10:27:04.496Z",
+          "frameCount": 32,
+          "viewportCellCount": 256000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/large-160x50-run-2.json",
+          "file": "large-160x50-run-2.json",
+          "capturedAt": "2026-06-08T10:28:01.389Z",
+          "frameCount": 32,
+          "viewportCellCount": 256000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/large-160x50-run-3.json",
+          "file": "large-160x50-run-3.json",
+          "capturedAt": "2026-06-08T10:28:43.238Z",
+          "frameCount": 32,
+          "viewportCellCount": 256000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        }
+      ]
+    },
+    {
+      "id": "noop-160x50",
+      "label": "160x50 no-op frame",
+      "captureCount": 3,
+      "frameCount": 72,
+      "viewportCellCount": 576000,
+      "fallbackFrameCount": 0,
+      "fallbackCellCount": 0,
+      "fallbackNodeCount": 0,
+      "fallbackFramePercent": 0.0,
+      "fallbackViewportCellPercent": 0.0,
+      "maxFallbackCellsInFrame": 0,
+      "maxFallbackNodesInFrame": 0,
+      "latestCapture": "noop-160x50-run-3.json",
+      "latestCapturedAt": "2026-06-08T10:33:23.192Z",
+      "gates": [
+        {
+          "id": "maxFallbackCellsInFrame",
+          "actual": 0.0,
+          "maximum": 0.0,
+          "unit": "count",
+          "passed": true
+        }
+      ],
+      "strictPass": true,
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/noop-160x50-run-1.json",
+          "file": "noop-160x50-run-1.json",
+          "capturedAt": "2026-06-08T10:31:47.846Z",
+          "frameCount": 24,
+          "viewportCellCount": 192000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/noop-160x50-run-2.json",
+          "file": "noop-160x50-run-2.json",
+          "capturedAt": "2026-06-08T10:32:34.147Z",
+          "frameCount": 24,
+          "viewportCellCount": 192000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/noop-160x50-run-3.json",
+          "file": "noop-160x50-run-3.json",
+          "capturedAt": "2026-06-08T10:33:23.192Z",
+          "frameCount": 24,
+          "viewportCellCount": 192000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        }
+      ]
+    },
+    {
+      "id": "normal-80x24",
+      "label": "80x24 normal app interaction",
+      "captureCount": 3,
+      "frameCount": 72,
+      "viewportCellCount": 138240,
+      "fallbackFrameCount": 0,
+      "fallbackCellCount": 0,
+      "fallbackNodeCount": 0,
+      "fallbackFramePercent": 0.0,
+      "fallbackViewportCellPercent": 0.0,
+      "maxFallbackCellsInFrame": 0,
+      "maxFallbackNodesInFrame": 0,
+      "latestCapture": "normal-80x24-run-3.json",
+      "latestCapturedAt": "2026-06-08T10:26:16.129Z",
+      "gates": [
+        {
+          "id": "maxFallbackCellsInFrame",
+          "actual": 0.0,
+          "maximum": 0.0,
+          "unit": "count",
+          "passed": true
+        }
+      ],
+      "strictPass": true,
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/normal-80x24-run-1.json",
+          "file": "normal-80x24-run-1.json",
+          "capturedAt": "2026-06-08T10:24:49.312Z",
+          "frameCount": 24,
+          "viewportCellCount": 46080,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/normal-80x24-run-2.json",
+          "file": "normal-80x24-run-2.json",
+          "capturedAt": "2026-06-08T10:25:24.344Z",
+          "frameCount": 24,
+          "viewportCellCount": 46080,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/normal-80x24-run-3.json",
+          "file": "normal-80x24-run-3.json",
+          "capturedAt": "2026-06-08T10:26:16.129Z",
+          "frameCount": 24,
+          "viewportCellCount": 46080,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        }
+      ]
+    },
+    {
+      "id": "resize-burst",
+      "label": "Resize burst",
+      "captureCount": 3,
+      "frameCount": 72,
+      "viewportCellCount": 357120,
+      "fallbackFrameCount": 0,
+      "fallbackCellCount": 0,
+      "fallbackNodeCount": 0,
+      "fallbackFramePercent": 0.0,
+      "fallbackViewportCellPercent": 0.0,
+      "maxFallbackCellsInFrame": 0,
+      "maxFallbackNodesInFrame": 0,
+      "latestCapture": "resize-burst-run-3.json",
+      "latestCapturedAt": "2026-06-08T10:50:08.270Z",
+      "gates": [
+        {
+          "id": "maxFallbackCellsInFrame",
+          "actual": 0.0,
+          "maximum": 0.0,
+          "unit": "count",
+          "passed": true
+        }
+      ],
+      "strictPass": true,
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/resize-burst-run-1.json",
+          "file": "resize-burst-run-1.json",
+          "capturedAt": "2026-06-08T10:48:31.225Z",
+          "frameCount": 24,
+          "viewportCellCount": 119040,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/resize-burst-run-2.json",
+          "file": "resize-burst-run-2.json",
+          "capturedAt": "2026-06-08T10:49:19.239Z",
+          "frameCount": 24,
+          "viewportCellCount": 119040,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/resize-burst-run-3.json",
+          "file": "resize-burst-run-3.json",
+          "capturedAt": "2026-06-08T10:50:08.270Z",
+          "frameCount": 24,
+          "viewportCellCount": 119040,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        }
+      ]
+    },
+    {
+      "id": "scroll-row-churn-160x50",
+      "label": "160x50 scroll-like row churn",
+      "captureCount": 3,
+      "frameCount": 96,
+      "viewportCellCount": 768000,
+      "fallbackFrameCount": 0,
+      "fallbackCellCount": 0,
+      "fallbackNodeCount": 0,
+      "fallbackFramePercent": 0.0,
+      "fallbackViewportCellPercent": 0.0,
+      "maxFallbackCellsInFrame": 0,
+      "maxFallbackNodesInFrame": 0,
+      "latestCapture": "scroll-row-churn-160x50-run-3.json",
+      "latestCapturedAt": "2026-06-08T10:42:46.931Z",
+      "gates": [
+        {
+          "id": "maxFallbackCellsInFrame",
+          "actual": 0.0,
+          "maximum": 0.0,
+          "unit": "count",
+          "passed": true
+        }
+      ],
+      "strictPass": true,
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/scroll-row-churn-160x50-run-1.json",
+          "file": "scroll-row-churn-160x50-run-1.json",
+          "capturedAt": "2026-06-08T10:41:16.009Z",
+          "frameCount": 32,
+          "viewportCellCount": 256000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/scroll-row-churn-160x50-run-2.json",
+          "file": "scroll-row-churn-160x50-run-2.json",
+          "capturedAt": "2026-06-08T10:42:01.295Z",
+          "frameCount": 32,
+          "viewportCellCount": 256000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/scroll-row-churn-160x50-run-3.json",
+          "file": "scroll-row-churn-160x50-run-3.json",
+          "capturedAt": "2026-06-08T10:42:46.931Z",
+          "frameCount": 32,
+          "viewportCellCount": 256000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        }
+      ]
+    },
+    {
+      "id": "single-dirty-cell-160x50",
+      "label": "160x50 single dirty cell",
+      "captureCount": 3,
+      "frameCount": 96,
+      "viewportCellCount": 768000,
+      "fallbackFrameCount": 0,
+      "fallbackCellCount": 0,
+      "fallbackNodeCount": 0,
+      "fallbackFramePercent": 0.0,
+      "fallbackViewportCellPercent": 0.0,
+      "maxFallbackCellsInFrame": 0,
+      "maxFallbackNodesInFrame": 0,
+      "latestCapture": "single-dirty-cell-160x50-run-3.json",
+      "latestCapturedAt": "2026-06-08T10:35:55.147Z",
+      "gates": [
+        {
+          "id": "maxFallbackCellsInFrame",
+          "actual": 0.0,
+          "maximum": 0.0,
+          "unit": "count",
+          "passed": true
+        }
+      ],
+      "strictPass": true,
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/single-dirty-cell-160x50-run-1.json",
+          "file": "single-dirty-cell-160x50-run-1.json",
+          "capturedAt": "2026-06-08T10:34:13.364Z",
+          "frameCount": 32,
+          "viewportCellCount": 256000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/single-dirty-cell-160x50-run-2.json",
+          "file": "single-dirty-cell-160x50-run-2.json",
+          "capturedAt": "2026-06-08T10:35:03.504Z",
+          "frameCount": 32,
+          "viewportCellCount": 256000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/single-dirty-cell-160x50-run-3.json",
+          "file": "single-dirty-cell-160x50-run-3.json",
+          "capturedAt": "2026-06-08T10:35:55.147Z",
+          "frameCount": 32,
+          "viewportCellCount": 256000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        }
+      ]
+    },
+    {
+      "id": "stress-300x100",
+      "label": "300x100 stress viewport",
+      "captureCount": 3,
+      "frameCount": 48,
+      "viewportCellCount": 1440000,
+      "fallbackFrameCount": 0,
+      "fallbackCellCount": 0,
+      "fallbackNodeCount": 0,
+      "fallbackFramePercent": 0.0,
+      "fallbackViewportCellPercent": 0.0,
+      "maxFallbackCellsInFrame": 0,
+      "maxFallbackNodesInFrame": 0,
+      "latestCapture": "stress-300x100-run-3.json",
+      "latestCapturedAt": "2026-06-08T10:31:10.961Z",
+      "gates": [
+        {
+          "id": "maxFallbackCellsInFrame",
+          "actual": 0.0,
+          "maximum": 0.0,
+          "unit": "count",
+          "passed": true
+        }
+      ],
+      "strictPass": true,
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/stress-300x100-run-1.json",
+          "file": "stress-300x100-run-1.json",
+          "capturedAt": "2026-06-08T10:29:24.884Z",
+          "frameCount": 16,
+          "viewportCellCount": 480000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/stress-300x100-run-2.json",
+          "file": "stress-300x100-run-2.json",
+          "capturedAt": "2026-06-08T10:30:11.162Z",
+          "frameCount": 16,
+          "viewportCellCount": 480000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/stress-300x100-run-3.json",
+          "file": "stress-300x100-run-3.json",
+          "capturedAt": "2026-06-08T10:31:10.961Z",
+          "frameCount": 16,
+          "viewportCellCount": 480000,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        }
+      ]
+    },
+    {
+      "id": "text-input-burst-80x24",
+      "label": "80x24 text input burst",
+      "captureCount": 3,
+      "frameCount": 120,
+      "viewportCellCount": 230400,
+      "fallbackFrameCount": 0,
+      "fallbackCellCount": 0,
+      "fallbackNodeCount": 0,
+      "fallbackFramePercent": 0.0,
+      "fallbackViewportCellPercent": 0.0,
+      "maxFallbackCellsInFrame": 0,
+      "maxFallbackNodesInFrame": 0,
+      "latestCapture": "text-input-burst-80x24-run-3.json",
+      "latestCapturedAt": "2026-06-08T10:47:45.488Z",
+      "gates": [
+        {
+          "id": "maxFallbackCellsInFrame",
+          "actual": 0.0,
+          "maximum": 0.0,
+          "unit": "count",
+          "passed": true
+        }
+      ],
+      "strictPass": true,
+      "captures": [
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/text-input-burst-80x24-run-1.json",
+          "file": "text-input-burst-80x24-run-1.json",
+          "capturedAt": "2026-06-08T10:45:55.695Z",
+          "frameCount": 40,
+          "viewportCellCount": 76800,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/text-input-burst-80x24-run-2.json",
+          "file": "text-input-burst-80x24-run-2.json",
+          "capturedAt": "2026-06-08T10:46:58.982Z",
+          "frameCount": 40,
+          "viewportCellCount": 76800,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        },
+        {
+          "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained/text-input-burst-80x24-run-3.json",
+          "file": "text-input-burst-80x24-run-3.json",
+          "capturedAt": "2026-06-08T10:47:45.488Z",
+          "frameCount": 40,
+          "viewportCellCount": 76800,
+          "fallbackFrameCount": 0,
+          "fallbackCellCount": 0,
+          "fallbackNodeCount": 0,
+          "fallbackFramePercent": 0.0,
+          "fallbackViewportCellPercent": 0.0,
+          "maxFallbackCellsInFrame": 0,
+          "maxFallbackNodesInFrame": 0
+        }
+      ]
+    }
+  ]
+}

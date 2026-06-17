@@ -115,12 +115,16 @@ class TokenMeter extends StatelessWidget {
     final nearLimit =
         ratio != null && ratio >= warningThreshold && ratio < errorThreshold;
     final displayLabel = _sanitizeStatusText(label);
-    final text = _tokenText(
-      displayLabel,
-      usage,
-      width: width,
-      percent: percent,
-    );
+    // A text status pairs with the color so "near/over limit" reads in
+    // monochrome (Cursor / Copilot surface the same as words, not color alone).
+    final statusSuffix = overLimit
+        ? '  OVER LIMIT'
+        : nearLimit
+        ? '  NEAR LIMIT'
+        : '';
+    final text =
+        _tokenText(displayLabel, usage, width: width, percent: percent) +
+        statusSuffix;
 
     return Semantics(
       role: SemanticRole.tokenMeter,

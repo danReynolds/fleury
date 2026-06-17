@@ -13,6 +13,10 @@ import 'bar_chart.dart';
 /// Range defaults to autoscaled `[min(values), max(values)]`. Bin labels
 /// are the midpoint of each bucket; turn them off with `showLabels: false`
 /// when packing many bins into a narrow space.
+///
+/// Semantics: contributes one summary node (chart role, label, and data
+/// state) by design. Terminal charts are announced and asserted as
+/// summaries; per-element semantic children are intentionally omitted.
 class Histogram extends StatelessWidget {
   const Histogram({
     super.key,

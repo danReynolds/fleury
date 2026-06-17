@@ -27,6 +27,34 @@ void main() {
       expect(received, 13);
     });
 
+    testWidgets('wheel up/down nudge the value by step', (tester) {
+      num received = -1;
+      tester.pumpWidget(
+        Stepper(value: 10, step: 3, onChanged: (v) => received = v),
+      );
+      // Render first so the wheel region is registered; '[ − 10 + ]' is row 0.
+      tester.render(size: const CellSize(20, 1));
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.scrollUp,
+          button: MouseButton.none,
+          col: 4,
+          row: 0,
+        ),
+      );
+      expect(received, 13, reason: 'wheel up nudged by +step');
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.scrollDown,
+          button: MouseButton.none,
+          col: 4,
+          row: 0,
+        ),
+      );
+      // Value is uncontrolled here (stays 10), so wheel down nudges 10 → 7.
+      expect(received, 7, reason: 'wheel down nudged by -step');
+    });
+
     testWidgets('Arrow Down decrements by step', (tester) {
       num received = -1;
       tester.pumpWidget(
@@ -93,6 +121,49 @@ void main() {
       tester.type('+');
       tester.type('-');
       expect(calls, [6, 4]);
+    });
+
+    testWidgets('typing digits then Enter sets the value directly', (tester) {
+      final calls = <num>[];
+      tester.pumpWidget(
+        Stepper(value: 5, autofocus: true, onChanged: calls.add),
+      );
+      tester.type('4');
+      tester.type('2');
+      // Nothing committed while the entry is in flight, and the buffer shows.
+      expect(calls, isEmpty);
+      expect(
+        tester.renderToString(size: const CellSize(16, 1)).contains('42'),
+        isTrue,
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      expect(calls, [42]);
+    });
+
+    testWidgets('direct entry clamps to max on commit', (tester) {
+      final calls = <num>[];
+      tester.pumpWidget(
+        Stepper(value: 5, min: 0, max: 10, autofocus: true, onChanged: calls.add),
+      );
+      tester.type('9');
+      tester.type('9');
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      expect(calls, [10]);
+    });
+
+    testWidgets('Esc cancels a pending direct entry', (tester) {
+      final calls = <num>[];
+      tester.pumpWidget(
+        Stepper(value: 5, autofocus: true, onChanged: calls.add),
+      );
+      tester.type('9');
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+      expect(calls, isEmpty);
+      // Display reverts to the controlled value.
+      expect(
+        tester.renderToString(size: const CellSize(16, 1)).contains('5'),
+        isTrue,
+      );
     });
 
     testWidgets('shows a label when provided', (tester) {

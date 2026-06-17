@@ -188,6 +188,10 @@ final class InputDebugEvent extends DebugEvent {
         kind: 'text',
         summary: '${text.length} chars',
       ),
+      TextCompositionEvent(:final kind, :final text) => InputDebugEvent(
+        kind: 'composition',
+        summary: text == null ? kind.name : '${kind.name}:${text.length} chars',
+      ),
       PasteEvent(:final text) => InputDebugEvent(
         kind: 'paste',
         summary: '${text.length} chars',

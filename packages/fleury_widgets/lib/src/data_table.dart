@@ -435,6 +435,11 @@ class DataTableController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Total row / column counts, so callers can tell when the selection sits on
+  /// an edge (e.g. to bubble an arrow key for boundary focus escape).
+  int get rowCount => _rowCount;
+  int get columnCount => _columnCount;
+
   DataTableSelectionRange get selectionRange => DataTableSelectionRange(
     anchorRow: _anchorRow,
     anchorColumn: _anchorColumn,
@@ -727,24 +732,39 @@ class _DataTableState extends State<DataTable> {
     }
     final extend = event.hasShift;
     switch (event.keyCode) {
+      // Boundary escape: an arrow at the grid edge bubbles so focus can leave
+      // the table (Tab/Shift+Tab and Esc also leave). Shift-extends never
+      // escape — they're an editing gesture, not navigation.
       case KeyCode.arrowUp:
-        _controller.moveSelection(rowDelta: -1, extend: extend);
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: !extend && _controller.selectedIndex <= 0,
+          move: () => _controller.moveSelection(rowDelta: -1, extend: extend),
+        );
       case KeyCode.arrowDown:
-        _controller.moveSelection(rowDelta: 1, extend: extend);
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge:
+              !extend && _controller.selectedIndex >= _controller.rowCount - 1,
+          move: () => _controller.moveSelection(rowDelta: 1, extend: extend),
+        );
       case KeyCode.arrowLeft:
         if (widget.selectionMode != DataTableSelectionMode.cell) {
           return KeyEventResult.ignored;
         }
-        _controller.moveSelection(columnDelta: -1, extend: extend);
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: !extend && _controller.selectedColumnIndex <= 0,
+          move: () =>
+              _controller.moveSelection(columnDelta: -1, extend: extend),
+        );
       case KeyCode.arrowRight:
         if (widget.selectionMode != DataTableSelectionMode.cell) {
           return KeyEventResult.ignored;
         }
-        _controller.moveSelection(columnDelta: 1, extend: extend);
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge:
+              !extend &&
+              _controller.selectedColumnIndex >= _controller.columnCount - 1,
+          move: () => _controller.moveSelection(columnDelta: 1, extend: extend),
+        );
       case KeyCode.pageUp:
         _controller.moveSelection(rowDelta: -_visibleRows, extend: extend);
         return KeyEventResult.handled;
@@ -752,20 +772,52 @@ class _DataTableState extends State<DataTable> {
         _controller.moveSelection(rowDelta: _visibleRows, extend: extend);
         return KeyEventResult.handled;
       case KeyCode.home:
-        _controller.selectCell(0, _controller.selectedColumnIndex);
+        // Ctrl+Home → first cell (0,0) in cell mode; plain Home → top row,
+        // same column (WAI-ARIA grid).
+        final homeColumn =
+            event.hasCtrl && widget.selectionMode == DataTableSelectionMode.cell
+            ? 0
+            : _controller.selectedColumnIndex;
+        _controller.selectCell(0, homeColumn);
         return KeyEventResult.handled;
       case KeyCode.end:
-        _controller.selectCell(
-          widget.rowCount - 1,
-          _controller.selectedColumnIndex,
-        );
+        final endColumn =
+            event.hasCtrl && widget.selectionMode == DataTableSelectionMode.cell
+            ? _controller.columnCount - 1
+            : _controller.selectedColumnIndex;
+        _controller.selectCell(widget.rowCount - 1, endColumn);
         return KeyEventResult.handled;
       case KeyCode.enter:
         widget.onSelect?.call(_controller.selectedIndex);
         return KeyEventResult.handled;
       default:
+        final ch = event.char;
+        if (ch != null &&
+            ch.length == 1 &&
+            ch.codeUnitAt(0) >= 0x21 &&
+            !event.hasCtrl &&
+            !event.hasAlt &&
+            widget.columns.isNotEmpty) {
+          return _typeahead(ch);
+        }
         return KeyEventResult.ignored;
     }
+  }
+
+  /// Jump the selection to the next row whose first-column cell starts with
+  /// [ch] (wrapping) — spreadsheet/grid type-ahead.
+  KeyEventResult _typeahead(String ch) {
+    final columnId = widget.columns.first.id;
+    final lower = ch.toLowerCase();
+    final start = _controller.selectedIndex + 1;
+    for (var k = 0; k < widget.rowCount; k++) {
+      final i = (start + k) % widget.rowCount;
+      if (widget.cellBuilder(i, columnId).toLowerCase().startsWith(lower)) {
+        _controller.selectCell(i, _controller.selectedColumnIndex);
+        break;
+      }
+    }
+    return KeyEventResult.handled;
   }
 
   @override
@@ -809,30 +861,47 @@ class _DataTableState extends State<DataTable> {
         focusNode: _focusNode,
         autofocus: widget.autofocus,
         onKey: _onKey,
-        child: GestureDetector(
-          onTapDownWithModifiers: (col, row, modifiers) {
-            _pendingPointerHit = _hitTestPointer(col, row, modifiers);
-          },
-          onTap: () {
-            final hit = _pendingPointerHit;
-            _pendingPointerHit = null;
-            if (hit == null) return;
-            _focusNode.requestFocus();
-            if (widget.selectionMode == DataTableSelectionMode.cell &&
-                hit.columnIndex != null) {
-              _controller.selectCell(
-                hit.rowIndex,
-                hit.columnIndex!,
-                extend: hit.extend,
-              );
-            } else {
-              _controller.selectedIndex = hit.rowIndex;
-            }
-          },
-          child: table,
+        // Wheel over the table scrolls the row window by moving the selection
+        // (the window follows the selected row; selection changes don't fire
+        // onSelect, so scrolling never triggers a row action).
+        child: PointerScrollListener(
+          router: PointerRouterScope.maybeOf(context),
+          onScrollUp: () => _scrollBy(-1),
+          onScrollDown: () => _scrollBy(1),
+          child: GestureDetector(
+            onTapDownWithModifiers: (col, row, modifiers) {
+              _pendingPointerHit = _hitTestPointer(col, row, modifiers);
+            },
+            onTap: () {
+              final hit = _pendingPointerHit;
+              _pendingPointerHit = null;
+              if (hit == null) return;
+              _focusNode.requestFocus();
+              if (widget.selectionMode == DataTableSelectionMode.cell &&
+                  hit.columnIndex != null) {
+                _controller.selectCell(
+                  hit.rowIndex,
+                  hit.columnIndex!,
+                  extend: hit.extend,
+                );
+              } else {
+                _controller.selectedIndex = hit.rowIndex;
+              }
+            },
+            child: table,
+          ),
         ),
       ),
     );
+  }
+
+  /// Wheel scroll moves the selection (the row window follows it). Selection
+  /// changes don't fire onSelect — that's reserved for Enter / activate.
+  void _scrollBy(int delta) {
+    final count = _controller.rowCount;
+    if (count == 0) return;
+    final next = (_controller.selectedIndex + delta).clamp(0, count - 1);
+    if (next != _controller.selectedIndex) _controller.selectedIndex = next;
   }
 
   _DataTablePointerHit? _hitTestPointer(

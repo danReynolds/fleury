@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryWebManualValidationAudit",
+  "generatedAt": "2026-06-08T10:51:15.742060Z",
+  "targetCount": 2,
+  "entryCount": 0,
+  "passedTargetCount": 0,
+  "missingTargets": [
+    "chrome-ime-macos",
+    "chrome-voiceover-macos"
+  ],
+  "failedTargets": [],
+  "blockedTargets": [],
+  "needsReviewTargets": [],
+  "strictPass": false,
+  "targets": [
+    {
+      "id": "chrome-ime-macos",
+      "label": "Chrome primary-browser IME smoke on macOS",
+      "phase": "Phase 3",
+      "category": "ime",
+      "browser": "Chrome",
+      "platform": "macOS",
+      "inputMethod": "Any real composing IME, such as Japanese Romaji",
+      "status": "missing",
+      "strictPass": false,
+      "requiredCheckCount": 6,
+      "passedRequiredCheckCount": 0,
+      "missingCheckIds": [
+        "manual-page-loads-dom-host",
+        "keyboard-capture-focused",
+        "composition-start-update-visible",
+        "composition-end-commits-once",
+        "candidate-window-near-caret",
+        "typing-continues-after-composition"
+      ],
+      "failedCheckIds": [],
+      "blockedCheckIds": []
+    },
+    {
+      "id": "chrome-voiceover-macos",
+      "label": "Chrome VoiceOver screen-reader smoke on macOS",
+      "phase": "Phase 4",
+      "category": "screenReader",
+      "browser": "Chrome",
+      "platform": "macOS",
+      "assistiveTechnology": "VoiceOver",
+      "status": "missing",
+      "strictPass": false,
+      "requiredCheckCount": 6,
+      "passedRequiredCheckCount": 0,
+      "missingCheckIds": [
+        "visual-grid-hidden",
+        "semantic-root-exposed",
+        "focused-textbox-announced",
+        "semantic-action-works",
+        "keyboard-capture-restored",
+        "safe-link-announced"
+      ],
+      "failedCheckIds": [],
+      "blockedCheckIds": []
+    }
+  ]
+}

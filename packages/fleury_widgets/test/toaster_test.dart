@@ -51,6 +51,31 @@ void main() {
     expect(out.contains('second'), isTrue);
   });
 
+  testWidgets('Esc dismisses the most recent toast', (tester) {
+    late BuildContext ctx;
+    tester.pumpWidget(
+      Toaster(
+        child: Column(
+          children: [
+            _Capture((c) => ctx = c),
+            Button(label: 'x', autofocus: true, onPressed: () {}),
+          ],
+        ),
+      ),
+    );
+
+    Toaster.show(ctx, 'first');
+    Toaster.show(ctx, 'second');
+    tester.pump();
+    expect(_screen(tester, rows: 10).contains('second'), isTrue);
+
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.pump();
+    final out = _screen(tester, rows: 10);
+    expect(out.contains('second'), isFalse, reason: 'latest toast dismissed');
+    expect(out.contains('first'), isTrue, reason: 'older toast remains');
+  });
+
   testWidgets('toasts float over a presented modal', (tester) async {
     // The Toaster's overlay entry sits above the navigator, so a toast
     // shows on top of a dialog presented on the navigator.
@@ -287,7 +312,7 @@ void main() {
       expect(
         node.states,
         contains(
-          'notification 1 of 1, action Undo, key Alt+U, auto dismiss 3000ms',
+          'notification 1 of 1, action Undo, key Alt+U, auto dismiss 5000ms',
         ),
       );
       expect(node.actions, contains(SemanticAction.activate));

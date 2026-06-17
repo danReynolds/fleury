@@ -586,6 +586,72 @@ void main() {
       );
     });
 
+    testWidgets('Shift+End extends the selection to the end of the row', (
+      tester,
+    ) async {
+      SelectedContent? captured;
+      tester.pumpWidget(
+        SelectionArea(
+          onSelectionChanged: (sel) => captured = sel,
+          child: const Text('hello world'),
+        ),
+      );
+      tester.render(size: const CellSize(20, 1));
+
+      // Anchor col 2, cursor col 5 → 'llo'.
+      tester.sendMouse(_down(2, 0));
+      tester.sendMouse(_drag(5, 0));
+      tester.sendMouse(_up(5, 0));
+      expect(captured?.plainText, 'llo');
+
+      tester.sendKey(
+        const KeyEvent(keyCode: KeyCode.end, modifiers: {KeyModifier.shift}),
+      );
+      expect(captured?.plainText, 'llo world');
+    });
+
+    testWidgets('Shift+Home extends the selection to the start of the row', (
+      tester,
+    ) async {
+      SelectedContent? captured;
+      tester.pumpWidget(
+        SelectionArea(
+          onSelectionChanged: (sel) => captured = sel,
+          child: const Text('hello world'),
+        ),
+      );
+      tester.render(size: const CellSize(20, 1));
+
+      // Anchor col 7, cursor col 4 → 'o w' (drag right-to-left).
+      tester.sendMouse(_down(7, 0));
+      tester.sendMouse(_drag(4, 0));
+      tester.sendMouse(_up(4, 0));
+      expect(captured?.plainText, 'o w');
+
+      tester.sendKey(
+        const KeyEvent(keyCode: KeyCode.home, modifiers: {KeyModifier.shift}),
+      );
+      expect(captured?.plainText, 'hello w');
+    });
+
+    testWidgets('Shift+Home with no active selection bubbles', (tester) async {
+      var ancestorHomeHit = 0;
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeyChord.shift.home, onEvent: (_) => ancestorHomeHit++),
+          ],
+          child: const SelectionArea(child: Text('hello')),
+        ),
+      );
+      tester.render(size: const CellSize(10, 1));
+
+      tester.sendKey(
+        const KeyEvent(keyCode: KeyCode.home, modifiers: {KeyModifier.shift}),
+      );
+      expect(ancestorHomeHit, 1);
+    });
+
     testWidgets('Shift+Arrow with no active selection bubbles', (tester) async {
       var ancestorRightHit = 0;
       tester.pumpWidget(

@@ -1,4 +1,4 @@
-import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_host.dart';
 import 'package:fleury_web/fleury_web.dart';
 
 void main() {

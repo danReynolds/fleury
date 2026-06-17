@@ -30,7 +30,18 @@ class _TooltipState extends State<Tooltip> {
   final AnchorLink _link = AnchorLink();
   OverlayEntry? _entry;
 
-  void _onFocusChange(bool within) => within ? _show() : _hide();
+  // Set when Esc dismisses the tip while the trigger keeps focus; cleared when
+  // focus leaves, so re-focusing the trigger shows the tip again.
+  bool _dismissed = false;
+
+  void _onFocusChange(bool within) {
+    if (within) {
+      if (!_dismissed) _show();
+    } else {
+      _dismissed = false;
+      _hide();
+    }
+  }
 
   void _show() {
     if (_entry != null) return;
@@ -86,7 +97,25 @@ class _TooltipState extends State<Tooltip> {
       state: SemanticState({'tooltipVisible': _entry != null}),
       child: FocusWithin(
         onFocusChange: _onFocusChange,
-        child: Anchor(link: _link, child: widget.child),
+        child: KeyBindings(
+          bindings: <KeyBinding>[
+            KeyBinding(
+              KeyChord.escape,
+              onEvent: (event) {
+                if (_entry == null) {
+                  event.bubble();
+                  return;
+                }
+                // WCAG 1.4.13: a persistent tip must be dismissible without
+                // moving focus, in case it overlays content the user wants.
+                _dismissed = true;
+                _hide();
+              },
+              hideFromHintBar: true,
+            ),
+          ],
+          child: Anchor(link: _link, child: widget.child),
+        ),
       ),
     );
   }

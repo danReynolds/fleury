@@ -134,7 +134,23 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
       _shiftMonth(12);
       return KeyEventResult.handled;
     }
+    if (text == 't' || text == 'T') {
+      _jumpToToday();
+      return KeyEventResult.handled;
+    }
     return KeyEventResult.ignored;
+  }
+
+  /// Jump to today, clamped into `[firstDate, lastDate]`. The most widely
+  /// recognized date-picker shortcut (jQuery UI, Bootstrap Datepicker, APG).
+  void _jumpToToday() {
+    if (!_enabled) return;
+    var today = _midnight(DateTime.now());
+    final first = widget.firstDate;
+    final last = widget.lastDate;
+    if (first != null && today.isBefore(_midnight(first))) today = _midnight(first);
+    if (last != null && today.isAfter(_midnight(last))) today = _midnight(last);
+    if (today != _midnight(widget.value)) widget.onChanged!(today);
   }
 
   @override
@@ -202,19 +218,35 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
 
   KeyEventResult _onKey(KeyEvent event) {
     if (!_enabled) return KeyEventResult.ignored;
+    // Boundary escape: the calendar is a grid, so an arrow that would step off
+    // its edge is returned *unhandled* and bubbles to the enclosing directional
+    // focus traversal — that's how you leave the calendar with the same arrow
+    // keys you navigate it with (Tab/Shift+Tab and Esc also leave). Month
+    // paging stays on PageUp/PageDown and the ‹ › header buttons.
+    final value = _midnight(widget.value);
+    final column = _backToWeekStart(value); // 0 = first column of the week
+    final lastDay = DateTime(value.year, value.month + 1, 0).day;
     switch (event.keyCode) {
       case KeyCode.arrowLeft:
-        _move(const Duration(days: -1));
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: column == 0 || value.day == 1,
+          move: () => _move(const Duration(days: -1)),
+        );
       case KeyCode.arrowRight:
-        _move(const Duration(days: 1));
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: column == 6 || value.day == lastDay,
+          move: () => _move(const Duration(days: 1)),
+        );
       case KeyCode.arrowUp:
-        _move(const Duration(days: -7));
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: value.day - 7 < 1,
+          move: () => _move(const Duration(days: -7)),
+        );
       case KeyCode.arrowDown:
-        _move(const Duration(days: 7));
-        return KeyEventResult.handled;
+        return moveOrEscape(
+          atEdge: value.day + 7 > lastDay,
+          move: () => _move(const Duration(days: 7)),
+        );
       case KeyCode.pageUp:
         _shiftMonth(-1);
         return KeyEventResult.handled;
@@ -269,6 +301,16 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
       final inB = _inBounds(day);
       final label = d.toString().padLeft(2, ' ');
       final cellText = ' $label';
+      // Click an in-bounds day to select it (focus first, mirroring the way
+      // keyboard navigation focuses). `d` is captured per-iteration so the
+      // closure points at this day, not the loop's final value.
+      final dayNum = d;
+      final onTap = (enabled && inB)
+          ? () {
+              _node.requestFocus();
+              _jumpInMonth(dayNum);
+            }
+          : null;
       if (selected) {
         row.add(
           _Cell(
@@ -278,6 +320,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
                 : focused
                 ? theme.focusedStyle
                 : theme.selectionStyle,
+            onTap: onTap,
           ),
         );
       } else if (!inB) {
@@ -285,7 +328,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
       } else if (!enabled) {
         row.add(_Cell(cellText, style: disabledStyle));
       } else {
-        row.add(_Cell(cellText));
+        row.add(_Cell(cellText, onTap: onTap));
       }
       if (row.length == 7) {
         rows.add(row);
@@ -303,10 +346,20 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Header: `< January 2024 >`. Left-anchored so flex layout
-        // can't push children to negative columns at tight widths.
+        // can't push children to negative columns at tight widths. The
+        // ‹ › glyphs page the month on click (PageUp/PageDown by keyboard).
         Row(
           children: [
-            Text('< ', style: enabled ? theme.mutedStyle : disabledStyle),
+            _MonthArrow(
+              '< ',
+              style: enabled ? theme.mutedStyle : disabledStyle,
+              onTap: enabled
+                  ? () {
+                      _node.requestFocus();
+                      _shiftMonth(-1);
+                    }
+                  : null,
+            ),
             Text(
               '${_months[v.month - 1]} ${v.year}',
               style: !enabled
@@ -315,7 +368,16 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
                   ? theme.focusedStyle
                   : const CellStyle(bold: true),
             ),
-            Text(' >', style: enabled ? theme.mutedStyle : disabledStyle),
+            _MonthArrow(
+              ' >',
+              style: enabled ? theme.mutedStyle : disabledStyle,
+              onTap: enabled
+                  ? () {
+                      _node.requestFocus();
+                      _shiftMonth(1);
+                    }
+                  : null,
+            ),
           ],
         ),
         // Day-of-week labels.
@@ -406,12 +468,31 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
 
 /// A fixed-width 3-column cell used for the day grid and the day-of-week
 /// header so columns line up regardless of which days have one or two
-/// digits.
+/// digits. Pass [onTap] to make the cell clickable (an in-bounds day).
 class _Cell extends StatelessWidget {
-  const _Cell(this.text, {this.style = CellStyle.empty});
+  const _Cell(this.text, {this.style = CellStyle.empty, this.onTap});
   final String text;
   final CellStyle style;
+  final void Function()? onTap;
   @override
-  Widget build(BuildContext context) =>
-      SizedBox(width: 3, child: Text(text, style: style));
+  Widget build(BuildContext context) {
+    final cell = SizedBox(width: 3, child: Text(text, style: style));
+    if (onTap == null) return cell;
+    return GestureDetector(onTap: onTap, child: cell);
+  }
+}
+
+/// The `‹` / `›` month-paging glyph in the calendar header. Clickable when
+/// [onTap] is provided; otherwise a plain label.
+class _MonthArrow extends StatelessWidget {
+  const _MonthArrow(this.text, {required this.style, this.onTap});
+  final String text;
+  final CellStyle style;
+  final void Function()? onTap;
+  @override
+  Widget build(BuildContext context) {
+    final label = Text(text, style: style);
+    if (onTap == null) return label;
+    return GestureDetector(onTap: onTap, child: label);
+  }
 }

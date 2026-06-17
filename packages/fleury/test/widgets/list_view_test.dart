@@ -7,11 +7,105 @@ import 'package:test/test.dart';
 
 KeyEvent _code(KeyCode kc) => KeyEvent(keyCode: kc);
 
+MouseEvent _mouse(MouseEventKind kind, int col, int row) =>
+    MouseEvent(kind: kind, button: MouseButton.left, col: col, row: row);
+
 Widget _itemBuilder(BuildContext context, int index, bool selected) {
   return Text('Item $index');
 }
 
 void main() {
+  group('pointer selection', () {
+    testWidgets('tapping an item selects it and fires onSelect', (tester) {
+      final controller = ListController(selectedIndex: 0);
+      final activated = <int>[];
+      tester.pumpWidget(
+        SizedBox(
+          width: 12,
+          height: 4,
+          child: ListView.builder(
+            controller: controller,
+            itemCount: 4,
+            onSelect: activated.add,
+            itemBuilder: (context, index, selected) =>
+                SizedBox(width: 12, height: 1, child: Text('item $index')),
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(12, 4)); // register gesture regions
+
+      // Tap the third row (index 2): press + release in the same cell.
+      tester.sendMouse(_mouse(MouseEventKind.down, 1, 2));
+      tester.sendMouse(_mouse(MouseEventKind.up, 1, 2));
+
+      expect(controller.selectedIndex, 2);
+      expect(activated, [2]);
+    });
+
+    testWidgets('tap survives a rebuild between press and release', (
+      tester,
+    ) {
+      // Over the serve wire, down and up arrive in separate frames, and the
+      // press triggers a click-to-focus rebuild in between — which recreates
+      // the lazy list's item render objects. Acting on the press (not a
+      // release-time identity match) keeps the selection working anyway.
+      final controller = ListController(selectedIndex: 0);
+      final activated = <int>[];
+      tester.pumpWidget(
+        SizedBox(
+          width: 12,
+          height: 4,
+          child: ListView.builder(
+            controller: controller,
+            itemCount: 4,
+            onSelect: activated.add,
+            itemBuilder: (context, index, selected) =>
+                SizedBox(width: 12, height: 1, child: Text('item $index')),
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(12, 4));
+
+      tester.sendMouse(_mouse(MouseEventKind.down, 1, 2));
+      tester.pump(); // full rebuild between down and up, as serve does
+      tester.render(size: const CellSize(12, 4));
+      tester.sendMouse(_mouse(MouseEventKind.up, 1, 2));
+
+      expect(controller.selectedIndex, 2);
+      expect(activated, [2]);
+    });
+
+    testWidgets('a drag wiggle between press and release still taps', (
+      tester,
+    ) {
+      // A real mouse click in the browser client emits a tiny drag between
+      // pointerdown and pointerup. That wiggle must not suppress the tap.
+      final controller = ListController(selectedIndex: 0);
+      final activated = <int>[];
+      tester.pumpWidget(
+        SizedBox(
+          width: 12,
+          height: 4,
+          child: ListView.builder(
+            controller: controller,
+            itemCount: 4,
+            onSelect: activated.add,
+            itemBuilder: (context, index, selected) =>
+                SizedBox(width: 12, height: 1, child: Text('item $index')),
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(12, 4));
+
+      tester.sendMouse(_mouse(MouseEventKind.down, 1, 2));
+      tester.sendMouse(_mouse(MouseEventKind.drag, 1, 2)); // wiggle, same cell
+      tester.sendMouse(_mouse(MouseEventKind.up, 1, 2));
+
+      expect(controller.selectedIndex, 2);
+      expect(activated, [2]);
+    });
+  });
+
   group('selection movement', () {
     testWidgets('arrowDown advances selectedIndex', (tester) {
       final controller = ListController();
@@ -82,7 +176,9 @@ void main() {
   });
 
   group('boundary handling', () {
-    testWidgets('contain (default) consumes up at the first item', (tester) {
+    testWidgets('contain (opt-in) consumes up at the first item', (tester) {
+      // The default is now bubble (boundary escape); contain is the opt-in for
+      // a standalone/primary list that should keep focus at its edges.
       var bubbled = 0;
       tester.pumpWidget(
         KeyBindings(
@@ -96,6 +192,7 @@ void main() {
             itemCount: 3,
             itemBuilder: _itemBuilder,
             autofocus: true,
+            edgeBehavior: EdgeBehavior.contain,
           ),
         ),
       );

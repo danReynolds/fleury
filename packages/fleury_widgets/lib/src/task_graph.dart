@@ -514,6 +514,8 @@ String _progressText(TaskGraphNode node) {
   final current = node.progressCurrent;
   final total = node.progressTotal;
   if (current != null && total != null) return 'Progress: $current / $total';
+  // A known total with an unknown current reads as "— / total", not "pending".
+  if (total != null) return 'Progress: — / $total';
   if (current != null) return 'Progress: $current';
   return 'Progress: pending';
 }

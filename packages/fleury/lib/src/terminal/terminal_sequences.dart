@@ -23,7 +23,13 @@ String buildTerminalEnterSequences(TerminalMode mode) {
 String buildTerminalExitSequences(TerminalMode mode) {
   final buf = StringBuffer();
   // Disable mouse modes unconditionally, including all-motion 1003, so none
-  // leak back to the shell.
+  // leak back to the shell. This stays unconditional even when the session
+  // never enabled mouse: suspend (Ctrl+Z) and subprocess handoff let foreign
+  // code write to the terminal, and a subprocess that enabled mouse and
+  // crashed would otherwise leave the user's shell spewing mouse reports.
+  // The cost is 32 bytes once per exit/suspend — measured and accepted
+  // (classified as session lifecycle in AnsiByteBreakdown, not frame
+  // overhead).
   buf.write('\x1B[?1006l\x1B[?1003l\x1B[?1002l\x1B[?1000l');
   if (mode.kittyKeyboard) buf.write('\x1B[<u');
   if (mode.bracketedPaste) buf.write('\x1B[?2004l');

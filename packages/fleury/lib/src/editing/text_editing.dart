@@ -281,6 +281,64 @@ final class TextEditingModel {
     );
   }
 
+  // ---- Kill ring (readline Ctrl+K / Ctrl+U / Ctrl+W / Ctrl+Y) -------------
+  //
+  // A shared most-recent-kill buffer, like emacs's: a kill in one field can be
+  // yanked in another. Killing (cut-to-buffer) gives Ctrl+W a recovery path,
+  // unlike a plain delete.
+  /// The shared kill ring (most recent kill). Resettable for tests.
+  static String killRing = '';
+
+  /// Cuts `[start, end)` into the kill ring and returns the value with that
+  /// span removed (caret at the cut point). Empty spans are a no-op.
+  static TextEditingValue killRange(TextEditingValue value, int start, int end) {
+    final a = snapOffsetToGraphemeBoundary(value.text, start);
+    final b = snapOffsetToGraphemeBoundary(value.text, end);
+    final lo = a < b ? a : b;
+    final hi = a < b ? b : a;
+    if (lo == hi) return value;
+    killRing = value.text.substring(lo, hi);
+    return TextEditingValue(
+      text: value.text.replaceRange(lo, hi, ''),
+      selection: TextSelection.collapsed(lo),
+    );
+  }
+
+  /// Ctrl+K: kill from the caret to the end of the line; if already at the line
+  /// end, kill the trailing newline (joining the next line) — emacs behavior.
+  static TextEditingValue killToLineEnd(TextEditingValue value) {
+    final offset = value.selection.extentOffset;
+    var end = lineEndOffset(value.text, offset);
+    if (end == offset && end < value.text.length && value.text[end] == '\n') {
+      end += 1;
+    }
+    return killRange(value, offset, end);
+  }
+
+  /// Ctrl+U: kill from the start of the line to the caret.
+  static TextEditingValue killToLineStart(TextEditingValue value) {
+    final offset = value.selection.extentOffset;
+    return killRange(value, lineStartOffset(value.text, offset), offset);
+  }
+
+  /// Ctrl+W: kill the word before the caret.
+  static TextEditingValue killWordLeft(TextEditingValue value) {
+    final offset = value.selection.extentOffset;
+    return killRange(value, previousWordBoundary(value.text, offset), offset);
+  }
+
+  /// Ctrl+Y: insert the kill ring at the caret (replacing any selection).
+  static TextEditingValue yank(
+    TextEditingValue value, {
+    bool singleLine = false,
+  }) {
+    if (killRing.isEmpty) return value;
+    return replaceSelection(
+      value,
+      singleLine ? normalizeSingleLineInput(killRing) : killRing,
+    );
+  }
+
   static TextEditingValue moveLeft(
     TextEditingValue value, {
     bool extend = false,

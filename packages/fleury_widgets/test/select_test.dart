@@ -395,6 +395,21 @@ void main() {
       expect(out.contains('[x] Red'), isTrue);
     });
 
+    testWidgets('Ctrl+A selects all, then deselects all', (tester) {
+      tester.pumpWidget(const _MultiHost());
+
+      tester.sendKey(const KeyEvent(char: 'a', modifiers: {KeyModifier.ctrl}));
+      var out = _screen(tester, cols: 18, rows: 3);
+      expect(out.contains('[x] Red'), isTrue);
+      expect(out.contains('[x] Green'), isTrue);
+      expect(out.contains('[x] Blue'), isTrue);
+
+      tester.sendKey(const KeyEvent(char: 'a', modifiers: {KeyModifier.ctrl}));
+      out = _screen(tester, cols: 18, rows: 3);
+      expect(out.contains('[ ] Red'), isTrue);
+      expect(out.contains('[ ] Blue'), isTrue);
+    });
+
     testWidgets('navigation skips disabled options', (tester) {
       Set<String>? picked;
       tester.pumpWidget(
@@ -472,5 +487,23 @@ void main() {
       );
       expect(result.status, SemanticActionInvocationStatus.disabled);
     });
+  });
+
+  testWidgets('sanitizes unsafe option labels in trigger, list, and '
+      'semantics', (tester) {
+    const unsafe = <SelectOption<String>>[
+      SelectOption(value: 'x', label: 'Bad\x1b]52;c;secret\x07ge'),
+    ];
+    tester.pumpWidget(const _Host(initial: 'x', options: unsafe));
+    final closed = _screen(tester, cols: 32);
+    expect(closed, isNot(contains('secret')), reason: 'trigger label');
+    expect(closed, contains(replacementCharacter));
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open
+    final open = _screen(tester, cols: 32);
+    expect(open, isNot(contains('secret')), reason: 'list row label');
+    final rows = tester.semantics().byRole(SemanticRole.menuItem);
+    for (final row in rows) {
+      expect(row.label, isNot(contains('secret')));
+    }
   });
 }

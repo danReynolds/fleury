@@ -69,6 +69,29 @@ void main() {
       expect(bottom.contains('0'), isTrue, reason: 'min y label above x-axis');
     });
 
+    testWidgets('yTickCount adds intermediate y-axis labels', (tester) {
+      tester.pumpWidget(
+        SizedBox(
+          width: 30,
+          height: 11,
+          child: LineChart(
+            series: const [
+              LineSeries([(0, 0), (1, 40)]),
+            ],
+            yTickCount: 5,
+          ),
+        ),
+      );
+      final out = tester.renderToString(
+        size: const CellSize(30, 11),
+        emptyMark: ' ',
+      );
+      // 5 ticks over 0..40 → labels 40/30/20/10/0; the default 3 would
+      // show only 40/20/0, so '30' proves the extra ticks rendered.
+      expect(out.contains('30'), isTrue, reason: 'intermediate 30 tick');
+      expect(out.contains('10'), isTrue, reason: 'intermediate 10 tick');
+    });
+
     testWidgets('shows min and max x-axis labels on the bottom row', (tester) {
       tester.pumpWidget(
         SizedBox(

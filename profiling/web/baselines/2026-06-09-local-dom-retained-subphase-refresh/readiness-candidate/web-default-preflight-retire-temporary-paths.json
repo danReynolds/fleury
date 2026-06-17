@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryWebDefaultPreflight",
+  "generatedAt": "2026-06-09T22:05:50.523539Z",
+  "target": "retire-temporary-paths",
+  "targetDescription": "Allow temporary web transport paths to be retired after retained DOM readiness.",
+  "diagnosticOnly": true,
+  "diagnosticReason": "Unbundled readiness-only diagnostics do not satisfy default or temporary-path-retirement release gates.",
+  "finalGateRequiresBundle": true,
+  "finalGateRequiresAutomatedValidation": true,
+  "finalGateBundlePath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-local-dom-retained-subphase-refresh/readiness-candidate/web-readiness-bundle.json",
+  "finalGateAutomatedValidationPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-local-dom-retained-subphase-refresh/readiness-candidate/web-automated-validation.json",
+  "readinessPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-local-dom-retained-subphase-refresh/readiness-candidate/web-readiness.json",
+  "bundleRequired": false,
+  "bundleBound": false,
+  "automatedValidationPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-local-dom-retained-subphase-refresh/readiness-candidate/web-automated-validation.json",
+  "automatedValidationRequired": false,
+  "automatedValidationBound": true,
+  "strictPass": true,
+  "checks": [
+    {
+      "id": "phase6Readiness",
+      "label": "Phase 6 readiness",
+      "strictPass": true,
+      "blockers": [],
+      "details": {
+        "readinessStrictPass": true
+      }
+    },
+    {
+      "id": "automatedValidation",
+      "label": "Automated retained host validation",
+      "strictPass": true,
+      "blockers": [],
+      "details": {
+        "automatedValidationPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-local-dom-retained-subphase-refresh/readiness-candidate/web-automated-validation.json",
+        "checkedSourceInputCount": 14,
+        "sourceMismatchCount": 0,
+        "missingSourceInputCount": 0,
+        "missingSourceFingerprintCount": 0,
+        "checkedMetadataCount": 1,
+        "metadataMismatchCount": 0,
+        "missingMetadataCount": 0,
+        "checkedManifestFieldCount": 14,
+        "manifestMismatchCount": 0,
+        "missingManifestFieldCount": 0
+      }
+    }
+  ]
+}

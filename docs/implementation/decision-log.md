@@ -8,6 +8,9 @@ or the relevant workstream.
 
 | Date | Decision | Reason | Status |
 | --- | --- | --- | --- |
+| 2026-06-12 | The catalog copy contract is `onCopy: void Function(XCopyResult)` with a typed per-widget result. | The catalog converged on this shape uniformly (19 widgets, re-audit 2026-06-11), superseding the June 3 recommendation of `controller.copy()`. Text editing copy stays in the editing engine via `clipboardPolicy`, and `Tree` defers copyable hierarchies to `TreeTable`. | Active |
+| 2026-06-12 | Charts are themed through `ThemeData.colorScheme` defaults with constructor palette/style overrides; component-theme chart tokens stay deleted. | Every chart family widget already derives defaults from the color scheme; the deleted component tokens duplicated that path. One theming mechanism per layer. | Active |
+| 2026-06-12 | Capability fallback splits by layer: color fidelity in the renderer cascade (done), behavioral capabilities via `resolveCapabilityRequirement` (done, 3/3), glyph repertoire via a `GlyphTier` in MediaQuery + ascii tiers in shared painting primitives. | Per-widget requirement plumbing across 54 widgets would duplicate decisions the renderer and primitives can make once; see capability-fallback-design.md. | Proposed |
 | 2026-05-31 | Use internal execution docs, not public-facing release docs. | The immediate need is implementation memory, checklists, and handoff context. | Active |
 | 2026-05-31 | Track execution in `docs/implementation/`. | Keeps active implementation state separate from strategy docs and RFCs. | Active |
 | 2026-05-31 | Use a doc suite rather than one large file. | The roadmap is already large; implementation state needs per-workstream notes. | Active |

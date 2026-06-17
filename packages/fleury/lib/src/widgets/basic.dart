@@ -67,7 +67,7 @@ final class _EmptyBoxElement extends Element {
 /// Its own [style] is merged on top of the ambient [DefaultTextStyle], so
 /// a parent can set a base color/dim for a whole subtree once and each
 /// `Text` overrides only what it sets.
-final class Text extends StatelessWidget {
+final class Text extends StatelessWidget implements WidgetUpdatePruner {
   const Text(
     this.data, {
     super.key,
@@ -108,11 +108,26 @@ final class Text extends StatelessWidget {
   final bool allowSelect;
 
   @override
+  bool hasEquivalentWidgetConfiguration(Widget other) {
+    return other is Text &&
+        key == other.key &&
+        data == other.data &&
+        style == other.style &&
+        softWrap == other.softWrap &&
+        maxLines == other.maxLines &&
+        overflow == other.overflow &&
+        textAlign == other.textAlign &&
+        profile == other.profile &&
+        allowSelect == other.allowSelect;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Semantics(
       role: SemanticRole.text,
       label: data,
       value: data,
+      includeChildren: false,
       child: _RawText(
         data: data,
         style: DefaultTextStyle.of(context).merge(style),

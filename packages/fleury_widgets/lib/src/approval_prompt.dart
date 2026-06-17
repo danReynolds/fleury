@@ -43,13 +43,22 @@ class ApprovalPrompt extends StatelessWidget {
     required this.request,
     required this.onDecision,
     this.width = 56,
-    this.autofocusApprove = true,
+    this.autofocusApprove,
   });
 
   final ApprovalRequest request;
   final void Function(ApprovalDecision decision) onDecision;
   final int? width;
-  final bool autofocusApprove;
+
+  /// Whether the confirm button is focused on open. When null (the default)
+  /// this is severity-aware: a [ApprovalSeverity.destructive] request focuses
+  /// *Deny* so a single Enter can't trigger an irreversible action — the
+  /// safe-default convention used by every agent CLI. Non-destructive requests
+  /// focus confirm. Pass an explicit value to override.
+  final bool? autofocusApprove;
+
+  bool get _autofocusApprove =>
+      autofocusApprove ?? request.severity != ApprovalSeverity.destructive;
 
   void _approve() => onDecision(ApprovalDecision.approved);
   void _deny() => onDecision(ApprovalDecision.denied);
@@ -57,6 +66,7 @@ class ApprovalPrompt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final approveFocused = _autofocusApprove;
     return Semantics(
       role: SemanticRole.approval,
       label: request.title,
@@ -82,34 +92,64 @@ class ApprovalPrompt extends StatelessWidget {
             return;
         }
       },
-      child: Dialog(
-        title: request.title,
-        width: width,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(request.message),
-            if (request.subject != null)
-              Text('Subject: ${request.subject}', style: theme.mutedStyle),
-            if (request.details.isNotEmpty) ...[
-              const SizedBox(height: 1),
-              for (final detail in request.details) Text('- $detail'),
-            ],
-            const SizedBox(height: 1),
-            Row(
-              children: [
-                Button(
-                  label: request.confirmLabel,
-                  variant: _confirmVariant(request.severity),
-                  autofocus: autofocusApprove,
-                  onPressed: _approve,
-                ),
-                const SizedBox(width: 1),
-                Button(label: request.cancelLabel, onPressed: _deny),
+      child: KeyBindings(
+        // y/n raw-key shortcuts — the universal CLI confirm convention — so a
+        // keyboard-first user decides without moving focus to a button.
+        bindings: <KeyBinding>[
+          KeyBinding(
+            KeyChord.char('y'),
+            onEvent: (_) => _approve(),
+            hideFromHintBar: true,
+          ),
+          KeyBinding(
+            KeyChord.char('n'),
+            onEvent: (_) => _deny(),
+            hideFromHintBar: true,
+          ),
+        ],
+        child: Dialog(
+          title: request.title,
+          width: width,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(request.message),
+              if (request.subject != null)
+                Text('Subject: ${request.subject}', style: theme.mutedStyle),
+              if (request.details.isNotEmpty) ...[
+                const SizedBox(height: 1),
+                for (final detail in request.details) Text('- $detail'),
               ],
-            ),
-          ],
+              if (request.severity == ApprovalSeverity.destructive) ...[
+                const SizedBox(height: 1),
+                Text(
+                  '! Destructive — this cannot be undone.',
+                  style: CellStyle(
+                    foreground: theme.colorScheme.error,
+                    bold: true,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 1),
+              Row(
+                children: [
+                  Button(
+                    label: request.confirmLabel,
+                    variant: _confirmVariant(request.severity),
+                    autofocus: approveFocused,
+                    onPressed: _approve,
+                  ),
+                  const SizedBox(width: 1),
+                  Button(
+                    label: request.cancelLabel,
+                    autofocus: !approveFocused,
+                    onPressed: _deny,
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

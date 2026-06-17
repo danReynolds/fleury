@@ -92,6 +92,41 @@ void main() {
     expect(activatedIndex, 1);
   });
 
+  testWidgets('groupByCategory renders section headers and hides row tags', (
+    tester,
+  ) {
+    const grouped = [
+      SearchResult(id: 'a', title: 'Apple', category: 'Fruit'),
+      SearchResult(id: 'b', title: 'Banana', category: 'Fruit'),
+      SearchResult(id: 'c', title: 'Carrot', category: 'Veg'),
+    ];
+    tester.pumpWidget(
+      SearchPanel(
+        results: grouped,
+        autofocus: true,
+        groupByCategory: true,
+        fillHeight: true,
+      ),
+    );
+    var output = tester.renderToString(
+      size: const CellSize(40, 16),
+      emptyMark: ' ',
+    );
+    // Uppercased section headers, one per category.
+    expect(output, contains('FRUIT'));
+    expect(output, contains('VEG'));
+    expect(output, contains('Apple'));
+    // The per-row category tag is suppressed while grouped.
+    expect(output, isNot(contains('Apple  Fruit')));
+
+    // Typing a query collapses grouping back to a flat, tagged list.
+    tester.type('Apple');
+    tester.pump();
+    output = tester.renderToString(size: const CellSize(40, 16), emptyMark: ' ');
+    expect(output, isNot(contains('FRUIT')));
+    expect(output, contains('Apple  Fruit'));
+  });
+
   testWidgets('arrow navigation moves selection before activation', (
     tester,
   ) async {

@@ -94,6 +94,33 @@ void main() {
     expect(row.state.outputSanitized, isTrue);
   });
 
+  testWidgets('showTimestamp prefixes rows with a local HH:mm:ss clock', (
+    tester,
+  ) {
+    tester.pumpWidget(
+      MessageList(
+        controller: MessageListController(followTail: false),
+        showTimestamp: true,
+        messages: [
+          MessageEntry(
+            role: MessageRole.user,
+            text: 'hi',
+            timestamp: DateTime(2026, 6, 16, 9, 4, 5),
+          ),
+          // No timestamp → no clock prefix (and no spacer).
+          const MessageEntry(role: MessageRole.assistant, text: 'hello'),
+        ],
+      ),
+    );
+    final output = tester.renderToString(
+      size: const CellSize(72, 4),
+      emptyMark: ' ',
+    );
+    expect(output, contains('09:04:05 [user] hi'));
+    expect(output, contains('[assistant] hello'));
+    expect(output, isNot(contains('09:04:05 [assistant]')));
+  });
+
   testWidgets('semantic activate selects a message row', (tester) async {
     final controller = MessageListController(
       selectedIndex: 0,

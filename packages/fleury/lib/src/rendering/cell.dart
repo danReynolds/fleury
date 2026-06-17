@@ -194,6 +194,12 @@ final class Colors {
   static const Color amber = RgbColor(255, 191, 0);
   static const Color lime = RgbColor(50, 205, 50);
   static const Color teal = RgbColor(0, 180, 180);
+
+  /// Cool spring-green accent (46, 230, 166) — the framework's default
+  /// [ColorScheme.primary]. A high-legibility "terminal cyber" green that
+  /// reads clearly on dark backgrounds and downsamples cleanly on 256/16-
+  /// color terminals.
+  static const Color mint = RgbColor(0x2E, 0xE6, 0xA6);
   static const Color azure = RgbColor(70, 130, 220);
   static const Color violet = RgbColor(138, 90, 220);
   static const Color pink = RgbColor(255, 105, 180);
@@ -241,6 +247,17 @@ final class CellStyle {
   bool get underline => _underline ?? false;
   bool get inverse => _inverse ?? false;
   bool get strikethrough => _strikethrough ?? false;
+
+  /// Raw tri-state attributes (null = unset, distinct from false). The
+  /// resolved getters above collapse null to false for rendering; these
+  /// preserve the distinction for exact serialization and inspection,
+  /// since [operator ==] compares the raw fields.
+  bool? get boldOrNull => _bold;
+  bool? get dimOrNull => _dim;
+  bool? get italicOrNull => _italic;
+  bool? get underlineOrNull => _underline;
+  bool? get inverseOrNull => _inverse;
+  bool? get strikethroughOrNull => _strikethrough;
 
   static const CellStyle empty = CellStyle();
 

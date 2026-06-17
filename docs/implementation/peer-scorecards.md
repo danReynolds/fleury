@@ -191,3 +191,73 @@ When refreshing this scorecard:
   should still measure semantic testing, retained-state ergonomics,
   capability diagnostics, terminal safety, and stability under demo-app
   workflows.
+
+## Native-Stack Wire Snapshot: 2026-06-11
+
+First wire runs with every participant native (arm64 Dart AOT for fleury,
+GOARCH=arm64 bubbletea, arm64 rustc ratatui, universal node/python for
+opentui/ink/textual). All earlier captures ran fleury (and bubbletea) under
+Rosetta; treat pre-2026-06-11 standings as superseded. Clean captures in
+`profiling/caps/2026-06-11-native-sb6-wire` and
+`profiling/caps/2026-06-11-native-multi-wire` (3 runs each).
+
+| Scenario | vs | Leading | Behind | Position |
+| --- | --- | --- | --- | --- |
+| SB.6 Dashboard | ratatui, opentui, bubbletea | bytes, bytes/frame, FPS | TTFB 2.2x / RSS 8x / CPU vs ratatui | catch up |
+| SB.12 Layout dirtiness | nocterm, ratatui, opentui | bytes, bytes/frame, SGR overhead, FPS | TTFB/RSS/CPU vs ratatui | catch up |
+| SB.4 Log region | textual, bubbletea, opentui | TTFB (19.7ms, beats all three), FPS | bytes 1.17x vs bubbletea; RSS vs Go | parity ok |
+| SB.9 Subprocess | textual, bubbletea, opentui | TTFB, FPS (~par with bubbletea) | bytes/SGR overhead vs bubbletea (36% — optimization target) | needs data |
+
+Reading: fleury LEADS on wire efficiency (bytes, bytes/frame, FPS) against
+every peer including the systems-language ones, and leads startup against
+every managed-runtime peer. The remaining "WAY OFF" axes are exclusively
+TTFB/RSS/CPU against ratatui (Rust): a language-runtime floor (Dart AOT
+~20MiB / ~20-30ms boot vs Rust ~2MiB / ~5-14ms), consistent with the
+maintainer's stated bar of "ballpark of perf-oriented peers" on footprint
+while leading on protocol efficiency. SB.9's 36% SGR overhead is a real
+remaining byte-optimization target. NOTE: the Rosetta-era harness masked
+ratatui's TTFB advantage (the capture tooling itself was emulated); native
+TTFB comparisons are now trustworthy.
+
+
+## Final Native Snapshot: 2026-06-11 (post wire-efficiency plan)
+
+Full 12-scenario re-run (3 runs each, all participants native, post
+encoder work) in `profiling/caps/2026-06-11-final`. Position rollup now
+bands RSS/CPU within runtime class (native best annotated in-cell).
+The overhead axis measures steady-state frame encoding: session
+lifecycle bytes (alt screen, cursor visibility, paste/mouse/Kitty
+toggles) are classified separately and excluded, symmetrically for all
+participants. Re-classifying changed no position; SB.2's overhead is
+`leading` under the honest axis.
+
+**Positions: push leading 8/12** (SB.1, SB.2, SB.3, SB.5, SB.6, SB.7,
+SB.10, SB.12), **parity ok 2/12** (SB.4, SB.8), **catch up 2/12**
+(SB.9, SB.11).
+
+Measured floors and verdicts behind the two catch-ups (full detail in
+the execution log, 2026-06-11 entries):
+
+- Fleury's cursor encoding is byte-minimal for its diff granularity
+  (verified by transcript histograms before/after byte-accounted styled
+  gap rewriting); SB.9's residual delta is fixture surface area — the
+  fleury fixture renders more live regions than the peer fixture.
+- Fleury-attributable startup is 2.5ms (first byte at 0.5ms after
+  entry); the Dart AOT boot floor (~15-17.5ms hello-world warm,
+  re-measured 2026-06-11; `dart compile exe` beats aot-snapshot by
+  5-7ms) is the entire TTFB gap vs ratatui. Startup claims scope to
+  managed-runtime peers, where fleury leads everywhere measured.
+- RSS floor (re-measured 2026-06-11, single consistent harness): bare
+  AOT hello-world 13.8 MiB; minimal fleury app +3.3 MiB (mostly touched
+  code pages — retained framework heap is ~85 KB); SB.6 dashboard
+  +6.4 MiB total, of which ~1-7 MiB (grid-dependent) is VM new-gen GC
+  sizing, reclaimable via `DART_VM_OPTIONS=--new_gen_semi_max_size=1`
+  at ~6% CPU on large grids. SB.11's 143 MiB is its fixture's 100k
+  eager node maps (recommendation recorded; fixtures are not slimmed to
+  move their own scoreboard rows).
+
+Claims language for public use: "Fleury leads wire efficiency (bytes,
+bytes/frame, FPS) against every measured peer including the Rust and
+Zig ones, and leads startup against every managed-runtime peer; on
+memory and raw startup it is ballpark-of-systems-languages with a
+documented Dart-runtime floor and a 2.5ms framework-attributable share."

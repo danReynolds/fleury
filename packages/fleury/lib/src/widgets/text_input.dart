@@ -4,8 +4,8 @@
 //   - TextEditingController — a ChangeNotifier holding the current
 //     TextEditingValue and compatibility text/cursor accessors.
 //   - TextInput — the widget. Creates a Focus node tagged as a
-//     TextInputClaimant, so the InputDispatcher routes
-//     TextInputEvents (typed printable text) directly to it. Handles
+//     TextInputClaimant / TextCompositionClaimant, so the InputDispatcher
+//     routes typed printable text and IME composition directly to it. Handles
 //     special chords (Backspace, arrows, Enter, etc.) via Focus.onKey.
 //   - RenderTextInput — paints the text plus a one-cell inverse
 //     cursor at the current selection position.
@@ -186,6 +186,31 @@ class TextEditingController extends ChangeNotifier {
     _checkNotDisposed();
     if (!hasSelection) return;
     _applyEdit(TextEditingModel.replaceSelection(_value, ''));
+  }
+
+  /// Kill (cut to the shared kill ring) from the caret to the line end; if
+  /// already at the line end, kill the newline. Recover with [yank].
+  void killToLineEnd() {
+    _checkNotDisposed();
+    _applyEdit(TextEditingModel.killToLineEnd(_value));
+  }
+
+  /// Kill from the line start to the caret, into the kill ring.
+  void killToLineStart() {
+    _checkNotDisposed();
+    _applyEdit(TextEditingModel.killToLineStart(_value));
+  }
+
+  /// Kill the word before the caret, into the kill ring.
+  void killWordLeft() {
+    _checkNotDisposed();
+    _applyEdit(TextEditingModel.killWordLeft(_value));
+  }
+
+  /// Insert the kill ring at the caret (replacing any selection).
+  void yank({bool singleLine = false}) {
+    _checkNotDisposed();
+    _applyEdit(TextEditingModel.yank(_value, singleLine: singleLine));
   }
 
   void replaceRange(
@@ -595,7 +620,8 @@ class TextInput extends StatefulWidget {
   State<TextInput> createState() => _TextInputState();
 }
 
-class _TextInputState extends State<TextInput> implements TextInputClaimant {
+class _TextInputState extends State<TextInput>
+    implements TextInputClaimant, TextCompositionClaimant {
   late TextEditingController _controller;
   late FocusNode _focusNode;
   bool _ownsController = false;
@@ -634,6 +660,7 @@ class _TextInputState extends State<TextInput> implements TextInputClaimant {
         widget.focusNode ??
         FocusNode(debugLabel: 'TextInput', canRequestFocus: widget.enabled);
     _focusNode.textInputClaimant = this;
+    _focusNode.textCompositionClaimant = this;
     _ownsFocusNode = widget.focusNode == null;
   }
 
@@ -659,11 +686,13 @@ class _TextInputState extends State<TextInput> implements TextInputClaimant {
     if (widget.focusNode != oldWidget.focusNode) {
       // Stop claiming text on the old node before letting it go.
       _focusNode.textInputClaimant = null;
+      _focusNode.textCompositionClaimant = null;
       if (_ownsFocusNode) _focusNode.dispose();
       _focusNode =
           widget.focusNode ??
           FocusNode(debugLabel: 'TextInput', canRequestFocus: widget.enabled);
       _focusNode.textInputClaimant = this;
+      _focusNode.textCompositionClaimant = this;
       _ownsFocusNode = widget.focusNode == null;
     }
     if (_ownsFocusNode) {
@@ -995,6 +1024,30 @@ class _TextInputState extends State<TextInput> implements TextInputClaimant {
         _resetHistoryBrowsing();
         _controller.delete();
         return KeyEventResult.handled;
+      case TextEditingKeyAction.killToLineEnd:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _resetHistoryBrowsing();
+        _controller.killToLineEnd();
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.killToLineStart:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _resetHistoryBrowsing();
+        _controller.killToLineStart();
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.killWordLeft:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _resetHistoryBrowsing();
+        _controller.killWordLeft();
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.yank:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _resetHistoryBrowsing();
+        _controller.yank(singleLine: true);
+        return KeyEventResult.handled;
       case TextEditingKeyAction.moveLeft:
         if (_shouldBubbleHorizontalBoundary(event, atStart: true)) {
           return KeyEventResult.ignored;
@@ -1086,6 +1139,36 @@ class _TextInputState extends State<TextInput> implements TextInputClaimant {
   }
 
   @override
+  KeyEventResult onTextCompositionUpdate(String text) {
+    if (!widget.enabled) return KeyEventResult.ignored;
+    if (widget.readOnly) return KeyEventResult.handled;
+    _cancelScheduledPaste();
+    _resetHistoryBrowsing();
+    _controller.updateComposingText(text, singleLine: true);
+    return KeyEventResult.handled;
+  }
+
+  @override
+  KeyEventResult onTextCompositionCommit(String? text) {
+    if (!widget.enabled) return KeyEventResult.ignored;
+    if (widget.readOnly) return KeyEventResult.handled;
+    _cancelScheduledPaste();
+    _resetHistoryBrowsing();
+    _controller.commitComposing(text: text, singleLine: true);
+    return KeyEventResult.handled;
+  }
+
+  @override
+  KeyEventResult onTextCompositionCancel() {
+    if (!widget.enabled) return KeyEventResult.ignored;
+    if (widget.readOnly) return KeyEventResult.handled;
+    _cancelScheduledPaste();
+    _resetHistoryBrowsing();
+    _controller.cancelComposing();
+    return KeyEventResult.handled;
+  }
+
+  @override
   void dispose() {
     _disposeBlinkTicker();
     _cancelScheduledPaste();
@@ -1094,6 +1177,7 @@ class _TextInputState extends State<TextInput> implements TextInputClaimant {
     _controller.removeListener(_onControllerChange);
     if (_ownsController) _controller.dispose();
     _focusNode.textInputClaimant = null;
+    _focusNode.textCompositionClaimant = null;
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
   }
@@ -1166,6 +1250,7 @@ class _TextInputState extends State<TextInput> implements TextInputClaimant {
         canRequestFocus: widget.enabled,
         onKey: _handleKey,
         child: _TextInputDisplay(
+          focusNode: _focusNode,
           text: _controller.text,
           selection: _controller.textSelection,
           placeholder: widget.placeholder,
@@ -1187,6 +1272,7 @@ class _TextInputState extends State<TextInput> implements TextInputClaimant {
 
 class _TextInputDisplay extends LeafRenderObjectWidget {
   const _TextInputDisplay({
+    required this.focusNode,
     required this.text,
     required this.selection,
     required this.placeholder,
@@ -1198,6 +1284,7 @@ class _TextInputDisplay extends LeafRenderObjectWidget {
     required this.obscuringCharacter,
   });
 
+  final FocusNode focusNode;
   final String text;
   final TextSelection selection;
   final String placeholder;
@@ -1211,6 +1298,7 @@ class _TextInputDisplay extends LeafRenderObjectWidget {
   @override
   RenderObject createRenderObject(BuildContext context) {
     return RenderTextInput(
+      focusNode: focusNode,
       text: text,
       selection: selection,
       placeholder: placeholder,
@@ -1229,6 +1317,7 @@ class _TextInputDisplay extends LeafRenderObjectWidget {
     covariant RenderTextInput renderObject,
   ) {
     renderObject
+      ..focusNode = focusNode
       ..text = text
       ..selection = selection
       ..placeholder = placeholder
@@ -1248,6 +1337,7 @@ class _TextInputDisplay extends LeafRenderObjectWidget {
 /// trailing cursor position, clipped to constraints. Height = 1.
 class RenderTextInput extends RenderObject {
   RenderTextInput({
+    required FocusNode focusNode,
     required String text,
     required TextSelection selection,
     String placeholder = '',
@@ -1259,7 +1349,8 @@ class RenderTextInput extends RenderObject {
     String obscuringCharacter = '•',
     WidthResolver widthResolver = const DefaultWidthResolver(),
     TerminalProfile profile = TerminalProfile.standard,
-  }) : _text = sanitizeForDisplay(text),
+  }) : _focusNode = focusNode,
+       _text = sanitizeForDisplay(text),
        _selection = selection.normalizeForText(sanitizeForDisplay(text)),
        _placeholder = sanitizeForDisplay(placeholder),
        _placeholderStyle = placeholderStyle,
@@ -1271,6 +1362,7 @@ class RenderTextInput extends RenderObject {
        _widthResolver = widthResolver,
        _profile = profile;
 
+  FocusNode _focusNode;
   String _text;
   TextSelection _selection;
   String _placeholder;
@@ -1283,6 +1375,13 @@ class RenderTextInput extends RenderObject {
   final WidthResolver _widthResolver;
   final TerminalProfile _profile;
   int _scrollLeft = 0;
+
+  set focusNode(FocusNode value) {
+    if (identical(_focusNode, value)) return;
+    _focusNode.caretRect = null;
+    _focusNode = value;
+    markNeedsPaintOnly();
+  }
 
   set text(String value) {
     final sanitized = sanitizeForDisplay(value);
@@ -1423,7 +1522,11 @@ class RenderTextInput extends RenderObject {
     CellOffset? screenOffset,
     CellRect? clipRect,
   }) {
-    if (size.isEmpty) return;
+    if (size.isEmpty) {
+      _focusNode.caretRect = null;
+      return;
+    }
+    _focusNode.caretRect = _caretRect(screenOffset ?? offset, clipRect);
     final row = offset.row;
     var col = offset.col;
     final maxCol = offset.col + size.cols;
@@ -1520,5 +1623,20 @@ class RenderTextInput extends RenderObject {
         // space.
       }
     }
+  }
+
+  CellRect? _caretRect(CellOffset paintOffset, CellRect? clipRect) {
+    final cursorCell = _displayCellForTextOffset(_selection.extentOffset);
+    final visibleStart = _scrollLeft;
+    final visibleEnd = _scrollLeft + size.cols;
+    if (cursorCell < visibleStart || cursorCell >= visibleEnd) return null;
+    final rect = CellRect(
+      offset: CellOffset(
+        paintOffset.col + cursorCell - visibleStart,
+        paintOffset.row,
+      ),
+      size: const CellSize(1, 1),
+    );
+    return clipRect == null ? rect : rect.intersect(clipRect);
   }
 }

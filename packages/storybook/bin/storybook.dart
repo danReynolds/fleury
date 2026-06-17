@@ -43,6 +43,7 @@ Future<void> _runInteractive(_StorybookCliOptions options) async {
       initialTheme: options.theme,
       initialViewport: options.viewport,
     ),
+    mode: const TerminalMode(mouse: true),
     onEvent: (event) {
       if (event is KeyEvent && event.hasCtrl && event.char == 'c') {
         return const ExitRequested();
@@ -233,7 +234,7 @@ void _printUsage() {
     '  --control <id=value>    Override a selected story control.',
   );
   stdout.writeln(
-    '  --theme <name>          terminal, dark, light, high-contrast.',
+    '  --theme <name>          cyber, terminal, dark, light, high-contrast.',
   );
   stdout.writeln(
     '  --size <preset>         fit, 80x24, 100x30, 120x40, or 60x20.',
@@ -365,7 +366,7 @@ final class _StorybookCliOptions {
     String? outputPath;
     String? widgetsExportPath;
     final controlSpecs = <String>[];
-    var theme = StorybookThemeMode.terminal;
+    var theme = StorybookThemeMode.cyber;
     var viewport = StorybookViewportPreset.fit;
 
     for (var i = start; i < args.length; i++) {
@@ -465,7 +466,8 @@ String _readValue(List<String> args, int index, String option) {
 StorybookThemeMode _parseTheme(String raw) {
   final normalized = raw.toLowerCase().replaceAll('_', '-');
   return switch (normalized) {
-    'terminal' || 'default' => StorybookThemeMode.terminal,
+    'cyber' || 'default' => StorybookThemeMode.cyber,
+    'terminal' => StorybookThemeMode.terminal,
     'dark' => StorybookThemeMode.dark,
     'light' => StorybookThemeMode.light,
     'high-contrast' || 'highcontrast' => StorybookThemeMode.highContrast,
@@ -475,7 +477,7 @@ StorybookThemeMode _parseTheme(String raw) {
 
 StorybookThemeMode _failTheme(String value) {
   stderr.writeln('Unknown theme: $value');
-  stderr.writeln('Expected terminal, dark, light, or high-contrast.');
+  stderr.writeln('Expected cyber, terminal, dark, light, or high-contrast.');
   exit(2);
 }
 

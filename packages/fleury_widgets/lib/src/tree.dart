@@ -122,6 +122,22 @@ class _TreeState<T> extends State<Tree<T>> {
     return KeyEventResult.handled;
   }
 
+  /// Jump to the next visible node whose label starts with [ch] (wrapping) —
+  /// WAI-ARIA treeview typeahead; essential for navigating long trees.
+  KeyEventResult _typeahead(String ch) {
+    if (_flat.isEmpty) return KeyEventResult.handled;
+    final lower = ch.toLowerCase();
+    final start = (_list.selectedIndex ?? -1) + 1;
+    for (var k = 0; k < _flat.length; k++) {
+      final i = (start + k) % _flat.length;
+      if (_flat[i].node.label.toLowerCase().startsWith(lower)) {
+        _list.selectedIndex = i;
+        break;
+      }
+    }
+    return KeyEventResult.handled;
+  }
+
   KeyEventResult _collapseOrParent() {
     final sel = _selected;
     final i = _list.selectedIndex;
@@ -221,10 +237,23 @@ class _TreeState<T> extends State<Tree<T>> {
       }),
       child: Focus(
         canRequestFocus: false,
-        onKey: (event) => switch (event.keyCode) {
-          KeyCode.arrowRight => _expandOrEnter(),
-          KeyCode.arrowLeft => _collapseOrParent(),
-          _ => KeyEventResult.ignored,
+        onKey: (event) {
+          switch (event.keyCode) {
+            case KeyCode.arrowRight:
+              return _expandOrEnter();
+            case KeyCode.arrowLeft:
+              return _collapseOrParent();
+            default:
+              final ch = event.char;
+              if (ch != null &&
+                  ch.length == 1 &&
+                  ch.codeUnitAt(0) >= 0x21 &&
+                  !event.hasCtrl &&
+                  !event.hasAlt) {
+                return _typeahead(ch);
+              }
+              return KeyEventResult.ignored;
+          }
         },
         child: ListView.builder(
           controller: _list,

@@ -112,7 +112,10 @@ Adopt **option C**:
 - Expose **caret geometry**: the focused text input publishes its caret
   `CellRect`; `WebFocusCoordinator`/`CompositionController` consume it directly.
 - Produce/update semantics **in the frame pipeline** behind a flag
-  (`semanticsEnabled`): default on for web hosts, AT-gated for native.
+  (`semanticsEnabled`): default on for web hosts, AT-gated for native. On web,
+  disabling semantics is diagnostics-only because the retained visual grid is
+  `aria-hidden`; callers must acknowledge that with an explicit
+  `allowInaccessibleDiagnostics` option.
 
 Non-goal: do not flatten the rich role model down to render primitives. The
 app-level roles are an asset; this RFC adds identity/geometry/lifecycle around
@@ -149,7 +152,8 @@ them, it does not replace them.
    (no behavior change for existing debug/test consumers).
 2. `CellRect bounds` on nodes, populated from paint geometry; caret rect on
    focused text input.
-3. Frame-pipeline production behind `semanticsEnabled` (default on for web).
+3. Frame-pipeline production behind `semanticsEnabled` (default on for web;
+   disabling it requires an explicit inaccessible-diagnostics acknowledgement).
 4. Node-diff API for incremental consumers; wire `SemanticDomPresenter`.
 5. Selection/copy cell↔node mapping; native AT and remote-mirror consumers.
 

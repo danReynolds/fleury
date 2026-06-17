@@ -102,6 +102,27 @@ void main() {
       );
     });
 
+    testWidgets('showTimestamp prefixes rows with the entry clock', (tester) {
+      tester.pumpWidget(
+        ConversationNavigator(
+          conversations: [
+            ConversationEntry(
+              id: 'c1',
+              title: 'Ops thread',
+              status: ConversationStatus.active,
+              timestamp: DateTime.utc(2026, 6, 16, 8, 7, 6),
+            ),
+          ],
+          showTimestamp: true,
+        ),
+      );
+      final out = tester.renderToString(
+        size: const CellSize(90, 6),
+        emptyMark: ' ',
+      );
+      expect(out, contains('08:07:06 Ops thread'));
+    });
+
     testWidgets('filters, selects, and exposes conversation semantics', (
       tester,
     ) async {

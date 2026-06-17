@@ -141,6 +141,44 @@ void main() {
       expect(controller.selection, 3);
     });
 
+    testWidgets('emacs kill ring: Ctrl+K kills to end, Ctrl+Y yanks back', (
+      tester,
+    ) {
+      final controller = TextEditingController(text: 'hello world')
+        ..selection = 5;
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          autofocus: true,
+          keymap: TextEditingKeymap.emacsSingleLine,
+        ),
+      );
+      tester.sendKey(_ctrlChar('k')); // kill " world"
+      expect(controller.text, 'hello');
+      expect(TextEditingModel.killRing, ' world');
+      tester.sendKey(_ctrlChar('y')); // yank it back at the caret
+      expect(controller.text, 'hello world');
+      expect(controller.selection, 11);
+    });
+
+    testWidgets('emacs Ctrl+W kills the previous word; Ctrl+U to line start', (
+      tester,
+    ) {
+      final controller = TextEditingController(text: 'one two three')
+        ..selection = 13;
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          autofocus: true,
+          keymap: TextEditingKeymap.emacsSingleLine,
+        ),
+      );
+      tester.sendKey(_ctrlChar('w')); // kill "three"
+      expect(controller.text, 'one two ');
+      tester.sendKey(_ctrlChar('u')); // kill from line start to caret
+      expect(controller.text, '');
+    });
+
     testWidgets('Ctrl+arrows move by word through the default keymap', (
       tester,
     ) {
@@ -794,6 +832,27 @@ void main() {
   });
 
   group('horizontal scrolling', () {
+    testWidgets('publishes focused caret geometry in screen cells', (tester) {
+      final focusNode = FocusNode(debugLabel: 'caret');
+      addTearDown(focusNode.dispose);
+      final controller = TextEditingController(text: 'abcdef');
+      tester.pumpWidget(
+        SizedBox(
+          width: 4,
+          child: TextInput(
+            controller: controller,
+            focusNode: focusNode,
+            autofocus: true,
+            enableBlink: false,
+          ),
+        ),
+      );
+
+      tester.render(size: const CellSize(4, 1));
+
+      expect(focusNode.caretRect, CellRect.fromLTWH(3, 0, 1, 1));
+    });
+
     testWidgets('keeps the trailing cursor visible in bounded width', (tester) {
       final controller = TextEditingController(text: 'abcdef');
       tester.pumpWidget(

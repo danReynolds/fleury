@@ -3,7 +3,9 @@
 /// Everything here is free of `dart:io`, so it compiles to the web (and any
 /// other Dart target). The native umbrella `fleury.dart` re-exports this
 /// plus the `dart:io`-backed pieces (the POSIX driver, `runTui`, stray-output
-/// capture). A browser host pairs this core with a web `TerminalDriver`.
+/// capture). Platform hosts that mount and present a Fleury tree should import
+/// `fleury_host.dart`, which re-exports this library plus host-only runtime
+/// and presentation contracts.
 ///
 /// See `docs/rfcs/0007-fleury-framework.md` for scope and gates.
 library;
@@ -134,7 +136,6 @@ export 'src/rendering/width_resolver.dart'
 
 // Runtime
 export 'src/runtime/hot_reload.dart' show HotReloadController;
-export 'src/runtime/input_dispatcher.dart' show InputDispatcher;
 
 // Semantics
 export 'src/semantics/accessibility.dart'
@@ -153,17 +154,12 @@ export 'src/semantics/semantics.dart'
     show
         SemanticAction,
         SemanticActionCallback,
-        SemanticActionContributor,
-        SemanticActionInvocationResult,
-        SemanticActionInvocationStatus,
-        SemanticContributor,
         SemanticNode,
         SemanticNodeId,
         SemanticRole,
         SemanticState,
         SemanticTree,
-        Semantics,
-        SemanticsElement;
+        Semantics;
 
 // Terminal
 export 'src/terminal/capabilities.dart'
@@ -218,6 +214,8 @@ export 'src/terminal/events.dart'
         MouseEventKind,
         PasteEvent,
         ResizeEvent,
+        TextCompositionEvent,
+        TextCompositionEventKind,
         TextInputEvent,
         TuiEvent;
 export 'src/terminal/fake_driver.dart' show FakeTerminalDriver;
@@ -243,7 +241,9 @@ export 'src/widgets/focus.dart'
         FocusWithin,
         KeyBindingSource,
         KeyEventResult,
-        TextInputClaimant;
+        TextCompositionClaimant,
+        TextInputClaimant,
+        moveOrEscape;
 export 'src/widgets/focus_traversal.dart'
     show FocusTraversalGroup, TraversalDirection, nearestFocusableInDirection;
 export 'src/widgets/inherited_notifier.dart' show InheritedNotifier;

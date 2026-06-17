@@ -39,7 +39,7 @@ const Map<String, List<String>> _semanticCatalog = {
   'command_palette': ['command', 'commandPalette'],
   'completion_text_input': ['menu', 'menuItem'],
   'context_panel': ['contextItem', 'contextPanel'],
-  'controls': ['button'],
+  'controls': ['button', 'region'],
   'conversation_navigator': ['conversation', 'conversationNavigator'],
   'data_table': ['table', 'tableCell', 'tableRow'],
   'date_picker': ['datePicker'],

@@ -364,8 +364,11 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
   void _move(int delta) {
     if (_filtered.isEmpty) return;
     final current = _list.selectedIndex ?? 0;
+    final n = _filtered.length;
     setState(() {
-      _list.selectedIndex = (current + delta).clamp(0, _filtered.length - 1);
+      // Wrap top↔bottom like fzf / VS Code / Textual — after filtering the
+      // list is short, so cycling beats stopping dead at an end.
+      _list.selectedIndex = ((current + delta) % n + n) % n;
     });
   }
 
@@ -554,12 +557,16 @@ class _CommandRow extends StatelessWidget {
         }
       },
       state: SemanticState(state),
-      child: Text(
-        '${selected ? '› ' : '  '}$label',
-        style: _commandStyle(
-          theme,
-          selected: selected,
-          enabled: command.enabled,
+      // Click an enabled command to run it (same as Enter on the selection).
+      child: GestureDetector(
+        onTap: command.enabled ? () => onActivate(command) : null,
+        child: Text(
+          '${selected ? '› ' : '  '}$label',
+          style: _commandStyle(
+            theme,
+            selected: selected,
+            enabled: command.enabled,
+          ),
         ),
       ),
     );

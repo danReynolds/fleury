@@ -105,6 +105,27 @@ void main() {
       expect(sink.output, '\x1B[Ha\x1B[14Cp');
     });
 
+    test('a same-style gap is written through without a cursor move', () {
+      const style = CellStyle(bold: true);
+      final prev = CellBuffer(const CellSize(5, 1));
+      final next = CellBuffer(const CellSize(5, 1));
+      prev.writeGrapheme(const CellOffset(1, 0), 'b', style: style);
+      prev.writeGrapheme(const CellOffset(2, 0), 'c', style: style);
+      next.writeGrapheme(const CellOffset(0, 0), 'a', style: style);
+      next.writeGrapheme(const CellOffset(1, 0), 'b', style: style);
+      next.writeGrapheme(const CellOffset(2, 0), 'c', style: style);
+      next.writeGrapheme(const CellOffset(3, 0), 'd', style: style);
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer(
+        synchronizedOutput: false,
+      ).renderDiff(prev, next, sink);
+
+      // 'b' and 'c' are unchanged and carry exactly the emitted style:
+      // rewriting them costs 2 bytes where a cursor move costs 4.
+      expect(sink.output, '\x1B[H\x1B[1mabcd\x1B[0m');
+    });
+
     test('a styled gap keeps the explicit cursor move', () {
       final prev = CellBuffer(const CellSize(5, 1));
       final next = CellBuffer(const CellSize(5, 1));
@@ -127,6 +148,25 @@ void main() {
       ).renderDiff(prev, next, sink);
 
       expect(sink.output, '\x1B[Ha\x1B[2Cd');
+    });
+
+    test('dirtyBounds limits the scanned diff region', () {
+      final prev = CellBuffer(const CellSize(6, 2));
+      final next = CellBuffer(const CellSize(6, 2));
+      next.writeGrapheme(const CellOffset(4, 1), 'X');
+      final dirty = <CellOffset>[];
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer(synchronizedOutput: false).renderDiff(
+        prev,
+        next,
+        sink,
+        dirtyBounds: CellRect.fromLTWH(4, 1, 1, 1),
+        onDirtyCell: (col, row) => dirty.add(CellOffset(col, row)),
+      );
+
+      expect(sink.output, '\x1B[2;5HX');
+      expect(dirty, const [CellOffset(4, 1)]);
     });
 
     test('same-column row movement uses line feed', () {
@@ -252,7 +292,25 @@ void main() {
 
       const AnsiRenderer().renderDiff(prev, next, sink);
 
-      expect(sink.output, '\x1B[?2026h\x1B[S\x1B[2Hcccc\x1B[?2026l');
+      // The scroll payload here is tiny, so the small-diff sync skip
+      // applies; the scroll escape itself is unchanged.
+      expect(sink.output, '\x1B[S\x1B[2Hcccc');
+    });
+
+    test('large scroll updates keep the synchronized-output wrapper', () {
+      final prev = CellBuffer(const CellSize(80, 2));
+      final next = CellBuffer(const CellSize(80, 2));
+      prev.writeText(const CellOffset(0, 0), 'a' * 70);
+      prev.writeText(const CellOffset(0, 1), 'b' * 70);
+      next.writeText(const CellOffset(0, 0), 'b' * 70);
+      next.writeText(const CellOffset(0, 1), 'c' * 70);
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer().renderDiff(prev, next, sink);
+
+      expect(sink.output.startsWith('\x1B[?2026h'), isTrue);
+      expect(sink.output.endsWith('\x1B[?2026l'), isTrue);
+      expect(sink.output, contains('\x1B[S'));
     });
 
     test('falls back to cell diff when protocol cells are present', () {
@@ -611,9 +669,13 @@ void main() {
 
   group('renderDiff — Synchronized Output (DEC mode 2026)', () {
     test('wraps a dirty frame in BSU/ESU by default', () {
-      final prev = CellBuffer(const CellSize(3, 1));
-      final next = CellBuffer(const CellSize(3, 1));
-      next.writeText(const CellOffset(0, 0), 'x');
+      // Wide enough that the payload exceeds the small-diff sync skip.
+      final prev = CellBuffer(const CellSize(80, 1));
+      final next = CellBuffer(const CellSize(80, 1));
+      next.writeText(
+        const CellOffset(0, 0),
+        'a long enough line of content to exceed the sync threshold',
+      );
       final sink = StringAnsiSink();
 
       const AnsiRenderer().renderDiff(prev, next, sink);
@@ -627,6 +689,20 @@ void main() {
         isTrue,
         reason: 'frame closes with ESU',
       );
+    });
+
+    test('small diffs skip the synchronized-output wrapper', () {
+      // A one-cell diff arrives in a single read; the 16-byte BSU/ESU
+      // wrapper would be a third of the frame for nothing.
+      final prev = CellBuffer(const CellSize(3, 1));
+      final next = CellBuffer(const CellSize(3, 1));
+      next.writeText(const CellOffset(0, 0), 'x');
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer().renderDiff(prev, next, sink);
+
+      expect(sink.output.contains('\x1B[?2026'), isFalse);
+      expect(sink.output, contains('x'));
     });
 
     test('an empty diff still emits nothing (no wrapper)', () {

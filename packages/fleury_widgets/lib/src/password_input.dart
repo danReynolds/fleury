@@ -5,9 +5,14 @@ import 'package:fleury/fleury.dart';
 /// what's in the controller. The real text is unchanged; only the
 /// displayed glyphs are masked.
 ///
-/// This is a thin sugar over `TextInput(obscureText: true)` so the call
-/// site reads as "this is a password," not "this is a text field that
-/// happens to be obscured."
+/// When [canReveal] is set (the default), [revealChord] (Ctrl+R) toggles a
+/// show / hide state while the field is focused, so a user can sanity-check
+/// what they typed. The field *consumes* the chord, so it never reaches
+/// app-level shortcuts. The clipboard and the semantic value stay redacted
+/// even while revealed — revealing is a visual convenience only.
+///
+/// This is sugar over `TextInput(obscureText: true)` so the call site reads
+/// as "this is a password," not "a text field that happens to be obscured."
 ///
 /// ```dart
 /// PasswordInput(
@@ -15,7 +20,7 @@ import 'package:fleury/fleury.dart';
 ///   onSubmit: (text) => save(text),
 /// )
 /// ```
-class PasswordInput extends StatelessWidget {
+class PasswordInput extends StatefulWidget {
   const PasswordInput({
     super.key,
     this.controller,
@@ -30,6 +35,8 @@ class PasswordInput extends StatelessWidget {
     this.obscuringCharacter = '•',
     this.enabled = true,
     this.readOnly = false,
+    this.canReveal = true,
+    this.revealChord = const KeyChord.char('r', ctrl: true),
     this.validationError,
     this.semanticLabel,
     this.semanticState = SemanticState.empty,
@@ -50,6 +57,15 @@ class PasswordInput extends StatelessWidget {
 
   final bool enabled;
   final bool readOnly;
+
+  /// When true, [revealChord] toggles the masked / plain rendering while the
+  /// field is focused.
+  final bool canReveal;
+
+  /// The chord that toggles reveal. Defaults to Ctrl+R. The focused field
+  /// consumes it, so it shadows any app-level binding on the same chord.
+  final KeyChord revealChord;
+
   final String? validationError;
 
   /// Label exposed through the semantic app graph.
@@ -62,28 +78,49 @@ class PasswordInput extends StatelessWidget {
   final SemanticState semanticState;
 
   @override
+  State<PasswordInput> createState() => _PasswordInputState();
+}
+
+class _PasswordInputState extends State<PasswordInput> {
+  bool _revealed = false;
+
+  @override
   Widget build(BuildContext context) {
-    return TextInput(
-      controller: controller,
-      focusNode: focusNode,
-      autofocus: autofocus,
-      onSubmit: onSubmit,
-      onEscape: onEscape,
-      placeholder: placeholder,
-      placeholderStyle: placeholderStyle,
-      style: style,
-      cursorStyle: cursorStyle,
-      obscureText: true,
-      obscuringCharacter: obscuringCharacter,
-      enabled: enabled,
-      readOnly: readOnly,
-      validationError: validationError,
+    final field = TextInput(
+      controller: widget.controller,
+      focusNode: widget.focusNode,
+      autofocus: widget.autofocus,
+      onSubmit: widget.onSubmit,
+      onEscape: widget.onEscape,
+      placeholder: widget.placeholder,
+      placeholderStyle: widget.placeholderStyle,
+      style: widget.style,
+      cursorStyle: widget.cursorStyle,
+      obscureText: !_revealed,
+      obscuringCharacter: widget.obscuringCharacter,
+      enabled: widget.enabled,
+      readOnly: widget.readOnly,
+      validationError: widget.validationError,
+      // Stays redacted even while visually revealed: showing the glyphs is a
+      // local convenience, copying or reading the value out is not.
       clipboardPolicy: TextClipboardPolicy.redacted,
-      semanticLabel: semanticLabel,
-      semanticState: semanticState.merge(const <String, Object?>{
+      semanticLabel: widget.semanticLabel,
+      semanticState: widget.semanticState.merge(<String, Object?>{
         'fieldType': 'secret',
         'redacted': true,
+        'revealed': _revealed,
       }),
+    );
+    if (!widget.canReveal || !widget.enabled) return field;
+    return KeyBindings(
+      bindings: <KeyBinding>[
+        KeyBinding(
+          widget.revealChord,
+          onEvent: (_) => setState(() => _revealed = !_revealed),
+          hideFromHintBar: true,
+        ),
+      ],
+      child: field,
     );
   }
 }

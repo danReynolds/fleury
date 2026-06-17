@@ -107,5 +107,48 @@ void main() {
       expect(result.completed, isTrue);
       expect(decision, ApprovalDecision.denied);
     });
+
+    testWidgets('destructive request focuses Deny and warns; y/n decide', (
+      tester,
+    ) {
+      ApprovalDecision? decision;
+      tester.pumpWidget(
+        ApprovalPrompt(
+          request: const ApprovalRequest(
+            id: 'rm.prod',
+            title: 'Delete database?',
+            message: 'This drops the production database.',
+            severity: ApprovalSeverity.destructive,
+            confirmLabel: 'Delete',
+            cancelLabel: 'Cancel',
+          ),
+          onDecision: (value) => decision = value,
+        ),
+      );
+      final output = tester.renderToString(
+        size: const CellSize(64, 12),
+        emptyMark: ' ',
+      );
+      expect(output, contains('Destructive'));
+
+      // Enter activates the focused button — which must be Deny for a
+      // destructive request, so a single Enter can't drop the database.
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      expect(decision, ApprovalDecision.denied);
+    });
+
+    testWidgets('y approves and n denies from a raw keypress', (tester) {
+      ApprovalDecision? decision;
+      tester.pumpWidget(
+        ApprovalPrompt(
+          request: _request(),
+          onDecision: (value) => decision = value,
+        ),
+      );
+      tester.sendKey(const KeyEvent(char: 'n'));
+      expect(decision, ApprovalDecision.denied);
+      tester.sendKey(const KeyEvent(char: 'y'));
+      expect(decision, ApprovalDecision.approved);
+    });
   });
 }

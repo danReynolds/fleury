@@ -177,6 +177,25 @@ void main() {
       expect(metadata, isNot(contains('super-secret-stack')));
     });
 
+    testWidgets('showTimestamp prefixes rows with the event clock', (tester) {
+      tester.pumpWidget(
+        TraceTimeline(
+          label: 'Demo trace',
+          events: _events(),
+          showTimestamp: true,
+        ),
+      );
+      final out = tester.renderToString(
+        size: const CellSize(90, 5),
+        emptyMark: ' ',
+      );
+      // First event's timestamp is 12:00:00 UTC; the third has none, so it
+      // gets no clock prefix.
+      expect(out, contains('12:00:00 [x] Boot demo console'));
+      expect(out, contains('[*] Capture diagnostics'));
+      expect(out, isNot(contains('00:00:00 [*]')));
+    });
+
     testWidgets('selects and exposes trace semantics', (tester) async {
       TraceTimelineSelectResult? selected;
       tester.pumpWidget(

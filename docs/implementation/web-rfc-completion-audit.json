@@ -1,0 +1,252 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryWebRfcCompletionAudit",
+  "generatedAt": "2026-06-11T13:35:27.605457Z",
+  "worktree": "codex/fleury-web-phase1",
+  "baselineDirectory": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native",
+  "readinessBundlePath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/web-readiness-bundle.json",
+  "overallStatus": "release-evidence-ready-default-actions-pending",
+  "architectureReviewReady": true,
+  "releaseEvidenceReady": true,
+  "releaseReady": false,
+  "defaultFlipReady": false,
+  "temporaryPathRetirementReady": false,
+  "goalCompletionClaim": "not-complete",
+  "completionScopes": {
+    "architectureReview": {
+      "ready": true,
+      "status": "ready-for-re-review",
+      "claim": "implementation-review-ready",
+      "releaseScope": false,
+      "includedEvidence": [
+        "shared-runtime-and-frame-loop",
+        "explicit-retained-dom-host",
+        "retained-semantics-defaults",
+        "browser-input-and-clipboard-harness",
+        "benchmark-readiness-and-release-gate-tooling",
+        "readiness-bundle-source-and-artifact-verification"
+      ],
+      "deferredReleaseGateIds": [
+        "make-dom-default",
+        "retire-temporary-paths"
+      ]
+    },
+    "releaseEvidence": {
+      "ready": true,
+      "status": "ready",
+      "requires": [
+        "reviewed-threshold-policy",
+        "scoped-manual-evidence",
+        "strict-phase-6-readiness",
+        "strict-readiness-bundle-verification",
+        "strict-retained-host-automated-validation"
+      ],
+      "remainingReleaseActionIds": [],
+      "satisfiedCurrentEvidenceActionIds": [
+        "verify-readiness-bundle",
+        "run-automated-web-host-tests"
+      ]
+    },
+    "releaseDefault": {
+      "ready": false,
+      "status": "blocked",
+      "requires": [
+        "release-evidence",
+        "bundle-bound-make-dom-default-preflight",
+        "bundle-bound-retire-temporary-paths-preflight"
+      ],
+      "remainingGateIds": [
+        "run-default-preflight:make-dom-default",
+        "run-default-preflight:retire-temporary-paths"
+      ],
+      "remainingReleaseActionIds": [
+        "run-default-preflight:make-dom-default",
+        "run-default-preflight:retire-temporary-paths"
+      ],
+      "satisfiedCurrentEvidenceActionIds": []
+    }
+  },
+  "completionBlockers": [
+    "bundle-bound make-dom-default preflight must pass before changing the package default",
+    "bundle-bound retire-temporary-paths preflight must pass before removing temporary/xterm-compatible paths"
+  ],
+  "phaseStatus": [
+    {
+      "phase": "Phase 1",
+      "name": "Shared Runtime and Damage Handoff",
+      "status": "landed",
+      "releaseBlocking": false,
+      "evidence": [
+        "packages/fleury/lib/fleury_host.dart",
+        "packages/fleury/lib/src/runtime/tui_runtime.dart",
+        "packages/fleury/lib/src/runtime/tui_frame_loop.dart",
+        "packages/fleury/test/runtime/tui_runtime_test.dart",
+        "packages/fleury/test/runtime/tui_frame_loop_test.dart"
+      ]
+    },
+    {
+      "phase": "Phase 2",
+      "name": "Host Skeleton and Visual DOM",
+      "status": "landed",
+      "releaseBlocking": false,
+      "evidence": [
+        "packages/fleury_web/lib/src/run_tui_surface.dart",
+        "packages/fleury_web/lib/src/run_tui_web_dom.dart",
+        "packages/fleury_web/lib/src/frame_presentation.dart",
+        "packages/fleury_web/lib/src/dom_grid/dom_grid_surface.dart",
+        "packages/fleury_web/test/run_tui_surface_test.dart",
+        "packages/fleury_web/test/run_tui_web_dom_test.dart"
+      ]
+    },
+    {
+      "phase": "Phase 3",
+      "name": "Input, Resize, Clipboard, IME",
+      "status": "automated-path-landed-ime-roadmap-follow-up",
+      "releaseBlocking": false,
+      "evidence": [
+        "packages/fleury_web/lib/src/input/dom_input_source.dart",
+        "packages/fleury_web/lib/src/clipboard/web_clipboard.dart",
+        "packages/fleury_web/test/dom_input_trace_fixture_test.dart",
+        "packages/fleury_web/test/web_clipboard_test.dart"
+      ],
+      "followUpGate": "reviewed pass evidence from real Chrome/macOS IME before claiming IME support"
+    },
+    {
+      "phase": "Phase 4",
+      "name": "Retained Semantics, Focus, Accessibility",
+      "status": "automated-path-landed-voiceover-follow-up",
+      "releaseBlocking": false,
+      "evidence": [
+        "packages/fleury_web/lib/src/semantics/semantic_dom_presenter.dart",
+        "packages/fleury_web/lib/src/semantics/semantic_coverage.dart",
+        "packages/fleury_web/lib/src/focus/web_focus_coordinator.dart",
+        "packages/fleury_web/test/semantic_dom_presenter_test.dart"
+      ],
+      "followUpGate": "reviewed screen-reader evidence from real Chrome/macOS VoiceOver"
+    },
+    {
+      "phase": "Phase 5",
+      "name": "Benchmark Gate",
+      "status": "reviewed-thresholds-ready",
+      "releaseBlocking": false,
+      "evidence": [
+        "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/scoreboard.json",
+        "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/thresholds.json"
+      ]
+    },
+    {
+      "phase": "Phase 6",
+      "name": "Harden and Retire Temporary Paths",
+      "status": "release-evidence-ready-default-actions-pending",
+      "releaseBlocking": true,
+      "evidence": [
+        "packages/fleury_web/tool/web_readiness.dart",
+        "packages/fleury_web/tool/web_readiness_bundle.dart",
+        "packages/fleury_web/tool/web_automated_validation.dart",
+        "packages/fleury_web/tool/web_default_preflight.dart",
+        "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/web-readiness.json",
+        "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/web-default-preflight-make-dom-default.json",
+        "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/web-default-preflight-retire-temporary-paths.json"
+      ],
+      "remainingGate": "strict readiness and bundle-bound default/retirement preflights must pass"
+    }
+  ],
+  "automatedEvidence": {
+    "strictBundleVerification": {
+      "strictPass": true,
+      "checkedArtifactCount": 11,
+      "checkedSourceInputCount": 230,
+      "checkedManifestFieldCount": 61,
+      "manifestMismatchCount": 0,
+      "missingManifestFieldCount": 0
+    },
+    "semanticCoverage": {
+      "strictPass": true,
+      "scenarioCount": 11,
+      "captureCount": 33,
+      "frameCount": 2496,
+      "fallbackCellCount": 0,
+      "fallbackNodeCount": 0
+    },
+    "automatedWebHostValidation": {
+      "strictPass": true,
+      "status": "pass",
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/web-automated-validation.json",
+      "checks": [
+        {
+          "id": "browser",
+          "strictPass": true,
+          "blockerCount": 0
+        },
+        {
+          "id": "vm",
+          "strictPass": true,
+          "blockerCount": 0
+        }
+      ]
+    }
+  },
+  "releaseGateEvidence": {
+    "releaseEvidenceReady": true,
+    "defaultPreflights": {
+      "make-dom-default": {
+        "targetId": "make-dom-default",
+        "ready": false,
+        "status": "diagnostic-only",
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/web-default-preflight-make-dom-default.json",
+        "strictPass": true,
+        "bundleBound": false,
+        "bundleRequired": false,
+        "automatedValidationBound": true,
+        "automatedValidationRequired": false,
+        "diagnosticOnly": true,
+        "finalGateRequiresBundle": true,
+        "finalGateRequiresAutomatedValidation": true
+      },
+      "retire-temporary-paths": {
+        "targetId": "retire-temporary-paths",
+        "ready": false,
+        "status": "diagnostic-only",
+        "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-10-arm-native/readiness-candidate/web-default-preflight-retire-temporary-paths.json",
+        "strictPass": true,
+        "bundleBound": false,
+        "bundleRequired": false,
+        "automatedValidationBound": true,
+        "automatedValidationRequired": false,
+        "diagnosticOnly": true,
+        "finalGateRequiresBundle": true,
+        "finalGateRequiresAutomatedValidation": true
+      }
+    }
+  },
+  "manualEvidence": {
+    "strictPass": true,
+    "targetCount": 0,
+    "passedTargetCount": 0,
+    "invalidEntryCount": 0,
+    "needsReviewTargets": [],
+    "targets": []
+  },
+  "releaseActions": [
+    {
+      "id": "verify-readiness-bundle",
+      "status": "passes-current-candidate-packet",
+      "kind": "artifact-verification"
+    },
+    {
+      "id": "run-automated-web-host-tests",
+      "status": "passes-current-candidate-packet",
+      "kind": "automated-validation"
+    },
+    {
+      "id": "run-default-preflight:make-dom-default",
+      "status": "pending-final-bundle-bound-preflight",
+      "kind": "release-gate"
+    },
+    {
+      "id": "run-default-preflight:retire-temporary-paths",
+      "status": "pending-final-bundle-bound-preflight",
+      "kind": "release-gate"
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 // cap. A fake clock and a fake flush scheduler drive timing synchronously.
 
 import 'package:fleury/fleury_test.dart' show FakeClock;
-import 'package:fleury/src/runtime/frame_scheduler.dart';
+import 'package:fleury/fleury_host.dart' show FrameScheduler;
 import 'package:test/test.dart';
 
 /// Captures the single pending (delay, flush) and lets the test fire it.

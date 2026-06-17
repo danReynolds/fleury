@@ -69,8 +69,9 @@ Resolved positions:
   native rather than grow a third copy of `run_tui.dart`.
 - **Damage reuse:** dirty row planning consumes Fleury's paint damage signal;
   fresh buffer comparison is a fallback/oracle, not the primary path.
-- **Semantics dependency:** rich web accessibility depends on the retained,
-  geometry-bearing semantics pipeline described in the companion RFC.
+- **Semantics dependency:** the automated semantic DOM backstop and any future
+  screen-reader support depend on the retained, geometry-bearing semantics
+  pipeline described in the companion RFC.
 - **Testing:** the live DOM renderer and the HTML artifact renderer share one
   pure span model so VM tests cover the real role-walking logic.
 - **Terminal transport:** xterm.js remains for arbitrary ANSI sessions such as
@@ -160,7 +161,7 @@ The browser host should satisfy these local contracts.
 
 | Concern | Current contract |
 | --- | --- |
-| Frame output | `run_tui_web.dart` renders a `CellBuffer`, then currently diffs through `AnsiRenderer` into `WebTerminalDriver`. Native `run_tui.dart` builds a full next-frame `CellBuffer` and lets `AnsiRenderer` diff it against the previous frame. |
+| Frame output | `run_tui_web.dart` renders a `CellBuffer`, then currently diffs through `AnsiRenderer` into `WebTerminalDriver`. Native `run_tui.dart` now also consumes `CellBuffer.damageBounds` through `AnsiRenderer.renderDiff(dirtyBounds:)`. |
 | Scheduling | Current web frames are coalesced with `scheduleMicrotask`; native runtime now has `FrameScheduler` for coalescing and optional caps. The web loop has drifted and should converge on shared runtime orchestration. |
 | Cursor | `RenderTextInput` paints cursor style into the buffer; a separate visual cursor overlay is not required. |
 | Caret geometry | IME placement still needs a public focused-caret rectangle; current cursor paint math is internal to text input rendering. |
@@ -390,10 +391,10 @@ Why compute this outside the surface:
 Primary dirty-row source:
 
 1. use per-row / row-range paint damage once available;
-2. otherwise derive conservative dirty rows from a measured renderer/presenter
-   damage handoff once the benchmark evidence says it pays for itself;
-3. use full repaint when layout invalidation, resize, protocol cells, or
-   unknown damage make region hints unsafe;
+2. otherwise convert current `CellBuffer.damageBounds` into conservative dirty
+   rows;
+3. use full repaint when `RenderDamageTracker` reports conservative layout
+   damage;
 4. use `compareRows(previous, next)` only as a verification mode, fallback, or
    parity oracle when damage is unavailable.
 
@@ -458,7 +459,7 @@ One browser frame is:
    - update `MediaQuery` if size changed;
    - dispatch queued Fleury input events;
    - render the widget tree into the back `CellBuffer`;
-   - take conservative paint damage from a measured renderer/presenter handoff;
+   - take paint damage from the buffer and `RenderDamageTracker`;
    - derive dirty rows from damage;
    - build row span models only for dirty rows.
 3. **Write phase**
@@ -797,7 +798,11 @@ Responsibilities:
 - position the textarea at the focused caret rectangle;
 - handle browsers where `compositionend.data` is incomplete or unreliable.
 
-IME support is a Phase 2 exit requirement, not a later polish item.
+IME support remains a first-class input capability, but manual primary-browser
+IME validation is a roadmap gate outside the current v1 release scope. The v1
+implementation keeps the hidden-textarea, composition-event, and caret-geometry
+surfaces in place so that follow-up evidence can validate native candidate
+window behavior without another host rewrite.
 
 ### 12.4 Pointer Mapping
 
@@ -947,6 +952,7 @@ Per frame:
 - width cache hits/misses;
 - metrics reads;
 - runtime render time;
+- dirty-row diff fallback time;
 - span build time;
 - DOM apply time;
 - semantic apply time;
@@ -1029,6 +1035,8 @@ Record browser event traces and expected Fleury events for:
 
 IME automation is browser-sensitive. Where full automation is not reliable,
 keep manual test scripts and browser-specific trace fixtures in the repo.
+Manual IME verification is out of the v1 release gate. It remains required
+before claiming IME support.
 
 ### 17.5 Accessibility Tests
 
@@ -1041,7 +1049,8 @@ Browser tests assert:
 - link semantics project to anchors when supported;
 - semantic updates are synchronized with visual commits.
 
-Manual screen-reader verification remains required before claiming support.
+Manual screen-reader verification is out of the v1 release gate. It remains
+required before claiming screen-reader support.
 
 ## 18. Performance Gates
 
@@ -1095,8 +1104,10 @@ Diagnose a miss by failure mode — they have different remedies:
 - **runtime-render-bound** (Dart build/layout/paint/plan dominates): WebGL does
   not help — the lever is the build target. Evaluate `dart2wasm`/WasmGC, which
   speeds Dart compute (DOM calls cross the JS boundary regardless of target, so
-  WASM helps render, not apply). Instrumentation must separate the two slices so
-  the miss is attributed correctly rather than reflexively answered with WebGL.
+  WASM helps render, not apply). Instrumentation must split runtime render into
+  build/layout/paint subphases, and keep those separate from DOM/browser apply
+  cost, so the miss is attributed correctly rather than reflexively answered
+  with WebGL.
 
 ## 19. Core Runtime Dependencies
 
@@ -1140,24 +1151,26 @@ the durable identity mechanism for reorderable or virtualized collections.
 
 ### R2: Reuse paint damage; add row granularity
 
-Native currently avoids repainting clean `RenderRepaintBoundary` subtrees, but
-it does not ship a paint-damage handoff into `AnsiRenderer`. A buffer-level
-dirty-region probe was measured and reverted because it added local SB.6
-overhead without materially improving the peer-facing catch-up axes.
+Native already records paint damage into `CellBuffer.damageBounds`, consumes it
+through `AnsiRenderer.renderDiff(dirtyBounds:)`, and uses
+`RenderRepaintBoundary` to avoid repainting clean subtrees. The web planner must
+consume that signal instead of making a fresh full-buffer comparison the normal
+path.
 
 Current damage is a single union `CellRect`. That is conservative but can be too
 wide for DOM rows: changes on rows 1 and 50 become rows 1-50. Add per-row or
 row-range damage so DOM can update exactly the affected rows and ANSI can also
 tighten its dirty bounds.
 
-Conservative layout damage still matters. Any future dirty-region handoff must
-fall back to a full diff after layout-affecting changes; layout-animating apps
-become the real worst case for the benchmark gate.
+Conservative layout damage still matters. Current
+`RenderDamageTracker.recordLayoutOrConservativePaint()` forces a full diff after
+layout-affecting changes. That is correct for now; layout-animating apps become
+the real worst case for the benchmark gate.
 
 ### R3: Extract shared `TuiRuntime` / `FrameLoop`
 
 `run_tui_web.dart` is an older fork of native `run_tui.dart` orchestration and
-has already drifted: it lacks the native `FrameScheduler`
+has already drifted: it lacks native damage handoff and `FrameScheduler`
 coalescing. A production `WebTuiHost` should not become a third copy.
 
 Dependency: extract a platform-agnostic runtime loop that owns:
@@ -1295,7 +1308,7 @@ Deliverables:
 - shared `TuiRuntime` / `FrameLoop` extraction or a narrow intermediate adapter
   that guarantees the same contracts;
 - browser rAF flush strategy wired through the shared `FrameScheduler` logic;
-- web path consumes measured dirty-region hints and conservative full-diff flags;
+- web path consumes `CellBuffer.damageBounds` and conservative full-diff flags;
 - first per-row / row-range damage representation, or a documented adapter from
   current union bounds.
 
@@ -1342,10 +1355,11 @@ Exit gate:
 
 - real Fleury app is usable without xterm for render or input;
 - paste, pointer, resize, and core keyboard paths work;
-- IME composition path works in at least the primary supported browser;
+- IME composition plumbing and caret-positioning hooks remain available for
+  follow-up primary-browser validation;
 - browser clipboard failure modes are visible and fallback behavior works.
 
-### Phase 4: Retained Semantics, Focus, and Accessibility
+### Phase 4: Retained Semantics, Focus, and Accessibility Backstop
 
 Deliverables:
 
@@ -1356,15 +1370,18 @@ Deliverables:
 - focused/actionable semantic nodes;
 - semantic activation -> Fleury action/focus dispatch;
 - link projection from semantic data;
-- accessibility smoke tests.
+- automated accessibility backstop tests.
 
 Exit gate:
 
 - visual grid remains hidden from assistive technology;
 - semantic DOM exposes current focused app state;
 - keyboard focus and semantic activation do not fight the hidden textarea;
-- IME candidate-window placement consumes real caret geometry;
-- manual screen-reader smoke passes for the supported v1 browser set.
+- caret geometry remains available to the future IME candidate-window
+  validation track;
+- semantic coverage/fallback audit reports the captured product states;
+- manual screen-reader smoke is explicitly deferred to a follow-up
+  accessibility validation track.
 
 ### Phase 5: Benchmark Gate
 
@@ -1404,7 +1421,8 @@ Before implementation starts, reviewers should be able to answer:
   post-frame callback contract?
 - Is the metrics/correction policy precise enough to avoid both drift and
   unnecessary DOM nodes?
-- Is the hidden textarea/focus model plausible for screen readers and IME?
+- Is the hidden textarea/focus model plausible for IME and for the deferred
+  screen-reader validation track?
 - Are the benchmark gates realistic for Fleury's intended web apps?
 - Which browser set is v1 required to support?
 - Is the shared runtime extraction sequenced before enough web work to prevent

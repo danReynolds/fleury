@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryWebDefaultPreflight",
+  "generatedAt": "2026-06-09T13:35:37.565306Z",
+  "target": "make-dom-default",
+  "targetDescription": "Allow the retained DOM host to become the default Fleury-owned web surface.",
+  "readinessPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-readiness.json",
+  "bundleRequired": false,
+  "bundleBound": false,
+  "automatedValidationPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-automated-validation.json",
+  "automatedValidationRequired": false,
+  "automatedValidationBound": true,
+  "strictPass": false,
+  "checks": [
+    {
+      "id": "phase6Readiness",
+      "label": "Phase 6 readiness",
+      "strictPass": false,
+      "blockers": [
+        "Frame performance scoreboard: frame scoreboard threshold policy reviewState is candidate; expected reviewed",
+        "Manual IME and screen-reader validation: manual validation audit strictPass is not true; manual validation passed 0 of 2 targets; needsReviewTargets: chrome-ime-macos, chrome-voiceover-macos; manual evidence provenance blockers: chrome-ime-macos: reviewedBy, capturedAt, environment.browserVersion; chrome-voiceover-macos: reviewedBy, capturedAt, environment.browserVersion; failing manual targets: chrome-ime-macos, chrome-voiceover-macos"
+      ],
+      "details": {
+        "readinessStrictPass": false,
+        "failedChecks": [
+          {
+            "id": "frameScoreboard",
+            "label": "Frame performance scoreboard",
+            "blockers": [
+              "frame scoreboard threshold policy reviewState is candidate; expected reviewed"
+            ],
+            "details": {
+              "scenarioCount": 11,
+              "runCount": 33,
+              "minRuns": 3,
+              "requireComparableRunEnvironment": true,
+              "thresholdPolicyPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/thresholds.candidate.json",
+              "thresholdPolicyReviewState": "candidate",
+              "thresholdPolicyFingerprint": "fnv1a64:5e05148220c729cd",
+              "thresholdPolicyScenarioCount": 11,
+              "thresholdReviewPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/threshold-review.json"
+            }
+          },
+          {
+            "id": "manualValidation",
+            "label": "Manual IME and screen-reader validation",
+            "blockers": [
+              "manual validation audit strictPass is not true",
+              "manual validation passed 0 of 2 targets",
+              "needsReviewTargets: chrome-ime-macos, chrome-voiceover-macos",
+              "manual evidence provenance blockers: chrome-ime-macos: reviewedBy, capturedAt, environment.browserVersion; chrome-voiceover-macos: reviewedBy, capturedAt, environment.browserVersion",
+              "failing manual targets: chrome-ime-macos, chrome-voiceover-macos"
+            ],
+            "details": {
+              "targetCount": 2,
+              "passedTargetCount": 0,
+              "entryCount": 2,
+              "invalidEntryCount": 0,
+              "needsReviewTargets": [
+                "chrome-ime-macos",
+                "chrome-voiceover-macos"
+              ],
+              "provenanceBlockers": {
+                "chrome-ime-macos": [
+                  "reviewedBy",
+                  "capturedAt",
+                  "environment.browserVersion"
+                ],
+                "chrome-voiceover-macos": [
+                  "reviewedBy",
+                  "capturedAt",
+                  "environment.browserVersion"
+                ]
+              },
+              "manualEvidence": [
+                {
+                  "id": "chrome-ime-macos",
+                  "latestEntryFile": "chrome-ime-macos.review.json",
+                  "latestEntryPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/evidence/chrome-ime-macos.review.json",
+                  "latestEntryFingerprint": "fnv1a64:b974789710154c43",
+                  "latestCapturedAt": "",
+                  "reviewedBy": ""
+                },
+                {
+                  "id": "chrome-voiceover-macos",
+                  "latestEntryFile": "chrome-voiceover-macos.review.json",
+                  "latestEntryPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/manual/evidence/chrome-voiceover-macos.review.json",
+                  "latestEntryFingerprint": "fnv1a64:412206c456b07902",
+                  "latestCapturedAt": "",
+                  "reviewedBy": ""
+                }
+              ],
+              "failingTargetDetails": [
+                {
+                  "id": "chrome-ime-macos",
+                  "status": "needsReview",
+                  "strictPass": false,
+                  "requiredCheckCount": 6,
+                  "passedRequiredCheckCount": 0,
+                  "missingCheckIds": [
+                    "manual-page-loads-dom-host",
+                    "keyboard-capture-focused",
+                    "composition-start-update-visible",
+                    "composition-end-commits-once",
+                    "candidate-window-near-caret",
+                    "typing-continues-after-composition"
+                  ],
+                  "provenanceBlockers": [
+                    "reviewedBy",
+                    "capturedAt",
+                    "environment.browserVersion"
+                  ]
+                },
+                {
+                  "id": "chrome-voiceover-macos",
+                  "status": "needsReview",
+                  "strictPass": false,
+                  "requiredCheckCount": 7,
+                  "passedRequiredCheckCount": 0,
+                  "missingCheckIds": [
+                    "manual-page-ready-semantic-host",
+                    "visual-grid-hidden",
+                    "semantic-root-exposed",
+                    "focused-textbox-announced",
+                    "semantic-action-works",
+                    "keyboard-capture-restored",
+                    "safe-link-announced"
+                  ],
+                  "provenanceBlockers": [
+                    "reviewedBy",
+                    "capturedAt",
+                    "environment.browserVersion"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "automatedValidation",
+      "label": "Automated retained host validation",
+      "strictPass": true,
+      "blockers": [],
+      "details": {
+        "automatedValidationPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh/readiness-candidate/web-automated-validation.json",
+        "checkedSourceInputCount": 14,
+        "sourceMismatchCount": 0,
+        "missingSourceInputCount": 0,
+        "missingSourceFingerprintCount": 0,
+        "checkedMetadataCount": 1,
+        "metadataMismatchCount": 0,
+        "missingMetadataCount": 0,
+        "checkedManifestFieldCount": 14,
+        "manifestMismatchCount": 0,
+        "missingManifestFieldCount": 0
+      }
+    }
+  ]
+}

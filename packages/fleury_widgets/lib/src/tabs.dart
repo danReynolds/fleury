@@ -147,6 +147,14 @@ class _TabsState extends State<Tabs> {
       case KeyCode.arrowRight:
         _controller.next();
         return KeyEventResult.handled;
+      // WAI-ARIA tablist: Home/End jump to first/last tab when the strip is
+      // focused.
+      case KeyCode.home:
+        if (widget.tabs.isNotEmpty) _controller.index = 0;
+        return KeyEventResult.handled;
+      case KeyCode.end:
+        if (widget.tabs.isNotEmpty) _controller.index = widget.tabs.length - 1;
+        return KeyEventResult.handled;
       default:
         return KeyEventResult.ignored;
     }
@@ -210,9 +218,17 @@ class _TabsState extends State<Tabs> {
                         return;
                     }
                   },
-                  child: Text(
-                    ' ${widget.tabs[i].label} ',
-                    style: i == active ? activeStyle : inactiveStyle,
+                  // Click a tab label to switch to it (Tab/arrows/Alt+N by
+                  // keyboard) — the same select the semantic action performs.
+                  child: GestureDetector(
+                    onTap: () {
+                      _controller.index = i;
+                      _focusNode.requestFocus();
+                    },
+                    child: Text(
+                      ' ${widget.tabs[i].label} ',
+                      style: i == active ? activeStyle : inactiveStyle,
+                    ),
                   ),
                 ),
             ],
@@ -247,6 +263,19 @@ class _TabsState extends State<Tabs> {
             },
             hideFromHintBar: true,
           ),
+        // Ctrl+PageUp/PageDown cycle tabs from anywhere in the tab area — the
+        // cross-app convention (browsers, VS Code, iTerm2) for switching tabs
+        // while focus is deep inside panel content.
+        KeyBinding(
+          KeyChord.ctrl.pageUp,
+          onEvent: (_) => _controller.previous(),
+          hideFromHintBar: true,
+        ),
+        KeyBinding(
+          KeyChord.ctrl.pageDown,
+          onEvent: (_) => _controller.next(),
+          hideFromHintBar: true,
+        ),
       ],
       child: body,
     );

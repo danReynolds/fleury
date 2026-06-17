@@ -71,6 +71,22 @@ void main() {
     expect(deleted.newLine, isNull);
   });
 
+  testWidgets('renders an old/new line-number gutter by default', (tester) {
+    tester.pumpWidget(
+      DiffView(diff: '@@ -1,2 +1,2 @@\n context\n-old\n+new\n', label: 'Patch'),
+    );
+    final output = tester.renderToString(
+      size: const CellSize(40, 8),
+      emptyMark: ' ',
+    );
+    // Context line carries both numbers; the gutter separator is present.
+    expect(output, contains('1 1 │  context'));
+    expect(output, contains('│ '));
+    // The deletion has an old number but no new; the addition the reverse.
+    expect(output, contains('2   │ -old'));
+    expect(output, contains('  2 │ +new'));
+  });
+
   testWidgets('renders diff rows with aggregate and row semantics', (tester) {
     tester.pumpWidget(DiffView(diff: _sampleDiff, label: 'Patch'));
 

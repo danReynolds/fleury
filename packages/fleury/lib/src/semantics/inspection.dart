@@ -1,3 +1,4 @@
+import '../foundation/geometry.dart';
 import '../rendering/text_sanitizer.dart';
 import 'semantics.dart';
 
@@ -206,6 +207,16 @@ final class SemanticInspectionSnapshot {
     'root': root.toJson(),
   };
 
+  /// Reconstructs a [SemanticTree] from this snapshot.
+  ///
+  /// The reconstructed tree mirrors the (already redacted) inspection view, so
+  /// a consumer that presents it exposes exactly what the snapshot carries —
+  /// sensitive values stay redacted. Used by the structured serve client to
+  /// drive its accessible DOM presenter from a `SemanticsFrame`, so a served
+  /// session stays screen-reader- and agent-readable without shipping the live
+  /// widget tree.
+  SemanticTree toSemanticTree() => SemanticTree(root: root.toSemanticNode());
+
   /// Returns a deterministic, redaction-aware tree summary for humans.
   ///
   /// Use [toJson] for protocol consumers. This string is intentionally optimized
@@ -254,6 +265,7 @@ final class SemanticInspectionNode {
     'expanded',
     'busy',
     'validationError',
+    'bounds',
     'actions',
     'state',
     'children',
@@ -272,6 +284,7 @@ final class SemanticInspectionNode {
     this.expanded,
     required this.busy,
     this.validationError,
+    this.bounds,
     required List<String> actions,
     required Map<String, Object?> state,
     required List<SemanticInspectionNode> children,
@@ -298,6 +311,7 @@ final class SemanticInspectionNode {
           : (node.validationError == null
                 ? null
                 : sanitizeForDisplay(node.validationError!)),
+      bounds: node.bounds,
       actions: [for (final action in node.actions) action.name]..sort(),
       state: _semanticStateToJson(node.state),
       children: [
@@ -340,6 +354,7 @@ final class SemanticInspectionNode {
       validationError: redacted && json['validationError'] != null
           ? '<redacted>'
           : _jsonSanitizedString(json['validationError']),
+      bounds: _jsonCellRect(json['bounds']),
       actions: _jsonSortedStrings(json['actions']),
       state: redacted ? _redactSensitiveState(state) : state,
       children: _jsonNodeList(json['children']),
@@ -358,6 +373,7 @@ final class SemanticInspectionNode {
   final bool? expanded;
   final bool busy;
   final String? validationError;
+  final CellRect? bounds;
   final List<String> actions;
   final Map<String, Object?> state;
   final List<SemanticInspectionNode> children;
@@ -389,11 +405,41 @@ final class SemanticInspectionNode {
     if (expanded != null) 'expanded': expanded,
     if (busy) 'busy': true,
     if (validationError != null) 'validationError': validationError,
+    if (bounds != null) 'bounds': _cellRectToJson(bounds!),
     if (actions.isNotEmpty) 'actions': actions,
     if (state.isNotEmpty) 'state': state,
     if (children.isNotEmpty)
       'children': <Object?>[for (final child in children) child.toJson()],
   };
+
+  /// Reconstructs a [SemanticNode] from this inspection node, recursively.
+  ///
+  /// Role and action names are matched back to their enums; an unrecognized
+  /// role (e.g. one added by a newer server) falls back to [SemanticRole.text]
+  /// and unrecognized actions are dropped, so an additive schema never crashes
+  /// an older consumer. See [SemanticInspectionSnapshot.toSemanticTree].
+  SemanticNode toSemanticNode() => SemanticNode(
+    id: SemanticNodeId(id),
+    role: _semanticRoleByName(role),
+    label: label,
+    value: value,
+    hint: hint,
+    enabled: enabled,
+    focused: focused,
+    selected: selected,
+    checked: checked,
+    expanded: expanded,
+    busy: busy,
+    validationError: validationError,
+    bounds: bounds,
+    actions: <SemanticAction>{
+      for (final name in actions) ?_semanticActionByName(name),
+    },
+    children: <SemanticNode>[
+      for (final child in children) child.toSemanticNode(),
+    ],
+    state: SemanticState(Map<String, Object?>.of(state)),
+  );
 
   String _debugLine({required bool includeState}) {
     final parts = <String>[
@@ -611,6 +657,29 @@ Object? _jsonValue(Object? value) {
   };
 }
 
+Map<String, Object?> _cellRectToJson(CellRect rect) {
+  return <String, Object?>{
+    'left': rect.left,
+    'top': rect.top,
+    'width': rect.size.cols,
+    'height': rect.size.rows,
+  };
+}
+
+CellRect? _jsonCellRect(Object? value) {
+  final map = _jsonMap(value);
+  if (map == null) return null;
+  final left = map['left'];
+  final top = map['top'];
+  final width = map['width'];
+  final height = map['height'];
+  if (left is! int || top is! int || width is! int || height is! int) {
+    return null;
+  }
+  if (width < 0 || height < 0) return null;
+  return CellRect.fromLTWH(left, top, width, height);
+}
+
 Map<String, Object?>? _jsonMap(Object? value) {
   if (value is Map<String, Object?>) return value;
   if (value is Map) return Map<String, Object?>.from(value);
@@ -656,4 +725,24 @@ List<SemanticInspectionNode> _jsonNodeList(Object? value) {
     if (map != null) nodes.add(SemanticInspectionNode.fromJson(map));
   }
   return nodes;
+}
+
+/// Matches a serialized role name back to its enum. An unknown name (a role
+/// added by a newer producer) degrades to [SemanticRole.text] rather than
+/// throwing, so [SemanticInspectionNode.toSemanticNode] tolerates an additive
+/// schema.
+SemanticRole _semanticRoleByName(String name) {
+  for (final role in SemanticRole.values) {
+    if (role.name == name) return role;
+  }
+  return SemanticRole.text;
+}
+
+/// Matches a serialized action name back to its enum, or null if unrecognized
+/// (dropped by [SemanticInspectionNode.toSemanticNode]).
+SemanticAction? _semanticActionByName(String name) {
+  for (final action in SemanticAction.values) {
+    if (action.name == name) return action;
+  }
+  return null;
 }

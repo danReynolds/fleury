@@ -28,6 +28,7 @@ void main() {
       port = 5900 + Random.secure().nextInt(100);
       pkgRoot = Directory.current.path;
       stderrLines.clear();
+      final childCwd = Directory('${tempDir.path}/child-cwd')..createSync();
 
       // Spawn the CLI in spawn mode pointing at our fixture subprocess.
       serveProcess = await Process.start(Platform.resolvedExecutable, [
@@ -39,6 +40,8 @@ void main() {
         Platform.resolvedExecutable,
         'run',
         '$pkgRoot/test/fixtures/spawn_app.dart',
+        'spawn-app',
+        childCwd.path,
       ], workingDirectory: tempDir.path);
 
       final ready = Completer<void>();
@@ -93,6 +96,7 @@ void main() {
             colorMode: ColorMode.truecolor,
             imageProtocol: ImageProtocol.halfBlock,
             tmuxPassthrough: false,
+            protocolVersion: 1,
           ),
         ),
       );
@@ -123,6 +127,46 @@ void main() {
       );
     });
 
+    test('a warm standby is pre-spawned and pairs the first browser', () async {
+      // The eager warm standby's subprocess spawns at serve start, before any
+      // browser connects — that's the cold start being paid ahead of time.
+      await _waitFor(
+        () => stderrLines.any((l) => l.contains('[serve s1] spawned')),
+        timeout: const Duration(seconds: 8),
+        what: 'warm standby spawned before any connection',
+      );
+
+      final ws = await WebSocket.connect('ws://127.0.0.1:$port/ws');
+      final inbound = BytesBuilder();
+      final wsSub = ws.listen((data) {
+        if (data is List<int>) inbound.add(data);
+      });
+      ws.add(
+        encodeFrame(
+          const InitFrame(
+            size: CellSize(80, 24),
+            colorMode: ColorMode.truecolor,
+            imageProtocol: ImageProtocol.halfBlock,
+            tmuxPassthrough: false,
+            protocolVersion: 1,
+          ),
+        ),
+      );
+
+      // The connection pairs with the warm standby (not a fresh cold spawn),
+      // and the standby's buffered hello reaches the browser through the pump.
+      await _waitFor(
+        () =>
+            _hasHelloFrame(inbound.toBytes(), 'spawn-app') &&
+            stderrLines.any((l) => l.contains('paired browser to warm standby')),
+        timeout: const Duration(seconds: 8),
+        what: 'browser paired to warm standby + hello delivered',
+      );
+
+      await wsSub.cancel();
+      await ws.close();
+    });
+
     test(
       'two concurrent browsers spawn two independent subprocesses',
       () async {
@@ -147,9 +191,11 @@ void main() {
           what: 'hello on both WS connections',
         );
 
-        // Two spawn lines, two distinct session IDs.
+        // Both browsers were served by their own subprocess (the hellos above
+        // prove isolation). With the warm-standby pool, serve also pre-spawns
+        // idle standbys, so the spawn count is >= 2 rather than exactly 2.
         final spawns = stderrLines.where((l) => l.contains('spawned')).toList();
-        expect(spawns, hasLength(2));
+        expect(spawns.length, greaterThanOrEqualTo(2));
         expect(stderrLines.any((l) => l.contains('[serve s1]')), isTrue);
         expect(stderrLines.any((l) => l.contains('[serve s2]')), isTrue);
 
@@ -234,6 +280,7 @@ void main() {
             colorMode: ColorMode.truecolor,
             imageProtocol: ImageProtocol.halfBlock,
             tmuxPassthrough: false,
+            protocolVersion: 1,
           ),
         ),
       );

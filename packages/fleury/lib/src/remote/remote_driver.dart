@@ -10,14 +10,35 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../foundation/geometry.dart';
+import '../rendering/cell_buffer.dart';
+import '../runtime/frame_presentation.dart';
+import '../runtime/remote_surface_sink.dart';
+import '../semantics/inspection.dart';
 import '../terminal/capabilities.dart';
 import '../terminal/events.dart';
 import '../terminal/input_parser.dart';
 import '../terminal/terminal_driver.dart';
+import 'remote_codec.dart';
 import 'remote_protocol.dart';
+import 'remote_semantics.dart';
 import 'remote_transport.dart';
 
-final class RemoteTerminalDriver implements TerminalDriver {
+/// Maximum grid dimensions the server will honor from a remote peer.
+/// A real terminal/browser viewport is well within this; the bound exists
+/// only to cap the cell-buffer allocation against a hostile RESIZE/INIT.
+/// 4000×4000 = 16M cells, generous and bounded.
+const int maxRemoteGridCols = 4000;
+const int maxRemoteGridRows = 4000;
+
+/// The remote-rendering driver for `fleury shell` and `fleury serve`.
+///
+/// One driver covers both legacy (ANSI) and structured (presentation-plan)
+/// peers. The handshake's protocol version decides: a v1 peer (a real
+/// terminal, e.g. `fleury shell`) receives ANSI via [write]; a v2 peer (the
+/// browser surface client) receives [PlanFrame]s via [presentPlan] and
+/// sends structured input. [wantsPresentationPlans] reflects the negotiated
+/// version and is read by [runTui] after [enter] completes.
+final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
   RemoteTerminalDriver(this._transport);
 
   final RemoteFrameTransport _transport;
@@ -25,13 +46,19 @@ final class RemoteTerminalDriver implements TerminalDriver {
   final StreamController<TuiEvent> _events =
       StreamController<TuiEvent>.broadcast();
   final _RemoteParserSink _sink = _RemoteParserSink();
+  final SemanticsWireEncoder _semanticsEncoder = SemanticsWireEncoder();
+  RemoteSemanticActionHandler? _onSemanticAction;
 
   StreamSubscription<RemoteFrame>? _frameSub;
   CellSize _size = const CellSize(80, 24);
   TerminalCapabilities _capabilities = TerminalCapabilities.defaultCapabilities;
   bool _active = false;
   bool _handshakeReceived = false;
+  int _protocolVersion = 1;
   Completer<void>? _handshake;
+
+  @override
+  bool get wantsPresentationPlans => _protocolVersion >= 2;
 
   @override
   CellSize get size => _size;
@@ -95,14 +122,43 @@ final class RemoteTerminalDriver implements TerminalDriver {
 
   @override
   void write(String data) {
-    if (!_active) return;
+    if (!_active || wantsPresentationPlans) return;
     _transport.send(OutputFrame(Uint8List.fromList(utf8.encode(data))));
+  }
+
+  @override
+  void presentFrame(
+    CellBuffer prev,
+    CellBuffer next,
+    FramePresentationPlan plan,
+  ) {
+    if (!_active) return;
+    _transport.send(
+      PlanFrame(buildRemotePlan(prev, next, fullRepaint: plan.fullRepaint)),
+    );
+  }
+
+  /// Diffs the semantic [snapshot] against the last one sent to this peer and
+  /// ships only what changed (a full frame once, patches after). No-op on the
+  /// ANSI path, and a no-op send when the exposed semantics are unchanged.
+  @override
+  void presentSemantics(SemanticInspectionSnapshot snapshot) {
+    if (!_active || !wantsPresentationPlans) return;
+    final bytes = _semanticsEncoder.encode(snapshot);
+    if (bytes == null) return;
+    _transport.send(SemanticsFrame(bytes));
+  }
+
+  @override
+  set onSemanticAction(RemoteSemanticActionHandler? handler) {
+    _onSemanticAction = handler;
   }
 
   void _onFrame(RemoteFrame frame) {
     switch (frame) {
       case InitFrame f:
-        _size = f.size;
+        _size = _clampSize(f.size);
+        _protocolVersion = f.protocolVersion;
         _capabilities = TerminalCapabilities(
           colorMode: f.colorMode,
           imageProtocol: f.imageProtocol,
@@ -113,18 +169,47 @@ final class RemoteTerminalDriver implements TerminalDriver {
           _handshake?.complete();
         }
       case ResizeFrame f:
-        _size = f.size;
-        if (_active) _events.add(ResizeEvent(f.size));
+        _size = _clampSize(f.size);
+        if (_active) _events.add(ResizeEvent(_size));
       case InputFrame f:
         _parser.feed(f.bytes, _sink);
       case OutputFrame _:
-        // App never receives OUTPUT; ignore so a malformed peer can't
-        // crash the session.
+      case PlanFrame _:
+      case SemanticsFrame _:
+        // App→peer render frames; an app never receives them. Ignore so a
+        // malformed peer can't crash the session.
         break;
+      case SemanticActionFrame f:
+        // The peer activated a node in its accessible DOM; invoke it on the
+        // live tree (only on the structured path, like the other v2 input).
+        if (_active && wantsPresentationPlans) {
+          _onSemanticAction?.call(f.id, f.action);
+        }
+      case InputEventFrame f:
+        // Structured input from a v2 peer: surface the event directly
+        // instead of parsing ANSI. A resize event also updates the cached
+        // size so the next plan is built at the new viewport.
+        if (_active) {
+          var event = f.event;
+          if (event is ResizeEvent) {
+            event = ResizeEvent(_clampSize(event.size));
+            _size = event.size;
+          }
+          _events.add(event);
+        }
       case ByeFrame():
         _onDisconnect();
     }
   }
+
+  /// Clamps a peer-supplied grid size to a sane maximum so a malicious or
+  /// buggy client cannot make the app allocate an enormous cell buffer
+  /// (`RESIZE cols=100000,rows=100000` → ten billion cells). The bound is
+  /// far above any real terminal/browser viewport.
+  CellSize _clampSize(CellSize size) => CellSize(
+    size.cols.clamp(1, maxRemoteGridCols),
+    size.rows.clamp(1, maxRemoteGridRows),
+  );
 
   void _onTransportError(Object error, StackTrace stackTrace) {
     if (!_active) {

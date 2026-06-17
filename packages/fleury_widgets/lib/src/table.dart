@@ -114,6 +114,8 @@ class Table extends StatefulWidget {
     this.autofocus = false,
     this.onSelect,
     this.selectedStyle,
+    this.sortColumnIndex,
+    this.sortAscending = true,
     this.label = 'Table',
   }) : columnCount =
            header?.length ?? (rows.isNotEmpty ? rows.first.length : 0);
@@ -137,6 +139,15 @@ class Table extends StatefulWidget {
 
   /// Style for the header rule.
   final CellStyle separatorStyle;
+
+  /// The header column the data is sorted by (renders nothing on its own —
+  /// supply a `▲`/`▼` in your header cell — but exposes the sort state in the
+  /// header cell's semantics so assistive tech / the serve bridge can announce
+  /// it, the WAI-ARIA `aria-sort` analog).
+  final int? sortColumnIndex;
+
+  /// Direction of [sortColumnIndex]: ascending when true, descending otherwise.
+  final bool sortAscending;
 
   /// Whether the table is keyboard-navigable with a highlighted row.
   /// Implied when a [controller] or [onSelect] is supplied.
@@ -252,6 +263,19 @@ class _TableState extends State<Table> {
   void dispose() {
     _detachInteractive();
     super.dispose();
+  }
+
+  /// Wheel scroll moves the selection (and the window follows it, since the
+  /// body window is derived from the selected row). Selection changes don't
+  /// fire onSelect — that's reserved for Enter / activate — so scrolling never
+  /// triggers row actions.
+  void _scrollBy(int delta) {
+    final controller = _controller;
+    final count = widget.rows.length;
+    if (controller == null || count == 0) return;
+    final selected = controller.selectedIndex ?? 0;
+    final next = (selected + delta).clamp(0, count - 1);
+    if (next != selected) controller.selectedIndex = next;
   }
 
   KeyEventResult _onKey(KeyEvent event) {
@@ -392,7 +416,13 @@ class _TableState extends State<Table> {
         focusNode: _focusNode,
         autofocus: widget.autofocus,
         onKey: _onKey,
-        child: table,
+        // Wheel over the table scrolls the row window by moving the selection.
+        child: PointerScrollListener(
+          router: PointerRouterScope.maybeOf(context),
+          onScrollUp: () => _scrollBy(-1),
+          onScrollDown: () => _scrollBy(1),
+          child: table,
+        ),
       ),
     );
   }
@@ -474,11 +504,22 @@ class _TableState extends State<Table> {
         'rowIndex': rowIndex,
         'columnIndex': columnIndex,
         'header': header,
+        if (header && widget.sortColumnIndex == columnIndex) ...{
+          'sortActive': true,
+          'sortDirection': widget.sortAscending ? 'ascending' : 'descending',
+        },
       }),
       onAction: interactiveBodyCell
           ? (action) => _handleCellAction(rowIndex, action)
           : null,
-      child: child,
+      // Click a body cell to select its row (focus + select) — the same select
+      // the keyboard performs; Enter / the activate action still activates.
+      child: interactiveBodyCell
+          ? GestureDetector(
+              onTap: () => _handleCellAction(rowIndex, SemanticAction.select),
+              child: child,
+            )
+          : child,
     );
   }
 }

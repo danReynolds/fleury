@@ -185,6 +185,8 @@ class SearchPanel extends StatefulWidget {
     this.placeholder = 'Search...',
     this.width = 60,
     this.maxVisible = 10,
+    this.fillHeight = false,
+    this.groupByCategory = false,
     this.queryFocusNode,
     this.resultsFocusNode,
     this.autofocus = false,
@@ -202,7 +204,23 @@ class SearchPanel extends StatefulWidget {
   final String label;
   final String placeholder;
   final int width;
+
+  /// Cap on the number of result rows when [fillHeight] is false. When
+  /// [fillHeight] is true this is ignored and the list grows to fill the
+  /// available vertical space.
   final int maxVisible;
+
+  /// When true the result list expands to fill the height handed down by the
+  /// parent (e.g. an [Expanded] panel slot) instead of being capped at
+  /// [maxVisible] rows. Requires a bounded-height parent.
+  final bool fillHeight;
+
+  /// When true (and no search query is active), a muted category header is
+  /// drawn above the first item of each category group, and the per-row
+  /// category tag is suppressed. Assumes results are already ordered by
+  /// category. Searching re-ranks results, so headers are hidden while a query
+  /// is active.
+  final bool groupByCategory;
   final FocusNode? queryFocusNode;
   final FocusNode? resultsFocusNode;
   final bool autofocus;
@@ -476,6 +494,64 @@ class _SearchPanelState extends State<SearchPanel> {
     final copyEnabled = widget.copySelection && selected != null;
     final canActivate = widget.onActivate != null;
     final panelFocused = _queryFocusNode.hasFocus || _resultsFocusNode.hasFocus;
+    // Category section headers only make sense in the browse (no-query) order,
+    // where results are grouped; a search re-ranks them.
+    final grouped = widget.groupByCategory && _query.text.trim().isEmpty;
+
+    final Widget listArea = order.isEmpty
+        ? Text(
+            _query.text.trim().isEmpty
+                ? widget.placeholder
+                : 'No matching results',
+          )
+        : ListView.builder(
+            controller: _list,
+            focusNode: _resultsFocusNode,
+            itemCount: order.length,
+            selectionActive: panelFocused,
+            onSelect: (_) => _activateSelected(),
+            itemBuilder: (context, viewIndex, activeSelected) {
+              final sourceIndex = order[viewIndex];
+              final selected = viewIndex == _list.selectedIndex;
+              final row = _SearchResultRow(
+                result: widget.results[sourceIndex],
+                sourceIndex: sourceIndex,
+                viewIndex: viewIndex,
+                selected: selected,
+                activeSelection: activeSelected,
+                copyEnabled: copyEnabled,
+                canActivate: canActivate,
+                onActivate: () => _activateResultAt(viewIndex),
+                onCopy: () => _copyResultAt(viewIndex),
+                showCategory: !grouped,
+              );
+              if (!grouped) return row;
+              // A header precedes the first row of each category group. Rows
+              // stay 1:1 with results (selection is unchanged); only the
+              // first-of-group item is two lines tall — the ListView supports
+              // variable item heights.
+              final category = widget.results[sourceIndex].category;
+              final previousCategory = viewIndex == 0
+                  ? null
+                  : widget.results[order[viewIndex - 1]].category;
+              if (category == null ||
+                  category.isEmpty ||
+                  category == previousCategory) {
+                return row;
+              }
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _CategoryHeader(
+                    label: category,
+                    topGap: viewIndex != 0,
+                  ),
+                  row,
+                ],
+              );
+            },
+          );
 
     Widget panel = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -487,38 +563,18 @@ class _SearchPanelState extends State<SearchPanel> {
           autofocus: widget.autofocus,
           onSubmit: (_) => _activateSelected(),
         ),
-        const SizedBox(height: 1),
-        SizedBox(
-          height: visible,
-          child: order.isEmpty
-              ? Text(
-                  _query.text.trim().isEmpty
-                      ? widget.placeholder
-                      : 'No matching results',
-                )
-              : ListView.builder(
-                  controller: _list,
-                  focusNode: _resultsFocusNode,
-                  itemCount: order.length,
-                  selectionActive: panelFocused,
-                  onSelect: (_) => _activateSelected(),
-                  itemBuilder: (context, viewIndex, activeSelected) {
-                    final sourceIndex = order[viewIndex];
-                    final selected = viewIndex == _list.selectedIndex;
-                    return _SearchResultRow(
-                      result: widget.results[sourceIndex],
-                      sourceIndex: sourceIndex,
-                      viewIndex: viewIndex,
-                      selected: selected,
-                      activeSelection: activeSelected,
-                      copyEnabled: copyEnabled,
-                      canActivate: canActivate,
-                      onActivate: () => _activateResultAt(viewIndex),
-                      onCopy: () => _copyResultAt(viewIndex),
-                    );
-                  },
-                ),
+        // Match count — the primary "is the filter working?" feedback (fzf,
+        // VS Code, k9s all show it).
+        Text(
+          _query.text.trim().isEmpty
+              ? '${widget.results.length} results'
+              : '${order.length} of ${widget.results.length}',
+          style: Theme.of(context).mutedStyle,
         ),
+        if (widget.fillHeight)
+          Expanded(child: listArea)
+        else
+          SizedBox(height: visible, child: listArea),
       ],
     );
 
@@ -614,6 +670,7 @@ class _SearchResultRow extends StatelessWidget {
     required this.canActivate,
     required this.onActivate,
     required this.onCopy,
+    this.showCategory = true,
   });
 
   final SearchResult result;
@@ -626,6 +683,10 @@ class _SearchResultRow extends StatelessWidget {
   final Future<void> Function() onActivate;
   final Future<void> Function() onCopy;
 
+  /// Whether the category is shown inline in the row. Suppressed when the list
+  /// renders category section headers (the header carries it instead).
+  final bool showCategory;
+
   @override
   Widget build(BuildContext context) {
     final title = _sanitizeSearchText(result.title);
@@ -636,7 +697,7 @@ class _SearchResultRow extends StatelessWidget {
     final rowText = _rowText(
       title: title,
       subtitle: subtitle,
-      category: category,
+      category: showCategory ? category : null,
       source: source,
       activeSelection: activeSelection,
     );
@@ -678,7 +739,38 @@ class _SearchResultRow extends StatelessWidget {
         'resultSource': ?source,
         'outputSanitized': _resultWasSanitized(result),
       }),
-      child: Text(rowText, style: style),
+      // Click an enabled result to activate it (same as Enter on the row).
+      child: GestureDetector(
+        onTap: (result.enabled && canActivate)
+            ? () => unawaited(onActivate())
+            : null,
+        child: Text(rowText, style: style),
+      ),
+    );
+  }
+}
+
+/// A muted, uppercase category divider drawn above the first row of each group
+/// when [SearchPanel.groupByCategory] is on. It is bundled into that row's list
+/// item rather than being a list item of its own, so selection and keyboard nav
+/// stay 1:1 with results.
+class _CategoryHeader extends StatelessWidget {
+  const _CategoryHeader({required this.label, this.topGap = true});
+
+  final String label;
+  final bool topGap;
+
+  @override
+  Widget build(BuildContext context) {
+    final header = Text(
+      _sanitizeSearchText(label).toUpperCase(),
+      style: Theme.of(context).mutedStyle,
+    );
+    if (!topGap) return header;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [const SizedBox(height: 1), header],
     );
   }
 }

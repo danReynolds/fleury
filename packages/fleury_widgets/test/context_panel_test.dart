@@ -95,6 +95,20 @@ void main() {
       );
     });
 
+    testWidgets('showTokenShare appends each item percentage of the total', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        ContextPanel(items: _items(), showTokenShare: true),
+      );
+      final out = tester.renderToString(
+        size: const CellSize(90, 8),
+        emptyMark: ' ',
+      );
+      // Total 1200+850+320 = 2370 → first item 1200 is 51%.
+      expect(out, contains('1.2k (51%)'));
+    });
+
     testWidgets('selects and exposes context semantics', (tester) async {
       ContextPanelSelectResult? selected;
       tester.pumpWidget(

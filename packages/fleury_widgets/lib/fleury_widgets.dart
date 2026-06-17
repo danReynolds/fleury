@@ -25,7 +25,15 @@ export 'src/completion_text_input.dart'
         TextCompletionRequestBuilder,
         defaultTextCompletionRequest;
 export 'src/controls.dart'
-    show Button, ButtonVariant, Checkbox, Radio, Switch, Toggle;
+    show
+        Button,
+        ButtonVariant,
+        Checkbox,
+        Radio,
+        RadioGroup,
+        RadioOption,
+        Switch,
+        Toggle;
 export 'src/conversation_navigator.dart'
     show
         ConversationEntry,

@@ -408,9 +408,15 @@ void main() {
         if (event is FrameDebugEvent) frames.add(event.frame);
       });
       final driver = FakeTerminalDriver(size: const CellSize(20, 4));
+      final counterKey = GlobalKey<_CounterAppState>();
       try {
         final future = runTui(
-          const RepaintBoundary(child: Text('cached')),
+          Column(
+            children: [
+              const RepaintBoundary(child: Text('cached')),
+              _CounterApp(key: counterKey),
+            ],
+          ),
           driver: driver,
           enableHotReload: false,
         );
@@ -427,12 +433,14 @@ void main() {
         expect(firstBoundaries.copiedCellCount, greaterThan(0));
 
         frames.clear();
-        driver.enqueue(const KeyEvent(keyCode: KeyCode.arrowDown));
+        // Dirty a sibling OUTSIDE the boundary: the frame must render (a
+        // clean frame is now skipped entirely) and the boundary replays
+        // its cache instead of repainting.
+        counterKey.currentState!.increment();
         await _settle();
 
         expect(frames, isNotEmpty);
         final secondFrame = frames.last;
-        expect(secondFrame.layoutStats.performedCount, 0);
         expect(secondFrame.layoutStats.skippedCount, greaterThan(0));
         final secondBoundaries = secondFrame.repaintBoundaries;
         expect(secondBoundaries.boundaryCount, 1);

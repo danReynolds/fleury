@@ -1,5 +1,7 @@
 import 'package:fleury/fleury.dart';
 
+import 'option_label.dart';
+
 /// Request passed to a [TextCompletionProvider].
 final class TextCompletionRequest {
   const TextCompletionRequest({
@@ -261,7 +263,9 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
     var width = 0;
     for (final option in options) {
       final detail = option.detail;
-      final label = detail == null ? option.label : '${option.label}  $detail';
+      final label = sanitizeOptionLabel(
+        detail == null ? option.label : '${option.label}  $detail',
+      );
       if (label.length > width) width = label.length;
     }
     _list.selectedIndex = state.selectedIndex;
@@ -306,13 +310,17 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
             itemCount: options.length,
             itemBuilder: (_, i, selected) {
               final option = options[i];
-              final detail = option.detail;
+              final rawDetail = option.detail;
+              final detail = rawDetail == null
+                  ? null
+                  : sanitizeOptionLabel(rawDetail);
+              final optionLabel = sanitizeOptionLabel(option.label);
               final label = detail == null
-                  ? option.label
-                  : '${option.label}  $detail';
+                  ? optionLabel
+                  : '$optionLabel  $detail';
               return Semantics(
                 role: SemanticRole.menuItem,
-                label: option.label,
+                label: optionLabel,
                 value: option.replacement,
                 hint: detail,
                 focused: _focusNode.hasFocus && selected,
@@ -340,9 +348,16 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
                       return;
                   }
                 },
-                child: Text(
-                  '${selected ? '› ' : '  '}$label',
-                  style: selected ? _selectionStyle : CellStyle.empty,
+                // Click a completion to accept it (same as Tab/Enter).
+                child: GestureDetector(
+                  onTap: () {
+                    _list.selectedIndex = i;
+                    _acceptCompletionAt(i);
+                  },
+                  child: Text(
+                    '${selected ? '› ' : '  '}$label',
+                    style: selected ? _selectionStyle : CellStyle.empty,
+                  ),
                 ),
               );
             },

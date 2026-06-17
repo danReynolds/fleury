@@ -1,5 +1,7 @@
 import 'package:fleury/fleury.dart';
 
+import 'option_label.dart';
+
 /// A row in a [Menu]: a selectable [MenuItem], a nested [SubMenu], or a
 /// [MenuSeparator].
 sealed class MenuEntry {
@@ -244,6 +246,37 @@ class _MenuBodyState extends State<_MenuBody> {
     return 0;
   }
 
+  int _lastSelectable() {
+    for (var i = widget.entries.length - 1; i >= 0; i--) {
+      if (_selectable(i)) return i;
+    }
+    return 0;
+  }
+
+  String? _entryLabel(int i) {
+    final e = widget.entries[i];
+    if (e is MenuItem) return e.label;
+    if (e is SubMenu) return e.label;
+    return null;
+  }
+
+  /// WAI-ARIA menu typeahead: jump to the next selectable item whose label
+  /// starts with [ch] (wrapping from the current selection).
+  KeyEventResult _typeahead(String ch) {
+    final lower = ch.toLowerCase();
+    final start = (_list.selectedIndex ?? -1) + 1;
+    for (var k = 0; k < widget.entries.length; k++) {
+      final i = (start + k) % widget.entries.length;
+      if (!_selectable(i)) continue;
+      final label = _entryLabel(i);
+      if (label != null && label.toLowerCase().startsWith(lower)) {
+        _list.selectedIndex = i;
+        break;
+      }
+    }
+    return KeyEventResult.handled;
+  }
+
   int? _step(int from, int dir) {
     var i = from + dir;
     while (i >= 0 && i < widget.entries.length) {
@@ -316,6 +349,9 @@ class _MenuBodyState extends State<_MenuBody> {
       case KeyCode.home:
         _list.selectedIndex = _firstSelectable();
         return KeyEventResult.handled;
+      case KeyCode.end:
+        _list.selectedIndex = _lastSelectable();
+        return KeyEventResult.handled;
       case KeyCode.enter:
         final i = _list.selectedIndex;
         if (i != null && _selectable(i)) _activate(i);
@@ -324,6 +360,14 @@ class _MenuBodyState extends State<_MenuBody> {
         widget.onDismiss();
         return KeyEventResult.handled;
       default:
+        final ch = event.char;
+        if (ch != null &&
+            ch.length == 1 &&
+            ch.codeUnitAt(0) >= 0x21 &&
+            !event.hasCtrl &&
+            !event.hasAlt) {
+          return _typeahead(ch);
+        }
         return KeyEventResult.ignored;
     }
   }
@@ -344,11 +388,11 @@ class _MenuBodyState extends State<_MenuBody> {
     // is a submenu, the trailing ' ▸' indicator (2).
     var labelWidth = 0;
     for (final e in widget.entries) {
-      final label = switch (e) {
+      final label = sanitizeOptionLabel(switch (e) {
         MenuItem(:final label) => label,
         SubMenu(:final label) => label,
         MenuSeparator() => '',
-      };
+      });
       if (label.length > labelWidth) labelWidth = label.length;
     }
     final width = labelWidth + 2 + (hasSubmenu ? 2 : 0);
@@ -404,14 +448,15 @@ class _MenuBodyState extends State<_MenuBody> {
                       case MenuSeparator():
                         return Text('─' * width, style: widget.mutedStyle);
                       case MenuItem(:final label, :final enabled):
+                        final safeLabel = sanitizeOptionLabel(label);
                         final child = enabled
                             ? Text(
-                                '${selected ? '› ' : '  '}$label',
+                                '${selected ? '› ' : '  '}$safeLabel',
                                 style: selected
                                     ? widget.selectionStyle
                                     : CellStyle.empty,
                               )
-                            : Text('  $label', style: widget.mutedStyle);
+                            : Text('  $safeLabel', style: widget.mutedStyle);
                         return _semanticMenuItem(
                           entry: entry,
                           index: i,
@@ -419,14 +464,15 @@ class _MenuBodyState extends State<_MenuBody> {
                           child: child,
                         );
                       case SubMenu(:final label, :final enabled):
+                        final safeLabel = sanitizeOptionLabel(label);
                         final child = enabled
                             ? Text(
-                                '${selected ? '› ' : '  '}$label ▸',
+                                '${selected ? '› ' : '  '}$safeLabel ▸',
                                 style: selected
                                     ? widget.selectionStyle
                                     : CellStyle.empty,
                               )
-                            : Text('  $label ▸', style: widget.mutedStyle);
+                            : Text('  $safeLabel ▸', style: widget.mutedStyle);
                         return _semanticMenuItem(
                           entry: entry,
                           index: i,
@@ -450,11 +496,11 @@ class _MenuBodyState extends State<_MenuBody> {
     required bool selected,
     required Widget child,
   }) {
-    final label = switch (entry) {
+    final label = sanitizeOptionLabel(switch (entry) {
       MenuItem(:final label) => label,
       SubMenu(:final label) => label,
       MenuSeparator() => '',
-    };
+    });
     final enabled = switch (entry) {
       MenuItem(:final enabled) => enabled,
       SubMenu(:final enabled) => enabled,
@@ -500,7 +546,17 @@ class _MenuBodyState extends State<_MenuBody> {
             return;
         }
       },
-      child: child,
+      // Click an enabled item to activate it (open a submenu or invoke a
+      // leaf) — the same outcome as Enter / Right, which run [_activate].
+      child: enabled
+          ? GestureDetector(
+              onTap: () {
+                _list.selectedIndex = index;
+                _activate(index);
+              },
+              child: child,
+            )
+          : child,
     );
   }
 }

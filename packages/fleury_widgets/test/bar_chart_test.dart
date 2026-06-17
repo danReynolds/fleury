@@ -102,6 +102,33 @@ void main() {
       expect(out[2], 'a b');
     });
 
+    testWidgets('showYAxis draws a value gutter and shifts the bars right', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 8,
+          height: 4,
+          child: BarChart(
+            bars: [Bar('a', 10)],
+            max: 10,
+            barWidth: 2,
+            gap: 0,
+            showLabels: false,
+            showYAxis: true,
+          ),
+        ),
+      );
+      final out = _rows(tester, 8, 4);
+      // 6-col gutter: 'max' label at the top, '0' on the baseline row.
+      expect(out[0].contains('10'), isTrue, reason: 'max label at top');
+      expect(out[3].contains('0'), isTrue, reason: 'zero baseline label');
+      // The full-height bar is pushed past the gutter to cols 6-7, with one
+      // column of breathing room before it.
+      expect(out[0].endsWith('██'), isTrue, reason: 'bar shifted past gutter');
+      expect(out[0][5], ' ');
+    });
+
     // ----- Palette -------------------------------------------------------
 
     testWidgets('palette cycles colors for single-value bars without color', (

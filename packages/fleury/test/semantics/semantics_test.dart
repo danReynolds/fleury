@@ -11,6 +11,74 @@ void main() {
 
     expect(node.value, 'Hello semantics');
     expect(node.children, isEmpty);
+    expect(node.bounds, isNull);
+  });
+
+  testWidgets('Semantics wrapper records visible bounds after render', (
+    tester,
+  ) {
+    tester.pumpWidget(
+      const Padding(
+        padding: EdgeInsets.only(left: 2, top: 1),
+        child: Text('Bounds'),
+      ),
+    );
+
+    tester.render(size: const CellSize(20, 4));
+
+    final node = tester.semantics().single(
+      role: SemanticRole.text,
+      label: 'Bounds',
+    );
+    expect(node.bounds, CellRect.fromLTWH(2, 1, 6, 1));
+  });
+
+  testWidgets('RepaintBoundary replays semantic bounds on cache hit', (tester) {
+    tester.pumpWidget(
+      const Padding(
+        padding: EdgeInsets.only(left: 2, top: 1),
+        child: RepaintBoundary(child: Text('Cached')),
+      ),
+    );
+
+    tester.render(size: const CellSize(20, 4));
+    var node = tester.semantics().single(
+      role: SemanticRole.text,
+      label: 'Cached',
+    );
+    expect(node.bounds, CellRect.fromLTWH(2, 1, 6, 1));
+
+    tester.render(size: const CellSize(20, 4));
+    node = tester.semantics().single(role: SemanticRole.text, label: 'Cached');
+    expect(node.bounds, CellRect.fromLTWH(2, 1, 6, 1));
+  });
+
+  testWidgets('RepaintBoundary translates cached semantic bounds when moved', (
+    tester,
+  ) {
+    tester.pumpWidget(
+      const Padding(
+        padding: EdgeInsets.only(left: 1, top: 1),
+        child: RepaintBoundary(child: Text('Moved')),
+      ),
+    );
+
+    tester.render(size: const CellSize(20, 5));
+    var node = tester.semantics().single(
+      role: SemanticRole.text,
+      label: 'Moved',
+    );
+    expect(node.bounds, CellRect.fromLTWH(1, 1, 5, 1));
+
+    tester.pumpWidget(
+      const Padding(
+        padding: EdgeInsets.only(left: 4, top: 3),
+        child: RepaintBoundary(child: Text('Moved')),
+      ),
+    );
+    tester.render(size: const CellSize(20, 5));
+    node = tester.semantics().single(role: SemanticRole.text, label: 'Moved');
+    expect(node.bounds, CellRect.fromLTWH(4, 3, 5, 1));
   });
 
   testWidgets('Semantics wrapper contributes app-authored node', (tester) {
@@ -34,6 +102,429 @@ void main() {
     expect(button.id, const SemanticNodeId('save-button'));
     expect(button.children.map((node) => node.role), [SemanticRole.text]);
     expect(tree.nodeById(const SemanticNodeId('save-button')), same(button));
+  });
+
+  test('SemanticTree exposes cached node count and id index', () {
+    const first = SemanticNode(
+      id: SemanticNodeId('first'),
+      role: SemanticRole.text,
+      label: 'First',
+    );
+    const second = SemanticNode(
+      id: SemanticNodeId('second'),
+      role: SemanticRole.button,
+      label: 'Second',
+    );
+    const tree = SemanticTree(
+      root: SemanticNode(
+        id: SemanticNodeId('root'),
+        role: SemanticRole.app,
+        children: [first, second],
+      ),
+    );
+
+    expect(tree.nodeCount, 3);
+    expect(tree.nodes.map((node) => node.id.value), [
+      'root',
+      'first',
+      'second',
+    ]);
+    expect(tree.nodesById[const SemanticNodeId('first')], same(first));
+    expect(tree.nodeById(const SemanticNodeId('second')), same(second));
+    expect(tree.nodesById, same(tree.nodesById));
+  });
+
+  test('SemanticTree replaces retained nodes without rebuilding siblings', () {
+    const first = SemanticNode(
+      id: SemanticNodeId('first'),
+      role: SemanticRole.text,
+      label: 'First',
+    );
+    const second = SemanticNode(
+      id: SemanticNodeId('second'),
+      role: SemanticRole.button,
+      label: 'Second',
+    );
+    const replacement = SemanticNode(
+      id: SemanticNodeId('second'),
+      role: SemanticRole.button,
+      label: 'Updated',
+    );
+    const tree = SemanticTree(
+      root: SemanticNode(
+        id: SemanticNodeId('root'),
+        role: SemanticRole.app,
+        children: [first, second],
+      ),
+    );
+
+    final next = tree.replaceNodes({
+      const SemanticNodeId('second'): replacement,
+    });
+
+    expect(next.root.children[0], same(first));
+    expect(next.root.children[1], same(replacement));
+    expect(next.nodeById(const SemanticNodeId('second')), same(replacement));
+    expect(tree.nodeById(const SemanticNodeId('second')), same(second));
+  });
+
+  testWidgets('leaf semantic updates are captured as retained dirty nodes', (
+    tester,
+  ) {
+    tester.owner.semanticDirtyTracker.reset();
+    tester.pumpWidget(
+      const Semantics(
+        id: SemanticNodeId('message'),
+        role: SemanticRole.status,
+        label: 'Before',
+        includeChildren: false,
+        child: SizedBox.fromSize(cols: 6, rows: 1),
+      ),
+    );
+    tester.render(size: const CellSize(20, 4));
+
+    expect(
+      tester.owner.semanticDirtyTracker.takeDirtySnapshot().requiresFullRebuild,
+      isTrue,
+    );
+    tester.owner.semanticDirtyTracker.reset();
+
+    tester.pumpWidget(
+      const Semantics(
+        id: SemanticNodeId('message'),
+        role: SemanticRole.status,
+        label: 'After',
+        includeChildren: false,
+        child: SizedBox.fromSize(cols: 6, rows: 1),
+      ),
+    );
+    tester.render(size: const CellSize(20, 4));
+
+    final SemanticDirtySnapshot snapshot = tester.owner.semanticDirtyTracker
+        .takeDirtySnapshot();
+    expect(snapshot.requiresFullRebuild, isFalse);
+    expect(snapshot.leafUpdates.keys, {const SemanticNodeId('message')});
+    final node = snapshot.leafUpdates[const SemanticNodeId('message')]!;
+    expect(node.role, SemanticRole.status);
+    expect(node.label, 'After');
+    expect(node.bounds, CellRect.fromLTWH(0, 0, 6, 1));
+  });
+
+  testWidgets('sibling semantic insertion escalates to a full rebuild', (
+    tester,
+  ) {
+    tester.pumpWidget(
+      const Column(
+        children: [
+          Semantics(
+            id: SemanticNodeId('one'),
+            role: SemanticRole.status,
+            label: 'One',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+          Semantics(
+            id: SemanticNodeId('two'),
+            role: SemanticRole.status,
+            label: 'Two',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(20, 6));
+    tester.owner.semanticDirtyTracker.reset();
+
+    tester.pumpWidget(
+      const Column(
+        children: [
+          Semantics(
+            id: SemanticNodeId('one'),
+            role: SemanticRole.status,
+            label: 'One',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+          Semantics(
+            id: SemanticNodeId('two'),
+            role: SemanticRole.status,
+            label: 'Two',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+          Semantics(
+            id: SemanticNodeId('three'),
+            role: SemanticRole.status,
+            label: 'Three',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(20, 6));
+
+    expect(
+      tester.owner.semanticDirtyTracker.takeDirtySnapshot().requiresFullRebuild,
+      isTrue,
+    );
+  });
+
+  testWidgets('sibling semantic removal escalates to a full rebuild', (tester) {
+    tester.pumpWidget(
+      const Column(
+        children: [
+          Semantics(
+            id: SemanticNodeId('one'),
+            role: SemanticRole.status,
+            label: 'One',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+          Semantics(
+            id: SemanticNodeId('two'),
+            role: SemanticRole.status,
+            label: 'Two',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(20, 6));
+    tester.owner.semanticDirtyTracker.reset();
+
+    tester.pumpWidget(
+      const Column(
+        children: [
+          Semantics(
+            id: SemanticNodeId('one'),
+            role: SemanticRole.status,
+            label: 'One',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(20, 6));
+
+    expect(
+      tester.owner.semanticDirtyTracker.takeDirtySnapshot().requiresFullRebuild,
+      isTrue,
+    );
+  });
+
+  testWidgets('semantic id change escalates to a full rebuild', (tester) {
+    tester.pumpWidget(
+      const Semantics(
+        id: SemanticNodeId('before'),
+        role: SemanticRole.status,
+        label: 'Stable',
+        includeChildren: false,
+        child: SizedBox.fromSize(cols: 4, rows: 1),
+      ),
+    );
+    tester.render(size: const CellSize(20, 4));
+    tester.owner.semanticDirtyTracker.reset();
+
+    tester.pumpWidget(
+      const Semantics(
+        id: SemanticNodeId('after'),
+        role: SemanticRole.status,
+        label: 'Stable',
+        includeChildren: false,
+        child: SizedBox.fromSize(cols: 4, rows: 1),
+      ),
+    );
+    tester.render(size: const CellSize(20, 4));
+
+    expect(
+      tester.owner.semanticDirtyTracker.takeDirtySnapshot().requiresFullRebuild,
+      isTrue,
+    );
+  });
+
+  testWidgets(
+    'updates on includeChildren semantics escalate to a full rebuild',
+    (tester) {
+      tester.pumpWidget(
+        const Semantics(
+          id: SemanticNodeId('region'),
+          role: SemanticRole.region,
+          label: 'Before',
+          child: Text('content'),
+        ),
+      );
+      tester.render(size: const CellSize(20, 4));
+      tester.owner.semanticDirtyTracker.reset();
+
+      tester.pumpWidget(
+        const Semantics(
+          id: SemanticNodeId('region'),
+          role: SemanticRole.region,
+          label: 'After',
+          child: Text('content'),
+        ),
+      );
+      tester.render(size: const CellSize(20, 4));
+
+      expect(
+        tester.owner.semanticDirtyTracker
+            .takeDirtySnapshot()
+            .requiresFullRebuild,
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets('geometry-only movement is captured as a retained leaf update', (
+    tester,
+  ) {
+    tester.pumpWidget(
+      const Padding(
+        padding: EdgeInsets.only(left: 1),
+        child: Semantics(
+          id: SemanticNodeId('message'),
+          role: SemanticRole.status,
+          label: 'Steady',
+          includeChildren: false,
+          child: SizedBox.fromSize(cols: 6, rows: 1),
+        ),
+      ),
+    );
+    tester.render(size: const CellSize(20, 4));
+    tester.owner.semanticDirtyTracker.reset();
+
+    tester.pumpWidget(
+      const Padding(
+        padding: EdgeInsets.only(left: 4),
+        child: Semantics(
+          id: SemanticNodeId('message'),
+          role: SemanticRole.status,
+          label: 'Steady',
+          includeChildren: false,
+          child: SizedBox.fromSize(cols: 6, rows: 1),
+        ),
+      ),
+    );
+    tester.render(size: const CellSize(20, 4));
+
+    final SemanticDirtySnapshot snapshot = tester.owner.semanticDirtyTracker
+        .takeDirtySnapshot();
+    expect(snapshot.requiresFullRebuild, isFalse);
+    expect(snapshot.leafUpdates.keys, {const SemanticNodeId('message')});
+    expect(
+      snapshot.leafUpdates[const SemanticNodeId('message')]!.bounds,
+      CellRect.fromLTWH(4, 0, 6, 1),
+    );
+  });
+
+  testWidgets('multiple leaf updates in one frame are all captured', (tester) {
+    tester.pumpWidget(
+      const Column(
+        children: [
+          Semantics(
+            id: SemanticNodeId('a'),
+            role: SemanticRole.status,
+            label: 'A1',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+          Semantics(
+            id: SemanticNodeId('b'),
+            role: SemanticRole.status,
+            label: 'B1',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(20, 6));
+    tester.owner.semanticDirtyTracker.reset();
+
+    tester.pumpWidget(
+      const Column(
+        children: [
+          Semantics(
+            id: SemanticNodeId('a'),
+            role: SemanticRole.status,
+            label: 'A2',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+          Semantics(
+            id: SemanticNodeId('b'),
+            role: SemanticRole.status,
+            label: 'B2',
+            includeChildren: false,
+            child: SizedBox.fromSize(cols: 4, rows: 1),
+          ),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(20, 6));
+
+    final SemanticDirtySnapshot snapshot = tester.owner.semanticDirtyTracker
+        .takeDirtySnapshot();
+    expect(snapshot.requiresFullRebuild, isFalse);
+    expect(snapshot.leafUpdates.keys, {
+      const SemanticNodeId('a'),
+      const SemanticNodeId('b'),
+    });
+    expect(snapshot.leafUpdates[const SemanticNodeId('a')]!.label, 'A2');
+    expect(snapshot.leafUpdates[const SemanticNodeId('b')]!.label, 'B2');
+  });
+
+  testWidgets('semantic dirty tracking is isolated per runtime', (tester) {
+    // A second, independent tester: its dirty state must not observe this
+    // tester's semantic updates. With the old static tracker these two
+    // runtimes shared one dirty map.
+    final other = FleuryTester();
+    addTearDown(other.dispose);
+    other.pumpWidget(
+      const Semantics(
+        id: SemanticNodeId('other'),
+        role: SemanticRole.status,
+        label: 'Quiet',
+        includeChildren: false,
+        child: SizedBox.fromSize(cols: 4, rows: 1),
+      ),
+    );
+    other.render(size: const CellSize(20, 4));
+    other.owner.semanticDirtyTracker.reset();
+
+    tester.pumpWidget(
+      const Semantics(
+        id: SemanticNodeId('message'),
+        role: SemanticRole.status,
+        label: 'Before',
+        includeChildren: false,
+        child: SizedBox.fromSize(cols: 6, rows: 1),
+      ),
+    );
+    tester.render(size: const CellSize(20, 4));
+    tester.owner.semanticDirtyTracker.reset();
+
+    tester.pumpWidget(
+      const Semantics(
+        id: SemanticNodeId('message'),
+        role: SemanticRole.status,
+        label: 'After',
+        includeChildren: false,
+        child: SizedBox.fromSize(cols: 6, rows: 1),
+      ),
+    );
+    tester.render(size: const CellSize(20, 4));
+
+    final otherSnapshot = other.owner.semanticDirtyTracker.takeDirtySnapshot();
+    expect(otherSnapshot.isClean, isTrue);
+
+    final snapshot = tester.owner.semanticDirtyTracker.takeDirtySnapshot();
+    expect(snapshot.requiresFullRebuild, isFalse);
+    expect(snapshot.leafUpdates.keys, {const SemanticNodeId('message')});
   });
 
   testWidgets('IndexedStack contributes only visible child semantics', (
@@ -88,6 +579,71 @@ void main() {
     expect(result.status, SemanticActionInvocationStatus.completed);
     expect(result.node?.id, const SemanticNodeId('save-button'));
     expect(calls, 1);
+  });
+
+  testWidgets('runtime semantic action helper dispatches through elements', (
+    tester,
+  ) async {
+    var calls = 0;
+    tester.pumpWidget(
+      Semantics(
+        id: const SemanticNodeId('run-button'),
+        role: SemanticRole.button,
+        label: 'Run',
+        actions: const {SemanticAction.activate},
+        onAction: (action) {
+          expect(action, SemanticAction.activate);
+          calls += 1;
+        },
+        child: const Text('Run'),
+      ),
+    );
+
+    final result = await invokeSemanticActionFromElement(
+      root: tester.root!,
+      tree: tester.semantics(),
+      id: const SemanticNodeId('run-button'),
+      action: SemanticAction.activate,
+    );
+
+    expect(result.status, SemanticActionInvocationStatus.completed);
+    expect(result.node?.id, const SemanticNodeId('run-button'));
+    expect(calls, 1);
+  });
+
+  testWidgets('runtime semantic action helper honors live enabled state', (
+    tester,
+  ) async {
+    var calls = 0;
+    Widget button({required bool enabled}) {
+      return Semantics(
+        id: const SemanticNodeId('run-button'),
+        role: SemanticRole.button,
+        label: 'Run',
+        enabled: enabled,
+        actions: const {SemanticAction.activate},
+        onAction: (action) {
+          expect(action, SemanticAction.activate);
+          calls += 1;
+        },
+        child: const Text('Run'),
+      );
+    }
+
+    tester.pumpWidget(button(enabled: true));
+    final enabledTree = tester.semantics();
+
+    tester.pumpWidget(button(enabled: false));
+
+    final result = await invokeSemanticActionFromElement(
+      root: tester.root!,
+      tree: enabledTree,
+      id: const SemanticNodeId('run-button'),
+      action: SemanticAction.activate,
+    );
+
+    expect(result.status, SemanticActionInvocationStatus.unsupported);
+    expect(calls, 0);
   });
 
   testWidgets('semantic action reports unsupported when no handler exists', (

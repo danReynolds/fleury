@@ -239,7 +239,12 @@ void main() {
             ),
           ],
         ),
-        child: DiffView(diff: '@@ -1 +1 @@\n-old\n+new\n'),
+        // showLineNumbers off so cell coordinates address the diff text
+        // directly (this test asserts line-kind colors, not the gutter).
+        child: DiffView(
+          diff: '@@ -1 +1 @@\n-old\n+new\n',
+          showLineNumbers: false,
+        ),
       ),
     );
 

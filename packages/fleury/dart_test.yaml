@@ -6,3 +6,5 @@
 tags:
   integration:
     timeout: 30s
+  coverage-incompatible:
+    timeout: 30s

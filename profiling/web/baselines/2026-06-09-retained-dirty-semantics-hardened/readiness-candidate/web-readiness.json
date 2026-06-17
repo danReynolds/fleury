@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryWebReadinessAudit",
+  "generatedAt": "2026-06-10T02:59:53.883740Z",
+  "strictPass": false,
+  "checks": [
+    {
+      "id": "frameScoreboard",
+      "label": "Frame performance scoreboard",
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened/readiness-candidate/scoreboard.json",
+      "strictPass": false,
+      "blockers": [
+        "frame scoreboard threshold policy reviewState is candidate; expected reviewed"
+      ],
+      "details": {
+        "scenarioCount": 11,
+        "runCount": 33,
+        "minRuns": 3,
+        "requireComparableRunEnvironment": true,
+        "thresholdPolicyPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened/thresholds.candidate.json",
+        "thresholdPolicyReviewState": "candidate",
+        "thresholdPolicyFingerprint": "fnv1a64:31221901e96a24c3",
+        "thresholdPolicyScenarioCount": 11,
+        "thresholdReviewPath": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened/threshold-review.json"
+      }
+    },
+    {
+      "id": "semanticCoverage",
+      "label": "Semantic coverage audit",
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened/readiness-candidate/semantic-coverage.json",
+      "strictPass": true,
+      "blockers": [],
+      "details": {
+        "scenarioCount": 11,
+        "captureCount": 33,
+        "frameCount": 912,
+        "fallbackCellCount": 0,
+        "fallbackNodeCount": 0
+      }
+    },
+    {
+      "id": "manualValidation",
+      "label": "Manual browser validation",
+      "path": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-09-retained-dirty-semantics-hardened/readiness-candidate/manual-validation-audit.json",
+      "strictPass": true,
+      "blockers": [],
+      "details": {
+        "targetCount": 0,
+        "passedTargetCount": 0,
+        "entryCount": 2,
+        "invalidEntryCount": 0
+      }
+    }
+  ]
+}

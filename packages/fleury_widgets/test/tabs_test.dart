@@ -13,6 +13,25 @@ String _row(FleuryTester tester, int row, {int cols = 20, int rows = 2}) {
   return sb.toString().trimRight();
 }
 
+void _clickAt(FleuryTester tester, {required int col, required int row}) {
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.down,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.up,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+}
+
 Matcher _stateError(String message) {
   return throwsA(
     isA<StateError>().having((error) => error.message, 'message', message),
@@ -52,6 +71,25 @@ void main() {
     );
     expect(_row(tester, 0).contains('One'), isTrue, reason: 'strip on row 0');
     expect(_row(tester, 1), 'first', reason: 'active content on row 1');
+  });
+
+  testWidgets('clicking a tab label switches to it', (tester) {
+    final controller = TabController();
+    addTearDown(controller.dispose);
+    tester.pumpWidget(
+      Tabs(
+        controller: controller,
+        tabs: const [
+          TabItem(label: 'One', content: Text('first')),
+          TabItem(label: 'Two', content: Text('second')),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(20, 2));
+    // Strip on row 0: ' One ' at cols 0-4, ' Two ' at cols 5-9.
+    _clickAt(tester, col: 6, row: 0);
+    expect(controller.index, 1);
+    expect(_row(tester, 1), 'second', reason: 'second tab content now shows');
   });
 
   testWidgets('the active label uses the active style', (tester) {

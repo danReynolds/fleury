@@ -33,11 +33,14 @@ import 'pointer.dart';
 
 /// How a [ListView] handles up/down at the first/last item.
 enum EdgeBehavior {
-  /// The key is consumed (no-op) and focus stays in the list. Default.
+  /// The key is consumed (no-op) and focus stays in the list. Opt in for a
+  /// standalone/primary list that should keep focus at its edges.
   contain,
 
-  /// The key is returned as `ignored` so ancestor `KeyBindings` can
-  /// act on it — e.g. move focus to a sibling pane.
+  /// The key is returned as `ignored` so ancestor `KeyBindings` can act on it
+  /// — e.g. directional focus traversal moves to a sibling. Default: a list
+  /// embedded among other widgets shouldn't trap the arrow keys (the
+  /// boundary-escape convention, matching [moveOrEscape] for non-list widgets).
   bubble,
 }
 
@@ -179,7 +182,7 @@ class ListView extends StatefulWidget {
     this.focusNode,
     required List<Widget> this.children,
     this.autofocus = false,
-    this.edgeBehavior = EdgeBehavior.contain,
+    this.edgeBehavior = EdgeBehavior.bubble,
     this.onSelect,
     this.selectionActive,
   }) : itemCount = null,
@@ -195,7 +198,7 @@ class ListView extends StatefulWidget {
     required int this.itemCount,
     required Widget Function(BuildContext, int, bool) this.itemBuilder,
     this.autofocus = false,
-    this.edgeBehavior = EdgeBehavior.contain,
+    this.edgeBehavior = EdgeBehavior.bubble,
     this.onSelect,
     this.selectionActive,
   }) : assert(itemCount >= 0, 'itemCount must be non-negative'),
@@ -406,6 +409,23 @@ class _ListViewState extends State<ListView> {
     super.dispose();
   }
 
+  /// Pointer press on an item: select it, take focus, and fire [onSelect] —
+  /// the click-to-activate convention, so a mouse reaches the same outcome
+  /// as moving the selection and pressing Enter.
+  ///
+  /// Acts on the press (tap-down), not the release: the press triggers a
+  /// click-to-focus rebuild, and over the serve wire that rebuild lands
+  /// between the down and up events — recreating the item's pointer region
+  /// so a release-time identity match would miss. Selecting on press is
+  /// robust to that and gives instant feedback.
+  void _handleItemTap(int index) {
+    final count = widget.effectiveItemCount;
+    if (index < 0 || index >= count) return;
+    _controller.selectedIndex = index;
+    _focusNode.requestFocus();
+    widget.onSelect?.call(index);
+  }
+
   @override
   Widget build(BuildContext context) {
     final selected = _controller.selectedIndex;
@@ -423,19 +443,28 @@ class _ListViewState extends State<ListView> {
           builder: (context, active) {
             if (widget.children != null) {
               // Eager: build all children upfront, render object picks the
-              // visible window.
+              // visible window. Each is made tappable for pointer selection.
               return _ListViewBody(
                 controller: _controller,
-                children: widget.children!,
+                children: <Widget>[
+                  for (var i = 0; i < widget.children!.length; i++)
+                    GestureDetector(
+                      onTapDown: (_, _) => _handleItemTap(i),
+                      child: widget.children![i],
+                    ),
+                ],
               );
             }
 
             // Lazy: builder + count. Item subtrees are mounted on demand by
-            // the render object during layout.
+            // the render object during layout; wrap each so a press selects it.
             return _LazyListBody(
               controller: _controller,
               itemCount: widget.itemCount!,
-              itemBuilder: widget.itemBuilder!,
+              itemBuilder: (context, index, itemActive) => GestureDetector(
+                onTapDown: (_, _) => _handleItemTap(index),
+                child: widget.itemBuilder!(context, index, itemActive),
+              ),
               selectedIndex: selected,
               selectionActive: active,
             );

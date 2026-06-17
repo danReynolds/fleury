@@ -29,20 +29,39 @@
 //     0x03 RESIZE   payload = `cols=<n>,rows=<n>`
 //
 //   App → Peer
-//     0x10 OUTPUT   payload = raw ANSI bytes to render
+//     0x10 OUTPUT   payload = raw ANSI bytes to render (legacy ANSI host;
+//                            retired-but-reserved — the structured serve
+//                            host emits PLAN/SEMANTICS instead)
+//     0x12 PLAN     payload = binary presentation plan (see remote_codec)
+//     0x13 SEMANTICS payload = UTF-8 JSON semantic snapshot
+//
+//   Peer (serve / shell) → App, structured input
+//     0x14 INPUT_EVENT payload = binary TuiEvent (see remote_codec)
+//     0x15 SEMANTIC_ACTION payload = `<nodeId><action>` (see remote_codec) —
+//                   the peer activating a node in its accessible DOM, so a
+//                   served session is operable through the a11y tree, not just
+//                   the visual grid
 //
 //   Either direction
 //     0x11 BYE      payload = empty, signals a clean shutdown
 //
-// The payload size is a 32-bit unsigned length so a single frame can
-// hold a fat-screen full repaint (a 200×60 buffer with worst-case SGR
-// is well under the 4 GiB ceiling).
+// The INIT payload carries `v=<n>` (protocol version). v2 added the
+// structured PLAN/SEMANTICS/INPUT_EVENT frames; a peer omitting `v`
+// is treated as v1 (ANSI host). The payload size is a 32-bit unsigned
+// length so a single frame can hold a fat-screen full repaint.
 
 import 'dart:convert';
 import 'dart:typed_data';
 
 import '../foundation/geometry.dart';
+import '../semantics/semantics.dart';
 import '../terminal/capabilities.dart';
+import '../terminal/events.dart';
+import 'remote_codec.dart';
+
+/// Current serve/shell protocol version. Bumped when frame semantics
+/// change incompatibly; carried in the INIT handshake.
+const int remoteProtocolVersion = 2;
 
 /// Default remote frame payload cap.
 ///
@@ -67,7 +86,11 @@ enum FrameType {
   input(0x02),
   resize(0x03),
   output(0x10),
-  bye(0x11);
+  bye(0x11),
+  plan(0x12),
+  semantics(0x13),
+  inputEvent(0x14),
+  semanticAction(0x15);
 
   const FrameType(this.code);
   final int code;
@@ -95,12 +118,17 @@ final class InitFrame extends RemoteFrame {
     required this.colorMode,
     required this.imageProtocol,
     required this.tmuxPassthrough,
+    this.protocolVersion = remoteProtocolVersion,
   });
 
   final CellSize size;
   final ColorMode colorMode;
   final ImageProtocol imageProtocol;
   final bool tmuxPassthrough;
+
+  /// Negotiated protocol version. A peer omitting `v` in INIT is read as
+  /// v1 (the legacy ANSI host).
+  final int protocolVersion;
 }
 
 /// Raw input bytes from the remote display — keystrokes, escape
@@ -119,10 +147,45 @@ final class ResizeFrame extends RemoteFrame {
 }
 
 /// Outbound ANSI bytes — the app's diff render. Only ever flows
-/// app → peer.
+/// app → peer. Legacy host; the structured serve host emits [PlanFrame].
 final class OutputFrame extends RemoteFrame {
   OutputFrame(this.bytes);
   final Uint8List bytes;
+}
+
+/// A presentation plan — the structured serve host's per-frame output,
+/// driving a visual surface on the peer instead of ANSI. App → peer.
+final class PlanFrame extends RemoteFrame {
+  const PlanFrame(this.plan);
+  final RemotePlan plan;
+}
+
+/// A semantic snapshot (UTF-8 JSON, the [SemanticInspectionSnapshot] shape)
+/// for the just-rendered frame. App → peer; lets a served session stay
+/// agent-drivable and accessible.
+final class SemanticsFrame extends RemoteFrame {
+  const SemanticsFrame(this.json);
+
+  /// Raw UTF-8 JSON bytes of the semantic snapshot.
+  final Uint8List json;
+}
+
+/// A structured input event from the peer — keystroke, mouse, paste,
+/// resize, composition — dispatched server-side as a [TuiEvent]. Replaces
+/// the raw [InputFrame] byte stream on the structured path. Peer → app.
+final class InputEventFrame extends RemoteFrame {
+  const InputEventFrame(this.event);
+  final TuiEvent event;
+}
+
+/// The peer activated a node in its accessible DOM (a screen reader or agent
+/// driving the semantics, not the visual grid). The host invokes [action] on
+/// the live node [id]. Peer → app; the structured counterpart to the
+/// app → peer [SemanticsFrame].
+final class SemanticActionFrame extends RemoteFrame {
+  const SemanticActionFrame(this.id, this.action);
+  final SemanticNodeId id;
+  final SemanticAction action;
 }
 
 /// Either side signals a clean shutdown. Empty payload.
@@ -140,6 +203,13 @@ Uint8List encodeFrame(RemoteFrame frame) {
       utf8.encode('cols=${f.size.cols},rows=${f.size.rows}'),
     ),
     OutputFrame f => (FrameType.output, f.bytes),
+    PlanFrame f => (FrameType.plan, encodeRemotePlan(f.plan)),
+    SemanticsFrame f => (FrameType.semantics, f.json),
+    InputEventFrame f => (FrameType.inputEvent, encodeInputEvent(f.event)),
+    SemanticActionFrame f => (
+      FrameType.semanticAction,
+      encodeSemanticAction(f.id, f.action),
+    ),
     ByeFrame() => (FrameType.bye, const <int>[]),
   };
   final out = BytesBuilder(copy: false);
@@ -155,7 +225,8 @@ String _encodeInit(InitFrame f) =>
     'rows=${f.size.rows},'
     'color=${f.colorMode.name},'
     'image=${f.imageProtocol.name},'
-    'tmux=${f.tmuxPassthrough ? 1 : 0}';
+    'tmux=${f.tmuxPassthrough ? 1 : 0},'
+    'v=${f.protocolVersion}';
 
 /// Streaming frame decoder. Feed bytes as they arrive from the
 /// transport; pull out complete frames with [drain]. The decoder
@@ -226,6 +297,28 @@ final class FrameDecoder {
         return ResizeFrame(_decodeSize(params, 'RESIZE'));
       case FrameType.output:
         return OutputFrame(payload);
+      case FrameType.plan:
+        try {
+          return PlanFrame(decodeRemotePlan(payload));
+        } on RemoteCodecException catch (e) {
+          throw RemoteProtocolException('PLAN frame: ${e.message}.');
+        }
+      case FrameType.semantics:
+        // Validated when consumed (JSON parse on the peer); carry verbatim.
+        return SemanticsFrame(payload);
+      case FrameType.inputEvent:
+        try {
+          return InputEventFrame(decodeInputEvent(payload));
+        } on RemoteCodecException catch (e) {
+          throw RemoteProtocolException('INPUT_EVENT frame: ${e.message}.');
+        }
+      case FrameType.semanticAction:
+        try {
+          final (:id, :action) = decodeSemanticAction(payload);
+          return SemanticActionFrame(id, action);
+        } on RemoteCodecException catch (e) {
+          throw RemoteProtocolException('SEMANTIC_ACTION frame: ${e.message}.');
+        }
       case FrameType.bye:
         return const ByeFrame();
     }
@@ -255,6 +348,7 @@ InitFrame _decodeInit(String body) {
       orElse: () => ImageProtocol.halfBlock,
     ),
     tmuxPassthrough: params['tmux'] == '1',
+    protocolVersion: int.tryParse(params['v'] ?? '') ?? 1,
   );
 }
 

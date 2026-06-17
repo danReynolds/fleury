@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
 
-import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_host.dart';
 
 /// The xterm.js `Terminal` the host page created and stashed on the global
 /// object as `fleuryTerminal`.

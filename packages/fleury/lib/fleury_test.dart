@@ -35,7 +35,8 @@ export 'src/semantics/semantics.dart'
         SemanticRole,
         SemanticState,
         SemanticTree,
-        Semantics;
+        Semantics,
+        invokeSemanticActionFromElement;
 export 'src/semantics/accessibility.dart'
     show
         AccessibilityNode,
@@ -48,6 +49,8 @@ export 'src/semantics/inspection.dart'
         SemanticInspectionNode,
         SemanticInspectionSnapshot,
         SemanticTreeInspection;
+export 'src/semantics/semantics_owner.dart'
+    show SemanticsOwner, SemanticTreeUpdate;
 export 'src/debug/debug_capture.dart'
     show
         DebugCaptureArtifact,

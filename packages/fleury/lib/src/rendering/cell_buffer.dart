@@ -32,8 +32,57 @@ final class CellBuffer {
 
   CellSize _size;
   List<Cell> _cells;
+  var _damageTrackingEnabled = false;
+  CellRect? _damageBounds;
+  final Set<int> _damageRows = <int>{};
+  var _damageSuppressionDepth = 0;
 
   CellSize get size => _size;
+
+  /// Conservative bounds of cells mutated since the last
+  /// [resetDamageTracking].
+  ///
+  /// This is a paint-to-presenter hint, not a correctness oracle. Callers can
+  /// use it to bound a later diff only when they know every possible visual
+  /// change went through this buffer while tracking was active.
+  CellRect? get damageBounds => _damageBounds;
+
+  /// Starts or resets damage tracking without changing cell contents.
+  void resetDamageTracking() {
+    _damageTrackingEnabled = true;
+    _damageBounds = null;
+    _damageRows.clear();
+  }
+
+  /// Clears and returns the accumulated damage bounds.
+  /// The exact rows written since [resetDamageTracking], independent of the
+  /// single-rect union in [takeDamageBounds]. Scattered writes (disjoint
+  /// rows) stay disjoint here instead of being smeared into one tall rect.
+  Set<int> takeDamageRows() {
+    final result = Set<int>.of(_damageRows);
+    _damageRows.clear();
+    return result;
+  }
+
+  CellRect? takeDamageBounds() {
+    final result = _damageBounds;
+    _damageBounds = null;
+    return result;
+  }
+
+  /// Runs [body] without recording buffer writes as damage.
+  ///
+  /// Used by repaint boundaries when blitting an unchanged cached subtree into
+  /// the frame buffer: the copy is necessary to reconstruct the next frame, but
+  /// it should not force the terminal presenter to scan that region.
+  T withoutDamageTracking<T>(T Function() body) {
+    _damageSuppressionDepth += 1;
+    try {
+      return body();
+    } finally {
+      _damageSuppressionDepth -= 1;
+    }
+  }
 
   /// Returns the cell at [position]. Throws if [position] is out of bounds.
   Cell at(CellOffset position) {
@@ -51,9 +100,27 @@ final class CellBuffer {
 
   /// Clears every cell back to [Cell.empty].
   void clear() {
-    for (var i = 0; i < _cells.length; i++) {
-      _cells[i] = const Cell.empty();
+    _recordDamageRect(0, 0, _size.cols, _size.rows);
+    _cells.fillRange(0, _cells.length, const Cell.empty());
+  }
+
+  /// Scrolls the buffer up by [rows] rows: row `r + rows` moves to row `r`,
+  /// and the bottom [rows] rows are cleared to [Cell.empty]. A non-positive
+  /// or oversized shift clears the whole buffer. Used by the remote client
+  /// to apply a scroll-up frame to its mirror before the residual patches.
+  void scrollUp(int rows) {
+    if (rows <= 0) return;
+    if (rows >= _size.rows) {
+      clear();
+      return;
     }
+    final cols = _size.cols;
+    final retained = (_size.rows - rows) * cols;
+    // setRange handles the overlap correctly here: the destination range
+    // starts before the source range, so the ascending element copy is safe.
+    _cells.setRange(0, retained, _cells, rows * cols);
+    _cells.fillRange(retained, _cells.length, const Cell.empty());
+    _recordDamageRect(0, 0, _size.cols, _size.rows);
   }
 
   /// Resizes the buffer to [newSize], discarding any existing content.
@@ -65,6 +132,8 @@ final class CellBuffer {
       const Cell.empty(),
       growable: false,
     );
+    _damageBounds = null;
+    _recordDamageRect(0, 0, newSize.cols, newSize.rows);
   }
 
   /// Copies every cell from [source] into this buffer with its top-left
@@ -112,6 +181,7 @@ final class CellBuffer {
     final dstCol0 = destOffset.col;
     final dstRow0 = destOffset.row;
     final srcStride = source._size.cols;
+    _recordDamageRect(dstCol0, dstRow0, cols, rows);
 
     // Fast path: full-width rows landing at column 0 of this buffer — the
     // sliced source rows map to a contiguous range in the destination, so
@@ -246,6 +316,8 @@ final class CellBuffer {
   }) {
     final width = widthResolver.widthOfGrapheme(grapheme, profile);
     if (width == 0) return 0;
+    // Include adjacent cells because writing can evict wide-cell neighbors.
+    _recordDamageRect(col - 1, row, width + 2, 1);
 
     final base = row * _size.cols + col;
 
@@ -320,6 +392,7 @@ final class CellBuffer {
     required int height,
   }) {
     if (!_containsColRow(topLeft.col, topLeft.row)) return;
+    _recordDamageRect(topLeft.col, topLeft.row, width, height);
     final r0 = topLeft.row;
     final c0 = topLeft.col;
     final maxR = (r0 + height).clamp(0, _size.rows);
@@ -362,6 +435,26 @@ final class CellBuffer {
 
   bool _containsColRow(int col, int row) =>
       col >= 0 && row >= 0 && col < _size.cols && row < _size.rows;
+
+  void _recordDamageRect(int col, int row, int cols, int rows) {
+    if (!_damageTrackingEnabled ||
+        _damageSuppressionDepth > 0 ||
+        cols <= 0 ||
+        rows <= 0) {
+      return;
+    }
+    final left = col < 0 ? 0 : col;
+    final top = row < 0 ? 0 : row;
+    final right = col + cols > _size.cols ? _size.cols : col + cols;
+    final bottom = row + rows > _size.rows ? _size.rows : row + rows;
+    if (left >= right || top >= bottom) return;
+    final rect = CellRect.fromLTWH(left, top, right - left, bottom - top);
+    final current = _damageBounds;
+    _damageBounds = current == null ? rect : current.union(rect);
+    for (var damagedRow = top; damagedRow < bottom; damagedRow++) {
+      _damageRows.add(damagedRow);
+    }
+  }
 
   void _checkBoundsColRow(int col, int row) {
     if (!_containsColRow(col, row)) {

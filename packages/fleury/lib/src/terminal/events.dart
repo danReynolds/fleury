@@ -153,6 +153,48 @@ final class TextInputEvent extends TuiEvent {
   String toString() => 'TextInputEvent(${_quote(text)})';
 }
 
+/// Browser/native IME composition lifecycle event.
+///
+/// Composition is distinct from ordinary text input: an update replaces the
+/// active composing range without committing an undo transaction, commit
+/// finalizes it, and cancel restores the pre-composition editing value.
+enum TextCompositionEventKind { update, commit, cancel }
+
+/// A text composition lifecycle event emitted by hosts with IME support.
+@immutable
+final class TextCompositionEvent extends TuiEvent {
+  const TextCompositionEvent.update(String text)
+    : this._(kind: TextCompositionEventKind.update, text: text);
+
+  const TextCompositionEvent.commit([String? text])
+    : this._(kind: TextCompositionEventKind.commit, text: text);
+
+  const TextCompositionEvent.cancel()
+    : this._(kind: TextCompositionEventKind.cancel);
+
+  const TextCompositionEvent._({required this.kind, this.text});
+
+  final TextCompositionEventKind kind;
+
+  /// Current composing text for [TextCompositionEventKind.update], optional
+  /// final committed text for [TextCompositionEventKind.commit], and null for
+  /// [TextCompositionEventKind.cancel].
+  final String? text;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TextCompositionEvent && other.kind == kind && other.text == text;
+  @override
+  int get hashCode => Object.hash(TextCompositionEvent, kind, text);
+  @override
+  String toString() {
+    final value = text;
+    return value == null
+        ? 'TextCompositionEvent(${kind.name})'
+        : 'TextCompositionEvent(${kind.name}, ${_quote(value)})';
+  }
+}
+
 /// Which mouse button an event concerns ([none] for wheel/motion).
 enum MouseButton { left, middle, right, none }
 

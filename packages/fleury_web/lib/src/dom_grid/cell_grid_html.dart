@@ -15,12 +15,11 @@
 /// grid can never drift even if the font's natural advance disagrees.
 library;
 
-import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_host.dart';
 
-/// Default foreground/background used when a cell leaves them unset (and as
-/// the swap targets for `inverse`). Match these to the host page's theme.
-const RgbColor kDefaultForeground = RgbColor(208, 208, 208);
-const RgbColor kDefaultBackground = RgbColor(30, 30, 30);
+import 'cell_style_css.dart';
+
+export 'cell_style_css.dart' show kDefaultBackground, kDefaultForeground;
 
 /// The stylesheet the emitted markup relies on. Inject once into the host
 /// page (or a `<style>` in the standalone artifact).
@@ -30,11 +29,15 @@ const String cellGridCss = '''
   font-size: 16px;
   line-height: 1.15;
   white-space: pre;
+  tab-size: 1;
+  font-kerning: none;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "clig" 0;
+  letter-spacing: 0;
   background: rgb(30, 30, 30);
   color: rgb(208, 208, 208);
   display: inline-block;
   padding: 10px 12px;
-  tab-size: 1;
 }
 .fleury-screen .r { display: block; }
 .fleury-screen .w2 { display: inline-block; width: 2ch; overflow: hidden; }
@@ -43,12 +46,11 @@ const String cellGridCss = '''
 
 /// Renders a whole [buffer] frame to an HTML string (a stack of row divs).
 String renderFrameHtml(CellBuffer buffer) {
-  final cols = buffer.size.cols;
-  final rows = buffer.size.rows;
+  const builder = CellSpanBuilder();
   final out = StringBuffer();
-  for (var row = 0; row < rows; row++) {
+  for (final row in builder.buildFrame(buffer)) {
     out.write('<div class="r">');
-    _renderRow(buffer, row, cols, out);
+    renderRowHtml(row, out);
     out.write('</div>');
   }
   return out.toString();
@@ -58,117 +60,82 @@ String renderFrameHtml(CellBuffer buffer) {
 String renderScreenHtml(CellBuffer buffer) =>
     '<div class="fleury-screen">${renderFrameHtml(buffer)}</div>';
 
-void _renderRow(CellBuffer buffer, int row, int cols, StringBuffer out) {
-  final runText = StringBuffer();
-  CellStyle? runStyle;
-
-  void flushRun() {
-    if (runText.isEmpty) {
-      runStyle = null;
-      return;
-    }
-    final css = _styleToCss(runStyle ?? CellStyle.empty);
-    if (css.isEmpty) {
-      out
-        ..write('<span>')
-        ..write(runText)
-        ..write('</span>');
-    } else {
-      out
-        ..write('<span style="')
-        ..write(css)
-        ..write('">')
-        ..write(runText)
-        ..write('</span>');
-    }
-    runText.clear();
-    runStyle = null;
-  }
-
-  var col = 0;
-  while (col < cols) {
-    final cell = buffer.atColRow(col, row);
-    final role = cell.role;
-
-    if (role == CellRole.empty) {
-      // A blank cell is one space of the default style. Coalesce with a
-      // running default-style span; otherwise flush first.
-      if (runStyle != null && runStyle != CellStyle.empty) flushRun();
-      runStyle = CellStyle.empty;
-      runText.write(' ');
-      col += 1;
-    } else if (role == CellRole.continuation) {
-      // The trailing half of a wide grapheme — already drawn by its leading
-      // cell. Emit nothing.
-      col += 1;
-    } else if (role == CellRole.leading) {
-      final wide =
-          col + 1 < cols &&
-          buffer.atColRow(col + 1, row).role == CellRole.continuation;
-      if (wide) {
-        flushRun();
-        final css = _styleToCss(cell.style);
-        out.write('<span class="w2"');
-        if (css.isNotEmpty) {
-          out
-            ..write(' style="')
-            ..write(css)
-            ..write('"');
-        }
+/// Renders a [RowSpanModel] to HTML.
+void renderRowHtml(RowSpanModel row, StringBuffer out) {
+  for (final run in row.runs) {
+    switch (run.kind) {
+      case CellRunKind.text:
+      case CellRunKind.emptyText:
+        _writeTextSpan(run, out);
+      case CellRunKind.boxDrawing:
+        _writeBoxDrawingSpan(run, out);
+      case CellRunKind.wideText:
+        _writeWideSpan(run, out);
+      case CellRunKind.protocolPlaceholder:
         out
-          ..write('>')
-          ..write(_escape(cell.grapheme!))
+          ..write('<span class="proto" title="')
+          ..write(protocolPlaceholderTitle)
+          ..write('" ')
+          ..write(protocolPlaceholderKindAttribute)
+          ..write('="')
+          ..write(protocolPlaceholderKind)
+          ..write('" ')
+          ..write(protocolPlaceholderUnsupportedAttribute)
+          ..write('="')
+          ..write(protocolPlaceholderUnsupported)
+          ..write('">')
+          ..write(protocolPlaceholderGlyph)
           ..write('</span>');
-        col += 1; // the continuation cell is skipped on the next iteration
-      } else {
-        if (runStyle != null && runStyle != cell.style) flushRun();
-        runStyle = cell.style;
-        runText.write(_escape(cell.grapheme!));
-        col += 1;
-      }
-    } else if (role == CellRole.protocolAnchor) {
-      // Inline-image protocol region (Kitty/Sixel/iTerm2). Not yet decoded
-      // in the spike — emit a visible placeholder so the grid stays aligned.
-      flushRun();
-      out.write('<span class="proto" title="inline image">▩</span>');
-      col += 1;
-    } else {
-      // protocolCovered — owned by its anchor, draw nothing.
-      col += 1;
     }
   }
-  flushRun();
 }
 
-String _styleToCss(CellStyle style) {
-  Color? fg = style.foreground;
-  Color? bg = style.background;
-  if (style.inverse) {
-    final swappedFg = bg ?? kDefaultBackground;
-    final swappedBg = fg ?? kDefaultForeground;
-    fg = swappedFg;
-    bg = swappedBg;
+void _writeTextSpan(CellSpanRun run, StringBuffer out) {
+  final css = cellStyleToCss(run.style);
+  if (css.isEmpty) {
+    out
+      ..write('<span>')
+      ..write(_escape(run.text))
+      ..write('</span>');
+  } else {
+    out
+      ..write('<span style="')
+      ..write(css)
+      ..write('">')
+      ..write(_escape(run.text))
+      ..write('</span>');
   }
-
-  final parts = <String>[];
-  if (fg != null) parts.add('color:${_rgb(fg)}');
-  if (bg != null) parts.add('background-color:${_rgb(bg)}');
-  if (style.bold) parts.add('font-weight:700');
-  if (style.dim) parts.add('opacity:.6');
-  if (style.italic) parts.add('font-style:italic');
-  final decorations = <String>[
-    if (style.underline) 'underline',
-    if (style.strikethrough) 'line-through',
-  ];
-  if (decorations.isNotEmpty) {
-    parts.add('text-decoration:${decorations.join(' ')}');
-  }
-  return parts.join(';');
 }
 
-String _rgb(Color color) {
-  final c = color.toRgb();
-  return 'rgb(${c.r}, ${c.g}, ${c.b})';
+void _writeBoxDrawingSpan(CellSpanRun run, StringBuffer out) {
+  final mask = boxDrawingMask(run.text);
+  if (mask == null) {
+    _writeTextSpan(run, out);
+    return;
+  }
+  // Spaces hold the cells; the line is painted with CSS gradients so the
+  // border tiles crisply instead of relying on the (non-tiling) font glyph.
+  out
+    ..write('<span style="')
+    ..write(boxDrawingCss(run.style, mask))
+    ..write('">')
+    ..write(''.padRight(run.widthCols, ' '))
+    ..write('</span>');
+}
+
+void _writeWideSpan(CellSpanRun run, StringBuffer out) {
+  final css = cellStyleToCss(run.style);
+  out.write('<span class="w2"');
+  if (css.isNotEmpty) {
+    out
+      ..write(' style="')
+      ..write(css)
+      ..write('"');
+  }
+  out
+    ..write('>')
+    ..write(_escape(run.text))
+    ..write('</span>');
 }
 
 String _escape(String s) {

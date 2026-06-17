@@ -152,7 +152,8 @@ class _ToolCallCardState extends State<ToolCallCard> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          'Tool: ${_sanitizeToolText(record.displayTitle)} [${record.status.name}]',
+          '${_statusGlyph(record.status)} ${_sanitizeToolText(record.displayTitle)}'
+          ' [${record.status.name}]',
           style: _styleForStatus(record.status),
         ),
         if (record.description != null)
@@ -311,6 +312,17 @@ String _truncateGraphemes(String text, int? maxLineLength) {
   final characters = text.characters;
   if (characters.length <= maxLineLength) return text;
   return characters.take(maxLineLength).toString();
+}
+
+// A scannable, color-independent status marker (matches the TaskGraph set).
+String _statusGlyph(ToolCallStatus status) {
+  return switch (status) {
+    ToolCallStatus.queued => '[ ]',
+    ToolCallStatus.running => '[>]',
+    ToolCallStatus.succeeded => '[x]',
+    ToolCallStatus.failed => '[!]',
+    ToolCallStatus.cancelled => '[-]',
+  };
 }
 
 CellStyle _styleForStatus(ToolCallStatus status) {

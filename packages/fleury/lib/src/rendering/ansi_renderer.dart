@@ -2,6 +2,7 @@ import '../foundation/geometry.dart';
 import '../terminal/capabilities.dart';
 import 'cell.dart';
 import 'cell_buffer.dart';
+import 'scroll_detection.dart';
 
 /// A destination for ANSI bytes. Production wiring sends them to stdout via
 /// `IoSinkAnsiSink`; tests capture them with [StringAnsiSink].
@@ -77,6 +78,23 @@ final class AnsiRenderer {
   static const _beginSyncUpdate = '\x1B[?2026h';
   static const _endSyncUpdate = '\x1B[?2026l';
 
+  /// Diffs at or below this many bytes skip the BSU/ESU wrapper.
+  ///
+  /// Synchronized output exists to stop the terminal rendering a partially
+  /// applied frame; a payload this small arrives (and paints) in one read,
+  /// so the 16-byte wrapper is a third of the frame for nothing. Wire
+  /// transcripts showed sync overhead at 3-5x peers on sparse-update
+  /// scenarios.
+  static const _syncSkipThresholdBytes = 48;
+
+  /// Wraps [payload] in synchronized-output markers when warranted.
+  String _wrapSync(String payload) {
+    if (!synchronizedOutput || payload.length <= _syncSkipThresholdBytes) {
+      return payload;
+    }
+    return '$_beginSyncUpdate$payload$_endSyncUpdate';
+  }
+
   /// Writes the diff between [previous] and [next] to [sink].
   ///
   /// Both buffers must have the same size; an assertion fires otherwise.
@@ -85,10 +103,16 @@ final class AnsiRenderer {
   /// [StringBuffer] and flushed to [sink] in a single `write` call.
   /// This reduces per-frame `sink.write` calls (and the IOSink queue
   /// operations they trigger downstream) from O(dirty cells) to one.
+  /// [dirtyBounds], when provided, must conservatively contain every cell that
+  /// can differ between [previous] and [next]. The renderer then scans only
+  /// that rectangle and skips whole-screen passes (diff stats, scroll
+  /// detection). Pass null whenever layout, removal, scrolling, or any other
+  /// unsafe mutation can change cells outside the known painted region.
   void renderDiff(
     CellBuffer previous,
     CellBuffer next,
     AnsiSink sink, {
+    CellRect? dirtyBounds,
     void Function(int col, int row)? onDirtyCell,
   }) {
     assert(
@@ -96,11 +120,28 @@ final class AnsiRenderer {
       'AnsiRenderer.renderDiff: buffer sizes differ '
       '(previous=${previous.size}, next=${next.size}).',
     );
-    final screenStats = _screenDiffStats(previous, next);
+    final diffBounds = dirtyBounds?.intersect(
+      CellRect(offset: CellOffset.zero, size: next.size),
+    );
+    if (dirtyBounds != null && diffBounds == null) return;
+    if (diffBounds != null) {
+      final buf = StringBuffer();
+      final anyDirty = _appendCellDiff(
+        previous,
+        next,
+        buf,
+        bounds: diffBounds,
+        onDirtyCell: onDirtyCell,
+      );
+      if (!anyDirty) return;
+      sink.write(_wrapSync(buf.toString()));
+      return;
+    }
+    final screenStats = screenDiffStats(previous, next);
     if (screenStats.dirtyCells == 0) return;
 
     final size = next.size;
-    final scrollUpRows = _detectBeneficialScrollUp(previous, next, screenStats);
+    final scrollUpRows = detectBeneficialScrollUp(previous, next, screenStats);
     if (scrollUpRows != null) {
       final scrolledPrevious = CellBuffer(size);
       scrolledPrevious.copyRectFrom(
@@ -112,11 +153,9 @@ final class AnsiRenderer {
         const CellOffset(0, 0),
       );
       final buf = StringBuffer();
-      if (synchronizedOutput) buf.write(_beginSyncUpdate);
       buf.write(_scrollUp(scrollUpRows));
       _appendCellDiff(scrolledPrevious, next, buf, onDirtyCell: onDirtyCell);
-      if (synchronizedOutput) buf.write(_endSyncUpdate);
-      sink.write(buf.toString());
+      sink.write(_wrapSync(buf.toString()));
       return;
     }
 
@@ -128,20 +167,21 @@ final class AnsiRenderer {
       onDirtyCell: onDirtyCell,
     );
     if (!anyDirty) return;
-    final output = StringBuffer();
-    if (synchronizedOutput) output.write(_beginSyncUpdate);
-    output.write(buf);
-    if (synchronizedOutput) output.write(_endSyncUpdate);
-    sink.write(output.toString());
+    sink.write(_wrapSync(buf.toString()));
   }
 
   bool _appendCellDiff(
     CellBuffer previous,
     CellBuffer next,
     StringBuffer buf, {
+    CellRect? bounds,
     void Function(int col, int row)? onDirtyCell,
   }) {
     final size = next.size;
+    final top = bounds?.top ?? 0;
+    final bottom = bounds?.bottom ?? size.rows;
+    final left = bounds?.left ?? 0;
+    final right = bounds?.right ?? size.cols;
     int? cursorRow;
     int? cursorCol;
     CellStyle? emittedStyle;
@@ -176,8 +216,11 @@ final class AnsiRenderer {
       // more than CPU here, and cursor moves are the dominant frame
       // overhead on scroll/dashboard/sparse updates.
       final fromCol = cursorCol;
-      if (cursorRow == row && fromCol != null && fromCol < col) {
-        final gap = _plainAsciiGap(
+      if (cursorRow == row &&
+          fromCol != null &&
+          fromCol < col &&
+          !styleResetRequired) {
+        final gap = _gapRewrite(
           previous,
           next,
           row,
@@ -187,9 +230,13 @@ final class AnsiRenderer {
         );
         if (gap != null) {
           final move = _cursorMove(cursorRow, cursorCol, row, col);
-          if (gap.length < move.length) {
-            buf.write(gap);
+          if (gap.bytes.length < move.length) {
+            buf.write(gap.bytes);
             cursorCol = col;
+            if (gap.emittedSgr) {
+              emittedStyle = gap.endStyle;
+              styleBytesEmitted = true;
+            }
           }
         }
       }
@@ -256,8 +303,8 @@ final class AnsiRenderer {
       cursorCol = col + (isWide ? 2 : 1);
     }
 
-    for (var row = 0; row < size.rows; row++) {
-      for (var col = 0; col < size.cols; col++) {
+    for (var row = top; row < bottom; row++) {
+      for (var col = left; col < right; col++) {
         appendCell(col, row);
       }
     }
@@ -384,7 +431,16 @@ final class AnsiRenderer {
 
   static String _scrollUp(int rows) => rows == 1 ? '\x1B[S' : '\x1B[${rows}S';
 
-  static String? _plainAsciiGap(
+  /// ASCII text (with any required SGR transitions) that can be rewritten in
+  /// place of a cursor move across an unchanged gap.
+  ///
+  /// Unlike a same-style-only rewrite, style boundaries inside the gap are
+  /// allowed: the SGR delta bytes are included in the returned payload, and
+  /// the caller compares total bytes against the cursor move. Wire
+  /// transcripts show forward cursor moves are fleury's dominant overhead;
+  /// peers win these scenarios by rewriting through lines rather than
+  /// hopping precisely between dirty cells.
+  ({String bytes, CellStyle endStyle, bool emittedSgr})? _gapRewrite(
     CellBuffer previous,
     CellBuffer next,
     int row,
@@ -393,14 +449,24 @@ final class AnsiRenderer {
     CellStyle? emittedStyle,
   ) {
     if (fromCol >= toCol) return null;
-    if (emittedStyle != null && emittedStyle != CellStyle.empty) return null;
+    var currentStyle = emittedStyle ?? CellStyle.empty;
+    var emittedSgr = false;
     final out = StringBuffer();
     for (var col = fromCol; col < toCol; col++) {
       final cell = next.atColRow(col, row);
       if (previous.atColRow(col, row) != cell) return null;
-      if (cell.style != CellStyle.empty) return null;
       switch (cell.role) {
         case CellRole.empty:
+          // Rewriting an empty cell as a space is only exact when the
+          // current style's background/inverse matches the cell's (empty)
+          // style; require an exact style match like content cells.
+          if (cell.style != currentStyle) {
+            final encoded = _styleDelta(currentStyle, cell.style);
+            if (encoded == null) return null;
+            out.write(encoded);
+            currentStyle = cell.style;
+            emittedSgr = true;
+          }
           out.write(' ');
         case CellRole.leading:
           final grapheme = cell.grapheme!;
@@ -409,6 +475,13 @@ final class AnsiRenderer {
               col + 1 < next.size.cols &&
               next.atColRow(col + 1, row).role == CellRole.continuation;
           if (isWide) return null;
+          if (cell.style != currentStyle) {
+            final encoded = _styleDelta(currentStyle, cell.style);
+            if (encoded == null) return null;
+            out.write(encoded);
+            currentStyle = cell.style;
+            emittedSgr = true;
+          }
           out.write(grapheme);
         case CellRole.continuation:
         case CellRole.protocolAnchor:
@@ -416,7 +489,24 @@ final class AnsiRenderer {
           return null;
       }
     }
-    return out.toString();
+    return (
+      bytes: out.toString(),
+      endStyle: currentStyle,
+      emittedSgr: emittedSgr,
+    );
+  }
+
+  /// SGR delta from [from] to [to] without a reset, or null when [to] is the
+  /// empty style and a reset would be required (resets inside a gap rewrite
+  /// would interact with [_appendCellDiff]'s reset bookkeeping).
+  String? _styleDelta(CellStyle from, CellStyle to) {
+    if (to == CellStyle.empty) {
+      if (from == CellStyle.empty) return '';
+      // Transitioning to empty needs a reset; keep gap rewrites reset-free.
+      return null;
+    }
+    final encoded = _encodeStyleTransition(from, to, resetFirst: false);
+    return encoded;
   }
 
   static bool _isAscii(String text) {
@@ -424,105 +514,6 @@ final class AnsiRenderer {
       if (text.codeUnitAt(i) > 0x7F) return false;
     }
     return true;
-  }
-
-  static int? _detectBeneficialScrollUp(
-    CellBuffer previous,
-    CellBuffer next,
-    ({int dirtyCells, bool hasProtocolCells}) stats,
-  ) {
-    final size = previous.size;
-    if (size != next.size || size.rows < 2) return null;
-
-    if (stats.hasProtocolCells) return null;
-    final normalDirty = stats.dirtyCells;
-    var bestShift = 0;
-    var bestDirty = normalDirty;
-    for (var shift = 1; shift < size.rows; shift++) {
-      final retainedNonEmpty = _rowHasNonEmpty(previous, shift);
-      if (!retainedNonEmpty) continue;
-      if (!_rowsEqual(previous, shift, next, 0)) continue;
-      var shiftedDirty = 0;
-      var abandoned = false;
-      for (var row = 1; row < size.rows - shift; row++) {
-        for (var col = 0; col < size.cols; col++) {
-          final oldCell = previous.atColRow(col, row + shift);
-          final newCell = next.atColRow(col, row);
-          if (oldCell != newCell) {
-            shiftedDirty++;
-            if (shiftedDirty >= bestDirty) {
-              abandoned = true;
-              break;
-            }
-          }
-        }
-        if (abandoned) break;
-      }
-      if (abandoned) continue;
-      for (var row = size.rows - shift; row < size.rows; row++) {
-        for (var col = 0; col < size.cols; col++) {
-          if (next.atColRow(col, row) != const Cell.empty()) {
-            shiftedDirty++;
-            if (shiftedDirty >= bestDirty) {
-              abandoned = true;
-              break;
-            }
-          }
-        }
-        if (abandoned) break;
-      }
-      if (!abandoned && shiftedDirty < bestDirty) {
-        bestShift = shift;
-        bestDirty = shiftedDirty;
-      }
-    }
-    return bestShift == 0 ? null : bestShift;
-  }
-
-  static ({int dirtyCells, bool hasProtocolCells}) _screenDiffStats(
-    CellBuffer previous,
-    CellBuffer next,
-  ) {
-    final size = previous.size;
-    var dirty = 0;
-    var hasProtocolCells = false;
-    for (var row = 0; row < size.rows; row++) {
-      for (var col = 0; col < size.cols; col++) {
-        final previousCell = previous.atColRow(col, row);
-        final nextCell = next.atColRow(col, row);
-        if (previousCell != nextCell) dirty++;
-        hasProtocolCells =
-            hasProtocolCells ||
-            previousCell.role == CellRole.protocolAnchor ||
-            previousCell.role == CellRole.protocolCovered ||
-            nextCell.role == CellRole.protocolAnchor ||
-            nextCell.role == CellRole.protocolCovered;
-      }
-    }
-    return (dirtyCells: dirty, hasProtocolCells: hasProtocolCells);
-  }
-
-  static bool _rowsEqual(
-    CellBuffer previous,
-    int previousRow,
-    CellBuffer next,
-    int nextRow,
-  ) {
-    final size = previous.size;
-    for (var col = 0; col < size.cols; col++) {
-      if (previous.atColRow(col, previousRow) != next.atColRow(col, nextRow)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  static bool _rowHasNonEmpty(CellBuffer buffer, int row) {
-    final size = buffer.size;
-    for (var col = 0; col < size.cols; col++) {
-      if (buffer.atColRow(col, row).role != CellRole.empty) return true;
-    }
-    return false;
   }
 
   // ---- Style encoding ----------------------------------------------------

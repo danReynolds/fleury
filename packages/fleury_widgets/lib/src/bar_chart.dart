@@ -74,6 +74,10 @@ class Bar {
 ///   Bar.stacked('host-b', [55, 25,  5]),
 /// ]);
 /// ```
+///
+/// Semantics: contributes one summary node (chart role, label, and data
+/// state) by design. Terminal charts are announced and asserted as
+/// summaries; per-element semantic children are intentionally omitted.
 class BarChart extends StatelessWidget {
   const BarChart({
     super.key,
@@ -86,6 +90,7 @@ class BarChart extends StatelessWidget {
     this.showLabels = true,
     this.showValues = false,
     this.showLegend = false,
+    this.showYAxis = false,
     this.semanticLabel = 'Bar chart',
   });
 
@@ -127,6 +132,13 @@ class BarChart extends StatelessWidget {
   /// empty or the chart is too narrow to fit it.
   final bool showLegend;
 
+  /// Reserve a left gutter and draw a value axis (max at the top, 0 at
+  /// the baseline, the midpoint between). Off by default — many compact
+  /// bar charts rely on per-bar value labels ([showValues]) instead — but
+  /// a shared axis is easier to read across many bars. Quietly degrades
+  /// to no gutter when the chart is too narrow.
+  final bool showYAxis;
+
   /// Label exposed through the semantic app graph.
   final String semanticLabel;
 
@@ -148,6 +160,7 @@ class BarChart extends StatelessWidget {
         showLabels: showLabels,
         showValues: showValues,
         showLegend: showLegend,
+        showYAxis: showYAxis,
         segmentLabels: segmentLabels,
         palette: p,
         defaultColor: p.isNotEmpty ? p.first : cs.primary,
@@ -187,6 +200,7 @@ class _RawBarChart extends LeafRenderObjectWidget {
     required this.showLabels,
     required this.showValues,
     required this.showLegend,
+    required this.showYAxis,
     required this.segmentLabels,
     required this.palette,
     required this.defaultColor,
@@ -200,6 +214,7 @@ class _RawBarChart extends LeafRenderObjectWidget {
   final bool showLabels;
   final bool showValues;
   final bool showLegend;
+  final bool showYAxis;
   final List<String>? segmentLabels;
   final List<Color> palette;
   final Color defaultColor;
@@ -214,6 +229,7 @@ class _RawBarChart extends LeafRenderObjectWidget {
     showLabels: showLabels,
     showValues: showValues,
     showLegend: showLegend,
+    showYAxis: showYAxis,
     segmentLabels: segmentLabels,
     palette: palette,
     defaultColor: defaultColor,
@@ -233,6 +249,7 @@ class _RawBarChart extends LeafRenderObjectWidget {
       ..showLabels = showLabels
       ..showValues = showValues
       ..showLegend = showLegend
+      ..showYAxis = showYAxis
       ..segmentLabels = segmentLabels
       ..palette = palette
       ..defaultColor = defaultColor
@@ -250,6 +267,7 @@ class RenderBarChart extends RenderObject {
     required bool showLabels,
     required bool showValues,
     required bool showLegend,
+    required bool showYAxis,
     required List<String>? segmentLabels,
     required List<Color> palette,
     required Color defaultColor,
@@ -261,6 +279,7 @@ class RenderBarChart extends RenderObject {
        _showLabels = showLabels,
        _showValues = showValues,
        _showLegend = showLegend,
+       _showYAxis = showYAxis,
        _segmentLabels = segmentLabels,
        _palette = palette,
        _defaultColor = defaultColor,
@@ -322,6 +341,13 @@ class RenderBarChart extends RenderObject {
     markNeedsLayout();
   }
 
+  bool _showYAxis;
+  set showYAxis(bool v) {
+    if (_showYAxis == v) return;
+    _showYAxis = v;
+    markNeedsLayout();
+  }
+
   List<String>? _segmentLabels;
   set segmentLabels(List<String>? v) {
     if (identical(_segmentLabels, v)) return;
@@ -353,6 +379,9 @@ class RenderBarChart extends RenderObject {
   static const _partials = ['', '▁', '▂', '▃', '▄', '▅', '▆', '▇'];
   static const _full = '█';
 
+  /// Width reserved on the left for value-axis labels when [showYAxis].
+  static const _yAxisGutter = 6;
+
   bool get _legendActive {
     if (!_showLegend) return false;
     final labels = _segmentLabels;
@@ -364,7 +393,8 @@ class RenderBarChart extends RenderObject {
 
   int get _naturalWidth {
     if (_bars.isEmpty) return 0;
-    return _bars.length * _barWidth + (_bars.length - 1) * _gap;
+    final bars = _bars.length * _barWidth + (_bars.length - 1) * _gap;
+    return bars + (_showYAxis ? _yAxisGutter : 0);
   }
 
   @override
@@ -427,11 +457,18 @@ class RenderBarChart extends RenderObject {
       _paintLegend(buffer, legendRow, offset.col, w);
     }
 
+    // Reserve a value-axis gutter on the left when there's room for it;
+    // degrade to no gutter (bars flush-left) when the box is too narrow.
+    final gutter = (_showYAxis && w > _yAxisGutter + 1) ? _yAxisGutter : 0;
+    if (gutter > 0) {
+      _paintYAxis(buffer, offset, chartTopRow, chartRows, topVal);
+    }
+
     // Clip bars that start past the buffer's right edge — at tight
     // widths the natural width exceeds the box, and we silently drop
     // overflowing bars rather than crashing on out-of-bounds writes.
     final rightEdge = offset.col + w;
-    var col = offset.col;
+    var col = offset.col + gutter;
     for (var i = 0; i < _bars.length; i++) {
       if (i > 0) col += _gap;
       if (col >= rightEdge) break;
@@ -597,6 +634,64 @@ class RenderBarChart extends RenderObject {
         buffer.writeGrapheme(CellOffset(c, row), label[j], style: _labelStyle);
       }
       col += label.length;
+    }
+  }
+
+  /// Value axis in the left gutter: max at the chart top, 0 at the
+  /// baseline, and the midpoint between (when there's room). Bars grow
+  /// from 0, so the axis is always zero-based. Labels right-align inside
+  /// the gutter with one column of breathing room before the bars.
+  void _paintYAxis(
+    CellBuffer buffer,
+    CellOffset offset,
+    int chartTopRow,
+    int chartRows,
+    double topVal,
+  ) {
+    final labelWidth = _yAxisGutter - 1;
+    _writeRightAligned(
+      buffer,
+      offset.col,
+      chartTopRow,
+      labelWidth,
+      _formatValue(topVal),
+      _labelStyle,
+    );
+    if (chartRows >= 3) {
+      _writeRightAligned(
+        buffer,
+        offset.col,
+        chartTopRow + chartRows ~/ 2,
+        labelWidth,
+        _formatValue(topVal / 2),
+        _labelStyle,
+      );
+    }
+    _writeRightAligned(
+      buffer,
+      offset.col,
+      chartTopRow + chartRows - 1,
+      labelWidth,
+      _formatValue(0),
+      _labelStyle,
+    );
+  }
+
+  static void _writeRightAligned(
+    CellBuffer buffer,
+    int leftCol,
+    int row,
+    int width,
+    String text,
+    CellStyle style,
+  ) {
+    if (row < 0 || row >= buffer.size.rows) return;
+    final clipped = text.length > width ? text.substring(0, width) : text;
+    final startCol = leftCol + width - clipped.length;
+    for (var i = 0; i < clipped.length; i++) {
+      final col = startCol + i;
+      if (col < 0 || col >= buffer.size.cols) continue;
+      buffer.writeGrapheme(CellOffset(col, row), clipped[i], style: style);
     }
   }
 

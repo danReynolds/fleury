@@ -9,6 +9,7 @@
 //   - Children removed: their State.dispose runs.
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/widgets/framework.dart' show WidgetUpdatePruner;
 import 'package:test/test.dart';
 
 /// Stateful widget that records its instance hashCode in `lifecycle`.
@@ -38,6 +39,41 @@ class _TrackableState extends State<_Trackable> {
 
   @override
   Widget build(BuildContext context) => Text(widget.label);
+}
+
+class _SwitchingRenderRoot extends StatelessWidget {
+  const _SwitchingRenderRoot({required this.nested});
+
+  final bool nested;
+
+  @override
+  Widget build(BuildContext context) {
+    if (nested) {
+      return Row(children: const [Text('nested')]);
+    }
+    return const Text('leaf');
+  }
+}
+
+class _PrunableCounter extends StatelessWidget implements WidgetUpdatePruner {
+  const _PrunableCounter({required this.label, required this.builds});
+
+  final String label;
+  final List<String> builds;
+
+  @override
+  bool hasEquivalentWidgetConfiguration(Widget other) {
+    return other is _PrunableCounter &&
+        key == other.key &&
+        label == other.label &&
+        identical(builds, other.builds);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    builds.add(label);
+    return Text(label);
+  }
 }
 
 /// Helper: find every _TrackableState under [root], in tree order.
@@ -179,6 +215,94 @@ void main() {
       expect(statesAfter[0].value, 1);
       expect(statesAfter[0].widget.label, 'b');
       expect(statesAfter[1].widget.label, 'a');
+    });
+
+    test('same-position component update can change first render root', () {
+      final owner = BuildOwner();
+      final root = owner.mountRoot(
+        Row(children: const [_SwitchingRenderRoot(nested: false)]),
+      );
+      final parentRender = owner.findRootRenderObject(root) as RenderFlex;
+      expect(parentRender.children.single, isNot(isA<RenderFlex>()));
+
+      owner.updateRoot(
+        root,
+        Row(children: const [_SwitchingRenderRoot(nested: true)]),
+      );
+
+      expect(parentRender.children.single, isA<RenderFlex>());
+    });
+
+    test('value-equivalent prunable children skip rebuild', () {
+      final builds = <String>[];
+      final owner = BuildOwner();
+      final root = owner.mountRoot(
+        Row(
+          children: [_PrunableCounter(label: 'same', builds: builds)],
+        ),
+      );
+
+      expect(builds, ['same']);
+
+      owner.updateRoot(
+        root,
+        Row(
+          children: [_PrunableCounter(label: 'same', builds: builds)],
+        ),
+      );
+
+      expect(builds, ['same']);
+
+      owner.updateRoot(
+        root,
+        Row(
+          children: [_PrunableCounter(label: 'changed', builds: builds)],
+        ),
+      );
+
+      expect(builds, ['same', 'changed']);
+    });
+
+    test('RepaintBoundary prunes equivalent child configuration', () {
+      final builds = <String>[];
+      final owner = BuildOwner();
+      final root = owner.mountRoot(
+        Row(
+          children: [
+            RepaintBoundary(
+              child: _PrunableCounter(label: 'same', builds: builds),
+            ),
+          ],
+        ),
+      );
+
+      expect(builds, ['same']);
+
+      owner.updateRoot(
+        root,
+        Row(
+          children: [
+            RepaintBoundary(
+              child: _PrunableCounter(label: 'same', builds: builds),
+            ),
+          ],
+        ),
+      );
+
+      expect(builds, ['same']);
+
+      owner.updateRoot(
+        root,
+        Row(
+          children: [
+            RepaintBoundary(
+              child: _PrunableCounter(label: 'changed', builds: builds),
+            ),
+          ],
+        ),
+      );
+
+      expect(builds, ['same', 'changed']);
     });
   });
 

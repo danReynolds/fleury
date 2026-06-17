@@ -179,6 +179,16 @@ List<StorybookTarget> storybookTargets({
   final targets = <StorybookTarget>[];
   for (final story in selectedStories) {
     if (variantId != null) {
+      if (variantId == 'default') {
+        targets.add(
+          StorybookTarget(
+            story: story,
+            variant: null,
+            values: story.initialControlValues(overrides: controlOverrides),
+          ),
+        );
+        continue;
+      }
       final variant = story.variants
           .where((variant) => variant.id == variantId)
           .firstOrNull;

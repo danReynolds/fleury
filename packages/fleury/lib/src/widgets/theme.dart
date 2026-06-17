@@ -17,7 +17,7 @@ final class ColorScheme {
   const ColorScheme({
     this.foreground,
     this.background,
-    this.primary = const AnsiColor(4),
+    this.primary = Colors.mint,
     this.success = const AnsiColor(2),
     this.warning = const AnsiColor(3),
     this.error = const AnsiColor(1),
@@ -37,7 +37,9 @@ final class ColorScheme {
   final Color error;
   final Color info;
 
-  /// The standard 16-color-safe scheme (terminal-default fg/bg).
+  /// The default scheme: terminal-default fg/bg, ANSI status roles, and a
+  /// cool spring-green [primary] ([Colors.mint]) — the one truecolor role,
+  /// which downsamples cleanly on 256/16-color terminals.
   static const ColorScheme standard = ColorScheme();
 
   /// Builds a scheme from a single accent [seed]. Unlike Material's

@@ -9,3 +9,4 @@ dependencies:
   fleury_widgets:
     path: ../packages/fleury_widgets
   ffi: ^2.1.0
+  vm_service: ^15.0.0

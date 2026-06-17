@@ -25,6 +25,23 @@ void main() {
       expect(calls, [1, 12]);
     });
 
+    testWidgets('keeps the caret in place when a character is rejected', (
+      tester,
+    ) {
+      final ctrl = TextEditingController(text: '12');
+      tester.pumpWidget(
+        NumberInput(controller: ctrl, autofocus: true, onChanged: (_) {}),
+      );
+      ctrl.selection = 1; // caret between '1' and '2'
+      tester.type('a'); // rejected: "1a2" reverts to "12"
+      expect(ctrl.text, '12');
+      expect(
+        ctrl.selection,
+        1,
+        reason: 'caret stays where the bad char would have gone, not the end',
+      );
+    });
+
     testWidgets('accepts a leading - when allowNegative is true', (tester) {
       final calls = <num?>[];
       tester.pumpWidget(NumberInput(autofocus: true, onChanged: calls.add));

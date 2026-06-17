@@ -29,6 +29,10 @@ enum CalendarWeekStart { sunday, monday }
 /// Months are labeled along the top row at the first week containing
 /// each new month. Days are labeled in the left gutter (Mon/Wed/Fri by
 /// default — every other row, the typical compact form).
+///
+/// Semantics: contributes one summary node (chart role, label, and data
+/// state) by design. Terminal charts are announced and asserted as
+/// summaries; per-element semantic children are intentionally omitted.
 class CalendarHeatmap extends StatelessWidget {
   const CalendarHeatmap({
     super.key,
@@ -42,6 +46,7 @@ class CalendarHeatmap extends StatelessWidget {
     this.weekStartsOn = CalendarWeekStart.sunday,
     this.showMonthLabels = true,
     this.showDayLabels = true,
+    this.showLegend = false,
     this.semanticLabel = 'Calendar heatmap',
   }) : assert(cellWidth >= 1, 'cellWidth must be >= 1');
 
@@ -79,6 +84,11 @@ class CalendarHeatmap extends StatelessWidget {
   /// Draw day-of-week labels along the left gutter (Mon/Wed/Fri).
   final bool showDayLabels;
 
+  /// When true, append a `· ░ ▒ ▓ █  less – more` scale strip below the grid.
+  /// GitHub substitutes hover counts for the scale; a TUI can't hover, so the
+  /// legend is the only way to map a glyph to its value.
+  final bool showLegend;
+
   /// Label exposed through the semantic app graph.
   final String semanticLabel;
 
@@ -96,6 +106,19 @@ class CalendarHeatmap extends StatelessWidget {
       max: max,
       weekStartsOn: weekStartsOn,
     );
+    final grid = _RawCalendarHeatmap(
+      values: normalizedValues,
+      start: normalizedStart,
+      end: normalizedEnd,
+      min: min,
+      max: max,
+      color: color ?? theme.colorScheme.primary,
+      cellWidth: cellWidth,
+      weekStartsOn: weekStartsOn,
+      labelStyle: theme.mutedStyle,
+      showMonthLabels: showMonthLabels,
+      showDayLabels: showDayLabels,
+    );
     return Semantics(
       role: SemanticRole.chart,
       label: semanticLabel,
@@ -111,19 +134,16 @@ class CalendarHeatmap extends StatelessWidget {
         'chartEndDate': _dateLabel(normalizedEnd),
         'chartWeekStart': weekStartsOn.name,
       }),
-      child: _RawCalendarHeatmap(
-        values: normalizedValues,
-        start: normalizedStart,
-        end: normalizedEnd,
-        min: min,
-        max: max,
-        color: color ?? theme.colorScheme.primary,
-        cellWidth: cellWidth,
-        weekStartsOn: weekStartsOn,
-        labelStyle: theme.mutedStyle,
-        showMonthLabels: showMonthLabels,
-        showDayLabels: showDayLabels,
-      ),
+      child: showLegend
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                grid,
+                Text('·░▒▓█  less – more', style: theme.mutedStyle),
+              ],
+            )
+          : grid,
     );
   }
 }

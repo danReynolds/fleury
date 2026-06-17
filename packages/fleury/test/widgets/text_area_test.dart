@@ -165,6 +165,28 @@ void main() {
   });
 
   group('horizontal scrolling', () {
+    testWidgets('publishes focused caret geometry after scrolling', (tester) {
+      final focusNode = FocusNode(debugLabel: 'area-caret');
+      addTearDown(focusNode.dispose);
+      final ctl = TextEditingController(text: 'r0\nr1\nr2\nr3\nr4')
+        ..selection = 'r0\nr1\nr2\nr3\nr4'.length;
+      tester.pumpWidget(
+        SizedBox(
+          width: 4,
+          height: 3,
+          child: TextArea(
+            controller: ctl,
+            focusNode: focusNode,
+            autofocus: true,
+          ),
+        ),
+      );
+
+      tester.render(size: const CellSize(4, 3));
+
+      expect(focusNode.caretRect, CellRect.fromLTWH(2, 2, 1, 1));
+    });
+
     testWidgets('keeps the trailing cursor visible in bounded width', (tester) {
       final ctl = TextEditingController(text: 'abcdef');
       tester.pumpWidget(TextArea(controller: ctl, autofocus: true));

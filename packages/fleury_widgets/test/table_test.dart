@@ -27,6 +27,25 @@ Matcher _stateError(String message) {
   );
 }
 
+void _clickAt(FleuryTester tester, {required int col, required int row}) {
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.down,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.up,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+}
+
 class _CountingCell extends RenderObject {
   _CountingCell(this.nextSize);
 
@@ -353,6 +372,41 @@ void main() {
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
       tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
       expect(picked, 1);
+    });
+
+    testWidgets('clicking a body row selects it', (tester) {
+      final c = TableController();
+      int? picked;
+      tester.pumpWidget(people(controller: c, onSelect: (i) => picked = i));
+      tester.render(size: const CellSize(8, 5));
+      // Header on row 0, body rows at 1..3; render row 2 is body index 1 (Bo).
+      _clickAt(tester, col: 0, row: 2);
+      expect(c.selectedIndex, 1, reason: 'click selected the clicked row');
+      expect(picked, isNull, reason: 'click selects but does not activate');
+    });
+
+    testWidgets('wheel scroll moves the selection', (tester) {
+      final c = TableController();
+      tester.pumpWidget(people(controller: c));
+      tester.render(size: const CellSize(8, 5));
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.scrollDown,
+          button: MouseButton.none,
+          col: 0,
+          row: 1,
+        ),
+      );
+      expect(c.selectedIndex, 1, reason: 'scrolled down one row');
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.scrollUp,
+          button: MouseButton.none,
+          col: 0,
+          row: 1,
+        ),
+      );
+      expect(c.selectedIndex, 0, reason: 'scrolled back up');
     });
 
     testWidgets('a controller drives selection programmatically', (tester) {

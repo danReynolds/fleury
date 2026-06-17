@@ -1,0 +1,64 @@
+/// Fleury host SPI.
+///
+/// Import this when building a platform host for Fleury rather than an
+/// application UI. The library re-exports `fleury_core.dart` plus the
+/// host-facing runtime, damage, and semantic-update contracts that native and
+/// browser runners need to mount, render, present, and mirror a Fleury tree.
+///
+/// This library is still platform-neutral and free of `dart:io`.
+library;
+
+export 'fleury_core.dart';
+export 'src/rendering/render_object.dart' show RenderDamageTracker;
+export 'src/rendering/scroll_detection.dart'
+    show detectBeneficialScrollUp, rowsEqual, screenDiffStats;
+export 'src/rendering/cell_span.dart'
+    show
+        CellRunKind,
+        CellSpanBuilder,
+        CellSpanRun,
+        RowSpanModel,
+        WidthCorrection,
+        boxDrawingMask,
+        boxSegmentEast,
+        boxSegmentNorth,
+        boxSegmentSouth,
+        boxSegmentWest,
+        protocolPlaceholderGlyph,
+        protocolPlaceholderKind,
+        protocolPlaceholderKindAttribute,
+        protocolPlaceholderTitle,
+        protocolPlaceholderUnsupported,
+        protocolPlaceholderUnsupportedAttribute;
+export 'src/runtime/frame_presentation.dart'
+    show
+        FrameDamageSource,
+        FramePresentationDamage,
+        FramePresentationPlan,
+        FramePresentationPlanner;
+export 'src/widgets/framework.dart' show BuildFlushStats;
+export 'src/runtime/frame_scheduler.dart'
+    show FrameFlushScheduler, FrameRenderCallback, FrameScheduler;
+export 'src/runtime/input_dispatcher.dart' show InputDispatcher;
+export 'src/runtime/tui_frame_loop.dart'
+    show
+        TuiDirtyRowRange,
+        TuiDirtyRows,
+        TuiFrameDamage,
+        TuiFrameLoop,
+        TuiFramePaintCallback,
+        TuiRenderedFrame;
+export 'src/runtime/tui_runtime.dart' show TuiRuntime;
+export 'src/semantics/semantics_owner.dart'
+    show SemanticsOwner, SemanticTreeUpdate, debugSemanticTreeDivergence;
+export 'src/semantics/semantics.dart'
+    show
+        SemanticActionContributor,
+        SemanticActionInvocationResult,
+        SemanticActionInvocationStatus,
+        SemanticContributor,
+        SemanticDirtyOwner,
+        SemanticDirtySnapshot,
+        SemanticDirtyTracker,
+        SemanticsElement,
+        invokeSemanticActionFromElement;

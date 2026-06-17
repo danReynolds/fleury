@@ -87,7 +87,8 @@ class TextArea extends StatefulWidget {
   State<TextArea> createState() => _TextAreaState();
 }
 
-class _TextAreaState extends State<TextArea> implements TextInputClaimant {
+class _TextAreaState extends State<TextArea>
+    implements TextInputClaimant, TextCompositionClaimant {
   late TextEditingController _controller;
   late FocusNode _focusNode;
   bool _ownsController = false;
@@ -106,6 +107,7 @@ class _TextAreaState extends State<TextArea> implements TextInputClaimant {
         widget.focusNode ??
         FocusNode(debugLabel: 'TextArea', canRequestFocus: widget.enabled);
     _focusNode.textInputClaimant = this;
+    _focusNode.textCompositionClaimant = this;
     _ownsFocusNode = widget.focusNode == null;
   }
 
@@ -122,11 +124,13 @@ class _TextAreaState extends State<TextArea> implements TextInputClaimant {
     }
     if (widget.focusNode != oldWidget.focusNode) {
       _focusNode.textInputClaimant = null;
+      _focusNode.textCompositionClaimant = null;
       if (_ownsFocusNode) _focusNode.dispose();
       _focusNode =
           widget.focusNode ??
           FocusNode(debugLabel: 'TextArea', canRequestFocus: widget.enabled);
       _focusNode.textInputClaimant = this;
+      _focusNode.textCompositionClaimant = this;
       _ownsFocusNode = widget.focusNode == null;
     }
     if (_ownsFocusNode) {
@@ -277,6 +281,33 @@ class _TextAreaState extends State<TextArea> implements TextInputClaimant {
     return KeyEventResult.handled;
   }
 
+  @override
+  KeyEventResult onTextCompositionUpdate(String text) {
+    if (!widget.enabled) return KeyEventResult.ignored;
+    if (widget.readOnly) return KeyEventResult.handled;
+    _cancelScheduledPaste();
+    _controller.updateComposingText(text);
+    return KeyEventResult.handled;
+  }
+
+  @override
+  KeyEventResult onTextCompositionCommit(String? text) {
+    if (!widget.enabled) return KeyEventResult.ignored;
+    if (widget.readOnly) return KeyEventResult.handled;
+    _cancelScheduledPaste();
+    _controller.commitComposing(text: text);
+    return KeyEventResult.handled;
+  }
+
+  @override
+  KeyEventResult onTextCompositionCancel() {
+    if (!widget.enabled) return KeyEventResult.ignored;
+    if (widget.readOnly) return KeyEventResult.handled;
+    _cancelScheduledPaste();
+    _controller.cancelComposing();
+    return KeyEventResult.handled;
+  }
+
   KeyEventResult _handleKey(KeyEvent event) {
     if (!widget.enabled) return KeyEventResult.ignored;
     final action = widget.keymap.resolve(event);
@@ -305,6 +336,26 @@ class _TextAreaState extends State<TextArea> implements TextInputClaimant {
         if (!_canEdit) return KeyEventResult.handled;
         _cancelScheduledPaste();
         _controller.delete();
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.killToLineEnd:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _controller.killToLineEnd();
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.killToLineStart:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _controller.killToLineStart();
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.killWordLeft:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _controller.killWordLeft();
+        return KeyEventResult.handled;
+      case TextEditingKeyAction.yank:
+        if (!_canEdit) return KeyEventResult.handled;
+        _cancelScheduledPaste();
+        _controller.yank();
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveLeft:
         _cancelScheduledPaste();
@@ -371,6 +422,7 @@ class _TextAreaState extends State<TextArea> implements TextInputClaimant {
     _controller.removeListener(_onChange);
     if (_ownsController) _controller.dispose();
     _focusNode.textInputClaimant = null;
+    _focusNode.textCompositionClaimant = null;
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
   }
@@ -415,6 +467,7 @@ class _TextAreaState extends State<TextArea> implements TextInputClaimant {
         canRequestFocus: widget.enabled,
         onKey: _handleKey,
         child: _TextAreaDisplay(
+          focusNode: _focusNode,
           text: _controller.text,
           selection: _controller.textSelection,
           placeholder: widget.placeholder,
@@ -434,6 +487,7 @@ class _TextAreaState extends State<TextArea> implements TextInputClaimant {
 
 class _TextAreaDisplay extends LeafRenderObjectWidget {
   const _TextAreaDisplay({
+    required this.focusNode,
     required this.text,
     required this.selection,
     required this.placeholder,
@@ -443,6 +497,7 @@ class _TextAreaDisplay extends LeafRenderObjectWidget {
     required this.cursorVisible,
   });
 
+  final FocusNode focusNode;
   final String text;
   final TextSelection selection;
   final String placeholder;
@@ -453,6 +508,7 @@ class _TextAreaDisplay extends LeafRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) => RenderTextArea(
+    focusNode: focusNode,
     text: text,
     selection: selection,
     placeholder: placeholder,
@@ -468,6 +524,7 @@ class _TextAreaDisplay extends LeafRenderObjectWidget {
     covariant RenderTextArea renderObject,
   ) {
     renderObject
+      ..focusNode = focusNode
       ..text = text
       ..selection = selection
       ..placeholder = placeholder
@@ -482,6 +539,7 @@ class _TextAreaDisplay extends LeafRenderObjectWidget {
 /// visible; paints a one-cell cursor at the selection.
 class RenderTextArea extends RenderObject {
   RenderTextArea({
+    required FocusNode focusNode,
     required String text,
     required TextSelection selection,
     String placeholder = '',
@@ -491,7 +549,8 @@ class RenderTextArea extends RenderObject {
     bool cursorVisible = true,
     WidthResolver widthResolver = const DefaultWidthResolver(),
     TerminalProfile profile = TerminalProfile.standard,
-  }) : _text = _sanitize(text),
+  }) : _focusNode = focusNode,
+       _text = _sanitize(text),
        _selection = selection.normalizeForText(_sanitize(text)),
        _placeholder = _sanitize(placeholder),
        _placeholderStyle = placeholderStyle,
@@ -504,6 +563,7 @@ class RenderTextArea extends RenderObject {
   static String _sanitize(String value) =>
       value.split('\n').map(sanitizeForDisplay).join('\n');
 
+  FocusNode _focusNode;
   String _text;
   TextSelection _selection;
   String _placeholder;
@@ -515,6 +575,13 @@ class RenderTextArea extends RenderObject {
   final TerminalProfile _profile;
   int _scrollTop = 0;
   int _scrollLeft = 0;
+
+  set focusNode(FocusNode value) {
+    if (identical(_focusNode, value)) return;
+    _focusNode.caretRect = null;
+    _focusNode = value;
+    markNeedsPaintOnly();
+  }
 
   set text(String value) {
     final s = _sanitize(value);
@@ -666,7 +733,11 @@ class RenderTextArea extends RenderObject {
     CellOffset? screenOffset,
     CellRect? clipRect,
   }) {
-    if (size.isEmpty) return;
+    if (size.isEmpty) {
+      _focusNode.caretRect = null;
+      return;
+    }
+    _focusNode.caretRect = _caretRect(screenOffset ?? offset, clipRect);
 
     // Empty: paint the (possibly multi-line) placeholder, with the
     // cursor over the very first cell when visible.
@@ -765,6 +836,28 @@ class RenderTextArea extends RenderObject {
         );
       }
     }
+  }
+
+  CellRect? _caretRect(CellOffset paintOffset, CellRect? clipRect) {
+    final lines = _showPlaceholder ? _placeholder.split('\n') : _lines;
+    if (lines.isEmpty) return null;
+    final (cursorLine, cursorCol) = _cursorLineCol(lines);
+    if (cursorLine < _scrollTop || cursorLine >= _scrollTop + size.rows) {
+      return null;
+    }
+    final line = lines[cursorLine];
+    final cursorCell = _displayCellForLineOffset(line, cursorCol);
+    final visibleStart = _scrollLeft;
+    final visibleEnd = _scrollLeft + size.cols;
+    if (cursorCell < visibleStart || cursorCell >= visibleEnd) return null;
+    final rect = CellRect(
+      offset: CellOffset(
+        paintOffset.col + cursorCell - visibleStart,
+        paintOffset.row + cursorLine - _scrollTop,
+      ),
+      size: const CellSize(1, 1),
+    );
+    return clipRect == null ? rect : rect.intersect(clipRect);
   }
 
   int _lineStartOffset(List<String> lines, int lineIndex) {

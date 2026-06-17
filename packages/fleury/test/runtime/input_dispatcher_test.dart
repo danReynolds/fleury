@@ -56,7 +56,8 @@ class _ClaimLog extends StatefulWidget {
   State<_ClaimLog> createState() => _ClaimLogState();
 }
 
-class _ClaimLogState extends State<_ClaimLog> implements TextInputClaimant {
+class _ClaimLogState extends State<_ClaimLog>
+    implements TextInputClaimant, TextCompositionClaimant {
   late final FocusNode _node;
 
   @override
@@ -64,6 +65,7 @@ class _ClaimLogState extends State<_ClaimLog> implements TextInputClaimant {
     super.initState();
     _node = FocusNode(debugLabel: 'claim-log');
     _node.textInputClaimant = this;
+    _node.textCompositionClaimant = this;
   }
 
   @override
@@ -79,8 +81,27 @@ class _ClaimLogState extends State<_ClaimLog> implements TextInputClaimant {
   }
 
   @override
+  KeyEventResult onTextCompositionUpdate(String text) {
+    widget.events.add('composition-update:$text');
+    return KeyEventResult.handled;
+  }
+
+  @override
+  KeyEventResult onTextCompositionCommit(String? text) {
+    widget.events.add('composition-commit:${text ?? '<active>'}');
+    return KeyEventResult.handled;
+  }
+
+  @override
+  KeyEventResult onTextCompositionCancel() {
+    widget.events.add('composition-cancel');
+    return KeyEventResult.handled;
+  }
+
+  @override
   void dispose() {
     _node.textInputClaimant = null;
+    _node.textCompositionClaimant = null;
     _node.dispose();
     super.dispose();
   }
@@ -514,6 +535,80 @@ void main() {
       h.dispatcher.dispatch(const PasteEvent('b\nc'));
 
       expect(events, ['text:a', 'paste:b\nc']);
+    });
+
+    test('16e. IME composition dispatches to composition claimant', () {
+      final events = <String>[];
+      final h = _TestHarness();
+      h.mountRoot(_ClaimLog(events: events));
+
+      h.dispatcher.dispatch(const TextCompositionEvent.update('あ'));
+      h.dispatcher.dispatch(const TextCompositionEvent.commit('亜'));
+      h.dispatcher.dispatch(const TextCompositionEvent.cancel());
+
+      expect(events, [
+        'composition-update:あ',
+        'composition-commit:亜',
+        'composition-cancel',
+      ]);
+    });
+
+    test(
+      '16f. Unclaimed IME composition does not fall through to bindings',
+      () {
+        var activations = 0;
+        final h = _TestHarness();
+        h.mountRoot(
+          KeyBindings(
+            bindings: [
+              KeyBinding(KeyChord.char('a'), onEvent: (_) => activations += 1),
+            ],
+            child: const Focus(autofocus: true, child: EmptyBox()),
+          ),
+        );
+
+        final result = h.dispatcher.dispatch(
+          const TextCompositionEvent.commit('a'),
+        );
+
+        expect(result, KeyEventResult.ignored);
+        expect(activations, 0);
+      },
+    );
+
+    test('16g. TextInput applies IME update, commit, and cancel', () {
+      final controller = TextEditingController(text: 'git ');
+      final h = _TestHarness();
+      h.mountRoot(TextInput(controller: controller, autofocus: true));
+
+      h.dispatcher.dispatch(const TextCompositionEvent.update('che'));
+
+      expect(controller.text, 'git che');
+      expect(controller.hasComposingRange, isTrue);
+
+      h.dispatcher.dispatch(const TextCompositionEvent.commit('checkout'));
+
+      expect(controller.text, 'git checkout');
+      expect(controller.hasComposingRange, isFalse);
+
+      h.dispatcher.dispatch(const TextCompositionEvent.update(' branch'));
+      expect(controller.text, 'git checkout branch');
+      h.dispatcher.dispatch(const TextCompositionEvent.cancel());
+
+      expect(controller.text, 'git checkout');
+      expect(controller.hasComposingRange, isFalse);
+    });
+
+    test('16h. TextArea preserves multiline IME commits', () {
+      final controller = TextEditingController(text: 'one\n');
+      final h = _TestHarness();
+      h.mountRoot(TextArea(controller: controller, autofocus: true));
+
+      h.dispatcher.dispatch(const TextCompositionEvent.update('two'));
+      h.dispatcher.dispatch(const TextCompositionEvent.commit('two\nthree'));
+
+      expect(controller.text, 'one\ntwo\nthree');
+      expect(controller.hasComposingRange, isFalse);
     });
   });
 

@@ -49,6 +49,9 @@ final _faClose = _libc.lookupFunction<Int32 Function(Pointer<Void>, Int32),
 final _read = _libc.lookupFunction<
     IntPtr Function(Int32, Pointer<Uint8>, IntPtr),
     int Function(int, Pointer<Uint8>, int)>('read');
+final _write = _libc.lookupFunction<
+    IntPtr Function(Int32, Pointer<Uint8>, IntPtr),
+    int Function(int, Pointer<Uint8>, int)>('write');
 final _close =
     _libc.lookupFunction<Int32 Function(Int32), int Function(int)>('close');
 final _fcntlGet =
@@ -95,6 +98,7 @@ const _fSetfl = 4;
 const _fGetfl = 3;
 final int _oNonblock = Platform.isMacOS ? 0x0004 : 0x800;
 const _wnohang = 1;
+const _sigint = 2;
 const _sigterm = 15;
 const _sigkill = 9;
 const _sigwinch = 28;
@@ -165,6 +169,35 @@ List<({int cols, int rows})> _parseResizeSequence(String value) {
   return List.unmodifiable(sizes);
 }
 
+Uint8List _parseHexBytes(String value) {
+  final cleaned = value
+      .replaceAll(RegExp(r'0x', caseSensitive: false), '')
+      .replaceAll(RegExp(r'[\s,;:_-]+'), '');
+  if (cleaned.isEmpty) return Uint8List(0);
+  if (cleaned.length.isOdd || !RegExp(r'^[0-9a-fA-F]+$').hasMatch(cleaned)) {
+    _fail('--input-hex must contain an even number of hex digits');
+  }
+  return Uint8List.fromList(<int>[
+    for (var i = 0; i < cleaned.length; i += 2)
+      int.parse(cleaned.substring(i, i + 2), radix: 16),
+  ]);
+}
+
+Set<int> _parseExitCodes(String value) {
+  final codes = <int>{};
+  for (final raw in value.split(',')) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) continue;
+    final parsed = int.tryParse(trimmed);
+    if (parsed == null || parsed < 0 || parsed > 255) {
+      _fail('--allow-exit-codes must contain comma-separated 0..255 integers');
+    }
+    codes.add(parsed!);
+  }
+  if (codes.isEmpty) _fail('--allow-exit-codes must not be empty');
+  return codes;
+}
+
 void _setPtyWindowSize(
   int fd,
   Pointer<Uint16> win,
@@ -187,6 +220,13 @@ void main(List<String> args) {
   String? uiMode;
   var resizeSequence = const <({int cols, int rows})>[];
   var resizeIntervalMs = 50;
+  Uint8List? inputBytes;
+  var inputDelayMs = 50;
+  int? interruptAfterMs;
+  int? interruptAfterOutputMs;
+  int? terminateAfterMs;
+  int? terminateAfterOutputMs;
+  final allowedExitCodes = <int>{0};
   final cmd = <String>[];
   for (var i = 0; i < args.length; i++) {
     final a = args[i];
@@ -215,6 +255,37 @@ void main(List<String> args) {
       if (resizeIntervalMs <= 0) {
         _fail('--resize-interval-ms must be a positive integer');
       }
+    } else if (a == '--input-hex') {
+      inputBytes = _parseHexBytes(args[++i]);
+    } else if (a == '--input-delay-ms') {
+      inputDelayMs = int.parse(args[++i]);
+      if (inputDelayMs < 0) {
+        _fail('--input-delay-ms must be a non-negative integer');
+      }
+    } else if (a == '--interrupt-after-ms') {
+      interruptAfterMs = int.parse(args[++i]);
+      if (interruptAfterMs <= 0) {
+        _fail('--interrupt-after-ms must be a positive integer');
+      }
+    } else if (a == '--interrupt-after-output-ms') {
+      interruptAfterOutputMs = int.parse(args[++i]);
+      if (interruptAfterOutputMs <= 0) {
+        _fail('--interrupt-after-output-ms must be a positive integer');
+      }
+    } else if (a == '--terminate-after-ms') {
+      terminateAfterMs = int.parse(args[++i]);
+      if (terminateAfterMs <= 0) {
+        _fail('--terminate-after-ms must be a positive integer');
+      }
+    } else if (a == '--terminate-after-output-ms') {
+      terminateAfterOutputMs = int.parse(args[++i]);
+      if (terminateAfterOutputMs <= 0) {
+        _fail('--terminate-after-output-ms must be a positive integer');
+      }
+    } else if (a == '--allow-exit-code') {
+      allowedExitCodes.addAll(_parseExitCodes(args[++i]));
+    } else if (a == '--allow-exit-codes') {
+      allowedExitCodes.addAll(_parseExitCodes(args[++i]));
     } else if (a == '--') {
       cmd.addAll(args.sublist(i + 1));
       break;
@@ -302,9 +373,51 @@ void main(List<String> args) {
     int? childStatus;
     var nextResize = 0;
     final resizeWin = arena<Uint16>(4);
+    var inputSent = inputBytes == null || inputBytes.isEmpty;
+    var interruptSent = false;
+    var terminateSent = false;
+    Pointer<Uint8>? inputBuffer;
+    if (inputBytes != null && inputBytes.isNotEmpty) {
+      inputBuffer = arena<Uint8>(inputBytes.length)
+        ..asTypedList(inputBytes.length).setAll(0, inputBytes);
+    }
+    final signals = <Map<String, Object?>>[];
 
     while (true) {
       final elapsedMs = sw.elapsedMicroseconds / 1000.0;
+      if (!inputSent && elapsedMs >= inputDelayMs) {
+        final bytes = inputBytes!;
+        final n = _write(masterFd, inputBuffer!, bytes.length);
+        if (n != bytes.length) {
+          _fail('failed to write ${bytes.length} input bytes to PTY');
+        }
+        inputSent = true;
+      }
+      final outputAgeMs = ttfb == null ? null : elapsedMs - ttfb;
+      if (!interruptSent &&
+          ((interruptAfterMs != null && elapsedMs >= interruptAfterMs) ||
+              (interruptAfterOutputMs != null &&
+                  outputAgeMs != null &&
+                  outputAgeMs >= interruptAfterOutputMs))) {
+        _kill(pid, _sigint);
+        signals.add(<String, Object?>{
+          'tMs': double.parse(elapsedMs.toStringAsFixed(3)),
+          'signal': 'sigint',
+        });
+        interruptSent = true;
+      }
+      if (!terminateSent &&
+          ((terminateAfterMs != null && elapsedMs >= terminateAfterMs) ||
+              (terminateAfterOutputMs != null &&
+                  outputAgeMs != null &&
+                  outputAgeMs >= terminateAfterOutputMs))) {
+        _kill(pid, _sigterm);
+        signals.add(<String, Object?>{
+          'tMs': double.parse(elapsedMs.toStringAsFixed(3)),
+          'signal': 'sigterm',
+        });
+        terminateSent = true;
+      }
       if (elapsedMs > timeout * 1000) {
         timedOut = true;
         _kill(pid, _sigterm);
@@ -377,12 +490,20 @@ void main(List<String> args) {
       if (uiMode != null) 'uiMode': uiMode,
       if (logicalFrameCount != null) 'logicalFrameCount': logicalFrameCount,
       if (resizes.isNotEmpty) 'resizes': resizes,
+      if (inputBytes != null && inputBytes.isNotEmpty)
+        'input': <String, Object?>{
+          'delayMs': inputDelayMs,
+          'bytes': inputBytes.length,
+        },
+      if (signals.isNotEmpty) 'signals': signals,
       if (runtimeMarkers != null) 'runtimeMarkers': runtimeMarkers,
       'reads': reads,
     }));
     stdout.writeln(
         'captured ${bytes.length} bytes in ${reads.length} reads -> $out.bin');
-    if (!timedOut && decoded.exitCode != null && decoded.exitCode != 0) {
+    if (!timedOut &&
+        decoded.exitCode != null &&
+        !allowedExitCodes.contains(decoded.exitCode)) {
       _fail('child exited with code ${decoded.exitCode} for "${cmd.first}"');
     }
     if (!timedOut && decoded.signal != null) {

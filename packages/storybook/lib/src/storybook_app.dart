@@ -12,7 +12,7 @@ class StorybookApp extends StatefulWidget {
     this.initialStoryId,
     this.initialVariantId,
     this.initialControlValues = const <String, Object?>{},
-    this.initialTheme = StorybookThemeMode.terminal,
+    this.initialTheme = StorybookThemeMode.cyber,
     this.initialViewport = StorybookViewportPreset.fit,
   }) : stories = stories ?? storybookStories;
 
@@ -40,24 +40,36 @@ class _StorybookAppState extends State<StorybookApp> {
   final Map<String, int> _variantIndexes = <String, int>{};
   final List<StoryAction> _actionLog = <StoryAction>[];
 
+  /// Esc anywhere focuses the widget list — the "step out to navigation" hatch
+  /// that complements arrow boundary-escape and Tab.
+  final FocusNode _selectorFocusNode = FocusNode(debugLabel: 'widget-list');
+
+  @override
+  void dispose() {
+    _selectorFocusNode.dispose();
+    super.dispose();
+  }
+
   Story get _selectedStory => widget.stories[_selectedIndex];
 
   StoryVariant? get _selectedVariant {
     final variants = _selectedStory.variants;
     if (variants.isEmpty) return null;
-    final index = _variantIndexes[_selectedStory.id] ?? 0;
-    return variants[index.clamp(0, variants.length - 1)];
+    final slot = _variantIndexes[_selectedStory.id] ?? 0;
+    if (slot <= 0) return null;
+    return variants[(slot - 1).clamp(0, variants.length - 1)];
   }
 
   Map<String, Object?> get _selectedControlValues {
     final story = _selectedStory;
     final variant = _selectedVariant;
     return _controlValues.putIfAbsent(_targetKey(story, variant), () {
+      final selectedVariantId = variant?.id ?? 'default';
+      final initialVariantId = widget.initialVariantId ?? 'default';
       final appliesInitialControls =
           widget.initialControlValues.isNotEmpty &&
           story.id == (widget.initialStoryId ?? widget.stories.first.id) &&
-          (widget.initialVariantId == null ||
-              widget.initialVariantId == variant?.id);
+          initialVariantId == selectedVariantId;
       return story.initialControlValues(
         variant: variant,
         overrides: appliesInitialControls
@@ -81,10 +93,14 @@ class _StorybookAppState extends State<StorybookApp> {
     final initialVariantId = widget.initialVariantId;
     if (initialVariantId != null && widget.stories.isNotEmpty) {
       final story = widget.stories[_selectedIndex];
-      final variantIndex = story.variants.indexWhere(
-        (variant) => variant.id == initialVariantId,
-      );
-      if (variantIndex >= 0) _variantIndexes[story.id] = variantIndex;
+      if (initialVariantId == 'default') {
+        _variantIndexes[story.id] = 0;
+      } else {
+        final variantIndex = story.variants.indexWhere(
+          (variant) => variant.id == initialVariantId,
+        );
+        if (variantIndex >= 0) _variantIndexes[story.id] = variantIndex + 1;
+      }
     }
   }
 
@@ -124,14 +140,15 @@ class _StorybookAppState extends State<StorybookApp> {
     final variants = story.variants;
     if (variants.isEmpty) return;
     setState(() {
+      final count = variants.length + 1;
       final current = _variantIndexes[story.id] ?? 0;
-      final next = (current + delta) % variants.length;
-      final resolved = next < 0 ? next + variants.length : next;
+      final next = (current + delta) % count;
+      final resolved = next < 0 ? next + count : next;
       _variantIndexes[story.id] = resolved;
       _resetGeneration += 1;
       _addAction('variant.selected', <String, Object?>{
         'storyId': story.id,
-        'variantId': variants[resolved].id,
+        'variantId': resolved == 0 ? 'default' : variants[resolved - 1].id,
       });
     });
   }
@@ -308,21 +325,33 @@ class _StorybookAppState extends State<StorybookApp> {
   @override
   Widget build(BuildContext context) {
     final theme = storybookThemeFor(_themeMode);
-    return Theme(
-      data: theme,
-      child: FleuryApp(
-        title: 'Fleury Storybook',
-        status: (_) => [
-          StatusItem.text('Widget', value: _selectedWidgetName),
-          StatusItem.text('Story', value: _selectedStory.title),
-          StatusItem.text('Theme', value: storybookThemeLabel(_themeMode)),
-          StatusItem.text('Viewport', value: storybookViewportLabel(_viewport)),
-          StatusItem.text('Widgets', value: '${_widgetCount(widget.stories)}'),
-        ],
-        child: CommandScope(
-          label: 'Storybook commands',
-          commands: _commands(),
+    final background = theme.colorScheme.background;
+    final app = FleuryApp(
+      title: 'Fleury Storybook',
+      status: (_) => [
+        StatusItem.text('Widget', value: _selectedWidgetName),
+        StatusItem.text('Story', value: _selectedStory.title),
+        StatusItem.text('Theme', value: storybookThemeLabel(_themeMode)),
+        StatusItem.text('Viewport', value: storybookViewportLabel(_viewport)),
+        StatusItem.text('Widgets', value: '${_widgetCount(widget.stories)}'),
+      ],
+      child: CommandScope(
+        label: 'Storybook commands',
+        commands: _commands(),
+        child: KeyBindings(
+          bindings: [
+            // Esc steps out of whatever widget has focus, back to the widget
+            // list — the coarse escape hatch alongside arrow boundary-escape
+            // and Tab. (Bubbled here: widgets that use Esc themselves consume
+            // it first.)
+            KeyBinding(
+              KeyChord.escape,
+              onEvent: (_) => _selectorFocusNode.requestFocus(),
+              hideFromHintBar: true,
+            ),
+          ],
           child: _StorybookShell(
+            selectorFocusNode: _selectorFocusNode,
             stories: widget.stories,
             selectedIndex: _selectedIndex,
             selectedWidgetName: _selectedWidgetName,
@@ -348,6 +377,15 @@ class _StorybookAppState extends State<StorybookApp> {
           ),
         ),
       ),
+    );
+    return Theme(
+      data: theme,
+      // The theme's background isn't auto-painted, so fill the whole surface
+      // with it (when set) before the panels render on top — this is what makes
+      // the cyber theme's dark backdrop show through transparent cells.
+      child: background == null
+          ? app
+          : Container(color: background, child: app),
     );
   }
 }
@@ -388,8 +426,10 @@ class _StorybookShell extends StatelessWidget {
     required this.onChangeControl,
     required this.onSetControlValue,
     required this.onRecordAction,
+    required this.selectorFocusNode,
   });
 
+  final FocusNode selectorFocusNode;
   final List<Story> stories;
   final int selectedIndex;
   final String selectedWidgetName;
@@ -445,27 +485,37 @@ class _StorybookShell extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SizedBox(
-                      width: selectorWidth,
-                      child: _WidgetSelector(
-                        width: selectorWidth,
-                        stories: stories,
-                        selectedIndex: selectedIndex,
-                        selectedWidgetName: selectedWidgetName,
-                        onSelect: onSelectWidget,
-                      ),
-                    ),
-                    const SizedBox(width: 1),
                     Expanded(
-                      child: _PreviewPanel(
-                        key: ValueKey('${story.id}:$resetGeneration'),
-                        story: story,
-                        variant: variant,
-                        selectedWidgetName: selectedWidgetName,
-                        values: controlValues,
-                        recordAction: onRecordAction,
-                        viewport: viewport,
-                        compact: compactPreview,
+                      child: FocusTraversalGroup(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SizedBox(
+                              width: selectorWidth,
+                              child: _WidgetSelector(
+                                width: selectorWidth,
+                                stories: stories,
+                                selectedIndex: selectedIndex,
+                                selectedWidgetName: selectedWidgetName,
+                                onSelect: onSelectWidget,
+                                listFocusNode: selectorFocusNode,
+                              ),
+                            ),
+                            const SizedBox(width: 1),
+                            Expanded(
+                              child: _PreviewPanel(
+                                key: ValueKey('${story.id}:$resetGeneration'),
+                                story: story,
+                                variant: variant,
+                                selectedWidgetName: selectedWidgetName,
+                                values: controlValues,
+                                recordAction: onRecordAction,
+                                viewport: viewport,
+                                compact: compactPreview,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     if (showDetailsPanel) ...[
@@ -610,6 +660,7 @@ class _WidgetSelector extends StatefulWidget {
     required this.selectedIndex,
     required this.selectedWidgetName,
     required this.onSelect,
+    this.listFocusNode,
   });
 
   final int width;
@@ -617,6 +668,10 @@ class _WidgetSelector extends StatefulWidget {
   final int selectedIndex;
   final String selectedWidgetName;
   final void Function(int storyIndex, String widgetName) onSelect;
+
+  /// Focus node for the result list — Esc anywhere in the app focuses it to
+  /// step back out to widget navigation.
+  final FocusNode? listFocusNode;
 
   @override
   State<_WidgetSelector> createState() => _WidgetSelectorState();
@@ -627,16 +682,12 @@ class _WidgetSelectorState extends State<_WidgetSelector> {
   final ListController _listController = ListController(selectedIndex: 0);
 
   List<SearchResult> _results() {
-    return <SearchResult>[
+    final results = <SearchResult>[
       for (var i = 0; i < widget.stories.length; i++)
         for (final widgetName in widget.stories[i].widgets)
           SearchResult(
             id: '${widget.stories[i].id}:$widgetName',
-            title:
-                i == widget.selectedIndex &&
-                    widgetName == widget.selectedWidgetName
-                ? '* $widgetName'
-                : widgetName,
+            title: widgetName,
             category: widget.stories[i].category,
             detail:
                 '${widget.stories[i].title}: ${widget.stories[i].description}',
@@ -651,6 +702,36 @@ class _WidgetSelectorState extends State<_WidgetSelector> {
             },
           ),
     ];
+    // Browse order: group by category in a fixed foundational→specialized
+    // order, alphabetical within each group. Search re-ranks by match, so this
+    // only governs the no-query list — the predictable way to find a widget.
+    results.sort((a, b) {
+      final ca = _categoryRank(a.category);
+      final cb = _categoryRank(b.category);
+      if (ca != cb) return ca.compareTo(cb);
+      return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+    });
+    return results;
+  }
+
+  /// Fixed semantic order for category groups; unknown categories sort last,
+  /// then alphabetically among themselves.
+  static int _categoryRank(String? category) {
+    const order = [
+      'Core',
+      'Input',
+      'Forms',
+      'Navigation',
+      'Data',
+      'Content',
+      'Visualization',
+      'Files',
+      'Output',
+      'Agent',
+      'Workflow',
+    ];
+    final i = order.indexOf(category ?? '');
+    return i >= 0 ? i : order.length;
   }
 
   void _activateResult(SearchResult result) {
@@ -681,9 +762,11 @@ class _WidgetSelectorState extends State<_WidgetSelector> {
         label: 'Widget selector',
         placeholder: 'Search widgets...',
         width: (widget.width - 3).clamp(20, 31),
-        maxVisible: 24,
+        fillHeight: true,
+        groupByCategory: true,
         autofocus: true,
         copySelection: false,
+        resultsFocusNode: widget.listFocusNode,
         onActivate: (result, _) => _activateResult(result),
       ),
       footer: Text(
@@ -725,26 +808,71 @@ class _PreviewPanel extends StatelessWidget {
         recordAction: recordAction,
       ),
     );
+    final theme = Theme.of(context);
     final viewportSize = storybookViewportSize(viewport);
-    final height =
-        viewportSize?.rows ??
-        (compact ? story.initialHeight.clamp(8, 12) : story.initialHeight);
-    final width = viewportSize?.cols;
-    return _Panel(
-      title: 'Preview',
-      child: SizedBox(
+    final bool fit = viewportSize == null && !compact;
+    final Widget body;
+    if (fit) {
+      // Fit (the default): the preview viewport *is* the pane, so a second
+      // rounded border inside it is redundant. It only added a smaller inner
+      // box whose left edge and rounded corner stranded a few rows above the
+      // footer, next to the full-height pane borders. Let the widget fill the
+      // pane directly under the single pane border.
+      body = content;
+    } else {
+      // A specific viewport — a fixed-size preset or the compact toggle —
+      // frames the widget at that size so its bounds are visible within the
+      // larger pane.
+      final height = viewportSize?.rows ?? story.initialHeight.clamp(8, 12);
+      final width = viewportSize?.cols;
+      body = SizedBox(
         width: width,
         height: height,
         child: Container(
           border: BoxBorder(
             style: BorderStyle.rounded,
-            cellStyle: Theme.of(context).mutedStyle,
+            cellStyle: theme.mutedStyle,
           ),
           padding: const EdgeInsets.all(1),
           child: content,
         ),
+      );
+    }
+    // The description lives in the always-visible preview (not just the
+    // inspector-gated details panel) so every widget self-documents, and the
+    // footer carries a widget-specific interaction tip when there is one.
+    final previewChild = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        if (!compact && story.description.isNotEmpty) ...[
+          Text(
+            story.description,
+            style: theme.mutedStyle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 1),
+        ],
+        // Top-align via loose constraints: greedy widgets (ScrollView, tables)
+        // still fill, but an intrinsic-height widget keeps its natural height
+        // instead of stretching — otherwise an anchored popup (completion menu,
+        // dropdown) would attach to the bottom of a stretched box and collide
+        // with the footer.
+        if (fit)
+          Expanded(child: Align(alignment: Alignment.topLeft, child: body))
+        else
+          body,
+      ],
+    );
+    final usage = story.usage;
+    return _Panel(
+      title: 'Preview',
+      child: previewChild,
+      footer: Text(
+        usage == null
+            ? 'Arrows / Tab move between widgets · Esc back to the list'
+            : '$usage · Esc to list',
       ),
-      footer: Text('Tab or arrow into the preview to interact.'),
     );
   }
 }

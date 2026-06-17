@@ -1,0 +1,1023 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryWebFrameCapture",
+  "frameBudgetMs": 16.67,
+  "frames": [
+    {
+      "reason": "benchmark:resize+build",
+      "coalescedReasons": [
+        "benchmark:resize",
+        "build"
+      ],
+      "viewport": {
+        "cols": 160,
+        "rows": 50
+      },
+      "damageSource": "paintDamage",
+      "fullRepaint": false,
+      "metricsChanged": false,
+      "dirtyRowCount": 23,
+      "dirtyCellEstimate": 3680,
+      "spanCount": 25,
+      "domNodesCreated": 25,
+      "rowsReplaced": 23,
+      "styleCacheHits": 25,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 20,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 116400,
+      "spanBuildMicros": 50500,
+      "domApplyMicros": 13100,
+      "semanticApplyMicros": 33801,
+      "totalFrameMicros": 225800
+    },
+    {
+      "reason": "metrics",
+      "coalescedReasons": [
+        "metrics"
+      ],
+      "viewport": {
+        "cols": 80,
+        "rows": 24
+      },
+      "damageSource": "fullRepaint",
+      "fullRepaint": true,
+      "metricsChanged": true,
+      "dirtyRowCount": 24,
+      "dirtyCellEstimate": 1920,
+      "spanCount": 24,
+      "domNodesCreated": 24,
+      "rowsReplaced": 24,
+      "styleCacheHits": 24,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 2,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 3400,
+      "spanBuildMicros": 3000,
+      "domApplyMicros": 200,
+      "semanticApplyMicros": 38800,
+      "totalFrameMicros": 72900
+    },
+    {
+      "reason": "benchmark:resize+build",
+      "coalescedReasons": [
+        "benchmark:resize",
+        "build"
+      ],
+      "viewport": {
+        "cols": 80,
+        "rows": 24
+      },
+      "damageSource": "paintDamage",
+      "fullRepaint": false,
+      "metricsChanged": false,
+      "dirtyRowCount": 23,
+      "dirtyCellEstimate": 1840,
+      "spanCount": 23,
+      "domNodesCreated": 23,
+      "rowsReplaced": 23,
+      "styleCacheHits": 23,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 20,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 45400,
+      "spanBuildMicros": 9901,
+      "domApplyMicros": 3799,
+      "semanticApplyMicros": 29900,
+      "totalFrameMicros": 89000
+    },
+    {
+      "reason": "metrics",
+      "coalescedReasons": [
+        "metrics"
+      ],
+      "viewport": {
+        "cols": 160,
+        "rows": 50
+      },
+      "damageSource": "fullRepaint",
+      "fullRepaint": true,
+      "metricsChanged": true,
+      "dirtyRowCount": 50,
+      "dirtyCellEstimate": 8000,
+      "spanCount": 52,
+      "domNodesCreated": 52,
+      "rowsReplaced": 50,
+      "styleCacheHits": 52,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 2,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 3801,
+      "spanBuildMicros": 53099,
+      "domApplyMicros": 901,
+      "semanticApplyMicros": 12199,
+      "totalFrameMicros": 91900
+    },
+    {
+      "reason": "benchmark:resize+build",
+      "coalescedReasons": [
+        "benchmark:resize",
+        "build"
+      ],
+      "viewport": {
+        "cols": 160,
+        "rows": 50
+      },
+      "damageSource": "paintDamage",
+      "fullRepaint": false,
+      "metricsChanged": false,
+      "dirtyRowCount": 23,
+      "dirtyCellEstimate": 3680,
+      "spanCount": 25,
+      "domNodesCreated": 25,
+      "rowsReplaced": 23,
+      "styleCacheHits": 25,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 20,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 158000,
+      "spanBuildMicros": 53600,
+      "domApplyMicros": 20199,
+      "semanticApplyMicros": 134899,
+      "totalFrameMicros": 472500
+    },
+    {
+      "reason": "metrics",
+      "coalescedReasons": [
+        "metrics"
+      ],
+      "viewport": {
+        "cols": 80,
+        "rows": 24
+      },
+      "damageSource": "fullRepaint",
+      "fullRepaint": true,
+      "metricsChanged": true,
+      "dirtyRowCount": 24,
+      "dirtyCellEstimate": 1920,
+      "spanCount": 24,
+      "domNodesCreated": 24,
+      "rowsReplaced": 24,
+      "styleCacheHits": 24,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 2,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 7500,
+      "spanBuildMicros": 200,
+      "domApplyMicros": 400,
+      "semanticApplyMicros": 6100,
+      "totalFrameMicros": 79299
+    },
+    {
+      "reason": "benchmark:resize+build",
+      "coalescedReasons": [
+        "benchmark:resize",
+        "build"
+      ],
+      "viewport": {
+        "cols": 80,
+        "rows": 24
+      },
+      "damageSource": "paintDamage",
+      "fullRepaint": false,
+      "metricsChanged": false,
+      "dirtyRowCount": 23,
+      "dirtyCellEstimate": 1840,
+      "spanCount": 23,
+      "domNodesCreated": 23,
+      "rowsReplaced": 23,
+      "styleCacheHits": 23,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 20,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 37000,
+      "spanBuildMicros": 201,
+      "domApplyMicros": 2099,
+      "semanticApplyMicros": 41300,
+      "totalFrameMicros": 96301
+    },
+    {
+      "reason": "metrics",
+      "coalescedReasons": [
+        "metrics"
+      ],
+      "viewport": {
+        "cols": 160,
+        "rows": 50
+      },
+      "damageSource": "fullRepaint",
+      "fullRepaint": true,
+      "metricsChanged": true,
+      "dirtyRowCount": 50,
+      "dirtyCellEstimate": 8000,
+      "spanCount": 52,
+      "domNodesCreated": 52,
+      "rowsReplaced": 50,
+      "styleCacheHits": 52,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 2,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 49801,
+      "spanBuildMicros": 9800,
+      "domApplyMicros": 400,
+      "semanticApplyMicros": 24201,
+      "totalFrameMicros": 121801
+    },
+    {
+      "reason": "benchmark:resize+build",
+      "coalescedReasons": [
+        "benchmark:resize",
+        "build"
+      ],
+      "viewport": {
+        "cols": 160,
+        "rows": 50
+      },
+      "damageSource": "paintDamage",
+      "fullRepaint": false,
+      "metricsChanged": false,
+      "dirtyRowCount": 23,
+      "dirtyCellEstimate": 3680,
+      "spanCount": 25,
+      "domNodesCreated": 25,
+      "rowsReplaced": 23,
+      "styleCacheHits": 25,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 20,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 1700,
+      "spanBuildMicros": 8500,
+      "domApplyMicros": 901,
+      "semanticApplyMicros": 4600,
+      "totalFrameMicros": 15800
+    },
+    {
+      "reason": "metrics",
+      "coalescedReasons": [
+        "metrics"
+      ],
+      "viewport": {
+        "cols": 80,
+        "rows": 24
+      },
+      "damageSource": "fullRepaint",
+      "fullRepaint": true,
+      "metricsChanged": true,
+      "dirtyRowCount": 24,
+      "dirtyCellEstimate": 1920,
+      "spanCount": 24,
+      "domNodesCreated": 24,
+      "rowsReplaced": 24,
+      "styleCacheHits": 24,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 2,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 35900,
+      "spanBuildMicros": 87200,
+      "domApplyMicros": 2201,
+      "semanticApplyMicros": 67799,
+      "totalFrameMicros": 259299
+    },
+    {
+      "reason": "benchmark:resize+build",
+      "coalescedReasons": [
+        "benchmark:resize",
+        "build"
+      ],
+      "viewport": {
+        "cols": 80,
+        "rows": 24
+      },
+      "damageSource": "paintDamage",
+      "fullRepaint": false,
+      "metricsChanged": false,
+      "dirtyRowCount": 23,
+      "dirtyCellEstimate": 1840,
+      "spanCount": 23,
+      "domNodesCreated": 23,
+      "rowsReplaced": 23,
+      "styleCacheHits": 23,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 20,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 1300,
+      "spanBuildMicros": 8601,
+      "domApplyMicros": 299,
+      "semanticApplyMicros": 3000,
+      "totalFrameMicros": 17000
+    },
+    {
+      "reason": "metrics",
+      "coalescedReasons": [
+        "metrics"
+      ],
+      "viewport": {
+        "cols": 160,
+        "rows": 50
+      },
+      "damageSource": "fullRepaint",
+      "fullRepaint": true,
+      "metricsChanged": true,
+      "dirtyRowCount": 50,
+      "dirtyCellEstimate": 8000,
+      "spanCount": 52,
+      "domNodesCreated": 52,
+      "rowsReplaced": 50,
+      "styleCacheHits": 52,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 2,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 1800,
+      "spanBuildMicros": 700,
+      "domApplyMicros": 400,
+      "semanticApplyMicros": 2200,
+      "totalFrameMicros": 143899
+    },
+    {
+      "reason": "benchmark:resize+build",
+      "coalescedReasons": [
+        "benchmark:resize",
+        "build"
+      ],
+      "viewport": {
+        "cols": 160,
+        "rows": 50
+      },
+      "damageSource": "paintDamage",
+      "fullRepaint": false,
+      "metricsChanged": false,
+      "dirtyRowCount": 23,
+      "dirtyCellEstimate": 3680,
+      "spanCount": 25,
+      "domNodesCreated": 25,
+      "rowsReplaced": 23,
+      "styleCacheHits": 25,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 20,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 55100,
+      "spanBuildMicros": 20800,
+      "domApplyMicros": 3401,
+      "semanticApplyMicros": 54199,
+      "totalFrameMicros": 133700
+    },
+    {
+      "reason": "metrics",
+      "coalescedReasons": [
+        "metrics"
+      ],
+      "viewport": {
+        "cols": 80,
+        "rows": 24
+      },
+      "damageSource": "fullRepaint",
+      "fullRepaint": true,
+      "metricsChanged": true,
+      "dirtyRowCount": 24,
+      "dirtyCellEstimate": 1920,
+      "spanCount": 24,
+      "domNodesCreated": 24,
+      "rowsReplaced": 24,
+      "styleCacheHits": 24,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 2,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 6000,
+      "spanBuildMicros": 100,
+      "domApplyMicros": 300,
+      "semanticApplyMicros": 2200,
+      "totalFrameMicros": 41401
+    },
+    {
+      "reason": "benchmark:resize+build",
+      "coalescedReasons": [
+        "benchmark:resize",
+        "build"
+      ],
+      "viewport": {
+        "cols": 80,
+        "rows": 24
+      },
+      "damageSource": "paintDamage",
+      "fullRepaint": false,
+      "metricsChanged": false,
+      "dirtyRowCount": 23,
+      "dirtyCellEstimate": 1840,
+      "spanCount": 23,
+      "domNodesCreated": 23,
+      "rowsReplaced": 23,
+      "styleCacheHits": 23,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 20,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 39701,
+      "spanBuildMicros": 699,
+      "domApplyMicros": 500,
+      "semanticApplyMicros": 33301,
+      "totalFrameMicros": 74301
+    },
+    {
+      "reason": "metrics",
+      "coalescedReasons": [
+        "metrics"
+      ],
+      "viewport": {
+        "cols": 160,
+        "rows": 50
+      },
+      "damageSource": "fullRepaint",
+      "fullRepaint": true,
+      "metricsChanged": true,
+      "dirtyRowCount": 50,
+      "dirtyCellEstimate": 8000,
+      "spanCount": 52,
+      "domNodesCreated": 52,
+      "rowsReplaced": 50,
+      "styleCacheHits": 52,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 2,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 14800,
+      "spanBuildMicros": 10100,
+      "domApplyMicros": 5300,
+      "semanticApplyMicros": 83500,
+      "totalFrameMicros": 457400
+    },
+    {
+      "reason": "benchmark:resize+build",
+      "coalescedReasons": [
+        "benchmark:resize",
+        "build"
+      ],
+      "viewport": {
+        "cols": 160,
+        "rows": 50
+      },
+      "damageSource": "paintDamage",
+      "fullRepaint": false,
+      "metricsChanged": false,
+      "dirtyRowCount": 23,
+      "dirtyCellEstimate": 3680,
+      "spanCount": 25,
+      "domNodesCreated": 25,
+      "rowsReplaced": 23,
+      "styleCacheHits": 25,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 20,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 15201,
+      "spanBuildMicros": 11000,
+      "domApplyMicros": 3899,
+      "semanticApplyMicros": 9400,
+      "totalFrameMicros": 39600
+    },
+    {
+      "reason": "metrics",
+      "coalescedReasons": [
+        "metrics"
+      ],
+      "viewport": {
+        "cols": 80,
+        "rows": 24
+      },
+      "damageSource": "fullRepaint",
+      "fullRepaint": true,
+      "metricsChanged": true,
+      "dirtyRowCount": 24,
+      "dirtyCellEstimate": 1920,
+      "spanCount": 24,
+      "domNodesCreated": 24,
+      "rowsReplaced": 24,
+      "styleCacheHits": 24,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 2,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 1300,
+      "spanBuildMicros": 200,
+      "domApplyMicros": 6200,
+      "semanticApplyMicros": 9500,
+      "totalFrameMicros": 77500
+    },
+    {
+      "reason": "benchmark:resize+build",
+      "coalescedReasons": [
+        "benchmark:resize",
+        "build"
+      ],
+      "viewport": {
+        "cols": 80,
+        "rows": 24
+      },
+      "damageSource": "paintDamage",
+      "fullRepaint": false,
+      "metricsChanged": false,
+      "dirtyRowCount": 23,
+      "dirtyCellEstimate": 1840,
+      "spanCount": 23,
+      "domNodesCreated": 23,
+      "rowsReplaced": 23,
+      "styleCacheHits": 23,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 20,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 3500,
+      "spanBuildMicros": 200,
+      "domApplyMicros": 200,
+      "semanticApplyMicros": 3100,
+      "totalFrameMicros": 7000
+    },
+    {
+      "reason": "metrics",
+      "coalescedReasons": [
+        "metrics"
+      ],
+      "viewport": {
+        "cols": 160,
+        "rows": 50
+      },
+      "damageSource": "fullRepaint",
+      "fullRepaint": true,
+      "metricsChanged": true,
+      "dirtyRowCount": 50,
+      "dirtyCellEstimate": 8000,
+      "spanCount": 52,
+      "domNodesCreated": 52,
+      "rowsReplaced": 50,
+      "styleCacheHits": 52,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 2,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 12100,
+      "spanBuildMicros": 1601,
+      "domApplyMicros": 4000,
+      "semanticApplyMicros": 2500,
+      "totalFrameMicros": 91599
+    },
+    {
+      "reason": "benchmark:resize+build",
+      "coalescedReasons": [
+        "benchmark:resize",
+        "build"
+      ],
+      "viewport": {
+        "cols": 160,
+        "rows": 50
+      },
+      "damageSource": "paintDamage",
+      "fullRepaint": false,
+      "metricsChanged": false,
+      "dirtyRowCount": 23,
+      "dirtyCellEstimate": 3680,
+      "spanCount": 25,
+      "domNodesCreated": 25,
+      "rowsReplaced": 23,
+      "styleCacheHits": 25,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 20,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 14801,
+      "spanBuildMicros": 199,
+      "domApplyMicros": 4600,
+      "semanticApplyMicros": 10400,
+      "totalFrameMicros": 30000
+    },
+    {
+      "reason": "metrics",
+      "coalescedReasons": [
+        "metrics"
+      ],
+      "viewport": {
+        "cols": 80,
+        "rows": 24
+      },
+      "damageSource": "fullRepaint",
+      "fullRepaint": true,
+      "metricsChanged": true,
+      "dirtyRowCount": 24,
+      "dirtyCellEstimate": 1920,
+      "spanCount": 24,
+      "domNodesCreated": 24,
+      "rowsReplaced": 24,
+      "styleCacheHits": 24,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 2,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 700,
+      "spanBuildMicros": 201,
+      "domApplyMicros": 1000,
+      "semanticApplyMicros": 7000,
+      "totalFrameMicros": 9401
+    },
+    {
+      "reason": "benchmark:resize+build",
+      "coalescedReasons": [
+        "benchmark:resize",
+        "build"
+      ],
+      "viewport": {
+        "cols": 80,
+        "rows": 24
+      },
+      "damageSource": "paintDamage",
+      "fullRepaint": false,
+      "metricsChanged": false,
+      "dirtyRowCount": 23,
+      "dirtyCellEstimate": 1840,
+      "spanCount": 23,
+      "domNodesCreated": 23,
+      "rowsReplaced": 23,
+      "styleCacheHits": 23,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 20,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 248200,
+      "spanBuildMicros": 65601,
+      "domApplyMicros": 70199,
+      "semanticApplyMicros": 1469301,
+      "totalFrameMicros": 1951500
+    },
+    {
+      "reason": "metrics",
+      "coalescedReasons": [
+        "metrics"
+      ],
+      "viewport": {
+        "cols": 160,
+        "rows": 50
+      },
+      "damageSource": "fullRepaint",
+      "fullRepaint": true,
+      "metricsChanged": true,
+      "dirtyRowCount": 50,
+      "dirtyCellEstimate": 8000,
+      "spanCount": 52,
+      "domNodesCreated": 52,
+      "rowsReplaced": 50,
+      "styleCacheHits": 52,
+      "styleCacheMisses": 0,
+      "widthCacheHits": 0,
+      "widthCacheMisses": 0,
+      "metricsReadCount": 1,
+      "semanticNodeCount": 26,
+      "semanticAddedNodeCount": 0,
+      "semanticRemovedNodeCount": 0,
+      "semanticUpdatedNodeCount": 2,
+      "semanticFallbackNodeCount": 0,
+      "semanticUncoveredCellCount": 0,
+      "runtimeRenderMicros": 324400,
+      "spanBuildMicros": 111900,
+      "domApplyMicros": 169900,
+      "semanticApplyMicros": 502100,
+      "totalFrameMicros": 1769600
+    }
+  ],
+  "summary": {
+    "schemaVersion": 1,
+    "kind": "fleuryWebFrameSummary",
+    "frameCount": 24,
+    "frameBudgetMs": 16.67,
+    "frameBudgetMicros": 16670,
+    "overBudgetFrameCount": 21,
+    "overBudgetPercent": 87.5,
+    "dominantP95Slice": "semanticApplyMs",
+    "timings": {
+      "runtimeRenderMs": {
+        "total": 1197.8049999999998,
+        "p50": 14.8,
+        "p95": 248.2,
+        "max": 324.4
+      },
+      "spanBuildMs": {
+        "total": 507.903,
+        "p50": 8.5,
+        "p95": 87.2,
+        "max": 111.9
+      },
+      "domApplyMs": {
+        "total": 314.398,
+        "p50": 2.099,
+        "p95": 70.199,
+        "max": 169.9
+      },
+      "semanticApplyMs": {
+        "total": 2585.3,
+        "p50": 12.199,
+        "p95": 502.1,
+        "max": 1469.301
+      },
+      "totalFrameMs": {
+        "total": 6368.501,
+        "p50": 89,
+        "p95": 1769.6,
+        "max": 1951.5
+      }
+    },
+    "counts": {
+      "dirtyRows": {
+        "total": 720,
+        "p50": 23,
+        "p95": 50,
+        "max": 50
+      },
+      "dirtyCells": {
+        "total": 92640,
+        "p50": 1920,
+        "p95": 8000,
+        "max": 8000
+      },
+      "spans": {
+        "total": 744,
+        "p50": 24,
+        "p95": 52,
+        "max": 52
+      },
+      "domNodesCreated": {
+        "total": 744,
+        "p50": 24,
+        "p95": 52,
+        "max": 52
+      },
+      "rowsReplaced": {
+        "total": 720,
+        "p50": 23,
+        "p95": 50,
+        "max": 50
+      },
+      "styleCacheHits": {
+        "total": 744,
+        "p50": 24,
+        "p95": 52,
+        "max": 52
+      },
+      "styleCacheMisses": {
+        "total": 0,
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "widthCacheHits": {
+        "total": 0,
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "widthCacheMisses": {
+        "total": 0,
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "metricsReads": {
+        "total": 24,
+        "p50": 1,
+        "p95": 1,
+        "max": 1
+      },
+      "semanticNodes": {
+        "total": 624,
+        "p50": 26,
+        "p95": 26,
+        "max": 26
+      },
+      "semanticAddedNodes": {
+        "total": 0,
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "semanticRemovedNodes": {
+        "total": 0,
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "semanticUpdatedNodes": {
+        "total": 264,
+        "p50": 2,
+        "p95": 20,
+        "max": 20
+      },
+      "semanticFallbackNodes": {
+        "total": 0,
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "semanticUncoveredCells": {
+        "total": 0,
+        "p50": 0,
+        "p95": 0,
+        "max": 0
+      }
+    },
+    "cacheHitRates": {
+      "style": 1,
+      "width": 0
+    }
+  },
+  "scenario": {
+    "id": "resize-burst",
+    "label": "Resize burst",
+    "kind": "resizeBurst",
+    "cols": 80,
+    "rows": 24,
+    "defaultFrames": 12,
+    "description": "Host container alternates between small and large viewports."
+  },
+  "capturedAt": "2026-06-08T10:48:31.225Z",
+  "requestedFrames": 12,
+  "requestedSteps": 12,
+  "warmupFrames": 2,
+  "browser": {
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/148.0.0.0 Safari/537.36",
+    "devicePixelRatio": 1
+  },
+  "browserMetrics": {
+    "layoutDurationMs": 683.466,
+    "recalcStyleDurationMs": 80.289,
+    "scriptDurationMs": 14251.185,
+    "taskDurationMs": 17524.195,
+    "jsHeapUsedBytes": 5170408.0,
+    "jsHeapTotalBytes": 11010048.0,
+    "domDocumentCount": 1,
+    "domNodeCount": 406,
+    "jsEventListenerCount": 76
+  },
+  "runEnvironment": {
+    "schemaVersion": 1,
+    "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "chromeBrowser": "Chrome/148.0.7778.217",
+    "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/148.0.0.0 Safari/537.36",
+    "devtoolsProtocolVersion": "1.3",
+    "v8Version": "14.8.178.28",
+    "webkitVersion": "537.36 (@c41b3e47e69c929c79773167979e00d206675cb0)",
+    "dartVersion": "3.12.1 (stable) (Tue May 26 01:02:21 2026 -0700) on \"macos_x64\"",
+    "operatingSystem": "macos",
+    "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+    "headless": true,
+    "requestedFrames": 12,
+    "warmupFrames": 2,
+    "frameBudgetMs": 16.67
+  }
+}

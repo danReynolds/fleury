@@ -15,6 +15,10 @@ import 'package:fleury/fleury.dart';
 ///   colLabels: const ['J', 'F', 'M', 'A', 'M', 'J', ...],
 /// )
 /// ```
+///
+/// Semantics: contributes one summary node (chart role, label, and data
+/// state) by design. Terminal charts are announced and asserted as
+/// summaries; per-element semantic children are intentionally omitted.
 class Heatmap extends StatelessWidget {
   const Heatmap({
     super.key,
@@ -25,6 +29,7 @@ class Heatmap extends StatelessWidget {
     this.color,
     this.rowLabels,
     this.colLabels,
+    this.showLegend = false,
     this.semanticLabel = 'Heatmap',
   });
 
@@ -51,6 +56,11 @@ class Heatmap extends StatelessWidget {
   /// Optional labels for the columns (drawn above the grid).
   final List<String>? colLabels;
 
+  /// When true, append a `░▒▓█  min – max` scale strip below the grid so the
+  /// intensity ladder maps to real values — the encoding is otherwise opaque
+  /// (and color/glyph-density-only is an accessibility red flag).
+  final bool showLegend;
+
   /// Label exposed through the semantic app graph.
   final String semanticLabel;
 
@@ -58,6 +68,16 @@ class Heatmap extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final stats = _heatmapStats(values, min: min, max: max);
+    final grid = _RawHeatmap(
+      values: values,
+      min: min,
+      max: max,
+      cellWidth: cellWidth < 1 ? 1 : cellWidth,
+      color: color ?? theme.colorScheme.primary,
+      labelStyle: theme.mutedStyle,
+      rowLabels: rowLabels,
+      colLabels: colLabels,
+    );
     return Semantics(
       role: SemanticRole.chart,
       label: semanticLabel,
@@ -71,19 +91,25 @@ class Heatmap extends StatelessWidget {
         'rowLabelCount': rowLabels?.length ?? 0,
         'columnLabelCount': colLabels?.length ?? 0,
       }),
-      child: _RawHeatmap(
-        values: values,
-        min: min,
-        max: max,
-        cellWidth: cellWidth < 1 ? 1 : cellWidth,
-        color: color ?? theme.colorScheme.primary,
-        labelStyle: theme.mutedStyle,
-        rowLabels: rowLabels,
-        colLabels: colLabels,
-      ),
+      child: showLegend
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                grid,
+                Text(
+                  '░▒▓█  ${_fmtHeat(stats.min)} – ${_fmtHeat(stats.max)}',
+                  style: theme.mutedStyle,
+                ),
+              ],
+            )
+          : grid,
     );
   }
 }
+
+String _fmtHeat(num v) =>
+    v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
 
 bool _labelsEqual(List<String>? a, List<String>? b) {
   if (identical(a, b)) return true;

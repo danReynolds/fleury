@@ -274,7 +274,17 @@ class _ColorPickerState extends State<ColorPicker> {
               'colorKind': _colorKind(color),
               ..._colorComponents(color),
             }),
-            child: Row(children: swatchParts),
+            // Click a swatch to select it (focus first, so the arrow keys keep
+            // working afterward). The whole-body tap below only grabs focus.
+            child: enabled
+                ? GestureDetector(
+                    onTap: () {
+                      _node.requestFocus();
+                      _selectIndex(idx);
+                    },
+                    child: Row(children: swatchParts),
+                  )
+                : Row(children: swatchParts),
           ),
         );
       }

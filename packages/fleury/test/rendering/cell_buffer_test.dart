@@ -42,6 +42,67 @@ void main() {
     });
   });
 
+  group('Damage tracking', () {
+    test('is disabled until resetDamageTracking starts it', () {
+      final buf = CellBuffer(const CellSize(3, 1));
+
+      buf.writeGrapheme(const CellOffset(0, 0), 'X');
+
+      expect(buf.damageBounds, isNull);
+    });
+
+    test('records conservative bounds for grapheme writes', () {
+      final buf = CellBuffer(const CellSize(5, 2));
+      buf.resetDamageTracking();
+
+      buf.writeGrapheme(const CellOffset(2, 1), 'X');
+
+      expect(buf.damageBounds, CellRect.fromLTWH(1, 1, 3, 1));
+      expect(buf.takeDamageBounds(), CellRect.fromLTWH(1, 1, 3, 1));
+      expect(buf.damageBounds, isNull);
+    });
+
+    test('records full buffer damage for clear', () {
+      final buf = CellBuffer(const CellSize(3, 2));
+      buf.resetDamageTracking();
+
+      buf.clear();
+
+      expect(buf.damageBounds, CellRect.fromLTWH(0, 0, 3, 2));
+    });
+
+    test('records clipped destination bounds for rect copies', () {
+      final source = CellBuffer(const CellSize(4, 2))
+        ..writeText(const CellOffset(0, 0), 'abcd')
+        ..writeText(const CellOffset(0, 1), 'efgh');
+      final dest = CellBuffer(const CellSize(5, 2));
+      dest.resetDamageTracking();
+
+      dest.copyRectFrom(
+        source,
+        CellRect.fromLTWH(1, 0, 3, 2),
+        const CellOffset(3, 0),
+      );
+
+      expect(dest.damageBounds, CellRect.fromLTWH(3, 0, 2, 2));
+    });
+
+    test('suppresses damage inside withoutDamageTracking', () {
+      final source = CellBuffer(const CellSize(2, 1))
+        ..writeText(const CellOffset(0, 0), 'ab');
+      final dest = CellBuffer(const CellSize(2, 1));
+      dest.resetDamageTracking();
+
+      dest.withoutDamageTracking(() {
+        dest.copyFrom(source, CellOffset.zero);
+      });
+
+      expect(dest.damageBounds, isNull);
+      expect(dest.atColRow(0, 0).grapheme, 'a');
+      expect(dest.atColRow(1, 0).grapheme, 'b');
+    });
+  });
+
   group('Narrow graphemes', () {
     test('writes a single-column ASCII grapheme as a leading cell', () {
       final buf = CellBuffer(const CellSize(3, 1));

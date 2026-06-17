@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryWebFrameThresholds",
+  "generatedAt": "2026-06-09T12:34:03.738655Z",
+  "reviewState": "candidate",
+  "reviewNote": "Generated from observed retained DOM web frame captures; review before using as a release gate.",
+  "generatedFrom": {
+    "kind": "fleuryWebFrameScoreboard",
+    "inputDir": "/Users/dan/Coding/fleury-web-phase1/profiling/web/baselines/2026-06-08-local-dom-retained-phase1-refresh",
+    "scoreboardGeneratedAt": "2026-06-09T12:34:03.696116Z",
+    "minRuns": 3,
+    "runCount": 33,
+    "scenarioCount": 11,
+    "sourceMetric": "maxCaptureP95PerScenario",
+    "thresholdHeadroomPercent": 20.0,
+    "thresholdMinHeadroomMs": 1.0,
+    "thresholdMinHeadroomPercent": 1.0
+  },
+  "defaults": {},
+  "scenarios": {
+    "cursor-blink-80x24": {
+      "maxTotalFrameP95Ms": 1078.2,
+      "maxDomApplyP95Ms": 31.68,
+      "maxSemanticApplyP95Ms": 285.72,
+      "maxOverBudgetPercent": 100.0,
+      "maxSemanticUncoveredCells": 0,
+      "observedFrameCount": 72,
+      "observedRequestedStepCount": 72,
+      "observedExtraFrameCount": 0,
+      "observedMaxFramesPerStep": 1.0
+    },
+    "dirty-row-160x50": {
+      "maxTotalFrameP95Ms": 864.97,
+      "maxDomApplyP95Ms": 30.0,
+      "maxSemanticApplyP95Ms": 374.16,
+      "maxOverBudgetPercent": 97.5,
+      "maxSemanticUncoveredCells": 0,
+      "observedFrameCount": 96,
+      "observedRequestedStepCount": 96,
+      "observedExtraFrameCount": 0,
+      "observedMaxFramesPerStep": 1.0
+    },
+    "full-frame-churn-160x50": {
+      "maxTotalFrameP95Ms": 2692.08,
+      "maxDomApplyP95Ms": 41.52,
+      "maxSemanticApplyP95Ms": 1379.17,
+      "maxOverBudgetPercent": 100.0,
+      "maxSemanticUncoveredCells": 0,
+      "observedFrameCount": 72,
+      "observedRequestedStepCount": 72,
+      "observedExtraFrameCount": 0,
+      "observedMaxFramesPerStep": 1.0
+    },
+    "large-160x50": {
+      "maxTotalFrameP95Ms": 499.69,
+      "maxDomApplyP95Ms": 18.48,
+      "maxSemanticApplyP95Ms": 232.08,
+      "maxOverBudgetPercent": 100.0,
+      "maxSemanticUncoveredCells": 0,
+      "observedFrameCount": 96,
+      "observedRequestedStepCount": 96,
+      "observedExtraFrameCount": 0,
+      "observedMaxFramesPerStep": 1.0
+    },
+    "noop-160x50": {
+      "maxTotalFrameP95Ms": 87.84,
+      "maxDomApplyP95Ms": 1.1,
+      "maxSemanticApplyP95Ms": 17.16,
+      "maxOverBudgetPercent": 35.0,
+      "maxSemanticUncoveredCells": 0,
+      "observedFrameCount": 72,
+      "observedRequestedStepCount": 72,
+      "observedExtraFrameCount": 0,
+      "observedMaxFramesPerStep": 1.0
+    },
+    "normal-80x24": {
+      "maxTotalFrameP95Ms": 466.56,
+      "maxDomApplyP95Ms": 23.28,
+      "maxSemanticApplyP95Ms": 177.6,
+      "maxOverBudgetPercent": 95.0,
+      "maxSemanticUncoveredCells": 0,
+      "observedFrameCount": 72,
+      "observedRequestedStepCount": 72,
+      "observedExtraFrameCount": 0,
+      "observedMaxFramesPerStep": 1.0
+    },
+    "resize-burst": {
+      "maxTotalFrameP95Ms": 949.92,
+      "maxDomApplyP95Ms": 49.09,
+      "maxSemanticApplyP95Ms": 444.6,
+      "maxOverBudgetPercent": 100.0,
+      "maxSemanticUncoveredCells": 0,
+      "observedFrameCount": 72,
+      "observedRequestedStepCount": 36,
+      "observedExtraFrameCount": 36,
+      "observedMaxFramesPerStep": 2.0
+    },
+    "scroll-row-churn-160x50": {
+      "maxTotalFrameP95Ms": 2411.65,
+      "maxDomApplyP95Ms": 207.96,
+      "maxSemanticApplyP95Ms": 656.28,
+      "maxOverBudgetPercent": 100.0,
+      "maxSemanticUncoveredCells": 0,
+      "observedFrameCount": 96,
+      "observedRequestedStepCount": 96,
+      "observedExtraFrameCount": 0,
+      "observedMaxFramesPerStep": 1.0
+    },
+    "single-dirty-cell-160x50": {
+      "maxTotalFrameP95Ms": 285.48,
+      "maxDomApplyP95Ms": 15.72,
+      "maxSemanticApplyP95Ms": 166.68,
+      "maxOverBudgetPercent": 100.0,
+      "maxSemanticUncoveredCells": 0,
+      "observedFrameCount": 96,
+      "observedRequestedStepCount": 96,
+      "observedExtraFrameCount": 0,
+      "observedMaxFramesPerStep": 1.0
+    },
+    "stress-300x100": {
+      "maxTotalFrameP95Ms": 3578.64,
+      "maxDomApplyP95Ms": 273.97,
+      "maxSemanticApplyP95Ms": 1559.16,
+      "maxOverBudgetPercent": 100.0,
+      "maxSemanticUncoveredCells": 0,
+      "observedFrameCount": 48,
+      "observedRequestedStepCount": 48,
+      "observedExtraFrameCount": 0,
+      "observedMaxFramesPerStep": 1.0
+    },
+    "text-input-burst-80x24": {
+      "maxTotalFrameP95Ms": 408.85,
+      "maxDomApplyP95Ms": 19.44,
+      "maxSemanticApplyP95Ms": 119.4,
+      "maxOverBudgetPercent": 87.0,
+      "maxSemanticUncoveredCells": 0,
+      "observedFrameCount": 120,
+      "observedRequestedStepCount": 60,
+      "observedExtraFrameCount": 60,
+      "observedMaxFramesPerStep": 2.0
+    }
+  }
+}

@@ -106,5 +106,59 @@ void main() {
       expect(node.states, contains('secret'));
       expect(accessibility.toPlainText(), isNot(contains('api-secret')));
     });
+
+    testWidgets('Ctrl+R reveals the real text, and re-masks it', (tester) {
+      final ctrl = TextEditingController(text: 'hunter2');
+      tester.pumpWidget(PasswordInput(controller: ctrl, autofocus: true));
+      String render() => tester
+          .renderToString(size: const CellSize(12, 1), emptyMark: ' ')
+          .trimRight();
+      // Masked by default.
+      expect(render().contains('hunter2'), isFalse);
+      expect(render().contains('•••••••'), isTrue);
+      // Reveal with Ctrl+R.
+      tester.sendKey(const KeyEvent(char: 'r', modifiers: {KeyModifier.ctrl}));
+      tester.pump();
+      expect(render().contains('hunter2'), isTrue);
+      // Re-mask with Ctrl+R.
+      tester.sendKey(const KeyEvent(char: 'r', modifiers: {KeyModifier.ctrl}));
+      tester.pump();
+      expect(render().contains('hunter2'), isFalse);
+    });
+
+    testWidgets('a revealed value still redacts semantics and clipboard', (
+      tester,
+    ) {
+      final ctrl = TextEditingController(text: 'hunter2');
+      tester.pumpWidget(PasswordInput(controller: ctrl, autofocus: true));
+      tester.sendKey(const KeyEvent(char: 'r', modifiers: {KeyModifier.ctrl}));
+      tester.pump();
+      final field = tester.semantics().single(
+        role: SemanticRole.textField,
+        focused: true,
+      );
+      expect(
+        field.value,
+        isNull,
+        reason: 'revealing is visual only — never read the secret out',
+      );
+      expect(field.state.clipboardPolicy, 'redacted');
+      expect(field.state['revealed'], isTrue);
+    });
+
+    testWidgets('canReveal: false leaves the field masked under Ctrl+R', (
+      tester,
+    ) {
+      final ctrl = TextEditingController(text: 'hunter2');
+      tester.pumpWidget(
+        PasswordInput(controller: ctrl, autofocus: true, canReveal: false),
+      );
+      tester.sendKey(const KeyEvent(char: 'r', modifiers: {KeyModifier.ctrl}));
+      tester.pump();
+      final out = tester
+          .renderToString(size: const CellSize(12, 1), emptyMark: ' ')
+          .trimRight();
+      expect(out.contains('hunter2'), isFalse);
+    });
   });
 }

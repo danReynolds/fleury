@@ -27,7 +27,7 @@ void main() {
         emptyMark: ' ',
       );
 
-      expect(output, contains('Tool: Run tests [running]'));
+      expect(output, contains('[>] Run tests [running]'));
       expect(output, contains('Args: cmd=dart test'));
       expect(output, contains('Output: ok'));
       expect(output, contains('next'));

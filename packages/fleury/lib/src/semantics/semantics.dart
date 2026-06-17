@@ -1,5 +1,9 @@
 import 'dart:async' show FutureOr;
 
+import '../foundation/geometry.dart';
+import '../rendering/cell_buffer.dart';
+import '../rendering/layout.dart';
+import '../rendering/render_object.dart';
 import '../widgets/framework.dart';
 
 /// Identity of a semantic node.
@@ -214,6 +218,22 @@ final class SemanticState {
   Map<String, Object?> get values => Map.unmodifiable(_values);
 
   Object? operator [](String key) => _values[key];
+
+  /// Returns true when this state and [other] carry equivalent typed values.
+  ///
+  /// This avoids forcing hot semantic diff paths through [values], which
+  /// defensively allocates an unmodifiable map for public callers.
+  bool hasSameValues(SemanticState other) {
+    if (identical(this, other)) return true;
+    if (_values.length != other._values.length) return false;
+    for (final entry in _values.entries) {
+      if (!other._values.containsKey(entry.key)) return false;
+      if (!_semanticStateValueEquals(entry.value, other._values[entry.key])) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   String? get routeName => _string('routeName');
   String? get screenId => _string('screenId');
@@ -433,6 +453,32 @@ final class SemanticState {
   String toString() => _values.toString();
 }
 
+bool _semanticStateValueEquals(Object? a, Object? b) {
+  if (identical(a, b)) return true;
+  if (a is Map && b is Map) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (!b.containsKey(entry.key)) return false;
+      if (!_semanticStateValueEquals(entry.value, b[entry.key])) return false;
+    }
+    return true;
+  }
+  if (a is Iterable && b is Iterable) {
+    final left = a.iterator;
+    final right = b.iterator;
+    while (true) {
+      final hasLeft = left.moveNext();
+      final hasRight = right.moveNext();
+      if (hasLeft != hasRight) return false;
+      if (!hasLeft) return true;
+      if (!_semanticStateValueEquals(left.current, right.current)) {
+        return false;
+      }
+    }
+  }
+  return a == b;
+}
+
 /// Immutable semantic description of a mounted UI node.
 final class SemanticNode {
   const SemanticNode({
@@ -448,6 +494,7 @@ final class SemanticNode {
     this.expanded,
     this.busy = false,
     this.validationError,
+    this.bounds,
     this.actions = const <SemanticAction>{},
     this.children = const <SemanticNode>[],
     this.state = SemanticState.empty,
@@ -465,11 +512,12 @@ final class SemanticNode {
   final bool? expanded;
   final bool busy;
   final String? validationError;
+  final CellRect? bounds;
   final Set<SemanticAction> actions;
   final List<SemanticNode> children;
   final SemanticState state;
 
-  SemanticNode copyWith({List<SemanticNode>? children}) {
+  SemanticNode copyWith({List<SemanticNode>? children, CellRect? bounds}) {
     return SemanticNode(
       id: id,
       role: role,
@@ -483,6 +531,7 @@ final class SemanticNode {
       expanded: expanded,
       busy: busy,
       validationError: validationError,
+      bounds: bounds ?? this.bounds,
       actions: actions,
       children: children ?? this.children,
       state: state,
@@ -531,7 +580,22 @@ final class SemanticTree {
 
   final SemanticNode root;
 
-  Iterable<SemanticNode> get nodes => root.selfAndDescendants;
+  /// Flattened semantic nodes in depth-first order.
+  ///
+  /// The tree is immutable, so the flattened list is cached per tree instance.
+  /// Runtime hosts walk this list multiple times per frame for coverage, focus,
+  /// diffing, and presentation; sharing the flattening keeps those passes from
+  /// recursively re-traversing the same snapshot.
+  Iterable<SemanticNode> get nodes => _cachedNodes(this);
+
+  /// Number of nodes in this snapshot.
+  int get nodeCount => _cachedNodes(this).length;
+
+  /// Semantic nodes keyed by id.
+  ///
+  /// This map is cached with [nodes] so diff/presenter consumers do not each
+  /// rebuild their own id index for the same immutable snapshot.
+  Map<SemanticNodeId, SemanticNode> get nodesById => _cachedNodesById(this);
 
   Iterable<SemanticNode> byRole(SemanticRole role) =>
       nodes.where((node) => node.role == role);
@@ -540,10 +604,23 @@ final class SemanticTree {
       nodes.where((node) => node.label == label);
 
   SemanticNode? nodeById(SemanticNodeId id) {
-    for (final node in nodes) {
-      if (node.id == id) return node;
-    }
-    return null;
+    return nodesById[id];
+  }
+
+  /// Returns a tree with the matching semantic nodes replaced.
+  ///
+  /// This is intentionally a semantic-tree operation rather than an
+  /// element-tree walk. Hosts that receive precise dirty semantic leaf nodes can
+  /// produce the next snapshot by rewriting only the retained semantic model,
+  /// then still run the normal coverage, focus, diff, and presentation stages
+  /// against a complete immutable tree.
+  SemanticTree replaceNodes(Map<SemanticNodeId, SemanticNode> replacements) {
+    if (replacements.isEmpty) return this;
+    final replacement = _replaceSemanticNode(root, replacements);
+    if (identical(replacement, root)) return this;
+    final tree = SemanticTree(root: replacement);
+    _cacheLeafReplacementTree(this, tree, replacements);
+    return tree;
   }
 
   Iterable<SemanticNode> where({
@@ -624,6 +701,196 @@ final class SemanticTree {
   }
 }
 
+SemanticNode _replaceSemanticNode(
+  SemanticNode node,
+  Map<SemanticNodeId, SemanticNode> replacements,
+) {
+  final replacement = replacements[node.id];
+  if (replacement != null) return replacement;
+
+  List<SemanticNode>? children;
+  for (var index = 0; index < node.children.length; index++) {
+    final child = node.children[index];
+    final nextChild = _replaceSemanticNode(child, replacements);
+    if (!identical(nextChild, child)) {
+      children ??= node.children.toList(growable: false);
+      children[index] = nextChild;
+    }
+  }
+  if (children == null) return node;
+  return node.copyWith(children: List<SemanticNode>.unmodifiable(children));
+}
+
+void _cacheLeafReplacementTree(
+  SemanticTree previous,
+  SemanticTree next,
+  Map<SemanticNodeId, SemanticNode> replacements,
+) {
+  final previousNodes = _semanticTreeNodes[previous];
+  if (previousNodes == null) return;
+
+  List<SemanticNode>? nextNodes;
+  for (var index = 0; index < previousNodes.length; index++) {
+    final previousNode = previousNodes[index];
+    final replacement = replacements[previousNode.id];
+    if (replacement == null) continue;
+    if (previousNode.children.isNotEmpty || replacement.children.isNotEmpty) {
+      return;
+    }
+    nextNodes ??= previousNodes.toList(growable: false);
+    nextNodes[index] = replacement;
+  }
+  if (nextNodes == null) return;
+
+  final cachedNodes = List<SemanticNode>.unmodifiable(nextNodes);
+  _semanticTreeNodes[next] = cachedNodes;
+
+  final previousNodesById = _semanticTreeNodesById[previous];
+  final nextNodesById = previousNodesById == null
+      ? <SemanticNodeId, SemanticNode>{
+          for (final node in cachedNodes) node.id: node,
+        }
+      : Map<SemanticNodeId, SemanticNode>.of(previousNodesById);
+  for (final entry in replacements.entries) {
+    nextNodesById[entry.key] = entry.value;
+  }
+  _semanticTreeNodesById[next] = Map<SemanticNodeId, SemanticNode>.unmodifiable(
+    nextNodesById,
+  );
+}
+
+final Expando<List<SemanticNode>> _semanticTreeNodes =
+    Expando<List<SemanticNode>>('fleury.SemanticTree.nodes');
+final Expando<Map<SemanticNodeId, SemanticNode>> _semanticTreeNodesById =
+    Expando<Map<SemanticNodeId, SemanticNode>>('fleury.SemanticTree.nodesById');
+
+List<SemanticNode> _cachedNodes(SemanticTree tree) {
+  final cached = _semanticTreeNodes[tree];
+  if (cached != null) return cached;
+  final collected = <SemanticNode>[];
+  void collect(SemanticNode node) {
+    collected.add(node);
+    for (final child in node.children) {
+      collect(child);
+    }
+  }
+
+  collect(tree.root);
+  final nodes = List<SemanticNode>.unmodifiable(collected);
+  _semanticTreeNodes[tree] = nodes;
+  return nodes;
+}
+
+Map<SemanticNodeId, SemanticNode> _cachedNodesById(SemanticTree tree) {
+  final cached = _semanticTreeNodesById[tree];
+  if (cached != null) return cached;
+  final nodesById = Map<SemanticNodeId, SemanticNode>.unmodifiable({
+    for (final node in _cachedNodes(tree)) node.id: node,
+  });
+  _semanticTreeNodesById[tree] = nodesById;
+  return nodesById;
+}
+
+/// Invokes [action] on the semantic node [id] by dispatching through the
+/// mounted element tree rooted at [root].
+///
+/// This is the runtime counterpart to semantic-test action invocation. Hosts
+/// such as the web semantic DOM can use it to route assistive-technology or
+/// mirrored-control activation back into the real Fleury widget tree.
+Future<SemanticActionInvocationResult> invokeSemanticActionFromElement({
+  required Element root,
+  required SemanticTree tree,
+  required SemanticNodeId id,
+  required SemanticAction action,
+}) async {
+  final target = tree.nodeById(id);
+  if (target == null) return SemanticActionInvocationResult.notFound(action);
+  if (!target.enabled) {
+    return SemanticActionInvocationResult.disabled(target, action);
+  }
+  if (!target.actions.contains(action)) {
+    return SemanticActionInvocationResult.unsupported(target, action);
+  }
+  try {
+    final dispatchResult = _dispatchSemanticAction(root, target, action);
+    final handled = dispatchResult is Future<bool>
+        ? await dispatchResult
+        : dispatchResult;
+    return handled
+        ? SemanticActionInvocationResult.completed(target, action)
+        : SemanticActionInvocationResult.unsupported(target, action);
+  } catch (error, stackTrace) {
+    return SemanticActionInvocationResult.failed(
+      target,
+      action,
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
+}
+
+FutureOr<bool> _dispatchSemanticAction(
+  Element element,
+  SemanticNode target,
+  SemanticAction action,
+) {
+  final children = _elementChildren(element);
+  for (var index = 0; index < children.length; index++) {
+    final childResult = _dispatchSemanticAction(
+      children[index],
+      target,
+      action,
+    );
+    if (childResult is Future<bool>) {
+      return _dispatchSemanticActionAfterAsyncChild(
+        childResult,
+        element,
+        children,
+        index + 1,
+        target,
+        action,
+      );
+    }
+    if (childResult) return true;
+  }
+
+  return _dispatchSemanticActionOnElement(element, target, action);
+}
+
+Future<bool> _dispatchSemanticActionAfterAsyncChild(
+  Future<bool> childResult,
+  Element element,
+  List<Element> children,
+  int nextIndex,
+  SemanticNode target,
+  SemanticAction action,
+) async {
+  if (await childResult) return true;
+  for (var index = nextIndex; index < children.length; index++) {
+    if (await _dispatchSemanticAction(children[index], target, action)) {
+      return true;
+    }
+  }
+  final ownResult = _dispatchSemanticActionOnElement(element, target, action);
+  return ownResult is Future<bool> ? await ownResult : ownResult;
+}
+
+FutureOr<bool> _dispatchSemanticActionOnElement(
+  Element element,
+  SemanticNode target,
+  SemanticAction action,
+) {
+  if (element is! SemanticActionContributor) return false;
+  final contributor = element as SemanticActionContributor;
+  return contributor.handleSemanticAction(target, action);
+}
+
+List<Element> _elementChildren(Element element) {
+  final children = <Element>[];
+  element.visitChildren(children.add);
+  return children;
+}
+
 /// Implemented by elements that contribute a semantic node.
 abstract interface class SemanticContributor {
   SemanticNode buildSemanticNode(List<SemanticNode> children);
@@ -645,6 +912,122 @@ abstract interface class SemanticActionContributor {
     SemanticNode target,
     SemanticAction action,
   );
+}
+
+/// Frame-local semantic invalidations collected while the element/render tree
+/// updates.
+///
+/// The dirty signal is deliberately conservative. Leaf semantic annotations can
+/// be rebuilt directly from the mounted [SemanticsElement]; structural changes,
+/// child-inclusive semantics, moves, mounts, unmounts, or stale elements force
+/// hosts back to [SemanticTree.fromElement].
+final class SemanticDirtyTracker {
+  bool _requiresFullRebuild = false;
+  final Map<SemanticNodeId, SemanticsElement> _dirtyLeafElements =
+      <SemanticNodeId, SemanticsElement>{};
+
+  /// Whether any dirt has accumulated since the last [takeDirtySnapshot].
+  ///
+  /// A cheap peek for hosts deciding whether to schedule a deferred semantic
+  /// flush; it does not validate or consume the accumulated state.
+  bool get hasDirt => _requiresFullRebuild || _dirtyLeafElements.isNotEmpty;
+
+  void recordStructureDirty() {
+    _requiresFullRebuild = true;
+    _dirtyLeafElements.clear();
+  }
+
+  void recordLeafDirty(SemanticsElement element) {
+    if (_requiresFullRebuild) return;
+    if (!element._canBuildRetainedLeaf) {
+      recordStructureDirty();
+      return;
+    }
+    _dirtyLeafElements[element._nodeId] = element;
+  }
+
+  SemanticDirtySnapshot takeDirtySnapshot() {
+    if (_requiresFullRebuild) {
+      _requiresFullRebuild = false;
+      _dirtyLeafElements.clear();
+      return const SemanticDirtySnapshot.fullRebuild();
+    }
+    if (_dirtyLeafElements.isEmpty) {
+      return const SemanticDirtySnapshot.clean();
+    }
+
+    final dirtyElements = Map<SemanticNodeId, SemanticsElement>.of(
+      _dirtyLeafElements,
+    );
+    _dirtyLeafElements.clear();
+    final leafUpdates = <SemanticNodeId, SemanticNode>{};
+    for (final entry in dirtyElements.entries) {
+      final element = entry.value;
+      if (!element.mounted ||
+          !element._canBuildRetainedLeaf ||
+          element._nodeId != entry.key) {
+        return const SemanticDirtySnapshot.fullRebuild();
+      }
+      leafUpdates[entry.key] = element._buildRetainedLeafSemanticNode();
+    }
+    return SemanticDirtySnapshot.leafUpdates(leafUpdates);
+  }
+
+  void reset() {
+    _requiresFullRebuild = false;
+    _dirtyLeafElements.clear();
+  }
+}
+
+final Expando<SemanticDirtyTracker> _semanticDirtyTrackers =
+    Expando<SemanticDirtyTracker>('fleury.BuildOwner.semanticDirtyTracker');
+
+/// Per-[BuildOwner] semantic dirty tracking.
+///
+/// [SemanticsElement]s record into their owner's tracker, so two Fleury
+/// runtimes in one isolate never observe each other's semantic dirt. The
+/// tracker accumulates marks across frames until [SemanticDirtyTracker
+/// .takeDirtySnapshot] consumes them, which lets deferred semantic
+/// presentation coalesce several frames into one flush. Attached lazily via
+/// an [Expando] (the same per-instance idiom [SemanticTree]'s caches use) so
+/// the widgets layer takes no dependency on semantics.
+extension SemanticDirtyOwner on BuildOwner {
+  SemanticDirtyTracker get semanticDirtyTracker =>
+      _semanticDirtyTrackers[this] ??= SemanticDirtyTracker();
+}
+
+/// Semantic dirty state captured for one rendered frame.
+final class SemanticDirtySnapshot {
+  const SemanticDirtySnapshot._({
+    required this.requiresFullRebuild,
+    required this.leafUpdates,
+  });
+
+  const SemanticDirtySnapshot.clean()
+    : this._(
+        requiresFullRebuild: false,
+        leafUpdates: const <SemanticNodeId, SemanticNode>{},
+      );
+
+  const SemanticDirtySnapshot.fullRebuild()
+    : this._(
+        requiresFullRebuild: true,
+        leafUpdates: const <SemanticNodeId, SemanticNode>{},
+      );
+
+  SemanticDirtySnapshot.leafUpdates(
+    Map<SemanticNodeId, SemanticNode> leafUpdates,
+  ) : this._(
+        requiresFullRebuild: false,
+        leafUpdates: Map<SemanticNodeId, SemanticNode>.unmodifiable(
+          leafUpdates,
+        ),
+      );
+
+  final bool requiresFullRebuild;
+  final Map<SemanticNodeId, SemanticNode> leafUpdates;
+
+  bool get isClean => !requiresFullRebuild && leafUpdates.isEmpty;
 }
 
 /// App-authored semantic annotation.
@@ -696,20 +1079,59 @@ final class Semantics extends ProxyWidget {
 }
 
 final class SemanticsElement extends ComponentElement
-    implements SemanticContributor, SemanticActionContributor {
+    implements
+        SemanticContributor,
+        SemanticChildrenProvider,
+        SemanticActionContributor {
   SemanticsElement(Semantics super.widget);
+
+  CellRect? _bounds;
+  SemanticNode? _cachedSemanticNode;
 
   @override
   Semantics get widget => super.widget as Semantics;
 
   @override
+  void mount(Element? parent) {
+    super.mount(parent);
+    owner.semanticDirtyTracker.recordStructureDirty();
+  }
+
+  @override
   void update(covariant Semantics newWidget) {
+    final oldId = _nodeId;
+    final oldIncludeChildren = widget.includeChildren;
     super.update(newWidget);
+    if (oldId != _nodeId || oldIncludeChildren || newWidget.includeChildren) {
+      owner.semanticDirtyTracker.recordStructureDirty();
+    } else {
+      owner.semanticDirtyTracker.recordLeafDirty(this);
+    }
     rebuild(force: true);
   }
 
   @override
-  Widget buildChild() => widget.child;
+  void deactivate() {
+    owner.semanticDirtyTracker.recordStructureDirty();
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    owner.semanticDirtyTracker.recordStructureDirty();
+  }
+
+  @override
+  void unmount() {
+    owner.semanticDirtyTracker.recordStructureDirty();
+    super.unmount();
+  }
+
+  @override
+  Widget buildChild() {
+    return _SemanticBounds(onPaintBounds: _updateBounds, child: widget.child);
+  }
 
   /// The node's identity. An explicit [Semantics.id] wins; otherwise a [Key] on
   /// the widget yields a stable, deterministic id (`key:<key>`) that survives
@@ -725,10 +1147,58 @@ final class SemanticsElement extends ComponentElement
     return SemanticNodeId('element-$hashCode');
   }
 
+  bool get _canBuildRetainedLeaf => !widget.includeChildren;
+
+  void _updateBounds(CellRect? bounds) {
+    if (_bounds == bounds) return;
+    _bounds = bounds;
+    _cachedSemanticNode = null;
+    if (_canBuildRetainedLeaf) {
+      owner.semanticDirtyTracker.recordLeafDirty(this);
+    } else {
+      owner.semanticDirtyTracker.recordStructureDirty();
+    }
+  }
+
+  SemanticNode _buildRetainedLeafSemanticNode() {
+    return buildSemanticNode(const <SemanticNode>[]);
+  }
+
+  @override
+  void visitSemanticChildren(void Function(Element child) visitor) {
+    if (!widget.includeChildren) return;
+    visitChildren(visitor);
+  }
+
   @override
   SemanticNode buildSemanticNode(List<SemanticNode> children) {
-    return SemanticNode(
-      id: _nodeId,
+    final semanticChildren = widget.includeChildren
+        ? children
+        : const <SemanticNode>[];
+    final id = _nodeId;
+    final cached = _cachedSemanticNode;
+    if (cached != null &&
+        semanticChildren.isEmpty &&
+        cached.children.isEmpty &&
+        cached.id == id &&
+        cached.role == widget.role &&
+        cached.label == widget.label &&
+        cached.value == widget.value &&
+        cached.hint == widget.hint &&
+        cached.enabled == widget.enabled &&
+        cached.focused == widget.focused &&
+        cached.selected == widget.selected &&
+        cached.checked == widget.checked &&
+        cached.expanded == widget.expanded &&
+        cached.busy == widget.busy &&
+        cached.validationError == widget.validationError &&
+        cached.bounds == _bounds &&
+        identical(cached.actions, widget.actions) &&
+        cached.state.hasSameValues(widget.state)) {
+      return cached;
+    }
+    final node = SemanticNode(
+      id: id,
       role: widget.role,
       label: widget.label,
       value: widget.value,
@@ -740,10 +1210,13 @@ final class SemanticsElement extends ComponentElement
       expanded: widget.expanded,
       busy: widget.busy,
       validationError: widget.validationError,
+      bounds: _bounds,
       actions: widget.actions,
-      children: widget.includeChildren ? children : const <SemanticNode>[],
+      children: semanticChildren,
       state: widget.state,
     );
+    if (semanticChildren.isEmpty) _cachedSemanticNode = node;
+    return node;
   }
 
   @override
@@ -753,27 +1226,132 @@ final class SemanticsElement extends ComponentElement
   ) async {
     final callback = widget.onAction;
     if (callback == null || target.id != _nodeId) return false;
+    if (!widget.enabled || !widget.actions.contains(action)) return false;
     await callback(action);
     return true;
   }
 }
 
-List<SemanticNode> _collectFrom(Element element) {
-  final children = <SemanticNode>[];
-  void visitChild(Element child) {
-    children.addAll(_collectFrom(child));
+final class _SemanticBounds extends SingleChildRenderObjectWidget {
+  const _SemanticBounds({
+    required this.onPaintBounds,
+    required Widget super.child,
+  });
+
+  final void Function(CellRect? bounds) onPaintBounds;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderSemanticBounds(onPaintBounds: onPaintBounds);
   }
 
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _RenderSemanticBounds renderObject,
+  ) {
+    renderObject.onPaintBounds = onPaintBounds;
+  }
+}
+
+final class _RenderSemanticBounds extends RenderObject
+    implements RenderObjectWithSingleChild {
+  _RenderSemanticBounds({
+    required void Function(CellRect? bounds) onPaintBounds,
+  }) : _onPaintBounds = onPaintBounds;
+
+  void Function(CellRect? bounds) _onPaintBounds;
+  set onPaintBounds(void Function(CellRect? bounds) value) {
+    _onPaintBounds = value;
+  }
+
+  RenderObject? _child;
+
+  @override
+  RenderObject? get child => _child;
+
+  @override
+  set child(RenderObject? value) {
+    if (identical(_child, value)) return;
+    if (_child != null) dropChild(_child!);
+    _child = value;
+    if (value != null) adoptChild(value);
+  }
+
+  @override
+  CellSize performLayout(CellConstraints constraints) {
+    final child = _child;
+    if (child == null) return constraints.constrain(CellSize.zero);
+    return child.layout(constraints);
+  }
+
+  @override
+  int computeMaxIntrinsicWidth(int? height) {
+    return _child?.computeMaxIntrinsicWidth(height) ?? 0;
+  }
+
+  @override
+  int computeMinIntrinsicWidth(int? height) {
+    return _child?.computeMinIntrinsicWidth(height) ?? 0;
+  }
+
+  @override
+  int computeMaxIntrinsicHeight(int? width) {
+    return _child?.computeMaxIntrinsicHeight(width) ?? 0;
+  }
+
+  @override
+  int computeMinIntrinsicHeight(int? width) {
+    return _child?.computeMinIntrinsicHeight(width) ?? 0;
+  }
+
+  @override
+  void paint(
+    CellBuffer buffer,
+    CellOffset offset, {
+    CellOffset? screenOffset,
+    CellRect? clipRect,
+  }) {
+    final localRect = CellRect(offset: offset, size: size);
+    final rect = CellRect(offset: screenOffset ?? offset, size: size);
+    SemanticPaintBoundsCapture.record(_onPaintBounds, localRect);
+    _onPaintBounds(clipRect == null ? rect : rect.intersect(clipRect));
+    _child?.paint(
+      buffer,
+      offset,
+      screenOffset: screenOffset ?? offset,
+      clipRect: clipRect,
+    );
+  }
+}
+
+List<SemanticNode> _collectFrom(Element element) {
+  final nodes = <SemanticNode>[];
+  _collectInto(element, nodes);
+  return nodes;
+}
+
+void _collectInto(Element element, List<SemanticNode> output) {
   if (element is SemanticChildrenProvider) {
-    (element as SemanticChildrenProvider).visitSemanticChildren(visitChild);
-  } else {
-    element.visitChildren(visitChild);
+    if (element is SemanticContributor) {
+      final children = <SemanticNode>[];
+      (element as SemanticChildrenProvider).visitSemanticChildren(
+        (child) => _collectInto(child, children),
+      );
+      output.add((element as SemanticContributor).buildSemanticNode(children));
+      return;
+    }
+    (element as SemanticChildrenProvider).visitSemanticChildren(
+      (child) => _collectInto(child, output),
+    );
+    return;
   }
 
   if (element is SemanticContributor) {
-    return <SemanticNode>[
-      (element as SemanticContributor).buildSemanticNode(children),
-    ];
+    final children = <SemanticNode>[];
+    element.visitChildren((child) => _collectInto(child, children));
+    output.add((element as SemanticContributor).buildSemanticNode(children));
+  } else {
+    element.visitChildren((child) => _collectInto(child, output));
   }
-  return children;
 }

@@ -73,7 +73,10 @@ void main() {
       expect(b.content, 2);
       expect(b.total, frame.length);
       // Every byte is accounted for exactly once.
-      expect(b.total, b.content + b.sgr + b.cursor + b.sync + b.other);
+      expect(
+        b.total,
+        b.content + b.sgr + b.cursor + b.sync + b.session + b.other,
+      );
     });
 
     test('overheadFraction reflects control vs information split', () {
@@ -81,6 +84,42 @@ void main() {
       // 6 cursor bytes + 2 content bytes.
       expect(b.overhead, 6);
       expect(b.content, 2);
+      expect(b.overheadFraction, closeTo(6 / 8, 1e-9));
+    });
+
+    test('lifecycle private modes are categorized as session, not sync', () {
+      // The exact enter sequence runTui emits for an interactive session.
+      const enter = '\x1B[?1049h\x1B[?25l\x1B[?2004h';
+      final b = AnsiByteBreakdown.analyze(enter);
+      expect(b.session, enter.length);
+      expect(b.sync, 0);
+    });
+
+    test('mouse-mode resets on exit are categorized as session', () {
+      const exit = '\x1B[?1006l\x1B[?1003l\x1B[?1002l\x1B[?1000l';
+      final b = AnsiByteBreakdown.analyze(exit);
+      expect(b.session, exit.length);
+      expect(b.sync, 0);
+    });
+
+    test('Kitty keyboard push/pop is categorized as session', () {
+      final b = AnsiByteBreakdown.analyze('\x1B[>1u\x1B[<u');
+      expect(b.session, '\x1B[>1u\x1B[<u'.length);
+      expect(b.other, 0);
+    });
+
+    test('synchronized output stays sync alongside session toggles', () {
+      final b = AnsiByteBreakdown.analyze('\x1B[?1049h\x1B[?2026h\x1B[?2026l');
+      expect(b.session, '\x1B[?1049h'.length);
+      expect(b.sync, '\x1B[?2026h\x1B[?2026l'.length);
+    });
+
+    test('overheadFraction excludes session lifecycle bytes', () {
+      // Session enter + one cursor move + content: the fraction is computed
+      // over the steady-state bytes only.
+      final b = AnsiByteBreakdown.analyze('\x1B[?1049h\x1B[1;1Hab');
+      expect(b.session, 8);
+      expect(b.overhead, 6);
       expect(b.overheadFraction, closeTo(6 / 8, 1e-9));
     });
   });

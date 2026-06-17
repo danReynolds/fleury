@@ -16,8 +16,27 @@ import 'framework.dart';
 /// whenever a `RenderObjectElement` inside it is reconciled or any render
 /// object's child list changes. Stable subtrees (`const` widgets, or
 /// instances kept identical across builds) stay cached across many frames.
-class RepaintBoundary extends SingleChildRenderObjectWidget {
+///
+/// Do NOT combine boundaries with keys to "recycle" rows of moving
+/// content (the keyed-list pattern from DOM frameworks). When content
+/// scrolls or shifts, keyed boundaries make every moved row a reconciled
+/// subtree — each one invalidates its cache, so the framework pays the
+/// boundary bookkeeping AND the repaint. Measured on the scroll
+/// benchmarks, that is about 2x slower than letting positional rebuild
+/// repaint the rows, and it also defeats scroll detection (which turns
+/// shifted rows into a single buffer move). Boundaries are for content
+/// that is expensive and STAYS PUT; moving content is exactly what the
+/// damage tracker and scroll reuse already handle.
+class RepaintBoundary extends SingleChildRenderObjectWidget
+    implements WidgetUpdatePruner {
   const RepaintBoundary({super.key, super.child});
+
+  @override
+  bool hasEquivalentWidgetConfiguration(Widget other) {
+    return other is RepaintBoundary &&
+        key == other.key &&
+        canSkipNullableWidgetUpdate(child, other.child);
+  }
 
   @override
   RenderRepaintBoundary createRenderObject(BuildContext context) =>

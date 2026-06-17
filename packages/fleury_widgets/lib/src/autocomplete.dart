@@ -1,5 +1,7 @@
 import 'package:fleury/fleury.dart';
 
+import 'option_label.dart';
+
 /// A text field with an anchored, live-filtered suggestion list.
 ///
 /// As the user types, options whose display string matches the text
@@ -140,7 +142,9 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
   void _move(int delta) {
     if (_filtered.isEmpty) return;
     final current = _list.selectedIndex ?? 0;
-    _list.selectedIndex = (current + delta).clamp(0, _filtered.length - 1);
+    final n = _filtered.length;
+    // Wrap like fzf / gum filter — Up from the first item lands on the last.
+    _list.selectedIndex = ((current + delta) % n + n) % n;
     _entry?.markNeedsBuild();
   }
 
@@ -159,7 +163,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
   Widget _suggestions() {
     var width = 0;
     for (final o in _filtered) {
-      final len = _display(o).length;
+      final len = sanitizeOptionLabel(_display(o)).length;
       if (len > width) width = len;
     }
     final height = _filtered.length > widget.maxVisible
@@ -205,7 +209,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
             selectionActive: true,
             itemCount: _filtered.length,
             itemBuilder: (_, i, selected) {
-              final label = _display(_filtered[i]);
+              final label = sanitizeOptionLabel(_display(_filtered[i]));
               return Semantics(
                 role: SemanticRole.menuItem,
                 label: label,
@@ -235,9 +239,17 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
                       return;
                   }
                 },
-                child: Text(
-                  '${selected ? '› ' : '  '}$label',
-                  style: selected ? _selectionStyle : CellStyle.empty,
+                // Click a suggestion to accept it — the same select+pick the
+                // keyboard's Tab/Enter performs.
+                child: GestureDetector(
+                  onTap: () {
+                    _list.selectedIndex = i;
+                    _pick();
+                  },
+                  child: Text(
+                    '${selected ? '› ' : '  '}$label',
+                    style: selected ? _selectionStyle : CellStyle.empty,
+                  ),
                 ),
               );
             },
@@ -295,6 +307,20 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
               return;
             }
             _close();
+          },
+          hideFromHintBar: true,
+        ),
+        // Tab accepts the highlighted suggestion when the menu is open — the
+        // dominant shell/fzf completion convention. When closed, Tab bubbles
+        // so it still moves focus between widgets.
+        KeyBinding(
+          KeyChord.tab,
+          onEvent: (event) {
+            if (_entry == null) {
+              event.bubble();
+              return;
+            }
+            _pick();
           },
           hideFromHintBar: true,
         ),
