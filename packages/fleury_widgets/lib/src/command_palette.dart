@@ -451,10 +451,16 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
           'visibleRangeEnd': visibleRangeEnd,
         }),
         child: Container(
+          // Fill an opaque background so the content beneath the floating
+          // palette doesn't bleed through, and bound the height to the content
+          // (input + gap + result window) so the box doesn't stretch to fill
+          // the whole viewport the centering Align hands it.
+          color: theme.colorScheme.background,
           border: BoxBorder(style: theme.borderStyle),
           padding: const EdgeInsets.symmetric(horizontal: 1),
           child: SizedBox(
             width: widget.width,
+            height: visible + 2,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

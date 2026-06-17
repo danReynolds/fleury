@@ -49,7 +49,9 @@ void main() {
       expect(buf.atColRow(14, 0).grapheme, ']');
     });
 
-    testWidgets('arrow right moves selection to the next color', (tester) {
+    testWidgets('arrows preview; Enter commits the highlighted color', (
+      tester,
+    ) {
       Color? received;
       tester.pumpWidget(
         ColorPicker(
@@ -58,8 +60,55 @@ void main() {
           onChanged: (c) => received = c,
         ),
       );
+      // Navigating only moves the preview cursor — nothing is committed yet.
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      expect(received, isNull, reason: 'arrow previews without committing');
+      // Enter locks in the highlighted color.
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
       expect(received, const AnsiColor(1));
+    });
+
+    testWidgets('# opens a hex-entry popover', (tester) {
+      tester.pumpWidget(
+        Navigator(
+          home: ColorPicker(
+            value: const AnsiColor(1),
+            autofocus: true,
+            onChanged: (_) {},
+          ),
+        ),
+      );
+      tester.type('#');
+      tester.pump();
+      final out = tester.renderToString(
+        size: const CellSize(40, 12),
+        emptyMark: ' ',
+      );
+      expect(
+        out.contains('Hex') || out.contains('RRGGBB'),
+        isTrue,
+        reason: '# opened the hex-entry popover',
+      );
+    });
+
+    testWidgets('Esc abandons an uncommitted preview', (tester) {
+      Color? received;
+      tester.pumpWidget(
+        ColorPicker(
+          value: const AnsiColor(0),
+          autofocus: true,
+          onChanged: (c) => received = c,
+        ),
+      );
+      tester.render(); // build snapshots the focus-in color
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight)); // preview 1
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape)); // abandon
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // commit cursor
+      expect(
+        received,
+        isNull,
+        reason: 'Esc reset the cursor, so Enter re-commits the original',
+      );
     });
 
     testWidgets('clicking a swatch selects that color', (tester) {
@@ -87,6 +136,7 @@ void main() {
         ),
       );
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
       // Default columns = 8, so down from 0 lands on 8.
       expect(received, const AnsiColor(8));
     });
@@ -115,6 +165,7 @@ void main() {
         ),
       );
       tester.sendKey(const KeyEvent(keyCode: KeyCode.home));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
       expect(received, const AnsiColor(0));
     });
 
@@ -128,6 +179,7 @@ void main() {
         ),
       );
       tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
       expect(received, const AnsiColor(15));
     });
 
@@ -143,6 +195,7 @@ void main() {
         ),
       );
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
       expect(received, const AnsiColor(5));
     });
 
