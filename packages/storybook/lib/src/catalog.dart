@@ -380,6 +380,7 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
         options: <String>['Dashboard', 'Distribution'],
       ),
       StoryControl.toggle(id: 'interactive', label: 'Interactive line'),
+      StoryControl.toggle(id: 'play', label: 'Play (live data)'),
       StoryControl.number(
         id: 'samples',
         label: 'Samples',
@@ -407,6 +408,7 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
     builder: (context) => _ChartsStory(
       distribution: context.option('mode') == 'Distribution',
       interactiveLine: context.enabled('interactive'),
+      play: context.enabled('play'),
       selectedWidgetName: context.selectedWidgetName ?? context.story.title,
       samples: context.number('samples').round(),
     ),
@@ -2099,26 +2101,85 @@ class _FormsStory extends StatelessWidget {
   }
 }
 
-class _ChartsStory extends StatelessWidget {
+class _ChartsStory extends StatefulWidget {
   const _ChartsStory({
     required this.distribution,
     required this.interactiveLine,
+    required this.play,
     required this.selectedWidgetName,
     required this.samples,
   });
 
   final bool distribution;
   final bool interactiveLine;
+  final bool play;
   final String selectedWidgetName;
   final int samples;
 
   @override
+  State<_ChartsStory> createState() => _ChartsStoryState();
+}
+
+class _ChartsStoryState extends State<_ChartsStory>
+    with SingleTickerProviderStateMixin {
+  Ticker? _sim;
+  int _phase = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncTicker();
+  }
+
+  @override
+  void didUpdateWidget(_ChartsStory oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.play != oldWidget.play) _syncTicker();
+  }
+
+  void _syncTicker() {
+    if (widget.play) {
+      // The ticker needs a TuiBinding (installed by runTui); a plain test tree
+      // has none, so animation is simply skipped there.
+      _sim ??= TuiBinding.maybeOf(context) != null ? createTicker(_onTick) : null;
+      if (_sim != null && !_sim!.isActive) _sim!.start();
+    } else {
+      _sim?.stop();
+    }
+  }
+
+  // Advances ~8 frames/sec while the Play toggle is on; [_phase] drives the
+  // live data below so each chart streams new values. (The mixin disposes the
+  // ticker it created, so no dispose() override is needed here.)
+  void _onTick(Duration elapsed) {
+    final next = elapsed.inMilliseconds ~/ 120;
+    if (next != _phase) setState(() => _phase = next);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final values = _distributionValues(samples);
-    final framePoints = _framePoints(samples);
-    final wirePoints = _wirePoints(samples);
-    final sparkline = _sparkline(samples);
-    final heatmap = _heatmap();
+    final distribution = widget.distribution;
+    final interactiveLine = widget.interactiveLine;
+    final selectedWidgetName = widget.selectedWidgetName;
+    final samples = widget.samples;
+    final live = widget.play;
+    final phase = _phase;
+    final values = live
+        ? _animValues(samples, phase)
+        : _distributionValues(samples);
+    final framePoints = live
+        ? _animPoints(samples, phase, 0)
+        : _framePoints(samples);
+    final wirePoints = live
+        ? _animPoints(samples, phase, 3)
+        : _wirePoints(samples);
+    final sparkline = live ? _animSparkline(samples, phase) : _sparkline(samples);
+    final heatmap = live ? _animHeatmap(phase) : _heatmap();
+    final bars = live ? _animBars(phase) : _statusBars;
+    final gaugeRss = live ? _animGauge(phase, 0) : 0.82;
+    final gaugeCpu = live ? _animGauge(phase, 2) : 0.64;
+    final gaugeIo = live ? _animGauge(phase, 4) : 0.98;
+    final clock = live ? _animClock(phase) : '12:34';
     final calendarValues = _calendarValues();
 
     if (distribution) {
@@ -2155,7 +2216,7 @@ class _ChartsStory extends StatelessWidget {
     switch (selectedWidgetName) {
       case 'BarChart':
         return BarChart(
-          bars: _statusBars,
+          bars: bars,
           barWidth: 3,
           gap: 2,
           segmentLabels: const <String>['app', 'framework', 'driver'],
@@ -2219,18 +2280,18 @@ class _ChartsStory extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             // Threshold zones: amber past 80%, red past 95%.
-            Gauge(value: 0.82, label: 'RSS', thresholds: _gaugeZones(Theme.of(context))),
+            Gauge(value: gaugeRss, label: 'RSS', thresholds: _gaugeZones(Theme.of(context))),
             const SizedBox(height: 1),
-            Gauge(value: 0.64, label: 'CPU', thresholds: _gaugeZones(Theme.of(context))),
+            Gauge(value: gaugeCpu, label: 'CPU', thresholds: _gaugeZones(Theme.of(context))),
             const SizedBox(height: 1),
-            Gauge(value: 0.98, label: 'IO', thresholds: _gaugeZones(Theme.of(context))),
+            Gauge(value: gaugeIo, label: 'IO', thresholds: _gaugeZones(Theme.of(context))),
           ],
         );
       case 'Digits':
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Digits('12:34', color: Theme.of(context).colorScheme.primary),
+            Digits(clock, color: Theme.of(context).colorScheme.primary),
             const SizedBox(height: 1),
             const Text('elapsed runtime'),
           ],
@@ -2247,7 +2308,7 @@ class _ChartsStory extends StatelessWidget {
             children: <Widget>[
               Expanded(
                 child: BarChart(
-                  bars: _statusBars,
+                  bars: bars,
                   barWidth: 3,
                   gap: 2,
                   segmentLabels: const <String>['app', 'framework', 'driver'],
@@ -2277,9 +2338,9 @@ class _ChartsStory extends StatelessWidget {
           children: <Widget>[
             SizedBox(width: 22, child: Sparkline(data: sparkline)),
             const SizedBox(width: 2),
-            const Gauge(value: 0.82, label: 'RSS'),
+            Gauge(value: gaugeRss, label: 'RSS'),
             const SizedBox(width: 2),
-            Digits('12:34', color: Theme.of(context).colorScheme.primary),
+            Digits(clock, color: Theme.of(context).colorScheme.primary),
           ],
         ),
         const SizedBox(height: 1),
@@ -2305,6 +2366,48 @@ const List<Bar> _statusBars = <Bar>[
   Bar.stacked('Mem', <num>[26, 18, 5]),
   Bar.stacked('IO', <num>[18, 9, 3]),
 ];
+
+// ── Live "play" data ──────────────────────────────────────────────────────
+// Phase-shifted variants of the static chart data; the charts story streams
+// these into each widget while the Play toggle is on, so the demos animate.
+List<num> _animSparkline(int samples, int phase) => <num>[
+  for (var i = 0; i < samples; i++) (math.sin((i + phase) * 0.5) + 1) * 45 + 5,
+];
+
+List<(num, num)> _animPoints(int samples, int phase, int seed) =>
+    <(num, num)>[
+      for (var i = 0; i < samples; i++)
+        (i, (math.sin((i + phase) * 0.6 + seed) + 1) * 40 + 10),
+    ];
+
+List<num> _animValues(int samples, int phase) => <num>[
+  for (var i = 0; i < samples * 2; i++) (math.sin((i + phase) * 0.4) + 1) * 25 + 4,
+];
+
+List<List<num>> _animHeatmap(int phase) => <List<num>>[
+  for (var r = 0; r < 3; r++)
+    <num>[
+      for (var c = 0; c < 5; c++)
+        ((math.sin((r * 5 + c + phase) * 0.5) + 1) * 5).roundToDouble(),
+    ],
+];
+
+List<Bar> _animBars(int phase) => <Bar>[
+  for (var b = 0; b < _statusBars.length; b++)
+    Bar.stacked(_statusBars[b].label, <num>[
+      for (var s = 0; s < 3; s++) (math.sin((b * 3 + s + phase) * 0.5) + 1) * 12 + 4,
+    ]),
+];
+
+double _animGauge(int phase, int seed) =>
+    (math.sin((phase + seed) * 0.25) + 1) / 2;
+
+String _animClock(int phase) {
+  final total = phase % 3600;
+  final m = (total ~/ 60).toString().padLeft(2, '0');
+  final s = (total % 60).toString().padLeft(2, '0');
+  return '$m:$s';
+}
 
 final DateTime _chartToday = DateTime(2026, 6, 9);
 
