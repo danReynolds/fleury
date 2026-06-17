@@ -68,6 +68,28 @@ void main() {
     Command(label: 'Close Window', onInvoke: () => onRun('close')),
   ];
 
+  testWidgets('palette is bounded to its content, not the full viewport', (
+    tester,
+  ) {
+    tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
+    _open(tester, ctx, commands((_) {})); // 3 commands
+    final lines = tester
+        .renderToString(size: const CellSize(50, 30), emptyMark: ' ')
+        .split('\n');
+    final top = lines.indexWhere((l) => l.contains('╭') || l.contains('┌'));
+    final bottom = lines.lastIndexWhere(
+      (l) => l.contains('╰') || l.contains('└'),
+    );
+    expect(top, greaterThanOrEqualTo(0), reason: 'palette border rendered');
+    // Box = border(2) + input(1) + gap(1) + 3 result rows = 7, far short of
+    // the 30-row viewport the centering Align offers.
+    expect(
+      bottom - top + 1,
+      lessThan(12),
+      reason: 'palette fits its content, not the whole viewport',
+    );
+  });
+
   testWidgets('filters by fuzzy query and invokes on Enter', (tester) async {
     String? ran;
     tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
