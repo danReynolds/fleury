@@ -9,6 +9,7 @@ import 'package:web/web.dart' as web;
 
 import '../dom_grid/dom_grid_surface.dart';
 import '../input/dom_input_source.dart';
+import '../metrics/cell_metrics.dart';
 import '../metrics/dom_cell_metrics.dart';
 import '../semantics/semantic_dom_presenter.dart';
 import 'plan_adapter.dart';
@@ -67,7 +68,10 @@ final class RemoteSurfaceClient {
   }
 
   void _onOpen() {
-    _size = _measureViewport();
+    // A degenerate first measurement falls back to a conventional 80×24 so the
+    // session never opens collapsed; the ResizeObserver corrects it once the
+    // container has a real layout.
+    _size = _measureViewport() ?? const CellSize(80, 24);
     // The grid surface owns its own root — `resize` calls `replaceChildren`
     // on it — so the accessible semantic tree must live in a sibling element,
     // not inside the grid root. This mirrors the in-browser host's layout
@@ -97,12 +101,11 @@ final class RemoteSurfaceClient {
     _observeResize();
   }
 
-  CellSize _measureViewport() {
+  CellSize? _measureViewport() {
     // DomCellMetrics.measure() owns the browser layout read and derives
     // the cols/rows that fit the container — the host read phase. The
     // client never reads layout directly (boundary contract).
-    final box = _metrics!.measure();
-    return CellSize(box.cols.clamp(1, 1000), box.rows.clamp(1, 1000));
+    return viewportSizeForMeasurement(_metrics!.measure());
   }
 
   void _sendInit() {
@@ -133,8 +136,13 @@ final class RemoteSurfaceClient {
   void _observeResize() {
     final observer = web.ResizeObserver(
       ((JSArray<JSAny?> _, web.ResizeObserver __) {
+        // A ResizeObserver callback can fire mid-reflow with the container
+        // momentarily collapsed; [_measureViewport] returns null for such a
+        // degenerate read. Adopting it would resize the grid to a one-row
+        // sliver and blank the screen (with no guarantee a corrective callback
+        // follows), so we ignore it and keep the last good size.
         final next = _measureViewport();
-        if (next == _size) return;
+        if (next == null || next == _size) return;
         _size = next;
         _surface?.resize(next);
         _mirror = CellBuffer(next);
@@ -149,9 +157,64 @@ final class RemoteSurfaceClient {
     if (data == null) return;
     final buffer = (data as JSArrayBuffer).toDart;
     _decoder.feed(buffer.asUint8List());
-    for (final frame in _decoder.drain()) {
-      _handleFrame(frame);
+    // This runs at the JS onmessage boundary, where an uncaught throw silently
+    // stops processing — a single malformed frame or render edge case would
+    // wedge the session blank with no recovery. So decode and apply each frame
+    // defensively: log the failure and repair the screen from the mirror.
+    final List<RemoteFrame> frames;
+    try {
+      frames = _decoder.drain().toList();
+    } catch (error) {
+      web.console.error('fleury: remote frame decode failed: $error'.toJS);
+      _resyncFromMirror();
+      return;
     }
+    for (final frame in frames) {
+      try {
+        _handleFrame(frame);
+      } catch (error) {
+        web.console.error('fleury: remote frame apply failed: $error'.toJS);
+        _resyncFromMirror();
+      }
+    }
+  }
+
+  /// Repaints the whole grid from the mirror after a frame failed to apply.
+  /// The mirror is the authoritative cell state (the transport-parity tests
+  /// guarantee it tracks the server), so a full local repaint restores any DOM
+  /// a half-applied frame left broken — without needing the server to resend.
+  void _resyncFromMirror() {
+    final surface = _surface;
+    if (surface == null) return;
+    try {
+      surface.present(_mirror, _mirror, _fullRepaintPlan(_mirror));
+    } catch (error) {
+      // A repaint that itself fails can't be recovered locally; log and leave
+      // the last good DOM rather than loop.
+      web.console.error('fleury: resync repaint failed: $error'.toJS);
+    }
+  }
+
+  FramePresentationPlan _fullRepaintPlan(CellBuffer mirror) {
+    const builder = CellSpanBuilder();
+    return FramePresentationPlan(
+      reason: 'resync',
+      fullRepaint: true,
+      size: mirror.size,
+      damage: FramePresentationDamage(
+        fullRepaint: true,
+        requiresFullDiff: true,
+        dirtyBounds: null,
+        dirtyRows: TuiDirtyRows.full(mirror.size.rows),
+        source: FrameDamageSource.fullRepaint,
+      ),
+      dirtyRowModels: [
+        for (var r = 0; r < mirror.size.rows; r++) builder.buildRow(mirror, r),
+      ],
+      metricsChanged: false,
+      dirtyRowDiffTime: Duration.zero,
+      spanBuildTime: Duration.zero,
+    );
   }
 
   void _handleFrame(RemoteFrame frame) {
@@ -213,4 +276,16 @@ final class RemoteSurfaceClient {
     _semanticRoot = null;
     _socket = null;
   }
+}
+
+/// The viewport size to adopt from a cell measurement, or null when the
+/// measurement is degenerate — fewer than two rows or columns. A degenerate
+/// read means the container has no usable layout yet: a ResizeObserver firing
+/// mid-reflow, the monospace probe measured before the font loaded, or a
+/// momentarily-collapsed host. Adopting it would resize the served grid down to
+/// a one-row sliver and blank the screen, with no guarantee a corrective
+/// measurement follows — so callers ignore it and keep the last good size.
+CellSize? viewportSizeForMeasurement(MeasuredCellBox box) {
+  if (box.cols < 2 || box.rows < 2) return null;
+  return CellSize(box.cols.clamp(1, 1000), box.rows.clamp(1, 1000));
 }
