@@ -380,7 +380,7 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
         options: <String>['Dashboard', 'Distribution'],
       ),
       StoryControl.toggle(id: 'interactive', label: 'Interactive line'),
-      StoryControl.toggle(id: 'play', label: 'Play (live data)'),
+      StoryControl.toggle(id: 'play', label: 'Play (live data)', initialValue: true),
       StoryControl.number(
         id: 'samples',
         label: 'Samples',
@@ -2124,6 +2124,11 @@ class _ChartsStoryState extends State<_ChartsStory>
     with SingleTickerProviderStateMixin {
   Ticker? _sim;
   int _phase = 0;
+  // Effective play state. Seeded from the inspector's Play control, but also
+  // flipped by the in-preview Play/Pause button below — so the demo is
+  // controllable even in a narrow layout where the inspector (and its toggle)
+  // is hidden.
+  late bool _playing = widget.play;
 
   @override
   void didChangeDependencies() {
@@ -2134,11 +2139,20 @@ class _ChartsStoryState extends State<_ChartsStory>
   @override
   void didUpdateWidget(_ChartsStory oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.play != oldWidget.play) _syncTicker();
+    // The inspector toggle is authoritative whenever it actually changes.
+    if (widget.play != oldWidget.play) {
+      _playing = widget.play;
+      _syncTicker();
+    }
+  }
+
+  void _togglePlay() {
+    setState(() => _playing = !_playing);
+    _syncTicker();
   }
 
   void _syncTicker() {
-    if (widget.play) {
+    if (_playing) {
       // The ticker needs a TuiBinding (installed by runTui); a plain test tree
       // has none, so animation is simply skipped there.
       _sim ??= TuiBinding.maybeOf(context) != null ? createTicker(_onTick) : null;
@@ -2148,9 +2162,9 @@ class _ChartsStoryState extends State<_ChartsStory>
     }
   }
 
-  // Advances ~8 frames/sec while the Play toggle is on; [_phase] drives the
-  // live data below so each chart streams new values. (The mixin disposes the
-  // ticker it created, so no dispose() override is needed here.)
+  // Advances ~8 frames/sec while play is on; [_phase] drives the live data
+  // below so each chart streams new values. (The mixin disposes the ticker it
+  // created, so no dispose() override is needed here.)
   void _onTick(Duration elapsed) {
     final next = elapsed.inMilliseconds ~/ 120;
     if (next != _phase) setState(() => _phase = next);
@@ -2158,11 +2172,24 @@ class _ChartsStoryState extends State<_ChartsStory>
 
   @override
   Widget build(BuildContext context) {
+    // A live indicator + Play/Pause button sits above every chart so the
+    // streaming is labelled and can be paused right here in the preview.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        _LivePlayBar(playing: _playing, onToggle: _togglePlay),
+        const SizedBox(height: 1),
+        _buildChart(context),
+      ],
+    );
+  }
+
+  Widget _buildChart(BuildContext context) {
     final distribution = widget.distribution;
     final interactiveLine = widget.interactiveLine;
     final selectedWidgetName = widget.selectedWidgetName;
     final samples = widget.samples;
-    final live = widget.play;
+    final live = _playing;
     final phase = _phase;
     final values = live
         ? _animValues(samples, phase)
@@ -2366,6 +2393,44 @@ const List<Bar> _statusBars = <Bar>[
   Bar.stacked('Mem', <num>[26, 18, 5]),
   Bar.stacked('IO', <num>[18, 9, 3]),
 ];
+
+/// Clickable Play/Pause control + live indicator shown above the charts
+/// preview. Clicking toggles the streaming animation in place, so liveness is
+/// discoverable and pausable without hunting for the inspector's Play toggle
+/// (which the narrow layout hides entirely).
+class _LivePlayBar extends StatelessWidget {
+  const _LivePlayBar({required this.playing, required this.onToggle});
+
+  final bool playing;
+  final void Function() onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: onToggle,
+      child: Row(
+        children: <Widget>[
+          Text(
+            playing ? '■ Pause' : '▶ Play',
+            style: CellStyle(
+              foreground: theme.colorScheme.primary,
+              bold: true,
+            ),
+          ),
+          const Text('   '),
+          if (playing)
+            Text(
+              '● live · streaming values',
+              style: CellStyle(foreground: theme.colorScheme.success),
+            )
+          else
+            Text('○ paused · click Play to animate', style: theme.mutedStyle),
+        ],
+      ),
+    );
+  }
+}
 
 // ── Live "play" data ──────────────────────────────────────────────────────
 // Phase-shifted variants of the static chart data; the charts story streams
