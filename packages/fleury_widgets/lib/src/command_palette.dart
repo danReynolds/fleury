@@ -406,6 +406,17 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
         : (_visibleCountFor(_filtered.length, widget.maxVisible));
     final visibleRangeStart = visibleRange?.first ?? 0;
     final visibleRangeEnd = visibleRange?.last ?? (visible - 1);
+    // Show the selected command's description in a footer rather than on its
+    // row. Only reserve the footer when some command actually has one, so a
+    // plain callback palette (file menu, etc.) stays as compact as before.
+    final hasDescriptions = _entries.any(
+      (entry) => entry.command.description != null,
+    );
+    final selIndex = _list.selectedIndex;
+    final selectedDescription =
+        (selIndex != null && selIndex >= 0 && selIndex < _filtered.length)
+        ? _filtered[selIndex].command.description
+        : null;
     return KeyBindings(
       bindings: [
         KeyBinding(
@@ -451,27 +462,38 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
           'visibleRangeEnd': visibleRangeEnd,
         }),
         child: Container(
-          // Fill an opaque background so the content beneath the floating
-          // palette doesn't bleed through, and bound the height to the content
-          // (input + gap + result window) so the box doesn't stretch to fill
-          // the whole viewport the centering Align hands it.
-          color: theme.colorScheme.background,
+          // Keep the floating palette opaque: every interior line is rendered
+          // full-width (rows pad their label region, spacers/footer are spaces)
+          // so no cell is left unwritten for the content beneath to bleed
+          // through. No interior padding — a 1-col inset would itself be
+          // unwritten (and bleed); the row marker ("› "/"  ") supplies the
+          // left gutter instead. Height is bound to the content so the box
+          // doesn't stretch to fill the viewport the centering Align hands it.
           border: BoxBorder(style: theme.borderStyle),
-          padding: const EdgeInsets.symmetric(horizontal: 1),
           child: SizedBox(
             width: widget.width,
-            height: visible + 2,
+            height: visible + 2 + (hasDescriptions ? 2 : 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextInput(
-                  controller: _query,
-                  focusNode: _queryFocus,
-                  placeholder: widget.placeholder,
-                  autofocus: true,
-                  onSubmit: (_) => _invoke(),
+                // Back the field with a full-width blank so the area past the
+                // query text stays opaque (a TextInput only paints the cells it
+                // occupies). The field paints on top of the spaces.
+                Stack(
+                  children: [
+                    Text(' ' * widget.width),
+                    TextInput(
+                      controller: _query,
+                      focusNode: _queryFocus,
+                      placeholder: widget.placeholder,
+                      autofocus: true,
+                      onSubmit: (_) => _invoke(),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 1),
+                // Blank spacer rows are written as full-width spaces, not an
+                // empty SizedBox, so they too stay opaque over the content.
+                Text(' ' * widget.width),
                 SizedBox(
                   height: visible,
                   child: _filtered.isEmpty
@@ -479,6 +501,7 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
                           _query.text.isEmpty
                               ? widget.placeholder
                               : 'No matching commands',
+                          style: theme.mutedStyle,
                         )
                       : ListView.builder(
                           controller: _list,
@@ -489,10 +512,22 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
                                 command: _filtered[index].command,
                                 index: index,
                                 selected: selected,
+                                width: widget.width,
                                 onActivate: _invokeCommand,
                               ),
                         ),
                 ),
+                if (hasDescriptions) ...[
+                  Text(' ' * widget.width),
+                  SizedBox(
+                    height: 1,
+                    child: Text(
+                      _fitWidth(selectedDescription ?? '', widget.width),
+                      style: theme.mutedStyle,
+                      maxLines: 1,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -512,12 +547,19 @@ class _CommandRow extends StatelessWidget {
     required this.command,
     required this.index,
     required this.selected,
+    required this.width,
     required this.onActivate,
   });
 
   final Command command;
   final int index;
   final bool selected;
+
+  /// Total row width in cells. The label region is padded to fill it (less the
+  /// shortcut) so every cell is written — which is what keeps the floating
+  /// palette opaque over the content beneath it (a `Text` only paints the
+  /// cells it occupies, and the theme background is "terminal default").
+  final int width;
   final void Function(Command command) onActivate;
 
   @override
@@ -526,19 +568,6 @@ class _CommandRow extends StatelessWidget {
     final desc = command.description;
     final shortcut = command.shortcut;
     final category = command.category;
-    final meta = <String>[];
-    if (shortcut != null) {
-      meta.add(shortcut);
-    }
-    if (category != null) {
-      meta.add(category);
-    }
-    if (desc != null) {
-      meta.add(desc);
-    }
-    final label = meta.isEmpty
-        ? command.label
-        : '${command.label}  ${meta.join('  ')}';
     final state = <String, Object?>{
       'commandId': command.id ?? command.label,
       'rowIndex': index,
@@ -549,6 +578,24 @@ class _CommandRow extends StatelessWidget {
     if (category != null) {
       state['commandCategory'] = category;
     }
+    final labelStyle = _commandStyle(
+      theme,
+      selected: selected,
+      enabled: command.enabled,
+    );
+    // The shortcut is a trailing, right-aligned key hint (VS Code / fzf style),
+    // not inline text — so the row reads as "command … keys" instead of one
+    // run-on string. Category and description stay off the row on purpose:
+    // repeating the category on every line is noise, and a wrapping description
+    // is exactly what made the list look like one text block. The description
+    // surfaces once, for the selected row, in the palette footer.
+    final shortcutStyle = selected
+        ? theme.selectionStyle
+        : (command.enabled
+              ? theme.mutedStyle
+              : theme.mutedStyle.merge(const CellStyle(dim: true)));
+    final labelRegion = (width - (shortcut?.length ?? 0)).clamp(0, width);
+    final labelText = _fitWidth('${selected ? '› ' : '  '}${command.label}', labelRegion);
     return Semantics(
       role: SemanticRole.command,
       label: command.label,
@@ -566,17 +613,28 @@ class _CommandRow extends StatelessWidget {
       // Click an enabled command to run it (same as Enter on the selection).
       child: GestureDetector(
         onTap: command.enabled ? () => onActivate(command) : null,
-        child: Text(
-          '${selected ? '› ' : '  '}$label',
-          style: _commandStyle(
-            theme,
-            selected: selected,
-            enabled: command.enabled,
-          ),
+        child: Row(
+          children: <Widget>[
+            Text(labelText, style: labelStyle, maxLines: 1),
+            if (shortcut != null)
+              Text(shortcut, style: shortcutStyle, maxLines: 1),
+          ],
         ),
       ),
     );
   }
+}
+
+/// Truncates [text] to [width] cells (with an ellipsis) or pads it with spaces
+/// to exactly [width], so the returned string fills its row — writing every
+/// cell keeps the floating palette opaque in any theme. Command labels are
+/// short ASCII, so a code-unit measure matches display width here.
+String _fitWidth(String text, int width) {
+  if (width <= 0) return '';
+  if (text.length > width) {
+    return width == 1 ? '…' : '${text.substring(0, width - 1)}…';
+  }
+  return text.padRight(width);
 }
 
 CellStyle _commandStyle(
