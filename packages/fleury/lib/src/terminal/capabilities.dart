@@ -31,6 +31,13 @@ enum ImageProtocol {
   /// Kitty graphics protocol — modern, supported by Kitty, Ghostty,
   /// WezTerm, Konsole 22.04+.
   kitty,
+
+  /// Native `<img>` rendering in the browser "serve" surface. Not a terminal
+  /// escape protocol: the DOM client declares it, and image bytes travel
+  /// out-of-band (see the inline-image frames) to an `<img>` overlay rather
+  /// than as an escape sequence. Never produced by terminal capability
+  /// detection.
+  browser,
 }
 
 /// Static snapshot of what the terminal supports.

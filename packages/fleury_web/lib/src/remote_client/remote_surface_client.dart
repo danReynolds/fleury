@@ -122,9 +122,13 @@ final class RemoteSurfaceClient {
     _send(
       encodeFrame(
         InitFrame(
+          // The browser renders real images via an <img> overlay (the serve
+          // path lifts inline-image payloads out of the cell grid), so it
+          // advertises the `browser` image protocol rather than the half-block
+          // glyph fallback.
           size: _size,
           colorMode: ColorMode.truecolor,
-          imageProtocol: ImageProtocol.halfBlock,
+          imageProtocol: ImageProtocol.browser,
           tmuxPassthrough: false,
           protocolVersion: remoteProtocolVersion,
         ),

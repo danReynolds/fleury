@@ -522,6 +522,10 @@ class RenderImage extends RenderObject {
       _paintSixel(buffer, offset, cols, rows);
       return;
     }
+    if (_protocol == ImageProtocol.browser) {
+      _paintBrowser(buffer, offset, cols, rows);
+      return;
+    }
 
     if (_glyph == ImageGlyph.quarterBlock) {
       _paintQuarterBlock(buffer, offset, cols, rows);
@@ -826,6 +830,18 @@ class RenderImage extends RenderObject {
       pos = end;
     }
     _writeProtocolRegion(buffer, offset, out.toString(), cols, rows);
+  }
+
+  /// Emits the image for the browser "serve" surface as a PNG `data:` URI in a
+  /// protocol-anchor cell. The serve codec lifts the payload out of the cell
+  /// grid into a dedicated inline-image frame (shipped once, keyed by content
+  /// hash) and the DOM client renders it as an `<img>` overlay — so the browser
+  /// gets true pixels, like a native terminal image protocol. The `data:` URI
+  /// is self-describing, so the client needs no format negotiation.
+  void _paintBrowser(CellBuffer buffer, CellOffset offset, int cols, int rows) {
+    final png = img.encodePng(_decoded);
+    final payload = 'data:image/png;base64,${base64.encode(png)}';
+    _writeProtocolRegion(buffer, offset, payload, cols, rows);
   }
 
   /// Paints the image at quarter-block density: 2×2 sub-pixels per
