@@ -2,18 +2,17 @@ import 'dart:async';
 
 import 'package:fleury/fleury.dart';
 
-/// Semantic level of a toast, driving its default color. [info] is
-/// neutral (uncolored); the rest tint the border and text.
+/// Semantic level of a toast, driving the color of its status dot. [info] is
+/// neutral (uncolored); the rest color the dot.
 enum ToastSeverity { info, success, warning, error }
 
-/// Leading glyph for a toast's severity. Narrow, single-cell, font-portable
-/// symbols (no emoji-presentation variants that render double-width).
-String _glyphForSeverity(ToastSeverity severity) => switch (severity) {
-  ToastSeverity.info => '•',
-  ToastSeverity.success => '✓',
-  ToastSeverity.warning => '▲',
-  ToastSeverity.error => '✗',
-};
+/// A toast's leading status dot: one uniform, reliably monospace-width glyph for
+/// every severity. (Distinct per-severity shapes — ✓ ✗ ▲ — render at
+/// inconsistent widths in proportional browser fonts, which threw the text out
+/// of alignment.) Severity is carried by the dot's *color* via
+/// [_styleForSeverity], not its shape — keeping color use sparse: a neutral
+/// frame and message with one colored accent.
+const String _severityDot = '●';
 
 CellStyle _styleForSeverity(ToastSeverity severity, ColorScheme colors) =>
     switch (severity) {
@@ -216,10 +215,10 @@ class _ToasterState extends State<Toaster> {
                 }
               },
               child: Container(
-                border: BoxBorder(
-                  style: BorderStyle.rounded,
-                  cellStyle: toast.style,
-                ),
+                // A normal (neutral) frame — severity lives in the dot, not the
+                // border — with horizontal padding so the content breathes.
+                border: const BoxBorder(style: BorderStyle.rounded),
+                padding: const EdgeInsets.symmetric(horizontal: 1),
                 child: _toastContent(toast),
               ),
             ),
@@ -243,21 +242,26 @@ class _ToasterState extends State<Toaster> {
 
   Widget _toastContent(_Toast toast) {
     final action = toast.action;
-    // A leading severity glyph (colored by the severity style) so a toast reads
-    // as a styled notification at a glance, not a bare line of text.
-    final message = Text(
-      '${_glyphForSeverity(toast.severity)} ${toast.message}',
-      style: toast.style,
-    );
-    if (action == null) return message;
+    // Sparse color: only the status dot carries the severity color; the message
+    // is neutral and the frame is plain. The action (if any) gets the one
+    // interactive accent, so it's clearly the part you can act on.
+    final dot = Text(_severityDot, style: toast.style);
+    final message = Text(' ${toast.message}');
+    if (action == null) {
+      return Row(mainAxisSize: MainAxisSize.min, children: <Widget>[dot, message]);
+    }
+    final theme = Theme.of(context);
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: [
+      children: <Widget>[
+        dot,
         message,
+        const Text('   '),
         Text(
-          '  [${action.key.hintLabel}] ${action.label}',
-          style: toast.style.merge(const CellStyle(bold: true)),
+          action.label,
+          style: CellStyle(foreground: theme.colorScheme.primary, bold: true),
         ),
+        Text(' [${action.key.hintLabel}]', style: theme.mutedStyle),
       ],
     );
   }

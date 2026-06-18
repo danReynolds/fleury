@@ -97,24 +97,31 @@ void main() {
     expect(() => Toaster.show(ctx, 'x'), throwsStateError);
   });
 
-  testWidgets('severity tints the toast text', (tester) {
+  testWidgets('severity colors the status dot, not the message', (tester) {
     late BuildContext ctx;
     tester.pumpWidget(Toaster(child: _Capture((c) => ctx = c)));
     Toaster.show(ctx, 'oops', severity: ToastSeverity.error);
     tester.pump();
     final buf = tester.render(size: const CellSize(20, 8));
-    // Find the 'o' of 'oops' and check it carries the error (red) color.
-    var found = false;
-    for (var r = 0; r < 8 && !found; r++) {
+    var dotColored = false;
+    var messageNeutral = false;
+    for (var r = 0; r < 8; r++) {
       for (var c = 0; c < 20; c++) {
-        if (buf.atColRow(c, r).grapheme == 'o') {
-          expect(buf.atColRow(c, r).style.foreground, const AnsiColor(1));
-          found = true;
-          break;
+        final cell = buf.atColRow(c, r);
+        if (cell.grapheme == '●') {
+          expect(cell.style.foreground, const AnsiColor(1),
+              reason: 'the status dot carries the error color');
+          dotColored = true;
+        }
+        // The 'oo' of 'oops' — the message itself stays neutral.
+        if (cell.grapheme == 'o' && buf.atColRow(c + 1, r).grapheme == 'o') {
+          expect(cell.style.foreground, isNull, reason: 'message not tinted');
+          messageNeutral = true;
         }
       }
     }
-    expect(found, isTrue, reason: 'rendered the toast text');
+    expect(dotColored, isTrue, reason: 'rendered a colored status dot');
+    expect(messageNeutral, isTrue, reason: 'rendered the neutral message');
   });
 
   group('action', () {
@@ -170,14 +177,25 @@ void main() {
     });
   });
 
-  testWidgets('shows a leading severity glyph', (tester) {
+  testWidgets('shows a leading status dot colored by severity', (tester) {
     late BuildContext ctx;
     tester.pumpWidget(Toaster(child: _Capture((c) => ctx = c)));
     Toaster.show(ctx, 'Saved', severity: ToastSeverity.success);
     tester.pump();
-    final out = _screen(tester, cols: 24);
-    expect(out.contains('✓ Saved'), isTrue,
-        reason: 'success toast is prefixed with its glyph');
+    final buf = tester.render(size: const CellSize(24, 8));
+    var found = false;
+    for (var r = 0; r < 8 && !found; r++) {
+      for (var c = 0; c < 24; c++) {
+        if (buf.atColRow(c, r).grapheme == '●') {
+          // A non-null foreground = colored (the success accent, not neutral).
+          expect(buf.atColRow(c, r).style.foreground, isNotNull,
+              reason: 'success toast shows a colored status dot');
+          found = true;
+          break;
+        }
+      }
+    }
+    expect(found, isTrue, reason: 'rendered a leading status dot');
   });
 
   testWidgets('info severity stays neutral (uncolored)', (tester) {
