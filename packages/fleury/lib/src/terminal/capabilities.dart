@@ -63,6 +63,21 @@ final class TerminalCapabilities {
   /// `allow-passthrough on` directly.
   final bool tmuxPassthrough;
 
+  TerminalCapabilities copyWith({
+    ColorMode? colorMode,
+    ImageProtocol? imageProtocol,
+    bool? supportsAlternateScreen,
+    bool? supportsHidingCursor,
+    bool? tmuxPassthrough,
+  }) => TerminalCapabilities(
+    colorMode: colorMode ?? this.colorMode,
+    imageProtocol: imageProtocol ?? this.imageProtocol,
+    supportsAlternateScreen:
+        supportsAlternateScreen ?? this.supportsAlternateScreen,
+    supportsHidingCursor: supportsHidingCursor ?? this.supportsHidingCursor,
+    tmuxPassthrough: tmuxPassthrough ?? this.tmuxPassthrough,
+  );
+
   @override
   String toString() {
     return 'TerminalCapabilities(colorMode=$colorMode, '
