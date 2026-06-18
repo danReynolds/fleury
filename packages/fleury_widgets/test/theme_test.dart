@@ -67,10 +67,11 @@ void main() {
     Toaster.show(ctx, 'boom', severity: ToastSeverity.error);
     tester.pump();
     final buf = tester.render(size: const CellSize(20, 8));
+    // Severity color lands on the status dot (the message stays neutral).
     var found = false;
     for (var r = 0; r < 8 && !found; r++) {
       for (var c = 0; c < 20; c++) {
-        if (buf.atColRow(c, r).grapheme == 'b') {
+        if (buf.atColRow(c, r).grapheme == '●') {
           expect(buf.atColRow(c, r).style.foreground, const AnsiColor(13));
           found = true;
           break;

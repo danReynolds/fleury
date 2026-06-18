@@ -224,7 +224,9 @@ void main() {
     testWidgets('Right opens a submenu to the right', (tester) {
       tester.pumpWidget(fileMenu((_) {}));
       tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open root
-      expect(_screen(tester, cols: 30).contains('Open ▸'), isTrue);
+      final root = _screen(tester, cols: 30);
+      expect(root.contains('Open'), isTrue);
+      expect(root.contains('▸'), isTrue, reason: 'submenu cascade indicator');
 
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → Open
       tester.sendKey(
@@ -266,7 +268,8 @@ void main() {
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft)); // back out
       final out = _screen(tester, cols: 30);
       expect(out.contains('Recent'), isFalse, reason: 'submenu closed');
-      expect(out.contains('Open ▸'), isTrue, reason: 'parent still open');
+      expect(out.contains('Open'), isTrue, reason: 'parent still open');
+      expect(out.contains('▸'), isTrue, reason: 'cascade indicator still shown');
     });
 
     testWidgets('Esc from a submenu returns to the parent, not all the way', (
