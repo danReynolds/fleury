@@ -65,6 +65,23 @@ final class DomRowFactory {
       }
     }
 
+    // Block-element glyphs (half / quarter / sextant blocks, shades, braille)
+    // carry image pixels. Rendered as inline text the cell background paints
+    // only the font's content box, so the line-box leading leaves a sliver of
+    // page background at every row boundary — visible as horizontal "scan
+    // lines" across an image. When such a glyph carries a background, lay the
+    // cell out as a full-height inline-block so the background fills the whole
+    // cell and neighbours meet with no gap (the same tiling fix box-drawing
+    // glyphs get). Gating on a background keeps baseline-aligned block glyphs
+    // without one — sparkline / progress bars — on the normal text path.
+    if (metrics != null &&
+        run.style.background != null &&
+        _isBlockElementText(run.text)) {
+      span.textContent = run.text;
+      span.setAttribute('style', _blockFillCss(run, stats, metrics));
+      return span;
+    }
+
     span.textContent = run.text;
 
     switch (run.kind) {
@@ -127,6 +144,37 @@ final class DomRowFactory {
     _widthCssCache[key] = css;
     return css;
   }
+
+  /// Whether every grapheme in [text] is a block-element glyph — half / quarter
+  /// blocks, shades and the full block (U+2580–U+259F), legacy-computing
+  /// sextants (U+1FB00–U+1FB3B), or braille (U+2800–U+28FF). These are the
+  /// glyphs the image renderer paints pixels with.
+  static bool _isBlockElementText(String text) {
+    if (text.isEmpty) return false;
+    for (final rune in text.runes) {
+      final isBlock =
+          (rune >= 0x2580 && rune <= 0x259F) ||
+          (rune >= 0x1FB00 && rune <= 0x1FB3B) ||
+          (rune >= 0x2800 && rune <= 0x28FF);
+      if (!isBlock) return false;
+    }
+    return true;
+  }
+
+  /// CSS that lays a block-element cell out as a full-cell inline-block so its
+  /// background fills the entire cell box (no row-boundary gap), while the glyph
+  /// still paints the sub-cell pixels over it.
+  String _blockFillCss(
+    CellSpanRun run,
+    DomRowReplacementStats? stats,
+    MeasuredCellBox metrics,
+  ) =>
+      'display:inline-block'
+      ';width:${_cssPx(run.widthCols * metrics.cssCellWidth)}'
+      ';height:100%'
+      ';vertical-align:top'
+      ';overflow:hidden'
+      ';${_styleCssFor(run.style, stats)}';
 
   String _styleCssFor(CellStyle style, DomRowReplacementStats? stats) {
     if (_styleCssCache.containsKey(style)) {
