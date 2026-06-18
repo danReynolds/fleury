@@ -1,10 +1,11 @@
+import 'dart:convert';
 import 'dart:io' as io;
 import 'dart:math' as math;
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
-import 'package:image/image.dart' as img;
 
+import 'sample_image.dart';
 import 'story.dart';
 
 final List<Story> storybookStories = _perWidgetStories(<Story>[
@@ -437,9 +438,10 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       StoryControl.option(
         id: 'imageGlyph',
         label: 'Image glyph (px/cell)',
-        // Quarter first so the default preview shows structure *and* color;
-        // Half block carries the image purely in per-cell color.
-        options: <String>['Quarter', 'Half block', 'Sextant', 'Braille'],
+        // Half block first: `▀` tiles cleanly with no inter-row banding — the
+        // safest default for photos. The denser tiers add resolution at the
+        // cost of richer glyphs (and more visible tiling on some fonts).
+        options: <String>['Half block', 'Quarter', 'Sextant', 'Braille'],
       ),
     ],
     variants: const <StoryVariant>[
@@ -1962,6 +1964,7 @@ class _TabsStory extends StatelessWidget {
     );
 
     return Tabs(
+      bordered: true,
       tabs: <TabItem>[
         TabItem(label: 'Overview', content: overview),
         TabItem(label: 'Metrics', content: metrics),
@@ -2663,22 +2666,22 @@ class _CanvasImageStory extends StatelessWidget {
   final String? selectedWidgetName;
   final CanvasMarker marker;
   final ImageGlyph imageGlyph;
-  final img.Image _image = _buildPreviewImage();
+  // A real decoded photograph (free-to-use, embedded) so the demo shows actual
+  // image rendering, not a synthetic pattern. Swap the glyph control to compare
+  // the sub-cell fidelity tiers.
+  static final _photoBytes = base64Decode(samplePhotoJpegBase64);
 
   @override
   Widget build(BuildContext context) {
     return switch (selectedWidgetName) {
-      // A real decoded image (here a procedurally-rendered Mandelbrot, not a
-      // flat gradient) so it's recognisable as an *image* — swap the glyph
-      // control to compare the sub-cell fidelity tiers.
       'Image' || 'ImageSource' => SizedBox(
         width: 56,
-        height: 14,
-        child: Image.decoded(
-          _image,
+        height: 16,
+        child: Image.bytes(
+          _photoBytes,
           glyph: imageGlyph,
           fit: ImageFit.contain,
-          semanticLabel: 'Mandelbrot set preview',
+          semanticLabel: 'Sample photograph',
         ),
       ),
       _ => SizedBox(
@@ -2723,45 +2726,6 @@ ImageGlyph _imageGlyph(String label) => switch (label) {
   'Braille' => ImageGlyph.braille,
   _ => ImageGlyph.halfBlock,
 };
-
-/// A procedurally-rendered Mandelbrot set — a recognisable *image* (not a flat
-/// gradient) that exercises real decoded-pixel rendering and shows off the
-/// sub-cell glyph fidelity tiers. Smooth-colored via the standard Bernstein
-/// polynomial palette over the escape-iteration count.
-img.Image _buildPreviewImage() {
-  const width = 160;
-  const height = 100;
-  const maxIter = 80;
-  final image = img.Image(width: width, height: height);
-  for (var py = 0; py < height; py += 1) {
-    final y0 = (py / height) * 2.4 - 1.2;
-    for (var px = 0; px < width; px += 1) {
-      final x0 = (px / width) * 3.2 - 2.1;
-      var x = 0.0;
-      var y = 0.0;
-      var iter = 0;
-      while (x * x + y * y <= 4 && iter < maxIter) {
-        final xt = x * x - y * y + x0;
-        y = 2 * x * y + y0;
-        x = xt;
-        iter += 1;
-      }
-      if (iter >= maxIter) {
-        image.setPixelRgb(px, py, 8, 8, 18); // inside the set: near-black
-      } else {
-        final t = iter / maxIter;
-        final r = (9 * (1 - t) * t * t * t * 255).round().clamp(0, 255);
-        final g = (15 * (1 - t) * (1 - t) * t * t * 255).round().clamp(0, 255);
-        final b = (8.5 * (1 - t) * (1 - t) * (1 - t) * t * 255).round().clamp(
-          0,
-          255,
-        );
-        image.setPixelRgb(px, py, r, g, b);
-      }
-    }
-  }
-  return image;
-}
 
 class _FilesStory extends StatelessWidget {
   const _FilesStory({

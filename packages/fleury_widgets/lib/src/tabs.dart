@@ -82,12 +82,18 @@ class Tabs extends StatefulWidget {
     this.autofocus = false,
     this.activeStyle,
     this.inactiveStyle,
+    this.bordered = false,
   });
 
   final List<TabItem> tabs;
   final TabController? controller;
   final FocusNode? focusNode;
   final bool autofocus;
+
+  /// When true, the active content sits in a bordered, padded panel below the
+  /// strip (separated by a gap), making the widget's bounds and the strip →
+  /// content split clear. Defaults to false — a bare strip-over-content layout.
+  final bool bordered;
 
   /// Style for the active tab's label. Defaults to inverse video.
   final CellStyle? activeStyle;
@@ -178,6 +184,17 @@ class _TabsState extends State<Tabs> {
     final activeStyle = widget.activeStyle ?? theme.selectionStyle;
     final inactiveStyle = widget.inactiveStyle ?? theme.mutedStyle;
 
+    final content = IndexedStack(
+      index: active,
+      children: [
+        for (var i = 0; i < widget.tabs.length; i++)
+          ExcludeFocus(
+            excluding: i != active,
+            child: widget.tabs[i].content,
+          ),
+      ],
+    );
+
     final body = Focus(
       focusNode: _focusNode,
       autofocus: widget.autofocus,
@@ -235,16 +252,15 @@ class _TabsState extends State<Tabs> {
           ),
           // Keep every tab mounted (state survives switching) but paint
           // and traverse only the active one.
-          IndexedStack(
-            index: active,
-            children: [
-              for (var i = 0; i < widget.tabs.length; i++)
-                ExcludeFocus(
-                  excluding: i != active,
-                  child: widget.tabs[i].content,
-                ),
-            ],
-          ),
+          if (widget.bordered) ...[
+            const SizedBox(height: 1),
+            Container(
+              border: BoxBorder(style: theme.borderStyle),
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              child: content,
+            ),
+          ] else
+            content,
         ],
       ),
     );
