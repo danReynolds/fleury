@@ -380,7 +380,7 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
         options: <String>['Dashboard', 'Distribution'],
       ),
       StoryControl.toggle(id: 'interactive', label: 'Interactive line'),
-      StoryControl.toggle(id: 'play', label: 'Play (live data)', initialValue: true),
+      StoryControl.toggle(id: 'play', label: 'Play (live data)'),
       StoryControl.number(
         id: 'samples',
         label: 'Samples',
@@ -2123,12 +2123,24 @@ class _ChartsStory extends StatefulWidget {
 class _ChartsStoryState extends State<_ChartsStory>
     with SingleTickerProviderStateMixin {
   Ticker? _sim;
-  int _phase = 0;
+  // Continuous animation phase: advances one unit per 120ms (the original
+  // motion speed) but is sampled on every ticker frame instead of being
+  // quantised to ~8fps, so the charts move smoothly rather than jumping. The
+  // ticker scheduler already paces at ~30Hz, so this samples at that native
+  // rate (the way Flutter samples animations on each vsync) with no extra
+  // throttle — the throttle was the choppiness.
+  double _phase = 0;
   // Effective play state. Seeded from the inspector's Play control, but also
   // flipped by the in-preview Play/Pause button below — so the demo is
   // controllable even in a narrow layout where the inspector (and its toggle)
   // is hidden.
   late bool _playing = widget.play;
+
+  // Static-by-nature widgets (e.g. CalendarHeatmap — a calendar of past
+  // activity) have no time-varying data, so they show no Play control and never
+  // animate. No dead button.
+  static const Set<String> _staticWidgets = {'CalendarHeatmap'};
+  bool get _playable => !_staticWidgets.contains(widget.selectedWidgetName);
 
   @override
   void didChangeDependencies() {
@@ -2140,8 +2152,11 @@ class _ChartsStoryState extends State<_ChartsStory>
   void didUpdateWidget(_ChartsStory oldWidget) {
     super.didUpdateWidget(oldWidget);
     // The inspector toggle is authoritative whenever it actually changes.
-    if (widget.play != oldWidget.play) {
-      _playing = widget.play;
+    if (widget.play != oldWidget.play) _playing = widget.play;
+    // Re-sync when play flips, or when navigating to/from a static widget whose
+    // ticker must stop / restart.
+    if (widget.play != oldWidget.play ||
+        widget.selectedWidgetName != oldWidget.selectedWidgetName) {
       _syncTicker();
     }
   }
@@ -2152,7 +2167,7 @@ class _ChartsStoryState extends State<_ChartsStory>
   }
 
   void _syncTicker() {
-    if (_playing) {
+    if (_playable && _playing) {
       // The ticker needs a TuiBinding (installed by runTui); a plain test tree
       // has none, so animation is simply skipped there.
       _sim ??= TuiBinding.maybeOf(context) != null ? createTicker(_onTick) : null;
@@ -2162,12 +2177,15 @@ class _ChartsStoryState extends State<_ChartsStory>
     }
   }
 
-  // Advances ~8 frames/sec while play is on; [_phase] drives the live data
-  // below so each chart streams new values. (The mixin disposes the ticker it
-  // created, so no dispose() override is needed here.)
+  // Samples the continuous phase on every ticker frame (~30Hz) while play is on;
+  // [_phase] drives the live data below so each chart streams new values. Phase
+  // advances one unit per 120ms — identical motion to the old 8fps step — but
+  // sampling it on every frame instead of quantising to ~8fps is what removes
+  // the visible choppiness. The per-frame wire cost is trivial (~150 B, ~40
+  // changed cells), so the full frame rate is well affordable. (The mixin
+  // disposes the ticker it created, so no dispose() override is needed here.)
   void _onTick(Duration elapsed) {
-    final next = elapsed.inMilliseconds ~/ 120;
-    if (next != _phase) setState(() => _phase = next);
+    setState(() => _phase = elapsed.inMilliseconds / 120.0);
   }
 
   @override
@@ -2177,8 +2195,10 @@ class _ChartsStoryState extends State<_ChartsStory>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        _LivePlayBar(playing: _playing, onToggle: _togglePlay),
-        const SizedBox(height: 1),
+        if (_playable) ...[
+          _LivePlayBar(playing: _playing, onToggle: _togglePlay),
+          const SizedBox(height: 1),
+        ],
         _buildChart(context),
       ],
     );
@@ -2189,7 +2209,7 @@ class _ChartsStoryState extends State<_ChartsStory>
     final interactiveLine = widget.interactiveLine;
     final selectedWidgetName = widget.selectedWidgetName;
     final samples = widget.samples;
-    final live = _playing;
+    final live = _playable && _playing;
     final phase = _phase;
     final values = live
         ? _animValues(samples, phase)
@@ -2435,21 +2455,21 @@ class _LivePlayBar extends StatelessWidget {
 // ── Live "play" data ──────────────────────────────────────────────────────
 // Phase-shifted variants of the static chart data; the charts story streams
 // these into each widget while the Play toggle is on, so the demos animate.
-List<num> _animSparkline(int samples, int phase) => <num>[
+List<num> _animSparkline(int samples, num phase) => <num>[
   for (var i = 0; i < samples; i++) (math.sin((i + phase) * 0.5) + 1) * 45 + 5,
 ];
 
-List<(num, num)> _animPoints(int samples, int phase, int seed) =>
+List<(num, num)> _animPoints(int samples, num phase, int seed) =>
     <(num, num)>[
       for (var i = 0; i < samples; i++)
         (i, (math.sin((i + phase) * 0.6 + seed) + 1) * 40 + 10),
     ];
 
-List<num> _animValues(int samples, int phase) => <num>[
+List<num> _animValues(int samples, num phase) => <num>[
   for (var i = 0; i < samples * 2; i++) (math.sin((i + phase) * 0.4) + 1) * 25 + 4,
 ];
 
-List<List<num>> _animHeatmap(int phase) => <List<num>>[
+List<List<num>> _animHeatmap(num phase) => <List<num>>[
   for (var r = 0; r < 3; r++)
     <num>[
       for (var c = 0; c < 5; c++)
@@ -2457,18 +2477,18 @@ List<List<num>> _animHeatmap(int phase) => <List<num>>[
     ],
 ];
 
-List<Bar> _animBars(int phase) => <Bar>[
+List<Bar> _animBars(num phase) => <Bar>[
   for (var b = 0; b < _statusBars.length; b++)
     Bar.stacked(_statusBars[b].label, <num>[
       for (var s = 0; s < 3; s++) (math.sin((b * 3 + s + phase) * 0.5) + 1) * 12 + 4,
     ]),
 ];
 
-double _animGauge(int phase, int seed) =>
+double _animGauge(num phase, int seed) =>
     (math.sin((phase + seed) * 0.25) + 1) / 2;
 
-String _animClock(int phase) {
-  final total = phase % 3600;
+String _animClock(num phase) {
+  final total = phase.floor() % 3600;
   final m = (total ~/ 60).toString().padLeft(2, '0');
   final s = (total % 60).toString().padLeft(2, '0');
   return '$m:$s';
