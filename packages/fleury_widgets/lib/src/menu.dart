@@ -180,11 +180,25 @@ class _MenuState extends State<Menu> {
               return;
           }
         },
-        child: Focus(
-          focusNode: _triggerFocus,
-          autofocus: widget.autofocus,
-          onKey: _onTriggerKey,
-          child: widget.trigger,
+        child: GestureDetector(
+          // Pointer users get the same affordance as keyboard (Enter) and
+          // assistive tech (the activate action): a tap toggles the menu.
+          // Focus the trigger first so [_open] records it as the prior focus
+          // and closing returns focus here — matching the keyboard path.
+          onTap: () {
+            if (_isOpen) {
+              _close();
+            } else {
+              _triggerFocus.requestFocus();
+              _open();
+            }
+          },
+          child: Focus(
+            focusNode: _triggerFocus,
+            autofocus: widget.autofocus,
+            onKey: _onTriggerKey,
+            child: widget.trigger,
+          ),
         ),
       ),
     );

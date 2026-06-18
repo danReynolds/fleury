@@ -6,6 +6,15 @@ import 'package:fleury/fleury.dart';
 /// neutral (uncolored); the rest tint the border and text.
 enum ToastSeverity { info, success, warning, error }
 
+/// Leading glyph for a toast's severity. Narrow, single-cell, font-portable
+/// symbols (no emoji-presentation variants that render double-width).
+String _glyphForSeverity(ToastSeverity severity) => switch (severity) {
+  ToastSeverity.info => '•',
+  ToastSeverity.success => '✓',
+  ToastSeverity.warning => '▲',
+  ToastSeverity.error => '✗',
+};
+
 CellStyle _styleForSeverity(ToastSeverity severity, ColorScheme colors) =>
     switch (severity) {
       ToastSeverity.info => CellStyle.empty, // neutral by design
@@ -234,11 +243,17 @@ class _ToasterState extends State<Toaster> {
 
   Widget _toastContent(_Toast toast) {
     final action = toast.action;
-    if (action == null) return Text(toast.message, style: toast.style);
+    // A leading severity glyph (colored by the severity style) so a toast reads
+    // as a styled notification at a glance, not a bare line of text.
+    final message = Text(
+      '${_glyphForSeverity(toast.severity)} ${toast.message}',
+      style: toast.style,
+    );
+    if (action == null) return message;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(toast.message, style: toast.style),
+        message,
         Text(
           '  [${action.key.hintLabel}] ${action.label}',
           style: toast.style.merge(const CellStyle(bold: true)),

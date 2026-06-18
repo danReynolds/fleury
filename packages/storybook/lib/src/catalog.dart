@@ -432,6 +432,15 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
         label: 'Canvas marker',
         options: <String>['Braille', 'Quadrant', 'Half block'],
       ),
+      // Sub-cell fidelity for the Image preview: more pixels per cell = sharper
+      // at the cost of needing richer Unicode glyphs in the font.
+      StoryControl.option(
+        id: 'imageGlyph',
+        label: 'Image glyph (px/cell)',
+        // Quarter first so the default preview shows structure *and* color;
+        // Half block carries the image purely in per-cell color.
+        options: <String>['Quarter', 'Half block', 'Sextant', 'Braille'],
+      ),
     ],
     variants: const <StoryVariant>[
       StoryVariant(
@@ -451,6 +460,7 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
     builder: (context) => _CanvasImageStory(
       selectedWidgetName: context.selectedWidgetName,
       marker: _canvasMarker(context.option('marker')),
+      imageGlyph: _imageGlyph(context.option('imageGlyph')),
     ),
   ),
   Story(
@@ -1759,13 +1769,72 @@ class _OverlayStory extends StatelessWidget {
             ),
           ],
         ),
-        'Toaster' => Button(
-          label: 'Toast',
-          onPressed: () => Toaster.show(
-            context,
-            'Storybook toast',
-            severity: ToastSeverity.info,
-          ),
+        'Toaster' => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text('Emit a toast — each carries its severity glyph + color:'),
+            const SizedBox(height: 1),
+            Row(
+              children: <Widget>[
+                Button(
+                  label: 'Info',
+                  onPressed: () => Toaster.show(
+                    context,
+                    'Heads up — nothing to do',
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Button(
+                  label: 'Success',
+                  onPressed: () => Toaster.show(
+                    context,
+                    'Saved story state',
+                    severity: ToastSeverity.success,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Button(
+                  label: 'Warning',
+                  onPressed: () => Toaster.show(
+                    context,
+                    'Approaching rate limit',
+                    severity: ToastSeverity.warning,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Button(
+                  label: 'Error',
+                  onPressed: () => Toaster.show(
+                    context,
+                    'Deploy failed',
+                    severity: ToastSeverity.error,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 1),
+            // An actionable toast: a labelled affordance + a global hotkey that
+            // runs it and dismisses the toast.
+            Button(
+              label: 'Delete (with Undo action)',
+              variant: ButtonVariant.primary,
+              onPressed: () => Toaster.show(
+                context,
+                'Item deleted',
+                severity: ToastSeverity.warning,
+                action: ToastAction(
+                  label: 'Undo',
+                  key: KeyChord.alt.u,
+                  onPressed: () => Toaster.show(
+                    context,
+                    'Restored',
+                    severity: ToastSeverity.success,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
         'Tooltip' => Tooltip(
           message: 'Focus the button to show this anchored tooltip.',
@@ -1834,23 +1903,63 @@ class _TabsStory extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.mutedStyle;
+    final bold = const CellStyle(bold: true);
+    final ok = CellStyle(foreground: theme.colorScheme.success);
+    final warn = CellStyle(foreground: theme.colorScheme.warning);
+
+    // Each tab is a distinct, designed panel so switching tabs visibly swaps
+    // the whole content — and the strip stays put. Left/Right or Alt+1..9 move
+    // between them.
+    final overview = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text('Service health', style: bold),
+        const SizedBox(height: 1),
+        Text('● Healthy', style: ok),
+        Text('Uptime     99.98%'),
+        Text('Region     us-east-1'),
+        const SizedBox(height: 1),
+        Text('Hidden tabs stay mounted — switch away and back.', style: muted),
+      ],
+    );
+
+    final metrics = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text('Request latency · last 24h', style: bold),
+        const SizedBox(height: 1),
+        const SizedBox(
+          width: 36,
+          child: Sparkline(data: <num>[4, 6, 3, 8, 9, 6, 11, 12, 7, 9, 5, 10]),
+        ),
+        const SizedBox(height: 1),
+        Text('p50 84ms    p95 142ms    p99 320ms', style: muted),
+      ],
+    );
+
+    final notes = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text('Release checklist', style: bold),
+        const SizedBox(height: 1),
+        Text('✓ Tests passing', style: ok),
+        Text('✓ Changelog updated', style: ok),
+        Text('▲ Migration needs review', style: warn),
+        const SizedBox(height: 1),
+        Text('Left/Right in the strip, or Alt+1..9.', style: muted),
+      ],
+    );
+
     return Tabs(
-      tabs: const <TabItem>[
-        TabItem(
-          label: 'Overview',
-          content: Text('The overview tab remains mounted while hidden.'),
-        ),
-        TabItem(
-          label: 'Metrics',
-          content: SizedBox(
-            width: 32,
-            child: Sparkline(data: <num>[4, 6, 3, 8, 9, 6, 11, 12]),
-          ),
-        ),
-        TabItem(
-          label: 'Notes',
-          content: Text('Use Left/Right in the tab strip or Alt+1..9.'),
-        ),
+      tabs: <TabItem>[
+        TabItem(label: 'Overview', content: overview),
+        TabItem(label: 'Metrics', content: metrics),
+        TabItem(label: 'Notes', content: notes),
       ],
     );
   }
@@ -2525,18 +2634,32 @@ Map<DateTime, num> _calendarValues() => <DateTime, num>{
 };
 
 class _CanvasImageStory extends StatelessWidget {
-  _CanvasImageStory({required this.selectedWidgetName, required this.marker});
+  _CanvasImageStory({
+    required this.selectedWidgetName,
+    required this.marker,
+    required this.imageGlyph,
+  });
 
   final String? selectedWidgetName;
   final CanvasMarker marker;
+  final ImageGlyph imageGlyph;
   final img.Image _image = _buildPreviewImage();
 
   @override
   Widget build(BuildContext context) {
     return switch (selectedWidgetName) {
+      // A real decoded image (here a procedurally-rendered Mandelbrot, not a
+      // flat gradient) so it's recognisable as an *image* — swap the glyph
+      // control to compare the sub-cell fidelity tiers.
       'Image' || 'ImageSource' => SizedBox(
-        width: 28,
-        child: Image.decoded(_image, semanticLabel: 'Generated color preview'),
+        width: 56,
+        height: 14,
+        child: Image.decoded(
+          _image,
+          glyph: imageGlyph,
+          fit: ImageFit.contain,
+          semanticLabel: 'Mandelbrot set preview',
+        ),
       ),
       _ => SizedBox(
         height: 10,
@@ -2574,14 +2697,45 @@ class _WavePainter extends CanvasPainter {
   }
 }
 
+ImageGlyph _imageGlyph(String label) => switch (label) {
+  'Quarter' => ImageGlyph.quarterBlock,
+  'Sextant' => ImageGlyph.sextant,
+  'Braille' => ImageGlyph.braille,
+  _ => ImageGlyph.halfBlock,
+};
+
+/// A procedurally-rendered Mandelbrot set — a recognisable *image* (not a flat
+/// gradient) that exercises real decoded-pixel rendering and shows off the
+/// sub-cell glyph fidelity tiers. Smooth-colored via the standard Bernstein
+/// polynomial palette over the escape-iteration count.
 img.Image _buildPreviewImage() {
-  final image = img.Image(width: 18, height: 10);
-  for (var y = 0; y < image.height; y += 1) {
-    for (var x = 0; x < image.width; x += 1) {
-      final r = (255 * x / (image.width - 1)).round();
-      final g = (255 * y / (image.height - 1)).round();
-      final b = 180;
-      image.setPixelRgb(x, y, r, g, b);
+  const width = 160;
+  const height = 100;
+  const maxIter = 80;
+  final image = img.Image(width: width, height: height);
+  for (var py = 0; py < height; py += 1) {
+    final y0 = (py / height) * 2.4 - 1.2;
+    for (var px = 0; px < width; px += 1) {
+      final x0 = (px / width) * 3.2 - 2.1;
+      var x = 0.0;
+      var y = 0.0;
+      var iter = 0;
+      while (x * x + y * y <= 4 && iter < maxIter) {
+        final xt = x * x - y * y + x0;
+        y = 2 * x * y + y0;
+        x = xt;
+        iter += 1;
+      }
+      if (iter >= maxIter) {
+        image.setPixelRgb(px, py, 8, 8, 18); // inside the set: near-black
+      } else {
+        final t = iter / maxIter;
+        final r = (9 * (1 - t) * t * t * t * 255).round().clamp(0, 255);
+        final g = (15 * (1 - t) * (1 - t) * t * t * 255).round().clamp(0, 255);
+        final b =
+            (8.5 * (1 - t) * (1 - t) * (1 - t) * t * 255).round().clamp(0, 255);
+        image.setPixelRgb(px, py, r, g, b);
+      }
     }
   }
   return image;
