@@ -444,7 +444,11 @@ Future<void> runTui(
   // Captures stray output (see below). The buffer powers replay-on-exit; the
   // optional hook lets the caller route lines live (e.g. to a file).
   final logBuffer = LogBuffer();
-  final capture = OutputCapture(buffer: logBuffer, onLine: onStrayOutput);
+  final capture = OutputCapture(
+    buffer: logBuffer,
+    onLine: onStrayOutput,
+    sanitizeForTerminal: true,
+  );
 
   // Single idempotent teardown, driven by either the normal exit path
   // (the finally below) or the zone's uncaught-error handler.
@@ -506,7 +510,8 @@ Future<void> runTui(
         runtimeMarkers?.mark('terminal.enter.end');
         // The handshake has landed, so the driver now knows whether the
         // peer negotiated the structured (plan) path.
-        if (maybeSurfaceSink != null && maybeSurfaceSink.wantsPresentationPlans) {
+        if (maybeSurfaceSink != null &&
+            maybeSurfaceSink.wantsPresentationPlans) {
           surfaceSink = maybeSurfaceSink;
           // The peer can activate a node in its accessible DOM; invoke the
           // action against the live tree and re-render, completing the
