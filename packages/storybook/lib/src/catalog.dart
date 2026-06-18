@@ -438,10 +438,11 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       StoryControl.option(
         id: 'imageGlyph',
         label: 'Image glyph (px/cell)',
-        // Half block first: `▀` tiles cleanly with no inter-row banding — the
-        // safest default for photos. The denser tiers add resolution at the
-        // cost of richer glyphs (and more visible tiling on some fonts).
-        options: <String>['Half block', 'Quarter', 'Sextant', 'Braille'],
+        // Sextant first: 6 px/cell (2×3) is the sharpest tier that still keeps
+        // colour, so the default preview shows the most detail. Half block (2
+        // px) is the most font-portable; Braille (8 px) is densest but
+        // monochrome — better for line art than photos.
+        options: <String>['Sextant', 'Half block', 'Quarter', 'Braille'],
       ),
     ],
     variants: const <StoryVariant>[
@@ -458,7 +459,7 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
         controlValues: <String, Object?>{'marker': 2},
       ),
     ],
-    initialHeight: 16,
+    initialHeight: 24,
     builder: (context) => _CanvasImageStory(
       selectedWidgetName: context.selectedWidgetName,
       marker: _canvasMarker(context.option('marker')),
@@ -2675,8 +2676,8 @@ class _CanvasImageStory extends StatelessWidget {
   Widget build(BuildContext context) {
     return switch (selectedWidgetName) {
       'Image' || 'ImageSource' => SizedBox(
-        width: 56,
-        height: 16,
+        width: 76,
+        height: 22,
         child: Image.bytes(
           _photoBytes,
           glyph: imageGlyph,
