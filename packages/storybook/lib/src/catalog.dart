@@ -438,11 +438,12 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       StoryControl.option(
         id: 'imageGlyph',
         label: 'Image glyph (px/cell)',
-        // Sextant first: 6 px/cell (2×3) is the sharpest tier that still keeps
-        // colour, so the default preview shows the most detail. Half block (2
-        // px) is the most font-portable; Braille (8 px) is densest but
-        // monochrome — better for line art than photos.
-        options: <String>['Sextant', 'Half block', 'Quarter', 'Braille'],
+        // Quarter first: 4 px/cell (2×2) using the quadrant Block Elements —
+        // old, universally-rendered glyphs — so it's sharper than half block
+        // with no missing-glyph risk. Sextant (6 px) and Braille (8 px) are
+        // denser but need the 2020 "Legacy Computing" block in the font (great
+        // in capable terminals, missing-glyph boxes where it's absent).
+        options: <String>['Quarter', 'Half block', 'Sextant', 'Braille'],
       ),
     ],
     variants: const <StoryVariant>[
