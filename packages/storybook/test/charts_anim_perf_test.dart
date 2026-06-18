@@ -31,9 +31,11 @@ class _FakeTransport implements RemoteFrameTransport {
     closed = true;
     if (!_in.isClosed) await _in.close();
   }
+
   void emit(RemoteFrame frame) {
     if (!_in.isClosed) _in.add(frame);
   }
+
   Future<void> disconnect() async {
     if (!_in.isClosed) await _in.close();
   }
@@ -69,27 +71,35 @@ void main() {
     final sw = Stopwatch()..start();
     await Future<void>.delayed(const Duration(milliseconds: 2000));
     sw.stop();
-    final steady = transport.sent.whereType<PlanFrame>().toList().sublist(before);
+    final steady = transport.sent.whereType<PlanFrame>().toList().sublist(
+      before,
+    );
 
     final secs = sw.elapsedMilliseconds / 1000.0;
     final fps = steady.length / secs;
-    final sizes =
-        steady.map((f) => encodeRemotePlan(f.plan).length).toList()..sort();
+    final sizes = steady.map((f) => encodeRemotePlan(f.plan).length).toList()
+      ..sort();
     final avgBytes = sizes.isEmpty
         ? 0
         : (sizes.reduce((a, b) => a + b) / sizes.length).round();
     final patchCells = steady
-        .map((f) => f.plan.patches.fold<int>(
-            0, (n, p) => n + p.runs.fold<int>(0, (m, r) => m + r.text.length)))
+        .map(
+          (f) => f.plan.patches.fold<int>(
+            0,
+            (n, p) => n + p.runs.fold<int>(0, (m, r) => m + r.text.length),
+          ),
+        )
         .fold<int>(0, (a, b) => a + b);
     // ignore: avoid_print
-    print('PERF served BarChart animation:\n'
-        '  steady frames: ${steady.length} in ${secs.toStringAsFixed(2)}s '
-        '=> ${fps.toStringAsFixed(1)} fps (wire)\n'
-        '  bytes/frame: avg=$avgBytes  p50=${sizes.isEmpty ? 0 : sizes[sizes.length ~/ 2]}  '
-        'max=${sizes.isEmpty ? 0 : sizes.last}\n'
-        '  ~changed glyph cells/frame: '
-        '${steady.isEmpty ? 0 : (patchCells / steady.length).round()}');
+    print(
+      'PERF served BarChart animation:\n'
+      '  steady frames: ${steady.length} in ${secs.toStringAsFixed(2)}s '
+      '=> ${fps.toStringAsFixed(1)} fps (wire)\n'
+      '  bytes/frame: avg=$avgBytes  p50=${sizes.isEmpty ? 0 : sizes[sizes.length ~/ 2]}  '
+      'max=${sizes.isEmpty ? 0 : sizes.last}\n'
+      '  ~changed glyph cells/frame: '
+      '${steady.isEmpty ? 0 : (patchCells / steady.length).round()}',
+    );
 
     expect(steady, isNotEmpty, reason: 'the chart should be animating');
 

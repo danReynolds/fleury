@@ -783,7 +783,8 @@ const Map<String, String> _widgetDescriptions = <String, String>{
   'Radio': 'Single-choice state across related options.',
   'RadioGroup':
       'Single-choice group with roving-arrow selection across its options.',
-  'RadioOption': 'Typed option metadata (value, label, enabled) for RadioGroup.',
+  'RadioOption':
+      'Typed option metadata (value, label, enabled) for RadioGroup.',
   'Select': 'Single-value dropdown selection for compact option sets.',
   'SelectOption':
       'Typed select option metadata including labels and disabled states.',
@@ -1608,7 +1609,12 @@ class _TextEntryStoryState extends State<_TextEntryStory> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Autocomplete<String>(
-            options: const <String>['fleury', 'flutter', 'ratatui', 'bubble tea'],
+            options: const <String>[
+              'fleury',
+              'flutter',
+              'ratatui',
+              'bubble tea',
+            ],
             placeholder: 'Type f...',
             onSelected: (value) {
               setState(() => _selected = value);
@@ -1773,16 +1779,16 @@ class _OverlayStory extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Text('Emit a toast — each carries its severity glyph + color:'),
+            const Text(
+              'Emit a toast — each carries its severity glyph + color:',
+            ),
             const SizedBox(height: 1),
             Row(
               children: <Widget>[
                 Button(
                   label: 'Info',
-                  onPressed: () => Toaster.show(
-                    context,
-                    'Heads up — nothing to do',
-                  ),
+                  onPressed: () =>
+                      Toaster.show(context, 'Heads up — nothing to do'),
                 ),
                 const SizedBox(width: 2),
                 Button(
@@ -2279,7 +2285,9 @@ class _ChartsStoryState extends State<_ChartsStory>
     if (_playable && _playing) {
       // The ticker needs a TuiBinding (installed by runTui); a plain test tree
       // has none, so animation is simply skipped there.
-      _sim ??= TuiBinding.maybeOf(context) != null ? createTicker(_onTick) : null;
+      _sim ??= TuiBinding.maybeOf(context) != null
+          ? createTicker(_onTick)
+          : null;
       if (_sim != null && !_sim!.isActive) _sim!.start();
     } else {
       _sim?.stop();
@@ -2329,7 +2337,9 @@ class _ChartsStoryState extends State<_ChartsStory>
     final wirePoints = live
         ? _animPoints(samples, phase, 3)
         : _wirePoints(samples);
-    final sparkline = live ? _animSparkline(samples, phase) : _sparkline(samples);
+    final sparkline = live
+        ? _animSparkline(samples, phase)
+        : _sparkline(samples);
     final heatmap = live ? _animHeatmap(phase) : _heatmap();
     final bars = live ? _animBars(phase) : _statusBars;
     final gaugeRss = live ? _animGauge(phase, 0) : 0.82;
@@ -2436,11 +2446,23 @@ class _ChartsStoryState extends State<_ChartsStory>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             // Threshold zones: amber past 80%, red past 95%.
-            Gauge(value: gaugeRss, label: 'RSS', thresholds: _gaugeZones(Theme.of(context))),
+            Gauge(
+              value: gaugeRss,
+              label: 'RSS',
+              thresholds: _gaugeZones(Theme.of(context)),
+            ),
             const SizedBox(height: 1),
-            Gauge(value: gaugeCpu, label: 'CPU', thresholds: _gaugeZones(Theme.of(context))),
+            Gauge(
+              value: gaugeCpu,
+              label: 'CPU',
+              thresholds: _gaugeZones(Theme.of(context)),
+            ),
             const SizedBox(height: 1),
-            Gauge(value: gaugeIo, label: 'IO', thresholds: _gaugeZones(Theme.of(context))),
+            Gauge(
+              value: gaugeIo,
+              label: 'IO',
+              thresholds: _gaugeZones(Theme.of(context)),
+            ),
           ],
         );
       case 'Digits':
@@ -2542,10 +2564,7 @@ class _LivePlayBar extends StatelessWidget {
         children: <Widget>[
           Text(
             playing ? '■ Pause' : '▶ Play',
-            style: CellStyle(
-              foreground: theme.colorScheme.primary,
-              bold: true,
-            ),
+            style: CellStyle(foreground: theme.colorScheme.primary, bold: true),
           ),
           const Text('   '),
           if (playing)
@@ -2568,14 +2587,14 @@ List<num> _animSparkline(int samples, num phase) => <num>[
   for (var i = 0; i < samples; i++) (math.sin((i + phase) * 0.5) + 1) * 45 + 5,
 ];
 
-List<(num, num)> _animPoints(int samples, num phase, int seed) =>
-    <(num, num)>[
-      for (var i = 0; i < samples; i++)
-        (i, (math.sin((i + phase) * 0.6 + seed) + 1) * 40 + 10),
-    ];
+List<(num, num)> _animPoints(int samples, num phase, int seed) => <(num, num)>[
+  for (var i = 0; i < samples; i++)
+    (i, (math.sin((i + phase) * 0.6 + seed) + 1) * 40 + 10),
+];
 
 List<num> _animValues(int samples, num phase) => <num>[
-  for (var i = 0; i < samples * 2; i++) (math.sin((i + phase) * 0.4) + 1) * 25 + 4,
+  for (var i = 0; i < samples * 2; i++)
+    (math.sin((i + phase) * 0.4) + 1) * 25 + 4,
 ];
 
 List<List<num>> _animHeatmap(num phase) => <List<num>>[
@@ -2589,7 +2608,8 @@ List<List<num>> _animHeatmap(num phase) => <List<num>>[
 List<Bar> _animBars(num phase) => <Bar>[
   for (var b = 0; b < _statusBars.length; b++)
     Bar.stacked(_statusBars[b].label, <num>[
-      for (var s = 0; s < 3; s++) (math.sin((b * 3 + s + phase) * 0.5) + 1) * 12 + 4,
+      for (var s = 0; s < 3; s++)
+        (math.sin((b * 3 + s + phase) * 0.5) + 1) * 12 + 4,
     ]),
 ];
 
@@ -2732,8 +2752,10 @@ img.Image _buildPreviewImage() {
         final t = iter / maxIter;
         final r = (9 * (1 - t) * t * t * t * 255).round().clamp(0, 255);
         final g = (15 * (1 - t) * (1 - t) * t * t * 255).round().clamp(0, 255);
-        final b =
-            (8.5 * (1 - t) * (1 - t) * (1 - t) * t * 255).round().clamp(0, 255);
+        final b = (8.5 * (1 - t) * (1 - t) * (1 - t) * t * 255).round().clamp(
+          0,
+          255,
+        );
         image.setPixelRgb(px, py, r, g, b);
       }
     }

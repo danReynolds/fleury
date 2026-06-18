@@ -12,6 +12,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../foundation/change_notifier.dart';
+import '../rendering/text_sanitizer.dart';
 
 /// Which standard stream a captured [LogLine] came from.
 enum LogSource { stdout, stderr }
@@ -67,10 +68,15 @@ class LogBuffer extends ChangeNotifier {
 /// Routes intercepted output into a [LogBuffer] (and an optional live
 /// [onLine] hook), assembling byte/string chunks into whole lines.
 class OutputCapture {
-  OutputCapture({required this.buffer, this.onLine});
+  OutputCapture({
+    required this.buffer,
+    this.onLine,
+    this.sanitizeForTerminal = false,
+  });
 
   final LogBuffer buffer;
   final void Function(LogLine line)? onLine;
+  final bool sanitizeForTerminal;
 
   final Map<LogSource, StringBuffer> _pending = {
     LogSource.stdout: StringBuffer(),
@@ -78,8 +84,11 @@ class OutputCapture {
   };
 
   void _emit(LogLine line) {
-    buffer.add(line);
-    onLine?.call(line);
+    final safeLine = sanitizeForTerminal
+        ? LogLine(sanitizeForDisplay(line.text), line.source)
+        : line;
+    buffer.add(safeLine);
+    onLine?.call(safeLine);
   }
 
   /// A complete `print()` line (which may itself span multiple lines).

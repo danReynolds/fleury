@@ -455,6 +455,26 @@ void main() {
     expect(order, [3, 1]);
   });
 
+  test('buildDataTableRowOrder caches sort keys while sorting', () {
+    var sortColumnCalls = 0;
+    final order = buildDataTableRowOrder(
+      rowCount: 6,
+      columns: _columns(),
+      cellBuilder: (int row, String column) {
+        if (column == 'run') {
+          sortColumnCalls += 1;
+          return 'run-${6 - row}';
+        }
+        if (column == 'status') return 'failed';
+        return '';
+      },
+      sort: const DataTableSortDescriptor(columnId: 'run'),
+    );
+
+    expect(order, [5, 4, 3, 2, 1, 0]);
+    expect(sortColumnCalls, 6);
+  });
+
   group('copy/export', () {
     late Clipboard originalClipboard;
     late TestClipboard clipboard;

@@ -201,14 +201,12 @@ List<int> buildDataTableRowOrder({
   }
 
   if (sort != null) {
+    final sortKeyByRow = <int, String>{
+      for (final row in rows) row: _sortKeyForRow(row, sort, cellBuilder),
+    };
+    final compare = sort.compare ?? _compareCellText;
     rows.sort((a, b) {
-      final left = _sanitizeExportField(cellBuilder(a, sort.columnId));
-      final right = _sanitizeExportField(cellBuilder(b, sort.columnId));
-      final compare = sort.compare ?? _compareCellText;
-      var result = compare(
-        sort.caseSensitive ? left : left.toLowerCase(),
-        sort.caseSensitive ? right : right.toLowerCase(),
-      );
+      var result = compare(sortKeyByRow[a]!, sortKeyByRow[b]!);
       if (result == 0) result = a.compareTo(b);
       return sort.direction == DataTableSortDirection.ascending
           ? result
@@ -217,6 +215,15 @@ List<int> buildDataTableRowOrder({
   }
 
   return List<int>.unmodifiable(rows);
+}
+
+String _sortKeyForRow(
+  int row,
+  DataTableSortDescriptor sort,
+  DataTableCellBuilder cellBuilder,
+) {
+  final value = _sanitizeExportField(cellBuilder(row, sort.columnId));
+  return sort.caseSensitive ? value : value.toLowerCase();
 }
 
 /// Exports row data without mounting cells as widgets.

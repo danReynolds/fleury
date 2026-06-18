@@ -34,6 +34,7 @@ import 'package:fleury/src/remote/remote_client_asset.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/remote/serve_index_html.dart';
 import 'package:fleury/src/remote/unix_socket_transport.dart';
+import 'package:fleury/src/rendering/text_sanitizer.dart';
 import 'package:fleury/src/terminal/capabilities.dart';
 import 'package:fleury/src/terminal/diagnostics.dart';
 import 'package:fleury/src/terminal/native_driver.dart';
@@ -269,6 +270,13 @@ Future<int> _runShell(List<String> args) async {
   server.listen((client) async {
     // One app at a time. A second connection while one is live gets
     // dropped — the shell terminal can only show one TUI's frames.
+    if (activeSession != null) {
+      client.destroy();
+      stderr.writeln(
+        '[shell] another app connected while a session was live - dropped',
+      );
+      return;
+    }
     final session = _runSession(client, shutdownSignal: shutdownSession.future);
     activeSession = session;
     final code = await session;
@@ -692,7 +700,11 @@ bool _isAllowedWebSocketOrigin(
   final requestHost = req.headers.value(HttpHeaders.hostHeader);
   if (requestHost == null || requestHost.isEmpty) return false;
 
-  if (originUri.authority.toLowerCase() == requestHost.trim().toLowerCase()) {
+  final normalizedOrigin = _ServeOriginPolicy._normalizeOrigin(origin);
+  final sameOrigin = _ServeOriginPolicy._normalizeOrigin(
+    'http://${requestHost.trim()}',
+  );
+  if (normalizedOrigin != null && normalizedOrigin == sameOrigin) {
     return true;
   }
   return originPolicy.allows(origin);
@@ -968,12 +980,11 @@ Future<int> _runServeSpawn({
 }
 
 Directory _createSpawnHandleDir() {
-  final suffix = '$pid-${DateTime.now().microsecondsSinceEpoch}';
   final shortTemp = Directory('/tmp');
   final base = !Platform.isWindows && shortTemp.existsSync()
       ? shortTemp
       : Directory.systemTemp;
-  return Directory('${base.path}/fleury-spawn-$suffix')..createSync();
+  return base.createTempSync('fleury-spawn-');
 }
 
 /// One spawn-mode session: a subprocess, its session socket, and the
@@ -1024,7 +1035,9 @@ class _SpawnSession {
       command.sublist(1),
       environment: env,
     );
-    stderr.writeln('[serve $tag] spawned ${command.first} (pid ${_process!.pid})');
+    stderr.writeln(
+      '[serve $tag] spawned ${command.first} (pid ${_process!.pid})',
+    );
     // Forward the subprocess's own stdout/stderr to ours, prefixed. The TUI
     // never writes to its own stdout (renders go via the socket), so anything
     // here is print()/log output.
@@ -1183,7 +1196,7 @@ class _SpawnSession {
     // alongside other sessions.
     final lines = chunk.split('\n');
     for (var i = 0; i < lines.length; i++) {
-      final line = lines[i];
+      final line = sanitizeForDisplay(lines[i]);
       if (line.isEmpty && i == lines.length - 1) continue;
       stderr.writeln('[$tag $stream] $line');
     }
