@@ -170,6 +170,16 @@ void main() {
     });
   });
 
+  testWidgets('shows a leading severity glyph', (tester) {
+    late BuildContext ctx;
+    tester.pumpWidget(Toaster(child: _Capture((c) => ctx = c)));
+    Toaster.show(ctx, 'Saved', severity: ToastSeverity.success);
+    tester.pump();
+    final out = _screen(tester, cols: 24);
+    expect(out.contains('✓ Saved'), isTrue,
+        reason: 'success toast is prefixed with its glyph');
+  });
+
   testWidgets('info severity stays neutral (uncolored)', (tester) {
     late BuildContext ctx;
     tester.pumpWidget(Toaster(child: _Capture((c) => ctx = c)));
