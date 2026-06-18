@@ -204,6 +204,10 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
   /// inconclusive; any failure leaves the conservative fallback in place.
   Future<void> _maybeProbeImageProtocol() async {
     if (!_stdoutIsTerminal || !_changedStdin) return;
+    // Escape hatch: `FLEURY_IMAGE_PROBE=0` disables the startup query for users
+    // on a terminal where it misbehaves (the conservative env fallback stands).
+    final flag = Platform.environment['FLEURY_IMAGE_PROBE'];
+    if (flag == '0' || flag == 'false') return;
     if (detectImageProtocolFromEnvironment(Platform.environment) !=
         ImageProtocol.halfBlock) {
       return;
