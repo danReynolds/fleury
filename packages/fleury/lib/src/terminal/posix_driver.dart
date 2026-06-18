@@ -20,6 +20,7 @@ import 'capabilities.dart';
 import 'events.dart';
 import 'input_parser.dart';
 import 'terminal_driver.dart';
+import 'terminal_probe.dart';
 import 'terminal_sequences.dart';
 
 class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
@@ -52,6 +53,15 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
   bool _active = false;
   bool _handoffActive = false;
   TerminalMode? _mode;
+
+  // Image-protocol probe state. While [_probing] is true the stdin listener
+  // diverts bytes into [_probeBuffer] (the terminal's reply to our query)
+  // instead of the input parser. [_imageProtocolOverride], once a probe
+  // confirms a native protocol the environment didn't advertise (e.g. Kitty
+  // graphics under Warp), upgrades [capabilities].
+  bool _probing = false;
+  List<int> _probeBuffer = <int>[];
+  ImageProtocol? _imageProtocolOverride;
   bool _wroteEnterSequences = false;
   bool _changedStdin = false;
   bool? _originalLineMode;
@@ -96,8 +106,11 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
   }
 
   @override
-  TerminalCapabilities get capabilities =>
-      detectTerminalCapabilitiesFromEnvironment(Platform.environment);
+  TerminalCapabilities get capabilities {
+    final base = detectTerminalCapabilitiesFromEnvironment(Platform.environment);
+    final override = _imageProtocolOverride;
+    return override == null ? base : base.copyWith(imageProtocol: override);
+  }
 
   @override
   Stream<TuiEvent> get events => _events.stream;
@@ -137,6 +150,14 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
 
     _stdinSubscription = _stdin.listen(
       (bytes) {
+        // During the startup image-protocol probe, the terminal's reply is for
+        // us, not the app — divert it to the probe buffer so it isn't parsed
+        // as keystrokes (and so a non-supporting terminal's reply is consumed
+        // rather than leaked as garbage).
+        if (_probing) {
+          _probeBuffer.addAll(bytes);
+          return;
+        }
         _parser.feed(bytes, _sink);
         _scheduleFlush();
       },
@@ -145,6 +166,12 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
       },
       cancelOnError: false,
     );
+
+    // Actively confirm a native image protocol the environment didn't name
+    // (e.g. Kitty graphics under Warp, which masquerades as xterm-256color).
+    // Runs before the app renders so the first frame already uses the right
+    // protocol; falls back silently when nothing replies.
+    await _maybeProbeImageProtocol();
 
     _resizeSubscription = _watchSignal(ProcessSignal.sigwinch, (_) {
       _events.add(ResizeEvent(size));
@@ -167,6 +194,26 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
     _tstpSubscription = _watchSignal(ProcessSignal.sigtstp, (_) => _suspend());
 
     _active = true;
+  }
+
+  /// When the environment doesn't already name a native image protocol, ask
+  /// the terminal directly (a short, bounded query/response). A confirmed reply
+  /// upgrades [capabilities] so [Image] widgets emit real pixels instead of
+  /// cell art. Skipped unless we own a real terminal in raw mode (so the reply
+  /// arrives byte-for-byte, not line-buffered) and the environment is
+  /// inconclusive; any failure leaves the conservative fallback in place.
+  Future<void> _maybeProbeImageProtocol() async {
+    if (!_stdoutIsTerminal || !_changedStdin) return;
+    if (detectImageProtocolFromEnvironment(Platform.environment) !=
+        ImageProtocol.halfBlock) {
+      return;
+    }
+    try {
+      final detected = await probeImageProtocol(_DriverProbeTransport(this));
+      if (detected != null) _imageProtocolOverride = detected;
+    } on Object {
+      // Probe failed (no terminal reply, write error, …): keep the fallback.
+    }
   }
 
   /// Builds the mode-entry escape sequence (alt screen, hide cursor,
@@ -337,5 +384,47 @@ class _ParserSink implements TuiEventSink {
   @override
   void add(TuiEvent event) {
     target?.add(event);
+  }
+}
+
+/// Probe transport over a [PosixTerminalDriver]'s live stdin/stdout. Writes the
+/// query, then waits for the reply that the driver's stdin listener diverts
+/// into its probe buffer. Because the query appends a Device Attributes request
+/// (which every terminal answers), it stops as soon as that reply lands instead
+/// of always blocking for the full timeout.
+class _DriverProbeTransport implements TerminalProbeTransport {
+  _DriverProbeTransport(this._driver);
+
+  final PosixTerminalDriver _driver;
+
+  @override
+  Future<List<int>> request(String bytes, {required Duration timeout}) async {
+    _driver._probing = true;
+    _driver._probeBuffer = <int>[];
+    try {
+      _driver._stdout.write(bytes);
+      await _driver._stdout.flush();
+      final deadline = Stopwatch()..start();
+      while (deadline.elapsed < timeout) {
+        if (_looksComplete(_driver._probeBuffer)) break;
+        await Future<void>.delayed(const Duration(milliseconds: 4));
+      }
+      return List<int>.unmodifiable(_driver._probeBuffer);
+    } finally {
+      _driver._probing = false;
+    }
+  }
+
+  /// True once the buffer holds a Device Attributes reply (`ESC [ … c`) — the
+  /// terminal has processed our request, so any graphics reply is already in.
+  static bool _looksComplete(List<int> buf) {
+    for (var i = 0; i + 1 < buf.length; i++) {
+      if (buf[i] != 0x1B || buf[i + 1] != 0x5B) continue; // ESC [
+      for (var j = i + 2; j < buf.length; j++) {
+        if (buf[j] == 0x63) return true; // 'c' — DA reply terminator
+        if (buf[j] == 0x1B) break; // next sequence; keep scanning
+      }
+    }
+    return false;
   }
 }

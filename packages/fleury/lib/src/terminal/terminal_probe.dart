@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:meta/meta.dart';
 
+import 'capabilities.dart';
 import 'capability_requirements.dart';
 
 /// Outcome for an explicit, opt-in terminal capability probe.
@@ -148,6 +149,30 @@ Future<TerminalProbeReport> runTerminalProbeSuite(
     }
   }
   return TerminalProbeReport(probes: results);
+}
+
+/// Actively probes the terminal for a native image protocol and returns the
+/// confirmed [ImageProtocol], or null if none is confirmed (the caller keeps
+/// its environment-derived fallback). Currently detects the **Kitty graphics
+/// protocol** (kitty, WezTerm, Ghostty, recent Warp, …) — the broadest and
+/// most capable. A single query/response round trip bounded by [timeout]; the
+/// request appends a Device Attributes query so a terminal that ignores the
+/// graphics query still replies, letting the caller stop waiting promptly
+/// instead of always blocking for the full [timeout].
+Future<ImageProtocol?> probeImageProtocol(
+  TerminalProbeTransport transport, {
+  Duration timeout = const Duration(milliseconds: 150),
+}) async {
+  final stopwatch = Stopwatch()..start();
+  final List<int> response;
+  try {
+    response = await transport.request(_kittyGraphicsQuery, timeout: timeout);
+  } on Object {
+    return null;
+  }
+  stopwatch.stop();
+  final result = _parseKittyGraphicsQuery(response, elapsed: stopwatch.elapsed);
+  return result.isConfirmed ? ImageProtocol.kitty : null;
 }
 
 typedef _ProbeParser =
