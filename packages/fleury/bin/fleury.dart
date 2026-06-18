@@ -692,7 +692,11 @@ bool _isAllowedWebSocketOrigin(
   final requestHost = req.headers.value(HttpHeaders.hostHeader);
   if (requestHost == null || requestHost.isEmpty) return false;
 
-  if (originUri.authority.toLowerCase() == requestHost.trim().toLowerCase()) {
+  final normalizedOrigin = _ServeOriginPolicy._normalizeOrigin(origin);
+  final sameOrigin = _ServeOriginPolicy._normalizeOrigin(
+    'http://${requestHost.trim()}',
+  );
+  if (normalizedOrigin != null && normalizedOrigin == sameOrigin) {
     return true;
   }
   return originPolicy.allows(origin);
@@ -1024,7 +1028,9 @@ class _SpawnSession {
       command.sublist(1),
       environment: env,
     );
-    stderr.writeln('[serve $tag] spawned ${command.first} (pid ${_process!.pid})');
+    stderr.writeln(
+      '[serve $tag] spawned ${command.first} (pid ${_process!.pid})',
+    );
     // Forward the subprocess's own stdout/stderr to ours, prefixed. The TUI
     // never writes to its own stdout (renders go via the socket), so anything
     // here is print()/log output.
