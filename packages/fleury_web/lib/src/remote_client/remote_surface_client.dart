@@ -23,11 +23,9 @@ import 'plan_adapter.dart';
 /// same DOM surface the in-browser host uses, with the same span/scroll
 /// machinery.
 final class RemoteSurfaceClient {
-  RemoteSurfaceClient({
-    required web.Element hostElement,
-    required String url,
-  }) : _host = hostElement,
-       _url = url;
+  RemoteSurfaceClient({required web.Element hostElement, required String url})
+    : _host = hostElement,
+      _url = url;
 
   final web.Element _host;
   final String _url;
@@ -35,14 +33,14 @@ final class RemoteSurfaceClient {
   web.WebSocket? _socket;
   DomGridSurface? _surface;
   SemanticDomPresenter? _semantics;
-  web.Element? _surfaceRoot;
-  web.Element? _semanticRoot;
   DomCellMetrics? _metrics;
   DomInputSource? _input;
   final FrameDecoder _decoder = FrameDecoder();
   final SemanticsWireDecoder _semanticsDecoder = SemanticsWireDecoder();
   CellSize _size = const CellSize(80, 24);
   bool _handshakeSent = false;
+  bool _closed = false;
+  web.HTMLElement? _disconnectBanner;
   CellBuffer _mirror = CellBuffer(const CellSize(80, 24));
 
   /// Connects and begins rendering. Resolves once the socket is open and
@@ -62,7 +60,7 @@ final class RemoteSurfaceClient {
       _onMessage(event);
     }).toJS;
     socket.onclose = ((web.CloseEvent _) {
-      _dispose();
+      _teardown('Disconnected from the fleury session.');
     }).toJS;
     await opened.future;
   }
@@ -78,11 +76,9 @@ final class RemoteSurfaceClient {
     // (a surface div + a semantic div under one host).
     final surfaceRoot = web.document.createElement('div');
     _host.appendChild(surfaceRoot);
-    _surfaceRoot = surfaceRoot;
     _surface = DomGridSurface(root: surfaceRoot, size: _size);
     final semanticRoot = web.document.createElement('div');
     _host.appendChild(semanticRoot);
-    _semanticRoot = semanticRoot;
     _semantics = SemanticDomPresenter(root: semanticRoot)
       // Activating a node in the accessible DOM (screen reader / agent) sends
       // the action back to the host, which invokes it on the live tree —
@@ -234,7 +230,7 @@ final class RemoteSurfaceClient {
       case SemanticsFrame f:
         _presentSemantics(f);
       case ByeFrame():
-        _dispose();
+        _teardown('The fleury session ended.');
       case InitFrame _:
       case ResizeFrame _:
       case InputFrame _:
@@ -263,18 +259,42 @@ final class RemoteSurfaceClient {
     _socket?.send(bytes.toJS);
   }
 
-  void _dispose() {
+  /// The session has ended — a dropped socket or a BYE from the host. Stop
+  /// interacting, but keep the last rendered frame on screen and overlay a
+  /// clear message instead of emptying the DOM. A silent blank (the old
+  /// behaviour) is impossible to tell apart from a render bug; this makes the
+  /// end-of-session state obvious and recoverable.
+  void _teardown(String message) {
+    if (_closed) return;
+    _closed = true;
     _input?.dispose();
     _input = null;
-    unawaited(_surface?.dispose());
-    _surface = null;
-    unawaited(_semantics?.dispose());
-    _semantics = null;
-    _surfaceRoot?.remove();
-    _surfaceRoot = null;
-    _semanticRoot?.remove();
-    _semanticRoot = null;
     _socket = null;
+    _showDisconnected(message);
+  }
+
+  void _showDisconnected(String message) {
+    if (_disconnectBanner != null) return;
+    final banner = web.document.createElement('div') as web.HTMLElement;
+    banner.textContent = '⚠ $message  Click or reload to reconnect.';
+    final style = banner.style;
+    style.setProperty('position', 'fixed');
+    style.setProperty('left', '0');
+    style.setProperty('right', '0');
+    style.setProperty('bottom', '0');
+    style.setProperty('padding', '8px 12px');
+    style.setProperty('background', 'rgba(120, 18, 18, 0.95)');
+    style.setProperty('color', '#fff');
+    style.setProperty('font', '13px ui-monospace, monospace');
+    style.setProperty('text-align', 'center');
+    style.setProperty('cursor', 'pointer');
+    style.setProperty('z-index', '2147483647');
+    banner.addEventListener(
+      'click',
+      ((web.Event _) => web.window.location.reload()).toJS,
+    );
+    _host.appendChild(banner);
+    _disconnectBanner = banner;
   }
 }
 

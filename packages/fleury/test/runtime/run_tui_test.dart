@@ -168,28 +168,48 @@ void main() {
       },
     );
 
-    test('an uncaught error in an event handler restores the terminal and '
-        'surfaces the error', () async {
-      final driver = FakeTerminalDriver();
-      final future = runTui(
-        const Text('hi'),
-        driver: driver,
-        enableHotReload: false,
-        onEvent: (_) => throw StateError('handler-boom'),
-      );
-      await _settle();
+    test(
+      'an uncaught error in an event handler is reported, not fatal',
+      () async {
+        final driver = FakeTerminalDriver();
+        var sessionFailed = false;
+        final future = runTui(
+          const Text('hi'),
+          driver: driver,
+          enableHotReload: false,
+          onEvent: (_) => throw StateError('handler-boom'),
+        ).then((_) {}, onError: (_) => sessionFailed = true);
+        await _settle();
 
-      driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
-      await expectLater(future, throwsA(isA<Error>()));
+        driver.clearOutput();
+        driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
+        await _settle();
 
-      expect(
-        driver.isActive,
-        isFalse,
-        reason: 'terminal restored even though a callback threw',
-      );
-      expect(driver.restoreCallCount, 1);
-      await driver.dispose();
-    });
+        // The throw is reported on screen and the session keeps running — a
+        // single bad handler can't take the app down (Flutter's posture).
+        expect(
+          sessionFailed,
+          isFalse,
+          reason: 'a throwing handler must not kill the session',
+        );
+        expect(driver.isActive, isTrue, reason: 'session still live');
+        expect(
+          driver.output.contains('⚠'),
+          isTrue,
+          reason: 'the error is surfaced as a banner',
+        );
+        expect(driver.output.contains('handler-boom'), isTrue);
+
+        // Clean shutdown via Ctrl+C restores the terminal exactly once.
+        driver.enqueue(
+          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+        );
+        await future;
+        expect(sessionFailed, isFalse);
+        expect(driver.restoreCallCount, 1);
+        await driver.dispose();
+      },
+    );
 
     test('an error during a scheduled frame restores the terminal and '
         'surfaces the error', () async {

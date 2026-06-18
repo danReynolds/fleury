@@ -23,6 +23,7 @@ import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/render_layout_stats.dart';
 import '../rendering/render_repaint_boundary.dart';
+import 'runtime_error_overlay.dart';
 import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
 import '../terminal/diagnostics.dart';
@@ -214,6 +215,12 @@ Future<void> runTui(
   // tuple allocation.
   List<int> lastFlashedCells = const [];
 
+  // True only while the synchronous render pipeline (build/layout/paint) runs.
+  // A throw with this set is an unrecoverable render crash (kept fatal); an
+  // event-handler or async throw happens with this clear and is reported and
+  // survived instead.
+  var inFrameRender = false;
+
   void renderFrame(String reason) {
     if (disposed) {
       // Late frame after cleanup started: drain any callbacks that
@@ -248,6 +255,7 @@ Future<void> runTui(
     Duration phaseBuild = Duration.zero;
     Duration phaseLayout = Duration.zero;
     Duration phasePaint = Duration.zero;
+    inFrameRender = true;
     final frame = frameLoop.render(
       size: size,
       paint: (next) {
@@ -265,6 +273,7 @@ Future<void> runTui(
         );
       },
     );
+    inFrameRender = false;
     if (frame == null) return;
     final prev = frame.previous;
     final next = frame.next;
@@ -450,6 +459,14 @@ Future<void> runTui(
     sanitizeForTerminal: true,
   );
 
+  // Uncaught runtime errors (a throwing event handler, a failed async callback)
+  // are reported and surfaced on screen rather than killing the session — see
+  // the zone guard and the event-dispatch try/catch below. The listener
+  // repaints so the banner appears/auto-dismisses.
+  final errorReporter = RuntimeErrorReporter(
+    onLog: (message) => stderr.writeln(message),
+  )..addListener(() => scheduleFrame('runtime-error'));
+
   // Single idempotent teardown, driven by either the normal exit path
   // (the finally below) or the zone's uncaught-error handler.
   Future<void> cleanup() async {
@@ -465,6 +482,7 @@ Future<void> runTui(
     DebugInvalidations.reset();
     frameScheduler.dispose();
     dispatcher.dispose();
+    errorReporter.dispose();
     runtime.dispose();
     runtimeMarkers?.mark('terminal.restore.start');
     await usedDriver.restore();
@@ -546,6 +564,12 @@ Future<void> runTui(
           // the ambient MediaQuery data when the terminal resizes, preserving
           // the Overlay/Navigator subtree (and all its state).
           final rootEntry = OverlayEntry(builder: (_) => Navigator(home: root));
+          // A full-screen layer above the app that shows the uncaught-error
+          // banner (and nothing otherwise). As its own entry it never touches
+          // the app's layout — the app keeps rendering full-screen underneath.
+          final errorEntry = OverlayEntry(
+            builder: (_) => RuntimeErrorOverlay(reporter: errorReporter),
+          );
           Widget buildRoot() => TuiBindingScope(
             binding: binding,
             child: MediaQuery(
@@ -572,7 +596,7 @@ Future<void> runTui(
                       controller: debugController,
                       child: Overlay(
                         key: overlayKey,
-                        initialEntries: [rootEntry],
+                        initialEntries: [rootEntry, errorEntry],
                       ),
                     ),
                   ),
@@ -606,65 +630,72 @@ Future<void> runTui(
 
           eventSub = usedDriver.events.listen(
             (event) {
-              DebugEvents.emitInput(event);
-              if (event is ResizeEvent) {
-                // Force buffer-pool reallocation and a full repaint on the
-                // next frame; the existing buffers are the wrong size.
-                frameLoop.resetBuffers();
-                // Propagate the new size through MediaQuery (layout already
-                // re-runs against the new buffer constraints).
-                final r = rootElement;
-                if (r != null) rootElement = runtime.updateRoot(buildRoot());
-                DebugEvents.emitTerminalDiagnosis(currentTerminalDiagnosis());
-              }
+              try {
+                DebugEvents.emitInput(event);
+                if (event is ResizeEvent) {
+                  // Force buffer-pool reallocation and a full repaint on the
+                  // next frame; the existing buffers are the wrong size.
+                  frameLoop.resetBuffers();
+                  // Propagate the new size through MediaQuery (layout already
+                  // re-runs against the new buffer constraints).
+                  final r = rootElement;
+                  if (r != null) rootElement = runtime.updateRoot(buildRoot());
+                  DebugEvents.emitTerminalDiagnosis(currentTerminalDiagnosis());
+                }
 
-              // Debug-shell hotkeys (Ctrl+G, F11, Esc-in-fullscreen, F12,
-              // 'p' when open): bypass the dispatcher so they fire inside
-              // an active modal route's `suppressGlobals: true` scope.
-              // Same escape-hatch tier as Ctrl+C.
-              if (event is KeyEvent &&
-                  tryConsumeDebugKey(debugController, event)) {
-                scheduleFrame('debug-key');
-                return;
-              }
-              if (event is KeyEvent && maybeToggleDebugConsole(event)) {
-                scheduleFrame('debug-console');
-                return;
-              }
+                // Debug-shell hotkeys (Ctrl+G, F11, Esc-in-fullscreen, F12,
+                // 'p' when open): bypass the dispatcher so they fire inside
+                // an active modal route's `suppressGlobals: true` scope.
+                // Same escape-hatch tier as Ctrl+C.
+                if (event is KeyEvent &&
+                    tryConsumeDebugKey(debugController, event)) {
+                  scheduleFrame('debug-key');
+                  return;
+                }
+                if (event is KeyEvent && maybeToggleDebugConsole(event)) {
+                  scheduleFrame('debug-console');
+                  return;
+                }
 
-              // Route input through the InputDispatcher: chords walk the focus
-              // chain (sequences, KeyBindings, Focus.onKey, globals), text +
-              // paste go to the nearest TextInputClaimant, and mouse events go
-              // to pointer regions + click-to-focus.
-              KeyEventResult dispatchResult = KeyEventResult.ignored;
-              if (event is KeyEvent ||
-                  event is TextInputEvent ||
-                  event is TextCompositionEvent ||
-                  event is PasteEvent ||
-                  event is MouseEvent) {
-                dispatchResult = dispatcher.dispatch(event);
-              }
+                // Route input through the InputDispatcher: chords walk the focus
+                // chain (sequences, KeyBindings, Focus.onKey, globals), text +
+                // paste go to the nearest TextInputClaimant, and mouse events go
+                // to pointer regions + click-to-focus.
+                KeyEventResult dispatchResult = KeyEventResult.ignored;
+                if (event is KeyEvent ||
+                    event is TextInputEvent ||
+                    event is TextCompositionEvent ||
+                    event is PasteEvent ||
+                    event is MouseEvent) {
+                  dispatchResult = dispatcher.dispatch(event);
+                }
 
-              // Ctrl+C exits only when the app did not handle it first.
-              // SelectionArea and focused text fields use Ctrl+C for copy and
-              // bubble when no selection exists, preserving the escape hatch.
-              if (event is KeyEvent &&
-                  event.char == 'c' &&
-                  event.hasCtrl &&
-                  dispatchResult != KeyEventResult.handled) {
-                if (!exit.isCompleted) exit.complete();
-                return;
-              }
-
-              if (onEvent != null) {
-                final result = onEvent(event);
-                if (result is ExitRequested) {
+                // Ctrl+C exits only when the app did not handle it first.
+                // SelectionArea and focused text fields use Ctrl+C for copy and
+                // bubble when no selection exists, preserving the escape hatch.
+                if (event is KeyEvent &&
+                    event.char == 'c' &&
+                    event.hasCtrl &&
+                    dispatchResult != KeyEventResult.handled) {
                   if (!exit.isCompleted) exit.complete();
                   return;
                 }
-              }
 
-              scheduleFrame(_frameReasonForEvent(event));
+                if (onEvent != null) {
+                  final result = onEvent(event);
+                  if (result is ExitRequested) {
+                    if (!exit.isCompleted) exit.complete();
+                    return;
+                  }
+                }
+
+                scheduleFrame(_frameReasonForEvent(event));
+              } catch (error, stack) {
+                // A throwing handler must not kill the input loop: report it
+                // (it surfaces on screen) and keep processing events.
+                errorReporter.report(error, stack);
+                scheduleFrame('event-error');
+              }
             },
             onDone: () {
               // The driver's event stream ended — stdin EOF on Posix, or a
@@ -682,9 +713,25 @@ Future<void> runTui(
         if (!done.isCompleted) done.complete();
       },
       (error, stack) {
-        cleanup().whenComplete(() {
-          if (!done.isCompleted) done.completeError(error, stack);
-        });
+        // Report and keep running (Flutter's posture): an uncaught handler or
+        // async error surfaces on screen instead of tearing the session down.
+        // report() logs it and repaints the banner. Two cases stay fatal — an
+        // error before the app has mounted (nothing to recover into), and a
+        // storm of errors every frame (an unrecoverable loop) — both restore
+        // the terminal and fail the run.
+        errorReporter.report(error, stack);
+        // Stay fatal (restore the terminal, fail the run) for the cases that
+        // genuinely can't continue: a crash inside the render pipeline
+        // (build/layout/paint can't be recovered per-frame), an error before
+        // the app mounted (nothing to recover into), or a storm of errors every
+        // frame (an unrecoverable loop). Everything else is reported and
+        // survived.
+        if (inFrameRender || rootElement == null || errorReporter.isStorming) {
+          inFrameRender = false;
+          cleanup().whenComplete(() {
+            if (!done.isCompleted) done.completeError(error, stack);
+          });
+        }
       },
       zoneSpecification: captureSpec,
     ),
