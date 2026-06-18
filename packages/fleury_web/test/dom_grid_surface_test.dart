@@ -261,6 +261,63 @@ void main() {
       expect(secondStats.widthCacheHits, 1);
     });
 
+    test('block-element image cells fill the whole cell box (no row gaps)', () {
+      const metrics = MeasuredCellBox(
+        cssCellWidth: 10,
+        cssCellHeight: 20,
+        cssCanvasWidth: 20,
+        cssCanvasHeight: 20,
+        devicePixelRatio: 2,
+        cols: 2,
+        rows: 1,
+      );
+      final root = web.document.createElement('div');
+      final surface = DomGridSurface(root: root, size: const CellSize(2, 1));
+      surface.resize(const CellSize(2, 1), metrics: metrics);
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
+      final frame = loop.render(
+        size: const CellSize(2, 1),
+        paint: (buffer) {
+          // A half-block image cell: top pixel in fg, bottom pixel in bg.
+          buffer.writeText(
+            const CellOffset(0, 0),
+            '▀',
+            style: const CellStyle(
+              foreground: Colors.green,
+              background: Colors.blue,
+            ),
+          );
+          // A block glyph without a background (e.g. a sparkline bar) stays on
+          // the normal inline text path.
+          buffer.writeText(
+            const CellOffset(1, 0),
+            '▇',
+            style: const CellStyle(foreground: Colors.green),
+          );
+        },
+      )!;
+      final plan = planner.build(reason: 'initial', frame: frame);
+      surface.present(frame.previous, frame.next, plan);
+
+      final spans = surface.rowElements.single.children;
+      final imageCell = spans.item(0)!;
+      expect(imageCell.textContent, '▀');
+      final imgStyle = imageCell.getAttribute('style')!;
+      expect(imgStyle, contains('display:inline-block'));
+      expect(imgStyle, contains('height:100%'));
+      expect(imgStyle, contains('vertical-align:top'));
+      expect(imgStyle, contains('background-color:'), reason: 'fills the cell');
+
+      final barCell = spans.item(1)!;
+      expect(barCell.textContent, '▇');
+      expect(
+        barCell.getAttribute('style') ?? '',
+        isNot(contains('inline-block')),
+        reason: 'no background → plain inline glyph, baseline-aligned',
+      );
+    });
+
     test('dispose clears retained rows and root children', () async {
       final root = web.document.createElement('div');
       final surface = DomGridSurface(root: root, size: size);
