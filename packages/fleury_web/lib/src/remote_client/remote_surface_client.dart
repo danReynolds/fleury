@@ -76,7 +76,14 @@ final class RemoteSurfaceClient {
     // (a surface div + a semantic div under one host).
     final surfaceRoot = web.document.createElement('div');
     _host.appendChild(surfaceRoot);
-    _surface = DomGridSurface(root: surfaceRoot, size: _size);
+    // Thread the measured cell box into the surface (the in-browser host does
+    // this; the serve client used to skip it). Without it the grid lays rows
+    // out at the font's natural fractional line-height — never device-pixel
+    // snapped — so every row boundary keeps a sub-pixel gap that shows as scan
+    // lines across full-cell image content. It also unlocks the block-element
+    // fill path, which fills each image cell to its box.
+    _surface = DomGridSurface(root: surfaceRoot, size: _size)
+      ..resize(_size, metrics: _cellBox());
     final semanticRoot = web.document.createElement('div');
     _host.appendChild(semanticRoot);
     _semantics = SemanticDomPresenter(root: semanticRoot)
@@ -103,6 +110,11 @@ final class RemoteSurfaceClient {
     // client never reads layout directly (boundary contract).
     return viewportSizeForMeasurement(_metrics!.measure());
   }
+
+  /// The measured per-cell pixel box (device-pixel snapped), handed to the
+  /// surface so rows lay out at exact cell heights and block-element image
+  /// cells fill their box. Null only before metrics exist.
+  MeasuredCellBox? _cellBox() => _metrics?.measure();
 
   void _sendInit() {
     if (_handshakeSent) return;
@@ -140,7 +152,7 @@ final class RemoteSurfaceClient {
         final next = _measureViewport();
         if (next == null || next == _size) return;
         _size = next;
-        _surface?.resize(next);
+        _surface?.resize(next, metrics: _cellBox());
         _mirror = CellBuffer(next);
         _send(encodeFrame(ResizeFrame(next)));
       }).toJS,
@@ -223,7 +235,7 @@ final class RemoteSurfaceClient {
           // (full-repaint) frame lands on a correctly-sized buffer.
           _mirror = CellBuffer(f.plan.size);
           _size = f.plan.size;
-          surface.resize(f.plan.size);
+          surface.resize(f.plan.size, metrics: _cellBox());
         }
         final plan = applyRemotePlan(f.plan, _mirror);
         surface.present(_mirror, _mirror, plan);
