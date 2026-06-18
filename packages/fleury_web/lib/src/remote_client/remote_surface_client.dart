@@ -23,11 +23,9 @@ import 'plan_adapter.dart';
 /// same DOM surface the in-browser host uses, with the same span/scroll
 /// machinery.
 final class RemoteSurfaceClient {
-  RemoteSurfaceClient({
-    required web.Element hostElement,
-    required String url,
-  }) : _host = hostElement,
-       _url = url;
+  RemoteSurfaceClient({required web.Element hostElement, required String url})
+    : _host = hostElement,
+      _url = url;
 
   final web.Element _host;
   final String _url;

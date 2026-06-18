@@ -54,21 +54,25 @@ void main() {
   });
 
   testWidgets('clicking the trigger opens the menu (pointer users)', (tester) {
-    tester.pumpWidget(
-      Menu(trigger: const Text('Edit'), items: items((_) {})),
-    );
+    tester.pumpWidget(Menu(trigger: const Text('Edit'), items: items((_) {})));
     // Render so the pointer router has the trigger's paint-time rect, then
     // click the trigger glyphs at the top-left.
     tester.render(size: const CellSize(16, 8));
     expect(_screen(tester).contains('Copy'), isFalse, reason: 'closed first');
     _clickAt(tester, col: 1, row: 0);
-    expect(_screen(tester).contains('Copy'), isTrue,
-        reason: 'a tap on the trigger opens the menu');
+    expect(
+      _screen(tester).contains('Copy'),
+      isTrue,
+      reason: 'a tap on the trigger opens the menu',
+    );
     // A second tap on the trigger closes it again.
     tester.render(size: const CellSize(16, 8));
     _clickAt(tester, col: 1, row: 0);
-    expect(_screen(tester).contains('Copy'), isFalse,
-        reason: 'tapping the trigger again closes the menu');
+    expect(
+      _screen(tester).contains('Copy'),
+      isFalse,
+      reason: 'tapping the trigger again closes the menu',
+    );
   });
 
   testWidgets('Down + Enter runs the selected item and closes', (tester) {

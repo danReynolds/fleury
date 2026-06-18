@@ -51,7 +51,8 @@ String _planText(List<PlanFrame> frames) => frames
     .map((run) => run.text)
     .join();
 
-Future<void> _settle() => Future<void>.delayed(const Duration(milliseconds: 20));
+Future<void> _settle() =>
+    Future<void>.delayed(const Duration(milliseconds: 20));
 
 void main() {
   test('a throwing key handler is reported on screen, not fatal', () async {
@@ -89,8 +90,11 @@ void main() {
     transport.emit(const InputEventFrame(KeyEvent(keyCode: KeyCode.f1)));
     await _settle();
     final afterSync = transport.sent.whereType<PlanFrame>().toList();
-    expect(_planText(afterSync.skip(baseline).toList()), contains('⚠'),
-        reason: 'the error banner is painted');
+    expect(
+      _planText(afterSync.skip(baseline).toList()),
+      contains('⚠'),
+      reason: 'the error banner is painted',
+    );
     expect(_planText(afterSync.skip(baseline).toList()), contains('boom-sync'));
     expect(sessionError, isFalse, reason: 'session survived the sync throw');
 

@@ -453,7 +453,11 @@ Future<void> runTui(
   // Captures stray output (see below). The buffer powers replay-on-exit; the
   // optional hook lets the caller route lines live (e.g. to a file).
   final logBuffer = LogBuffer();
-  final capture = OutputCapture(buffer: logBuffer, onLine: onStrayOutput);
+  final capture = OutputCapture(
+    buffer: logBuffer,
+    onLine: onStrayOutput,
+    sanitizeForTerminal: true,
+  );
 
   // Uncaught runtime errors (a throwing event handler, a failed async callback)
   // are reported and surfaced on screen rather than killing the session — see
@@ -524,7 +528,8 @@ Future<void> runTui(
         runtimeMarkers?.mark('terminal.enter.end');
         // The handshake has landed, so the driver now knows whether the
         // peer negotiated the structured (plan) path.
-        if (maybeSurfaceSink != null && maybeSurfaceSink.wantsPresentationPlans) {
+        if (maybeSurfaceSink != null &&
+            maybeSurfaceSink.wantsPresentationPlans) {
           surfaceSink = maybeSurfaceSink;
           // The peer can activate a node in its accessible DOM; invoke the
           // action against the live tree and re-render, completing the
@@ -626,65 +631,65 @@ Future<void> runTui(
           eventSub = usedDriver.events.listen(
             (event) {
               try {
-              DebugEvents.emitInput(event);
-              if (event is ResizeEvent) {
-                // Force buffer-pool reallocation and a full repaint on the
-                // next frame; the existing buffers are the wrong size.
-                frameLoop.resetBuffers();
-                // Propagate the new size through MediaQuery (layout already
-                // re-runs against the new buffer constraints).
-                final r = rootElement;
-                if (r != null) rootElement = runtime.updateRoot(buildRoot());
-                DebugEvents.emitTerminalDiagnosis(currentTerminalDiagnosis());
-              }
+                DebugEvents.emitInput(event);
+                if (event is ResizeEvent) {
+                  // Force buffer-pool reallocation and a full repaint on the
+                  // next frame; the existing buffers are the wrong size.
+                  frameLoop.resetBuffers();
+                  // Propagate the new size through MediaQuery (layout already
+                  // re-runs against the new buffer constraints).
+                  final r = rootElement;
+                  if (r != null) rootElement = runtime.updateRoot(buildRoot());
+                  DebugEvents.emitTerminalDiagnosis(currentTerminalDiagnosis());
+                }
 
-              // Debug-shell hotkeys (Ctrl+G, F11, Esc-in-fullscreen, F12,
-              // 'p' when open): bypass the dispatcher so they fire inside
-              // an active modal route's `suppressGlobals: true` scope.
-              // Same escape-hatch tier as Ctrl+C.
-              if (event is KeyEvent &&
-                  tryConsumeDebugKey(debugController, event)) {
-                scheduleFrame('debug-key');
-                return;
-              }
-              if (event is KeyEvent && maybeToggleDebugConsole(event)) {
-                scheduleFrame('debug-console');
-                return;
-              }
+                // Debug-shell hotkeys (Ctrl+G, F11, Esc-in-fullscreen, F12,
+                // 'p' when open): bypass the dispatcher so they fire inside
+                // an active modal route's `suppressGlobals: true` scope.
+                // Same escape-hatch tier as Ctrl+C.
+                if (event is KeyEvent &&
+                    tryConsumeDebugKey(debugController, event)) {
+                  scheduleFrame('debug-key');
+                  return;
+                }
+                if (event is KeyEvent && maybeToggleDebugConsole(event)) {
+                  scheduleFrame('debug-console');
+                  return;
+                }
 
-              // Route input through the InputDispatcher: chords walk the focus
-              // chain (sequences, KeyBindings, Focus.onKey, globals), text +
-              // paste go to the nearest TextInputClaimant, and mouse events go
-              // to pointer regions + click-to-focus.
-              KeyEventResult dispatchResult = KeyEventResult.ignored;
-              if (event is KeyEvent ||
-                  event is TextInputEvent ||
-                  event is TextCompositionEvent ||
-                  event is PasteEvent ||
-                  event is MouseEvent) {
-                dispatchResult = dispatcher.dispatch(event);
-              }
+                // Route input through the InputDispatcher: chords walk the focus
+                // chain (sequences, KeyBindings, Focus.onKey, globals), text +
+                // paste go to the nearest TextInputClaimant, and mouse events go
+                // to pointer regions + click-to-focus.
+                KeyEventResult dispatchResult = KeyEventResult.ignored;
+                if (event is KeyEvent ||
+                    event is TextInputEvent ||
+                    event is TextCompositionEvent ||
+                    event is PasteEvent ||
+                    event is MouseEvent) {
+                  dispatchResult = dispatcher.dispatch(event);
+                }
 
-              // Ctrl+C exits only when the app did not handle it first.
-              // SelectionArea and focused text fields use Ctrl+C for copy and
-              // bubble when no selection exists, preserving the escape hatch.
-              if (event is KeyEvent &&
-                  event.char == 'c' &&
-                  event.hasCtrl &&
-                  dispatchResult != KeyEventResult.handled) {
-                if (!exit.isCompleted) exit.complete();
-                return;
-              }
-
-              if (onEvent != null) {
-                final result = onEvent(event);
-                if (result is ExitRequested) {
+                // Ctrl+C exits only when the app did not handle it first.
+                // SelectionArea and focused text fields use Ctrl+C for copy and
+                // bubble when no selection exists, preserving the escape hatch.
+                if (event is KeyEvent &&
+                    event.char == 'c' &&
+                    event.hasCtrl &&
+                    dispatchResult != KeyEventResult.handled) {
                   if (!exit.isCompleted) exit.complete();
                   return;
                 }
-              }
 
-              scheduleFrame(_frameReasonForEvent(event));
+                if (onEvent != null) {
+                  final result = onEvent(event);
+                  if (result is ExitRequested) {
+                    if (!exit.isCompleted) exit.complete();
+                    return;
+                  }
+                }
+
+                scheduleFrame(_frameReasonForEvent(event));
               } catch (error, stack) {
                 // A throwing handler must not kill the input loop: report it
                 // (it surfaces on screen) and keep processing events.

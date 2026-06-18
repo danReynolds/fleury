@@ -40,6 +40,7 @@ void main() {
             '130',
           ],
         );
+        if (capture == null) return;
 
         expect(capture.metadata['timedOut'], isFalse);
         expect(capture.metadata['exitCode'], 130);
@@ -65,6 +66,7 @@ void main() {
           '143',
         ],
       );
+      if (capture == null) return;
 
       expect(capture.metadata['timedOut'], isFalse);
       expect(capture.metadata['exitCode'], 143);
@@ -74,17 +76,19 @@ void main() {
   });
 }
 
-Future<({Map<String, Object?> metadata, String output})> _capturePty(
+Future<({Map<String, Object?> metadata, String output})?> _capturePty(
   Directory tempDir,
   String name, {
   required List<String> extraArgs,
 }) async {
   final packageRoot = Directory.current;
   final repoRoot = _findRepoRoot(packageRoot);
+  final profilingRoot = Directory('${repoRoot.path}/profiling');
+  final fixtureApp = '${packageRoot.path}/test/fixtures/pty_run_tui_app.dart';
   final outBase = '${tempDir.path}/$name';
   final result = await Process.run(Platform.resolvedExecutable, <String>[
     'run',
-    '${repoRoot.path}/profiling/capture_pty.dart',
+    'capture_pty.dart',
     '--out',
     outBase,
     '--timeout',
@@ -92,8 +96,17 @@ Future<({Map<String, Object?> metadata, String output})> _capturePty(
     ...extraArgs,
     '--',
     Platform.resolvedExecutable,
-    'test/fixtures/pty_run_tui_app.dart',
-  ], workingDirectory: packageRoot.path);
+    fixtureApp,
+  ], workingDirectory: profilingRoot.path);
+
+  if (result.exitCode != 0 &&
+      result.stderr.toString().contains('openpty failed')) {
+    markTestSkipped(
+      'PTY capture helper could not allocate a pseudo-terminal: '
+      '${result.stderr.toString().trim()}',
+    );
+    return null;
+  }
 
   expect(
     result.exitCode,

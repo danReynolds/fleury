@@ -94,10 +94,7 @@ void main() {
         );
         final resp = await req.close();
         expect(resp.statusCode, 200);
-        expect(
-          resp.headers.contentType?.mimeType,
-          'application/javascript',
-        );
+        expect(resp.headers.contentType?.mimeType, 'application/javascript');
         final bytes = await resp.fold<int>(0, (n, chunk) => n + chunk.length);
         expect(bytes, greaterThan(10000));
         client.close();
@@ -118,6 +115,16 @@ void main() {
         expect(resp.statusCode, 200);
         await resp.drain<void>();
         client.close();
+      });
+
+      test('rejects scheme-mismatched same-authority origins', () async {
+        await expectLater(
+          WebSocket.connect(
+            'ws://127.0.0.1:$port/ws',
+            headers: {'origin': 'https://127.0.0.1:$port'},
+          ),
+          throwsA(anything),
+        );
       });
 
       test(

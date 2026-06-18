@@ -7,7 +7,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
@@ -25,7 +24,7 @@ void main() {
 
     setUp(() async {
       tempDir = Directory.systemTemp.createTempSync('fleury_spawn_test_');
-      port = 5900 + Random.secure().nextInt(100);
+      port = await _unusedLoopbackPort();
       pkgRoot = Directory.current.path;
       stderrLines.clear();
       final childCwd = Directory('${tempDir.path}/child-cwd')..createSync();
@@ -42,6 +41,7 @@ void main() {
         '$pkgRoot/test/fixtures/spawn_app.dart',
         'spawn-app',
         childCwd.path,
+        '--hostile-log',
       ], workingDirectory: tempDir.path);
 
       final ready = Completer<void>();
@@ -127,6 +127,20 @@ void main() {
       );
     });
 
+    test('sanitizes subprocess log output before writing to stderr', () async {
+      await _waitFor(
+        () => stderrLines.any((line) => line.contains('HOSTILE')),
+        timeout: const Duration(seconds: 8),
+        what: 'hostile subprocess log line',
+      );
+
+      final line = stderrLines.singleWhere((line) => line.contains('HOSTILE'));
+      expect(line, contains(replacementCharacter));
+      expect(line, isNot(contains('\x1B')));
+      expect(line, isNot(contains('SECRET')));
+      expect(line, isNot(contains('[2J')));
+    });
+
     test('a warm standby is pre-spawned and pairs the first browser', () async {
       // The eager warm standby's subprocess spawns at serve start, before any
       // browser connects — that's the cold start being paid ahead of time.
@@ -158,7 +172,9 @@ void main() {
       await _waitFor(
         () =>
             _hasHelloFrame(inbound.toBytes(), 'spawn-app') &&
-            stderrLines.any((l) => l.contains('paired browser to warm standby')),
+            stderrLines.any(
+              (l) => l.contains('paired browser to warm standby'),
+            ),
         timeout: const Duration(seconds: 8),
         what: 'browser paired to warm standby + hello delivered',
       );
@@ -217,7 +233,7 @@ void main() {
 
     setUp(() async {
       tempDir = Directory.systemTemp.createTempSync('fleury_spawn_run_tui_');
-      port = 6000 + Random.secure().nextInt(100);
+      port = await _unusedLoopbackPort();
       pkgRoot = Directory.current.path;
       stderrLines.clear();
 
@@ -335,4 +351,11 @@ bool _hasOutputFrameText(Uint8List bytes, String text) {
     }
   }
   return false;
+}
+
+Future<int> _unusedLoopbackPort() async {
+  final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+  final port = socket.port;
+  await socket.close();
+  return port;
 }

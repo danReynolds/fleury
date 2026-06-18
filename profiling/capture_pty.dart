@@ -71,6 +71,10 @@ final _waitpid = _libc.lookupFunction<
     int Function(int, Pointer<Int32>, int)>('waitpid');
 final _getrusage = _libc.lookupFunction<Int32 Function(Int32, Pointer<Uint8>),
     int Function(int, Pointer<Uint8>)>('getrusage');
+final _errnoPointer =
+    _libc.lookupFunction<Pointer<Int32> Function(), Pointer<Int32> Function()>(
+  Platform.isMacOS ? '__error' : '__errno_location',
+);
 
 const _rusageChildren = -1;
 
@@ -108,6 +112,8 @@ void _fail(String m) {
   stderr.writeln('capture_pty: $m');
   exit(1);
 }
+
+int _errno() => _errnoPointer().value;
 
 ({int? exitCode, int? signal}) _decodeWaitStatus(int status) {
   final signal = status & 0x7f;
@@ -306,7 +312,7 @@ void main(List<String> args) {
     win[2] = 0;
     win[3] = 0;
     if (_openpty(master, slave, nullptr, nullptr, win) != 0) {
-      _fail('openpty failed');
+      _fail('openpty failed (errno=${_errno()})');
     }
     final masterFd = master.value, slaveFd = slave.value;
 
