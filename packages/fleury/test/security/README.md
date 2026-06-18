@@ -25,19 +25,26 @@ through an explicit framework-owned effect API.
   terminal controls. Fleury's equivalent sinks are captured runtime output,
   subprocess output, served-app logs, and any future log/file/model viewers.
 
-## Test layers
+## Security matrix
 
-- `terminal_security_boundary_test.dart` covers terminal-bound text sinks:
-  display text, runtime stray-output capture, `runTui` replay/hook delivery,
-  and subprocess task output.
-- `../rendering/text_sanitizer_test.dart` owns the sanitizer corpus and parser
-  edge cases for CSI, OSC, DCS, APC, C0/C1, malformed strings, and Unicode.
-- `../runtime/clipboard_test.dart` owns clipboard policy, OSC 52 caps, and
-  in-process fallback behavior.
-- `../remote/*` owns WebSocket origin checks, frame caps, malformed frames, and
-  browser/app transport boundaries.
-- `../effects/*` owns process and external-effect APIs.
+| Boundary | Threat | Owner tests | Status |
+| --- | --- | --- | --- |
+| Terminal sanitizer corpus | ANSI/OSC/DCS/APC/C0/C1 bytes become active terminal protocol. | `../rendering/text_sanitizer_test.dart`, `terminal_security_boundary_test.dart` | Covered |
+| Widget text to terminal cells | App/file/model text bypasses sanitizer before the cell buffer. | `terminal_security_boundary_test.dart`, `../widgets/*`, `../../../fleury_widgets/test/*sanitizes*` | Covered |
+| Runtime stray stdout/stderr | `print()` or direct stdout/stderr writes replay hostile controls after `runTui` restores the terminal. | `terminal_security_boundary_test.dart`, `../runtime/run_tui_test.dart` | Covered |
+| Subprocess task output | Tool output writes terminal controls into task events/log views. | `terminal_security_boundary_test.dart`, `../effects/process_task_test.dart` | Covered |
+| Served spawn logs | `fleury serve --spawn` mirrors child output to the developer terminal as active controls. | `../remote/serve_spawn_test.dart` | Covered |
+| Clipboard effects | Untrusted content writes OSC 52 or platform clipboard unexpectedly. | `../runtime/clipboard_test.dart`, widget copy tests using `ClipboardWritePolicy.inProcessOnly` or redaction | Covered |
+| External processes and editors | File paths or command metadata cross into shell execution unintentionally. | `effects_security_boundary_test.dart`, `../effects/external_editor_test.dart`, `../effects/process_task_test.dart` | Covered |
+| Terminal input parser | Malformed byte streams, truncated CSI/OSC/paste, or random input crash or amplify events. | `../terminal/input_parser_test.dart` seeded fuzzing | Covered |
+| WebSocket serve origin and frames | Cross-site WebSocket hijack, oversized frames, malformed frames, stale handles, or broad static serving. | `../remote/serve_integration_test.dart`, `../remote/remote_protocol_test.dart`, `../remote/serve_stale_handle_test.dart`, `../remote/remote_codec_test.dart` | Covered |
+| Browser DOM cell text | Cell text becomes HTML/DOM instead of text. | `../../../fleury_web/test/security/browser_security_boundary_test.dart`, `../../../fleury_web/test/dom_grid_surface_test.dart`, `../../../fleury_web/test/cell_grid_html_test.dart` | Covered |
+| Browser semantic links | Unsafe or disabled links become navigable browser links. | `../../../fleury_web/test/security/browser_security_boundary_test.dart`, `../../../fleury_web/test/semantic_dom_presenter_test.dart` | Covered |
+| Native protocol/image payloads | Framework-owned image/protocol bytes leak through browser DOM or untrusted text APIs. | `../../../fleury_web/test/security/browser_security_boundary_test.dart`, `../rendering/ansi_renderer_test.dart`, `../../../fleury_widgets/test/*image*` | Covered |
+| Semantics/debug/export text | Labels, state, debug snapshots, exports, and search indexes preserve terminal controls or secrets. | `../semantics/*`, `../debug/*`, `../remote/remote_semantics_test.dart`, widget sanitizer/export tests | Covered |
+| Local shell/serve IPC handles | Stale or competing local handles hijack sessions. Same-user possession of a live socket/env handle remains the documented OS trust boundary. | `../remote/serve_stale_handle_test.dart`, `../remote/shell_lifecycle_test.dart`, `../remote/serve_spawn_test.dart` | Covered to stated boundary |
+| Capability-gated effects | Clipboard, image, link, mouse, keyboard, tmux, and fallback behavior silently use unavailable or prohibited terminal capabilities. | `../terminal/capability_requirements_test.dart`, `../terminal/diagnostics_test.dart`, widget capability tests | Covered |
 
 When a new feature can write to a terminal, browser DOM, clipboard, shell,
-external editor, file, URL opener, or native terminal protocol, add it to this
-matrix or to the specific layer above.
+external editor, file, URL opener, or native terminal protocol, add a row here
+with a concrete owner test before calling the feature complete.
