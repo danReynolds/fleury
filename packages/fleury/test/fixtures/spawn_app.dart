@@ -20,8 +20,11 @@ Future<void> main(List<String> args) async {
     exit(2);
   }
   final tag = args.isNotEmpty ? args.first : 'spawn-app';
-  if (args.length > 1) {
+  if (args.length > 1 && !args[1].startsWith('--')) {
     Directory.current = args[1];
+  }
+  if (args.contains('--hostile-log')) {
+    stderr.writeln('HOSTILE \x1b]52;c;SECRET\x07 after \x1b[2J end');
   }
   final transport = await UnixSocketFrameTransport.connect(handle);
 
