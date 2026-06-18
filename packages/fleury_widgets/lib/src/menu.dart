@@ -246,6 +246,9 @@ class _MenuBodyState extends State<_MenuBody> {
   );
   final FocusNode _focus = FocusNode(debugLabel: 'menu');
   final AnchorLink _selfLink = AnchorLink();
+  // Anchors the currently-selected submenu row so its child panel opens beside
+  // *that row*, not the panel's top corner.
+  final AnchorLink _submenuAnchor = AnchorLink();
   OverlayEntry? _childEntry;
 
   bool _selectable(int i) {
@@ -265,6 +268,27 @@ class _MenuBodyState extends State<_MenuBody> {
       if (_selectable(i)) return i;
     }
     return 0;
+  }
+
+  /// One full-width row: `marker + label`, padded so the cascade `▸` indicator
+  /// sits in its own right-aligned column with a trailing pad cell. Filling the
+  /// whole [width] makes the selection highlight a clean full-row bar rather
+  /// than a ragged block sized to the text.
+  String _rowText(
+    String label, {
+    required bool selected,
+    required bool isSub,
+    required bool hasIndicator,
+    required int width,
+  }) {
+    final marker = selected ? '› ' : '  ';
+    // Trailing region: [▸ or blank][pad] when this menu has submenus, else
+    // just a pad. Reserving it on every row keeps the ▸ column aligned.
+    final trailing = hasIndicator ? (isSub ? '▸ ' : '  ') : ' ';
+    final fillTo = width - trailing.length;
+    var s = '$marker$label';
+    s = s.length >= fillTo ? s.substring(0, fillTo) : s.padRight(fillTo);
+    return '$s$trailing';
   }
 
   String? _entryLabel(int i) {
@@ -315,8 +339,9 @@ class _MenuBodyState extends State<_MenuBody> {
     final manager = Focus.of(context);
     final entry = OverlayEntry(
       builder: (_) => Follower(
-        link: _selfLink,
+        link: _submenuAnchor,
         placement: FollowerPlacement.right,
+        gap: 1,
         child: _MenuBody(
           entries: sub.items,
           semanticLabel: sub.label,
@@ -398,8 +423,9 @@ class _MenuBodyState extends State<_MenuBody> {
   Widget build(BuildContext context) {
     Focus.maybeOf(context); // Rebuild menu/item semantics when focus moves.
     final hasSubmenu = widget.entries.any((e) => e is SubMenu);
-    // Width fits the longest label plus the marker (2) and, when any row
-    // is a submenu, the trailing ' ▸' indicator (2).
+    // Row layout: a 2-cell leading marker (`› ` selected / blank), the label,
+    // the cascade `▸` indicator right-aligned in its own column, and a trailing
+    // pad cell so labels never hug the border.
     var labelWidth = 0;
     for (final e in widget.entries) {
       final label = sanitizeOptionLabel(switch (e) {
@@ -409,7 +435,9 @@ class _MenuBodyState extends State<_MenuBody> {
       });
       if (label.length > labelWidth) labelWidth = label.length;
     }
-    final width = labelWidth + 2 + (hasSubmenu ? 2 : 0);
+    // 2 (marker) + label + a trailing region: 2 cells when any row is a
+    // submenu (the ▸ column + a pad), else 1 (just the pad).
+    final width = 2 + labelWidth + (hasSubmenu ? 2 : 1);
 
     return Semantics(
       role: SemanticRole.menu,
@@ -462,15 +490,19 @@ class _MenuBodyState extends State<_MenuBody> {
                       case MenuSeparator():
                         return Text('─' * width, style: widget.mutedStyle);
                       case MenuItem(:final label, :final enabled):
-                        final safeLabel = sanitizeOptionLabel(label);
-                        final child = enabled
-                            ? Text(
-                                '${selected ? '› ' : '  '}$safeLabel',
-                                style: selected
-                                    ? widget.selectionStyle
-                                    : CellStyle.empty,
-                              )
-                            : Text('  $safeLabel', style: widget.mutedStyle);
+                        final sel = enabled && selected;
+                        final child = Text(
+                          _rowText(sanitizeOptionLabel(label),
+                              selected: sel,
+                              isSub: false,
+                              hasIndicator: hasSubmenu,
+                              width: width),
+                          style: !enabled
+                              ? widget.mutedStyle
+                              : sel
+                                  ? widget.selectionStyle
+                                  : CellStyle.empty,
+                        );
                         return _semanticMenuItem(
                           entry: entry,
                           index: i,
@@ -478,21 +510,30 @@ class _MenuBodyState extends State<_MenuBody> {
                           child: child,
                         );
                       case SubMenu(:final label, :final enabled):
-                        final safeLabel = sanitizeOptionLabel(label);
-                        final child = enabled
-                            ? Text(
-                                '${selected ? '› ' : '  '}$safeLabel ▸',
-                                style: selected
-                                    ? widget.selectionStyle
-                                    : CellStyle.empty,
-                              )
-                            : Text('  $safeLabel ▸', style: widget.mutedStyle);
-                        return _semanticMenuItem(
+                        final sel = enabled && selected;
+                        final child = Text(
+                          _rowText(sanitizeOptionLabel(label),
+                              selected: sel,
+                              isSub: true,
+                              hasIndicator: hasSubmenu,
+                              width: width),
+                          style: !enabled
+                              ? widget.mutedStyle
+                              : sel
+                                  ? widget.selectionStyle
+                                  : CellStyle.empty,
+                        );
+                        final item = _semanticMenuItem(
                           entry: entry,
                           index: i,
                           selected: selected,
                           child: child,
                         );
+                        // Anchor the selected submenu row so its child panel
+                        // opens aligned to it (not the panel corner).
+                        return sel
+                            ? Anchor(link: _submenuAnchor, child: item)
+                            : item;
                     }
                   },
                 ),
