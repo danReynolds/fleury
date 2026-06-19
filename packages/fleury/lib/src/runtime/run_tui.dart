@@ -7,7 +7,8 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show File, IOOverrides, Platform, stderr;
+import 'dart:io'
+    show File, FileMode, IOOverrides, Platform, RandomAccessFile, stderr;
 
 import '../debug/debug_events.dart';
 import '../debug/debug_invalidation.dart';
@@ -187,7 +188,13 @@ Future<void> runTui(
   final byteTelemetry = Platform.environment['FLEURY_BYTE_TELEMETRY'] == '1'
       ? CountingAnsiSink.aggregate(driverSink)
       : null;
-  final AnsiSink sink = byteTelemetry ?? driverSink;
+  // Optional diagnostic: FLEURY_ANSI_CAPTURE=/path tees every byte we emit to a
+  // file (in addition to the terminal) so a rendering bug can be reproduced and
+  // the exact escape stream inspected offline — no PTY/`script` needed.
+  final capturePath = Platform.environment['FLEURY_ANSI_CAPTURE'];
+  final AnsiSink sink = (capturePath != null && capturePath.isNotEmpty)
+      ? _CapturingAnsiSink(byteTelemetry ?? driverSink, capturePath)
+      : (byteTelemetry ?? driverSink);
   // Downsample colors to whatever the terminal actually supports.
   // `FLEURY_SYNC_OUTPUT=0` drops the DEC-2026 synchronized-update wrapper around
   // each frame. The wrapper is correct per spec (and verified by the renderer's
@@ -761,6 +768,33 @@ String _frameReasonForEvent(TuiEvent event) {
     PasteEvent() => 'paste',
     MouseEvent() => 'mouse',
   };
+}
+
+/// Tees every emitted byte to a file (diagnostic; `FLEURY_ANSI_CAPTURE`).
+/// Writes synchronously so the capture survives a Ctrl-C mid-session.
+class _CapturingAnsiSink implements AnsiSink {
+  _CapturingAnsiSink(this._inner, String path)
+      : _file = File(path).openSync(mode: FileMode.write);
+  final AnsiSink _inner;
+  final RandomAccessFile _file;
+
+  @override
+  void write(String data) {
+    _inner.write(data);
+    try {
+      _file.writeStringSync(data);
+    } catch (_) {
+      // Best-effort capture; never break rendering over a diagnostic write.
+    }
+  }
+
+  @override
+  Future<void> flush() async {
+    await _inner.flush();
+    try {
+      _file.flushSync();
+    } catch (_) {}
+  }
 }
 
 class _DriverSink implements AnsiSink {
