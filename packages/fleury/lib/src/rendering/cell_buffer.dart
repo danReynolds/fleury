@@ -473,17 +473,23 @@ final class CellBuffer {
     writeProtocol(topLeft, id, width: width, height: height);
   }
 
-  /// Content hash (hex + length), stable across re-encodes of the same image so
-  /// the serve ships identical bytes only once. A rolling hash modulo a 2^31-1
-  /// prime keeps the running value JS-safe (this file compiles to dart2js too,
-  /// where ints are 53-bit) — the intermediate never exceeds 2^39.
+  /// Content hash, stable across re-encodes of the same image so the serve
+  /// ships identical bytes only once. Two independent rolling hashes (distinct
+  /// multipliers and Mersenne-prime moduli) combine with the byte length into
+  /// one id — ~62 effective bits, so distinct images are overwhelmingly
+  /// unlikely to collide and alias to one another's pixels. Each intermediate
+  /// stays JS-safe: `h * 769 + b < 2^31 * 2^10 = 2^41 < 2^53` (this file
+  /// compiles to dart2js, where ints are 53-bit).
   static String _hashBytes(Uint8List bytes) {
-    const mod = 0x7FFFFFFF; // 2^31 - 1, a Mersenne prime
-    var hash = 0;
+    const mod1 = 0x7FFFFFFF; // 2^31 - 1
+    const mod2 = 0x7FFFFFED; // largest prime below 2^31 - 1, independent of mod1
+    var h1 = 0;
+    var h2 = 0;
     for (final b in bytes) {
-      hash = (hash * 257 + b) % mod;
+      h1 = (h1 * 257 + b) % mod1;
+      h2 = (h2 * 769 + b) % mod2;
     }
-    return '${hash.toRadixString(16)}-${bytes.length}';
+    return '${h1.toRadixString(16)}-${h2.toRadixString(16)}-${bytes.length}';
   }
 
   // ---- Invariants --------------------------------------------------------

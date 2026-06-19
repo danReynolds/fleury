@@ -62,6 +62,19 @@ void main() {
       expect(buf.images.length, 2);
     });
 
+    test('id is two delimited hash segments plus length', () {
+      // The content hash combines two independent rolling hashes with the
+      // byte length, delimited so distinct (h1,h2) pairs can never alias to
+      // one string. Lock the shape so the delimiter is never dropped.
+      final buf = CellBuffer(const CellSize(4, 1));
+      buf.writeImage(const CellOffset(0, 0),
+          Uint8List.fromList([1, 2, 3, 4, 5]), width: 2, height: 1);
+      final id = buf.images.keys.single;
+      final parts = id.split('-');
+      expect(parts.length, 3, reason: 'h1-h2-length');
+      expect(int.parse(parts[2]), 5, reason: 'trailing segment is byte length');
+    });
+
     test('clear() drops the image table', () {
       final buf = CellBuffer(const CellSize(4, 2));
       buf.writeImage(const CellOffset(0, 0),

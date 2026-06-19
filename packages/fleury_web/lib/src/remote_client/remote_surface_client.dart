@@ -124,6 +124,11 @@ final class RemoteSurfaceClient {
       ..setProperty('position', 'absolute')
       ..setProperty('left', '0')
       ..setProperty('top', '0')
+      ..setProperty('width', '100%')
+      ..setProperty('height', '100%')
+      // Clip any image that would extend past the grid (e.g. a placement near
+      // the edge) to the host bounds instead of bleeding over the page.
+      ..setProperty('overflow', 'hidden')
       ..setProperty('pointer-events', 'none');
     _host.appendChild(overlay);
     _imageOverlay = overlay;
@@ -167,6 +172,10 @@ final class RemoteSurfaceClient {
       if (el == null) {
         el = web.document.createElement('img') as web.HTMLImageElement;
         el.style.setProperty('position', 'absolute');
+        // Decorative: the overlay is the visual layer only — assistive tech
+        // reads the separate semantics DOM, so an empty alt keeps the image
+        // from being announced twice (or as a meaningless blob id).
+        el.alt = '';
         // A corrupt / undecodable payload would otherwise show the browser's
         // broken-image glyph; hide it instead so a bad frame degrades to blank.
         el.onerror = (web.Event _) {
