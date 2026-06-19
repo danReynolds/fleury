@@ -3,6 +3,7 @@ import 'dart:js_interop';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury_host.dart';
+import 'package:fleury/src/remote/remote_codec.dart' show ImagePlacement;
 import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/remote/remote_semantics.dart';
 import 'package:web/web.dart' as web;
@@ -42,6 +43,14 @@ final class RemoteSurfaceClient {
   bool _closed = false;
   web.HTMLElement? _disconnectBanner;
   CellBuffer _mirror = CellBuffer(const CellSize(80, 24));
+
+  // Inline-image overlay: a sibling div above the grid holding one <img> per
+  // placed image. Bytes are cached by content-hash id as blob URLs; the <img>
+  // elements are reconciled against each frame's placements.
+  web.HTMLElement? _imageOverlay;
+  final Map<String, String> _imageBlobUrls = <String, String>{};
+  final Map<String, web.HTMLImageElement> _imageEls =
+      <String, web.HTMLImageElement>{};
 
   /// Connects and begins rendering. Resolves once the socket is open and
   /// the INIT handshake has been sent.
@@ -95,6 +104,18 @@ final class RemoteSurfaceClient {
         _send(encodeFrame(SemanticActionFrame(id, action)));
       };
     _mirror = CellBuffer(_size);
+    // Inline-image overlay: a sibling of the grid root (the grid `replaceChildren`s
+    // its own root, so overlays must live outside it), absolutely positioned over
+    // the grid. pointer-events:none lets clicks fall through to the cell grid.
+    (_host as web.HTMLElement).style.setProperty('position', 'relative');
+    final overlay = web.document.createElement('div') as web.HTMLElement;
+    overlay.style
+      ..setProperty('position', 'absolute')
+      ..setProperty('left', '0')
+      ..setProperty('top', '0')
+      ..setProperty('pointer-events', 'none');
+    _host.appendChild(overlay);
+    _imageOverlay = overlay;
     _input = DomInputSource(
       hostElement: _host,
       pointerTarget: surfaceRoot,
@@ -102,6 +123,52 @@ final class RemoteSurfaceClient {
     )..start(_sendInput);
     _sendInit();
     _observeResize();
+  }
+
+  /// Caches one inline image's bytes as a blob URL, keyed by content-hash id.
+  /// Idempotent — the server ships each id once, but a re-send (after the
+  /// server's dedup set is bounded) just keeps the existing URL.
+  void _cacheImage(String id, Uint8List bytes) {
+    if (_imageBlobUrls.containsKey(id)) return;
+    final blob = web.Blob(
+      <JSAny>[bytes.toJS].toJS,
+      web.BlobPropertyBag(type: 'image/png'),
+    );
+    _imageBlobUrls[id] = web.URL.createObjectURL(blob);
+  }
+
+  /// Reconciles the `<img>` overlay against this frame's [placements] (the full
+  /// current set). New images get an element; placed ones are positioned at
+  /// their cell rect; images no longer placed (scrolled away, covered, removed)
+  /// have their element dropped.
+  void _applyPlacements(List<ImagePlacement> placements) {
+    final overlay = _imageOverlay;
+    final box = _metrics?.measure();
+    if (overlay == null || box == null) return;
+    final cw = box.cssCellWidth;
+    final ch = box.cssCellHeight;
+    final seen = <String>{};
+    for (final p in placements) {
+      seen.add(p.id);
+      final url = _imageBlobUrls[p.id];
+      if (url == null) continue; // bytes not arrived yet; a later frame retries
+      var el = _imageEls[p.id];
+      if (el == null) {
+        el = web.document.createElement('img') as web.HTMLImageElement;
+        el.style.setProperty('position', 'absolute');
+        el.src = url;
+        overlay.appendChild(el);
+        _imageEls[p.id] = el;
+      }
+      el.style
+        ..setProperty('left', '${p.col * cw}px')
+        ..setProperty('top', '${p.row * ch}px')
+        ..setProperty('width', '${p.cols * cw}px')
+        ..setProperty('height', '${p.rows * ch}px');
+    }
+    for (final id in _imageEls.keys.toList()) {
+      if (!seen.contains(id)) _imageEls.remove(id)?.remove();
+    }
   }
 
   CellSize? _measureViewport() {
@@ -243,6 +310,9 @@ final class RemoteSurfaceClient {
         }
         final plan = applyRemotePlan(f.plan, _mirror);
         surface.present(_mirror, _mirror, plan);
+        _applyPlacements(f.plan.placements);
+      case InlineImageFrame f:
+        _cacheImage(f.id, f.bytes);
       case SemanticsFrame f:
         _presentSemantics(f);
       case ByeFrame():
@@ -286,6 +356,13 @@ final class RemoteSurfaceClient {
     _input?.dispose();
     _input = null;
     _socket = null;
+    for (final url in _imageBlobUrls.values) {
+      web.URL.revokeObjectURL(url);
+    }
+    _imageBlobUrls.clear();
+    _imageEls.clear();
+    _imageOverlay?.remove();
+    _imageOverlay = null;
     _showDisconnected(message);
   }
 

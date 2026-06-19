@@ -480,8 +480,7 @@ RemotePlan buildRemotePlan(
     return source < rows ? prev.atColRow(col, source) : const Cell.empty();
   }
 
-  final placements = <ImagePlacement>[];
-  final patches = _buildPatches(next, prevRef, full, styleIndex, placements);
+  final patches = _buildPatches(next, prevRef, full, styleIndex);
 
   return RemotePlan(
     size: next.size,
@@ -489,8 +488,35 @@ RemotePlan buildRemotePlan(
     scrollUpRows: scrollUpRows,
     styleTable: styleTable,
     patches: patches,
-    placements: placements,
+    placements: _scanImagePlacements(next),
   );
+}
+
+/// The full set of inline-image placements in [next] — every image-anchor cell,
+/// not just the changed ones — so the client's `<img>` overlay reflects the
+/// current layout each frame (a static image isn't dropped when its cells don't
+/// change; one covered/scrolled away simply stops being scanned). Gated on the
+/// image table being non-empty, so image-free frames pay nothing.
+List<ImagePlacement> _scanImagePlacements(CellBuffer next) {
+  if (next.images.isEmpty) return const <ImagePlacement>[];
+  final placements = <ImagePlacement>[];
+  for (var row = 0; row < next.size.rows; row++) {
+    for (var col = 0; col < next.size.cols; col++) {
+      final cell = next.atColRow(col, row);
+      if (cell.role != CellRole.protocolAnchor) continue;
+      final image = next.images[cell.grapheme];
+      if (image != null) {
+        placements.add(ImagePlacement(
+          id: image.id,
+          col: col,
+          row: row,
+          cols: image.cols,
+          rows: image.rows,
+        ));
+      }
+    }
+  }
+  return placements;
 }
 
 List<RemoteRowPatch> _buildPatches(
@@ -498,7 +524,6 @@ List<RemoteRowPatch> _buildPatches(
   Cell Function(int col, int row) prevRef,
   bool full,
   int Function(CellStyle) styleIndex,
-  List<ImagePlacement> placements,
 ) {
   final cols = next.size.cols;
   final rows = next.size.rows;
@@ -525,24 +550,15 @@ List<RemoteRowPatch> _buildPatches(
           // grapheme already spans them); empty/blank render as a space.
           if (cell.role != CellRole.continuation) {
             final g = cell.grapheme;
-            final image = (cell.role == CellRole.protocolAnchor && g != null)
-                ? next.images[g]
-                : null;
-            if (image != null) {
-              // Browser inline image: blank the grid here (the client overlays
-              // an <img> at this placement) and record where it goes. The
-              // covered cells already render as spaces.
-              buffer.write(' ');
-              placements.add(ImagePlacement(
-                id: g!,
-                col: col,
-                row: row,
-                cols: image.cols,
-                rows: image.rows,
-              ));
-            } else {
-              buffer.write(g ?? ' ');
-            }
+            // Browser inline image: blank the grid here — the client overlays
+            // an <img> (placement comes from a full scan, not the diff, so a
+            // static image isn't dropped on unchanged frames). Covered cells
+            // already render as spaces; a terminal-escape anchor still writes
+            // its grapheme.
+            final isImage = cell.role == CellRole.protocolAnchor &&
+                g != null &&
+                next.images.containsKey(g);
+            buffer.write(isImage ? ' ' : (g ?? ' '));
           }
           col++;
         }

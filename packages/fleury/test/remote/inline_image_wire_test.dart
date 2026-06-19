@@ -28,6 +28,20 @@ void main() {
           reason: 'image region is blanked; bytes travel out of band');
     });
 
+    test('a static (unchanged) image still emits its placement', () {
+      final bytes = Uint8List.fromList([5, 6, 7, 8]);
+      final prev = CellBuffer(const CellSize(6, 3))
+        ..writeImage(const CellOffset(1, 0), bytes, width: 2, height: 2);
+      final next = CellBuffer(const CellSize(6, 3))
+        ..writeImage(const CellOffset(1, 0), bytes, width: 2, height: 2);
+
+      final plan = buildRemotePlan(prev, next, fullRepaint: false);
+
+      expect(plan.patches, isEmpty, reason: 'nothing changed in the grid');
+      expect(plan.placements.length, 1,
+          reason: 'placement persists every frame so the <img> is not dropped');
+    });
+
     test('placements round-trip through the plan wire', () {
       final next = CellBuffer(const CellSize(6, 3));
       next.writeImage(const CellOffset(0, 0),
