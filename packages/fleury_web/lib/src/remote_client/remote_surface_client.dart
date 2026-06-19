@@ -164,7 +164,11 @@ final class RemoteSurfaceClient {
         ..setProperty('left', '${p.col * cw}px')
         ..setProperty('top', '${p.row * ch}px')
         ..setProperty('width', '${p.cols * cw}px')
-        ..setProperty('height', '${p.rows * ch}px');
+        ..setProperty('height', '${p.rows * ch}px')
+        // InlineImageFit names ARE the CSS object-fit keywords (contain/cover/
+        // fill/none), so the source `fit` maps straight through. Without this
+        // the default `fill` would stretch a wrong-aspect cell box.
+        ..setProperty('object-fit', p.fit.name);
     }
     for (final id in _imageEls.keys.toList()) {
       if (!seen.contains(id)) _imageEls.remove(id)?.remove();

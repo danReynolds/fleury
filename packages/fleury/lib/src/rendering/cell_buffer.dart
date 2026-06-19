@@ -11,18 +11,28 @@ import 'width_resolver.dart';
 /// carries a protocol-anchor cell whose grapheme is the [id]. The serve codec
 /// ships the bytes once per id and the DOM client renders an `<img>` overlay
 /// spanning [cols]×[rows] cells.
+/// How an inline image fills its placement rectangle on a true-pixel surface.
+/// The four modes mirror the widget-level `ImageFit`, and — by design — their
+/// names are exactly the CSS `object-fit` keywords, so the serve client applies
+/// `el.style.objectFit = fit.name` with no lookup table. [contain] (the default)
+/// preserves the source aspect ratio; without it a wrong-aspect cell box would
+/// stretch the image.
+enum InlineImageFit { contain, cover, fill, none }
+
 final class InlineImage {
   const InlineImage({
     required this.id,
     required this.bytes,
     required this.cols,
     required this.rows,
+    this.fit = InlineImageFit.contain,
   });
 
   final String id;
   final Uint8List bytes;
   final int cols;
   final int rows;
+  final InlineImageFit fit;
 }
 
 /// A two-dimensional grid of [Cell]s representing one frame of the terminal
@@ -449,6 +459,7 @@ final class CellBuffer {
     Uint8List bytes, {
     required int width,
     required int height,
+    InlineImageFit fit = InlineImageFit.contain,
   }) {
     if (!_containsColRow(topLeft.col, topLeft.row)) return;
     final id = _hashBytes(bytes);
@@ -457,6 +468,7 @@ final class CellBuffer {
       bytes: bytes,
       cols: width,
       rows: height,
+      fit: fit,
     );
     writeProtocol(topLeft, id, width: width, height: height);
   }

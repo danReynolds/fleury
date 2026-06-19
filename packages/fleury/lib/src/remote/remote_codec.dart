@@ -60,6 +60,7 @@ final class ImagePlacement {
     required this.row,
     required this.cols,
     required this.rows,
+    this.fit = InlineImageFit.contain,
   });
 
   final String id;
@@ -67,6 +68,10 @@ final class ImagePlacement {
   final int row;
   final int cols;
   final int rows;
+
+  /// How the client's `<img>` fills this cell rectangle (CSS `object-fit`).
+  /// Carried per placement so a wrong-aspect box doesn't stretch the image.
+  final InlineImageFit fit;
 }
 
 /// One contiguous changed column range in a row.
@@ -377,7 +382,8 @@ Uint8List encodeRemotePlan(RemotePlan plan) {
       ..varint(p.row)
       ..varint(p.col)
       ..varint(p.cols)
-      ..varint(p.rows);
+      ..varint(p.rows)
+      ..varint(p.fit.index);
   }
   return w.take();
 }
@@ -423,8 +429,19 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
     final pcol = r.varint();
     final pcols = r.varint();
     final prows = r.varint();
+    final fitIndex = r.varint();
+    final fit = fitIndex < InlineImageFit.values.length
+        ? InlineImageFit.values[fitIndex]
+        : InlineImageFit.contain;
     placements.add(
-      ImagePlacement(id: id, col: pcol, row: prow, cols: pcols, rows: prows),
+      ImagePlacement(
+        id: id,
+        col: pcol,
+        row: prow,
+        cols: pcols,
+        rows: prows,
+        fit: fit,
+      ),
     );
   }
   r.expectEnd();
@@ -512,6 +529,7 @@ List<ImagePlacement> _scanImagePlacements(CellBuffer next) {
           row: row,
           cols: image.cols,
           rows: image.rows,
+          fit: image.fit,
         ));
       }
     }

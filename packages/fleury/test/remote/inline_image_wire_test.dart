@@ -58,6 +58,36 @@ void main() {
           [original.id, 0, 0, 2, 2]);
     });
 
+    test('a non-default fit round-trips through the plan wire', () {
+      final next = CellBuffer(const CellSize(6, 3));
+      next.writeImage(const CellOffset(0, 0),
+          Uint8List.fromList([9, 8, 7, 6]),
+          width: 3, height: 2, fit: InlineImageFit.cover);
+      final plan = buildRemotePlan(
+          CellBuffer(const CellSize(6, 3)), next, fullRepaint: true);
+
+      // The scanned placement carries the image's fit...
+      expect(plan.placements.single.fit, InlineImageFit.cover);
+      // ...and it survives encode → decode (default would be contain).
+      final decoded = decodeRemotePlan(encodeRemotePlan(plan));
+      expect(decoded.placements.single.fit, InlineImageFit.cover);
+    });
+
+    test('an out-of-range fit index decodes to contain (forward-compat)', () {
+      // A future sender could ship a fit ordinal this build doesn't know;
+      // the decoder must not throw — it falls back to the safe default.
+      final next = CellBuffer(const CellSize(6, 3))
+        ..writeImage(const CellOffset(0, 0), Uint8List.fromList([1, 2, 3, 4]),
+            width: 2, height: 2);
+      final bytes = encodeRemotePlan(
+          buildRemotePlan(CellBuffer(const CellSize(6, 3)), next, fullRepaint: true));
+      // The final byte is the single placement's fit ordinal (0 = contain);
+      // bump it past the known range and confirm graceful fallback.
+      final tampered = Uint8List.fromList(bytes)..last = 0x7F;
+      expect(decodeRemotePlan(tampered).placements.single.fit,
+          InlineImageFit.contain);
+    });
+
     test('a plan with no images round-trips with empty placements', () {
       final next = CellBuffer(const CellSize(4, 2))
         ..writeText(const CellOffset(0, 0), 'hi');

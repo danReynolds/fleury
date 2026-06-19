@@ -99,7 +99,7 @@ export 'src/rendering/cell.dart'
         Colors,
         IndexedColor,
         RgbColor;
-export 'src/rendering/cell_buffer.dart' show CellBuffer;
+export 'src/rendering/cell_buffer.dart' show CellBuffer, InlineImageFit;
 export 'src/rendering/edge_insets.dart' show EdgeInsets;
 export 'src/rendering/layout.dart' show CellConstraints;
 export 'src/rendering/render_flex.dart'

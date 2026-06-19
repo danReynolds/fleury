@@ -863,6 +863,67 @@ void main() {
     });
   });
 
+  group('Image — browser (serve) protocol', () {
+    Widget browserHosted(Widget child) {
+      return MediaQuery(
+        data: const MediaQueryData(
+          size: CellSize(10, 10),
+          imageProtocol: ImageProtocol.browser,
+        ),
+        child: child,
+      );
+    }
+
+    testWidgets('routes bytes off-grid and carries the widget fit', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        browserHosted(
+          SizedBox(
+            width: 4,
+            height: 3,
+            child: Image(
+              source: ImageSource.decoded(_solid(8, 8, 10, 20, 30)),
+              fit: ImageFit.cover,
+            ),
+          ),
+        ),
+      );
+      final buf = tester.render(size: const CellSize(4, 3));
+
+      // Bytes live in the off-grid image table, not in a cell escape.
+      expect(buf.images.length, 1, reason: 'one inline image registered');
+      final image = buf.images.values.single;
+      expect(image.cols, 4);
+      expect(image.rows, 3);
+      expect(image.fit, InlineImageFit.cover,
+          reason: 'widget ImageFit.cover maps to the wire fit');
+
+      // The anchor carries only the id (a key in the image table), and the
+      // region is protocol-covered — no glyph art, no Kitty escape.
+      final anchor = buf.atColRow(0, 0);
+      expect(anchor.role, CellRole.protocolAnchor);
+      expect(buf.images.containsKey(anchor.grapheme), isTrue);
+      expect(anchor.grapheme!.startsWith('\x1B'), isFalse,
+          reason: 'browser anchors hold an id, not a terminal escape');
+      expect(buf.atColRow(1, 0).role, CellRole.protocolCovered);
+    });
+
+    testWidgets('fit defaults to contain', (tester) {
+      tester.pumpWidget(
+        browserHosted(
+          SizedBox(
+            width: 4,
+            height: 2,
+            child: Image(source: ImageSource.decoded(_solid(8, 8, 1, 2, 3))),
+          ),
+        ),
+      );
+      final buf = tester.render(size: const CellSize(4, 2));
+      expect(buf.images.values.single.fit, InlineImageFit.contain);
+    });
+  });
+
   group('Image — iTerm2 inline-image protocol', () {
     Widget itermHosted(Widget child) {
       return MediaQuery(

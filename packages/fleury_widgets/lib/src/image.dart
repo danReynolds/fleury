@@ -838,8 +838,25 @@ class RenderImage extends RenderObject {
   /// bytes once and the DOM client renders an `<img>` overlay — true pixels,
   /// like a native terminal image protocol, without bloating the cell wire.
   void _paintBrowser(CellBuffer buffer, CellOffset offset, int cols, int rows) {
-    buffer.writeImage(offset, img.encodePng(_decoded), width: cols, height: rows);
+    buffer.writeImage(
+      offset,
+      img.encodePng(_decoded),
+      width: cols,
+      height: rows,
+      fit: _inlineFit(_fit),
+    );
   }
+
+  /// Maps the widget-level [ImageFit] onto the wire-level [InlineImageFit] the
+  /// serve client turns into a CSS `object-fit`. Exhaustive, so adding an
+  /// [ImageFit] mode fails to compile here until it's mapped — keeping the two
+  /// enums in lockstep.
+  static InlineImageFit _inlineFit(ImageFit fit) => switch (fit) {
+    ImageFit.contain => InlineImageFit.contain,
+    ImageFit.cover => InlineImageFit.cover,
+    ImageFit.fill => InlineImageFit.fill,
+    ImageFit.none => InlineImageFit.none,
+  };
 
   /// Paints the image at quarter-block density: 2×2 sub-pixels per
   /// cell instead of half-block's 1×2. For each cell we sample the

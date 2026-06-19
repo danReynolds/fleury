@@ -30,6 +30,20 @@ void main() {
       expect(buf.atColRow(1, 2).role, CellRole.protocolCovered);
     });
 
+    test('fit defaults to contain and records an explicit fit', () {
+      final buf = CellBuffer(const CellSize(8, 2));
+      buf.writeImage(const CellOffset(0, 0),
+          Uint8List.fromList([1, 2, 3]), width: 2, height: 1);
+      expect(buf.images.values.single.fit, InlineImageFit.contain,
+          reason: 'default preserves aspect ratio');
+
+      buf.clear();
+      buf.writeImage(const CellOffset(0, 0),
+          Uint8List.fromList([4, 5, 6]), width: 2, height: 1,
+          fit: InlineImageFit.cover);
+      expect(buf.images.values.single.fit, InlineImageFit.cover);
+    });
+
     test('identical bytes hash to one id (ship-once dedup)', () {
       final buf = CellBuffer(const CellSize(10, 2));
       buf.writeImage(const CellOffset(0, 0),
