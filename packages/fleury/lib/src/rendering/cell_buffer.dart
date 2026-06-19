@@ -1,8 +1,29 @@
+import 'dart:typed_data';
+
 import 'package:characters/characters.dart';
 
 import '../foundation/geometry.dart';
 import 'cell.dart';
 import 'width_resolver.dart';
+
+/// An inline image placed into a [CellBuffer] (browser "serve" surface). The
+/// bytes live here, off the cell grid, keyed by a content hash; the grid only
+/// carries a protocol-anchor cell whose grapheme is the [id]. The serve codec
+/// ships the bytes once per id and the DOM client renders an `<img>` overlay
+/// spanning [cols]×[rows] cells.
+final class InlineImage {
+  const InlineImage({
+    required this.id,
+    required this.bytes,
+    required this.cols,
+    required this.rows,
+  });
+
+  final String id;
+  final Uint8List bytes;
+  final int cols;
+  final int rows;
+}
 
 /// A two-dimensional grid of [Cell]s representing one frame of the terminal
 /// rendering output.
@@ -32,12 +53,20 @@ final class CellBuffer {
 
   CellSize _size;
   List<Cell> _cells;
+  // Inline images placed this frame, keyed by content hash. Repopulated by
+  // [writeImage] each paint; cleared with the cells. Read-only to callers.
+  final Map<String, InlineImage> _images = <String, InlineImage>{};
   var _damageTrackingEnabled = false;
   CellRect? _damageBounds;
   final Set<int> _damageRows = <int>{};
   var _damageSuppressionDepth = 0;
 
   CellSize get size => _size;
+
+  /// Inline images placed this frame, keyed by content hash. The cell grid
+  /// references each via a protocol-anchor cell whose grapheme is the id; the
+  /// bytes live here. Read-only.
+  Map<String, InlineImage> get images => _images;
 
   /// Conservative bounds of cells mutated since the last
   /// [resetDamageTracking].
@@ -102,6 +131,7 @@ final class CellBuffer {
   void clear() {
     _recordDamageRect(0, 0, _size.cols, _size.rows);
     _cells.fillRange(0, _cells.length, const Cell.empty());
+    _images.clear();
   }
 
   /// Scrolls the buffer up by [rows] rows: row `r + rows` moves to row `r`,
@@ -132,6 +162,7 @@ final class CellBuffer {
       const Cell.empty(),
       growable: false,
     );
+    _images.clear();
     _damageBounds = null;
     _recordDamageRect(0, 0, newSize.cols, newSize.rows);
   }
@@ -404,6 +435,43 @@ final class CellBuffer {
         _cells[r * _size.cols + c] = const Cell.protocolCovered();
       }
     }
+  }
+
+  /// Places an inline image over a [width]×[height] cell region for the browser
+  /// "serve" surface. The bytes are stored in [images] keyed by a content hash;
+  /// the grid only carries a protocol-anchor cell whose grapheme is that id
+  /// (plus protocol-covered cells). The serve codec ships the bytes once per id
+  /// and the DOM client renders an `<img>` overlay — true pixels, not glyph art.
+  /// Distinct from [writeProtocol], whose anchor grapheme is a terminal escape;
+  /// a backend tells them apart by whether the grapheme is a key in [images].
+  void writeImage(
+    CellOffset topLeft,
+    Uint8List bytes, {
+    required int width,
+    required int height,
+  }) {
+    if (!_containsColRow(topLeft.col, topLeft.row)) return;
+    final id = _hashBytes(bytes);
+    _images[id] = InlineImage(
+      id: id,
+      bytes: bytes,
+      cols: width,
+      rows: height,
+    );
+    writeProtocol(topLeft, id, width: width, height: height);
+  }
+
+  /// Content hash (hex + length), stable across re-encodes of the same image so
+  /// the serve ships identical bytes only once. A rolling hash modulo a 2^31-1
+  /// prime keeps the running value JS-safe (this file compiles to dart2js too,
+  /// where ints are 53-bit) — the intermediate never exceeds 2^39.
+  static String _hashBytes(Uint8List bytes) {
+    const mod = 0x7FFFFFFF; // 2^31 - 1, a Mersenne prime
+    var hash = 0;
+    for (final b in bytes) {
+      hash = (hash * 257 + b) % mod;
+    }
+    return '${hash.toRadixString(16)}-${bytes.length}';
   }
 
   // ---- Invariants --------------------------------------------------------

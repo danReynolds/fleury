@@ -832,16 +832,13 @@ class RenderImage extends RenderObject {
     _writeProtocolRegion(buffer, offset, out.toString(), cols, rows);
   }
 
-  /// Emits the image for the browser "serve" surface as a PNG `data:` URI in a
-  /// protocol-anchor cell. The serve codec lifts the payload out of the cell
-  /// grid into a dedicated inline-image frame (shipped once, keyed by content
-  /// hash) and the DOM client renders it as an `<img>` overlay — so the browser
-  /// gets true pixels, like a native terminal image protocol. The `data:` URI
-  /// is self-describing, so the client needs no format negotiation.
+  /// Emits the image for the browser "serve" surface. The PNG bytes go into the
+  /// buffer's inline-image table (keyed by content hash) via [CellBuffer.writeImage];
+  /// the cell grid only carries the lightweight id. The serve codec ships the
+  /// bytes once and the DOM client renders an `<img>` overlay — true pixels,
+  /// like a native terminal image protocol, without bloating the cell wire.
   void _paintBrowser(CellBuffer buffer, CellOffset offset, int cols, int rows) {
-    final png = img.encodePng(_decoded);
-    final payload = 'data:image/png;base64,${base64.encode(png)}';
-    _writeProtocolRegion(buffer, offset, payload, cols, rows);
+    buffer.writeImage(offset, img.encodePng(_decoded), width: cols, height: rows);
   }
 
   /// Paints the image at quarter-block density: 2×2 sub-pixels per
