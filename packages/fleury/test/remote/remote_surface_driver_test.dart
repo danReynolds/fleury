@@ -5,6 +5,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
@@ -341,6 +342,95 @@ void main() {
       final resize = events.whereType<ResizeEvent>().single;
       expect(resize.size.rows, maxRemoteGridRows);
       await sub.cancel();
+      await driver.restore();
+    });
+  });
+
+  group('inline image shipping', () {
+    FramePresentationPlan fullPlan(CellSize size) => FramePresentationPlan(
+          reason: 'test',
+          fullRepaint: true,
+          size: size,
+          damage: FramePresentationDamage(
+            fullRepaint: true,
+            requiresFullDiff: true,
+            dirtyBounds: null,
+            dirtyRows: TuiDirtyRows.full(size.rows),
+            source: FrameDamageSource.fullRepaint,
+          ),
+          dirtyRowModels: const [],
+          metricsChanged: false,
+          dirtyRowDiffTime: Duration.zero,
+          spanBuildTime: Duration.zero,
+        );
+
+    CellBuffer withImage(List<int> bytes, {int at = 0}) {
+      return CellBuffer(const CellSize(40, 10))
+        ..writeImage(CellOffset(at, 0), Uint8List.fromList(bytes),
+            width: 3, height: 2);
+    }
+
+    Future<RemoteTerminalDriver> connected(_FakeTransport transport) async {
+      final driver = RemoteTerminalDriver(transport);
+      final entered = driver.enter(TerminalMode.interactive);
+      transport.emit(_init);
+      await entered;
+      transport.sent.clear();
+      return driver;
+    }
+
+    test('ships bytes once while an image stays on screen, then re-ships when '
+        'it leaves and returns', () async {
+      final transport = _FakeTransport();
+      final driver = await connected(transport);
+      final size = const CellSize(40, 10);
+      final empty = CellBuffer(size);
+
+      // Frame 1: image appears → bytes + plan.
+      driver.presentFrame(empty, withImage([1, 2, 3, 4]), fullPlan(size));
+      expect(transport.sent.whereType<InlineImageFrame>(), hasLength(1));
+      transport.sent.clear();
+
+      // Frame 2: still on screen → plan only, no re-ship.
+      driver.presentFrame(
+          withImage([1, 2, 3, 4]), withImage([1, 2, 3, 4]), fullPlan(size));
+      expect(transport.sent.whereType<InlineImageFrame>(), isEmpty,
+          reason: 'an on-screen image ships once');
+      transport.sent.clear();
+
+      // Frame 3: image gone.
+      driver.presentFrame(withImage([1, 2, 3, 4]), empty, fullPlan(size));
+      expect(transport.sent.whereType<InlineImageFrame>(), isEmpty);
+      transport.sent.clear();
+
+      // Frame 4: returns → re-shipped (the client may have evicted its blob).
+      driver.presentFrame(empty, withImage([1, 2, 3, 4]), fullPlan(size));
+      expect(transport.sent.whereType<InlineImageFrame>(), hasLength(1),
+          reason: 'a re-appearing image is re-sent');
+
+      await driver.restore();
+    });
+
+    test('the same bytes drawn twice ship once but yield two placements',
+        () async {
+      final transport = _FakeTransport();
+      final driver = await connected(transport);
+      final size = const CellSize(40, 10);
+      final next = CellBuffer(size)
+        ..writeImage(const CellOffset(0, 0),
+            Uint8List.fromList([9, 9, 9]), width: 2, height: 2)
+        ..writeImage(const CellOffset(10, 0),
+            Uint8List.fromList([9, 9, 9]), width: 2, height: 2);
+
+      driver.presentFrame(CellBuffer(size), next, fullPlan(size));
+
+      expect(transport.sent.whereType<InlineImageFrame>(), hasLength(1),
+          reason: 'identical bytes ship once');
+      final plan = transport.sent.whereType<PlanFrame>().single.plan;
+      expect(plan.placements, hasLength(2),
+          reason: 'each draw is its own placement');
+      expect(plan.placements.map((p) => p.col).toSet(), {0, 10});
+
       await driver.restore();
     });
   });

@@ -3,6 +3,7 @@ import 'dart:js_interop';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury_host.dart';
+import 'package:fleury/src/remote/remote_codec.dart' show ImagePlacement;
 import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/remote/remote_semantics.dart';
 import 'package:web/web.dart' as web;
@@ -12,6 +13,7 @@ import '../input/dom_input_source.dart';
 import '../metrics/cell_metrics.dart';
 import '../metrics/dom_cell_metrics.dart';
 import '../semantics/semantic_dom_presenter.dart';
+import 'inline_image_overlay.dart';
 import 'plan_adapter.dart';
 
 /// Browser-side client for the structured serve path.
@@ -42,6 +44,10 @@ final class RemoteSurfaceClient {
   bool _closed = false;
   web.HTMLElement? _disconnectBanner;
   CellBuffer _mirror = CellBuffer(const CellSize(80, 24));
+
+  // The inline-image `<img>` overlay above the grid. Created in [_onOpen],
+  // fed InlineImageFrame bytes + per-frame placements, disposed in teardown.
+  InlineImageOverlay? _imageOverlay;
 
   /// Connects and begins rendering. Resolves once the socket is open and
   /// the INIT handshake has been sent.
@@ -95,6 +101,7 @@ final class RemoteSurfaceClient {
         _send(encodeFrame(SemanticActionFrame(id, action)));
       };
     _mirror = CellBuffer(_size);
+    _imageOverlay = InlineImageOverlay(_host as web.HTMLElement);
     _input = DomInputSource(
       hostElement: _host,
       pointerTarget: surfaceRoot,
@@ -102,6 +109,13 @@ final class RemoteSurfaceClient {
     )..start(_sendInput);
     _sendInit();
     _observeResize();
+  }
+
+  /// Reconciles the inline-image overlay against this frame's [placements]
+  /// (delegated to [InlineImageOverlay]; no-op until metrics exist).
+  void _applyPlacements(List<ImagePlacement> placements) {
+    final box = _metrics?.measure();
+    if (box != null) _imageOverlay?.apply(placements, box);
   }
 
   CellSize? _measureViewport() {
@@ -122,9 +136,13 @@ final class RemoteSurfaceClient {
     _send(
       encodeFrame(
         InitFrame(
+          // The browser renders real images via an <img> overlay (the serve
+          // path lifts inline-image payloads out of the cell grid), so it
+          // advertises the `browser` image protocol rather than the half-block
+          // glyph fallback.
           size: _size,
           colorMode: ColorMode.truecolor,
-          imageProtocol: ImageProtocol.halfBlock,
+          imageProtocol: ImageProtocol.browser,
           tmuxPassthrough: false,
           protocolVersion: remoteProtocolVersion,
         ),
@@ -154,6 +172,11 @@ final class RemoteSurfaceClient {
         _size = next;
         _surface?.resize(next, metrics: _cellBox());
         _mirror = CellBuffer(next);
+        // Reposition the overlay images to the new cell pitch now, so they stay
+        // pinned to their cells even if the host doesn't send a fresh plan; the
+        // next PlanFrame (the usual case) supersedes this with the real layout.
+        final box = _cellBox();
+        if (box != null) _imageOverlay?.reapply(box);
         _send(encodeFrame(ResizeFrame(next)));
       }).toJS,
     );
@@ -239,6 +262,9 @@ final class RemoteSurfaceClient {
         }
         final plan = applyRemotePlan(f.plan, _mirror);
         surface.present(_mirror, _mirror, plan);
+        _applyPlacements(f.plan.placements);
+      case InlineImageFrame f:
+        _imageOverlay?.cacheImage(f.id, f.bytes);
       case SemanticsFrame f:
         _presentSemantics(f);
       case ByeFrame():
@@ -282,6 +308,8 @@ final class RemoteSurfaceClient {
     _input?.dispose();
     _input = null;
     _socket = null;
+    _imageOverlay?.dispose();
+    _imageOverlay = null;
     _showDisconnected(message);
   }
 

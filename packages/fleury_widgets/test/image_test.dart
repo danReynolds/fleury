@@ -732,7 +732,7 @@ void main() {
             height: 3,
             child: Image(
               source: ImageSource.decoded(_solid(8, 8, 10, 20, 30)),
-              fit: ImageFit.contain,
+              fit: ImageFit.fill,
             ),
           ),
         ),
@@ -742,7 +742,7 @@ void main() {
       expect(
         anchor.role,
         CellRole.protocolAnchor,
-        reason: 'top-left cell holds the raw Kitty escape sequence',
+        reason: 'fill covers the whole box; top-left holds the Kitty escape',
       );
       // No half-block content should appear under Kitty.
       for (var r = 0; r < 3; r++) {
@@ -753,6 +753,75 @@ void main() {
             CellRole.protocolCovered,
             reason: 'cells inside the image region are protocol-covered',
           );
+        }
+      }
+    });
+
+    testWidgets('contain letterboxes a wide image into a centered band', (
+      tester,
+    ) {
+      // A 4:1 source in a square box: contain preserves aspect, so it occupies
+      // a single centered row band — NOT the whole box (that would distort).
+      tester.pumpWidget(
+        kittyHosted(
+          SizedBox(
+            width: 8,
+            height: 8,
+            child: Image(
+              source: ImageSource.decoded(_solid(16, 4, 1, 2, 3)),
+              fit: ImageFit.contain,
+            ),
+          ),
+        ),
+      );
+      final buf = tester.render(size: const CellSize(8, 8));
+      expect(buf.atColRow(0, 0).role, CellRole.empty,
+          reason: 'top row is letterbox, not covered');
+      var anchors = 0;
+      int? anchorRow;
+      final coveredRows = <int>{};
+      for (var r = 0; r < 8; r++) {
+        for (var c = 0; c < 8; c++) {
+          final role = buf.atColRow(c, r).role;
+          if (role == CellRole.protocolAnchor) {
+            anchors++;
+            anchorRow = r;
+          }
+          if (role == CellRole.protocolAnchor ||
+              role == CellRole.protocolCovered) {
+            coveredRows.add(r);
+          }
+        }
+      }
+      expect(anchors, 1, reason: 'one image region');
+      expect(coveredRows.length, 1,
+          reason: 'a 4:1 image in a square box occupies one row');
+      expect(anchorRow, greaterThan(0),
+          reason: 'the band is vertically centered, not top-aligned');
+    });
+
+    testWidgets('cover fills the whole box (cropping the source)', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        kittyHosted(
+          SizedBox(
+            width: 6,
+            height: 6,
+            child: Image(
+              source: ImageSource.decoded(_solid(16, 4, 9, 9, 9)),
+              fit: ImageFit.cover,
+            ),
+          ),
+        ),
+      );
+      final buf = tester.render(size: const CellSize(6, 6));
+      expect(buf.atColRow(0, 0).role, CellRole.protocolAnchor);
+      for (var r = 0; r < 6; r++) {
+        for (var c = 0; c < 6; c++) {
+          if (r == 0 && c == 0) continue;
+          expect(buf.atColRow(c, r).role, CellRole.protocolCovered,
+              reason: 'cover scales to fill, so every cell is covered');
         }
       }
     });
@@ -863,6 +932,68 @@ void main() {
     });
   });
 
+  group('Image — browser (serve) protocol', () {
+    Widget browserHosted(Widget child) {
+      return MediaQuery(
+        data: const MediaQueryData(
+          size: CellSize(10, 10),
+          imageProtocol: ImageProtocol.browser,
+        ),
+        child: child,
+      );
+    }
+
+    testWidgets('routes bytes off-grid and carries the widget fit', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        browserHosted(
+          SizedBox(
+            width: 4,
+            height: 3,
+            child: Image(
+              source: ImageSource.decoded(_solid(8, 8, 10, 20, 30)),
+              fit: ImageFit.cover,
+            ),
+          ),
+        ),
+      );
+      final buf = tester.render(size: const CellSize(4, 3));
+
+      // Bytes live in the off-grid image table, not in a cell escape.
+      expect(buf.images.length, 1, reason: 'one inline image registered');
+      // Geometry + fit ride on the placement.
+      final placement = buf.imagePlacements.single;
+      expect(placement.cols, 4);
+      expect(placement.rows, 3);
+      expect(placement.fit, InlineImageFit.cover,
+          reason: 'widget ImageFit.cover maps to the wire fit');
+
+      // The anchor carries only the id (a key in the image table), and the
+      // region is protocol-covered — no glyph art, no Kitty escape.
+      final anchor = buf.atColRow(0, 0);
+      expect(anchor.role, CellRole.protocolAnchor);
+      expect(buf.images.containsKey(anchor.grapheme), isTrue);
+      expect(anchor.grapheme!.startsWith('\x1B'), isFalse,
+          reason: 'browser anchors hold an id, not a terminal escape');
+      expect(buf.atColRow(1, 0).role, CellRole.protocolCovered);
+    });
+
+    testWidgets('fit defaults to contain', (tester) {
+      tester.pumpWidget(
+        browserHosted(
+          SizedBox(
+            width: 4,
+            height: 2,
+            child: Image(source: ImageSource.decoded(_solid(8, 8, 1, 2, 3))),
+          ),
+        ),
+      );
+      final buf = tester.render(size: const CellSize(4, 2));
+      expect(buf.imagePlacements.single.fit, InlineImageFit.contain);
+    });
+  });
+
   group('Image — iTerm2 inline-image protocol', () {
     Widget itermHosted(Widget child) {
       return MediaQuery(
@@ -884,7 +1015,7 @@ void main() {
             height: 3,
             child: Image(
               source: ImageSource.decoded(_solid(8, 8, 10, 20, 30)),
-              fit: ImageFit.contain,
+              fit: ImageFit.fill,
             ),
           ),
         ),

@@ -1,8 +1,53 @@
+import 'dart:typed_data';
+
 import 'package:characters/characters.dart';
 
 import '../foundation/geometry.dart';
 import 'cell.dart';
 import 'width_resolver.dart';
+
+/// An inline image placed into a [CellBuffer] (browser "serve" surface). The
+/// How an inline image fills its placement rectangle on a true-pixel surface.
+/// The four modes mirror the widget-level `ImageFit`, and — by design — their
+/// names are exactly the CSS `object-fit` keywords, so the serve client applies
+/// `el.style.objectFit = fit.name` with no lookup table. [contain] (the default)
+/// preserves the source aspect ratio; without it a wrong-aspect cell box would
+/// stretch the image.
+enum InlineImageFit { contain, cover, fill, none }
+
+/// One inline image's bytes, off the cell grid, content-addressed by [id]. The
+/// grid carries a protocol-anchor cell whose grapheme is the id; the serve
+/// codec ships the bytes once and the DOM client renders an `<img>`. Geometry
+/// (where and how big) is NOT here — it belongs to the *placement*, since the
+/// same bytes can appear at several sizes/positions in one frame.
+final class InlineImage {
+  const InlineImage({required this.id, required this.bytes});
+
+  final String id;
+  final Uint8List bytes;
+}
+
+/// One placement of an inline image: which [id]'s bytes go where ([col], [row])
+/// over how many cells ([cols]×[rows]) and how they fill that box ([fit]). One
+/// is recorded per [CellBuffer.writeImage] call, so the same image drawn twice
+/// yields two placements with independent geometry.
+final class InlineImagePlacement {
+  const InlineImagePlacement({
+    required this.id,
+    required this.col,
+    required this.row,
+    required this.cols,
+    required this.rows,
+    required this.fit,
+  });
+
+  final String id;
+  final int col;
+  final int row;
+  final int cols;
+  final int rows;
+  final InlineImageFit fit;
+}
 
 /// A two-dimensional grid of [Cell]s representing one frame of the terminal
 /// rendering output.
@@ -32,12 +77,27 @@ final class CellBuffer {
 
   CellSize _size;
   List<Cell> _cells;
+  // Inline image bytes placed this frame, deduplicated by content hash.
+  // Repopulated by [writeImage] each paint; cleared with the cells.
+  final Map<String, InlineImage> _images = <String, InlineImage>{};
+  // Per-placement geometry, one entry per [writeImage] call, in paint order.
+  final List<InlineImagePlacement> _imagePlacements = <InlineImagePlacement>[];
   var _damageTrackingEnabled = false;
   CellRect? _damageBounds;
   final Set<int> _damageRows = <int>{};
   var _damageSuppressionDepth = 0;
 
   CellSize get size => _size;
+
+  /// Inline image bytes placed this frame, deduplicated by content hash. The
+  /// cell grid references each via a protocol-anchor cell whose grapheme is the
+  /// id. Read-only.
+  Map<String, InlineImage> get images => _images;
+
+  /// Per-placement geometry for the inline images placed this frame, in paint
+  /// order. Each entry is a distinct on-screen rectangle even when two share an
+  /// [InlineImagePlacement.id] (same bytes drawn twice). Read-only.
+  List<InlineImagePlacement> get imagePlacements => _imagePlacements;
 
   /// Conservative bounds of cells mutated since the last
   /// [resetDamageTracking].
@@ -102,6 +162,8 @@ final class CellBuffer {
   void clear() {
     _recordDamageRect(0, 0, _size.cols, _size.rows);
     _cells.fillRange(0, _cells.length, const Cell.empty());
+    _images.clear();
+    _imagePlacements.clear();
   }
 
   /// Scrolls the buffer up by [rows] rows: row `r + rows` moves to row `r`,
@@ -132,6 +194,8 @@ final class CellBuffer {
       const Cell.empty(),
       growable: false,
     );
+    _images.clear();
+    _imagePlacements.clear();
     _damageBounds = null;
     _recordDamageRect(0, 0, newSize.cols, newSize.rows);
   }
@@ -404,6 +468,85 @@ final class CellBuffer {
         _cells[r * _size.cols + c] = const Cell.protocolCovered();
       }
     }
+  }
+
+  /// Places an inline image over a [width]×[height] cell region for the browser
+  /// "serve" surface. The bytes are stored in [images] keyed by a content hash;
+  /// the grid only carries a protocol-anchor cell whose grapheme is that id
+  /// (plus protocol-covered cells). The serve codec ships the bytes once per id
+  /// and the DOM client renders an `<img>` overlay — true pixels, not glyph art.
+  /// Distinct from [writeProtocol], whose anchor grapheme is a terminal escape;
+  /// a backend tells them apart by whether the grapheme is a key in [images].
+  void writeImage(
+    CellOffset topLeft,
+    Uint8List bytes, {
+    required int width,
+    required int height,
+    InlineImageFit fit = InlineImageFit.contain,
+  }) {
+    if (!_containsColRow(topLeft.col, topLeft.row)) return;
+    final id = _hashBytes(bytes);
+    // Bytes are deduplicated by id; geometry is recorded per placement so the
+    // same image drawn twice (or at two sizes) keeps independent rectangles.
+    _images[id] = InlineImage(id: id, bytes: bytes);
+    _imagePlacements.add(InlineImagePlacement(
+      id: id,
+      col: topLeft.col,
+      row: topLeft.row,
+      cols: width,
+      rows: height,
+      fit: fit,
+    ));
+    writeProtocol(topLeft, id, width: width, height: height);
+  }
+
+  /// Records an inline image whose bytes are already hashed/encoded (the widget
+  /// caches the PNG + id across repaints). Skips the per-paint re-hash on the
+  /// hot path; see [writeImage] for the deduplication + placement model.
+  void writeImageWithId(
+    CellOffset topLeft,
+    String id,
+    Uint8List bytes, {
+    required int width,
+    required int height,
+    InlineImageFit fit = InlineImageFit.contain,
+  }) {
+    if (!_containsColRow(topLeft.col, topLeft.row)) return;
+    _images[id] = InlineImage(id: id, bytes: bytes);
+    _imagePlacements.add(InlineImagePlacement(
+      id: id,
+      col: topLeft.col,
+      row: topLeft.row,
+      cols: width,
+      rows: height,
+      fit: fit,
+    ));
+    writeProtocol(topLeft, id, width: width, height: height);
+  }
+
+  /// Public content hash for inline-image bytes — the same scheme [writeImage]
+  /// uses, exposed so a caller that caches its encoded bytes (the Image widget
+  /// caches the PNG across repaints) can precompute the id once and pass it to
+  /// [writeImageWithId], skipping a per-frame re-hash of the whole image.
+  static String hashImageBytes(Uint8List bytes) => _hashBytes(bytes);
+
+  /// Content hash, stable across re-encodes of the same image so the serve
+  /// ships identical bytes only once. Two independent rolling hashes (distinct
+  /// multipliers and Mersenne-prime moduli) combine with the byte length into
+  /// one id — ~62 effective bits, so distinct images are overwhelmingly
+  /// unlikely to collide and alias to one another's pixels. Each intermediate
+  /// stays JS-safe: `h * 769 + b < 2^31 * 2^10 = 2^41 < 2^53` (this file
+  /// compiles to dart2js, where ints are 53-bit).
+  static String _hashBytes(Uint8List bytes) {
+    const mod1 = 0x7FFFFFFF; // 2^31 - 1
+    const mod2 = 0x7FFFFFED; // largest prime below 2^31 - 1, independent of mod1
+    var h1 = 0;
+    var h2 = 0;
+    for (final b in bytes) {
+      h1 = (h1 * 257 + b) % mod1;
+      h2 = (h2 * 769 + b) % mod2;
+    }
+    return '${h1.toRadixString(16)}-${h2.toRadixString(16)}-${bytes.length}';
   }
 
   // ---- Invariants --------------------------------------------------------

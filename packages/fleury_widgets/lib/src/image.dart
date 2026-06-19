@@ -440,8 +440,22 @@ class RenderImage extends RenderObject {
   set decoded(img.Image v) {
     if (identical(_decoded, v)) return;
     _decoded = v;
+    _encodedPng = null;
+    _encodedId = null;
+    _fitCropPng = null;
+    _fitCropKey = null;
     markNeedsLayout();
   }
+
+  // Cached PNG encode of [_decoded] and its content-hash id, recomputed only
+  // when the decoded image changes. The native-protocol (kitty/iTerm2) and
+  // browser paint paths run on every frame the tree repaints; without this they
+  // would re-encode (zlib) and re-hash the same pixels each frame.
+  Uint8List? _encodedPng;
+  String? _encodedId;
+
+  Uint8List get _png => _encodedPng ??= img.encodePng(_decoded);
+  String get _pngId => _encodedId ??= CellBuffer.hashImageBytes(_png);
 
   ImageFit _fit;
   set fit(ImageFit v) {
@@ -520,6 +534,10 @@ class RenderImage extends RenderObject {
     }
     if (_protocol == ImageProtocol.sixel) {
       _paintSixel(buffer, offset, cols, rows);
+      return;
+    }
+    if (_protocol == ImageProtocol.browser) {
+      _paintBrowser(buffer, offset, cols, rows);
       return;
     }
 
@@ -788,6 +806,79 @@ class RenderImage extends RenderObject {
     }
   }
 
+  /// The cell sub-rectangle the source occupies inside a [cols]×[rows] box under
+  /// [fit] — `col`/`row` relative to the box top-left, `cols`/`rows` its size —
+  /// plus the source-pixel crop (`cropX/Y/W/H`) to transmit. Mirrors
+  /// [_sampleMappers]' contain/cover/none math against the conventional 1×2 cell
+  /// pixel aspect, so the kitty/iTerm2 paths letterbox or crop exactly like the
+  /// glyph tiers and the browser (CSS `object-fit`). `fill` is the whole box and
+  /// whole source (the historical behaviour). When the box already matches the
+  /// source aspect, `contain` degenerates to the full box.
+  static _FitRect _resolveFit(
+      int srcW, int srcH, int cols, int rows, ImageFit fit) {
+    int centerOffset(int outer, int inner) =>
+        ((outer - inner) / 2).round().clamp(0, outer - inner);
+    switch (fit) {
+      case ImageFit.fill:
+        return _FitRect(0, 0, cols, rows, 0, 0, srcW, srcH);
+      case ImageFit.contain:
+        final tgtW = cols.toDouble();
+        final tgtH = (rows * 2).toDouble();
+        final scale = (tgtW / srcW < tgtH / srcH) ? tgtW / srcW : tgtH / srcH;
+        final dCols = (srcW * scale).round().clamp(1, cols);
+        final dRows = (srcH * scale / 2).round().clamp(1, rows);
+        return _FitRect(centerOffset(cols, dCols), centerOffset(rows, dRows),
+            dCols, dRows, 0, 0, srcW, srcH);
+      case ImageFit.cover:
+        final tgtW = cols.toDouble();
+        final tgtH = (rows * 2).toDouble();
+        final scale = (tgtW / srcW > tgtH / srcH) ? tgtW / srcW : tgtH / srcH;
+        final cropW = (tgtW / scale).round().clamp(1, srcW);
+        final cropH = (tgtH / scale).round().clamp(1, srcH);
+        return _FitRect(0, 0, cols, rows, centerOffset(srcW, cropW),
+            centerOffset(srcH, cropH), cropW, cropH);
+      case ImageFit.none:
+        // Native resolution, centered: 1 source px = 1 column, 2 px = 1 row.
+        final cropW = srcW <= cols ? srcW : cols;
+        final cropH = srcH <= rows * 2 ? srcH : rows * 2;
+        final dCols = cropW.clamp(1, cols);
+        final dRows = (cropH / 2).round().clamp(1, rows);
+        return _FitRect(centerOffset(cols, dCols), centerOffset(rows, dRows),
+            dCols, dRows, centerOffset(srcW, cropW), centerOffset(srcH, cropH),
+            cropW, cropH);
+    }
+  }
+
+  // Single-entry cache of the cropped+encoded PNG for cover/none fits (contain
+  // and fill reuse the full-image [_png]). Keyed by the crop rect, invalidated
+  // when the decoded image changes.
+  Uint8List? _fitCropPng;
+  String? _fitCropKey;
+
+  /// PNG bytes for [f]'s crop: the full-image [_png] when the crop is the whole
+  /// source (fill/contain), else a cached encode of the cropped region.
+  Uint8List _fitPng(_FitRect f) {
+    if (f.cropX == 0 &&
+        f.cropY == 0 &&
+        f.cropW == _decoded.width &&
+        f.cropH == _decoded.height) {
+      return _png;
+    }
+    final key = '${f.cropX},${f.cropY},${f.cropW},${f.cropH}';
+    if (_fitCropKey == key && _fitCropPng != null) return _fitCropPng!;
+    final cropped = img.copyCrop(
+      _decoded,
+      x: f.cropX,
+      y: f.cropY,
+      width: f.cropW,
+      height: f.cropH,
+    );
+    final png = img.encodePng(cropped);
+    _fitCropPng = png;
+    _fitCropKey = key;
+    return png;
+  }
+
   /// Emits the image via the Kitty graphics protocol — terminal renders
   /// actual pixels, not half-blocks. Encodes the source as PNG (Kitty's
   /// best-supported format; format `f=100`), base64-wraps the payload,
@@ -800,10 +891,12 @@ class RenderImage extends RenderObject {
   /// image at the current cursor position. The renderer positions the
   /// cursor at the cell anchor before emitting these bytes.
   void _paintKitty(CellBuffer buffer, CellOffset offset, int cols, int rows) {
-    // Re-encode the decoded source as PNG. Cheap and correct — Kitty's
-    // RGBA path (`f=32`) has fewer well-tested decoders across
-    // terminals than PNG (`f=100`).
-    final png = img.encodePng(_decoded);
+    // Resolve the fit: contain letterboxes into a centered sub-rect, cover/none
+    // crop, fill takes the whole box — matching the glyph + browser surfaces.
+    final f = _resolveFit(_decoded.width, _decoded.height, cols, rows, _fit);
+    // Encode (cached across repaints) — Kitty's RGBA path (`f=32`) has fewer
+    // well-tested decoders across terminals than PNG (`f=100`).
+    final png = _fitPng(f);
     final b64 = base64.encode(png);
     const chunkSize = 4096;
     final out = StringBuffer();
@@ -816,7 +909,7 @@ class RenderImage extends RenderObject {
       if (first) {
         // First chunk carries the parameters; subsequent ones only
         // carry `m=` (continuation flag).
-        out.write('f=100,a=T,c=$cols,r=$rows,m=${isLast ? 0 : 1};');
+        out.write('f=100,a=T,c=${f.cols},r=${f.rows},m=${isLast ? 0 : 1};');
         first = false;
       } else {
         out.write('m=${isLast ? 0 : 1};');
@@ -825,8 +918,38 @@ class RenderImage extends RenderObject {
       out.write('\x1B\\');
       pos = end;
     }
-    _writeProtocolRegion(buffer, offset, out.toString(), cols, rows);
+    _writeProtocolRegion(buffer, CellOffset(offset.col + f.col, offset.row + f.row),
+        out.toString(), f.cols, f.rows);
   }
+
+  /// Emits the image for the browser "serve" surface. The PNG bytes go into the
+  /// buffer's inline-image table (keyed by content hash) via [CellBuffer.writeImage];
+  /// the cell grid only carries the lightweight id. The serve codec ships the
+  /// bytes once and the DOM client renders an `<img>` overlay — true pixels,
+  /// like a native terminal image protocol, without bloating the cell wire.
+  void _paintBrowser(CellBuffer buffer, CellOffset offset, int cols, int rows) {
+    // Reuse the cached PNG + id so a static image isn't re-encoded or re-hashed
+    // on every repaint (writeImageWithId skips the per-paint content hash).
+    buffer.writeImageWithId(
+      offset,
+      _pngId,
+      _png,
+      width: cols,
+      height: rows,
+      fit: _inlineFit(_fit),
+    );
+  }
+
+  /// Maps the widget-level [ImageFit] onto the wire-level [InlineImageFit] the
+  /// serve client turns into a CSS `object-fit`. Exhaustive, so adding an
+  /// [ImageFit] mode fails to compile here until it's mapped — keeping the two
+  /// enums in lockstep.
+  static InlineImageFit _inlineFit(ImageFit fit) => switch (fit) {
+    ImageFit.contain => InlineImageFit.contain,
+    ImageFit.cover => InlineImageFit.cover,
+    ImageFit.fill => InlineImageFit.fill,
+    ImageFit.none => InlineImageFit.none,
+  };
 
   /// Paints the image at quarter-block density: 2×2 sub-pixels per
   /// cell instead of half-block's 1×2. For each cell we sample the
@@ -1464,12 +1587,16 @@ class RenderImage extends RenderObject {
   /// Unlike Kitty there's no chunking — the entire payload rides in
   /// one OSC sequence terminated by BEL.
   void _paintIterm2(CellBuffer buffer, CellOffset offset, int cols, int rows) {
-    final png = img.encodePng(_decoded);
+    // Resolve the fit into a sub-rect + crop (see _paintKitty); the sub-rect is
+    // aspect-correct, so preserveAspectRatio=0 fills it without distortion.
+    final f = _resolveFit(_decoded.width, _decoded.height, cols, rows, _fit);
+    final png = _fitPng(f);
     final b64 = base64.encode(png);
     final out =
         '\x1B]1337;File=inline=1;size=${png.length};'
-        'width=$cols;height=$rows;preserveAspectRatio=0:$b64\x07';
-    _writeProtocolRegion(buffer, offset, out, cols, rows);
+        'width=${f.cols};height=${f.rows};preserveAspectRatio=0:$b64\x07';
+    _writeProtocolRegion(buffer, CellOffset(offset.col + f.col, offset.row + f.row),
+        out, f.cols, f.rows);
   }
 
   /// Hand off a fully-assembled protocol payload to the cell buffer,
@@ -1607,4 +1734,29 @@ class RenderImage extends RenderObject {
       (alpha * srcB + (1 - alpha) * bgRgb.b).round().clamp(0, 255),
     );
   }
+}
+
+/// Destination cell rectangle (relative to the image box) plus the source-pixel
+/// crop that a protocol paint path transmits, as resolved by
+/// [RenderImage._resolveFit] for a given [ImageFit].
+class _FitRect {
+  const _FitRect(
+    this.col,
+    this.row,
+    this.cols,
+    this.rows,
+    this.cropX,
+    this.cropY,
+    this.cropW,
+    this.cropH,
+  );
+
+  final int col;
+  final int row;
+  final int cols;
+  final int rows;
+  final int cropX;
+  final int cropY;
+  final int cropW;
+  final int cropH;
 }

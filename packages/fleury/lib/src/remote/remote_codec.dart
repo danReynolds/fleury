@@ -31,6 +31,7 @@ final class RemotePlan {
     required this.styleTable,
     required this.patches,
     this.scrollUpRows,
+    this.placements = const <ImagePlacement>[],
   });
 
   final CellSize size;
@@ -42,6 +43,35 @@ final class RemotePlan {
 
   /// Changed column-range patches.
   final List<RemoteRowPatch> patches;
+
+  /// Inline images placed this frame (browser surface). The grid cells under
+  /// each placement are blanked in [patches]; the client overlays an `<img>`
+  /// (bytes arrive separately, once per id). Derived fresh every frame, so an
+  /// image scrolled away or covered simply stops appearing here.
+  final List<ImagePlacement> placements;
+}
+
+/// Where an inline image sits: its content-hash [id] and the cell rectangle it
+/// spans. Bytes travel out-of-band (an `InlineImageFrame`), shipped once per id.
+final class ImagePlacement {
+  const ImagePlacement({
+    required this.id,
+    required this.col,
+    required this.row,
+    required this.cols,
+    required this.rows,
+    this.fit = InlineImageFit.contain,
+  });
+
+  final String id;
+  final int col;
+  final int row;
+  final int cols;
+  final int rows;
+
+  /// How the client's `<img>` fills this cell rectangle (CSS `object-fit`).
+  /// Carried per placement so a wrong-aspect box doesn't stretch the image.
+  final InlineImageFit fit;
 }
 
 /// One contiguous changed column range in a row.
@@ -345,6 +375,16 @@ Uint8List encodeRemotePlan(RemotePlan plan) {
         ..vstr(run.text);
     }
   }
+  w.varint(plan.placements.length);
+  for (final p in plan.placements) {
+    w
+      ..vstr(p.id)
+      ..varint(p.row)
+      ..varint(p.col)
+      ..varint(p.cols)
+      ..varint(p.rows)
+      ..varint(p.fit.index);
+  }
   return w.take();
 }
 
@@ -381,6 +421,29 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
       ),
     );
   }
+  final placementCount = r.varint();
+  final placements = <ImagePlacement>[];
+  for (var i = 0; i < placementCount; i++) {
+    final id = r.vstr();
+    final prow = r.varint();
+    final pcol = r.varint();
+    final pcols = r.varint();
+    final prows = r.varint();
+    final fitIndex = r.varint();
+    final fit = fitIndex < InlineImageFit.values.length
+        ? InlineImageFit.values[fitIndex]
+        : InlineImageFit.contain;
+    placements.add(
+      ImagePlacement(
+        id: id,
+        col: pcol,
+        row: prow,
+        cols: pcols,
+        rows: prows,
+        fit: fit,
+      ),
+    );
+  }
   r.expectEnd();
   return RemotePlan(
     size: CellSize(cols, rows),
@@ -388,6 +451,7 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
     scrollUpRows: scrollUp,
     styleTable: List.unmodifiable(styleTable),
     patches: List.unmodifiable(patches),
+    placements: List.unmodifiable(placements),
   );
 }
 
@@ -441,7 +505,29 @@ RemotePlan buildRemotePlan(
     scrollUpRows: scrollUpRows,
     styleTable: styleTable,
     patches: patches,
+    placements: _imagePlacements(next),
   );
+}
+
+/// The inline-image placements for [next], read straight from the buffer's
+/// per-placement list (one entry per `writeImage`, in paint order) — the full
+/// current set every frame, so a static image isn't dropped on an unchanged
+/// frame and the same bytes drawn twice keep independent geometry. Empty when
+/// no image was placed, so image-free frames pay nothing.
+List<ImagePlacement> _imagePlacements(CellBuffer next) {
+  final placements = next.imagePlacements;
+  if (placements.isEmpty) return const <ImagePlacement>[];
+  return [
+    for (final p in placements)
+      ImagePlacement(
+        id: p.id,
+        col: p.col,
+        row: p.row,
+        cols: p.cols,
+        rows: p.rows,
+        fit: p.fit,
+      ),
+  ];
 }
 
 List<RemoteRowPatch> _buildPatches(
@@ -474,7 +560,16 @@ List<RemoteRowPatch> _buildPatches(
           // continuation cells contribute nothing (the leading cell's
           // grapheme already spans them); empty/blank render as a space.
           if (cell.role != CellRole.continuation) {
-            buffer.write(cell.grapheme ?? ' ');
+            final g = cell.grapheme;
+            // Browser inline image: blank the grid here — the client overlays
+            // an <img> (placement comes from a full scan, not the diff, so a
+            // static image isn't dropped on unchanged frames). Covered cells
+            // already render as spaces; a terminal-escape anchor still writes
+            // its grapheme.
+            final isImage = cell.role == CellRole.protocolAnchor &&
+                g != null &&
+                next.images.containsKey(g);
+            buffer.write(isImage ? ' ' : (g ?? ' '));
           }
           col++;
         }
