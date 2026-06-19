@@ -90,7 +90,8 @@ enum FrameType {
   plan(0x12),
   semantics(0x13),
   inputEvent(0x14),
-  semanticAction(0x15);
+  semanticAction(0x15),
+  inlineImage(0x16);
 
   const FrameType(this.code);
   final int code;
@@ -188,6 +189,17 @@ final class SemanticActionFrame extends RemoteFrame {
   final SemanticAction action;
 }
 
+/// The bytes of one inline image (browser surface), keyed by content-hash
+/// [id]. App → peer, sent once before the first [PlanFrame] that places it; the
+/// client caches it by id and renders an `<img>` overlay wherever a plan's
+/// `placements` reference it. Decoupling bytes from placement keeps the image
+/// off the cell-grid wire and ships it a single time.
+final class InlineImageFrame extends RemoteFrame {
+  const InlineImageFrame(this.id, this.bytes);
+  final String id;
+  final Uint8List bytes;
+}
+
 /// Either side signals a clean shutdown. Empty payload.
 final class ByeFrame extends RemoteFrame {
   const ByeFrame();
@@ -210,6 +222,7 @@ Uint8List encodeFrame(RemoteFrame frame) {
       FrameType.semanticAction,
       encodeSemanticAction(f.id, f.action),
     ),
+    InlineImageFrame f => (FrameType.inlineImage, _encodeInlineImage(f)),
     ByeFrame() => (FrameType.bye, const <int>[]),
   };
   final out = BytesBuilder(copy: false);
@@ -227,6 +240,29 @@ String _encodeInit(InitFrame f) =>
     'image=${f.imageProtocol.name},'
     'tmux=${f.tmuxPassthrough ? 1 : 0},'
     'v=${f.protocolVersion}';
+
+/// Wire layout: [u16 id length][id utf-8][image bytes...].
+Uint8List _encodeInlineImage(InlineImageFrame f) {
+  final idBytes = utf8.encode(f.id);
+  final out = BytesBuilder(copy: false);
+  out.add((ByteData(2)..setUint16(0, idBytes.length)).buffer.asUint8List());
+  out.add(idBytes);
+  out.add(f.bytes);
+  return out.toBytes();
+}
+
+InlineImageFrame _decodeInlineImage(Uint8List payload) {
+  if (payload.length < 2) {
+    throw RemoteProtocolException('INLINE_IMAGE frame: truncated header.');
+  }
+  final idLen = ByteData.sublistView(payload, 0, 2).getUint16(0);
+  if (2 + idLen > payload.length) {
+    throw RemoteProtocolException('INLINE_IMAGE frame: id overruns payload.');
+  }
+  final id = utf8.decode(payload.sublist(2, 2 + idLen));
+  final bytes = Uint8List.fromList(payload.sublist(2 + idLen));
+  return InlineImageFrame(id, bytes);
+}
 
 /// Streaming frame decoder. Feed bytes as they arrive from the
 /// transport; pull out complete frames with [drain]. The decoder
@@ -319,6 +355,8 @@ final class FrameDecoder {
         } on RemoteCodecException catch (e) {
           throw RemoteProtocolException('SEMANTIC_ACTION frame: ${e.message}.');
         }
+      case FrameType.inlineImage:
+        return _decodeInlineImage(payload);
       case FrameType.bye:
         return const ByeFrame();
     }

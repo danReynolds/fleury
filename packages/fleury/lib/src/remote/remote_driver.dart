@@ -52,6 +52,10 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
   StreamSubscription<RemoteFrame>? _frameSub;
   CellSize _size = const CellSize(80, 24);
   TerminalCapabilities _capabilities = TerminalCapabilities.defaultCapabilities;
+
+  // Content-hash ids of inline images already shipped to this peer, so each
+  // image's bytes travel only once. Bounded in [presentFrame].
+  final Set<String> _sentImageIds = <String>{};
   bool _active = false;
   bool _handshakeReceived = false;
   int _protocolVersion = 1;
@@ -133,9 +137,23 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
     FramePresentationPlan plan,
   ) {
     if (!_active) return;
-    _transport.send(
-      PlanFrame(buildRemotePlan(prev, next, fullRepaint: plan.fullRepaint)),
-    );
+    final remotePlan = buildRemotePlan(prev, next, fullRepaint: plan.fullRepaint);
+    // Ship each placed image's bytes once (keyed by content hash) before the
+    // plan that references it; the client caches by id and overlays an <img>.
+    if (remotePlan.placements.isNotEmpty) {
+      // Bound the dedup set so a session cycling through many distinct images
+      // can't grow it without limit; clearing just re-ships what's on screen.
+      if (_sentImageIds.length > 512) _sentImageIds.clear();
+      for (final placement in remotePlan.placements) {
+        if (_sentImageIds.add(placement.id)) {
+          final image = next.images[placement.id];
+          if (image != null) {
+            _transport.send(InlineImageFrame(placement.id, image.bytes));
+          }
+        }
+      }
+    }
+    _transport.send(PlanFrame(remotePlan));
   }
 
   /// Diffs the semantic [snapshot] against the last one sent to this peer and
@@ -176,6 +194,7 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
       case OutputFrame _:
       case PlanFrame _:
       case SemanticsFrame _:
+      case InlineImageFrame _:
         // App→peer render frames; an app never receives them. Ignore so a
         // malformed peer can't crash the session.
         break;

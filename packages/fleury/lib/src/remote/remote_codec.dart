@@ -31,6 +31,7 @@ final class RemotePlan {
     required this.styleTable,
     required this.patches,
     this.scrollUpRows,
+    this.placements = const <ImagePlacement>[],
   });
 
   final CellSize size;
@@ -42,6 +43,30 @@ final class RemotePlan {
 
   /// Changed column-range patches.
   final List<RemoteRowPatch> patches;
+
+  /// Inline images placed this frame (browser surface). The grid cells under
+  /// each placement are blanked in [patches]; the client overlays an `<img>`
+  /// (bytes arrive separately, once per id). Derived fresh every frame, so an
+  /// image scrolled away or covered simply stops appearing here.
+  final List<ImagePlacement> placements;
+}
+
+/// Where an inline image sits: its content-hash [id] and the cell rectangle it
+/// spans. Bytes travel out-of-band (an `InlineImageFrame`), shipped once per id.
+final class ImagePlacement {
+  const ImagePlacement({
+    required this.id,
+    required this.col,
+    required this.row,
+    required this.cols,
+    required this.rows,
+  });
+
+  final String id;
+  final int col;
+  final int row;
+  final int cols;
+  final int rows;
 }
 
 /// One contiguous changed column range in a row.
@@ -345,6 +370,15 @@ Uint8List encodeRemotePlan(RemotePlan plan) {
         ..vstr(run.text);
     }
   }
+  w.varint(plan.placements.length);
+  for (final p in plan.placements) {
+    w
+      ..vstr(p.id)
+      ..varint(p.row)
+      ..varint(p.col)
+      ..varint(p.cols)
+      ..varint(p.rows);
+  }
   return w.take();
 }
 
@@ -381,6 +415,18 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
       ),
     );
   }
+  final placementCount = r.varint();
+  final placements = <ImagePlacement>[];
+  for (var i = 0; i < placementCount; i++) {
+    final id = r.vstr();
+    final prow = r.varint();
+    final pcol = r.varint();
+    final pcols = r.varint();
+    final prows = r.varint();
+    placements.add(
+      ImagePlacement(id: id, col: pcol, row: prow, cols: pcols, rows: prows),
+    );
+  }
   r.expectEnd();
   return RemotePlan(
     size: CellSize(cols, rows),
@@ -388,6 +434,7 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
     scrollUpRows: scrollUp,
     styleTable: List.unmodifiable(styleTable),
     patches: List.unmodifiable(patches),
+    placements: List.unmodifiable(placements),
   );
 }
 
@@ -433,7 +480,8 @@ RemotePlan buildRemotePlan(
     return source < rows ? prev.atColRow(col, source) : const Cell.empty();
   }
 
-  final patches = _buildPatches(next, prevRef, full, styleIndex);
+  final placements = <ImagePlacement>[];
+  final patches = _buildPatches(next, prevRef, full, styleIndex, placements);
 
   return RemotePlan(
     size: next.size,
@@ -441,6 +489,7 @@ RemotePlan buildRemotePlan(
     scrollUpRows: scrollUpRows,
     styleTable: styleTable,
     patches: patches,
+    placements: placements,
   );
 }
 
@@ -449,6 +498,7 @@ List<RemoteRowPatch> _buildPatches(
   Cell Function(int col, int row) prevRef,
   bool full,
   int Function(CellStyle) styleIndex,
+  List<ImagePlacement> placements,
 ) {
   final cols = next.size.cols;
   final rows = next.size.rows;
@@ -474,7 +524,25 @@ List<RemoteRowPatch> _buildPatches(
           // continuation cells contribute nothing (the leading cell's
           // grapheme already spans them); empty/blank render as a space.
           if (cell.role != CellRole.continuation) {
-            buffer.write(cell.grapheme ?? ' ');
+            final g = cell.grapheme;
+            final image = (cell.role == CellRole.protocolAnchor && g != null)
+                ? next.images[g]
+                : null;
+            if (image != null) {
+              // Browser inline image: blank the grid here (the client overlays
+              // an <img> at this placement) and record where it goes. The
+              // covered cells already render as spaces.
+              buffer.write(' ');
+              placements.add(ImagePlacement(
+                id: g!,
+                col: col,
+                row: row,
+                cols: image.cols,
+                rows: image.rows,
+              ));
+            } else {
+              buffer.write(g ?? ' ');
+            }
           }
           col++;
         }
