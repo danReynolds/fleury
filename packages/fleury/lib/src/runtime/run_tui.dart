@@ -189,7 +189,16 @@ Future<void> runTui(
       : null;
   final AnsiSink sink = byteTelemetry ?? driverSink;
   // Downsample colors to whatever the terminal actually supports.
-  final renderer = AnsiRenderer(colorMode: usedDriver.capabilities.colorMode);
+  // `FLEURY_SYNC_OUTPUT=0` drops the DEC-2026 synchronized-update wrapper around
+  // each frame. The wrapper is correct per spec (and verified by the renderer's
+  // own equivalence tests), but a terminal whose 2026 implementation drops or
+  // mis-applies updates under rapid frames (e.g. fast scrolling) can desync from
+  // the renderer's model and show persistent stale cells; this is the escape
+  // hatch to confirm/avoid that without touching the diff.
+  final renderer = AnsiRenderer(
+    colorMode: usedDriver.capabilities.colorMode,
+    synchronizedOutput: Platform.environment['FLEURY_SYNC_OUTPUT'] != '0',
+  );
   // When the driver wants structured presentation plans (the serve path,
   // rendering through the fleury web surface instead of a terminal
   // emulator), the render loop hands it plans instead of ANSI bytes. Null
