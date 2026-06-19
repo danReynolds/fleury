@@ -337,6 +337,35 @@ void main() {
     });
   });
 
+  group('renderDiff — ambiguous-width glyphs', () {
+    test('repositions absolutely after a box-drawing (ambiguous) glyph', () {
+      // U+2500 (─) and the other box / bullet / arrow glyphs are East-Asian
+      // "Ambiguous": a terminal or font that renders them two columns wide
+      // advances the cursor further than fleury's one-column model, so a
+      // following relative move desyncs. The renderer must reposition the next
+      // cell absolutely so it stays pinned to its column on any terminal.
+      final prev = CellBuffer(const CellSize(4, 1));
+      final next = CellBuffer(const CellSize(4, 1))
+        ..writeText(const CellOffset(0, 0), '─x');
+      final sink = StringAnsiSink();
+      const AnsiRenderer(synchronizedOutput: false).renderDiff(prev, next, sink);
+
+      expect(sink.output, contains('─\x1B[1;2Hx'),
+          reason: 'an absolute CUP separates the ambiguous glyph from the '
+              'next cell');
+    });
+
+    test('a pure-ASCII run is NOT broken up (stays compact)', () {
+      final prev = CellBuffer(const CellSize(6, 1));
+      final next = CellBuffer(const CellSize(6, 1))
+        ..writeText(const CellOffset(0, 0), 'abcde');
+      final sink = StringAnsiSink();
+      const AnsiRenderer(synchronizedOutput: false).renderDiff(prev, next, sink);
+      // No interior cursor moves — ASCII width is unambiguous.
+      expect(sink.output, '\x1B[Habcde');
+    });
+  });
+
   group('renderDiff — styles', () {
     test('emits SGR change before the grapheme of a styled cell', () {
       final prev = CellBuffer(const CellSize(3, 1));

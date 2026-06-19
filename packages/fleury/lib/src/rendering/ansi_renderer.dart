@@ -302,14 +302,29 @@ final class AnsiRenderer {
           next.atColRow(col + 1, row).role == CellRole.continuation;
       cursorCol = col + (isWide ? 2 : 1);
 
-      // A write that lands on (or past) the last column leaves the cursor in a
-      // terminal-defined state: terminals without the `xenl`/pending-wrap quirk
-      // (e.g. Warp) wrap to the next line immediately, so the cursor is no
-      // longer where we think. Invalidate the tracked position so the next
-      // dirty cell repositions absolutely (CUP) instead of with a `\r\n` or
-      // relative move that would over-advance and cascade-corrupt the rows
-      // below. Independent of the terminal's autowrap mode.
-      if (cursorCol != null && cursorCol! >= size.cols) {
+      // Invalidate the tracked cursor — forcing the next dirty cell to
+      // reposition with an absolute CUP — whenever the cursor's resting column
+      // is terminal-defined rather than known:
+      //
+      //  * A write to the last column: terminals without the `xenl`/pending-wrap
+      //    quirk (e.g. Warp) wrap to the next line immediately, so a following
+      //    `\r\n`/relative move would over-advance and cascade-corrupt the rows
+      //    below.
+      //  * A grapheme whose DISPLAY WIDTH the terminal may disagree on. Every
+      //    non-ASCII glyph fleury emits for box drawing / bullets / arrows is
+      //    East-Asian "Ambiguous"; a terminal (or font) that renders those two
+      //    columns wide advances the cursor further than our one-column model,
+      //    so the row desyncs. An absolute reposition for each following cell
+      //    overwrites the overflow and pins every cell to its column regardless
+      //    of how the terminal sizes ambiguous-width characters. ASCII runs (the
+      //    common case — names, values) are unaffected and stay compact.
+      final isAscii = grapheme.length == 1 && grapheme.codeUnitAt(0) < 0x80;
+      // Ambiguous-width: a non-ASCII glyph fleury lays out as one column and
+      // that isn't a known wide (CJK) char — a terminal/font may still render
+      // it two columns wide. Wide chars (`isWide`) are unambiguous (both sides
+      // agree on 2) and ASCII is unambiguous (1), so neither needs this.
+      final ambiguousWidth = !isWide && !isAscii;
+      if ((cursorCol != null && cursorCol! >= size.cols) || ambiguousWidth) {
         cursorRow = null;
         cursorCol = null;
       }
