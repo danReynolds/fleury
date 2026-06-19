@@ -28,6 +28,25 @@ void main() {
           reason: 'image region is blanked; bytes travel out of band');
     });
 
+    test('two distinct images on one frame yield two placements', () {
+      final next = CellBuffer(const CellSize(12, 4))
+        ..writeImage(const CellOffset(0, 0),
+            Uint8List.fromList([1, 1, 1, 1]), width: 2, height: 2)
+        ..writeImage(const CellOffset(6, 0),
+            Uint8List.fromList([2, 2, 2, 2]), width: 3, height: 2);
+
+      final plan =
+          buildRemotePlan(CellBuffer(const CellSize(12, 4)), next, fullRepaint: true);
+
+      expect(plan.placements.length, 2);
+      expect(plan.placements.map((p) => p.id).toSet().length, 2,
+          reason: 'distinct bytes → distinct ids');
+      // Round-trips both.
+      final decoded = decodeRemotePlan(encodeRemotePlan(plan));
+      expect(decoded.placements.map((p) => '${p.col}:${p.cols}').toSet(),
+          {'0:2', '6:3'});
+    });
+
     test('a static (unchanged) image still emits its placement', () {
       final bytes = Uint8List.fromList([5, 6, 7, 8]);
       final prev = CellBuffer(const CellSize(6, 3))

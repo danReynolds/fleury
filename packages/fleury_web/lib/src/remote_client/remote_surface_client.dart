@@ -51,6 +51,17 @@ final class RemoteSurfaceClient {
   final Map<String, String> _imageBlobUrls = <String, String>{};
   final Map<String, web.HTMLImageElement> _imageEls =
       <String, web.HTMLImageElement>{};
+  // Last geometry applied to each placed <img> ('left|top|w|h|fit'), so a
+  // static image isn't re-styled every frame (avoids needless layout work).
+  final Map<String, String> _imageRects = <String, String>{};
+
+  // Cap on cached blob URLs. The host ships each image once and re-ships an
+  // on-screen image after its own 512-id dedup set clears, so it is safe to
+  // evict only ids that are NOT currently placed once the cache grows past
+  // this bound — the working set (on-screen images) is never dropped, and a
+  // re-shown image is re-shipped. Matches the host's dedup bound so a normal
+  // session (a handful of images) never evicts.
+  static const int _maxCachedImages = 512;
 
   /// Connects and begins rendering. Resolves once the socket is open and
   /// the INIT handshake has been sent.
@@ -156,22 +167,53 @@ final class RemoteSurfaceClient {
       if (el == null) {
         el = web.document.createElement('img') as web.HTMLImageElement;
         el.style.setProperty('position', 'absolute');
+        // A corrupt / undecodable payload would otherwise show the browser's
+        // broken-image glyph; hide it instead so a bad frame degrades to blank.
+        el.onerror = (web.Event _) {
+          _imageEls[p.id]?.style.setProperty('visibility', 'hidden');
+        }.toJS;
         el.src = url;
         overlay.appendChild(el);
         _imageEls[p.id] = el;
       }
-      el.style
-        ..setProperty('left', '${p.col * cw}px')
-        ..setProperty('top', '${p.row * ch}px')
-        ..setProperty('width', '${p.cols * cw}px')
-        ..setProperty('height', '${p.rows * ch}px')
-        // InlineImageFit names ARE the CSS object-fit keywords (contain/cover/
-        // fill/none), so the source `fit` maps straight through. Without this
-        // the default `fill` would stretch a wrong-aspect cell box.
-        ..setProperty('object-fit', p.fit.name);
+      // Re-style only when the geometry actually changed: a static image holds
+      // its rect across frames, so this skips needless layout on every frame.
+      final rect = '${p.col * cw}|${p.row * ch}|${p.cols * cw}|'
+          '${p.rows * ch}|${p.fit.name}';
+      if (_imageRects[p.id] != rect) {
+        _imageRects[p.id] = rect;
+        el.style
+          ..setProperty('left', '${p.col * cw}px')
+          ..setProperty('top', '${p.row * ch}px')
+          ..setProperty('width', '${p.cols * cw}px')
+          ..setProperty('height', '${p.rows * ch}px')
+          // InlineImageFit names ARE the CSS object-fit keywords (contain/cover/
+          // fill/none), so the source `fit` maps straight through. Without this
+          // the default `fill` would stretch a wrong-aspect cell box.
+          ..setProperty('object-fit', p.fit.name);
+      }
     }
     for (final id in _imageEls.keys.toList()) {
-      if (!seen.contains(id)) _imageEls.remove(id)?.remove();
+      if (!seen.contains(id)) {
+        _imageEls.remove(id)?.remove();
+        _imageRects.remove(id);
+      }
+    }
+    _evictStaleImages(seen);
+  }
+
+  /// Bounds the blob-URL cache. Bytes for an image off-screen are kept (so it
+  /// reappears instantly on scroll-back without a re-ship) until the cache
+  /// exceeds [_maxCachedImages]; only ids not in [placed] are then revoked, so
+  /// the on-screen working set is never dropped. A normal session stays well
+  /// under the cap and never evicts.
+  void _evictStaleImages(Set<String> placed) {
+    if (_imageBlobUrls.length <= _maxCachedImages) return;
+    for (final id in _imageBlobUrls.keys.toList()) {
+      if (_imageBlobUrls.length <= _maxCachedImages) break;
+      if (placed.contains(id)) continue;
+      final url = _imageBlobUrls.remove(id);
+      if (url != null) web.URL.revokeObjectURL(url);
     }
   }
 
@@ -365,6 +407,7 @@ final class RemoteSurfaceClient {
     }
     _imageBlobUrls.clear();
     _imageEls.clear();
+    _imageRects.clear();
     _imageOverlay?.remove();
     _imageOverlay = null;
     _showDisconnected(message);
