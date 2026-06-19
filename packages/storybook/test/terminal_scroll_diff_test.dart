@@ -7,10 +7,14 @@
 // renderer's model would then agree with the terminal's wrong state and never
 // recover (persistent garble).
 //
-// Written to chase a scroll-garble report in Warp: it proves the framework's
-// diff is spec-correct across that exact scenario, localizing the report to the
-// terminal's own rendering of (correct) ANSI rather than the diff — see the
-// FLEURY_SYNC_OUTPUT escape hatch in run_tui.dart.
+// Written to chase a scroll-garble report in Warp. It proves the framework's
+// diff is spec-correct across that exact scenario (down to the bottom and back,
+// with coalesced multi-row jumps) — which is what localized the report to a
+// terminal-state assumption rather than the diff: the renderer positions with
+// `\r\n` and relative moves that assume writing the last column does NOT wrap,
+// but the enter sequence wasn't disabling autowrap (DECAWM). Fixed by emitting
+// `\x1B[?7l` on entry (terminal_sequences.dart). This model terminal assumes
+// no-wrap, matching the fixed behavior — so it stays a guard for the diff.
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
@@ -105,7 +109,7 @@ void main() {
   testWidgets('widget-list scroll leaves no stale cells on the terminal',
       (tester) async {
     tester.pumpWidget(StorybookApp());
-    const size = CellSize(100, 24);
+    const size = CellSize(72, 48);
 
     final loop = TuiFrameLoop(renderDamage: tester.owner.renderDamageTracker);
     final renderer = AnsiRenderer(colorMode: ColorMode.truecolor);
@@ -141,16 +145,20 @@ void main() {
     }
 
     present('initial');
-    // Scroll the whole list down past the visible window…
-    for (var i = 0; i < 60; i++) {
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-      present('arrowDown #$i');
+    // Fast scrolling coalesces several key presses into one rendered frame, so
+    // the diff spans a multi-row jump. Drive batches of keys per frame, all the
+    // way to the bottom and back — each rendered frame must stay in sync.
+    for (var batch = 0; batch < 26; batch++) {
+      for (var k = 0; k < 5; k++) {
+        tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      }
+      present('down batch $batch');
     }
-    // …then back up. Either direction must leave the terminal exactly in sync
-    // with the rendered buffer — no stale cells from a clipped or skipped diff.
-    for (var i = 0; i < 60; i++) {
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
-      present('arrowUp #$i');
+    for (var batch = 0; batch < 26; batch++) {
+      for (var k = 0; k < 5; k++) {
+        tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+      }
+      present('up batch $batch');
     }
   });
 }

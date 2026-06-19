@@ -4,6 +4,14 @@ import 'terminal_driver.dart';
 String buildTerminalEnterSequences(TerminalMode mode) {
   final buf = StringBuffer();
   if (mode.alternateScreen) buf.write('\x1B[?1049h');
+  // Disable autowrap (DECAWM) while we own the screen. The diff renderer paints
+  // full-width rows and positions the cursor with `\r\n`/relative moves that
+  // assume writing the last column does NOT advance the cursor. With autowrap
+  // left on, a row whose content reaches the last column wraps the cursor an
+  // extra line, and the following `\r\n` over-advances — desyncing every row
+  // below it (persistent garble, most visible once long content scrolls into
+  // view). Restored on exit.
+  if (mode.alternateScreen) buf.write('\x1B[?7l');
   if (mode.hideCursor) buf.write('\x1B[?25l');
   if (mode.bracketedPaste) buf.write('\x1B[?2004h');
   // Push the Kitty "disambiguate escape codes" flag (1). Unknown terminals
@@ -35,6 +43,9 @@ String buildTerminalExitSequences(TerminalMode mode) {
   if (mode.bracketedPaste) buf.write('\x1B[?2004l');
   if (mode.hideCursor) buf.write('\x1B[?25h');
   if (mode.resetStyleOnExit) buf.write('\x1B[0m');
+  // Restore autowrap (DECAWM) before leaving the alt screen, so the shell we
+  // hand back behaves normally.
+  if (mode.alternateScreen) buf.write('\x1B[?7h');
   if (mode.alternateScreen) buf.write('\x1B[?1049l');
   return buf.toString();
 }
