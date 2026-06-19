@@ -54,6 +54,10 @@ final class RemoteSurfaceClient {
   final Map<String, web.HTMLImageElement> _imageEls =
       <String, web.HTMLImageElement>{};
   final Map<String, String> _imageRects = <String, String>{};
+  // The most recent frame's placements, re-applied on resize so images track
+  // the new cell pitch even if no PlanFrame happens to follow (a paused or
+  // static served screen); the next PlanFrame supersedes them.
+  List<ImagePlacement> _lastPlacements = const <ImagePlacement>[];
 
   // Cap on cached blob URLs. The host re-ships an image whenever it (re)appears
   // on screen (it tracks only the previous frame's placed ids), so the client
@@ -158,6 +162,7 @@ final class RemoteSurfaceClient {
   /// one element, repositioned). New ones are created, placed ones positioned at
   /// their cell rect, and elements no longer placed are dropped.
   void _applyPlacements(List<ImagePlacement> placements) {
+    _lastPlacements = placements;
     final overlay = _imageOverlay;
     final box = _metrics?.measure();
     if (overlay == null || box == null) return;
@@ -298,6 +303,10 @@ final class RemoteSurfaceClient {
         _size = next;
         _surface?.resize(next, metrics: _cellBox());
         _mirror = CellBuffer(next);
+        // Reposition the overlay images to the new cell pitch now, so they stay
+        // pinned to their cells even if the host doesn't send a fresh plan; the
+        // next PlanFrame (the usual case) supersedes this with the real layout.
+        _applyPlacements(_lastPlacements);
         _send(encodeFrame(ResizeFrame(next)));
       }).toJS,
     );
