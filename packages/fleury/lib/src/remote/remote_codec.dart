@@ -505,36 +505,29 @@ RemotePlan buildRemotePlan(
     scrollUpRows: scrollUpRows,
     styleTable: styleTable,
     patches: patches,
-    placements: _scanImagePlacements(next),
+    placements: _imagePlacements(next),
   );
 }
 
-/// The full set of inline-image placements in [next] — every image-anchor cell,
-/// not just the changed ones — so the client's `<img>` overlay reflects the
-/// current layout each frame (a static image isn't dropped when its cells don't
-/// change; one covered/scrolled away simply stops being scanned). Gated on the
-/// image table being non-empty, so image-free frames pay nothing.
-List<ImagePlacement> _scanImagePlacements(CellBuffer next) {
-  if (next.images.isEmpty) return const <ImagePlacement>[];
-  final placements = <ImagePlacement>[];
-  for (var row = 0; row < next.size.rows; row++) {
-    for (var col = 0; col < next.size.cols; col++) {
-      final cell = next.atColRow(col, row);
-      if (cell.role != CellRole.protocolAnchor) continue;
-      final image = next.images[cell.grapheme];
-      if (image != null) {
-        placements.add(ImagePlacement(
-          id: image.id,
-          col: col,
-          row: row,
-          cols: image.cols,
-          rows: image.rows,
-          fit: image.fit,
-        ));
-      }
-    }
-  }
-  return placements;
+/// The inline-image placements for [next], read straight from the buffer's
+/// per-placement list (one entry per `writeImage`, in paint order) — the full
+/// current set every frame, so a static image isn't dropped on an unchanged
+/// frame and the same bytes drawn twice keep independent geometry. Empty when
+/// no image was placed, so image-free frames pay nothing.
+List<ImagePlacement> _imagePlacements(CellBuffer next) {
+  final placements = next.imagePlacements;
+  if (placements.isEmpty) return const <ImagePlacement>[];
+  return [
+    for (final p in placements)
+      ImagePlacement(
+        id: p.id,
+        col: p.col,
+        row: p.row,
+        cols: p.cols,
+        rows: p.rows,
+        fit: p.fit,
+      ),
+  ];
 }
 
 List<RemoteRowPatch> _buildPatches(

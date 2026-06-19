@@ -893,10 +893,11 @@ void main() {
 
       // Bytes live in the off-grid image table, not in a cell escape.
       expect(buf.images.length, 1, reason: 'one inline image registered');
-      final image = buf.images.values.single;
-      expect(image.cols, 4);
-      expect(image.rows, 3);
-      expect(image.fit, InlineImageFit.cover,
+      // Geometry + fit ride on the placement.
+      final placement = buf.imagePlacements.single;
+      expect(placement.cols, 4);
+      expect(placement.rows, 3);
+      expect(placement.fit, InlineImageFit.cover,
           reason: 'widget ImageFit.cover maps to the wire fit');
 
       // The anchor carries only the id (a key in the image table), and the
@@ -920,7 +921,7 @@ void main() {
         ),
       );
       final buf = tester.render(size: const CellSize(4, 2));
-      expect(buf.images.values.single.fit, InlineImageFit.contain);
+      expect(buf.imagePlacements.single.fit, InlineImageFit.contain);
     });
   });
 

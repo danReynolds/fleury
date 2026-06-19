@@ -14,9 +14,13 @@ void main() {
 
       expect(buf.images.length, 1);
       final image = buf.images.values.single;
-      expect(image.cols, 3);
-      expect(image.rows, 2);
       expect(image.bytes, bytes, reason: 'bytes preserved verbatim');
+
+      // Geometry lives on the placement, not the (dedup'd) image bytes.
+      final placement = buf.imagePlacements.single;
+      expect(placement.id, image.id);
+      expect([placement.col, placement.row, placement.cols, placement.rows],
+          [1, 1, 3, 2]);
 
       // The anchor carries only the id; covered cells fill the 3×2 region.
       final anchor = buf.atColRow(1, 1);
@@ -34,14 +38,34 @@ void main() {
       final buf = CellBuffer(const CellSize(8, 2));
       buf.writeImage(const CellOffset(0, 0),
           Uint8List.fromList([1, 2, 3]), width: 2, height: 1);
-      expect(buf.images.values.single.fit, InlineImageFit.contain,
+      expect(buf.imagePlacements.single.fit, InlineImageFit.contain,
           reason: 'default preserves aspect ratio');
 
       buf.clear();
       buf.writeImage(const CellOffset(0, 0),
           Uint8List.fromList([4, 5, 6]), width: 2, height: 1,
           fit: InlineImageFit.cover);
-      expect(buf.images.values.single.fit, InlineImageFit.cover);
+      expect(buf.imagePlacements.single.fit, InlineImageFit.cover);
+    });
+
+    test('same bytes drawn twice: one image, two placements with own geometry',
+        () {
+      final buf = CellBuffer(const CellSize(12, 4));
+      final bytes = Uint8List.fromList([7, 7, 7, 7]);
+      buf.writeImage(const CellOffset(0, 0), bytes, width: 2, height: 2);
+      buf.writeImage(const CellOffset(6, 1), bytes,
+          width: 4, height: 1, fit: InlineImageFit.cover);
+
+      expect(buf.images.length, 1, reason: 'bytes dedup to one entry');
+      expect(buf.imagePlacements.length, 2, reason: 'two distinct rectangles');
+      final p0 = buf.imagePlacements[0];
+      final p1 = buf.imagePlacements[1];
+      expect([p0.col, p0.row, p0.cols, p0.rows, p0.fit.name],
+          [0, 0, 2, 2, 'contain']);
+      expect([p1.col, p1.row, p1.cols, p1.rows, p1.fit.name],
+          [6, 1, 4, 1, 'cover'],
+          reason: 'the second placement keeps its own size/fit, not the first');
+      expect(p0.id, p1.id, reason: 'same content id');
     });
 
     test('identical bytes hash to one id (ship-once dedup)', () {

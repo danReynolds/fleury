@@ -53,9 +53,14 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
   CellSize _size = const CellSize(80, 24);
   TerminalCapabilities _capabilities = TerminalCapabilities.defaultCapabilities;
 
-  // Content-hash ids of inline images already shipped to this peer, so each
-  // image's bytes travel only once. Bounded in [presentFrame].
-  final Set<String> _sentImageIds = <String>{};
+  // Content-hash ids of inline images placed on the PREVIOUS frame. An image's
+  // bytes are (re)shipped whenever it appears or re-appears — i.e. its id is
+  // placed this frame but was not last frame — never per-session "once ever".
+  // This keeps the host's notion of what the peer has bounded by the on-screen
+  // set and consistent with the client, which freely evicts off-screen blobs:
+  // a scrolled-back image is always re-sent. (A continuously on-screen image
+  // ships once and is not re-sent while it stays placed.)
+  Set<String> _prevPlacedImageIds = <String>{};
   bool _active = false;
   bool _handshakeReceived = false;
   int _protocolVersion = 1;
@@ -138,21 +143,21 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
   ) {
     if (!_active) return;
     final remotePlan = buildRemotePlan(prev, next, fullRepaint: plan.fullRepaint);
-    // Ship each placed image's bytes once (keyed by content hash) before the
-    // plan that references it; the client caches by id and overlays an <img>.
-    if (remotePlan.placements.isNotEmpty) {
-      // Bound the dedup set so a session cycling through many distinct images
-      // can't grow it without limit; clearing just re-ships what's on screen.
-      if (_sentImageIds.length > 512) _sentImageIds.clear();
-      for (final placement in remotePlan.placements) {
-        if (_sentImageIds.add(placement.id)) {
-          final image = next.images[placement.id];
-          if (image != null) {
-            _transport.send(InlineImageFrame(placement.id, image.bytes));
-          }
-        }
+    // Ship the bytes for each image that (re)appears this frame — placed now but
+    // not on the previous frame — before the plan that references it. An image
+    // that stays on screen ships once; one that scrolls away and back is re-sent
+    // (the client may have evicted its blob in the meantime). Each distinct id
+    // ships at most once per frame even if placed several times.
+    final placedIds = <String>{};
+    for (final placement in remotePlan.placements) {
+      if (!placedIds.add(placement.id)) continue; // already sent this frame
+      if (_prevPlacedImageIds.contains(placement.id)) continue; // peer has it
+      final image = next.images[placement.id];
+      if (image != null) {
+        _transport.send(InlineImageFrame(placement.id, image.bytes));
       }
     }
+    _prevPlacedImageIds = placedIds;
     _transport.send(PlanFrame(remotePlan));
   }
 

@@ -217,7 +217,25 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
       if (detected != null) _imageProtocolOverride = detected;
     } on Object {
       // Probe failed (no terminal reply, write error, …): keep the fallback.
+    } finally {
+      _replayPostProbeInput();
     }
+  }
+
+  /// Replays real keystrokes that arrived during the probe window. Everything
+  /// the terminal captured after its Device-Attributes reply is user input (the
+  /// reply is the last thing the terminal sends in response), so feed that tail
+  /// to the parser instead of dropping it. Bytes at/before the reply are the
+  /// terminal's own response and stay consumed; if no DA reply landed (timeout)
+  /// nothing is replayed, since the buffer may hold a partial response.
+  void _replayPostProbeInput() {
+    final buf = _probeBuffer;
+    _probeBuffer = <int>[];
+    if (buf.isEmpty) return;
+    final tailStart = _daReplyEnd(buf);
+    if (tailStart < 0 || tailStart >= buf.length) return;
+    _parser.feed(buf.sublist(tailStart), _sink);
+    _scheduleFlush();
   }
 
   /// Builds the mode-entry escape sequence (alt screen, hide cursor,
@@ -419,16 +437,27 @@ class _DriverProbeTransport implements TerminalProbeTransport {
     }
   }
 
-  /// True once the buffer holds a Device Attributes reply (`ESC [ … c`) — the
-  /// terminal has processed our request, so any graphics reply is already in.
-  static bool _looksComplete(List<int> buf) {
-    for (var i = 0; i + 1 < buf.length; i++) {
-      if (buf[i] != 0x1B || buf[i + 1] != 0x5B) continue; // ESC [
-      for (var j = i + 2; j < buf.length; j++) {
-        if (buf[j] == 0x63) return true; // 'c' — DA reply terminator
-        if (buf[j] == 0x1B) break; // next sequence; keep scanning
-      }
+  /// True once the buffer holds a Device Attributes reply — the terminal has
+  /// processed our request, so any graphics reply is already in.
+  static bool _looksComplete(List<int> buf) => _daReplyEnd(buf) >= 0;
+}
+
+/// Index just past a Device-Attributes reply's `c` terminator in [buf], or -1
+/// if none is present yet. A DA reply is `ESC [` then CSI parameter/intermediate
+/// bytes (0x20–0x3F) then the final byte `c` (0x63). Requiring valid CSI bytes
+/// before the `c` stops a stray 0x63 in unrelated content (or a user keystroke
+/// that leaked in) from being mistaken for the terminator. Used both to end the
+/// probe wait and to find where real post-probe input begins.
+int _daReplyEnd(List<int> buf) {
+  for (var i = 0; i + 1 < buf.length; i++) {
+    if (buf[i] != 0x1B || buf[i + 1] != 0x5B) continue; // ESC [
+    var j = i + 2;
+    while (j < buf.length && buf[j] >= 0x20 && buf[j] <= 0x3F) {
+      j++; // CSI parameter / intermediate bytes
     }
-    return false;
+    if (j >= buf.length) return -1; // final byte not arrived yet
+    if (buf[j] == 0x63) return j + 1; // 'c' final byte → Device Attributes
+    i = j; // some other CSI final byte — keep scanning past it
   }
+  return -1;
 }

@@ -45,22 +45,21 @@ final class RemoteSurfaceClient {
   CellBuffer _mirror = CellBuffer(const CellSize(80, 24));
 
   // Inline-image overlay: a sibling div above the grid holding one <img> per
-  // placed image. Bytes are cached by content-hash id as blob URLs; the <img>
-  // elements are reconciled against each frame's placements.
+  // placement. Bytes are cached by content-hash id as blob URLs (_imageBlobUrls,
+  // keyed by id — so the same image at several spots shares one decode); the
+  // <img> elements and their last-applied geometry are keyed by 'id#occurrence'
+  // so repeated placements of one image each get a distinct element.
   web.HTMLElement? _imageOverlay;
   final Map<String, String> _imageBlobUrls = <String, String>{};
   final Map<String, web.HTMLImageElement> _imageEls =
       <String, web.HTMLImageElement>{};
-  // Last geometry applied to each placed <img> ('left|top|w|h|fit'), so a
-  // static image isn't re-styled every frame (avoids needless layout work).
   final Map<String, String> _imageRects = <String, String>{};
 
-  // Cap on cached blob URLs. The host ships each image once and re-ships an
-  // on-screen image after its own 512-id dedup set clears, so it is safe to
-  // evict only ids that are NOT currently placed once the cache grows past
-  // this bound — the working set (on-screen images) is never dropped, and a
-  // re-shown image is re-shipped. Matches the host's dedup bound so a normal
-  // session (a handful of images) never evicts.
+  // Cap on cached blob URLs. The host re-ships an image whenever it (re)appears
+  // on screen (it tracks only the previous frame's placed ids), so the client
+  // may freely evict ids that are NOT currently placed once the cache grows
+  // past this bound — the on-screen working set is never dropped, and an image
+  // that scrolls back is re-sent. A normal session stays well under the cap.
   static const int _maxCachedImages = 512;
 
   /// Connects and begins rendering. Resolves once the socket is open and
@@ -154,21 +153,32 @@ final class RemoteSurfaceClient {
   }
 
   /// Reconciles the `<img>` overlay against this frame's [placements] (the full
-  /// current set). New images get an element; placed ones are positioned at
-  /// their cell rect; images no longer placed (scrolled away, covered, removed)
-  /// have their element dropped.
+  /// current set). Elements are keyed by id + occurrence, so the same image
+  /// drawn at two positions gets two `<img>`s (and a single moving image keeps
+  /// one element, repositioned). New ones are created, placed ones positioned at
+  /// their cell rect, and elements no longer placed are dropped.
   void _applyPlacements(List<ImagePlacement> placements) {
     final overlay = _imageOverlay;
     final box = _metrics?.measure();
     if (overlay == null || box == null) return;
     final cw = box.cssCellWidth;
     final ch = box.cssCellHeight;
+    // Match the grid's own origin convention (see DomInputSource caret math):
+    // the canvas may be inset within the host, so add its offset.
+    final ox = box.cssCanvasLeft;
+    final oy = box.cssCanvasTop;
     final seen = <String>{};
+    final placedIds = <String>{};
+    final occurrence = <String, int>{};
     for (final p in placements) {
-      seen.add(p.id);
+      placedIds.add(p.id);
+      // Distinguish repeated placements of the same bytes within one frame.
+      final occ = occurrence[p.id] = (occurrence[p.id] ?? 0) + 1;
+      final key = '${p.id}#$occ';
+      seen.add(key);
       final url = _imageBlobUrls[p.id];
       if (url == null) continue; // bytes not arrived yet; a later frame retries
-      var el = _imageEls[p.id];
+      var el = _imageEls[key];
       if (el == null) {
         el = web.document.createElement('img') as web.HTMLImageElement;
         el.style.setProperty('position', 'absolute');
@@ -179,21 +189,29 @@ final class RemoteSurfaceClient {
         // A corrupt / undecodable payload would otherwise show the browser's
         // broken-image glyph; hide it instead so a bad frame degrades to blank.
         el.onerror = (web.Event _) {
-          _imageEls[p.id]?.style.setProperty('visibility', 'hidden');
+          _imageEls[key]?.style.setProperty('visibility', 'hidden');
         }.toJS;
         el.src = url;
         overlay.appendChild(el);
-        _imageEls[p.id] = el;
+        _imageEls[key] = el;
+      } else if (el.src != url) {
+        // The bytes for this id were re-shipped under a new blob URL (e.g. the
+        // image returned after the host re-sent it); point at the fresh URL and
+        // clear any error-hidden state so it can render again.
+        el.src = url;
+        el.style.removeProperty('visibility');
+        _imageRects.remove(key);
       }
       // Re-style only when the geometry actually changed: a static image holds
       // its rect across frames, so this skips needless layout on every frame.
-      final rect = '${p.col * cw}|${p.row * ch}|${p.cols * cw}|'
-          '${p.rows * ch}|${p.fit.name}';
-      if (_imageRects[p.id] != rect) {
-        _imageRects[p.id] = rect;
+      final left = ox + p.col * cw;
+      final top = oy + p.row * ch;
+      final rect = '$left|$top|${p.cols * cw}|${p.rows * ch}|${p.fit.name}';
+      if (_imageRects[key] != rect) {
+        _imageRects[key] = rect;
         el.style
-          ..setProperty('left', '${p.col * cw}px')
-          ..setProperty('top', '${p.row * ch}px')
+          ..setProperty('left', '${left}px')
+          ..setProperty('top', '${top}px')
           ..setProperty('width', '${p.cols * cw}px')
           ..setProperty('height', '${p.rows * ch}px')
           // InlineImageFit names ARE the CSS object-fit keywords (contain/cover/
@@ -202,13 +220,13 @@ final class RemoteSurfaceClient {
           ..setProperty('object-fit', p.fit.name);
       }
     }
-    for (final id in _imageEls.keys.toList()) {
-      if (!seen.contains(id)) {
-        _imageEls.remove(id)?.remove();
-        _imageRects.remove(id);
+    for (final key in _imageEls.keys.toList()) {
+      if (!seen.contains(key)) {
+        _imageEls.remove(key)?.remove();
+        _imageRects.remove(key);
       }
     }
-    _evictStaleImages(seen);
+    _evictStaleImages(placedIds);
   }
 
   /// Bounds the blob-URL cache. Bytes for an image off-screen are kept (so it

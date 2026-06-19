@@ -259,7 +259,10 @@ InlineImageFrame _decodeInlineImage(Uint8List payload) {
   if (2 + idLen > payload.length) {
     throw RemoteProtocolException('INLINE_IMAGE frame: id overruns payload.');
   }
-  final id = utf8.decode(payload.sublist(2, 2 + idLen));
+  // Tolerate malformed UTF-8 in the id (matching the rest of the codec): a
+  // bit-flipped id should degrade to a harmless mismatched key, not throw a
+  // raw FormatException that drops every other frame in the batch.
+  final id = utf8.decode(payload.sublist(2, 2 + idLen), allowMalformed: true);
   final bytes = Uint8List.fromList(payload.sublist(2 + idLen));
   return InlineImageFrame(id, bytes);
 }

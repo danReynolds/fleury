@@ -440,8 +440,20 @@ class RenderImage extends RenderObject {
   set decoded(img.Image v) {
     if (identical(_decoded, v)) return;
     _decoded = v;
+    _encodedPng = null;
+    _encodedId = null;
     markNeedsLayout();
   }
+
+  // Cached PNG encode of [_decoded] and its content-hash id, recomputed only
+  // when the decoded image changes. The native-protocol (kitty/iTerm2) and
+  // browser paint paths run on every frame the tree repaints; without this they
+  // would re-encode (zlib) and re-hash the same pixels each frame.
+  Uint8List? _encodedPng;
+  String? _encodedId;
+
+  Uint8List get _png => _encodedPng ??= img.encodePng(_decoded);
+  String get _pngId => _encodedId ??= CellBuffer.hashImageBytes(_png);
 
   ImageFit _fit;
   set fit(ImageFit v) {
@@ -804,10 +816,10 @@ class RenderImage extends RenderObject {
   /// image at the current cursor position. The renderer positions the
   /// cursor at the cell anchor before emitting these bytes.
   void _paintKitty(CellBuffer buffer, CellOffset offset, int cols, int rows) {
-    // Re-encode the decoded source as PNG. Cheap and correct — Kitty's
-    // RGBA path (`f=32`) has fewer well-tested decoders across
-    // terminals than PNG (`f=100`).
-    final png = img.encodePng(_decoded);
+    // Encode the decoded source as PNG (cached across repaints) — Kitty's RGBA
+    // path (`f=32`) has fewer well-tested decoders across terminals than PNG
+    // (`f=100`).
+    final png = _png;
     final b64 = base64.encode(png);
     const chunkSize = 4096;
     final out = StringBuffer();
@@ -838,9 +850,12 @@ class RenderImage extends RenderObject {
   /// bytes once and the DOM client renders an `<img>` overlay — true pixels,
   /// like a native terminal image protocol, without bloating the cell wire.
   void _paintBrowser(CellBuffer buffer, CellOffset offset, int cols, int rows) {
-    buffer.writeImage(
+    // Reuse the cached PNG + id so a static image isn't re-encoded or re-hashed
+    // on every repaint (writeImageWithId skips the per-paint content hash).
+    buffer.writeImageWithId(
       offset,
-      img.encodePng(_decoded),
+      _pngId,
+      _png,
       width: cols,
       height: rows,
       fit: _inlineFit(_fit),
@@ -1494,7 +1509,7 @@ class RenderImage extends RenderObject {
   /// Unlike Kitty there's no chunking — the entire payload rides in
   /// one OSC sequence terminated by BEL.
   void _paintIterm2(CellBuffer buffer, CellOffset offset, int cols, int rows) {
-    final png = img.encodePng(_decoded);
+    final png = _png;
     final b64 = base64.encode(png);
     final out =
         '\x1B]1337;File=inline=1;size=${png.length};'

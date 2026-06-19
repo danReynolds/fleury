@@ -7,10 +7,6 @@ import 'cell.dart';
 import 'width_resolver.dart';
 
 /// An inline image placed into a [CellBuffer] (browser "serve" surface). The
-/// bytes live here, off the cell grid, keyed by a content hash; the grid only
-/// carries a protocol-anchor cell whose grapheme is the [id]. The serve codec
-/// ships the bytes once per id and the DOM client renders an `<img>` overlay
-/// spanning [cols]×[rows] cells.
 /// How an inline image fills its placement rectangle on a true-pixel surface.
 /// The four modes mirror the widget-level `ImageFit`, and — by design — their
 /// names are exactly the CSS `object-fit` keywords, so the serve client applies
@@ -19,17 +15,35 @@ import 'width_resolver.dart';
 /// stretch the image.
 enum InlineImageFit { contain, cover, fill, none }
 
+/// One inline image's bytes, off the cell grid, content-addressed by [id]. The
+/// grid carries a protocol-anchor cell whose grapheme is the id; the serve
+/// codec ships the bytes once and the DOM client renders an `<img>`. Geometry
+/// (where and how big) is NOT here — it belongs to the *placement*, since the
+/// same bytes can appear at several sizes/positions in one frame.
 final class InlineImage {
-  const InlineImage({
-    required this.id,
-    required this.bytes,
-    required this.cols,
-    required this.rows,
-    this.fit = InlineImageFit.contain,
-  });
+  const InlineImage({required this.id, required this.bytes});
 
   final String id;
   final Uint8List bytes;
+}
+
+/// One placement of an inline image: which [id]'s bytes go where ([col], [row])
+/// over how many cells ([cols]×[rows]) and how they fill that box ([fit]). One
+/// is recorded per [CellBuffer.writeImage] call, so the same image drawn twice
+/// yields two placements with independent geometry.
+final class InlineImagePlacement {
+  const InlineImagePlacement({
+    required this.id,
+    required this.col,
+    required this.row,
+    required this.cols,
+    required this.rows,
+    required this.fit,
+  });
+
+  final String id;
+  final int col;
+  final int row;
   final int cols;
   final int rows;
   final InlineImageFit fit;
@@ -63,9 +77,11 @@ final class CellBuffer {
 
   CellSize _size;
   List<Cell> _cells;
-  // Inline images placed this frame, keyed by content hash. Repopulated by
-  // [writeImage] each paint; cleared with the cells. Read-only to callers.
+  // Inline image bytes placed this frame, deduplicated by content hash.
+  // Repopulated by [writeImage] each paint; cleared with the cells.
   final Map<String, InlineImage> _images = <String, InlineImage>{};
+  // Per-placement geometry, one entry per [writeImage] call, in paint order.
+  final List<InlineImagePlacement> _imagePlacements = <InlineImagePlacement>[];
   var _damageTrackingEnabled = false;
   CellRect? _damageBounds;
   final Set<int> _damageRows = <int>{};
@@ -73,10 +89,15 @@ final class CellBuffer {
 
   CellSize get size => _size;
 
-  /// Inline images placed this frame, keyed by content hash. The cell grid
-  /// references each via a protocol-anchor cell whose grapheme is the id; the
-  /// bytes live here. Read-only.
+  /// Inline image bytes placed this frame, deduplicated by content hash. The
+  /// cell grid references each via a protocol-anchor cell whose grapheme is the
+  /// id. Read-only.
   Map<String, InlineImage> get images => _images;
+
+  /// Per-placement geometry for the inline images placed this frame, in paint
+  /// order. Each entry is a distinct on-screen rectangle even when two share an
+  /// [InlineImagePlacement.id] (same bytes drawn twice). Read-only.
+  List<InlineImagePlacement> get imagePlacements => _imagePlacements;
 
   /// Conservative bounds of cells mutated since the last
   /// [resetDamageTracking].
@@ -142,6 +163,7 @@ final class CellBuffer {
     _recordDamageRect(0, 0, _size.cols, _size.rows);
     _cells.fillRange(0, _cells.length, const Cell.empty());
     _images.clear();
+    _imagePlacements.clear();
   }
 
   /// Scrolls the buffer up by [rows] rows: row `r + rows` moves to row `r`,
@@ -173,6 +195,7 @@ final class CellBuffer {
       growable: false,
     );
     _images.clear();
+    _imagePlacements.clear();
     _damageBounds = null;
     _recordDamageRect(0, 0, newSize.cols, newSize.rows);
   }
@@ -463,15 +486,49 @@ final class CellBuffer {
   }) {
     if (!_containsColRow(topLeft.col, topLeft.row)) return;
     final id = _hashBytes(bytes);
-    _images[id] = InlineImage(
+    // Bytes are deduplicated by id; geometry is recorded per placement so the
+    // same image drawn twice (or at two sizes) keeps independent rectangles.
+    _images[id] = InlineImage(id: id, bytes: bytes);
+    _imagePlacements.add(InlineImagePlacement(
       id: id,
-      bytes: bytes,
+      col: topLeft.col,
+      row: topLeft.row,
       cols: width,
       rows: height,
       fit: fit,
-    );
+    ));
     writeProtocol(topLeft, id, width: width, height: height);
   }
+
+  /// Records an inline image whose bytes are already hashed/encoded (the widget
+  /// caches the PNG + id across repaints). Skips the per-paint re-hash on the
+  /// hot path; see [writeImage] for the deduplication + placement model.
+  void writeImageWithId(
+    CellOffset topLeft,
+    String id,
+    Uint8List bytes, {
+    required int width,
+    required int height,
+    InlineImageFit fit = InlineImageFit.contain,
+  }) {
+    if (!_containsColRow(topLeft.col, topLeft.row)) return;
+    _images[id] = InlineImage(id: id, bytes: bytes);
+    _imagePlacements.add(InlineImagePlacement(
+      id: id,
+      col: topLeft.col,
+      row: topLeft.row,
+      cols: width,
+      rows: height,
+      fit: fit,
+    ));
+    writeProtocol(topLeft, id, width: width, height: height);
+  }
+
+  /// Public content hash for inline-image bytes — the same scheme [writeImage]
+  /// uses, exposed so a caller that caches its encoded bytes (the Image widget
+  /// caches the PNG across repaints) can precompute the id once and pass it to
+  /// [writeImageWithId], skipping a per-frame re-hash of the whole image.
+  static String hashImageBytes(Uint8List bytes) => _hashBytes(bytes);
 
   /// Content hash, stable across re-encodes of the same image so the serve
   /// ships identical bytes only once. Two independent rolling hashes (distinct
