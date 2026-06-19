@@ -22,18 +22,27 @@ import 'package:fleury_storybook/storybook.dart';
 import 'package:test/test.dart';
 
 class _ModelTerminal {
-  _ModelTerminal(this.cols, this.rows)
+  _ModelTerminal(this.cols, this.rows, {this.autowrap = false})
       : grid = List.generate(rows, (_) => List.filled(cols, ' '));
 
   final int cols;
   final int rows;
+  // Models a terminal WITHOUT the VT100 `xenl` pending-wrap quirk: writing the
+  // last column moves to the next line immediately (as Warp does). The renderer
+  // must not rely on the cursor staying put after a last-column write.
+  final bool autowrap;
   final List<List<String>> grid;
   int cr = 0;
   int cc = 0;
 
   void _put(String g) {
     if (cr >= 0 && cr < rows && cc >= 0 && cc < cols) grid[cr][cc] = g;
-    cc += 1;
+    if (autowrap && cc >= cols - 1) {
+      cr += 1;
+      cc = 0;
+    } else {
+      cc += 1;
+    }
   }
 
   void apply(String out) {
@@ -113,7 +122,7 @@ void main() {
 
     final loop = TuiFrameLoop(renderDamage: tester.owner.renderDamageTracker);
     final renderer = AnsiRenderer(colorMode: ColorMode.truecolor);
-    final term = _ModelTerminal(size.cols, size.rows);
+    final term = _ModelTerminal(size.cols, size.rows, autowrap: true);
     final sink = StringAnsiSink();
 
     void present(String label) {

@@ -278,7 +278,12 @@ void main() {
         synchronizedOutput: false,
       ).renderDiff(prev, next, sink);
 
-      expect(sink.output, '\x1B[2S\x1B[3Heeee\r\nffff');
+      // 'eeee' fills the 4-wide row, so the write lands on the last column.
+      // The cursor's post-write state is terminal-defined (terminals without
+      // pending-wrap advance to the next line immediately), so the renderer
+      // repositions absolutely (CUP) for the next row instead of '\r\n', which
+      // would over-advance on such terminals. See ansi_renderer.dart.
+      expect(sink.output, '\x1B[2S\x1B[3Heeee\x1B[4Hffff');
     });
 
     test('wraps scroll updates in synchronized-output markers', () {

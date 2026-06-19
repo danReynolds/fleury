@@ -301,6 +301,18 @@ final class AnsiRenderer {
           col + 1 < size.cols &&
           next.atColRow(col + 1, row).role == CellRole.continuation;
       cursorCol = col + (isWide ? 2 : 1);
+
+      // A write that lands on (or past) the last column leaves the cursor in a
+      // terminal-defined state: terminals without the `xenl`/pending-wrap quirk
+      // (e.g. Warp) wrap to the next line immediately, so the cursor is no
+      // longer where we think. Invalidate the tracked position so the next
+      // dirty cell repositions absolutely (CUP) instead of with a `\r\n` or
+      // relative move that would over-advance and cascade-corrupt the rows
+      // below. Independent of the terminal's autowrap mode.
+      if (cursorCol != null && cursorCol! >= size.cols) {
+        cursorRow = null;
+        cursorCol = null;
+      }
     }
 
     for (var row = top; row < bottom; row++) {
