@@ -1485,7 +1485,7 @@ class RenderLineChart extends RenderObject {
       final row = offset.row + ((plotRows - 1) * frac).round();
       _writeRightAligned(
         buffer,
-        0,
+        offset.col,
         row,
         yLabelWidth,
         _yTickFormat(value),

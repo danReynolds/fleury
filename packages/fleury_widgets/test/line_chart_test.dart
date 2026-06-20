@@ -69,6 +69,40 @@ void main() {
       expect(bottom.contains('0'), isTrue, reason: 'min y label above x-axis');
     });
 
+    testWidgets('y-axis labels honor the paint offset, not screen column 0', (
+      tester,
+    ) {
+      // Regression: the y-tick labels were written at literal column 0 instead
+      // of offset.col, so any LineChart not flush against the screen's left
+      // edge (a padded card, a multi-column dashboard) leaked its labels to
+      // col 0 — bleeding onto whatever sat there.
+      tester.pumpWidget(
+        Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: SizedBox(
+            width: 30,
+            height: 8,
+            child: LineChart(
+              series: const [
+                LineSeries([(0, 0), (1, 10)]),
+              ],
+            ),
+          ),
+        ),
+      );
+      final top = _row(tester, 0, 42, 8);
+      expect(
+        top.substring(0, 12).trim(),
+        isEmpty,
+        reason: 'no y-label should leak into the 12-col left padding',
+      );
+      expect(
+        top.indexOf('10') >= 12,
+        isTrue,
+        reason: 'the max y label renders inside the offset chart gutter',
+      );
+    });
+
     testWidgets('yTickCount adds intermediate y-axis labels', (tester) {
       tester.pumpWidget(
         SizedBox(
