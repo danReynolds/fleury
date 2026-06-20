@@ -387,42 +387,23 @@ final class AnsiRenderer {
   /// Absolute positions omit defaults: `CSI H` at home, and `CSI row H` when
   /// the column is 1.
   static String _cursorMove(int? fromRow, int? fromCol, int row, int col) {
-    var shortest = _absolutePosition(row, col);
-    if (fromRow != null && fromCol != null) {
-      if (fromRow == row) {
-        shortest = _shorter(shortest, _horizontalMove(fromCol, col));
-      } else {
-        if (row == fromRow + 1) {
-          if (fromCol == col) {
-            shortest = _shorter(shortest, '\n');
-          }
-          if (col == 0) {
-            shortest = _shorter(shortest, fromCol == 0 ? '\n' : '\r\n');
-          } else {
-            shortest = _shorter(shortest, '\r\n${_horizontalMove(0, col)}');
-          }
-        }
-        if (fromCol == col) {
-          shortest = _shorter(shortest, _verticalMove(fromRow, row));
-        }
-        if (col == 0) {
-          shortest = _shorter(shortest, _lineMove(fromRow, row));
-        }
-        if (fromCol != col) {
-          shortest = _shorter(
-            shortest,
-            _verticalMove(fromRow, row) + _horizontalMove(fromCol, col),
-          );
-          if (col > 0) {
-            shortest = _shorter(
-              shortest,
-              _lineMove(fromRow, row) + _horizontalMove(0, col),
-            );
-          }
-        }
-      }
+    final absolute = _absolutePosition(row, col);
+    // Same-row moves are column-relative (CUF/CUB) and safe: the tracked column
+    // is kept exact (last-column and ambiguous-width writes invalidate it, so a
+    // following move re-pins absolutely). CROSS-ROW relative moves (`\r\n`, CNL,
+    // CUU/CUD), however, are row-RELATIVE — they step from the terminal's
+    // current row. If our tracked row ever drifts from the terminal's actual
+    // row (a write that wrapped, an LF that scrolled at the bottom margin, an
+    // ambiguous-width glyph the terminal advanced differently), every following
+    // row move lands one row off and cascades: a shrunk row's new content gets
+    // written a row away, stranding the previous row's tail on screen — the
+    // fast-scroll "stale tail" garble (`NumberInput  ller`, `…oller`). An
+    // absolute CUP for any row change re-pins the row and cannot drift; the cost
+    // is ~1 byte/row over `\r\n`+CUF, and only on row transitions.
+    if (fromRow != null && fromCol != null && fromRow == row) {
+      return _shorter(absolute, _horizontalMove(fromCol, col));
     }
-    return shortest;
+    return absolute;
   }
 
   /// Absolute cursor position (1-indexed), omitting defaults: `CSI H` at home,
@@ -442,19 +423,6 @@ final class AnsiRenderer {
     return n == 1 ? '\x1B[$dir' : '\x1B[$n$dir';
   }
 
-  static String _verticalMove(int fromRow, int row) {
-    if (fromRow == row) return '';
-    final n = (row - fromRow).abs();
-    final dir = row > fromRow ? 'B' : 'A';
-    return n == 1 ? '\x1B[$dir' : '\x1B[$n$dir';
-  }
-
-  static String _lineMove(int fromRow, int row) {
-    if (fromRow == row) return '';
-    final n = (row - fromRow).abs();
-    final dir = row > fromRow ? 'E' : 'F';
-    return n == 1 ? '\x1B[$dir' : '\x1B[$n$dir';
-  }
 
   static String _scrollUp(int rows) => rows == 1 ? '\x1B[S' : '\x1B[${rows}S';
 
