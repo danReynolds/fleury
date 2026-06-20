@@ -35,6 +35,9 @@ Future<void> main(List<String> rawArgs) async {
     case 'storybook':
       await runner.storybookApp(args);
       return;
+    case 'samples':
+      await runner.samplesApp(args);
+      return;
     case 'core-demo':
       await runner.coreDemo(_requiredName(args, 'core-demo'));
       return;
@@ -128,6 +131,9 @@ void _printUsage() {
     '  storybook [command/options]   Run, inspect, verify, or snapshot storybook',
   );
   stdout.writeln(
+    '  samples <app>                 Run a showcase app (dashboard|files|agent)',
+  );
+  stdout.writeln(
     '  core-demo <name>              Run a packages/fleury example',
   );
   stdout.writeln(
@@ -187,6 +193,7 @@ void _printUsage() {
   stdout.writeln('  dart tool/fleury_dev.dart storybook');
   stdout.writeln('  dart tool/fleury_dev.dart storybook verify');
   stdout.writeln('  dart tool/fleury_dev.dart storybook coverage --strict');
+  stdout.writeln('  dart tool/fleury_dev.dart samples dashboard');
   stdout.writeln('  dart tool/fleury_dev.dart core-demo counter');
   stdout.writeln('  dart tool/fleury_dev.dart cli diagnose --json');
   stdout.writeln('  dart tool/fleury_dev.dart benchmark list');
@@ -222,6 +229,9 @@ void _printCatalog() {
   stdout.writeln('');
   stdout.writeln('Storybook:');
   stdout.writeln('  storybook -> packages/storybook/bin/storybook.dart');
+  stdout.writeln('');
+  stdout.writeln('Samples:');
+  stdout.writeln('  samples <app> -> packages/samples/bin/samples.dart');
 }
 
 final _coreDemos = <String, String>{
@@ -288,6 +298,7 @@ class _Runner {
   String get git => '$root/packages/fleury_git';
   String get demo => '$root/packages/fleury_example_console';
   String get storybook => '$root/packages/storybook';
+  String get samples => '$root/packages/samples';
   String get profiling => '$root/profiling';
 
   Future<void> bootstrap() async {
@@ -537,6 +548,14 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       'bin/storybook.dart',
       ...args,
     ], workingDirectory: storybook);
+  }
+
+  Future<void> samplesApp(List<String> args) {
+    return _run('dart', [
+      'run',
+      'bin/samples.dart',
+      ...args,
+    ], workingDirectory: samples);
   }
 
   Future<void> coreDemo(String name) {
