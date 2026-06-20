@@ -7,7 +7,8 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show File, IOOverrides, Platform, stderr;
+import 'dart:io'
+    show File, FileMode, IOOverrides, Platform, RandomAccessFile, stderr;
 
 import '../debug/debug_events.dart';
 import '../debug/debug_invalidation.dart';
@@ -187,9 +188,24 @@ Future<void> runTui(
   final byteTelemetry = Platform.environment['FLEURY_BYTE_TELEMETRY'] == '1'
       ? CountingAnsiSink.aggregate(driverSink)
       : null;
-  final AnsiSink sink = byteTelemetry ?? driverSink;
+  // Optional diagnostic: FLEURY_ANSI_CAPTURE=/path tees every byte we emit to a
+  // file (in addition to the terminal) so a rendering bug can be reproduced and
+  // the exact escape stream inspected offline — no PTY/`script` needed.
+  final capturePath = Platform.environment['FLEURY_ANSI_CAPTURE'];
+  final AnsiSink sink = (capturePath != null && capturePath.isNotEmpty)
+      ? _CapturingAnsiSink.wrap(byteTelemetry ?? driverSink, capturePath)
+      : (byteTelemetry ?? driverSink);
   // Downsample colors to whatever the terminal actually supports.
-  final renderer = AnsiRenderer(colorMode: usedDriver.capabilities.colorMode);
+  // `FLEURY_SYNC_OUTPUT=0` drops the DEC-2026 synchronized-update wrapper around
+  // each frame. The wrapper is correct per spec (and verified by the renderer's
+  // own equivalence tests), but a terminal whose 2026 implementation drops or
+  // mis-applies updates under rapid frames (e.g. fast scrolling) can desync from
+  // the renderer's model and show persistent stale cells; this is the escape
+  // hatch to confirm/avoid that without touching the diff.
+  final renderer = AnsiRenderer(
+    colorMode: usedDriver.capabilities.colorMode,
+    synchronizedOutput: Platform.environment['FLEURY_SYNC_OUTPUT'] != '0',
+  );
   // When the driver wants structured presentation plans (the serve path,
   // rendering through the fleury web surface instead of a terminal
   // emulator), the render loop hands it plans instead of ANSI bytes. Null
@@ -752,6 +768,52 @@ String _frameReasonForEvent(TuiEvent event) {
     PasteEvent() => 'paste',
     MouseEvent() => 'mouse',
   };
+}
+
+/// Tees every emitted byte to a file (diagnostic; `FLEURY_ANSI_CAPTURE`).
+/// Writes synchronously so the capture survives a Ctrl-C mid-session.
+class _CapturingAnsiSink implements AnsiSink {
+  _CapturingAnsiSink(this._inner, this._file);
+
+  /// Wraps [inner] to also tee to [path]. If the file can't be opened (bad
+  /// path, no permission) the capture is skipped with a warning rather than
+  /// crashing the app over a mistyped diagnostic env var — same best-effort
+  /// policy as [_RuntimeMarkerRecorder].
+  static AnsiSink wrap(AnsiSink inner, String path) {
+    try {
+      return _CapturingAnsiSink(
+        inner,
+        File(path).openSync(mode: FileMode.write),
+      );
+    } on Object catch (error) {
+      stderr.writeln(
+        '[fleury] FLEURY_ANSI_CAPTURE: cannot open "$path": '
+        '$error — capture disabled.',
+      );
+      return inner;
+    }
+  }
+
+  final AnsiSink _inner;
+  final RandomAccessFile _file;
+
+  @override
+  void write(String data) {
+    _inner.write(data);
+    try {
+      _file.writeStringSync(data);
+    } catch (_) {
+      // Best-effort capture; never break rendering over a diagnostic write.
+    }
+  }
+
+  @override
+  Future<void> flush() async {
+    await _inner.flush();
+    try {
+      _file.flushSync();
+    } catch (_) {}
+  }
 }
 
 class _DriverSink implements AnsiSink {

@@ -169,7 +169,7 @@ void main() {
       expect(dirty, const [CellOffset(4, 1)]);
     });
 
-    test('same-column row movement uses line feed', () {
+    test('cross-row movement uses absolute CUP (not row-relative LF)', () {
       final prev = CellBuffer(const CellSize(3, 3));
       final next = CellBuffer(const CellSize(3, 3));
       next.writeGrapheme(const CellOffset(0, 0), 'a');
@@ -179,11 +179,13 @@ void main() {
       const AnsiRenderer(
         synchronizedOutput: false,
       ).renderDiff(prev, next, sink);
-      // After 'a' the cursor is at col 1; LF moves one row down at same col.
-      expect(sink.output, '\x1B[Ha\nc');
+      // Row changes use an absolute CUP, never LF/CRLF/CNL: those are row-
+      // RELATIVE and desync if the tracked row ever drifts from the terminal's
+      // (the fast-scroll "stale tail" garble). Absolute re-pins the row.
+      expect(sink.output, '\x1B[Ha\x1B[2;2Hc');
     });
 
-    test('line-start row movement uses carriage-return line-feed', () {
+    test('cross-row movement to column 0 uses absolute CUP', () {
       final prev = CellBuffer(const CellSize(3, 3));
       final next = CellBuffer(const CellSize(3, 3));
       next.writeGrapheme(const CellOffset(0, 0), 'a');
@@ -193,26 +195,23 @@ void main() {
       const AnsiRenderer(
         synchronizedOutput: false,
       ).renderDiff(prev, next, sink);
-      // After 'a' the cursor is at col 1; CRLF moves down to col 0.
-      expect(sink.output, '\x1B[Ha\r\nb');
+      // Absolute CUP to (row 1, col 0) = CSI 2 H (column default omitted).
+      expect(sink.output, '\x1B[Ha\x1B[2Hb');
     });
 
-    test(
-      'indented next-row movement uses carriage-return line-feed plus CUF',
-      () {
-        final prev = CellBuffer(const CellSize(8, 3));
-        final next = CellBuffer(const CellSize(8, 3));
-        next.writeText(const CellOffset(0, 0), 'aaaa');
-        next.writeText(const CellOffset(1, 1), 'b');
-        final sink = StringAnsiSink();
+    test('indented cross-row movement uses absolute CUP', () {
+      final prev = CellBuffer(const CellSize(8, 3));
+      final next = CellBuffer(const CellSize(8, 3));
+      next.writeText(const CellOffset(0, 0), 'aaaa');
+      next.writeText(const CellOffset(1, 1), 'b');
+      final sink = StringAnsiSink();
 
-        const AnsiRenderer(
-          synchronizedOutput: false,
-        ).renderDiff(prev, next, sink);
-        // After 'aaaa' the cursor is at col 4; CRLF + CUF beats CNL + CUF by 1 B.
-        expect(sink.output, '\x1B[Haaaa\r\n\x1B[Cb');
-      },
-    );
+      const AnsiRenderer(
+        synchronizedOutput: false,
+      ).renderDiff(prev, next, sink);
+      // Absolute CUP to (row 1, col 1) instead of the old CRLF+CUF — drift-safe.
+      expect(sink.output, '\x1B[Haaaa\x1B[2;2Hb');
+    });
   });
 
   group('renderDiff — wide content', () {
@@ -278,7 +277,12 @@ void main() {
         synchronizedOutput: false,
       ).renderDiff(prev, next, sink);
 
-      expect(sink.output, '\x1B[2S\x1B[3Heeee\r\nffff');
+      // 'eeee' fills the 4-wide row, so the write lands on the last column.
+      // The cursor's post-write state is terminal-defined (terminals without
+      // pending-wrap advance to the next line immediately), so the renderer
+      // repositions absolutely (CUP) for the next row instead of '\r\n', which
+      // would over-advance on such terminals. See ansi_renderer.dart.
+      expect(sink.output, '\x1B[2S\x1B[3Heeee\x1B[4Hffff');
     });
 
     test('wraps scroll updates in synchronized-output markers', () {
@@ -329,6 +333,35 @@ void main() {
 
       expect(sink.output.contains('\x1B[S'), isFalse);
       expect(sink.output.contains('P'), isTrue);
+    });
+  });
+
+  group('renderDiff — ambiguous-width glyphs', () {
+    test('repositions absolutely after a box-drawing (ambiguous) glyph', () {
+      // U+2500 (─) and the other box / bullet / arrow glyphs are East-Asian
+      // "Ambiguous": a terminal or font that renders them two columns wide
+      // advances the cursor further than fleury's one-column model, so a
+      // following relative move desyncs. The renderer must reposition the next
+      // cell absolutely so it stays pinned to its column on any terminal.
+      final prev = CellBuffer(const CellSize(4, 1));
+      final next = CellBuffer(const CellSize(4, 1))
+        ..writeText(const CellOffset(0, 0), '─x');
+      final sink = StringAnsiSink();
+      const AnsiRenderer(synchronizedOutput: false).renderDiff(prev, next, sink);
+
+      expect(sink.output, contains('─\x1B[1;2Hx'),
+          reason: 'an absolute CUP separates the ambiguous glyph from the '
+              'next cell');
+    });
+
+    test('a pure-ASCII run is NOT broken up (stays compact)', () {
+      final prev = CellBuffer(const CellSize(6, 1));
+      final next = CellBuffer(const CellSize(6, 1))
+        ..writeText(const CellOffset(0, 0), 'abcde');
+      final sink = StringAnsiSink();
+      const AnsiRenderer(synchronizedOutput: false).renderDiff(prev, next, sink);
+      // No interior cursor moves — ASCII width is unambiguous.
+      expect(sink.output, '\x1B[Habcde');
     });
   });
 

@@ -301,6 +301,33 @@ final class AnsiRenderer {
           col + 1 < size.cols &&
           next.atColRow(col + 1, row).role == CellRole.continuation;
       cursorCol = col + (isWide ? 2 : 1);
+
+      // Invalidate the tracked cursor — forcing the next dirty cell to
+      // reposition with an absolute CUP — whenever the cursor's resting column
+      // is terminal-defined rather than known:
+      //
+      //  * A write to the last column: terminals without the `xenl`/pending-wrap
+      //    quirk (e.g. Warp) wrap to the next line immediately, so a following
+      //    `\r\n`/relative move would over-advance and cascade-corrupt the rows
+      //    below.
+      //  * A grapheme whose DISPLAY WIDTH the terminal may disagree on. Every
+      //    non-ASCII glyph fleury emits for box drawing / bullets / arrows is
+      //    East-Asian "Ambiguous"; a terminal (or font) that renders those two
+      //    columns wide advances the cursor further than our one-column model,
+      //    so the row desyncs. An absolute reposition for each following cell
+      //    overwrites the overflow and pins every cell to its column regardless
+      //    of how the terminal sizes ambiguous-width characters. ASCII runs (the
+      //    common case — names, values) are unaffected and stay compact.
+      final isAscii = grapheme.length == 1 && grapheme.codeUnitAt(0) < 0x80;
+      // Ambiguous-width: a non-ASCII glyph fleury lays out as one column and
+      // that isn't a known wide (CJK) char — a terminal/font may still render
+      // it two columns wide. Wide chars (`isWide`) are unambiguous (both sides
+      // agree on 2) and ASCII is unambiguous (1), so neither needs this.
+      final ambiguousWidth = !isWide && !isAscii;
+      if ((cursorCol != null && cursorCol! >= size.cols) || ambiguousWidth) {
+        cursorRow = null;
+        cursorCol = null;
+      }
     }
 
     for (var row = top; row < bottom; row++) {
@@ -360,42 +387,23 @@ final class AnsiRenderer {
   /// Absolute positions omit defaults: `CSI H` at home, and `CSI row H` when
   /// the column is 1.
   static String _cursorMove(int? fromRow, int? fromCol, int row, int col) {
-    var shortest = _absolutePosition(row, col);
-    if (fromRow != null && fromCol != null) {
-      if (fromRow == row) {
-        shortest = _shorter(shortest, _horizontalMove(fromCol, col));
-      } else {
-        if (row == fromRow + 1) {
-          if (fromCol == col) {
-            shortest = _shorter(shortest, '\n');
-          }
-          if (col == 0) {
-            shortest = _shorter(shortest, fromCol == 0 ? '\n' : '\r\n');
-          } else {
-            shortest = _shorter(shortest, '\r\n${_horizontalMove(0, col)}');
-          }
-        }
-        if (fromCol == col) {
-          shortest = _shorter(shortest, _verticalMove(fromRow, row));
-        }
-        if (col == 0) {
-          shortest = _shorter(shortest, _lineMove(fromRow, row));
-        }
-        if (fromCol != col) {
-          shortest = _shorter(
-            shortest,
-            _verticalMove(fromRow, row) + _horizontalMove(fromCol, col),
-          );
-          if (col > 0) {
-            shortest = _shorter(
-              shortest,
-              _lineMove(fromRow, row) + _horizontalMove(0, col),
-            );
-          }
-        }
-      }
+    final absolute = _absolutePosition(row, col);
+    // Same-row moves are column-relative (CUF/CUB) and safe: the tracked column
+    // is kept exact (last-column and ambiguous-width writes invalidate it, so a
+    // following move re-pins absolutely). CROSS-ROW relative moves (`\r\n`, CNL,
+    // CUU/CUD), however, are row-RELATIVE — they step from the terminal's
+    // current row. If our tracked row ever drifts from the terminal's actual
+    // row (a write that wrapped, an LF that scrolled at the bottom margin, an
+    // ambiguous-width glyph the terminal advanced differently), every following
+    // row move lands one row off and cascades: a shrunk row's new content gets
+    // written a row away, stranding the previous row's tail on screen — the
+    // fast-scroll "stale tail" garble (`NumberInput  ller`, `…oller`). An
+    // absolute CUP for any row change re-pins the row and cannot drift; the cost
+    // is ~1 byte/row over `\r\n`+CUF, and only on row transitions.
+    if (fromRow != null && fromCol != null && fromRow == row) {
+      return _shorter(absolute, _horizontalMove(fromCol, col));
     }
-    return shortest;
+    return absolute;
   }
 
   /// Absolute cursor position (1-indexed), omitting defaults: `CSI H` at home,
@@ -412,20 +420,6 @@ final class AnsiRenderer {
     if (fromCol == col) return '';
     final n = (col - fromCol).abs();
     final dir = col > fromCol ? 'C' : 'D';
-    return n == 1 ? '\x1B[$dir' : '\x1B[$n$dir';
-  }
-
-  static String _verticalMove(int fromRow, int row) {
-    if (fromRow == row) return '';
-    final n = (row - fromRow).abs();
-    final dir = row > fromRow ? 'B' : 'A';
-    return n == 1 ? '\x1B[$dir' : '\x1B[$n$dir';
-  }
-
-  static String _lineMove(int fromRow, int row) {
-    if (fromRow == row) return '';
-    final n = (row - fromRow).abs();
-    final dir = row > fromRow ? 'E' : 'F';
     return n == 1 ? '\x1B[$dir' : '\x1B[$n$dir';
   }
 
