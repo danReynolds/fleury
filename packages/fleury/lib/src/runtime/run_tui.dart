@@ -193,7 +193,7 @@ Future<void> runTui(
   // the exact escape stream inspected offline — no PTY/`script` needed.
   final capturePath = Platform.environment['FLEURY_ANSI_CAPTURE'];
   final AnsiSink sink = (capturePath != null && capturePath.isNotEmpty)
-      ? _CapturingAnsiSink(byteTelemetry ?? driverSink, capturePath)
+      ? _CapturingAnsiSink.wrap(byteTelemetry ?? driverSink, capturePath)
       : (byteTelemetry ?? driverSink);
   // Downsample colors to whatever the terminal actually supports.
   // `FLEURY_SYNC_OUTPUT=0` drops the DEC-2026 synchronized-update wrapper around
@@ -773,8 +773,27 @@ String _frameReasonForEvent(TuiEvent event) {
 /// Tees every emitted byte to a file (diagnostic; `FLEURY_ANSI_CAPTURE`).
 /// Writes synchronously so the capture survives a Ctrl-C mid-session.
 class _CapturingAnsiSink implements AnsiSink {
-  _CapturingAnsiSink(this._inner, String path)
-      : _file = File(path).openSync(mode: FileMode.write);
+  _CapturingAnsiSink(this._inner, this._file);
+
+  /// Wraps [inner] to also tee to [path]. If the file can't be opened (bad
+  /// path, no permission) the capture is skipped with a warning rather than
+  /// crashing the app over a mistyped diagnostic env var — same best-effort
+  /// policy as [_RuntimeMarkerRecorder].
+  static AnsiSink wrap(AnsiSink inner, String path) {
+    try {
+      return _CapturingAnsiSink(
+        inner,
+        File(path).openSync(mode: FileMode.write),
+      );
+    } on Object catch (error) {
+      stderr.writeln(
+        '[fleury] FLEURY_ANSI_CAPTURE: cannot open "$path": '
+        '$error — capture disabled.',
+      );
+      return inner;
+    }
+  }
+
   final AnsiSink _inner;
   final RandomAccessFile _file;
 

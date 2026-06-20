@@ -7,14 +7,17 @@
 // renderer's model would then agree with the terminal's wrong state and never
 // recover (persistent garble).
 //
-// Written to chase a scroll-garble report in Warp. It proves the framework's
-// diff is spec-correct across that exact scenario (down to the bottom and back,
-// with coalesced multi-row jumps) — which is what localized the report to a
-// terminal-state assumption rather than the diff: the renderer positions with
-// `\r\n` and relative moves that assume writing the last column does NOT wrap,
-// but the enter sequence wasn't disabling autowrap (DECAWM). Fixed by emitting
-// `\x1B[?7l` on entry (terminal_sequences.dart). This model terminal assumes
-// no-wrap, matching the fixed behavior — so it stays a guard for the diff.
+// Written to chase a scroll-garble report in Warp. The model terminal here runs
+// with autowrap ON (`autowrap: true`) — the stricter case: it models a terminal
+// like Warp that wraps the cursor immediately on a last-column write (and ignores
+// our DECAWM-off `\x1B[?7l`). The renderer must stay correct anyway, which it does
+// by repositioning the cursor absolutely after any last-column or ambiguous-width
+// write and on every row change (see ansi_renderer.dart `_cursorMove`). The real
+// root cause of the reported garble turned out to be the diff's CROSS-ROW cursor
+// moves: it used row-relative encodings (`\r\n`/CNL/CUU/CUD) that desync once the
+// tracked row drifts from the terminal's, stranding tails. The renderer now uses
+// an absolute CUP for cross-row moves, so this harness holds whether the terminal
+// wraps or not.
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
@@ -23,7 +26,7 @@ import 'package:test/test.dart';
 
 class _ModelTerminal {
   _ModelTerminal(this.cols, this.rows, {this.autowrap = false})
-      : grid = List.generate(rows, (_) => List.filled(cols, ' '));
+    : grid = List.generate(rows, (_) => List.filled(cols, ' '));
 
   final int cols;
   final int rows;
@@ -50,22 +53,47 @@ class _ModelTerminal {
     final n = out.length;
     while (i < n) {
       final cu = out.codeUnitAt(i);
-      if (cu == 0x08) { cc -= 1; i++; continue; }
-      if (cu == 0x0A) { cr += 1; i++; continue; }
-      if (cu == 0x0D) { cc = 0; i++; continue; }
-      if (cu != 0x1B) { _put(out[i]); i++; continue; }
+      if (cu == 0x08) {
+        cc -= 1;
+        i++;
+        continue;
+      }
+      if (cu == 0x0A) {
+        cr += 1;
+        i++;
+        continue;
+      }
+      if (cu == 0x0D) {
+        cc = 0;
+        i++;
+        continue;
+      }
+      if (cu != 0x1B) {
+        _put(out[i]);
+        i++;
+        continue;
+      }
       i++;
       if (i >= n) break;
-      if (out.codeUnitAt(i) != 0x5B) { i++; continue; }
+      if (out.codeUnitAt(i) != 0x5B) {
+        i++;
+        continue;
+      }
       i++;
       var private = false;
-      if (i < n && out.codeUnitAt(i) == 0x3F) { private = true; i++; }
+      if (i < n && out.codeUnitAt(i) == 0x3F) {
+        private = true;
+        i++;
+      }
       final params = StringBuffer();
       var finalByte = 0;
       while (i < n) {
         final c = out.codeUnitAt(i);
         i++;
-        if (c >= 0x40 && c <= 0x7E) { finalByte = c; break; }
+        if (c >= 0x40 && c <= 0x7E) {
+          finalByte = c;
+          break;
+        }
         params.write(String.fromCharCode(c));
       }
       if (private) continue;
@@ -77,12 +105,20 @@ class _ModelTerminal {
         case 0x66:
           cr = p(0, 1) - 1;
           cc = p(1, 1) - 1;
-        case 0x41: cr -= p(0, 1);
-        case 0x42: cr += p(0, 1);
-        case 0x43: cc += p(0, 1);
-        case 0x44: cc -= p(0, 1);
-        case 0x45: cr += p(0, 1); cc = 0;
-        case 0x46: cr -= p(0, 1); cc = 0;
+        case 0x41:
+          cr -= p(0, 1);
+        case 0x42:
+          cr += p(0, 1);
+        case 0x43:
+          cc += p(0, 1);
+        case 0x44:
+          cc -= p(0, 1);
+        case 0x45:
+          cr += p(0, 1);
+          cc = 0;
+        case 0x46:
+          cr -= p(0, 1);
+          cc = 0;
         case 0x53:
           final k = p(0, 1);
           for (var s = 0; s < k; s++) {
@@ -115,8 +151,9 @@ String _expected(CellBuffer b, int col, int row) {
 }
 
 void main() {
-  testWidgets('widget-list scroll leaves no stale cells on the terminal',
-      (tester) async {
+  testWidgets('widget-list scroll leaves no stale cells on the terminal', (
+    tester,
+  ) async {
     tester.pumpWidget(StorybookApp());
     const size = CellSize(72, 48);
 
@@ -144,11 +181,15 @@ void main() {
         final expectedRow = [
           for (var c = 0; c < size.cols; c++) _expected(frame.next, c, r),
         ].join().replaceAll(RegExp(r'\s+$'), '');
-        expect(term.rowText(r), expectedRow,
-            reason: 'terminal diverged from the rendered frame at row $r '
-                'after "$label"\n'
-                '  terminal: "${term.rowText(r)}"\n'
-                '  rendered: "$expectedRow"');
+        expect(
+          term.rowText(r),
+          expectedRow,
+          reason:
+              'terminal diverged from the rendered frame at row $r '
+              'after "$label"\n'
+              '  terminal: "${term.rowText(r)}"\n'
+              '  rendered: "$expectedRow"',
+        );
       }
       loop.commit(frame);
     }

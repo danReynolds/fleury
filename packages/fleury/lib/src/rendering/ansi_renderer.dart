@@ -423,7 +423,6 @@ final class AnsiRenderer {
     return n == 1 ? '\x1B[$dir' : '\x1B[$n$dir';
   }
 
-
   static String _scrollUp(int rows) => rows == 1 ? '\x1B[S' : '\x1B[${rows}S';
 
   /// ASCII text (with any required SGR transitions) that can be rewritten in
