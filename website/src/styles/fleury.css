@@ -69,6 +69,19 @@
   font-style: italic;
   white-space: nowrap;
 }
+/* Discreet "how this runs" affordance — the one place we explain the dart2js
+   story, instead of a repeated admonition on every page. */
+.fleury-info {
+  font-size: 0.7rem;
+  color: var(--sl-color-gray-4);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: help;
+}
+.fleury-info:hover {
+  color: var(--sl-color-text-accent);
+  text-decoration: underline;
+}
 .fleury-expand {
   background: transparent;
   color: var(--sl-color-gray-2);

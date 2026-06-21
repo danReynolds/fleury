@@ -25,10 +25,6 @@ const KNOBS_COMPONENT = '../../../components/FleuryKnobs.astro';
 const KNOB_WIDGETS = new Set(['gauge', 'progressbar', 'histogram', 'heatmap']);
 
 const yaml = (s) => JSON.stringify(s);
-const note = (widget) =>
-  `:::note\nThis example runs entirely in your browser — the real \`${widget}\` ` +
-  `widget, compiled to JavaScript with dart2js (no server). See ` +
-  `[Serving and embedding](/architecture/serving-and-embedding/).\n:::\n`;
 
 // API reference + example source, extracted from the Dart source at build time.
 const api = JSON.parse(readFileSync(API, 'utf8'));
@@ -114,7 +110,6 @@ for (const e of widgets) {
       `${intro}\n\n` +
       `${liveBlock}\n\n` +
       (snippet ? `The code for the example above:\n\n\`\`\`dart\n${snippet}\n\`\`\`\n\n` : '') +
-      `${note(e.widget)}\n` +
       propsTable(e.widget) +
       `**Category:** ${e.category} · [Back to all widgets](/widgets/)\n`
   );
@@ -156,7 +151,6 @@ for (const e of showcases) {
       '```\n\n' +
       `<FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}}` +
       `${e.interactive ? ' interactive' : ''} />\n\n` +
-      `${note('app,')}\n` +
       `[Back to all showcases](/showcases/)\n`
   );
 }

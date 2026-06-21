@@ -22,7 +22,14 @@ const style = `width:${cols}ch;height:${(rows * 1.25).toFixed(2)}em`;
       <span class="fleury-badge" title="Edit the props below — the live widget re-renders in place.">
         <span class="fleury-dot"></span>Live · interactive
       </span>
-      <span class="fleury-hint">▾ edit the props below</span>
+      <div style="display:flex;align-items:center;gap:0.6rem">
+        <span class="fleury-hint">▾ edit the props below</span>
+        <a
+          class="fleury-info"
+          href="/architecture/serving-and-embedding/"
+          title="The real widget, running live in your browser — compiled to JavaScript with dart2js, no server. Click to learn how."
+        >ⓘ how it works</a>
+      </div>
     </div>
     <div class="fleury-host-wrap">
       <div class="fleury-host fleury-knob-host" style={style} role="img" aria-label={`Interactive Fleury ${id} playground`}></div>
