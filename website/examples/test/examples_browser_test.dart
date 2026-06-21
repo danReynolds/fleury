@@ -62,4 +62,43 @@ void main() {
     addTearDown(() => host.remove());
     expect(host.textContent, contains('q4'));
   });
+
+  test('gauge knobs re-render in place when a prop changes', () async {
+    final flush = _FakeFlush();
+    final host = web.document.createElement('div');
+    host.setAttribute(
+      'style',
+      'position:absolute;left:0;top:0;width:60ch;height:160px;'
+          'font-family:monospace;font-size:16px;line-height:18px;',
+    );
+    web.document.body!.appendChild(host);
+    addTearDown(() => host.remove());
+
+    final params = KnobParams(<String, Object?>{
+      'value': 0.30,
+      'label': 'CPU',
+      'showPercentage': true,
+    });
+    await runTuiWebDom(
+      () => knobRoot('gauge', params),
+      hostElement: host,
+      flushScheduler: flush.schedule,
+    );
+    for (var i = 0; i < 4 && flush.pending; i++) {
+      flush.fire();
+    }
+    expect(host.textContent, contains('30%'));
+
+    // Push a new value through the notifier; the widget should rebuild in place.
+    params.value = <String, Object?>{
+      'value': 0.90,
+      'label': 'CPU',
+      'showPercentage': true,
+    };
+    for (var i = 0; i < 4 && flush.pending; i++) {
+      flush.fire();
+    }
+    expect(host.textContent, contains('90%'));
+    expect(host.textContent, isNot(contains('30%')));
+  });
 }

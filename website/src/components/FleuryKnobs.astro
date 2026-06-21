@@ -1,0 +1,198 @@
+---
+// An interactive "playground" for a knob-enabled widget: the live widget on top
+// (mounted via window.fleuryMountKnobs from the dart2js bundle) and form
+// controls below. Changing a control pushes new props into the running widget,
+// which re-renders in place — no recompile. The control set per widget id lives
+// in the KNOBS table in the inline script below.
+interface Props {
+  /** Knob id, e.g. "gauge" or "progressbar" (see registry.dart knobExamples). */
+  id: string;
+  /** Grid width in character cells. */
+  cols?: number;
+  /** Grid height in rows. */
+  rows?: number;
+}
+const { id, cols = 48, rows = 6 } = Astro.props;
+const style = `width:${cols}ch;height:${(rows * 1.25).toFixed(2)}em`;
+---
+
+<div class="fleury-knobs" data-fleury-knobs={id}>
+  <div class="fleury-frame">
+    <div class="fleury-bar">
+      <span class="fleury-badge" title="Edit the props below — the live widget re-renders in place.">
+        <span class="fleury-dot"></span>Live · interactive
+      </span>
+      <span class="fleury-knob-hint">▾ edit the props below</span>
+    </div>
+    <div class="fleury-host-wrap">
+      <div class="fleury-host fleury-knob-host" style={style} role="img" aria-label={`Interactive Fleury ${id} playground`}></div>
+    </div>
+  </div>
+  <div class="fleury-controls" role="group" aria-label="Widget properties"></div>
+</div>
+
+<script is:inline>
+  (function () {
+    // Control specs per knob id. Kept in sync with registry.dart knobExamples.
+    const KNOBS = {
+      gauge: [
+        { name: 'value', type: 'range', min: 0, max: 1, step: 0.01, default: 0.62 },
+        { name: 'label', type: 'text', default: 'CPU' },
+        { name: 'showPercentage', type: 'bool', default: true },
+      ],
+      progressbar: [
+        { name: 'value', type: 'range', min: 0, max: 1, step: 0.01, default: 0.45 },
+        { name: 'indeterminate', type: 'bool', default: false },
+      ],
+    };
+
+    if (!document.getElementById('fleury-examples-bundle')) {
+      const s = document.createElement('script');
+      s.id = 'fleury-examples-bundle';
+      s.src = '/fleury-examples.js';
+      s.defer = true;
+      document.head.appendChild(s);
+    }
+
+    function whenReady(cb) {
+      if (window.fleuryMountKnobs) return cb();
+      let tries = 0;
+      const t = setInterval(() => {
+        if (window.fleuryMountKnobs || tries++ > 200) {
+          clearInterval(t);
+          if (window.fleuryMountKnobs) cb();
+        }
+      }, 50);
+    }
+
+    function control(spec, params, onChange) {
+      const row = document.createElement('label');
+      row.className = 'fleury-knob';
+      const name = document.createElement('code');
+      name.className = 'fleury-knob-name';
+      name.textContent = spec.name;
+      row.appendChild(name);
+      if (spec.type === 'range') {
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.min = spec.min; input.max = spec.max; input.step = spec.step;
+        input.value = params[spec.name];
+        const out = document.createElement('span');
+        out.className = 'fleury-knob-val';
+        out.textContent = (+params[spec.name]).toFixed(2);
+        input.addEventListener('input', () => {
+          params[spec.name] = +input.value;
+          out.textContent = (+input.value).toFixed(2);
+          onChange();
+        });
+        row.appendChild(input);
+        row.appendChild(out);
+      } else if (spec.type === 'bool') {
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = !!params[spec.name];
+        input.addEventListener('change', () => {
+          params[spec.name] = input.checked;
+          onChange();
+        });
+        row.insertBefore(input, name);
+      } else if (spec.type === 'text') {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'fleury-knob-text';
+        input.value = params[spec.name];
+        input.addEventListener('input', () => {
+          params[spec.name] = input.value;
+          onChange();
+        });
+        row.appendChild(input);
+      }
+      return row;
+    }
+
+    function mount(root) {
+      if (root.dataset.fleuryKnobsState) return;
+      root.dataset.fleuryKnobsState = 'mounting';
+      const id = root.dataset.fleuryKnobs;
+      const spec = KNOBS[id] || [];
+      const host = root.querySelector('.fleury-knob-host');
+      const controls = root.querySelector('.fleury-controls');
+      const params = {};
+      spec.forEach((k) => (params[k.name] = k.default));
+      let handle = null;
+      const push = () => {
+        if (handle && handle.update) handle.update(JSON.stringify(params));
+      };
+      spec.forEach((k) => controls.appendChild(control(k, params, push)));
+      whenReady(() => {
+        handle = window.fleuryMountKnobs(host, id, JSON.stringify(params));
+        root.dataset.fleuryKnobsState = 'ready';
+      });
+    }
+
+    function mountAll() {
+      document.querySelectorAll('[data-fleury-knobs]').forEach(mount);
+    }
+    // Mount now (covers the initial / full page load) and on every Astro
+    // client-side navigation. mount() is idempotent via the state guard.
+    if (!window.__fleuryKnobsBoot) {
+      window.__fleuryKnobsBoot = true;
+      document.addEventListener('astro:page-load', mountAll);
+    }
+    mountAll();
+  })();
+</script>
+
+<style>
+  .fleury-knobs {
+    margin: 1.5rem 0;
+    max-width: 100%;
+  }
+  .fleury-knob-hint {
+    font-size: 0.72rem;
+    color: var(--sl-color-gray-4);
+    font-style: italic;
+  }
+  .fleury-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 1.4rem;
+    align-items: center;
+    margin-top: 0.7rem;
+    padding: 0.6rem 0.85rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+    background: var(--sl-color-gray-7, rgba(255, 255, 255, 0.02));
+  }
+  .fleury-knob {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.82rem;
+  }
+  .fleury-knob-name {
+    color: var(--sl-color-text-accent);
+    font-size: 0.78rem;
+  }
+  .fleury-knob-val {
+    min-width: 2.6rem;
+    color: var(--sl-color-gray-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .fleury-knob input[type='range'] {
+    width: 9rem;
+    accent-color: #3ddc97;
+  }
+  .fleury-knob input[type='checkbox'] {
+    accent-color: #3ddc97;
+  }
+  .fleury-knob-text {
+    width: 7rem;
+    padding: 0.1rem 0.35rem;
+    font-size: 0.8rem;
+    color: var(--sl-color-white);
+    background: var(--sl-color-black);
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.3rem;
+  }
+</style>

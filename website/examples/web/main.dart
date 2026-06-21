@@ -6,6 +6,7 @@
 // `window.fleuryMountExamples()` so the docs site can re-scan after Astro
 // client-side navigations (the dart2js `main` only runs on the first load).
 import 'dart:async';
+import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
@@ -24,11 +25,53 @@ external set _fleuryMountExamples(JSFunction value);
 @JS('fleuryMountInto')
 external set _fleuryMountInto(JSFunction value);
 
+// `window.fleuryMountKnobs(hostElement, id, paramsJson)` — mount a knob-enabled
+// widget built from a JSON params string, and return a
+// `{ update(paramsJson), dispose }` handle so the docs UI can push new prop
+// values (re-rendering in place) and tear it down.
+@JS('fleuryMountKnobs')
+external set _fleuryMountKnobs(JSFunction value);
+
 void main() {
   _fleuryMountExamples = (() => _mountAll()).toJS;
   _fleuryMountInto =
       ((web.Element host, String id) => _mountInto(host, id)).toJS;
+  _fleuryMountKnobs =
+      ((web.Element host, String id, String paramsJson) =>
+          _mountKnobs(host, id, paramsJson)).toJS;
   _mountAll();
+}
+
+JSObject _mountKnobs(web.Element host, String id, String paramsJson) {
+  final params = KnobParams(_decodeParams(paramsJson));
+  TuiSurfaceHost? surface;
+  var disposed = false;
+  unawaited(runTuiWebDom(() => knobRoot(id, params), hostElement: host).then((h) {
+    if (disposed) {
+      h.dispose();
+    } else {
+      surface = h;
+    }
+  }));
+  final handle = JSObject();
+  handle['update'] = ((String json) {
+    params.value = _decodeParams(json);
+  }).toJS;
+  handle['dispose'] = (() {
+    disposed = true;
+    surface?.dispose();
+    surface = null;
+  }).toJS;
+  return handle;
+}
+
+Map<String, Object?> _decodeParams(String json) {
+  try {
+    final decoded = jsonDecode(json);
+    return decoded is Map ? decoded.cast<String, Object?>() : <String, Object?>{};
+  } catch (_) {
+    return <String, Object?>{};
+  }
 }
 
 JSObject _mountInto(web.Element host, String id) {

@@ -429,6 +429,64 @@ Widget _framed(Widget child) => Theme(
       child: Padding(padding: const EdgeInsets.all(1), child: child),
     );
 
+// ── Knobs (interactive props) ───────────────────────────────────────────────
+//
+// A small set of widgets gets a live "playground": the docs UI renders form
+// controls and pushes a params map in here, which builds the widget. Re-running
+// with new params re-renders without a recompile — the realistic browser-side
+// answer to "edit and re-run" (true Dart editing would need a compile server).
+
+/// Builds a knob-enabled widget from a params map supplied by the docs UI.
+/// Missing or ill-typed keys fall back to the defaults below.
+final Map<String, Widget Function(Map<String, Object?>)> knobExamples =
+    <String, Widget Function(Map<String, Object?>)>{
+  'gauge': (p) => _framed(Gauge(
+        value: _knobDouble(p['value'], 0.62),
+        label: _knobString(p['label'], 'CPU'),
+        showPercentage: _knobBool(p['showPercentage'], true),
+        thresholds: <(double, Color)>[
+          (0.7, _theme.colorScheme.warning),
+          (0.9, _theme.colorScheme.error),
+        ],
+      )),
+  'progressbar': (p) {
+    final indeterminate = _knobBool(p['indeterminate'], false);
+    return _framed(ProgressBar(
+      value: indeterminate ? null : _knobDouble(p['value'], 0.45),
+    ));
+  },
+};
+
+double _knobDouble(Object? v, double fallback) =>
+    v is num ? v.toDouble() : fallback;
+String _knobString(Object? v, String fallback) =>
+    v is String && v.isNotEmpty ? v : fallback;
+bool _knobBool(Object? v, bool fallback) => v is bool ? v : fallback;
+
+/// A mutable params holder the docs knob UI pushes updates into. Notifies so a
+/// [ListenableBuilder] can rebuild the widget in place (no remount/recompile).
+class KnobParams with ChangeNotifier {
+  KnobParams(this._value);
+
+  Map<String, Object?> _value;
+  Map<String, Object?> get value => _value;
+  set value(Map<String, Object?> next) {
+    _value = next;
+    notifyListeners();
+  }
+}
+
+/// Root widget for a knob playground: rebuilds [id]'s widget whenever [params]
+/// changes.
+Widget knobRoot(String id, KnobParams params) {
+  final builder = knobExamples[id];
+  if (builder == null) return const Center(child: Text('Unknown knob example'));
+  return ListenableBuilder(
+    listenable: params,
+    builder: (context, _) => builder(params.value),
+  );
+}
+
 /// Streams a bounded random-walk series into [builder] on a ticker, so chart
 /// examples animate in the docs. The shown code stays the plain static widget
 /// (see each example's `code` override).

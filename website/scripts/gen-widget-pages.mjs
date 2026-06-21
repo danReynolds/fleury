@@ -18,6 +18,11 @@ const CODE = join(here, '..', 'src', 'examples_code.json');
 const DOCS = join(here, '..', 'src', 'content', 'docs');
 // From src/content/docs/<section>/*.mdx up to src/components/.
 const COMPONENT = '../../../components/FleuryExample.astro';
+const KNOBS_COMPONENT = '../../../components/FleuryKnobs.astro';
+
+// Widgets that get an interactive props playground instead of a static example.
+// The slug must match a key in registry.dart's `knobExamples`.
+const KNOB_WIDGETS = new Set(['gauge', 'progressbar']);
 
 const yaml = (s) => JSON.stringify(s);
 const note = (widget) =>
@@ -92,12 +97,21 @@ for (const e of widgets) {
   // An explicit `code` override (used by animated examples to keep the snippet
   // static) wins; otherwise show the code extracted from the builder.
   const snippet = e.code ?? exampleCode[e.id];
+  // Knob-enabled widgets get an interactive props playground; others a static
+  // (but live) example.
+  const isKnob = KNOB_WIDGETS.has(slug);
+  const importLine = isKnob
+    ? `import FleuryKnobs from '${KNOBS_COMPONENT}';`
+    : `import FleuryExample from '${COMPONENT}';`;
+  const liveBlock = isKnob
+    ? `<FleuryKnobs id="${slug}" cols={${e.cols}} rows={${e.rows}} />`
+    : `<FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}} />`;
   writeFileSync(
     join(widgetsDir, `${slug}.mdx`),
     `---\ntitle: ${yaml(e.widget)}\ndescription: ${yaml(e.blurb)}\n---\n\n` +
-      `import FleuryExample from '${COMPONENT}';\n\n` +
+      `${importLine}\n\n` +
       `${intro}\n\n` +
-      `<FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}} />\n\n` +
+      `${liveBlock}\n\n` +
       (snippet ? `The code for the example above:\n\n\`\`\`dart\n${snippet}\n\`\`\`\n\n` : '') +
       `${note(e.widget)}\n` +
       propsTable(e.widget) +
