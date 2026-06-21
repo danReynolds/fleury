@@ -32,6 +32,7 @@ void main(List<String> args) {
       if (params.isEmpty) continue;
       result[name] = <String, Object?>{
         'doc': _docText(decl.documentationComment),
+        'classDoc': _docMarkdown(decl.documentationComment),
         'params': params,
       };
     }
@@ -100,6 +101,26 @@ List<Map<String, Object?>> _params(
     }
   }
   return null;
+}
+
+/// The full `///` doc comment as Markdown, preserving paragraphs and fenced
+/// code. Dartdoc `[Name]` references become inline code (we have no API site to
+/// link to yet).
+String? _docMarkdown(Comment? comment) {
+  if (comment == null) return null;
+  final lines = comment.tokens.map((t) {
+    var s = t.lexeme;
+    if (s.startsWith('///')) s = s.substring(3);
+    if (s.startsWith(' ')) s = s.substring(1);
+    return s;
+  }).toList();
+  var text = lines.join('\n').trim();
+  if (text.isEmpty) return null;
+  text = text.replaceAllMapped(
+    RegExp(r'\[([A-Za-z_][\w]*)\](?!\()'),
+    (m) => '`${m[1]}`',
+  );
+  return text;
 }
 
 /// First paragraph of a `///` doc comment, collapsed to one line.

@@ -7,19 +7,50 @@
 // client-side navigations (the dart2js `main` only runs on the first load).
 import 'dart:async';
 import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 
 import 'package:fleury_doc_examples/registry.dart';
 import 'package:fleury_web/fleury_web.dart';
 import 'package:web/web.dart' as web;
 
-// Exposes `window.fleuryMountExamples()` for the docs site to call after
-// client-side navigations.
+// `window.fleuryMountExamples()` — re-scan the page after client-side
+// navigations (the dart2js `main` only runs once).
 @JS('fleuryMountExamples')
 external set _fleuryMountExamples(JSFunction value);
 
+// `window.fleuryMountInto(hostElement, id)` — mount one example into a given
+// element (used by the fullscreen overlay) and return a `{ dispose }` handle so
+// the caller can tear it down (and stop any ticker) on close.
+@JS('fleuryMountInto')
+external set _fleuryMountInto(JSFunction value);
+
 void main() {
   _fleuryMountExamples = (() => _mountAll()).toJS;
+  _fleuryMountInto =
+      ((web.Element host, String id) => _mountInto(host, id)).toJS;
   _mountAll();
+}
+
+JSObject _mountInto(web.Element host, String id) {
+  final builder = examples[id];
+  TuiSurfaceHost? surface;
+  var disposed = false;
+  if (builder != null) {
+    unawaited(runTuiWebDom(builder, hostElement: host).then((h) {
+      if (disposed) {
+        h.dispose();
+      } else {
+        surface = h;
+      }
+    }));
+  }
+  final handle = JSObject();
+  handle['dispose'] = (() {
+    disposed = true;
+    surface?.dispose();
+    surface = null;
+  }).toJS;
+  return handle;
 }
 
 void _mountAll() {

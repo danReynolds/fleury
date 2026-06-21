@@ -1,8 +1,8 @@
 ---
 // Embeds a live, client-side Fleury widget. The widget identified by `id` is
 // mounted from the dart2js examples bundle (public/fleury-examples.js) into a
-// host element sized to a specific cell grid (cols × rows), so it's framed to
-// its content rather than stretched to the page column.
+// host sized to a cell grid (cols × rows). An "Expand" button re-mounts it in a
+// dismissible fullscreen overlay.
 interface Props {
   /** Registry id, e.g. "gauge.basic" (see website/examples/lib/registry.dart). */
   id: string;
@@ -21,6 +21,14 @@ const style = `width:${cols}ch;height:${(rows * 1.25).toFixed(2)}em`;
 <figure class="fleury-example">
   {title && <figcaption>{title}</figcaption>}
   <div class="fleury-frame">
+    <button
+      class="fleury-expand"
+      type="button"
+      data-id={id}
+      data-cols={cols}
+      data-rows={rows}
+      aria-label="Expand this example to full screen"
+    >⛶ Expand</button>
     <div
       class="fleury-host"
       data-fleury-example={id}
@@ -33,24 +41,71 @@ const style = `width:${cols}ch;height:${(rows * 1.25).toFixed(2)}em`;
 </figure>
 
 <script is:inline>
-  // Load the bundle once, and (re)mount on every Astro page load — including
-  // client-side navigations, where the dart2js `main` won't re-run.
   (function () {
-    if (!window.__fleuryExamplesBoot) {
-      window.__fleuryExamplesBoot = true;
-      const ensure = () => {
-        if (document.getElementById('fleury-examples-bundle')) return;
-        const s = document.createElement('script');
-        s.id = 'fleury-examples-bundle';
-        s.src = '/fleury-examples.js';
-        s.defer = true;
-        document.head.appendChild(s);
-      };
-      ensure();
-      document.addEventListener('astro:page-load', () => {
-        if (window.fleuryMountExamples) window.fleuryMountExamples();
-      });
+    if (window.__fleuryExamplesBoot) return;
+    window.__fleuryExamplesBoot = true;
+
+    // Load the bundle once; (re)mount on every Astro page load (incl. SPA nav).
+    if (!document.getElementById('fleury-examples-bundle')) {
+      const s = document.createElement('script');
+      s.id = 'fleury-examples-bundle';
+      s.src = '/fleury-examples.js';
+      s.defer = true;
+      document.head.appendChild(s);
     }
+    document.addEventListener('astro:page-load', () => {
+      if (window.fleuryMountExamples) window.fleuryMountExamples();
+    });
+
+    // Fullscreen overlay (event-delegated so it covers every example on a page).
+    function expand(id, cols, rows) {
+      const fc = Math.min(Math.round(cols * 1.5), 160);
+      const fr = Math.min(Math.round(rows * 1.4), 46);
+      const overlay = document.createElement('div');
+      overlay.className = 'fleury-overlay';
+      const card = document.createElement('div');
+      card.className = 'fleury-overlay-card';
+      const bar = document.createElement('div');
+      bar.className = 'fleury-overlay-bar';
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'fleury-overlay-close';
+      close.textContent = '✕ Close (Esc)';
+      bar.appendChild(close);
+      const host = document.createElement('div');
+      host.className = 'fleury-host';
+      host.style.cssText =
+        `width:${fc}ch;height:${(fr * 1.25).toFixed(1)}em;max-width:92vw;max-height:78vh`;
+      card.appendChild(bar);
+      card.appendChild(host);
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+      document.documentElement.style.overflow = 'hidden';
+
+      const handle = window.fleuryMountInto
+        ? window.fleuryMountInto(host, id)
+        : null;
+      const dismiss = () => {
+        if (handle && handle.dispose) handle.dispose();
+        overlay.remove();
+        document.documentElement.style.overflow = '';
+        document.removeEventListener('keydown', onKey);
+      };
+      const onKey = (e) => {
+        if (e.key === 'Escape') dismiss();
+      };
+      document.addEventListener('keydown', onKey);
+      overlay.addEventListener('mousedown', (e) => {
+        if (e.target === overlay) dismiss();
+      });
+      close.addEventListener('click', dismiss);
+    }
+
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest && e.target.closest('.fleury-expand');
+      if (!btn) return;
+      expand(btn.dataset.id, +btn.dataset.cols, +btn.dataset.rows);
+    });
   })();
 </script>
 
@@ -63,9 +118,8 @@ const style = `width:${cols}ch;height:${(rows * 1.25).toFixed(2)}em`;
     color: var(--sl-color-gray-3);
     margin-bottom: 0.4rem;
   }
-  /* The visual card: border, padding, background. Scrolls if the grid is wider
-     than the column on a narrow screen rather than clipping it. */
   .fleury-frame {
+    position: relative;
     display: inline-block;
     max-width: 100%;
     overflow: auto;
@@ -74,7 +128,25 @@ const style = `width:${cols}ch;height:${(rows * 1.25).toFixed(2)}em`;
     border-radius: 0.5rem;
     padding: 0.75rem 1rem;
   }
-  /* The grid host itself — sized to exactly cols × rows by the inline style. */
+  .fleury-expand {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.4rem;
+    z-index: 2;
+    background: rgba(20, 28, 38, 0.85);
+    color: #c8d3e0;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.35rem;
+    padding: 0.1rem 0.45rem;
+    font-size: 0.78rem;
+    cursor: pointer;
+    opacity: 0.65;
+    transition: opacity 0.12s ease;
+  }
+  .fleury-frame:hover .fleury-expand,
+  .fleury-expand:focus-visible {
+    opacity: 1;
+  }
   .fleury-host {
     font-family: var(--sl-font-mono, ui-monospace, monospace);
     font-size: 14px;
@@ -84,13 +156,51 @@ const style = `width:${cols}ch;height:${(rows * 1.25).toFixed(2)}em`;
 </style>
 
 <style is:global>
-  /* The grid's rows are created at runtime, so Astro's scoped styles don't
-     reach them. Starlight's markdown vertical rhythm adds a top margin between
-     block siblings — which double-spaces the grid's rows and overflows the
-     fixed host. Reset it so a row is exactly one line tall. */
+  /* Runtime-created grid rows: reset Starlight's between-block margin so a row
+     is exactly one line tall (else every example double-spaces + overflows). */
   .fleury-host .fleury-screen,
   .fleury-host .fleury-row,
   .fleury-host .fleury-semantics {
     margin: 0 !important;
+  }
+
+  /* Fullscreen overlay (appended to <body>, so it needs global styles). */
+  .fleury-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    background: rgba(0, 0, 0, 0.72);
+  }
+  .fleury-overlay-card {
+    max-width: 95vw;
+    max-height: 90vh;
+    overflow: auto;
+    padding: 0.5rem 1rem 1rem;
+    background: #0b0f14;
+    border: 1px solid var(--sl-color-gray-4, #4a4a4a);
+    border-radius: 0.6rem;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.55);
+  }
+  .fleury-overlay-bar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5rem;
+  }
+  .fleury-overlay-close {
+    background: transparent;
+    color: var(--sl-color-gray-2, #cbd2da);
+    border: 1px solid var(--sl-color-gray-5, #555);
+    border-radius: 0.4rem;
+    padding: 0.25rem 0.65rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .fleury-overlay-close:hover {
+    color: #fff;
+    border-color: #888;
   }
 </style>

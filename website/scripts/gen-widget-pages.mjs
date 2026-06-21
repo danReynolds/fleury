@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const MANIFEST = join(here, '..', 'src', 'examples.json');
 const API = join(here, '..', 'src', 'api.json');
+const CODE = join(here, '..', 'src', 'examples_code.json');
 const DOCS = join(here, '..', 'src', 'content', 'docs');
 // From src/content/docs/<section>/*.mdx up to src/components/.
 const COMPONENT = '../../../components/FleuryExample.astro';
@@ -21,11 +22,31 @@ const COMPONENT = '../../../components/FleuryExample.astro';
 const yaml = (s) => JSON.stringify(s);
 const note = (widget) =>
   `:::note\nThis example runs entirely in your browser — the real \`${widget}\` ` +
-  `compiled to JavaScript with dart2js (no server). See ` +
+  `widget, compiled to JavaScript with dart2js (no server). See ` +
   `[Serving and embedding](/architecture/serving-and-embedding/).\n:::\n`;
 
-// API reference extracted from the widget source (bin/api_extract.dart).
+// API reference + example source, extracted from the Dart source at build time.
 const api = JSON.parse(readFileSync(API, 'utf8'));
+const exampleCode = JSON.parse(readFileSync(CODE, 'utf8'));
+
+// Escape MDX-significant chars (`<` opens a tag, `{` an expression) in prose,
+// leaving fenced and inline code verbatim. For rendering source doc comments.
+const mdxSafe = (md) =>
+  md
+    .split(/(```[\s\S]*?```)/g)
+    .map((seg, i) =>
+      i % 2 === 1
+        ? seg
+        : seg
+            .split(/(`[^`]*`)/g)
+            .map((s, j) =>
+              j % 2 === 1
+                ? s
+                : s.replace(/</g, '&lt;').replace(/\{/g, '&#123;')
+            )
+            .join('')
+    )
+    .join('');
 
 // Markdown-table-safe (and MDX-safe) cell text.
 const cell = (s) =>
@@ -66,13 +87,17 @@ mkdirSync(widgetsDir, { recursive: true });
 
 for (const e of widgets) {
   const slug = e.id.split('.')[0];
+  // Prefer the widget's own source doc comment (richer); fall back to the blurb.
+  const intro = api[e.widget]?.classDoc ? mdxSafe(api[e.widget].classDoc) : e.blurb;
+  const snippet = exampleCode[e.id];
   writeFileSync(
     join(widgetsDir, `${slug}.mdx`),
     `---\ntitle: ${yaml(e.widget)}\ndescription: ${yaml(e.blurb)}\n---\n\n` +
       `import FleuryExample from '${COMPONENT}';\n\n` +
-      `${e.blurb}\n\n` +
+      `${intro}\n\n` +
       `<FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}} />\n\n` +
-      `${note(`${e.widget}\` widget,`)}\n` +
+      (snippet ? `The code for the example above:\n\n\`\`\`dart\n${snippet}\n\`\`\`\n\n` : '') +
+      `${note(e.widget)}\n` +
       propsTable(e.widget) +
       `**Category:** ${e.category} · [Back to all widgets](/widgets/)\n`
   );
