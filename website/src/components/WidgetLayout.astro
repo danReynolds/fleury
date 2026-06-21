@@ -1,0 +1,20 @@
+---
+// Two-column reference layout for widget pages (used with `tableOfContents:
+// false` in the page frontmatter). The description + API breakdown flow in the
+// main column on the left; the live demo and its code sit in a sticky column on
+// the right — reclaiming the space the table-of-contents pane used to waste.
+//
+//   <WidgetLayout>
+//     <Fragment slot="aside"> live demo + ```dart code``` </Fragment>
+//     ...prose, ## Properties, ## Source...
+//   </WidgetLayout>
+//
+// Widths and the sticky/stacking behaviour live in src/styles/fleury.css.
+---
+
+<div class="widget-ref">
+  <div class="widget-ref-docs"><slot /></div>
+  <aside class="widget-ref-aside" aria-label="Live example and code">
+    <slot name="aside" />
+  </aside>
+</div>

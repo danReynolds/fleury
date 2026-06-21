@@ -19,6 +19,7 @@ const DOCS = join(here, '..', 'src', 'content', 'docs');
 // From src/content/docs/<section>/*.mdx up to src/components/.
 const COMPONENT = '../../../components/FleuryExample.astro';
 const KNOBS_COMPONENT = '../../../components/FleuryKnobs.astro';
+const LAYOUT_COMPONENT = '../../../components/WidgetLayout.astro';
 
 // Widgets that get an interactive props playground instead of a static example.
 // The slug must match a key in registry.dart's `knobExamples`.
@@ -122,15 +123,22 @@ for (const e of widgets) {
       `${e.interactive ? ' interactive' : ''} />`;
   writeFileSync(
     join(widgetsDir, `${slug}.mdx`),
-    `---\ntitle: ${yaml(e.widget)}\ndescription: ${yaml(e.blurb)}\n---\n\n` +
-      `${importLine}\n\n` +
-      `${intro}\n\n` +
-      `## Example\n\n` +
+    `---\ntitle: ${yaml(e.widget)}\ndescription: ${yaml(e.blurb)}\n` +
+      `tableOfContents: false\n---\n\n` +
+      `${importLine}\n` +
+      `import WidgetLayout from '${LAYOUT_COMPONENT}';\n\n` +
+      `<WidgetLayout>\n\n` +
+      // Right column: the live demo + the code that produces it.
+      `<Fragment slot="aside">\n\n` +
       `${liveBlock}\n\n` +
       (snippet ? `\`\`\`dart\n${snippet}\n\`\`\`\n\n` : '') +
+      `</Fragment>\n\n` +
+      // Left column: description + API breakdown.
+      `${intro}\n\n` +
       propsTable(e.widget) +
       sourceSection(e.widget) +
-      `**Category:** ${e.category} · [All widgets](/widgets/)\n`
+      `**Category:** ${e.category} · [All widgets](/widgets/)\n\n` +
+      `</WidgetLayout>\n`
   );
 }
 

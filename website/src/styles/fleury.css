@@ -4,6 +4,46 @@
    and the knob pages use a different component — both need the same host font
    metrics and frame chrome. Component-specific layout stays in each .astro. */
 
+/* ── Widget reference layout (two columns) ──────────────────────────────────
+   Widget pages run with `tableOfContents: false` and wrap their body in
+   <WidgetLayout>. We reclaim the freed table-of-contents width: the prose + API
+   breakdown flow on the left, the live demo + code stick on the right. The
+   :has() override lets the page (title + body containers) use the full pane. */
+.main-pane:has(.widget-ref) .sl-container {
+  max-width: none;
+}
+.widget-ref {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 31rem);
+  gap: 1rem 2.75rem;
+  align-items: start;
+}
+.widget-ref-docs > :first-child {
+  margin-top: 0;
+}
+.widget-ref-aside {
+  position: sticky;
+  top: 5rem;
+  min-width: 0;
+}
+/* The demo + code can be wider than the column on small widgets — let them
+   scroll rather than blow out the grid track. */
+.widget-ref-aside .fleury-example,
+.widget-ref-aside .fleury-knobs {
+  max-width: 100%;
+  overflow-x: auto;
+}
+/* Stack to a single column when there isn't room for two — demo first. */
+@media (max-width: 72rem) {
+  .widget-ref {
+    grid-template-columns: 1fr;
+  }
+  .widget-ref-aside {
+    position: static;
+    order: -1;
+  }
+}
+
 /* ── The cell-grid host ─────────────────────────────────────────────────────
    The DOM grid sizes its cells from these metrics; the digit/braille glyphs
    depend on line-height: 1.25 to connect vertically, so this MUST reach every
