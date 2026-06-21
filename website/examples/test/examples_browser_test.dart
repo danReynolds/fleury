@@ -63,6 +63,15 @@ void main() {
     expect(host.textContent, contains('q4'));
   });
 
+  test('digits.basic renders the interactive world-clock timezone tabs',
+      () async {
+    final host = await _mount('digits.basic');
+    addTearDown(() => host.remove());
+    // The timezone tab labels are real text; the clock itself is block glyphs.
+    expect(host.textContent, contains('UTC'));
+    expect(host.textContent, contains('PST'));
+  });
+
   test('gauge knobs re-render in place when a prop changes', () async {
     final flush = _FakeFlush();
     final host = web.document.createElement('div');

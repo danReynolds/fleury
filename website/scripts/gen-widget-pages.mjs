@@ -105,7 +105,8 @@ for (const e of widgets) {
     : `import FleuryExample from '${COMPONENT}';`;
   const liveBlock = isKnob
     ? `<FleuryKnobs id="${slug}" cols={${e.cols}} rows={${e.rows}} />`
-    : `<FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}} />`;
+    : `<FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}}` +
+      `${e.interactive ? ' interactive' : ''} />`;
   writeFileSync(
     join(widgetsDir, `${slug}.mdx`),
     `---\ntitle: ${yaml(e.widget)}\ndescription: ${yaml(e.blurb)}\n---\n\n` +
@@ -153,7 +154,8 @@ for (const e of showcases) {
       '```sh\n' +
       `fleury dev samples ${slug}\n` +
       '```\n\n' +
-      `<FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}} />\n\n` +
+      `<FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}}` +
+      `${e.interactive ? ' interactive' : ''} />\n\n` +
       `${note('app,')}\n` +
       `[Back to all showcases](/showcases/)\n`
   );

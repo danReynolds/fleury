@@ -25,6 +25,7 @@ class ExampleInfo {
     this.cols = 56,
     this.rows = 10,
     this.code,
+    this.interactive = false,
   });
 
   /// Stable id, e.g. `gauge.basic`.
@@ -51,6 +52,12 @@ class ExampleInfo {
   /// examples so the snippet stays the clean static widget usage while the live
   /// example streams. When null, the code is extracted from the builder source.
   final String? code;
+
+  /// Whether the widget actually responds to keyboard/mouse input. Drives the
+  /// "interactive" badge so it never over-promises on a view-only widget.
+  /// (Knob-enabled widgets are interactive via their controls — see
+  /// `knobExamples` — and are flagged in the page generator, not here.)
+  final bool interactive;
 }
 
 final List<ExampleInfo> exampleList = <ExampleInfo>[
@@ -195,9 +202,19 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'Digits',
     category: 'Charts & meters',
     blurb: 'Seven-segment-style large digits for clocks and counters.',
-    cols: 44,
-    rows: 7,
-    builder: () => _framed(Digits('12:34:56', color: _theme.colorScheme.primary)),
+    cols: 56,
+    rows: 11,
+    interactive: true,
+    code: '''// A live world clock: Tabs pick the zone, Digits show the ticking time.
+// Switch zones with ← / → (or click a tab); the clock ticks every second.
+Tabs(
+  tabs: <TabItem>[
+    TabItem(label: 'UTC', content: Digits(utcTime)),
+    TabItem(label: 'EST', content: Digits(estTime)),
+    // …one tab per zone — the selected tab's clock updates each second.
+  ],
+)''',
+    builder: () => _framed(const _WorldClock()),
   ),
 
   // ── Data & lists ─────────────────────────────────────────────────────────
@@ -208,6 +225,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     blurb: 'A columnar table with flex/fixed widths and row/cell selection.',
     cols: 48,
     rows: 8,
+    interactive: true,
     builder: () => _framed(DataTable(
       rowCount: _people.length,
       controller: DataTableController(),
@@ -234,6 +252,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     blurb: 'An expandable hierarchy with keyboard navigation and type-ahead.',
     cols: 40,
     rows: 9,
+    interactive: true,
     builder: () => _framed(Tree<String>(
       label: 'project',
       roots: <TreeNode<String>>[
@@ -275,6 +294,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     blurb: 'A collapsible, type-colored tree view of a JSON value.',
     cols: 48,
     rows: 10,
+    interactive: true,
     builder: () => _framed(JsonView(
       value: const <String, Object?>{
         'name': 'fleury',
@@ -354,6 +374,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
         'chart, memory/IO meters, and a live process table.',
     cols: 116,
     rows: 38,
+    interactive: true,
     builder: () => const DashboardApp(),
   ),
   ExampleInfo(
@@ -365,6 +386,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
         'adapts to each file type (code, Markdown, JSON).',
     cols: 104,
     rows: 26,
+    interactive: true,
     builder: () => const FileManagerApp(),
   ),
   ExampleInfo(
@@ -376,6 +398,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
         'list, a colored diff, and a prompt box.',
     cols: 92,
     rows: 34,
+    interactive: true,
     builder: () => const AgentApp(),
   ),
 ];
@@ -485,6 +508,75 @@ Widget knobRoot(String id, KnobParams params) {
     listenable: params,
     builder: (context, _) => builder(params.value),
   );
+}
+
+/// An interactive world clock: a [Tabs] strip selects a timezone and a [Digits]
+/// shows that zone's wall-clock time, ticking once a second. Demonstrates making
+/// a display widget interactive — pick a zone with ← / → (or click a tab).
+class _WorldClock extends StatefulWidget {
+  const _WorldClock();
+
+  @override
+  State<_WorldClock> createState() => _WorldClockState();
+}
+
+class _WorldClockState extends State<_WorldClock>
+    with SingleTickerProviderStateMixin {
+  // (label, UTC offset in hours). Fixed offsets — a demo, not a DST authority.
+  static const List<(String, int)> _zones = <(String, int)>[
+    ('UTC', 0),
+    ('EST', -5),
+    ('PST', -8),
+    ('CET', 1),
+    ('JST', 9),
+  ];
+
+  Ticker? _ticker;
+  int _lastSecond = -1;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_ticker == null && TuiBinding.maybeOf(context) != null) {
+      _ticker = createTicker(_onTick)..start();
+    }
+  }
+
+  void _onTick(Duration _) {
+    final second = DateTime.now().second;
+    if (second == _lastSecond) return; // rebuild ~once a second, not every frame
+    _lastSecond = second;
+    setState(() {});
+  }
+
+  String _timeFor(int offsetHours) {
+    final t = DateTime.now().toUtc().add(Duration(hours: offsetHours));
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(t.hour)}:${two(t.minute)}:${two(t.second)}';
+  }
+
+  @override
+  void dispose() {
+    _ticker?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Tabs(
+      tabs: <TabItem>[
+        for (final zone in _zones)
+          TabItem(
+            label: zone.$1,
+            content: Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Digits(_timeFor(zone.$2), color: theme.colorScheme.primary),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 /// Streams a bounded random-walk series into [builder] on a ticker, so chart

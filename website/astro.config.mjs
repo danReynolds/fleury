@@ -10,6 +10,10 @@ export default defineConfig({
       title: 'Fleury',
       description:
         "Flutter's architecture, rebuilt for the terminal — and the browser.",
+      // Shared styling for embedded Fleury examples — must be site-wide so the
+      // JS-created fullscreen overlay (appended to <body>, outside component
+      // scope) and the knob pages get the same host font metrics + chrome.
+      customCss: ['./src/styles/fleury.css'],
       sidebar: [
         {
           label: 'Start here',

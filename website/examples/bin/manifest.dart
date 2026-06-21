@@ -17,6 +17,7 @@ void main(List<String> args) {
         'cols': e.cols,
         'rows': e.rows,
         'code': e.code,
+        'interactive': e.interactive,
       },
   ];
   final json = const JsonEncoder.withIndent('  ').convert(data);

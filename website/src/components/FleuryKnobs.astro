@@ -22,7 +22,7 @@ const style = `width:${cols}ch;height:${(rows * 1.25).toFixed(2)}em`;
       <span class="fleury-badge" title="Edit the props below — the live widget re-renders in place.">
         <span class="fleury-dot"></span>Live · interactive
       </span>
-      <span class="fleury-knob-hint">▾ edit the props below</span>
+      <span class="fleury-hint">▾ edit the props below</span>
     </div>
     <div class="fleury-host-wrap">
       <div class="fleury-host fleury-knob-host" style={style} role="img" aria-label={`Interactive Fleury ${id} playground`}></div>
@@ -142,57 +142,3 @@ const style = `width:${cols}ch;height:${(rows * 1.25).toFixed(2)}em`;
     mountAll();
   })();
 </script>
-
-<style>
-  .fleury-knobs {
-    margin: 1.5rem 0;
-    max-width: 100%;
-  }
-  .fleury-knob-hint {
-    font-size: 0.72rem;
-    color: var(--sl-color-gray-4);
-    font-style: italic;
-  }
-  .fleury-controls {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.6rem 1.4rem;
-    align-items: center;
-    margin-top: 0.7rem;
-    padding: 0.6rem 0.85rem;
-    border: 1px solid var(--sl-color-gray-5);
-    border-radius: 0.5rem;
-    background: var(--sl-color-gray-7, rgba(255, 255, 255, 0.02));
-  }
-  .fleury-knob {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    font-size: 0.82rem;
-  }
-  .fleury-knob-name {
-    color: var(--sl-color-text-accent);
-    font-size: 0.78rem;
-  }
-  .fleury-knob-val {
-    min-width: 2.6rem;
-    color: var(--sl-color-gray-3);
-    font-variant-numeric: tabular-nums;
-  }
-  .fleury-knob input[type='range'] {
-    width: 9rem;
-    accent-color: #3ddc97;
-  }
-  .fleury-knob input[type='checkbox'] {
-    accent-color: #3ddc97;
-  }
-  .fleury-knob-text {
-    width: 7rem;
-    padding: 0.1rem 0.35rem;
-    font-size: 0.8rem;
-    color: var(--sl-color-white);
-    background: var(--sl-color-black);
-    border: 1px solid var(--sl-color-gray-5);
-    border-radius: 0.3rem;
-  }
-</style>
