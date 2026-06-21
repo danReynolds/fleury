@@ -19,6 +19,15 @@ export default defineConfig({
           ],
         },
         {
+          label: 'Guides',
+          items: [
+            { label: 'Theming', slug: 'guides/theming' },
+            { label: 'Animation & tickers', slug: 'guides/animation' },
+            { label: 'Focus & keyboard', slug: 'guides/focus-and-keyboard' },
+            { label: 'Testing', slug: 'guides/testing' },
+          ],
+        },
+        {
           label: 'Architecture',
           items: [
             { label: 'Core and targets', slug: 'architecture/core-and-targets' },
