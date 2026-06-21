@@ -22,7 +22,7 @@ const KNOBS_COMPONENT = '../../../components/FleuryKnobs.astro';
 
 // Widgets that get an interactive props playground instead of a static example.
 // The slug must match a key in registry.dart's `knobExamples`.
-const KNOB_WIDGETS = new Set(['gauge', 'progressbar']);
+const KNOB_WIDGETS = new Set(['gauge', 'progressbar', 'histogram', 'heatmap']);
 
 const yaml = (s) => JSON.stringify(s);
 const note = (widget) =>

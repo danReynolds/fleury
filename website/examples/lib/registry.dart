@@ -276,6 +276,7 @@ Tabs(
     blurb: 'Renders Markdown — headings, lists, code, quotes — to styled cells.',
     cols: 60,
     rows: 13,
+    interactive: true,
     builder: () => _framed(MarkdownView(markdown: _markdownSample)),
   ),
   ExampleInfo(
@@ -284,7 +285,8 @@ Tabs(
     category: 'Documents',
     blurb: 'Source with line numbers, comment dimming, and copy support.',
     cols: 58,
-    rows: 8,
+    rows: 12,
+    interactive: true,
     builder: () => _framed(CodeView(source: _codeSample, language: 'dart')),
   ),
   ExampleInfo(
@@ -313,7 +315,8 @@ Tabs(
     category: 'Agent surfaces',
     blurb: 'A role-aware conversation transcript (user/assistant/tool/…).',
     cols: 64,
-    rows: 8,
+    rows: 11,
+    interactive: true,
     builder: () => _framed(MessageList(
       showTimestamp: false,
       messages: const <MessageEntry>[
@@ -322,7 +325,17 @@ Tabs(
             text: "I'll read the CLI and pubspec first.",
             role: MessageRole.assistant),
         MessageEntry(text: 'Read  lib/main.dart', role: MessageRole.tool),
-        MessageEntry(text: 'Done — prints 1.4.0.', role: MessageRole.assistant),
+        MessageEntry(text: 'Read  pubspec.yaml', role: MessageRole.tool),
+        MessageEntry(
+            text: 'Found version 1.4.0 in pubspec. Adding a --version flag '
+                'that prints it and exits.',
+            role: MessageRole.assistant),
+        MessageEntry(text: 'Edit  lib/main.dart (+8 −0)', role: MessageRole.tool),
+        MessageEntry(text: 'dart test', role: MessageRole.tool),
+        MessageEntry(
+            text: 'All 12 tests pass. `myapp --version` prints 1.4.0.',
+            role: MessageRole.assistant),
+        MessageEntry(text: 'Ship it 🚀', role: MessageRole.user),
       ],
     )),
   ),
@@ -417,18 +430,67 @@ const List<(String, String, int)> _people = <(String, String, int)>[
 
 const String _markdownSample = '''
 # Fleury
-A **retained-mode** UI framework.
 
-- terminal target
-- web target
+A **retained-mode** UI framework for the terminal — and the browser.
 
-> One app, two surfaces.
+## Targets
+
+- **terminal** — POSIX & Windows drivers
+- **web (serve)** — stream frames to a browser over a socket
+- **web (embed)** — compile the widget tree to JS with dart2js
+
+## Why
+
+> One widget tree. Two surfaces. No rewrite.
+
+Build with the same `Widget` / `State` / `build` model you know from
+Flutter, then run it wherever your users are — a terminal, or a
+`<div>` on a page.
+
+```dart
+runTui(const App());
+```
+
+See the **Guides** for theming, animation, focus, and testing.
 ''';
 
 const String _codeSample = '''
 import 'package:fleury/fleury.dart';
 
-Future<void> main() => runTui(const App());
+/// A tiny counter — the smallest interesting Fleury program.
+void main() => runTui(
+      const CounterApp(),
+      onEvent: (event) => event is KeyEvent && event.char == 'q'
+          ? const ExitRequested()
+          : null,
+    );
+
+class CounterApp extends StatefulWidget {
+  const CounterApp({super.key});
+
+  @override
+  State<CounterApp> createState() => _CounterAppState();
+}
+
+class _CounterAppState extends State<CounterApp> {
+  int _count = 0;
+
+  void _increment() => setState(() => _count++);
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text('count: \$_count'),
+          const SizedBox(height: 1),
+          Button(label: '+1', onPressed: _increment),
+        ],
+      ),
+    );
+  }
+}
 ''';
 
 // A compact dark theme so embedded examples read well on the docs page.
@@ -478,10 +540,30 @@ final Map<String, Widget Function(Map<String, Object?>)> knobExamples =
       value: indeterminate ? null : _knobDouble(p['value'], 0.45),
     ));
   },
+  'histogram': (p) => _framed(Histogram(
+        values: const <num>[
+          1, 2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 6, 6, 7, 2, 3, 4, 5,
+        ],
+        bins: _knobInt(p['bins'], 7),
+        showValues: _knobBool(p['showValues'], true),
+        color: _theme.colorScheme.primary,
+      )),
+  'heatmap': (p) => _framed(Heatmap(
+        values: const <List<num>>[
+          <num>[0.1, 0.3, 0.6, 0.9],
+          <num>[0.2, 0.5, 0.8, 0.4],
+          <num>[0.7, 0.6, 0.3, 0.1],
+        ],
+        rowLabels: const <String>['a', 'b', 'c'],
+        colLabels: const <String>['w', 'x', 'y', 'z'],
+        cellWidth: _knobInt(p['cellWidth'], 3),
+        showLegend: _knobBool(p['showLegend'], true),
+      )),
 };
 
 double _knobDouble(Object? v, double fallback) =>
     v is num ? v.toDouble() : fallback;
+int _knobInt(Object? v, int fallback) => v is num ? v.round() : fallback;
 String _knobString(Object? v, String fallback) =>
     v is String && v.isNotEmpty ? v : fallback;
 bool _knobBool(Object? v, bool fallback) => v is bool ? v : fallback;

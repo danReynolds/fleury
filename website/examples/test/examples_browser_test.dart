@@ -110,4 +110,45 @@ void main() {
     expect(host.textContent, contains('90%'));
     expect(host.textContent, isNot(contains('30%')));
   });
+
+  test('codeview.basic renders the (now scrollable) source', () async {
+    final host = await _mount('codeview.basic');
+    addTearDown(() => host.remove());
+    expect(host.textContent, contains('CounterApp'));
+  });
+
+  test('messagelist.basic renders the (now scrollable) transcript', () async {
+    final host = await _mount('messagelist.basic');
+    addTearDown(() => host.remove());
+    expect(host.textContent, contains('Ship it'));
+  });
+
+  test('histogram knobs re-render when the bin count changes', () async {
+    final flush = _FakeFlush();
+    final host = web.document.createElement('div');
+    host.setAttribute(
+      'style',
+      'position:absolute;left:0;top:0;width:80ch;height:240px;'
+          'font-family:monospace;font-size:16px;line-height:18px;',
+    );
+    web.document.body!.appendChild(host);
+    addTearDown(() => host.remove());
+
+    final params = KnobParams(<String, Object?>{'bins': 4, 'showValues': true});
+    await runTuiWebDom(
+      () => knobRoot('histogram', params),
+      hostElement: host,
+      flushScheduler: flush.schedule,
+    );
+    for (var i = 0; i < 4 && flush.pending; i++) {
+      flush.fire();
+    }
+    final fourBins = host.textContent;
+
+    params.value = <String, Object?>{'bins': 16, 'showValues': true};
+    for (var i = 0; i < 4 && flush.pending; i++) {
+      flush.fire();
+    }
+    expect(host.textContent, isNot(equals(fourBins))); // re-binned in place
+  });
 }
