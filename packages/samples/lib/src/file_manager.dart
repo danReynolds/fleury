@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
+import 'package:fleury/fleury_host.dart';
+import 'package:fleury_widgets/fleury_widgets_web.dart';
 
 import 'scaffold.dart';
 
@@ -220,7 +220,7 @@ dart run bin/my_app.dart
 ''';
 
 const String _mainDart = '''
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 import 'src/app.dart';
 
@@ -238,7 +238,7 @@ Future<void> main() async {
 ''';
 
 const String _appDart = '''
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 import 'counter.dart';
 

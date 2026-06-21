@@ -1,4 +1,4 @@
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 import 'scaffold.dart';
 
