@@ -27,8 +27,8 @@ const style = `width:${cols}ch;height:${(rows * 1.25).toFixed(2)}em`;
     <div class="fleury-host-wrap">
       <div class="fleury-host fleury-knob-host" style={style} role="img" aria-label={`Interactive Fleury ${id} playground`}></div>
     </div>
+    <div class="fleury-controls" role="group" aria-label="Widget properties"></div>
   </div>
-  <div class="fleury-controls" role="group" aria-label="Widget properties"></div>
 </div>
 
 <script is:inline>
@@ -106,7 +106,7 @@ const style = `width:${cols}ch;height:${(rows * 1.25).toFixed(2)}em`;
           params[spec.name] = input.checked;
           onChange();
         });
-        row.insertBefore(input, name);
+        row.appendChild(input);
       } else if (spec.type === 'text') {
         const input = document.createElement('input');
         input.type = 'text';
