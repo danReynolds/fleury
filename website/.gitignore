@@ -17,3 +17,4 @@ src/examples.json
 # dart bundle build dir
 examples/build/
 examples/.dart_tool/
+src/api.json

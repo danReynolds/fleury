@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MANIFEST = join(here, '..', 'src', 'examples.json');
+const API = join(here, '..', 'src', 'api.json');
 const DOCS = join(here, '..', 'src', 'content', 'docs');
 // From src/content/docs/<section>/*.mdx up to src/components/.
 const COMPONENT = '../../../components/FleuryExample.astro';
@@ -22,6 +23,37 @@ const note = (widget) =>
   `:::note\nThis example runs entirely in your browser — the real \`${widget}\` ` +
   `compiled to JavaScript with dart2js (no server). See ` +
   `[Serving and embedding](/architecture/serving-and-embedding/).\n:::\n`;
+
+// API reference extracted from the widget source (bin/api_extract.dart).
+const api = JSON.parse(readFileSync(API, 'utf8'));
+
+// Markdown-table-safe (and MDX-safe) cell text.
+const cell = (s) =>
+  String(s ?? '—')
+    .replace(/\|/g, '\\|')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\{/g, '&#123;')
+    .replace(/\}/g, '&#125;');
+const codeCell = (s) => '`' + String(s).replace(/\|/g, '\\|') + '`';
+
+// A "Properties" table for a widget class, from its extracted constructor params.
+function propsTable(widget) {
+  const entry = api[widget];
+  if (!entry || !entry.params.length) return '';
+  const rows = entry.params
+    .map((p) => {
+      const def = p.required ? '**required**' : p.default ? codeCell(p.default) : '—';
+      return `| ${codeCell(p.name)} | ${codeCell(p.type)} | ${def} | ${cell(p.doc)} |`;
+    })
+    .join('\n');
+  return (
+    `## Properties\n\n` +
+    `| Property | Type | Default | Description |\n` +
+    `| --- | --- | --- | --- |\n` +
+    `${rows}\n\n`
+  );
+}
 
 const all = JSON.parse(readFileSync(MANIFEST, 'utf8'));
 const widgets = all.filter((e) => e.category !== 'Showcases');
@@ -41,6 +73,7 @@ for (const e of widgets) {
       `${e.blurb}\n\n` +
       `<FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}} />\n\n` +
       `${note(`${e.widget}\` widget,`)}\n` +
+      propsTable(e.widget) +
       `**Category:** ${e.category} · [Back to all widgets](/widgets/)\n`
   );
 }
