@@ -1,0 +1,23 @@
+{
+  "name": "fleury-website",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "sync:docs": "node scripts/sync-docs.mjs",
+    "manifest": "cd examples && dart run bin/manifest.dart ../src/examples.json",
+    "gen:widgets": "node scripts/gen-widget-pages.mjs",
+    "build:examples": "cd examples && dart compile js web/main.dart -o ../public/fleury-examples.js -O2",
+    "generate": "npm run sync:docs && npm run manifest && npm run gen:widgets && npm run build:examples",
+    "predev": "npm run generate",
+    "dev": "astro dev",
+    "prebuild": "npm run generate",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.40.0",
+    "astro": "^6.4.8",
+    "sharp": "^0.35.2"
+  }
+}

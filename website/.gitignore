@@ -1,0 +1,19 @@
+# build output
+dist/
+.astro/
+
+# deps
+node_modules/
+
+# generated — produced by `npm run generate`
+public/fleury-examples.js
+public/fleury-examples.js.deps
+public/fleury-examples.js.map
+src/content/docs/architecture/
+src/content/docs/widgets/
+src/content/docs/showcases/
+src/examples.json
+
+# dart bundle build dir
+examples/build/
+examples/.dart_tool/

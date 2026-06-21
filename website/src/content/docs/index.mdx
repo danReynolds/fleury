@@ -1,0 +1,54 @@
+---
+title: Fleury
+description: Flutter's architecture, rebuilt for the terminal — and the browser.
+template: splash
+hero:
+  tagline: A retained-mode UI framework for the terminal — and the browser. Flutter's architecture, rebuilt for cells.
+  actions:
+    - text: Get started
+      link: /getting-started/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/danReynolds/fleury
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+import FleuryExample from '../../components/FleuryExample.astro';
+
+<FleuryExample
+  id="linechart.basic"
+  title="A live Fleury chart — the real widget, compiled to JS with dart2js, running in this page."
+  height="11em"
+/>
+
+## Why Fleury
+
+<CardGrid>
+  <Card title="Flutter's architecture, for cells" icon="puzzle">
+    Widgets, elements, render objects, and a semantics tree — incremental
+    rebuilds, layout, and paint over a grid of cells instead of pixels.
+  </Card>
+  <Card title="One app, two surfaces" icon="laptop">
+    The same app renders to a real terminal *or* the browser. A parity oracle
+    keeps the two surfaces honest.
+  </Card>
+  <Card title="Machine-readable by default" icon="seti:default">
+    A semantics tree — roles, state, actions — ships as a headline feature, so
+    tests and agents can drive the UI, not just screen-scrape it.
+  </Card>
+  <Card title="Runs anywhere" icon="rocket">
+    Embed widgets client-side with dart2js (no backend), or stream a full native
+    app to the browser with <code>fleury serve</code>.
+  </Card>
+</CardGrid>
+
+## How does the example above work?
+
+That chart isn't a screenshot or a recording — it's the real `LineChart`
+widget. `dart2js` compiled the widget plus the Fleury framework to JavaScript,
+and it renders into a DOM cell grid right here in your browser. See
+[Serving and embedding](/architecture/serving-and-embedding/) for the two ways
+to put Fleury on the web, and [Core and targets](/architecture/core-and-targets/)
+for how the pieces fit together.

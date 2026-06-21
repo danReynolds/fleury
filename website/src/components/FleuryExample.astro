@@ -1,0 +1,70 @@
+---
+// Embeds a live, client-side Fleury widget. The widget identified by `id` is
+// mounted from the dart2js examples bundle (public/fleury-examples.js) into a
+// sized host element — no server, it runs entirely in the browser.
+interface Props {
+  /** Registry id, e.g. "gauge.basic" (see website/examples/lib/registry.dart). */
+  id: string;
+  /** Optional caption shown above the example. */
+  title?: string;
+  /** CSS height of the host box (it needs a real size to paint). */
+  height?: string;
+}
+const { id, title, height = '13em' } = Astro.props;
+---
+
+<figure class="fleury-example">
+  {title && <figcaption>{title}</figcaption>}
+  <div
+    class="fleury-host"
+    data-fleury-example={id}
+    style={`height:${height}`}
+    role="img"
+    aria-label={title ?? `Live Fleury example: ${id}`}
+  >
+  </div>
+</figure>
+
+<script is:inline>
+  // Load the bundle once, and (re)mount on every Astro page load — including
+  // client-side navigations, where the dart2js `main` won't re-run.
+  (function () {
+    if (!window.__fleuryExamplesBoot) {
+      window.__fleuryExamplesBoot = true;
+      const ensure = () => {
+        if (document.getElementById('fleury-examples-bundle')) return;
+        const s = document.createElement('script');
+        s.id = 'fleury-examples-bundle';
+        s.src = '/fleury-examples.js';
+        s.defer = true;
+        document.head.appendChild(s);
+      };
+      ensure();
+      document.addEventListener('astro:page-load', () => {
+        if (window.fleuryMountExamples) window.fleuryMountExamples();
+      });
+    }
+  })();
+</script>
+
+<style>
+  .fleury-example {
+    margin: 1.5rem 0;
+  }
+  .fleury-example figcaption {
+    font-size: 0.85rem;
+    color: var(--sl-color-gray-3);
+    margin-bottom: 0.4rem;
+  }
+  .fleury-host {
+    font-family: var(--sl-font-mono, ui-monospace, monospace);
+    font-size: 14px;
+    line-height: 1.25;
+    background: #0b0f14;
+    color: #c8d3e0;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    overflow: hidden;
+  }
+</style>
