@@ -26,9 +26,26 @@ const KNOB_WIDGETS = new Set(['gauge', 'progressbar', 'histogram', 'heatmap']);
 
 const yaml = (s) => JSON.stringify(s);
 
+// "View source" base — links each widget page back to its Dart implementation,
+// the way the Flutter/dartdoc API reference does.
+const REPO = 'https://github.com/danReynolds/fleury/blob/main';
+
 // API reference + example source, extracted from the Dart source at build time.
 const api = JSON.parse(readFileSync(API, 'utf8'));
 const exampleCode = JSON.parse(readFileSync(CODE, 'utf8'));
+
+// A "## Source" section linking the widget class to its file on GitHub, at the
+// class declaration line.
+function sourceSection(widget) {
+  const e = api[widget];
+  if (!e || !e.file) return '';
+  const url = `${REPO}/${e.file}${e.line ? `#L${e.line}` : ''}`;
+  return (
+    `## Source\n\n` +
+    `\`${widget}\` is defined in [\`${e.file}\`](${url}) — read the ` +
+    `implementation, or jump straight to the [widget catalog](/widgets/).\n\n`
+  );
+}
 
 // Escape MDX-significant chars (`<` opens a tag, `{` an expression) in prose,
 // leaving fenced and inline code verbatim. For rendering source doc comments.
@@ -108,10 +125,12 @@ for (const e of widgets) {
     `---\ntitle: ${yaml(e.widget)}\ndescription: ${yaml(e.blurb)}\n---\n\n` +
       `${importLine}\n\n` +
       `${intro}\n\n` +
+      `## Example\n\n` +
       `${liveBlock}\n\n` +
-      (snippet ? `The code for the example above:\n\n\`\`\`dart\n${snippet}\n\`\`\`\n\n` : '') +
+      (snippet ? `\`\`\`dart\n${snippet}\n\`\`\`\n\n` : '') +
       propsTable(e.widget) +
-      `**Category:** ${e.category} · [Back to all widgets](/widgets/)\n`
+      sourceSection(e.widget) +
+      `**Category:** ${e.category} · [All widgets](/widgets/)\n`
   );
 }
 
@@ -138,20 +157,34 @@ const showDir = join(DOCS, 'showcases');
 rmSync(showDir, { recursive: true, force: true });
 mkdirSync(showDir, { recursive: true });
 
+// Showcase slug → its sample source file (for a "view source" link).
+const SAMPLE_FILES = {
+  dashboard: 'dashboard.dart',
+  files: 'file_manager.dart',
+  agent: 'agent_tui.dart',
+};
 for (const e of showcases) {
   const slug = e.id.split('.')[1]; // showcase.dashboard -> dashboard
+  const file = SAMPLE_FILES[slug];
+  const source = file
+    ? `## Source\n\n` +
+      `Built entirely from Fleury widgets — see ` +
+      `[\`packages/samples/lib/src/${file}\`](${REPO}/packages/samples/lib/src/${file}).\n\n`
+    : '';
   writeFileSync(
     join(showDir, `${slug}.mdx`),
     `---\ntitle: ${yaml(e.widget)}\ndescription: ${yaml(e.blurb)}\n---\n\n` +
       `import FleuryExample from '${COMPONENT}';\n\n` +
       `${e.blurb}\n\n` +
-      `Launch it from the terminal too:\n\n` +
+      `## Example\n\n` +
+      `<FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}}` +
+      `${e.interactive ? ' interactive' : ''} />\n\n` +
+      `## Run it from the terminal\n\n` +
       '```sh\n' +
       `fleury dev samples ${slug}\n` +
       '```\n\n' +
-      `<FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}}` +
-      `${e.interactive ? ' interactive' : ''} />\n\n` +
-      `[Back to all showcases](/showcases/)\n`
+      source +
+      `[All showcases](/showcases/)\n`
   );
 }
 const showIndex =

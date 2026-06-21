@@ -102,6 +102,15 @@
   max-width: 100%;
 }
 
+/* ── Example + its source, grouped under "## Example" ───────────────────────
+   The live demo and the Markdown code fence that documents it sit close so they
+   read as one unit. (The code stays a normal fence rather than nesting inside
+   the shrink-to-fit demo frame, which it can't size against.) */
+.fleury-example,
+.fleury-knobs {
+  margin-bottom: 0.6rem;
+}
+
 /* ── Fullscreen overlay (appended to <body>) ────────────────────────────────*/
 .fleury-overlay {
   position: fixed;

@@ -18,10 +18,14 @@ void main(List<String> args) {
 
   for (final entity in srcDir.listSync()) {
     if (entity is! File || !entity.path.endsWith('.dart')) continue;
-    final unit = parseString(
+    final parsed = parseString(
       content: entity.readAsStringSync(),
       throwIfDiagnostics: false,
-    ).unit;
+    );
+    final unit = parsed.unit;
+    // Repo-relative path so the docs site can build a GitHub "view source" link.
+    final file =
+        'packages/fleury_widgets/lib/src/${entity.uri.pathSegments.last}';
     for (final decl in unit.declarations) {
       if (decl is! ClassDeclaration) continue;
       final name = decl.name.lexeme;
@@ -34,6 +38,8 @@ void main(List<String> args) {
         'doc': _docText(decl.documentationComment),
         'classDoc': _docMarkdown(decl.documentationComment),
         'params': params,
+        'file': file,
+        'line': parsed.lineInfo.getLocation(decl.name.offset).lineNumber,
       };
     }
   }
