@@ -3,6 +3,8 @@
 // (fleury_host) and the web-safe widget barrel (fleury_widgets_web) — never the
 // full `fleury.dart` / `fleury_widgets.dart` umbrellas, which pull in native
 // drivers and the dart:io-backed widgets.
+import 'dart:math';
+
 import 'package:fleury/fleury_host.dart';
 import 'package:fleury_samples/samples.dart';
 import 'package:fleury_widgets/fleury_widgets_web.dart';
@@ -22,6 +24,7 @@ class ExampleInfo {
     required this.builder,
     this.cols = 56,
     this.rows = 10,
+    this.code,
   });
 
   /// Stable id, e.g. `gauge.basic`.
@@ -43,6 +46,11 @@ class ExampleInfo {
   /// stretched to the page column.
   final int cols;
   final int rows;
+
+  /// Optional override for the code shown on the page. Used by animated
+  /// examples so the snippet stays the clean static widget usage while the live
+  /// example streams. When null, the code is extracted from the builder source.
+  final String? code;
 }
 
 final List<ExampleInfo> exampleList = <ExampleInfo>[
@@ -70,10 +78,20 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     blurb: 'A compact inline trend line with an optional trailing value.',
     cols: 44,
     rows: 2,
-    builder: () => _framed(Sparkline(
-      data: const <num>[3, 5, 4, 7, 6, 9, 8, 11, 9, 12, 10, 13, 12, 15],
-      color: _theme.colorScheme.success,
-      showValue: true,
+    code: '''Sparkline(
+  data: <num>[3, 5, 4, 7, 6, 9, 8, 11, 9, 12],
+  color: theme.colorScheme.success,
+  showValue: true,
+)''',
+    builder: () => _framed(_LiveSeries(
+      length: 28,
+      min: 0,
+      max: 20,
+      builder: (data) => Sparkline(
+        data: data,
+        color: _theme.colorScheme.success,
+        showValue: true,
+      ),
     )),
   ),
   ExampleInfo(
@@ -83,19 +101,30 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     blurb: 'A braille line/area/scatter chart with axes, legend, and references.',
     cols: 60,
     rows: 16,
-    builder: () => _framed(LineChart(
-      series: <LineSeries>[
-        LineSeries(
-          const <(num, num)>[
-            (0, 1), (1, 3), (2, 2), (3, 5), (4, 4), (5, 7), (6, 6), (7, 8),
-          ],
-          label: 'load',
-          color: _theme.colorScheme.primary,
-        ),
-      ],
-      showAxes: true,
-      showLegend: true,
-      yRange: const (0, 8),
+    code: '''LineChart(
+  series: <LineSeries>[
+    LineSeries(points, label: 'load', color: theme.colorScheme.primary),
+  ],
+  showAxes: true,
+  showLegend: true,
+  yRange: const (0, 100),
+)''',
+    builder: () => _framed(_LiveSeries(
+      length: 40,
+      min: 0,
+      max: 100,
+      builder: (data) => LineChart(
+        series: <LineSeries>[
+          LineSeries(
+            <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
+            label: 'load',
+            color: _theme.colorScheme.primary,
+          ),
+        ],
+        showAxes: true,
+        showLegend: true,
+        yRange: const (0, 100),
+      ),
     )),
   ),
   ExampleInfo(
@@ -105,9 +134,20 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     blurb: 'Vertical bars with a categorical palette and an optional y-axis.',
     cols: 52,
     rows: 14,
-    builder: () => _framed(BarChart(
-      bars: <Bar>[Bar('q1', 12), Bar('q2', 19), Bar('q3', 9), Bar('q4', 22)],
-      showYAxis: true,
+    code: '''BarChart(
+  bars: <Bar>[Bar('q1', 12), Bar('q2', 19), Bar('q3', 9), Bar('q4', 22)],
+  showYAxis: true,
+)''',
+    builder: () => _framed(_LiveSeries(
+      length: 5,
+      min: 2,
+      max: 24,
+      builder: (data) => BarChart(
+        bars: <Bar>[
+          for (var i = 0; i < data.length; i++) Bar('q${i + 1}', data[i]),
+        ],
+        showYAxis: true,
+      ),
     )),
   ),
   ExampleInfo(
@@ -156,7 +196,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     category: 'Charts & meters',
     blurb: 'Seven-segment-style large digits for clocks and counters.',
     cols: 44,
-    rows: 5,
+    rows: 7,
     builder: () => _framed(Digits('12:34:56', color: _theme.colorScheme.primary)),
   ),
 
@@ -388,3 +428,73 @@ Widget _framed(Widget child) => Theme(
       data: _theme,
       child: Padding(padding: const EdgeInsets.all(1), child: child),
     );
+
+/// Streams a bounded random-walk series into [builder] on a ticker, so chart
+/// examples animate in the docs. The shown code stays the plain static widget
+/// (see each example's `code` override).
+class _LiveSeries extends StatefulWidget {
+  const _LiveSeries({
+    required this.length,
+    required this.min,
+    required this.max,
+    required this.builder,
+  });
+
+  final int length;
+  final double min;
+  final double max;
+  final Widget Function(List<num> data) builder;
+
+  @override
+  State<_LiveSeries> createState() => _LiveSeriesState();
+}
+
+class _LiveSeriesState extends State<_LiveSeries>
+    with SingleTickerProviderStateMixin {
+  final Random _r = Random(5);
+  late List<double> _data;
+  Ticker? _ticker;
+  int _lastMs = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    var v = (widget.min + widget.max) / 2;
+    _data = List<double>.generate(widget.length, (_) => v = _walk(v));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_ticker == null && TuiBinding.maybeOf(context) != null) {
+      _ticker = createTicker(_onTick);
+      // Let the initial chart paint before the stream starts — otherwise the
+      // browser DOM host can keep re-scheduling and never complete the first
+      // paint of a constantly-rebuilding leaf.
+      Future<void>.delayed(const Duration(milliseconds: 250), () {
+        if (mounted && _ticker != null && !_ticker!.isActive) _ticker!.start();
+      });
+    }
+  }
+
+  void _onTick(Duration elapsed) {
+    if (elapsed.inMilliseconds - _lastMs < 160) return;
+    _lastMs = elapsed.inMilliseconds;
+    setState(() {
+      _data = <double>[..._data.skip(1), _walk(_data.last)];
+    });
+  }
+
+  double _walk(double v) => (v + (_r.nextDouble() * 2 - 1) * (widget.max - widget.min) * 0.16)
+      .clamp(widget.min, widget.max)
+      .toDouble();
+
+  @override
+  void dispose() {
+    _ticker?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(_data);
+}

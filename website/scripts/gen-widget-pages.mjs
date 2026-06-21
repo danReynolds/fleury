@@ -89,7 +89,9 @@ for (const e of widgets) {
   const slug = e.id.split('.')[0];
   // Prefer the widget's own source doc comment (richer); fall back to the blurb.
   const intro = api[e.widget]?.classDoc ? mdxSafe(api[e.widget].classDoc) : e.blurb;
-  const snippet = exampleCode[e.id];
+  // An explicit `code` override (used by animated examples to keep the snippet
+  // static) wins; otherwise show the code extracted from the builder.
+  const snippet = e.code ?? exampleCode[e.id];
   writeFileSync(
     join(widgetsDir, `${slug}.mdx`),
     `---\ntitle: ${yaml(e.widget)}\ndescription: ${yaml(e.blurb)}\n---\n\n` +
