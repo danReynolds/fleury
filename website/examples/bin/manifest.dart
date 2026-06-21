@@ -14,7 +14,8 @@ void main(List<String> args) {
         'widget': e.widget,
         'category': e.category,
         'blurb': e.blurb,
-        'height': e.height,
+        'cols': e.cols,
+        'rows': e.rows,
       },
   ];
   final json = const JsonEncoder.withIndent('  ').convert(data);

@@ -53,7 +53,7 @@ void main() {
 <script src="app.js"></script>
 ```
 
-<!-- fleury-example: linechart.basic | Embedded right here in these docs: the real LineChart widget, compiled with dart2js, running client-side in your browser. -->
+<!-- fleury-example: linechart.basic 60x16 | Embedded right here in these docs: the real LineChart widget, compiled with dart2js, running client-side in your browser. -->
 
 **Properties**
 

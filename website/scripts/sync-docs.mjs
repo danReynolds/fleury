@@ -45,12 +45,14 @@ const rewriteLinks = (md) =>
     return `](${dest}${anchor ?? ''})`;
   });
 
+// <!-- fleury-example: <id> [<cols>x<rows>] [| caption] -->
 const EXAMPLE_RE =
-  /<!--\s*fleury-example:\s*([\w.]+)\s*(?:\|\s*([^>]*?))?\s*-->/g;
+  /<!--\s*fleury-example:\s*([\w.]+)(?:\s+(\d+)x(\d+))?\s*(?:\|\s*([^>]*?))?\s*-->/g;
 const embedExamples = (md) =>
-  md.replace(EXAMPLE_RE, (_m, id, caption) => {
+  md.replace(EXAMPLE_RE, (_m, id, cols, rows, caption) => {
+    const size = cols && rows ? ` cols={${cols}} rows={${rows}}` : '';
     const title = caption ? ` title=${JSON.stringify(caption.trim())}` : '';
-    return `<FleuryExample id="${id}"${title} />`;
+    return `<FleuryExample id="${id}"${size}${title} />`;
   });
 
 // Start clean so a doc that switches .md <-> .mdx never leaves a stale twin.

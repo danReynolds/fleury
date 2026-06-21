@@ -2,7 +2,7 @@
 // dart2js (runTuiWebDom), so everything imports the dart:io-free host SPI
 // (fleury_host) and the web-safe widget barrel (fleury_widgets_web) — never the
 // full `fleury.dart` / `fleury_widgets.dart` umbrellas, which pull in native
-// drivers and the 7 dart:io-backed widgets.
+// drivers and the dart:io-backed widgets.
 import 'package:fleury/fleury_host.dart';
 import 'package:fleury_samples/samples.dart';
 import 'package:fleury_widgets/fleury_widgets_web.dart';
@@ -20,7 +20,8 @@ class ExampleInfo {
     required this.category,
     required this.blurb,
     required this.builder,
-    this.height = 12,
+    this.cols = 56,
+    this.rows = 10,
   });
 
   /// Stable id, e.g. `gauge.basic`.
@@ -38,8 +39,10 @@ class ExampleInfo {
   /// Root-widget factory mounted via runTuiWebDom.
   final ExampleBuilder builder;
 
-  /// Host height in `em`.
-  final int height;
+  /// Host grid size in cells — the example is framed to exactly this, not
+  /// stretched to the page column.
+  final int cols;
+  final int rows;
 }
 
 final List<ExampleInfo> exampleList = <ExampleInfo>[
@@ -49,7 +52,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'Gauge',
     category: 'Charts & meters',
     blurb: 'A labelled progress meter with colored warning/critical thresholds.',
-    height: 6,
+    cols: 40,
+    rows: 3,
     builder: () => _framed(Gauge(
       value: 0.62,
       label: 'CPU',
@@ -64,7 +68,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'Sparkline',
     category: 'Charts & meters',
     blurb: 'A compact inline trend line with an optional trailing value.',
-    height: 5,
+    cols: 44,
+    rows: 2,
     builder: () => _framed(Sparkline(
       data: const <num>[3, 5, 4, 7, 6, 9, 8, 11, 9, 12, 10, 13, 12, 15],
       color: _theme.colorScheme.success,
@@ -76,6 +81,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'LineChart',
     category: 'Charts & meters',
     blurb: 'A braille line/area/scatter chart with axes, legend, and references.',
+    cols: 60,
+    rows: 16,
     builder: () => _framed(LineChart(
       series: <LineSeries>[
         LineSeries(
@@ -96,6 +103,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'BarChart',
     category: 'Charts & meters',
     blurb: 'Vertical bars with a categorical palette and an optional y-axis.',
+    cols: 52,
+    rows: 14,
     builder: () => _framed(BarChart(
       bars: <Bar>[Bar('q1', 12), Bar('q2', 19), Bar('q3', 9), Bar('q4', 22)],
       showYAxis: true,
@@ -106,6 +115,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'Histogram',
     category: 'Charts & meters',
     blurb: 'Bins a list of samples into a frequency distribution.',
+    cols: 52,
+    rows: 12,
     builder: () => _framed(const Histogram(
       values: <num>[1, 2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 6, 6, 7, 2, 3, 4, 5],
       bins: 7,
@@ -117,6 +128,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'Heatmap',
     category: 'Charts & meters',
     blurb: 'A 2-D grid of values shaded by magnitude, with an optional legend.',
+    cols: 40,
+    rows: 8,
     builder: () => _framed(const Heatmap(
       values: <List<num>>[
         <num>[0.1, 0.3, 0.6, 0.9],
@@ -133,7 +146,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'ProgressBar',
     category: 'Charts & meters',
     blurb: 'A determinate or indeterminate progress indicator.',
-    height: 4,
+    cols: 44,
+    rows: 2,
     builder: () => _framed(const ProgressBar(value: 0.45)),
   ),
   ExampleInfo(
@@ -141,7 +155,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'Digits',
     category: 'Charts & meters',
     blurb: 'Seven-segment-style large digits for clocks and counters.',
-    height: 6,
+    cols: 44,
+    rows: 5,
     builder: () => _framed(Digits('12:34:56', color: _theme.colorScheme.primary)),
   ),
 
@@ -151,6 +166,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'DataTable',
     category: 'Data & lists',
     blurb: 'A columnar table with flex/fixed widths and row/cell selection.',
+    cols: 48,
+    rows: 8,
     builder: () => _framed(DataTable(
       rowCount: _people.length,
       controller: DataTableController(),
@@ -175,6 +192,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'Tree',
     category: 'Data & lists',
     blurb: 'An expandable hierarchy with keyboard navigation and type-ahead.',
+    cols: 40,
+    rows: 9,
     builder: () => _framed(Tree<String>(
       label: 'project',
       roots: <TreeNode<String>>[
@@ -196,6 +215,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'MarkdownView',
     category: 'Documents',
     blurb: 'Renders Markdown — headings, lists, code, quotes — to styled cells.',
+    cols: 60,
+    rows: 13,
     builder: () => _framed(MarkdownView(markdown: _markdownSample)),
   ),
   ExampleInfo(
@@ -203,6 +224,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'CodeView',
     category: 'Documents',
     blurb: 'Source with line numbers, comment dimming, and copy support.',
+    cols: 58,
+    rows: 8,
     builder: () => _framed(CodeView(source: _codeSample, language: 'dart')),
   ),
   ExampleInfo(
@@ -210,6 +233,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'JsonView',
     category: 'Documents',
     blurb: 'A collapsible, type-colored tree view of a JSON value.',
+    cols: 48,
+    rows: 10,
     builder: () => _framed(JsonView(
       value: const <String, Object?>{
         'name': 'fleury',
@@ -227,6 +252,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'MessageList',
     category: 'Agent surfaces',
     blurb: 'A role-aware conversation transcript (user/assistant/tool/…).',
+    cols: 64,
+    rows: 8,
     builder: () => _framed(MessageList(
       showTimestamp: false,
       messages: const <MessageEntry>[
@@ -244,6 +271,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'ContextPanel',
     category: 'Agent surfaces',
     blurb: 'Lists context items with a token-usage meter and share bars.',
+    cols: 56,
+    rows: 9,
     builder: () => _framed(ContextPanel(
       showTokenShare: true,
       usage: const TokenUsage(
@@ -266,6 +295,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'TaskGraph',
     category: 'Agent surfaces',
     blurb: 'A compact plan / dependency graph with per-node status.',
+    cols: 48,
+    rows: 6,
     builder: () => _framed(const TaskGraph(nodes: <TaskGraphNode>[
       TaskGraphNode(id: '1', title: 'Inspect CLI', status: TaskGraphStatus.succeeded),
       TaskGraphNode(id: '2', title: 'Handle --version', status: TaskGraphStatus.running),
@@ -281,7 +312,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     blurb:
         'An htop-style live dashboard: per-core CPU gauges, a streaming history '
         'chart, memory/IO meters, and a live process table.',
-    height: 42,
+    cols: 116,
+    rows: 38,
     builder: () => const DashboardApp(),
   ),
   ExampleInfo(
@@ -291,7 +323,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     blurb:
         'A two-pane file explorer over an in-memory project, with a preview that '
         'adapts to each file type (code, Markdown, JSON).',
-    height: 30,
+    cols: 104,
+    rows: 26,
     builder: () => const FileManagerApp(),
   ),
   ExampleInfo(
@@ -301,7 +334,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     blurb:
         'A Claude-Code-style streaming session: prose, tool cards, a live todo '
         'list, a colored diff, and a prompt box.',
-    height: 38,
+    cols: 92,
+    rows: 34,
     builder: () => const AgentApp(),
   ),
 ];

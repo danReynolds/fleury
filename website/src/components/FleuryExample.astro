@@ -1,27 +1,34 @@
 ---
 // Embeds a live, client-side Fleury widget. The widget identified by `id` is
 // mounted from the dart2js examples bundle (public/fleury-examples.js) into a
-// sized host element — no server, it runs entirely in the browser.
+// host element sized to a specific cell grid (cols × rows), so it's framed to
+// its content rather than stretched to the page column.
 interface Props {
   /** Registry id, e.g. "gauge.basic" (see website/examples/lib/registry.dart). */
   id: string;
   /** Optional caption shown above the example. */
   title?: string;
-  /** CSS height of the host box (it needs a real size to paint). */
-  height?: string;
+  /** Grid width in character cells. */
+  cols?: number;
+  /** Grid height in rows. */
+  rows?: number;
 }
-const { id, title, height = '13em' } = Astro.props;
+const { id, title, cols = 60, rows = 12 } = Astro.props;
+// ch ≈ one monospace column; 1 row = line-height (1.25) em at the host font size.
+const style = `width:${cols}ch;height:${(rows * 1.25).toFixed(2)}em`;
 ---
 
 <figure class="fleury-example">
   {title && <figcaption>{title}</figcaption>}
-  <div
-    class="fleury-host"
-    data-fleury-example={id}
-    style={`height:${height}`}
-    role="img"
-    aria-label={title ?? `Live Fleury example: ${id}`}
-  >
+  <div class="fleury-frame">
+    <div
+      class="fleury-host"
+      data-fleury-example={id}
+      style={style}
+      role="img"
+      aria-label={title ?? `Live Fleury example: ${id}`}
+    >
+    </div>
   </div>
 </figure>
 
@@ -56,15 +63,34 @@ const { id, title, height = '13em' } = Astro.props;
     color: var(--sl-color-gray-3);
     margin-bottom: 0.4rem;
   }
+  /* The visual card: border, padding, background. Scrolls if the grid is wider
+     than the column on a narrow screen rather than clipping it. */
+  .fleury-frame {
+    display: inline-block;
+    max-width: 100%;
+    overflow: auto;
+    background: #0b0f14;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+  }
+  /* The grid host itself — sized to exactly cols × rows by the inline style. */
   .fleury-host {
     font-family: var(--sl-font-mono, ui-monospace, monospace);
     font-size: 14px;
     line-height: 1.25;
-    background: #0b0f14;
     color: #c8d3e0;
-    border: 1px solid var(--sl-color-gray-5);
-    border-radius: 0.5rem;
-    padding: 0.75rem 1rem;
-    overflow: hidden;
+  }
+</style>
+
+<style is:global>
+  /* The grid's rows are created at runtime, so Astro's scoped styles don't
+     reach them. Starlight's markdown vertical rhythm adds a top margin between
+     block siblings — which double-spaces the grid's rows and overflows the
+     fixed host. Reset it so a row is exactly one line tall. */
+  .fleury-host .fleury-screen,
+  .fleury-host .fleury-row,
+  .fleury-host .fleury-semantics {
+    margin: 0 !important;
   }
 </style>

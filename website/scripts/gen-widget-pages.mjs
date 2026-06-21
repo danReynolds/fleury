@@ -39,7 +39,7 @@ for (const e of widgets) {
     `---\ntitle: ${yaml(e.widget)}\ndescription: ${yaml(e.blurb)}\n---\n\n` +
       `import FleuryExample from '${COMPONENT}';\n\n` +
       `${e.blurb}\n\n` +
-      `<FleuryExample id="${e.id}" height="${e.height}em" />\n\n` +
+      `<FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}} />\n\n` +
       `${note(`${e.widget}\` widget,`)}\n` +
       `**Category:** ${e.category} · [Back to all widgets](/widgets/)\n`
   );
@@ -79,7 +79,7 @@ for (const e of showcases) {
       '```sh\n' +
       `fleury dev samples ${slug}\n` +
       '```\n\n' +
-      `<FleuryExample id="${e.id}" height="${e.height}em" />\n\n` +
+      `<FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}} />\n\n` +
       `${note('app,')}\n` +
       `[Back to all showcases](/showcases/)\n`
   );
