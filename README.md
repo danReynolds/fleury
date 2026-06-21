@@ -13,6 +13,10 @@ The standalone Fleury workspace is split into local Dart packages:
   implementation cycle.
 - `packages/storybook` - interactive widget storybook for browsing and
   exercising supported Fleury widgets.
+- `docs/architecture.md`, `docs/core-and-targets.md`,
+  `docs/serving-and-embedding.md` - how Fleury is layered (a platform-neutral
+  core + pluggable targets) and the two ways to run it in a browser (serve vs.
+  embed).
 - `docs/rfcs` - design notes and implementation RFCs from the original work.
 - `docs/implementation` - active milestone trackers, workstream notes, and the
   execution journal.
