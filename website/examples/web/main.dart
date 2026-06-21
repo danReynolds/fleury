@@ -46,7 +46,8 @@ JSObject _mountKnobs(web.Element host, String id, String paramsJson) {
   final params = KnobParams(_decodeParams(paramsJson));
   TuiSurfaceHost? surface;
   var disposed = false;
-  unawaited(runTuiWebDom(() => knobRoot(id, params), hostElement: host).then((h) {
+  unawaited(runTuiWebDom(() => knobRoot(id, params),
+      hostElement: host, flushScheduler: _docsFlush).then((h) {
     if (disposed) {
       h.dispose();
     } else {
@@ -79,7 +80,8 @@ JSObject _mountInto(web.Element host, String id) {
   TuiSurfaceHost? surface;
   var disposed = false;
   if (builder != null) {
-    unawaited(runTuiWebDom(builder, hostElement: host).then((h) {
+    unawaited(runTuiWebDom(builder, hostElement: host, flushScheduler: _docsFlush)
+        .then((h) {
       if (disposed) {
         h.dispose();
       } else {
@@ -116,8 +118,40 @@ void mountExample(web.Element host) {
   }
   host.setAttribute('data-fleury-state', 'mounting');
   unawaited(
-    runTuiWebDom(builder, hostElement: host).then(
+    runTuiWebDom(builder, hostElement: host, flushScheduler: _docsFlush).then(
       (_) => host.setAttribute('data-fleury-state', 'ready'),
     ),
   );
+}
+
+/// Flush scheduler for the docs examples: prefer `requestAnimationFrame`
+/// (smooth, vsync-aligned) but guarantee a flush via a short Timer fallback even
+/// when rAF is paused (a backgrounded or headless tab). Without this, a
+/// late-mounted or animating example would never paint there. First to fire wins.
+void _docsFlush(Duration delay, void Function() flush) {
+  void arm() {
+    var done = false;
+    Timer? fallback;
+    void run() {
+      if (done) return;
+      done = true;
+      fallback?.cancel();
+      flush();
+    }
+
+    try {
+      web.window.requestAnimationFrame(((JSNumber _) {
+        run();
+      }).toJS);
+    } catch (_) {
+      // Partial window API — the Timer fallback still flushes.
+    }
+    fallback = Timer(const Duration(milliseconds: 120), run);
+  }
+
+  if (delay <= Duration.zero) {
+    arm();
+  } else {
+    Timer(delay, arm);
+  }
 }
