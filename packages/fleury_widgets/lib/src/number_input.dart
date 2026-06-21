@@ -1,4 +1,4 @@
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 /// A numeric variant of [TextInput] — accepts digits, an optional
 /// leading `-`, and (when [allowDecimal] is true) one `.`. Anything

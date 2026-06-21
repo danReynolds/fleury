@@ -1,6 +1,6 @@
 import 'dart:async' show scheduleMicrotask, unawaited;
 
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 /// Protocol-neutral status for a node in a [TaskGraph].
 enum TaskGraphStatus { pending, running, succeeded, failed, cancelled, skipped }

@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 /// A 2×4-pixel-per-cell drawing surface that renders as Unicode braille
 /// patterns (`U+2800..U+28FF`). Internal helper used by `Canvas` and

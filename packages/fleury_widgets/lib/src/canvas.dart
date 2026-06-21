@@ -1,4 +1,4 @@
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 import 'braille.dart';
 import 'half_block_buffer.dart';

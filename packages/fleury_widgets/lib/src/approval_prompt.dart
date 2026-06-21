@@ -1,4 +1,4 @@
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 import 'controls.dart' show Button, ButtonVariant;
 import 'dialog.dart' show Dialog;

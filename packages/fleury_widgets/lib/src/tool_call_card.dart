@@ -1,7 +1,7 @@
 import 'dart:async' show unawaited;
 
 import 'package:characters/characters.dart';
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 import 'controls.dart' show Button, ButtonVariant;
 

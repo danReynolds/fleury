@@ -2,7 +2,7 @@ import 'dart:async' show unawaited;
 import 'dart:convert';
 
 import 'package:characters/characters.dart';
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 import 'component_theme.dart';
 

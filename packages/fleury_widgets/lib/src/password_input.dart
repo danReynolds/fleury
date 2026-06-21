@@ -1,4 +1,4 @@
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 /// A [TextInput] tuned for password / secret entry: every typed grapheme
 /// is rendered as a single `•` (or [obscuringCharacter]) regardless of

@@ -1,7 +1,7 @@
 import 'dart:async' show scheduleMicrotask, unawaited;
 
 import 'package:characters/characters.dart';
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 /// Protocol-neutral lifecycle state for a timeline event.
 enum TraceTimelineStatus {

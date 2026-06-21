@@ -1,4 +1,4 @@
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 /// A compact, single-row history graph of recent numeric values, rendered
 /// with the eight vertical block elements (`▁▂▃▄▅▆▇█`).

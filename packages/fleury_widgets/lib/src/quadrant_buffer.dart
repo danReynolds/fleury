@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 /// A 2×2-pixel-per-cell drawing surface that renders as Unicode block-
 /// element quadrants. Sits between [HalfBlockBuffer] (1×2) and

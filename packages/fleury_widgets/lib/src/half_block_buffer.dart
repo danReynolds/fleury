@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 /// A 1×2-pixel-per-cell drawing surface that renders as Unicode block
 /// elements (` ` / `▀` / `▄` / `█`). Lower sub-cell resolution than

@@ -1,4 +1,4 @@
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 /// One tab: a [label] for the strip and the [content] shown when active.
 class TabItem {

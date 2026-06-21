@@ -1,4 +1,4 @@
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 /// Which of the two handles a [RangeSlider] is editing.
 enum _ActiveHandle { low, high }

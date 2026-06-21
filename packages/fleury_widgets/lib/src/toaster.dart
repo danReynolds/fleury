@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 /// Semantic level of a toast, driving the color of its status dot. [info] is
 /// neutral (uncolored); the rest color the dot.

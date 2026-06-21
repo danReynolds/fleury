@@ -1,4 +1,4 @@
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 /// A grid of color swatches. The currently-selected swatch is bordered
 /// with the theme's focus style; arrow chords move between cells; Enter

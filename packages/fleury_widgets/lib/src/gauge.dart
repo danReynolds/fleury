@@ -1,4 +1,4 @@
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_host.dart';
 
 /// A single-value status indicator: a horizontal bar with an optional
 /// inline label and a percentage suffix. Sub-cell precision via the
