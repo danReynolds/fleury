@@ -26,6 +26,15 @@
   top: 5rem;
   min-width: 0;
 }
+/* A small caption so the right column reads as a deliberate "live demo" panel
+   rather than a widget floating in empty space. */
+.widget-ref-aside-label {
+  margin: 0 0 0.5rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
 /* The demo + code can be wider than the column on small widgets — let them
    scroll rather than blow out the grid track. */
 .widget-ref-aside .fleury-example,

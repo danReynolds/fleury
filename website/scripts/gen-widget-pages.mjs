@@ -25,6 +25,71 @@ const LAYOUT_COMPONENT = '../../../components/WidgetLayout.astro';
 // The slug must match a key in registry.dart's `knobExamples`.
 const KNOB_WIDGETS = new Set(['gauge', 'progressbar', 'histogram', 'heatmap']);
 
+// Curated extra usage examples, shown as a tabbed group under "## Usage" for
+// widgets where a few variations are worth showing. Hand-written against the
+// real constructor params (see src/api.json); keep them small and accurate.
+const TABS_IMPORT = "import { Tabs, TabItem } from '@astrojs/starlight/components';";
+const EXTRA_EXAMPLES = {
+  gauge: [
+    { label: 'Basic', code: `Gauge(value: 0.62, label: 'CPU')` },
+    {
+      label: 'Thresholds',
+      code: `Gauge(
+  value: 0.94,
+  label: 'CPU',
+  // The fill turns amber past 0.7, red past 0.9.
+  thresholds: <(double, Color)>[
+    (0.7, theme.colorScheme.warning),
+    (0.9, theme.colorScheme.error),
+  ],
+)`,
+    },
+    {
+      label: 'No percentage',
+      code: `Gauge(value: 0.5, label: 'Disk', showPercentage: false)`,
+    },
+  ],
+  progressbar: [
+    { label: 'Determinate', code: `ProgressBar(value: 0.45)` },
+    {
+      label: 'Indeterminate',
+      code: `// A null value animates an indeterminate bar.
+ProgressBar(value: null)`,
+    },
+  ],
+  sparkline: [
+    { label: 'Basic', code: `Sparkline(data: const <num>[3, 5, 4, 8, 6, 9, 7])` },
+    {
+      label: 'With value',
+      code: `Sparkline(
+  data: const <num>[3, 5, 4, 8, 6, 9, 7],
+  showValue: true,
+)`,
+    },
+  ],
+};
+
+// The "## Usage" block: a tabbed group when the widget has curated extras,
+// otherwise a single titled code frame from the extracted example.
+function usageSection(slug, widget, snippet) {
+  const extras = EXTRA_EXAMPLES[slug];
+  if (extras && extras.length) {
+    const items = extras
+      .map(
+        (ex) =>
+          `<TabItem label=${yaml(ex.label)}>\n\n` +
+          `\`\`\`dart\n${ex.code}\n\`\`\`\n\n` +
+          `</TabItem>`
+      )
+      .join('\n');
+    return `## Usage\n\n<Tabs>\n${items}\n</Tabs>\n\n`;
+  }
+  if (snippet) {
+    return `## Usage\n\n\`\`\`dart title=${yaml(widget + '.dart')}\n${snippet}\n\`\`\`\n\n`;
+  }
+  return '';
+}
+
 const yaml = (s) => JSON.stringify(s);
 
 // "View source" base — links each widget page back to its Dart implementation,
@@ -126,19 +191,18 @@ for (const e of widgets) {
     `---\ntitle: ${yaml(e.widget)}\ndescription: ${yaml(e.blurb)}\n` +
       `tableOfContents: false\n---\n\n` +
       `${importLine}\n` +
-      `import WidgetLayout from '${LAYOUT_COMPONENT}';\n\n` +
+      `import WidgetLayout from '${LAYOUT_COMPONENT}';\n` +
+      (EXTRA_EXAMPLES[slug] ? `${TABS_IMPORT}\n` : '') +
+      `\n` +
       `<WidgetLayout>\n\n` +
       // Right column: the live (knob-tweakable) demo only — the code below is a
       // fixed usage example, so it lives in the main column, not next to it.
       `<Fragment slot="aside">\n\n` +
       `${liveBlock}\n\n` +
       `</Fragment>\n\n` +
-      // Left column: description → usage example → API breakdown.
+      // Left column: description → usage example(s) → API breakdown.
       `${intro}\n\n` +
-      (snippet
-        ? `## Usage\n\n\`\`\`dart title=${yaml(e.widget + '.dart')}\n` +
-          `${snippet}\n\`\`\`\n\n`
-        : '') +
+      usageSection(slug, e.widget, snippet) +
       propsTable(e.widget) +
       sourceSection(e.widget) +
       `**Category:** ${e.category} · [All widgets](/widgets/)\n\n` +
