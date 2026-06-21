@@ -128,13 +128,17 @@ for (const e of widgets) {
       `${importLine}\n` +
       `import WidgetLayout from '${LAYOUT_COMPONENT}';\n\n` +
       `<WidgetLayout>\n\n` +
-      // Right column: the live demo + the code that produces it.
+      // Right column: the live (knob-tweakable) demo only — the code below is a
+      // fixed usage example, so it lives in the main column, not next to it.
       `<Fragment slot="aside">\n\n` +
       `${liveBlock}\n\n` +
-      (snippet ? `\`\`\`dart\n${snippet}\n\`\`\`\n\n` : '') +
       `</Fragment>\n\n` +
-      // Left column: description + API breakdown.
+      // Left column: description → usage example → API breakdown.
       `${intro}\n\n` +
+      (snippet
+        ? `## Usage\n\n\`\`\`dart title=${yaml(e.widget + '.dart')}\n` +
+          `${snippet}\n\`\`\`\n\n`
+        : '') +
       propsTable(e.widget) +
       sourceSection(e.widget) +
       `**Category:** ${e.category} · [All widgets](/widgets/)\n\n` +
