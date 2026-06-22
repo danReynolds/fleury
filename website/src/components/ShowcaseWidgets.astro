@@ -1,0 +1,44 @@
+---
+// Renders the "widgets used" grid for a showcase (grouped by category, each
+// linking to its reference page) and doubles as the full-width marker: its
+// `.showcase-page` class triggers the no-ToC, full-bleed layout in fleury.css.
+// When a showcase uses no catalog widgets (it's built from primitives), we say
+// so instead — that's a feature, not a gap.
+interface Props {
+  widgets: { name: string; slug: string; category: string }[];
+}
+const { widgets } = Astro.props;
+const byCat = new Map<string, { name: string; slug: string }[]>();
+for (const w of widgets) {
+  if (!byCat.has(w.category)) byCat.set(w.category, []);
+  byCat.get(w.category)!.push({ name: w.name, slug: w.slug });
+}
+const groups = [...byCat.entries()];
+---
+
+<div class="showcase-page">
+  {
+    groups.length > 0 ? (
+      <div class="showcase-widgets">
+        {groups.map(([cat, ws]) => (
+          <div class="showcase-widget-group">
+            <p class="showcase-widget-cat">{cat}</p>
+            <ul>
+              {ws.map((w) => (
+                <li>
+                  <a href={`/widgets/${w.slug}/`}>{w.name}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <p class="showcase-primitives">
+        Built entirely from layout and text primitives — <code>Text</code>,{' '}
+        <code>RichText</code>, <code>Column</code>, <code>Row</code>,{' '}
+        <code>Container</code> — plus theme styling. No special widgets required.
+      </p>
+    )
+  }
+</div>

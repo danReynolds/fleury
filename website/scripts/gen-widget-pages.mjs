@@ -305,33 +305,84 @@ const showDir = join(DOCS, 'showcases');
 rmSync(showDir, { recursive: true, force: true });
 mkdirSync(showDir, { recursive: true });
 
-// Showcase slug → its sample source file (for a "view source" link).
+// Showcase slug → its sample source file (for a "view source" link + the
+// "widgets used" extraction).
 const SAMPLE_FILES = {
   dashboard: 'dashboard.dart',
   files: 'file_manager.dart',
   agent: 'agent_tui.dart',
 };
+const SHOWCASE_COMPONENT = '../../../components/ShowcaseWidgets.astro';
+const SAMPLES_DIR = join(here, '..', '..', 'packages', 'samples', 'lib', 'src');
+
+// One-paragraph pitch per showcase: what it is + why Fleury made it easy.
+const SHOWCASE_GOALS = {
+  dashboard:
+    'A live operations dashboard — per-core gauges, a streaming history chart, ' +
+    'and a sortable process table — the kind of thing you would normally reach ' +
+    'for htop or a Grafana panel to build. In Fleury it is one widget tree: the ' +
+    'same `Gauge`, `Sparkline`, `LineChart`, and `DataTable` you would use ' +
+    'anywhere, composed with `Row`/`Column` and updated on a ticker. No canvas ' +
+    'math and no manual redraw bookkeeping — call `setState`, and the framework ' +
+    'repaints only the cells that changed, so the graphs stream smoothly without ' +
+    'you thinking about it.',
+  files:
+    'A two-pane file explorer whose preview adapts to each file type. The left ' +
+    'pane is a tree; the right pane swaps in the right viewer — `CodeView` for ' +
+    'source, `MarkdownView` for docs, `JsonView` for data — each a drop-in widget ' +
+    'with selection, scrolling, and copy already handled. "The preview matches ' +
+    'the file" is just a `switch` in `build()`; the viewers do the rest.',
+  agent:
+    'A Claude-Code-style streaming session — prose, tool cards, a live todo list, ' +
+    'a colored diff, a prompt box. The striking part: it uses no special "agent" ' +
+    'widgets. It is built entirely from `Text`, `RichText`, `Column`, and theme ' +
+    'styling — the Fleury primitives over a cell grid are expressive enough that a ' +
+    'rich agent UI is just layout and color. And the same tree is inspectable as a ' +
+    'semantic graph, so a test or another agent can read it (see ' +
+    '[Built for agents](/architecture/agents-and-semantics/)).',
+};
+
+// Catalog widget name → { slug, category }, for the "widgets used" links.
+const catalog = new Map();
+for (const e of widgets)
+  catalog.set(e.widget, { slug: e.id.split('.')[0], category: e.category });
+for (const d of DOC_ONLY) catalog.set(d.widget, { slug: d.slug, category: d.category });
+const widgetsUsedIn = (file) => {
+  const src = readFileSync(join(SAMPLES_DIR, file), 'utf8');
+  const used = [];
+  for (const [name, info] of catalog) {
+    if (new RegExp(`\\b${name}\\(`).test(src))
+      used.push({ name, slug: info.slug, category: info.category });
+  }
+  return used;
+};
+
 for (const e of showcases) {
   const slug = e.id.split('.')[1]; // showcase.dashboard -> dashboard
   const file = SAMPLE_FILES[slug];
-  const source = file
-    ? `## Source\n\n` +
-      `Built entirely from Fleury widgets — see ` +
-      `[\`packages/samples/lib/src/${file}\`](${REPO}/packages/samples/lib/src/${file}).\n\n`
-    : '';
+  const used = file ? widgetsUsedIn(file) : [];
   writeFileSync(
     join(showDir, `${slug}.mdx`),
-    `---\ntitle: ${yaml(e.widget)}\ndescription: ${yaml(e.blurb)}\n---\n\n` +
-      `import FleuryExample from '${COMPONENT}';\n\n` +
+    `---\ntitle: ${yaml(e.widget)}\ndescription: ${yaml(e.blurb)}\n` +
+      `tableOfContents: false\n---\n\n` +
+      `import FleuryExample from '${COMPONENT}';\n` +
+      `import ShowcaseWidgets from '${SHOWCASE_COMPONENT}';\n\n` +
       `${e.blurb}\n\n` +
       `## Example\n\n` +
       `<FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}}` +
       `${e.interactive ? ' interactive' : ''} />\n\n` +
+      `## Built with Fleury\n\n` +
+      `${SHOWCASE_GOALS[slug] ?? ''}\n\n` +
+      `## Widgets used\n\n` +
+      `<ShowcaseWidgets widgets={${JSON.stringify(used)}} />\n\n` +
       `## Run it from the terminal\n\n` +
       '```sh\n' +
       `fleury dev samples ${slug}\n` +
       '```\n\n' +
-      source +
+      (file
+        ? `## Source\n\n` +
+          `[\`packages/samples/lib/src/${file}\`](${REPO}/packages/samples/lib/src/${file})\n\n`
+        : '') +
       `[All showcases](/showcases/)\n`
   );
 }

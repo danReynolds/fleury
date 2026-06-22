@@ -100,6 +100,37 @@
   }
 }
 
+/* ── Showcase pages (full-bleed, no ToC) ────────────────────────────────────
+   A <ShowcaseWidgets> on the page carries `.showcase-page`; that lets the demo
+   (often 100+ cols wide) and the prose use the full pane the ToC freed. */
+.main-pane:has(.showcase-page) .sl-container {
+  max-width: none;
+}
+.showcase-widgets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 1.25rem 2rem;
+  margin: 0.5rem 0 0.5rem;
+}
+.showcase-widget-group > .showcase-widget-cat {
+  margin: 0 0 0.4rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+.showcase-widget-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.showcase-widget-group li {
+  margin: 0.1rem 0;
+}
+.showcase-primitives {
+  color: var(--sl-color-gray-2);
+}
+
 /* ── The cell-grid host ─────────────────────────────────────────────────────
    The DOM grid sizes its cells from these metrics; the digit/braille glyphs
    depend on line-height: 1.25 to connect vertically, so this MUST reach every
