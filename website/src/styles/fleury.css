@@ -53,6 +53,37 @@
   }
 }
 
+/* ── Landing "you write → Fleury renders" split ─────────────────────────────*/
+.home-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem 2.5rem;
+  align-items: start;
+  margin: 1rem 0 1.5rem;
+}
+.home-split-col {
+  min-width: 0;
+}
+.home-split-label {
+  margin: 0 0 0.5rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+.home-split-demo {
+  display: flex;
+}
+/* Match the code block's height-ish and keep the two columns visually paired. */
+.home-split .expressive-code {
+  margin: 0;
+}
+@media (max-width: 50rem) {
+  .home-split {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── The cell-grid host ─────────────────────────────────────────────────────
    The DOM grid sizes its cells from these metrics; the digit/braille glyphs
    depend on line-height: 1.25 to connect vertically, so this MUST reach every

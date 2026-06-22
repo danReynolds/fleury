@@ -14,15 +14,36 @@ hero:
       variant: minimal
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 import FleuryExample from '../../components/FleuryExample.astro';
+import HomeSplit from '../../components/HomeSplit.astro';
 
-<FleuryExample
-  id="linechart.basic"
-  title="A live Fleury chart — the real widget, compiled to JS with dart2js, running in this page."
-  cols={64}
-  rows={16}
-/>
+<HomeSplit>
+<Fragment slot="code">
+```dart
+Column(
+  crossAxisAlignment: CrossAxisAlignment.stretch,
+  children: [
+    Gauge(value: 0.62, label: 'CPU'),
+    Gauge(value: 0.81, label: 'MEM'),
+    Gauge(value: 0.34, label: 'DISK'),
+    SizedBox(height: 1),
+    Sparkline(
+      data: [3, 5, 4, 8, 6, 9, 7, 5, 8, 6],
+      color: theme.colorScheme.primary,
+    ),
+  ],
+)
+```
+</Fragment>
+<Fragment slot="demo">
+<FleuryExample id="home.monitor" cols={34} rows={9} />
+</Fragment>
+</HomeSplit>
+
+That widget on the right isn't a screenshot — it's the real Fleury widget tree,
+compiled to JavaScript with `dart2js` and running in your browser. The *same*
+code runs in a terminal.
 
 ## Why Fleury
 
@@ -35,9 +56,9 @@ import FleuryExample from '../../components/FleuryExample.astro';
     The same app renders to a real terminal *or* the browser. A parity oracle
     keeps the two surfaces honest.
   </Card>
-  <Card title="Machine-readable by default" icon="seti:default">
+  <Card title="Built for agents" icon="seti:default">
     A semantics tree — roles, state, actions — ships as a headline feature, so
-    tests and agents can drive the UI, not just screen-scrape it.
+    tests and AI agents can *drive* the UI, not screen-scrape it.
   </Card>
   <Card title="Runs anywhere" icon="rocket">
     Embed widgets client-side with dart2js (no backend), or stream a full native
@@ -45,11 +66,44 @@ import FleuryExample from '../../components/FleuryExample.astro';
   </Card>
 </CardGrid>
 
-## How does the example above work?
+## See it in action
 
-That chart isn't a screenshot or a recording — it's the real `LineChart`
-widget. `dart2js` compiled the widget plus the Fleury framework to JavaScript,
-and it renders into a DOM cell grid right here in your browser. See
+Three complete apps, each built entirely from Fleury widgets and **running live
+in your browser** — open one and use your keyboard and mouse.
+
+<CardGrid>
+  <LinkCard
+    title="System monitor →"
+    href="/showcases/dashboard/"
+    description="An htop-style live dashboard: per-core CPU gauges, a streaming history chart, memory/IO meters, and a process table."
+  />
+  <LinkCard
+    title="Coding agent →"
+    href="/showcases/agent/"
+    description="A Claude-Code-style streaming session: prose, tool cards, a live todo list, a colored diff, and a prompt box."
+  />
+  <LinkCard
+    title="File manager →"
+    href="/showcases/files/"
+    description="A two-pane file explorer with a preview that adapts to each file type — code, Markdown, JSON."
+  />
+  <LinkCard
+    title="Browse every widget →"
+    href="/widgets/"
+    description="Charts, meters, tables, trees, document viewers, and agent surfaces — each with a live, interactive example."
+  />
+</CardGrid>
+
+## How it works
+
+`dart2js` compiles the widget tree plus the Fleury framework to JavaScript, and
+it renders into a DOM grid of cells right here in the page. The same widget tree
+runs natively in a terminal through a POSIX/Windows driver. See
+[Core and targets](/architecture/core-and-targets/) for how the pieces fit, and
 [Serving and embedding](/architecture/serving-and-embedding/) for the two ways
-to put Fleury on the web, and [Core and targets](/architecture/core-and-targets/)
-for how the pieces fit together.
+to put Fleury on the web.
+
+<CardGrid>
+  <LinkCard title="Get started" href="/getting-started/" description="Install Fleury and build your first app in a few minutes." />
+  <LinkCard title="Architecture" href="/architecture/core-and-targets/" description="Core, targets, and the retained-mode pipeline." />
+</CardGrid>

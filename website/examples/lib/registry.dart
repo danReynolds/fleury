@@ -61,6 +61,29 @@ class ExampleInfo {
 }
 
 final List<ExampleInfo> exampleList = <ExampleInfo>[
+  // ── Landing hero (not catalogued — mounted directly on the home page) ─────
+  ExampleInfo(
+    id: 'home.monitor',
+    widget: 'System monitor',
+    category: 'Home',
+    blurb: 'A compact system monitor built from a few Fleury widgets.',
+    cols: 34,
+    rows: 9,
+    builder: () => _framed(Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        const Gauge(value: 0.62, label: 'CPU'),
+        const Gauge(value: 0.81, label: 'MEM'),
+        const Gauge(value: 0.34, label: 'DISK'),
+        const SizedBox(height: 1),
+        Sparkline(
+          data: const <num>[3, 5, 4, 8, 6, 9, 7, 5, 8, 6],
+          color: _theme.colorScheme.primary,
+        ),
+      ],
+    )),
+  ),
   // ── Charts & meters ──────────────────────────────────────────────────────
   ExampleInfo(
     id: 'gauge.basic',

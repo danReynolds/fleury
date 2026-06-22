@@ -1,0 +1,16 @@
+---
+// Landing "you write → you get" split: the Dart you'd write on the left, the
+// real widget it renders (live, dart2js) on the right. Stacks on narrow
+// viewports. Styling lives in src/styles/fleury.css.
+---
+
+<div class="home-split">
+  <div class="home-split-col">
+    <p class="home-split-label">You write</p>
+    <slot name="code" />
+  </div>
+  <div class="home-split-col">
+    <p class="home-split-label">Fleury renders</p>
+    <div class="home-split-demo"><slot name="demo" /></div>
+  </div>
+</div>

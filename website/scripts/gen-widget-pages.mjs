@@ -161,7 +161,11 @@ function propsTable(widget) {
 }
 
 const all = JSON.parse(readFileSync(MANIFEST, 'utf8'));
-const widgets = all.filter((e) => e.category !== 'Showcases');
+// 'Home' = the landing-hero example, mounted directly on the home page (no
+// catalog entry). 'Showcases' = full apps, their own section.
+const widgets = all.filter(
+  (e) => e.category !== 'Showcases' && e.category !== 'Home'
+);
 const showcases = all.filter((e) => e.category === 'Showcases');
 
 // ── Widget pages ────────────────────────────────────────────────────────────
