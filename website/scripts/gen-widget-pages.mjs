@@ -233,10 +233,59 @@ for (const e of widgets) {
   );
 }
 
+// ── Doc-only pages ──────────────────────────────────────────────────────────
+// Widgets that can't be an in-browser embed — they use dart:io (filesystem,
+// processes, image decoding) or are invoked imperatively. They still get a full
+// reference page (description, properties, source), just no live demo.
+const DOC_ONLY = [
+  { slug: 'filebrowser', widget: 'FileBrowser', category: 'Inputs & controls', reason: 'native' },
+  { slug: 'filepicker', widget: 'FilePicker', category: 'Inputs & controls', reason: 'native' },
+  { slug: 'form', widget: 'FormPanel', category: 'Inputs & controls', reason: 'native' },
+  { slug: 'image', widget: 'Image', category: 'Data & lists', reason: 'native',
+    code: "Image.file('assets/logo.png', fit: ImageFit.contain)" },
+  { slug: 'logregion', widget: 'LogRegion', category: 'Agent surfaces', reason: 'native' },
+  { slug: 'processpanel', widget: 'ProcessPanel', category: 'Agent surfaces', reason: 'native' },
+  { slug: 'terminaloutputregion', widget: 'TerminalOutputRegion', category: 'Agent surfaces', reason: 'native' },
+  { slug: 'workflowsnapshot', widget: 'WorkflowSnapshot', category: 'Agent surfaces', reason: 'native' },
+  { slug: 'toaster', widget: 'Toaster', category: 'Navigation & overlays', reason: 'imperative',
+    code: "// Wrap your app once:\nToaster(child: app)\n\n// …then from anywhere below it:\nToaster.show(context, 'Saved', severity: ToastSeverity.success);" },
+];
+const docNote = (reason) =>
+  reason === 'native'
+    ? `:::note[Runs locally]\nThis widget uses \`dart:io\` (filesystem, processes, ` +
+      `or image decoding), so it runs in a terminal or through ` +
+      `[\`fleury serve\`](/architecture/serving-and-embedding/) — not as an ` +
+      `in-browser embed. The reference below is generated from the source.\n:::\n`
+    : `:::note[Imperative]\nShown by calling \`Toaster.show(context, …)\`, so ` +
+      `there's no static preview — wrap your app in a \`Toaster\` once, then ` +
+      `raise toasts from anywhere below it.\n:::\n`;
+for (const d of DOC_ONLY) {
+  const intro = api[d.widget]?.classDoc ? mdxSafe(api[d.widget].classDoc) : '';
+  writeFileSync(
+    join(widgetsDir, `${d.slug}.mdx`),
+    `---\ntitle: ${yaml(d.widget)}\n` +
+      `description: ${yaml(api[d.widget]?.doc ?? d.widget)}\n---\n\n` +
+      (intro ? `${intro}\n\n` : '') +
+      `${docNote(d.reason)}\n` +
+      (d.code ? `## Usage\n\n\`\`\`dart\n${d.code}\n\`\`\`\n\n` : '') +
+      propsTable(d.widget) +
+      sourceSection(d.widget) +
+      `**Category:** ${d.category} · [All widgets](/widgets/)\n`
+  );
+}
+
 const byCategory = new Map();
 for (const e of widgets) {
   if (!byCategory.has(e.category)) byCategory.set(e.category, []);
   byCategory.get(e.category).push(e);
+}
+// Fold the doc-only widgets into the catalog index, flagged so the lack of a
+// live demo is no surprise.
+for (const d of DOC_ONLY) {
+  const tag = d.reason === 'native' ? ' *(runs locally)*' : ' *(imperative)*';
+  const blurb = (api[d.widget]?.doc ?? '') + tag;
+  if (!byCategory.has(d.category)) byCategory.set(d.category, []);
+  byCategory.get(d.category).push({ widget: d.widget, id: d.slug, blurb });
 }
 let widgetIndex =
   `---\ntitle: Overview\ndescription: The Fleury widget library — every page has a live, client-side example.\n---\n\n` +
