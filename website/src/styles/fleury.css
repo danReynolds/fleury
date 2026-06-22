@@ -20,10 +20,13 @@
   --sl-color-text-accent: #0f7a50;
 }
 
-/* ── Full width, no table-of-contents ───────────────────────────────────────
-   The ToC is off site-wide (astro.config.mjs); drop Starlight's content cap so
-   every page uses the freed width. */
-.sl-container {
+/* ── Width ───────────────────────────────────────────────────────────────────
+   The table-of-contents is off site-wide (astro.config.mjs). Prose pages keep
+   Starlight's readable content width (just centered, no ToC beside them); only
+   the pages with a real two-column layout — widget reference + showcases — drop
+   the cap to use the full pane. */
+.main-pane:has(.widget-ref) .sl-container,
+.main-pane:has(.showcase-page) .sl-container {
   max-width: none;
 }
 
@@ -77,6 +80,9 @@
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem 2.5rem;
   align-items: start;
+  /* The splash template is full-bleed; keep the code↔demo pair from spreading
+     across an ultrawide screen. */
+  max-width: 60rem;
   margin: 1rem 0 1.5rem;
 }
 .home-split-col {
