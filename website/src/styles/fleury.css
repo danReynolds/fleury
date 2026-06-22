@@ -4,6 +4,22 @@
    and the knob pages use a different component — both need the same host font
    metrics and frame chrome. Component-specific layout stays in each .astro. */
 
+/* ── Brand ──────────────────────────────────────────────────────────────────
+   Fleury's accent is the same green the live demos paint with, so the site and
+   the widgets read as one thing. Drives links, active nav, focus rings, etc. */
+:root {
+  --sl-color-accent-low: #102a20;
+  --sl-color-accent: #1f9d6b;
+  --sl-color-accent-high: #a6f0d0;
+  --sl-color-text-accent: #3ddc97;
+}
+:root[data-theme='light'] {
+  --sl-color-accent-low: #c6f3df;
+  --sl-color-accent: #138a5b;
+  --sl-color-accent-high: #0a4d33;
+  --sl-color-text-accent: #0f7a50;
+}
+
 /* ── Widget reference layout (two columns) ──────────────────────────────────
    Widget pages run with `tableOfContents: false` and wrap their body in
    <WidgetLayout>. We reclaim the freed table-of-contents width: the prose + API

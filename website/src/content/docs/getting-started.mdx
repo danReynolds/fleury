@@ -1,0 +1,149 @@
+---
+title: Getting started
+description: Install Fleury and build your first terminal app in a few minutes.
+---
+
+import FleuryExample from '../../components/FleuryExample.astro';
+
+In about five minutes you'll build a small live status panel from scratch, run
+it in your terminal, and learn how to run the same code in a browser. Here's
+what you're building:
+
+<FleuryExample id="home.monitor" cols={34} rows={9} />
+
+## 1. Create a project
+
+```sh
+dart create my_app
+cd my_app
+```
+
+Add the framework and the widget library to `pubspec.yaml`:
+
+```yaml
+dependencies:
+  fleury:
+    git: https://github.com/danReynolds/fleury.git
+  fleury_widgets:
+    git:
+      url: https://github.com/danReynolds/fleury.git
+      path: packages/fleury_widgets
+```
+
+Then run `dart pub get`.
+
+## 2. Hello, cells
+
+A Fleury app is a widget tree handed to `runTui`. If you've written Flutter,
+this is the same `Widget` / `build` model — it just paints to a grid of cells
+instead of pixels.
+
+```dart title="bin/main.dart"
+import 'package:fleury/fleury.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
+
+void main() => runTui(
+      const Center(child: Text('Hello, cells!')),
+    );
+```
+
+Run it — `Ctrl-C` quits:
+
+```sh
+dart run bin/main.dart
+```
+
+You should see *Hello, cells!* centered in your terminal.
+
+## 3. Add state
+
+Real apps change over time. Make the app stateful and tick a counter — exactly
+like Flutter. `setState` marks the widget dirty; Fleury rebuilds only that path,
+re-lays-out, and diffs the new cell grid against the old, so an idle frame costs
+nothing.
+
+```dart title="bin/main.dart"
+import 'dart:async';
+
+import 'package:fleury/fleury.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
+
+void main() => runTui(const StatusApp());
+
+class StatusApp extends StatefulWidget {
+  const StatusApp({super.key});
+
+  @override
+  State<StatusApp> createState() => _StatusAppState();
+}
+
+class _StatusAppState extends State<StatusApp> {
+  var _tick = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      setState(() => _tick++);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(1),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('uptime: ${_tick}s'),
+          const SizedBox(height: 1),
+          ProgressBar(value: (_tick % 60) / 60),
+        ],
+      ),
+    );
+  }
+}
+```
+
+Run it again — the progress bar fills once a minute.
+
+## 4. Compose widgets
+
+The widget library is broad — [browse the catalog](/widgets/), every entry has a
+live example. Swap the body for a few `Gauge`s and a `Sparkline` and you've got
+the status panel from the top of this page:
+
+```dart
+Column(
+  crossAxisAlignment: CrossAxisAlignment.stretch,
+  children: [
+    Gauge(value: 0.62, label: 'CPU'),
+    Gauge(value: 0.81, label: 'MEM'),
+    Gauge(value: 0.34, label: 'DISK'),
+    const SizedBox(height: 1),
+    Sparkline(data: const [3, 5, 4, 8, 6, 9, 7, 5, 8, 6]),
+  ],
+)
+```
+
+## 5. Run it in a browser
+
+The same code runs on the web. You can **embed** it client-side — compile to
+JavaScript with `dart2js`, no backend — or **serve** it from a native process
+and stream frames to a browser tab. Both modes, and when to choose each, are in
+[Serving and embedding](/architecture/serving-and-embedding/).
+
+## Where to next
+
+- [Widgets](/widgets/) — the full catalog, each with a live, interactive example.
+- [Core and targets](/architecture/core-and-targets/) — how one app runs on a
+  terminal, the DOM, and a remote browser session.
+- [Built for agents](/architecture/agents-and-semantics/) — the semantic app
+  graph that lets tests and AI agents drive the UI.
