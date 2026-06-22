@@ -106,32 +106,14 @@
 .main-pane:has(.showcase-page) .sl-container {
   max-width: none;
 }
-/* Two columns: the live app on the left (it's the star), the details on the
-   right so you see the running app and what's behind it together. */
-.showcase-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 19rem;
-  gap: 1.5rem 2.5rem;
-  align-items: start;
-}
-.showcase-demo {
-  min-width: 0;
-}
-.showcase-details > :first-child {
-  margin-top: 0;
-}
-@media (max-width: 60rem) {
-  .showcase-grid {
-    grid-template-columns: 1fr;
-  }
-}
-/* "Widgets used" list (right column), with a live filter. */
+/* "Widgets used" — a filterable, category-grouped grid of links, full width. */
 .showcase-widget-filter {
   width: 100%;
+  max-width: 22rem;
   box-sizing: border-box;
-  margin: 0 0 0.75rem;
-  padding: 0.3rem 0.55rem;
-  font-size: 0.82rem;
+  margin: 0 0 1rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
   color: var(--sl-color-white);
   background: var(--sl-color-black);
   border: 1px solid var(--sl-color-gray-5);
@@ -141,11 +123,13 @@
   outline: none;
   border-color: var(--sl-color-text-accent);
 }
-.showcase-widget-group {
-  margin-bottom: 0.85rem;
+.showcase-widget-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 1rem 2rem;
 }
 .showcase-widget-cat {
-  margin: 0 0 0.3rem;
+  margin: 0 0 0.35rem;
   font-size: 0.68rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;

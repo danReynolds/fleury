@@ -313,7 +313,6 @@ const SAMPLE_FILES = {
   agent: 'agent_tui.dart',
 };
 const SHOWCASE_COMPONENT = '../../../components/ShowcaseWidgets.astro';
-const SHOWCASE_LAYOUT = '../../../components/ShowcaseLayout.astro';
 const SAMPLES_DIR = join(here, '..', '..', 'packages', 'samples', 'lib', 'src');
 
 // One-paragraph pitch per showcase: what it is + why Fleury made it easy.
@@ -367,29 +366,20 @@ for (const e of showcases) {
     `---\ntitle: ${yaml(e.widget)}\ndescription: ${yaml(e.blurb)}\n` +
       `tableOfContents: false\n---\n\n` +
       `import FleuryExample from '${COMPONENT}';\n` +
-      `import ShowcaseWidgets from '${SHOWCASE_COMPONENT}';\n` +
-      `import ShowcaseLayout from '${SHOWCASE_LAYOUT}';\n\n` +
-      `${e.blurb}\n\n` +
-      `<ShowcaseLayout>\n\n` +
-      // Left column: the live app.
-      `<Fragment slot="demo">\n\n` +
+      `import ShowcaseWidgets from '${SHOWCASE_COMPONENT}';\n\n` +
+      // Richer intro, above the demo: the "what it is + why it was easy" pitch
+      // (it leads with the description), then how to run it + a source link, so
+      // the reader has context before diving in.
+      `${SHOWCASE_GOALS[slug] ?? e.blurb}\n\n` +
+      `**Run it yourself:** \`fleury dev samples ${slug}\`` +
+      (file
+        ? ` &nbsp;·&nbsp; **Source:** [\`${file}\`](${REPO}/packages/samples/lib/src/${file})`
+        : '') +
+      `\n\n` +
       `<FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}}` +
       `${e.interactive ? ' interactive' : ''} />\n\n` +
-      `</Fragment>\n\n` +
-      // Right column: the details.
-      `## Built with Fleury\n\n` +
-      `${SHOWCASE_GOALS[slug] ?? ''}\n\n` +
       `## Widgets used\n\n` +
       `<ShowcaseWidgets widgets={${JSON.stringify(used)}} />\n\n` +
-      `## Run it\n\n` +
-      '```sh\n' +
-      `fleury dev samples ${slug}\n` +
-      '```\n\n' +
-      (file
-        ? `## Source\n\n` +
-          `[\`${file}\`](${REPO}/packages/samples/lib/src/${file})\n\n`
-        : '') +
-      `</ShowcaseLayout>\n\n` +
       `[All showcases](/showcases/)\n`
   );
 }
