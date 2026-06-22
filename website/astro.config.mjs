@@ -20,6 +20,7 @@ export default defineConfig({
           items: [
             { label: 'Introduction', slug: 'introduction' },
             { label: 'Getting started', slug: 'getting-started' },
+            { label: 'How Fleury compares', slug: 'comparison' },
           ],
         },
         {
@@ -43,6 +44,7 @@ export default defineConfig({
               label: 'Built for agents',
               slug: 'architecture/agents-and-semantics',
             },
+            { label: 'Performance', slug: 'architecture/performance' },
           ],
         },
         {

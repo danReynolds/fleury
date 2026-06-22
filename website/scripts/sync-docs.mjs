@@ -22,6 +22,7 @@ const ROUTES = {
   'core-and-targets.md': '/architecture/core-and-targets/',
   'serving-and-embedding.md': '/architecture/serving-and-embedding/',
   'agents-and-semantics.md': '/architecture/agents-and-semantics/',
+  'performance.md': '/architecture/performance/',
 };
 
 const DOCS = [
@@ -43,6 +44,13 @@ const DOCS = [
     description:
       'Fleury produces a semantic app graph — roles, state, and actions — so ' +
       'tests and AI agents can drive the UI by meaning instead of scraping ANSI.',
+  },
+  {
+    src: 'performance.md',
+    description:
+      'Why Fleury stays cheap as apps get busy: retained-mode incremental ' +
+      'rebuilds, cell-level frame diffing, windowed data widgets, and a ' +
+      'patch-stream browser wire.',
   },
 ];
 
