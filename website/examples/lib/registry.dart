@@ -400,6 +400,151 @@ Tabs(
     ])),
   ),
 
+  // ── Inputs & controls ────────────────────────────────────────────────────
+  ExampleInfo(
+    id: 'select.basic',
+    widget: 'Select',
+    category: 'Inputs & controls',
+    blurb: 'A single-choice dropdown; open it with Enter and pick with ↑/↓.',
+    cols: 40,
+    rows: 6,
+    interactive: true,
+    builder: () => const _SelectExample(),
+  ),
+  ExampleInfo(
+    id: 'rangeslider.basic',
+    widget: 'RangeSlider',
+    category: 'Inputs & controls',
+    blurb: 'A two-handle slider for picking a low/high range.',
+    cols: 44,
+    rows: 3,
+    interactive: true,
+    builder: () => const _RangeSliderExample(),
+  ),
+  ExampleInfo(
+    id: 'stepper.basic',
+    widget: 'Stepper',
+    category: 'Inputs & controls',
+    blurb: 'Increment/decrement a number with ↑/↓ (×10 with Shift).',
+    cols: 40,
+    rows: 3,
+    interactive: true,
+    builder: () => const _StepperExample(),
+  ),
+  ExampleInfo(
+    id: 'numberinput.basic',
+    widget: 'NumberInput',
+    category: 'Inputs & controls',
+    blurb: 'A numeric text field with min/max clamping; type or wheel to change.',
+    cols: 36,
+    rows: 3,
+    interactive: true,
+    builder: () => _framed(const NumberInput(initialValue: 42, min: 0, max: 100)),
+  ),
+  ExampleInfo(
+    id: 'passwordinput.basic',
+    widget: 'PasswordInput',
+    category: 'Inputs & controls',
+    blurb: 'An obscured text field with a reveal chord (Ctrl-R).',
+    cols: 40,
+    rows: 3,
+    interactive: true,
+    builder: () => _framed(const PasswordInput(placeholder: 'Password')),
+  ),
+  ExampleInfo(
+    id: 'autocomplete.basic',
+    widget: 'Autocomplete',
+    category: 'Inputs & controls',
+    blurb: 'A text field that filters a list of options as you type.',
+    cols: 44,
+    rows: 7,
+    interactive: true,
+    builder: () => _framed(Autocomplete<String>(
+      placeholder: 'Type a fruit…',
+      options: const <String>['Apple', 'Apricot', 'Banana', 'Cherry', 'Grape'],
+    )),
+  ),
+  ExampleInfo(
+    id: 'colorpicker.basic',
+    widget: 'ColorPicker',
+    category: 'Inputs & controls',
+    blurb: 'A swatch grid; move with the arrow keys, choose with Enter.',
+    cols: 36,
+    rows: 4,
+    interactive: true,
+    builder: () => const _ColorPickerExample(),
+  ),
+  ExampleInfo(
+    id: 'datepicker.basic',
+    widget: 'DatePicker',
+    category: 'Inputs & controls',
+    blurb: 'A month calendar; arrow keys move days, PageUp/Down change month.',
+    cols: 30,
+    rows: 12,
+    interactive: true,
+    builder: () => const _DatePickerExample(),
+  ),
+
+  // ── Navigation & overlays ────────────────────────────────────────────────
+  ExampleInfo(
+    id: 'tabs.basic',
+    widget: 'Tabs',
+    category: 'Navigation & overlays',
+    blurb: 'A tab strip over swappable panels; ←/→ switch tabs.',
+    cols: 48,
+    rows: 6,
+    interactive: true,
+    builder: () => _framed(Tabs(
+      tabs: <TabItem>[
+        TabItem(label: 'Overview', content: _framed(const Text('Project at a glance.'))),
+        TabItem(label: 'Logs', content: _framed(const Text('› build finished in 1.8s'))),
+        TabItem(label: 'Settings', content: _framed(const Text('Theme · keybindings · …'))),
+      ],
+    )),
+  ),
+  ExampleInfo(
+    id: 'menu.basic',
+    widget: 'Menu',
+    category: 'Navigation & overlays',
+    blurb: 'A trigger that opens a list of actions.',
+    cols: 40,
+    rows: 7,
+    interactive: true,
+    builder: () => _framed(Menu(
+      trigger: const Text('Actions ▾'),
+      items: <MenuEntry>[
+        MenuItem(label: 'Rename', onSelected: () {}),
+        MenuItem(label: 'Duplicate', onSelected: () {}),
+        MenuItem(label: 'Delete', onSelected: () {}),
+      ],
+    )),
+  ),
+  ExampleInfo(
+    id: 'tooltip.basic',
+    widget: 'Tooltip',
+    category: 'Navigation & overlays',
+    blurb: 'A hover/focus hint attached to any child.',
+    cols: 40,
+    rows: 4,
+    interactive: true,
+    builder: () => _framed(const Tooltip(
+      message: 'Saves the current file',
+      child: Text('[ Save ]'),
+    )),
+  ),
+  ExampleInfo(
+    id: 'dialog.basic',
+    widget: 'Dialog',
+    category: 'Navigation & overlays',
+    blurb: 'A bordered, titled modal surface.',
+    cols: 44,
+    rows: 6,
+    builder: () => _framed(const Dialog(
+      title: 'Confirm',
+      child: Text('Delete 3 files? This cannot be undone.'),
+    )),
+  ),
+
   // ── Showcases (full apps; rendered on the Showcases page, not as widgets) ──
   ExampleInfo(
     id: 'showcase.dashboard',
@@ -536,6 +681,104 @@ Widget _framed(Widget child) => Theme(
       data: _theme,
       child: Padding(padding: const EdgeInsets.all(1), child: child),
     );
+
+// ── Stateful wrappers ───────────────────────────────────────────────────────
+// Controlled widgets (value + onChanged) need a holder so interacting with the
+// live example actually moves them; self-managing widgets are used directly.
+class _SelectExample extends StatefulWidget {
+  const _SelectExample();
+  @override
+  State<_SelectExample> createState() => _SelectExampleState();
+}
+
+class _SelectExampleState extends State<_SelectExample> {
+  String _v = 'medium';
+  @override
+  Widget build(BuildContext context) => _framed(Select<String>(
+        value: _v,
+        onChanged: (v) => setState(() => _v = v),
+        options: const <SelectOption<String>>[
+          SelectOption(value: 'low', label: 'Low'),
+          SelectOption(value: 'medium', label: 'Medium'),
+          SelectOption(value: 'high', label: 'High'),
+        ],
+      ));
+}
+
+class _RangeSliderExample extends StatefulWidget {
+  const _RangeSliderExample();
+  @override
+  State<_RangeSliderExample> createState() => _RangeSliderExampleState();
+}
+
+class _RangeSliderExampleState extends State<_RangeSliderExample> {
+  (num, num) _v = (20, 70);
+  @override
+  Widget build(BuildContext context) => _framed(RangeSlider(
+        values: _v,
+        min: 0,
+        max: 100,
+        label: 'Range',
+        showValues: true,
+        onChanged: (v) => setState(() => _v = v),
+      ));
+}
+
+class _StepperExample extends StatefulWidget {
+  const _StepperExample();
+  @override
+  State<_StepperExample> createState() => _StepperExampleState();
+}
+
+class _StepperExampleState extends State<_StepperExample> {
+  num _v = 3;
+  @override
+  Widget build(BuildContext context) => _framed(Stepper(
+        value: _v,
+        min: 0,
+        max: 10,
+        label: 'Quantity',
+        onChanged: (v) => setState(() => _v = v),
+      ));
+}
+
+class _ColorPickerExample extends StatefulWidget {
+  const _ColorPickerExample();
+  @override
+  State<_ColorPickerExample> createState() => _ColorPickerExampleState();
+}
+
+class _ColorPickerExampleState extends State<_ColorPickerExample> {
+  Color _c = const RgbColor(0x3D, 0xDC, 0x97);
+  @override
+  Widget build(BuildContext context) => _framed(ColorPicker(
+        value: _c,
+        onChanged: (c) => setState(() => _c = c),
+        colors: const <Color>[
+          RgbColor(0xFF, 0x5C, 0x57),
+          RgbColor(0xF5, 0xC2, 0x11),
+          RgbColor(0x3D, 0xDC, 0x97),
+          RgbColor(0x56, 0xC2, 0xFF),
+          RgbColor(0xBD, 0x93, 0xF9),
+        ],
+      ));
+}
+
+class _DatePickerExample extends StatefulWidget {
+  const _DatePickerExample();
+  @override
+  State<_DatePickerExample> createState() => _DatePickerExampleState();
+}
+
+class _DatePickerExampleState extends State<_DatePickerExample> {
+  DateTime _d = DateTime(2026, 6, 22);
+  @override
+  Widget build(BuildContext context) => _framed(DatePicker(
+        value: _d,
+        label: 'Date',
+        onChanged: (d) => setState(() => _d = d),
+      ));
+}
 
 // ── Knobs (interactive props) ───────────────────────────────────────────────
 //
