@@ -1,0 +1,11 @@
+---
+// Two-column showcase layout: the live app on the left (it's the star, and it's
+// wide), the details — pitch, widgets used, run command, source — in a column on
+// the right so you can see the running app and what's behind it at once. Stacks
+// on narrow viewports. Widths live in src/styles/fleury.css.
+---
+
+<div class="showcase-grid">
+  <div class="showcase-demo"><slot name="demo" /></div>
+  <div class="showcase-details"><slot /></div>
+</div>

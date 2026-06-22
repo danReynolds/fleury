@@ -1,9 +1,9 @@
 ---
-// Renders the "widgets used" grid for a showcase (grouped by category, each
-// linking to its reference page) and doubles as the full-width marker: its
-// `.showcase-page` class triggers the no-ToC, full-bleed layout in fleury.css.
-// When a showcase uses no catalog widgets (it's built from primitives), we say
-// so instead — that's a feature, not a gap.
+// Renders the "widgets used" list for a showcase (grouped by category, each
+// linking to its reference page, with a live filter) and doubles as the
+// full-width marker: its `.showcase-page` class triggers the full-bleed layout
+// in fleury.css. When a showcase uses no catalog widgets (it's built from
+// primitives), we say so — that's a feature, not a gap.
 interface Props {
   widgets: { name: string; slug: string; category: string }[];
 }
@@ -19,19 +19,31 @@ const groups = [...byCat.entries()];
 <div class="showcase-page">
   {
     groups.length > 0 ? (
-      <div class="showcase-widgets">
-        {groups.map(([cat, ws]) => (
-          <div class="showcase-widget-group">
-            <p class="showcase-widget-cat">{cat}</p>
-            <ul>
-              {ws.map((w) => (
-                <li>
-                  <a href={`/widgets/${w.slug}/`}>{w.name}</a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+      <div class="showcase-widgets" data-showcase-widgets>
+        <input
+          type="text"
+          class="showcase-widget-filter"
+          placeholder="Filter widgets…"
+          aria-label="Filter widgets used"
+          data-filter
+        />
+        <div class="showcase-widget-list">
+          {groups.map(([cat, ws]) => (
+            <div class="showcase-widget-group" data-group>
+              <p class="showcase-widget-cat">{cat}</p>
+              <ul>
+                {ws.map((w) => (
+                  <li data-name={w.name.toLowerCase()}>
+                    <a href={`/widgets/${w.slug}/`}>{w.name}</a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <p class="showcase-widget-empty" data-empty hidden>
+          No widgets match.
+        </p>
       </div>
     ) : (
       <p class="showcase-primitives">
@@ -42,3 +54,33 @@ const groups = [...byCat.entries()];
     )
   }
 </div>
+
+<script>
+  // Live-filter each showcase's "widgets used" list by name.
+  function wireFilters() {
+    document.querySelectorAll('[data-showcase-widgets]').forEach((root) => {
+      const input = root.querySelector('[data-filter]') as HTMLInputElement | null;
+      if (!input || input.dataset.wired) return;
+      input.dataset.wired = '1';
+      const empty = root.querySelector('[data-empty]') as HTMLElement | null;
+      const groups = [...root.querySelectorAll('[data-group]')] as HTMLElement[];
+      input.addEventListener('input', () => {
+        const q = input.value.trim().toLowerCase();
+        let any = false;
+        for (const group of groups) {
+          let shown = 0;
+          group.querySelectorAll('li').forEach((li) => {
+            const match = !q || (li.dataset.name || '').includes(q);
+            (li as HTMLElement).hidden = !match;
+            if (match) shown++;
+          });
+          group.hidden = shown === 0;
+          if (shown) any = true;
+        }
+        if (empty) empty.hidden = any;
+      });
+    });
+  }
+  wireFilters();
+  document.addEventListener('astro:page-load', wireFilters);
+</script>
