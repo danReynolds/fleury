@@ -39,6 +39,10 @@ export default defineConfig({
               label: 'Serving and embedding',
               slug: 'architecture/serving-and-embedding',
             },
+            {
+              label: 'Built for agents',
+              slug: 'architecture/agents-and-semantics',
+            },
           ],
         },
         {

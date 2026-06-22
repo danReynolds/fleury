@@ -21,6 +21,7 @@ const GITHUB = 'https://github.com/danReynolds/fleury/blob/main/docs';
 const ROUTES = {
   'core-and-targets.md': '/architecture/core-and-targets/',
   'serving-and-embedding.md': '/architecture/serving-and-embedding/',
+  'agents-and-semantics.md': '/architecture/agents-and-semantics/',
 };
 
 const DOCS = [
@@ -36,6 +37,12 @@ const DOCS = [
     description:
       'Two ways to run Fleury in a browser — embed it client-side with ' +
       'dart2js, or serve it from a native process — and when to choose each.',
+  },
+  {
+    src: 'agents-and-semantics.md',
+    description:
+      'Fleury produces a semantic app graph — roles, state, and actions — so ' +
+      'tests and AI agents can drive the UI by meaning instead of scraping ANSI.',
   },
 ];
 
