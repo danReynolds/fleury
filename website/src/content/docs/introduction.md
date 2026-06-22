@@ -4,10 +4,10 @@ description: What Fleury is, who it's for, and the mental model in two minutes.
 ---
 
 Fleury is a **retained-mode UI framework for the terminal** — and, it turns
-out, the browser. If you know Flutter, you already know Fleury's shape:
-immutable **widgets** describe the UI, a durable **element** tree holds identity
-and state, a **render** tree lays out and paints over a grid of cells, and a
-**semantics** tree exposes roles/state/actions for tests and agents.
+out, the browser. Its shape is a stack of trees: immutable **widgets** describe
+the UI, a durable **element** tree holds identity and state, a **render** tree
+lays out and paints over a grid of cells, and a **semantics** tree exposes
+roles/state/actions for tests and agents.
 
 ## Who it's for
 

@@ -34,8 +34,8 @@ Then run `dart pub get`.
 
 ## 2. Hello, cells
 
-A Fleury app is a widget tree handed to `runTui`. If you've written Flutter,
-this is the same `Widget` / `build` model — it just paints to a grid of cells
+A Fleury app is a widget tree handed to `runTui`. You build it with the familiar
+`Widget` / `build` / `setState` model — it just paints to a grid of cells
 instead of pixels.
 
 ```dart title="bin/main.dart"
@@ -57,8 +57,8 @@ You should see *Hello, cells!* centered in your terminal.
 
 ## 3. Add state
 
-Real apps change over time. Make the app stateful and tick a counter — exactly
-like Flutter. `setState` marks the widget dirty; Fleury rebuilds only that path,
+Real apps change over time. Make the app stateful and tick a counter.
+`setState` marks the widget dirty; Fleury rebuilds only that path,
 re-lays-out, and diffs the new cell grid against the old, so an idle frame costs
 nothing.
 

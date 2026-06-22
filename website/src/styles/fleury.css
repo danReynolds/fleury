@@ -20,14 +20,16 @@
   --sl-color-text-accent: #0f7a50;
 }
 
-/* ── Widget reference layout (two columns) ──────────────────────────────────
-   Widget pages run with `tableOfContents: false` and wrap their body in
-   <WidgetLayout>. We reclaim the freed table-of-contents width: the prose + API
-   breakdown flow on the left, the live demo + code stick on the right. The
-   :has() override lets the page (title + body containers) use the full pane. */
-.main-pane:has(.widget-ref) .sl-container {
+/* ── Full width, no table-of-contents ───────────────────────────────────────
+   The ToC is off site-wide (astro.config.mjs); drop Starlight's content cap so
+   every page uses the freed width. */
+.sl-container {
   max-width: none;
 }
+
+/* ── Widget reference layout (two columns) ──────────────────────────────────
+   Widget pages wrap their body in <WidgetLayout>: prose + API on the left, the
+   live demo + code on the right. */
 .widget-ref {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(20rem, 31rem);
@@ -100,13 +102,7 @@
   }
 }
 
-/* ── Showcase pages (full-bleed, no ToC) ────────────────────────────────────
-   A <ShowcaseWidgets> on the page carries `.showcase-page`; that lets the demo
-   (often 100+ cols wide) and the prose use the full pane the ToC freed. */
-.main-pane:has(.showcase-page) .sl-container {
-  max-width: none;
-}
-/* "Widgets used" — a filterable, category-grouped grid of links, full width. */
+/* ── Showcase "widgets used" — a filterable, category-grouped grid of links ──*/
 .showcase-widget-filter {
   width: 100%;
   max-width: 22rem;

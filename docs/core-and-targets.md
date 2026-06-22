@@ -36,8 +36,9 @@ target is the only part that knows about ANSI bytes, DOM nodes, or sockets.
 
 ## The core
 
-The core is Flutter's architecture rebuilt for cells. It keeps four trees, each
-with one job (expanded in [the architecture overview](architecture.md#the-architecture)):
+The core is a retained-mode reactive engine, specialized for cells. It keeps
+four trees, each with one job (expanded in
+[the architecture overview](architecture.md#the-architecture)):
 
 | Tree | Job |
 |------|-----|
@@ -119,6 +120,17 @@ That gives a simple rule for any code that might run in the browser:
 | `fleury` (`fleury.dart` umbrella) | + native runtime: `runTui`, drivers, log/process/file, **serve** | ❌ `dart:io` |
 | `fleury_widgets` | the widget library | ✅ 51 / ❌ 7 |
 | `fleury_web` | the web/DOM target + the remote browser client | ✅ dart2js |
+
+## Influences
+
+Fleury is its own framework, but it stands on prior art. The retained four-tree
+pipeline (widget → element → render → semantics) is most directly influenced by
+**Flutter**. The cell-grid model and the terminal focus follow the long line of
+TUI toolkits — from `ncurses` to modern ones like **Ratatui**, **Textual**, and
+**Bubble Tea**. And the semantic app graph echoes the accessibility trees of the
+web (**ARIA**) and native UI platforms. What's new is the combination: that
+pipeline, on a cell grid, with one app definition spanning a terminal and the
+browser.
 
 ## Why this matters
 

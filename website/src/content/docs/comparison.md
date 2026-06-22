@@ -4,8 +4,8 @@ description: Where Fleury sits among terminal UI frameworks — Ratatui, Textual
 ---
 
 There are excellent terminal UI frameworks already. Fleury isn't trying to
-replace all of them — it's aimed at a specific combination: **a Flutter-style
-retained model, a browser target, and a semantic graph built for tests and
+replace all of them — it's aimed at a specific combination: **a retained
+widget-tree model, a browser target, and a semantic graph built for tests and
 agents**, in Dart.
 
 Here's the landscape on a few verifiable axes. (Frameworks move quickly; this
@@ -14,7 +14,7 @@ latest.)
 
 | Framework | Language | Programming model | First-class web target |
 | --- | --- | --- | --- |
-| **Fleury** | Dart | Retained tree (Flutter-like) | **Yes** — embed via dart2js *or* serve |
+| **Fleury** | Dart | Retained widget tree | **Yes** — embed via dart2js *or* serve |
 | Ratatui | Rust | Immediate mode | No |
 | Textual | Python | Retained tree (CSS-like) | Yes — serve (textual-web) |
 | Bubble Tea | Go | Elm (Model / Update / View) | No |

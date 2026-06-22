@@ -7,8 +7,8 @@ bolted on after the fact.
 ## Retained mode, incremental everything
 
 Many terminal UIs are immediate-mode: every frame, your code re-describes the
-whole screen and the framework redraws it. Fleury keeps a *retained* tree — widgets,
-elements, and render objects, like Flutter. A `setState` marks one subtree
+whole screen and the framework redraws it. Fleury keeps a *retained* tree —
+widgets, elements, and render objects. A `setState` marks one subtree
 dirty; only that path rebuilds, re-lays-out, and re-paints. The rest of the tree
 is reused untouched. A button label changing doesn't re-lay-out the table next
 to it.

@@ -6,9 +6,9 @@ match substrings, guess at key sequences. It's brittle: restyle a border and the
 test breaks; the agent never really knew what was on screen, only what it looked
 like.
 
-Fleury takes the Flutter idea — a **semantics tree** alongside the visual one —
-and makes it a headline feature. Every frame, the framework produces a *semantic
-app graph*: a tree describing what the UI **means**, not how it's painted.
+Fleury keeps a **semantics tree** alongside the visual one and makes it a
+headline feature. Every frame, the framework produces a *semantic app graph*: a
+tree describing what the UI **means**, not how it's painted.
 
 ## What the graph contains
 

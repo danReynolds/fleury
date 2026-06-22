@@ -3,9 +3,9 @@ title: Testing
 description: Render and drive widgets headlessly with FleuryTester — no terminal.
 ---
 
-Fleury widgets are tested the way Flutter widgets are: you pump a widget tree,
-render it to a grid of cells, and assert on the output — no real terminal
-involved. The harness is `FleuryTester`, exposed through `testWidgets`.
+Fleury widgets are tested without a real terminal: you pump a widget tree,
+render it to a grid of cells, and assert on the output — the rendered cells or
+the semantic graph. The harness is `FleuryTester`, exposed through `testWidgets`.
 
 ```dart
 import 'package:fleury/fleury.dart';

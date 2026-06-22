@@ -9,7 +9,10 @@ export default defineConfig({
     starlight({
       title: 'Fleury',
       description:
-        "Flutter's architecture, rebuilt for the terminal — and the browser.",
+        'A retained-mode UI framework for the terminal — and the browser.',
+      // Drop the per-page table-of-contents site-wide; content goes full-width
+      // (see the .sl-container override in fleury.css).
+      tableOfContents: false,
       // Shared styling for embedded Fleury examples — must be site-wide so the
       // JS-created fullscreen overlay (appended to <body>, outside component
       // scope) and the knob pages get the same host font metrics + chrome.
