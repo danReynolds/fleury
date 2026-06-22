@@ -74,37 +74,134 @@
   }
 }
 
-/* ── Landing "you write → Fleury renders" split ─────────────────────────────*/
-.home-split {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.5rem 2.5rem;
-  align-items: start;
-  /* The splash template is full-bleed; keep the code↔demo pair from spreading
-     across an ultrawide screen. */
-  max-width: 60rem;
-  margin: 1rem 0 1.5rem;
+/* ── Landing hero stage: one "editor → live preview" panel ──────────────────*/
+.home-stage {
+  max-width: 62rem;
+  margin: 2rem auto 1rem;
+  border: 1px solid color-mix(in srgb, var(--sl-color-gray-4) 60%, transparent);
+  border-radius: 0.9rem;
+  overflow: hidden;
+  background:
+    radial-gradient(130% 90% at 0% 0%, rgba(61, 220, 151, 0.07), transparent 42%),
+    linear-gradient(180deg, #0d1219, #0a0e13);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 28px 70px -30px rgba(0, 0, 0, 0.85),
+    0 0 70px -30px rgba(61, 220, 151, 0.3);
 }
-.home-split-col {
-  min-width: 0;
+.home-stage-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.95rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.02);
 }
-.home-split-label {
-  margin: 0 0 0.5rem;
-  font-size: 0.72rem;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+.home-stage-dots {
+  display: inline-flex;
+  gap: 0.4rem;
+}
+.home-stage-dots i {
+  width: 0.66rem;
+  height: 0.66rem;
+  border-radius: 50%;
+  background: #3a3f47;
+}
+.home-stage-dots i:nth-child(1) {
+  background: #ff5f57;
+}
+.home-stage-dots i:nth-child(2) {
+  background: #febc2e;
+}
+.home-stage-dots i:nth-child(3) {
+  background: #28c840;
+}
+.home-stage-file {
+  font-family: var(--sl-font-mono, ui-monospace, monospace);
+  font-size: 0.8rem;
   color: var(--sl-color-gray-3);
 }
-.home-split-demo {
-  display: flex;
+.home-stage-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+  font-size: 0.7rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #3ddc97;
 }
-/* Match the code block's height-ish and keep the two columns visually paired. */
-.home-split .expressive-code {
-  margin: 0;
+.home-stage-pulse {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: #3ddc97;
+  box-shadow: 0 0 0 0 rgba(61, 220, 151, 0.5);
+  animation: fleury-pulse 1.8s ease-out infinite;
+}
+.home-stage-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.home-stage-pane {
+  position: relative;
+  min-width: 0;
+  padding: 1.6rem 1.2rem 1.2rem;
+}
+.home-stage-demo {
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(0, 0, 0, 0.22);
+  display: flex;
+  flex-direction: column;
+}
+.home-stage-demo-inner {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.home-stage-tag {
+  position: absolute;
+  top: 0.6rem;
+  left: 1.2rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-4);
+}
+.home-stage-demo .home-stage-tag {
+  left: auto;
+  right: 1.2rem;
+}
+/* Blend the code block into the panel — no second frame. */
+.home-stage-code :is(.expressive-code, figure, pre) {
+  margin: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.home-stage-code .copy {
+  display: none;
+}
+/* Strip the example's own chrome; the panel is the frame now. */
+.home-stage-demo .fleury-frame {
+  border: none;
+  background: transparent;
+}
+.home-stage-demo .fleury-bar {
+  display: none;
+}
+.home-stage-demo .fleury-host-wrap {
+  padding: 0;
+  overflow: visible;
 }
 @media (max-width: 50rem) {
-  .home-split {
+  .home-stage-body {
     grid-template-columns: 1fr;
+  }
+  .home-stage-demo {
+    border-left: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
   }
 }
 

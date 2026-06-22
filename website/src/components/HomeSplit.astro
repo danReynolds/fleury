@@ -1,16 +1,24 @@
 ---
-// Landing "you write → you get" split: the Dart you'd write on the left, the
-// real widget it renders (live, dart2js) on the right. Stacks on narrow
-// viewports. Styling lives in src/styles/fleury.css.
+// Landing hero centerpiece: one premium "editor → live preview" panel. The Dart
+// you'd write sits in the left pane, the real widget it renders (live, dart2js)
+// in the right — unified under a single window frame so it reads as one
+// interface, not two floating boxes. Styling lives in src/styles/fleury.css.
 ---
 
-<div class="home-split">
-  <div class="home-split-col">
-    <p class="home-split-label">You write</p>
-    <slot name="code" />
+<div class="home-stage">
+  <div class="home-stage-bar">
+    <span class="home-stage-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span class="home-stage-file">monitor.dart</span>
+    <span class="home-stage-live"><span class="home-stage-pulse"></span>live</span>
   </div>
-  <div class="home-split-col">
-    <p class="home-split-label">Fleury renders</p>
-    <div class="home-split-demo"><slot name="demo" /></div>
+  <div class="home-stage-body">
+    <div class="home-stage-pane home-stage-code">
+      <span class="home-stage-tag">You write</span>
+      <slot name="code" />
+    </div>
+    <div class="home-stage-pane home-stage-demo">
+      <span class="home-stage-tag">Fleury renders</span>
+      <div class="home-stage-demo-inner"><slot name="demo" /></div>
+    </div>
   </div>
 </div>
