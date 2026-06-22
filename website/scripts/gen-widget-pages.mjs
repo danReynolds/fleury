@@ -15,6 +15,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const MANIFEST = join(here, '..', 'src', 'examples.json');
 const API = join(here, '..', 'src', 'api.json');
 const CODE = join(here, '..', 'src', 'examples_code.json');
+const TYPES = join(here, '..', 'src', 'types.json');
 const DOCS = join(here, '..', 'src', 'content', 'docs');
 // From src/content/docs/<section>/*.mdx up to src/components/.
 const COMPONENT = '../../../components/FleuryExample.astro';
@@ -142,6 +143,24 @@ const cell = (s) =>
     .replace(/\}/g, '&#125;');
 const codeCell = (s) => '`' + String(s).replace(/\|/g, '\\|') + '`';
 
+// name -> repo source path#line, for linking type names back to their source.
+const types = JSON.parse(readFileSync(TYPES, 'utf8'));
+
+// Render a Dart type as a monospaced cell, linking any type name we know about
+// to its definition on GitHub (the dartdoc "click the type" affordance). Built
+// as HTML so the links survive inside a Markdown table cell.
+function linkType(typeStr) {
+  const esc = String(typeStr)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\|/g, '&#124;');
+  const linked = esc.replace(/[A-Z][A-Za-z0-9_]*/g, (name) =>
+    types[name] ? `<a href="${REPO}/${types[name]}">${name}</a>` : name
+  );
+  return `<code>${linked}</code>`;
+}
+
 // A "Properties" table for a widget class, from its extracted constructor params.
 function propsTable(widget) {
   const entry = api[widget];
@@ -149,7 +168,7 @@ function propsTable(widget) {
   const rows = entry.params
     .map((p) => {
       const def = p.required ? '**required**' : p.default ? codeCell(p.default) : '—';
-      return `| ${codeCell(p.name)} | ${codeCell(p.type)} | ${def} | ${cell(p.doc)} |`;
+      return `| ${codeCell(p.name)} | ${linkType(p.type)} | ${def} | ${cell(p.doc)} |`;
     })
     .join('\n');
   return (

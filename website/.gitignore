@@ -19,3 +19,4 @@ examples/build/
 examples/.dart_tool/
 src/api.json
 src/examples_code.json
+src/types.json
