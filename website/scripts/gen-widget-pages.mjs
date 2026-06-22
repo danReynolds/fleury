@@ -239,7 +239,7 @@ for (const e of widgets) {
   byCategory.get(e.category).push(e);
 }
 let widgetIndex =
-  `---\ntitle: Widgets\ndescription: The Fleury widget library — every page has a live, client-side example.\n---\n\n` +
+  `---\ntitle: Overview\ndescription: The Fleury widget library — every page has a live, client-side example.\n---\n\n` +
   `Fleury ships a broad widget library: charts and meters, data and lists, ` +
   `document viewers, and agent surfaces. Each widget below has its own page ` +
   `with a **live example that runs in your browser** (compiled with dart2js).\n\n`;
