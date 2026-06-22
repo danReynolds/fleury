@@ -544,6 +544,296 @@ Tabs(
       child: Text('Delete 3 files? This cannot be undone.'),
     )),
   ),
+  ExampleInfo(
+    id: 'commandpalette.basic',
+    widget: 'CommandPalette',
+    category: 'Navigation & overlays',
+    blurb: 'A fuzzy command launcher; type to filter, Enter to invoke.',
+    cols: 52,
+    rows: 10,
+    interactive: true,
+    builder: () => _framed(CommandPalette(commands: <Command>[
+      Command(label: 'Open file…', shortcut: 'Ctrl-P', onInvoke: () {}),
+      Command(label: 'Toggle theme', category: 'View', onInvoke: () {}),
+      Command(label: 'Run tests', shortcut: 'Ctrl-T', onInvoke: () {}),
+      Command(label: 'Git: commit', category: 'Git', onInvoke: () {}),
+    ])),
+  ),
+  ExampleInfo(
+    id: 'searchpanel.basic',
+    widget: 'SearchPanel',
+    category: 'Navigation & overlays',
+    blurb: 'A query box over a result list, grouped and copyable.',
+    cols: 60,
+    rows: 11,
+    interactive: true,
+    builder: () => _framed(const SearchPanel(
+      groupByCategory: true,
+      results: <SearchResult>[
+        SearchResult(title: 'main.dart', subtitle: 'lib/', category: 'Files'),
+        SearchResult(title: 'pubspec.yaml', subtitle: './', category: 'Files'),
+        SearchResult(
+            title: 'runTui', subtitle: 'lib/src/app.dart', category: 'Symbols'),
+        SearchResult(
+            title: 'Gauge', subtitle: 'widgets/gauge.dart', category: 'Symbols'),
+      ],
+    )),
+  ),
+  ExampleInfo(
+    id: 'filementionpicker.basic',
+    widget: 'FileMentionPicker',
+    category: 'Navigation & overlays',
+    blurb: 'An @-mention picker for files; type to filter the project.',
+    cols: 56,
+    rows: 8,
+    interactive: true,
+    builder: () => _framed(const FileMentionPicker(
+      entries: <FileMentionEntry>[
+        FileMentionEntry(path: 'lib/main.dart', label: 'main.dart'),
+        FileMentionEntry(path: 'lib/src/app.dart', label: 'app.dart'),
+        FileMentionEntry(path: 'pubspec.yaml', label: 'pubspec.yaml'),
+        FileMentionEntry(path: 'README.md', label: 'README.md'),
+      ],
+    )),
+  ),
+  ExampleInfo(
+    id: 'completiontextinput.basic',
+    widget: 'CompletionTextInput',
+    category: 'Inputs & controls',
+    blurb: 'A text field with inline completion suggestions as you type.',
+    cols: 44,
+    rows: 7,
+    interactive: true,
+    builder: () => _framed(CompletionTextInput(
+      placeholder: 'Type a command…',
+      showOnEmptyQuery: true,
+      provider: (request) {
+        const options = <TextCompletionOption>[
+          TextCompletionOption(label: 'benchmark'),
+          TextCompletionOption(label: 'storybook'),
+          TextCompletionOption(label: 'command-palette'),
+          TextCompletionOption(label: 'semantic-tree'),
+        ];
+        final q = request.query.toLowerCase();
+        return options.where((o) => o.label.toLowerCase().contains(q));
+      },
+    )),
+  ),
+
+  // ── Data & lists ─────────────────────────────────────────────────────────
+  ExampleInfo(
+    id: 'table.basic',
+    widget: 'Table',
+    category: 'Data & lists',
+    blurb: 'A text table of widget cells, with optional row selection.',
+    cols: 44,
+    rows: 6,
+    interactive: true,
+    builder: () => _framed(Table(
+      selectable: true,
+      header: const <Widget>[Text('Name'), Text('Role'), Text('Commits')],
+      rows: const <List<Widget>>[
+        <Widget>[Text('dan'), Text('author'), Text('1284')],
+        <Widget>[Text('ada'), Text('reviewer'), Text('642')],
+        <Widget>[Text('lin'), Text('docs'), Text('219')],
+      ],
+    )),
+  ),
+  ExampleInfo(
+    id: 'treetable.basic',
+    widget: 'TreeTable',
+    category: 'Data & lists',
+    blurb: 'A hierarchical, expandable table; ←/→ collapse and expand rows.',
+    cols: 48,
+    rows: 9,
+    interactive: true,
+    builder: () => _framed(TreeTable<String>(
+      treeColumnId: 'name',
+      columns: const <DataTableColumn>[
+        DataTableColumn(id: 'name', title: 'Name'),
+        DataTableColumn(id: 'size', title: 'Size'),
+      ],
+      roots: const <TreeTableNode<String>>[
+        TreeTableNode(
+          key: 'lib',
+          label: 'lib',
+          cells: <String, String>{'size': '—'},
+          children: <TreeTableNode<String>>[
+            TreeTableNode(
+                key: 'main', label: 'main.dart', cells: <String, String>{'size': '1.2k'}),
+            TreeTableNode(
+                key: 'app', label: 'app.dart', cells: <String, String>{'size': '8.4k'}),
+          ],
+        ),
+        TreeTableNode(
+            key: 'pub', label: 'pubspec.yaml', cells: <String, String>{'size': '512'}),
+      ],
+    )),
+  ),
+  ExampleInfo(
+    id: 'calendarheatmap.basic',
+    widget: 'CalendarHeatmap',
+    category: 'Data & lists',
+    blurb: 'A GitHub-style contribution grid keyed by date.',
+    cols: 56,
+    rows: 9,
+    builder: () => _framed(CalendarHeatmap(
+      start: DateTime(2026, 1, 1),
+      end: DateTime(2026, 3, 31),
+      color: _theme.colorScheme.primary,
+      values: <DateTime, num>{
+        DateTime(2026, 1, 6): 2,
+        DateTime(2026, 1, 14): 5,
+        DateTime(2026, 1, 21): 8,
+        DateTime(2026, 2, 3): 3,
+        DateTime(2026, 2, 10): 6,
+        DateTime(2026, 2, 18): 9,
+        DateTime(2026, 3, 2): 4,
+        DateTime(2026, 3, 11): 7,
+        DateTime(2026, 3, 20): 1,
+      },
+    )),
+  ),
+
+  // ── Agent surfaces (more) ────────────────────────────────────────────────
+  ExampleInfo(
+    id: 'approvalprompt.basic',
+    widget: 'ApprovalPrompt',
+    category: 'Agent surfaces',
+    blurb: 'A yes/no approval card for gating risky agent actions.',
+    cols: 56,
+    rows: 8,
+    interactive: true,
+    builder: () => _framed(ApprovalPrompt(
+      onDecision: (d) {},
+      request: const ApprovalRequest(
+        id: 'a1',
+        title: 'Run on bare metal?',
+        message: 'This will reserve the terminal and write benchmark artifacts.',
+        subject: 'Tier-C benchmark',
+      ),
+    )),
+  ),
+  ExampleInfo(
+    id: 'diffview.basic',
+    widget: 'DiffView',
+    category: 'Agent surfaces',
+    blurb: 'A unified diff with line numbers and word-level highlighting.',
+    cols: 56,
+    rows: 9,
+    interactive: true,
+    builder: () => _framed(DiffView(diff: _diffSample)),
+  ),
+  ExampleInfo(
+    id: 'patchreview.basic',
+    widget: 'PatchReview',
+    category: 'Agent surfaces',
+    blurb: 'A file-by-file patch review surface over a diff.',
+    cols: 60,
+    rows: 12,
+    interactive: true,
+    builder: () => _framed(PatchReview(
+      diff: _diffSample,
+      status: PatchReviewStatus.pending,
+    )),
+  ),
+  ExampleInfo(
+    id: 'toolcallcard.basic',
+    widget: 'ToolCallCard',
+    category: 'Agent surfaces',
+    blurb: 'A card summarizing one tool/function call and its result.',
+    cols: 56,
+    rows: 8,
+    builder: () => _framed(ToolCallCard(
+      record: ToolCallRecord(
+        id: 't1',
+        name: 'benchmark.run',
+        title: 'Run benchmark',
+        status: ToolCallStatus.succeeded,
+        description: 'Capture peer comparison output.',
+        arguments: const <String, Object?>{
+          'scenario': 'sb6_data_table',
+          'peers': <String>['ratatui', 'bubbletea'],
+        },
+      ),
+    )),
+  ),
+  ExampleInfo(
+    id: 'tracetimeline.basic',
+    widget: 'TraceTimeline',
+    category: 'Agent surfaces',
+    blurb: 'A vertical timeline of trace events with status and timing.',
+    cols: 56,
+    rows: 8,
+    interactive: true,
+    builder: () => _framed(TraceTimeline(events: <TraceTimelineEntry>[
+      TraceTimelineEntry(
+        id: 't1',
+        label: 'Resolve story',
+        kind: TraceTimelineKind.command,
+        status: TraceTimelineStatus.succeeded,
+        timestamp: DateTime(2026, 6, 9, 10),
+        duration: const Duration(milliseconds: 12),
+      ),
+      TraceTimelineEntry(
+        id: 't2',
+        label: 'Run tests',
+        kind: TraceTimelineKind.command,
+        status: TraceTimelineStatus.running,
+        timestamp: DateTime(2026, 6, 9, 10, 0, 1),
+      ),
+    ])),
+  ),
+  ExampleInfo(
+    id: 'conversationnavigator.basic',
+    widget: 'ConversationNavigator',
+    category: 'Agent surfaces',
+    blurb: 'A searchable list of conversations with status and unread counts.',
+    cols: 60,
+    rows: 8,
+    interactive: true,
+    builder: () => _framed(const ConversationNavigator(
+      conversations: <ConversationEntry>[
+        ConversationEntry(
+          id: 'c1',
+          title: 'Benchmark scoreboard',
+          subtitle: 'Perf follow-up',
+          status: ConversationStatus.active,
+          latestMessage: 'Run all peers before deciding.',
+          unreadCount: 2,
+        ),
+        ConversationEntry(
+          id: 'c2',
+          title: 'Docs site',
+          status: ConversationStatus.idle,
+          latestMessage: 'Tabbed examples shipped.',
+        ),
+      ],
+    )),
+  ),
+  ExampleInfo(
+    id: 'modelstatusbar.basic',
+    widget: 'ModelStatusBar',
+    category: 'Agent surfaces',
+    blurb: 'A status line for the active model: provider, mode, latency, tokens.',
+    cols: 60,
+    rows: 3,
+    builder: () => _framed(const ModelStatusBar(
+      info: ModelStatusInfo(
+        model: 'claude-opus-4-8',
+        provider: 'Anthropic',
+        status: ModelRuntimeStatus.streaming,
+        mode: 'edit',
+        latency: Duration(milliseconds: 180),
+        tokenUsage: TokenUsage(
+          input: 8200,
+          output: 1400,
+          contextUsed: 64000,
+          contextLimit: 200000,
+        ),
+      ),
+    )),
+  ),
 
   // ── Showcases (full apps; rendered on the Showcases page, not as widgets) ──
   ExampleInfo(
@@ -620,6 +910,15 @@ runTui(const App());
 ```
 
 See the **Guides** for theming, animation, focus, and testing.
+''';
+
+const String _diffSample = '''@@ -1,5 +1,5 @@
+ void main() {
+-  final greeting = 'hi';
+-  print(greeting);
++  final greeting = 'hello';
++  print(greeting.toUpperCase());
+ }
 ''';
 
 const String _codeSample = '''
