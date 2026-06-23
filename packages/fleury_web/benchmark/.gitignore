@@ -1,3 +1,0 @@
-# Vendored third-party renderer, fetched on demand (see fetch_xterm.sh).
-# Deliberately not committed — fleury removed xterm from its own stack.
-vendor/

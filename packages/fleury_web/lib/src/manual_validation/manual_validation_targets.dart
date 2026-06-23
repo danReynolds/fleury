@@ -884,7 +884,7 @@ const manualValidationTargets = <ManualValidationTarget>[
       ManualValidationCheck(
         id: 'manual-page-loads-dom-host',
         instruction:
-            'manual_validation.html reaches data-fleury-manual-validation="ready", retained DOM host output is visible, and no xterm element is present.',
+            'manual_validation.html reaches data-fleury-manual-validation="ready", retained DOM host output is visible, and no terminal-emulator fallback element is present.',
       ),
       ManualValidationCheck(
         id: 'keyboard-capture-focused',
@@ -926,7 +926,7 @@ const manualValidationTargets = <ManualValidationTarget>[
       ManualValidationCheck(
         id: 'manual-page-ready-semantic-host',
         instruction:
-            'manual_validation.html reaches data-fleury-manual-validation="ready", retained semantic DOM output is reachable, and no xterm element is present.',
+            'manual_validation.html reaches data-fleury-manual-validation="ready", retained semantic DOM output is reachable, and no terminal-emulator fallback element is present.',
       ),
       ManualValidationCheck(
         id: 'visual-grid-hidden',

@@ -111,7 +111,8 @@ final class TuiSurfaceHost {
 /// Runs a Fleury widget tree against a visual [FrameSurface].
 ///
 /// This host proves the framework can render real widgets into a retained web
-/// surface without going through ANSI/xterm. Geometry may be supplied through
+/// surface without going through ANSI or a terminal emulator. Geometry may be
+/// supplied through
 /// [cellMetrics], which is read only during the frame read phase. Browser input
 /// may be supplied through [inputSource], which is queued by event handlers and
 /// dispatched during the frame update phase. A web clipboard backend may be

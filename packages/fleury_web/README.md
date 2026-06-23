@@ -1,7 +1,6 @@
 # Fleury Web
 
-Run [fleury](../fleury) apps in a browser. The package currently exposes two
-host paths:
+Run [fleury](../fleury) apps in a browser through the retained DOM host:
 
 - **`runTuiWebDom`** runs Fleury-owned apps through the retained DOM host:
   Fleury paints into a `CellBuffer`, browser frames flush under
@@ -10,13 +9,10 @@ host paths:
   browser input is queued into the shared runtime loop, clipboard uses the
   browser API with fallback behavior, and a separate semantic DOM mirrors the
   app for accessibility.
-- **`runTuiWeb`** remains the xterm.js-compatible bridge for the legacy demo
-  path and arbitrary terminal-style transport experiments. It still renders
-  Fleury frames as ANSI through `WebTerminalDriver`.
 
 The retained DOM host is the normal development target for Fleury-owned web
-apps. The xterm path stays available while benchmark gates and compatibility
-work mature.
+apps. The serve/remote paths reuse the same core runtime contracts behind their
+own hosts.
 
 ## How it works
 
@@ -48,9 +44,6 @@ platform pieces:
   report gates, repeated-run scoreboards, semantic coverage audits, and manual
   browser validation packets.
 
-For the xterm path, the host page creates a terminal and exposes it as
-`globalThis.fleuryTerminal`; `WebTerminalDriver` picks it up from there.
-
 ## Run the retained DOM demo
 
 ```sh
@@ -64,9 +57,9 @@ dart pub global run dhttpd --path web
 ```
 
 You'll get a retained DOM Fleury app with browser input, state updates,
-semantic status, a semantic action, and no xterm dependency.
+semantic status, a semantic action, and a selectable-text DOM surface.
 
-## Run the xterm bridge demo
+## Run the counter demo
 
 ```sh
 dart pub get
@@ -78,13 +71,8 @@ dart pub global run dhttpd --path web
 # then open the printed http://localhost:8080
 ```
 
-You'll get a focused counter you can drive with the arrow keys through the
-legacy xterm-compatible transport.
-
-> Like the POSIX driver (which needs a real TTY), `WebTerminalDriver` needs a
-> real xterm.js instance, so it's exercised in a browser rather than the VM
-> test suite. The byte-level parsing it delegates to `InputParser` is covered
-> there.
+You'll get a focused counter you can drive with the arrow keys, mounted into a
+plain host `<div>` through the retained DOM host.
 
 ## Capture retained DOM frame metrics
 

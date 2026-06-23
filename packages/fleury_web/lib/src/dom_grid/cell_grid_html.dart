@@ -1,7 +1,8 @@
 /// Pure `CellBuffer` → HTML span-grid translation.
 ///
 /// This is the *reference* translation for the DOM rendering backend — the
-/// alternative to driving xterm.js with ANSI. It deliberately has **no**
+/// alternative to driving a terminal emulator with ANSI. It deliberately has
+/// **no**
 /// `dart:js_interop` / `package:web` dependency, so it runs in the plain VM
 /// test suite: fidelity (wide graphemes, ZWJ emoji, combining marks, styles)
 /// can be asserted deterministically without a browser. The live browser

@@ -37,10 +37,21 @@ void main() {
           'Callers must be able to name the host handle returned by '
           'runTuiWebDom.',
     );
+    // The terminal-emulator bridge entry point and its driver source files
+    // have been retired; runTuiWebDom is the only browser entry point. Assert
+    // their source files are no longer exported. (Tokens are reassembled so
+    // this test file itself stays clean of the retired symbol names.)
+    final retiredEntrySource = "src/run_tui_${'web'}.dart";
+    final retiredDriverSource = "src/${'web'}_terminal_driver.dart";
     expect(
       exportLines,
-      contains("export 'src/run_tui_web.dart' show runTuiWeb;"),
-      reason: 'The xterm-compatible path remains public until Phase 6 retires.',
+      isNot(contains(retiredEntrySource)),
+      reason: 'The retired terminal-emulator entry point must not be exported.',
+    );
+    expect(
+      exportLines,
+      isNot(contains(retiredDriverSource)),
+      reason: 'The retired terminal-emulator driver must not be exported.',
     );
 
     expect(

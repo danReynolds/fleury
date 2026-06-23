@@ -44,7 +44,7 @@ CellBuffer dashboard() {
   );
   b.writeText(
     const CellOffset(11, 1),
-    'native web render — no xterm.js',
+    'native web render — no terminal emulator',
     style: const CellStyle(foreground: Colors.slate, italic: true),
   );
 
@@ -162,7 +162,7 @@ void main() {
     )
     ..writeln(
       '<p>Every glyph below was painted from a real CellBuffer frame. '
-      'Selectable text, real fonts, no xterm.js.</p>',
+      'Selectable text, real fonts, no terminal emulator.</p>',
     )
     ..writeln(renderScreenHtml(buffer))
     ..writeln('</body></html>');

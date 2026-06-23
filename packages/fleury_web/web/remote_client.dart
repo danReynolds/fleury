@@ -1,6 +1,6 @@
 // dart2js entrypoint for the structured serve client. `fleury serve`
-// embeds the compiled output and serves it in place of the xterm.js page;
-// it renders a remote session through the retained DOM surface.
+// embeds the compiled output and serves it in place of a terminal-emulator
+// page; it renders a remote session through the retained DOM surface.
 
 import 'dart:async';
 

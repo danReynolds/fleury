@@ -24,9 +24,9 @@ import 'semantics/semantic_dom_presenter.dart';
 /// [allowInaccessibleDiagnostics] and is intended only for focused local
 /// performance diagnostics.
 ///
-/// This entry point intentionally does not replace [runTuiWeb] yet; the legacy
-/// xterm-compatible path remains the default public demo path while focus
-/// coordination, retained semantics, and benchmark gates land.
+/// This is the public browser entry point for Fleury-owned apps. The
+/// serve/remote paths reuse the same core runtime contracts behind their own
+/// hosts.
 Future<TuiSurfaceHost> runTuiWebDom(
   Widget Function() rootFactory, {
   web.Element? hostElement,

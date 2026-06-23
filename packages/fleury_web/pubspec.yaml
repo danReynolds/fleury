@@ -1,7 +1,6 @@
 name: fleury_web
 description: >-
-  Run fleury in a browser through the retained DOM host or the legacy xterm.js
-  terminal bridge.
+  Run fleury in a browser through the retained DOM host.
 version: 0.0.0
 publish_to: none
 

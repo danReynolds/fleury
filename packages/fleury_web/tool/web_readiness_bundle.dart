@@ -2311,7 +2311,7 @@ List<String> _completionBlockers({
   }
   if (!temporaryPathRetirementReady) {
     blockers.add(
-      'bundle-bound retire-temporary-paths preflight must pass before removing temporary/xterm-compatible paths',
+      'bundle-bound retire-temporary-paths preflight must pass before removing temporary terminal-emulator-compatible paths',
     );
   }
   return blockers;

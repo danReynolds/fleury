@@ -1,13 +1,30 @@
+import 'dart:async';
+
 import 'package:fleury/fleury_host.dart';
 import 'package:fleury_web/fleury_web.dart';
+import 'package:web/web.dart' as web;
 
 void main() {
-  runTuiWeb(() => const _Demo());
+  unawaited(_run());
+}
+
+Future<void> _run() async {
+  final host = _hostElement();
+  await runTuiWebDom(() => const _Demo(), hostElement: host);
+}
+
+web.Element _hostElement() {
+  final existing = web.document.querySelector('#fleury-app');
+  if (existing != null) return existing;
+  final element = web.document.createElement('div');
+  element.id = 'fleury-app';
+  web.document.body?.appendChild(element);
+  return element;
 }
 
 /// A small interactive demo: a focused counter driven by the arrow keys —
-/// enough to prove the whole pipeline (input → state → layout → ANSI →
-/// xterm.js) works live in a browser.
+/// enough to prove the whole pipeline (input → state → layout → retained DOM)
+/// works live in a browser.
 class _Demo extends StatefulWidget {
   const _Demo();
   @override

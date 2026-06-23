@@ -21,9 +21,9 @@ import 'plan_adapter.dart';
 /// Connects to a `fleury serve` WebSocket, performs the v2 INIT handshake,
 /// applies inbound [PlanFrame]s to a retained [DomGridSurface], and sends
 /// browser input back as structured [InputEventFrame]s. This is the
-/// renderer that replaces xterm.js: a served session renders through the
-/// same DOM surface the in-browser host uses, with the same span/scroll
-/// machinery.
+/// renderer that replaces the terminal-emulator page: a served session renders
+/// through the same DOM surface the in-browser host uses, with the same
+/// span/scroll machinery.
 final class RemoteSurfaceClient {
   RemoteSurfaceClient({required web.Element hostElement, required String url})
     : _host = hostElement,

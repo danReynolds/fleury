@@ -289,7 +289,11 @@ void main() {
               'notes',
               contains('data-fleury-manual-validation="ready"'),
             )
-            .having((check) => check['notes'], 'notes', contains('xterm')),
+            .having(
+              (check) => check['notes'],
+              'notes',
+              contains('terminal-emulator'),
+            ),
       ),
     );
   });

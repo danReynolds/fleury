@@ -4,7 +4,8 @@
 // semantic presenter — the same two calls RemoteSurfaceClient makes per frame.
 // The live-socket transport half is covered by the VM `serve_e2e_socket_test`;
 // this closes the browser-DOM half of the composition gap, for both the visual
-// grid and the semantics an xterm-relay tool structurally cannot carry.
+// grid and the semantics a terminal-emulator relay tool structurally cannot
+// carry.
 @TestOn('browser')
 library;
 

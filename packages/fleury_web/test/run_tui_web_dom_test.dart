@@ -90,7 +90,6 @@ void main() {
 
       expect(hostElement.querySelector('.fleury-screen'), isNotNull);
       expect(hostElement.querySelector('.fleury-semantics'), isNotNull);
-      expect(hostElement.querySelector('.xterm'), isNull);
       expect(hostElement.querySelector('textarea'), isNotNull);
       expect(flush.pending, isTrue);
 

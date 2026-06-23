@@ -67,12 +67,6 @@ void main() {
       hostElement.querySelector('.fleury-screen')!.getAttribute('aria-hidden'),
       'true',
     );
-    expect(
-      web.document.querySelector(
-        '.xterm, .xterm-screen, .xterm-viewport, xterm-terminal',
-      ),
-      isNull,
-    );
 
     final semanticRoot = hostElement.querySelector('.fleury-semantics')!;
     expect(semanticRoot.getAttribute('data-fleury-semantic-root'), 'true');

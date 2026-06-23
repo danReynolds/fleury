@@ -1,9 +1,10 @@
 /// Run fleury in the browser.
 ///
-/// [runTuiWeb] pairs the framework's host SPI (`fleury_host.dart`) with a
-/// [WebTerminalDriver] over xterm.js. The retained
-/// DOM path is available separately as [runTuiWebDom] while it matures behind
-/// the same core runtime contracts.
+/// [runTuiWebDom] is the retained DOM host: it pairs the framework's host SPI
+/// (`fleury_host.dart`) with retained row DOM for presentation, browser cell
+/// metrics, DOM input events, browser clipboard, and a semantic DOM mirror for
+/// accessibility. The serve/remote paths sit behind the same core runtime
+/// contracts as their own hosts.
 library;
 
 export 'src/frame_presentation.dart' show FrameDamageSource;
@@ -25,5 +26,3 @@ export 'src/run_tui_web_dom.dart' show runTuiWebDom;
 export 'src/semantics/semantic_flush_scheduler.dart'
     show SemanticFlushScheduler, TimerSemanticFlushScheduler;
 export 'src/run_tui_surface.dart' show TuiSurfaceHost;
-export 'src/run_tui_web.dart' show runTuiWeb;
-export 'src/web_terminal_driver.dart' show WebTerminalDriver;
