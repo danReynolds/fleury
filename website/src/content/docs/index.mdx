@@ -14,29 +14,26 @@ hero:
       variant: minimal
 ---
 
-import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 import FleuryExample from '../../components/FleuryExample.astro';
+import FeatureCard from '../../components/FeatureCard.astro';
 import HomeSplit from '../../components/HomeSplit.astro';
 
-<HomeSplit files={[{ name: 'monitor.dart' }, { name: 'table.dart' }, { name: 'review.dart' }]}>
+<HomeSplit files={[{ name: 'clock.dart' }, { name: 'table.dart' }, { name: 'bars.dart' }]}>
 <Fragment slot="code-0">
 ```dart
-Column(
-  crossAxisAlignment: CrossAxisAlignment.stretch,
-  children: [
-    Gauge(value: 0.62, label: 'CPU'),
-    Gauge(value: 0.81, label: 'MEM'),
-    Gauge(value: 0.34, label: 'DISK'),
-    SizedBox(height: 1),
-    Sparkline(
-      data: [3, 5, 4, 8, 6, 9, 7, 5, 8, 6],
-      color: theme.colorScheme.primary,
-    ),
+// A live world clock — the selected tab's Digits tick every
+// second; click a tab (or press ← / →) to switch zone.
+Tabs(
+  tabs: [
+    TabItem(label: 'UTC', content: Digits(utcTime)),
+    TabItem(label: 'EST', content: Digits(estTime)),
+    TabItem(label: 'PST', content: Digits(pstTime)),
   ],
 )
 ```
 </Fragment>
-<FleuryExample slot="demo-0" id="home.monitor" cols={34} rows={9} />
+<FleuryExample slot="demo-0" id="digits.basic" cols={56} rows={11} interactive />
 
 <Fragment slot="code-1">
 ```dart
@@ -56,47 +53,43 @@ DataTable(
 
 <Fragment slot="code-2">
 ```dart
-// Hand it a unified diff; it renders the review.
-DiffView(
-  diff: '''
-@@ -1,5 +1,5 @@
- void main() {
--  final greeting = 'hi';
--  print(greeting);
-+  final greeting = 'hello';
-+  print(greeting.toUpperCase());
- }
-''',
+// Streamed on a ticker: setState with fresh values each
+// frame, and Fleury repaints only the bars that changed.
+BarChart(
+  bars: [
+    for (final (i, v) in load.indexed) Bar('q${i + 1}', v),
+  ],
+  showYAxis: true,
 )
 ```
 </Fragment>
-<FleuryExample slot="demo-2" id="diffview.basic" cols={56} rows={9} interactive />
+<FleuryExample slot="demo-2" id="barchart.basic" cols={52} rows={12} />
 </HomeSplit>
 
 None of these are screenshots — each is the real Fleury widget tree, compiled to
-JavaScript with `dart2js` and running live in your browser. Tab through them in
-the title bar, or watch them cycle. The *same* code runs in a terminal.
+JavaScript with `dart2js` and running live in your browser: the clock ticks, the
+bars stream, and the table responds to your clicks. Tab through them in the title
+bar, or watch them cycle. The *same* code runs in a terminal.
 
 ## Why Fleury
 
 <CardGrid>
-  <Card title="A real widget tree, for cells" icon="puzzle">
+  <FeatureCard icon="puzzle" title="A real widget tree, for cells" href="/architecture/core-and-targets/" cta="How it fits together">
     Widgets, elements, render objects, and a semantics tree — incremental
     rebuilds, layout, and paint over a grid of cells instead of pixels.
-  </Card>
-  <Card title="One app, two surfaces" icon="laptop">
+  </FeatureCard>
+  <FeatureCard icon="laptop" title="One app, two surfaces" href="/comparison/" cta="Why Fleury">
     The same app renders to a real terminal *or* the browser. A parity oracle
     keeps the two surfaces honest.
-  </Card>
-  <Card title="Built for agents" icon="seti:default">
+  </FeatureCard>
+  <FeatureCard icon="seti:default" title="Built for agents" href="/architecture/agents-and-semantics/" cta="How agents drive it">
     A semantics tree — roles, state, actions — ships as a headline feature, so
     tests and AI agents can *drive* the UI, not screen-scrape it.
-    [How it works →](/architecture/agents-and-semantics/)
-  </Card>
-  <Card title="Runs anywhere" icon="rocket">
+  </FeatureCard>
+  <FeatureCard icon="rocket" title="Runs anywhere" href="/architecture/serving-and-embedding/" cta="Serving & embedding">
     Embed widgets client-side with dart2js (no backend), or stream a full native
     app to the browser with <code>fleury serve</code>.
-  </Card>
+  </FeatureCard>
 </CardGrid>
 
 ## See it in action
@@ -129,14 +122,11 @@ in your browser** — open one and use your keyboard and mouse.
 
 ## How it works
 
-`dart2js` compiles the widget tree plus the Fleury framework to JavaScript, and
-it renders into a DOM grid of cells right here in the page. The same widget tree
-runs natively in a terminal through a POSIX/Windows driver. See
-[Core and targets](/architecture/core-and-targets/) for how the pieces fit, and
-[Serving and embedding](/architecture/serving-and-embedding/) for the two ways
-to put Fleury on the web.
+*One widget tree, two surfaces* is the headline — underneath is a retained-mode
+engine that turns your widgets into cells and paints them wherever you point it:
+a terminal, a browser, a streamed session. These pages are the tour.
 
 <CardGrid>
-  <LinkCard title="Get started" href="/getting-started/" description="Install Fleury and build your first app in a few minutes." />
-  <LinkCard title="Architecture" href="/architecture/core-and-targets/" description="Core, targets, and the retained-mode pipeline." />
+  <LinkCard title="Architecture" href="/architecture/overview/" description="The retained four-tree pipeline, the platform-neutral core, and the targets that paint a cell grid to a terminal or a browser." />
+  <LinkCard title="Serving & embedding" href="/architecture/serving-and-embedding/" description="The two ways to put Fleury in a browser: a client-side dart2js bundle, or streaming a native app with fleury serve." />
 </CardGrid>

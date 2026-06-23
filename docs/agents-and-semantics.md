@@ -12,8 +12,8 @@ tree describing what the UI **means**, not how it's painted.
 
 ## What the graph contains
 
-Each node is a [`SemanticNode`](https://github.com/danReynolds/fleury/blob/main/packages/fleury/lib/src/semantics/semantics.dart):
-a role, a human label, a value, interaction state, the actions it supports, and
+Each node is a `SemanticNode` — a role, a human label, a value, interaction
+state, the actions it supports, and
 its children.
 
 ```dart

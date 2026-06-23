@@ -1,0 +1,31 @@
+---
+// A premium, interactive value-prop card for the landing page. Unlike Starlight's
+// static <Card>, the whole tile is a link with a hover lift + accent, and a CTA
+// row so it reads as something to click. Styling lives in src/styles/fleury.css.
+import { Icon } from '@astrojs/starlight/components';
+
+interface Props {
+  /** Starlight icon name, e.g. "puzzle". */
+  icon: string;
+  title: string;
+  /** Where the card links to. */
+  href: string;
+  /** Call-to-action label shown in the footer row. */
+  cta?: string;
+}
+const { icon, title, href, cta } = Astro.props;
+---
+
+<a class="feature-card" href={href}>
+  <span class="feature-card-icon"><Icon name={icon} size="1.25rem" /></span>
+  <span class="feature-card-title">{title}</span>
+  <div class="feature-card-body"><slot /></div>
+  {
+    cta && (
+      <span class="feature-card-cta">
+        {cta}
+        <span class="feature-card-arrow" aria-hidden="true">→</span>
+      </span>
+    )
+  }
+</a>

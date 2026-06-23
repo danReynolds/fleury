@@ -37,7 +37,10 @@ export default defineConfig({
       // Shared styling for embedded Fleury examples — must be site-wide so the
       // JS-created fullscreen overlay (appended to <body>, outside component
       // scope) and the knob pages get the same host font metrics + chrome.
-      customCss: ['./src/styles/fleury.css'],
+      customCss: [
+        '@fontsource-variable/space-grotesk',
+        './src/styles/fleury.css',
+      ],
       sidebar: [
         {
           label: 'Start here',
@@ -74,6 +77,7 @@ export default defineConfig({
         {
           label: 'Architecture',
           items: [
+            { label: 'Overview', slug: 'architecture/overview' },
             { label: 'Core and targets', slug: 'architecture/core-and-targets' },
             {
               label: 'Serving and embedding',

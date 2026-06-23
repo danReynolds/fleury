@@ -19,6 +19,7 @@ const COMPONENT = '../../../components/FleuryExample.astro';
 const GITHUB = 'https://github.com/danReynolds/fleury/blob/main/docs';
 
 const ROUTES = {
+  'architecture-overview.md': '/architecture/overview/',
   'core-and-targets.md': '/architecture/core-and-targets/',
   'serving-and-embedding.md': '/architecture/serving-and-embedding/',
   'agents-and-semantics.md': '/architecture/agents-and-semantics/',
@@ -26,6 +27,14 @@ const ROUTES = {
 };
 
 const DOCS = [
+  {
+    src: 'architecture-overview.md',
+    out: 'overview.md',
+    description:
+      'How Fleury works under the hood: a retained four-tree pipeline ' +
+      '(widget · element · render · semantics) and a platform-neutral core ' +
+      'that paints a cell grid to a terminal or a browser.',
+  },
   {
     src: 'core-and-targets.md',
     description:
@@ -91,7 +100,7 @@ for (const doc of DOCS) {
     `---\n\n` +
     (hasExample ? `import FleuryExample from '${COMPONENT}';\n\n` : '');
 
-  const base = doc.src.replace(/\.md$/, '');
+  const base = (doc.out ?? doc.src).replace(/\.md$/, '');
   writeFileSync(join(OUT_DIR, `${base}.${ext}`), frontmatter + body);
   console.log(`synced ${doc.src} -> architecture/${base}.${ext}`);
 }
