@@ -103,6 +103,37 @@ ticker and repaints only the cells that change:
 
 <FleuryExample id="home.monitor" cols={34} rows={9} />
 
+## Why Dart
+
+The honest first reaction to "a TUI framework in Dart" is *why Dart?* — most
+terminal tooling is Rust, Go, or Python. The answer is that Dart is what makes
+Fleury's core promise *possible*, not just convenient.
+
+**It compiles to both a native binary and the browser.** Dart AOT-compiles to a
+fast, self-contained terminal executable — ship it like a Go binary, no runtime
+on the box — *and* compiles to JavaScript with `dart2js`. That dual target is the
+whole reason one widget tree can run in a terminal *and* a browser with no second
+implementation. In most languages, "the same app, native and on the web" means
+two codebases; in Dart it's one source and two `dart compile` invocations.
+
+**The retained UI model is Dart's home turf.** The widget / element / render /
+`setState` architecture that makes Fleury a real framework — incremental rebuilds,
+a layout engine, composition — was proven at scale in Dart by Flutter, and the
+language's ergonomics (const constructors, named parameters, mixins, sound null
+safety) co-evolved with exactly this kind of declarative tree. Fleury isn't
+bending Dart to fit; it's using it for what it was shaped to do.
+
+**Hot reload, in a terminal.** Edit a widget and watch your running TUI update
+without losing its state — the same stateful hot reload Flutter developers lean
+on, straight from the Dart VM. Most terminal stacks restart the process and lose
+your place.
+
+None of this makes Dart the *leanest* option at the floor — Rust boots quicker
+and idles smaller, and [the benchmarks](/architecture/performance/) say so
+plainly — or the most common in the space. It makes it the right fit for *this*
+job: a real, retained UI framework that spans the terminal and the browser from
+one codebase.
+
 ## When to pick something else
 
 Fleury is one good option among several, and the right tool depends on your stack
@@ -118,9 +149,10 @@ and what you value. Reach for a peer when its strengths line up with yours:
 
 ## Fleury's trade-offs
 
-Fleury is Dart — less common in the terminal space than Go, Rust, or Python, so
-the surrounding ecosystem is younger. It's also pre-1.0: the API is still
-settling, and it's distributed as a Git dependency today. If you need a
+The flip side of that bet: Dart's terminal ecosystem is young — fewer libraries
+and fewer examples to crib from than Go, Rust, or Python have. Fleury is also
+pre-1.0: the API is still settling, and it's distributed as a Git dependency
+today. If you need a
 long-stable, widely-deployed framework right now, one of the above may fit
 better. If the retained model, the batteries-included widgets, the agent-facing
 semantics, and the web target are what you're after, that's exactly the gap

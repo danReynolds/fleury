@@ -68,16 +68,77 @@ typed cell values, and that it can `select` a different row or `copy` the
 current one — then it issues that `SemanticAction` instead of guessing which
 arrow keys to press.
 
-## The same tree powers three things
+## Read it, drive it — in code
 
-- **Tests that assert on meaning.** Check that "the CPU gauge reads 0.62" or
-  "row 3 is selected" — assertions that survive a re-theme, a layout change, or a
-  port to the browser, because they're about semantics, not glyphs.
-- **Agents that drive, not scrape.** An AI agent reads roles, state, and the
-  available `SemanticAction`s, then acts through them. The UI is a typed surface,
-  not a screenshot to interpret.
-- **Accessibility, for free.** It's the same tree a screen reader would want —
-  roles, labels, and state — so accessible output isn't a separate effort.
+That graph isn't a diagram of something internal; it's the API. A test reads it
+and asserts on *meaning*:
+
+```dart
+testWidgets('Save advertises an activate action', (tester) {
+  tester.pumpWidget(const Semantics(
+    id: SemanticNodeId('save'),
+    role: SemanticRole.button,
+    label: 'Save',
+    actions: {SemanticAction.activate},
+    child: Text('Save'),
+  ));
+
+  final save = tester.semantics().single(
+    role: SemanticRole.button, label: 'Save');
+  expect(save.actions, contains(SemanticAction.activate));
+});
+```
+
+`tester.semantics()` returns the same tree shown above; `.single(...)` finds a
+node by role, label, value, or an action it advertises. The assertions are about
+what a node *is* — its `value`, whether it's `selected`, the `state` it carries —
+so they survive a re-theme, a relayout, or a port to the browser. "The CPU gauge
+reads 0.62" and "row 3 is selected" are one `expect` each, not a screen-scrape.
+
+Driving the UI is the mirror image: find a node that advertises an action, invoke
+it, and watch the state change — exactly what an agent does instead of guessing
+keystrokes.
+
+```dart
+testWidgets('activating Save runs its handler', (tester) async {
+  var saved = 0;
+  tester.pumpWidget(Semantics(
+    role: SemanticRole.button,
+    label: 'Save',
+    actions: const {SemanticAction.activate},
+    onAction: (_) => saved++,                 // the app's handler
+    child: const Text('Save'),
+  ));
+
+  final result = await tester.invokeSemanticAction(
+    SemanticAction.activate, role: SemanticRole.button, label: 'Save');
+
+  expect(result.completed, isTrue);
+  expect(saved, 1);                           // the UI actually changed
+});
+```
+
+That `read graph → invoke action → observe change` loop is the whole story, and
+it isn't terminal-only. [`fleury serve`](/architecture/serving-and-embedding/)
+exposes the same loop over a socket: the tree ships out as JSON
+(`tester.semanticInspectionJson()` is that exact payload, redaction and all), and
+`SemanticAction`s come back on the same channel. The browser client already
+consumes the outbound half — projecting a live accessibility tree straight from
+the wire — so an agent is just the same kind of consumer with a different goal.
+A packaged agent adapter is still ahead of us; the graph, the actions, and the
+wire that carry them are here today, and tested.
+
+## One tree, three payoffs
+
+The graph isn't built for any single consumer — it's one artifact with three
+uses:
+
+- **Tests** assert on meaning (above), so they survive a re-theme, a relayout, or
+  a port to the browser.
+- **Agents** read roles, state, and the available `SemanticAction`s and act
+  through them — a typed surface, not a screenshot to interpret.
+- **Accessibility** comes along for free: it's the same roles-and-state tree a
+  screen reader wants, so accessible output isn't a separate effort.
 
 ## On both surfaces
 
