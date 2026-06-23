@@ -45,6 +45,7 @@ export default defineConfig({
             { label: 'Introduction', slug: 'introduction' },
             { label: 'Getting started', slug: 'getting-started' },
             { label: 'Tutorial: a filterable list', slug: 'tutorial' },
+            { label: 'Coming from Flutter', slug: 'coming-from-flutter' },
             { label: 'Why Fleury', slug: 'comparison' },
           ],
         },
@@ -59,6 +60,10 @@ export default defineConfig({
           label: 'Guides',
           items: [
             { label: 'Layout', slug: 'guides/layout' },
+            { label: 'Lists & scrolling', slug: 'guides/lists-and-scrolling' },
+            { label: 'Navigation', slug: 'guides/navigation' },
+            { label: 'Loading data', slug: 'guides/loading-data' },
+            { label: 'Input & gestures', slug: 'guides/input-and-gestures' },
             { label: 'Theming', slug: 'guides/theming' },
             { label: 'Animation', slug: 'guides/animation' },
             { label: 'Focus & keyboard', slug: 'guides/focus-and-keyboard' },

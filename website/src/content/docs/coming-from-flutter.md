@@ -17,7 +17,7 @@ These transfer with no adjustment:
 |---|---|
 | Core model | `Widget`, `StatelessWidget`, `StatefulWidget`, `State`, `build`, `setState`, `BuildContext`, `InheritedWidget` |
 | Keys | `Key`, `ValueKey`, `UniqueKey`, `GlobalKey` |
-| Layout | `Column`, `Row`, `Expanded`, `Flexible`, `Stack`, `Positioned`, `Padding`, `Center`, `Align`, `Container`, `ConstrainedBox`, `AspectRatio`, `SizedBox`, `Wrap`, `IntrinsicWidth/Height`, `LayoutBuilder` |
+| Layout | `Column`, `Row`, `Expanded`, `Flexible`, `Spacer`, `Stack`, `Positioned`, `Padding`, `Center`, `Align`, `Container`, `ConstrainedBox`, `AspectRatio`, `SizedBox`, `Wrap`, `IntrinsicWidth/Height`, `LayoutBuilder` |
 | Async | `FutureBuilder`, `StreamBuilder`, `AsyncSnapshot`, `ConnectionState` |
 | Navigation | `Navigator.push` / `pop` / `pushReplacement` / `popUntil`, `PopScope` |
 | Input | `GestureDetector`, `MouseRegion`, `FocusNode`, `Focus`, `FocusScope` |
@@ -104,7 +104,6 @@ visually square. See [Layout](/guides/layout/).
 
 | Flutter | Use instead |
 |---|---|
-| `Spacer` | `Expanded(child: EmptyBox())` (a `Spacer` is on the way) |
 | `InkWell` | `GestureDetector` + `MouseRegion` (no ripple in a terminal) |
 | `CustomScrollView` / slivers / `GridView` | `ListView` / `ListView.builder` / `ScrollView` |
 | `ValueListenableBuilder` / plain `Builder` | `ListenableBuilder` / a small `StatelessWidget` |

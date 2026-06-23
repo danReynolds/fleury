@@ -23,6 +23,13 @@ Everything bottoms out in one shared frame scheduler (one timer for the whole
 app, ~30 Hz under `requestAnimationFrame` in the browser) and respects reduced-
 motion automatically.
 
+> **Coming from Flutter?** Fleury's `Animation` points the *other way* from
+> Flutter's. In Flutter, `Animation<T>` is a read-only value an
+> `AnimationController` drives. Here, `Animation<T>` is the mutable thing you
+> drive — you create it, read `.value`, and retarget it with `.to()`. It fuses
+> Flutter's controller + tween + listenable into one spring-driven object. We
+> kept the name on purpose; just know it's the value, not the read-only view.
+
 ## A value that follows state: `AnimationBuilder`
 
 This is the workhorse. Give it a target value; whenever that value changes

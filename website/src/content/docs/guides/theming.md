@@ -9,7 +9,9 @@ whole tree.
 
 ## Apply a theme
 
-Wrap your app in a `Theme`:
+`runTui` doesn't install a `Theme` for you — until you add one, widgets fall back
+to sensible built-in defaults (`Theme.of(context)` always returns *something*).
+To customize, wrap a subtree in a `Theme`:
 
 ```dart
 import 'package:fleury/fleury.dart';
@@ -63,6 +65,24 @@ const CellStyle(
 `textStyle` (the default), `mutedStyle` (secondary text), `selectionStyle`
 (highlighted rows), and `focusedStyle` (the focused control).
 
+## Multiple styles in one line: RichText
+
+A `Text` carries a single `CellStyle`. To mix styles within one run — a bold word
+in a sentence, a colored token in a log line — use `RichText` with a tree of
+`TextSpan`s, where each span's style cascades to its children:
+
+```dart
+RichText(
+  text: TextSpan(
+    children: [
+      TextSpan(text: 'deploy '),
+      TextSpan(text: 'ok', style: CellStyle(foreground: scheme.success, bold: true)),
+      TextSpan(text: ' in 1.2s'),
+    ],
+  ),
+)
+```
+
 ## Reading the theme
 
 ```dart
@@ -72,6 +92,10 @@ Widget build(BuildContext context) {
   return Text('hello', style: theme.textStyle);
 }
 ```
+
+`context.theme` and `context.colors` are shorthands for `Theme.of(context)` and
+`Theme.of(context).colorScheme` — both establish the same dependency, so the
+widget rebuilds if the theme changes.
 
 Backgrounds aren't auto-painted: to fill a region with the theme background,
 wrap it in a `Container(color: theme.colorScheme.background, child: …)`.

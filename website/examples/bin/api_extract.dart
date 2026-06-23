@@ -13,34 +13,42 @@ import 'package:analyzer/dart/ast/ast.dart';
 ///
 /// Usage: dart run bin/api_extract.dart [out.json]   (defaults to stdout)
 void main(List<String> args) {
-  final srcDir = Directory('../../packages/fleury_widgets/lib/src');
+  // Scan the high-level widget library AND the framework's core widgets, so the
+  // reference can document both. Repo-relative prefix per dir builds the GitHub
+  // "view source" link. fleury_widgets is scanned first; on the (unlikely) name
+  // clash it wins, preserving existing pages.
+  const sources = <(String, String)>[
+    ('../../packages/fleury_widgets/lib/src', 'packages/fleury_widgets/lib/src'),
+    ('../../packages/fleury/lib/src/widgets', 'packages/fleury/lib/src/widgets'),
+  ];
   final result = <String, Object?>{};
 
-  for (final entity in srcDir.listSync()) {
-    if (entity is! File || !entity.path.endsWith('.dart')) continue;
-    final parsed = parseString(
-      content: entity.readAsStringSync(),
-      throwIfDiagnostics: false,
-    );
-    final unit = parsed.unit;
-    // Repo-relative path so the docs site can build a GitHub "view source" link.
-    final file =
-        'packages/fleury_widgets/lib/src/${entity.uri.pathSegments.last}';
-    for (final decl in unit.declarations) {
-      if (decl is! ClassDeclaration) continue;
-      final name = decl.name.lexeme;
-      if (name.startsWith('_')) continue;
-      final ctor = _primaryConstructor(decl);
-      if (ctor == null) continue;
-      final params = _params(decl, ctor);
-      if (params.isEmpty) continue;
-      result[name] = <String, Object?>{
-        'doc': _docText(decl.documentationComment),
-        'classDoc': _docMarkdown(decl.documentationComment),
-        'params': params,
-        'file': file,
-        'line': parsed.lineInfo.getLocation(decl.name.offset).lineNumber,
-      };
+  for (final (dirPath, repoPrefix) in sources) {
+    for (final entity in Directory(dirPath).listSync()) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      final parsed = parseString(
+        content: entity.readAsStringSync(),
+        throwIfDiagnostics: false,
+      );
+      final unit = parsed.unit;
+      final file = '$repoPrefix/${entity.uri.pathSegments.last}';
+      for (final decl in unit.declarations) {
+        if (decl is! ClassDeclaration) continue;
+        final name = decl.name.lexeme;
+        if (name.startsWith('_')) continue;
+        if (result.containsKey(name)) continue; // first dir wins on clash
+        final ctor = _primaryConstructor(decl);
+        if (ctor == null) continue;
+        final params = _params(decl, ctor);
+        if (params.isEmpty) continue;
+        result[name] = <String, Object?>{
+          'doc': _docText(decl.documentationComment),
+          'classDoc': _docMarkdown(decl.documentationComment),
+          'params': params,
+          'file': file,
+          'line': parsed.lineInfo.getLocation(decl.name.offset).lineNumber,
+        };
+      }
     }
   }
 

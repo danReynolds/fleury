@@ -250,16 +250,62 @@ const DOC_ONLY = [
   { slug: 'toaster', widget: 'Toaster', category: 'Navigation & overlays', reason: 'imperative',
     code: "// Wrap your app once:\nToaster(child: app)\n\n// …then from anywhere below it:\nToaster.show(context, 'Saved', severity: ToastSeverity.success);" },
 ];
-const docNote = (reason) =>
-  reason === 'native'
-    ? `:::note[Runs locally]\nThis widget uses \`dart:io\` (filesystem, processes, ` +
+const docNote = (reason) => {
+  if (reason === 'native')
+    return (
+      `:::note[Runs locally]\nThis widget uses \`dart:io\` (filesystem, processes, ` +
       `or image decoding), so it runs in a terminal or through ` +
       `[\`fleury serve\`](/architecture/serving-and-embedding/) — not as an ` +
       `in-browser embed. The reference below is generated from the source.\n:::\n`
-    : `:::note[Imperative]\nShown by calling \`Toaster.show(context, …)\`, so ` +
-      `there's no static preview — wrap your app in a \`Toaster\` once, then ` +
-      `raise toasts from anywhere below it.\n:::\n`;
-for (const d of DOC_ONLY) {
+    );
+  if (reason === 'core')
+    return (
+      `:::note[Core widget]\nA framework primitive from \`package:fleury\` — the ` +
+      `same model you know from Flutter. The reference below is generated from ` +
+      `the source; the [guides](/guides/layout/) show these in context.\n:::\n`
+    );
+  return (
+    `:::note[Imperative]\nShown by calling \`Toaster.show(context, …)\`, so ` +
+    `there's no static preview — wrap your app in a \`Toaster\` once, then ` +
+    `raise toasts from anywhere below it.\n:::\n`
+  );
+};
+
+// Core framework widgets (from package:fleury): the layout, text, async, input,
+// and builder primitives a Flutter developer reaches for. Documented from source
+// like the rest of the reference; usage in context lives in the guides.
+const CORE = [
+  { slug: 'text', widget: 'Text', code: "Text('hello', style: CellStyle(bold: true))" },
+  { slug: 'richtext', widget: 'RichText',
+    code: "RichText(text: TextSpan(children: [\n  TextSpan(text: 'deploy '),\n  TextSpan(text: 'ok', style: CellStyle(bold: true)),\n]))" },
+  { slug: 'textspan', widget: 'TextSpan' },
+  { slug: 'listview', widget: 'ListView',
+    code: "ListView.builder(\n  itemCount: rows.length,\n  itemBuilder: (context, i, selected) => Text(rows[i].label),\n)" },
+  { slug: 'scrollview', widget: 'ScrollView',
+    code: "ScrollView(child: Column(children: [/* tall content */]))" },
+  { slug: 'futurebuilder', widget: 'FutureBuilder',
+    code: "FutureBuilder<List<Item>>(\n  future: load(),\n  builder: (context, snapshot) => snapshot.hasData\n      ? ItemList(snapshot.data!)\n      : const Text('Loading…'),\n)" },
+  { slug: 'streambuilder', widget: 'StreamBuilder' },
+  { slug: 'gesturedetector', widget: 'GestureDetector',
+    code: "GestureDetector(\n  onTap: _select,\n  onTapDown: (col, row) => _placeAt(col, row),\n  child: child,\n)" },
+  { slug: 'mouseregion', widget: 'MouseRegion' },
+  { slug: 'layoutbuilder', widget: 'LayoutBuilder',
+    code: "LayoutBuilder(\n  builder: (context, constraints) =>\n      (constraints.maxCols ?? 0) > 60 ? Wide() : Narrow(),\n)" },
+  { slug: 'listenablebuilder', widget: 'ListenableBuilder' },
+  { slug: 'container', widget: 'Container' },
+  { slug: 'sizedbox', widget: 'SizedBox' },
+  { slug: 'padding', widget: 'Padding' },
+  { slug: 'align', widget: 'Align' },
+  { slug: 'positioned', widget: 'Positioned' },
+  { slug: 'wrap', widget: 'Wrap' },
+  { slug: 'flexible', widget: 'Flexible' },
+  { slug: 'spacer', widget: 'Spacer' },
+  { slug: 'constrainedbox', widget: 'ConstrainedBox' },
+  { slug: 'aspectratio', widget: 'AspectRatio' },
+].map((d) => ({ ...d, category: 'Core widgets', reason: 'core' }));
+
+const DOC_PAGES = [...DOC_ONLY, ...CORE];
+for (const d of DOC_PAGES) {
   const intro = api[d.widget]?.classDoc ? mdxSafe(api[d.widget].classDoc) : '';
   writeFileSync(
     join(widgetsDir, `${d.slug}.mdx`),
@@ -281,8 +327,12 @@ for (const e of widgets) {
 }
 // Fold the doc-only widgets into the catalog index, flagged so the lack of a
 // live demo is no surprise.
-for (const d of DOC_ONLY) {
-  const tag = d.reason === 'native' ? ' *(runs locally)*' : ' *(imperative)*';
+for (const d of DOC_PAGES) {
+  const tag = d.reason === 'native'
+    ? ' *(runs locally)*'
+    : d.reason === 'core'
+      ? ' *(core)*'
+      : ' *(imperative)*';
   const blurb = (api[d.widget]?.doc ?? '') + tag;
   if (!byCategory.has(d.category)) byCategory.set(d.category, []);
   byCategory.get(d.category).push({ widget: d.widget, id: d.slug, blurb });

@@ -8,8 +8,8 @@
 //                  Implements the Unix-socket transport defined in
 //                  `lib/src/remote/`.
 //
-//   fleury serve    (future) Same idea, websocket transport: app
-//                  renders into a browser xterm.js client.
+//   fleury serve    Same idea, WebSocket transport: the app renders into a
+//                  DOM cell grid in the browser (no terminal emulator).
 //
 //   fleury benchmark
 //                  Run contributor benchmark and profiling workflows from
@@ -79,7 +79,7 @@ void _printUsage() {
   stderr.writeln('           launched under an IDE debugger.');
   stderr.writeln(
     '  serve    Proxy fleury-app rendering to a browser via '
-    'WebSocket + xterm.js.',
+    'WebSocket into a DOM cell grid.',
   );
   stderr.writeln(
     '           Options: --port=<n> (default 5777), '

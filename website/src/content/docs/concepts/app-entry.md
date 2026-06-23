@@ -46,6 +46,23 @@ mode/alt-screen/mouse setup; `enableHotReload` (default `true`) wires up state-
 preserving hot reload under the Dart VM. Because `runTui` depends on `dart:io`,
 it's exported from `fleury.dart` — *not* from the web-safe `fleury_core`.
 
+## What `runTui` sets up (there's no `MaterialApp`)
+
+Coming from Flutter, you might look for a `MaterialApp`/`WidgetsApp` to wrap your
+root. There isn't one — `runTui` assembles the ambient scaffold itself. Before it
+mounts your widget, it injects:
+
+- a **`MediaQuery`** carrying the terminal size (rebuilt on resize),
+- the **focus root**, so `Focus` and traversal work,
+- **pointer routing**, so `GestureDetector` / `MouseRegion` receive mouse events,
+- an **`Overlay`** for floating layers (tooltips, toasts), and
+- a root **`Navigator`**, so `context.push` / `context.pop` work app-wide.
+
+That's why navigation, focus, media queries, and the mouse "just work" with no
+setup. The one thing `runTui` does **not** inject is a `Theme` — `Theme.of(context)`
+returns sensible defaults until you wrap a subtree in your own (see
+[Theming](/guides/theming/)).
+
 ## `runTuiWebDom` — the browser
 
 To run the **same widget tree** client-side in a browser, compile to JavaScript

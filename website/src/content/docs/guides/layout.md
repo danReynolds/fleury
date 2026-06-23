@@ -73,8 +73,9 @@ with `fit: FlexFit.tight`.) When the integer space doesn't divide evenly, the
 remainder is handed to the leftmost flex children one cell at a time, so layout
 stays deterministic.
 
-> **There's no `Spacer`.** For a flexible gap, use `Expanded(child: SizedBox())`;
-> for a fixed gap, use a `SizedBox` with a width or height (below).
+> For a flexible gap, use `Spacer()` — it expands to push siblings apart, and
+> `Spacer(flex: 2)` takes a bigger share than a plain `Spacer()`. For a *fixed*
+> gap, use a `SizedBox` with a width or height (below).
 
 ## Fixed sizes and gaps: SizedBox
 
