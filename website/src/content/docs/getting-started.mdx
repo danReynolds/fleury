@@ -11,9 +11,8 @@ cells** instead of pixels. One widget tree renders in a terminal *and* a browser
 and because that same tree is also a **semantic graph**, a test or an agent can
 read it like a screen reader.
 
-The status panel below isn't a screenshot. It's a real Fleury widget tree,
-compiled to JavaScript with `dart2js` and running live in your browser right
-now — the *same* Dart that runs, unchanged, in a terminal.
+The status panel below is live — a real Fleury tree compiled to JavaScript and
+running in your browser, from the *same* Dart you'll run in a terminal.
 
 <FleuryExample id="home.monitor" cols={34} rows={9} />
 
@@ -152,7 +151,7 @@ and stream frames to a browser tab. Both modes, and when to choose each, are in
 ## Where to next
 
 - [Widgets](/widgets/) — the full catalog, each with a live, interactive example.
-- [Core and targets](/architecture/core-and-targets/) — how one app runs on a
-  terminal, the DOM, and a remote browser session.
+- [Core and targets](/architecture/core-and-targets/) — how one app runs in a
+  terminal, an embedded browser bundle, and a served browser session.
 - [Built for agents](/architecture/agents-and-semantics/) — the semantic app
   graph that lets tests and AI agents drive the UI.

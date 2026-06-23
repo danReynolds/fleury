@@ -1,12 +1,14 @@
 ---
 title: App entry points
-description: runTui, runTuiWeb, and runTuiWebDom — how a widget tree starts running on each target.
+description: runTui and runTuiWebDom — how a widget tree starts running in a terminal or a browser.
 ---
 
-A Fleury app is a widget tree handed to a run function. Which one you call
-depends on where the app runs — a terminal, or a browser. They share a model
-(mount the tree, render the first frame, then re-render on every input and every
-`setState`) but differ in signature, so it's worth knowing all three.
+A Fleury app is a widget tree handed to a *run* function. There are two,
+depending on where the tree executes: `runTui` for a terminal and `runTuiWebDom`
+for a browser. (A third path, `fleury serve`, streams a native app to a browser —
+but it's a deployment mode, not an entry point.) The two run functions share a
+model — mount the tree, paint the first frame, then re-render on every input and
+every `setState` — and differ mainly in signature.
 
 ## `runTui` — the terminal
 
@@ -46,7 +48,7 @@ mode/alt-screen/mouse setup; `enableHotReload` (default `true`) wires up state-
 preserving hot reload under the Dart VM. Because `runTui` depends on `dart:io`,
 it's exported from `fleury.dart` — *not* from the web-safe `fleury_core`.
 
-## What `runTui` sets up (there's no `MaterialApp`)
+## The ambient scaffold (no `MaterialApp` needed)
 
 Coming from Flutter, you might look for a `MaterialApp`/`WidgetsApp` to wrap your
 root. There isn't one — `runTui` assembles the ambient scaffold itself. Before it
@@ -97,23 +99,15 @@ This is the path the live examples throughout these docs use — every embedded
 widget on this site is the real tree, compiled with `dart2js` and mounted with
 `runTuiWebDom`.
 
-## `runTuiWeb` — the legacy browser path
-
-`runTuiWeb` (also from `fleury_web`) is the older browser entry point that drives
-an xterm-style terminal emulator rather than a DOM cell grid. It takes the same
-`() => MyApp()` factory. `runTuiWebDom` is the direction of travel — prefer it
-for new work; `runTuiWeb` remains for the terminal-emulator use case.
-
 ## Which one?
 
 | Target | Function | Takes |
 |---|---|---|
 | Terminal (native) | `runTui` | a widget instance |
-| Browser, client-side | `runTuiWebDom` | a widget factory |
-| Browser, terminal-emulator | `runTuiWeb` | a widget factory |
+| Browser, embedded | `runTuiWebDom` | a widget factory |
 
-There's also a *third* way to get an app into a browser without compiling it
-yourself — `fleury serve`, which runs your native app and streams its frames to a
-browser. That's a shipping decision rather than an entry point; see
-[Deployment & distribution](/guides/deployment/) for when to embed (client-side
-`runTuiWebDom`) versus serve.
+To put an app in a browser *without* compiling it yourself, reach for
+`fleury serve` instead — it runs your native app and streams the frames to a thin
+client. That's a deployment choice, not an entry point;
+[Serving and embedding](/architecture/serving-and-embedding/) covers when to
+embed versus serve.

@@ -3,20 +3,18 @@ title: "Tutorial: a filterable list"
 description: Build a small interactive TUI end-to-end — state, a text input, live filtering, and layout.
 ---
 
-[Getting started](/getting-started/) gets you running. This tutorial builds
-something interactive end-to-end: a list that narrows as you type. Along the way
-you'll use the three things every Fleury app is made of — [state](/concepts/widgets-and-state/),
-[layout](/guides/layout/), and input. It takes about fifteen minutes.
+In about fifteen minutes you'll build a list that narrows live as you type —
+touching the three things every Fleury app is made of:
+[state](/concepts/widgets-and-state/), [layout](/guides/layout/), and input.
 
-If you haven't set up a project yet, do the first step of [Getting
-started](/getting-started/) first — you need the `fleury` and `fleury_widgets`
-dependencies.
+You'll need a project with the `fleury` and `fleury_widgets` dependencies; the
+first step of [Getting started](/getting-started/) sets that up if you haven't
+already.
 
 ## What we're building
 
-A single-screen tool: a text field at the top, a list below it, and a count.
-Type, and the list filters live. It's small, but it touches everything you need
-for a real app.
+A single screen: a text field at the top, a filtered list below it, and a live
+count. Type, and the list narrows in place.
 
 ## 1. A static list
 

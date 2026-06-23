@@ -370,27 +370,28 @@ const SAMPLES_DIR = join(here, '..', '..', 'packages', 'samples', 'lib', 'src');
 const SHOWCASE_GOALS = {
   dashboard:
     'A live operations dashboard — per-core gauges, a streaming history chart, ' +
-    'and a sortable process table — the kind of thing you would normally reach ' +
-    'for htop or a Grafana panel to build. In Fleury it is one widget tree: the ' +
-    'same `Gauge`, `Sparkline`, `LineChart`, and `DataTable` you would use ' +
-    'anywhere, composed with `Row`/`Column` and updated on a ticker. No canvas ' +
-    'math and no manual redraw bookkeeping — call `setState`, and the framework ' +
-    'repaints only the cells that changed, so the graphs stream smoothly without ' +
-    'you thinking about it.',
+    "and a sortable process table — the kind of thing you'd normally reach for " +
+    'htop or a Grafana panel to build.\n\n' +
+    "In Fleury it's one widget tree: the same `Gauge`, `Sparkline`, `LineChart`, " +
+    "and `DataTable` you'd use anywhere, composed with `Row`/`Column` and updated " +
+    'on a ticker. No canvas math, no manual redraw bookkeeping — call `setState`, ' +
+    'and the framework repaints only the cells that changed, so the graphs stream ' +
+    'smoothly.',
   files:
     'A two-pane file explorer whose preview adapts to each file type. The left ' +
-    'pane is a tree; the right pane swaps in the right viewer — `CodeView` for ' +
-    'source, `MarkdownView` for docs, `JsonView` for data — each a drop-in widget ' +
-    'with selection, scrolling, and copy already handled. "The preview matches ' +
-    'the file" is just a `switch` in `build()`; the viewers do the rest.',
+    "pane is a tree; the right pane swaps in the right viewer for what's selected " +
+    '— `CodeView` for source, `MarkdownView` for docs, `JsonView` for data.\n\n' +
+    'Each viewer is a drop-in widget with selection, scrolling, and copy already ' +
+    'handled, so "the preview matches the file" comes down to a `switch` in ' +
+    '`build()`.',
   agent:
     'A Claude-Code-style streaming session — prose, tool cards, a live todo list, ' +
-    'a colored diff, a prompt box. The striking part: it uses no special "agent" ' +
-    'widgets. It is built entirely from `Text`, `RichText`, `Column`, and theme ' +
-    'styling — the Fleury primitives over a cell grid are expressive enough that a ' +
-    'rich agent UI is just layout and color. And the same tree is inspectable as a ' +
-    'semantic graph, so a test or another agent can read it (see ' +
-    '[Built for agents](/architecture/agents-and-semantics/)).',
+    'a colored diff, a prompt box.\n\n' +
+    'None of it uses special "agent" widgets: it is just the Fleury primitives ' +
+    'over a cell grid, expressive enough that a rich agent UI comes down to ' +
+    'layout and color. And because it is an ordinary Fleury tree, the same UI is ' +
+    'inspectable as a semantic graph — so a test, or another agent, can read it. ' +
+    'See [Built for agents](/architecture/agents-and-semantics/).',
 };
 
 // Catalog widget name → { slug, category }, for the "widgets used" links.
@@ -439,8 +440,8 @@ for (const e of showcases) {
 const showIndex =
   `---\ntitle: Showcases\ndescription: Full Fleury apps, each running live in your browser.\n---\n\n` +
   `Three complete apps, each built entirely from Fleury widgets and **running ` +
-  `live in your browser** — the real Dart, compiled to JavaScript with dart2js, ` +
-  `no server. They double as runnable examples: \`fleury dev samples <app>\`.\n\n` +
+  `live in your browser** — open one and use your keyboard and mouse. Each is ` +
+  `also a runnable native sample: \`fleury dev samples <app>\`.\n\n` +
   showcases
     .map((e) => `- [${e.widget}](/showcases/${e.id.split('.')[1]}/) — ${e.blurb}`)
     .join('\n') +

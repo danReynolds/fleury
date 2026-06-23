@@ -3,15 +3,13 @@ title: Widgets & state
 description: The programming model — stateless and stateful widgets, the State lifecycle, setState, keys, and context.
 ---
 
-If you've used Flutter, this is the same model — a tree of widgets, rebuilt
-declaratively — painting to a grid of cells instead of pixels. If you haven't,
-here's everything you need.
-
-## Everything is a widget
-
 A Fleury UI is a tree of **widgets**: immutable descriptions of what should be on
-screen. You never mutate a widget; you describe a new one and let the framework
-figure out the minimal change. There are two kinds.
+screen. You never mutate a widget — you describe a new one and let the framework
+work out the minimal change. (If you've used Flutter, this is the same model,
+painting to a grid of cells instead of pixels; everything below will feel like
+home.)
+
+## Two kinds of widget
 
 A **`StatelessWidget`** depends only on its inputs. Override one method, `build`,
 which returns the widget's children:
@@ -157,14 +155,17 @@ shuffled:
 
 ## Sharing data down the tree: InheritedWidget
 
-Passing a value through ten constructors to reach one deep widget is the problem
-**`InheritedWidget`** solves. An inherited widget sits high in the tree and
-exposes data to everything beneath it; descendants read it with
-`context.dependOnInheritedWidgetOfExactType<T>()` and rebuild automatically when
-it changes. You'll mostly meet it through the ones built in — `Theme`,
-`MediaQuery`, `DefaultTextStyle` — each fronted by a `.of(context)` helper. When
-you have app-wide state that many widgets need (a current user, a router), the
-same pattern is how you hand it down without prop-drilling.
+You've already used this. Every `.of(context)` call reads from an
+**`InheritedWidget`** — a widget that sits high in the tree, exposes data to
+everything beneath it, and rebuilds any descendant that read it when the value
+changes. The built-ins you've met (`Theme`, `MediaQuery`, `DefaultTextStyle`) are
+all inherited widgets, each fronted by a `.of(context)` helper.
+
+You'd write your own when app-wide state — a current user, a router, a feature
+flag — needs to reach many widgets, and you'd rather not thread it through ten
+constructors to get there. Descendants opt in with
+`context.dependOnInheritedWidgetOfExactType<T>()` (or your own `.of` helper) and
+rebuild automatically when it changes.
 
 ---
 

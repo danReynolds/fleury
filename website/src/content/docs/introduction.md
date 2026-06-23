@@ -3,36 +3,36 @@ title: Introduction
 description: What Fleury is, who it's for, and the mental model in two minutes.
 ---
 
-Fleury is a **retained-mode UI framework for the terminal** — and, it turns
-out, the browser. Its shape is a stack of trees: immutable **widgets** describe
-the UI, a durable **element** tree holds identity and state, a **render** tree
-lays out and paints over a grid of cells, and a **semantics** tree exposes
-roles/state/actions for tests and agents.
+Fleury is a **retained-mode UI framework for the terminal** — and, it turns out,
+the browser.
 
-## Who it's for
-
-The fastest-growing terminal programs aren't utilities — they're *applications*:
-agent consoles, dev-tool dashboards, LLM chat surfaces, deploy monitors. They
-have the screen complexity, input handling, and update rates that the word
-"application" implies. Fleury is built for exactly that: incremental rendering,
-real input and focus management, and untrusted-output handling as first-class
-framework concerns.
+The fastest-growing terminal programs aren't utilities anymore; they're
+*applications* — agent consoles, dev-tool dashboards, LLM chat surfaces, deploy
+monitors — with the screen complexity, input handling, and update rates the word
+implies. Most TUI toolkits were built for the utilities. Fleury is built for the
+applications: incremental rendering, real input and focus management, a widget
+set deep enough to skip the hand-rolling, and untrusted-output handling — all as
+first-class framework concerns.
 
 ## The mental model
 
-A state change flows through one pipeline:
+If you've written Flutter, you already have it. An immutable **widget** tree
+describes the UI, a durable **element** tree holds identity and state (your
+`setState` lives there), and a **render** tree lays out and paints — except
+Fleury paints to a grid of character **cells**, not pixels. A fourth
+**semantics** tree rides alongside, exposing roles and actions for tests and
+agents.
 
-```
-rebuild dirty subtree → layout → paint into a damage-tracked CellBuffer → target
-```
+The framework itself never mentions a terminal: it paints into an abstract cell
+grid, and a **target** turns that grid into something real — diffed ANSI, a
+browser DOM, or a streamed session. The
+[architecture overview](/architecture/overview/) walks the whole pipeline.
 
-The framework never mentions a terminal. It paints into an abstract **cell
-grid**; a **target** turns that grid into something real — diffed ANSI for a
-terminal, retained DOM for a browser. That separation is what lets one app
-definition run as a terminal program, a client-side web bundle, or a remotely
-streamed session.
+## Where to start
 
-- New to the framework? Start with [Getting started](/getting-started/).
-- Want the architecture? See [Core and targets](/architecture/core-and-targets/).
-- Putting Fleury on the web? See
+- **New here?** [Getting started](/getting-started/) builds your first app in a
+  few minutes.
+- **Coming from Flutter?** [The map](/coming-from-flutter/) — what's identical,
+  what's renamed, and what's deliberately different.
+- **Putting Fleury on the web?**
   [Serving and embedding](/architecture/serving-and-embedding/).
