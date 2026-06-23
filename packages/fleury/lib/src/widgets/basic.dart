@@ -417,6 +417,24 @@ class Expanded extends Flexible {
     : super(fit: FlexFit.tight);
 }
 
+/// A flexible empty gap along the main axis of a [Row] or [Column].
+///
+/// A `Spacer()` between two children pushes them to opposite ends;
+/// `Spacer(flex: 2)` takes twice the share of another `Spacer`. It is
+/// shorthand for `Expanded(flex: flex, child: const SizedBox.shrink())`.
+class Spacer extends StatelessWidget {
+  const Spacer({super.key, this.flex = 1})
+    : assert(flex > 0, 'Spacer flex must be greater than zero.');
+
+  /// This spacer's share of the remaining main-axis space, relative to
+  /// other flex children.
+  final int flex;
+
+  @override
+  Widget build(BuildContext context) =>
+      Expanded(flex: flex, child: const SizedBox.shrink());
+}
+
 /// A widget that takes up to a `flex` share of the available main-axis
 /// space in a [Flex]. With [FlexFit.loose] the child can take less than
 /// its allocation; with [FlexFit.tight] it must take exactly that much.

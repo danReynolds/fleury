@@ -350,6 +350,7 @@ export 'src/widgets/basic.dart'
         Positioned,
         Row,
         SizedBox,
+        Spacer,
         Stack,
         Text,
         Wrap;

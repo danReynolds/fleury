@@ -198,6 +198,46 @@ void main() {
       expect(buf.atColRow(4, 3).style.background, isNull);
     });
   });
+
+  group('Spacer', () {
+    testWidgets('pushes siblings to opposite ends of a Row', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 10,
+          height: 1,
+          child: Row(children: [Text('a'), Spacer(), Text('b')]),
+        ),
+      );
+      final buf = tester.render(size: const CellSize(10, 1));
+      expect(buf.atColRow(0, 0).grapheme, 'a');
+      // The Spacer absorbs the 8 middle cells, pinning 'b' to the last column.
+      expect(buf.atColRow(9, 0).grapheme, 'b');
+      expect(buf.atColRow(5, 0).grapheme, isNull);
+    });
+
+    testWidgets('flex weights split the gap proportionally', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 11,
+          height: 1,
+          child: Row(
+            children: [
+              Text('a'),
+              Spacer(), // flex 1 → 2 cells
+              Text('b'),
+              Spacer(flex: 3), // flex 3 → 6 cells
+              Text('c'),
+            ],
+          ),
+        ),
+      );
+      // 3 glyphs + 8 gap cells, split 1:3 → 2 and 6 cells (no remainder).
+      final buf = tester.render(size: const CellSize(11, 1));
+      expect(buf.atColRow(0, 0).grapheme, 'a');
+      expect(buf.atColRow(3, 0).grapheme, 'b');
+      expect(buf.atColRow(10, 0).grapheme, 'c');
+    });
+  });
 }
 
 class _ColoredBox extends StatelessWidget {
