@@ -30,6 +30,8 @@ import 'dart:io';
 import 'dart:typed_data' show Uint8List;
 
 import 'package:fleury/src/foundation/geometry.dart';
+import 'package:fleury/src/mcp/app_bridge.dart';
+import 'package:fleury/src/mcp/mcp_server.dart';
 import 'package:fleury/src/remote/remote_client_asset.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/remote/serve_index_html.dart';
@@ -50,6 +52,8 @@ Future<void> main(List<String> args) async {
       exit(await _runShell(args.sublist(1)));
     case 'serve':
       exit(await _runServe(args.sublist(1)));
+    case 'mcp':
+      exit(await _runMcp(args.sublist(1)));
     case 'diagnose':
       exit(await _runDiagnose(args.sublist(1)));
     case 'dev':
@@ -90,6 +94,21 @@ void _printUsage() {
     '(per-browser subprocess isolation).',
   );
   stderr.writeln(
+    '  mcp      Expose a fleury app to an AI agent over the Model Context '
+    'Protocol (stdio).',
+  );
+  stderr.writeln(
+    '           The agent reads the app\'s semantic tree and drives it '
+    'through semantic',
+  );
+  stderr.writeln(
+    '           actions — no screen-scraping. Options: --cols=<n>, '
+    '--rows=<n>.',
+  );
+  stderr.writeln(
+    '           Usage: fleury mcp [--cols=<n>] [--rows=<n>] -- <command ...>',
+  );
+  stderr.writeln(
     '  diagnose Print terminal + capability information for bug '
     'reports.',
   );
@@ -115,6 +134,100 @@ void _printUsage() {
   stderr.writeln(
     '           Examples: fleury benchmark list; fleury benchmark wire sb6 --help',
   );
+}
+
+/// `fleury mcp [--cols=<n>] [--rows=<n>] [--] <command ...>` — runs a Model
+/// Context Protocol server (JSON-RPC over stdio) that drives the spawned app
+/// through its semantic tree. The app's render frames travel over a private
+/// socket; stdout stays a clean JSON-RPC channel (app logs go to stderr).
+Future<int> _runMcp(List<String> args) async {
+  var cols = 80;
+  var rows = 24;
+  List<String>? command;
+  for (var i = 0; i < args.length; i++) {
+    final arg = args[i];
+    if (arg == '--') {
+      command = args.sublist(i + 1);
+      break;
+    } else if (arg.startsWith('--cols=')) {
+      final value = int.tryParse(arg.substring('--cols='.length));
+      if (value == null || value < 1) {
+        stderr.writeln('--cols must be a positive integer.');
+        return 2;
+      }
+      cols = value;
+    } else if (arg.startsWith('--rows=')) {
+      final value = int.tryParse(arg.substring('--rows='.length));
+      if (value == null || value < 1) {
+        stderr.writeln('--rows must be a positive integer.');
+        return 2;
+      }
+      rows = value;
+    } else if (arg == '-h' || arg == '--help') {
+      stderr.writeln(
+        'fleury mcp [--cols=<n>] [--rows=<n>] -- <command ...>',
+      );
+      stderr.writeln(
+        'Example: fleury mcp -- dart run my_app.dart',
+      );
+      return 0;
+    } else if (arg.startsWith('-')) {
+      stderr.writeln('Unknown option for mcp: $arg');
+      return 2;
+    } else {
+      // First bare token starts the app command (the `--` separator is
+      // optional but recommended when the command takes its own flags).
+      command = args.sublist(i);
+      break;
+    }
+  }
+
+  if (command == null || command.isEmpty) {
+    stderr.writeln(
+      'fleury mcp requires a command to run the app, e.g. '
+      '`fleury mcp -- dart run my_app.dart`.',
+    );
+    return 2;
+  }
+
+  final FleuryAppBridge bridge;
+  try {
+    bridge = await FleuryAppBridge.spawn(
+      command: command,
+      viewport: CellSize(cols, rows),
+    );
+  } on FleuryAppBridgeException catch (e) {
+    stderr.writeln('fleury mcp: ${e.message}');
+    return 1;
+  } on ProcessException catch (e) {
+    stderr.writeln('fleury mcp: could not start ${command.first}: ${e.message}');
+    return 1;
+  }
+
+  final exitCode = Completer<int>();
+  Future<void> finish(int code) async {
+    await bridge.close();
+    if (!exitCode.isCompleted) exitCode.complete(code);
+  }
+
+  // The host closes our stdin to disconnect; the app exiting ends the session
+  // too. Either way, tear down and exit.
+  unawaited(
+    runMcpServer(
+      bridge: bridge,
+      input: stdin,
+      output: stdout,
+    ).then((_) => finish(0)),
+  );
+  unawaited(bridge.done.then((_) => finish(0)));
+
+  late StreamSubscription<ProcessSignal> intSub;
+  intSub = ProcessSignal.sigint.watch().listen((_) async {
+    await intSub.cancel();
+    await finish(130);
+  });
+
+  return exitCode.future;
 }
 
 Future<int> _runDev(List<String> args) async {
