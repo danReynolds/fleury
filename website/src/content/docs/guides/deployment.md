@@ -29,9 +29,9 @@ That binary is the whole app. Ship it like any CLI tool.
 
 ## Run it in a browser (embed)
 
-Because a Fleury widget tree is target-agnostic, the *same* code can run
-client-side in a browser — compiled to JavaScript, no server involved. Write a
-tiny web entry point that mounts your app with `runTuiWebDom`:
+The *same* widget tree compiles to JavaScript and runs client-side — no server.
+Write a tiny web entry point that mounts your app with
+[`runTuiWebDom`](/concepts/app-entry/):
 
 ```dart
 // web/main.dart

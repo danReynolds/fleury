@@ -4,8 +4,8 @@ description: Style a Fleury app with ThemeData, ColorScheme, and CellStyle.
 ---
 
 Every Fleury app renders through a `ThemeData`. Widgets read it with
-`Theme.of(context)` and style their cells from it, so a single theme drives the
-whole tree.
+`Theme.of(context)` — or the `context.theme` and `context.colors` shorthands —
+and style their cells from it, so a single theme drives the whole tree.
 
 ## Apply a theme
 
@@ -83,19 +83,7 @@ RichText(
 )
 ```
 
-## Reading the theme
+## Painting backgrounds
 
-```dart
-@override
-Widget build(BuildContext context) {
-  final theme = Theme.of(context);
-  return Text('hello', style: theme.textStyle);
-}
-```
-
-`context.theme` and `context.colors` are shorthands for `Theme.of(context)` and
-`Theme.of(context).colorScheme` — both establish the same dependency, so the
-widget rebuilds if the theme changes.
-
-Backgrounds aren't auto-painted: to fill a region with the theme background,
-wrap it in a `Container(color: theme.colorScheme.background, child: …)`.
+Backgrounds aren't auto-painted. To fill a region with the theme background, wrap
+it in a `Container(color: theme.colorScheme.background, child: …)`.

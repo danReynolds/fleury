@@ -39,9 +39,9 @@ The pushed screen returns its result by popping with a value:
 context.pop(true);   // completes the awaiting push with `true`
 ```
 
-## Other moves
+## The full Navigator API
 
-The full `NavigatorState` is available via `Navigator.of(context)`, or directly
+The whole `NavigatorState` is available via `Navigator.of(context)`, or directly
 on the context:
 
 - `context.push<T>(screen)` — push and (optionally) await a result.

@@ -12,7 +12,7 @@ explicit `null` max rather than a huge number — so an unbounded height is
 genuinely unbounded, not `999999`.
 
 You compose layout from small single-purpose widgets. Here are the ones you'll
-reach for, roughly in order of how often.
+reach for, roughly most-used first.
 
 ## Rows and columns
 

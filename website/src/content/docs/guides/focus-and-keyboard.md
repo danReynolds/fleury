@@ -3,9 +3,18 @@ title: Focus & keyboard
 description: Handle key events, manage focus, and register app-wide shortcuts.
 ---
 
-Fleury routes keyboard input to the focused part of the tree. Most widgets
-(inputs, lists, trees, tables) manage their own focus and keys; this guide is
-for when you handle keys yourself.
+Fleury routes every key event to the focused part of the tree. Most widgets —
+inputs, lists, trees, tables — manage their own focus and keys, so much of the
+time you write nothing. This guide is for when you don't, and the first question
+is *which tool*:
+
+- **`Focus`** — a focusable region with an `onKey` callback. Reach for it to
+  handle keys *while a particular subtree is focused* (an arrow-key navigator, a
+  custom editor).
+- **`FocusNode`** — when you need to *move* focus yourself: focus a field on
+  mount, or jump focus on a button press.
+- **`KeyBindings`** — app-wide shortcuts that fire *regardless of what's focused*
+  (Ctrl-S to save, a command palette).
 
 ## Handle keys with Focus
 
@@ -72,3 +81,8 @@ KeyBindings(
 
 `KeyChord` has the common chords built in (`KeyChord.enter`, `.escape`, `.tab`)
 and a `ctrl` / `alt` / `shift` builder for combinations (`KeyChord.ctrl.s`).
+
+**One key to watch:** `Esc` already pops the `Navigator` by default. If you also
+bind it — above, or in a `Focus` — be deliberate about which should win; to
+intercept the pop rather than race it, reach for a `PopScope` (see
+[Navigation](/guides/navigation/#guarding-back)).

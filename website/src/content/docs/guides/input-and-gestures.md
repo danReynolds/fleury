@@ -61,7 +61,7 @@ MouseRegion(
 )
 ```
 
-## A note on reach
+## Keep it keyboard-first
 
 Mouse support is real and handy, but a good terminal app stays fully usable from
 the keyboard — many users run without mouse reporting, over SSH, or in

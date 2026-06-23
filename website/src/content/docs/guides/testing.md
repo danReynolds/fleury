@@ -3,9 +3,13 @@ title: Testing
 description: Render and drive widgets headlessly with FleuryTester — no terminal.
 ---
 
-Fleury widgets are tested without a real terminal: you pump a widget tree,
-render it to a grid of cells, and assert on the output — the rendered cells or
-the semantic graph. The harness is `FleuryTester`, exposed through `testWidgets`.
+Fleury has no real terminal in its test loop. You mount a widget tree, render it
+to a grid of cells, and assert on the output — the cells themselves, or the
+semantic graph behind them. Two payoffs fall out of that: tests run at plain
+unit-test speed and stay deterministic (you advance the clock yourself), and
+assertions on *meaning* — "row 3 is selected", "the gauge reads 0.62" — survive a
+re-theme, a relayout, or the port to the browser. The harness is `FleuryTester`,
+exposed through `testWidgets`.
 
 ```dart
 import 'package:fleury/fleury.dart';
