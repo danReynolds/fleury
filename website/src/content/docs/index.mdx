@@ -18,8 +18,8 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 import FleuryExample from '../../components/FleuryExample.astro';
 import HomeSplit from '../../components/HomeSplit.astro';
 
-<HomeSplit>
-<Fragment slot="code">
+<HomeSplit files={[{ name: 'monitor.dart' }, { name: 'table.dart' }, { name: 'review.dart' }]}>
+<Fragment slot="code-0">
 ```dart
 Column(
   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -36,14 +36,46 @@ Column(
 )
 ```
 </Fragment>
-<Fragment slot="demo">
-<FleuryExample id="home.monitor" cols={34} rows={9} />
+<FleuryExample slot="demo-0" id="home.monitor" cols={34} rows={9} />
+
+<Fragment slot="code-1">
+```dart
+DataTable(
+  rowCount: people.length,
+  selectionMode: DataTableSelectionMode.row,
+  columns: const [
+    DataTableColumn(id: 'name', title: 'NAME'),
+    DataTableColumn(id: 'role', title: 'ROLE'),
+    DataTableColumn(id: 'commits', title: 'COMMITS'),
+  ],
+  cellBuilder: (row, col) => people[row][col],
+)
+```
 </Fragment>
+<FleuryExample slot="demo-1" id="datatable.basic" cols={48} rows={8} interactive />
+
+<Fragment slot="code-2">
+```dart
+// Hand it a unified diff; it renders the review.
+DiffView(
+  diff: '''
+@@ -1,5 +1,5 @@
+ void main() {
+-  final greeting = 'hi';
+-  print(greeting);
++  final greeting = 'hello';
++  print(greeting.toUpperCase());
+ }
+''',
+)
+```
+</Fragment>
+<FleuryExample slot="demo-2" id="diffview.basic" cols={56} rows={9} interactive />
 </HomeSplit>
 
-That widget on the right isn't a screenshot — it's the real Fleury widget tree,
-compiled to JavaScript with `dart2js` and running in your browser. The *same*
-code runs in a terminal.
+None of these are screenshots — each is the real Fleury widget tree, compiled to
+JavaScript with `dart2js` and running live in your browser. Tab through them in
+the title bar, or watch them cycle. The *same* code runs in a terminal.
 
 ## Why Fleury
 

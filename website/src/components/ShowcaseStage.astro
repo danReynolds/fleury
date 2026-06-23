@@ -1,0 +1,40 @@
+---
+// Lays a showcase out as: the live demo on the left (its natural cell-grid
+// width) and a compact meta rail on the right, filling the space the fixed-size
+// demo leaves over. The rail holds the two "how do I get this" affordances —
+// the run command and a link to the sample's source — so they sit beside the
+// demo instead of as a loose line above it. On narrow viewports the rail wraps
+// below. Styling lives in src/styles/fleury.css.
+interface Props {
+  /** The shell command that runs this app natively, e.g. "fleury dev samples dashboard". */
+  runCmd: string;
+  /** The sample's source filename, e.g. "dashboard.dart" (shown as the link label). */
+  sourceFile?: string;
+  /** GitHub URL to the sample source. */
+  sourceUrl?: string;
+}
+const { runCmd, sourceFile, sourceUrl } = Astro.props;
+---
+
+<div class="showcase-stage">
+  <div class="showcase-stage-demo"><slot /></div>
+  <aside class="showcase-meta" aria-label="How to run this showcase">
+    <div class="showcase-meta-block">
+      <p class="showcase-meta-label">Run it yourself</p>
+      <code class="showcase-meta-cmd">{runCmd}</code>
+      <p class="showcase-meta-hint">Runs the real app in your terminal.</p>
+    </div>
+    {
+      sourceFile && sourceUrl && (
+        <div class="showcase-meta-block">
+          <p class="showcase-meta-label">Source</p>
+          <a class="showcase-meta-link" href={sourceUrl} target="_blank" rel="noopener">
+            <code>{sourceFile}</code>
+            <span aria-hidden="true">↗</span>
+          </a>
+          <p class="showcase-meta-hint">The whole app — one file.</p>
+        </div>
+      )
+    }
+  </aside>
+</div>

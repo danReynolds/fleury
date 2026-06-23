@@ -8,16 +8,23 @@
    Fleury's accent is the same green the live demos paint with, so the site and
    the widgets read as one thing. Drives links, active nav, focus rings, etc. */
 :root {
-  --sl-color-accent-low: #102a20;
-  --sl-color-accent: #1f9d6b;
-  --sl-color-accent-high: #a6f0d0;
-  --sl-color-text-accent: #3ddc97;
+  --sl-color-accent-low: #10291f;
+  --sl-color-accent: #1f9c6b;
+  --sl-color-accent-high: #a5f0d3;
+  --sl-color-text-accent: #3ddb9e;
 }
 :root[data-theme='light'] {
-  --sl-color-accent-low: #c6f3df;
-  --sl-color-accent: #138a5b;
-  --sl-color-accent-high: #0a4d33;
-  --sl-color-text-accent: #0f7a50;
+  --sl-color-accent-low: #c4f2e0;
+  --sl-color-accent: #138a5c;
+  --sl-color-accent-high: #0a4c33;
+  --sl-color-text-accent: #107a51;
+}
+
+/* The header mark is a dark square tile; round it so it reads as a product
+   icon (and looks intentional on the light theme, where its corners show). */
+.site-title img,
+img.site-logo {
+  border-radius: 7px;
 }
 
 /* ── Width ───────────────────────────────────────────────────────────────────
@@ -75,9 +82,15 @@
 }
 
 /* ── Landing hero stage: one "editor → live preview" panel ──────────────────*/
+/* On the splash homepage the demo window sits right under the hero — trim the
+   hero's tall default bottom padding so the window lands "in your face" instead
+   of a screenful down. (.hero only exists on splash pages.) */
+.hero {
+  padding-bottom: 2.5rem;
+}
 .home-stage {
-  max-width: 62rem;
-  margin: 2rem auto 1rem;
+  max-width: 68rem;
+  margin: 0.5rem auto 3rem;
   border: 1px solid color-mix(in srgb, var(--sl-color-gray-4) 60%, transparent);
   border-radius: 0.9rem;
   overflow: hidden;
@@ -100,6 +113,7 @@
 .home-stage-dots {
   display: inline-flex;
   gap: 0.4rem;
+  flex: none;
 }
 .home-stage-dots i {
   width: 0.66rem;
@@ -116,37 +130,76 @@
 .home-stage-dots i:nth-child(3) {
   background: #28c840;
 }
+/* Filename tabs in the title bar — click to jump to that demo. */
+.home-stage-files {
+  display: flex;
+  gap: 0.15rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
 .home-stage-file {
+  appearance: none;
+  background: none;
+  border: none;
+  border-radius: 0.4rem;
+  padding: 0.18rem 0.6rem;
   font-family: var(--sl-font-mono, ui-monospace, monospace);
   font-size: 0.8rem;
-  color: var(--sl-color-gray-3);
+  line-height: 1.4;
+  color: var(--sl-color-gray-4);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.home-stage-file:hover {
+  color: var(--sl-color-gray-2);
+}
+.home-stage-file[aria-selected='true'] {
+  color: var(--sl-color-white);
+  background: rgba(255, 255, 255, 0.06);
+}
+.home-stage-file:focus-visible {
+  outline: 2px solid #3ddb9e;
+  outline-offset: 1px;
 }
 .home-stage-live {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
   margin-left: auto;
+  flex: none;
   font-size: 0.7rem;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: #3ddc97;
+  color: #3ddb9e;
 }
 .home-stage-pulse {
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
-  background: #3ddc97;
+  background: #3ddb9e;
   box-shadow: 0 0 0 0 rgba(61, 220, 151, 0.5);
   animation: fleury-pulse 1.8s ease-out infinite;
 }
+/* All slides share one grid cell, so the window is as tall as the tallest slide
+   and never jumps; switching crossfades via opacity (never display:none, so each
+   live demo keeps its real size and mounts at the right cell dimensions). */
 .home-stage-body {
   display: grid;
+}
+.home-stage-slide {
+  grid-area: 1 / 1;
+  display: grid;
   grid-template-columns: 1fr 1fr;
+  transition: opacity 0.45s ease;
+}
+.home-stage-slide[data-active='false'] {
+  opacity: 0;
+  pointer-events: none;
 }
 .home-stage-pane {
   position: relative;
   min-width: 0;
-  padding: 1.6rem 1.2rem 1.2rem;
+  padding: 1.7rem 1.2rem 1.3rem;
 }
 .home-stage-demo {
   border-left: 1px solid rgba(255, 255, 255, 0.07);
@@ -159,6 +212,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 .home-stage-tag {
   position: absolute;
@@ -172,6 +226,31 @@
 .home-stage-demo .home-stage-tag {
   left: auto;
   right: 1.2rem;
+}
+/* Auto-advance progress dots. */
+.home-stage-progress {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0 0 0.95rem;
+}
+.home-stage-dot {
+  appearance: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+}
+.home-stage-dot:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+.home-stage-dot[data-active='true'] {
+  background: #3ddb9e;
+  transform: scale(1.15);
 }
 /* Blend the code block into the panel — no second frame. */
 .home-stage-code :is(.expressive-code, figure, pre) {
@@ -195,8 +274,13 @@
   padding: 0;
   overflow: visible;
 }
+@media (prefers-reduced-motion: reduce) {
+  .home-stage-slide {
+    transition: none;
+  }
+}
 @media (max-width: 50rem) {
-  .home-stage-body {
+  .home-stage-slide {
     grid-template-columns: 1fr;
   }
   .home-stage-demo {
@@ -250,6 +334,130 @@
   color: var(--sl-color-gray-2);
 }
 
+/* ── Showcase stage — the live demo at its natural width on the left, and a
+   meta rail (run command + source link) filling the gap to its right. The fixed
+   cell-grid demo never spans the full pane, so the rail uses that leftover space
+   instead of leaving it blank. Wraps below the demo on narrow viewports. ──── */
+.showcase-stage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1.5rem 2rem;
+  margin: 1.5rem 0;
+}
+.showcase-stage-demo {
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+.showcase-stage-demo .fleury-example {
+  margin: 0;
+}
+.showcase-meta {
+  flex: 1 1 13rem;
+  min-width: 13rem;
+  max-width: 22rem;
+  box-sizing: border-box;
+  padding: 1.1rem 1.2rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.6rem;
+  background: var(--sl-color-gray-6);
+}
+.showcase-meta-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.showcase-meta-block + .showcase-meta-block {
+  margin-top: 1.1rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--sl-color-gray-5);
+}
+.showcase-meta-label {
+  margin: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--sl-color-text-accent);
+}
+.showcase-meta-cmd {
+  display: block;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.82rem;
+  color: var(--sl-color-white);
+  background: var(--sl-color-black);
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.35rem;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.showcase-meta-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+}
+.showcase-meta-link code {
+  font-size: 0.82rem;
+}
+.showcase-meta-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--sl-color-gray-3);
+}
+
+/* ── Tabbed live demos (DemoTabs.astro) — Starlight-tab look, but inactive
+   panes stay full-size off-screen so each dart2js demo mounts at the right
+   cell-grid dimensions instead of into a 0×0 hidden panel. ──────────────────*/
+.demo-tabs {
+  margin: 1.5rem 0;
+}
+.demo-tabs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  border-bottom: 1px solid var(--sl-color-gray-5);
+  margin-bottom: 1rem;
+}
+.demo-tab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 0.4rem 0.85rem;
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--sl-color-gray-2);
+  cursor: pointer;
+}
+.demo-tab:hover {
+  color: var(--sl-color-white);
+}
+.demo-tab[aria-selected='true'] {
+  color: var(--sl-color-text-accent);
+  border-bottom-color: var(--sl-color-text-accent);
+  font-weight: 600;
+}
+.demo-tab:focus-visible {
+  outline: 2px solid var(--sl-color-text-accent);
+  outline-offset: 2px;
+  border-radius: 0.2rem;
+}
+.demo-tabs-panes {
+  position: relative;
+}
+.demo-pane .fleury-example {
+  margin: 0;
+}
+/* Inactive panes: full-size but parked off-screen, so their host keeps real
+   dimensions (mounts correctly) without taking layout space or showing. */
+.demo-pane[data-active='false'] {
+  position: absolute;
+  top: 0;
+  left: -100000px;
+}
+
 /* ── The cell-grid host ─────────────────────────────────────────────────────
    The DOM grid sizes its cells from these metrics; the digit/braille glyphs
    depend on line-height: 1.25 to connect vertically, so this MUST reach every
@@ -301,7 +509,7 @@
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
-  background: #3ddc97;
+  background: #3ddb9e;
   animation: fleury-pulse 1.8s ease-out infinite;
 }
 @keyframes fleury-pulse {
@@ -449,12 +657,12 @@
 }
 .fleury-knob input[type='range'] {
   width: 8.5rem;
-  accent-color: #3ddc97;
+  accent-color: #3ddb9e;
 }
 .fleury-knob input[type='checkbox'] {
   width: 1rem;
   height: 1rem;
-  accent-color: #3ddc97;
+  accent-color: #3ddb9e;
 }
 .fleury-knob-text {
   box-sizing: border-box;

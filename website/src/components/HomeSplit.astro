@@ -1,24 +1,160 @@
 ---
-// Landing hero centerpiece: one premium "editor → live preview" panel. The Dart
-// you'd write sits in the left pane, the real widget it renders (live, dart2js)
-// in the right — unified under a single window frame so it reads as one
-// interface, not two floating boxes. Styling lives in src/styles/fleury.css.
+// Landing hero: one premium "editor → live preview" window that *cycles* through
+// a few code↔render pairs. The Dart you'd write sits left ("You write"); the real
+// widget it renders (live, dart2js) sits right ("Fleury renders"). The window's
+// title bar holds the filename tabs; it auto-advances and you can click a tab or
+// a dot to jump. Slides are stacked in one CSS grid cell and crossfaded with
+// opacity — never `display:none` — so every demo keeps its real size and mounts
+// at the right cell-grid dimensions up front. Styling lives in fleury.css.
+interface FileTab {
+  /** Tab label / filename, e.g. "monitor.dart". */
+  name: string;
+}
+interface Props {
+  files: FileTab[];
+}
+const { files } = Astro.props;
 ---
 
-<div class="home-stage">
+<div class="home-stage" data-home-carousel>
   <div class="home-stage-bar">
     <span class="home-stage-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-    <span class="home-stage-file">monitor.dart</span>
+    <div class="home-stage-files" role="tablist" aria-label="Fleury demos">
+      {
+        files.map((f, i) => (
+          <button
+            class="home-stage-file"
+            role="tab"
+            type="button"
+            data-slide={i}
+            aria-selected={i === 0 ? 'true' : 'false'}
+            tabindex={i === 0 ? '0' : '-1'}
+          >
+            {f.name}
+          </button>
+        ))
+      }
+    </div>
     <span class="home-stage-live"><span class="home-stage-pulse"></span>live</span>
   </div>
+
   <div class="home-stage-body">
-    <div class="home-stage-pane home-stage-code">
-      <span class="home-stage-tag">You write</span>
-      <slot name="code" />
-    </div>
-    <div class="home-stage-pane home-stage-demo">
-      <span class="home-stage-tag">Fleury renders</span>
-      <div class="home-stage-demo-inner"><slot name="demo" /></div>
-    </div>
+    {/* Astro requires static slot names, so the slides are written out (up to
+        four); the `files` prop gates how many render and labels the tabs. */}
+    {files[0] && (
+      <div class="home-stage-slide" data-slide="0" data-active="true">
+        <div class="home-stage-pane home-stage-code"><span class="home-stage-tag">You write</span><slot name="code-0" /></div>
+        <div class="home-stage-pane home-stage-demo"><span class="home-stage-tag">Fleury renders</span><div class="home-stage-demo-inner"><slot name="demo-0" /></div></div>
+      </div>
+    )}
+    {files[1] && (
+      <div class="home-stage-slide" data-slide="1" data-active="false">
+        <div class="home-stage-pane home-stage-code"><span class="home-stage-tag">You write</span><slot name="code-1" /></div>
+        <div class="home-stage-pane home-stage-demo"><span class="home-stage-tag">Fleury renders</span><div class="home-stage-demo-inner"><slot name="demo-1" /></div></div>
+      </div>
+    )}
+    {files[2] && (
+      <div class="home-stage-slide" data-slide="2" data-active="false">
+        <div class="home-stage-pane home-stage-code"><span class="home-stage-tag">You write</span><slot name="code-2" /></div>
+        <div class="home-stage-pane home-stage-demo"><span class="home-stage-tag">Fleury renders</span><div class="home-stage-demo-inner"><slot name="demo-2" /></div></div>
+      </div>
+    )}
+    {files[3] && (
+      <div class="home-stage-slide" data-slide="3" data-active="false">
+        <div class="home-stage-pane home-stage-code"><span class="home-stage-tag">You write</span><slot name="code-3" /></div>
+        <div class="home-stage-pane home-stage-demo"><span class="home-stage-tag">Fleury renders</span><div class="home-stage-demo-inner"><slot name="demo-3" /></div></div>
+      </div>
+    )}
+  </div>
+
+  <div class="home-stage-progress" role="presentation">
+    {
+      files.map((_, i) => (
+        <button
+          class="home-stage-dot"
+          type="button"
+          data-slide={i}
+          data-active={i === 0 ? 'true' : 'false'}
+          aria-label={`Show demo ${i + 1}`}
+        />
+      ))
+    }
   </div>
 </div>
+
+<script>
+  // Auto-advancing crossfade carousel. Slides share one grid cell (so the window
+  // height is the tallest slide's — no jump) and toggle via opacity. Pauses on
+  // hover/focus and honours prefers-reduced-motion.
+  function wireHomeCarousel() {
+    document.querySelectorAll('[data-home-carousel]').forEach((rootEl) => {
+      const root = rootEl as HTMLElement;
+      if (root.dataset.wired) return;
+      root.dataset.wired = '1';
+
+      const tabs = [...root.querySelectorAll('[role="tab"]')] as HTMLElement[];
+      const slides = [...root.querySelectorAll('.home-stage-slide')] as HTMLElement[];
+      const dots = [...root.querySelectorAll('.home-stage-dot')] as HTMLElement[];
+      const n = slides.length;
+      if (n <= 1) return;
+
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+      let active = 0;
+      let timer: ReturnType<typeof setInterval> | null = null;
+
+      const show = (i: number) => {
+        active = ((i % n) + n) % n;
+        tabs.forEach((t, j) => {
+          const on = j === active;
+          t.setAttribute('aria-selected', on ? 'true' : 'false');
+          t.setAttribute('tabindex', on ? '0' : '-1');
+        });
+        slides.forEach((s, j) => {
+          const on = j === active;
+          s.setAttribute('data-active', on ? 'true' : 'false');
+          (s as HTMLElement & { inert: boolean }).inert = !on;
+        });
+        dots.forEach((d, j) =>
+          d.setAttribute('data-active', j === active ? 'true' : 'false'),
+        );
+      };
+      const stop = () => {
+        if (timer) clearInterval(timer);
+        timer = null;
+      };
+      const start = () => {
+        stop();
+        if (!reduce.matches) timer = setInterval(() => show(active + 1), 5200);
+      };
+      const go = (i: number) => {
+        show(i);
+        start();
+      };
+
+      tabs.forEach((tab, i) => {
+        tab.addEventListener('click', () => go(i));
+        tab.addEventListener('keydown', (e) => {
+          const k = (e as KeyboardEvent).key;
+          if (k === 'ArrowRight') {
+            go((i + 1) % n);
+            tabs[(i + 1) % n].focus();
+          } else if (k === 'ArrowLeft') {
+            go((i - 1 + n) % n);
+            tabs[(i - 1 + n) % n].focus();
+          }
+        });
+      });
+      dots.forEach((dot, i) => dot.addEventListener('click', () => go(i)));
+
+      root.addEventListener('mouseenter', stop);
+      root.addEventListener('mouseleave', start);
+      root.addEventListener('focusin', stop);
+      root.addEventListener('focusout', start);
+
+      show(0);
+      start();
+    });
+  }
+  wireHomeCarousel();
+  document.addEventListener('astro:page-load', wireHomeCarousel);
+</script>

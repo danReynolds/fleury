@@ -313,6 +313,7 @@ const SAMPLE_FILES = {
   agent: 'agent_tui.dart',
 };
 const SHOWCASE_COMPONENT = '../../../components/ShowcaseWidgets.astro';
+const SHOWCASE_STAGE_COMPONENT = '../../../components/ShowcaseStage.astro';
 const SAMPLES_DIR = join(here, '..', '..', 'packages', 'samples', 'lib', 'src');
 
 // One-paragraph pitch per showcase: what it is + why Fleury made it easy.
@@ -366,18 +367,20 @@ for (const e of showcases) {
     `---\ntitle: ${yaml(e.widget)}\ndescription: ${yaml(e.blurb)}\n` +
       `tableOfContents: false\n---\n\n` +
       `import FleuryExample from '${COMPONENT}';\n` +
+      `import ShowcaseStage from '${SHOWCASE_STAGE_COMPONENT}';\n` +
       `import ShowcaseWidgets from '${SHOWCASE_COMPONENT}';\n\n` +
       // Richer intro, above the demo: the "what it is + why it was easy" pitch
-      // (it leads with the description), then how to run it + a source link, so
-      // the reader has context before diving in.
+      // (it leads with the description). The demo then sits in a <ShowcaseStage>
+      // with the run command + source link in the right-side rail beside it.
       `${SHOWCASE_GOALS[slug] ?? e.blurb}\n\n` +
-      `**Run it yourself:** \`fleury dev samples ${slug}\`` +
+      `<ShowcaseStage runCmd="fleury dev samples ${slug}"` +
       (file
-        ? ` &nbsp;·&nbsp; **Source:** [\`${file}\`](${REPO}/packages/samples/lib/src/${file})`
+        ? ` sourceFile="${file}" sourceUrl="${REPO}/packages/samples/lib/src/${file}"`
         : '') +
-      `\n\n` +
-      `<FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}}` +
-      `${e.interactive ? ' interactive' : ''} />\n\n` +
+      `>\n` +
+      `  <FleuryExample id="${e.id}" cols={${e.cols}} rows={${e.rows}}` +
+      `${e.interactive ? ' interactive' : ''} />\n` +
+      `</ShowcaseStage>\n\n` +
       `## Widgets used\n\n` +
       `<ShowcaseWidgets widgets={${JSON.stringify(used)}} />\n\n` +
       `[All showcases](/showcases/)\n`

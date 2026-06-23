@@ -1,0 +1,102 @@
+---
+// A tabbed strip of live, interactive Fleury demos. Looks like Starlight's
+// <Tabs>, but solves a mounting problem those can't: Starlight hides inactive
+// panels with `display:none`, so a dart2js demo inside one mounts into a 0×0
+// host and never re-renders when shown. Here inactive panes are kept at their
+// full size but pushed off-screen, so every demo mounts at the right cell-grid
+// dimensions up front; switching tabs just brings one on-screen. Styling lives
+// in src/styles/fleury.css.
+import FleuryExample from './FleuryExample.astro';
+
+interface Demo {
+  /** Registry id, e.g. "datatable.basic". */
+  id: string;
+  /** Tab label. */
+  label: string;
+  cols: number;
+  rows: number;
+  interactive?: boolean;
+}
+interface Props {
+  demos: Demo[];
+}
+const { demos } = Astro.props;
+---
+
+<div class="demo-tabs" data-demo-tabs>
+  <div class="demo-tabs-bar" role="tablist" aria-label="Interactive widget demos">
+    {
+      demos.map((d, i) => (
+        <button
+          class="demo-tab"
+          role="tab"
+          type="button"
+          id={`demo-tab-${d.id}`}
+          aria-controls={`demo-pane-${d.id}`}
+          aria-selected={i === 0 ? 'true' : 'false'}
+          tabindex={i === 0 ? '0' : '-1'}
+          data-demo-tab={i}
+        >
+          {d.label}
+        </button>
+      ))
+    }
+  </div>
+  <div class="demo-tabs-panes">
+    {
+      demos.map((d, i) => (
+        <div
+          class="demo-pane"
+          role="tabpanel"
+          id={`demo-pane-${d.id}`}
+          aria-labelledby={`demo-tab-${d.id}`}
+          data-demo-pane={i}
+          data-active={i === 0 ? 'true' : 'false'}
+        >
+          <FleuryExample
+            id={d.id}
+            cols={d.cols}
+            rows={d.rows}
+            interactive={d.interactive}
+          />
+        </div>
+      ))
+    }
+  </div>
+</div>
+
+<script>
+  // Tab switching: toggle which pane is on-screen (panes are pre-mounted; the
+  // CSS pushes inactive ones off-screen rather than hiding them, so no demo has
+  // to re-render on switch). Arrow keys move between tabs, roving tabindex.
+  function wireDemoTabs() {
+    document.querySelectorAll('[data-demo-tabs]').forEach((rootEl) => {
+      const root = rootEl as HTMLElement;
+      if (root.dataset.wired) return;
+      root.dataset.wired = '1';
+      const tabs = [...root.querySelectorAll('[data-demo-tab]')] as HTMLElement[];
+      const panes = [...root.querySelectorAll('[data-demo-pane]')] as HTMLElement[];
+      const select = (idx: number, focus = false) => {
+        tabs.forEach((t, i) => {
+          const on = i === idx;
+          t.setAttribute('aria-selected', on ? 'true' : 'false');
+          t.setAttribute('tabindex', on ? '0' : '-1');
+          if (on && focus) t.focus();
+        });
+        panes.forEach((p, i) =>
+          p.setAttribute('data-active', i === idx ? 'true' : 'false'),
+        );
+      };
+      tabs.forEach((tab, i) => {
+        tab.addEventListener('click', () => select(i));
+        tab.addEventListener('keydown', (e) => {
+          const k = (e as KeyboardEvent).key;
+          if (k === 'ArrowRight') select((i + 1) % tabs.length, true);
+          else if (k === 'ArrowLeft') select((i - 1 + tabs.length) % tabs.length, true);
+        });
+      });
+    });
+  }
+  wireDemoTabs();
+  document.addEventListener('astro:page-load', wireDemoTabs);
+</script>

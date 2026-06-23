@@ -1,6 +1,15 @@
-# Fleury
+<p align="center">
+  <img src="assets/fleury-icon.png" alt="Fleury" width="120" height="120">
+</p>
 
-Flutter-shaped terminal UI for Dart.
+<h1 align="center">Fleury</h1>
+
+<p align="center">
+  A retained-mode UI framework for the terminal — and the browser.<br>
+  One widget tree, two surfaces.
+</p>
+
+---
 
 The standalone Fleury workspace is split into local Dart packages:
 

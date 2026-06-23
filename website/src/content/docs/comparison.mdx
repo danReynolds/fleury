@@ -1,0 +1,96 @@
+---
+title: Why Fleury
+description: What Fleury gives you — a batteries-included retained widget toolkit, a semantic graph built for tests and agents, and one app that runs in a terminal or a browser.
+---
+
+import FleuryExample from '../../components/FleuryExample.astro';
+import DemoTabs from '../../components/DemoTabs.astro';
+
+Fleury gives a terminal app the leverage you'd expect from a GUI framework: a
+**batteries-included retained widget toolkit**, a **semantic graph built for
+tests and agents**, and **one app definition that runs in a terminal or a
+browser** — all in Dart. The terminal already has excellent frameworks; Fleury's
+aim is this particular combination, and the rest of this page shows what it buys
+you.
+
+## Where Fleury is strong
+
+Picking a framework is mostly about what you *don't* have to build. Fleury's bet
+is that a terminal app deserves the leverage a GUI framework gives you — rich
+widgets, a real layout engine, and a model your tooling can read.
+
+### A batteries-included widget set
+
+Charts (`Gauge`, `Sparkline`, `LineChart`, `BarChart`, `Histogram`, `Heatmap`),
+windowed data (`DataTable`, `TreeTable`), text and document viewers (`CodeView`,
+`MarkdownView`, `JsonView`, `DiffView`), inputs, overlays, and surfaces built for
+agent and dev tooling (`MessageList`, `PatchReview`, `CommandPalette`,
+`TraceTimeline`). Fifty-plus widgets come in the box, so a lot of what you'd
+otherwise hand-roll is a drop-in. Tab through a few below — each is the real
+widget, running live; click into one and use it (type, arrow, select):
+
+<DemoTabs
+  demos={[
+    { id: 'datatable.basic', label: 'Data table', cols: 48, rows: 8, interactive: true },
+    { id: 'commandpalette.basic', label: 'Command palette', cols: 52, rows: 10, interactive: true },
+    { id: 'autocomplete.basic', label: 'Autocomplete', cols: 44, rows: 7, interactive: true },
+    { id: 'patchreview.basic', label: 'Patch review', cols: 60, rows: 12, interactive: true },
+  ]}
+/>
+
+Browse the whole set in the [widget reference](/widgets/), or see them composed
+into real apps in the [showcases](/showcases/).
+
+### Built for agents and tests
+
+Every frame, Fleury emits a **semantic graph** — roles, labels, values, and the
+typed actions each node supports — right alongside the visual one. Tests assert
+on meaning ("row 3 is selected", "the CPU gauge reads 0.62") and survive a
+re-theme, a layout change, or a port to the browser. An AI agent reads the graph
+and drives the UI through those actions instead of scraping ANSI. It's a
+first-class output, not an afterthought — see
+[Built for agents](/architecture/agents-and-semantics/).
+
+### Fast by construction
+
+A `setState` marks one subtree dirty; only that path rebuilds, re-lays-out, and
+re-paints, and the target diffs down to the **cell** — an idle app emits nothing,
+a busy one pays only for what moved. Data widgets are windowed, so a
+hundred-thousand-row table costs about a screenful. It's
+[benchmarked against peers](/architecture/performance/), not just asserted. The
+dashboard below streams on a ticker and repaints only the cells that change:
+
+<FleuryExample id="home.monitor" cols={34} rows={9} />
+
+### One model, two surfaces
+
+It's the retained widget / `State` / `build` / `setState` model — familiar if
+you've used Flutter, and quick to pick up if you haven't. The same widget tree
+runs in a real terminal, embeds in a page client-side with dart2js (no backend —
+every demo on this page is exactly that), or streams from a native process with
+[`fleury serve`](/architecture/serving-and-embedding/). A parity oracle checks
+that both surfaces render the same tree, so the terminal and the browser stay in
+lockstep instead of drifting apart.
+
+## When to pick something else
+
+Fleury is one good option among several, and the right tool depends on your stack
+and what you value. Reach for a peer when its strengths line up with yours:
+
+- **Ratatui** if you're in Rust and want maximum control with an immediate-mode
+  model and a mature ecosystem.
+- **Textual** if you're in Python and want a batteries-included framework with a
+  large widget set, CSS-like styling, and devtools.
+- **Bubble Tea** if you're in Go and like the Elm architecture and the Charm
+  ecosystem (Bubbles, Lip Gloss, Glamour).
+- **Ink** if you're in Node and want to build CLIs with React.
+
+## Fleury's trade-offs
+
+Fleury is Dart — less common in the terminal space than Go, Rust, or Python, so
+the surrounding ecosystem is younger. It's also pre-1.0: the API is still
+settling, and it's distributed as a Git dependency today. If you need a
+long-stable, widely-deployed framework right now, one of the above may fit
+better. If the retained model, the batteries-included widgets, the agent-facing
+semantics, and the web target are what you're after, that's exactly the gap
+Fleury fills.

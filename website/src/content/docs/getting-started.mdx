@@ -5,11 +5,20 @@ description: Install Fleury and build your first terminal app in a few minutes.
 
 import FleuryExample from '../../components/FleuryExample.astro';
 
-In about five minutes you'll build a small live status panel from scratch, run
-it in your terminal, and learn how to run the same code in a browser. Here's
-what you're building:
+Fleury is a retained-mode UI framework — the familiar Flutter model of a widget
+tree rebuilt declaratively, `setState` and all — that paints to a **grid of
+cells** instead of pixels. One widget tree renders in a terminal *and* a browser,
+and because that same tree is also a **semantic graph**, a test or an agent can
+read it like a screen reader.
+
+The status panel below isn't a screenshot. It's a real Fleury widget tree,
+compiled to JavaScript with `dart2js` and running live in your browser right
+now — the *same* Dart that runs, unchanged, in a terminal.
 
 <FleuryExample id="home.monitor" cols={34} rows={9} />
+
+In about five minutes you'll build exactly this from scratch, run it in your
+terminal, and watch it run in a browser. Let's go.
 
 ## 1. Create a project
 
@@ -38,7 +47,7 @@ A Fleury app is a widget tree handed to `runTui`. You build it with the familiar
 `Widget` / `build` / `setState` model — it just paints to a grid of cells
 instead of pixels.
 
-```dart title="bin/main.dart"
+```dart title="bin/my_app.dart"
 import 'package:fleury/fleury.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 
@@ -50,7 +59,7 @@ void main() => runTui(
 Run it — `Ctrl-C` quits:
 
 ```sh
-dart run bin/main.dart
+dart run bin/my_app.dart
 ```
 
 You should see *Hello, cells!* centered in your terminal.
@@ -62,7 +71,7 @@ Real apps change over time. Make the app stateful and tick a counter.
 re-lays-out, and diffs the new cell grid against the old, so an idle frame costs
 nothing.
 
-```dart title="bin/main.dart"
+```dart title="bin/my_app.dart"
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';
