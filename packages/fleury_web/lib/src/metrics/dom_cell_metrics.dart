@@ -171,10 +171,11 @@ final class DomCellMetrics implements CellMetrics {
     final box = _cached;
     if (box == null) return CellOffset.zero;
     if (box.cols <= 0 || box.rows <= 0) return CellOffset.zero;
-    // Map against the natural layout pitch the grid renders with, not the
-    // device-pixel-snapped box — see [MeasuredCellBox.layoutCellWidth].
-    final col = _clampCellIndex(x / box.layoutCellWidth, box.cols);
-    final row = _clampCellIndex(y / box.layoutCellHeight, box.rows);
+    // The grid is letter-spaced so text flows at the device-pixel-snapped cell
+    // size (see DomGridSurface._rootStyle), so map pointers against that snapped
+    // pitch — it's now the pitch the grid actually renders with.
+    final col = _clampCellIndex(x / box.cssCellWidth, box.cols);
+    final row = _clampCellIndex(y / box.cssCellHeight, box.rows);
     return CellOffset(col, row);
   }
 

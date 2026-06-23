@@ -78,16 +78,19 @@ void main() {
     expect(box.cssCanvasWidth, closeTo(184, 0.5));
     expect(box.cssCanvasHeight, closeTo(64, 0.5));
 
-    // Hit-testing maps against the unsnapped layout pitch, so it never drifts
-    // off the rendered grid the way the device-pixel-snapped box would.
+    // The grid is letter-spaced so text flows at the device-pixel-snapped cell
+    // pitch (see DomGridSurface._rootStyle), so hit-testing maps against that
+    // snapped pitch — a pointer in the centre of the last cell resolves there.
+    expect(box.cssCellWidth, greaterThan(0));
+    expect(box.cssCellHeight, greaterThan(0));
     expect(box.layoutCellWidth, greaterThan(0));
     expect(box.layoutCellHeight, greaterThan(0));
     final lastCol = box.cols - 1;
     final lastRow = box.rows - 1;
     expect(
       metrics.cellForPoint(
-        box.layoutCellWidth * lastCol + box.layoutCellWidth * 0.5,
-        box.layoutCellHeight * lastRow + box.layoutCellHeight * 0.5,
+        box.cssCellWidth * lastCol + box.cssCellWidth * 0.5,
+        box.cssCellHeight * lastRow + box.cssCellHeight * 0.5,
       ),
       CellOffset(lastCol, lastRow),
     );

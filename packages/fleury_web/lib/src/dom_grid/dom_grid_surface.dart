@@ -173,14 +173,27 @@ final class DomGridSurface implements FrameSurface {
     final base = StringBuffer(
       'user-select:none;white-space:pre;tab-size:1;'
       'font-kerning:none;font-variant-ligatures:none;'
-      'font-feature-settings:"liga" 0,"clig" 0;letter-spacing:0',
+      'font-feature-settings:"liga" 0,"clig" 0',
     );
     final metrics = _metrics;
     if (metrics != null) {
+      // Cells are sized to the device-pixel-snapped `cssCellWidth`, but
+      // `white-space:pre` advances text by the font's natural glyph width
+      // (`layoutCellWidth`). When the two disagree, every column lands a hair
+      // off the snapped grid and the box-drawing borders — painted as 1px
+      // gradient lines — fall on sub-pixel boundaries, so they anti-alias into
+      // soft, dashed, jagged edges. A sub-pixel letter-spacing closes the gap so
+      // the flow matches the snapped grid: borders stay crisp and glyphs (bars,
+      // sparklines) tile seamlessly into their snapped cells.
       base
+        ..write(
+          ';letter-spacing:${metrics.cssCellWidth - metrics.layoutCellWidth}px',
+        )
         ..write(';line-height:${metrics.cssCellHeight}px')
         ..write(';width:${metrics.cssCanvasWidth}px')
         ..write(';height:${metrics.cssCanvasHeight}px');
+    } else {
+      base.write(';letter-spacing:0');
     }
     return base.toString();
   }
