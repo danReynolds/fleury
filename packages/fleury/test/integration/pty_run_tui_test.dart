@@ -73,6 +73,86 @@ void main() {
       expect(capture.output, contains('PTY-FIRST-FRAME'));
       _expectTerminalRestored(capture.output);
     }, skip: skipPty);
+
+    test('restores before SIGTSTP and re-enters after SIGCONT', () async {
+      final capture = await _capturePty(
+        tempDir,
+        'suspend-resume',
+        extraArgs: const [
+          '--cols',
+          '40',
+          '--rows',
+          '8',
+          '--suspend-after-output-ms',
+          '350',
+          '--continue-after-suspend-ms',
+          '300',
+          '--input-hex',
+          '03',
+          '--input-delay-ms',
+          '1200',
+        ],
+      );
+      if (capture == null) return;
+
+      expect(capture.metadata['timedOut'], isFalse);
+      expect(capture.metadata['exitCode'], 0);
+      expect(capture.output, contains('PTY-FIRST-FRAME'));
+      expect(
+        _signalNames(capture.metadata),
+        containsAll(['sigtstp', 'sigcont']),
+      );
+      _expectTerminalRestored(capture.output);
+      _expectTerminalReentered(capture.output);
+    }, skip: skipPty);
+
+    test('terminal handoff restores, runs operation, and re-enters', () async {
+      final capture = await _capturePty(
+        tempDir,
+        'handoff',
+        extraArgs: const [
+          '--cols',
+          '40',
+          '--rows',
+          '8',
+          '--input-hex',
+          '03',
+          '--input-delay-ms',
+          '1200',
+        ],
+        fixtureArgs: const ['--handoff'],
+      );
+      if (capture == null) return;
+
+      expect(capture.metadata['timedOut'], isFalse);
+      expect(capture.metadata['exitCode'], 0);
+      expect(capture.output, contains('PTY-HANDOFF-MODE'));
+      expect(capture.output, contains('PTY-HANDOFF'));
+      _expectTerminalRestored(capture.output);
+      _expectTerminalReentered(capture.output);
+    }, skip: skipPty);
+
+    test('fatal render crash still restores terminal modes', () async {
+      final capture = await _capturePty(
+        tempDir,
+        'layout-crash',
+        extraArgs: const [
+          '--cols',
+          '40',
+          '--rows',
+          '8',
+          '--allow-exit-codes',
+          '1,255',
+        ],
+        fixtureArgs: const ['--layout-crash'],
+      );
+      if (capture == null) return;
+
+      expect(capture.metadata['timedOut'], isFalse);
+      expect(capture.metadata['exitCode'], isNot(0));
+      expect(capture.output, contains('layout-boom'));
+      _expectTerminalRestored(capture.output);
+    }, skip: skipPty);
   });
 }
 
@@ -80,6 +160,7 @@ Future<({Map<String, Object?> metadata, String output})?> _capturePty(
   Directory tempDir,
   String name, {
   required List<String> extraArgs,
+  List<String> fixtureArgs = const [],
 }) async {
   final packageRoot = Directory.current;
   final repoRoot = _findRepoRoot(packageRoot);
@@ -97,6 +178,7 @@ Future<({Map<String, Object?> metadata, String output})?> _capturePty(
     '--',
     Platform.resolvedExecutable,
     fixtureApp,
+    ...fixtureArgs,
   ], workingDirectory: profilingRoot.path);
 
   if (result.exitCode != 0 &&
@@ -144,4 +226,33 @@ void _expectTerminalRestored(String output) {
   expect(output, contains('\x1B[?2004l'));
   expect(output, contains('\x1B[?25h'));
   expect(output, contains('\x1B[?1049l'));
+}
+
+void _expectTerminalReentered(String output) {
+  expect(_countOccurrences(output, '\x1B[?1049h'), greaterThanOrEqualTo(2));
+  expect(_countOccurrences(output, '\x1B[?1049l'), greaterThanOrEqualTo(2));
+  expect(_countOccurrences(output, '\x1B[?2004h'), greaterThanOrEqualTo(2));
+  expect(_countOccurrences(output, '\x1B[?2004l'), greaterThanOrEqualTo(2));
+}
+
+List<String> _signalNames(Map<String, Object?> metadata) {
+  final signals = metadata['signals'];
+  if (signals is! List<Object?>) return const [];
+  return <String>[
+    for (final signal in signals)
+      if (signal is Map<String, Object?> && signal['signal'] is String)
+        signal['signal']! as String,
+  ];
+}
+
+int _countOccurrences(String haystack, String needle) {
+  if (needle.isEmpty) return 0;
+  var count = 0;
+  var index = 0;
+  while (true) {
+    index = haystack.indexOf(needle, index);
+    if (index < 0) return count;
+    count++;
+    index += needle.length;
+  }
 }

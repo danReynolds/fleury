@@ -106,6 +106,8 @@ const _sigint = 2;
 const _sigterm = 15;
 const _sigkill = 9;
 const _sigwinch = 28;
+final int _sigTstp = Platform.isMacOS ? 18 : 20;
+final int _sigCont = Platform.isMacOS ? 19 : 18;
 final int _tioCSWINSZ = Platform.isMacOS ? 0x80087467 : 0x5414;
 
 void _fail(String m) {
@@ -232,6 +234,9 @@ void main(List<String> args) {
   int? interruptAfterOutputMs;
   int? terminateAfterMs;
   int? terminateAfterOutputMs;
+  int? suspendAfterMs;
+  int? suspendAfterOutputMs;
+  int? continueAfterSuspendMs;
   final allowedExitCodes = <int>{0};
   final cmd = <String>[];
   for (var i = 0; i < args.length; i++) {
@@ -287,6 +292,21 @@ void main(List<String> args) {
       terminateAfterOutputMs = int.parse(args[++i]);
       if (terminateAfterOutputMs <= 0) {
         _fail('--terminate-after-output-ms must be a positive integer');
+      }
+    } else if (a == '--suspend-after-ms') {
+      suspendAfterMs = int.parse(args[++i]);
+      if (suspendAfterMs <= 0) {
+        _fail('--suspend-after-ms must be a positive integer');
+      }
+    } else if (a == '--suspend-after-output-ms') {
+      suspendAfterOutputMs = int.parse(args[++i]);
+      if (suspendAfterOutputMs <= 0) {
+        _fail('--suspend-after-output-ms must be a positive integer');
+      }
+    } else if (a == '--continue-after-suspend-ms') {
+      continueAfterSuspendMs = int.parse(args[++i]);
+      if (continueAfterSuspendMs <= 0) {
+        _fail('--continue-after-suspend-ms must be a positive integer');
       }
     } else if (a == '--allow-exit-code') {
       allowedExitCodes.addAll(_parseExitCodes(args[++i]));
@@ -382,6 +402,9 @@ void main(List<String> args) {
     var inputSent = inputBytes == null || inputBytes.isEmpty;
     var interruptSent = false;
     var terminateSent = false;
+    var suspendSent = false;
+    var continueSent = false;
+    double? suspendAtMs;
     Pointer<Uint8>? inputBuffer;
     if (inputBytes != null && inputBytes.isNotEmpty) {
       inputBuffer = arena<Uint8>(inputBytes.length)
@@ -423,6 +446,30 @@ void main(List<String> args) {
           'signal': 'sigterm',
         });
         terminateSent = true;
+      }
+      if (!suspendSent &&
+          ((suspendAfterMs != null && elapsedMs >= suspendAfterMs) ||
+              (suspendAfterOutputMs != null &&
+                  outputAgeMs != null &&
+                  outputAgeMs >= suspendAfterOutputMs))) {
+        _kill(pid, _sigTstp);
+        signals.add(<String, Object?>{
+          'tMs': double.parse(elapsedMs.toStringAsFixed(3)),
+          'signal': 'sigtstp',
+        });
+        suspendSent = true;
+        suspendAtMs = elapsedMs;
+      }
+      if (!continueSent &&
+          suspendAtMs != null &&
+          continueAfterSuspendMs != null &&
+          elapsedMs - suspendAtMs >= continueAfterSuspendMs) {
+        _kill(pid, _sigCont);
+        signals.add(<String, Object?>{
+          'tMs': double.parse(elapsedMs.toStringAsFixed(3)),
+          'signal': 'sigcont',
+        });
+        continueSent = true;
       }
       if (elapsedMs > timeout * 1000) {
         timedOut = true;
