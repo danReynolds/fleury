@@ -71,6 +71,16 @@ JavaScript with `dart2js` and running live in your browser: the clock ticks, the
 bars stream, and the table responds to your clicks. Tab through them in the title
 bar, or watch them cycle. The *same* code runs in a terminal.
 
+And dropping it into *your* page is the fun part: hand Fleury a host element and a
+widget tree, and a `dart2js` bundle does the rest — no iframe, no backend, no
+screenshot. Every live demo on this site is one line like this:
+
+```dart
+runTuiWebDom(() => const Dashboard(), hostElement: appHost);
+```
+
+[Embed Fleury in any page →](/architecture/serving-and-embedding/)
+
 ## Why Fleury
 
 <CardGrid>
