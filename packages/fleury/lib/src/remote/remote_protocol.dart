@@ -22,7 +22,7 @@
 //
 //   Peer (shell / serve) → App
 //     0x01 INIT     payload = `cols=<n>,rows=<n>,color=<mode>,`
-//                            `image=<protocol>,tmux=<0|1>`
+//                            `glyph=<tier>,image=<protocol>,tmux=<0|1>`
 //                   sent exactly once, before any INPUT frame
 //     0x02 INPUT    payload = raw bytes destined for stdin
 //                   (escape sequences, key chords, paste contents)
@@ -117,6 +117,7 @@ final class InitFrame extends RemoteFrame {
   const InitFrame({
     required this.size,
     required this.colorMode,
+    this.glyphTier = GlyphTier.unicode,
     required this.imageProtocol,
     required this.tmuxPassthrough,
     this.protocolVersion = remoteProtocolVersion,
@@ -124,6 +125,7 @@ final class InitFrame extends RemoteFrame {
 
   final CellSize size;
   final ColorMode colorMode;
+  final GlyphTier glyphTier;
   final ImageProtocol imageProtocol;
   final bool tmuxPassthrough;
 
@@ -237,6 +239,7 @@ String _encodeInit(InitFrame f) =>
     'cols=${f.size.cols},'
     'rows=${f.size.rows},'
     'color=${f.colorMode.name},'
+    'glyph=${f.glyphTier.name},'
     'image=${f.imageProtocol.name},'
     'tmux=${f.tmuxPassthrough ? 1 : 0},'
     'v=${f.protocolVersion}';
@@ -383,6 +386,10 @@ InitFrame _decodeInit(String body) {
     colorMode: ColorMode.values.firstWhere(
       (m) => m.name == params['color'],
       orElse: () => ColorMode.truecolor,
+    ),
+    glyphTier: GlyphTier.values.firstWhere(
+      (t) => t.name == params['glyph'],
+      orElse: () => GlyphTier.unicode,
     ),
     imageProtocol: ImageProtocol.values.firstWhere(
       (p) => p.name == params['image'],

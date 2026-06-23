@@ -592,6 +592,7 @@ Future<void> runTui(
               data: MediaQueryData(
                 size: usedDriver.size,
                 colorMode: usedDriver.capabilities.colorMode,
+                glyphTier: usedDriver.capabilities.glyphTier,
                 imageProtocol: usedDriver.capabilities.imageProtocol,
                 tmuxPassthrough: usedDriver.capabilities.tmuxPassthrough,
               ),

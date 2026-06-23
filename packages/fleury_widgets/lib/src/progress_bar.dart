@@ -1,6 +1,7 @@
 import 'package:fleury/fleury_host.dart';
 
 import 'component_theme.dart';
+import 'glyphs.dart';
 
 /// A horizontal determinate progress bar that fills proportionally to
 /// [value] (0..1). It fills the available width — bound it with a
@@ -59,6 +60,7 @@ class ProgressBar extends StatelessWidget {
             indeterminatePhase: (frame % _sweepPeriod) / _sweepPeriod,
             filledStyle: resolvedFilledStyle,
             trackStyle: resolvedTrackStyle,
+            glyphTier: MediaQuery.glyphTierOf(ctx),
           ),
         ),
       );
@@ -79,6 +81,7 @@ class ProgressBar extends StatelessWidget {
         value: value,
         filledStyle: resolvedFilledStyle,
         trackStyle: resolvedTrackStyle,
+        glyphTier: MediaQuery.glyphTierOf(context),
       ),
     );
   }
@@ -89,12 +92,14 @@ final class _RawProgressBar extends LeafRenderObjectWidget {
     required this.value,
     required this.filledStyle,
     required this.trackStyle,
+    required this.glyphTier,
     this.indeterminatePhase,
   });
 
   final double value;
   final CellStyle filledStyle;
   final CellStyle trackStyle;
+  final GlyphTier glyphTier;
   final double? indeterminatePhase;
 
   @override
@@ -102,6 +107,7 @@ final class _RawProgressBar extends LeafRenderObjectWidget {
     value: value,
     filledStyle: filledStyle,
     trackStyle: trackStyle,
+    glyphTier: glyphTier,
     indeterminatePhase: indeterminatePhase,
   );
 
@@ -114,6 +120,7 @@ final class _RawProgressBar extends LeafRenderObjectWidget {
       ..value = value
       ..filledStyle = filledStyle
       ..trackStyle = trackStyle
+      ..glyphTier = glyphTier
       ..indeterminatePhase = indeterminatePhase;
   }
 }
@@ -124,10 +131,12 @@ class RenderProgressBar extends RenderObject {
     required double value,
     required CellStyle filledStyle,
     required CellStyle trackStyle,
+    required GlyphTier glyphTier,
     double? indeterminatePhase,
   }) : _value = value,
        _filledStyle = filledStyle,
        _trackStyle = trackStyle,
+       _glyphTier = glyphTier,
        _indeterminatePhase = indeterminatePhase;
 
   double _value;
@@ -158,10 +167,12 @@ class RenderProgressBar extends RenderObject {
     markNeedsPaintOnly();
   }
 
-  // 1/8..7/8 partial blocks; index 0 is unused (no partial).
-  static const _eighths = [' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
-  static const _full = '█';
-  static const _track = '░';
+  GlyphTier _glyphTier;
+  set glyphTier(GlyphTier v) {
+    if (_glyphTier == v) return;
+    _glyphTier = v;
+    markNeedsPaintOnly();
+  }
 
   @override
   CellSize performLayout(CellConstraints constraints) {
@@ -193,7 +204,9 @@ class RenderProgressBar extends RenderObject {
         final lit = ((col - start) % w + w) % w < seg;
         buffer.writeGrapheme(
           CellOffset(tgtCol, offset.row),
-          lit ? _full : _track,
+          lit
+              ? horizontalFillGlyph(_glyphTier, 8)
+              : horizontalTrackGlyph(_glyphTier),
           style: lit ? _filledStyle : _trackStyle,
         );
       }
@@ -210,13 +223,13 @@ class RenderProgressBar extends RenderObject {
       final String glyph;
       final CellStyle style;
       if (col < full) {
-        glyph = _full;
+        glyph = horizontalFillGlyph(_glyphTier, 8);
         style = _filledStyle;
       } else if (col == full && partialIndex > 0 && partialIndex < 8) {
-        glyph = _eighths[partialIndex];
+        glyph = horizontalFillGlyph(_glyphTier, partialIndex);
         style = _filledStyle;
       } else {
-        glyph = _track;
+        glyph = horizontalTrackGlyph(_glyphTier);
         style = _trackStyle;
       }
       buffer.writeGrapheme(CellOffset(tgtCol, offset.row), glyph, style: style);

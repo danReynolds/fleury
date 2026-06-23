@@ -1,5 +1,7 @@
 import 'package:fleury/fleury_host.dart';
 
+import 'glyphs.dart';
+
 /// One column in a [BarChart].
 ///
 /// A single-value bar uses [Bar.new] with one [value]. For stacked bars,
@@ -165,6 +167,7 @@ class BarChart extends StatelessWidget {
         palette: p,
         defaultColor: p.isNotEmpty ? p.first : cs.primary,
         labelStyle: theme.mutedStyle,
+        glyphTier: MediaQuery.glyphTierOf(context),
       ),
     );
   }
@@ -205,6 +208,7 @@ class _RawBarChart extends LeafRenderObjectWidget {
     required this.palette,
     required this.defaultColor,
     required this.labelStyle,
+    required this.glyphTier,
   });
 
   final List<Bar> bars;
@@ -219,6 +223,7 @@ class _RawBarChart extends LeafRenderObjectWidget {
   final List<Color> palette;
   final Color defaultColor;
   final CellStyle labelStyle;
+  final GlyphTier glyphTier;
 
   @override
   RenderObject createRenderObject(BuildContext context) => RenderBarChart(
@@ -234,6 +239,7 @@ class _RawBarChart extends LeafRenderObjectWidget {
     palette: palette,
     defaultColor: defaultColor,
     labelStyle: labelStyle,
+    glyphTier: glyphTier,
   );
 
   @override
@@ -253,7 +259,8 @@ class _RawBarChart extends LeafRenderObjectWidget {
       ..segmentLabels = segmentLabels
       ..palette = palette
       ..defaultColor = defaultColor
-      ..labelStyle = labelStyle;
+      ..labelStyle = labelStyle
+      ..glyphTier = glyphTier;
   }
 }
 
@@ -272,6 +279,7 @@ class RenderBarChart extends RenderObject {
     required List<Color> palette,
     required Color defaultColor,
     required CellStyle labelStyle,
+    required GlyphTier glyphTier,
   }) : _bars = bars,
        _max = max,
        _barWidth = barWidth < 1 ? 1 : barWidth,
@@ -283,7 +291,8 @@ class RenderBarChart extends RenderObject {
        _segmentLabels = segmentLabels,
        _palette = palette,
        _defaultColor = defaultColor,
-       _labelStyle = labelStyle;
+       _labelStyle = labelStyle,
+       _glyphTier = glyphTier;
 
   List<Bar> _bars;
   set bars(List<Bar> v) {
@@ -376,8 +385,12 @@ class RenderBarChart extends RenderObject {
     markNeedsPaintOnly();
   }
 
-  static const _partials = ['', '▁', '▂', '▃', '▄', '▅', '▆', '▇'];
-  static const _full = '█';
+  GlyphTier _glyphTier;
+  set glyphTier(GlyphTier v) {
+    if (_glyphTier == v) return;
+    _glyphTier = v;
+    markNeedsPaintOnly();
+  }
 
   /// Width reserved on the left for value-axis labels when [showYAxis].
   static const _yAxisGutter = 6;
@@ -516,7 +529,9 @@ class RenderBarChart extends RenderObject {
     for (var r = 0; r < chartRows; r++) {
       if (r < firstFilledRow) continue;
       final isTop = r == firstFilledRow;
-      final glyph = (isTop && hasPartial) ? _partials[partial] : _full;
+      final glyph = (isTop && hasPartial)
+          ? verticalLevelGlyph(_glyphTier, partial)
+          : verticalLevelGlyph(_glyphTier, 8);
       for (var x = 0; x < _barWidth; x++) {
         final tgt = col + x;
         if (tgt < 0 || tgt >= buffer.size.cols) continue;
@@ -579,7 +594,11 @@ class RenderBarChart extends RenderObject {
           final tgt = col + x;
           if (tgt < 0 || tgt >= buffer.size.cols) continue;
           if (cursorRow < 0 || cursorRow >= buffer.size.rows) continue;
-          buffer.writeGrapheme(CellOffset(tgt, cursorRow), _full, style: style);
+          buffer.writeGrapheme(
+            CellOffset(tgt, cursorRow),
+            verticalLevelGlyph(_glyphTier, 8),
+            style: style,
+          );
         }
         cursorRow -= 1;
       }
@@ -592,7 +611,7 @@ class RenderBarChart extends RenderObject {
           if (cursorRow < 0 || cursorRow >= buffer.size.rows) continue;
           buffer.writeGrapheme(
             CellOffset(tgt, cursorRow),
-            _partials[partial],
+            verticalLevelGlyph(_glyphTier, partial),
             style: style,
           );
         }
@@ -622,7 +641,7 @@ class RenderBarChart extends RenderObject {
       if (col >= 0 && col < buffer.size.cols) {
         buffer.writeGrapheme(
           CellOffset(col, row),
-          '●',
+          _glyphTier == GlyphTier.ascii ? '*' : '●',
           style: CellStyle(foreground: color),
         );
       }

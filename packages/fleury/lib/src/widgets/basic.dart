@@ -11,8 +11,10 @@ import '../rendering/render_stack.dart';
 import '../rendering/render_wrap.dart';
 import '../rendering/width_resolver.dart';
 import '../semantics/semantics.dart';
+import '../terminal/capabilities.dart';
 import 'align.dart';
 import 'framework.dart';
+import 'media_query.dart';
 import 'selection/selectable.dart';
 import 'theme.dart';
 
@@ -805,7 +807,7 @@ class _Border extends SingleChildRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) {
-    return RenderBorder(border: border);
+    return RenderBorder(border: _effectiveBorder(context));
   }
 
   @override
@@ -813,7 +815,17 @@ class _Border extends SingleChildRenderObjectWidget {
     BuildContext context,
     covariant RenderBorder renderObject,
   ) {
-    renderObject.border = border;
+    renderObject.border = _effectiveBorder(context);
+  }
+
+  /// On an ASCII glyph tier, box-drawing borders degrade to the ASCII style
+  /// (`+`, `-`, `|`) so they stay legible on legacy terminals/fonts.
+  BoxBorder _effectiveBorder(BuildContext context) {
+    if (MediaQuery.glyphTierOf(context) != GlyphTier.ascii ||
+        border.style == BorderStyle.ascii) {
+      return border;
+    }
+    return BoxBorder(style: BorderStyle.ascii, cellStyle: border.cellStyle);
   }
 }
 

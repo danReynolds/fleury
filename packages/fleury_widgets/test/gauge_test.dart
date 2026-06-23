@@ -33,6 +33,17 @@ void main() {
       expect(_row(tester, 4), '██▌░');
     });
 
+    testWidgets('uses ASCII glyphs under ASCII glyph tier', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 4,
+          height: 1,
+          child: Gauge(value: 0.625, showPercentage: false),
+        ),
+      );
+      expect(_row(tester, 4), '##+.');
+    }, glyphTier: GlyphTier.ascii);
+
     testWidgets('appends a percentage when enabled', (tester) {
       tester.pumpWidget(
         const SizedBox(width: 10, height: 1, child: Gauge(value: 0.5)),

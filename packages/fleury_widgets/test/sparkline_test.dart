@@ -22,6 +22,17 @@ void main() {
       expect(_row(tester, 5), ' ▂▄▆█');
     });
 
+    testWidgets('uses ASCII ramp under ASCII glyph tier', (tester) {
+      tester.pumpWidget(
+        SizedBox(
+          width: 5,
+          height: 1,
+          child: Sparkline(data: const [0, 1, 2, 3, 4], max: 4),
+        ),
+      );
+      expect(_row(tester, 5), ' :=*#');
+    }, glyphTier: GlyphTier.ascii);
+
     testWidgets('keeps the newest value on the right when data is wider than '
         'the available cells', (tester) {
       tester.pumpWidget(

@@ -1,5 +1,7 @@
 import 'package:fleury/fleury_host.dart';
 
+import 'glyphs.dart';
+
 /// A compact, single-row history graph of recent numeric values, rendered
 /// with the eight vertical block elements (`▁▂▃▄▅▆▇█`).
 ///
@@ -76,12 +78,19 @@ class Sparkline extends StatelessWidget {
                     max: max,
                     min: min,
                     style: resolved,
+                    glyphTier: MediaQuery.glyphTierOf(context),
                   ),
                 ),
                 Text(' ${_formatSparkValue(latest)}', style: theme.mutedStyle),
               ],
             )
-          : _RawSparkline(data: data, max: max, min: min, style: resolved),
+          : _RawSparkline(
+              data: data,
+              max: max,
+              min: min,
+              style: resolved,
+              glyphTier: MediaQuery.glyphTierOf(context),
+            ),
     );
   }
 }
@@ -104,16 +113,23 @@ class _RawSparkline extends LeafRenderObjectWidget {
     required this.max,
     required this.min,
     required this.style,
+    required this.glyphTier,
   });
 
   final List<num> data;
   final num? max;
   final num min;
   final CellStyle style;
+  final GlyphTier glyphTier;
 
   @override
-  RenderObject createRenderObject(BuildContext context) =>
-      RenderSparkline(data: data, max: max, min: min, style: style);
+  RenderObject createRenderObject(BuildContext context) => RenderSparkline(
+    data: data,
+    max: max,
+    min: min,
+    style: style,
+    glyphTier: glyphTier,
+  );
 
   @override
   void updateRenderObject(
@@ -124,7 +140,8 @@ class _RawSparkline extends LeafRenderObjectWidget {
       ..data = data
       ..max = max
       ..min = min
-      ..style = style;
+      ..style = style
+      ..glyphTier = glyphTier;
   }
 }
 
@@ -135,10 +152,12 @@ class RenderSparkline extends RenderObject {
     required num? max,
     required num min,
     required CellStyle style,
+    required GlyphTier glyphTier,
   }) : _data = data,
        _max = max,
        _min = min,
-       _style = style;
+       _style = style,
+       _glyphTier = glyphTier;
 
   List<num> _data;
   set data(List<num> v) {
@@ -173,9 +192,12 @@ class RenderSparkline extends RenderObject {
     markNeedsPaintOnly();
   }
 
-  // Index 0 ('') means "below baseline — write nothing"; 1..8 are the
-  // eight visible levels.
-  static const _bars = ['', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+  GlyphTier _glyphTier;
+  set glyphTier(GlyphTier v) {
+    if (_glyphTier == v) return;
+    _glyphTier = v;
+    markNeedsPaintOnly();
+  }
 
   @override
   CellSize performLayout(CellConstraints constraints) {
@@ -237,7 +259,7 @@ class RenderSparkline extends RenderObject {
       if (level == 0) continue;
       buffer.writeGrapheme(
         CellOffset(col, offset.row),
-        _bars[level],
+        verticalLevelGlyph(_glyphTier, level),
         style: _style,
       );
     }

@@ -1,5 +1,7 @@
 import 'package:fleury/fleury_host.dart';
 
+import 'glyphs.dart';
+
 /// A single-value status indicator: a horizontal bar with an optional
 /// inline label and a percentage suffix. Sub-cell precision via the
 /// horizontal eighth-block glyphs (`▏▎▍▌▋▊▉█`).
@@ -92,6 +94,7 @@ class Gauge extends StatelessWidget {
         showPercentage: showPercentage,
         filledStyle: filled,
         trackStyle: track,
+        glyphTier: MediaQuery.glyphTierOf(context),
       ),
     );
   }
@@ -104,6 +107,7 @@ class _RawGauge extends LeafRenderObjectWidget {
     required this.showPercentage,
     required this.filledStyle,
     required this.trackStyle,
+    required this.glyphTier,
   });
 
   final double value;
@@ -111,6 +115,7 @@ class _RawGauge extends LeafRenderObjectWidget {
   final bool showPercentage;
   final CellStyle filledStyle;
   final CellStyle trackStyle;
+  final GlyphTier glyphTier;
 
   @override
   RenderObject createRenderObject(BuildContext context) => RenderGauge(
@@ -119,6 +124,7 @@ class _RawGauge extends LeafRenderObjectWidget {
     showPercentage: showPercentage,
     filledStyle: filledStyle,
     trackStyle: trackStyle,
+    glyphTier: glyphTier,
   );
 
   @override
@@ -131,7 +137,8 @@ class _RawGauge extends LeafRenderObjectWidget {
       ..label = label
       ..showPercentage = showPercentage
       ..filledStyle = filledStyle
-      ..trackStyle = trackStyle;
+      ..trackStyle = trackStyle
+      ..glyphTier = glyphTier;
   }
 }
 
@@ -143,11 +150,13 @@ class RenderGauge extends RenderObject {
     required bool showPercentage,
     required CellStyle filledStyle,
     required CellStyle trackStyle,
+    required GlyphTier glyphTier,
   }) : _value = value,
        _label = label,
        _showPercentage = showPercentage,
        _filledStyle = filledStyle,
-       _trackStyle = trackStyle;
+       _trackStyle = trackStyle,
+       _glyphTier = glyphTier;
 
   double _value;
   set value(double v) {
@@ -184,9 +193,12 @@ class RenderGauge extends RenderObject {
     markNeedsPaintOnly();
   }
 
-  static const _eighths = [' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
-  static const _full = '█';
-  static const _track = '░';
+  GlyphTier _glyphTier;
+  set glyphTier(GlyphTier v) {
+    if (_glyphTier == v) return;
+    _glyphTier = v;
+    markNeedsPaintOnly();
+  }
 
   String get _suffix =>
       _showPercentage ? ' ${(_value.clamp(0.0, 1.0) * 100).round()}%' : '';
@@ -249,13 +261,13 @@ class RenderGauge extends RenderObject {
       final String glyph;
       final CellStyle style;
       if (t < full) {
-        glyph = _full;
+        glyph = horizontalFillGlyph(_glyphTier, 8);
         style = _filledStyle;
       } else if (t == full && partialIndex > 0 && partialIndex < 8) {
-        glyph = _eighths[partialIndex];
+        glyph = horizontalFillGlyph(_glyphTier, partialIndex);
         style = _filledStyle;
       } else {
-        glyph = _track;
+        glyph = horizontalTrackGlyph(_glyphTier);
         style = _trackStyle;
       }
       buffer.writeGrapheme(CellOffset(col, offset.row), glyph, style: style);

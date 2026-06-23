@@ -131,6 +131,7 @@ final class TerminalPlatformReport {
 final class TerminalCapabilityReport {
   const TerminalCapabilityReport({
     required this.colorMode,
+    required this.glyphTier,
     required this.imageProtocol,
     required this.alternateScreen,
     required this.hideCursor,
@@ -145,6 +146,7 @@ final class TerminalCapabilityReport {
   TerminalCapabilityReport.fromCapabilities(TerminalCapabilities capabilities)
     : this(
         colorMode: capabilities.colorMode,
+        glyphTier: capabilities.glyphTier,
         imageProtocol: capabilities.imageProtocol,
         alternateScreen: capabilities.supportsAlternateScreen,
         hideCursor: capabilities.supportsHidingCursor,
@@ -152,6 +154,7 @@ final class TerminalCapabilityReport {
       );
 
   final ColorMode colorMode;
+  final GlyphTier glyphTier;
   final ImageProtocol imageProtocol;
   final bool alternateScreen;
   final bool hideCursor;
@@ -165,6 +168,7 @@ final class TerminalCapabilityReport {
   TerminalCapabilities toCapabilities() {
     return TerminalCapabilities(
       colorMode: colorMode,
+      glyphTier: glyphTier,
       imageProtocol: imageProtocol,
       supportsAlternateScreen: alternateScreen,
       supportsHidingCursor: hideCursor,
@@ -174,6 +178,7 @@ final class TerminalCapabilityReport {
 
   Map<String, Object?> toJson() => <String, Object?>{
     'colorMode': colorMode.name,
+    'glyphTier': glyphTier.name,
     'imageProtocol': imageProtocol.name,
     'alternateScreen': alternateScreen,
     'hideCursor': hideCursor,
@@ -537,6 +542,15 @@ List<TerminalDiagnosticMessage> _buildFallbacks(
         severity: TerminalDiagnosticSeverity.info,
         code: 'image_half_block_fallback',
         message: 'Native image output is unavailable; images use cell art.',
+      ),
+    );
+  }
+  if (capabilities.glyphTier == GlyphTier.ascii) {
+    fallbacks.add(
+      const TerminalDiagnosticMessage(
+        severity: TerminalDiagnosticSeverity.info,
+        code: 'glyph_ascii_fallback',
+        message: 'Unicode drawing glyphs will degrade to ASCII output.',
       ),
     );
   }

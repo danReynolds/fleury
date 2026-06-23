@@ -591,6 +591,7 @@ void main() {
           ),
           capabilities: TerminalCapabilityReport(
             colorMode: ColorMode.truecolor,
+            glyphTier: GlyphTier.unicode,
             imageProtocol: ImageProtocol.kitty,
             alternateScreen: false,
             hideCursor: true,

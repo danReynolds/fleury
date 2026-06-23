@@ -60,6 +60,11 @@ void main() {
     expect(_bar(tester), '████▌░░░░░');
   });
 
+  testWidgets('uses ASCII glyphs under ASCII glyph tier', (tester) {
+    tester.pumpWidget(const ProgressBar(value: 0.45));
+    expect(_bar(tester), '####+.....');
+  }, glyphTier: GlyphTier.ascii);
+
   testWidgets('clamps out-of-range values', (tester) {
     tester.pumpWidget(const ProgressBar(value: 1.5));
     expect(_bar(tester), '██████████');

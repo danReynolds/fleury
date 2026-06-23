@@ -184,6 +184,7 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
         _protocolVersion = f.protocolVersion;
         _capabilities = TerminalCapabilities(
           colorMode: f.colorMode,
+          glyphTier: f.glyphTier,
           imageProtocol: f.imageProtocol,
           tmuxPassthrough: f.tmuxPassthrough,
         );

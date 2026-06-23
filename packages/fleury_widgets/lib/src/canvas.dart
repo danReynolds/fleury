@@ -120,6 +120,7 @@ class Canvas extends StatelessWidget {
       bounds: resolvedBounds,
       marker: marker,
       defaultStyle: CellStyle(foreground: theme.colorScheme.primary),
+      glyphTier: MediaQuery.glyphTierOf(context),
     );
     if (!_hasSemantics) return raw;
     return Semantics(
@@ -152,12 +153,14 @@ class _RawCanvas extends LeafRenderObjectWidget {
     required this.bounds,
     required this.marker,
     required this.defaultStyle,
+    required this.glyphTier,
   });
 
   final CanvasPainter painter;
   final CanvasBounds bounds;
   final CanvasMarker marker;
   final CellStyle defaultStyle;
+  final GlyphTier glyphTier;
 
   @override
   RenderObject createRenderObject(BuildContext context) => RenderCanvas(
@@ -165,6 +168,7 @@ class _RawCanvas extends LeafRenderObjectWidget {
     bounds: bounds,
     marker: marker,
     defaultStyle: defaultStyle,
+    glyphTier: glyphTier,
   );
 
   @override
@@ -176,7 +180,8 @@ class _RawCanvas extends LeafRenderObjectWidget {
       ..painter = painter
       ..bounds = bounds
       ..marker = marker
-      ..defaultStyle = defaultStyle;
+      ..defaultStyle = defaultStyle
+      ..glyphTier = glyphTier;
   }
 }
 
@@ -187,10 +192,12 @@ class RenderCanvas extends RenderObject {
     required CanvasBounds bounds,
     required CanvasMarker marker,
     required CellStyle defaultStyle,
+    required GlyphTier glyphTier,
   }) : _painter = painter,
        _bounds = bounds,
        _marker = marker,
-       _defaultStyle = defaultStyle;
+       _defaultStyle = defaultStyle,
+       _glyphTier = glyphTier;
 
   CanvasPainter _painter;
   set painter(CanvasPainter v) {
@@ -220,6 +227,13 @@ class RenderCanvas extends RenderObject {
     markNeedsPaintOnly();
   }
 
+  GlyphTier _glyphTier;
+  set glyphTier(GlyphTier v) {
+    if (_glyphTier == v) return;
+    _glyphTier = v;
+    markNeedsPaintOnly();
+  }
+
   @override
   CellSize performLayout(CellConstraints constraints) {
     final cols = constraints.hasBoundedWidth ? constraints.maxCols! : 20;
@@ -239,15 +253,15 @@ class RenderCanvas extends RenderObject {
       case CanvasMarker.braille:
         final buf = BrailleBuffer(size.cols, size.rows);
         _painter.paint(_BrailleCtx(buf, _bounds));
-        buf.writeTo(buffer, offset, _defaultStyle);
+        buf.writeTo(buffer, offset, _defaultStyle, glyphTier: _glyphTier);
       case CanvasMarker.halfBlock:
         final buf = HalfBlockBuffer(size.cols, size.rows);
         _painter.paint(_HalfBlockCtx(buf, _bounds));
-        buf.writeTo(buffer, offset, _defaultStyle);
+        buf.writeTo(buffer, offset, _defaultStyle, glyphTier: _glyphTier);
       case CanvasMarker.quadrant:
         final buf = QuadrantBuffer(size.cols, size.rows);
         _painter.paint(_QuadrantCtx(buf, _bounds));
-        buf.writeTo(buffer, offset, _defaultStyle);
+        buf.writeTo(buffer, offset, _defaultStyle, glyphTier: _glyphTier);
     }
   }
 }

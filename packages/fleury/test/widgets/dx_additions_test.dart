@@ -72,6 +72,25 @@ void main() {
       // Cell inside the border has the background fill.
       expect(buf.atColRow(1, 1).style.background, Colors.azure);
     });
+
+    testWidgets(
+      'border uses ASCII glyphs under ASCII glyph tier',
+      (tester) {
+        tester.pumpWidget(
+          Container(
+            width: 5,
+            height: 3,
+            border: const BoxBorder(style: BorderStyle.rounded),
+            child: const Text('x'),
+          ),
+        );
+        final buf = tester.render(size: const CellSize(5, 3));
+        expect(buf.atColRow(0, 0).grapheme, '+');
+        expect(buf.atColRow(1, 0).grapheme, '-');
+        expect(buf.atColRow(0, 1).grapheme, '|');
+      },
+      glyphTier: GlyphTier.ascii,
+    );
   });
 
   group('runTui(Widget) accepts a direct widget', () {

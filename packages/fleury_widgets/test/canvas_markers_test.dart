@@ -35,6 +35,19 @@ void main() {
       expect(buf.atColRow(0, 0).grapheme, '▀');
     });
 
+    test('ASCII glyph tier writes density glyphs', () {
+      final b = HalfBlockBuffer(1, 1);
+      b.setPixel(0, 0);
+      final buf = CellBuffer(const CellSize(1, 1));
+      b.writeTo(
+        buf,
+        CellOffset.zero,
+        CellStyle.empty,
+        glyphTier: GlyphTier.ascii,
+      );
+      expect(buf.atColRow(0, 0).grapheme, ':');
+    });
+
     test('bottom pixel only → ▄', () {
       final b = HalfBlockBuffer(1, 1);
       b.setPixel(0, 1);
@@ -76,6 +89,19 @@ void main() {
       final buf = CellBuffer(const CellSize(1, 1));
       b.writeTo(buf, CellOffset.zero, CellStyle.empty);
       expect(buf.atColRow(0, 0).grapheme, '▘');
+    });
+
+    test('ASCII glyph tier writes density glyphs', () {
+      final b = QuadrantBuffer(1, 1);
+      b.setPixel(0, 0);
+      final buf = CellBuffer(const CellSize(1, 1));
+      b.writeTo(
+        buf,
+        CellOffset.zero,
+        CellStyle.empty,
+        glyphTier: GlyphTier.ascii,
+      );
+      expect(buf.atColRow(0, 0).grapheme, '.');
     });
 
     test('upper-right pixel → ▝', () {
@@ -134,6 +160,22 @@ void main() {
         reason: 'expected a braille codepoint',
       );
     });
+
+    testWidgets(
+      'ASCII tier renders canvas dots as ASCII density glyphs',
+      (tester) {
+        tester.pumpWidget(
+          const SizedBox(
+            width: 1,
+            height: 1,
+            child: Canvas(painter: _DotAt(0, 0)),
+          ),
+        );
+        final buf = tester.render(size: const CellSize(1, 1));
+        expect(buf.atColRow(0, 0).grapheme, '.');
+      },
+      glyphTier: GlyphTier.ascii,
+    );
 
     testWidgets('marker: halfBlock renders ▀/▄/█ glyphs', (tester) {
       tester.pumpWidget(

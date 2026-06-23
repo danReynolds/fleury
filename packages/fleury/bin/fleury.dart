@@ -329,6 +329,7 @@ Future<int> _runSession(Socket client, {Future<void>? shutdownSignal}) async {
     InitFrame(
       size: _localSize(),
       colorMode: capabilities.colorMode,
+      glyphTier: capabilities.glyphTier,
       imageProtocol: capabilities.imageProtocol,
       tmuxPassthrough: capabilities.tmuxPassthrough,
     ),
@@ -1369,6 +1370,7 @@ Future<int> _runDiagnose(List<String> args) async {
   stdout.writeln('| | |');
   stdout.writeln('|---|---|');
   row('Color mode', capabilities.colorMode.name);
+  row('Glyph tier', capabilities.glyphTier.name);
   row('Image protocol', capabilities.imageProtocol.name);
   row('Alternate screen', capabilities.alternateScreen);
   row('Hide cursor', capabilities.hideCursor);

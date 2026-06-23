@@ -22,9 +22,18 @@ void main() {
 
   testWidgets('of returns the full data', (tester) {
     tester.viewportSize = const CellSize(30, 10);
+    tester.glyphTier = GlyphTier.ascii;
     late MediaQueryData data;
-    tester.pumpWidget(_Capture((c) => data = MediaQuery.of(c)));
+    late BuildContext dataContext;
+    tester.pumpWidget(
+      _Capture((c) {
+        dataContext = c;
+        data = MediaQuery.of(c);
+      }),
+    );
     expect(data.size, const CellSize(30, 10));
+    expect(data.glyphTier, GlyphTier.ascii);
+    expect(MediaQuery.glyphTierOf(dataContext), GlyphTier.ascii);
   });
 
   testWidgets('maybeOf is null with no MediaQuery ancestor', (tester) {
@@ -48,6 +57,12 @@ void main() {
     expect(
       const MediaQueryData(size: CellSize(5, 5)),
       isNot(const MediaQueryData(size: CellSize(6, 5))),
+    );
+    expect(
+      const MediaQueryData(size: CellSize(5, 5)),
+      isNot(
+        const MediaQueryData(size: CellSize(5, 5), glyphTier: GlyphTier.ascii),
+      ),
     );
   });
 }

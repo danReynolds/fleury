@@ -165,9 +165,11 @@ export 'src/semantics/semantics.dart'
 export 'src/terminal/capabilities.dart'
     show
         ColorMode,
+        GlyphTier,
         ImageProtocol,
         TerminalCapabilities,
         detectColorModeFromEnvironment,
+        detectGlyphTierFromEnvironment,
         detectImageProtocolFromEnvironment,
         detectTerminalCapabilitiesFromEnvironment,
         detectTerminalMultiplexerFromEnvironment;

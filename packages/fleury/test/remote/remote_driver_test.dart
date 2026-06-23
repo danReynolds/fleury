@@ -53,9 +53,10 @@ void main() {
           const InitFrame(
             size: CellSize(132, 43),
             colorMode: ColorMode.truecolor,
+            glyphTier: GlyphTier.ascii,
             imageProtocol: ImageProtocol.kitty,
             tmuxPassthrough: true,
-          protocolVersion: 1,
+            protocolVersion: 1,
           ),
         );
         await entering;
@@ -63,6 +64,7 @@ void main() {
         expect(driver.isActive, isTrue);
         expect(driver.size, const CellSize(132, 43));
         expect(driver.capabilities.colorMode, ColorMode.truecolor);
+        expect(driver.capabilities.glyphTier, GlyphTier.ascii);
         expect(driver.capabilities.imageProtocol, ImageProtocol.kitty);
         expect(driver.capabilities.tmuxPassthrough, isTrue);
 
@@ -83,7 +85,7 @@ void main() {
           colorMode: ColorMode.truecolor,
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
-        protocolVersion: 1,
+          protocolVersion: 1,
         ),
       );
       await entering;
@@ -118,7 +120,7 @@ void main() {
           colorMode: ColorMode.truecolor,
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
-        protocolVersion: 1,
+          protocolVersion: 1,
         ),
       );
       await entering;
@@ -144,7 +146,7 @@ void main() {
           colorMode: ColorMode.truecolor,
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
-        protocolVersion: 1,
+          protocolVersion: 1,
         ),
       );
       await entering;
@@ -179,7 +181,7 @@ void main() {
           colorMode: ColorMode.truecolor,
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
-        protocolVersion: 1,
+          protocolVersion: 1,
         ),
       );
       await entering;
@@ -235,7 +237,7 @@ void main() {
           colorMode: ColorMode.truecolor,
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
-        protocolVersion: 1,
+          protocolVersion: 1,
         ),
       );
       await entering;

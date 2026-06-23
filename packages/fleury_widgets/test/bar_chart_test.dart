@@ -82,6 +82,25 @@ void main() {
       expect(out[1], 'a');
     });
 
+    testWidgets('uses ASCII ramp under ASCII glyph tier', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 1,
+          height: 2,
+          child: BarChart(
+            bars: [Bar('a', 0.25)],
+            max: 1,
+            barWidth: 1,
+            gap: 0,
+            showLabels: true,
+          ),
+        ),
+      );
+      final out = _rows(tester, 1, 2);
+      expect(out[0], ':');
+      expect(out[1], 'a');
+    }, glyphTier: GlyphTier.ascii);
+
     testWidgets('a bar at zero leaves its column empty', (tester) {
       tester.pumpWidget(
         const SizedBox(

@@ -8,23 +8,28 @@ import 'package:test/test.dart';
 
 void main() {
   group('encode/decode round-trip', () {
-    test('INIT carries size, color mode, image protocol, tmux flag', () {
-      final frame = const InitFrame(
-        size: CellSize(132, 43),
-        colorMode: ColorMode.truecolor,
-        imageProtocol: ImageProtocol.kitty,
-        tmuxPassthrough: true,
-      );
-      final wire = encodeFrame(frame);
-      final decoder = FrameDecoder()..feed(wire);
-      final out = decoder.drain().toList();
-      expect(out, hasLength(1));
-      final decoded = out.single as InitFrame;
-      expect(decoded.size, const CellSize(132, 43));
-      expect(decoded.colorMode, ColorMode.truecolor);
-      expect(decoded.imageProtocol, ImageProtocol.kitty);
-      expect(decoded.tmuxPassthrough, isTrue);
-    });
+    test(
+      'INIT carries size, color mode, glyph tier, image protocol, tmux flag',
+      () {
+        final frame = const InitFrame(
+          size: CellSize(132, 43),
+          colorMode: ColorMode.truecolor,
+          glyphTier: GlyphTier.ascii,
+          imageProtocol: ImageProtocol.kitty,
+          tmuxPassthrough: true,
+        );
+        final wire = encodeFrame(frame);
+        final decoder = FrameDecoder()..feed(wire);
+        final out = decoder.drain().toList();
+        expect(out, hasLength(1));
+        final decoded = out.single as InitFrame;
+        expect(decoded.size, const CellSize(132, 43));
+        expect(decoded.colorMode, ColorMode.truecolor);
+        expect(decoded.glyphTier, GlyphTier.ascii);
+        expect(decoded.imageProtocol, ImageProtocol.kitty);
+        expect(decoded.tmuxPassthrough, isTrue);
+      },
+    );
 
     test('INPUT preserves arbitrary binary including 0x1B and 0x00', () {
       final bytes = Uint8List.fromList([

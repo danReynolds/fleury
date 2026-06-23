@@ -284,6 +284,7 @@ class _DebugPanelState extends State<DebugPanel> {
       const Text(''),
       const Text('— terminal capabilities —', style: CellStyle(dim: true)),
       _row('Color', capabilities.colorMode.name),
+      _row('Glyphs', capabilities.glyphTier.name),
       _row('Images', capabilities.imageProtocol.name),
       _row('Alt screen', capabilities.alternateScreen ? 'yes' : 'no'),
       _row('Hide cursor', capabilities.hideCursor ? 'yes' : 'no'),

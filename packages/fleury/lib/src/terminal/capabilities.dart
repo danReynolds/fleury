@@ -9,6 +9,14 @@ import 'package:meta/meta.dart';
 /// with the P1 capabilities work.
 enum ColorMode { none, ansi16, indexed256, truecolor }
 
+/// Glyph repertoire a terminal/font combination can render safely.
+///
+/// [unicode] enables box-drawing, braille, block elements, and common
+/// ornaments. [ascii] keeps drawing output to 7-bit characters for legacy
+/// consoles, `TERM=dumb`/`linux`, non-UTF-8 locales, or an explicit user
+/// override. It changes how primitives *draw*, never their semantic state.
+enum GlyphTier { ascii, unicode }
+
 /// Image-rendering protocol the terminal supports. Decided at startup
 /// from env vars (`KITTY_WINDOW_ID`, `TERM_PROGRAM`, `TERM`); runtime
 /// DA1 probes for Sixel are a later refinement.
@@ -45,6 +53,7 @@ enum ImageProtocol {
 final class TerminalCapabilities {
   const TerminalCapabilities({
     this.colorMode = ColorMode.ansi16,
+    this.glyphTier = GlyphTier.unicode,
     this.imageProtocol = ImageProtocol.halfBlock,
     this.supportsAlternateScreen = true,
     this.supportsHidingCursor = true,
@@ -58,6 +67,9 @@ final class TerminalCapabilities {
       TerminalCapabilities();
 
   final ColorMode colorMode;
+
+  /// Whether Unicode drawing glyphs are safe, or output must stay 7-bit ASCII.
+  final GlyphTier glyphTier;
   final ImageProtocol imageProtocol;
   final bool supportsAlternateScreen;
   final bool supportsHidingCursor;
@@ -72,12 +84,14 @@ final class TerminalCapabilities {
 
   TerminalCapabilities copyWith({
     ColorMode? colorMode,
+    GlyphTier? glyphTier,
     ImageProtocol? imageProtocol,
     bool? supportsAlternateScreen,
     bool? supportsHidingCursor,
     bool? tmuxPassthrough,
   }) => TerminalCapabilities(
     colorMode: colorMode ?? this.colorMode,
+    glyphTier: glyphTier ?? this.glyphTier,
     imageProtocol: imageProtocol ?? this.imageProtocol,
     supportsAlternateScreen:
         supportsAlternateScreen ?? this.supportsAlternateScreen,
@@ -88,6 +102,7 @@ final class TerminalCapabilities {
   @override
   String toString() {
     return 'TerminalCapabilities(colorMode=$colorMode, '
+        'glyphTier=$glyphTier, '
         'imageProtocol=$imageProtocol, '
         'altScreen=$supportsAlternateScreen, '
         'hideCursor=$supportsHidingCursor, '
@@ -106,9 +121,43 @@ TerminalCapabilities detectTerminalCapabilitiesFromEnvironment(
 ) {
   return TerminalCapabilities(
     colorMode: detectColorModeFromEnvironment(environment),
+    glyphTier: detectGlyphTierFromEnvironment(environment),
     imageProtocol: detectImageProtocolFromEnvironment(environment),
     tmuxPassthrough: detectTerminalMultiplexerFromEnvironment(environment),
   );
+}
+
+/// Detects whether Unicode drawing glyphs are safe to use, or output should
+/// stay 7-bit ASCII.
+///
+/// Order: an explicit `FLEURY_GLYPH_TIER=ascii|unicode` (or the boolean
+/// `FLEURY_ASCII`) wins; then `TERM=dumb`/`linux`; then a `C`/`POSIX` or
+/// non-UTF-8 locale (`LC_ALL` > `LC_CTYPE` > `LANG`). Defaults to Unicode.
+GlyphTier detectGlyphTierFromEnvironment(Map<String, String> environment) {
+  final override = environment['FLEURY_GLYPH_TIER']?.toLowerCase().trim();
+  if (override == 'ascii') return GlyphTier.ascii;
+  if (override == 'unicode') return GlyphTier.unicode;
+
+  final asciiOverride = environment['FLEURY_ASCII']?.toLowerCase().trim();
+  if (asciiOverride == '1' ||
+      asciiOverride == 'true' ||
+      asciiOverride == 'yes' ||
+      asciiOverride == 'on') {
+    return GlyphTier.ascii;
+  }
+
+  final term = environment['TERM']?.toLowerCase().trim() ?? '';
+  if (term == 'dumb' || term == 'linux') return GlyphTier.ascii;
+
+  for (final name in const ['LC_ALL', 'LC_CTYPE', 'LANG']) {
+    final locale = environment[name]?.trim();
+    if (locale == null || locale.isEmpty) continue;
+    final normalized = locale.toUpperCase().replaceAll('-', '');
+    if (normalized == 'C' || normalized == 'POSIX') return GlyphTier.ascii;
+    return normalized.contains('UTF8') ? GlyphTier.unicode : GlyphTier.ascii;
+  }
+
+  return GlyphTier.unicode;
 }
 
 /// Detects maximum color fidelity from conventional terminal environment.

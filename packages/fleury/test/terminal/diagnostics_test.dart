@@ -13,8 +13,32 @@ void main() {
           });
 
       expect(capabilities.colorMode, ColorMode.truecolor);
+      expect(capabilities.glyphTier, GlyphTier.unicode);
       expect(capabilities.imageProtocol, ImageProtocol.kitty);
       expect(capabilities.tmuxPassthrough, isTrue);
+    });
+
+    test('detects ASCII glyph tier from explicit override and locale', () {
+      expect(
+        detectTerminalCapabilitiesFromEnvironment(const <String, String>{
+          'FLEURY_GLYPH_TIER': 'ascii',
+        }).glyphTier,
+        GlyphTier.ascii,
+      );
+      expect(
+        detectTerminalCapabilitiesFromEnvironment(const <String, String>{
+          'TERM': 'xterm-256color',
+          'LANG': 'C',
+        }).glyphTier,
+        GlyphTier.ascii,
+      );
+      expect(
+        detectTerminalCapabilitiesFromEnvironment(const <String, String>{
+          'TERM': 'xterm-256color',
+          'LANG': 'en_US.UTF-8',
+        }).glyphTier,
+        GlyphTier.unicode,
+      );
     });
 
     test('honors NO_COLOR over forced color', () {
@@ -44,6 +68,7 @@ void main() {
         size: const CellSize(120, 40),
         capabilities: const TerminalCapabilities(
           colorMode: ColorMode.truecolor,
+          glyphTier: GlyphTier.unicode,
           imageProtocol: ImageProtocol.kitty,
           tmuxPassthrough: true,
         ),
@@ -81,6 +106,7 @@ void main() {
       expect(platform['operatingSystemVersion'], 'Windows 11');
       expect(platform['dartVersion'], '3.12.1');
       expect(capabilities['colorMode'], 'truecolor');
+      expect(capabilities['glyphTier'], 'unicode');
       expect(capabilities['imageProtocol'], 'kitty');
       expect(capabilities['tmuxPassthrough'], isTrue);
       expect(environment['tmux'], isTrue);
@@ -94,6 +120,7 @@ void main() {
         isInteractive: false,
         capabilities: const TerminalCapabilities(
           colorMode: ColorMode.none,
+          glyphTier: GlyphTier.ascii,
           imageProtocol: ImageProtocol.halfBlock,
           supportsAlternateScreen: false,
           supportsHidingCursor: false,
@@ -121,6 +148,7 @@ void main() {
         json['fallbacks'],
         containsMessageCode('image_half_block_fallback'),
       );
+      expect(json['fallbacks'], containsMessageCode('glyph_ascii_fallback'));
       expect(
         json['fallbacks'],
         containsMessageCode('visual_output_unavailable'),

@@ -9,6 +9,7 @@ final class MediaQueryData {
   const MediaQueryData({
     required this.size,
     this.colorMode = ColorMode.truecolor,
+    this.glyphTier = GlyphTier.unicode,
     this.imageProtocol = ImageProtocol.halfBlock,
     this.tmuxPassthrough = false,
   });
@@ -21,6 +22,11 @@ final class MediaQueryData {
   /// this; widgets that just emit `RgbColor` and trust the renderer
   /// cascade can ignore it.
   final ColorMode colorMode;
+
+  /// The terminal/font glyph repertoire. Widgets and primitives that draw
+  /// charts, borders, and ornaments use this to choose Unicode or ASCII
+  /// representations without changing semantic state.
+  final GlyphTier glyphTier;
 
   /// The richest image-rendering protocol the terminal supports.
   /// Image widgets pick the highest-fidelity path available.
@@ -35,11 +41,13 @@ final class MediaQueryData {
   MediaQueryData copyWith({
     CellSize? size,
     ColorMode? colorMode,
+    GlyphTier? glyphTier,
     ImageProtocol? imageProtocol,
     bool? tmuxPassthrough,
   }) => MediaQueryData(
     size: size ?? this.size,
     colorMode: colorMode ?? this.colorMode,
+    glyphTier: glyphTier ?? this.glyphTier,
     imageProtocol: imageProtocol ?? this.imageProtocol,
     tmuxPassthrough: tmuxPassthrough ?? this.tmuxPassthrough,
   );
@@ -49,16 +57,18 @@ final class MediaQueryData {
       other is MediaQueryData &&
       other.size == size &&
       other.colorMode == colorMode &&
+      other.glyphTier == glyphTier &&
       other.imageProtocol == imageProtocol &&
       other.tmuxPassthrough == tmuxPassthrough;
 
   @override
   int get hashCode =>
-      Object.hash(size, colorMode, imageProtocol, tmuxPassthrough);
+      Object.hash(size, colorMode, glyphTier, imageProtocol, tmuxPassthrough);
 
   @override
   String toString() =>
       'MediaQueryData(size: $size, colorMode: ${colorMode.name}, '
+      'glyphTier: ${glyphTier.name}, '
       'imageProtocol: ${imageProtocol.name}, '
       'tmuxPassthrough: $tmuxPassthrough)';
 }
@@ -99,6 +109,11 @@ class MediaQuery extends InheritedWidget {
   /// the common terminal).
   static ColorMode colorModeOf(BuildContext context) =>
       maybeOf(context)?.colorMode ?? ColorMode.truecolor;
+
+  /// The detected glyph repertoire. Returns [GlyphTier.unicode] when there is
+  /// no MediaQuery in scope (the common test + modern-terminal default).
+  static GlyphTier glyphTierOf(BuildContext context) =>
+      maybeOf(context)?.glyphTier ?? GlyphTier.unicode;
 
   /// The detected image protocol. Returns [ImageProtocol.halfBlock]
   /// when there's no MediaQuery — the universal-fallback path.

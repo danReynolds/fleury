@@ -49,6 +49,7 @@ import '../runtime/input_dispatcher.dart';
 import '../semantics/accessibility.dart';
 import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
+import '../terminal/capabilities.dart';
 import '../terminal/events.dart';
 import '../widgets/basic.dart';
 import '../widgets/focus.dart';
@@ -67,6 +68,10 @@ class FleuryTester {
   FleuryTester({
     AnimationPolicy animationPolicy = AnimationPolicy.enabled,
     this.viewportSize = const CellSize(80, 24),
+    this.colorMode = ColorMode.truecolor,
+    this.glyphTier = GlyphTier.unicode,
+    this.imageProtocol = ImageProtocol.halfBlock,
+    this.tmuxPassthrough = false,
   }) : _clock = FakeClock(),
        _focusManager = FocusManager() {
     _scheduler = FakeTickerScheduler(clock: _clock);
@@ -94,6 +99,14 @@ class FleuryTester {
   ///
   ///     tester.viewportSize = const CellSize(40, 10);
   CellSize viewportSize;
+
+  /// Capability profile installed in the ambient [MediaQuery]. Tests set
+  /// [glyphTier] to [GlyphTier.ascii] to exercise the ASCII drawing fallback.
+  ColorMode colorMode;
+  GlyphTier glyphTier;
+  ImageProtocol imageProtocol;
+  bool tmuxPassthrough;
+
   final FakeClock _clock;
   late final FakeTickerScheduler _scheduler;
   late final TuiBinding _binding;
@@ -581,7 +594,13 @@ class FleuryTester {
     return TuiBindingScope(
       binding: _binding,
       child: MediaQuery(
-        data: MediaQueryData(size: viewportSize),
+        data: MediaQueryData(
+          size: viewportSize,
+          colorMode: colorMode,
+          glyphTier: glyphTier,
+          imageProtocol: imageProtocol,
+          tmuxPassthrough: tmuxPassthrough,
+        ),
         child: FocusManagerScope(
           manager: _focusManager,
           child: PointerRouterScope(
@@ -782,6 +801,10 @@ void testWidgets(
   FutureOr<void> Function(FleuryTester tester) body, {
   AnimationPolicy animationPolicy = AnimationPolicy.enabled,
   CellSize viewportSize = const CellSize(80, 24),
+  ColorMode colorMode = ColorMode.truecolor,
+  GlyphTier glyphTier = GlyphTier.unicode,
+  ImageProtocol imageProtocol = ImageProtocol.halfBlock,
+  bool tmuxPassthrough = false,
   pkg_test.Timeout? timeout,
   Object? skip,
 }) {
@@ -791,6 +814,10 @@ void testWidgets(
       final tester = FleuryTester(
         animationPolicy: animationPolicy,
         viewportSize: viewportSize,
+        colorMode: colorMode,
+        glyphTier: glyphTier,
+        imageProtocol: imageProtocol,
+        tmuxPassthrough: tmuxPassthrough,
       );
       try {
         await body(tester);

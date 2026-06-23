@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:fleury/fleury_host.dart';
 
+import 'glyphs.dart';
+
 /// A 2×4-pixel-per-cell drawing surface that renders as Unicode braille
 /// patterns (`U+2800..U+28FF`). Internal helper used by `Canvas` and
 /// `LineChart` to draw at sub-cell resolution on the terminal grid.
@@ -76,7 +78,12 @@ class BrailleBuffer {
 
   /// Writes the populated cells of this buffer into [target] at [offset].
   /// Cells with no dots are left untouched.
-  void writeTo(CellBuffer target, CellOffset offset, CellStyle defaultStyle) {
+  void writeTo(
+    CellBuffer target,
+    CellOffset offset,
+    CellStyle defaultStyle, {
+    GlyphTier glyphTier = GlyphTier.unicode,
+  }) {
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
         final idx = r * cols + c;
@@ -88,10 +95,22 @@ class BrailleBuffer {
             : defaultStyle.merge(CellStyle(foreground: color));
         target.writeGrapheme(
           CellOffset(offset.col + c, offset.row + r),
-          String.fromCharCode(0x2800 + dots),
+          glyphTier == GlyphTier.ascii
+              ? densityGlyph(glyphTier, _bitCount(dots), 8)
+              : String.fromCharCode(0x2800 + dots),
           style: style,
         );
       }
     }
   }
+}
+
+int _bitCount(int value) {
+  var count = 0;
+  var remaining = value;
+  while (remaining != 0) {
+    count += remaining & 1;
+    remaining >>= 1;
+  }
+  return count;
 }

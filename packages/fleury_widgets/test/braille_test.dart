@@ -26,6 +26,19 @@ void main() {
       expect(buffer.atColRow(0, 0).grapheme!.codeUnitAt(0), 0x2800 + (1 << 0));
     });
 
+    test('ASCII glyph tier writes density glyphs', () {
+      final b = BrailleBuffer(1, 1);
+      b.setPixel(0, 0);
+      final buffer = CellBuffer(const CellSize(1, 1));
+      b.writeTo(
+        buffer,
+        CellOffset.zero,
+        CellStyle.empty,
+        glyphTier: GlyphTier.ascii,
+      );
+      expect(buffer.atColRow(0, 0).grapheme, '.');
+    });
+
     test('setPixel(1, 3) sets dot 8 (bit 7)', () {
       final b = BrailleBuffer(1, 1);
       b.setPixel(1, 3);

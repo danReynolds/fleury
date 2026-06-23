@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:fleury/fleury_host.dart';
 
+import 'glyphs.dart';
+
 /// A 2×2-pixel-per-cell drawing surface that renders as Unicode block-
 /// element quadrants. Sits between [HalfBlockBuffer] (1×2) and
 /// `BrailleBuffer` (2×4) in resolution, with the visual character of
@@ -86,7 +88,12 @@ class QuadrantBuffer {
   }
 
   /// Writes the populated cells of this buffer into [target] at [offset].
-  void writeTo(CellBuffer target, CellOffset offset, CellStyle defaultStyle) {
+  void writeTo(
+    CellBuffer target,
+    CellOffset offset,
+    CellStyle defaultStyle, {
+    GlyphTier glyphTier = GlyphTier.unicode,
+  }) {
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
         final idx = r * cols + c;
@@ -98,10 +105,22 @@ class QuadrantBuffer {
             : defaultStyle.merge(CellStyle(foreground: color));
         target.writeGrapheme(
           CellOffset(offset.col + c, offset.row + r),
-          _glyphs[bits],
+          glyphTier == GlyphTier.ascii
+              ? densityGlyph(glyphTier, _bitCount(bits), 4)
+              : _glyphs[bits],
           style: style,
         );
       }
     }
   }
+}
+
+int _bitCount(int value) {
+  var count = 0;
+  var remaining = value;
+  while (remaining != 0) {
+    count += remaining & 1;
+    remaining >>= 1;
+  }
+  return count;
 }
