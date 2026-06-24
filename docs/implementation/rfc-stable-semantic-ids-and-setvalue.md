@@ -1,7 +1,8 @@
 # RFC: Stable semantic node identity + parameterized `setValue`
 
-**Status:** Partially implemented (2026-06-24) — Part B shipped end to end;
-Part A's safety net shipped, the full id rewrite scoped as a follow-on. See
+**Status:** Substantially implemented (2026-06-24) — Part B shipped end to end;
+Part A's key-derived ids (A1/A2) + safety net shipped; the A3 structure-generation
+handle and v2 id-polish scoped as follow-ons. See
 [Implementation status](#implementation-status-2026-06-24).
 **Owner:** Semantic app graph, core widgets, `fleury_mcp` (and the future
 `fleury_acp`).
@@ -323,6 +324,13 @@ first-principles corrections implementation forced on the RFC's own assumptions:
 3. **`setValue` end to end** (`fleury` + `fleury_mcp`, `d5fd97d`) — payload on the
    `SemanticActionFrame`, threaded through the driver/`run_tui` round trip, plus a
    `set_value` MCP tool. An agent now sets a field in one call.
+4. **A1/A2 key-derived ids** (`fleury` + `fleury_widgets` + `fleury_mcp`,
+   `36c67e3`) — `element-$hashCode` replaced by ids folded from the keyed-ancestor
+   chain (`semanticAnchorOf` → `auto:<scope>/<~tail>/<role>`), so a node under a
+   keyed row keeps its id across rebuilds and reorders. `DataTable` re-roots its
+   row/cell ids on the same anchor (no more `datatable-$hashCode`). The stale
+   guard's `_isPositionalId` extends to `auto:` ids carrying `~`. Reorder-proof,
+   rebuild-stable, and same-position-rebuild-stable tests; full suites green.
 
 **Corrections to the RFC, discovered by building it:**
 
@@ -338,25 +346,42 @@ first-principles corrections implementation forced on the RFC's own assumptions:
   many contributors**, not a one-liner — and the existing ids are more stable than
   the RFC assumed, which is *why* the fingerprint net (which protects exactly the
   remaining positional ids) is sufficient today.
-- **The id rewrite entangles with the retained-leaf incremental path.** The
-  semantics dirty-tracker keys leaf updates by `element._nodeId`; a top-down
-  anchoring post-pass (which assigns ids by tree position *after* the walk) would
-  mismatch those keys and break incremental semantics. This is what makes A1/A2
-  invasive and is the core reason it is deferred rather than rushed — and the
-  reason A3's *safety* value was delivered server-side first, buying time to do
-  A1/A2 right.
+- **The RFC's "top-down post-pass" framing was wrong — A1/A2 is element-local.**
+  The RFC (and an earlier read of mine) assumed ids had to be assigned by a
+  top-down pass over the *assembled* semantic tree, which would have entangled
+  with the retained-leaf path (the dirty-tracker keys leaf updates by
+  `element._nodeId`; a post-pass id wouldn't be reproducible from the element
+  alone at patch time). Reading the machinery showed `Element.elementParent` lets
+  a node derive its id from its *own* ancestor walk — element-local, reproducible
+  at record/patch/dispatch time, and provably leaf-path-safe (a position change is
+  always a structural change → full rebuild; the retained-vs-full divergence
+  assertions confirm both paths agree). That collapsed A1/A2 from "invasive
+  post-pass" to "a richer `_nodeId` getter" — which is what shipped.
 - **A3's safety did not need the core structure-generation handle.** The
   versioned-handle grammar (a `structureGeneration` that also covers A2's
   structural-tail ids) remains the principled end state, but a role+label
   fingerprint gated on positional ids catches the silent mis-target now, with no
-  core protocol change. The full handle lands with A1/A2.
+  core protocol change. It now also covers the new `auto:…~…` positional ids.
 
 **Deferred (clearly scoped follow-ons):**
 
-- **A1/A2 full id rewrite** + the **A3 structure-generation handle** that
-  supersedes the fingerprint net (covers structural-tail ids, not just positional
-  ones). Cross-contributor and entangled with the retained-leaf path — its own
-  scoped change, with the safety net protecting current ids meanwhile.
+- **A3 structure-generation handle.** The principled version of the safety net: a
+  `structureGeneration` bumped only on shape change (the dirty-tracker's
+  structure-vs-leaf split is the exact signal), carried on the snapshot and
+  checked on dispatch — superseding the server-side fingerprint and extending the
+  guard to *core* dispatch (tests/a11y), not just MCP. The fingerprint net holds
+  the line meanwhile.
+- **A1/A2 v2 refinements (the new id scheme is stable-within-session, not yet
+  polished):** key-value **redaction** for folded ancestor keys (a sensitive
+  `ValueKey` currently leaks into descendants' ids the same way an own `key:` id
+  always has — but now more broadly; route through the snapshot's redaction
+  policy before the format is declared stable); **id memoization** on the element
+  (the ancestor walk is O(depth·siblings) per node on full rebuilds — gates pass
+  today, but memoize before it matters); **trim the constant framework-key
+  prefix** (the overlay entry's `ValueKey<OverlayEntry>` folds into every id as
+  noise); **`GlobalKey` anchoring** (treated as transparent today — fine because
+  anchoring lands on the nearest value key — but a stable `GlobalKey` token would
+  let it anchor directly).
 - **B4 central typed coercion.** Only `TextInput`'s string coercion shipped;
   `Slider`/`Select`/`DatePicker` adoption and the central typed-per-role coercion +
   typed-failure statuses wait until those widgets adopt `setValue`.
@@ -365,11 +390,12 @@ first-principles corrections implementation forced on the RFC's own assumptions:
 
 > **As built, this order was inverted** — see
 > [Implementation status](#implementation-status-2026-06-24). A3's *safety* (the
-> fingerprint net, not the full handle) shipped first with no core change, Part B
-> (Phase 3) shipped additively next, and Phase 1/2 (the id rewrite + the
-> structure-generation handle) are the remaining follow-on — because the id
-> rewrite entangles with the retained-leaf incremental path and the existing ids
-> proved stable enough for the net to hold the line meanwhile.
+> fingerprint net) shipped first with no core change, Part B (Phase 3) shipped
+> additively next, and Phase 1 (the A1/A2 id scheme) then landed as an
+> element-local `_nodeId` derivation (not the post-pass this section assumed).
+> What remains of Phase 2 is the structure-generation *handle* that supersedes
+> the fingerprint net, plus the v2 id-polish (redaction, memoization, prefix
+> trimming, GlobalKey anchoring).
 
 1. **Phase 1 — id scheme (A1/A2).** Replace `element-$hashCode`. Pure win for
    tests/a11y/MCP; lowest risk (ids were never a stable contract). No action-API
