@@ -122,6 +122,37 @@ void main() {
           as Map<String, Object?>)['value'];
       expect('$value', contains(text));
     });
+
+    test('agent: set_value sets the prompt in one call (no focus dance)', () async {
+      final agent = await drive('agent');
+
+      final field = await agent.tool('find_nodes', <String, Object?>{
+        'role': 'textField',
+      });
+      final node = (field['nodes'] as List).single as Map<String, Object?>;
+      final id = node['id'] as String;
+      expect(
+        node['actions'] as List,
+        contains('setValue'),
+        reason: 'the real TextInput advertises setValue over the wire',
+      );
+
+      // One call — no prior focus/type_text — carries the payload through the
+      // full stack: MCP set_value → SEMANTIC_ACTION frame → live TextInput.
+      const text = 'ship the release';
+      final result = await agent.tool('set_value', <String, Object?>{
+        'id': id,
+        'value': text,
+      });
+      expect(result['changed'], isTrue);
+
+      final after = await agent.tool('find_nodes', <String, Object?>{
+        'role': 'textField',
+      });
+      final value = ((after['nodes'] as List).single
+          as Map<String, Object?>)['value'];
+      expect('$value', contains(text));
+    });
   }, skip: skip, timeout: const Timeout(Duration(seconds: 90)));
 }
 
