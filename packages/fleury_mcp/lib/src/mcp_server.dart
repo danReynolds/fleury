@@ -15,14 +15,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import '../semantics/inspection.dart';
-import '../semantics/semantics.dart';
-import '../terminal/events.dart';
+import 'package:fleury/fleury_core.dart';
+
 import 'app_bridge.dart';
 
-/// MCP protocol revision this server implements. The handshake echoes the
-/// client's requested revision when it sends one (our tool/resource surface is
-/// revision-stable), falling back to this.
+/// MCP protocol revision this server prefers. The handshake echoes the client's
+/// requested revision when it is one we support, falling back to this.
 const String mcpProtocolVersion = '2025-06-18';
 
 /// Server identity reported in the `initialize` handshake.
@@ -35,25 +33,72 @@ const int _invalidRequest = -32600;
 const int _methodNotFound = -32601;
 
 /// Reads newline-delimited JSON-RPC from [input], dispatches against [bridge],
-/// and writes responses to [output] (flushed per message — stdio to a pipe is
-/// block-buffered). Returns when [input] closes (the host disconnected).
+/// and writes responses to [output]. Returns when [input] closes (the host
+/// disconnected) or a write fails (the host's pipe broke).
+///
+/// Requests are handled concurrently — a slow `tools/call` (which can block in
+/// `settle()`) must not delay a following `ping`/cancellation — and responses,
+/// matched by id, may complete out of order. Writes are serialized through a
+/// single chain so concurrent responses can't interleave a partial line, and a
+/// broken-pipe write ends the loop cleanly rather than escaping unhandled.
 Future<void> runMcpServer({
   required FleuryAppBridge bridge,
   required Stream<List<int>> input,
   required IOSink output,
 }) async {
-  final server = McpServer(
-    bridge: bridge,
-    send: (line) => output.write('$line\n'),
-  );
+  final done = Completer<void>();
+  var writeFailed = false;
+  Future<void> writeChain = Future<void>.value();
+  void send(String line) {
+    if (writeFailed) return;
+    writeChain = writeChain
+        .then((_) async {
+          output.write('$line\n');
+          await output.flush();
+        })
+        .catchError((Object _) {
+          // The host closed the pipe; stop writing and end the loop so the
+          // caller can tear the session (and the app subprocess) down.
+          writeFailed = true;
+          if (!done.isCompleted) done.complete();
+        });
+  }
+
+  final server = McpServer(bridge: bridge, send: send);
   final lines = input
       .transform(utf8.decoder)
       .transform(const LineSplitter());
-  await for (final line in lines) {
-    if (line.trim().isEmpty) continue;
-    await server.handleLine(line);
-    await output.flush();
+  final pending = <Future<void>>[];
+
+  late final StreamSubscription<String> sub;
+  sub = lines.listen(
+    (line) {
+      if (line.trim().isEmpty) return;
+      final handled = server.handleLine(line).catchError((Object _) {});
+      pending.add(handled);
+      handled.whenComplete(() => pending.remove(handled));
+    },
+    onError: (Object _, StackTrace _) {
+      if (!done.isCompleted) done.complete();
+    },
+    onDone: () {
+      if (!done.isCompleted) done.complete();
+    },
+    cancelOnError: false,
+  );
+
+  await done.future;
+  await sub.cancel();
+  // On a clean shutdown (the host closed stdin), let in-flight handlers finish
+  // so their responses flush — bounded, so a wedged tool call can't hang
+  // teardown. On a write failure the pipe is already broken, so skip it.
+  if (!writeFailed && pending.isNotEmpty) {
+    await Future.wait(pending.toList()).timeout(
+      const Duration(seconds: 3),
+      onTimeout: () => const <void>[],
+    );
   }
+  await writeChain.catchError((Object _) {});
 }
 
 /// The transport-agnostic JSON-RPC core. Feed it raw request lines via
@@ -64,6 +109,12 @@ final class McpServer {
 
   final FleuryAppBridge bridge;
   final void Function(String jsonLine) send;
+
+  static const Set<String> _supportedProtocolVersions = <String>{
+    '2025-06-18',
+    '2025-03-26',
+    '2024-11-05',
+  };
 
   static final Map<String, SemanticAction> _actionsByName = {
     for (final a in SemanticAction.values) a.name: a,
@@ -87,24 +138,20 @@ final class McpServer {
       );
       return;
     }
+    // A message with no `id` key is a notification — never respond to it (even
+    // if it's malformed). A request carries an `id`, which may legitimately be
+    // null and must still be echoed in the response.
+    if (!decoded.containsKey('id')) return;
+
     final id = decoded['id'];
     final method = decoded['method'];
     if (method is! String) {
-      // A response or a malformed frame — nothing for a server to act on.
-      if (id != null) {
-        _sendMessage(_errorMessage(id, _invalidRequest, 'Missing method'));
-      }
+      _sendMessage(_errorMessage(id, _invalidRequest, 'Missing or invalid method'));
       return;
     }
     final params = decoded['params'] is Map
         ? (decoded['params'] as Map).cast<String, Object?>()
         : const <String, Object?>{};
-    final isNotification = !decoded.containsKey('id');
-
-    // Notifications (no id) are fire-and-forget; never reply to them.
-    if (isNotification) {
-      return; // initialized / cancelled / progress — nothing to do.
-    }
 
     switch (method) {
       case 'initialize':
@@ -136,10 +183,12 @@ final class McpServer {
 
   Map<String, Object?> _initializeResult(Map<String, Object?> params) {
     final requested = params['protocolVersion'];
+    final version = requested is String &&
+            _supportedProtocolVersions.contains(requested)
+        ? requested
+        : mcpProtocolVersion;
     return <String, Object?>{
-      'protocolVersion': requested is String && requested.isNotEmpty
-          ? requested
-          : mcpProtocolVersion,
+      'protocolVersion': version,
       'capabilities': <String, Object?>{
         'tools': <String, Object?>{},
         'resources': <String, Object?>{},
@@ -180,9 +229,7 @@ final class McpServer {
       throw StateError('Unknown resource: $uri');
     }
     final snapshot = await _currentSnapshot();
-    final text = snapshot == null
-        ? '{}'
-        : jsonEncode(snapshot.toJson());
+    final text = snapshot == null ? '{}' : jsonEncode(snapshot.toJson());
     return <String, Object?>{
       'contents': <Object?>[
         <String, Object?>{
@@ -214,10 +261,10 @@ final class McpServer {
       'name': 'find_nodes',
       'description':
           'Find UI nodes matching a query — handy on a large tree. Filter by '
-          'role (e.g. "button", "tableRow", "textField"), label substring, an '
-          'action the node supports, or focus/selection state. Returns each '
-          "match's id (use it with invoke_action), role, label, value, and "
-          'available actions.',
+          'role (e.g. "button", "tableRow", "textField"), a case-insensitive '
+          'substring of the label, an action the node supports, or '
+          'focus/selection state. Returns each match\'s id (use it with '
+          'invoke_action), role, label, value, and available actions.',
       'inputSchema': <String, Object?>{
         'type': 'object',
         'properties': <String, Object?>{
@@ -282,17 +329,19 @@ final class McpServer {
     <String, Object?>{
       'name': 'press_key',
       'description':
-          'Press a key. Use a named key (enter, tab, escape, backspace, '
-          'arrowUp, arrowDown, arrowLeft, arrowRight, home, end, pageUp, '
-          'pageDown, delete, f1–f12) or a single literal character. Optional '
-          "modifiers: ctrl, alt, shift. Prefer invoke_action when an "
-          'equivalent SemanticAction exists. Returns the UI after it settles.',
+          'Press a key. A named key (enter, tab, escape, backspace, arrowUp, '
+          'arrowDown, arrowLeft, arrowRight, home, end, pageUp, pageDown, '
+          'delete, f1–f12) drives navigation/activation. A literal character '
+          'with no modifiers is typed into the focused input (same as '
+          'type_text). Add modifiers (ctrl, alt, shift) to send a chord. Prefer '
+          'invoke_action when an equivalent SemanticAction exists. Returns the '
+          'UI after it settles.',
       'inputSchema': <String, Object?>{
         'type': 'object',
         'properties': <String, Object?>{
           'key': <String, Object?>{
             'type': 'string',
-            'description': 'A named key (e.g. "enter") or a single character.',
+            'description': 'A named key (e.g. "enter") or a literal character.',
           },
           'modifiers': <String, Object?>{
             'type': 'array',
@@ -338,34 +387,29 @@ final class McpServer {
       }
     } on _ToolFailure catch (failure) {
       return _toolError(failure.message);
+    } catch (error) {
+      // Any other failure (e.g. a transport error mid-action) is surfaced to
+      // the model as a tool error, never thrown back through the read loop.
+      return _toolError('Internal error handling $name: $error');
     }
   }
 
   Future<Map<String, Object?>> _toolGetUi() async {
     final snapshot = await _requireSnapshot();
-    return _toolJson(_describeTree(snapshot));
+    return _toolJson(snapshot.toJson());
   }
 
   Future<Map<String, Object?>> _toolFindNodes(Map<String, Object?> args) async {
     final snapshot = await _requireSnapshot();
-    final role = _optString(args['role']);
-    final label = _optString(args['label'])?.toLowerCase();
-    final action = _optString(args['action']);
-    final focused = args['focused'] is bool ? args['focused'] as bool : null;
-    final selected = args['selected'] is bool ? args['selected'] as bool : null;
-
-    final matches = <SemanticInspectionNode>[];
-    for (final node in snapshot.nodes) {
-      if (role != null && node.role != role) continue;
-      if (label != null &&
-          !(node.label ?? '').toLowerCase().contains(label)) {
-        continue;
-      }
-      if (action != null && !node.actions.contains(action)) continue;
-      if (focused != null && node.focused != focused) continue;
-      if (selected != null && node.selected != selected) continue;
-      matches.add(node);
-    }
+    final matches = snapshot
+        .where(
+          role: _optString(args['role']),
+          labelContains: _optString(args['label']),
+          action: _optString(args['action']),
+          focused: args['focused'] is bool ? args['focused'] as bool : null,
+          selected: args['selected'] is bool ? args['selected'] as bool : null,
+        )
+        .toList(growable: false);
 
     const cap = 50;
     final truncated = matches.length > cap;
@@ -397,14 +441,22 @@ final class McpServer {
       );
     }
     final snapshot = await _requireSnapshot();
-    final node = snapshot.nodeById(id);
-    if (node == null) {
+    final matches = snapshot.where(id: id).toList(growable: false);
+    if (matches.isEmpty) {
       throw _ToolFailure(
         'No node with id "$id" in the current UI. Call get_ui or find_nodes '
-        'for current ids (they are snapshot-local and change as the UI '
-        'rebuilds).',
+        'for current ids (auto-generated ids are snapshot-local and change as '
+        'the UI rebuilds).',
       );
     }
+    if (matches.length > 1) {
+      throw _ToolFailure(
+        'id "$id" is ambiguous — ${matches.length} nodes share it. Target a '
+        'node with an app-assigned stable Semantics(id:), or use find_nodes to '
+        'disambiguate by role/label.',
+      );
+    }
+    final node = matches.single;
     if (!node.actions.contains(actionName)) {
       throw _ToolFailure(
         'Node "$id" (${node.role}${node.label == null ? '' : ' "${node.label}"'}) '
@@ -416,10 +468,16 @@ final class McpServer {
     final before = bridge.revision;
     bridge.invokeAction(SemanticNodeId(id), action);
     final after = await bridge.settle(sinceRevision: before);
+    final changed = bridge.revision != before;
     return _toolJson(<String, Object?>{
       'invoked': <String, Object?>{'id': id, 'action': actionName},
-      'changed': after != null && bridge.revision != before,
-      'ui': after == null ? null : _describeTree(after),
+      'changed': changed,
+      if (!changed)
+        'note':
+            'No semantic change observed. If "$id" was an auto-generated id '
+            '(element-…) it is snapshot-local and may be stale — re-read get_ui '
+            'and retry.',
+      'ui': after?.toJson(),
     });
   }
 
@@ -428,13 +486,20 @@ final class McpServer {
     if (text == null) {
       throw const _ToolFailure('type_text requires "text".');
     }
+    if (text.isEmpty) {
+      return _toolJson(<String, Object?>{
+        'typed': '',
+        'changed': false,
+        'note': 'Empty text ignored.',
+      });
+    }
     final before = bridge.revision;
     bridge.typeText(text);
     final after = await bridge.settle(sinceRevision: before);
     return _toolJson(<String, Object?>{
       'typed': text,
-      'changed': after != null && bridge.revision != before,
-      'ui': after == null ? null : _describeTree(after),
+      'changed': bridge.revision != before,
+      'ui': after?.toJson(),
     });
   }
 
@@ -459,16 +524,18 @@ final class McpServer {
     }
 
     final keyCode = _keysByName[key];
-    final char = keyCode == null ? key : null;
-    if (keyCode == null && key.runes.length != 1) {
-      throw _ToolFailure(
-        'Unrecognized key "$key". Use a named key '
-        '(${_keysByName.keys.join(', ')}) or a single character.',
-      );
-    }
-
     final before = bridge.revision;
-    bridge.pressKey(keyCode: keyCode, char: char, modifiers: modifiers);
+    if (keyCode != null) {
+      bridge.pressKey(keyCode: keyCode, modifiers: modifiers);
+    } else if (modifiers.isNotEmpty) {
+      // A literal character held with modifiers — a chord (e.g. ctrl+a).
+      bridge.pressKey(char: key, modifiers: modifiers);
+    } else {
+      // A bare printable character: a plain KeyEvent(char:) does NOT insert
+      // text (only a TextInputEvent does), so type it — that's what "press the
+      // 'a' key" into a focused field means.
+      bridge.typeText(key);
+    }
     final after = await bridge.settle(sinceRevision: before);
     return _toolJson(<String, Object?>{
       'pressed': <String, Object?>{
@@ -476,23 +543,23 @@ final class McpServer {
         if (modifiers.isNotEmpty)
           'modifiers': <Object?>[for (final m in modifiers) m.name],
       },
-      'changed': after != null && bridge.revision != before,
-      'ui': after == null ? null : _describeTree(after),
+      'changed': bridge.revision != before,
+      'ui': after?.toJson(),
     });
   }
 
   // ---- snapshot helpers ----------------------------------------------------
 
   /// The latest snapshot, waiting briefly for the app's first frame if it
-  /// hasn't rendered yet.
+  /// hasn't rendered yet. Returns null if the app never rendered (the bridge's
+  /// first-frame watchdog fired) or the wait times out.
   Future<SemanticInspectionSnapshot?> _currentSnapshot() async {
     if (bridge.snapshot != null) return bridge.snapshot;
+    if (bridge.renderTimedOut) return null;
     try {
       await bridge.ready.timeout(const Duration(seconds: 5));
     } on TimeoutException {
       return null;
-    } on StateError {
-      return null; // app exited before rendering
     }
     return bridge.snapshot;
   }
@@ -500,29 +567,36 @@ final class McpServer {
   Future<SemanticInspectionSnapshot> _requireSnapshot() async {
     final snapshot = await _currentSnapshot();
     if (snapshot == null) {
-      throw const _ToolFailure(
-        'The app has not rendered a UI yet (no semantic frame received).',
+      throw _ToolFailure(
+        bridge.renderTimedOut
+            ? 'The app connected but never rendered a UI (no semantic frame '
+                  'within the first-frame timeout). Does it call runTui(...)?'
+            : 'The app has not rendered a UI yet (no semantic frame received).',
       );
     }
     return snapshot;
   }
 
-  /// A compact, agent-oriented view of the whole tree: the summary counts plus
-  /// the full nested node JSON (ids, roles, values, state, actions).
-  Map<String, Object?> _describeTree(SemanticInspectionSnapshot snapshot) {
-    return <String, Object?>{
-      'nodeCount': snapshot.nodeCount,
-      'focusedNodeId': snapshot.focusedNodeId,
-      'roleCounts': snapshot.roleCounts,
-      'root': snapshot.root.toJson(),
-    };
-  }
-
-  /// A node flattened for find_nodes results — its own fields, no children.
+  /// A node flattened for find_nodes results — its own fields, no children
+  /// (built directly, so a deep match doesn't serialize its whole subtree).
   Map<String, Object?> _flatNode(SemanticInspectionNode node) {
-    final json = Map<String, Object?>.of(node.toJson())..remove('children');
-    json['childCount'] = node.children.length;
-    return json;
+    return <String, Object?>{
+      'id': node.id,
+      'role': node.role,
+      if (node.label != null) 'label': node.label,
+      if (node.value != null) 'value': node.value,
+      if (node.hint != null) 'hint': node.hint,
+      'enabled': node.enabled,
+      if (node.focused) 'focused': true,
+      if (node.selected) 'selected': true,
+      if (node.checked != null) 'checked': node.checked,
+      if (node.expanded != null) 'expanded': node.expanded,
+      if (node.busy) 'busy': true,
+      if (node.validationError != null) 'validationError': node.validationError,
+      if (node.actions.isNotEmpty) 'actions': node.actions,
+      if (node.state.isNotEmpty) 'state': node.state,
+      'childCount': node.children.length,
+    };
   }
 
   // ---- JSON-RPC framing ----------------------------------------------------
@@ -556,8 +630,7 @@ final class McpServer {
     'isError': true,
   };
 
-  static String? _optString(Object? value) =>
-      value is String ? value : null;
+  static String? _optString(Object? value) => value is String ? value : null;
 }
 
 /// A recoverable tool-domain failure (bad args, missing node, …). Caught in

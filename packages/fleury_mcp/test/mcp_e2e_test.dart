@@ -4,19 +4,16 @@
 // These exercise the actual socket, the real app's semantics, and the real
 // SemanticAction dispatch closing back to a re-render.
 //
-// Tagged `integration` (per dart_test.yaml) since these spawn `dart run` and
-// take seconds: `dart test -x integration` excludes them, `-t integration`
-// runs only them. They run by default.
+// Tagged `integration` (per dart_test.yaml) since they spawn `dart run` and
+// take seconds: `dart test -x integration` excludes them. They run by default.
 @Tags(<String>['integration'])
 library;
 
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:fleury/src/foundation/geometry.dart';
-import 'package:fleury/src/mcp/app_bridge.dart';
-import 'package:fleury/src/mcp/mcp_server.dart';
-import 'package:fleury/src/semantics/semantics.dart';
+import 'package:fleury/fleury_core.dart';
+import 'package:fleury_mcp/fleury_mcp.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -145,10 +142,10 @@ Map<String, Object?> _toolJson(String line) {
 /// Resolves the counter fixture to an absolute path so `dart run` works
 /// regardless of the test runner's working directory.
 String _fixturePath() {
-  const rel = 'test/mcp/fixtures/counter_app.dart';
+  const rel = 'test/fixtures/counter_app.dart';
   final candidates = <String>[
     '${Directory.current.path}/$rel',
-    '${Directory.current.path}/packages/fleury/$rel',
+    '${Directory.current.path}/packages/fleury_mcp/$rel',
   ];
   for (final candidate in candidates) {
     final file = File(candidate);

@@ -1,8 +1,8 @@
 // Bridges a running Fleury app to an out-of-process agent.
 //
-// The MCP server is a *peer* on the same structured wire the browser serve
-// client speaks (`remote_protocol.dart`): it sends an INIT handshake, receives
-// the app's semantic snapshots (as SEMANTICS patch frames), and sends back
+// The MCP server is a *peer* on the same structured wire `fleury serve` speaks
+// (`package:fleury/src/remote/`): it sends an INIT handshake, receives the
+// app's semantic snapshots (as SEMANTICS patch frames), and sends back
 // SEMANTIC_ACTION / INPUT_EVENT frames to drive the UI. It ignores the visual
 // PLAN/IMAGE frames entirely — an agent reads meaning, not cells.
 //
@@ -16,16 +16,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import '../foundation/geometry.dart';
-import '../remote/remote_protocol.dart';
-import '../remote/remote_semantics.dart';
-import '../remote/remote_transport.dart';
-import '../remote/unix_socket_transport.dart';
-import '../rendering/text_sanitizer.dart';
-import '../semantics/inspection.dart';
-import '../semantics/semantics.dart';
-import '../terminal/capabilities.dart';
-import '../terminal/events.dart';
+import 'package:fleury/fleury_core.dart';
+// The remote-render wire has no public host-side library; consume it directly,
+// the same way fleury_web does. See analysis_options (implementation_imports).
+import 'package:fleury/src/remote/remote_protocol.dart';
+import 'package:fleury/src/remote/remote_semantics.dart';
+import 'package:fleury/src/remote/remote_transport.dart';
+import 'package:fleury/src/remote/unix_socket_transport.dart';
 
 /// A line sink for the app subprocess's own stdout/stderr. The MCP server's
 /// real stdout is reserved for JSON-RPC, so app logs must never land there.
@@ -40,12 +37,15 @@ final class FleuryAppBridge {
   FleuryAppBridge(
     this._transport, {
     CellSize viewport = const CellSize(80, 24),
+    Duration firstFrameTimeout = const Duration(seconds: 10),
     Future<void> Function()? onClose,
   }) : _viewport = viewport,
+       _firstFrameTimeout = firstFrameTimeout,
        _onClose = onClose;
 
   final RemoteFrameTransport _transport;
   final CellSize _viewport;
+  final Duration _firstFrameTimeout;
   final Future<void> Function()? _onClose;
 
   final SemanticsWireDecoder _decoder = SemanticsWireDecoder();
@@ -53,10 +53,18 @@ final class FleuryAppBridge {
   final Completer<void> _exited = Completer<void>();
 
   StreamSubscription<RemoteFrame>? _sub;
-  SemanticInspectionSnapshot? _snapshot;
+  Timer? _renderWatchdog;
+
+  // The latest decoded tree, plus a snapshot built lazily from it and cached
+  // until the next frame — so an app that animates at 60fps doesn't pay a full
+  // snapshot rebuild per frame when no agent is reading.
+  SemanticTree? _tree;
+  SemanticInspectionSnapshot? _cachedSnapshot;
+
   int _revision = 0;
   bool _started = false;
   bool _closed = false;
+  bool _renderTimedOut = false;
 
   // Replaced and completed on every semantics update so [settle] can await the
   // next one without polling.
@@ -67,7 +75,12 @@ final class FleuryAppBridge {
   CellSize get viewport => _viewport;
 
   /// The most recent semantic snapshot, or null before the first frame lands.
-  SemanticInspectionSnapshot? get snapshot => _snapshot;
+  /// Built lazily from the last frame and memoized until the next one.
+  SemanticInspectionSnapshot? get snapshot {
+    final tree = _tree;
+    if (tree == null) return null;
+    return _cachedSnapshot ??= tree.toInspectionSnapshot();
+  }
 
   /// Monotonic counter bumped on every semantics update. Capture it before an
   /// action, then [settle] past it to observe the result.
@@ -77,9 +90,15 @@ final class FleuryAppBridge {
   /// transport drops).
   bool get isRunning => !_exited.isCompleted;
 
-  /// Completes when the app reaches a settled initial state — either the first
-  /// semantic snapshot arrived, or the app exited before rendering one. Never
-  /// errors; check [snapshot] / [isRunning] after it resolves.
+  /// True once the app connected but did not render a first frame within
+  /// [firstFrameTimeout] (e.g. it never called runTui). Lets tools fail fast
+  /// with a clear message instead of each waiting out its own timeout.
+  bool get renderTimedOut => _renderTimedOut;
+
+  /// Completes when the app reaches a settled initial state — the first
+  /// semantic snapshot arrived, the app exited, or the first-frame watchdog
+  /// fired. Never errors; check [snapshot] / [isRunning] / [renderTimedOut]
+  /// after it resolves.
   Future<void> get ready => _firstSnapshot.future;
 
   /// Completes when the app disconnects.
@@ -95,7 +114,14 @@ final class FleuryAppBridge {
       onDone: _markExited,
       cancelOnError: false,
     );
-    _transport.send(
+    // Bound the "connected but never renders" case so the session can't wedge.
+    _renderWatchdog = Timer(_firstFrameTimeout, () {
+      if (_firstSnapshot.isCompleted) return;
+      _renderTimedOut = true;
+      _firstSnapshot.complete();
+      _signalTick();
+    });
+    _send(
       InitFrame(
         size: _viewport,
         colorMode: ColorMode.truecolor,
@@ -109,46 +135,52 @@ final class FleuryAppBridge {
 
   /// Invokes [action] on the live node [id]. The app dispatches it against its
   /// real element tree and re-renders; observe the result with [settle].
-  void invokeAction(SemanticNodeId id, SemanticAction action) {
-    if (!isRunning) return;
-    _transport.send(SemanticActionFrame(id, action));
-  }
+  void invokeAction(SemanticNodeId id, SemanticAction action) =>
+      _send(SemanticActionFrame(id, action));
 
   /// Types [text] into the focused widget (a structured text-input event, the
   /// same one a keypress would produce on the serve path).
   void typeText(String text) {
-    if (!isRunning || text.isEmpty) return;
-    _transport.send(InputEventFrame(TextInputEvent(text)));
+    if (text.isEmpty) return;
+    _send(InputEventFrame(TextInputEvent(text)));
   }
 
-  /// Presses a key — either a named [keyCode] (enter, tab, arrows…) or a
-  /// literal [char] — with optional [modifiers].
+  /// Presses a key — a named [keyCode] (enter, tab, arrows…) or a literal
+  /// [char] — with optional [modifiers].
   void pressKey({
     KeyCode? keyCode,
     String? char,
     Set<KeyModifier> modifiers = const <KeyModifier>{},
   }) {
-    if (!isRunning) return;
-    _transport.send(
+    _send(
       InputEventFrame(
         KeyEvent(keyCode: keyCode, char: char, modifiers: modifiers),
       ),
     );
   }
 
-  /// Resizes the app's viewport. Surfaces a resize event app-side, reflowing
-  /// the layout (and thus which rows of windowed widgets are in the tree).
-  void resize(CellSize size) {
+  /// Resizes the app's viewport, reflowing the layout (and thus which rows of
+  /// windowed widgets are in the tree).
+  void resize(CellSize size) => _send(ResizeFrame(size));
+
+  /// Sends a frame, treating a transport failure (the socket dropped between
+  /// our last `isRunning` check and now) as the app exiting — so callers get a
+  /// clean "app gone" path rather than an exception thrown back at them.
+  void _send(RemoteFrame frame) {
     if (!isRunning) return;
-    _transport.send(ResizeFrame(size));
+    try {
+      _transport.send(frame);
+    } catch (_) {
+      _markExited();
+    }
   }
 
   /// Waits for the semantics to react and then settle. Used after an action to
   /// observe what changed: it first waits (up to [timeout]) for a revision past
   /// [sinceRevision], then for a [quiet] window with no further updates, then
-  /// returns the latest snapshot. If nothing changes within [timeout] it
-  /// returns the current snapshot — an action that doesn't alter the accessible
-  /// tree simply produces no new frame.
+  /// returns the latest snapshot. The debounce is event-driven — it returns
+  /// ~[quiet] after the *last* frame, with no fixed minimum sleep — and returns
+  /// the current snapshot immediately if nothing changes within [timeout].
   Future<SemanticInspectionSnapshot?> settle({
     int? sinceRevision,
     Duration quiet = const Duration(milliseconds: 60),
@@ -169,13 +201,15 @@ final class FleuryAppBridge {
       }
     }
 
-    // Phase 2: let a burst of frames (e.g. a quick animation) settle.
+    // Phase 2: event-driven debounce. Wait `quiet` for the next frame; if none
+    // arrives in that window the burst has settled, so return — no fixed sleep.
     while (isRunning && stopwatch.elapsed < timeout) {
       final before = _revision;
-      await Future<void>.delayed(quiet);
+      final window = quiet < remaining() ? quiet : remaining();
+      await _nextTick(window);
       if (_revision == before) break;
     }
-    return _snapshot;
+    return snapshot;
   }
 
   /// Tears down the transport and (for a spawned app) the subprocess.
@@ -183,6 +217,7 @@ final class FleuryAppBridge {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    _renderWatchdog?.cancel();
     await _sub?.cancel();
     _sub = null;
     try {
@@ -200,8 +235,10 @@ final class FleuryAppBridge {
       case SemanticsFrame f:
         final tree = _decoder.apply(f.json);
         if (tree == null) return; // malformed/desync — keep the last good tree.
-        _snapshot = tree.toInspectionSnapshot();
+        _tree = tree;
+        _cachedSnapshot = null; // rebuilt lazily on the next read.
         _revision++;
+        _renderWatchdog?.cancel();
         if (!_firstSnapshot.isCompleted) _firstSnapshot.complete();
         _signalTick();
       case ByeFrame():
@@ -232,10 +269,11 @@ final class FleuryAppBridge {
   }
 
   void _markExited() {
+    _renderWatchdog?.cancel();
     if (!_exited.isCompleted) _exited.complete();
     // Unblock `ready` rather than erroring it — an app that exits before its
     // first frame is a settled (empty) state, not an exception for every
-    // awaiter to handle. Callers check `snapshot`/`isRunning`.
+    // awaiter to handle. Callers check `snapshot`/`isRunning`/`renderTimedOut`.
     if (!_firstSnapshot.isCompleted) _firstSnapshot.complete();
     _signalTick();
   }
@@ -248,6 +286,7 @@ final class FleuryAppBridge {
     required List<String> command,
     CellSize viewport = const CellSize(80, 24),
     Duration connectTimeout = const Duration(seconds: 20),
+    Duration firstFrameTimeout = const Duration(seconds: 10),
     BridgeLog? log,
   }) async {
     if (command.isEmpty) {
@@ -292,19 +331,20 @@ final class FleuryAppBridge {
       await cleanupSocket();
       rethrow;
     }
-    logLine('[fleury mcp] spawned ${command.join(' ')} (pid ${process.pid})');
+    logLine('[fleury_mcp] spawned ${command.join(' ')} (pid ${process.pid})');
 
     // The app renders to the socket; anything on its stdout/stderr is its own
-    // print()/log output. Forward it to our stderr, line by line.
-    void forward(String tag, Stream<List<int>> source) {
-      source
+    // print()/log output. Forward it to our log sink, line by line, and keep
+    // the subscriptions so they can be cancelled on teardown.
+    StreamSubscription<String> forward(String tag, Stream<List<int>> source) {
+      return source
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .listen((line) => logLine('[app $tag] ${sanitizeForDisplay(line)}'));
     }
 
-    forward('out', process.stdout);
-    forward('err', process.stderr);
+    final outSub = forward('out', process.stdout);
+    final errSub = forward('err', process.stderr);
 
     final connection = await Future.any<Object>([
       server.first,
@@ -313,6 +353,8 @@ final class FleuryAppBridge {
     ]);
 
     if (connection is! Socket) {
+      await outSub.cancel();
+      await errSub.cancel();
       process.kill(ProcessSignal.sigkill);
       await cleanupSocket();
       final reason = connection is _AppExited
@@ -328,7 +370,10 @@ final class FleuryAppBridge {
     final bridge = FleuryAppBridge(
       transport,
       viewport: viewport,
+      firstFrameTimeout: firstFrameTimeout,
       onClose: () async {
+        await outSub.cancel();
+        await errSub.cancel();
         process.kill(ProcessSignal.sigterm);
         await process.exitCode
             .timeout(

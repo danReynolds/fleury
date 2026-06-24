@@ -1,0 +1,16 @@
+include: package:lints/recommended.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+
+linter:
+  rules:
+    # fleury_mcp is a peer on Fleury's internal remote-render wire (frames,
+    # transport, the semantics decoder). That protocol has no public host-side
+    # library, so — exactly as fleury_web does — we import it from
+    # `package:fleury/src/remote/...`. Disable the cross-package
+    # implementation-import lint for that deliberate, documented coupling.
+    implementation_imports: false

@@ -1,0 +1,20 @@
+name: fleury_mcp
+description: >-
+  A Model Context Protocol server that drives a Fleury terminal-UI app through
+  its semantic tree, so any MCP host can read and operate it.
+version: 0.0.0
+publish_to: none
+
+executables:
+  fleury_mcp: fleury_mcp
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  fleury:
+    path: ../fleury
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.26.3
