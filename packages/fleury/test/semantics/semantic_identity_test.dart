@@ -163,6 +163,46 @@ void main() {
           reason: 'positional ids carry the ~ fragility marker');
     });
 
+    testWidgets('a positional id is recomputed, not stale-memoized, when a '
+        'sibling insert shifts it', (tester) {
+      Widget build({required bool withLeader}) => Semantics(
+        key: const ValueKey('scope'),
+        role: SemanticRole.list,
+        child: Column(
+          children: <Widget>[
+            if (withLeader)
+              const Semantics(
+                role: SemanticRole.text,
+                label: 'lead',
+                child: Text('lead'),
+              ),
+            // const ⇒ its element is reused without update() across the insert,
+            // so only the structure-generation bump can drop its id memo. This
+            // pins that mechanism (not update()-invalidation) as the guard.
+            const Semantics(
+              role: SemanticRole.button,
+              label: 'x',
+              child: Text('x'),
+            ),
+          ],
+        ),
+      );
+
+      tester.pumpWidget(build(withLeader: false));
+      final before =
+          tester.semantics().where(role: SemanticRole.button).single.id.value;
+
+      tester.pumpWidget(build(withLeader: true));
+      final after =
+          tester.semantics().where(role: SemanticRole.button).single.id.value;
+
+      expect(
+        after,
+        isNot(before),
+        reason: 'the ~positional segment shifted; a stale memo would not change',
+      );
+    });
+
     testWidgets('a positional id survives a from-scratch rebuild at the same '
         'position', (tester) {
       tester.pumpWidget(build(<String>['a']));

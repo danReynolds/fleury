@@ -363,25 +363,38 @@ first-principles corrections implementation forced on the RFC's own assumptions:
   fingerprint gated on positional ids catches the silent mis-target now, with no
   core protocol change. It now also covers the new `auto:…~…` positional ids.
 
+**A1/A2 polish — resolved (2026-06-24 polish pass):**
+
+- **Id memoization — done.** `_nodeId` is memoized per a monotonic
+  `SemanticDirtyTracker.structureGeneration` (bumped on every structural change,
+  untouched by leaf updates). The ancestor walk now runs once per generation;
+  the steady-state leaf-flush and dispatch paths reuse the cached id. A
+  `const`-sibling-insert test pins that the generation bump — not
+  `update()`-invalidation — is what drops a shifted node's stale memo. (This is
+  an *internal* counter, not the A3 wire handle below.)
+- **Privacy — no data-exposure regression; contract documented.** A folded key
+  value is the same identifier the app already uses for reconciliation, and a
+  keyed ancestor already exposes it as *its own* node id — so folding it into
+  descendant ids reveals no value the snapshot didn't already carry. Ids are
+  display-sanitized at the inspection boundary (`sanitizeForDisplay`). The
+  contract — `Key`s are structural identifiers, not a place for secrets — is the
+  same one the own-`key:` form always implied, now stated in `semanticAnchorOf`.
+- **Overlay-prefix trim — deliberately NOT done.** Folding the full keyed chain
+  (incl. the runtime/overlay root key) is load-bearing: it keeps ids globally
+  unique and gives unkeyed nodes a session-stable anchor. Trimming the constant
+  prefix would trade that for cosmetics on an opaque handle — a net negative.
+- **`GlobalKey` anchoring — non-issue.** Transparent handling is correct:
+  anchoring falls through to the nearest value key (stable under reparenting) or
+  the keyed root, so no node is left worse off. A stable-token `GlobalKey` anchor
+  would only shorten some ids — cosmetic, deferred.
+
 **Deferred (clearly scoped follow-ons):**
 
-- **A3 structure-generation handle.** The principled version of the safety net: a
-  `structureGeneration` bumped only on shape change (the dirty-tracker's
-  structure-vs-leaf split is the exact signal), carried on the snapshot and
-  checked on dispatch — superseding the server-side fingerprint and extending the
-  guard to *core* dispatch (tests/a11y), not just MCP. The fingerprint net holds
-  the line meanwhile.
-- **A1/A2 v2 refinements (the new id scheme is stable-within-session, not yet
-  polished):** key-value **redaction** for folded ancestor keys (a sensitive
-  `ValueKey` currently leaks into descendants' ids the same way an own `key:` id
-  always has — but now more broadly; route through the snapshot's redaction
-  policy before the format is declared stable); **id memoization** on the element
-  (the ancestor walk is O(depth·siblings) per node on full rebuilds — gates pass
-  today, but memoize before it matters); **trim the constant framework-key
-  prefix** (the overlay entry's `ValueKey<OverlayEntry>` folds into every id as
-  noise); **`GlobalKey` anchoring** (treated as transparent today — fine because
-  anchoring lands on the nearest value key — but a stable `GlobalKey` token would
-  let it anchor directly).
+- **A3 structure-generation handle.** The principled version of the safety net:
+  thread the `structureGeneration` (already built for the memo above) onto the
+  snapshot/wire and check it on dispatch — superseding the server-side
+  fingerprint and extending the guard to *core* dispatch (tests/a11y), not just
+  MCP. The fingerprint net holds the line meanwhile.
 - **B4 central typed coercion.** Only `TextInput`'s string coercion shipped;
   `Slider`/`Select`/`DatePicker` adoption and the central typed-per-role coercion +
   typed-failure statuses wait until those widgets adopt `setValue`.

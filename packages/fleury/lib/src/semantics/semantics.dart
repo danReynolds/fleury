@@ -937,10 +937,19 @@ List<Element> _elementChildren(Element element) {
 /// own), so anchoring lands on the nearest value key, which is what stays put
 /// under a `GlobalKey` move.
 ///
-/// Positional `~` segments are version-fragile — a sibling insert/remove shifts
-/// them — and the `~` marks the whole id as such, so a consumer (the MCP stale
-/// guard, a future structure-generation check) can require a freshness check on
-/// exactly those ids and exempt the fully-keyed ones.
+/// The *full* keyed chain is folded (not just the nearest key) deliberately: it
+/// keeps ids globally unique — no false "ambiguous" rejections — and gives even
+/// unkeyed nodes a session-stable anchor (the runtime/overlay root is keyed), at
+/// the cost of a constant, opaque framework-key prefix on every id. Ids are
+/// opaque handles, so that prefix is harmless; trimming it would trade that
+/// uniqueness and stability for cosmetics.
+///
+/// Privacy: a folded key value is the same identifier the app already chose for
+/// reconciliation, and a keyed ancestor already exposes it as *its own* node id,
+/// so folding it into descendant ids reveals no value the snapshot didn't
+/// already carry. Ids are display-sanitized at the inspection boundary; like the
+/// own-`key:` form, this scheme treats `Key`s as structural identifiers, not a
+/// place to encode secrets.
 String? semanticAnchorOf(Element element) {
   final scope = <String>[]; // keyed segments, leaf→root
   final tail = <String>[]; // positional segments below the nearest key, leaf→root
@@ -1017,6 +1026,7 @@ abstract interface class SemanticValueContributor {
 /// hosts back to [SemanticTree.fromElement].
 final class SemanticDirtyTracker {
   bool _requiresFullRebuild = false;
+  int _structureGeneration = 0;
   final Map<SemanticNodeId, SemanticsElement> _dirtyLeafElements =
       <SemanticNodeId, SemanticsElement>{};
 
@@ -1026,8 +1036,18 @@ final class SemanticDirtyTracker {
   /// flush; it does not validate or consume the accumulated state.
   bool get hasDirt => _requiresFullRebuild || _dirtyLeafElements.isNotEmpty;
 
+  /// A monotonic counter bumped on every structural change. Element id
+  /// derivation ([SemanticsElement._nodeId]) is position-dependent, so its memo
+  /// is valid only within a generation: any mount/unmount/move bumps this and
+  /// invalidates cached ids, while a leaf-only update leaves it untouched — so
+  /// the steady-state leaf-flush and action-dispatch paths reuse the cached id
+  /// instead of re-walking ancestors. Monotonic by design (never reset), so a
+  /// stale memo can never collide with a future generation.
+  int get structureGeneration => _structureGeneration;
+
   void recordStructureDirty() {
     _requiresFullRebuild = true;
+    _structureGeneration++;
     _dirtyLeafElements.clear();
   }
 
@@ -1203,6 +1223,9 @@ final class SemanticsElement extends ComponentElement
     final oldId = _nodeId;
     final oldIncludeChildren = widget.includeChildren;
     super.update(newWidget);
+    // The own widget (hence its key) just changed; a leaf update does not bump
+    // the structure generation, so drop the memo to recompute against newWidget.
+    _cachedNodeId = null;
     if (oldId != _nodeId || oldIncludeChildren || newWidget.includeChildren) {
       owner.semanticDirtyTracker.recordStructureDirty();
     } else {
@@ -1234,6 +1257,9 @@ final class SemanticsElement extends ComponentElement
     return _SemanticBounds(onPaintBounds: _updateBounds, child: widget.child);
   }
 
+  SemanticNodeId? _cachedNodeId;
+  int _cachedNodeIdGeneration = -1;
+
   /// The node's identity. An explicit [Semantics.id] wins; otherwise a [Key] on
   /// the widget yields a stable, deterministic id (`key:<key>`) that survives
   /// rebuilds — the identity a future incremental/observable backend, a remote
@@ -1245,7 +1271,24 @@ final class SemanticsElement extends ComponentElement
   /// Only when nothing above the node is keyed does it fall back to the
   /// snapshot-local `element-<hash>` form (still NOT stable across rebuilds;
   /// see [SemanticNodeId]).
+  ///
+  /// Memoized per [SemanticDirtyTracker.structureGeneration]: the derivation
+  /// walks ancestors (O(depth)), so the leaf-flush and dispatch paths — which
+  /// read it repeatedly within one generation — reuse the cached value. The
+  /// memo is dropped whenever the structure generation advances (any move that
+  /// could shift a positional segment) and in [update] (the node's own key may
+  /// have changed).
   SemanticNodeId get _nodeId {
+    final generation = owner.semanticDirtyTracker.structureGeneration;
+    final cached = _cachedNodeId;
+    if (cached != null && _cachedNodeIdGeneration == generation) return cached;
+    final id = _computeNodeId();
+    _cachedNodeId = id;
+    _cachedNodeIdGeneration = generation;
+    return id;
+  }
+
+  SemanticNodeId _computeNodeId() {
     final explicitId = widget.id;
     if (explicitId != null) return explicitId;
     final key = widget.key;
