@@ -136,6 +136,7 @@ final class SemanticInspectionSnapshot {
     String? id,
     String? role,
     String? label,
+    String? labelContains,
     Object? value,
     String? action,
     bool? focused,
@@ -148,6 +149,7 @@ final class SemanticInspectionSnapshot {
         id: id,
         role: role,
         label: label,
+        labelContains: labelContains,
         value: value,
         action: action,
         focused: focused,
@@ -162,6 +164,7 @@ final class SemanticInspectionSnapshot {
     String? id,
     String? role,
     String? label,
+    String? labelContains,
     Object? value,
     String? action,
     bool? focused,
@@ -173,6 +176,7 @@ final class SemanticInspectionSnapshot {
       id: id,
       role: role,
       label: label,
+      labelContains: labelContains,
       value: value,
       action: action,
       focused: focused,
@@ -185,6 +189,7 @@ final class SemanticInspectionSnapshot {
       id: id,
       role: role,
       label: label,
+      labelContains: labelContains,
       value: value,
       action: action,
       focused: focused,
@@ -485,6 +490,7 @@ final class SemanticInspectionNode {
     String? id,
     String? role,
     String? label,
+    String? labelContains,
     Object? value,
     String? action,
     bool? focused,
@@ -495,6 +501,12 @@ final class SemanticInspectionNode {
     if (id != null && this.id != id) return false;
     if (role != null && this.role != role) return false;
     if (label != null && this.label != label) return false;
+    if (labelContains != null &&
+        !(this.label ?? '').toLowerCase().contains(
+          labelContains.toLowerCase(),
+        )) {
+      return false;
+    }
     if (value != null && this.value != value) return false;
     if (action != null && !actions.contains(action)) return false;
     if (focused != null && this.focused != focused) return false;
@@ -538,6 +550,7 @@ String _queryDescription({
   required String? id,
   required String? role,
   required String? label,
+  required String? labelContains,
   required Object? value,
   required String? action,
   required bool? focused,
@@ -549,6 +562,7 @@ String _queryDescription({
     if (id != null) 'id:${_debugValue(id)}',
     if (role != null) 'role:${_debugValue(role)}',
     if (label != null) 'label:${_debugValue(label)}',
+    if (labelContains != null) 'labelContains:${_debugValue(labelContains)}',
     if (value != null) 'value:${_debugValue(value)}',
     if (action != null) 'action:${_debugValue(action)}',
     if (focused != null) 'focused:$focused',
