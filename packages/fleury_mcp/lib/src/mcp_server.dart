@@ -354,6 +354,48 @@ final class McpServer {
         'required': <Object?>['key'],
       },
     },
+    <String, Object?>{
+      'name': 'resize',
+      'description':
+          "Resize the app's viewport (the terminal grid it lays out against). "
+          'The semantic tree only contains what is currently laid out, so grow '
+          'the grid to surface more rows of a windowed widget — a long table or '
+          'log — that the default 80×24 clips. Returns the UI after it reflows.',
+      'inputSchema': <String, Object?>{
+        'type': 'object',
+        'properties': <String, Object?>{
+          'cols': <String, Object?>{
+            'type': 'integer',
+            'description': 'Columns (width), at least 1.',
+          },
+          'rows': <String, Object?>{
+            'type': 'integer',
+            'description': 'Rows (height), at least 1.',
+          },
+        },
+        'required': <Object?>['cols', 'rows'],
+      },
+    },
+    <String, Object?>{
+      'name': 'wait_for_change',
+      'description':
+          'Block until the UI changes on its own — a ticking dashboard, a '
+          'streaming response, a background task finishing — then return the '
+          'new tree. Use this to observe asynchronous updates instead of '
+          'polling get_ui. Returns as soon as the semantics change, or after '
+          'timeout_ms with changed:false if nothing happened.',
+      'inputSchema': <String, Object?>{
+        'type': 'object',
+        'properties': <String, Object?>{
+          'timeout_ms': <String, Object?>{
+            'type': 'integer',
+            'description':
+                'Maximum wait in milliseconds (default 15000, clamped to '
+                '100–60000).',
+          },
+        },
+      },
+    },
   ];
 
   static String get _actionNames =>
@@ -382,6 +424,10 @@ final class McpServer {
           return await _toolTypeText(args);
         case 'press_key':
           return await _toolPressKey(args);
+        case 'resize':
+          return await _toolResize(args);
+        case 'wait_for_change':
+          return await _toolWaitForChange(args);
         default:
           return _toolError('Unknown tool: $name');
       }
@@ -548,6 +594,42 @@ final class McpServer {
     });
   }
 
+  Future<Map<String, Object?>> _toolResize(Map<String, Object?> args) async {
+    final cols = _optInt(args['cols']);
+    final rows = _optInt(args['rows']);
+    if (cols == null || cols < 1 || rows == null || rows < 1) {
+      throw const _ToolFailure(
+        'resize requires positive integer "cols" and "rows".',
+      );
+    }
+    final before = bridge.revision;
+    bridge.resize(CellSize(cols, rows));
+    final after = await bridge.settle(sinceRevision: before);
+    return _toolJson(<String, Object?>{
+      'resized': <String, Object?>{'cols': cols, 'rows': rows},
+      'changed': bridge.revision != before,
+      'ui': after?.toJson(),
+    });
+  }
+
+  Future<Map<String, Object?>> _toolWaitForChange(
+    Map<String, Object?> args,
+  ) async {
+    final timeoutMs = (_optInt(args['timeout_ms']) ?? 15000).clamp(100, 60000);
+    await _requireSnapshot(); // ensure the app has rendered at least once.
+    final before = bridge.revision;
+    final after = await bridge.settle(
+      sinceRevision: before,
+      timeout: Duration(milliseconds: timeoutMs),
+    );
+    final changed = bridge.revision != before;
+    return _toolJson(<String, Object?>{
+      'changed': changed,
+      if (!changed) 'note': 'No change within ${timeoutMs}ms.',
+      'ui': after?.toJson(),
+    });
+  }
+
   // ---- snapshot helpers ----------------------------------------------------
 
   /// The latest snapshot, waiting briefly for the app's first frame if it
@@ -631,6 +713,8 @@ final class McpServer {
   };
 
   static String? _optString(Object? value) => value is String ? value : null;
+
+  static int? _optInt(Object? value) => value is int ? value : null;
 }
 
 /// A recoverable tool-domain failure (bad args, missing node, …). Caught in

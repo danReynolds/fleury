@@ -112,7 +112,7 @@ void main() {
     expect((err['error'] as Map<String, Object?>)['code'], -32600);
   });
 
-  test('tools/list exposes the five driving tools with schemas', () async {
+  test('tools/list exposes the driving tools with schemas', () async {
     await server.handleLine(_rpc(3, 'tools/list'));
     final tools = (lastResult()['tools'] as List).cast<Map<String, Object?>>();
     expect(
@@ -123,6 +123,8 @@ void main() {
         'invoke_action',
         'type_text',
         'press_key',
+        'resize',
+        'wait_for_change',
       ]),
     );
     for (final tool in tools) {
@@ -340,6 +342,71 @@ void main() {
     expect(event.keyCode, isNull);
     expect(event.char, 'a');
     expect(event.modifiers, contains(KeyModifier.ctrl));
+  });
+
+  test('resize sends a RESIZE frame and reports the new viewport', () async {
+    pushCount(0);
+    await bridge.ready;
+    final pending = server.handleLine(
+      _rpc(40, 'tools/call', <String, Object?>{
+        'name': 'resize',
+        'arguments': <String, Object?>{'cols': 120, 'rows': 40},
+      }),
+    );
+    pushCount(1); // app reflows
+    await pending;
+
+    final resize = transport.sent.whereType<ResizeFrame>().single;
+    expect(resize.size.cols, 120);
+    expect(resize.size.rows, 40);
+    expect(toolJson(lastResult())['resized'], <String, Object?>{
+      'cols': 120,
+      'rows': 40,
+    });
+  });
+
+  test('resize rejects a non-positive size', () async {
+    pushCount(0);
+    await bridge.ready;
+    await server.handleLine(
+      _rpc(41, 'tools/call', <String, Object?>{
+        'name': 'resize',
+        'arguments': <String, Object?>{'cols': 0, 'rows': 40},
+      }),
+    );
+    expect(lastResult()['isError'], isTrue);
+    expect(transport.sent.whereType<ResizeFrame>(), isEmpty);
+  });
+
+  test('wait_for_change returns when the UI updates on its own', () async {
+    pushCount(0);
+    await bridge.ready;
+    final pending = server.handleLine(
+      _rpc(42, 'tools/call', <String, Object?>{
+        'name': 'wait_for_change',
+        'arguments': <String, Object?>{'timeout_ms': 2000},
+      }),
+    );
+    pushCount(7); // an async update arrives
+    await pending;
+
+    final result = toolJson(lastResult());
+    expect(result['changed'], isTrue);
+    expect(jsonEncode(result['ui']), contains('"value":7'));
+  });
+
+  test('wait_for_change reports no change on timeout', () async {
+    pushCount(0);
+    await bridge.ready;
+    await server.handleLine(
+      _rpc(43, 'tools/call', <String, Object?>{
+        'name': 'wait_for_change',
+        'arguments': <String, Object?>{'timeout_ms': 150},
+      }),
+    );
+    final result = toolJson(lastResult());
+    expect(result['changed'], isFalse);
+    expect(result['note'], contains('No change'));
   });
 
   test('unknown method returns a JSON-RPC method-not-found error', () async {
