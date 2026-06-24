@@ -126,15 +126,15 @@ exposes the same loop over a socket: the tree ships out as JSON
 outbound half — projecting a live accessibility tree straight from the wire — so
 an agent is just the same kind of consumer with a different goal.
 
-## Drive it with an agent — `fleury mcp`
+## Drive it with an agent — `fleury_mcp`
 
-That front door is built. `fleury mcp` runs a [Model Context
+That front door is built. The `fleury_mcp` package runs a [Model Context
 Protocol](https://modelcontextprotocol.io) server — the open standard any
 MCP-capable agent (Claude included) already knows how to connect to — over the
 same wire:
 
 ```sh
-fleury mcp -- dart run my_app.dart
+fleury_mcp -- dart run my_app.dart
 ```
 
 It spawns your app, tracks its live semantic tree, and exposes it as MCP:
@@ -148,14 +148,16 @@ Point an MCP host at it and the agent reads roles, labels, values, and the
 actions each node supports, then drives the UI through them — no ANSI scraping,
 no guessed keystrokes. The Dart side is a thin shim precisely because the app
 already emits MCP's shapes: the graph *is* the resource, the `SemanticAction`s
-*are* the tools. A host configures it like any other MCP server:
+*are* the tools. A host configures it like any other MCP server (the executable
+comes from the `fleury_mcp` package — `dart pub global activate fleury_mcp`, or
+invoke it as `dart run fleury_mcp:fleury_mcp`):
 
 ```json
 {
   "mcpServers": {
     "my-app": {
-      "command": "fleury",
-      "args": ["mcp", "--", "dart", "run", "my_app.dart"]
+      "command": "fleury_mcp",
+      "args": ["--", "dart", "run", "my_app.dart"]
     }
   }
 }
