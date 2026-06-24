@@ -208,7 +208,7 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
         // The peer activated a node in its accessible DOM; invoke it on the
         // live tree (only on the structured path, like the other v2 input).
         if (_active && wantsPresentationPlans) {
-          _onSemanticAction?.call(f.id, f.action);
+          _onSemanticAction?.call(f.id, f.action, f.value);
         }
       case InputEventFrame f:
         // Structured input from a v2 peer: surface the event directly

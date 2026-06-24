@@ -317,6 +317,28 @@ final class McpServer {
       },
     },
     <String, Object?>{
+      'name': 'set_value',
+      'description':
+          "Set an input's value in one call — text into a field, a slider "
+          'position, a select option — instead of focus-then-keystrokes. The '
+          'node must advertise the `setValue` action (a textField does). The '
+          'value is a JSON scalar (string, number, or boolean), coerced for the '
+          'widget. Returns the UI after it settles.',
+      'inputSchema': <String, Object?>{
+        'type': 'object',
+        'properties': <String, Object?>{
+          'id': <String, Object?>{
+            'type': 'string',
+            'description': 'Node id from get_ui / find_nodes.',
+          },
+          'value': <String, Object?>{
+            'description': 'The value to set (string, number, or boolean).',
+          },
+        },
+        'required': <Object?>['id', 'value'],
+      },
+    },
+    <String, Object?>{
       'name': 'type_text',
       'description':
           'Type text into the currently focused input. Focus an input first — '
@@ -427,6 +449,8 @@ final class McpServer {
           return await _toolFindNodes(args);
         case 'invoke_action':
           return await _toolInvokeAction(args);
+        case 'set_value':
+          return await _toolSetValue(args);
         case 'type_text':
           return await _toolTypeText(args);
         case 'press_key':
@@ -495,27 +519,53 @@ final class McpServer {
         'Unknown action "$actionName". Valid actions: $_actionNames.',
       );
     }
+    await _resolveActionableNode(id, actionName);
+
+    final before = bridge.revision;
+    bridge.invokeAction(SemanticNodeId(id), action);
+    final after = await bridge.settle(sinceRevision: before);
+    final changed = bridge.revision != before;
+    return _toolJson(<String, Object?>{
+      'invoked': <String, Object?>{'id': id, 'action': actionName},
+      'changed': changed,
+      if (!changed)
+        'note':
+            'No semantic change observed. If "$id" was an auto-generated id '
+            '(element-…) it is snapshot-local and may be stale — re-read get_ui '
+            'and retry.',
+      'ui': after?.toJson(),
+    });
+  }
+
+  /// Resolves [id] to the single live node that advertises [requiredAction],
+  /// running the checks invoke_action and set_value share: not-found, ambiguity,
+  /// advertise, and the positional stale-reference guard. Throws [_ToolFailure]
+  /// on any of them.
+  Future<SemanticInspectionNode> _resolveActionableNode(
+    String id,
+    String requiredAction,
+  ) async {
     final snapshot = await _requireSnapshot();
     final matches = snapshot.where(id: id).toList(growable: false);
     if (matches.isEmpty) {
       throw _ToolFailure(
-        'No node with id "$id" in the current UI. Call get_ui or find_nodes '
-        'for current ids (auto-generated ids are snapshot-local and change as '
-        'the UI rebuilds).',
+        'No node with id "$id" in the current UI. Call get_ui or find_nodes for '
+        'current ids (auto-generated ids are snapshot-local and change as the UI '
+        'rebuilds).',
       );
     }
     if (matches.length > 1) {
       throw _ToolFailure(
-        'id "$id" is ambiguous — ${matches.length} nodes share it. Target a '
-        'node with an app-assigned stable Semantics(id:), or use find_nodes to '
+        'id "$id" is ambiguous — ${matches.length} nodes share it. Target a node '
+        'with an app-assigned stable Semantics(id:), or use find_nodes to '
         'disambiguate by role/label.',
       );
     }
     final node = matches.single;
-    if (!node.actions.contains(actionName)) {
+    if (!node.actions.contains(requiredAction)) {
       throw _ToolFailure(
-        'Node "$id" (${node.role}${node.label == null ? '' : ' "${node.label}"'}) '
-        'does not advertise "$actionName". It supports: '
+        'Node "$id" (${_describeNode(node)}) does not advertise '
+        '"$requiredAction". It supports: '
         '${node.actions.isEmpty ? '(none)' : node.actions.join(', ')}.',
       );
     }
@@ -532,25 +582,34 @@ final class McpServer {
       if (observed != null && _fingerprint(observed) != _fingerprint(node)) {
         throw _ToolFailure(
           'Stale reference: id "$id" now denotes a different node '
-          '(${_describeNode(observed)} → ${_describeNode(node)}). The UI '
-          'changed since you read it — re-read get_ui and retry. (Auto-generated '
-          'ids are positional; prefer an app-assigned Semantics(id:).)',
+          '(${_describeNode(observed)} → ${_describeNode(node)}). The UI changed '
+          'since you read it — re-read get_ui and retry. (Auto-generated ids are '
+          'positional; prefer an app-assigned Semantics(id:).)',
         );
       }
     }
+    return node;
+  }
+
+  Future<Map<String, Object?>> _toolSetValue(Map<String, Object?> args) async {
+    final id = _optString(args['id']);
+    if (id == null || id.isEmpty) {
+      throw const _ToolFailure('set_value requires a node "id".');
+    }
+    if (!args.containsKey('value')) {
+      throw const _ToolFailure(
+        'set_value requires a "value" (string, number, or boolean).',
+      );
+    }
+    final value = args['value'];
+    await _resolveActionableNode(id, SemanticAction.setValue.name);
 
     final before = bridge.revision;
-    bridge.invokeAction(SemanticNodeId(id), action);
+    bridge.setValue(SemanticNodeId(id), value);
     final after = await bridge.settle(sinceRevision: before);
-    final changed = bridge.revision != before;
     return _toolJson(<String, Object?>{
-      'invoked': <String, Object?>{'id': id, 'action': actionName},
-      'changed': changed,
-      if (!changed)
-        'note':
-            'No semantic change observed. If "$id" was an auto-generated id '
-            '(element-…) it is snapshot-local and may be stale — re-read get_ui '
-            'and retry.',
+      'set': <String, Object?>{'id': id, 'value': value},
+      'changed': bridge.revision != before,
       'ui': after?.toJson(),
     });
   }

@@ -400,6 +400,73 @@ void main() {
     );
   });
 
+  test('set_value sends a setValue frame whose payload round-trips the wire', () async {
+    Map<String, Object?> field(Object? value) => <String, Object?>{
+      'id': 'root',
+      'role': 'app',
+      'children': <Object?>[
+        <String, Object?>{
+          'id': 'name',
+          'role': 'textField',
+          'label': 'Name',
+          if (value != null) 'value': value,
+          'actions': <String>['setValue'],
+        },
+      ],
+    };
+
+    pushRoot(field(null));
+    await bridge.ready;
+
+    final pending = server.handleLine(
+      _rpc(36, 'tools/call', <String, Object?>{
+        'name': 'set_value',
+        'arguments': <String, Object?>{'id': 'name', 'value': 'Ada'},
+      }),
+    );
+    pushRoot(field('Ada')); // settle reaction
+    await pending;
+
+    final frame = transport.sent.whereType<SemanticActionFrame>().single;
+    expect(frame.id.value, 'name');
+    expect(frame.action, SemanticAction.setValue);
+    expect(frame.value, 'Ada');
+
+    // The payload survives a full encode → decode over the wire.
+    final decoder = FrameDecoder()..feed(encodeFrame(frame));
+    final decoded = decoder.drain().single as SemanticActionFrame;
+    expect(decoded.action, SemanticAction.setValue);
+    expect(decoded.value, 'Ada');
+
+    final result = toolJson(lastResult());
+    expect(result['set'], isNotNull);
+    expect(result['changed'], isTrue);
+  });
+
+  test('set_value rejects a node that does not advertise setValue', () async {
+    pushRoot(<String, Object?>{
+      'id': 'root',
+      'role': 'app',
+      'children': <Object?>[
+        <String, Object?>{
+          'id': 'btn',
+          'role': 'button',
+          'label': 'Go',
+          'actions': <String>['activate'],
+        },
+      ],
+    });
+    await bridge.ready;
+    await server.handleLine(
+      _rpc(37, 'tools/call', <String, Object?>{
+        'name': 'set_value',
+        'arguments': <String, Object?>{'id': 'btn', 'value': 'x'},
+      }),
+    );
+    expect(toolError(lastResult()), contains('does not advertise'));
+    expect(transport.sent.whereType<SemanticActionFrame>(), isEmpty);
+  });
+
   test('type_text emits a TextInputEvent frame', () async {
     pushCount(0);
     await bridge.ready;

@@ -138,6 +138,12 @@ final class FleuryAppBridge {
   void invokeAction(SemanticNodeId id, SemanticAction action) =>
       _send(SemanticActionFrame(id, action));
 
+  /// Sets node [id]'s value to [value] — the payload for a `setValue` action
+  /// (text into a field, a slider position…). The node must advertise
+  /// `setValue`; observe the result with [settle].
+  void setValue(SemanticNodeId id, Object? value) =>
+      _send(SemanticActionFrame(id, SemanticAction.setValue, value: value));
+
   /// Types [text] into the focused widget (a structured text-input event, the
   /// same one a keypress would produce on the serve path).
   void typeText(String text) {
