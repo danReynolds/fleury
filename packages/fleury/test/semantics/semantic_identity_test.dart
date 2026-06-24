@@ -163,7 +163,7 @@ void main() {
           reason: 'positional ids carry the ~ fragility marker');
     });
 
-    testWidgets('a positional id is recomputed, not stale-memoized, when a '
+    testWidgets('a positional id reflects the node\'s current position after a '
         'sibling insert shifts it', (tester) {
       Widget build({required bool withLeader}) => Semantics(
         key: const ValueKey('scope'),
@@ -176,9 +176,9 @@ void main() {
                 label: 'lead',
                 child: Text('lead'),
               ),
-            // const ⇒ its element is reused without update() across the insert,
-            // so only the structure-generation bump can drop its id memo. This
-            // pins that mechanism (not update()-invalidation) as the guard.
+            // const ⇒ this element is reused (no update()) across the insert; the
+            // derivation must still report its new ~index, since _nodeId is
+            // computed fresh from the live tree rather than cached.
             const Semantics(
               role: SemanticRole.button,
               label: 'x',
@@ -201,6 +201,33 @@ void main() {
         isNot(before),
         reason: 'the ~positional segment shifted; a stale memo would not change',
       );
+    });
+
+    test('escapeSemanticIdSegment neutralizes the / separator and ~ marker', () {
+      expect(escapeSemanticIdSegment('plain'), 'plain');
+      expect(escapeSemanticIdSegment('a/b'), 'a%2Fb');
+      expect(escapeSemanticIdSegment('a~b'), 'a%7Eb');
+      expect(escapeSemanticIdSegment('a%b'), 'a%25b');
+      // % escaped first, so the escape is unambiguous/reversible.
+      expect(escapeSemanticIdSegment('~/%'), '%7E%2F%25');
+    });
+
+    testWidgets('a folded ancestor key containing / or ~ is escaped, so it '
+        'cannot inject a segment or be misread as positional', (tester) {
+      tester.pumpWidget(
+        const Semantics(
+          key: ValueKey('a/b~c'),
+          role: SemanticRole.list,
+          child: Semantics(
+            role: SemanticRole.button,
+            label: 'x',
+            child: Text('x'),
+          ),
+        ),
+      );
+      final id = tester.semantics().where(role: SemanticRole.button).single.id.value;
+      expect(id, contains('a%2Fb%7Ec'), reason: 'the key is folded in escaped');
+      expect(id, isNot(contains('a/b~c')), reason: 'raw key form is absent');
     });
 
     testWidgets('a positional id survives a from-scratch rebuild at the same '

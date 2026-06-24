@@ -162,6 +162,7 @@ export 'src/semantics/semantics.dart'
         SemanticTree,
         SemanticValueContributor,
         Semantics,
+        escapeSemanticIdSegment,
         semanticAnchorOf;
 
 // Terminal

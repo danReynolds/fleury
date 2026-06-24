@@ -115,6 +115,30 @@ void main() {
       expect(rowId2, rowId);
     });
 
+    testWidgets('a row key containing / or ~ is escaped, so it cannot inject a '
+        'segment or collide', (tester) {
+      tester.pumpWidget(
+        DataTable(
+          label: 'Runs',
+          rowCount: 10,
+          columns: _columns(),
+          rowKeyBuilder: (row) => 'a/b~$row',
+          cellBuilder: _cell,
+        ),
+      );
+      tester.render(size: const CellSize(20, 6));
+      final rowId = tester
+          .semantics()
+          .byRole(SemanticRole.tableRow)
+          .firstWhere((n) => n.state['rowIndex'] == 0)
+          .id
+          .value;
+      // The row key 'a/b~0' is folded escaped, so it adds exactly one segment
+      // ('row/<key>') and its '/' can't fork the path or alias another row.
+      expect(rowId, contains('/table/row/a%2Fb%7E0'));
+      expect(rowId, isNot(contains('row/a/b')));
+    });
+
     testWidgets('a table without a rowKeyBuilder marks its index-keyed rows ~',
         (tester) {
       tester.pumpWidget(runs(keyed: false));

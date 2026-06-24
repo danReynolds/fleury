@@ -365,13 +365,26 @@ first-principles corrections implementation forced on the RFC's own assumptions:
 
 **A1/A2 polish — resolved (2026-06-24 polish pass):**
 
-- **Id memoization — done.** `_nodeId` is memoized per a monotonic
-  `SemanticDirtyTracker.structureGeneration` (bumped on every structural change,
-  untouched by leaf updates). The ancestor walk now runs once per generation;
-  the steady-state leaf-flush and dispatch paths reuse the cached id. A
-  `const`-sibling-insert test pins that the generation bump — not
-  `update()`-invalidation — is what drops a shifted node's stale memo. (This is
-  an *internal* counter, not the A3 wire handle below.)
+- **Id memoization — attempted, then REVERTED (code review caught it).** A first
+  pass memoized `_nodeId` per a `structureGeneration` bumped on
+  `recordStructureDirty`. The review flagged, and a probe confirmed the risk: a
+  positional `~index` depends on the *whole* element tree, but the generation
+  only bumps on `SemanticsElement` lifecycle — a *non-Semantics* sibling
+  reshuffle can shift a node's index with no bump, so the memo could serve a
+  stale id on a fresh walk. (In practice the shift usually dirties an
+  `includeChildren` ancestor's bounds and bumps anyway, which is why two probes
+  showed no staleness — but the invariant isn't guaranteed by construction.)
+  Since the benefit is steady-state-only and the perf gates pass without it,
+  `_nodeId` is now always-fresh (provably correct). A correct memo needs a
+  build-owner structure generation that covers non-Semantics moves — folded into
+  the deferred A3 handle.
+- **Id-segment escaping — done.** Folded key values and `DataTable` row keys are
+  now run through `escapeSemanticIdSegment` (percent-style for `%`, `~`, `/`), so
+  an app `Key` containing `/` cannot inject a phantom segment or alias another
+  id, and `~` stays an unambiguous positional marker. (The misclassification this
+  also prevents is mostly latent today — every `_nodeId`-derived `auto:` id
+  already carries a positional `~` from the node's own index — but the
+  `/`-injection / uniqueness fix is real.)
 - **Privacy — no data-exposure regression; contract documented.** A folded key
   value is the same identifier the app already uses for reconciliation, and a
   keyed ancestor already exposes it as *its own* node id — so folding it into
@@ -391,8 +404,9 @@ first-principles corrections implementation forced on the RFC's own assumptions:
 **Deferred (clearly scoped follow-ons):**
 
 - **A3 structure-generation handle.** The principled version of the safety net:
-  thread the `structureGeneration` (already built for the memo above) onto the
-  snapshot/wire and check it on dispatch — superseding the server-side
+  a build-owner structure generation (covering non-Semantics moves — the same
+  signal a correct id memo needs) threaded onto the snapshot/wire and checked on
+  dispatch — superseding the server-side
   fingerprint and extending the guard to *core* dispatch (tests/a11y), not just
   MCP. The fingerprint net holds the line meanwhile.
 - **B4 central typed coercion.** Only `TextInput`'s string coercion shipped;

@@ -1229,10 +1229,11 @@ class _DataTableElement extends LeafRenderObjectElement
         : widget.rowKeyBuilder!(rowIndex);
     // No rowKeyBuilder ⇒ the "key" is the row index — positional, so mark it
     // `~` (version-fragile). A real row key is stable and identifies the row
-    // wherever it scrolls/reorders.
+    // wherever it scrolls/reorders; escape it so a key containing `/` or `~`
+    // can't inject a segment or be misread as positional.
     final rowId = widget.rowKeyBuilder == null
         ? '$scope/table/row/~$key'
-        : '$scope/table/row/$key';
+        : '$scope/table/row/${escapeSemanticIdSegment('$key')}';
     final rowSelected = widget.selectionMode == DataTableSelectionMode.row
         ? rowIndex == selected
         : rowIndex == selected;
