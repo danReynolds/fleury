@@ -1,6 +1,8 @@
 # RFC: Stable semantic node identity + parameterized `setValue`
 
-**Status:** Draft / Proposed (2026-06-24)
+**Status:** Partially implemented (2026-06-24) — Part B shipped end to end;
+Part A's safety net shipped, the full id rewrite scoped as a follow-on. See
+[Implementation status](#implementation-status-2026-06-24).
 **Owner:** Semantic app graph, core widgets, `fleury_mcp` (and the future
 `fleury_acp`).
 **Related:** [Agent adapter boundary](agent-adapter-boundary.md);
@@ -190,19 +192,27 @@ fallback isn't foolproof": it doesn't have to be.
 
 ### Part B — Parameterized `setValue`
 
-**B1. Optional action payload.** Today `SemanticActionFrame(id, action)` and
-`onAction: FutureOr<void> Function(SemanticAction)` carry no value. The payload
-is **additive on the wire** — absent for the existing 16 actions, so old frames
-decode unchanged — but a **clean breaking change to the handler signature**
-(Fleury is pre-1.0; we make breaking API changes cleanly, no compat shims):
+**B1. Optional action payload — additive, *not* a handler break (as built).**
+`setValue` is the one action that carries an argument. This RFC originally
+proposed threading the value through `onAction` itself — changing its signature
+to a `SemanticActionInvocation { action, value }`. Implementation rejected that:
+it is a breaking ripple across **99 `onAction` handlers in 43 widgets**, and only
+a handful of widgets ever need a payload. The value rides a **separate, opt-in
+channel** instead, leaving every existing handler untouched:
 
-- wire: `SemanticActionFrame(id, action, value?)` — extend `encodeSemanticAction`
-  with an optional payload; absent ⇒ null.
-- handler: `onAction` receives a `SemanticActionInvocation { action, value }`
-  rather than a bare `SemanticAction`. Every existing handler migrates to read
-  `invocation.action` — a mechanical, repo-wide change, **not** a silent no-op;
-  it pairs with the existing `SemanticActionInvocationResult` / `…Status`.
-- `invokeSemanticActionFromElement(..., {Object? value})`.
+- wire: `SemanticActionFrame(id, action, value?)` — `encodeSemanticAction`
+  carries the payload as a JSON scalar behind a presence bit (absent ⇒ null, so
+  the parameterless actions are byte-for-byte unchanged but for one flag byte).
+  The codec is version-locked (server and client ship from one build), so no
+  cross-version compat is needed; a malformed payload is rejected.
+- handler: a new `typedef SemanticSetValueCallback = FutureOr<void> Function(Object?)`
+  and an opt-in `SemanticValueContributor` interface — only value-bearing nodes
+  implement it. `Semantics` gains an additive `onSetValue`; a `setValue` dispatch
+  routes there (via `SemanticValueContributor`) rather than the parameterless
+  `onAction`.
+- `invokeSemanticActionFromElement(..., {Object? value})` and the tester's
+  `invokeSemanticAction(..., payload:)` thread the value through the *private*
+  dispatch functions only — no public signature that 99 sites implement changes.
 
 **B2. `setValue` action + generalization.** Add `SemanticAction.setValue`. Input
 widgets advertise it and apply the payload directly: `TextInput`/`TextField` set
@@ -292,7 +302,74 @@ validation are defined centrally, not per widget:
   be checked against the UIA/Android/AX contracts the research gathered but did
   not deep-verify, and validated per widget.
 
+## Implementation status (2026-06-24)
+
+Built on `mcp-support` ([PR #19](https://github.com/danReynolds/fleury/pull/19)),
+**safety-first, inverting the RFC's phase order**. What shipped, and the
+first-principles corrections implementation forced on the RFC's own assumptions:
+
+**Shipped:**
+
+1. **A3 safety net — fingerprint stale-guard** (`fleury_mcp`,
+   `5263daf`). The `set_value`/`invoke_action` tools snapshot the served tree and,
+   before dispatching, compare the target's role+label fingerprint against what
+   the agent last read — but **only for positional (`element-…`) ids**; stable
+   ids (explicit, `key:…`, contributor-assigned) are exempt so a legitimate label
+   change (Play→Pause) doesn't falsely fire. This is the concrete fix for the
+   silent mis-target (finding #6) **with zero core change**.
+2. **Core `setValue`** (`fleury`, `a63ee07`) — the additive design in B1:
+   `SemanticAction.setValue` + `onSetValue`/`SemanticValueContributor`; `TextInput`
+   advertises and applies it. 7 tests.
+3. **`setValue` end to end** (`fleury` + `fleury_mcp`, `d5fd97d`) — payload on the
+   `SemanticActionFrame`, threaded through the driver/`run_tui` round trip, plus a
+   `set_value` MCP tool. An agent now sets a field in one call.
+
+**Corrections to the RFC, discovered by building it:**
+
+- **B1's breaking `onAction` change was wrong** → additive `onSetValue` (see B1,
+  rewritten). The breaking version would have churned 99 handlers for a feature a
+  handful of widgets use.
+- **A1/A2 ids are *decentralized*, not one mint site.** The RFC reads as if a
+  single `element-$hashCode` site needs replacing. In fact every
+  `SemanticContributor` invents its own ids; most are *already* stable
+  (toast/command/status/form nodes key off real keys), and the `$hashCode`
+  offenders are specific — `DataTable` rows, command-scope, and the `Semantics`
+  `element-` fallback. So A1 is a **centralized identity + anchoring pass touching
+  many contributors**, not a one-liner — and the existing ids are more stable than
+  the RFC assumed, which is *why* the fingerprint net (which protects exactly the
+  remaining positional ids) is sufficient today.
+- **The id rewrite entangles with the retained-leaf incremental path.** The
+  semantics dirty-tracker keys leaf updates by `element._nodeId`; a top-down
+  anchoring post-pass (which assigns ids by tree position *after* the walk) would
+  mismatch those keys and break incremental semantics. This is what makes A1/A2
+  invasive and is the core reason it is deferred rather than rushed — and the
+  reason A3's *safety* value was delivered server-side first, buying time to do
+  A1/A2 right.
+- **A3's safety did not need the core structure-generation handle.** The
+  versioned-handle grammar (a `structureGeneration` that also covers A2's
+  structural-tail ids) remains the principled end state, but a role+label
+  fingerprint gated on positional ids catches the silent mis-target now, with no
+  core protocol change. The full handle lands with A1/A2.
+
+**Deferred (clearly scoped follow-ons):**
+
+- **A1/A2 full id rewrite** + the **A3 structure-generation handle** that
+  supersedes the fingerprint net (covers structural-tail ids, not just positional
+  ones). Cross-contributor and entangled with the retained-leaf path — its own
+  scoped change, with the safety net protecting current ids meanwhile.
+- **B4 central typed coercion.** Only `TextInput`'s string coercion shipped;
+  `Slider`/`Select`/`DatePicker` adoption and the central typed-per-role coercion +
+  typed-failure statuses wait until those widgets adopt `setValue`.
+
 ## Rollout (phased, independently landable)
+
+> **As built, this order was inverted** — see
+> [Implementation status](#implementation-status-2026-06-24). A3's *safety* (the
+> fingerprint net, not the full handle) shipped first with no core change, Part B
+> (Phase 3) shipped additively next, and Phase 1/2 (the id rewrite + the
+> structure-generation handle) are the remaining follow-on — because the id
+> rewrite entangles with the retained-leaf incremental path and the existing ids
+> proved stable enough for the net to hold the line meanwhile.
 
 1. **Phase 1 — id scheme (A1/A2).** Replace `element-$hashCode`. Pure win for
    tests/a11y/MCP; lowest risk (ids were never a stable contract). No action-API

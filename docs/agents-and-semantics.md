@@ -142,7 +142,8 @@ It spawns your app, tracks its live semantic tree, and exposes it as MCP:
 - a **resource**, `fleury://ui/tree` — the current semantic snapshot;
 - **tools** the agent calls — `get_ui` and `find_nodes` to read the UI,
   `invoke_action` to operate a node through one of its advertised
-  `SemanticAction`s, and `type_text` / `press_key` for raw input.
+  `SemanticAction`s, `set_value` to set a field/slider/select in one call (a node
+  advertising `setValue`), and `type_text` / `press_key` for raw input.
 
 Point an MCP host at it and the agent reads roles, labels, values, and the
 actions each node supports, then drives the UI through them — no ANSI scraping,
