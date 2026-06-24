@@ -16,8 +16,9 @@ pressure-tested against prior art:
 1. **Identity** — replace auto-generated `SemanticNodeId('element-$hashCode')`
    with **key-derived ids** (fold the nearest ancestor widget `Key` chain),
    falling back to a **role-qualified structural path anchored at the nearest
-   keyed ancestor**. Pair durable ids with a **per-snapshot revision stamp** so
-   a stale reference *fails safely* instead of silently driving the wrong node.
+   keyed ancestor**. Pair durable ids with a **structure-generation stamp**
+   (bumped only on tree-shape changes) so a stale *structural* reference *fails
+   safely* instead of silently driving the wrong node.
 
 2. **Actions with a payload** — give `SemanticAction` an optional argument so a
    first-class **`setValue`** action can carry the value to set, generalizing to
@@ -130,34 +131,77 @@ id = <keyed-ancestor path> "/" <role> [ "#" <disambiguator> ]
 keyed, fall back to a structural path, but **anchored at the nearest keyed
 ancestor and role-qualified** (`…/region/list/listItem#2`), so only the unkeyed
 *tail* is positional. This is the single most important deviation from a naive
-"XPath from root", which the research flags as maximally brittle.
+"XPath from root", which the research flags as maximally brittle. This tail is
+the one part that shifts under reorder — which is exactly what A3's version
+check exists to make safe.
 
-**A3. Versioned handle — make staleness safe (the hardening).** Durable ids
-reduce churn; they don't eliminate it. So:
+**Derivation invariants.** The generator must also honor:
 
-- Stamp each emitted snapshot with a monotonic **revision** (the bridge already
-  tracks one; core can expose a per-tree generation counter).
-- An action invocation may carry `(id, observedRevision)`. The dispatcher
-  resolves `id` in the *current* tree; if it is gone, now ambiguous, or its
-  identity-defining attributes (role/key) differ from when observed, **fail
-  with a typed `stale` status** ("re-read get_ui") rather than acting.
+- **GlobalKey anchoring.** A `GlobalKey` is identity that survives *reparenting*
+  — its whole point. So when a node or an ancestor (up to the nearest keyed one)
+  carries a `GlobalKey`, anchor the id *at* that `GlobalKey` and do **not** fold
+  ancestors above it; the id then travels with the subtree the way the element
+  does. Folding the ancestor chain unconditionally would churn the id for
+  exactly the construct designed to keep it stable.
+- **Collision at mint.** Duplicate sibling `ValueKey`s are a real app bug (the
+  framework rejects duplicate `GlobalKey`s; it does *not* reject duplicate
+  `ValueKey`s). On a collision, append a stable disambiguator **and** emit a
+  framework diagnostic; if uniqueness can't be reached, mark the colliding nodes
+  so resolution fails `ambiguous` rather than silently driving one of them.
+- **Privacy.** Key values can be sensitive (`ValueKey(user.email)`, a session
+  token) and the id crosses the boundary to an external agent — while the rest of
+  the snapshot is already redaction-aware. So **key values folded into an id run
+  through the same sanitization/redaction policy**, and a widget may opt a key
+  out of derivation or supply a non-revealing stable surrogate. An id must never
+  become an exfiltration channel for data the snapshot redacts.
+- **Cost.** Deriving the id walks the ancestor chain (O(depth) per node) plus a
+  sibling scan for the disambiguator — too expensive to recompute for every node
+  every frame (the old `hashCode` id was O(1)). **Memoize the id on the
+  `SemanticsElement`**, invalidating only when an ancestor key or the node's
+  keyed-path position changes; a steady-state frame recomputes nothing.
 
-This is the `1:10` versioned-ref pattern, implemented on machinery we already
-have. It demotes the MCP server's current ambiguity-rejection and stale-hint
-heuristics from load-bearing to belt-and-suspenders, and it is the concrete
-answer to "the structural fallback isn't foolproof": it doesn't have to be.
+**A3. Versioned handle — make staleness *safe* (the hardening).** Durable ids
+reduce churn; they don't eliminate it. The version check exists to protect the
+**structural-fallback ids (A2)** — whose unkeyed tail *does* shift under a
+sibling insert or reorder. Fully-keyed ids are stable by construction and need
+no check.
+
+- Track a **structure generation** on the tree: a counter that bumps **only when
+  the tree's shape changes** (a node added, removed, or reparented; a keyed
+  ancestor changes) — *not* on every value tick. A naive per-frame counter would
+  be wrong: it would mark an unchanged node stale one frame after it was read.
+- Each emitted snapshot carries `structureGeneration`; the agent passes it back
+  with an action as `(id, observedGeneration)`.
+- Resolution: resolve `id` in the current tree. A **fully-keyed id** is honored
+  regardless of generation (it re-resolves to the same logical node by
+  construction). An id whose tail is **structural/positional** is honored only
+  if `observedGeneration == currentGeneration`; otherwise the shape moved under
+  it and the dispatcher returns a typed **`stale`** status ("re-read get_ui")
+  instead of acting on whatever now occupies that path.
+- Floor, independent of the generation: an id resolving to **zero or more than
+  one** node fails `notFound` / `ambiguous` (what the MCP server already
+  enforces — now belt-and-suspenders, not the only guard).
+
+The dispatcher needs **no stored snapshots and no echoed attributes**: the id
+string itself reveals whether its tail is keyed or positional, and the
+generation reveals whether the shape moved. This is the `1:10` versioned-ref
+pattern on machinery we already have, and the concrete answer to "the structural
+fallback isn't foolproof": it doesn't have to be.
 
 ### Part B — Parameterized `setValue`
 
 **B1. Optional action payload.** Today `SemanticActionFrame(id, action)` and
-`onAction: void Function(SemanticAction)` carry no argument. Add an **optional
-value** to the invocation, null for the existing 16 actions so current handlers
-are unaffected:
+`onAction: FutureOr<void> Function(SemanticAction)` carry no value. The payload
+is **additive on the wire** — absent for the existing 16 actions, so old frames
+decode unchanged — but a **clean breaking change to the handler signature**
+(Fleury is pre-1.0; we make breaking API changes cleanly, no compat shims):
 
-- wire: `SemanticActionFrame(id, action, value?)` (extend
-  `encodeSemanticAction` with an optional payload),
-- handler: an action *invocation* object carrying `action` + `value` (we already
-  have `SemanticActionInvocationResult`/`Status` to pair it with),
+- wire: `SemanticActionFrame(id, action, value?)` — extend `encodeSemanticAction`
+  with an optional payload; absent ⇒ null.
+- handler: `onAction` receives a `SemanticActionInvocation { action, value }`
+  rather than a bare `SemanticAction`. Every existing handler migrates to read
+  `invocation.action` — a mechanical, repo-wide change, **not** a silent no-op;
+  it pairs with the existing `SemanticActionInvocationResult` / `…Status`.
 - `invokeSemanticActionFromElement(..., {Object? value})`.
 
 **B2. `setValue` action + generalization.** Add `SemanticAction.setValue`. Input
@@ -170,12 +214,30 @@ call replaces the focus-then-keystroke dance.
 disabled field, out-of-range, validation). The agent/test reads the result; the
 MCP `set_value(id, value)` tool surfaces failure as a tool error.
 
+**B4. Payload contract — typed, coerced, validated.** The value crosses the wire
+as a JSON scalar, so a bare `Object?` is not a contract on its own; coercion and
+validation are defined centrally, not per widget:
+
+- **Typed per role.** `Slider`/`spinButton` → number; `DatePicker` → ISO-8601
+  date; `Select` → an option value from the advertised set; text field → string.
+  Define the expected type per role (or carry a small discriminated value) and
+  coerce centrally (`"0.7"` → `0.7`, ISO parse) so widgets don't each reinvent
+  it.
+- **Typed failure.** Out-of-range, parse-failure, and not-an-option map to
+  distinct statuses on `SemanticActionInvocationResult`, which the MCP
+  `set_value` tool surfaces as an actionable error (not a generic "failed").
+- **Preconditions.** `setValue` **auto-acquires focus** (no prior `focus`
+  round-trip required) and is **idempotent** (setting the current value is a
+  no-op success). Pin these per widget as it adopts the action, checked against
+  the UIA/Android/AX contracts.
+
 ## Where the changes land
 
 | Change | Files / types |
 | --- | --- |
 | A1/A2 id derivation | the semantics id assignment that currently mints `element-$hashCode` (`lib/src/semantics/…`, the `SemanticsElement` path) |
-| A3 revision + stale check | `SemanticInspectionSnapshot` (carry revision), `invokeSemanticActionFromElement` (optional `observedRevision` + `stale` status); `fleury_mcp` (`get_ui` stamps revision, `invoke_action` passes it back) |
+| A derivation invariants | id generator: `GlobalKey` anchoring, duplicate-`ValueKey` collision diagnostic, key-value redaction, id memoized on `SemanticsElement` |
+| A3 structure-gen + stale check | `SemanticInspectionSnapshot` (carry `structureGeneration`), `invokeSemanticActionFromElement` (optional `observedGeneration` + `stale` status); `fleury_mcp` (`get_ui` stamps it, `invoke_action` passes it back) |
 | B1 action payload | `SemanticAction`, `SemanticActionFrame`, `encodeSemanticAction`/`decodeSemanticAction`, `Semantics.onAction`, `invokeSemanticActionFromElement` |
 | B2 widget adoption | `TextInput`/`TextField`, `Slider`, `Select`, `DatePicker` |
 | B3 / MCP surface | `SemanticActionInvocationResult`; `fleury_mcp` `set_value` tool |
@@ -216,21 +278,30 @@ MCP `set_value(id, value)` tool surfaces failure as a tool error.
   new format we should treat it as semi-stable and document the grammar.
 - **`AutomationId` is only sibling-unique and not stable across app *builds*.**
   Fine — we only need within-session stability; we do not promise cross-build.
-- **Exact collision rule** (fold the whole ancestor key-chain vs. nearest only;
-  where to inject the sibling index) needs to be pinned with concrete tree
-  fixtures before implementation.
-- **`setValue` preconditions** (does it require focus first? is it idempotent?)
-  vary by platform and need a direct read of the UIA/Android/AX contracts the
-  research gathered but did not deep-verify.
+- **Exact fold depth & disambiguator placement** (fold the whole ancestor
+  key-chain vs. stop at the nearest keyed ancestor; where to inject the sibling
+  index) need pinning with concrete tree fixtures before implementation.
+- **Structure-generation granularity.** "Shape change" must be defined precisely:
+  add/remove/reparent and keyed-ancestor changes bump it; a label or value tick
+  must **not** (or A3 over-fires and forces a re-read every step). Pin the exact
+  mutation set that bumps the generation.
+- **Privacy audit.** A3/A-invariants route folded key values through redaction;
+  audit that path end-to-end so a sensitive `ValueKey` cannot leak through an id
+  even as the snapshot redacts the value.
+- **`setValue` preconditions** are specified (auto-focus, idempotent) but should
+  be checked against the UIA/Android/AX contracts the research gathered but did
+  not deep-verify, and validated per widget.
 
 ## Rollout (phased, independently landable)
 
 1. **Phase 1 — id scheme (A1/A2).** Replace `element-$hashCode`. Pure win for
    tests/a11y/MCP; lowest risk (ids were never a stable contract). No action-API
    change.
-2. **Phase 2 — versioned handle (A3).** Land in `fleury_mcp` first (it already
-   has `revision`), then optionally push the `stale` status into the core invoke
-   path. Retires the stale-id band-aids.
+2. **Phase 2 — versioned handle (A3).** Compute a **structure generation** (in
+   core, or derived in `fleury_mcp` from the snapshot's node set — *not* the
+   bridge's per-frame `revision`, which is the wrong, too-fine granularity), have
+   `get_ui` stamp it and `invoke_action` pass it back, then optionally push the
+   `stale` status into the core invoke path. Retires the stale-id band-aids.
 3. **Phase 3 — `setValue` (B1–B3).** The larger change (action payload contract
    + per-widget adoption); sequence it after the identity work and design the
    payload contract for tests/a11y, not just MCP.
