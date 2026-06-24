@@ -116,9 +116,20 @@ enum SemanticAction {
   cancel,
   diagnose,
   captureDebug,
+
+  /// Set the node's value to a payload supplied with the invocation (text into
+  /// a field, a slider position, a selected option). Unlike every action above,
+  /// it carries an argument — delivered via [SemanticSetValueCallback] /
+  /// [SemanticValueContributor], not the parameterless [SemanticActionCallback].
+  setValue,
 }
 
 typedef SemanticActionCallback = FutureOr<void> Function(SemanticAction action);
+
+/// Carries a [SemanticAction.setValue] payload to the node it targets. The
+/// payload is a JSON-friendly scalar (string, num, bool, or null); a widget
+/// coerces/validates it for its role (a slider expects a num, a field a string).
+typedef SemanticSetValueCallback = FutureOr<void> Function(Object? value);
 
 enum SemanticActionInvocationStatus {
   completed,
@@ -802,6 +813,7 @@ Future<SemanticActionInvocationResult> invokeSemanticActionFromElement({
   required SemanticTree tree,
   required SemanticNodeId id,
   required SemanticAction action,
+  Object? value,
 }) async {
   final target = tree.nodeById(id);
   if (target == null) return SemanticActionInvocationResult.notFound(action);
@@ -812,7 +824,7 @@ Future<SemanticActionInvocationResult> invokeSemanticActionFromElement({
     return SemanticActionInvocationResult.unsupported(target, action);
   }
   try {
-    final dispatchResult = _dispatchSemanticAction(root, target, action);
+    final dispatchResult = _dispatchSemanticAction(root, target, action, value);
     final handled = dispatchResult is Future<bool>
         ? await dispatchResult
         : dispatchResult;
@@ -833,6 +845,7 @@ FutureOr<bool> _dispatchSemanticAction(
   Element element,
   SemanticNode target,
   SemanticAction action,
+  Object? value,
 ) {
   final children = _elementChildren(element);
   for (var index = 0; index < children.length; index++) {
@@ -840,6 +853,7 @@ FutureOr<bool> _dispatchSemanticAction(
       children[index],
       target,
       action,
+      value,
     );
     if (childResult is Future<bool>) {
       return _dispatchSemanticActionAfterAsyncChild(
@@ -849,12 +863,13 @@ FutureOr<bool> _dispatchSemanticAction(
         index + 1,
         target,
         action,
+        value,
       );
     }
     if (childResult) return true;
   }
 
-  return _dispatchSemanticActionOnElement(element, target, action);
+  return _dispatchSemanticActionOnElement(element, target, action, value);
 }
 
 Future<bool> _dispatchSemanticActionAfterAsyncChild(
@@ -864,14 +879,20 @@ Future<bool> _dispatchSemanticActionAfterAsyncChild(
   int nextIndex,
   SemanticNode target,
   SemanticAction action,
+  Object? value,
 ) async {
   if (await childResult) return true;
   for (var index = nextIndex; index < children.length; index++) {
-    if (await _dispatchSemanticAction(children[index], target, action)) {
+    if (await _dispatchSemanticAction(children[index], target, action, value)) {
       return true;
     }
   }
-  final ownResult = _dispatchSemanticActionOnElement(element, target, action);
+  final ownResult = _dispatchSemanticActionOnElement(
+    element,
+    target,
+    action,
+    value,
+  );
   return ownResult is Future<bool> ? await ownResult : ownResult;
 }
 
@@ -879,7 +900,19 @@ FutureOr<bool> _dispatchSemanticActionOnElement(
   Element element,
   SemanticNode target,
   SemanticAction action,
+  Object? value,
 ) {
+  // `setValue` carries a payload, so it routes to the opt-in value contributor
+  // rather than the parameterless action handler. A node that advertises
+  // setValue but doesn't implement [SemanticValueContributor] simply goes
+  // unhandled (→ unsupported), like any other unhandled action.
+  if (action == SemanticAction.setValue &&
+      element is SemanticValueContributor) {
+    return (element as SemanticValueContributor).handleSemanticSetValue(
+      target,
+      value,
+    );
+  }
   if (element is! SemanticActionContributor) return false;
   final contributor = element as SemanticActionContributor;
   return contributor.handleSemanticAction(target, action);
@@ -912,6 +945,14 @@ abstract interface class SemanticActionContributor {
     SemanticNode target,
     SemanticAction action,
   );
+}
+
+/// Implemented by semantic contributors that can apply a [SemanticAction
+/// .setValue] payload. Opt-in and additive: only value-bearing nodes implement
+/// it, so the existing [SemanticActionContributor]s are untouched. Return true
+/// if the value was applied.
+abstract interface class SemanticValueContributor {
+  FutureOr<bool> handleSemanticSetValue(SemanticNode target, Object? value);
 }
 
 /// Frame-local semantic invalidations collected while the element/render tree
@@ -1054,6 +1095,7 @@ final class Semantics extends ProxyWidget {
     this.state = SemanticState.empty,
     this.includeChildren = true,
     this.onAction,
+    this.onSetValue,
     required super.child,
   });
 
@@ -1074,6 +1116,11 @@ final class Semantics extends ProxyWidget {
   final bool includeChildren;
   final SemanticActionCallback? onAction;
 
+  /// Handler for a [SemanticAction.setValue] invocation. A node that advertises
+  /// `setValue` in [actions] provides this to receive the payload (e.g. a text
+  /// field sets its controller, a slider its position).
+  final SemanticSetValueCallback? onSetValue;
+
   @override
   SemanticsElement createElement() => SemanticsElement(this);
 }
@@ -1082,7 +1129,8 @@ final class SemanticsElement extends ComponentElement
     implements
         SemanticContributor,
         SemanticChildrenProvider,
-        SemanticActionContributor {
+        SemanticActionContributor,
+        SemanticValueContributor {
   SemanticsElement(Semantics super.widget);
 
   CellRect? _bounds;
@@ -1228,6 +1276,21 @@ final class SemanticsElement extends ComponentElement
     if (callback == null || target.id != _nodeId) return false;
     if (!widget.enabled || !widget.actions.contains(action)) return false;
     await callback(action);
+    return true;
+  }
+
+  @override
+  Future<bool> handleSemanticSetValue(
+    SemanticNode target,
+    Object? value,
+  ) async {
+    final callback = widget.onSetValue;
+    if (callback == null || target.id != _nodeId) return false;
+    if (!widget.enabled ||
+        !widget.actions.contains(SemanticAction.setValue)) {
+      return false;
+    }
+    await callback(value);
     return true;
   }
 }

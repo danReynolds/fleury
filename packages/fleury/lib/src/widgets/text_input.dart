@@ -966,6 +966,16 @@ class _TextInputState extends State<TextInput>
     return KeyEventResult.handled;
   }
 
+  /// Applies a `setValue` payload — replaces the field's text in one semantic
+  /// call (an agent/test sets the field directly instead of focus-then-keys).
+  /// The payload is coerced to a string for a text field (B4 payload contract).
+  void _handleSemanticSetValue(Object? value) {
+    if (!_canEdit) return;
+    _cancelScheduledPaste();
+    _resetHistoryBrowsing();
+    _controller.text = value?.toString() ?? '';
+  }
+
   void _handleSemanticAction(SemanticAction action) {
     switch (action) {
       case SemanticAction.focus:
@@ -1204,6 +1214,7 @@ class _TextInputState extends State<TextInput>
       actions: {
         if (widget.enabled) SemanticAction.focus,
         if (widget.enabled && !widget.readOnly) SemanticAction.clear,
+        if (widget.enabled && !widget.readOnly) SemanticAction.setValue,
         if (widget.enabled &&
             _controller.hasSelection &&
             _effectiveClipboardPolicy != TextClipboardPolicy.disabled)
@@ -1244,6 +1255,7 @@ class _TextInputState extends State<TextInput>
         'pasteTotalLength': _pasteProgress.totalLength,
       }),
       onAction: _handleSemanticAction,
+      onSetValue: _handleSemanticSetValue,
       child: Focus(
         focusNode: _focusNode,
         autofocus: widget.autofocus && widget.enabled,

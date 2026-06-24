@@ -157,8 +157,10 @@ export 'src/semantics/semantics.dart'
         SemanticNode,
         SemanticNodeId,
         SemanticRole,
+        SemanticSetValueCallback,
         SemanticState,
         SemanticTree,
+        SemanticValueContributor,
         Semantics;
 
 // Terminal
