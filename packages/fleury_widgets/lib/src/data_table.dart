@@ -1101,6 +1101,13 @@ class _DataTableElement extends LeafRenderObjectElement
 
   @override
   SemanticNode buildSemanticNode(List<SemanticNode> children) {
+    // Stable id anchor folded from the table's keyed ancestors (e.g.
+    // DataTable(key:)), so row/cell ids survive rebuilds and reorders instead
+    // of churning on the element's hashCode. Falls back to the element hash
+    // only when the table has no keyed ancestor at all. Genuinely positional
+    // segments (index-keyed rows, column index) carry a `~` so the stale guard
+    // protects exactly them.
+    final scope = semanticAnchorOf(this) ?? 'element-$hashCode';
     final visibleFirst = renderObject.visibleFirst;
     final visibleRows = renderObject.visibleRows;
     final visibleEnd = widget.rowCount == 0 || visibleRows == 0
@@ -1128,7 +1135,7 @@ class _DataTableElement extends LeafRenderObjectElement
         ? null
         : widget.columns[selectedColumn].id;
     return SemanticNode(
-      id: SemanticNodeId('datatable-$hashCode'),
+      id: SemanticNodeId('$scope/table'),
       role: SemanticRole.table,
       label: widget.label,
       value: selectedKey,
@@ -1171,14 +1178,14 @@ class _DataTableElement extends LeafRenderObjectElement
       }),
       children: <SemanticNode>[
         SemanticNode(
-          id: SemanticNodeId('datatable-$hashCode-header'),
+          id: SemanticNodeId('$scope/table/header'),
           role: SemanticRole.tableRow,
           label: 'Header',
           state: const SemanticState({'rowIndex': -1, 'header': true}),
           children: [
             for (var col = 0; col < widget.columns.length; col++)
               SemanticNode(
-                id: SemanticNodeId('datatable-$hashCode-header-$col'),
+                id: SemanticNodeId('$scope/table/header/~$col'),
                 role: SemanticRole.tableCell,
                 label: _sanitizeExportField(widget.columns[col].title),
                 value: _sanitizeExportField(widget.columns[col].title),
@@ -1193,7 +1200,7 @@ class _DataTableElement extends LeafRenderObjectElement
         ),
         for (var i = 0; i < visibleRows; i++)
           if (visibleFirst + i < widget.rowCount)
-            _semanticRow(visibleFirst + i, selected, range),
+            _semanticRow(scope, visibleFirst + i, selected, range),
       ],
     );
   }
@@ -1212,6 +1219,7 @@ class _DataTableElement extends LeafRenderObjectElement
   }
 
   SemanticNode _semanticRow(
+    String scope,
     int rowIndex,
     int selected,
     DataTableSelectionRange range,
@@ -1219,11 +1227,17 @@ class _DataTableElement extends LeafRenderObjectElement
     final key = widget.rowKeyBuilder == null
         ? rowIndex
         : widget.rowKeyBuilder!(rowIndex);
+    // No rowKeyBuilder ⇒ the "key" is the row index — positional, so mark it
+    // `~` (version-fragile). A real row key is stable and identifies the row
+    // wherever it scrolls/reorders.
+    final rowId = widget.rowKeyBuilder == null
+        ? '$scope/table/row/~$key'
+        : '$scope/table/row/$key';
     final rowSelected = widget.selectionMode == DataTableSelectionMode.row
         ? rowIndex == selected
         : rowIndex == selected;
     return SemanticNode(
-      id: SemanticNodeId('datatable-$hashCode-row-$key'),
+      id: SemanticNodeId(rowId),
       role: SemanticRole.tableRow,
       label: key.toString(),
       selected: rowSelected,
@@ -1243,12 +1257,13 @@ class _DataTableElement extends LeafRenderObjectElement
       }),
       children: [
         for (var col = 0; col < widget.columns.length; col++)
-          _semanticCell(rowIndex, key, col, selected, range),
+          _semanticCell(rowId, rowIndex, key, col, selected, range),
       ],
     );
   }
 
   SemanticNode _semanticCell(
+    String rowId,
     int rowIndex,
     Object key,
     int columnIndex,
@@ -1261,7 +1276,7 @@ class _DataTableElement extends LeafRenderObjectElement
         ? rowIndex == selected
         : range.containsCell(rowIndex, columnIndex);
     return SemanticNode(
-      id: SemanticNodeId('datatable-$hashCode-row-$key-cell-$columnIndex'),
+      id: SemanticNodeId('$rowId/cell/~$columnIndex'),
       role: SemanticRole.tableCell,
       label: text,
       value: text,

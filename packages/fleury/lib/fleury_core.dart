@@ -161,7 +161,8 @@ export 'src/semantics/semantics.dart'
         SemanticState,
         SemanticTree,
         SemanticValueContributor,
-        Semantics;
+        Semantics,
+        semanticAnchorOf;
 
 // Terminal
 export 'src/terminal/capabilities.dart'

@@ -924,6 +924,59 @@ List<Element> _elementChildren(Element element) {
   return children;
 }
 
+/// A stable, position-derived identity anchor for [element], folding the chain
+/// of keyed ancestors (the same `Key`s reconciliation uses) with a positional
+/// `~<index>` segment for each unkeyed step *below* the nearest key.
+///
+/// Returns null when no foldable key exists anywhere above [element] — the
+/// caller then keeps the snapshot-local `element-<hash>` form. Unlike that hash,
+/// this anchor is derived from keys + tree position rather than element
+/// instance identity, so it is identical across rebuilds: a node under a keyed
+/// list row keeps its id wherever the row moves. `GlobalKey`s are treated as
+/// transparent (they have no stable string and survive reparenting on their
+/// own), so anchoring lands on the nearest value key, which is what stays put
+/// under a `GlobalKey` move.
+///
+/// Positional `~` segments are version-fragile — a sibling insert/remove shifts
+/// them — and the `~` marks the whole id as such, so a consumer (the MCP stale
+/// guard, a future structure-generation check) can require a freshness check on
+/// exactly those ids and exempt the fully-keyed ones.
+String? semanticAnchorOf(Element element) {
+  final scope = <String>[]; // keyed segments, leaf→root
+  final tail = <String>[]; // positional segments below the nearest key, leaf→root
+  var sawKey = false;
+  Element? e = element;
+  while (e != null) {
+    final key = e.widget.key;
+    if (key != null && key is! GlobalKey) {
+      scope.add('$key');
+      sawKey = true;
+    } else if (!sawKey) {
+      tail.add('~${_childIndexOf(e)}');
+    }
+    e = e.elementParent;
+  }
+  if (!sawKey) return null;
+  return 'auto:${[...scope.reversed, ...tail.reversed].join('/')}';
+}
+
+/// [element]'s index among its parent's children, in `visitChildren` order.
+/// Element-local and reproducible: the leaf-update path and dispatch both
+/// recompute the id from the live element, and a position change is always a
+/// structural change (a full rebuild), so the index is only ever read while the
+/// tree shape is stable.
+int _childIndexOf(Element element) {
+  final parent = element.elementParent;
+  if (parent == null) return 0;
+  var index = 0;
+  var result = 0;
+  parent.visitChildren((child) {
+    if (identical(child, element)) result = index;
+    index++;
+  });
+  return result;
+}
+
 /// Implemented by elements that contribute a semantic node.
 abstract interface class SemanticContributor {
   SemanticNode buildSemanticNode(List<SemanticNode> children);
@@ -1184,15 +1237,22 @@ final class SemanticsElement extends ComponentElement
   /// The node's identity. An explicit [Semantics.id] wins; otherwise a [Key] on
   /// the widget yields a stable, deterministic id (`key:<key>`) that survives
   /// rebuilds — the identity a future incremental/observable backend, a remote
-  /// mirror, or a durable test selector needs. With neither, the id falls back
-  /// to an element-instance hash, which is snapshot-local and NOT stable across
-  /// rebuilds (see [SemanticNodeId]).
+  /// mirror, or a durable test selector needs.
+  ///
+  /// With neither, the id is *derived from the keyed-ancestor chain*
+  /// ([semanticAnchorOf]): a node under a keyed list row gets an `auto:…` id
+  /// that tracks the row wherever it moves, instead of a churning element hash.
+  /// Only when nothing above the node is keyed does it fall back to the
+  /// snapshot-local `element-<hash>` form (still NOT stable across rebuilds;
+  /// see [SemanticNodeId]).
   SemanticNodeId get _nodeId {
     final explicitId = widget.id;
     if (explicitId != null) return explicitId;
     final key = widget.key;
     if (key != null) return SemanticNodeId('key:$key');
-    return SemanticNodeId('element-$hashCode');
+    final anchor = semanticAnchorOf(this);
+    if (anchor == null) return SemanticNodeId('element-$hashCode');
+    return SemanticNodeId('$anchor/${widget.role.name}');
   }
 
   bool get _canBuildRetainedLeaf => !widget.includeChildren;

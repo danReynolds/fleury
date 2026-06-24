@@ -615,10 +615,13 @@ final class McpServer {
   }
 
   /// Whether [id] is an auto-generated *positional* id that can come to denote a
-  /// different logical node when the tree shifts. Today that's the
-  /// `element-<hash>` fallback; app-assigned, `key:…`, and contributor-assigned
-  /// ids track their logical node and are exempt from the stale check.
-  static bool _isPositionalId(String id) => id.startsWith('element-');
+  /// different logical node when the tree shifts. Two forms qualify:
+  /// the `element-<hash>` deep fallback, and a derived `auto:…` id that carries
+  /// a `~` segment (an unkeyed-tail or index-keyed position — see
+  /// `semanticAnchorOf`). App-assigned, `key:…`, and fully-keyed `auto:` ids
+  /// (no `~`) track their logical node and are exempt from the stale check.
+  static bool _isPositionalId(String id) =>
+      id.startsWith('element-') || (id.startsWith('auto:') && id.contains('~'));
 
   /// A cheap "is this the same logical node" proxy: role + label. Stable across
   /// value-only updates (a counter ticking keeps its label), and changes when a

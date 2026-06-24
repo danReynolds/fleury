@@ -400,6 +400,67 @@ void main() {
     );
   });
 
+  test('invoke_action treats a derived auto: id with a ~tail as positional', () async {
+    // The new id scheme: an unkeyed/index-keyed node gets auto:…/~N/… — still
+    // version-fragile, so the stale guard must cover it just like element-….
+    pushRoot(buttonAndCount('auto:scope/~0/button', 'Alice', 0));
+    await bridge.ready;
+    await server.handleLine(
+      _rpc(50, 'tools/call', <String, Object?>{
+        'name': 'get_ui',
+        'arguments': <String, Object?>{},
+      }),
+    );
+    lastResult();
+
+    await pushAndAwait(buttonAndCount('auto:scope/~0/button', 'Bob', 0));
+    await server.handleLine(
+      _rpc(51, 'tools/call', <String, Object?>{
+        'name': 'invoke_action',
+        'arguments': <String, Object?>{
+          'id': 'auto:scope/~0/button',
+          'action': 'activate',
+        },
+      }),
+    );
+    expect(toolError(lastResult()), contains('Stale reference'));
+    expect(transport.sent.whereType<SemanticActionFrame>(), isEmpty);
+  });
+
+  test('invoke_action exempts a fully-keyed auto: id (no ~) from the stale check',
+      () async {
+    // A keyed-anchored auto: id (no ~) tracks its logical node, so a label
+    // toggle must not be read as a mis-target.
+    pushRoot(buttonAndCount('auto:scope/key:row-7/button', 'Play', 0));
+    await bridge.ready;
+    await server.handleLine(
+      _rpc(52, 'tools/call', <String, Object?>{
+        'name': 'get_ui',
+        'arguments': <String, Object?>{},
+      }),
+    );
+    lastResult();
+
+    await pushAndAwait(buttonAndCount('auto:scope/key:row-7/button', 'Pause', 0));
+    final pending = server.handleLine(
+      _rpc(53, 'tools/call', <String, Object?>{
+        'name': 'invoke_action',
+        'arguments': <String, Object?>{
+          'id': 'auto:scope/key:row-7/button',
+          'action': 'activate',
+        },
+      }),
+    );
+    pushRoot(buttonAndCount('auto:scope/key:row-7/button', 'Play', 1)); // settle
+    await pending;
+
+    expect(toolJson(lastResult())['invoked'], isNotNull);
+    expect(
+      transport.sent.whereType<SemanticActionFrame>().map((f) => f.id.value),
+      contains('auto:scope/key:row-7/button'),
+    );
+  });
+
   test('set_value sends a setValue frame whose payload round-trips the wire', () async {
     Map<String, Object?> field(Object? value) => <String, Object?>{
       'id': 'root',

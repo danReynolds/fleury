@@ -49,8 +49,8 @@ void main() {
       expect(first.value, 'key:ValueKey<String>(row-7)');
     });
 
-    testWidgets('without id or key, the fallback is the documented unstable '
-        'element-<hash> form', (tester) {
+    testWidgets('without an explicit id or key, the id is derived from the '
+        'keyed-ancestor chain (auto:…), not an element hash', (tester) {
       tester.pumpWidget(
         const Semantics(
           role: SemanticRole.button,
@@ -58,12 +58,16 @@ void main() {
           child: Text('Anon'),
         ),
       );
-      final id = tester.semantics().single(role: SemanticRole.button).id;
-      expect(
-        id.value,
-        startsWith('element-'),
-        reason: 'unkeyed/unid\'d nodes get the snapshot-local fallback id',
-      );
+      final id = tester.semantics().where(role: SemanticRole.button).single.id;
+      // A realistic tree always has a keyed ancestor (here the Overlay entry),
+      // so an unkeyed node anchors to it with a ~positional tail: value-derived
+      // and stable within the session, unlike the old element-<hash>. The `~`
+      // marks it version-fragile for the stale guard. (The bare element-<hash>
+      // form remains only as a deep fallback for a node with no keyed ancestor
+      // at all — not reachable through the normal runtime/overlay root.)
+      expect(id.value, startsWith('auto:'));
+      expect(id.value, contains('~'));
+      expect(id.value, isNot(startsWith('element-')));
     });
 
     test('SemanticTree query surface works on a hand-built tree '
@@ -88,6 +92,86 @@ void main() {
         'Token',
       );
       expect(tree.byRole(SemanticRole.textField), hasLength(1));
+    });
+  });
+
+  group('derived identity from keyed ancestors (RFC A1/A2)', () {
+    // A keyed list row wrapping an unkeyed leaf — the shape Fleury's data
+    // widgets produce (rows carry a Key; the cells inside do not).
+    Widget row(String k) => Semantics(
+      key: ValueKey('row-$k'),
+      role: SemanticRole.listItem,
+      child: Semantics(
+        role: SemanticRole.button,
+        label: k,
+        child: Text(k),
+      ),
+    );
+    Widget build(List<String> ks) =>
+        Column(children: <Widget>[for (final k in ks) row(k)]);
+
+    testWidgets('an unkeyed node folds its keyed ancestor into a stable '
+        'auto: id', (tester) {
+      tester.pumpWidget(build(<String>['a']));
+      final id = tester.semantics().where(role: SemanticRole.button).single.id;
+
+      expect(id.value, startsWith('auto:'));
+      expect(
+        id.value,
+        contains('ValueKey<String>(row-a)'),
+        reason: 'the keyed ancestor anchors the id, not an element hash',
+      );
+      expect(id.value, isNot(contains('element-')));
+    });
+
+    testWidgets('the keyed-anchored id is reorder-proof', (tester) {
+      tester.pumpWidget(build(<String>['a', 'b']));
+      final aId = tester.semantics().where(role: SemanticRole.button, label: 'a').single.id;
+      final bId = tester.semantics().where(role: SemanticRole.button, label: 'b').single.id;
+      expect(aId, isNot(bId));
+
+      // Swap the rows. Each row keeps its Key, so its descendant keeps its id
+      // wherever the row now sits — the property element-$hashCode never had.
+      tester.pumpWidget(build(<String>['b', 'a']));
+      final aId2 = tester.semantics().where(role: SemanticRole.button, label: 'a').single.id;
+      final bId2 = tester.semantics().where(role: SemanticRole.button, label: 'b').single.id;
+      expect(aId2, aId, reason: 'row a moved but its node id is unchanged');
+      expect(bId2, bId, reason: 'row b moved but its node id is unchanged');
+    });
+
+    testWidgets('two unkeyed same-role siblings under one key get distinct '
+        'ids (positional tail)', (tester) {
+      tester.pumpWidget(
+        Semantics(
+          key: const ValueKey('scope'),
+          role: SemanticRole.list,
+          child: Column(
+            children: const <Widget>[
+              Semantics(role: SemanticRole.button, label: 'x', child: Text('x')),
+              Semantics(role: SemanticRole.button, label: 'y', child: Text('y')),
+            ],
+          ),
+        ),
+      );
+      final ids = tester
+          .semantics()
+          .where(role: SemanticRole.button)
+          .map((n) => n.id)
+          .toSet();
+      expect(ids, hasLength(2), reason: 'the ~positional tail disambiguates');
+      expect(ids.every((id) => id.value.contains('~')), isTrue,
+          reason: 'positional ids carry the ~ fragility marker');
+    });
+
+    testWidgets('a positional id survives a from-scratch rebuild at the same '
+        'position', (tester) {
+      tester.pumpWidget(build(<String>['a']));
+      final first = tester.semantics().where(role: SemanticRole.button).single.id;
+      tester.pumpWidget(const SizedBox());
+      tester.pumpWidget(build(<String>['a']));
+      final second = tester.semantics().where(role: SemanticRole.button).single.id;
+      expect(second, first,
+          reason: 'derived ids are value-based, not element-instance-based');
     });
   });
 }

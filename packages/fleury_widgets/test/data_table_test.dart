@@ -79,6 +79,59 @@ void main() {
     });
   });
 
+  group('semantic id stability (RFC A1/A2)', () {
+    DataTable runs({bool keyed = true}) => DataTable(
+      label: 'Runs',
+      rowCount: 100,
+      columns: _columns(),
+      rowKeyBuilder: keyed ? (row) => 'RUN-$row' : null,
+      cellBuilder: _cell,
+    );
+
+    testWidgets('a keyed-row table gives rows a stable, ~-free id that '
+        'survives a from-scratch rebuild', (tester) {
+      tester.pumpWidget(runs());
+      tester.render(size: const CellSize(20, 6));
+      final rowId = tester
+          .semantics()
+          .single(role: SemanticRole.tableRow, label: 'RUN-0')
+          .id;
+      expect(rowId.value, contains('/table/row/RUN-0'));
+      expect(
+        rowId.value,
+        isNot(contains('/row/~')),
+        reason: 'a real row key is stable, not positional',
+      );
+
+      // Rebuild from scratch: the row id is identical — derived from the row
+      // key, not the (now-different) element instance.
+      tester.pumpWidget(const SizedBox());
+      tester.pumpWidget(runs());
+      tester.render(size: const CellSize(20, 6));
+      final rowId2 = tester
+          .semantics()
+          .single(role: SemanticRole.tableRow, label: 'RUN-0')
+          .id;
+      expect(rowId2, rowId);
+    });
+
+    testWidgets('a table without a rowKeyBuilder marks its index-keyed rows ~',
+        (tester) {
+      tester.pumpWidget(runs(keyed: false));
+      tester.render(size: const CellSize(20, 6));
+      final rowId = tester
+          .semantics()
+          .byRole(SemanticRole.tableRow)
+          .firstWhere((n) => n.state['rowIndex'] == 0)
+          .id;
+      expect(
+        rowId.value,
+        contains('/table/row/~0'),
+        reason: 'an index-based row is positional / version-fragile',
+      );
+    });
+  });
+
   testWidgets('renders visible rows only and exposes virtualized semantics', (
     tester,
   ) {
