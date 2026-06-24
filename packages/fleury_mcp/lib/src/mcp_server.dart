@@ -110,6 +110,12 @@ final class McpServer {
   final FleuryAppBridge bridge;
   final void Function(String jsonLine) send;
 
+  /// The snapshot most recently handed to the agent (via get_ui / find_nodes /
+  /// the resource) — the frame whose ids the agent is holding. invoke_action
+  /// compares against it to detect a stale *positional* reference (see
+  /// [_isPositionalId] / [_fingerprint]).
+  SemanticInspectionSnapshot? _lastServed;
+
   static const Set<String> _supportedProtocolVersions = <String>{
     '2025-06-18',
     '2025-03-26',
@@ -229,6 +235,7 @@ final class McpServer {
       throw StateError('Unknown resource: $uri');
     }
     final snapshot = await _currentSnapshot();
+    if (snapshot != null) _lastServed = snapshot;
     final text = snapshot == null ? '{}' : jsonEncode(snapshot.toJson());
     return <String, Object?>{
       'contents': <Object?>[
@@ -442,11 +449,13 @@ final class McpServer {
 
   Future<Map<String, Object?>> _toolGetUi() async {
     final snapshot = await _requireSnapshot();
+    _lastServed = snapshot;
     return _toolJson(snapshot.toJson());
   }
 
   Future<Map<String, Object?>> _toolFindNodes(Map<String, Object?> args) async {
     final snapshot = await _requireSnapshot();
+    _lastServed = snapshot;
     final matches = snapshot
         .where(
           role: _optString(args['role']),
@@ -511,6 +520,25 @@ final class McpServer {
       );
     }
 
+    // Stale-reference guard. A positional/auto id (`element-…`) can come to
+    // denote a *different* logical node after the tree shifts (an unkeyed list
+    // recycles element slots). If the node now at this id no longer matches what
+    // the agent last read, fail safely instead of driving the wrong node — the
+    // silent mis-target the code review flagged. Stable ids (explicit, key:…,
+    // contributor-assigned) track their logical node, so they're exempt: a
+    // legitimate label change on a stable id must not falsely fire.
+    if (_isPositionalId(id)) {
+      final observed = _lastServed?.nodeById(id);
+      if (observed != null && _fingerprint(observed) != _fingerprint(node)) {
+        throw _ToolFailure(
+          'Stale reference: id "$id" now denotes a different node '
+          '(${_describeNode(observed)} → ${_describeNode(node)}). The UI '
+          'changed since you read it — re-read get_ui and retry. (Auto-generated '
+          'ids are positional; prefer an app-assigned Semantics(id:).)',
+        );
+      }
+    }
+
     final before = bridge.revision;
     bridge.invokeAction(SemanticNodeId(id), action);
     final after = await bridge.settle(sinceRevision: before);
@@ -526,6 +554,21 @@ final class McpServer {
       'ui': after?.toJson(),
     });
   }
+
+  /// Whether [id] is an auto-generated *positional* id that can come to denote a
+  /// different logical node when the tree shifts. Today that's the
+  /// `element-<hash>` fallback; app-assigned, `key:…`, and contributor-assigned
+  /// ids track their logical node and are exempt from the stale check.
+  static bool _isPositionalId(String id) => id.startsWith('element-');
+
+  /// A cheap "is this the same logical node" proxy: role + label. Stable across
+  /// value-only updates (a counter ticking keeps its label), and changes when a
+  /// positional id comes to point at a different node (a different row's label).
+  static String _fingerprint(SemanticInspectionNode node) =>
+      '${node.role} ${node.label ?? ''}';
+
+  static String _describeNode(SemanticInspectionNode node) =>
+      node.label == null ? node.role : '${node.role} "${node.label}"';
 
   Future<Map<String, Object?>> _toolTypeText(Map<String, Object?> args) async {
     final text = _optString(args['text']);

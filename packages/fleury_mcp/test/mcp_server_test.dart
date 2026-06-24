@@ -50,6 +50,39 @@ void main() {
   /// Pushes a fresh semantic snapshot (counter at [count]) to the bridge.
   void pushCount(int count) => pushRoot(_counterRoot(count));
 
+  /// Pushes a snapshot and waits until the bridge has decoded it (the revision
+  /// advances), so a following read observes the new tree.
+  Future<void> pushAndAwait(Map<String, Object?> root) async {
+    final before = bridge.revision;
+    pushRoot(root);
+    while (bridge.revision == before) {
+      await Future<void>.delayed(Duration.zero);
+    }
+  }
+
+  /// A root holding a single button [id]/[label] plus a [count] text node, so a
+  /// value tick (changing count) leaves the button's role+label fingerprint
+  /// untouched.
+  Map<String, Object?> buttonAndCount(String id, String label, int count) =>
+      <String, Object?>{
+        'id': 'root',
+        'role': 'app',
+        'children': <Object?>[
+          <String, Object?>{
+            'id': id,
+            'role': 'button',
+            'label': label,
+            'actions': <String>['activate'],
+          },
+          <String, Object?>{
+            'id': 'count',
+            'role': 'text',
+            'label': 'Count',
+            'value': count,
+          },
+        ],
+      };
+
   /// Decodes the last response line and returns its `result` map.
   Map<String, Object?> lastResult() {
     final message = jsonDecode(out.removeLast()) as Map<String, Object?>;
@@ -263,6 +296,108 @@ void main() {
     );
     expect(toolError(lastResult()), contains('does not advertise'));
     expect(transport.sent.whereType<SemanticActionFrame>(), isEmpty);
+  });
+
+  test('invoke_action blocks a stale positional id (mis-target guard)',
+      () async {
+    // The agent reads a positional/auto id as button "Alice"...
+    pushRoot(buttonAndCount('element-1', 'Alice', 0));
+    await bridge.ready;
+    await server.handleLine(
+      _rpc(30, 'tools/call', <String, Object?>{
+        'name': 'get_ui',
+        'arguments': <String, Object?>{},
+      }),
+    );
+    lastResult();
+
+    // ...then the tree shifts and element-1 comes to denote a different node.
+    await pushAndAwait(buttonAndCount('element-1', 'Bob', 0));
+
+    await server.handleLine(
+      _rpc(31, 'tools/call', <String, Object?>{
+        'name': 'invoke_action',
+        'arguments': <String, Object?>{'id': 'element-1', 'action': 'activate'},
+      }),
+    );
+    expect(toolError(lastResult()), contains('Stale reference'));
+    expect(transport.sent.whereType<SemanticActionFrame>(), isEmpty);
+  });
+
+  test('invoke_action allows a positional id whose fingerprint is unchanged',
+      () async {
+    pushRoot(buttonAndCount('element-2', 'Save', 0));
+    await bridge.ready;
+    await server.handleLine(
+      _rpc(32, 'tools/call', <String, Object?>{
+        'name': 'get_ui',
+        'arguments': <String, Object?>{},
+      }),
+    );
+    lastResult();
+
+    // A value tick elsewhere; element-2 "Save" is the same logical node.
+    await pushAndAwait(buttonAndCount('element-2', 'Save', 1));
+
+    final pending = server.handleLine(
+      _rpc(33, 'tools/call', <String, Object?>{
+        'name': 'invoke_action',
+        'arguments': <String, Object?>{'id': 'element-2', 'action': 'activate'},
+      }),
+    );
+    pushRoot(buttonAndCount('element-2', 'Save', 2)); // settle reaction
+    await pending;
+
+    expect(toolJson(lastResult())['invoked'], isNotNull);
+    expect(
+      transport.sent.whereType<SemanticActionFrame>().map((f) => f.id.value),
+      contains('element-2'),
+    );
+  });
+
+  test('invoke_action exempts a stable id from the stale check', () async {
+    Map<String, Object?> playButton(String label) => <String, Object?>{
+      'id': 'root',
+      'role': 'app',
+      'children': <Object?>[
+        <String, Object?>{
+          'id': 'play-btn',
+          'role': 'button',
+          'label': label,
+          'actions': <String>['activate'],
+        },
+      ],
+    };
+
+    // The agent reads a stable app-assigned id as "Play"...
+    pushRoot(playButton('Play'));
+    await bridge.ready;
+    await server.handleLine(
+      _rpc(34, 'tools/call', <String, Object?>{
+        'name': 'get_ui',
+        'arguments': <String, Object?>{},
+      }),
+    );
+    lastResult();
+
+    // ...whose label legitimately toggles to "Pause" — still the same node.
+    await pushAndAwait(playButton('Pause'));
+
+    final pending = server.handleLine(
+      _rpc(35, 'tools/call', <String, Object?>{
+        'name': 'invoke_action',
+        'arguments': <String, Object?>{'id': 'play-btn', 'action': 'activate'},
+      }),
+    );
+    pushRoot(playButton('Play')); // settle reaction; proves it went through
+    await pending;
+
+    // A label change on a stable id must NOT fire the stale guard.
+    expect(toolJson(lastResult())['invoked'], isNotNull);
+    expect(
+      transport.sent.whereType<SemanticActionFrame>().map((f) => f.id.value),
+      contains('play-btn'),
+    );
   });
 
   test('type_text emits a TextInputEvent frame', () async {
