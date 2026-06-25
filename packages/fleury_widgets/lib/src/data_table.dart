@@ -4,6 +4,7 @@ import 'package:characters/characters.dart';
 import 'package:fleury/fleury_host.dart';
 
 import 'component_theme.dart';
+import 'semantic_coercion.dart';
 import 'table.dart' show FixedColumnWidth, FlexColumnWidth, TableColumnWidth;
 
 /// Direction for an app-provided [DataTable] sort state.
@@ -555,6 +556,7 @@ class DataTable extends StatefulWidget {
     this.selectedStyle,
     this.sortColumnId,
     this.sortDirection,
+    this.onSort,
     this.filterText,
     this.label = 'Data table',
   });
@@ -577,6 +579,13 @@ class DataTable extends StatefulWidget {
   final CellStyle? selectedStyle;
   final String? sortColumnId;
   final DataTableSortDirection? sortDirection;
+
+  /// Called with a column's id when an agent activates its header cell, so the
+  /// app can (re)sort. The header is custom-painted (no per-cell widget), so
+  /// this is the semantic-layer trigger — the synthetic header cells carry the
+  /// `columnId`. When non-null, header cells advertise `activate`.
+  final void Function(String columnId)? onSort;
+
   final String? filterText;
   final String? label;
 
@@ -685,6 +694,15 @@ class _DataTableState extends State<DataTable> {
         _focusNode.requestFocus();
         return _selectSemanticTarget(target);
       case SemanticAction.activate:
+        // A header cell activate is a sort request, not a row selection.
+        if (target.state['header'] == true) {
+          final columnId = target.state['columnId'];
+          if (widget.onSort != null && columnId is String) {
+            widget.onSort!(columnId);
+            return true;
+          }
+          return false;
+        }
         if (widget.onSelect == null) return false;
         _focusNode.requestFocus();
         _selectSemanticTarget(target);
@@ -697,6 +715,20 @@ class _DataTableState extends State<DataTable> {
       case _:
         return false;
     }
+  }
+
+  /// `setValue` on the table node jumps the windowed row range to a target row
+  /// INDEX (0-based) — the off-window reach an agent can't otherwise get
+  /// without growing the whole grid. The window follows the selection, so the
+  /// target row then appears in the next snapshot. Clamped to the row range;
+  /// does not fire `onSelect` (it's navigation, not a row action).
+  bool _handleSemanticSetValue(SemanticNode target, Object? value) {
+    if (target.role != SemanticRole.table || widget.rowCount <= 0) return false;
+    final index = coerceSemanticInt(value);
+    if (index == null) return false;
+    _focusNode.requestFocus();
+    _controller.selectedIndex = index.clamp(0, widget.rowCount - 1);
+    return true;
   }
 
   bool _selectSemanticTarget(SemanticNode target) {
@@ -860,7 +892,9 @@ class _DataTableState extends State<DataTable> {
         _visibleRows = viewport.visibleRows < 1 ? 1 : viewport.visibleRows;
       },
       onSelect: widget.onSelect,
+      sortable: widget.onSort != null,
       onSemanticAction: _handleSemanticAction,
+      onSemanticSetValue: _handleSemanticSetValue,
     );
     return FocusWithin(
       onFocusChange: _onFocusWithinChange,
@@ -1017,7 +1051,9 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
     required this.selectedStyle,
     required this.onViewport,
     required this.onSelect,
+    required this.sortable,
     required this.onSemanticAction,
+    required this.onSemanticSetValue,
     required this.copySelectedRow,
     required this.copyOptions,
     this.sortColumnId,
@@ -1041,8 +1077,11 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
   final CellStyle selectedStyle;
   final void Function(DataTableViewportMetrics viewport) onViewport;
   final void Function(int rowIndex)? onSelect;
+  final bool sortable;
   final FutureOr<bool> Function(SemanticNode target, SemanticAction action)
   onSemanticAction;
+  final FutureOr<bool> Function(SemanticNode target, Object? value)
+  onSemanticSetValue;
   final bool copySelectedRow;
   final DataTableCopyOptions copyOptions;
   final String? sortColumnId;
@@ -1090,7 +1129,10 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
 }
 
 class _DataTableElement extends LeafRenderObjectElement
-    implements SemanticContributor, SemanticActionContributor {
+    implements
+        SemanticContributor,
+        SemanticActionContributor,
+        SemanticValueContributor {
   _DataTableElement(_DataTableRenderWidget super.widget);
 
   @override
@@ -1101,6 +1143,13 @@ class _DataTableElement extends LeafRenderObjectElement
 
   @override
   SemanticNode buildSemanticNode(List<SemanticNode> children) {
+    // Stable id anchor folded from the table's keyed ancestors (e.g.
+    // DataTable(key:)), so row/cell ids survive rebuilds and reorders instead
+    // of churning on the element's hashCode. Falls back to the element hash
+    // only when the table has no keyed ancestor at all. Genuinely positional
+    // segments (index-keyed rows, column index) carry a `~` so the stale guard
+    // protects exactly them.
+    final scope = semanticAnchorOf(this) ?? 'element-$hashCode';
     final visibleFirst = renderObject.visibleFirst;
     final visibleRows = renderObject.visibleRows;
     final visibleEnd = widget.rowCount == 0 || visibleRows == 0
@@ -1128,7 +1177,7 @@ class _DataTableElement extends LeafRenderObjectElement
         ? null
         : widget.columns[selectedColumn].id;
     return SemanticNode(
-      id: SemanticNodeId('datatable-$hashCode'),
+      id: SemanticNodeId('$scope/table'),
       role: SemanticRole.table,
       label: widget.label,
       value: selectedKey,
@@ -1138,6 +1187,9 @@ class _DataTableElement extends LeafRenderObjectElement
         SemanticAction.focus,
         SemanticAction.select,
         if (widget.onSelect != null) SemanticAction.activate,
+        // Jump the windowed row range to a target row INDEX — the off-window
+        // reach an agent otherwise can't get without resizing the whole grid.
+        if (widget.rowCount > 0) SemanticAction.setValue,
         if (widget.copySelectedRow &&
             widget.rowCount > 0 &&
             widget.columns.isNotEmpty)
@@ -1171,29 +1223,37 @@ class _DataTableElement extends LeafRenderObjectElement
       }),
       children: <SemanticNode>[
         SemanticNode(
-          id: SemanticNodeId('datatable-$hashCode-header'),
+          id: SemanticNodeId('$scope/table/header'),
           role: SemanticRole.tableRow,
           label: 'Header',
           state: const SemanticState({'rowIndex': -1, 'header': true}),
           children: [
             for (var col = 0; col < widget.columns.length; col++)
               SemanticNode(
-                id: SemanticNodeId('datatable-$hashCode-header-$col'),
+                id: SemanticNodeId('$scope/table/header/~$col'),
                 role: SemanticRole.tableCell,
                 label: _sanitizeExportField(widget.columns[col].title),
                 value: _sanitizeExportField(widget.columns[col].title),
+                // Activating a sortable column's header asks the app to sort by
+                // it (the app owns the data + the direction toggle).
+                actions: <SemanticAction>{
+                  if (widget.sortable) SemanticAction.activate,
+                },
                 state: SemanticState({
                   'rowIndex': -1,
                   'columnIndex': col,
                   'columnId': widget.columns[col].id,
                   'header': true,
+                  if (widget.sortColumnId == widget.columns[col].id &&
+                      widget.sortDirection != null)
+                    'sortDirection': widget.sortDirection!.name,
                 }),
               ),
           ],
         ),
         for (var i = 0; i < visibleRows; i++)
           if (visibleFirst + i < widget.rowCount)
-            _semanticRow(visibleFirst + i, selected, range),
+            _semanticRow(scope, visibleFirst + i, selected, range),
       ],
     );
   }
@@ -1212,6 +1272,7 @@ class _DataTableElement extends LeafRenderObjectElement
   }
 
   SemanticNode _semanticRow(
+    String scope,
     int rowIndex,
     int selected,
     DataTableSelectionRange range,
@@ -1219,11 +1280,18 @@ class _DataTableElement extends LeafRenderObjectElement
     final key = widget.rowKeyBuilder == null
         ? rowIndex
         : widget.rowKeyBuilder!(rowIndex);
+    // No rowKeyBuilder ⇒ the "key" is the row index — positional, so mark it
+    // `~` (version-fragile). A real row key is stable and identifies the row
+    // wherever it scrolls/reorders; escape it so a key containing `/` or `~`
+    // can't inject a segment or be misread as positional.
+    final rowId = widget.rowKeyBuilder == null
+        ? '$scope/table/row/~$key'
+        : '$scope/table/row/${escapeSemanticIdSegment('$key')}';
     final rowSelected = widget.selectionMode == DataTableSelectionMode.row
         ? rowIndex == selected
         : rowIndex == selected;
     return SemanticNode(
-      id: SemanticNodeId('datatable-$hashCode-row-$key'),
+      id: SemanticNodeId(rowId),
       role: SemanticRole.tableRow,
       label: key.toString(),
       selected: rowSelected,
@@ -1243,12 +1311,13 @@ class _DataTableElement extends LeafRenderObjectElement
       }),
       children: [
         for (var col = 0; col < widget.columns.length; col++)
-          _semanticCell(rowIndex, key, col, selected, range),
+          _semanticCell(rowId, rowIndex, key, col, selected, range),
       ],
     );
   }
 
   SemanticNode _semanticCell(
+    String rowId,
     int rowIndex,
     Object key,
     int columnIndex,
@@ -1261,7 +1330,7 @@ class _DataTableElement extends LeafRenderObjectElement
         ? rowIndex == selected
         : range.containsCell(rowIndex, columnIndex);
     return SemanticNode(
-      id: SemanticNodeId('datatable-$hashCode-row-$key-cell-$columnIndex'),
+      id: SemanticNodeId('$rowId/cell/~$columnIndex'),
       role: SemanticRole.tableCell,
       label: text,
       value: text,
@@ -1289,6 +1358,11 @@ class _DataTableElement extends LeafRenderObjectElement
     SemanticAction action,
   ) {
     return widget.onSemanticAction(target, action);
+  }
+
+  @override
+  FutureOr<bool> handleSemanticSetValue(SemanticNode target, Object? value) {
+    return widget.onSemanticSetValue(target, value);
   }
 }
 

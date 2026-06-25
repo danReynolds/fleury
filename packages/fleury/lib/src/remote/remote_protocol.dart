@@ -186,9 +186,13 @@ final class InputEventFrame extends RemoteFrame {
 /// the live node [id]. Peer → app; the structured counterpart to the
 /// app → peer [SemanticsFrame].
 final class SemanticActionFrame extends RemoteFrame {
-  const SemanticActionFrame(this.id, this.action);
+  const SemanticActionFrame(this.id, this.action, {this.value});
   final SemanticNodeId id;
   final SemanticAction action;
+
+  /// Optional payload, carried only by [SemanticAction.setValue] (a
+  /// JSON-friendly scalar). Null for every parameterless action.
+  final Object? value;
 }
 
 /// The bytes of one inline image (browser surface), keyed by content-hash
@@ -222,7 +226,7 @@ Uint8List encodeFrame(RemoteFrame frame) {
     InputEventFrame f => (FrameType.inputEvent, encodeInputEvent(f.event)),
     SemanticActionFrame f => (
       FrameType.semanticAction,
-      encodeSemanticAction(f.id, f.action),
+      encodeSemanticAction(f.id, f.action, value: f.value),
     ),
     InlineImageFrame f => (FrameType.inlineImage, _encodeInlineImage(f)),
     ByeFrame() => (FrameType.bye, const <int>[]),
@@ -356,8 +360,8 @@ final class FrameDecoder {
         }
       case FrameType.semanticAction:
         try {
-          final (:id, :action) = decodeSemanticAction(payload);
-          return SemanticActionFrame(id, action);
+          final (:id, :action, :value) = decodeSemanticAction(payload);
+          return SemanticActionFrame(id, action, value: value);
         } on RemoteCodecException catch (e) {
           throw RemoteProtocolException('SEMANTIC_ACTION frame: ${e.message}.');
         }

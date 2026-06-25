@@ -1,0 +1,19 @@
+# Changelog
+
+## 0.1.0
+
+Initial public release.
+
+A Dart-native terminal UI framework with Flutter-style ergonomics (widgets,
+elements, state, layout) and terminal-native internals.
+
+- **Widgets & layout** — a Flutter-shaped widget/element/render tree targeting a
+  terminal cell grid.
+- **Two surfaces** — render to a terminal, or serve the same app to a browser
+  over a structured wire (`fleury serve`).
+- **Semantics, built in** — every widget contributes an accessible semantic tree
+  that powers the browser accessibility mirror, the testing API, and agent
+  drivability (see the `fleury_mcp` package).
+- **Host SPI** — `fleury_host.dart` / `fleury_host_io.dart` expose the runtime,
+  damage, semantics, and remote-render wire contracts a platform host builds on.
+- **Testing** — `fleury_test.dart` drives apps and asserts on the semantic tree.

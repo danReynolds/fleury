@@ -158,6 +158,20 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
 
   DateTime _midnight(DateTime d) => DateTime(d.year, d.month, d.day);
 
+  void _setDateFromPayload(Object? payload) {
+    if (!_enabled) return;
+    final parsed = payload is DateTime
+        ? payload
+        : payload is String
+        ? DateTime.tryParse(payload.trim())
+        : null;
+    if (parsed == null) return;
+    final next = _midnight(parsed);
+    if (_inBounds(next) && next != _midnight(widget.value)) {
+      widget.onChanged!(next);
+    }
+  }
+
   String _formatDate(DateTime d) {
     final m = d.month.toString().padLeft(2, '0');
     final day = d.day.toString().padLeft(2, '0');
@@ -426,6 +440,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
         SemanticAction.focus,
         if (canIncrement) SemanticAction.increment,
         if (canDecrement) SemanticAction.decrement,
+        SemanticAction.setValue,
       },
       state: SemanticState({
         'selectedDate': _formatDate(v),
@@ -456,6 +471,9 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
             return;
         }
       },
+      // Jump to an exact date in one call (ISO `YYYY-MM-DD`), instead of
+      // increment-ing a day at a time. Out-of-[firstDate, lastDate] is a no-op.
+      onSetValue: _setDateFromPayload,
       child: Focus(
         focusNode: _node,
         autofocus: widget.autofocus,

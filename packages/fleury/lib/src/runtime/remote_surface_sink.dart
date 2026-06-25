@@ -3,10 +3,11 @@ import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
 import 'frame_presentation.dart';
 
-/// Handles an inbound semantic-action request from the peer (the browser
-/// activating a node in its accessible DOM).
+/// Handles an inbound semantic-action request from the peer (the browser or an
+/// agent activating a node in its accessible DOM). [value] is the optional
+/// payload carried by [SemanticAction.setValue]; null for every other action.
 typedef RemoteSemanticActionHandler =
-    void Function(SemanticNodeId id, SemanticAction action);
+    void Function(SemanticNodeId id, SemanticAction action, Object? value);
 
 /// A driver that wants structured frames instead of ANSI bytes.
 ///

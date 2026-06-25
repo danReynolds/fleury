@@ -1,0 +1,34 @@
+name: fleury_mcp
+description: >-
+  A Model Context Protocol server that drives a Fleury terminal-UI app through
+  its semantic tree, so any MCP host can read and operate it.
+version: 0.1.0
+repository: https://github.com/danReynolds/fleury/tree/main/packages/fleury_mcp
+issue_tracker: https://github.com/danReynolds/fleury/issues
+topics:
+  - mcp
+  - agents
+  - tui
+  - terminal
+  - automation
+
+executables:
+  fleury_mcp: fleury_mcp
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  # Depends on fleury's PUBLIC host SPI (fleury_host_io.dart) — safe under
+  # semver. fleury must be published first; until then the override below
+  # resolves it from the local path. Remove the override before the final
+  # `dart pub publish` of this package (or it will warn).
+  fleury: ^0.1.0
+
+dependency_overrides:
+  fleury:
+    path: ../fleury
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.26.3

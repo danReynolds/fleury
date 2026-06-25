@@ -71,6 +71,10 @@ export default defineConfig({
             { label: 'Animation', slug: 'guides/animation' },
             { label: 'Focus & keyboard', slug: 'guides/focus-and-keyboard' },
             { label: 'Testing', slug: 'guides/testing' },
+            {
+              label: 'Driving with an agent (MCP)',
+              slug: 'guides/driving-with-agents',
+            },
             { label: 'Deployment & distribution', slug: 'guides/deployment' },
           ],
         },

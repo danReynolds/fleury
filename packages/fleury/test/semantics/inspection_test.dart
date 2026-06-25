@@ -3,6 +3,39 @@ import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('toJsonCapped bounds the tree and marks what it dropped', () {
+    final root = SemanticNode(
+      id: const SemanticNodeId('root'),
+      role: SemanticRole.app,
+      children: <SemanticNode>[
+        for (var i = 0; i < 6; i++)
+          SemanticNode(
+            id: SemanticNodeId('item-$i'),
+            role: SemanticRole.listItem,
+            label: 'Item $i',
+          ),
+      ],
+    );
+    final snapshot = SemanticTree(root: root).toInspectionSnapshot();
+    expect(snapshot.nodeCount, 7);
+
+    // Under a generous cap it is byte-identical to the unbounded toJson — no
+    // truncation markers leak onto a tree that fits.
+    final full = snapshot.toJsonCapped(maxNodes: 1000);
+    expect(full.containsKey('truncated'), isFalse);
+    expect(full, snapshot.toJson());
+
+    // A tight cap keeps the root + budget nodes and flags exactly what it cut,
+    // while the summary still describes the full tree so the agent knows to
+    // drill in with find_nodes.
+    final capped = snapshot.toJsonCapped(maxNodes: 4);
+    expect(capped['truncated'], isTrue);
+    expect(capped['nodeCount'], 7);
+    final rootJson = capped['root'] as Map<String, Object?>;
+    expect((rootJson['children'] as List).length, 3);
+    expect(rootJson['childrenTruncated'], 3);
+  });
+
   test(
     'semantic inspection snapshot is queryable, redacted, and JSON-safe',
     () {

@@ -739,28 +739,44 @@ TuiEvent decodeInputEvent(Uint8List bytes) {
   return event;
 }
 
-/// Encodes a peer's semantic-action request — the browser activating a node in
-/// its accessible DOM — as the node id plus the action name.
-Uint8List encodeSemanticAction(SemanticNodeId id, SemanticAction action) {
+/// Encodes a peer's semantic-action request — the browser or an agent
+/// activating a node in its accessible DOM — as the node id, the action name,
+/// and an optional JSON-encoded payload (carried only by `setValue`).
+Uint8List encodeSemanticAction(
+  SemanticNodeId id,
+  SemanticAction action, {
+  Object? value,
+}) {
   final w = _Writer();
   w.vstr(id.value);
   w.vstr(action.name);
+  w.boolean(value != null);
+  if (value != null) w.vstr(jsonEncode(value));
   return w.take();
 }
 
 /// Decodes a semantic-action request. Throws [RemoteCodecException] on an
-/// unrecognized action name (e.g. a peer on a newer protocol) so the caller
-/// rejects it rather than misinterpreting it.
-({SemanticNodeId id, SemanticAction action}) decodeSemanticAction(
+/// unrecognized action name (e.g. a peer on a newer protocol) or a malformed
+/// payload so the caller rejects it rather than misinterpreting it.
+({SemanticNodeId id, SemanticAction action, Object? value}) decodeSemanticAction(
   Uint8List bytes,
 ) {
   final r = _Reader(bytes);
   final id = r.vstr();
   final actionName = r.vstr();
+  Object? value;
+  if (r.boolean()) {
+    final raw = r.vstr();
+    try {
+      value = jsonDecode(raw);
+    } on FormatException {
+      throw const RemoteCodecException('invalid setValue payload JSON');
+    }
+  }
   r.expectEnd();
   for (final action in SemanticAction.values) {
     if (action.name == actionName) {
-      return (id: SemanticNodeId(id), action: action);
+      return (id: SemanticNodeId(id), action: action, value: value);
     }
   }
   throw RemoteCodecException('unknown semantic action "$actionName"');

@@ -464,6 +464,9 @@ class FleuryTester {
   /// node that advertises [action]. This is intentionally semantic-first: tests
   /// can exercise app commands, controls, fields, and app-authored regions by
   /// role/label/action instead of reaching through widget internals.
+  ///
+  /// For [SemanticAction.setValue], pass the value to apply as [payload] (the
+  /// [value] argument is a node *filter*, not the payload).
   Future<SemanticActionInvocationResult> invokeSemanticAction(
     SemanticAction action, {
     SemanticNode? node,
@@ -471,6 +474,7 @@ class FleuryTester {
     SemanticRole? role,
     String? label,
     Object? value,
+    Object? payload,
     bool? focused,
     bool? selected,
     bool? enabled,
@@ -511,7 +515,12 @@ class FleuryTester {
     }
 
     try {
-      final handled = await _dispatchSemanticAction(root, target, action);
+      final handled = await _dispatchSemanticAction(
+        root,
+        target,
+        action,
+        payload,
+      );
       _owner.flushBuild();
       return handled
           ? SemanticActionInvocationResult.completed(target, action)
@@ -722,6 +731,7 @@ class FleuryTester {
     Element element,
     SemanticNode target,
     SemanticAction action,
+    Object? payload,
   ) async {
     final children = <Element>[];
     if (element is SemanticChildrenProvider) {
@@ -730,11 +740,20 @@ class FleuryTester {
       element.visitChildren(children.add);
     }
     for (final child in children) {
-      if (await _dispatchSemanticAction(child, target, action)) {
+      if (await _dispatchSemanticAction(child, target, action, payload)) {
         return true;
       }
     }
 
+    // setValue carries a payload → route to the opt-in value contributor.
+    if (action == SemanticAction.setValue &&
+        element is SemanticValueContributor) {
+      if (!_semanticSubtreeContains(element, target.id)) return false;
+      return await (element as SemanticValueContributor).handleSemanticSetValue(
+        target,
+        payload,
+      );
+    }
     if (element is! SemanticActionContributor) return false;
     if (!_semanticSubtreeContains(element, target.id)) return false;
     final contributor = element as SemanticActionContributor;

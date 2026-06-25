@@ -264,6 +264,15 @@ class _TextAreaState extends State<TextArea>
     }
   }
 
+  /// Replaces the whole body in one call (the `setValue` path) — the multi-line
+  /// counterpart to TextInput's, so an agent can set a TextArea without typing
+  /// the text character by character.
+  void _handleSemanticSetValue(Object? value) {
+    if (!_canEdit) return;
+    _cancelScheduledPaste();
+    _controller.text = value?.toString() ?? '';
+  }
+
   @override
   KeyEventResult onTextInput(String text) {
     if (!widget.enabled) return KeyEventResult.ignored;
@@ -441,7 +450,8 @@ class _TextAreaState extends State<TextArea>
       validationError: widget.validationError,
       actions: {
         if (widget.enabled) SemanticAction.focus,
-        if (widget.enabled && !widget.readOnly) SemanticAction.clear,
+        if (_canEdit) SemanticAction.clear,
+        if (_canEdit) SemanticAction.setValue,
         if (widget.enabled &&
             _controller.hasSelection &&
             widget.clipboardPolicy != TextClipboardPolicy.disabled)
@@ -461,6 +471,7 @@ class _TextAreaState extends State<TextArea>
         'pasteTotalLength': _pasteProgress.totalLength,
       }),
       onAction: _handleSemanticAction,
+      onSetValue: _handleSemanticSetValue,
       child: Focus(
         focusNode: _focusNode,
         autofocus: widget.autofocus && widget.enabled,

@@ -1,6 +1,7 @@
 import 'dart:async' show FutureOr;
 
 import '../foundation/geometry.dart';
+import '../foundation/key.dart' show Key, ValueKey;
 import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
@@ -116,9 +117,20 @@ enum SemanticAction {
   cancel,
   diagnose,
   captureDebug,
+
+  /// Set the node's value to a payload supplied with the invocation (text into
+  /// a field, a slider position, a selected option). Unlike every action above,
+  /// it carries an argument — delivered via [SemanticSetValueCallback] /
+  /// [SemanticValueContributor], not the parameterless [SemanticActionCallback].
+  setValue,
 }
 
 typedef SemanticActionCallback = FutureOr<void> Function(SemanticAction action);
+
+/// Carries a [SemanticAction.setValue] payload to the node it targets. The
+/// payload is a JSON-friendly scalar (string, num, bool, or null); a widget
+/// coerces/validates it for its role (a slider expects a num, a field a string).
+typedef SemanticSetValueCallback = FutureOr<void> Function(Object? value);
 
 enum SemanticActionInvocationStatus {
   completed,
@@ -802,6 +814,7 @@ Future<SemanticActionInvocationResult> invokeSemanticActionFromElement({
   required SemanticTree tree,
   required SemanticNodeId id,
   required SemanticAction action,
+  Object? value,
 }) async {
   final target = tree.nodeById(id);
   if (target == null) return SemanticActionInvocationResult.notFound(action);
@@ -812,7 +825,7 @@ Future<SemanticActionInvocationResult> invokeSemanticActionFromElement({
     return SemanticActionInvocationResult.unsupported(target, action);
   }
   try {
-    final dispatchResult = _dispatchSemanticAction(root, target, action);
+    final dispatchResult = _dispatchSemanticAction(root, target, action, value);
     final handled = dispatchResult is Future<bool>
         ? await dispatchResult
         : dispatchResult;
@@ -833,6 +846,7 @@ FutureOr<bool> _dispatchSemanticAction(
   Element element,
   SemanticNode target,
   SemanticAction action,
+  Object? value,
 ) {
   final children = _elementChildren(element);
   for (var index = 0; index < children.length; index++) {
@@ -840,6 +854,7 @@ FutureOr<bool> _dispatchSemanticAction(
       children[index],
       target,
       action,
+      value,
     );
     if (childResult is Future<bool>) {
       return _dispatchSemanticActionAfterAsyncChild(
@@ -849,12 +864,13 @@ FutureOr<bool> _dispatchSemanticAction(
         index + 1,
         target,
         action,
+        value,
       );
     }
     if (childResult) return true;
   }
 
-  return _dispatchSemanticActionOnElement(element, target, action);
+  return _dispatchSemanticActionOnElement(element, target, action, value);
 }
 
 Future<bool> _dispatchSemanticActionAfterAsyncChild(
@@ -864,14 +880,20 @@ Future<bool> _dispatchSemanticActionAfterAsyncChild(
   int nextIndex,
   SemanticNode target,
   SemanticAction action,
+  Object? value,
 ) async {
   if (await childResult) return true;
   for (var index = nextIndex; index < children.length; index++) {
-    if (await _dispatchSemanticAction(children[index], target, action)) {
+    if (await _dispatchSemanticAction(children[index], target, action, value)) {
       return true;
     }
   }
-  final ownResult = _dispatchSemanticActionOnElement(element, target, action);
+  final ownResult = _dispatchSemanticActionOnElement(
+    element,
+    target,
+    action,
+    value,
+  );
   return ownResult is Future<bool> ? await ownResult : ownResult;
 }
 
@@ -879,7 +901,19 @@ FutureOr<bool> _dispatchSemanticActionOnElement(
   Element element,
   SemanticNode target,
   SemanticAction action,
+  Object? value,
 ) {
+  // `setValue` carries a payload, so it routes to the opt-in value contributor
+  // rather than the parameterless action handler. A node that advertises
+  // setValue but doesn't implement [SemanticValueContributor] simply goes
+  // unhandled (→ unsupported), like any other unhandled action.
+  if (action == SemanticAction.setValue &&
+      element is SemanticValueContributor) {
+    return (element as SemanticValueContributor).handleSemanticSetValue(
+      target,
+      value,
+    );
+  }
   if (element is! SemanticActionContributor) return false;
   final contributor = element as SemanticActionContributor;
   return contributor.handleSemanticAction(target, action);
@@ -889,6 +923,100 @@ List<Element> _elementChildren(Element element) {
   final children = <Element>[];
   element.visitChildren(children.add);
   return children;
+}
+
+/// A stable, position-derived identity anchor for [element], folding the chain
+/// of keyed ancestors (the same `Key`s reconciliation uses) with a positional
+/// `~<index>` segment for each unkeyed step *below* the nearest key.
+///
+/// Returns null when no foldable key exists anywhere above [element] — the
+/// caller then keeps the snapshot-local `element-<hash>` form. Unlike that hash,
+/// this anchor is derived from keys + tree position rather than element
+/// instance identity, so it is identical across rebuilds: a node under a keyed
+/// list row keeps its id wherever the row moves. `GlobalKey`s are treated as
+/// transparent (they have no stable string and survive reparenting on their
+/// own), so anchoring lands on the nearest value key, which is what stays put
+/// under a `GlobalKey` move.
+///
+/// The *full* keyed chain is folded (not just the nearest key) deliberately: it
+/// keeps ids globally unique — no false "ambiguous" rejections — and gives even
+/// unkeyed nodes a session-stable anchor (the runtime/overlay root is keyed), at
+/// the cost of a constant, opaque framework-key prefix on every id. Ids are
+/// opaque handles, so that prefix is harmless; trimming it would trade that
+/// uniqueness and stability for cosmetics.
+///
+/// Privacy: a folded key value is the same identifier the app already chose for
+/// reconciliation, and a keyed ancestor already exposes it as *its own* node id,
+/// so folding it into descendant ids reveals no value the snapshot didn't
+/// already carry. Ids are display-sanitized at the inspection boundary; like the
+/// own-`key:` form, this scheme treats `Key`s as structural identifiers, not a
+/// place to encode secrets.
+/// Escapes a folded key value so it cannot inject the `/` segment separator or
+/// the `~` positional marker into a derived id (see [semanticAnchorOf]).
+///
+/// Without this, an app `Key` whose string form contains `~` (e.g.
+/// `ValueKey('a~b')`, a path/range) would make a *stable* id look positional to
+/// the stale-reference guard, and a `/` would inject phantom segments that break
+/// uniqueness. Percent-style so the escape introduces no `/` or `~` of its own;
+/// `~` in a derived id then unambiguously means "positional segment", never key
+/// content. Contributors that mint child ids from a key (e.g. `DataTable` rows)
+/// must apply this too.
+String escapeSemanticIdSegment(String segment) => segment
+    .replaceAll('%', '%25')
+    .replaceAll('~', '%7E')
+    .replaceAll('/', '%2F');
+
+/// Renders a [Key] compactly for a derived id (already escaped by the caller).
+///
+/// A [ValueKey]'s `toString` wraps its value — `ValueKey<String>(row-3)` — which
+/// is ~17 bytes of boilerplate that says nothing the value (`row-3`) doesn't.
+/// Folded onto *every* descendant's id, that boilerplate dominates the get_ui
+/// token cost, so derived ids carry just the value. An object-valued key (e.g.
+/// the overlay entry, whose `toString` is the verbose `Instance of '…'`) renders
+/// as a short, session-stable identity token instead.
+String _renderSemanticKeySegment(Key key) {
+  if (key is! ValueKey) return '$key';
+  final Object? value = key.value;
+  if (value is String) return value;
+  if (value is num || value is bool) return '$value';
+  // Object-valued key: its toString is verbose; use a session-stable token.
+  return '${value.runtimeType}#${identityHashCode(value).toRadixString(36)}';
+}
+
+String? semanticAnchorOf(Element element) {
+  final scope = <String>[]; // keyed segments, leaf→root
+  final tail = <String>[]; // positional segments below the nearest key, leaf→root
+  var sawKey = false;
+  Element? e = element;
+  while (e != null) {
+    final key = e.widget.key;
+    if (key != null && key is! GlobalKey) {
+      scope.add(escapeSemanticIdSegment(_renderSemanticKeySegment(key)));
+      sawKey = true;
+    } else if (!sawKey) {
+      tail.add('~${_childIndexOf(e)}');
+    }
+    e = e.elementParent;
+  }
+  if (!sawKey) return null;
+  return 'auto:${[...scope.reversed, ...tail.reversed].join('/')}';
+}
+
+/// [element]'s index among its parent's children, in `visitChildren` order.
+/// Element-local and reproducible: the leaf-update path and dispatch both
+/// recompute the id from the live element, and a position change is always a
+/// structural change (a full rebuild), so the index is only ever read while the
+/// tree shape is stable.
+int _childIndexOf(Element element) {
+  final parent = element.elementParent;
+  if (parent == null) return 0;
+  var index = 0;
+  var result = 0;
+  parent.visitChildren((child) {
+    if (identical(child, element)) result = index;
+    index++;
+  });
+  return result;
 }
 
 /// Implemented by elements that contribute a semantic node.
@@ -912,6 +1040,14 @@ abstract interface class SemanticActionContributor {
     SemanticNode target,
     SemanticAction action,
   );
+}
+
+/// Implemented by semantic contributors that can apply a [SemanticAction
+/// .setValue] payload. Opt-in and additive: only value-bearing nodes implement
+/// it, so the existing [SemanticActionContributor]s are untouched. Return true
+/// if the value was applied.
+abstract interface class SemanticValueContributor {
+  FutureOr<bool> handleSemanticSetValue(SemanticNode target, Object? value);
 }
 
 /// Frame-local semantic invalidations collected while the element/render tree
@@ -1054,6 +1190,7 @@ final class Semantics extends ProxyWidget {
     this.state = SemanticState.empty,
     this.includeChildren = true,
     this.onAction,
+    this.onSetValue,
     required super.child,
   });
 
@@ -1074,6 +1211,11 @@ final class Semantics extends ProxyWidget {
   final bool includeChildren;
   final SemanticActionCallback? onAction;
 
+  /// Handler for a [SemanticAction.setValue] invocation. A node that advertises
+  /// `setValue` in [actions] provides this to receive the payload (e.g. a text
+  /// field sets its controller, a slider its position).
+  final SemanticSetValueCallback? onSetValue;
+
   @override
   SemanticsElement createElement() => SemanticsElement(this);
 }
@@ -1082,7 +1224,8 @@ final class SemanticsElement extends ComponentElement
     implements
         SemanticContributor,
         SemanticChildrenProvider,
-        SemanticActionContributor {
+        SemanticActionContributor,
+        SemanticValueContributor {
   SemanticsElement(Semantics super.widget);
 
   CellRect? _bounds;
@@ -1136,15 +1279,31 @@ final class SemanticsElement extends ComponentElement
   /// The node's identity. An explicit [Semantics.id] wins; otherwise a [Key] on
   /// the widget yields a stable, deterministic id (`key:<key>`) that survives
   /// rebuilds — the identity a future incremental/observable backend, a remote
-  /// mirror, or a durable test selector needs. With neither, the id falls back
-  /// to an element-instance hash, which is snapshot-local and NOT stable across
-  /// rebuilds (see [SemanticNodeId]).
+  /// mirror, or a durable test selector needs.
+  ///
+  /// With neither, the id is *derived from the keyed-ancestor chain*
+  /// ([semanticAnchorOf]): a node under a keyed list row gets an `auto:…` id
+  /// that tracks the row wherever it moves, instead of a churning element hash.
+  /// Only when nothing above the node is keyed does it fall back to the
+  /// snapshot-local `element-<hash>` form (still NOT stable across rebuilds;
+  /// see [SemanticNodeId]).
+  ///
+  /// Recomputed on every read (it is O(depth)): the value is position-dependent,
+  /// so caching it would need a freshness signal that covers *non-Semantics*
+  /// reshuffles — which shift a positional segment without any
+  /// [SemanticsElement] lifecycle event. That signal (a build-owner structure
+  /// generation) is folded into the deferred A3 work; until then, always-fresh
+  /// is the only provably correct choice.
   SemanticNodeId get _nodeId {
     final explicitId = widget.id;
     if (explicitId != null) return explicitId;
     final key = widget.key;
-    if (key != null) return SemanticNodeId('key:$key');
-    return SemanticNodeId('element-$hashCode');
+    if (key != null) {
+      return SemanticNodeId('key:${escapeSemanticIdSegment(_renderSemanticKeySegment(key))}');
+    }
+    final anchor = semanticAnchorOf(this);
+    if (anchor == null) return SemanticNodeId('element-$hashCode');
+    return SemanticNodeId('$anchor/${widget.role.name}');
   }
 
   bool get _canBuildRetainedLeaf => !widget.includeChildren;
@@ -1229,6 +1388,100 @@ final class SemanticsElement extends ComponentElement
     if (!widget.enabled || !widget.actions.contains(action)) return false;
     await callback(action);
     return true;
+  }
+
+  @override
+  Future<bool> handleSemanticSetValue(
+    SemanticNode target,
+    Object? value,
+  ) async {
+    final callback = widget.onSetValue;
+    if (callback == null || target.id != _nodeId) return false;
+    if (!widget.enabled ||
+        !widget.actions.contains(SemanticAction.setValue)) {
+      return false;
+    }
+    await callback(value);
+    return true;
+  }
+}
+
+/// Drops [child]'s whole subtree from the semantic tree (while still rendering
+/// it) when [excluding] is true.
+///
+/// The semantic tree is what a screen reader, the web accessible-DOM mirror,
+/// and an MCP agent read and drive — so this is how an app hides content from
+/// *them* without hiding it visually: a closed-but-mounted drawer, decorative
+/// chrome that isn't actionable, or the background behind a modal an agent
+/// shouldn't touch. Toggling [excluding] is a structural change; the subtree
+/// re-appears verbatim when it flips back to false.
+///
+/// It contributes no node of its own (unlike [Semantics]); it only gates
+/// whether its descendants are collected, via [SemanticChildrenProvider].
+final class ExcludeSemantics extends ProxyWidget {
+  const ExcludeSemantics({
+    super.key,
+    this.excluding = true,
+    required super.child,
+  });
+
+  /// When true (the default), [child]'s semantic subtree is omitted from
+  /// collection. When false, this widget is transparent.
+  final bool excluding;
+
+  @override
+  Element createElement() => _ExcludeSemanticsElement(this);
+}
+
+final class _ExcludeSemanticsElement extends ComponentElement
+    implements SemanticChildrenProvider {
+  _ExcludeSemanticsElement(ExcludeSemantics super.widget);
+
+  @override
+  ExcludeSemantics get widget => super.widget as ExcludeSemantics;
+
+  @override
+  void mount(Element? parent) {
+    super.mount(parent);
+    owner.semanticDirtyTracker.recordStructureDirty();
+  }
+
+  @override
+  void update(covariant ExcludeSemantics newWidget) {
+    final wasExcluding = widget.excluding;
+    super.update(newWidget);
+    // Flipping exclusion adds or removes the whole subtree — a shape change.
+    if (wasExcluding != newWidget.excluding) {
+      owner.semanticDirtyTracker.recordStructureDirty();
+    }
+    rebuild(force: true);
+  }
+
+  @override
+  void deactivate() {
+    owner.semanticDirtyTracker.recordStructureDirty();
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    owner.semanticDirtyTracker.recordStructureDirty();
+  }
+
+  @override
+  void unmount() {
+    owner.semanticDirtyTracker.recordStructureDirty();
+    super.unmount();
+  }
+
+  @override
+  Widget buildChild() => widget.child;
+
+  @override
+  void visitSemanticChildren(void Function(Element child) visitor) {
+    if (widget.excluding) return;
+    visitChildren(visitor);
   }
 }
 
