@@ -1119,4 +1119,39 @@ void main() {
     expect(area.state.clipboardPolicy, 'redacted');
     expect(area.state.clipboardRedacted, isTrue);
   });
+
+  testWidgets('ExcludeSemantics drops its subtree from semantics but still '
+      'renders, and toggles back', (tester) {
+    Widget build({required bool excluding}) => Column(
+      children: <Widget>[
+        const Semantics(
+          role: SemanticRole.button,
+          label: 'Visible',
+          child: Text('V'),
+        ),
+        ExcludeSemantics(
+          excluding: excluding,
+          child: const Semantics(
+            role: SemanticRole.button,
+            label: 'Hidden',
+            child: Text('H'),
+          ),
+        ),
+      ],
+    );
+
+    tester.pumpWidget(build(excluding: true));
+    expect(tester.semantics().where(label: 'Hidden'), isEmpty);
+    expect(tester.semantics().where(label: 'Visible'), isNotEmpty);
+    // Excluded from semantics, but the child still paints.
+    expect(tester.renderToString(size: const CellSize(8, 4)), contains('H'));
+
+    // Flipping excluding:false is a structural change that re-includes it.
+    tester.pumpWidget(build(excluding: false));
+    expect(tester.semantics().where(label: 'Hidden'), isNotEmpty);
+
+    // …and back to excluding drops it again.
+    tester.pumpWidget(build(excluding: true));
+    expect(tester.semantics().where(label: 'Hidden'), isEmpty);
+  });
 }

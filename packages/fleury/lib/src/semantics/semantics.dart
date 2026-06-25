@@ -1386,6 +1386,85 @@ final class SemanticsElement extends ComponentElement
   }
 }
 
+/// Drops [child]'s whole subtree from the semantic tree (while still rendering
+/// it) when [excluding] is true.
+///
+/// The semantic tree is what a screen reader, the web accessible-DOM mirror,
+/// and an MCP agent read and drive — so this is how an app hides content from
+/// *them* without hiding it visually: a closed-but-mounted drawer, decorative
+/// chrome that isn't actionable, or the background behind a modal an agent
+/// shouldn't touch. Toggling [excluding] is a structural change; the subtree
+/// re-appears verbatim when it flips back to false.
+///
+/// It contributes no node of its own (unlike [Semantics]); it only gates
+/// whether its descendants are collected, via [SemanticChildrenProvider].
+final class ExcludeSemantics extends ProxyWidget {
+  const ExcludeSemantics({
+    super.key,
+    this.excluding = true,
+    required super.child,
+  });
+
+  /// When true (the default), [child]'s semantic subtree is omitted from
+  /// collection. When false, this widget is transparent.
+  final bool excluding;
+
+  @override
+  Element createElement() => _ExcludeSemanticsElement(this);
+}
+
+final class _ExcludeSemanticsElement extends ComponentElement
+    implements SemanticChildrenProvider {
+  _ExcludeSemanticsElement(ExcludeSemantics super.widget);
+
+  @override
+  ExcludeSemantics get widget => super.widget as ExcludeSemantics;
+
+  @override
+  void mount(Element? parent) {
+    super.mount(parent);
+    owner.semanticDirtyTracker.recordStructureDirty();
+  }
+
+  @override
+  void update(covariant ExcludeSemantics newWidget) {
+    final wasExcluding = widget.excluding;
+    super.update(newWidget);
+    // Flipping exclusion adds or removes the whole subtree — a shape change.
+    if (wasExcluding != newWidget.excluding) {
+      owner.semanticDirtyTracker.recordStructureDirty();
+    }
+    rebuild(force: true);
+  }
+
+  @override
+  void deactivate() {
+    owner.semanticDirtyTracker.recordStructureDirty();
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    owner.semanticDirtyTracker.recordStructureDirty();
+  }
+
+  @override
+  void unmount() {
+    owner.semanticDirtyTracker.recordStructureDirty();
+    super.unmount();
+  }
+
+  @override
+  Widget buildChild() => widget.child;
+
+  @override
+  void visitSemanticChildren(void Function(Element child) visitor) {
+    if (widget.excluding) return;
+    visitChildren(visitor);
+  }
+}
+
 final class _SemanticBounds extends SingleChildRenderObjectWidget {
   const _SemanticBounds({
     required this.onPaintBounds,
