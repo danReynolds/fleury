@@ -178,6 +178,15 @@ class _TreeState<T> extends State<Tree<T>> {
     setState(() => _expanded.add(node));
   }
 
+  void _closeRow(int index) {
+    if (index < 0 || index >= _flat.length) return;
+    _focusNode.requestFocus();
+    _list.selectedIndex = index;
+    final node = _flat[index].node;
+    if (!node.isBranch) return;
+    setState(() => _expanded.remove(node));
+  }
+
   void _activateRow(int index) {
     if (index < 0 || index >= _flat.length) return;
     _focusNode.requestFocus();
@@ -273,6 +282,7 @@ class _TreeState<T> extends State<Tree<T>> {
               selectedStyle: selectedStyle,
               hasOnSelect: widget.onSelect != null,
               onOpen: () => _openRow(i),
+              onClose: () => _closeRow(i),
               onActivate: () => _activateRow(i),
             );
           },
@@ -300,6 +310,7 @@ class _TreeRowWidget<T> extends StatelessWidget {
     required this.selectedStyle,
     required this.hasOnSelect,
     required this.onOpen,
+    required this.onClose,
     required this.onActivate,
   });
 
@@ -311,6 +322,7 @@ class _TreeRowWidget<T> extends StatelessWidget {
   final CellStyle selectedStyle;
   final bool hasOnSelect;
   final void Function() onOpen;
+  final void Function() onClose;
   final void Function() onActivate;
 
   @override
@@ -324,13 +336,19 @@ class _TreeRowWidget<T> extends StatelessWidget {
       selected: selected,
       enabled: true,
       actions: {
-        if (node.isBranch) SemanticAction.open,
+        // A collapsed branch offers `open`, an expanded one `close` — the
+        // symmetric pair an agent needs (collapsing was Left-arrow-only).
+        if (node.isBranch && !expanded) SemanticAction.open,
+        if (node.isBranch && expanded) SemanticAction.close,
         if (!node.isBranch && hasOnSelect) SemanticAction.activate,
       },
       onAction: (action) {
         switch (action) {
           case SemanticAction.open:
             if (node.isBranch) onOpen();
+            return;
+          case SemanticAction.close:
+            if (node.isBranch) onClose();
             return;
           case SemanticAction.activate:
             if (!node.isBranch && hasOnSelect) onActivate();

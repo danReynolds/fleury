@@ -507,6 +507,14 @@ class _JsonViewState extends State<JsonView> {
     if (row.expandable && !row.expanded) _controller.expand(row.pointer);
   }
 
+  void _closeRow(List<JsonViewRow> rows, int index) {
+    if (index < 0 || index >= rows.length) return;
+    _focusNode.requestFocus();
+    _controller.selectedIndex = index;
+    final row = rows[index];
+    if (row.expandable && row.expanded) _controller.collapse(row.pointer);
+  }
+
   Future<void> _copyRow(List<JsonViewRow> rows, int index) async {
     if (index < 0 || index >= rows.length) return;
     _focusNode.requestFocus();
@@ -562,6 +570,7 @@ class _JsonViewState extends State<JsonView> {
             activeSelection: activeSelected,
             copyEnabled: copyEnabled,
             onOpen: () => _openRow(rows, index),
+            onClose: () => _closeRow(rows, index),
             onCopy: () => _copyRow(rows, index),
           );
         },
@@ -650,6 +659,7 @@ class _JsonRowWidget extends StatelessWidget {
     required this.activeSelection,
     required this.copyEnabled,
     required this.onOpen,
+    required this.onClose,
     required this.onCopy,
   });
 
@@ -659,6 +669,7 @@ class _JsonRowWidget extends StatelessWidget {
   final bool activeSelection;
   final bool copyEnabled;
   final void Function() onOpen;
+  final void Function() onClose;
   final Future<void> Function() onCopy;
 
   @override
@@ -670,13 +681,18 @@ class _JsonRowWidget extends StatelessWidget {
       selected: selected,
       expanded: row.expandable ? row.expanded : null,
       actions: {
-        if (row.expandable) SemanticAction.open,
+        // Symmetric expand/collapse — collapsing was Left-arrow-only.
+        if (row.expandable && !row.expanded) SemanticAction.open,
+        if (row.expandable && row.expanded) SemanticAction.close,
         if (selected && copyEnabled) SemanticAction.copy,
       },
       onAction: (action) async {
         switch (action) {
           case SemanticAction.open:
             if (row.expandable) onOpen();
+            return;
+          case SemanticAction.close:
+            if (row.expandable) onClose();
             return;
           case SemanticAction.copy:
             if (copyEnabled) await onCopy();
