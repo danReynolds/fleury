@@ -38,8 +38,13 @@ rides the same wire.
 ## Measured against peers, not asserted
 
 Fleury is benchmarked against current releases of the frameworks people actually
-reach for — Ratatui, Textual, Bubble Tea, Ink — using a scenario harness (data
-tables, streaming logs, text editing, Markdown rendering) so the comparison is
-about realistic workloads rather than a synthetic loop. The framework also ships
-a built-in profiling surface, so you can see rebuild, layout, and paint costs in
-your own app.
+reach for using scenario harnesses, not a synthetic leaderboard. The benchmark
+matrix covers the conventional pressure points for terminal apps: startup and
+first paint, input latency, large data navigation, streaming logs and Markdown,
+dashboard update cadence, layout invalidation, resize churn, command-palette
+churn, process output, wire bytes, CPU, and RSS. Peer comparisons are run from
+matching source fixtures and need fixture parity plus repeated hardware runs
+before they support public superiority claims.
+
+The framework also ships a built-in profiling surface, so you can inspect
+rebuild, layout, paint, and frame costs in your own app.
