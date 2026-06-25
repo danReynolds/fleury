@@ -21,15 +21,34 @@ final class FileMentionEntry {
   }) : assert(line == null || line > 0),
        assert(column == null || column > 0);
 
+  /// File path, symbol path, URL, or other target identifier.
   final String path;
+
+  /// Optional display label; defaults to [path].
   final String? label;
+
+  /// Optional secondary detail text.
   final String? detail;
+
+  /// Kind of mention target represented by this entry.
   final FileMentionKind kind;
+
+  /// Optional language identifier for file or symbol targets.
   final String? language;
+
+  /// One-based line number for source targets.
   final int? line;
+
+  /// One-based column number for source targets.
   final int? column;
+
+  /// Text inserted/copied when this entry is picked.
   final String? mentionText;
+
+  /// Whether this entry can be selected and picked.
   final bool enabled;
+
+  /// App-specific semantic state carried by the entry.
   final Map<String, Object?> metadata;
 
   String get displayLabel => label ?? path;
@@ -89,8 +108,13 @@ final class FileMentionCopyOptions {
     this.clipboardPolicy = ClipboardWritePolicy.standard,
   });
 
+  /// Whether copy uses [FileMentionEntry.displayMention] instead of the path.
   final bool copyMentionText;
+
+  /// Whether copied text includes [FileMentionEntry.detail].
   final bool includeDetail;
+
+  /// Clipboard write behavior for copied mention text.
   final ClipboardWritePolicy clipboardPolicy;
 }
 
@@ -201,20 +225,49 @@ class FileMentionPicker extends StatefulWidget {
   }) : assert(width > 0),
        assert(maxVisible > 0);
 
+  /// Source mention entries to search, display, pick, and copy.
   final List<FileMentionEntry> entries;
+
+  /// External controller for the query input.
   final TextEditingController? queryController;
+
+  /// External controller for result selection and visible range.
   final FileMentionPickerController? controller;
+
+  /// Optional app-owned matcher used instead of default ranked search.
   final FileMentionMatcher? matcher;
+
+  /// Semantic and visual label for the picker.
   final String label;
+
+  /// Placeholder shown in the query input.
   final String placeholder;
+
+  /// Width, in terminal cells, reserved for query and rows.
   final int width;
+
+  /// Maximum visible rows before the list scrolls.
   final int maxVisible;
+
+  /// Focus node used by the query input.
   final FocusNode? queryFocusNode;
+
+  /// Focus node used by the results list.
   final FocusNode? resultsFocusNode;
+
+  /// Whether the query input should request focus when mounted.
   final bool autofocus;
+
+  /// Whether Ctrl+C and semantic copy export the selected mention.
   final bool copySelection;
+
+  /// Clipboard/export options for selected-mention copy.
   final FileMentionCopyOptions copyOptions;
+
+  /// Called when a mention is picked.
   final void Function(FileMentionPickResult result)? onPick;
+
+  /// Called after a copy attempt completes.
   final void Function(FileMentionCopyResult result)? onCopy;
 
   @override

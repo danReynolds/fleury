@@ -50,21 +50,49 @@ final class WorkflowSnapshot {
        logEntries = List<LogEntry>.unmodifiable(logEntries),
        metadata = Map<String, Object?>.unmodifiable(metadata);
 
+  /// Optional stable workflow identity.
   final Object? id;
+
+  /// Human-readable workflow title.
   final String? title;
+
+  /// Conversation or transcript messages in this workflow.
   final List<MessageEntry> messages;
+
+  /// Tool calls attached to the workflow.
   final List<ToolCallRecord> toolCalls;
+
+  /// Pending or completed approval requests.
   final List<ApprovalRequest> approvals;
+
+  /// Task graph nodes representing planned or running work.
   final List<TaskGraphNode> tasks;
+
+  /// Current model/runtime status, if known.
   final ModelStatusInfo? modelStatus;
+
+  /// Context items currently attached to the workflow.
   final List<ContextItem> contextItems;
+
+  /// Mentionable files or paths associated with the workflow.
   final List<FileMentionEntry> fileMentions;
+
+  /// Conversation summaries available to the workflow.
   final List<ConversationEntry> conversations;
+
+  /// Trace or timeline events for active work.
   final List<TraceTimelineEntry> traceEvents;
+
+  /// Patch files currently under review.
   final List<PatchReviewFile> patchFiles;
+
+  /// Log rows associated with the workflow.
   final List<LogEntry> logEntries;
+
+  /// App-specific semantic state carried by the snapshot.
   final Map<String, Object?> metadata;
 
+  /// Derived aggregate health, counts, and semantic state.
   late final WorkflowSummary summary = WorkflowSummary.fromSnapshot(this);
 
   SemanticState toSemanticState() {

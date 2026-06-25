@@ -45,16 +45,37 @@ class TerminalOutputRegion extends StatelessWidget {
     this.onCopy,
   }) : assert(maxLineLength == null || maxLineLength >= 0);
 
+  /// Runtime output buffer to render; defaults to the ambient [LogBufferScope].
   final LogBuffer? buffer;
+
+  /// External selection and tail-follow controller.
   final LogRegionController? controller;
+
+  /// Focus node used by the rendered log region.
   final FocusNode? focusNode;
+
+  /// Whether the rendered log region should request focus when mounted.
   final bool autofocus;
+
+  /// Semantic and visual label for the output region.
   final String label;
+
+  /// Whether rows render stdout/stderr prefixes.
   final bool showPrefix;
+
+  /// Maximum displayed line length per output row.
   final int? maxLineLength;
+
+  /// Optional filter applied to captured output rows.
   final LogRegionFilterDescriptor? filter;
+
+  /// Whether Ctrl+C and semantic copy export the selected output row.
   final bool copySelection;
+
+  /// Clipboard/export options for copied output.
   final LogRegionCopyOptions copyOptions;
+
+  /// Called after a copy attempt completes.
   final void Function(LogRegionCopyResult result)? onCopy;
 
   @override

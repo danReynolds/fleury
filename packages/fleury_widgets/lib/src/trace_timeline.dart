@@ -48,14 +48,31 @@ final class TraceTimelineEntry {
   /// Stable identity used by semantics, selection, and callbacks.
   final Object id;
 
+  /// Primary event label.
   final String label;
+
+  /// Optional longer detail text.
   final String? detail;
+
+  /// Event kind used for styling and semantics.
   final TraceTimelineKind kind;
+
+  /// Event lifecycle status.
   final TraceTimelineStatus status;
+
+  /// Optional source/origin label.
   final String? source;
+
+  /// Optional wall-clock timestamp.
   final DateTime? timestamp;
+
+  /// Optional elapsed duration for the event.
   final Duration? duration;
+
+  /// Whether this event can be selected and activated.
   final bool enabled;
+
+  /// App-specific semantic state carried by the event.
   final Map<String, Object?> metadata;
 
   String get displayId => id.toString();
@@ -193,11 +210,22 @@ final class TraceTimelineCopyOptions {
     this.clipboardPolicy = ClipboardWritePolicy.standard,
   }) : assert(maxDetailLength == null || maxDetailLength >= 0);
 
+  /// Whether copied event text includes [TraceTimelineEntry.detail].
   final bool includeDetail;
+
+  /// Whether copied event text includes [TraceTimelineEntry.source].
   final bool includeSource;
+
+  /// Whether copied event text includes [TraceTimelineEntry.timestamp].
   final bool includeTimestamp;
+
+  /// Whether copied event text includes [TraceTimelineEntry.duration].
   final bool includeDuration;
+
+  /// Maximum copied detail length.
   final int? maxDetailLength;
+
+  /// Clipboard write behavior for copied event text.
   final ClipboardWritePolicy clipboardPolicy;
 }
 
@@ -343,10 +371,19 @@ class TraceTimeline extends StatefulWidget {
     this.onCopy,
   });
 
+  /// Source events to display, activate, and copy.
   final List<TraceTimelineEntry> events;
+
+  /// External selection and visible-range controller.
   final TraceTimelineController? controller;
+
+  /// Focus node used for keyboard navigation.
   final FocusNode? focusNode;
+
+  /// Whether the timeline should request focus when mounted.
   final bool autofocus;
+
+  /// Semantic and visual label for the timeline.
   final String label;
 
   /// Prefix each row with the event's [TraceTimelineEntry.timestamp] as a
@@ -355,9 +392,16 @@ class TraceTimeline extends StatefulWidget {
   /// time as well.
   final bool showTimestamp;
 
+  /// Whether Ctrl+C and semantic copy export the selected event.
   final bool copySelection;
+
+  /// Clipboard/export options for selected-event copy.
   final TraceTimelineCopyOptions copyOptions;
+
+  /// Called when an event is activated.
   final void Function(TraceTimelineSelectResult result)? onSelect;
+
+  /// Called after a copy attempt completes.
   final void Function(TraceTimelineCopyResult result)? onCopy;
 
   @override

@@ -42,20 +42,39 @@ class PasswordInput extends StatefulWidget {
     this.semanticState = SemanticState.empty,
   });
 
+  /// Text controller holding the unredacted secret value.
   final TextEditingController? controller;
+
+  /// Focus node used by the underlying text input.
   final FocusNode? focusNode;
+
+  /// Whether the field should request focus when mounted.
   final bool autofocus;
+
+  /// Called with the unredacted text when the user submits.
   final void Function(String text)? onSubmit;
+
+  /// Called when Escape is pressed.
   final void Function()? onEscape;
+
+  /// Placeholder text shown when the field is empty.
   final String placeholder;
+
+  /// Style used for [placeholder].
   final CellStyle placeholderStyle;
+
+  /// Style used for entered text or obscuring glyphs.
   final CellStyle style;
+
+  /// Style applied to the cursor cell.
   final CellStyle cursorStyle;
 
   /// Glyph used in place of each typed grapheme. Defaults to `•`.
   final String obscuringCharacter;
 
   final bool enabled;
+
+  /// Whether the field can receive focus but not edit text.
   final bool readOnly;
 
   /// When true, [revealChord] toggles the masked / plain rendering while the
@@ -66,6 +85,7 @@ class PasswordInput extends StatefulWidget {
   /// consumes it, so it shadows any app-level binding on the same chord.
   final KeyChord revealChord;
 
+  /// Optional validation error displayed by the underlying input.
   final String? validationError;
 
   /// Label exposed through the semantic app graph.
