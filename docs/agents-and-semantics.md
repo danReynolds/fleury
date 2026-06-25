@@ -137,32 +137,23 @@ same wire:
 fleury_mcp -- dart run my_app.dart
 ```
 
-It spawns your app, tracks its live semantic tree, and exposes it as MCP:
-
-- a **resource**, `fleury://ui/tree` — the current semantic snapshot;
-- **tools** the agent calls — `get_ui` and `find_nodes` to read the UI,
-  `invoke_action` to operate a node through one of its advertised
-  `SemanticAction`s, `set_value` to set a field/slider/select in one call (a node
-  advertising `setValue`), and `type_text` / `press_key` for raw input.
+It spawns your app, tracks its live semantic tree, and exposes it as MCP: the
+graph as a **resource** (`fleury://ui/tree`), and the `SemanticAction`s as
+**tools** — `get_ui` / `find_nodes` to read, `invoke_action` / `set_value` /
+`type_text` / `press_key` to drive, and `resize` / `wait_for_change` to surface
+more rows or watch for asynchronous change.
 
 Point an MCP host at it and the agent reads roles, labels, values, and the
 actions each node supports, then drives the UI through them — no ANSI scraping,
 no guessed keystrokes. The Dart side is a thin shim precisely because the app
 already emits MCP's shapes: the graph *is* the resource, the `SemanticAction`s
-*are* the tools. A host configures it like any other MCP server (the executable
-comes from the `fleury_mcp` package — `dart pub global activate fleury_mcp`, or
-invoke it as `dart run fleury_mcp:fleury_mcp`):
+*are* the tools. Most terminal UIs render cells an agent has to scrape; Fleury
+hands it structured meaning — typed, token-cheap, and identical whether the app
+runs in a terminal or a browser.
 
-```json
-{
-  "mcpServers": {
-    "my-app": {
-      "command": "fleury_mcp",
-      "args": ["--", "dart", "run", "my_app.dart"]
-    }
-  }
-}
-```
+See [Driving with an agent (MCP)](/guides/driving-with-agents/) for the hands-on
+setup: installing the driver, connecting a host, the full tool reference, and
+making your app drive well.
 
 ## One tree, three payoffs
 
