@@ -9,7 +9,8 @@ Code and Claude Desktop already speak. The agent reads your UI as roles, labels,
 values, and the actions each node supports, then operates it by invoking those
 actions. No ANSI scraping, no guessed keystrokes.
 
-This guide is the *how*. For *why* it works — the semantic tree underneath — see
+This guide is the *how*. For the architecture — how the MCP server is a thin shim
+over the semantic tree your app already produces — see
 [Built for agents](/architecture/agents-and-semantics/).
 
 ## Your app needs no MCP code
@@ -143,3 +144,11 @@ Because the agent drives at the semantic layer — below the display surface —
 operates the **same app whether you'd otherwise view it in a terminal or a
 browser** ([`fleury serve`](/architecture/serving-and-embedding/)). There is no
 separate "CLI" vs "web" integration.
+
+## Under the hood
+
+The reason an agent can drive a Fleury app at all — and why the MCP server is a
+thin shim rather than a scraping layer — is the **semantic tree** every Fleury
+app already produces. [Built for agents](/architecture/agents-and-semantics/)
+walks through it: the graph that *is* the MCP resource, and the actions that
+*are* the tools.
