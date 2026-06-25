@@ -1,6 +1,7 @@
 import 'package:fleury/fleury_host.dart';
 
 import 'component_theme.dart';
+import 'semantic_coercion.dart';
 
 /// Shared focus + activation chrome for the form controls. Focusable;
 /// Enter or Space activates ([onActivate]) when enabled. The [builder] gets
@@ -19,6 +20,7 @@ class _FocusableControl extends StatefulWidget {
     this.semanticValue,
     this.semanticChecked,
     this.semanticSelected = false,
+    this.onSetValue,
     this.focusNode,
     this.autofocus = false,
   });
@@ -30,6 +32,12 @@ class _FocusableControl extends StatefulWidget {
   final Object? semanticValue;
   final bool? semanticChecked;
   final bool semanticSelected;
+
+  /// When non-null, the control advertises [SemanticAction.setValue] and routes
+  /// the payload here — letting an agent set the value directly (idempotent),
+  /// instead of toggling via [onActivate] and hoping it lands.
+  final SemanticSetValueCallback? onSetValue;
+
   final FocusNode? focusNode;
   final bool autofocus;
 
@@ -120,7 +128,11 @@ class _FocusableControlState extends State<_FocusableControl>
       selected: widget.semanticSelected,
       checked: widget.semanticChecked,
       enabled: true,
-      actions: const {SemanticAction.focus, SemanticAction.activate},
+      actions: {
+        SemanticAction.focus,
+        SemanticAction.activate,
+        if (widget.onSetValue != null) SemanticAction.setValue,
+      },
       onAction: (action) {
         switch (action) {
           case SemanticAction.focus:
@@ -134,6 +146,7 @@ class _FocusableControlState extends State<_FocusableControl>
             return;
         }
       },
+      onSetValue: widget.onSetValue,
       child: GestureDetector(
         // A click focuses the control and activates it, so pointer users get
         // the same affordance as keyboard users.
@@ -201,6 +214,12 @@ class Checkbox extends StatelessWidget {
       focusNode: focusNode,
       autofocus: autofocus,
       onActivate: onChanged == null ? null : () => onChanged!(!value),
+      onSetValue: onChanged == null
+          ? null
+          : (payload) {
+              final next = coerceSemanticBool(payload);
+              if (next != null) onChanged!(next);
+            },
       semanticRole: SemanticRole.checkbox,
       semanticLabel: label,
       semanticValue: value,
@@ -244,6 +263,12 @@ class Toggle extends StatelessWidget {
       focusNode: focusNode,
       autofocus: autofocus,
       onActivate: onChanged == null ? null : () => onChanged!(!value),
+      onSetValue: onChanged == null
+          ? null
+          : (payload) {
+              final next = coerceSemanticBool(payload);
+              if (next != null) onChanged!(next);
+            },
       semanticRole: SemanticRole.toggle,
       semanticLabel: label,
       semanticValue: value,
@@ -293,6 +318,12 @@ class Switch extends StatelessWidget {
       focusNode: focusNode,
       autofocus: autofocus,
       onActivate: onChanged == null ? null : () => onChanged!(!value),
+      onSetValue: onChanged == null
+          ? null
+          : (payload) {
+              final next = coerceSemanticBool(payload);
+              if (next != null) onChanged!(next);
+            },
       semanticRole: SemanticRole.toggle,
       semanticLabel: label,
       semanticValue: value,

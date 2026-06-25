@@ -1,5 +1,7 @@
 import 'package:fleury/fleury_host.dart';
 
+import 'semantic_coercion.dart';
+
 /// Which of the two handles a [RangeSlider] is editing.
 enum _ActiveHandle { low, high }
 
@@ -325,6 +327,7 @@ class _RangeSliderState extends State<RangeSlider> {
         SemanticAction.focus,
         if (canIncrement) SemanticAction.increment,
         if (canDecrement) SemanticAction.decrement,
+        SemanticAction.setValue,
       },
       state: SemanticState({
         'lowValue': lo,
@@ -353,6 +356,13 @@ class _RangeSliderState extends State<RangeSlider> {
           case _:
             return;
         }
+      },
+      // Set the *active* handle to an exact value (clamped so the handles can't
+      // cross). Which handle is active is in `state['activeHandle']`; switch it
+      // with Left/Right (press_key) before setting the other one.
+      onSetValue: (payload) {
+        final next = coerceSemanticNum(payload);
+        if (next != null) _setHandle(_active, next);
       },
       child: Focus(
         focusNode: _node,
