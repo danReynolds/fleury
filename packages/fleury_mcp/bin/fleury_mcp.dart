@@ -107,11 +107,22 @@ Future<int> _run(List<String> args) async {
   );
   unawaited(bridge.done.then((_) => finish(0)));
 
-  late StreamSubscription<ProcessSignal> intSub;
-  intSub = ProcessSignal.sigint.watch().listen((_) async {
-    await intSub.cancel();
-    await finish(130);
-  });
+  // Tear the spawned app down on a host-initiated stop. The primary path is the
+  // host closing our stdin (handled by runMcpServer above); SIGINT/SIGTERM are
+  // what a host escalates to — without cleanup the app subprocess is orphaned.
+  final signalSubs = <StreamSubscription<ProcessSignal>>[];
+  Future<void> onSignal(int code) async {
+    for (final sub in signalSubs) {
+      await sub.cancel();
+    }
+    await finish(code);
+  }
+
+  signalSubs.add(ProcessSignal.sigint.watch().listen((_) => onSignal(130)));
+  if (!Platform.isWindows) {
+    // SIGTERM isn't watchable on Windows; SIGINT covers the Ctrl-C path there.
+    signalSubs.add(ProcessSignal.sigterm.watch().listen((_) => onSignal(143)));
+  }
 
   return exitCode.future;
 }

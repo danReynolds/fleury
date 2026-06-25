@@ -31,6 +31,10 @@ const String mcpServerVersion = '0.1.0';
 const int _parseError = -32700;
 const int _invalidRequest = -32600;
 const int _methodNotFound = -32601;
+const int _internalError = -32603;
+
+/// MCP-defined: a `resources/read` for a URI this server doesn't expose.
+const int _resourceNotFound = -32002;
 
 /// Reads newline-delimited JSON-RPC from [input], dispatches against [bridge],
 /// and writes responses to [output]. Returns when [input] closes (the host
@@ -159,29 +163,43 @@ final class McpServer {
         ? (decoded['params'] as Map).cast<String, Object?>()
         : const <String, Object?>{};
 
-    switch (method) {
-      case 'initialize':
-        _sendMessage(_resultMessage(id, _initializeResult(params)));
-      case 'ping':
-        _sendMessage(_resultMessage(id, const <String, Object?>{}));
-      case 'tools/list':
-        _sendMessage(_resultMessage(id, <String, Object?>{'tools': _toolDefs}));
-      case 'tools/call':
-        _sendMessage(_resultMessage(id, await _callTool(params)));
-      case 'resources/list':
-        _sendMessage(
-          _resultMessage(id, <String, Object?>{'resources': _resourceDefs}),
-        );
-      case 'resources/templates/list':
-        _sendMessage(
-          _resultMessage(id, const <String, Object?>{'resourceTemplates': []}),
-        );
-      case 'resources/read':
-        _sendMessage(_resultMessage(id, await _readResource(params)));
-      default:
-        _sendMessage(
-          _errorMessage(id, _methodNotFound, 'Unknown method: $method'),
-        );
+    // Every request must get a response. A handler throw (e.g. an unknown
+    // resource URI, or a transport hiccup mid-read) becomes a JSON-RPC error
+    // rather than a swallowed, response-less line that would hang the client.
+    // tools/call is already internally guarded; this covers the rest.
+    try {
+      switch (method) {
+        case 'initialize':
+          _sendMessage(_resultMessage(id, _initializeResult(params)));
+        case 'ping':
+          _sendMessage(_resultMessage(id, const <String, Object?>{}));
+        case 'tools/list':
+          _sendMessage(
+            _resultMessage(id, <String, Object?>{'tools': _toolDefs}),
+          );
+        case 'tools/call':
+          _sendMessage(_resultMessage(id, await _callTool(params)));
+        case 'resources/list':
+          _sendMessage(
+            _resultMessage(id, <String, Object?>{'resources': _resourceDefs}),
+          );
+        case 'resources/templates/list':
+          _sendMessage(
+            _resultMessage(id, const <String, Object?>{'resourceTemplates': []}),
+          );
+        case 'resources/read':
+          _sendMessage(_resultMessage(id, await _readResource(params)));
+        default:
+          _sendMessage(
+            _errorMessage(id, _methodNotFound, 'Unknown method: $method'),
+          );
+      }
+    } on _RpcError catch (e) {
+      _sendMessage(_errorMessage(id, e.code, e.message));
+    } catch (error) {
+      _sendMessage(
+        _errorMessage(id, _internalError, 'Internal error handling $method: $error'),
+      );
     }
   }
 
@@ -232,7 +250,7 @@ final class McpServer {
   Future<Map<String, Object?>> _readResource(Map<String, Object?> params) async {
     final uri = params['uri'];
     if (uri != _treeUri) {
-      throw StateError('Unknown resource: $uri');
+      throw _RpcError(_resourceNotFound, 'Unknown resource: $uri');
     }
     final snapshot = await _currentSnapshot();
     if (snapshot != null) _lastServed = snapshot;
@@ -554,7 +572,7 @@ final class McpServer {
             'No semantic change observed. If "$id" was an auto-generated id '
             '(element-…) it is snapshot-local and may be stale — re-read get_ui '
             'and retry.',
-      'ui': after?.toJson(),
+      'ui': _uiResult(after),
     });
   }
 
@@ -637,7 +655,7 @@ final class McpServer {
     return _toolJson(<String, Object?>{
       'set': <String, Object?>{'id': id, 'value': value},
       'changed': bridge.revision != before,
-      'ui': after?.toJson(),
+      'ui': _uiResult(after),
     });
   }
 
@@ -683,7 +701,7 @@ final class McpServer {
     return _toolJson(<String, Object?>{
       'typed': text,
       'changed': bridge.revision != before,
-      'ui': after?.toJson(),
+      'ui': _uiResult(after),
     });
   }
 
@@ -728,7 +746,7 @@ final class McpServer {
           'modifiers': <Object?>[for (final m in modifiers) m.name],
       },
       'changed': bridge.revision != before,
-      'ui': after?.toJson(),
+      'ui': _uiResult(after),
     });
   }
 
@@ -746,7 +764,7 @@ final class McpServer {
     return _toolJson(<String, Object?>{
       'resized': <String, Object?>{'cols': cols, 'rows': rows},
       'changed': bridge.revision != before,
-      'ui': after?.toJson(),
+      'ui': _uiResult(after),
     });
   }
 
@@ -764,7 +782,7 @@ final class McpServer {
     return _toolJson(<String, Object?>{
       'changed': changed,
       if (!changed) 'note': 'No change within ${timeoutMs}ms.',
-      'ui': after?.toJson(),
+      'ui': _uiResult(after),
     });
   }
 
@@ -795,6 +813,19 @@ final class McpServer {
       );
     }
     return snapshot;
+  }
+
+  /// Serializes the post-action tree the SAME way get_ui does — node-capped and
+  /// token-trimmed — so an action on a large screen can't return the full
+  /// uncapped tree and blow the agent's context. It also records the tree as the
+  /// one the agent has now seen, so the positional stale-reference guard
+  /// compares the agent's NEXT id against this fresh tree, not the stale one from
+  /// the last get_ui (which would false-positive after the action mutated a
+  /// node's label). Returns null when the app produced no snapshot.
+  Object? _uiResult(SemanticInspectionSnapshot? after) {
+    if (after == null) return null;
+    _lastServed = after;
+    return after.toJsonCapped(maxNodes: _getUiNodeCap);
   }
 
   /// A node flattened for find_nodes results — its own fields, no children
@@ -852,7 +883,24 @@ final class McpServer {
 
   static String? _optString(Object? value) => value is String ? value : null;
 
-  static int? _optInt(Object? value) => value is int ? value : null;
+  // Accepts a JSON integer, or a whole-valued double (some clients encode
+  // integer arguments as `80.0`); rejects fractional or non-numeric values.
+  static int? _optInt(Object? value) {
+    if (value is int) return value;
+    if (value is double && value.isFinite && value == value.truncateToDouble()) {
+      return value.toInt();
+    }
+    return null;
+  }
+}
+
+/// A JSON-RPC-level failure (bad URI, malformed request) that [handleLine]
+/// turns into an error *response* with [code]. Distinct from [_ToolFailure],
+/// which is an in-band `isError` tool result the model reads and reacts to.
+final class _RpcError implements Exception {
+  const _RpcError(this.code, this.message);
+  final int code;
+  final String message;
 }
 
 /// A recoverable tool-domain failure (bad args, missing node, …). Caught in

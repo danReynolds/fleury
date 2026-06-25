@@ -461,6 +461,108 @@ void main() {
     );
   });
 
+  test('an action that relabels its own positional node does not falsely stale '
+      'the follow-up (post-action tree is tracked)', () async {
+    // The agent reads a positional id whose node will relabel itself as a
+    // result of the action (a wizard step advancing). The follow-up action on
+    // the SAME id must compare against the tree the agent just saw — not the
+    // pre-action tree, which would read the self-relabel as a mis-target.
+    pushRoot(buttonAndCount('element-9', 'Step 1', 0));
+    await bridge.ready;
+    await server.handleLine(
+      _rpc(60, 'tools/call', <String, Object?>{
+        'name': 'get_ui',
+        'arguments': <String, Object?>{},
+      }),
+    );
+    lastResult();
+
+    final first = server.handleLine(
+      _rpc(61, 'tools/call', <String, Object?>{
+        'name': 'invoke_action',
+        'arguments': <String, Object?>{'id': 'element-9', 'action': 'activate'},
+      }),
+    );
+    pushRoot(buttonAndCount('element-9', 'Step 2', 0)); // the app reacts
+    await first;
+    expect(toolJson(lastResult())['invoked'], isNotNull);
+
+    final second = server.handleLine(
+      _rpc(62, 'tools/call', <String, Object?>{
+        'name': 'invoke_action',
+        'arguments': <String, Object?>{'id': 'element-9', 'action': 'activate'},
+      }),
+    );
+    pushRoot(buttonAndCount('element-9', 'Step 3', 0));
+    await second;
+    final result = lastResult();
+    expect(result['isError'], isNot(true),
+        reason: 'follow-up on the just-seen tree must not be falsely stale');
+    expect(toolJson(result)['invoked'], isNotNull);
+  });
+
+  test('action results use the same capped, trimmed serializer as get_ui '
+      '(not raw toJson)', () async {
+    // A node whose value merely repeats its label: the capped serializer drops
+    // the redundant value, raw toJson keeps it — so its presence/absence tells
+    // the two serializers apart.
+    Map<String, Object?> root(int tick) => <String, Object?>{
+      'id': 'root',
+      'role': 'app',
+      'children': <Object?>[
+        <String, Object?>{
+          'id': 'status',
+          'role': 'text',
+          'label': 'Ready',
+          'value': 'Ready',
+        },
+        <String, Object?>{
+          'id': 'go',
+          'role': 'button',
+          'label': 'Go $tick',
+          'actions': <String>['activate'],
+        },
+      ],
+    };
+    pushRoot(root(0));
+    await bridge.ready;
+
+    await server.handleLine(
+      _rpc(70, 'tools/call', <String, Object?>{
+        'name': 'get_ui',
+        'arguments': <String, Object?>{},
+      }),
+    );
+    expect(jsonEncode(toolJson(lastResult())), isNot(contains('"value":"Ready"')));
+
+    final pending = server.handleLine(
+      _rpc(71, 'tools/call', <String, Object?>{
+        'name': 'invoke_action',
+        'arguments': <String, Object?>{'id': 'go', 'action': 'activate'},
+      }),
+    );
+    pushRoot(root(1)); // reaction
+    await pending;
+    expect(
+      jsonEncode(toolJson(lastResult())['ui']),
+      isNot(contains('"value":"Ready"')),
+      reason: 'action results must go through the capped, trimmed serializer',
+    );
+  });
+
+  test('resources/read of an unknown URI returns an error, not a dropped '
+      'response', () async {
+    await server.handleLine(
+      _rpc(80, 'resources/read', <String, Object?>{'uri': 'fleury://nope'}),
+    );
+    expect(out, isNotEmpty, reason: 'every request must get a response');
+    final message = jsonDecode(out.removeLast()) as Map<String, Object?>;
+    expect(message['id'], 80);
+    final error = message['error'] as Map<String, Object?>;
+    expect(error['code'], -32002); // MCP "resource not found"
+    expect(error['message'], contains('Unknown resource'));
+  });
+
   test('set_value sends a setValue frame whose payload round-trips the wire', () async {
     Map<String, Object?> field(Object? value) => <String, Object?>{
       'id': 'root',
