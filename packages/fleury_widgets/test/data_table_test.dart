@@ -156,6 +156,57 @@ void main() {
     });
   });
 
+  testWidgets('setValue(index) jumps the window to an off-screen row (R1 reach)',
+      (tester) async {
+    tester.pumpWidget(
+      DataTable(
+        label: 'Runs',
+        rowCount: 100000,
+        columns: _columns(),
+        rowKeyBuilder: (row) => 'RUN-$row',
+        cellBuilder: _cell,
+      ),
+    );
+    tester.render(size: const CellSize(20, 6));
+
+    final table = tester.semantics().single(role: SemanticRole.table);
+    expect(table.actions, contains(SemanticAction.setValue));
+    expect(table.state['collectionRowCount'], 100000);
+    // Row 5000 is far off-window — absent from the tree, unreachable by id.
+    expect(
+      tester
+          .semantics()
+          .byRole(SemanticRole.tableRow)
+          .where((n) => n.state['rowIndex'] == 5000),
+      isEmpty,
+    );
+
+    await tester.invokeSemanticAction(SemanticAction.setValue,
+        node: table, payload: 5000);
+    tester.render(size: const CellSize(20, 6)); // relayout windows row 5000 in
+
+    expect(
+      tester
+          .semantics()
+          .byRole(SemanticRole.tableRow)
+          .where((n) => n.state['rowIndex'] == 5000),
+      isNotEmpty,
+      reason: 'the window followed the selection to the requested index',
+    );
+
+    // Out-of-range index is clamped to the last row, not rejected.
+    await tester.invokeSemanticAction(SemanticAction.setValue,
+        role: SemanticRole.table, payload: 999999);
+    tester.render(size: const CellSize(20, 6));
+    expect(
+      tester
+          .semantics()
+          .byRole(SemanticRole.tableRow)
+          .where((n) => n.state['rowIndex'] == 99999),
+      isNotEmpty,
+    );
+  });
+
   testWidgets('renders visible rows only and exposes virtualized semantics', (
     tester,
   ) {

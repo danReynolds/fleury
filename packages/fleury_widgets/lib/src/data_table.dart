@@ -4,6 +4,7 @@ import 'package:characters/characters.dart';
 import 'package:fleury/fleury_host.dart';
 
 import 'component_theme.dart';
+import 'semantic_coercion.dart';
 import 'table.dart' show FixedColumnWidth, FlexColumnWidth, TableColumnWidth;
 
 /// Direction for an app-provided [DataTable] sort state.
@@ -699,6 +700,20 @@ class _DataTableState extends State<DataTable> {
     }
   }
 
+  /// `setValue` on the table node jumps the windowed row range to a target row
+  /// INDEX (0-based) — the off-window reach an agent can't otherwise get
+  /// without growing the whole grid. The window follows the selection, so the
+  /// target row then appears in the next snapshot. Clamped to the row range;
+  /// does not fire `onSelect` (it's navigation, not a row action).
+  bool _handleSemanticSetValue(SemanticNode target, Object? value) {
+    if (target.role != SemanticRole.table || widget.rowCount <= 0) return false;
+    final index = coerceSemanticInt(value);
+    if (index == null) return false;
+    _focusNode.requestFocus();
+    _controller.selectedIndex = index.clamp(0, widget.rowCount - 1);
+    return true;
+  }
+
   bool _selectSemanticTarget(SemanticNode target) {
     final rowIndex = target.state['rowIndex'];
     if (rowIndex is! int || rowIndex < 0) {
@@ -861,6 +876,7 @@ class _DataTableState extends State<DataTable> {
       },
       onSelect: widget.onSelect,
       onSemanticAction: _handleSemanticAction,
+      onSemanticSetValue: _handleSemanticSetValue,
     );
     return FocusWithin(
       onFocusChange: _onFocusWithinChange,
@@ -1018,6 +1034,7 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
     required this.onViewport,
     required this.onSelect,
     required this.onSemanticAction,
+    required this.onSemanticSetValue,
     required this.copySelectedRow,
     required this.copyOptions,
     this.sortColumnId,
@@ -1043,6 +1060,8 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
   final void Function(int rowIndex)? onSelect;
   final FutureOr<bool> Function(SemanticNode target, SemanticAction action)
   onSemanticAction;
+  final FutureOr<bool> Function(SemanticNode target, Object? value)
+  onSemanticSetValue;
   final bool copySelectedRow;
   final DataTableCopyOptions copyOptions;
   final String? sortColumnId;
@@ -1090,7 +1109,10 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
 }
 
 class _DataTableElement extends LeafRenderObjectElement
-    implements SemanticContributor, SemanticActionContributor {
+    implements
+        SemanticContributor,
+        SemanticActionContributor,
+        SemanticValueContributor {
   _DataTableElement(_DataTableRenderWidget super.widget);
 
   @override
@@ -1145,6 +1167,9 @@ class _DataTableElement extends LeafRenderObjectElement
         SemanticAction.focus,
         SemanticAction.select,
         if (widget.onSelect != null) SemanticAction.activate,
+        // Jump the windowed row range to a target row INDEX — the off-window
+        // reach an agent otherwise can't get without resizing the whole grid.
+        if (widget.rowCount > 0) SemanticAction.setValue,
         if (widget.copySelectedRow &&
             widget.rowCount > 0 &&
             widget.columns.isNotEmpty)
@@ -1305,6 +1330,11 @@ class _DataTableElement extends LeafRenderObjectElement
     SemanticAction action,
   ) {
     return widget.onSemanticAction(target, action);
+  }
+
+  @override
+  FutureOr<bool> handleSemanticSetValue(SemanticNode target, Object? value) {
+    return widget.onSemanticSetValue(target, value);
   }
 }
 
