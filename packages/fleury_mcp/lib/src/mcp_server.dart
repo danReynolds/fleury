@@ -319,11 +319,15 @@ final class McpServer {
     <String, Object?>{
       'name': 'set_value',
       'description':
-          "Set an input's value in one call — text into a field, a slider "
-          'position, a select option — instead of focus-then-keystrokes. The '
-          'node must advertise the `setValue` action (a textField does). The '
-          'value is a JSON scalar (string, number, or boolean), coerced for the '
-          'widget. Returns the UI after it settles.',
+          'Set a value in one call instead of focus-then-keystrokes. The node '
+          'must advertise the `setValue` action. Works on: textField/textArea '
+          '(the text), checkbox/toggle (true/false — idempotent, unlike '
+          'activate), spinButton/slider (a number), select (an option label or '
+          'value, without opening it), datePicker (an ISO date YYYY-MM-DD), and '
+          'a table (a 0-based row INDEX — jumps a windowed grid so an '
+          'off-screen row scrolls into view, then read it from get_ui). The '
+          'value is a JSON scalar, coerced for the widget; an unreadable value '
+          'is a no-op. Returns the UI after it settles.',
       'inputSchema': <String, Object?>{
         'type': 'object',
         'properties': <String, Object?>{
@@ -332,7 +336,10 @@ final class McpServer {
             'description': 'Node id from get_ui / find_nodes.',
           },
           'value': <String, Object?>{
-            'description': 'The value to set (string, number, or boolean).',
+            'type': <String>['string', 'number', 'integer', 'boolean'],
+            'description':
+                'The value to set; its meaning depends on the node (see the '
+                'tool description) — e.g. a row index for a table.',
           },
         },
         'required': <Object?>['id', 'value'],
