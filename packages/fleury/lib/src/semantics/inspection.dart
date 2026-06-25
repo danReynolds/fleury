@@ -430,11 +430,20 @@ final class SemanticInspectionNode {
 
   /// This node's own fields without children — shared by [toJson] and the
   /// budgeted [_toJsonCapped].
-  Map<String, Object?> _scalarJson() => <String, Object?>{
+  ///
+  /// [includeBounds] / [dedupeValue] trim noise for token-limited agent
+  /// consumers: an MCP agent dispatches by id, not pixels, so it doesn't need
+  /// [bounds]; and a `value` that merely repeats `label` (a display node) is
+  /// redundant. The wire/serve path keeps both (the accessible DOM mirror uses
+  /// bounds), so these default to off only in the capped path.
+  Map<String, Object?> _scalarJson({
+    bool includeBounds = true,
+    bool dedupeValue = false,
+  }) => <String, Object?>{
     'id': id,
     'role': role,
     if (label != null) 'label': label,
-    if (value != null) 'value': value,
+    if (value != null && !(dedupeValue && value == label)) 'value': value,
     if (hint != null) 'hint': hint,
     'enabled': enabled,
     if (focused) 'focused': true,
@@ -443,7 +452,7 @@ final class SemanticInspectionNode {
     if (expanded != null) 'expanded': expanded,
     if (busy) 'busy': true,
     if (validationError != null) 'validationError': validationError,
-    if (bounds != null) 'bounds': _cellRectToJson(bounds!),
+    if (includeBounds && bounds != null) 'bounds': _cellRectToJson(bounds!),
     if (actions.isNotEmpty) 'actions': actions,
     if (state.isNotEmpty) 'state': state,
   };
@@ -453,7 +462,7 @@ final class SemanticInspectionNode {
   /// gets `childrenTruncated: <count>` so a consumer knows to drill in with a
   /// targeted query rather than assume it saw everything.
   Map<String, Object?> _toJsonCapped(_NodeBudget budget) {
-    final json = _scalarJson();
+    final json = _scalarJson(includeBounds: false, dedupeValue: true);
     if (children.isEmpty) return json;
     final emitted = <Object?>[];
     for (final child in children) {

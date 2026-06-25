@@ -51,12 +51,12 @@ void main() {
     print('PAYLOAD nodes=$nodes bytes=$bytes per-node=${perNode.toStringAsFixed(1)} '
         '(~${(bytes / 4).round()} tokens)');
 
-    // Bounds with headroom over the measured size (~160 B/node after the
-    // compact-id work). A regression that re-bloats per-node cost — a verbose
-    // id, an un-trimmed field — trips this.
+    // Headroom over the measured ~114 B/node (after compact ids + dropping
+    // bounds/duplicate-value in the agent path). A regression that re-bloats
+    // per-node cost — a verbose id, an un-trimmed or re-added field — trips this.
     expect(
       perNode,
-      lessThan(190),
+      lessThan(130),
       reason: 'per-node payload regressed — check id format / node fields',
     );
     expect(
