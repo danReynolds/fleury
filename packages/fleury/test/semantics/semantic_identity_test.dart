@@ -46,7 +46,9 @@ void main() {
       final second = tester.semantics().single(role: SemanticRole.button).id;
 
       expect(first, second, reason: 'key identity must survive rebuilds');
-      expect(first.value, 'key:ValueKey<String>(row-7)');
+      // The key renders compactly (just its value), not the verbose
+      // `ValueKey<String>(row-7)` — that wrapper is pure token cost.
+      expect(first.value, 'key:row-7');
     });
 
     testWidgets('without an explicit id or key, the id is derived from the '
@@ -118,8 +120,8 @@ void main() {
       expect(id.value, startsWith('auto:'));
       expect(
         id.value,
-        contains('ValueKey<String>(row-a)'),
-        reason: 'the keyed ancestor anchors the id, not an element hash',
+        contains('/row-a/'),
+        reason: 'the keyed ancestor (rendered compactly) anchors the id',
       );
       expect(id.value, isNot(contains('element-')));
     });

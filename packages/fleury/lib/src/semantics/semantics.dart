@@ -1,6 +1,7 @@
 import 'dart:async' show FutureOr;
 
 import '../foundation/geometry.dart';
+import '../foundation/key.dart' show Key, ValueKey;
 import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
@@ -965,6 +966,23 @@ String escapeSemanticIdSegment(String segment) => segment
     .replaceAll('~', '%7E')
     .replaceAll('/', '%2F');
 
+/// Renders a [Key] compactly for a derived id (already escaped by the caller).
+///
+/// A [ValueKey]'s `toString` wraps its value — `ValueKey<String>(row-3)` — which
+/// is ~17 bytes of boilerplate that says nothing the value (`row-3`) doesn't.
+/// Folded onto *every* descendant's id, that boilerplate dominates the get_ui
+/// token cost, so derived ids carry just the value. An object-valued key (e.g.
+/// the overlay entry, whose `toString` is the verbose `Instance of '…'`) renders
+/// as a short, session-stable identity token instead.
+String _renderSemanticKeySegment(Key key) {
+  if (key is! ValueKey) return '$key';
+  final Object? value = key.value;
+  if (value is String) return value;
+  if (value is num || value is bool) return '$value';
+  // Object-valued key: its toString is verbose; use a session-stable token.
+  return '${value.runtimeType}#${identityHashCode(value).toRadixString(36)}';
+}
+
 String? semanticAnchorOf(Element element) {
   final scope = <String>[]; // keyed segments, leaf→root
   final tail = <String>[]; // positional segments below the nearest key, leaf→root
@@ -973,7 +991,7 @@ String? semanticAnchorOf(Element element) {
   while (e != null) {
     final key = e.widget.key;
     if (key != null && key is! GlobalKey) {
-      scope.add(escapeSemanticIdSegment('$key'));
+      scope.add(escapeSemanticIdSegment(_renderSemanticKeySegment(key)));
       sawKey = true;
     } else if (!sawKey) {
       tail.add('~${_childIndexOf(e)}');
@@ -1280,7 +1298,9 @@ final class SemanticsElement extends ComponentElement
     final explicitId = widget.id;
     if (explicitId != null) return explicitId;
     final key = widget.key;
-    if (key != null) return SemanticNodeId('key:$key');
+    if (key != null) {
+      return SemanticNodeId('key:${escapeSemanticIdSegment(_renderSemanticKeySegment(key))}');
+    }
     final anchor = semanticAnchorOf(this);
     if (anchor == null) return SemanticNodeId('element-$hashCode');
     return SemanticNodeId('$anchor/${widget.role.name}');
