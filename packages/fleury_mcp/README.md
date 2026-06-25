@@ -39,6 +39,18 @@ Because it operates at the *semantic* layer — below the display surface — it
 drives the **same app whether you'd otherwise view it in a terminal or a
 browser** (`fleury serve`). There is no separate "CLI" vs "web" integration.
 
+> **Why the fit is this clean.** The semantic tree wasn't built for agents — it's
+> the same roles / labels / values / actions structure Fleury already produces
+> for its accessibility mirror and its testing API. And that's *exactly* what an
+> agent needs: **what's here** (roles), **what it says** (labels/values), **what
+> I can do** (actions). So the mapping is nearly 1:1 — the tree **is** the
+> resource, the `SemanticAction`s **are** the tools — and `fleury_mcp` is a thin
+> shim over an existing, tested foundation, not a separate agent subsystem bolted
+> on. The same property makes it cheap: the agent reads structured *meaning*, not
+> a screen-scrape of cells. Most *terminal* UIs render cells directly, leaving an
+> agent to scrape ANSI; Fleury already produces a semantic tree for accessibility
+> and testing, so agents read and drive it the same structured way.
+
 ## Your app needs no MCP code
 
 Drivability is a property of the framework, not something you wire up. You add no
