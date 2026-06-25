@@ -61,15 +61,15 @@ Use `local` runs to inspect Fleury's own frame, CPU, and memory behavior. Use
 runs when the question includes the terminal boundary: bytes written, frames
 emitted, time to first byte, CPU, RSS, and peer fixtures under a real PTY.
 
-## How to read peer results
+## What results are for
 
-Peer fixtures are calibration, not marketing copy. They are useful when they
-answer a specific engineering question: is Fleury writing more than the workload
-requires, paying too much runtime overhead, or solving a scenario with a less
-natural shape than another framework?
+Benchmark output should make the next engineering question clearer. Local and
+profile runs show whether Fleury's own pipeline is staying proportional to the
+change. Wire runs show what happens at the terminal boundary: bytes written,
+frames emitted, time to first byte, CPU, and RSS. Peer fixture runs show how the
+same scenario behaves when expressed with other frameworks' natural APIs.
 
-Treat peer numbers as public claims only when the fixture shape, terminal,
-machine, framework versions, and repeated-run variance are documented beside the
-result. Without that context, the responsible claim is narrower: the harness
-exists, the scenario is repeatable, and the results are evidence for regressions
-or follow-up investigation.
+For durable comparisons, keep the fixture shape, terminal, machine, framework
+versions, and repeated-run variance beside the result. That context makes the
+captures useful for regression review, fixture-shape review, runtime-floor
+analysis, and follow-up profiling.
