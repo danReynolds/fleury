@@ -338,10 +338,11 @@ for (const d of DOC_PAGES) {
   byCategory.get(d.category).push({ widget: d.widget, id: d.slug, blurb });
 }
 let widgetIndex =
-  `---\ntitle: Overview\ndescription: The Fleury widget library — every page has a live, client-side example.\n---\n\n` +
+  `---\ntitle: Overview\ndescription: The Fleury widget library — live examples where they can run in the browser, source-backed references everywhere else.\n---\n\n` +
   `Fleury ships a broad widget library: charts and meters, data and lists, ` +
-  `document viewers, and agent surfaces. Each widget below has its own page ` +
-  `with a **live example that runs in your browser** (compiled with dart2js).\n\n`;
+  `document viewers, and agent surfaces. Browser-safe widgets have **live, ` +
+  `client-side examples** compiled with dart2js; native and imperative widgets ` +
+  `still get source-backed reference pages.\n\n`;
 for (const [category, items] of byCategory) {
   widgetIndex += `## ${category}\n\n`;
   for (const e of items)
