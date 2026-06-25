@@ -2,7 +2,18 @@ name: fleury_mcp
 description: >-
   A Model Context Protocol server that drives a Fleury terminal-UI app through
   its semantic tree, so any MCP host can read and operate it.
-version: 0.0.0
+version: 0.1.0
+repository: https://github.com/danReynolds/fleury/tree/main/packages/fleury_mcp
+issue_tracker: https://github.com/danReynolds/fleury/issues
+topics:
+  - mcp
+  - agents
+  - tui
+  - terminal
+  - automation
+# Held until `fleury` is published to pub.dev and the dependency below is
+# switched from a path to a hosted version constraint. Remove this line to
+# publish. See the README's "Status" section.
 publish_to: none
 
 executables:
