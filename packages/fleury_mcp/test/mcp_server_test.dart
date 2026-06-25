@@ -8,12 +8,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:fleury/fleury_core.dart';
-// The remote-render wire types have no public host-side library; consume them
-// directly, the same way fleury_web does.
-import 'package:fleury/src/remote/remote_protocol.dart';
-import 'package:fleury/src/remote/remote_semantics.dart';
-import 'package:fleury/src/remote/remote_transport.dart';
+// The host SPI re-exports fleury_core plus the remote-render wire types
+// (frames, codec, transport) this test builds and asserts on.
+import 'package:fleury/fleury_host.dart';
 import 'package:fleury_mcp/fleury_mcp.dart';
 import 'package:test/test.dart';
 

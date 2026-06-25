@@ -1,7 +1,7 @@
 // Bridges a running Fleury app to an out-of-process agent.
 //
 // The MCP server is a *peer* on the same structured wire `fleury serve` speaks
-// (`package:fleury/src/remote/`): it sends an INIT handshake, receives the
+// (`package:fleury/fleury_host_io.dart`): it sends an INIT handshake, receives the
 // app's semantic snapshots (as SEMANTICS patch frames), and sends back
 // SEMANTIC_ACTION / INPUT_EVENT frames to drive the UI. It ignores the visual
 // PLAN/IMAGE frames entirely — an agent reads meaning, not cells.
@@ -16,13 +16,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:fleury/fleury_core.dart';
-// The remote-render wire has no public host-side library; consume it directly,
-// the same way fleury_web does. See analysis_options (implementation_imports).
-import 'package:fleury/src/remote/remote_protocol.dart';
-import 'package:fleury/src/remote/remote_semantics.dart';
-import 'package:fleury/src/remote/remote_transport.dart';
-import 'package:fleury/src/remote/unix_socket_transport.dart';
+// The host SPI: semantics + the remote-render wire (frame protocol, codec,
+// transport) + the Unix-socket transport — the same public surface a native
+// host like `fleury serve` builds on.
+import 'package:fleury/fleury_host_io.dart';
 
 /// A line sink for the app subprocess's own stdout/stderr. The MCP server's
 /// real stdout is reserved for JSON-RPC, so app logs must never land there.

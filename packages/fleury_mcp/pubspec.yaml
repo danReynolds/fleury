@@ -11,10 +11,6 @@ topics:
   - tui
   - terminal
   - automation
-# Held until `fleury` is published to pub.dev and the dependency below is
-# switched from a path to a hosted version constraint. Remove this line to
-# publish. See the README's "Status" section.
-publish_to: none
 
 executables:
   fleury_mcp: fleury_mcp
@@ -23,6 +19,13 @@ environment:
   sdk: ^3.10.4
 
 dependencies:
+  # Depends on fleury's PUBLIC host SPI (fleury_host_io.dart) — safe under
+  # semver. fleury must be published first; until then the override below
+  # resolves it from the local path. Remove the override before the final
+  # `dart pub publish` of this package (or it will warn).
+  fleury: ^0.1.0
+
+dependency_overrides:
   fleury:
     path: ../fleury
 
