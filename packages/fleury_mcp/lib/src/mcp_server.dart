@@ -236,7 +236,9 @@ final class McpServer {
     }
     final snapshot = await _currentSnapshot();
     if (snapshot != null) _lastServed = snapshot;
-    final text = snapshot == null ? '{}' : jsonEncode(snapshot.toJson());
+    final text = snapshot == null
+        ? '{}'
+        : jsonEncode(snapshot.toJsonCapped(maxNodes: _getUiNodeCap));
     return <String, Object?>{
       'contents': <Object?>[
         <String, Object?>{
@@ -478,10 +480,17 @@ final class McpServer {
     }
   }
 
+  /// Node ceiling for the full-tree `get_ui` / resource payload. Generous for a
+  /// real TUI screen (most are well under), but bounds a pathological tree (e.g.
+  /// a grid resized huge) so it can't blow the agent's context. Over it, deep
+  /// subtrees are dropped with `childrenTruncated` and the agent uses
+  /// `find_nodes` to drill in.
+  static const int _getUiNodeCap = 800;
+
   Future<Map<String, Object?>> _toolGetUi() async {
     final snapshot = await _requireSnapshot();
     _lastServed = snapshot;
-    return _toolJson(snapshot.toJson());
+    return _toolJson(snapshot.toJsonCapped(maxNodes: _getUiNodeCap));
   }
 
   Future<Map<String, Object?>> _toolFindNodes(Map<String, Object?> args) async {

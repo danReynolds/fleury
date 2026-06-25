@@ -212,6 +212,24 @@ final class SemanticInspectionSnapshot {
     'root': root.toJson(),
   };
 
+  /// Like [toJson] but bounds the tree to at most [maxNodes] nodes — dropped
+  /// subtrees carry `childrenTruncated` and the envelope carries `truncated:
+  /// true`. For token-limited consumers (the MCP `get_ui` tool); the wire/serve
+  /// path uses the unbounded [toJson]. `roleCounts`/`nodeCount` still describe
+  /// the *full* tree so a consumer knows what it didn't see.
+  Map<String, Object?> toJsonCapped({required int maxNodes}) {
+    final budget = _NodeBudget(maxNodes <= 1 ? 0 : maxNodes - 1);
+    return <String, Object?>{
+      'schemaVersion': schemaVersion,
+      'nodeCount': nodeCount,
+      if (nodeCount > maxNodes) 'truncated': true,
+      'focusedNodeId': focusedNodeId,
+      'roleCounts': roleCounts,
+      'actionCount': actionCount,
+      'root': root._toJsonCapped(budget),
+    };
+  }
+
   /// Reconstructs a [SemanticTree] from this snapshot.
   ///
   /// The reconstructed tree mirrors the (already redacted) inspection view, so
@@ -255,6 +273,13 @@ final class SemanticInspectionSnapshot {
 }
 
 /// Redacted, JSON-safe semantic node used by [SemanticInspectionSnapshot].
+/// Mutable remaining-node budget threaded through
+/// [SemanticInspectionNode._toJsonCapped].
+class _NodeBudget {
+  _NodeBudget(this.remaining);
+  int remaining;
+}
+
 final class SemanticInspectionNode {
   /// Stable node JSON keys for semantic inspection schema v1.
   static const Set<String> stableJsonFields = <String>{
@@ -398,6 +423,14 @@ final class SemanticInspectionNode {
   Object? operator [](String key) => toJson()[key];
 
   Map<String, Object?> toJson() => <String, Object?>{
+    ..._scalarJson(),
+    if (children.isNotEmpty)
+      'children': <Object?>[for (final child in children) child.toJson()],
+  };
+
+  /// This node's own fields without children — shared by [toJson] and the
+  /// budgeted [_toJsonCapped].
+  Map<String, Object?> _scalarJson() => <String, Object?>{
     'id': id,
     'role': role,
     if (label != null) 'label': label,
@@ -413,9 +446,26 @@ final class SemanticInspectionNode {
     if (bounds != null) 'bounds': _cellRectToJson(bounds!),
     if (actions.isNotEmpty) 'actions': actions,
     if (state.isNotEmpty) 'state': state,
-    if (children.isNotEmpty)
-      'children': <Object?>[for (final child in children) child.toJson()],
   };
+
+  /// Serializes this subtree depth-first, emitting at most [budget] more
+  /// descendant nodes. A node whose children are dropped to stay within budget
+  /// gets `childrenTruncated: <count>` so a consumer knows to drill in with a
+  /// targeted query rather than assume it saw everything.
+  Map<String, Object?> _toJsonCapped(_NodeBudget budget) {
+    final json = _scalarJson();
+    if (children.isEmpty) return json;
+    final emitted = <Object?>[];
+    for (final child in children) {
+      if (budget.remaining <= 0) break;
+      budget.remaining--;
+      emitted.add(child._toJsonCapped(budget));
+    }
+    if (emitted.isNotEmpty) json['children'] = emitted;
+    final dropped = children.length - emitted.length;
+    if (dropped > 0) json['childrenTruncated'] = dropped;
+    return json;
+  }
 
   /// Reconstructs a [SemanticNode] from this inspection node, recursively.
   ///
