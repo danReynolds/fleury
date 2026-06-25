@@ -409,9 +409,13 @@ first-principles corrections implementation forced on the RFC's own assumptions:
   dispatch — superseding the server-side
   fingerprint and extending the guard to *core* dispatch (tests/a11y), not just
   MCP. The fingerprint net holds the line meanwhile.
-- **B4 central typed coercion.** Only `TextInput`'s string coercion shipped;
-  `Slider`/`Select`/`DatePicker` adoption and the central typed-per-role coercion +
-  typed-failure statuses wait until those widgets adopt `setValue`.
+- **B4 typed coercion — largely DONE** (2026-06-25, `6f013dd`/`c43c92e`).
+  `setValue` adopted across Checkbox/Toggle/Switch, Stepper, RangeSlider, Select,
+  TextArea, and DatePicker via a shared `semantic_coercion.dart` (lenient
+  bool/num/int, `null` on garbage → handler no-ops rather than guessing). The
+  remaining piece is *typed-failure statuses* (today an uncoercible value is a
+  silent no-op reported as `changed:false`; a structured "couldn't coerce" status
+  would be friendlier) — minor, deferred.
 
 ## Rollout (phased, independently landable)
 
