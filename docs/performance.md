@@ -46,5 +46,24 @@ churn, process output, wire bytes, CPU, and RSS. Peer comparisons are run from
 matching source fixtures and need fixture parity plus repeated hardware runs
 before they support public superiority claims.
 
+## How to inspect it
+
+The public docs intentionally describe the model and measurement surface rather
+than publishing a static "faster than X" table. From a Fleury framework checkout:
+
+```sh
+fleury benchmark list
+fleury benchmark local SB.6 --warmup=1 --iterations=3 --json
+fleury benchmark wire sb6 --runs=3
+fleury benchmark manifest --json
+```
+
+Use `fleury benchmark list` for the current scenario catalog, `local` runs for
+Fleury-only CPU/RSS/frame-cost work, and `wire` runs for real-PTY peer fixtures.
+The full scenario matrix and peer target rationale live in the
+[benchmark index](https://github.com/danReynolds/fleury/blob/main/benchmarks/README.md).
+Treat peer numbers as publishable only when the fixture shape, terminal, machine,
+and repeated-run variance are all documented beside the result.
+
 The framework also ships a built-in profiling surface, so you can inspect
 rebuild, layout, paint, and frame costs in your own app.
