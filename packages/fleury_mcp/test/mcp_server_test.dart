@@ -563,6 +563,51 @@ void main() {
     expect(error['message'], contains('Unknown resource'));
   });
 
+  test('find_nodes rejects an unknown role with a corrective hint', () async {
+    pushCount(0);
+    await bridge.ready;
+    await server.handleLine(
+      _rpc(90, 'tools/call', <String, Object?>{
+        'name': 'find_nodes',
+        'arguments': <String, Object?>{'role': 'tablerow'}, // wrong case
+      }),
+    );
+    expect(toolError(lastResult()), contains('Unknown role'));
+  });
+
+  test('wait_for_change omits the UI on timeout (no redundant tree)', () async {
+    pushCount(0);
+    await bridge.ready;
+    await server.handleLine(
+      _rpc(91, 'tools/call', <String, Object?>{
+        'name': 'wait_for_change',
+        'arguments': <String, Object?>{'timeout_ms': 100},
+      }),
+    );
+    final result = toolJson(lastResult());
+    expect(result['changed'], isFalse);
+    expect(result.containsKey('ui'), isFalse,
+        reason: 'an unchanged tree is already in the agent\'s context');
+    expect(result['note'], contains('No change'));
+  });
+
+  test('tool results mirror the text as structuredContent (MCP 2025-06-18)',
+      () async {
+    pushCount(0);
+    await bridge.ready;
+    await server.handleLine(
+      _rpc(92, 'tools/call', <String, Object?>{
+        'name': 'get_ui',
+        'arguments': <String, Object?>{},
+      }),
+    );
+    final result = lastResult();
+    final text =
+        ((result['content'] as List).single as Map<String, Object?>)['text']
+            as String;
+    expect(result['structuredContent'], jsonDecode(text));
+  });
+
   test('set_value sends a setValue frame whose payload round-trips the wire', () async {
     Map<String, Object?> field(Object? value) => <String, Object?>{
       'id': 'root',
@@ -572,7 +617,7 @@ void main() {
           'id': 'name',
           'role': 'textField',
           'label': 'Name',
-          if (value != null) 'value': value,
+          'value': ?value,
           'actions': <String>['setValue'],
         },
       ],

@@ -132,6 +132,9 @@ final class McpServer {
   static final Map<String, KeyCode> _keysByName = {
     for (final k in KeyCode.values) k.name: k,
   };
+  static final Set<String> _roleNames = {
+    for (final r in SemanticRole.values) r.name,
+  };
 
   /// Parses and dispatches a single JSON-RPC line.
   Future<void> handleLine(String line) async {
@@ -517,13 +520,29 @@ final class McpServer {
   }
 
   Future<Map<String, Object?>> _toolFindNodes(Map<String, Object?> args) async {
+    // Validate the enum-valued filters up front: a typo'd role/action would
+    // otherwise silently match nothing, and the agent could wrongly conclude
+    // "no such nodes" rather than "I mistyped the name".
+    final role = _optString(args['role']);
+    if (role != null && !_roleNames.contains(role)) {
+      throw _ToolFailure(
+        'Unknown role "$role". Role names are camelCase (e.g. button, tableRow, '
+        'textField); omit role or call get_ui to see the roles in this UI.',
+      );
+    }
+    final action = _optString(args['action']);
+    if (action != null && !_actionsByName.containsKey(action)) {
+      throw _ToolFailure(
+        'Unknown action "$action". Valid actions: $_actionNames.',
+      );
+    }
     final snapshot = await _requireSnapshot();
     _lastServed = snapshot;
     final matches = snapshot
         .where(
-          role: _optString(args['role']),
+          role: role,
           labelContains: _optString(args['label']),
-          action: _optString(args['action']),
+          action: action,
           focused: args['focused'] is bool ? args['focused'] as bool : null,
           selected: args['selected'] is bool ? args['selected'] as bool : null,
         )
@@ -779,10 +798,14 @@ final class McpServer {
       timeout: Duration(milliseconds: timeoutMs),
     );
     final changed = bridge.revision != before;
+    // On a timeout the tree is unchanged from the agent's last read, so echoing
+    // it back is pure wasted tokens — return just the verdict.
     return _toolJson(<String, Object?>{
       'changed': changed,
-      if (!changed) 'note': 'No change within ${timeoutMs}ms.',
-      'ui': _uiResult(after),
+      if (!changed)
+        'note': 'No change within ${timeoutMs}ms; the UI is as you last read it.'
+      else
+        'ui': _uiResult(after),
     });
   }
 
@@ -864,11 +887,17 @@ final class McpServer {
         'error': <String, Object?>{'code': code, 'message': message},
       };
 
-  /// A successful tool result whose single text block is [value] as JSON.
+  /// A successful tool result. The JSON [value] is returned as a text block (the
+  /// model-facing channel, and the back-compat path for pre-2025-06-18 clients)
+  /// and, when it's an object, also as `structuredContent` for clients that
+  /// consume tool output programmatically (MCP 2025-06-18). Both carry the same
+  /// data; a spec-compliant client feeds the text to the model and uses
+  /// structuredContent for app logic, so this doesn't double the model's tokens.
   Map<String, Object?> _toolJson(Object? value) => <String, Object?>{
     'content': <Object?>[
       <String, Object?>{'type': 'text', 'text': jsonEncode(value)},
     ],
+    if (value is Map<String, Object?>) 'structuredContent': value,
     'isError': false,
   };
 
