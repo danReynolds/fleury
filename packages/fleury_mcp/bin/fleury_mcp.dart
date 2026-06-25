@@ -63,6 +63,17 @@ Future<int> _run(List<String> args) async {
     return 2;
   }
 
+  if (_isColdRunCommand(command)) {
+    // The bridge spawns whatever command it's given, so it can't AOT-compile
+    // the app itself — point the user at the fast path instead.
+    stderr.writeln(
+      'fleury_mcp: launching via `dart run` JIT-compiles the app on startup '
+      '(seconds). For a faster, repeatable launch, AOT-compile once '
+      '(`dart compile exe my_app.dart -o my_app`) and run `fleury_mcp -- '
+      './my_app`.',
+    );
+  }
+
   final FleuryAppBridge bridge;
   try {
     bridge = await FleuryAppBridge.spawn(
@@ -103,6 +114,16 @@ Future<int> _run(List<String> args) async {
   });
 
   return exitCode.future;
+}
+
+/// True when [command] launches the app through the Dart VM's JIT path
+/// (`dart run …` or `dart path/to/app.dart`), which cold-compiles on spawn.
+/// An AOT executable or other launcher returns false.
+bool _isColdRunCommand(List<String> command) {
+  if (command.isEmpty) return false;
+  final exe = command.first.split(Platform.pathSeparator).last;
+  if (exe != 'dart' && exe != 'dart.exe') return false;
+  return command.skip(1).any((a) => a == 'run' || a.endsWith('.dart'));
 }
 
 void _printUsage() {

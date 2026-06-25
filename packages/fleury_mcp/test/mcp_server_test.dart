@@ -545,6 +545,30 @@ void main() {
     expect((event as TextInputEvent).text, 'hello');
   });
 
+  test('type_text and set_value reject an over-long payload', () async {
+    pushCount(0);
+    await bridge.ready;
+    final huge = 'x' * 200001;
+
+    await server.handleLine(
+      _rpc(70, 'tools/call', <String, Object?>{
+        'name': 'type_text',
+        'arguments': <String, Object?>{'text': huge},
+      }),
+    );
+    expect(toolError(lastResult()), contains('too long'));
+
+    await server.handleLine(
+      _rpc(71, 'tools/call', <String, Object?>{
+        'name': 'set_value',
+        'arguments': <String, Object?>{'id': 'whatever', 'value': huge},
+      }),
+    );
+    expect(toolError(lastResult()), contains('too long'));
+    // Nothing was dispatched — the clamp fires before the bridge call.
+    expect(transport.sent.whereType<InputEventFrame>(), isEmpty);
+  });
+
   test('press_key sends a named key (with modifiers) as a KeyEvent', () async {
     pushCount(0);
     await bridge.ready;

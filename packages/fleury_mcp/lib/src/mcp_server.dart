@@ -487,6 +487,11 @@ final class McpServer {
   /// `find_nodes` to drill in.
   static const int _getUiNodeCap = 800;
 
+  /// Upper bound on a single `type_text` / `set_value` string. Generous (a long
+  /// TextArea body fits) but bounds a pathological payload below the wire's
+  /// frame cap, with a clear error instead of a silent giant frame.
+  static const int _maxInputChars = 200000;
+
   Future<Map<String, Object?>> _toolGetUi() async {
     final snapshot = await _requireSnapshot();
     _lastServed = snapshot;
@@ -618,6 +623,12 @@ final class McpServer {
       );
     }
     final value = args['value'];
+    if (value is String && value.length > _maxInputChars) {
+      throw _ToolFailure(
+        'set_value "value" is too long (${value.length} chars; max '
+        '$_maxInputChars).',
+      );
+    }
     await _resolveActionableNode(id, SemanticAction.setValue.name);
 
     final before = bridge.revision;
@@ -652,6 +663,12 @@ final class McpServer {
     final text = _optString(args['text']);
     if (text == null) {
       throw const _ToolFailure('type_text requires "text".');
+    }
+    if (text.length > _maxInputChars) {
+      throw _ToolFailure(
+        'type_text "text" is too long (${text.length} chars; max '
+        '$_maxInputChars). Send it in smaller chunks.',
+      );
     }
     if (text.isEmpty) {
       return _toolJson(<String, Object?>{
