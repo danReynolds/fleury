@@ -207,6 +207,53 @@ void main() {
     );
   });
 
+  testWidgets('a sortable header activates to request a sort; state carries '
+      'the active direction', (tester) async {
+    String? sorted;
+    DataTable build({void Function(String)? onSort}) => DataTable(
+      label: 'Runs',
+      rowCount: 10,
+      columns: _columns(),
+      rowKeyBuilder: (row) => 'RUN-$row',
+      cellBuilder: _cell,
+      sortColumnId: 'run',
+      sortDirection: DataTableSortDirection.descending,
+      onSort: onSort,
+    );
+
+    SemanticNode header(FleuryTester t, String columnId) => t
+        .semantics()
+        .byRole(SemanticRole.tableCell)
+        .firstWhere(
+          (n) => n.state['header'] == true && n.state['columnId'] == columnId,
+        );
+
+    // No onSort ⇒ headers aren't activatable.
+    tester.pumpWidget(build());
+    tester.render(size: const CellSize(24, 6));
+    expect(
+      header(tester, 'run').actions,
+      isNot(contains(SemanticAction.activate)),
+    );
+
+    // With onSort, a header advertises activate; the sorted column carries the
+    // active direction so an agent can see/toggle it.
+    tester.pumpWidget(build(onSort: (id) => sorted = id));
+    tester.render(size: const CellSize(24, 6));
+    final runHeader = header(tester, 'run');
+    expect(runHeader.actions, contains(SemanticAction.activate));
+    expect(runHeader.state['sortDirection'], 'descending');
+    expect(header(tester, 'status').state['sortDirection'], isNull);
+
+    await tester.invokeSemanticAction(SemanticAction.activate, node: runHeader);
+    expect(sorted, 'run');
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      node: header(tester, 'status'),
+    );
+    expect(sorted, 'status');
+  });
+
   testWidgets('renders visible rows only and exposes virtualized semantics', (
     tester,
   ) {

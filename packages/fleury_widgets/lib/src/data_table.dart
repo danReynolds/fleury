@@ -556,6 +556,7 @@ class DataTable extends StatefulWidget {
     this.selectedStyle,
     this.sortColumnId,
     this.sortDirection,
+    this.onSort,
     this.filterText,
     this.label = 'Data table',
   });
@@ -578,6 +579,13 @@ class DataTable extends StatefulWidget {
   final CellStyle? selectedStyle;
   final String? sortColumnId;
   final DataTableSortDirection? sortDirection;
+
+  /// Called with a column's id when an agent activates its header cell, so the
+  /// app can (re)sort. The header is custom-painted (no per-cell widget), so
+  /// this is the semantic-layer trigger — the synthetic header cells carry the
+  /// `columnId`. When non-null, header cells advertise `activate`.
+  final void Function(String columnId)? onSort;
+
   final String? filterText;
   final String? label;
 
@@ -686,6 +694,15 @@ class _DataTableState extends State<DataTable> {
         _focusNode.requestFocus();
         return _selectSemanticTarget(target);
       case SemanticAction.activate:
+        // A header cell activate is a sort request, not a row selection.
+        if (target.state['header'] == true) {
+          final columnId = target.state['columnId'];
+          if (widget.onSort != null && columnId is String) {
+            widget.onSort!(columnId);
+            return true;
+          }
+          return false;
+        }
         if (widget.onSelect == null) return false;
         _focusNode.requestFocus();
         _selectSemanticTarget(target);
@@ -875,6 +892,7 @@ class _DataTableState extends State<DataTable> {
         _visibleRows = viewport.visibleRows < 1 ? 1 : viewport.visibleRows;
       },
       onSelect: widget.onSelect,
+      sortable: widget.onSort != null,
       onSemanticAction: _handleSemanticAction,
       onSemanticSetValue: _handleSemanticSetValue,
     );
@@ -1033,6 +1051,7 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
     required this.selectedStyle,
     required this.onViewport,
     required this.onSelect,
+    required this.sortable,
     required this.onSemanticAction,
     required this.onSemanticSetValue,
     required this.copySelectedRow,
@@ -1058,6 +1077,7 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
   final CellStyle selectedStyle;
   final void Function(DataTableViewportMetrics viewport) onViewport;
   final void Function(int rowIndex)? onSelect;
+  final bool sortable;
   final FutureOr<bool> Function(SemanticNode target, SemanticAction action)
   onSemanticAction;
   final FutureOr<bool> Function(SemanticNode target, Object? value)
@@ -1214,11 +1234,19 @@ class _DataTableElement extends LeafRenderObjectElement
                 role: SemanticRole.tableCell,
                 label: _sanitizeExportField(widget.columns[col].title),
                 value: _sanitizeExportField(widget.columns[col].title),
+                // Activating a sortable column's header asks the app to sort by
+                // it (the app owns the data + the direction toggle).
+                actions: <SemanticAction>{
+                  if (widget.sortable) SemanticAction.activate,
+                },
                 state: SemanticState({
                   'rowIndex': -1,
                   'columnIndex': col,
                   'columnId': widget.columns[col].id,
                   'header': true,
+                  if (widget.sortColumnId == widget.columns[col].id &&
+                      widget.sortDirection != null)
+                    'sortDirection': widget.sortDirection!.name,
                 }),
               ),
           ],
