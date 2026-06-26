@@ -29,7 +29,7 @@ const _languages = [
   'Elixir', 'Zig', 'Swift', 'Kotlin', 'Haskell',
 ];
 
-void main() => runTui(const FilterApp());
+void main() => runApp(const FilterApp());
 
 class FilterApp extends StatelessWidget {
   const FilterApp({super.key});

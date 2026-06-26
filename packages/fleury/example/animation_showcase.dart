@@ -17,7 +17,7 @@
 import 'package:fleury/fleury.dart';
 
 Future<void> main() async {
-  await runTui(
+  await runApp(
     const _ShowcaseApp(),
     onEvent: (event) {
       if (event is KeyEvent && event.hasCtrl && event.char == 'c') {

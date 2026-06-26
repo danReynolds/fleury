@@ -1,23 +1,23 @@
 ---
 title: App entry points
-description: runTui and runTuiWebDom — how a widget tree starts running in a terminal or a browser.
+description: runApp and mountApp — how a widget tree starts running in a terminal or a browser.
 ---
 
-A Fleury app is a widget tree handed to a *run* function. There are two,
-depending on where the tree executes: `runTui` for a terminal and `runTuiWebDom`
-for a browser. (A third path, `fleury serve`, streams a native app to a browser —
-but it's a deployment mode, not an entry point.) The two run functions share a
-model — mount the tree, paint the first frame, then re-render on every input and
-every `setState` — and differ mainly in signature.
+A Fleury app is a widget tree handed to an entry function. Use `runApp` when the
+tree runs in a terminal, and `mountApp` when a dart2js bundle mounts the tree
+inside a browser element. (A third path, `fleury serve`, streams a native app to
+a browser — but it's a deployment mode, not an entry point.) Both entry
+functions share a model: mount the tree, paint the first frame, then re-render on
+every input and every `setState`.
 
-## `runTui` — the terminal
+## `runApp` — the terminal
 
 The default. Lives in `package:fleury/fleury.dart` and drives a real terminal:
 
 ```dart
 import 'package:fleury/fleury.dart';
 
-void main() => runTui(const MyApp());
+void main() => runApp(const MyApp());
 ```
 
 It takes a **widget instance** and returns a `Future<void>` that completes when
@@ -30,7 +30,7 @@ terminal to exactly how it found it.
 The options you'll actually reach for:
 
 ```dart
-runTui(
+runApp(
   const MyApp(),
   onEvent: (event) {
     // Inspect every input event before the framework re-renders.
@@ -45,13 +45,13 @@ runTui(
 
 `mode` (a `TerminalMode`, default `TerminalMode.interactive`) controls the raw-
 mode/alt-screen/mouse setup; `enableHotReload` (default `true`) wires up state-
-preserving hot reload under the Dart VM. Because `runTui` depends on `dart:io`,
+preserving hot reload under the Dart VM. Because `runApp` depends on `dart:io`,
 it's exported from `fleury.dart` — *not* from the web-safe `fleury_core`.
 
 ## The ambient scaffold (no `MaterialApp` needed)
 
 Coming from Flutter, you might look for a `MaterialApp`/`WidgetsApp` to wrap your
-root. There isn't one — `runTui` assembles the ambient scaffold itself. Before it
+root. There isn't one — `runApp` assembles the ambient scaffold itself. Before it
 mounts your widget, it injects:
 
 - a **`MediaQuery`** carrying the terminal size (rebuilt on resize),
@@ -61,14 +61,14 @@ mounts your widget, it injects:
 - a root **`Navigator`**, so `context.push` / `context.pop` work app-wide.
 
 That's why navigation, focus, media queries, and the mouse "just work" with no
-setup. The one thing `runTui` does **not** inject is a `Theme` — `Theme.of(context)`
+setup. The one thing `runApp` does **not** inject is a `Theme` — `Theme.of(context)`
 returns sensible defaults until you wrap a subtree in your own (see
 [Theming](/guides/theming/)).
 
-## `runTuiWebDom` — the browser
+## `mountApp` — the browser
 
 To run the **same widget tree** client-side in a browser, compile to JavaScript
-with `dart2js` and call `runTuiWebDom` from `package:fleury_web/fleury_web.dart`.
+with `dart2js` and call `mountApp` from `package:fleury_web/fleury_web.dart`.
 It paints into a retained DOM cell grid and — this is the part that matters for
 agents and accessibility — mirrors the tree into a **semantic DOM** by default:
 
@@ -78,14 +78,14 @@ import 'package:web/web.dart' as web;
 
 void main() {
   final host = web.document.getElementById('app')!;
-  runTuiWebDom(() => const MyApp(), hostElement: host);
+  mountApp(() => const MyApp(), into: host);
 }
 ```
 
-Two differences from `runTui` worth flagging:
+Two differences from `runApp` worth flagging:
 
 - It takes a **widget factory** (`() => const MyApp()`), not an instance.
-- It returns a `Future<TuiSurfaceHost>` (a handle to the running surface), not
+- It returns a `Future<MountedApp>` (a handle to the running surface), not
   `void`.
 
 The host element must have an explicit size and a monospace font, or the grid
@@ -97,14 +97,14 @@ measures zero cells and paints nothing:
 
 This is the path the live examples throughout these docs use — every embedded
 widget on this site is the real tree, compiled with `dart2js` and mounted with
-`runTuiWebDom`.
+`mountApp`.
 
 ## Which one?
 
-| Target | Function | Takes |
+| Target | Entry function | Takes |
 |---|---|---|
-| Terminal (native) | `runTui` | a widget instance |
-| Browser, embedded | `runTuiWebDom` | a widget factory |
+| Terminal, native | `runApp` | a widget instance |
+| Browser, embedded | `mountApp` | a widget factory and `into:` host element |
 
 To put an app in a browser *without* compiling it yourself, reach for
 `fleury serve` instead — it runs your native app and streams the frames to a thin

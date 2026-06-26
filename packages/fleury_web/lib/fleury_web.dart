@@ -1,6 +1,6 @@
 /// Run fleury in the browser.
 ///
-/// [runTuiWebDom] is the retained DOM host: it pairs the framework's host SPI
+/// [mountApp] is the retained DOM host: it pairs the framework's host SPI
 /// (`fleury_host.dart`) with retained row DOM for presentation, browser cell
 /// metrics, DOM input events, browser clipboard, and a semantic DOM mirror for
 /// accessibility. The serve/remote paths sit behind the same core runtime
@@ -22,7 +22,7 @@ export 'src/instrumentation/web_host_instrumentation.dart'
         WebSemanticFlushInstrumentation,
         WebSemanticFlushSummary,
         defaultWebFrameBudgetMs;
-export 'src/run_tui_web_dom.dart' show runTuiWebDom;
+export 'src/mount_app.dart' show mountApp;
 export 'src/semantics/semantic_flush_scheduler.dart'
     show SemanticFlushScheduler, TimerSemanticFlushScheduler;
-export 'src/run_tui_surface.dart' show TuiSurfaceHost;
+export 'src/run_tui_surface.dart' show MountedApp;

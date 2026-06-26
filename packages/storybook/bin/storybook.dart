@@ -35,7 +35,7 @@ Future<void> _runInteractive(_StorybookCliOptions options) async {
   final overrides = _controlOverridesFor(story, options.controlSpecs);
   _validateVariant(story, options.variantId);
 
-  await runTui(
+  await runApp(
     StorybookApp(
       initialStoryId: options.storyId,
       initialVariantId: options.variantId,

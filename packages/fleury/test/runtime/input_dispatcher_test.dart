@@ -3,8 +3,8 @@
 // InputDispatcher, and asserts on the resulting handler calls and
 // hint-bar contents.
 //
-// The dispatcher is wired up directly here rather than via runTui
-// because runTui depends on a real terminal driver. Constructing
+// The dispatcher is wired up directly here rather than via runApp
+// because runApp depends on a real terminal driver. Constructing
 // the FocusManager + InputDispatcher manually lets each test run
 // without I/O.
 

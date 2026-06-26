@@ -39,7 +39,7 @@ class _DebugPanelState extends State<DebugPanel> {
   // framework emits frames. Without this we'd loop: every FrameEvent
   // triggers setState → schedules a frame → emits another FrameEvent
   // → another setState. The framework happily runs that at full speed,
-  // burning CPU in production and locking the test suite (the runTui
+  // burning CPU in production and locking the test suite (the runApp
   // future can't drain because the event loop is saturated with
   // panel-triggered frames). 100ms is fast enough that humans can't
   // perceive the lag in the live counters; the underlying history
@@ -116,7 +116,7 @@ class _DebugPanelState extends State<DebugPanel> {
         return _rebuildsBody();
       case DebugTab.logs:
         // Captured stdout/stderr lives in the ambient LogBufferScope
-        // installed by runTui; LogView wires itself to it.
+        // installed by runApp; LogView wires itself to it.
         return const [Expanded(child: LogView())];
     }
   }

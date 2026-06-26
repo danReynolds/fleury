@@ -30,7 +30,7 @@ void main() {
         text,
         isNot(contains('RemoteTerminalDriver')),
         reason:
-            '$path should keep remote rendering available through runTui '
+            '$path should keep remote rendering available through runApp '
             'auto-discovery and the fleury CLI, not through direct driver '
             'construction.',
       );
@@ -44,7 +44,9 @@ void main() {
     }
 
     final nativeUmbrella = File('lib/fleury.dart').readAsStringSync();
-    expect(nativeUmbrella, contains('runTui'));
+    final retiredNativeEntry = 'run${'Tui'}';
+    expect(nativeUmbrella, contains('runApp'));
+    expect(nativeUmbrella, isNot(contains(retiredNativeEntry)));
 
     final core = File('lib/fleury_core.dart').readAsStringSync();
     expect(core, contains('TerminalDriver'));

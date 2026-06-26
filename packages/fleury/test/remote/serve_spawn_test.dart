@@ -223,7 +223,7 @@ void main() {
     );
   }, tags: ['integration']);
 
-  group('fleury serve --spawn with a real runTui app', () {
+  group('fleury serve --spawn with a real runApp app', () {
     late Directory tempDir;
     late Process serveProcess;
     late int port;
@@ -232,7 +232,7 @@ void main() {
     late StreamSubscription<String> stderrSub;
 
     setUp(() async {
-      tempDir = Directory.systemTemp.createTempSync('fleury_spawn_run_tui_');
+      tempDir = Directory.systemTemp.createTempSync('fleury_spawn_run_app_');
       port = await _unusedLoopbackPort();
       pkgRoot = Directory.current.path;
       stderrLines.clear();
@@ -287,7 +287,7 @@ void main() {
       });
 
       // Real browsers send INIT immediately on WebSocket open. The server must
-      // preserve that frame while the spawned runTui process starts and
+      // preserve that frame while the spawned runApp process starts and
       // connects back to the per-session Unix socket.
       ws.add(
         encodeFrame(

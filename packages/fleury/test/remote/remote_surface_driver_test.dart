@@ -1,6 +1,6 @@
 // End-to-end test for RemoteTerminalDriver — the structured serve path.
 // Covers: handshake establishes size+caps; structured INPUT_EVENT frames
-// surface as events; presentPlan emits PLAN frames; and driving runTui
+// surface as events; presentPlan emits PLAN frames; and driving runApp
 // through this driver produces PLAN frames instead of ANSI.
 
 import 'dart:async';
@@ -66,18 +66,23 @@ void main() {
       final transport = _FakeTransport();
       final driver = RemoteTerminalDriver(transport);
       final entered = driver.enter(TerminalMode.interactive);
-      transport.emit(const InitFrame(
-        size: CellSize(40, 10),
-        colorMode: ColorMode.truecolor,
-        imageProtocol: ImageProtocol.halfBlock,
-        tmuxPassthrough: false,
-        protocolVersion: 1,
-      ));
+      transport.emit(
+        const InitFrame(
+          size: CellSize(40, 10),
+          colorMode: ColorMode.truecolor,
+          imageProtocol: ImageProtocol.halfBlock,
+          tmuxPassthrough: false,
+          protocolVersion: 1,
+        ),
+      );
       await entered;
       expect(driver.wantsPresentationPlans, isFalse);
       driver.write('ansi');
-      expect(transport.sent.whereType<OutputFrame>(), isNotEmpty,
-          reason: 'v1 emits ANSI');
+      expect(
+        transport.sent.whereType<OutputFrame>(),
+        isNotEmpty,
+        reason: 'v1 emits ANSI',
+      );
       await driver.restore();
     });
 
@@ -164,94 +169,104 @@ void main() {
       expect(closed, isTrue);
     });
 
-    test('runTui drives the surface driver with PLAN frames, not ANSI', () async {
-      final transport = _FakeTransport();
-      final driver = RemoteTerminalDriver(transport);
-      // runTui blocks until the session ends; feed INIT so enter() unblocks.
-      scheduleMicrotask(() => transport.emit(_init));
-      final done = runTui(
-        const Text('hello'),
-        driver: driver,
-        requireInteractiveTerminal: false,
-      );
-      // Let the first frame render, then resize to force a second frame.
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-      transport.emit(const ResizeFrame(CellSize(50, 12)));
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+    test(
+      'runApp drives the surface driver with PLAN frames, not ANSI',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        // runApp blocks until the session ends; feed INIT so enter() unblocks.
+        scheduleMicrotask(() => transport.emit(_init));
+        final done = runApp(
+          const Text('hello'),
+          driver: driver,
+          requireInteractiveTerminal: false,
+        );
+        // Let the first frame render, then resize to force a second frame.
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        transport.emit(const ResizeFrame(CellSize(50, 12)));
+        await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      final plans = transport.sent.whereType<PlanFrame>().toList();
-      expect(plans, isNotEmpty, reason: 'rendered through the surface');
-      expect(
-        transport.sent.whereType<OutputFrame>(),
-        isEmpty,
-        reason: 'no ANSI on the structured path',
-      );
-      // First plan repaints the whole 40x10 viewport with content.
-      final first = plans.first.plan;
-      expect(first.size, const CellSize(40, 10));
-      expect(first.fullRepaint, isTrue);
-      expect(first.patches, isNotEmpty);
-      // The "hello" text shows up in some patch's runs.
-      final text = first.patches
-          .expand((p) => p.runs)
-          .map((run) => run.text)
-          .join();
-      expect(text, contains('hello'));
+        final plans = transport.sent.whereType<PlanFrame>().toList();
+        expect(plans, isNotEmpty, reason: 'rendered through the surface');
+        expect(
+          transport.sent.whereType<OutputFrame>(),
+          isEmpty,
+          reason: 'no ANSI on the structured path',
+        );
+        // First plan repaints the whole 40x10 viewport with content.
+        final first = plans.first.plan;
+        expect(first.size, const CellSize(40, 10));
+        expect(first.fullRepaint, isTrue);
+        expect(first.patches, isNotEmpty);
+        // The "hello" text shows up in some patch's runs.
+        final text = first.patches
+            .expand((p) => p.runs)
+            .map((run) => run.text)
+            .join();
+        expect(text, contains('hello'));
 
-      await transport.disconnect();
-      await done;
-    });
+        await transport.disconnect();
+        await done;
+      },
+    );
 
-    test('runTui ships the app semantics as a decodable SemanticsFrame',
-        () async {
-      final transport = _FakeTransport();
-      final driver = RemoteTerminalDriver(transport);
-      scheduleMicrotask(() => transport.emit(_init));
-      final done = runTui(
-        Semantics(
-          id: const SemanticNodeId('btn:save'),
-          role: SemanticRole.button,
-          label: 'Save',
-          actions: const {SemanticAction.activate},
-          onAction: (_) {},
-          child: const Text('Save'),
-        ),
-        driver: driver,
-        requireInteractiveTerminal: false,
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+    test(
+      'runApp ships the app semantics as a decodable SemanticsFrame',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        scheduleMicrotask(() => transport.emit(_init));
+        final done = runApp(
+          Semantics(
+            id: const SemanticNodeId('btn:save'),
+            role: SemanticRole.button,
+            label: 'Save',
+            actions: const {SemanticAction.activate},
+            onAction: (_) {},
+            child: const Text('Save'),
+          ),
+          driver: driver,
+          requireInteractiveTerminal: false,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      final semFrames = transport.sent.whereType<SemanticsFrame>().toList();
-      expect(semFrames, isNotEmpty,
-          reason: 'the real run loop emits semantics on first paint');
-      // The first emission per connection is a FULL frame (patches need a base).
-      final firstEnv =
-          jsonDecode(utf8.decode(semFrames.first.json)) as Map<String, Object?>;
-      expect(firstEnv['mode'], 'full');
+        final semFrames = transport.sent.whereType<SemanticsFrame>().toList();
+        expect(
+          semFrames,
+          isNotEmpty,
+          reason: 'the real run loop emits semantics on first paint',
+        );
+        // The first emission per connection is a FULL frame (patches need a base).
+        final firstEnv =
+            jsonDecode(utf8.decode(semFrames.first.json))
+                as Map<String, Object?>;
+        expect(firstEnv['mode'], 'full');
 
-      // Decode the stream exactly as RemoteSurfaceClient does; the app's real
-      // button — built by the framework, not hand-authored — comes through.
-      final decoder = SemanticsWireDecoder();
-      SemanticTree? tree;
-      for (final frame in semFrames) {
-        tree = decoder.apply(frame.json) ?? tree;
-      }
-      expect(tree, isNotNull);
-      final button = tree!.root.selfAndDescendants
-          .firstWhere((n) => n.role == SemanticRole.button);
-      expect(button.label, 'Save');
-      expect(button.actions, contains(SemanticAction.activate));
+        // Decode the stream exactly as RemoteSurfaceClient does; the app's real
+        // button — built by the framework, not hand-authored — comes through.
+        final decoder = SemanticsWireDecoder();
+        SemanticTree? tree;
+        for (final frame in semFrames) {
+          tree = decoder.apply(frame.json) ?? tree;
+        }
+        expect(tree, isNotNull);
+        final button = tree!.root.selfAndDescendants.firstWhere(
+          (n) => n.role == SemanticRole.button,
+        );
+        expect(button.label, 'Save');
+        expect(button.actions, contains(SemanticAction.activate));
 
-      await transport.disconnect();
-      await done;
-    });
+        await transport.disconnect();
+        await done;
+      },
+    );
 
     test('a peer SEMANTIC_ACTION activates the live node', () async {
       final transport = _FakeTransport();
       final driver = RemoteTerminalDriver(transport);
       var activated = 0;
       scheduleMicrotask(() => transport.emit(_init));
-      final done = runTui(
+      final done = runApp(
         Semantics(
           id: const SemanticNodeId('btn:go'),
           role: SemanticRole.button,
@@ -298,12 +313,14 @@ void main() {
       final transport = _FakeTransport();
       final driver = RemoteTerminalDriver(transport);
       final entered = driver.enter(TerminalMode.interactive);
-      transport.emit(const InitFrame(
-        size: CellSize(100000, 100000), // would be 10 billion cells
-        colorMode: ColorMode.truecolor,
-        imageProtocol: ImageProtocol.halfBlock,
-        tmuxPassthrough: false,
-      ));
+      transport.emit(
+        const InitFrame(
+          size: CellSize(100000, 100000), // would be 10 billion cells
+          colorMode: ColorMode.truecolor,
+          imageProtocol: ImageProtocol.halfBlock,
+          tmuxPassthrough: false,
+        ),
+      );
       await entered;
       expect(driver.size.cols, lessThanOrEqualTo(maxRemoteGridCols));
       expect(driver.size.rows, lessThanOrEqualTo(maxRemoteGridRows));
@@ -335,9 +352,7 @@ void main() {
       final entered = driver.enter(TerminalMode.interactive);
       transport.emit(_init);
       await entered;
-      transport.emit(
-        const InputEventFrame(ResizeEvent(CellSize(1, 888888))),
-      );
+      transport.emit(const InputEventFrame(ResizeEvent(CellSize(1, 888888))));
       await Future<void>.delayed(Duration.zero);
       final resize = events.whereType<ResizeEvent>().single;
       expect(resize.size.rows, maxRemoteGridRows);
@@ -348,26 +363,29 @@ void main() {
 
   group('inline image shipping', () {
     FramePresentationPlan fullPlan(CellSize size) => FramePresentationPlan(
-          reason: 'test',
-          fullRepaint: true,
-          size: size,
-          damage: FramePresentationDamage(
-            fullRepaint: true,
-            requiresFullDiff: true,
-            dirtyBounds: null,
-            dirtyRows: TuiDirtyRows.full(size.rows),
-            source: FrameDamageSource.fullRepaint,
-          ),
-          dirtyRowModels: const [],
-          metricsChanged: false,
-          dirtyRowDiffTime: Duration.zero,
-          spanBuildTime: Duration.zero,
-        );
+      reason: 'test',
+      fullRepaint: true,
+      size: size,
+      damage: FramePresentationDamage(
+        fullRepaint: true,
+        requiresFullDiff: true,
+        dirtyBounds: null,
+        dirtyRows: TuiDirtyRows.full(size.rows),
+        source: FrameDamageSource.fullRepaint,
+      ),
+      dirtyRowModels: const [],
+      metricsChanged: false,
+      dirtyRowDiffTime: Duration.zero,
+      spanBuildTime: Duration.zero,
+    );
 
     CellBuffer withImage(List<int> bytes, {int at = 0}) {
-      return CellBuffer(const CellSize(40, 10))
-        ..writeImage(CellOffset(at, 0), Uint8List.fromList(bytes),
-            width: 3, height: 2);
+      return CellBuffer(const CellSize(40, 10))..writeImage(
+        CellOffset(at, 0),
+        Uint8List.fromList(bytes),
+        width: 3,
+        height: 2,
+      );
     }
 
     Future<RemoteTerminalDriver> connected(_FakeTransport transport) async {
@@ -393,9 +411,15 @@ void main() {
 
       // Frame 2: still on screen → plan only, no re-ship.
       driver.presentFrame(
-          withImage([1, 2, 3, 4]), withImage([1, 2, 3, 4]), fullPlan(size));
-      expect(transport.sent.whereType<InlineImageFrame>(), isEmpty,
-          reason: 'an on-screen image ships once');
+        withImage([1, 2, 3, 4]),
+        withImage([1, 2, 3, 4]),
+        fullPlan(size),
+      );
+      expect(
+        transport.sent.whereType<InlineImageFrame>(),
+        isEmpty,
+        reason: 'an on-screen image ships once',
+      );
       transport.sent.clear();
 
       // Frame 3: image gone.
@@ -405,33 +429,52 @@ void main() {
 
       // Frame 4: returns → re-shipped (the client may have evicted its blob).
       driver.presentFrame(empty, withImage([1, 2, 3, 4]), fullPlan(size));
-      expect(transport.sent.whereType<InlineImageFrame>(), hasLength(1),
-          reason: 'a re-appearing image is re-sent');
+      expect(
+        transport.sent.whereType<InlineImageFrame>(),
+        hasLength(1),
+        reason: 'a re-appearing image is re-sent',
+      );
 
       await driver.restore();
     });
 
-    test('the same bytes drawn twice ship once but yield two placements',
-        () async {
-      final transport = _FakeTransport();
-      final driver = await connected(transport);
-      final size = const CellSize(40, 10);
-      final next = CellBuffer(size)
-        ..writeImage(const CellOffset(0, 0),
-            Uint8List.fromList([9, 9, 9]), width: 2, height: 2)
-        ..writeImage(const CellOffset(10, 0),
-            Uint8List.fromList([9, 9, 9]), width: 2, height: 2);
+    test(
+      'the same bytes drawn twice ship once but yield two placements',
+      () async {
+        final transport = _FakeTransport();
+        final driver = await connected(transport);
+        final size = const CellSize(40, 10);
+        final next = CellBuffer(size)
+          ..writeImage(
+            const CellOffset(0, 0),
+            Uint8List.fromList([9, 9, 9]),
+            width: 2,
+            height: 2,
+          )
+          ..writeImage(
+            const CellOffset(10, 0),
+            Uint8List.fromList([9, 9, 9]),
+            width: 2,
+            height: 2,
+          );
 
-      driver.presentFrame(CellBuffer(size), next, fullPlan(size));
+        driver.presentFrame(CellBuffer(size), next, fullPlan(size));
 
-      expect(transport.sent.whereType<InlineImageFrame>(), hasLength(1),
-          reason: 'identical bytes ship once');
-      final plan = transport.sent.whereType<PlanFrame>().single.plan;
-      expect(plan.placements, hasLength(2),
-          reason: 'each draw is its own placement');
-      expect(plan.placements.map((p) => p.col).toSet(), {0, 10});
+        expect(
+          transport.sent.whereType<InlineImageFrame>(),
+          hasLength(1),
+          reason: 'identical bytes ship once',
+        );
+        final plan = transport.sent.whereType<PlanFrame>().single.plan;
+        expect(
+          plan.placements,
+          hasLength(2),
+          reason: 'each draw is its own placement',
+        );
+        expect(plan.placements.map((p) => p.col).toSet(), {0, 10});
 
-      await driver.restore();
-    });
+        await driver.restore();
+      },
+    );
   });
 }

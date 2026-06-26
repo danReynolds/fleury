@@ -2,7 +2,7 @@
 
 Run [fleury](../fleury) apps in a browser through the retained DOM host:
 
-- **`runTuiWebDom`** runs Fleury-owned apps through the retained DOM host:
+- **`mountApp`** runs Fleury-owned apps through the retained DOM host:
   Fleury paints into a `CellBuffer`, browser frames flush under
   `requestAnimationFrame` with an asynchronous timer fallback for embedded
   browser surfaces that lack rAF, dirty rows update retained DOM row elements,
@@ -35,7 +35,7 @@ platform pieces:
   unavailable.
 - **Semantics:** `SemanticDomPresenter` projects Fleury semantics into a
   separate accessibility DOM. Visual rows stay `aria-hidden`, so
-  `runTuiWebDom` keeps semantics enabled for product use and requires
+  `mountApp` keeps semantics enabled for product use and requires
   `allowInaccessibleDiagnostics: true` before callers can disable them for
   focused local performance diagnostics.
 - **Instrumentation:** `RecordingWebHostInstrumentation`,

@@ -34,26 +34,36 @@ external set _fleuryMountKnobs(JSFunction value);
 
 void main() {
   _fleuryMountExamples = (() => _mountAll()).toJS;
-  _fleuryMountInto =
-      ((web.Element host, String id) => _mountInto(host, id)).toJS;
+  _fleuryMountInto = ((web.Element host, String id) => _mountInto(
+    host,
+    id,
+  )).toJS;
   _fleuryMountKnobs =
-      ((web.Element host, String id, String paramsJson) =>
-          _mountKnobs(host, id, paramsJson)).toJS;
+      ((web.Element host, String id, String paramsJson) => _mountKnobs(
+        host,
+        id,
+        paramsJson,
+      )).toJS;
   _mountAll();
 }
 
 JSObject _mountKnobs(web.Element host, String id, String paramsJson) {
   final params = KnobParams(_decodeParams(paramsJson));
-  TuiSurfaceHost? surface;
+  MountedApp? surface;
   var disposed = false;
-  unawaited(runTuiWebDom(() => knobRoot(id, params),
-      hostElement: host, flushScheduler: _docsFlush).then((h) {
-    if (disposed) {
-      h.dispose();
-    } else {
-      surface = h;
-    }
-  }));
+  unawaited(
+    mountApp(
+      () => knobRoot(id, params),
+      into: host,
+      flushScheduler: _docsFlush,
+    ).then((h) {
+      if (disposed) {
+        h.dispose();
+      } else {
+        surface = h;
+      }
+    }),
+  );
   final handle = JSObject();
   handle['update'] = ((String json) {
     params.value = _decodeParams(json);
@@ -69,7 +79,9 @@ JSObject _mountKnobs(web.Element host, String id, String paramsJson) {
 Map<String, Object?> _decodeParams(String json) {
   try {
     final decoded = jsonDecode(json);
-    return decoded is Map ? decoded.cast<String, Object?>() : <String, Object?>{};
+    return decoded is Map
+        ? decoded.cast<String, Object?>()
+        : <String, Object?>{};
   } catch (_) {
     return <String, Object?>{};
   }
@@ -77,21 +89,27 @@ Map<String, Object?> _decodeParams(String json) {
 
 JSObject _mountInto(web.Element host, String id) {
   final builder = examples[id];
-  TuiSurfaceHost? surface;
+  MountedApp? surface;
   web.MutationObserver? observer;
   var disposed = false;
   if (builder != null) {
-    final themeController =
-        DocsExampleThemeController(_docsExampleStyleForHost(host));
+    final themeController = DocsExampleThemeController(
+      _docsExampleStyleForHost(host),
+    );
     observer = _observeSiteTheme(host, themeController);
-    unawaited(runTuiWebDom(() => themedExampleRoot(builder, themeController),
-        hostElement: host, flushScheduler: _docsFlush).then((h) {
-      if (disposed) {
-        h.dispose();
-      } else {
-        surface = h;
-      }
-    }));
+    unawaited(
+      mountApp(
+        () => themedExampleRoot(builder, themeController),
+        into: host,
+        flushScheduler: _docsFlush,
+      ).then((h) {
+        if (disposed) {
+          h.dispose();
+        } else {
+          surface = h;
+        }
+      }),
+    );
   }
   final handle = JSObject();
   handle['dispose'] = (() {
@@ -121,15 +139,17 @@ void mountExample(web.Element host) {
     host.textContent = 'Unknown Fleury example: $id';
     return;
   }
-  final themeController =
-      DocsExampleThemeController(_docsExampleStyleForHost(host));
+  final themeController = DocsExampleThemeController(
+    _docsExampleStyleForHost(host),
+  );
   _observeSiteTheme(host, themeController);
   host.setAttribute('data-fleury-state', 'mounting');
   unawaited(
-    runTuiWebDom(() => themedExampleRoot(builder, themeController),
-        hostElement: host, flushScheduler: _docsFlush).then(
-      (_) => host.setAttribute('data-fleury-state', 'ready'),
-    ),
+    mountApp(
+      () => themedExampleRoot(builder, themeController),
+      into: host,
+      flushScheduler: _docsFlush,
+    ).then((_) => host.setAttribute('data-fleury-state', 'ready')),
   );
 }
 
@@ -147,8 +167,8 @@ DocsExampleStyle _docsExampleStyleForHost(web.Element host) {
 
 DocsExampleStyle _siteDocsExampleStyle() =>
     web.document.documentElement?.getAttribute('data-theme') == 'light'
-        ? DocsExampleStyle.light
-        : DocsExampleStyle.dark;
+    ? DocsExampleStyle.light
+    : DocsExampleStyle.dark;
 
 web.MutationObserver? _observeSiteTheme(
   web.Element host,
@@ -182,9 +202,11 @@ void _docsFlush(Duration delay, void Function() flush) {
     }
 
     try {
-      web.window.requestAnimationFrame(((JSNumber _) {
-        run();
-      }).toJS);
+      web.window.requestAnimationFrame(
+        ((JSNumber _) {
+          run();
+        }).toJS,
+      );
     } catch (_) {
       // Partial window API — the Timer fallback still flushes.
     }

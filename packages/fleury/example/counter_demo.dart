@@ -28,7 +28,7 @@ import 'package:fleury/fleury.dart';
 
 Future<void> main() async {
   final driver = PosixTerminalDriver();
-  await runTui(
+  await runApp(
     CounterApp(driver: driver),
     driver: driver,
     onEvent: (event) {

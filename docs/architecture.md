@@ -124,7 +124,7 @@ import 'dart:async';
 import 'package:fleury/fleury.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 
-Future<void> main() => runTui(const StatusApp());
+Future<void> main() => runApp(const StatusApp());
 
 class StatusApp extends StatefulWidget {
   const StatusApp({super.key});

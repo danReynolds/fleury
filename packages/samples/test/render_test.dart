@@ -23,9 +23,7 @@ void main() {
   });
 
   group('file manager', () {
-    testWidgets('renders the tree and a markdown preview by default', (
-      tester,
-    ) {
+    testWidgets('renders the tree and a markdown preview by default', (tester) {
       tester.pumpWidget(const FileManagerApp());
       final out = tester.renderToString(size: _size);
       expect(out, contains('Explorer'));
@@ -39,12 +37,14 @@ void main() {
       tester.pumpWidget(const FileManagerApp());
       tester.render(size: _size); // mount + focus the tree
       // lib/ is the first row: expand it, step to main.dart, open it.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight)); // expand lib/
+      tester.sendKey(
+        const KeyEvent(keyCode: KeyCode.arrowRight),
+      ); // expand lib/
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → main.dart
       tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open
       final out = tester.renderToString(size: _size);
       expect(out, contains('main.dart'));
-      expect(out, contains('runTui'));
+      expect(out, contains('runApp'));
     });
 
     testWidgets('opening config.json shows the JSON preview', (tester) {
@@ -53,7 +53,9 @@ void main() {
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → test/
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → assets/
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight)); // expand
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → config.json
+      tester.sendKey(
+        const KeyEvent(keyCode: KeyCode.arrowDown),
+      ); // → config.json
       tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open
       final out = tester.renderToString(size: _size);
       expect(out, contains('config.json'));
@@ -86,10 +88,7 @@ void main() {
       tester.pump(const Duration(seconds: 6));
       tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // submit → next
       tester.pump(const Duration(seconds: 6));
-      expect(
-        tester.renderToString(size: tall),
-        contains('All tests passed!'),
-      );
+      expect(tester.renderToString(size: tall), contains('All tests passed!'));
     });
   });
 }

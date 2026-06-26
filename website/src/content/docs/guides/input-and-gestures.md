@@ -13,7 +13,7 @@ in Flutter: `GestureDetector` and `MouseRegion`.
 Mouse reporting is a terminal mode you opt into when you start the app:
 
 ```dart
-runTui(const MyApp(), mode: const TerminalMode(mouse: true));
+runApp(const MyApp(), mode: const TerminalMode(mouse: true));
 ```
 
 With it on, clicks, drags, and motion are routed to your gesture widgets.

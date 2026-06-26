@@ -1,7 +1,7 @@
 name: fleury_doc_examples
 description: >-
   Client-side (dart2js) widget examples embedded live in the Fleury docs site.
-  Each example runs entirely in the browser via runTuiWebDom — no server.
+  Each example runs entirely in the browser via mountApp — no server.
 version: 0.0.0
 publish_to: none
 

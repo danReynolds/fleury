@@ -67,7 +67,7 @@ other way from Flutter's. See [Animation](/guides/animation/).
 
 ### There's no `MaterialApp` / `WidgetsApp`
 
-You don't wrap your app in a root widget. `runTui(MyApp())` assembles the
+You don't wrap your app in a root widget. `runApp(MyApp())` assembles the
 ambient scaffold for you — it injects `MediaQuery`, the focus root, pointer
 routing, an `Overlay`, and a root `Navigator`, so `context.push` /
 `MediaQuery.of` / focus all work out of the box. The one thing it does **not**

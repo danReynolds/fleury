@@ -28,7 +28,7 @@ void main() {
       'createNativeTerminalDriver',
       'PosixTerminalDriver',
       'WindowsTerminalDriver',
-      'runTui',
+      'runApp',
     ]) {
       expect(
         native,
@@ -36,6 +36,7 @@ void main() {
         reason: '$symbol is part of the native terminal launch surface.',
       );
     }
+    expect(native, isNot(contains('run${'Tui'}')));
   });
 
   test(

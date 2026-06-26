@@ -194,7 +194,7 @@ void main() {
         streamDone,
         isTrue,
         reason:
-            'events stream closing is what runTui listens for to exit cleanly',
+            'events stream closing is what runApp listens for to exit cleanly',
       );
 
       await eventSub.cancel();

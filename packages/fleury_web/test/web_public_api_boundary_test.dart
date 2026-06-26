@@ -27,22 +27,24 @@ void main() {
 
     expect(
       exportLines,
-      contains("export 'src/run_tui_web_dom.dart' show runTuiWebDom;"),
-      reason: 'runTuiWebDom is the explicit retained DOM browser entry point.',
+      contains("export 'src/mount_app.dart' show mountApp;"),
+      reason: 'mountApp is the explicit retained DOM browser entry point.',
     );
     expect(
       exportLines,
-      contains("export 'src/run_tui_surface.dart' show TuiSurfaceHost;"),
+      contains("export 'src/run_tui_surface.dart' show MountedApp;"),
       reason:
           'Callers must be able to name the host handle returned by '
-          'runTuiWebDom.',
+          'mountApp.',
     );
     // The terminal-emulator bridge entry point and its driver source files
-    // have been retired; runTuiWebDom is the only browser entry point. Assert
+    // have been retired; mountApp is the only browser entry point. Assert
     // their source files are no longer exported. (Tokens are reassembled so
     // this test file itself stays clean of the retired symbol names.)
     final retiredEntrySource = "src/run_tui_${'web'}.dart";
     final retiredDriverSource = "src/${'web'}_terminal_driver.dart";
+    final retiredDomEntry = 'run${'Tui'}WebDom';
+    final retiredHostHandle = 'Tui${'SurfaceHost'}';
     expect(
       exportLines,
       isNot(contains(retiredEntrySource)),
@@ -92,13 +94,24 @@ void main() {
 
     expect(
       text,
-      contains('runTuiWebDom'),
+      contains('mountApp'),
       reason: 'The package barrel should expose the retained DOM path.',
     );
     expect(
       text,
-      contains('TuiSurfaceHost'),
+      isNot(contains(retiredDomEntry)),
+      reason:
+          'The package barrel should not expose the retired DOM entry name.',
+    );
+    expect(
+      text,
+      contains('MountedApp'),
       reason: 'The package barrel should expose the public host handle.',
+    );
+    expect(
+      text,
+      isNot(contains(retiredHostHandle)),
+      reason: 'The package barrel should not expose the retired host handle.',
     );
   });
 

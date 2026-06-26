@@ -160,7 +160,7 @@ class Navigator extends StatefulWidget {
     throw StateError(
       rootNavigator
           ? 'No root Navigator for this BuildContext. Wrap your app in a '
-                'Navigator(home: ...) and run it with runTui (which installs '
+                'Navigator(home: ...) and run it with runApp (which installs '
                 'a TuiBinding).'
           : 'No Navigator above this BuildContext. Wrap the relevant '
                 'subtree in a Navigator(home: ...).',

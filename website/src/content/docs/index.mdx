@@ -76,7 +76,7 @@ widget tree, and a `dart2js` bundle does the rest — no iframe, no backend, no
 screenshot. Every live demo on this site is one line like this:
 
 ```dart
-runTuiWebDom(() => const Dashboard(), hostElement: appHost);
+mountApp(() => const Dashboard(), into: appHost);
 ```
 
 [Embed Fleury in any page →](/architecture/serving-and-embedding/)

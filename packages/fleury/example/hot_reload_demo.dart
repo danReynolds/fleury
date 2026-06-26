@@ -31,7 +31,7 @@ import 'package:fleury/fleury.dart';
 Future<void> main() async {
   // enableHotReload defaults to true; spelled out here so the example
   // is self-explanatory when copied into a real app.
-  await runTui(
+  await runApp(
     const HotReloadDemo(),
     enableHotReload: true,
     onEvent: (event) {

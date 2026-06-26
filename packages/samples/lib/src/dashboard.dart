@@ -43,7 +43,7 @@ class _DashboardBodyState extends State<_DashboardBody>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // The ticker needs the TuiBinding that runTui installs; a headless test
+    // The ticker needs the TuiBinding that runApp installs; a headless test
     // tree has none, so the dashboard simply renders its initial frame there.
     if (_ticker == null && TuiBinding.maybeOf(context) != null) {
       _ticker = createTicker(_onTick)..start();
@@ -104,19 +104,21 @@ class _DashboardBodyState extends State<_DashboardBody>
 
   Widget _topBar(ThemeData theme) {
     final accent = theme.colorScheme.primary;
-    final load = _metrics.loadAvg
-        .map((v) => v.toStringAsFixed(2))
-        .join(' ');
+    final load = _metrics.loadAvg.map((v) => v.toStringAsFixed(2)).join(' ');
     return Row(
       children: <Widget>[
         Text('▌ ', style: CellStyle(foreground: accent)),
-        Text('Fleury System Monitor',
-            style: CellStyle(bold: true, foreground: accent)),
+        Text(
+          'Fleury System Monitor',
+          style: CellStyle(bold: true, foreground: accent),
+        ),
         const Expanded(child: SizedBox.shrink()),
         Text('load $load   ', style: theme.mutedStyle),
         Text('up ${_metrics.uptime}   ', style: theme.mutedStyle),
-        Text(_metrics.clock,
-            style: CellStyle(foreground: theme.colorScheme.info)),
+        Text(
+          _metrics.clock,
+          style: CellStyle(foreground: theme.colorScheme.info),
+        ),
       ],
     );
   }
@@ -124,8 +126,10 @@ class _DashboardBodyState extends State<_DashboardBody>
   Widget _cpuPanel(ThemeData theme) {
     return Panel(
       title: 'CPU',
-      trailing: Text('${(_metrics.cpuAvg * 100).round()}%',
-          style: theme.mutedStyle),
+      trailing: Text(
+        '${(_metrics.cpuAvg * 100).round()}%',
+        style: theme.mutedStyle,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -158,12 +162,16 @@ class _DashboardBodyState extends State<_DashboardBody>
               (0.92, theme.colorScheme.error),
             ],
           ),
-          Text('  ${_gb(m.mem, m.memTotalGb)} / ${m.memTotalGb.toStringAsFixed(0)} GB',
-              style: theme.mutedStyle),
+          Text(
+            '  ${_gb(m.mem, m.memTotalGb)} / ${m.memTotalGb.toStringAsFixed(0)} GB',
+            style: theme.mutedStyle,
+          ),
           const SizedBox(height: 1),
           Gauge(value: m.swap, label: 'Swp', color: theme.colorScheme.info),
-          Text('  ${_gb(m.swap, m.swapTotalGb)} / ${m.swapTotalGb.toStringAsFixed(0)} GB',
-              style: theme.mutedStyle),
+          Text(
+            '  ${_gb(m.swap, m.swapTotalGb)} / ${m.swapTotalGb.toStringAsFixed(0)} GB',
+            style: theme.mutedStyle,
+          ),
           const SizedBox(height: 1),
           _ioRow(theme, 'Net ↓', m.netRx, theme.colorScheme.success),
           _ioRow(theme, 'Net ↑', m.netTx, theme.colorScheme.info),
@@ -211,8 +219,10 @@ class _DashboardBodyState extends State<_DashboardBody>
   Widget _processPanel(ThemeData theme) {
     return Panel(
       title: 'Processes',
-      trailing: Text('${_metrics.procs.length} tasks · sorted by CPU%',
-          style: theme.mutedStyle),
+      trailing: Text(
+        '${_metrics.procs.length} tasks · sorted by CPU%',
+        style: theme.mutedStyle,
+      ),
       child: DataTable(
         rowCount: _metrics.procs.length,
         controller: _table,
@@ -220,10 +230,18 @@ class _DashboardBodyState extends State<_DashboardBody>
         selectionMode: DataTableSelectionMode.row,
         columns: const <DataTableColumn>[
           DataTableColumn(id: 'pid', title: 'PID', width: FixedColumnWidth(7)),
-          DataTableColumn(id: 'user', title: 'USER', width: FixedColumnWidth(9)),
+          DataTableColumn(
+            id: 'user',
+            title: 'USER',
+            width: FixedColumnWidth(9),
+          ),
           DataTableColumn(id: 'cpu', title: 'CPU%', width: FixedColumnWidth(6)),
           DataTableColumn(id: 'mem', title: 'MEM%', width: FixedColumnWidth(6)),
-          DataTableColumn(id: 'time', title: 'TIME', width: FixedColumnWidth(8)),
+          DataTableColumn(
+            id: 'time',
+            title: 'TIME',
+            width: FixedColumnWidth(8),
+          ),
           DataTableColumn(id: 'cmd', title: 'COMMAND'),
         ],
         cellBuilder: (row, columnId) {
@@ -309,11 +327,11 @@ class _Metrics {
   final List<num> disk = <num>[];
   final List<double> loadAvg = <double>[1.24, 0.98, 0.71];
   late List<_Proc> procs;
-  final DateTime _boot =
-      DateTime.now().subtract(const Duration(days: 3, hours: 4, minutes: 12));
+  final DateTime _boot = DateTime.now().subtract(
+    const Duration(days: 3, hours: 4, minutes: 12),
+  );
 
-  double get cpuAvg =>
-      cores.fold<double>(0, (a, b) => a + b) / cores.length;
+  double get cpuAvg => cores.fold<double>(0, (a, b) => a + b) / cores.length;
 
   String get clock {
     final n = DateTime.now();
@@ -329,8 +347,9 @@ class _Metrics {
   }
 
   /// Maps a value history into `(x, y)` points for [LineChart].
-  List<(num, num)> points(List<num> history) =>
-      <(num, num)>[for (var i = 0; i < history.length; i++) (i, history[i])];
+  List<(num, num)> points(List<num> history) => <(num, num)>[
+    for (var i = 0; i < history.length; i++) (i, history[i]),
+  ];
 
   // ~11 Hz: the smoothly-scrolling graphs and meters. Steps are small so the
   // walk stays organic at this rate rather than thrashing.

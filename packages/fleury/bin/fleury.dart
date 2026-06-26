@@ -1051,7 +1051,7 @@ class _SpawnSession {
   }
 
   /// Brings the subprocess up *ahead of a browser* — a warm standby. The app
-  /// connects to its session socket and (for a runTui app) blocks awaiting
+  /// connects to its session socket and (for a runApp app) blocks awaiting
   /// INIT, so the expensive `dart run`/VM cold start is paid here, before any
   /// connection, and a later [attach] pairs instantly. Returns false if the
   /// process couldn't start or never connected.

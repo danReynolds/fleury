@@ -13,7 +13,7 @@ Both are targets behind the same host SPI; see
 [Core and targets](core-and-targets.md) for the layering.
 
 ```
- EMBED  (runTuiWebDom)                SERVE  (fleury serve)
+ EMBED  (mountApp)                    SERVE  (fleury serve)
  ─────────────────────                ─────────────────────
  dart2js bundle:                      server (native Dart):
    widget tree                          widget tree  ← runs here
@@ -28,7 +28,7 @@ Both are targets behind the same host SPI; see
 
 ---
 
-## Embed — `runTuiWebDom` (client-side)
+## Embed — `mountApp` (client-side)
 
 dart2js compiles your widget tree **plus** the Fleury core **plus** the
 `fleury_web` DOM host into one JS bundle. The whole program runs in the browser;
@@ -42,7 +42,7 @@ import 'package:web/web.dart' as web;
 
 void main() {
   final host = web.document.querySelector('#app')! as web.Element;
-  runTuiWebDom(() => const MyApp(), hostElement: host);
+  mountApp(() => const MyApp(), into: host);
 }
 ```
 
@@ -123,7 +123,7 @@ machine.
 
 ## Which do I want?
 
-| | **Embed** (`runTuiWebDom`) | **Serve** (`fleury serve`) |
+| | **Embed** (`mountApp`) | **Serve** (`fleury serve`) |
 |---|---|---|
 | Widget tree runs… | in the browser (dart2js) | on a server (native Dart) |
 | Backend required | **none** — static asset | a running process per session |

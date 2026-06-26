@@ -101,13 +101,13 @@ Three lines:
 import 'package:fleury/fleury.dart';
 
 Future<void> main() async {
-  await runTui(const MyApp());     // enableHotReload defaults to true
+  await runApp(const MyApp());     // enableHotReload defaults to true
 }
 ```
 
 Then pick a launch path: VS Code (template above), CLI with
 `hotreloader`, or editor-agnostic SIGUSR1. All three use the same
-underlying mechanism — your `runTui` call is identical.
+underlying mechanism — your `runApp` call is identical.
 
 ## What survives a reload
 
@@ -122,7 +122,7 @@ underlying mechanism — your `runTui` call is identical.
 
 ## What doesn't survive
 
-- Anything you computed once in `main()` before `runTui` ran.
+- Anything you computed once in `main()` before `runApp` ran.
 - Top-level globals initialized at startup.
 - Object identity for new instances created in `build()` (Flutter same).
 - Edits that change a constructor signature, generic parameter, or
@@ -159,7 +159,7 @@ This is exactly the Flutter contract — same hook name, same semantics.
 
 ## How it works under the hood
 
-1. `runTui(enableHotReload: true)` calls
+1. `runApp(enableHotReload: true)` calls
    `HotReloadController.attach(onReassemble: ...)`. By default, that
    callback runs `BuildOwner.reassembleApplication()` followed by
    `TickerScheduler.reassemble()`.
@@ -190,7 +190,7 @@ This is exactly the Flutter contract — same hook name, same semantics.
 ## Disabling hot reload
 
 ```dart
-await runTui(const MyApp(), enableHotReload: false);
+await runApp(const MyApp(), enableHotReload: false);
 ```
 
 Use this in production launches. It skips the service-extension
@@ -207,7 +207,7 @@ stderr; if you don't see it, the flag isn't being applied.
 **"VS Code reloads my code but the UI doesn't update"** — Same root
 cause: the VM service is enabled, but fleury's controller didn't
 attach. Check that `enableHotReload: true` (the default) in your
-`runTui` call.
+`runApp` call.
 
 **"Hot reload says it succeeded but my widget tree looks wrong"** —
 Some edits can't be applied cleanly to a running tree (changing a

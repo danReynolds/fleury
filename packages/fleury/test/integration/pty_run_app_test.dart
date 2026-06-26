@@ -8,7 +8,7 @@ void main() {
       ? 'PTY capture uses POSIX openpty and posix_spawnp.'
       : null;
 
-  group('runTui over a real PTY', tags: ['integration'], () {
+  group('runApp over a real PTY', tags: ['integration'], () {
     late Directory tempDir;
 
     setUp(() {
@@ -165,7 +165,8 @@ Future<({Map<String, Object?> metadata, String output})?> _capturePty(
   final packageRoot = Directory.current;
   final repoRoot = _findRepoRoot(packageRoot);
   final profilingRoot = Directory('${repoRoot.path}/profiling');
-  final fixtureApp = '${packageRoot.path}/test/fixtures/pty_run_tui_app.dart';
+  final fixtureApp =
+      '${packageRoot.path}/test/fixtures/pty_run_app_fixture.dart';
   final outBase = '${tempDir.path}/$name';
   final result = await Process.run(Platform.resolvedExecutable, <String>[
     'run',

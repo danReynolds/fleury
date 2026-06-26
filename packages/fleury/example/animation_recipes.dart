@@ -245,7 +245,7 @@ class HealthDot extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 Future<void> main() async {
-  await runTui(
+  await runApp(
     const _Gallery(),
     onEvent: (event) {
       if (event is KeyEvent && event.hasCtrl && event.char == 'c') {
