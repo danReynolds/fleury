@@ -252,6 +252,16 @@ img.site-logo {
     0 28px 70px -30px rgba(0, 0, 0, 0.85),
     0 0 70px -30px rgba(61, 220, 151, 0.3);
 }
+:root[data-theme='light'] .home-stage {
+  border-color: color-mix(in srgb, #bcd5ca 72%, transparent);
+  background:
+    radial-gradient(110% 85% at 0% 0%, rgba(19, 138, 92, 0.08), transparent 46%),
+    linear-gradient(180deg, #ffffff, #f3faf6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 28px 70px -34px rgba(15, 58, 41, 0.35),
+    0 0 70px -40px rgba(19, 138, 92, 0.28);
+}
 .home-stage-bar {
   display: flex;
   align-items: center;
@@ -259,6 +269,10 @@ img.site-logo {
   padding: 0.55rem 0.95rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   background: rgba(255, 255, 255, 0.02);
+}
+:root[data-theme='light'] .home-stage-bar {
+  border-bottom-color: rgba(13, 66, 47, 0.13);
+  background: rgba(19, 138, 92, 0.035);
 }
 /* Starlight's prose adds top-margin between adjacent flow elements; the carousel
    chrome lays out with flexbox, where that margin staggers items (it was pushing
@@ -308,12 +322,22 @@ img.site-logo {
   cursor: pointer;
   transition: color 0.15s, background 0.15s;
 }
+:root[data-theme='light'] .home-stage-file {
+  color: #66746e;
+}
 .home-stage-file:hover {
   color: var(--sl-color-gray-2);
+}
+:root[data-theme='light'] .home-stage-file:hover {
+  color: #123d2b;
 }
 .home-stage-file[aria-selected='true'] {
   color: var(--sl-color-white);
   background: rgba(255, 255, 255, 0.06);
+}
+:root[data-theme='light'] .home-stage .home-stage-file[aria-selected='true'] {
+  color: #0a3625;
+  background: rgba(19, 138, 92, 0.11);
 }
 .home-stage-file:focus-visible {
   outline: 2px solid #3ddb9e;
@@ -363,11 +387,19 @@ img.site-logo {
   min-width: 0;
   padding: 1.7rem 1.2rem 1.3rem;
 }
+:root[data-theme='light'] .home-stage-code {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(248, 252, 250, 0.9));
+}
 .home-stage-demo {
   border-left: 1px solid rgba(255, 255, 255, 0.07);
   background: rgba(0, 0, 0, 0.22);
   display: flex;
   flex-direction: column;
+}
+:root[data-theme='light'] .home-stage-demo {
+  border-left-color: rgba(13, 66, 47, 0.13);
+  background: linear-gradient(180deg, #0d1418, #070c10);
 }
 .home-stage-demo-inner {
   flex: 1;
@@ -385,9 +417,15 @@ img.site-logo {
   text-transform: uppercase;
   color: var(--sl-color-gray-4);
 }
+:root[data-theme='light'] .home-stage-tag {
+  color: #68776f;
+}
 .home-stage-demo .home-stage-tag {
   left: auto;
   right: 1.2rem;
+}
+:root[data-theme='light'] .home-stage-demo .home-stage-tag {
+  color: rgba(204, 215, 224, 0.68);
 }
 /* Auto-advance progress dots. */
 .home-stage-progress {
@@ -407,8 +445,14 @@ img.site-logo {
   cursor: pointer;
   transition: background 0.2s, transform 0.2s;
 }
+:root[data-theme='light'] .home-stage-dot {
+  background: rgba(11, 56, 39, 0.24);
+}
 .home-stage-dot:hover {
   background: rgba(255, 255, 255, 0.4);
+}
+:root[data-theme='light'] .home-stage-dot:hover {
+  background: rgba(11, 56, 39, 0.42);
 }
 .home-stage-dot[data-active='true'] {
   background: #3ddb9e;
@@ -448,6 +492,9 @@ img.site-logo {
   .home-stage-demo {
     border-left: none;
     border-top: 1px solid rgba(255, 255, 255, 0.07);
+  }
+  :root[data-theme='light'] .home-stage-demo {
+    border-top-color: rgba(13, 66, 47, 0.13);
   }
 }
 
