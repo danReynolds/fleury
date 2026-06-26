@@ -78,10 +78,14 @@ Map<String, Object?> _decodeParams(String json) {
 JSObject _mountInto(web.Element host, String id) {
   final builder = examples[id];
   TuiSurfaceHost? surface;
+  web.MutationObserver? observer;
   var disposed = false;
   if (builder != null) {
-    unawaited(runTuiWebDom(builder, hostElement: host, flushScheduler: _docsFlush)
-        .then((h) {
+    final themeController =
+        DocsExampleThemeController(_docsExampleStyleForHost(host));
+    observer = _observeSiteTheme(host, themeController);
+    unawaited(runTuiWebDom(() => themedExampleRoot(builder, themeController),
+        hostElement: host, flushScheduler: _docsFlush).then((h) {
       if (disposed) {
         h.dispose();
       } else {
@@ -92,6 +96,7 @@ JSObject _mountInto(web.Element host, String id) {
   final handle = JSObject();
   handle['dispose'] = (() {
     disposed = true;
+    observer?.disconnect();
     surface?.dispose();
     surface = null;
   }).toJS;
@@ -116,12 +121,49 @@ void mountExample(web.Element host) {
     host.textContent = 'Unknown Fleury example: $id';
     return;
   }
+  final themeController =
+      DocsExampleThemeController(_docsExampleStyleForHost(host));
+  _observeSiteTheme(host, themeController);
   host.setAttribute('data-fleury-state', 'mounting');
   unawaited(
-    runTuiWebDom(builder, hostElement: host, flushScheduler: _docsFlush).then(
+    runTuiWebDom(() => themedExampleRoot(builder, themeController),
+        hostElement: host, flushScheduler: _docsFlush).then(
       (_) => host.setAttribute('data-fleury-state', 'ready'),
     ),
   );
+}
+
+DocsExampleStyle _docsExampleStyleForHost(web.Element host) {
+  switch (host.getAttribute('data-fleury-theme')) {
+    case 'light':
+      return DocsExampleStyle.light;
+    case 'site':
+      return _siteDocsExampleStyle();
+    case 'dark':
+    default:
+      return DocsExampleStyle.dark;
+  }
+}
+
+DocsExampleStyle _siteDocsExampleStyle() =>
+    web.document.documentElement?.getAttribute('data-theme') == 'light'
+        ? DocsExampleStyle.light
+        : DocsExampleStyle.dark;
+
+web.MutationObserver? _observeSiteTheme(
+  web.Element host,
+  DocsExampleThemeController controller,
+) {
+  if (host.getAttribute('data-fleury-theme') != 'site') return null;
+  final root = web.document.documentElement;
+  if (root == null) return null;
+  final observer = web.MutationObserver(
+    ((JSArray<web.MutationRecord> _, web.MutationObserver __) {
+      controller.style = _siteDocsExampleStyle();
+    }).toJS,
+  );
+  observer.observe(root, web.MutationObserverInit(attributes: true));
+  return observer;
 }
 
 /// Flush scheduler for the docs examples: prefer `requestAnimationFrame`

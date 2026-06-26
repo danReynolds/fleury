@@ -12,6 +12,36 @@ import 'package:fleury_widgets/fleury_widgets_web.dart';
 /// Builds the root widget for one live example.
 typedef ExampleBuilder = Widget Function();
 
+/// Visual theme used by a docs embed.
+enum DocsExampleStyle { dark, light }
+
+/// Lets the host page retheme a live example after it has mounted.
+final class DocsExampleThemeController extends ChangeNotifier {
+  DocsExampleThemeController(this._style);
+
+  DocsExampleStyle _style;
+
+  DocsExampleStyle get style => _style;
+
+  set style(DocsExampleStyle value) {
+    if (value == _style) return;
+    _style = value;
+    notifyListeners();
+  }
+}
+
+Widget themedExampleRoot(
+  ExampleBuilder builder,
+  DocsExampleThemeController controller,
+) =>
+    ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) => _DocsExampleTheme(
+        data: _themeFor(controller.style),
+        child: builder(),
+      ),
+    );
+
 /// One embeddable example, keyed by the `data-fleury-example` id used on the
 /// docs page. This list is the single source of truth: it drives the live
 /// mounts AND the generated widget-reference pages (via `bin/manifest.dart`).
@@ -960,7 +990,7 @@ class _CounterAppState extends State<CounterApp> {
 }
 ''';
 
-// A compact dark theme so embedded examples read well on the docs page.
+// Compact docs themes so embedded examples read well against the site chrome.
 final ThemeData _theme = const ThemeData(
   brightness: Brightness.dark,
   textStyle: CellStyle(foreground: RgbColor(0xC8, 0xD3, 0xE0)),
@@ -976,10 +1006,60 @@ final ThemeData _theme = const ThemeData(
   ),
 );
 
-Widget _framed(Widget child) => Theme(
-      data: _theme,
-      child: Padding(padding: const EdgeInsets.all(1), child: child),
-    );
+final ThemeData _lightTheme = const ThemeData(
+  brightness: Brightness.light,
+  textStyle: CellStyle(foreground: RgbColor(0x20, 0x2A, 0x25)),
+  mutedStyle: CellStyle(foreground: RgbColor(0x72, 0x7F, 0x78)),
+  selectionStyle: CellStyle(
+    foreground: RgbColor(0xF7, 0xFF, 0xFB),
+    background: RgbColor(0x13, 0x8A, 0x5C),
+  ),
+  focusedStyle: CellStyle(
+    bold: true,
+    foreground: RgbColor(0x0A, 0x36, 0x25),
+  ),
+  borderStyle: BorderStyle.rounded,
+  colorScheme: ColorScheme(
+    foreground: RgbColor(0x20, 0x2A, 0x25),
+    primary: RgbColor(0x13, 0x8A, 0x5C),
+    success: RgbColor(0x13, 0x8A, 0x5C),
+    warning: RgbColor(0x9A, 0x6B, 0x00),
+    error: RgbColor(0xB4, 0x23, 0x18),
+    info: RgbColor(0x0A, 0x66, 0xA0),
+  ),
+);
+
+ThemeData _themeFor(DocsExampleStyle style) => switch (style) {
+      DocsExampleStyle.dark => _theme,
+      DocsExampleStyle.light => _lightTheme,
+    };
+
+Widget _framed(Widget child) => _Framed(child: child);
+
+class _Framed extends StatelessWidget {
+  const _Framed({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Theme(
+        data: _DocsExampleTheme.maybeOf(context) ?? _theme,
+        child: Padding(padding: const EdgeInsets.all(1), child: child),
+      );
+}
+
+class _DocsExampleTheme extends InheritedWidget {
+  const _DocsExampleTheme({required this.data, required super.child});
+
+  final ThemeData data;
+
+  static ThemeData? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_DocsExampleTheme>()?.data;
+
+  @override
+  bool updateShouldNotify(_DocsExampleTheme oldWidget) =>
+      oldWidget.data != data;
+}
 
 // ── Stateful wrappers ───────────────────────────────────────────────────────
 // Controlled widgets (value + onChanged) need a holder so interacting with the

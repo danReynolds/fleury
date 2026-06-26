@@ -399,7 +399,8 @@ img.site-logo {
 }
 :root[data-theme='light'] .home-stage-demo {
   border-left-color: rgba(13, 66, 47, 0.13);
-  background: linear-gradient(180deg, #0d1418, #070c10);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(247, 252, 249, 0.92));
 }
 .home-stage-demo-inner {
   flex: 1;
@@ -425,7 +426,7 @@ img.site-logo {
   right: 1.2rem;
 }
 :root[data-theme='light'] .home-stage-demo .home-stage-tag {
-  color: rgba(204, 215, 224, 0.68);
+  color: #68776f;
 }
 /* Auto-advance progress dots. */
 .home-stage-progress {
@@ -479,6 +480,14 @@ img.site-logo {
 .home-stage-demo .fleury-host-wrap {
   padding: 0;
   overflow: visible;
+}
+:root[data-theme='light'] .home-stage-demo .fleury-host {
+  color: #202a25;
+}
+:root[data-theme='light'] .home-stage-demo .fleury-screen {
+  background: transparent !important;
+  color: inherit;
+  padding: 0;
 }
 @media (prefers-reduced-motion: reduce) {
   .home-stage-slide {
@@ -677,6 +686,10 @@ img.site-logo {
   line-height: 1.25;
   color: #c8d3e0;
 }
+:root[data-theme='light'] .fleury-host[data-fleury-theme='site'],
+.fleury-host[data-fleury-theme='light'] {
+  color: #202a25;
+}
 
 /* Runtime-created grid rows: reset Starlight's between-block margin so a row is
    exactly one line tall (else every example double-spaces and overflows). */
@@ -695,6 +708,11 @@ img.site-logo {
   border: 1px solid var(--sl-color-gray-5);
   border-radius: 0.5rem;
 }
+:root[data-theme='light'] .fleury-frame[data-fleury-theme='site'],
+.fleury-frame[data-fleury-theme='light'] {
+  background: #ffffff;
+  border-color: #d7e4de;
+}
 .fleury-bar {
   display: flex;
   align-items: center;
@@ -703,6 +721,11 @@ img.site-logo {
   padding: 0.3rem 0.6rem;
   border-bottom: 1px solid var(--sl-color-gray-5);
   background: rgba(255, 255, 255, 0.025);
+}
+:root[data-theme='light'] .fleury-frame[data-fleury-theme='site'] .fleury-bar,
+.fleury-frame[data-fleury-theme='light'] .fleury-bar {
+  border-bottom-color: #d7e4de;
+  background: rgba(19, 138, 92, 0.035);
 }
 .fleury-badge {
   display: inline-flex;
@@ -764,6 +787,10 @@ img.site-logo {
   overflow: auto;
   max-width: 100%;
 }
+:root[data-theme='light'] .fleury-frame[data-fleury-theme='site'] .fleury-host-wrap,
+.fleury-frame[data-fleury-theme='light'] .fleury-host-wrap {
+  background: #ffffff;
+}
 
 /* ── Example + its source, grouped under "## Example" ───────────────────────
    The live demo and the Markdown code fence that documents it sit close so they
@@ -794,6 +821,11 @@ img.site-logo {
   border: 1px solid var(--sl-color-gray-4, #4a4a4a);
   border-radius: 0.6rem;
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.55);
+}
+:root[data-theme='light'] .fleury-overlay-card[data-fleury-theme='site'],
+.fleury-overlay-card[data-fleury-theme='light'] {
+  background: #ffffff;
+  border-color: #d7e4de;
 }
 .fleury-overlay-bar {
   display: flex;
