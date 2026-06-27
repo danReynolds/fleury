@@ -6,9 +6,12 @@ owns, how a state change becomes changed cells, and where terminal/browser
 targets begin.
 
 Fleury is not an ANSI string builder with widgets on top. It is a retained UI
-engine for a cell grid. The terminal target, the embedded browser target, and
-the served browser target all consume the same framework output: a
-damage-tracked `CellBuffer` plus a semantic app graph.
+engine for a cell grid. Every visual target consumes the same framework output:
+a damage-tracked `CellBuffer`. Semantics are a parallel product of the same
+mounted tree, projected or shipped by tests, browser hosts, served sessions,
+agents, and debug tooling. That distinction is deliberate: the terminal
+renderer should not need an accessibility tree to write ANSI, and the browser
+should not need to scrape visual rows to be accessible.
 
 ## The short version
 
@@ -122,7 +125,9 @@ but the model is intentionally delta-ready:
   how tests and the served browser accessibility tree drive the real app.
 
 That is why semantics are documented as architecture, not a testing add-on. They
-are one of the retained products of the framework.
+are one of the retained products of the framework. They are not globally
+incremental yet: leaf-only updates can take the retained path, while structural
+changes intentionally escalate to a full semantic rebuild.
 
 ## One update through the engine
 
@@ -269,7 +274,12 @@ The important principle is that damage, retained DOM, and semantic deltas are
 optimization paths. The tests keep them equivalent to the simpler full-buffer or
 full-tree truth.
 
-## Interesting tradeoffs
+## Tradeoffs and pressure points
+
+The architecture is optimized for app-grade, semantic, cross-target TUIs. It is
+not a claim that Fleury has the smallest possible runtime for one-off CLIs, the
+fastest possible large-grid browser renderer, or a free incremental path for
+every tree mutation. These are the pressure points worth keeping visible.
 
 ### Conservative damage is a feature
 
@@ -278,12 +288,51 @@ change can remove or move cells without painting every stale location. Falling
 back to a wider diff for that frame is cheaper than debugging a stale character
 that only appears after a resize or conditional child disappears.
 
+That also means new render objects have to earn paint-only invalidation. If a
+setter can move children, change size, or leave stale cells behind, it belongs on
+the layout path until tests prove a tighter bound is safe.
+
+### Full buffers remain the correctness boundary
+
+`CellBuffer` remains the frame truth. Dirty rectangles, dirty rows, scroll hints,
+and semantic patches are acceleration data around that truth, not replacements
+for it. Fleury has already tested broader ideas such as public dirty-span buffer
+handoff and style-aware same-row gap encoding; they were correct but neutral or
+slower on the measured workloads.
+
+The current conclusion is narrow: keep the full-buffer diff contract, continue
+private renderer/output-path improvements where measurements point, and avoid
+adding public damage metadata until a benchmark shows it unlocks real wins.
+
 ### Repaint boundaries are not magic
 
 A repaint boundary avoids re-walking expensive paint code, but it still has to
 copy cells into the next frame and the presenter may still inspect buffers. It
 is a tool for stable, expensive paint subtrees, not a default wrapper for every
 component.
+
+### Semantics are retained, but not fully incremental
+
+The semantic pipeline has retained owners and leaf-update paths, but it
+escalates to full rebuilds for structural ambiguity and fallback-bearing cases.
+That is intentional. Assistive technology and agents need correct meaning more
+than they need the smallest possible semantic patch.
+
+The pressure point is large semantic trees with frequent structural churn. If
+that becomes a real workload, the fix is deeper retained semantic production and
+clearer dirty-source attribution, not weakening the correctness oracle.
+
+### DOM is the default backend, not a forever bet
+
+The embedded and served browser paths currently present a retained DOM grid plus
+a separate semantic DOM. That is the right default for compatibility, cell-sized
+viewports, browser accessibility, and developer ergonomics. It is not a claim
+that DOM will always beat canvas or WebGL on raw large-grid throughput.
+
+The visual surface is intentionally behind `FrameSurface`: input, clipboard,
+metrics, scheduling, remote protocol, and semantics live outside the DOM grid.
+If a future canvas or WebGL renderer earns its keep, it should reuse those host
+contracts instead of forcing a framework rewrite.
 
 ### Browser layout remains a host contract
 
@@ -293,13 +342,6 @@ caret geometry, and keep the input target available. A bad containing layout can
 starve the surface of size or intercept events even though the Fleury widget tree
 is correct.
 
-### Semantics are retained, but correctness comes first
-
-The semantic pipeline has retained owners and leaf-update paths, but it
-escalates to full rebuilds for structural ambiguity. That is intentional.
-Assistive technology and agents need correct meaning more than they need the
-smallest possible semantic patch.
-
 ### Flutter instincts need translation
 
 Fleury borrows Flutter's retained model, but terminal performance has different
@@ -308,13 +350,21 @@ Writing fewer ANSI bytes can matter more than minimizing object churn. A
 cell-grid renderer has to respect grapheme widths and terminal capability
 fallbacks in ways a pixel renderer does not.
 
+### Data-heavy widgets need data architecture too
+
+When a workload builds a huge search index or eagerly mounts a very large data
+shape, the renderer is not automatically the bottleneck. The retained render
+pipeline can make visible rows cheap, but filtering, indexing, and lazy data
+source boundaries still belong to the widget or model layer. Treat those costs
+as data-architecture pressure before proposing a render-tree rewrite.
+
 ### The runtime floor is accepted
 
 Fleury is pure Dart so the same core can run natively and compile to JavaScript.
 That keeps the target story simple and preserves the browser path, but it means
 Dart's startup and memory floor are part of the product envelope. The
 architecture focuses on making Fleury's own retained work proportional to the
-change.
+change, not on winning every tiny native-memory or cold-start comparison.
 
 ## Where to read the code
 
