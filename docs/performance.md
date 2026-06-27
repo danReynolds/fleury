@@ -21,9 +21,10 @@ Fleury's performance model has five practical promises:
 | Idle is quiet | If nothing changed, Fleury should schedule no meaningful work and emit no frame output. |
 
 Those promises come from the same architecture described in
-[Overview](/architecture/overview/): a retained widget/element/render/semantics
-pipeline that paints into a cell grid, then hands changed cells to the active
-target.
+[Overview](/architecture/overview/) and
+[Architecture deep dive](/architecture/deep-dive/): a retained
+widget/element/render/semantics pipeline that paints into a cell grid, then
+hands changed cells to the active target.
 
 ## What the benchmarks protect
 

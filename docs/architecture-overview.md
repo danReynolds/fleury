@@ -71,17 +71,23 @@ is the only part that knows about ANSI bytes, DOM nodes, or sockets. A parity
 oracle asserts the terminal and the browser render the same tree, so the surfaces
 can't quietly diverge.
 
-## Go deeper
+## How this section is organized
 
-- **[Core and targets](core-and-targets.md)** — the core/target seam in detail:
-  the `dart:io`-free boundary, the host SPI, and exactly which code compiles
-  where.
-- **[Serving and embedding](serving-and-embedding.md)** — the two browser paths
-  above, and when to reach for each.
-- **[Built for agents](agents-and-semantics.md)** — the semantics tree, and how
-  agents and tests drive the UI by *meaning* instead of scraping ANSI.
-- **[Performance](performance.md)** — why that incremental pipeline stays cheap
-  as apps get busy, measured against peer frameworks.
+This page is the map. The rest of the architecture section splits the system by
+the question you are trying to answer:
+
+- **[Architecture deep dive](architecture-deep-dive.md)** — the retained trees
+  in detail: widget, element, render, cell buffer, semantics, frame damage,
+  presentation planning, and the tradeoffs behind them.
+- **[Core and targets](core-and-targets.md)** — the package/import split: the
+  `dart:io`-free core, the host SPI, and exactly which code compiles where.
+- **[Serving and embedding](serving-and-embedding.md)** — the two browser paths:
+  embedded `mountApp` versus served `fleury serve`, and when to reach for each.
+- **[Built for agents](agents-and-semantics.md)** — the semantic app graph, and
+  how tests, accessibility, and agents drive the UI by meaning instead of
+  scraping ANSI.
+- **[Performance](performance.md)** — the performance contract and benchmark
+  surface that keep the incremental pipeline honest.
 
 ## Influences
 

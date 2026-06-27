@@ -1,9 +1,11 @@
 # Fleury core and targets
 
 The [architecture overview](architecture-overview.md) covers the core → cells →
-targets model. This page is the practical side of it: how the code is split
-across packages, why the core compiles to JavaScript at all, and the one import
-rule that keeps your widgets browser-safe.
+targets model, and the [architecture deep dive](architecture-deep-dive.md)
+explains the retained runtime underneath it. This page is the practical side of
+that architecture: how the code is split across packages, why the core compiles
+to JavaScript at all, and the one import rule that keeps your widgets
+browser-safe.
 
 The short version: Fleury is a **platform-neutral core** that turns your widget
 tree into a `CellBuffer` — an abstract grid of styled cells — plus a set of
