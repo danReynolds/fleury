@@ -1,6 +1,6 @@
 ---
 title: Why Fleury
-description: "Fleury brings a real UI framework to the terminal — Flutter's retained model rebuilt for cells — and takes it two places no terminal toolkit has gone: a UI agents and tests can drive, and one app that runs in a terminal or a browser."
+description: "Fleury brings a real UI framework to the terminal — Flutter's retained model rebuilt for cells — and combines it with semantics agents and tests can drive plus one app that runs in a terminal or a browser."
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
@@ -8,17 +8,17 @@ import FleuryExample from '../../components/FleuryExample.astro';
 import DemoTabs from '../../components/DemoTabs.astro';
 
 Fleury brings a real UI framework to the terminal — the retained widget model that
-powers Flutter, rebuilt for a grid of cells — and then takes it two places no
-terminal toolkit has gone: a UI that **agents and tests can read and drive**, and
+powers Flutter, rebuilt for a grid of cells — and combines it with two
+less-common capabilities: a UI that **agents and tests can read and drive**, and
 **one app that runs in a terminal _or_ a browser**. The terminal already has
 excellent frameworks; this is the particular combination Fleury is built for.
 
 <CardGrid>
   <Card title="Flutter's model, in the terminal" icon="puzzle">
     A retained widget / element / render tree with a real layout engine, hot
-    reload, and fifty-plus widgets. Write it like Flutter; run it in a terminal.
+    reload, and a broad widget library. Write it like Flutter; run it in a terminal.
   </Card>
-  <Card title="A UI agents can read" icon="seti:default">
+  <Card title="A UI that agents can read" icon="seti:default">
     Every frame emits a semantic graph — roles, state, typed actions — so tests
     assert on *meaning* and AI agents drive the UI instead of scraping it.
   </Card>
@@ -75,8 +75,8 @@ with concrete actions like `activate`, `submit`, `select`, `increment`, and `cop
 Tests assert on *meaning* — "row 3 is selected", "the CPU gauge reads 0.62" — and
 survive a re-theme, a layout change, or a port to the browser. An AI agent reads
 the graph and drives the UI through those actions instead of scraping ANSI and
-guessing keystrokes. It's produced by the core, runs off the visual frame so it
-costs the render budget nothing, and ships over the [`fleury serve`](/architecture/serving-and-embedding/)
+guessing keystrokes. It's produced by the core, runs alongside the visual frame
+without adding terminal-paint work, and ships over the [`fleury serve`](/architecture/serving-and-embedding/)
 wire too — so a remote session is as inspectable as a local one. See
 [Built for agents](/architecture/agents-and-semantics/).
 

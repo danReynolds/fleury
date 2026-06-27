@@ -9,10 +9,10 @@ the browser.
 The fastest-growing terminal programs aren't utilities anymore; they're
 *applications* — agent consoles, dev-tool dashboards, LLM chat surfaces, deploy
 monitors — with the screen complexity, input handling, and update rates the word
-implies. Most TUI toolkits were built for the utilities. Fleury is built for the
-applications: incremental rendering, real input and focus management, a widget
-set deep enough to skip the hand-rolling, and untrusted-output handling — all as
-first-class framework concerns.
+implies. Many TUI toolkits still fit utility-style screens best. Fleury is built
+for application-scale terminal UIs: incremental rendering, real input and focus
+management, a widget set deep enough to skip the hand-rolling, and
+untrusted-output handling as first-class framework concerns.
 
 ## The mental model
 
