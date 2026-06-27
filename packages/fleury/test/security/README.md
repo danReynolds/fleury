@@ -31,7 +31,7 @@ through an explicit framework-owned effect API.
 | --- | --- | --- | --- |
 | Terminal sanitizer corpus | ANSI/OSC/DCS/APC/C0/C1 bytes become active terminal protocol. | `../rendering/text_sanitizer_test.dart`, `terminal_security_boundary_test.dart` | Covered |
 | Widget text to terminal cells | App/file/model text bypasses sanitizer before the cell buffer. | `terminal_security_boundary_test.dart`, `../widgets/*`, `../../../fleury_widgets/test/*sanitizes*` | Covered |
-| Runtime stray stdout/stderr | `print()` or direct stdout/stderr writes replay hostile controls after `runTui` restores the terminal. | `terminal_security_boundary_test.dart`, `../runtime/run_tui_test.dart` | Covered |
+| Runtime stray stdout/stderr | `print()` or direct stdout/stderr writes replay hostile controls after `runApp` restores the terminal. | `terminal_security_boundary_test.dart`, `../runtime/run_app_test.dart` | Covered |
 | Subprocess task output | Tool output writes terminal controls into task events/log views. | `terminal_security_boundary_test.dart`, `../effects/process_task_test.dart` | Covered |
 | Served spawn logs | `fleury serve --spawn` mirrors child output to the developer terminal as active controls. | `../remote/serve_spawn_test.dart` | Covered |
 | Clipboard effects | Untrusted content writes OSC 52 or platform clipboard unexpectedly. | `../runtime/clipboard_test.dart`, widget copy tests using `ClipboardWritePolicy.inProcessOnly` or redaction | Covered |

@@ -27,8 +27,8 @@
 
 import 'package:fleury/fleury.dart';
 
-Future<void> main() => runTui(const ChatApp());
-// Ctrl+C is a framework-level exit guard in runTui — apps don't need
+Future<void> main() => runApp(const ChatApp());
+// Ctrl+C is a framework-level exit guard in runApp — apps don't need
 // to wire it themselves.
 
 class ChatApp extends StatefulWidget {

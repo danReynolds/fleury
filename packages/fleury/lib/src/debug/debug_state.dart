@@ -22,7 +22,7 @@ enum DebugPanelSide { right, bottom }
 /// `tree`, `rebuilds`, `logs` are stubs that promote in P1.
 enum DebugTab { live, tree, rebuilds, logs }
 
-/// Top-level config the app declares once via `runTui(debug: ...)`.
+/// Top-level config the app declares once via `runApp(debug: ...)`.
 class DebugConfig {
   const DebugConfig({
     this.enabled = true,

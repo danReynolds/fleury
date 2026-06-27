@@ -27,7 +27,7 @@ excellent frameworks; this is the particular combination Fleury is built for.
     a socket — kept in lockstep by a parity oracle.
   </Card>
   <Card title="Fast, and measured" icon="rocket">
-    Incremental down to the cell, data widgets windowed to 100k rows, and
+    Incremental down to the cell, data widgets virtualized to 100k rows, and
     benchmarked against peers on real terminals — including the browser.
   </Card>
 </CardGrid>
@@ -45,7 +45,7 @@ hot reload in a running terminal. If you've written Flutter it transfers directl
 if you haven't, it's a small model to pick up.
 
 That foundation is why the widget set runs deep — charts (`Gauge`, `Sparkline`,
-`LineChart`, `BarChart`, `Histogram`, `Heatmap`), windowed data (`DataTable`,
+`LineChart`, `BarChart`, `Histogram`, `Heatmap`), virtualized data (`DataTable`,
 `TreeTable`), document viewers (`CodeView`, `MarkdownView`, `JsonView`,
 `DiffView`), and surfaces shaped for agent and dev tooling (`MessageList`,
 `PatchReview`, `CommandPalette`, `TraceTimeline`). Fifty-plus widgets in the box,
@@ -95,7 +95,7 @@ A `setState` marks one subtree dirty; only that path rebuilds, re-lays-out, and
 re-paints, and the target diffs down to the **cell** — an idle app emits nothing, a
 busy one pays only for what moved. A cursor move in a 10,000-character editor costs
 about **0.8 ms**, tracking the change rather than how much is on screen. Data
-widgets are windowed, so a hundred-thousand-row table costs about a screenful. And
+widgets are virtualized, so a hundred-thousand-row table costs about a screenful. And
 it's [benchmarked against peers](/architecture/performance/) on real terminals —
 including **browser-inclusive latency under 12 ms**, measured through the real
 browser frame pipeline, not just our own timers. The dashboard below streams on a

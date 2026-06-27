@@ -9,7 +9,7 @@
 //   void main() {
 //     FleuryDebug.registerMonitor('peers', () => peerStore.length);
 //     FleuryDebug.registerMonitor('queue', () => jobQueue.depth);
-//     runTui(...);
+//     runApp(...);
 //   }
 //
 // Each registered getter runs once per debug-panel rebuild — keep

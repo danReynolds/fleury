@@ -74,8 +74,14 @@ class NumberInput extends StatefulWidget {
 
   /// Forwarded to the inner [TextInput] verbatim.
   final String placeholder;
+
+  /// Style used for [placeholder].
   final CellStyle placeholderStyle;
+
+  /// Style used for entered numeric text.
   final CellStyle style;
+
+  /// Style applied to the cursor cell.
   final CellStyle cursorStyle;
 
   /// Label exposed through the semantic app graph.
@@ -83,7 +89,10 @@ class NumberInput extends StatefulWidget {
   /// When omitted, [placeholder] still labels the underlying text field.
   final String? semanticLabel;
 
+  /// Focus node used by the underlying text input.
   final FocusNode? focusNode;
+
+  /// Whether the field should request focus when mounted.
   final bool autofocus;
 
   @override

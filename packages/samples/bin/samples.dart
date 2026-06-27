@@ -11,10 +11,10 @@ import 'package:fleury_samples/samples.dart';
 /// Apps: dashboard | files | agent.
 const Map<String, (String, Widget Function())> _apps =
     <String, (String, Widget Function())>{
-  'dashboard': ('htop-style live system monitor', DashboardApp.new),
-  'files': ('two-pane keyboard file manager', FileManagerApp.new),
-  'agent': ('Claude-Code-style coding-agent TUI', AgentApp.new),
-};
+      'dashboard': ('htop-style live system monitor', DashboardApp.new),
+      'files': ('two-pane keyboard file manager', FileManagerApp.new),
+      'agent': ('Claude-Code-style coding-agent TUI', AgentApp.new),
+    };
 
 Future<void> main(List<String> args) async {
   final positional = args.where((a) => !a.startsWith('-')).toList();
@@ -35,7 +35,7 @@ Future<void> main(List<String> args) async {
     exit(2);
   }
 
-  await runTui(
+  await runApp(
     entry.$2(),
     mode: const TerminalMode(mouse: true),
     onEvent: (event) {

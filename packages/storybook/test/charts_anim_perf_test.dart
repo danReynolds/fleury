@@ -3,7 +3,7 @@
 library;
 
 // Assesses the served chart animation: drives the real playing BarChart story
-// through runTui + the structured serve path for a wall-clock window and
+// through runApp + the structured serve path for a wall-clock window and
 // reports the wire frame rate (the user-visible update rate) and bytes/frame.
 // Run with: dart test test/charts_anim_perf_test.dart --tags perf
 
@@ -53,7 +53,7 @@ void main() {
     final transport = _FakeTransport();
     final driver = RemoteTerminalDriver(transport);
     scheduleMicrotask(() => transport.emit(_init));
-    final done = runTui(
+    final done = runApp(
       StorybookApp(
         initialStoryId: 'visualization.charts.bar-chart',
         initialControlValues: const <String, Object?>{'play': 1},

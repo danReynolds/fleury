@@ -19,11 +19,22 @@ final class LogEntry {
     this.metadata = const <String, Object?>{},
   });
 
+  /// Stable identity used by semantics and copy callbacks.
   final Object? id;
+
+  /// Severity used for styling, filtering, and aggregate semantics.
   final LogSeverity severity;
+
+  /// Optional source label such as `stdout`, `stderr`, or a subsystem name.
   final String? source;
+
+  /// Optional timestamp associated with the entry.
   final DateTime? timestamp;
+
+  /// Sanitized display message for the row.
   final String message;
+
+  /// App-specific semantic state carried by the row.
   final Map<String, Object?> metadata;
 }
 
@@ -36,9 +47,16 @@ final class LogRegionFilterDescriptor {
     this.caseSensitive = false,
   });
 
+  /// Text query matched against message, source, severity, and metadata.
   final String query;
+
+  /// Optional set of source labels to include.
   final Set<String>? sources;
+
+  /// Optional set of severities to include.
   final Set<LogSeverity>? severities;
+
+  /// Whether query matching preserves case.
   final bool caseSensitive;
 
   bool get isEmpty =>
@@ -58,9 +76,16 @@ final class LogRegionExportOptions {
        assert(maxEntries == null || maxEntries >= 0),
        assert(maxLineLength == null || maxLineLength >= 0);
 
+  /// Whether exported rows include timestamp/severity/source prefixes.
   final bool includePrefix;
+
+  /// First filtered entry to export.
   final int startIndex;
+
+  /// Maximum number of entries to export.
   final int? maxEntries;
+
+  /// Maximum message length per exported row.
   final int? maxLineLength;
 }
 
@@ -86,7 +111,10 @@ final class LogRegionCopyOptions {
     this.clipboardPolicy = ClipboardWritePolicy.standard,
   });
 
+  /// Whether copied rows include timestamp/severity/source prefixes.
   final bool includePrefix;
+
+  /// Clipboard write behavior for copied log text.
   final ClipboardWritePolicy clipboardPolicy;
 }
 
@@ -243,17 +271,40 @@ class LogRegion extends StatefulWidget {
     this.onCopy,
   }) : assert(maxLineLength == null || maxLineLength >= 0);
 
+  /// Source log rows to render, filter, and copy.
   final List<LogEntry> entries;
+
+  /// External selection and tail-follow controller.
   final LogRegionController? controller;
+
+  /// Focus node used for keyboard navigation.
   final FocusNode? focusNode;
+
+  /// Whether the region should request focus when mounted.
   final bool autofocus;
+
+  /// Semantic and visual label for the region.
   final String label;
+
+  /// Whether rows render severity/source/timestamp prefixes.
   final bool showPrefix;
+
+  /// Maximum displayed message length per row.
   final int? maxLineLength;
+
+  /// Optional filter applied before rendering rows.
   final LogRegionFilterDescriptor? filter;
+
+  /// Optional prebuilt search index for large log collections.
   final LogRegionSearchIndex? searchIndex;
+
+  /// Whether Ctrl+C and semantic copy export the selected row.
   final bool copySelection;
+
+  /// Clipboard/export options for the selected row.
   final LogRegionCopyOptions copyOptions;
+
+  /// Called after a copy attempt completes.
   final void Function(LogRegionCopyResult result)? onCopy;
 
   @override

@@ -2288,7 +2288,7 @@ class _ChartsStoryState extends State<_ChartsStory>
 
   void _syncTicker() {
     if (_playable && _playing) {
-      // The ticker needs a TuiBinding (installed by runTui); a plain test tree
+      // The ticker needs a TuiBinding (installed by runApp); a plain test tree
       // has none, so animation is simply skipped there.
       _sim ??= TuiBinding.maybeOf(context) != null
           ? createTicker(_onTick)

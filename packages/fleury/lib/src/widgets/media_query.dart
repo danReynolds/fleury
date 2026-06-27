@@ -88,7 +88,7 @@ class MediaQuery extends InheritedWidget {
     final data = maybeOf(context);
     if (data == null) {
       throw StateError(
-        'No MediaQuery in scope. It is installed by runTui; in tests the '
+        'No MediaQuery in scope. It is installed by runApp; in tests the '
         'FleuryTester provides one.',
       );
     }

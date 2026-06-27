@@ -27,7 +27,7 @@ bool _extensionRegistered = false;
 
 /// Owns the hot-reload integration for one TUI session.
 ///
-/// Created by `runTui`; tests can create one against a stub reassemble
+/// Created by `runApp`; tests can create one against a stub reassemble
 /// callback to assert the wiring without spinning up a real VM service
 /// connection.
 class HotReloadController {

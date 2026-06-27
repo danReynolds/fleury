@@ -31,7 +31,7 @@ That binary is the whole app. Ship it like any CLI tool.
 
 The *same* widget tree compiles to JavaScript and runs client-side — no server.
 Write a tiny web entry point that mounts your app with
-[`runTuiWebDom`](/concepts/app-entry/):
+[`mountApp`](/concepts/app-entry/):
 
 ```dart
 // web/main.dart
@@ -40,7 +40,7 @@ import 'package:web/web.dart' as web;
 
 void main() {
   final host = web.document.getElementById('app')!;
-  runTuiWebDom(() => const MyApp(), hostElement: host);
+  mountApp(() => const MyApp(), into: host);
 }
 ```
 
@@ -101,7 +101,7 @@ fleury serve --port=8080 --host=0.0.0.0 --allow-origin=https://example.com --spa
 
 ## Embed or serve?
 
-| | Embed (`runTuiWebDom`) | Serve (`fleury serve`) |
+| | Embed (`mountApp`) | Serve (`fleury serve`) |
 |---|---|---|
 | Where it runs | In the browser | A native process |
 | Backend needed | None — static asset | Yes — the running app |

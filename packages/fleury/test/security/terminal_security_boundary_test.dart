@@ -65,10 +65,10 @@ void main() {
       _expectNoHostileTerminalPayload(buffered);
     });
 
-    test('runTui stray output hook receives sanitized lines', () async {
+    test('runApp stray output hook receives sanitized lines', () async {
       final driver = FakeTerminalDriver();
       final captured = <LogLine>[];
-      final future = runTui(
+      final future = runApp(
         const Text('ui'),
         driver: driver,
         enableHotReload: false,
@@ -88,9 +88,9 @@ void main() {
       await driver.dispose();
     });
 
-    test('runTui replay emits sanitized stray output after restore', () async {
+    test('runApp replay emits sanitized stray output after restore', () async {
       final driver = FakeTerminalDriver();
-      final future = runTui(
+      final future = runApp(
         const Text('ui'),
         driver: driver,
         enableHotReload: false,

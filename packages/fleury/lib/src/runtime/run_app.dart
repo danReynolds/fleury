@@ -1,4 +1,4 @@
-// runTui: the application entry point that ties everything together.
+// runApp: the application entry point that ties everything together.
 //
 // Mounts a root widget, owns a terminal driver, runs a frame loop
 // (event -> setState -> flushBuild -> renderFrame -> ANSI diff -> stdout),
@@ -50,7 +50,7 @@ import 'remote_surface_sink.dart';
 import 'tui_frame_loop.dart';
 import 'tui_runtime.dart';
 
-/// A signal returned by an event handler in [runTui] to ask the loop to
+/// A signal returned by an event handler in [runApp] to ask the loop to
 /// exit cleanly.
 class ExitRequested {
   const ExitRequested();
@@ -104,7 +104,7 @@ typedef TuiEventHandler = ExitRequested? Function(TuiEvent event);
 /// cursor-control sequences into the stream. Pass
 /// [requireInteractiveTerminal] = false to run anyway (screen control and
 /// raw input are skipped where there's no terminal).
-Future<void> runTui(
+Future<void> runApp(
   Widget root, {
   TerminalDriver? driver,
   TerminalMode mode = TerminalMode.interactive,
@@ -120,7 +120,7 @@ Future<void> runTui(
   Duration frameInterval = Duration.zero,
 }) async {
   final runtimeMarkers = _RuntimeMarkerRecorder.fromEnvironment();
-  runtimeMarkers?.mark('runTui.entry');
+  runtimeMarkers?.mark('runApp.entry');
   final usedDriver = driver ?? await _resolveDefaultDriver();
   // Long-lived shell-state holder. Survives setState / rebuilds; the
   // root is rebuilt whenever the viewport resizes, so a per-build
@@ -143,7 +143,7 @@ Future<void> runTui(
   if (requireInteractiveTerminal && !usedDriver.isInteractive) {
     throw FleuryError(
       summary:
-          'runTui needs an interactive terminal, but standard output '
+          'runApp needs an interactive terminal, but standard output '
           'is not a TTY.',
       details:
           'Standard output looks piped or redirected — `app > out.txt`, '
@@ -518,7 +518,7 @@ Future<void> runTui(
     if (byteTelemetry != null) {
       stderr.write(_formatByteTelemetry(byteTelemetry));
     }
-    runtimeMarkers?.mark('runTui.cleanup.complete');
+    runtimeMarkers?.mark('runApp.cleanup.complete');
     runtimeMarkers?.write();
   }
 

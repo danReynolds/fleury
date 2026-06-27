@@ -42,7 +42,7 @@ Then run `dart pub get`.
 
 ## 2. Hello, cells
 
-A Fleury app is a widget tree handed to `runTui`. You build it with the familiar
+A Fleury app is a widget tree handed to `runApp`. You build it with the familiar
 `Widget` / `build` / `setState` model — it just paints to a grid of cells
 instead of pixels.
 
@@ -50,7 +50,7 @@ instead of pixels.
 import 'package:fleury/fleury.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 
-void main() => runTui(
+void main() => runApp(
       const Center(child: Text('Hello, cells!')),
     );
 ```
@@ -76,7 +76,7 @@ import 'dart:async';
 import 'package:fleury/fleury.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 
-void main() => runTui(const StatusApp());
+void main() => runApp(const StatusApp());
 
 class StatusApp extends StatefulWidget {
   const StatusApp({super.key});

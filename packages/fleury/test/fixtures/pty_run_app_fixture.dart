@@ -5,7 +5,7 @@ import 'package:fleury/fleury.dart';
 
 Future<void> main(List<String> args) async {
   if (args.contains('--layout-crash')) {
-    return runTui(const _BoomWidget(), enableHotReload: false);
+    return runApp(const _BoomWidget(), enableHotReload: false);
   }
   if (args.contains('--handoff')) {
     final driver = createNativeTerminalDriver();
@@ -16,13 +16,13 @@ Future<void> main(List<String> args) async {
         }),
       );
     });
-    return runTui(
+    return runApp(
       const _PtySmokeApp(label: 'PTY-HANDOFF-MODE'),
       driver: driver,
       enableHotReload: false,
     );
   }
-  return runTui(const _PtySmokeApp(), enableHotReload: false);
+  return runApp(const _PtySmokeApp(), enableHotReload: false);
 }
 
 class _PtySmokeApp extends StatelessWidget {

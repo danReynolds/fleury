@@ -145,7 +145,7 @@ class TickerScheduler {
   }
 
   /// Fires every registered reassemble callback. Called by the
-  /// runtime (via the `onReassemble` hook in `runTui`) after the
+  /// runtime (via the `onReassemble` hook in `runApp`) after the
   /// build owner has walked the element tree.
   ///
   /// Iterates over a snapshot so a callback can safely unregister
@@ -189,7 +189,7 @@ class TickerScheduler {
   /// guarantee. Defer to a Future or a setState instead.
   ///
   /// Internal: driven by `TuiBinding` / `FleuryTester.pump` /
-  /// `run_tui_web` after a frame; app code should use
+  /// a runtime host after a frame; app code should use
   /// [addPostFrameCallback].
   @internal
   void flushPostFrameCallbacks(Duration timeStamp) {

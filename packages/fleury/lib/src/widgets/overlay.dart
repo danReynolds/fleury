@@ -2,7 +2,7 @@
 // that float on top of the main content.
 //
 // Mirrors Flutter's Overlay/OverlayEntry pair. It is the floating-layer
-// primitive: `runTui` installs one at the root and mounts the app's
+// primitive: `runApp` installs one at the root and mounts the app's
 // Navigator as its bottom entry. Modals are Navigator routes (see
 // `present`), not overlay entries — this direct API is for non-route
 // floating content: autocomplete dropdowns, toasts, tooltips, drag
@@ -122,7 +122,7 @@ class OverlayEntry extends ChangeNotifier {
 /// popovers, toasts, tooltips — that render on top of the main
 /// content.
 ///
-/// Apps usually don't construct an `Overlay` themselves; `runTui`
+/// Apps usually don't construct an `Overlay` themselves; `runApp`
 /// installs one at the root of the tree so `Overlay.of(context)` is
 /// always reachable.
 class Overlay extends StatefulWidget {
@@ -130,7 +130,7 @@ class Overlay extends StatefulWidget {
 
   /// Entries to insert immediately after the overlay mounts, in
   /// stacking order (first is bottom-most, last is top-most). This
-  /// is how `runTui` installs the user's root widget as the
+  /// is how `runApp` installs the user's root widget as the
   /// bottom-most entry.
   final List<OverlayEntry> initialEntries;
 
@@ -139,14 +139,14 @@ class Overlay extends StatefulWidget {
 
   /// Returns the [OverlayState] of the nearest ancestor [Overlay].
   /// Throws if none exists (a missing overlay almost always means
-  /// `runTui` wasn't used or the call site is outside the app's
+  /// `runApp` wasn't used or the call site is outside the app's
   /// root).
   static OverlayState of(BuildContext context) {
     final state = context.findAncestorStateOfType<OverlayState>();
     if (state == null) {
       throw StateError(
         'No Overlay above this BuildContext. Make sure you started the '
-        'app with runTui() (which installs a root Overlay), or wrap '
+        'app with runApp() (which installs a root Overlay), or wrap '
         'your widget tree manually in Overlay(initialEntries: [...]).',
       );
     }

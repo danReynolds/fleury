@@ -284,18 +284,43 @@ class CodeView extends StatefulWidget {
   }) : assert(maxLineLength == null || maxLineLength >= 0),
        assert(tabSize > 0);
 
+  /// Parsed source document to render.
   final CodeDocument document;
+
+  /// External selection and visible-range controller.
   final CodeViewController? controller;
+
+  /// Focus node used for keyboard navigation.
   final FocusNode? focusNode;
+
+  /// Whether the viewer should request focus when mounted.
   final bool autofocus;
+
+  /// Semantic and visual label for the code viewer.
   final String label;
+
+  /// Optional language hint used for coarse line classification.
   final String? language;
+
+  /// Optional file path exposed through semantics.
   final String? filePath;
+
+  /// Maximum displayed line length.
   final int? maxLineLength;
+
+  /// Number of spaces used when expanding tabs.
   final int tabSize;
+
+  /// Whether rendered rows include line-number prefixes.
   final bool showLineNumbers;
+
+  /// Whether Ctrl+C and semantic copy export the selected text.
   final bool copySelection;
+
+  /// Clipboard/export options for copied source text.
   final CodeViewCopyOptions copyOptions;
+
+  /// Called after a copy attempt completes.
   final void Function(CodeViewCopyResult result)? onCopy;
 
   @override

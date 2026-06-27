@@ -261,7 +261,7 @@ void _onTick(Duration elapsed) {
 
 ## In the browser and in tests
 
-None of this changes across targets. `runTuiWebDom` installs the same binding,
+None of this changes across targets. `mountApp` installs the same binding,
 so every layer here runs client-side under `requestAnimationFrame` with no code
 change. In tests, `tester.pump(duration)` advances tickers, springs, and effects
 deterministically — and because animation respects the `AnimationPolicy`, a

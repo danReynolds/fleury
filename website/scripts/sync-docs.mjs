@@ -58,7 +58,7 @@ const DOCS = [
     src: 'performance.md',
     description:
       'Why Fleury stays cheap as apps get busy: retained-mode incremental ' +
-      'rebuilds, cell-level frame diffing, windowed data widgets, and a ' +
+      'rebuilds, cell-level frame diffing, virtualized data widgets, and a ' +
       'patch-stream browser wire.',
   },
 ];

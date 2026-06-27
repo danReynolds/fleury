@@ -33,7 +33,7 @@ const webAutomatedBrowserTestPaths = <String>[
   'test/dom_input_source_test.dart',
   'test/dom_input_trace_fixture_test.dart',
   'test/run_tui_surface_test.dart',
-  'test/run_tui_web_dom_test.dart',
+  'test/mount_app_test.dart',
   'test/semantic_dom_presenter_test.dart',
   'test/web_clipboard_test.dart',
 ];

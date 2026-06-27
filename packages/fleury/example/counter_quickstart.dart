@@ -10,7 +10,7 @@
 
 import 'package:fleury/fleury.dart';
 
-void main() => runTui(const CounterApp());
+void main() => runApp(const CounterApp());
 
 class CounterApp extends StatefulWidget {
   const CounterApp({super.key});

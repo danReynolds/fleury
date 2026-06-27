@@ -30,7 +30,10 @@ final class TreeTableNode<T> {
   /// Optional column values used when no [TreeTable.cellBuilder] is supplied.
   final Map<String, String> cells;
 
+  /// Child nodes nested under this row.
   final List<TreeTableNode<T>> children;
+
+  /// App-specific values exposed to search and semantic state.
   final Map<String, Object?> metadata;
 
   bool get isBranch => children.isNotEmpty;
@@ -79,9 +82,16 @@ final class TreeTableFilterDescriptor {
     this.mode = TreeTableFilterMode.fuzzy,
   });
 
+  /// Raw search query typed by the user or app.
   final String query;
+
+  /// Optional column subset to search; null searches key, metadata, and columns.
   final Set<String>? columnIds;
+
+  /// Whether matching preserves case.
   final bool caseSensitive;
+
+  /// Matching algorithm used for [query].
   final TreeTableFilterMode mode;
 
   bool get isEmpty => query.trim().isEmpty;
@@ -715,10 +725,19 @@ final class TreeTableExportOptions {
   }) : assert(startRow >= 0),
        assert(maxRows == null || maxRows >= 0);
 
+  /// Export encoding.
   final DataTableExportFormat format;
+
+  /// Whether to include the column header row.
   final bool includeHeader;
+
+  /// Whether tree-column values include depth indentation.
   final bool includeTreeIndent;
+
+  /// First visible row to export.
   final int startRow;
+
+  /// Maximum number of rows to export.
   final int? maxRows;
 }
 
@@ -750,9 +769,16 @@ final class TreeTableCopyOptions {
     this.clipboardPolicy = ClipboardWritePolicy.standard,
   });
 
+  /// Export encoding for copied rows.
   final DataTableExportFormat format;
+
+  /// Whether copied row text includes the column header row.
   final bool includeHeader;
+
+  /// Whether copied tree-column text includes depth indentation.
   final bool includeTreeIndent;
+
+  /// Clipboard write behavior for the exported text.
   final ClipboardWritePolicy clipboardPolicy;
 }
 
@@ -1023,24 +1049,61 @@ class TreeTable<T> extends StatefulWidget {
   }) : assert(maxVisible > 0),
        assert(columnSpacing >= 0);
 
+  /// Root nodes of the retained hierarchy.
   final List<TreeTableNode<T>> roots;
+
+  /// Columns displayed for each visible row.
   final List<DataTableColumn> columns;
+
+  /// Column id that renders the tree label and expansion marker.
   final String? treeColumnId;
+
+  /// Optional app-provided cell text builder for non-tree columns.
   final TreeTableCellBuilder<T>? cellBuilder;
+
+  /// External expansion and selection controller.
   final TreeTableController? controller;
+
+  /// Focus node used for keyboard navigation.
   final FocusNode? focusNode;
+
+  /// Whether the table should request focus when mounted.
   final bool autofocus;
+
+  /// Semantic label for the table.
   final String label;
+
+  /// Maximum visible body rows before the list scrolls.
   final int maxVisible;
+
+  /// Optional filter applied to the source tree.
   final TreeTableFilterDescriptor? filter;
+
+  /// Optional prebuilt search index for large trees.
   final TreeTableSearchIndex<T>? searchIndex;
+
+  /// Called when the selected row is activated.
   final void Function(TreeTableRow<T> row)? onSelect;
+
+  /// Whether Ctrl+C and semantic copy export the selected row.
   final bool copySelectedRow;
+
+  /// Export and clipboard options used when copying rows.
   final TreeTableCopyOptions copyOptions;
+
+  /// Called after a copy attempt completes.
   final void Function(TreeTableCopyResult<T> result)? onCopy;
+
+  /// Empty cells inserted between adjacent columns.
   final int columnSpacing;
+
+  /// Whether to draw a separator below the header row.
   final bool headerSeparator;
+
+  /// Style used for header and row separators.
   final CellStyle? separatorStyle;
+
+  /// Style merged onto the selected row.
   final CellStyle? selectedStyle;
 
   @override

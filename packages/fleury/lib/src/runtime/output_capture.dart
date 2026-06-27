@@ -4,7 +4,7 @@
 //
 // The driver holds the *real* stdout (resolved before these overrides take
 // effect), so framework frames bypass capture entirely; only foreign writes
-// inside the run zone are intercepted and buffered. `runTui` replays the
+// inside the run zone are intercepted and buffered. `runApp` replays the
 // buffer once the terminal is restored (or hands each line to a caller hook).
 
 import 'dart:async';

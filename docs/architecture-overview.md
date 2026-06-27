@@ -53,10 +53,10 @@ takes that buffer and paints it somewhere real.
                │  host SPI (the seam)
    ┌───────────┼───────────────────────────┐
    ▼           ▼                            ▼
- Terminal    Browser, embedded           Browser, served
- (ANSI)      (runTuiWebDom)              (fleury serve)
- dart:io     the app compiles to JS      the app runs on a server;
-             and runs in the page        the browser paints streamed frames
+ Terminal    Browser, embedded        Browser, served
+ (ANSI)      (mountApp)                (fleury serve)
+ dart:io     the app compiles to JS    the app runs on a server;
+             and runs in the page      the browser paints streamed frames
 ```
 
 The two browser targets are not the same thing. **Embedded** compiles your whole

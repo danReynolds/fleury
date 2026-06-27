@@ -524,7 +524,7 @@ class _SelectionAreaState extends State<SelectionArea> {
     final text = _delegate.getSelectedText();
     if (text.isEmpty) {
       // Nothing to copy — let an ancestor binding handle Ctrl+C
-      // (e.g. the framework-level exit guard in runTui).
+      // (e.g. the framework-level exit guard in runApp).
       event.bubble();
       return;
     }

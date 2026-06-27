@@ -10,7 +10,7 @@ typedef RemoteSemanticActionHandler =
 
 /// A driver that wants structured frames instead of ANSI bytes.
 ///
-/// When [runTui]'s resolved driver implements this and
+/// When [runApp]'s resolved driver implements this and
 /// [wantsPresentationPlans] is true, the render loop hands it each frame's
 /// buffers (and the computed plan) here instead of diffing to ANSI — the
 /// path that lets a served session render through the fleury web surface
@@ -26,7 +26,11 @@ abstract interface class RemoteSurfaceSink {
   /// Presents one rendered frame. Called on the visual frame, in place of
   /// the ANSI diff write. [prev]/[next] are the committed and new buffers;
   /// [plan] carries the damage classification (full-repaint, scroll).
-  void presentFrame(CellBuffer prev, CellBuffer next, FramePresentationPlan plan);
+  void presentFrame(
+    CellBuffer prev,
+    CellBuffer next,
+    FramePresentationPlan plan,
+  );
 
   /// Presents the current frame's semantic [snapshot], so a served session
   /// stays agent-drivable and accessible. The sink diffs it against the last

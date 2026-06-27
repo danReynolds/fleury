@@ -515,16 +515,37 @@ class MarkdownView extends StatefulWidget {
   }) : assert(maxLineLength == null || maxLineLength >= 0),
        assert(tabSize > 0);
 
+  /// Parsed Markdown document to render.
   final MarkdownDocument document;
+
+  /// External selection and visible-range controller.
   final MarkdownViewController? controller;
+
+  /// Focus node used for keyboard navigation.
   final FocusNode? focusNode;
+
+  /// Whether the viewer should request focus when mounted.
   final bool autofocus;
+
+  /// Semantic and visual label for the Markdown viewer.
   final String label;
+
+  /// Base text style merged into rendered Markdown spans.
   final CellStyle? baseStyle;
+
+  /// Maximum displayed line length.
   final int? maxLineLength;
+
+  /// Number of spaces used when expanding tabs.
   final int tabSize;
+
+  /// Whether Ctrl+C and semantic copy export the selected block/document.
   final bool copySelection;
+
+  /// Clipboard/export options for copied Markdown text.
   final MarkdownViewCopyOptions copyOptions;
+
+  /// Called after a copy attempt completes.
   final void Function(MarkdownViewCopyResult result)? onCopy;
 
   @override

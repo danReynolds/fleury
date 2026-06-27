@@ -34,8 +34,8 @@ clipboard, and (optionally) a place to project semantics.
 
 | Target | Library | Paints the `CellBuffer` to… | Platform |
 |--------|---------|-----------------------------|----------|
-| **Terminal** | `package:fleury/fleury.dart` (`runTui`) | diffed **ANSI** via the POSIX/Windows native drivers | `dart:io` |
-| **Browser, embedded** | `package:fleury_web` (`runTuiWebDom`) | retained **DOM** rows + a parallel semantic DOM | dart2js, client-side |
+| **Terminal** | `package:fleury/fleury.dart` (`runApp`) | diffed **ANSI** via the POSIX/Windows native drivers | `dart:io` |
+| **Browser, embedded** | `package:fleury_web` (`mountApp`) | retained **DOM** rows + a parallel semantic DOM | dart2js, client-side |
 | **Browser, served** | `fleury serve` + DOM client | streamed **cell-diff frames** over a socket | server `dart:io`, client dart2js |
 
 The two browser rows differ only in *where the app runs*. **Embedded** compiles
@@ -51,7 +51,7 @@ diverge.
 
 ## The web-safety boundary (practical rule)
 
-The native runtime — `runTui`, the terminal drivers, stdout/stderr **log
+The native runtime — `runApp`, the terminal drivers, stdout/stderr **log
 capture**, **process** tasks, the external editor, and **file I/O** — lives
 *above* the host SPI and pulls in `dart:io` (and, via the Windows driver,
 `dart:ffi`). It is exported from the `fleury.dart` umbrella, **not** from
@@ -78,7 +78,7 @@ That gives a simple rule for any code that might run in the browser:
 | Package | Role | Web-safe? |
 |---------|------|-----------|
 | `fleury` (`fleury_core`, `fleury_host`) | the core + host SPI | ✅ core/SPI |
-| `fleury` (`fleury.dart` umbrella) | + native runtime: `runTui`, drivers, log/process/file, **serve** | ❌ `dart:io` |
+| `fleury` (`fleury.dart` umbrella) | + native runtime: `runApp`, drivers, log/process/file, **serve** | ❌ `dart:io` |
 | `fleury_widgets` | the widget library | ✅ 51 / ❌ 7 |
 | `fleury_web` | the web/DOM target + the served browser client | ✅ dart2js |
 

@@ -12,15 +12,15 @@ Future<void> _run() async {
   await runDomDemo();
 }
 
-Future<TuiSurfaceHost> runDomDemo({
+Future<MountedApp> runDomDemo({
   web.Element? hostElement,
   FrameFlushScheduler? flushScheduler,
 }) async {
   final host = hostElement ?? _hostElement();
   final instrumentation = _ReadyMarkerInstrumentation();
-  final surfaceHost = await runTuiWebDom(
+  final surfaceHost = await mountApp(
     () => const _DomDemoApp(),
-    hostElement: host,
+    into: host,
     flushScheduler: flushScheduler,
     instrumentation: instrumentation,
   );

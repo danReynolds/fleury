@@ -1,4 +1,4 @@
-// DebugShell — the top-level wrapper installed by runTui. Composes
+// DebugShell — the top-level wrapper installed by runApp. Composes
 // the user app with the debug panel according to controller.mode:
 //
 //   off        → child verbatim (short-circuit; zero overhead)
@@ -11,7 +11,7 @@
 // Hotkey dispatch is NOT done here. The shell's hotkeys (Ctrl+G, F11,
 // Esc-in-fullscreen, F12, paint-flash 'p') are framework escape
 // hatches — they must fire even when a modal route (e.g. Navigator's
-// active screen) is suppressing globals. runTui's event handler
+// active screen) is suppressing globals. runApp's event handler
 // consumes them BEFORE the InputDispatcher walks the focus chain, in
 // the same tier as the Ctrl+C exit-guard. Putting them in a tree-level
 // KeyBindings would correctly land inside the modal scope filter and
@@ -28,7 +28,7 @@ import '../widgets/media_query.dart';
 import 'debug_panel.dart';
 import 'debug_state.dart';
 
-/// Wraps [child] in the debug shell. Pass the runTui-resolved
+/// Wraps [child] in the debug shell. Pass the runApp-resolved
 /// controller; if `controller.config.enabled == false`, this is a
 /// no-op shell that just returns [child].
 class DebugShell extends StatefulWidget {
@@ -135,7 +135,7 @@ class _DebugShellState extends State<DebugShell> {
 }
 
 /// Tries to consume [event] as a debug-shell hotkey, returning true
-/// when it did. Called by runTui's event loop BEFORE the dispatcher,
+/// when it did. Called by runApp's event loop BEFORE the dispatcher,
 /// in the same escape-hatch tier as the Ctrl+C exit guard — so debug
 /// hotkeys fire even inside a modal route's `suppressGlobals: true`
 /// scope.

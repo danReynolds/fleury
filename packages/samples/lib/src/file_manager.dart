@@ -26,8 +26,9 @@ class _FileManagerBody extends StatefulWidget {
 }
 
 class _FileManagerBodyState extends State<_FileManagerBody> {
-  late final List<TreeNode<_FsNode>> _roots =
-      _sampleProject.map(_toTreeNode).toList();
+  late final List<TreeNode<_FsNode>> _roots = _sampleProject
+      .map(_toTreeNode)
+      .toList();
 
   // Start with a file open so the preview pane isn't empty on first paint.
   _FsNode? _selected = _find(_sampleProject, 'README.md');
@@ -90,8 +91,10 @@ class _FileManagerBodyState extends State<_FileManagerBody> {
     return Row(
       children: <Widget>[
         Text('▌ ', style: CellStyle(foreground: theme.colorScheme.primary)),
-        Text('Fleury Files',
-            style: CellStyle(bold: true, foreground: theme.colorScheme.primary)),
+        Text(
+          'Fleury Files',
+          style: CellStyle(bold: true, foreground: theme.colorScheme.primary),
+        ),
         Text('   my-app', style: theme.mutedStyle),
         const Expanded(child: SizedBox.shrink()),
         Text('${_countFiles(_sampleProject)} files', style: theme.mutedStyle),
@@ -138,13 +141,13 @@ class _FileManagerBodyState extends State<_FileManagerBody> {
 
 class _FsNode {
   _FsNode.dir(this.name, this.path, this.children)
-      : isDir = true,
-        content = null,
-        language = null;
+    : isDir = true,
+      content = null,
+      language = null;
 
   _FsNode.file(this.name, this.path, this.content, {this.language})
-      : isDir = false,
-        children = const <_FsNode>[];
+    : isDir = false,
+      children = const <_FsNode>[];
 
   final String name;
   final String path;
@@ -155,10 +158,10 @@ class _FsNode {
 }
 
 TreeNode<_FsNode> _toTreeNode(_FsNode n) => TreeNode<_FsNode>(
-      n.isDir ? '${n.name}/' : n.name,
-      value: n,
-      children: n.children.map(_toTreeNode).toList(),
-    );
+  n.isDir ? '${n.name}/' : n.name,
+  value: n,
+  children: n.children.map(_toTreeNode).toList(),
+);
 
 _FsNode? _find(List<_FsNode> nodes, String name) {
   for (final n in nodes) {
@@ -170,33 +173,56 @@ _FsNode? _find(List<_FsNode> nodes, String name) {
 }
 
 int _countFiles(List<_FsNode> nodes) => nodes.fold<int>(
-      0,
-      (sum, n) => sum + (n.isDir ? _countFiles(n.children) : 1),
-    );
+  0,
+  (sum, n) => sum + (n.isDir ? _countFiles(n.children) : 1),
+);
 
 final List<_FsNode> _sampleProject = <_FsNode>[
   _FsNode.dir('lib', 'my-app/lib', <_FsNode>[
-    _FsNode.file('main.dart', 'my-app/lib/main.dart', _mainDart,
-        language: 'dart'),
+    _FsNode.file(
+      'main.dart',
+      'my-app/lib/main.dart',
+      _mainDart,
+      language: 'dart',
+    ),
     _FsNode.dir('src', 'my-app/lib/src', <_FsNode>[
-      _FsNode.file('app.dart', 'my-app/lib/src/app.dart', _appDart,
-          language: 'dart'),
-      _FsNode.file('counter.dart', 'my-app/lib/src/counter.dart', _counterDart,
-          language: 'dart'),
+      _FsNode.file(
+        'app.dart',
+        'my-app/lib/src/app.dart',
+        _appDart,
+        language: 'dart',
+      ),
+      _FsNode.file(
+        'counter.dart',
+        'my-app/lib/src/counter.dart',
+        _counterDart,
+        language: 'dart',
+      ),
     ]),
   ]),
   _FsNode.dir('test', 'my-app/test', <_FsNode>[
-    _FsNode.file('counter_test.dart', 'my-app/test/counter_test.dart',
-        _counterTestDart,
-        language: 'dart'),
+    _FsNode.file(
+      'counter_test.dart',
+      'my-app/test/counter_test.dart',
+      _counterTestDart,
+      language: 'dart',
+    ),
   ]),
   _FsNode.dir('assets', 'my-app/assets', <_FsNode>[
-    _FsNode.file('config.json', 'my-app/assets/config.json', _configJson,
-        language: 'json'),
+    _FsNode.file(
+      'config.json',
+      'my-app/assets/config.json',
+      _configJson,
+      language: 'json',
+    ),
   ]),
   _FsNode.file('README.md', 'my-app/README.md', _readmeMd),
-  _FsNode.file('pubspec.yaml', 'my-app/pubspec.yaml', _pubspecYaml,
-      language: 'yaml'),
+  _FsNode.file(
+    'pubspec.yaml',
+    'my-app/pubspec.yaml',
+    _pubspecYaml,
+    language: 'yaml',
+  ),
 ];
 
 const String _readmeMd = '''
@@ -225,7 +251,7 @@ import 'package:fleury/fleury_host.dart';
 import 'src/app.dart';
 
 Future<void> main() async {
-  await runTui(
+  await runApp(
     const CounterApp(),
     onEvent: (event) {
       if (event is KeyEvent && event.char == 'q') {

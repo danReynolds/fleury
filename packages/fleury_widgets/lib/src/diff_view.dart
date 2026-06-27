@@ -323,19 +323,35 @@ class DiffView extends StatefulWidget {
     this.onCopy,
   }) : assert(maxLineLength == null || maxLineLength >= 0);
 
+  /// Parsed unified diff document to render.
   final DiffDocument document;
+
+  /// External selection and visible-range controller.
   final DiffViewController? controller;
+
+  /// Focus node used for keyboard navigation.
   final FocusNode? focusNode;
+
+  /// Whether the viewer should request focus when mounted.
   final bool autofocus;
+
+  /// Semantic and visual label for the diff viewer.
   final String label;
+
+  /// Maximum displayed line length.
   final int? maxLineLength;
 
   /// Render an old | new line-number gutter (the universal unified-diff
   /// convention — delta, GitHub, git pager). The data is tracked either way.
   final bool showLineNumbers;
 
+  /// Whether Ctrl+C and semantic copy export the selected row/hunk.
   final bool copySelection;
+
+  /// Clipboard/export options for copied diff text.
   final DiffViewCopyOptions copyOptions;
+
+  /// Called after a copy attempt completes.
   final void Function(DiffViewCopyResult result)? onCopy;
 
   @override

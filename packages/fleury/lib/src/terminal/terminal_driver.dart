@@ -104,7 +104,7 @@ abstract interface class TerminalDriver {
   ///
   /// When false, a visual TUI has nowhere meaningful to draw: emitting the
   /// cursor-positioning and screen-control sequences would just corrupt the
-  /// redirected stream. `runTui` refuses to start in that case by default.
+  /// redirected stream. `runApp` refuses to start in that case by default.
   /// (Input arriving from a pipe while output is still a terminal — scripted
   /// keystrokes — does not make a driver non-interactive.)
   bool get isInteractive;

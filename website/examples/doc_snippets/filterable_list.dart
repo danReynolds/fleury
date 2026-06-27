@@ -7,11 +7,19 @@
 import 'package:fleury/fleury.dart';
 
 const _languages = [
-  'Dart', 'Rust', 'Go', 'Python', 'TypeScript',
-  'Elixir', 'Zig', 'Swift', 'Kotlin', 'Haskell',
+  'Dart',
+  'Rust',
+  'Go',
+  'Python',
+  'TypeScript',
+  'Elixir',
+  'Zig',
+  'Swift',
+  'Kotlin',
+  'Haskell',
 ];
 
-void main() => runTui(const FilterApp());
+void main() => runApp(const FilterApp());
 
 class FilterApp extends StatefulWidget {
   const FilterApp({super.key});

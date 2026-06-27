@@ -24,16 +24,37 @@ final class ToolCallRecord {
     this.metadata = const <String, Object?>{},
   });
 
+  /// Stable tool-call identity.
   final String id;
+
+  /// Tool name or command identifier.
   final String name;
+
+  /// Optional display title; defaults to [name].
   final String? title;
+
+  /// Optional human-readable description.
   final String? description;
+
+  /// Current lifecycle status.
   final ToolCallStatus status;
+
+  /// Sanitized argument summary for the call.
   final Map<String, Object?> arguments;
+
+  /// Optional captured output text.
   final String? output;
+
+  /// Optional error text; shown instead of [output] when present.
   final String? error;
+
+  /// Current progress value, when known.
   final num? progressCurrent;
+
+  /// Total progress value, when known.
   final num? progressTotal;
+
+  /// App-specific semantic state carried by the record.
   final Map<String, Object?> metadata;
 
   String get displayTitle => title ?? name;
@@ -50,9 +71,16 @@ final class ToolCallCopyOptions {
     this.clipboardPolicy = ClipboardWritePolicy.standard,
   }) : assert(maxOutputLength == null || maxOutputLength >= 0);
 
+  /// Whether copied summaries include [ToolCallRecord.arguments].
   final bool includeArguments;
+
+  /// Whether copied summaries include output or error text.
   final bool includeOutput;
+
+  /// Maximum copied output/error length.
   final int? maxOutputLength;
+
+  /// Clipboard write behavior for copied tool-call text.
   final ClipboardWritePolicy clipboardPolicy;
 }
 
@@ -104,11 +132,22 @@ class ToolCallCard extends StatefulWidget {
     this.width,
   });
 
+  /// Tool-call data to render.
   final ToolCallRecord record;
+
+  /// Whether the card exposes copy UI and semantic copy.
   final bool copyEnabled;
+
+  /// Clipboard/export options for copied tool-call summaries.
   final ToolCallCopyOptions copyOptions;
+
+  /// Called after a copy attempt completes.
   final void Function(ToolCallCopyResult result)? onCopy;
+
+  /// Called when the cancel action is invoked while the record is busy.
   final VoidCallback? onCancel;
+
+  /// Optional fixed width for the card content.
   final int? width;
 
   @override

@@ -247,7 +247,7 @@ void main() {
     );
     expect(
       automatedTestsAction['browserTestCommand'] as List<Object?>,
-      contains('test/run_tui_web_dom_test.dart'),
+      contains('test/mount_app_test.dart'),
     );
     expect(
       automatedTestsAction['vmTestCommand'] as List<Object?>,
@@ -380,7 +380,7 @@ void main() {
         .toList();
     expect(
       automatedTestFingerprintPaths,
-      contains(File('test/run_tui_web_dom_test.dart').absolute.path),
+      contains(File('test/mount_app_test.dart').absolute.path),
     );
     expect(
       automatedTestFingerprintPaths,
@@ -3718,7 +3718,7 @@ void main() {
           '-p',
           'chrome',
           'test/dom_input_trace_fixture_test.dart',
-          'test/run_tui_web_dom_test.dart',
+          'test/mount_app_test.dart',
         ]),
       );
       expect(

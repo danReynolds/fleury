@@ -191,7 +191,7 @@ void main() {
       tester.pump(const Duration(milliseconds: 40));
       expect(m.value, greaterThan(0.0));
 
-      // runTui's order: owner.reassembleApplication() then
+      // runApp's order: owner.reassembleApplication() then
       // binding.tickerScheduler.reassemble().
       tester.owner.reassembleApplication();
       tester.binding.tickerScheduler.reassemble();

@@ -56,126 +56,117 @@ class _FakeClipboard extends Clipboard {
 }
 
 void main() {
-  test(
-    'runTuiWebDom assembles retained DOM rendering and browser input',
-    () async {
-      final previousClipboard = _FakeClipboard();
-      Clipboard.instance = previousClipboard;
-      addTearDown(() => Clipboard.instance = previousClipboard);
+  test('mountApp assembles retained DOM rendering and browser input', () async {
+    final previousClipboard = _FakeClipboard();
+    Clipboard.instance = previousClipboard;
+    addTearDown(() => Clipboard.instance = previousClipboard);
 
-      final hostElement = web.document.createElement('div');
-      hostElement.setAttribute(
-        'style',
-        'position:absolute;left:0;top:0;width:240px;height:48px;'
-            'font-family:monospace;font-size:16px;line-height:16px;',
-      );
-      web.document.body!.appendChild(hostElement);
-      addTearDown(() => hostElement.parentNode?.removeChild(hostElement));
+    final hostElement = web.document.createElement('div');
+    hostElement.setAttribute(
+      'style',
+      'position:absolute;left:0;top:0;width:240px;height:48px;'
+          'font-family:monospace;font-size:16px;line-height:16px;',
+    );
+    web.document.body!.appendChild(hostElement);
+    addTearDown(() => hostElement.parentNode?.removeChild(hostElement));
 
-      final controller = TextEditingController();
-      final instrumentation = RecordingWebHostInstrumentation();
-      final focusCoordinator = WebFocusCoordinator();
-      final flush = _FakeFlush();
-      final webClipboard = _FakeClipboard();
-      await webClipboard.writeWithReport('fallback');
-      final TuiSurfaceHost host = await runTuiWebDom(
-        () => TextInput(controller: controller, autofocus: true),
-        hostElement: hostElement,
-        clipboard: webClipboard,
-        flushScheduler: flush.schedule,
-        instrumentation: instrumentation,
-        focusCoordinator: focusCoordinator,
-      );
-      addTearDown(host.dispose);
+    final controller = TextEditingController();
+    final instrumentation = RecordingWebHostInstrumentation();
+    final focusCoordinator = WebFocusCoordinator();
+    final flush = _FakeFlush();
+    final webClipboard = _FakeClipboard();
+    await webClipboard.writeWithReport('fallback');
+    final MountedApp host = await mountApp(
+      () => TextInput(controller: controller, autofocus: true),
+      into: hostElement,
+      clipboard: webClipboard,
+      flushScheduler: flush.schedule,
+      instrumentation: instrumentation,
+      focusCoordinator: focusCoordinator,
+    );
+    addTearDown(host.dispose);
 
-      expect(hostElement.querySelector('.fleury-screen'), isNotNull);
-      expect(hostElement.querySelector('.fleury-semantics'), isNotNull);
-      expect(hostElement.querySelector('textarea'), isNotNull);
-      expect(flush.pending, isTrue);
+    expect(hostElement.querySelector('.fleury-screen'), isNotNull);
+    expect(hostElement.querySelector('.fleury-semantics'), isNotNull);
+    expect(hostElement.querySelector('textarea'), isNotNull);
+    expect(flush.pending, isTrue);
 
-      flush.fire();
-      await host.awaitSemanticIdle();
-      expect(instrumentation.frames, hasLength(1));
-      expect(controller.text, isEmpty);
-      final semanticsRoot = hostElement.querySelector('.fleury-semantics')!;
-      final field =
-          semanticsRoot.querySelector('[role="textbox"]')!
-              as web.HTMLInputElement;
-      expect(
-        hostElement
-            .querySelector('.fleury-screen')!
-            .getAttribute('aria-hidden'),
-        'true',
-      );
-      expect(semanticsRoot.getAttribute('aria-hidden'), isNull);
-      expect(field.getAttribute('data-fleury-focused'), 'true');
-      expect(field.value, isEmpty);
-      expect(focusCoordinator.activeSemanticNode, isNotNull);
-      expect(
-        focusCoordinator.browserFocusTarget,
-        WebFocusTarget.keyboardCapture,
-      );
+    flush.fire();
+    await host.awaitSemanticIdle();
+    expect(instrumentation.frames, hasLength(1));
+    expect(controller.text, isEmpty);
+    final semanticsRoot = hostElement.querySelector('.fleury-semantics')!;
+    final field =
+        semanticsRoot.querySelector('[role="textbox"]')!
+            as web.HTMLInputElement;
+    expect(
+      hostElement.querySelector('.fleury-screen')!.getAttribute('aria-hidden'),
+      'true',
+    );
+    expect(semanticsRoot.getAttribute('aria-hidden'), isNull);
+    expect(field.getAttribute('data-fleury-focused'), 'true');
+    expect(field.value, isEmpty);
+    expect(focusCoordinator.activeSemanticNode, isNotNull);
+    expect(focusCoordinator.browserFocusTarget, WebFocusTarget.keyboardCapture);
 
-      final textArea =
-          hostElement.querySelector('textarea') as web.HTMLTextAreaElement;
-      final fallbackPaste = web.ClipboardEvent(
-        'paste',
-        web.ClipboardEventInit(bubbles: true, cancelable: true),
-      );
-      textArea.dispatchEvent(fallbackPaste);
+    final textArea =
+        hostElement.querySelector('textarea') as web.HTMLTextAreaElement;
+    final fallbackPaste = web.ClipboardEvent(
+      'paste',
+      web.ClipboardEventInit(bubbles: true, cancelable: true),
+    );
+    textArea.dispatchEvent(fallbackPaste);
 
-      expect(fallbackPaste.defaultPrevented, isTrue);
-      expect(flush.pending, isTrue);
-      flush.fire();
-      await host.awaitSemanticIdle();
-      expect(controller.text, 'fallback');
-      expect(instrumentation.frames, hasLength(2));
+    expect(fallbackPaste.defaultPrevented, isTrue);
+    expect(flush.pending, isTrue);
+    flush.fire();
+    await host.awaitSemanticIdle();
+    expect(controller.text, 'fallback');
+    expect(instrumentation.frames, hasLength(2));
 
-      textArea.dispatchEvent(
-        web.InputEvent(
-          'input',
-          web.InputEventInit(
-            data: 'z',
-            inputType: 'insertText',
-            bubbles: true,
-            cancelable: true,
-          ),
+    textArea.dispatchEvent(
+      web.InputEvent(
+        'input',
+        web.InputEventInit(
+          data: 'z',
+          inputType: 'insertText',
+          bubbles: true,
+          cancelable: true,
         ),
-      );
+      ),
+    );
 
-      expect(flush.pending, isTrue);
-      expect(controller.text, 'fallback');
+    expect(flush.pending, isTrue);
+    expect(controller.text, 'fallback');
 
-      flush.fire();
-      await host.awaitSemanticIdle();
+    flush.fire();
+    await host.awaitSemanticIdle();
 
-      expect(controller.text, 'fallbackz');
-      expect(instrumentation.frames, hasLength(3));
-      expect(
-        instrumentation.summarize().timings['totalFrameMs']!.p95,
-        greaterThanOrEqualTo(0),
-      );
-      expect(hostElement.textContent, contains('fallbackz'));
-      expect(
-        (semanticsRoot.querySelector('[role="textbox"]')!
-                as web.HTMLInputElement)
-            .value,
-        'fallbackz',
-      );
+    expect(controller.text, 'fallbackz');
+    expect(instrumentation.frames, hasLength(3));
+    expect(
+      instrumentation.summarize().timings['totalFrameMs']!.p95,
+      greaterThanOrEqualTo(0),
+    );
+    expect(hostElement.textContent, contains('fallbackz'));
+    expect(
+      (semanticsRoot.querySelector('[role="textbox"]')! as web.HTMLInputElement)
+          .value,
+      'fallbackz',
+    );
 
-      await host.dispose();
+    await host.dispose();
 
-      expect(hostElement.parentNode, isNotNull);
-      expect(hostElement.querySelector('.fleury-screen'), isNull);
-      expect(hostElement.querySelector('.fleury-semantics'), isNull);
-      expect(hostElement.querySelector('textarea'), isNull);
-      expect(Clipboard.instance, same(previousClipboard));
-      expect(focusCoordinator.browserFocusTarget, isNull);
-    },
-  );
+    expect(hostElement.parentNode, isNotNull);
+    expect(hostElement.querySelector('.fleury-screen'), isNull);
+    expect(hostElement.querySelector('.fleury-semantics'), isNull);
+    expect(hostElement.querySelector('textarea'), isNull);
+    expect(Clipboard.instance, same(previousClipboard));
+    expect(focusCoordinator.browserFocusTarget, isNull);
+  });
 
   test(
-    'runTuiWebDom disposes generated DOM roots after contained build errors',
+    'mountApp disposes generated DOM roots after contained build errors',
     () async {
       final previousClipboard = _FakeClipboard();
       Clipboard.instance = previousClipboard;
@@ -193,9 +184,9 @@ void main() {
       final error = StateError('root build failed');
       final flush = _FakeFlush();
 
-      final host = await runTuiWebDom(
+      final host = await mountApp(
         () => throw error,
-        hostElement: hostElement,
+        into: hostElement,
         clipboard: _FakeClipboard(),
         flushScheduler: flush.schedule,
       );
@@ -220,7 +211,7 @@ void main() {
   );
 
   test(
-    'runTuiWebDom retains but clears caller-supplied visual and semantic roots',
+    'mountApp retains but clears caller-supplied visual and semantic roots',
     () async {
       final previousClipboard = _FakeClipboard();
       Clipboard.instance = previousClipboard;
@@ -240,9 +231,9 @@ void main() {
       addTearDown(() => hostElement.parentNode?.removeChild(hostElement));
 
       final flush = _FakeFlush();
-      final host = await runTuiWebDom(
+      final host = await mountApp(
         () => const Text('supplied roots'),
-        hostElement: hostElement,
+        into: hostElement,
         surfaceElement: surfaceElement,
         semanticElement: semanticElement,
         clipboard: _FakeClipboard(),
@@ -273,16 +264,16 @@ void main() {
   );
 
   test(
-    'runTuiWebDom rejects disabled semantics without diagnostics acknowledgement',
+    'mountApp rejects disabled semantics without diagnostics acknowledgement',
     () async {
       final hostElement = web.document.createElement('div');
       web.document.body!.appendChild(hostElement);
       addTearDown(() => hostElement.parentNode?.removeChild(hostElement));
 
       await expectLater(
-        runTuiWebDom(
+        mountApp(
           () => const Text('inaccessible'),
-          hostElement: hostElement,
+          into: hostElement,
           semanticsEnabled: false,
         ),
         throwsA(
@@ -301,9 +292,9 @@ void main() {
 
       final semanticElement = web.document.createElement('div');
       await expectLater(
-        runTuiWebDom(
+        mountApp(
           () => const Text('inaccessible'),
-          hostElement: hostElement,
+          into: hostElement,
           semanticElement: semanticElement,
           semanticsEnabled: false,
           allowInaccessibleDiagnostics: true,
@@ -315,7 +306,7 @@ void main() {
   );
 
   test(
-    'runTuiWebDom allows disabled semantics only for acknowledged diagnostics',
+    'mountApp allows disabled semantics only for acknowledged diagnostics',
     () async {
       final previousClipboard = _FakeClipboard();
       Clipboard.instance = previousClipboard;
@@ -331,9 +322,9 @@ void main() {
       addTearDown(() => hostElement.parentNode?.removeChild(hostElement));
 
       final flush = _FakeFlush();
-      final host = await runTuiWebDom(
+      final host = await mountApp(
         () => const Text('diagnostics only'),
-        hostElement: hostElement,
+        into: hostElement,
         semanticsEnabled: false,
         allowInaccessibleDiagnostics: true,
         clipboard: _FakeClipboard(),

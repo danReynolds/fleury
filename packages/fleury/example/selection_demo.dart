@@ -31,7 +31,7 @@
 
 import 'package:fleury/fleury.dart';
 
-Future<void> main() => runTui(const SelectionDemo());
+Future<void> main() => runApp(const SelectionDemo());
 
 class SelectionDemo extends StatefulWidget {
   const SelectionDemo({super.key});

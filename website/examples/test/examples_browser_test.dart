@@ -2,6 +2,7 @@
 library;
 
 import 'package:fleury_doc_examples/registry.dart';
+import 'package:fleury/fleury_host.dart';
 import 'package:fleury_web/fleury_web.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;
@@ -31,16 +32,49 @@ Future<web.Element> _mount(String id) async {
         'font-family:monospace;font-size:16px;line-height:18px;',
   );
   web.document.body!.appendChild(host);
-  await runTuiWebDom(
-    examples[id]!,
-    hostElement: host,
-    flushScheduler: flush.schedule,
-  );
+  await mountApp(examples[id]!, into: host, flushScheduler: flush.schedule);
   // Drain the initial frame(s) so the DOM grid is painted.
   for (var i = 0; i < 4 && flush.pending; i++) {
     flush.fire();
   }
   return host;
+}
+
+Future<web.Element> _mountRoot(Widget Function() builder) async {
+  final flush = _FakeFlush();
+  final host = web.document.createElement('div');
+  host.setAttribute(
+    'style',
+    'position:absolute;left:0;top:0;width:80ch;height:240px;'
+        'font-family:monospace;font-size:16px;line-height:18px;',
+  );
+  web.document.body!.appendChild(host);
+  await mountApp(builder, into: host, flushScheduler: flush.schedule);
+  for (var i = 0; i < 4 && flush.pending; i++) {
+    flush.fire();
+  }
+  return host;
+}
+
+final class _ThemeColorProbe extends StatelessWidget {
+  const _ThemeColorProbe();
+
+  @override
+  Widget build(BuildContext context) => Text(
+    'accent',
+    style: CellStyle(foreground: Theme.of(context).colorScheme.primary),
+  );
+}
+
+String? _firstSpanColorContaining(web.Element host, String text) {
+  final spans = host.querySelectorAll('.fleury-row span');
+  for (var i = 0; i < spans.length; i++) {
+    final span = spans.item(i);
+    if (span is! web.Element) continue;
+    if (!(span.textContent ?? '').contains(text)) continue;
+    return web.window.getComputedStyle(span).color;
+  }
+  return null;
 }
 
 void main() {
@@ -63,14 +97,28 @@ void main() {
     expect(host.textContent, contains('q4'));
   });
 
-  test('digits.basic renders the interactive world-clock timezone tabs',
-      () async {
-    final host = await _mount('digits.basic');
+  test('site-themed examples use the light docs palette', () async {
+    final host = await _mountRoot(
+      () => themedExampleRoot(
+        () => const _ThemeColorProbe(),
+        DocsExampleThemeController(DocsExampleStyle.light),
+      ),
+    );
     addTearDown(() => host.remove());
-    // The timezone tab labels are real text; the clock itself is block glyphs.
-    expect(host.textContent, contains('UTC'));
-    expect(host.textContent, contains('PST'));
+
+    expect(_firstSpanColorContaining(host, 'accent'), 'rgb(19, 138, 92)');
   });
+
+  test(
+    'digits.basic renders the interactive world-clock timezone tabs',
+    () async {
+      final host = await _mount('digits.basic');
+      addTearDown(() => host.remove());
+      // The timezone tab labels are real text; the clock itself is block glyphs.
+      expect(host.textContent, contains('UTC'));
+      expect(host.textContent, contains('PST'));
+    },
+  );
 
   test('gauge knobs re-render in place when a prop changes', () async {
     final flush = _FakeFlush();
@@ -88,9 +136,9 @@ void main() {
       'label': 'CPU',
       'showPercentage': true,
     });
-    await runTuiWebDom(
+    await mountApp(
       () => knobRoot('gauge', params),
-      hostElement: host,
+      into: host,
       flushScheduler: flush.schedule,
     );
     for (var i = 0; i < 4 && flush.pending; i++) {
@@ -135,9 +183,9 @@ void main() {
     addTearDown(() => host.remove());
 
     final params = KnobParams(<String, Object?>{'bins': 4, 'showValues': true});
-    await runTuiWebDom(
+    await mountApp(
       () => knobRoot('histogram', params),
-      hostElement: host,
+      into: host,
       flushScheduler: flush.schedule,
     );
     for (var i = 0; i < 4 && flush.pending; i++) {

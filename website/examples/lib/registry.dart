@@ -1,5 +1,5 @@
 // Web-safe widget examples for the docs site. These run client-side via
-// dart2js (runTuiWebDom), so everything imports the dart:io-free host SPI
+// dart2js (mountApp), so everything imports the dart:io-free host SPI
 // (fleury_host) and the web-safe widget barrel (fleury_widgets_web) — never the
 // full `fleury.dart` / `fleury_widgets.dart` umbrellas, which pull in native
 // drivers and the dart:io-backed widgets.
@@ -11,6 +11,38 @@ import 'package:fleury_widgets/fleury_widgets_web.dart';
 
 /// Builds the root widget for one live example.
 typedef ExampleBuilder = Widget Function();
+
+/// Visual theme used by a docs embed.
+enum DocsExampleStyle { dark, light }
+
+/// Lets the host page retheme a live example after it has mounted.
+final class DocsExampleThemeController extends ChangeNotifier {
+  DocsExampleThemeController(this._style);
+
+  DocsExampleStyle _style;
+
+  DocsExampleStyle get style => _style;
+
+  set style(DocsExampleStyle value) {
+    if (value == _style) return;
+    _style = value;
+    notifyListeners();
+  }
+}
+
+Widget themedExampleRoot(
+  ExampleBuilder builder,
+  DocsExampleThemeController controller,
+) => ListenableBuilder(
+  listenable: controller,
+  builder: (context, _) {
+    final theme = _themeFor(controller.style);
+    return _DocsExampleTheme(
+      data: theme,
+      child: Theme(data: theme, child: builder()),
+    );
+  },
+);
 
 /// One embeddable example, keyed by the `data-fleury-example` id used on the
 /// docs page. This list is the single source of truth: it drives the live
@@ -40,7 +72,7 @@ class ExampleInfo {
   /// One-line description for the reference page.
   final String blurb;
 
-  /// Root-widget factory mounted via runTuiWebDom.
+  /// Root-widget factory mounted via mountApp.
   final ExampleBuilder builder;
 
   /// Host grid size in cells — the example is framed to exactly this, not
@@ -69,37 +101,42 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     blurb: 'A compact system monitor built from a few Fleury widgets.',
     cols: 34,
     rows: 9,
-    builder: () => _framed(Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        const Gauge(value: 0.62, label: 'CPU'),
-        const Gauge(value: 0.81, label: 'MEM'),
-        const Gauge(value: 0.34, label: 'DISK'),
-        const SizedBox(height: 1),
-        Sparkline(
-          data: const <num>[3, 5, 4, 8, 6, 9, 7, 5, 8, 6],
-          color: _theme.colorScheme.primary,
-        ),
-      ],
-    )),
+    builder: () => _framed(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          const Gauge(value: 0.62, label: 'CPU'),
+          const Gauge(value: 0.81, label: 'MEM'),
+          const Gauge(value: 0.34, label: 'DISK'),
+          const SizedBox(height: 1),
+          Sparkline(
+            data: const <num>[3, 5, 4, 8, 6, 9, 7, 5, 8, 6],
+            color: _theme.colorScheme.primary,
+          ),
+        ],
+      ),
+    ),
   ),
   // ── Charts & meters ──────────────────────────────────────────────────────
   ExampleInfo(
     id: 'gauge.basic',
     widget: 'Gauge',
     category: 'Charts & meters',
-    blurb: 'A labelled progress meter with colored warning/critical thresholds.',
+    blurb:
+        'A labelled progress meter with colored warning/critical thresholds.',
     cols: 40,
     rows: 3,
-    builder: () => _framed(Gauge(
-      value: 0.62,
-      label: 'CPU',
-      thresholds: <(double, Color)>[
-        (0.7, _theme.colorScheme.warning),
-        (0.9, _theme.colorScheme.error),
-      ],
-    )),
+    builder: () => _framed(
+      Gauge(
+        value: 0.62,
+        label: 'CPU',
+        thresholds: <(double, Color)>[
+          (0.7, _theme.colorScheme.warning),
+          (0.9, _theme.colorScheme.error),
+        ],
+      ),
+    ),
   ),
   ExampleInfo(
     id: 'sparkline.basic',
@@ -113,22 +150,25 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
   color: theme.colorScheme.success,
   showValue: true,
 )''',
-    builder: () => _framed(_LiveSeries(
-      length: 28,
-      min: 0,
-      max: 20,
-      builder: (data) => Sparkline(
-        data: data,
-        color: _theme.colorScheme.success,
-        showValue: true,
+    builder: () => _framed(
+      _LiveSeries(
+        length: 28,
+        min: 0,
+        max: 20,
+        builder: (data) => Sparkline(
+          data: data,
+          color: _theme.colorScheme.success,
+          showValue: true,
+        ),
       ),
-    )),
+    ),
   ),
   ExampleInfo(
     id: 'linechart.basic',
     widget: 'LineChart',
     category: 'Charts & meters',
-    blurb: 'A braille line/area/scatter chart with axes, legend, and references.',
+    blurb:
+        'A braille line/area/scatter chart with axes, legend, and references.',
     cols: 60,
     rows: 16,
     code: '''LineChart(
@@ -139,23 +179,25 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
   showLegend: true,
   yRange: const (0, 100),
 )''',
-    builder: () => _framed(_LiveSeries(
-      length: 40,
-      min: 0,
-      max: 100,
-      builder: (data) => LineChart(
-        series: <LineSeries>[
-          LineSeries(
-            <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
-            label: 'load',
-            color: _theme.colorScheme.primary,
-          ),
-        ],
-        showAxes: true,
-        showLegend: true,
-        yRange: const (0, 100),
+    builder: () => _framed(
+      _LiveSeries(
+        length: 40,
+        min: 0,
+        max: 100,
+        builder: (data) => LineChart(
+          series: <LineSeries>[
+            LineSeries(
+              <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
+              label: 'load',
+              color: _theme.colorScheme.primary,
+            ),
+          ],
+          showAxes: true,
+          showLegend: true,
+          yRange: const (0, 100),
+        ),
       ),
-    )),
+    ),
   ),
   ExampleInfo(
     id: 'barchart.basic',
@@ -168,17 +210,19 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
   bars: <Bar>[Bar('q1', 12), Bar('q2', 19), Bar('q3', 9), Bar('q4', 22)],
   showYAxis: true,
 )''',
-    builder: () => _framed(_LiveSeries(
-      length: 5,
-      min: 2,
-      max: 24,
-      builder: (data) => BarChart(
-        bars: <Bar>[
-          for (var i = 0; i < data.length; i++) Bar('q${i + 1}', data[i]),
-        ],
-        showYAxis: true,
+    builder: () => _framed(
+      _LiveSeries(
+        length: 5,
+        min: 2,
+        max: 24,
+        builder: (data) => BarChart(
+          bars: <Bar>[
+            for (var i = 0; i < data.length; i++) Bar('q${i + 1}', data[i]),
+          ],
+          showYAxis: true,
+        ),
       ),
-    )),
+    ),
   ),
   ExampleInfo(
     id: 'histogram.basic',
@@ -187,11 +231,34 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     blurb: 'Bins a list of samples into a frequency distribution.',
     cols: 52,
     rows: 12,
-    builder: () => _framed(const Histogram(
-      values: <num>[1, 2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 6, 6, 7, 2, 3, 4, 5],
-      bins: 7,
-      showValues: true,
-    )),
+    builder: () => _framed(
+      const Histogram(
+        values: <num>[
+          1,
+          2,
+          2,
+          3,
+          3,
+          3,
+          4,
+          4,
+          4,
+          4,
+          5,
+          5,
+          5,
+          6,
+          6,
+          7,
+          2,
+          3,
+          4,
+          5,
+        ],
+        bins: 7,
+        showValues: true,
+      ),
+    ),
   ),
   ExampleInfo(
     id: 'heatmap.basic',
@@ -200,16 +267,18 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     blurb: 'A 2-D grid of values shaded by magnitude, with an optional legend.',
     cols: 40,
     rows: 8,
-    builder: () => _framed(const Heatmap(
-      values: <List<num>>[
-        <num>[0.1, 0.3, 0.6, 0.9],
-        <num>[0.2, 0.5, 0.8, 0.4],
-        <num>[0.7, 0.6, 0.3, 0.1],
-      ],
-      rowLabels: <String>['a', 'b', 'c'],
-      colLabels: <String>['w', 'x', 'y', 'z'],
-      showLegend: true,
-    )),
+    builder: () => _framed(
+      const Heatmap(
+        values: <List<num>>[
+          <num>[0.1, 0.3, 0.6, 0.9],
+          <num>[0.2, 0.5, 0.8, 0.4],
+          <num>[0.7, 0.6, 0.3, 0.1],
+        ],
+        rowLabels: <String>['a', 'b', 'c'],
+        colLabels: <String>['w', 'x', 'y', 'z'],
+        showLegend: true,
+      ),
+    ),
   ),
   ExampleInfo(
     id: 'progressbar.basic',
@@ -228,7 +297,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     cols: 56,
     rows: 11,
     interactive: true,
-    code: '''// A live world clock: Tabs pick the zone, Digits show the ticking time.
+    code:
+        '''// A live world clock: Tabs pick the zone, Digits show the ticking time.
 // Switch zones with ← / → (or click a tab); the clock ticks every second.
 Tabs(
   tabs: <TabItem>[
@@ -249,24 +319,34 @@ Tabs(
     cols: 48,
     rows: 8,
     interactive: true,
-    builder: () => _framed(DataTable(
-      rowCount: _people.length,
-      controller: DataTableController(),
-      selectionMode: DataTableSelectionMode.row,
-      columns: const <DataTableColumn>[
-        DataTableColumn(id: 'name', title: 'NAME', width: FixedColumnWidth(10)),
-        DataTableColumn(id: 'role', title: 'ROLE'),
-        DataTableColumn(id: 'commits', title: 'COMMITS', width: FixedColumnWidth(9)),
-      ],
-      cellBuilder: (row, col) {
-        final p = _people[row];
-        return switch (col) {
-          'name' => p.$1,
-          'role' => p.$2,
-          _ => p.$3.toString(),
-        };
-      },
-    )),
+    builder: () => _framed(
+      DataTable(
+        rowCount: _people.length,
+        controller: DataTableController(),
+        selectionMode: DataTableSelectionMode.row,
+        columns: const <DataTableColumn>[
+          DataTableColumn(
+            id: 'name',
+            title: 'NAME',
+            width: FixedColumnWidth(10),
+          ),
+          DataTableColumn(id: 'role', title: 'ROLE'),
+          DataTableColumn(
+            id: 'commits',
+            title: 'COMMITS',
+            width: FixedColumnWidth(9),
+          ),
+        ],
+        cellBuilder: (row, col) {
+          final p = _people[row];
+          return switch (col) {
+            'name' => p.$1,
+            'role' => p.$2,
+            _ => p.$3.toString(),
+          };
+        },
+      ),
+    ),
   ),
   ExampleInfo(
     id: 'tree.basic',
@@ -276,19 +356,27 @@ Tabs(
     cols: 40,
     rows: 9,
     interactive: true,
-    builder: () => _framed(Tree<String>(
-      label: 'project',
-      roots: <TreeNode<String>>[
-        TreeNode<String>('lib/', children: <TreeNode<String>>[
-          const TreeNode<String>('main.dart'),
-          TreeNode<String>('src/', children: const <TreeNode<String>>[
-            TreeNode<String>('app.dart'),
-            TreeNode<String>('theme.dart'),
-          ]),
-        ]),
-        const TreeNode<String>('README.md'),
-      ],
-    )),
+    builder: () => _framed(
+      Tree<String>(
+        label: 'project',
+        roots: <TreeNode<String>>[
+          TreeNode<String>(
+            'lib/',
+            children: <TreeNode<String>>[
+              const TreeNode<String>('main.dart'),
+              TreeNode<String>(
+                'src/',
+                children: const <TreeNode<String>>[
+                  TreeNode<String>('app.dart'),
+                  TreeNode<String>('theme.dart'),
+                ],
+              ),
+            ],
+          ),
+          const TreeNode<String>('README.md'),
+        ],
+      ),
+    ),
   ),
 
   // ── Documents ────────────────────────────────────────────────────────────
@@ -296,7 +384,8 @@ Tabs(
     id: 'markdown.basic',
     widget: 'MarkdownView',
     category: 'Documents',
-    blurb: 'Renders Markdown — headings, lists, code, quotes — to styled cells.',
+    blurb:
+        'Renders Markdown — headings, lists, code, quotes — to styled cells.',
     cols: 60,
     rows: 13,
     interactive: true,
@@ -320,15 +409,17 @@ Tabs(
     cols: 48,
     rows: 10,
     interactive: true,
-    builder: () => _framed(JsonView(
-      value: const <String, Object?>{
-        'name': 'fleury',
-        'version': '1.0.0',
-        'web': true,
-        'targets': <String>['terminal', 'dom', 'serve'],
-      },
-      initialExpandedDepth: 2,
-    )),
+    builder: () => _framed(
+      JsonView(
+        value: const <String, Object?>{
+          'name': 'fleury',
+          'version': '1.0.0',
+          'web': true,
+          'targets': <String>['terminal', 'dom', 'serve'],
+        },
+        initialExpandedDepth: 2,
+      ),
+    ),
   ),
 
   // ── Agent surfaces ───────────────────────────────────────────────────────
@@ -340,27 +431,36 @@ Tabs(
     cols: 64,
     rows: 11,
     interactive: true,
-    builder: () => _framed(MessageList(
-      showTimestamp: false,
-      messages: const <MessageEntry>[
-        MessageEntry(text: 'Add a --version flag.', role: MessageRole.user),
-        MessageEntry(
+    builder: () => _framed(
+      MessageList(
+        showTimestamp: false,
+        messages: const <MessageEntry>[
+          MessageEntry(text: 'Add a --version flag.', role: MessageRole.user),
+          MessageEntry(
             text: "I'll read the CLI and pubspec first.",
-            role: MessageRole.assistant),
-        MessageEntry(text: 'Read  lib/main.dart', role: MessageRole.tool),
-        MessageEntry(text: 'Read  pubspec.yaml', role: MessageRole.tool),
-        MessageEntry(
-            text: 'Found version 1.4.0 in pubspec. Adding a --version flag '
+            role: MessageRole.assistant,
+          ),
+          MessageEntry(text: 'Read  lib/main.dart', role: MessageRole.tool),
+          MessageEntry(text: 'Read  pubspec.yaml', role: MessageRole.tool),
+          MessageEntry(
+            text:
+                'Found version 1.4.0 in pubspec. Adding a --version flag '
                 'that prints it and exits.',
-            role: MessageRole.assistant),
-        MessageEntry(text: 'Edit  lib/main.dart (+8 −0)', role: MessageRole.tool),
-        MessageEntry(text: 'dart test', role: MessageRole.tool),
-        MessageEntry(
+            role: MessageRole.assistant,
+          ),
+          MessageEntry(
+            text: 'Edit  lib/main.dart (+8 −0)',
+            role: MessageRole.tool,
+          ),
+          MessageEntry(text: 'dart test', role: MessageRole.tool),
+          MessageEntry(
             text: 'All 12 tests pass. `myapp --version` prints 1.4.0.',
-            role: MessageRole.assistant),
-        MessageEntry(text: 'Ship it 🚀', role: MessageRole.user),
-      ],
-    )),
+            role: MessageRole.assistant,
+          ),
+          MessageEntry(text: 'Ship it 🚀', role: MessageRole.user),
+        ],
+      ),
+    ),
   ),
   ExampleInfo(
     id: 'contextpanel.basic',
@@ -369,22 +469,37 @@ Tabs(
     blurb: 'Lists context items with a token-usage meter and share bars.',
     cols: 56,
     rows: 9,
-    builder: () => _framed(ContextPanel(
-      showTokenShare: true,
-      usage: const TokenUsage(
-          input: 9200, output: 3100, contextUsed: 12300, contextLimit: 200000),
-      items: const <ContextItem>[
-        ContextItem(
-            id: 'a', label: 'lib/main.dart', kind: ContextItemKind.file, tokenCount: 410),
-        ContextItem(
-            id: 'b', label: 'pubspec.yaml', kind: ContextItemKind.file, tokenCount: 120),
-        ContextItem(
+    builder: () => _framed(
+      ContextPanel(
+        showTokenShare: true,
+        usage: const TokenUsage(
+          input: 9200,
+          output: 3100,
+          contextUsed: 12300,
+          contextLimit: 200000,
+        ),
+        items: const <ContextItem>[
+          ContextItem(
+            id: 'a',
+            label: 'lib/main.dart',
+            kind: ContextItemKind.file,
+            tokenCount: 410,
+          ),
+          ContextItem(
+            id: 'b',
+            label: 'pubspec.yaml',
+            kind: ContextItemKind.file,
+            tokenCount: 120,
+          ),
+          ContextItem(
             id: 'c',
             label: 'dart test',
             kind: ContextItemKind.command,
-            tokenCount: 90),
-      ],
-    )),
+            tokenCount: 90,
+          ),
+        ],
+      ),
+    ),
   ),
   ExampleInfo(
     id: 'taskgraph.basic',
@@ -393,11 +508,27 @@ Tabs(
     blurb: 'A compact plan / dependency graph with per-node status.',
     cols: 48,
     rows: 6,
-    builder: () => _framed(const TaskGraph(nodes: <TaskGraphNode>[
-      TaskGraphNode(id: '1', title: 'Inspect CLI', status: TaskGraphStatus.succeeded),
-      TaskGraphNode(id: '2', title: 'Handle --version', status: TaskGraphStatus.running),
-      TaskGraphNode(id: '3', title: 'Add a test', status: TaskGraphStatus.pending),
-    ])),
+    builder: () => _framed(
+      const TaskGraph(
+        nodes: <TaskGraphNode>[
+          TaskGraphNode(
+            id: '1',
+            title: 'Inspect CLI',
+            status: TaskGraphStatus.succeeded,
+          ),
+          TaskGraphNode(
+            id: '2',
+            title: 'Handle --version',
+            status: TaskGraphStatus.running,
+          ),
+          TaskGraphNode(
+            id: '3',
+            title: 'Add a test',
+            status: TaskGraphStatus.pending,
+          ),
+        ],
+      ),
+    ),
   ),
 
   // ── Inputs & controls ────────────────────────────────────────────────────
@@ -435,11 +566,13 @@ Tabs(
     id: 'numberinput.basic',
     widget: 'NumberInput',
     category: 'Inputs & controls',
-    blurb: 'A numeric text field with min/max clamping; type or wheel to change.',
+    blurb:
+        'A numeric text field with min/max clamping; type or wheel to change.',
     cols: 36,
     rows: 3,
     interactive: true,
-    builder: () => _framed(const NumberInput(initialValue: 42, min: 0, max: 100)),
+    builder: () =>
+        _framed(const NumberInput(initialValue: 42, min: 0, max: 100)),
   ),
   ExampleInfo(
     id: 'passwordinput.basic',
@@ -459,10 +592,18 @@ Tabs(
     cols: 44,
     rows: 7,
     interactive: true,
-    builder: () => _framed(Autocomplete<String>(
-      placeholder: 'Type a fruit…',
-      options: const <String>['Apple', 'Apricot', 'Banana', 'Cherry', 'Grape'],
-    )),
+    builder: () => _framed(
+      Autocomplete<String>(
+        placeholder: 'Type a fruit…',
+        options: const <String>[
+          'Apple',
+          'Apricot',
+          'Banana',
+          'Cherry',
+          'Grape',
+        ],
+      ),
+    ),
   ),
   ExampleInfo(
     id: 'colorpicker.basic',
@@ -494,13 +635,24 @@ Tabs(
     cols: 48,
     rows: 6,
     interactive: true,
-    builder: () => _framed(Tabs(
-      tabs: <TabItem>[
-        TabItem(label: 'Overview', content: _framed(const Text('Project at a glance.'))),
-        TabItem(label: 'Logs', content: _framed(const Text('› build finished in 1.8s'))),
-        TabItem(label: 'Settings', content: _framed(const Text('Theme · keybindings · …'))),
-      ],
-    )),
+    builder: () => _framed(
+      Tabs(
+        tabs: <TabItem>[
+          TabItem(
+            label: 'Overview',
+            content: _framed(const Text('Project at a glance.')),
+          ),
+          TabItem(
+            label: 'Logs',
+            content: _framed(const Text('› build finished in 1.8s')),
+          ),
+          TabItem(
+            label: 'Settings',
+            content: _framed(const Text('Theme · keybindings · …')),
+          ),
+        ],
+      ),
+    ),
   ),
   ExampleInfo(
     id: 'menu.basic',
@@ -510,14 +662,16 @@ Tabs(
     cols: 40,
     rows: 7,
     interactive: true,
-    builder: () => _framed(Menu(
-      trigger: const Text('Actions ▾'),
-      items: <MenuEntry>[
-        MenuItem(label: 'Rename', onSelected: () {}),
-        MenuItem(label: 'Duplicate', onSelected: () {}),
-        MenuItem(label: 'Delete', onSelected: () {}),
-      ],
-    )),
+    builder: () => _framed(
+      Menu(
+        trigger: const Text('Actions ▾'),
+        items: <MenuEntry>[
+          MenuItem(label: 'Rename', onSelected: () {}),
+          MenuItem(label: 'Duplicate', onSelected: () {}),
+          MenuItem(label: 'Delete', onSelected: () {}),
+        ],
+      ),
+    ),
   ),
   ExampleInfo(
     id: 'tooltip.basic',
@@ -527,10 +681,9 @@ Tabs(
     cols: 40,
     rows: 4,
     interactive: true,
-    builder: () => _framed(const Tooltip(
-      message: 'Saves the current file',
-      child: Text('[ Save ]'),
-    )),
+    builder: () => _framed(
+      const Tooltip(message: 'Saves the current file', child: Text('[ Save ]')),
+    ),
   ),
   ExampleInfo(
     id: 'dialog.basic',
@@ -539,10 +692,12 @@ Tabs(
     blurb: 'A bordered, titled modal surface.',
     cols: 44,
     rows: 6,
-    builder: () => _framed(const Dialog(
-      title: 'Confirm',
-      child: Text('Delete 3 files? This cannot be undone.'),
-    )),
+    builder: () => _framed(
+      const Dialog(
+        title: 'Confirm',
+        child: Text('Delete 3 files? This cannot be undone.'),
+      ),
+    ),
   ),
   ExampleInfo(
     id: 'commandpalette.basic',
@@ -552,12 +707,16 @@ Tabs(
     cols: 52,
     rows: 10,
     interactive: true,
-    builder: () => _framed(CommandPalette(commands: <Command>[
-      Command(label: 'Open file…', shortcut: 'Ctrl-P', onInvoke: () {}),
-      Command(label: 'Toggle theme', category: 'View', onInvoke: () {}),
-      Command(label: 'Run tests', shortcut: 'Ctrl-T', onInvoke: () {}),
-      Command(label: 'Git: commit', category: 'Git', onInvoke: () {}),
-    ])),
+    builder: () => _framed(
+      CommandPalette(
+        commands: <Command>[
+          Command(label: 'Open file…', shortcut: 'Ctrl-P', onInvoke: () {}),
+          Command(label: 'Toggle theme', category: 'View', onInvoke: () {}),
+          Command(label: 'Run tests', shortcut: 'Ctrl-T', onInvoke: () {}),
+          Command(label: 'Git: commit', category: 'Git', onInvoke: () {}),
+        ],
+      ),
+    ),
   ),
   ExampleInfo(
     id: 'searchpanel.basic',
@@ -567,17 +726,29 @@ Tabs(
     cols: 60,
     rows: 11,
     interactive: true,
-    builder: () => _framed(const SearchPanel(
-      groupByCategory: true,
-      results: <SearchResult>[
-        SearchResult(title: 'main.dart', subtitle: 'lib/', category: 'Files'),
-        SearchResult(title: 'pubspec.yaml', subtitle: './', category: 'Files'),
-        SearchResult(
-            title: 'runTui', subtitle: 'lib/src/app.dart', category: 'Symbols'),
-        SearchResult(
-            title: 'Gauge', subtitle: 'widgets/gauge.dart', category: 'Symbols'),
-      ],
-    )),
+    builder: () => _framed(
+      const SearchPanel(
+        groupByCategory: true,
+        results: <SearchResult>[
+          SearchResult(title: 'main.dart', subtitle: 'lib/', category: 'Files'),
+          SearchResult(
+            title: 'pubspec.yaml',
+            subtitle: './',
+            category: 'Files',
+          ),
+          SearchResult(
+            title: 'runApp',
+            subtitle: 'lib/src/app.dart',
+            category: 'Symbols',
+          ),
+          SearchResult(
+            title: 'Gauge',
+            subtitle: 'widgets/gauge.dart',
+            category: 'Symbols',
+          ),
+        ],
+      ),
+    ),
   ),
   ExampleInfo(
     id: 'filementionpicker.basic',
@@ -587,14 +758,16 @@ Tabs(
     cols: 56,
     rows: 8,
     interactive: true,
-    builder: () => _framed(const FileMentionPicker(
-      entries: <FileMentionEntry>[
-        FileMentionEntry(path: 'lib/main.dart', label: 'main.dart'),
-        FileMentionEntry(path: 'lib/src/app.dart', label: 'app.dart'),
-        FileMentionEntry(path: 'pubspec.yaml', label: 'pubspec.yaml'),
-        FileMentionEntry(path: 'README.md', label: 'README.md'),
-      ],
-    )),
+    builder: () => _framed(
+      const FileMentionPicker(
+        entries: <FileMentionEntry>[
+          FileMentionEntry(path: 'lib/main.dart', label: 'main.dart'),
+          FileMentionEntry(path: 'lib/src/app.dart', label: 'app.dart'),
+          FileMentionEntry(path: 'pubspec.yaml', label: 'pubspec.yaml'),
+          FileMentionEntry(path: 'README.md', label: 'README.md'),
+        ],
+      ),
+    ),
   ),
   ExampleInfo(
     id: 'completiontextinput.basic',
@@ -604,20 +777,22 @@ Tabs(
     cols: 44,
     rows: 7,
     interactive: true,
-    builder: () => _framed(CompletionTextInput(
-      placeholder: 'Type a command…',
-      showOnEmptyQuery: true,
-      provider: (request) {
-        const options = <TextCompletionOption>[
-          TextCompletionOption(label: 'benchmark'),
-          TextCompletionOption(label: 'storybook'),
-          TextCompletionOption(label: 'command-palette'),
-          TextCompletionOption(label: 'semantic-tree'),
-        ];
-        final q = request.query.toLowerCase();
-        return options.where((o) => o.label.toLowerCase().contains(q));
-      },
-    )),
+    builder: () => _framed(
+      CompletionTextInput(
+        placeholder: 'Type a command…',
+        showOnEmptyQuery: true,
+        provider: (request) {
+          const options = <TextCompletionOption>[
+            TextCompletionOption(label: 'benchmark'),
+            TextCompletionOption(label: 'storybook'),
+            TextCompletionOption(label: 'command-palette'),
+            TextCompletionOption(label: 'semantic-tree'),
+          ];
+          final q = request.query.toLowerCase();
+          return options.where((o) => o.label.toLowerCase().contains(q));
+        },
+      ),
+    ),
   ),
 
   // ── Data & lists ─────────────────────────────────────────────────────────
@@ -629,15 +804,17 @@ Tabs(
     cols: 44,
     rows: 6,
     interactive: true,
-    builder: () => _framed(Table(
-      selectable: true,
-      header: const <Widget>[Text('Name'), Text('Role'), Text('Commits')],
-      rows: const <List<Widget>>[
-        <Widget>[Text('dan'), Text('author'), Text('1284')],
-        <Widget>[Text('ada'), Text('reviewer'), Text('642')],
-        <Widget>[Text('lin'), Text('docs'), Text('219')],
-      ],
-    )),
+    builder: () => _framed(
+      Table(
+        selectable: true,
+        header: const <Widget>[Text('Name'), Text('Role'), Text('Commits')],
+        rows: const <List<Widget>>[
+          <Widget>[Text('dan'), Text('author'), Text('1284')],
+          <Widget>[Text('ada'), Text('reviewer'), Text('642')],
+          <Widget>[Text('lin'), Text('docs'), Text('219')],
+        ],
+      ),
+    ),
   ),
   ExampleInfo(
     id: 'treetable.basic',
@@ -647,28 +824,39 @@ Tabs(
     cols: 48,
     rows: 9,
     interactive: true,
-    builder: () => _framed(TreeTable<String>(
-      treeColumnId: 'name',
-      columns: const <DataTableColumn>[
-        DataTableColumn(id: 'name', title: 'Name'),
-        DataTableColumn(id: 'size', title: 'Size'),
-      ],
-      roots: const <TreeTableNode<String>>[
-        TreeTableNode(
-          key: 'lib',
-          label: 'lib',
-          cells: <String, String>{'size': '—'},
-          children: <TreeTableNode<String>>[
-            TreeTableNode(
-                key: 'main', label: 'main.dart', cells: <String, String>{'size': '1.2k'}),
-            TreeTableNode(
-                key: 'app', label: 'app.dart', cells: <String, String>{'size': '8.4k'}),
-          ],
-        ),
-        TreeTableNode(
-            key: 'pub', label: 'pubspec.yaml', cells: <String, String>{'size': '512'}),
-      ],
-    )),
+    builder: () => _framed(
+      TreeTable<String>(
+        treeColumnId: 'name',
+        columns: const <DataTableColumn>[
+          DataTableColumn(id: 'name', title: 'Name'),
+          DataTableColumn(id: 'size', title: 'Size'),
+        ],
+        roots: const <TreeTableNode<String>>[
+          TreeTableNode(
+            key: 'lib',
+            label: 'lib',
+            cells: <String, String>{'size': '—'},
+            children: <TreeTableNode<String>>[
+              TreeTableNode(
+                key: 'main',
+                label: 'main.dart',
+                cells: <String, String>{'size': '1.2k'},
+              ),
+              TreeTableNode(
+                key: 'app',
+                label: 'app.dart',
+                cells: <String, String>{'size': '8.4k'},
+              ),
+            ],
+          ),
+          TreeTableNode(
+            key: 'pub',
+            label: 'pubspec.yaml',
+            cells: <String, String>{'size': '512'},
+          ),
+        ],
+      ),
+    ),
   ),
   ExampleInfo(
     id: 'calendarheatmap.basic',
@@ -677,22 +865,24 @@ Tabs(
     blurb: 'A GitHub-style contribution grid keyed by date.',
     cols: 56,
     rows: 9,
-    builder: () => _framed(CalendarHeatmap(
-      start: DateTime(2026, 1, 1),
-      end: DateTime(2026, 3, 31),
-      color: _theme.colorScheme.primary,
-      values: <DateTime, num>{
-        DateTime(2026, 1, 6): 2,
-        DateTime(2026, 1, 14): 5,
-        DateTime(2026, 1, 21): 8,
-        DateTime(2026, 2, 3): 3,
-        DateTime(2026, 2, 10): 6,
-        DateTime(2026, 2, 18): 9,
-        DateTime(2026, 3, 2): 4,
-        DateTime(2026, 3, 11): 7,
-        DateTime(2026, 3, 20): 1,
-      },
-    )),
+    builder: () => _framed(
+      CalendarHeatmap(
+        start: DateTime(2026, 1, 1),
+        end: DateTime(2026, 3, 31),
+        color: _theme.colorScheme.primary,
+        values: <DateTime, num>{
+          DateTime(2026, 1, 6): 2,
+          DateTime(2026, 1, 14): 5,
+          DateTime(2026, 1, 21): 8,
+          DateTime(2026, 2, 3): 3,
+          DateTime(2026, 2, 10): 6,
+          DateTime(2026, 2, 18): 9,
+          DateTime(2026, 3, 2): 4,
+          DateTime(2026, 3, 11): 7,
+          DateTime(2026, 3, 20): 1,
+        },
+      ),
+    ),
   ),
 
   // ── Agent surfaces (more) ────────────────────────────────────────────────
@@ -704,15 +894,18 @@ Tabs(
     cols: 56,
     rows: 8,
     interactive: true,
-    builder: () => _framed(ApprovalPrompt(
-      onDecision: (d) {},
-      request: const ApprovalRequest(
-        id: 'a1',
-        title: 'Run on bare metal?',
-        message: 'This will reserve the terminal and write benchmark artifacts.',
-        subject: 'Tier-C benchmark',
+    builder: () => _framed(
+      ApprovalPrompt(
+        onDecision: (d) {},
+        request: const ApprovalRequest(
+          id: 'a1',
+          title: 'Run on bare metal?',
+          message:
+              'This will reserve the terminal and write benchmark artifacts.',
+          subject: 'Tier-C benchmark',
+        ),
       ),
-    )),
+    ),
   ),
   ExampleInfo(
     id: 'diffview.basic',
@@ -732,10 +925,9 @@ Tabs(
     cols: 60,
     rows: 12,
     interactive: true,
-    builder: () => _framed(PatchReview(
-      diff: _diffSample,
-      status: PatchReviewStatus.pending,
-    )),
+    builder: () => _framed(
+      PatchReview(diff: _diffSample, status: PatchReviewStatus.pending),
+    ),
   ),
   ExampleInfo(
     id: 'toolcallcard.basic',
@@ -744,19 +936,21 @@ Tabs(
     blurb: 'A card summarizing one tool/function call and its result.',
     cols: 56,
     rows: 8,
-    builder: () => _framed(ToolCallCard(
-      record: ToolCallRecord(
-        id: 't1',
-        name: 'benchmark.run',
-        title: 'Run benchmark',
-        status: ToolCallStatus.succeeded,
-        description: 'Capture peer comparison output.',
-        arguments: const <String, Object?>{
-          'scenario': 'sb6_data_table',
-          'peers': <String>['ratatui', 'bubbletea'],
-        },
+    builder: () => _framed(
+      ToolCallCard(
+        record: ToolCallRecord(
+          id: 't1',
+          name: 'benchmark.run',
+          title: 'Run benchmark',
+          status: ToolCallStatus.succeeded,
+          description: 'Capture peer comparison output.',
+          arguments: const <String, Object?>{
+            'scenario': 'sb6_data_table',
+            'peers': <String>['ratatui', 'bubbletea'],
+          },
+        ),
       ),
-    )),
+    ),
   ),
   ExampleInfo(
     id: 'tracetimeline.basic',
@@ -766,23 +960,27 @@ Tabs(
     cols: 56,
     rows: 8,
     interactive: true,
-    builder: () => _framed(TraceTimeline(events: <TraceTimelineEntry>[
-      TraceTimelineEntry(
-        id: 't1',
-        label: 'Resolve story',
-        kind: TraceTimelineKind.command,
-        status: TraceTimelineStatus.succeeded,
-        timestamp: DateTime(2026, 6, 9, 10),
-        duration: const Duration(milliseconds: 12),
+    builder: () => _framed(
+      TraceTimeline(
+        events: <TraceTimelineEntry>[
+          TraceTimelineEntry(
+            id: 't1',
+            label: 'Resolve story',
+            kind: TraceTimelineKind.command,
+            status: TraceTimelineStatus.succeeded,
+            timestamp: DateTime(2026, 6, 9, 10),
+            duration: const Duration(milliseconds: 12),
+          ),
+          TraceTimelineEntry(
+            id: 't2',
+            label: 'Run tests',
+            kind: TraceTimelineKind.command,
+            status: TraceTimelineStatus.running,
+            timestamp: DateTime(2026, 6, 9, 10, 0, 1),
+          ),
+        ],
       ),
-      TraceTimelineEntry(
-        id: 't2',
-        label: 'Run tests',
-        kind: TraceTimelineKind.command,
-        status: TraceTimelineStatus.running,
-        timestamp: DateTime(2026, 6, 9, 10, 0, 1),
-      ),
-    ])),
+    ),
   ),
   ExampleInfo(
     id: 'conversationnavigator.basic',
@@ -792,47 +990,52 @@ Tabs(
     cols: 60,
     rows: 8,
     interactive: true,
-    builder: () => _framed(const ConversationNavigator(
-      conversations: <ConversationEntry>[
-        ConversationEntry(
-          id: 'c1',
-          title: 'Benchmark scoreboard',
-          subtitle: 'Perf follow-up',
-          status: ConversationStatus.active,
-          latestMessage: 'Run all peers before deciding.',
-          unreadCount: 2,
-        ),
-        ConversationEntry(
-          id: 'c2',
-          title: 'Docs site',
-          status: ConversationStatus.idle,
-          latestMessage: 'Tabbed examples shipped.',
-        ),
-      ],
-    )),
+    builder: () => _framed(
+      const ConversationNavigator(
+        conversations: <ConversationEntry>[
+          ConversationEntry(
+            id: 'c1',
+            title: 'Benchmark scoreboard',
+            subtitle: 'Perf follow-up',
+            status: ConversationStatus.active,
+            latestMessage: 'Run all peers before deciding.',
+            unreadCount: 2,
+          ),
+          ConversationEntry(
+            id: 'c2',
+            title: 'Docs site',
+            status: ConversationStatus.idle,
+            latestMessage: 'Tabbed examples shipped.',
+          ),
+        ],
+      ),
+    ),
   ),
   ExampleInfo(
     id: 'modelstatusbar.basic',
     widget: 'ModelStatusBar',
     category: 'Agent surfaces',
-    blurb: 'A status line for the active model: provider, mode, latency, tokens.',
+    blurb:
+        'A status line for the active model: provider, mode, latency, tokens.',
     cols: 60,
     rows: 3,
-    builder: () => _framed(const ModelStatusBar(
-      info: ModelStatusInfo(
-        model: 'claude-opus-4-8',
-        provider: 'Anthropic',
-        status: ModelRuntimeStatus.streaming,
-        mode: 'edit',
-        latency: Duration(milliseconds: 180),
-        tokenUsage: TokenUsage(
-          input: 8200,
-          output: 1400,
-          contextUsed: 64000,
-          contextLimit: 200000,
+    builder: () => _framed(
+      const ModelStatusBar(
+        info: ModelStatusInfo(
+          model: 'claude-opus-4-8',
+          provider: 'Anthropic',
+          status: ModelRuntimeStatus.streaming,
+          mode: 'edit',
+          latency: Duration(milliseconds: 180),
+          tokenUsage: TokenUsage(
+            input: 8200,
+            output: 1400,
+            contextUsed: 64000,
+            contextLimit: 200000,
+          ),
         ),
       ),
-    )),
+    ),
   ),
 
   // ── Showcases (full apps; rendered on the Showcases page, not as widgets) ──
@@ -906,7 +1109,7 @@ Flutter, then run it wherever your users are — a terminal, or a
 `<div>` on a page.
 
 ```dart
-runTui(const App());
+runApp(const App());
 ```
 
 See the **Guides** for theming, animation, focus, and testing.
@@ -925,7 +1128,7 @@ const String _codeSample = '''
 import 'package:fleury/fleury.dart';
 
 /// A tiny counter — the smallest interesting Fleury program.
-void main() => runTui(
+void main() => runApp(
       const CounterApp(),
       onEvent: (event) => event is KeyEvent && event.char == 'q'
           ? const ExitRequested()
@@ -960,7 +1163,7 @@ class _CounterAppState extends State<CounterApp> {
 }
 ''';
 
-// A compact dark theme so embedded examples read well on the docs page.
+// Compact docs themes so embedded examples read well against the site chrome.
 final ThemeData _theme = const ThemeData(
   brightness: Brightness.dark,
   textStyle: CellStyle(foreground: RgbColor(0xC8, 0xD3, 0xE0)),
@@ -976,10 +1179,57 @@ final ThemeData _theme = const ThemeData(
   ),
 );
 
-Widget _framed(Widget child) => Theme(
-      data: _theme,
-      child: Padding(padding: const EdgeInsets.all(1), child: child),
-    );
+final ThemeData _lightTheme = const ThemeData(
+  brightness: Brightness.light,
+  textStyle: CellStyle(foreground: RgbColor(0x20, 0x2A, 0x25)),
+  mutedStyle: CellStyle(foreground: RgbColor(0x72, 0x7F, 0x78)),
+  selectionStyle: CellStyle(
+    foreground: RgbColor(0xF7, 0xFF, 0xFB),
+    background: RgbColor(0x13, 0x8A, 0x5C),
+  ),
+  focusedStyle: CellStyle(bold: true, foreground: RgbColor(0x0A, 0x36, 0x25)),
+  borderStyle: BorderStyle.rounded,
+  colorScheme: ColorScheme(
+    foreground: RgbColor(0x20, 0x2A, 0x25),
+    primary: RgbColor(0x13, 0x8A, 0x5C),
+    success: RgbColor(0x13, 0x8A, 0x5C),
+    warning: RgbColor(0x9A, 0x6B, 0x00),
+    error: RgbColor(0xB4, 0x23, 0x18),
+    info: RgbColor(0x0A, 0x66, 0xA0),
+  ),
+);
+
+ThemeData _themeFor(DocsExampleStyle style) => switch (style) {
+  DocsExampleStyle.dark => _theme,
+  DocsExampleStyle.light => _lightTheme,
+};
+
+Widget _framed(Widget child) => _Framed(child: child);
+
+class _Framed extends StatelessWidget {
+  const _Framed({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Theme(
+    data: _DocsExampleTheme.maybeOf(context) ?? _theme,
+    child: Padding(padding: const EdgeInsets.all(1), child: child),
+  );
+}
+
+class _DocsExampleTheme extends InheritedWidget {
+  const _DocsExampleTheme({required this.data, required super.child});
+
+  final ThemeData data;
+
+  static ThemeData? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_DocsExampleTheme>()?.data;
+
+  @override
+  bool updateShouldNotify(_DocsExampleTheme oldWidget) =>
+      oldWidget.data != data;
+}
 
 // ── Stateful wrappers ───────────────────────────────────────────────────────
 // Controlled widgets (value + onChanged) need a holder so interacting with the
@@ -993,15 +1243,17 @@ class _SelectExample extends StatefulWidget {
 class _SelectExampleState extends State<_SelectExample> {
   String _v = 'medium';
   @override
-  Widget build(BuildContext context) => _framed(Select<String>(
-        value: _v,
-        onChanged: (v) => setState(() => _v = v),
-        options: const <SelectOption<String>>[
-          SelectOption(value: 'low', label: 'Low'),
-          SelectOption(value: 'medium', label: 'Medium'),
-          SelectOption(value: 'high', label: 'High'),
-        ],
-      ));
+  Widget build(BuildContext context) => _framed(
+    Select<String>(
+      value: _v,
+      onChanged: (v) => setState(() => _v = v),
+      options: const <SelectOption<String>>[
+        SelectOption(value: 'low', label: 'Low'),
+        SelectOption(value: 'medium', label: 'Medium'),
+        SelectOption(value: 'high', label: 'High'),
+      ],
+    ),
+  );
 }
 
 class _RangeSliderExample extends StatefulWidget {
@@ -1013,14 +1265,16 @@ class _RangeSliderExample extends StatefulWidget {
 class _RangeSliderExampleState extends State<_RangeSliderExample> {
   (num, num) _v = (20, 70);
   @override
-  Widget build(BuildContext context) => _framed(RangeSlider(
-        values: _v,
-        min: 0,
-        max: 100,
-        label: 'Range',
-        showValues: true,
-        onChanged: (v) => setState(() => _v = v),
-      ));
+  Widget build(BuildContext context) => _framed(
+    RangeSlider(
+      values: _v,
+      min: 0,
+      max: 100,
+      label: 'Range',
+      showValues: true,
+      onChanged: (v) => setState(() => _v = v),
+    ),
+  );
 }
 
 class _StepperExample extends StatefulWidget {
@@ -1032,13 +1286,15 @@ class _StepperExample extends StatefulWidget {
 class _StepperExampleState extends State<_StepperExample> {
   num _v = 3;
   @override
-  Widget build(BuildContext context) => _framed(Stepper(
-        value: _v,
-        min: 0,
-        max: 10,
-        label: 'Quantity',
-        onChanged: (v) => setState(() => _v = v),
-      ));
+  Widget build(BuildContext context) => _framed(
+    Stepper(
+      value: _v,
+      min: 0,
+      max: 10,
+      label: 'Quantity',
+      onChanged: (v) => setState(() => _v = v),
+    ),
+  );
 }
 
 class _ColorPickerExample extends StatefulWidget {
@@ -1050,17 +1306,19 @@ class _ColorPickerExample extends StatefulWidget {
 class _ColorPickerExampleState extends State<_ColorPickerExample> {
   Color _c = const RgbColor(0x3D, 0xDC, 0x97);
   @override
-  Widget build(BuildContext context) => _framed(ColorPicker(
-        value: _c,
-        onChanged: (c) => setState(() => _c = c),
-        colors: const <Color>[
-          RgbColor(0xFF, 0x5C, 0x57),
-          RgbColor(0xF5, 0xC2, 0x11),
-          RgbColor(0x3D, 0xDC, 0x97),
-          RgbColor(0x56, 0xC2, 0xFF),
-          RgbColor(0xBD, 0x93, 0xF9),
-        ],
-      ));
+  Widget build(BuildContext context) => _framed(
+    ColorPicker(
+      value: _c,
+      onChanged: (c) => setState(() => _c = c),
+      colors: const <Color>[
+        RgbColor(0xFF, 0x5C, 0x57),
+        RgbColor(0xF5, 0xC2, 0x11),
+        RgbColor(0x3D, 0xDC, 0x97),
+        RgbColor(0x56, 0xC2, 0xFF),
+        RgbColor(0xBD, 0x93, 0xF9),
+      ],
+    ),
+  );
 }
 
 class _DatePickerExample extends StatefulWidget {
@@ -1072,11 +1330,13 @@ class _DatePickerExample extends StatefulWidget {
 class _DatePickerExampleState extends State<_DatePickerExample> {
   DateTime _d = DateTime(2026, 6, 22);
   @override
-  Widget build(BuildContext context) => _framed(DatePicker(
-        value: _d,
-        label: 'Date',
-        onChanged: (d) => setState(() => _d = d),
-      ));
+  Widget build(BuildContext context) => _framed(
+    DatePicker(
+      value: _d,
+      label: 'Date',
+      onChanged: (d) => setState(() => _d = d),
+    ),
+  );
 }
 
 // ── Knobs (interactive props) ───────────────────────────────────────────────
@@ -1090,41 +1350,68 @@ class _DatePickerExampleState extends State<_DatePickerExample> {
 /// Missing or ill-typed keys fall back to the defaults below.
 final Map<String, Widget Function(Map<String, Object?>)> knobExamples =
     <String, Widget Function(Map<String, Object?>)>{
-  'gauge': (p) => _framed(Gauge(
-        value: _knobDouble(p['value'], 0.62),
-        label: _knobString(p['label'], 'CPU'),
-        showPercentage: _knobBool(p['showPercentage'], true),
-        thresholds: <(double, Color)>[
-          (0.7, _theme.colorScheme.warning),
-          (0.9, _theme.colorScheme.error),
-        ],
-      )),
-  'progressbar': (p) {
-    final indeterminate = _knobBool(p['indeterminate'], false);
-    return _framed(ProgressBar(
-      value: indeterminate ? null : _knobDouble(p['value'], 0.45),
-    ));
-  },
-  'histogram': (p) => _framed(Histogram(
-        values: const <num>[
-          1, 2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 6, 6, 7, 2, 3, 4, 5,
-        ],
-        bins: _knobInt(p['bins'], 7),
-        showValues: _knobBool(p['showValues'], true),
-        color: _theme.colorScheme.primary,
-      )),
-  'heatmap': (p) => _framed(Heatmap(
-        values: const <List<num>>[
-          <num>[0.1, 0.3, 0.6, 0.9],
-          <num>[0.2, 0.5, 0.8, 0.4],
-          <num>[0.7, 0.6, 0.3, 0.1],
-        ],
-        rowLabels: const <String>['a', 'b', 'c'],
-        colLabels: const <String>['w', 'x', 'y', 'z'],
-        cellWidth: _knobInt(p['cellWidth'], 3),
-        showLegend: _knobBool(p['showLegend'], true),
-      )),
-};
+      'gauge': (p) => _framed(
+        Gauge(
+          value: _knobDouble(p['value'], 0.62),
+          label: _knobString(p['label'], 'CPU'),
+          showPercentage: _knobBool(p['showPercentage'], true),
+          thresholds: <(double, Color)>[
+            (0.7, _theme.colorScheme.warning),
+            (0.9, _theme.colorScheme.error),
+          ],
+        ),
+      ),
+      'progressbar': (p) {
+        final indeterminate = _knobBool(p['indeterminate'], false);
+        return _framed(
+          ProgressBar(
+            value: indeterminate ? null : _knobDouble(p['value'], 0.45),
+          ),
+        );
+      },
+      'histogram': (p) => _framed(
+        Histogram(
+          values: const <num>[
+            1,
+            2,
+            2,
+            3,
+            3,
+            3,
+            4,
+            4,
+            4,
+            4,
+            5,
+            5,
+            5,
+            6,
+            6,
+            7,
+            2,
+            3,
+            4,
+            5,
+          ],
+          bins: _knobInt(p['bins'], 7),
+          showValues: _knobBool(p['showValues'], true),
+          color: _theme.colorScheme.primary,
+        ),
+      ),
+      'heatmap': (p) => _framed(
+        Heatmap(
+          values: const <List<num>>[
+            <num>[0.1, 0.3, 0.6, 0.9],
+            <num>[0.2, 0.5, 0.8, 0.4],
+            <num>[0.7, 0.6, 0.3, 0.1],
+          ],
+          rowLabels: const <String>['a', 'b', 'c'],
+          colLabels: const <String>['w', 'x', 'y', 'z'],
+          cellWidth: _knobInt(p['cellWidth'], 3),
+          showLegend: _knobBool(p['showLegend'], true),
+        ),
+      ),
+    };
 
 double _knobDouble(Object? v, double fallback) =>
     v is num ? v.toDouble() : fallback;
@@ -1191,7 +1478,8 @@ class _WorldClockState extends State<_WorldClock>
 
   void _onTick(Duration _) {
     final second = DateTime.now().second;
-    if (second == _lastSecond) return; // rebuild ~once a second, not every frame
+    if (second == _lastSecond)
+      return; // rebuild ~once a second, not every frame
     _lastSecond = second;
     setState(() {});
   }
@@ -1218,7 +1506,10 @@ class _WorldClockState extends State<_WorldClock>
             label: zone.$1,
             content: Padding(
               padding: const EdgeInsets.only(top: 1),
-              child: Digits(_timeFor(zone.$2), color: theme.colorScheme.primary),
+              child: Digits(
+                _timeFor(zone.$2),
+                color: theme.colorScheme.primary,
+              ),
             ),
           ),
       ],
@@ -1282,9 +1573,10 @@ class _LiveSeriesState extends State<_LiveSeries>
     });
   }
 
-  double _walk(double v) => (v + (_r.nextDouble() * 2 - 1) * (widget.max - widget.min) * 0.16)
-      .clamp(widget.min, widget.max)
-      .toDouble();
+  double _walk(double v) =>
+      (v + (_r.nextDouble() * 2 - 1) * (widget.max - widget.min) * 0.16)
+          .clamp(widget.min, widget.max)
+          .toDouble();
 
   @override
   void dispose() {

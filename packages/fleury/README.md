@@ -14,7 +14,7 @@ text, capability detection, and safe input handling.
 ```dart
 import 'package:fleury/fleury.dart';
 
-void main() => runTui(const CounterApp());
+void main() => runApp(const CounterApp());
 
 class CounterApp extends StatefulWidget {
   const CounterApp({super.key});
@@ -41,7 +41,7 @@ This exact example lives at `example/counter_quickstart.dart` and is
 covered by `test/example/counter_quickstart_test.dart`, so the snippet
 can't silently rot.
 
-`runTui` installs the binding, enters raw mode + the alternate screen,
+`runApp` installs the binding, enters raw mode + the alternate screen,
 detects terminal capabilities (color depth, image protocol, multiplexer),
 wires input dispatch and the frame scheduler, and renders your widget
 tree with a diffing ANSI renderer. Ctrl+C always exits.
@@ -101,7 +101,7 @@ The animation system lives in two coordinated lanes — continuous
 tweens (Flutter-shaped: AnimationController + Tween + AnimatedBuilder)
 and discrete frame-indexed primitives (FrameTicker / FrameBuilder).
 Both share a single per-runtime `TickerScheduler` owned by the
-`TuiBinding` that `runTui` installs at the root; idle apps burn no
+`TuiBinding` that `runApp` installs at the root; idle apps burn no
 scheduler CPU.
 
 See [`docs/rfcs/0010-animation-infrastructure.md`](../../docs/rfcs/0010-animation-infrastructure.md)

@@ -85,6 +85,31 @@ peer-wire comparisons, profiling, scoreboards, and manifest/result/variance
 tools. Release and evidence commands such as terminal matrix capture and MVP
 readiness remain available through `fleury dev --help`.
 
+## Performance and Benchmarks
+
+Fleury documents performance as an implementation model plus repeatable scenario
+evidence. The public docs page is
+[Performance](https://fleury.dev/architecture/performance/); the detailed
+scenario matrix and runner commands live in [benchmarks/README.md](benchmarks/README.md).
+
+The suite tracks the pressure points that usually matter for terminal apps:
+startup and first paint, input latency, large data navigation, streaming logs
+and Markdown, dashboard update cadence, layout invalidation, resize churn,
+command-palette churn, process output, wire bytes, CPU, and RSS. Peer-wire
+comparisons use source fixtures and repeated captures to answer regression,
+fixture-shape, runtime-floor, and terminal-boundary cost questions. Results are
+most useful when the fixture, terminal, machine, framework versions, and variance
+are recorded beside the captures.
+
+Quick entry points:
+
+```sh
+fleury benchmark list
+fleury benchmark local SB.6 --warmup=1 --iterations=3 --json
+fleury benchmark wire sb6 --runs=3
+fleury benchmark manifest --json
+```
+
 ## Validate
 
 Run the packages independently:

@@ -1,6 +1,6 @@
 // A throwing event handler — sync or async — must report and keep the session
 // running (Flutter's posture), surfacing an error banner, instead of tearing
-// the runTui session down. Drives runTui through the structured serve path and
+// the runApp session down. Drives runApp through the structured serve path and
 // asserts the session survives and the banner appears.
 
 import 'dart:async';
@@ -61,7 +61,7 @@ void main() {
     scheduleMicrotask(() => transport.emit(_init));
 
     var sessionError = false;
-    final done = runTui(
+    final done = runApp(
       KeyBindings(
         bindings: [
           // Synchronous throw inside dispatch (caught by the event-loop guard).

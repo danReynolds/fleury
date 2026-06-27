@@ -1,45 +1,75 @@
 # Performance
 
-Fleury is built to stay cheap as apps get busy. The performance story is
-architectural — a few decisions in the core — rather than micro-optimizations
-bolted on after the fact.
+For Fleury, "performance" means keeping work proportional to the change the app
+made, not to the size of the whole screen or dataset. A dashboard tick should
+not repaint the app shell. A row selection should not rebuild a hundred-thousand
+rows. An idle app should not write bytes.
 
-## Retained mode, incremental everything
+This page describes that contract, then points to the benchmarks that check
+whether the implementation is still honoring it.
 
-Many terminal UIs are immediate-mode: every frame, your code re-describes the
-whole screen and the framework redraws it. Fleury keeps a *retained* tree —
-widgets, elements, and render objects. A `setState` marks one subtree
-dirty; only that path rebuilds, re-lays-out, and re-paints. The rest of the tree
-is reused untouched. A button label changing doesn't re-lay-out the table next
-to it.
+## The contract
 
-## Diff to the cells, not the screen
+Fleury's performance model has five practical promises:
 
-Layout and paint produce a grid of cells. The terminal target diffs the new grid
-against the previous one and emits **only the cells that changed** as ANSI — no
-full repaints. A frame with no changes emits nothing at all, so an idle app
-costs nothing, and a busy app pays only for what actually moved.
+| Promise | What should happen |
+| --- | --- |
+| Dirty work stays local | `setState` marks one part of the retained tree dirty; unrelated widgets, layout, and paint are reused. |
+| Output is damage-based | The terminal target writes changed cells as ANSI. The browser target applies changed cell ranges or DOM patches. |
+| Large data is virtualized | Tables, trees, and lists bind the visible window instead of rebuilding the full dataset. |
+| Streaming output stays incremental | Logs, Markdown, and subprocess output append without forcing unrelated regions through the pipeline. |
+| Idle is quiet | If nothing changed, Fleury should schedule no meaningful work and emit no frame output. |
 
-## Data widgets are windowed
+Those promises come from the same architecture described in
+[Overview](/architecture/overview/): a retained widget/element/render/semantics
+pipeline that paints into a cell grid, then hands changed cells to the active
+target.
 
-The data widgets — `DataTable`, `TreeTable`, lists — build only the rows that
-are actually on screen. A hundred-thousand-row table costs about what a
-screenful costs; scrolling rebinds the visible window instead of rebuilding the
-dataset. Large, text-shaped data is a first-class case, not a cliff.
+## What the benchmarks protect
 
-## The browser wire is a patch stream
+The benchmark suite is organized around the places terminal apps usually get
+expensive:
 
-When you stream an app to a browser with [`fleury serve`](/architecture/serving-and-embedding/),
-the server doesn't ship repaints. Each frame is encoded as compact **cell-range
-patches** against a shared style table, varint-packed, so a live, churning app
-stays small over a socket. The [semantics tree](/architecture/agents-and-semantics/)
-rides the same wire.
+| Concern | What it tells us |
+| --- | --- |
+| Startup and first paint | How much runtime overhead every app pays before the UI gets interesting. |
+| Input latency | Whether text fields, paste, cursor movement, completions, and command entry stay responsive. |
+| Large data navigation | Whether tables and trees stay tied to the virtualized visible window instead of dataset size. |
+| Streaming text | Whether logs, Markdown, and subprocess output append without runaway parsing or repaint work. |
+| Update cadence | Whether many independent widgets can tick without broad redraws. |
+| Layout and resize churn | Whether Fleury recomputes only affected layout regions and recovers cleanly from terminal resizes. |
+| App-shell churn | Whether overlays, command palettes, focus restoration, and transient UI creation stay cheap. |
+| Wire and process cost | How many bytes, frames, CPU, and RSS a real terminal run consumes. |
 
-## Measured against peers, not asserted
+The full scenario matrix and peer target rationale live in the
+[benchmark index](https://github.com/danReynolds/fleury/blob/main/benchmarks/README.md).
 
-Fleury is benchmarked against current releases of the frameworks people actually
-reach for — Ratatui, Textual, Bubble Tea, Ink — using a scenario harness (data
-tables, streaming logs, text editing, Markdown rendering) so the comparison is
-about realistic workloads rather than a synthetic loop. The framework also ships
-a built-in profiling surface, so you can see rebuild, layout, and paint costs in
-your own app.
+## How to inspect it
+
+From a Fleury framework checkout:
+
+```sh
+fleury benchmark list
+fleury benchmark local SB.6 --warmup=1 --iterations=3 --json
+fleury benchmark profile SB.6 --warmup=1 --iterations=5
+fleury benchmark wire sb6 --runs=3
+fleury benchmark manifest --json
+```
+
+Use `local` runs to inspect Fleury's own frame, CPU, and memory behavior. Use
+`profile` when a scenario needs VM service CPU or allocation detail. Use `wire`
+runs when the question includes the terminal boundary: bytes written, frames
+emitted, time to first byte, CPU, RSS, and peer fixtures under a real PTY.
+
+## What results are for
+
+Benchmark output should make the next engineering question clearer. Local and
+profile runs show whether Fleury's own pipeline is staying proportional to the
+change. Wire runs show what happens at the terminal boundary: bytes written,
+frames emitted, time to first byte, CPU, and RSS. Peer fixture runs show how the
+same scenario behaves when expressed with other frameworks' natural APIs.
+
+For durable comparisons, keep the fixture shape, terminal, machine, framework
+versions, and repeated-run variance beside the result. That context makes the
+captures useful for regression review, fixture-shape review, runtime-floor
+analysis, and follow-up profiling.

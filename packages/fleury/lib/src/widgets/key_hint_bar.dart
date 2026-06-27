@@ -39,7 +39,7 @@ class KeyHintBar extends StatelessWidget {
   /// Style applied to the entire rendered text.
   final CellStyle style;
 
-  /// Bindings from `runTui`'s `globalBindings` parameter. Pass these
+  /// Bindings from `runApp`'s `globalBindings` parameter. Pass these
   /// in explicitly so the hint bar can show them; the framework
   /// doesn't currently expose them via an InheritedWidget.
   final List<KeyBinding> globalBindings;

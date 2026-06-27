@@ -39,7 +39,7 @@ void main() {
     );
     web.document.body!.appendChild(hostElement);
 
-    final TuiSurfaceHost host = await dom_demo.runDomDemo(
+    final MountedApp host = await dom_demo.runDomDemo(
       hostElement: hostElement,
       flushScheduler: flush.schedule,
     );

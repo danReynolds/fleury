@@ -44,14 +44,31 @@ final class PatchReviewFile {
   /// Parsed diff file index when this entry was derived from a [DiffDocument].
   final int? fileIndex;
 
+  /// Original path from the diff header, when present.
   final String? oldPath;
+
+  /// New path from the diff header, when present.
   final String? newPath;
+
+  /// Human-readable review summary for this file.
   final String? summary;
+
+  /// Current review status for this file.
   final PatchReviewStatus status;
+
+  /// Number of added lines in this file.
   final int additions;
+
+  /// Number of removed lines in this file.
   final int deletions;
+
+  /// Number of hunks in this file.
   final int hunks;
+
+  /// Whether the row can be selected and activated.
   final bool enabled;
+
+  /// App-specific semantic state carried by the file row.
   final Map<String, Object?> metadata;
 
   String get displayId => (id ?? path).toString();
@@ -106,8 +123,13 @@ final class PatchReviewCopyOptions {
     this.clipboardPolicy = ClipboardWritePolicy.standard,
   });
 
+  /// Whether copied file text includes [PatchReviewFile.summary].
   final bool includeSummary;
+
+  /// Whether copied file text includes additions, deletions, and hunk count.
   final bool includeStats;
+
+  /// Clipboard write behavior for the exported text.
   final ClipboardWritePolicy clipboardPolicy;
 }
 
@@ -267,25 +289,64 @@ class PatchReview extends StatefulWidget {
   }) : assert(maxVisibleFiles > 0),
        assert(diffHeight > 0);
 
+  /// Parsed unified diff displayed in the embedded [DiffView].
   final DiffDocument document;
+
+  /// File-level review rows shown above the diff.
   final List<PatchReviewFile> files;
+
+  /// Optional stable patch identity exposed through semantics.
   final Object? patchId;
+
+  /// Aggregate review status for the patch.
   final PatchReviewStatus status;
+
+  /// External file-list selection controller.
   final PatchReviewController? controller;
+
+  /// External diff viewport and selection controller.
   final DiffViewController? diffController;
+
+  /// Focus node used by the file list.
   final FocusNode? focusNode;
+
+  /// Focus node used by the embedded diff view.
   final FocusNode? diffFocusNode;
+
+  /// Whether the file list should request focus when mounted.
   final bool autofocus;
+
+  /// Whether the embedded diff should request focus when mounted.
   final bool diffAutofocus;
+
+  /// Semantic and visual label for the review surface.
   final String label;
+
+  /// Maximum number of file rows shown before the list scrolls.
   final int maxVisibleFiles;
+
+  /// Height, in terminal rows, reserved for the embedded diff.
   final int diffHeight;
+
+  /// Whether to render the embedded diff below the file list.
   final bool showDiff;
+
+  /// Whether Ctrl+C and semantic copy export the selected file summary.
   final bool copySelection;
+
+  /// Clipboard/export options for the file list.
   final PatchReviewCopyOptions copyOptions;
+
+  /// Clipboard/export options for the embedded diff view.
   final DiffViewCopyOptions diffCopyOptions;
+
+  /// Called when a file row is selected or activated.
   final void Function(PatchReviewFileSelectResult result)? onSelectFile;
+
+  /// Called after copying a file summary.
   final void Function(PatchReviewCopyResult result)? onCopyFile;
+
+  /// Called after copying text from the embedded diff.
   final void Function(DiffViewCopyResult result)? onDiffCopy;
 
   @override

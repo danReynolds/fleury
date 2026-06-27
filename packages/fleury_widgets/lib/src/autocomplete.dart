@@ -28,14 +28,20 @@ class Autocomplete<T extends Object> extends StatefulWidget {
     this.maxVisible = 6,
   });
 
+  /// Source options matched against the current field text.
   final List<T> options;
 
   /// Maps an option to the text shown in the dropdown and filled into the
   /// field. Defaults to `option.toString()`.
   final String Function(T option) displayStringForOption;
 
+  /// Text controller for the underlying input.
   final TextEditingController? controller;
+
+  /// Focus node used by the underlying input.
   final FocusNode? focusNode;
+
+  /// Whether the input should request focus when mounted.
   final bool autofocus;
 
   /// Hint text passed to the underlying [TextInput].
@@ -48,7 +54,10 @@ class Autocomplete<T extends Object> extends StatefulWidget {
   /// surface independently from the current query text.
   final String? semanticLabel;
 
+  /// Called with the selected option when the user picks a suggestion.
   final void Function(T value)? onSelected;
+
+  /// Maximum visible suggestion rows before the list scrolls.
   final int maxVisible;
 
   static String _defaultStringFor(Object option) => option.toString();
