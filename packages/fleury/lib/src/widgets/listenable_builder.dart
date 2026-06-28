@@ -31,32 +31,14 @@ import 'framework.dart';
 class ListenableBuilder extends StatefulWidget {
   const ListenableBuilder({
     super.key,
-    Listenable? listenable,
-    @Deprecated('Use listenable instead. This alias will be removed later.')
-    Listenable? animation,
+    required this.listenable,
     required this.builder,
     this.child,
-  }) : assert(
-         listenable != null || animation != null,
-         'ListenableBuilder requires a listenable.',
-       ),
-       assert(
-         listenable == null || animation == null,
-         'Pass either listenable or animation, not both.',
-       ),
-       _listenable = listenable,
-       _animation = animation;
-
-  final Listenable? _listenable;
-  final Listenable? _animation;
+  });
 
   /// The notifier to listen to. An `Animation`, a `FrameTicker`, or any
   /// other [Listenable].
-  Listenable get listenable => _listenable ?? _animation!;
-
-  /// Compatibility alias for older Fleury code.
-  @Deprecated('Use listenable instead. This alias will be removed later.')
-  Listenable get animation => listenable;
+  final Listenable listenable;
 
   /// Called on every notification. Receives the BuildContext of
   /// the builder's location in the tree and the (unchanged) [child]

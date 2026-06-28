@@ -125,21 +125,33 @@ Run it again — the progress bar fills once a minute.
 ## 4. Compose widgets
 
 The widget library is broad — [browse the catalog](/widgets/), every entry has a
-live example. Swap the body for a few `Gauge`s and a `Sparkline` and you've got
-the status panel from the top of this page:
+live example. Charts, meters, and the rest compose like any other widget. Replace
+the `build` method with the panel behind the live example at the top of this page:
 
-```dart
-Column(
-  crossAxisAlignment: CrossAxisAlignment.stretch,
-  children: [
-    Gauge(value: 0.62, label: 'CPU'),
-    Gauge(value: 0.81, label: 'MEM'),
-    Gauge(value: 0.34, label: 'DISK'),
-    const SizedBox(height: 1),
-    Sparkline(data: const [3, 5, 4, 8, 6, 9, 7, 5, 8, 6]),
-  ],
-)
+```dart title="bin/my_app.dart"
+@override
+Widget build(BuildContext context) {
+  return Padding(
+    padding: const EdgeInsets.all(1),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Gauge(value: 0.62, label: 'CPU'),
+        Gauge(value: 0.81, label: 'MEM'),
+        Gauge(value: 0.34, label: 'DISK'),
+        const SizedBox(height: 1),
+        Sparkline(data: const [3, 5, 4, 8, 6, 9, 7, 5, 8, 6]),
+      ],
+    ),
+  );
+}
 ```
+
+Those are fixed sample values. To make the panel live, feed them from state and
+call `setState` — exactly the way step 3 drove the progress bar from `_tick`. (If
+you do drop the timer, remove the now-unused `_tick` and `_timer` too.) State,
+lifecycle, composition: the same three moves, however rich the screen gets.
 
 ## 5. Run it in a browser
 

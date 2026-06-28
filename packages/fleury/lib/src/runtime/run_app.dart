@@ -111,8 +111,6 @@ Future<void> runApp(
   bool enableHotReload = true,
   bool requireInteractiveTerminal = true,
   void Function(LogLine line)? onStrayOutput,
-  bool debugConsole = false,
-  KeyChord debugConsoleKey = const KeyChord.key(KeyCode.f12),
   TuiEventHandler? onEvent,
   List<KeyBinding> globalBindings = const [],
   Duration sequenceTimeout = const Duration(milliseconds: 500),
@@ -166,14 +164,11 @@ Future<void> runApp(
   // Install the build-error boundary: a thrown build() renders an error
   // panel for that subtree instead of crashing the app.
   Element.errorBuilder ??= (error, stack) => ErrorWidget.builder(error, stack);
-  // Floating LogConsole is migrating into the unified DebugShell —
-  // F12 is now a binding on DebugShell that opens the docked panel
-  // with the Logs tab focused (rather than a separate Overlay entry).
-  // The deprecated `debugConsole` / `debugConsoleKey` parameters are
-  // kept for backward compatibility but are no-ops; new code should
-  // rely on the always-available `debug` config.
+  // Floating LogConsole lives in the unified DebugShell — F12 is a binding on
+  // DebugShell that opens the docked panel with the Logs tab focused (rather
+  // than a separate Overlay entry), backed by the always-available `debug`
+  // config.
   final overlayKey = GlobalKey<OverlayState>();
-  bool maybeToggleDebugConsole(KeyEvent event) => false;
 
   final dispatcher = InputDispatcher(
     focusManager: focusManager,
@@ -667,10 +662,6 @@ Future<void> runApp(
                 if (event is KeyEvent &&
                     tryConsumeDebugKey(debugController, event)) {
                   scheduleFrame('debug-key');
-                  return;
-                }
-                if (event is KeyEvent && maybeToggleDebugConsole(event)) {
-                  scheduleFrame('debug-console');
                   return;
                 }
 

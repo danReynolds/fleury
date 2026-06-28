@@ -249,7 +249,7 @@ void main() {
 
       tester.pumpWidget(
         ListenableBuilder(
-          animation: model,
+          listenable: model,
           builder: (context, _) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,

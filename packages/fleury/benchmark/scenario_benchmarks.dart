@@ -1774,7 +1774,7 @@ final class _CounterScenarioBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      animation: counter,
+      listenable: counter,
       builder: (context, _) {
         final count = counter.value;
         return Semantics(
@@ -1882,7 +1882,7 @@ class _LayoutCounterPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      animation: counter,
+      listenable: counter,
       builder: (context, _) {
         final count = counter.value;
         final accent = counter.accent;

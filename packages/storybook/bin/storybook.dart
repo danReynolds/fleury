@@ -250,9 +250,6 @@ void _printUsage() {
     '  --strict                Fail coverage when exports are missing.',
   );
   stdout.writeln('');
-  stdout.writeln('Legacy aliases:');
-  stdout.writeln('  --list                  Same as `list`.');
-  stdout.writeln('');
   stdout.writeln('Examples:');
   stdout.writeln('  dart run bin/storybook.dart');
   stdout.writeln('  dart run bin/storybook.dart list --json');
@@ -373,8 +370,6 @@ final class _StorybookCliOptions {
       final arg = args[i];
       if (arg == '-h' || arg == '--help') {
         help = true;
-      } else if (arg == '--list') {
-        command = _StorybookCommand.list;
       } else if (arg == '--json') {
         json = true;
       } else if (arg == '--strict') {

@@ -155,19 +155,5 @@ void main() {
       notifier.poke();
       expect(builds, after);
     });
-
-    test('animation parameter remains a compatibility alias', () {
-      final notifier = _CountingNotifier();
-      // ignore: deprecated_member_use_from_same_package
-      final widget = ListenableBuilder(
-        // ignore: deprecated_member_use_from_same_package
-        animation: notifier,
-        builder: (ctx, child) => const Text('x'),
-      );
-
-      expect(widget.listenable, same(notifier));
-      // ignore: deprecated_member_use_from_same_package
-      expect(widget.animation, same(notifier));
-    });
   });
 }

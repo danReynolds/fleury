@@ -48,7 +48,7 @@ const DOCS = [
     src: 'core-and-targets.md',
     description:
       'How Fleury is layered: a platform-neutral core that produces a cell ' +
-      'grid, plus pluggable targets that paint it to a terminal or a browser ' +
+      'grid, and pluggable targets that paint it to a terminal or a browser ' +
       '(embedded with dart2js, or served).',
   },
   {
