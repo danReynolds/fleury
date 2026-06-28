@@ -15,6 +15,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:characters/characters.dart';
 import 'package:fleury/fleury_core.dart';
 
 import 'app_bridge.dart';
@@ -784,10 +785,11 @@ final class McpServer {
     } else if (modifiers.isNotEmpty) {
       // A literal character held with modifiers — a chord (e.g. ctrl+a).
       bridge.pressKey(char: key, modifiers: modifiers);
-    } else if (key.runes.length == 1) {
-      // A bare printable character: a plain KeyEvent(char:) does NOT insert
-      // text (only a TextInputEvent does), so type it — that's what "press the
-      // 'a' key" into a focused field means.
+    } else if (key.characters.length == 1) {
+      // A bare printable character (one grapheme cluster — counts an emoji or
+      // accented letter as one): a plain KeyEvent(char:) does NOT insert text
+      // (only a TextInputEvent does), so type it — that's what "press the 'a'
+      // key" into a focused field means.
       bridge.typeText(key);
     } else {
       // A multi-character value that is neither a known key name nor a chord is

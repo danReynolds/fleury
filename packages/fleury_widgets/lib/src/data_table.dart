@@ -1375,8 +1375,9 @@ class _DataTableElement extends LeafRenderObjectElement
   /// exactly as [buildSemanticNode] mints it, so it matches the live tree.
   bool _ownsTarget(SemanticNode target) {
     final scope = semanticAnchorOf(this) ?? 'element-$hashCode';
-    return target.id.value == '$scope/table' ||
-        target.id.value.startsWith('$scope/');
+    // The table node is `$scope/table` and every row/cell id is `$scope/…`, so a
+    // single prefix check covers them all; a sibling table has a different scope.
+    return target.id.value.startsWith('$scope/');
   }
 }
 

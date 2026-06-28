@@ -430,7 +430,9 @@ final class SemanticInspectionNode {
 
   /// This node's own fields, without children — the flat shape a consumer that
   /// *lists* matching nodes (e.g. an MCP `find_nodes`) wants, rather than the
-  /// nested [toJson]. Shares [toJson]'s field set so the two never drift.
+  /// nested [toJson]. Computed by the same `_scalarJson` as [toJson], so the two
+  /// can't drift on the fields they share; unlike [toJson], `includeBounds`
+  /// defaults to false, so `bounds` is omitted unless asked for.
   Map<String, Object?> toScalarJson({bool includeBounds = false}) =>
       _scalarJson(includeBounds: includeBounds);
 
