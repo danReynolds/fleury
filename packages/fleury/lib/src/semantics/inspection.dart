@@ -428,6 +428,12 @@ final class SemanticInspectionNode {
       'children': <Object?>[for (final child in children) child.toJson()],
   };
 
+  /// This node's own fields, without children — the flat shape a consumer that
+  /// *lists* matching nodes (e.g. an MCP `find_nodes`) wants, rather than the
+  /// nested [toJson]. Shares [toJson]'s field set so the two never drift.
+  Map<String, Object?> toScalarJson({bool includeBounds = false}) =>
+      _scalarJson(includeBounds: includeBounds);
+
   /// This node's own fields without children — shared by [toJson] and the
   /// budgeted [_toJsonCapped].
   ///

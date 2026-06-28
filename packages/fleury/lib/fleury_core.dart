@@ -164,6 +164,7 @@ export 'src/semantics/semantics.dart'
         Semantics,
         ExcludeSemantics,
         escapeSemanticIdSegment,
+        isPositionalSemanticId,
         semanticAnchorOf;
 
 // Terminal

@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "fleury-website",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/dan/Coding/fleury-mcp/website && exec npm run dev"
+      ],
+      "port": 4321
+    }
+  ]
+}

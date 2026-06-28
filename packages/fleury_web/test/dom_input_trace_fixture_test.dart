@@ -254,5 +254,14 @@ final class _FakeMetrics implements CellMetrics {
   }
 
   @override
+  CellOffset? cellForViewportPoint(double clientX, double clientY) {
+    if (box.cols <= 0 || box.rows <= 0) return null;
+    return cellForPoint(
+      clientX - box.cssCanvasLeft,
+      clientY - box.cssCanvasTop,
+    );
+  }
+
+  @override
   void dispose() {}
 }

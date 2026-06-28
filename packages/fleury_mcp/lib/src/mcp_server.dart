@@ -117,8 +117,46 @@ final class McpServer {
   /// The snapshot most recently handed to the agent (via get_ui / find_nodes /
   /// the resource) — the frame whose ids the agent is holding. invoke_action
   /// compares against it to detect a stale *positional* reference (see
-  /// [_isPositionalId] / [_fingerprint]).
+  /// [isPositionalSemanticId] / [_fingerprint]).
   SemanticInspectionSnapshot? _lastServed;
+
+  /// Serializes mutating tool calls (invoke_action/set_value/type_text/
+  /// press_key/resize) so two in-flight mutations can't interleave their
+  /// revision/settle bookkeeping — one's frame satisfying the other's
+  /// `sinceRevision`, so it returns the wrong "after" snapshot. Reads
+  /// (get_ui/find_nodes/ping) and `wait_for_change` stay concurrent: the latter
+  /// MUST be able to observe a mutation happening alongside it.
+  ///
+  /// `null` means idle, in which case the body runs *synchronously* (it is not
+  /// deferred behind a microtask), so the common single-call path keeps capturing
+  /// `before = bridge.revision` before the next frame lands.
+  Future<void>? _mutationTail;
+
+  Future<T> _serializeMutation<T>(Future<T> Function() body) {
+    final prior = _mutationTail;
+    if (prior == null) {
+      final result = body();
+      final mine = result.then<void>((_) {}, onError: (Object _) {});
+      _mutationTail = mine;
+      mine.whenComplete(() {
+        if (identical(_mutationTail, mine)) _mutationTail = null;
+      });
+      return result;
+    }
+    final completer = Completer<T>();
+    final mine = prior.then((_) async {
+      try {
+        completer.complete(await body());
+      } catch (error, stack) {
+        completer.completeError(error, stack);
+      }
+    });
+    _mutationTail = mine;
+    mine.whenComplete(() {
+      if (identical(_mutationTail, mine)) _mutationTail = null;
+    });
+    return completer.future;
+  }
 
   static const Set<String> _supportedProtocolVersions = <String>{
     '2025-06-18',
@@ -478,15 +516,15 @@ final class McpServer {
         case 'find_nodes':
           return await _toolFindNodes(args);
         case 'invoke_action':
-          return await _toolInvokeAction(args);
+          return await _serializeMutation(() => _toolInvokeAction(args));
         case 'set_value':
-          return await _toolSetValue(args);
+          return await _serializeMutation(() => _toolSetValue(args));
         case 'type_text':
-          return await _toolTypeText(args);
+          return await _serializeMutation(() => _toolTypeText(args));
         case 'press_key':
-          return await _toolPressKey(args);
+          return await _serializeMutation(() => _toolPressKey(args));
         case 'resize':
-          return await _toolResize(args);
+          return await _serializeMutation(() => _toolResize(args));
         case 'wait_for_change':
           return await _toolWaitForChange(args);
         default:
@@ -639,7 +677,7 @@ final class McpServer {
     // silent mis-target the code review flagged. Stable ids (explicit, key:…,
     // contributor-assigned) track their logical node, so they're exempt: a
     // legitimate label change on a stable id must not falsely fire.
-    if (_isPositionalId(id)) {
+    if (isPositionalSemanticId(id)) {
       final observed = lastServed?.nodeById(id);
       if (observed != null && _fingerprint(observed) != _fingerprint(node)) {
         throw _ToolFailure(
@@ -681,15 +719,6 @@ final class McpServer {
       'ui': _uiResult(after),
     });
   }
-
-  /// Whether [id] is an auto-generated *positional* id that can come to denote a
-  /// different logical node when the tree shifts. Two forms qualify:
-  /// the `element-<hash>` deep fallback, and a derived `auto:…` id that carries
-  /// a `~` segment (an unkeyed-tail or index-keyed position — see
-  /// `semanticAnchorOf`). App-assigned, `key:…`, and fully-keyed `auto:` ids
-  /// (no `~`) track their logical node and are exempt from the stale check.
-  static bool _isPositionalId(String id) =>
-      id.startsWith('element-') || (id.startsWith('auto:') && id.contains('~'));
 
   /// A cheap "is this the same logical node" proxy: role + label. Stable across
   /// value-only updates (a counter ticking keeps its label), and changes when a
@@ -866,25 +895,13 @@ final class McpServer {
 
   /// A node flattened for find_nodes results — its own fields, no children
   /// (built directly, so a deep match doesn't serialize its whole subtree).
-  Map<String, Object?> _flatNode(SemanticInspectionNode node) {
-    return <String, Object?>{
-      'id': node.id,
-      'role': node.role,
-      if (node.label != null) 'label': node.label,
-      if (node.value != null) 'value': node.value,
-      if (node.hint != null) 'hint': node.hint,
-      'enabled': node.enabled,
-      if (node.focused) 'focused': true,
-      if (node.selected) 'selected': true,
-      if (node.checked != null) 'checked': node.checked,
-      if (node.expanded != null) 'expanded': node.expanded,
-      if (node.busy) 'busy': true,
-      if (node.validationError != null) 'validationError': node.validationError,
-      if (node.actions.isNotEmpty) 'actions': node.actions,
-      if (node.state.isNotEmpty) 'state': node.state,
-      'childCount': node.children.length,
-    };
-  }
+  Map<String, Object?> _flatNode(SemanticInspectionNode node) => <String, Object?>{
+    // Shares the node's own scalar serializer with get_ui so the two can't drift
+    // (a new semantic field shows up in both). find_nodes lists matches flat, so
+    // it appends a childCount instead of nesting children.
+    ...node.toScalarJson(),
+    'childCount': node.children.length,
+  };
 
   // ---- JSON-RPC framing ----------------------------------------------------
 

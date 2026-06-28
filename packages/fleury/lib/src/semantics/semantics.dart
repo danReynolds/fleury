@@ -909,12 +909,6 @@ FutureOr<bool> _dispatchSemanticActionOnElement(
   // unhandled (→ unsupported), like any other unhandled action.
   if (action == SemanticAction.setValue &&
       element is SemanticValueContributor) {
-    // A value contributor (e.g. DataTable) self-identifies by role/state rather
-    // than node id, so guard that the targeted node actually lives in this
-    // element's semantic subtree — otherwise the first contributor of a matching
-    // role in the walk swallows a payload meant for a sibling. (SemanticsElement
-    // self-checks `target.id`; this covers contributors that don't.)
-    if (!_semanticSubtreeContains(element, target.id)) return false;
     return (element as SemanticValueContributor).handleSemanticSetValue(
       target,
       value,
@@ -928,38 +922,6 @@ FutureOr<bool> _dispatchSemanticActionOnElement(
 List<Element> _elementChildren(Element element) {
   final children = <Element>[];
   element.visitChildren(children.add);
-  return children;
-}
-
-/// Whether the semantic subtree [element] contributes contains node [id].
-/// Used to confine a `setValue` payload to the contributor that actually owns
-/// the targeted node (see [_dispatchSemanticActionOnElement]).
-bool _semanticSubtreeContains(Element element, SemanticNodeId id) {
-  for (final node in _collectSemanticNodes(element)) {
-    if (node.selfAndDescendants.any((candidate) => candidate.id == id)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-List<SemanticNode> _collectSemanticNodes(Element element) {
-  final children = <SemanticNode>[];
-  void visitChild(Element child) {
-    children.addAll(_collectSemanticNodes(child));
-  }
-
-  if (element is SemanticChildrenProvider) {
-    (element as SemanticChildrenProvider).visitSemanticChildren(visitChild);
-  } else {
-    element.visitChildren(visitChild);
-  }
-
-  if (element is SemanticContributor) {
-    return <SemanticNode>[
-      (element as SemanticContributor).buildSemanticNode(children),
-    ];
-  }
   return children;
 }
 
@@ -1039,6 +1001,19 @@ String? semanticAnchorOf(Element element) {
   if (!sawKey) return null;
   return 'auto:${[...scope.reversed, ...tail.reversed].join('/')}';
 }
+
+/// Whether [id] is an auto-generated *positional* id — one that can come to
+/// denote a different logical node when the tree shifts, so a held reference to
+/// it may go stale. Two forms qualify: the `element-<hash>` snapshot-local
+/// fallback, and a derived `auto:…` id carrying a `~` positional segment (see
+/// [semanticAnchorOf]). App-assigned, `key:…`, and fully-keyed `auto:` ids (no
+/// `~`) track their logical node and are stable.
+///
+/// Lives beside the encoding so the id scheme has a single owner: consumers that
+/// guard against stale references (e.g. `fleury_mcp`) ask here rather than
+/// re-deriving the prefix rules.
+bool isPositionalSemanticId(String id) =>
+    id.startsWith('element-') || (id.startsWith('auto:') && id.contains('~'));
 
 /// [element]'s index among its parent's children, in `visitChildren` order.
 /// Element-local and reproducible: the leaf-update path and dispatch both
