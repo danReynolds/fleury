@@ -156,6 +156,11 @@ printf '%s\n' \
   | fleury_mcp -- dart run bin/my_app.dart
 ```
 
+A cold `dart run` JIT-compiles the app first, which can take a few seconds — if
+`get_ui` comes back with "has not rendered a UI yet," give it a moment and retry,
+or point `fleury_mcp` at an AOT-compiled binary (`dart compile exe`) so the first
+frame lands well within the startup window.
+
 ## What the agent sees
 
 `get_ui` returns the tree as JSON — roles, labels, values, and supported actions.

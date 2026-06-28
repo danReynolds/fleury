@@ -603,6 +603,10 @@ final class McpServer {
     String id,
     String requiredAction,
   ) async {
+    // Capture the agent-held baseline up front: a concurrent get_ui/find_nodes
+    // can reassign _lastServed across the awaits below, which would compare the
+    // stale-reference guard against a frame the agent never saw.
+    final lastServed = _lastServed;
     final snapshot = await _requireSnapshot();
     final matches = snapshot.where(id: id).toList(growable: false);
     if (matches.isEmpty) {
@@ -636,7 +640,7 @@ final class McpServer {
     // contributor-assigned) track their logical node, so they're exempt: a
     // legitimate label change on a stable id must not falsely fire.
     if (_isPositionalId(id)) {
-      final observed = _lastServed?.nodeById(id);
+      final observed = lastServed?.nodeById(id);
       if (observed != null && _fingerprint(observed) != _fingerprint(node)) {
         throw _ToolFailure(
           'Stale reference: id "$id" now denotes a different node '
@@ -751,11 +755,20 @@ final class McpServer {
     } else if (modifiers.isNotEmpty) {
       // A literal character held with modifiers — a chord (e.g. ctrl+a).
       bridge.pressKey(char: key, modifiers: modifiers);
-    } else {
+    } else if (key.runes.length == 1) {
       // A bare printable character: a plain KeyEvent(char:) does NOT insert
       // text (only a TextInputEvent does), so type it — that's what "press the
       // 'a' key" into a focused field means.
       bridge.typeText(key);
+    } else {
+      // A multi-character value that is neither a known key name nor a chord is
+      // almost certainly a mistyped key (e.g. "esc"/"return" for
+      // "escape"/"enter"). Reject it rather than silently typing the literal
+      // word — use type_text for literal text input.
+      throw _ToolFailure(
+        'press_key got unknown key "$key". Use a known key name '
+        '(e.g. escape, enter, tab, arrowUp) or type_text for literal text.',
+      );
     }
     final after = await bridge.settle(sinceRevision: before);
     return _toolJson(<String, Object?>{

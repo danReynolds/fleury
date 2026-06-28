@@ -909,6 +909,12 @@ FutureOr<bool> _dispatchSemanticActionOnElement(
   // unhandled (→ unsupported), like any other unhandled action.
   if (action == SemanticAction.setValue &&
       element is SemanticValueContributor) {
+    // A value contributor (e.g. DataTable) self-identifies by role/state rather
+    // than node id, so guard that the targeted node actually lives in this
+    // element's semantic subtree — otherwise the first contributor of a matching
+    // role in the walk swallows a payload meant for a sibling. (SemanticsElement
+    // self-checks `target.id`; this covers contributors that don't.)
+    if (!_semanticSubtreeContains(element, target.id)) return false;
     return (element as SemanticValueContributor).handleSemanticSetValue(
       target,
       value,
@@ -922,6 +928,38 @@ FutureOr<bool> _dispatchSemanticActionOnElement(
 List<Element> _elementChildren(Element element) {
   final children = <Element>[];
   element.visitChildren(children.add);
+  return children;
+}
+
+/// Whether the semantic subtree [element] contributes contains node [id].
+/// Used to confine a `setValue` payload to the contributor that actually owns
+/// the targeted node (see [_dispatchSemanticActionOnElement]).
+bool _semanticSubtreeContains(Element element, SemanticNodeId id) {
+  for (final node in _collectSemanticNodes(element)) {
+    if (node.selfAndDescendants.any((candidate) => candidate.id == id)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+List<SemanticNode> _collectSemanticNodes(Element element) {
+  final children = <SemanticNode>[];
+  void visitChild(Element child) {
+    children.addAll(_collectSemanticNodes(child));
+  }
+
+  if (element is SemanticChildrenProvider) {
+    (element as SemanticChildrenProvider).visitSemanticChildren(visitChild);
+  } else {
+    element.visitChildren(visitChild);
+  }
+
+  if (element is SemanticContributor) {
+    return <SemanticNode>[
+      (element as SemanticContributor).buildSemanticNode(children),
+    ];
+  }
   return children;
 }
 

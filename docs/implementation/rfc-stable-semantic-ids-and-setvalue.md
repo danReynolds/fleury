@@ -256,7 +256,7 @@ validation are defined centrally, not per widget:
 ## Impact on consumers
 
 - **Tests** get stable, meaningful ids (`single(id: 'table[processes]/row[1234]')`)
-  and `invokeSemanticAction(setValue, value: 'x')` instead of simulated keys.
+  and `invokeSemanticAction(setValue, payload: 'x')` instead of simulated keys.
 - **Accessibility** gets meaningful node ids and a `setValue` that maps to the
   platform "set value" verb.
 - **`fleury serve` / browser client** is unaffected by A1/A2 (it consumes ids
