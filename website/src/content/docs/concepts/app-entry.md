@@ -60,7 +60,7 @@ mounts your widget, it injects:
 - an **`Overlay`** for floating layers (tooltips, toasts), and
 - a root **`Navigator`**, so `context.push` / `context.pop` work app-wide.
 
-That's why navigation, focus, media queries, and the mouse "just work" with no
+That's why navigation, focus, media queries, and mouse input work without extra
 setup. The one thing `runApp` does **not** inject is a `Theme` — `Theme.of(context)`
 returns sensible defaults until you wrap a subtree in your own (see
 [Theming](/guides/theming/)).

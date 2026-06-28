@@ -550,12 +550,19 @@ class Button extends StatelessWidget {
     this.autofocus = false,
   });
 
+  /// Text shown inside the `[ … ]` button frame.
   final String label;
 
   /// Pressed handler, or null to disable the button.
   final void Function()? onPressed;
+
+  /// Accent applied to the label, resolved from the theme's [ColorScheme].
   final ButtonVariant variant;
+
+  /// Focus node for the button.
   final FocusNode? focusNode;
+
+  /// Whether the button requests focus when mounted.
   final bool autofocus;
 
   static Color? _color(ButtonVariant variant, ColorScheme scheme) =>

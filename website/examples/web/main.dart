@@ -90,13 +90,13 @@ Map<String, Object?> _decodeParams(String json) {
 JSObject _mountInto(web.Element host, String id) {
   final builder = examples[id];
   MountedApp? surface;
-  web.MutationObserver? observer;
+  DocsExampleThemeController? followed;
   var disposed = false;
   if (builder != null) {
     final themeController = DocsExampleThemeController(
       _docsExampleStyleForHost(host),
     );
-    observer = _observeSiteTheme(host, themeController);
+    followed = _followSiteTheme(host, themeController);
     unawaited(
       mountApp(
         () => themedExampleRoot(builder, themeController),
@@ -114,7 +114,7 @@ JSObject _mountInto(web.Element host, String id) {
   final handle = JSObject();
   handle['dispose'] = (() {
     disposed = true;
-    observer?.disconnect();
+    _unfollowSiteTheme(followed);
     surface?.dispose();
     surface = null;
   }).toJS;
@@ -142,7 +142,7 @@ void mountExample(web.Element host) {
   final themeController = DocsExampleThemeController(
     _docsExampleStyleForHost(host),
   );
-  _observeSiteTheme(host, themeController);
+  _followSiteTheme(host, themeController);
   host.setAttribute('data-fleury-state', 'mounting');
   unawaited(
     mountApp(
@@ -170,20 +170,51 @@ DocsExampleStyle _siteDocsExampleStyle() =>
     ? DocsExampleStyle.light
     : DocsExampleStyle.dark;
 
-web.MutationObserver? _observeSiteTheme(
+// Embeds that follow the site (Starlight) light/dark theme. A single shared
+// MutationObserver fans `data-theme` changes out to all of them, rather than
+// spinning up one observer per embed. Each entry carries its host so we can drop
+// embeds whose host has detached (e.g. an Astro client-side navigation replaced
+// the page) — the `mountExample` path has no dispose hook to unregister itself.
+final List<(web.Element, DocsExampleThemeController)> _siteThemeEmbeds =
+    <(web.Element, DocsExampleThemeController)>[];
+web.MutationObserver? _siteThemeObserver;
+
+/// Registers [controller] to follow the site theme when [host] opted in with
+/// `data-fleury-theme="site"`. Returns the controller when registered, so a
+/// caller with a dispose path can later [_unfollowSiteTheme] it.
+DocsExampleThemeController? _followSiteTheme(
   web.Element host,
   DocsExampleThemeController controller,
 ) {
   if (host.getAttribute('data-fleury-theme') != 'site') return null;
   final root = web.document.documentElement;
   if (root == null) return null;
-  final observer = web.MutationObserver(
+  _siteThemeEmbeds.add((host, controller));
+  _siteThemeObserver ??= web.MutationObserver(
     ((JSArray<web.MutationRecord> _, web.MutationObserver __) {
-      controller.style = _siteDocsExampleStyle();
+      _siteThemeEmbeds.removeWhere((e) => !e.$1.isConnected);
+      final style = _siteDocsExampleStyle();
+      for (final (_, c) in _siteThemeEmbeds) {
+        c.style = style;
+      }
     }).toJS,
-  );
-  observer.observe(root, web.MutationObserverInit(attributes: true));
-  return observer;
+  )..observe(
+      root,
+      web.MutationObserverInit(
+        attributes: true,
+        attributeFilter: <JSString>['data-theme'.toJS].toJS,
+      ),
+    );
+  return controller;
+}
+
+void _unfollowSiteTheme(DocsExampleThemeController? controller) {
+  if (controller == null) return;
+  _siteThemeEmbeds.removeWhere((e) => identical(e.$2, controller));
+  if (_siteThemeEmbeds.isEmpty) {
+    _siteThemeObserver?.disconnect();
+    _siteThemeObserver = null;
+  }
 }
 
 /// Flush scheduler for the docs examples: prefer `requestAnimationFrame`

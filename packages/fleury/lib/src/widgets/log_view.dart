@@ -57,7 +57,7 @@ class LogView extends StatelessWidget {
     final explicit = buffer;
     if (explicit != null) {
       return ListenableBuilder(
-        animation: explicit,
+        listenable: explicit,
         builder: (context, _) => _list(context, explicit),
       );
     }

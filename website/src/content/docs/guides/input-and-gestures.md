@@ -16,7 +16,10 @@ Mouse reporting is a terminal mode you opt into when you start the app:
 runApp(const MyApp(), mode: const TerminalMode(mouse: true));
 ```
 
-With it on, clicks, drags, and motion are routed to your gesture widgets.
+`mouse: true` routes clicks, drags, and the wheel to your gesture widgets. Bare
+pointer **motion** — what `MouseRegion` hover needs — is chattier, so it's a
+separate opt-in: `TerminalMode(mouseMotion: true)` (which implies `mouse`). Leave
+it off unless you actually use hover.
 
 ## Taps and clicks
 
@@ -29,7 +32,7 @@ GestureDetector(
   onTap: () => _select(),
   onTapDown: (col, row) => _placeCursorAt(col, row),
   onSecondaryTap: () => _showContextMenu(),
-  child: Cell(),
+  child: board,
 )
 ```
 
@@ -43,7 +46,7 @@ GestureDetector(
   onDragStart: (col, row) => _begin(col),
   onDragUpdate: (col, row) => setState(() => _dividerCol = col),
   onDragEnd: () => _commit(),
-  child: Divider(),
+  child: handle,
 )
 ```
 

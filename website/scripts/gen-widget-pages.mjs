@@ -85,7 +85,12 @@ function usageSection(slug, widget, snippet) {
       .join('\n');
     return `## Usage\n\n<Tabs>\n${items}\n</Tabs>\n\n`;
   }
-  if (snippet) {
+  // Interactive examples built from a private `_FooExample()` wrapper extract to
+  // that wrapper call, which is a meaningless, leaky snippet (the wrapper is a
+  // registry implementation detail, not how you use the widget). Suppress the
+  // Usage block in that case — the page still has the live example + properties.
+  // Add an explicit `code:` to the registry entry to show real usage instead.
+  if (snippet && !/^const\s+_\w+\(\)$/.test(snippet.trim())) {
     return `## Usage\n\n\`\`\`dart title=${yaml(widget + '.dart')}\n${snippet}\n\`\`\`\n\n`;
   }
   return '';

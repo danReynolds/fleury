@@ -160,7 +160,7 @@ class AppStatusBar extends StatelessWidget {
     final app = StatusHost.of(context);
     final status = app.status;
     return ListenableBuilder(
-      animation: status,
+      listenable: status,
       builder: (context, _) {
         final items = status.items;
         return Semantics(

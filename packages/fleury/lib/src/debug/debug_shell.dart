@@ -46,7 +46,7 @@ class _DebugShellState extends State<DebugShell> {
   Widget build(BuildContext context) {
     if (!widget.controller.config.enabled) return widget.child;
     return ListenableBuilder(
-      animation: widget.controller,
+      listenable: widget.controller,
       builder: (context, _) => _layout(context),
     );
   }

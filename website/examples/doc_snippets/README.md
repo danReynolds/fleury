@@ -18,6 +18,7 @@ changes underneath a doc, the build goes red instead of the docs going stale.
 
 | Program | Backs |
 |---|---|
+| `coming_from_flutter.dart` | [Coming from Flutter](../../src/content/docs/coming-from-flutter.md) |
 | `filterable_list.dart` | [Tutorial: a filterable list](../../src/content/docs/tutorial.md) |
 | `core_widgets.dart` | Lists & scrolling, Loading data, Input & gestures, Theming (RichText) |
 | `navigation_demo.dart` | [Navigation](../../src/content/docs/guides/navigation.md) |

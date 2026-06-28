@@ -16,12 +16,12 @@ own hosts.
 
 ## How it works
 
-fleury's core (`package:fleury/fleury_core.dart`) and host SPI
+Fleury's core (`package:fleury/fleury_core.dart`) and host SPI
 (`package:fleury/fleury_host.dart`) are free of `dart:io`, so they compile to
 JavaScript. This package imports the host SPI and supplies the missing browser
 platform pieces:
 
-- **Runtime and frame loop:** `runTuiSurface` shares Fleury's `TuiRuntime`
+- **Runtime and frame loop:** the DOM host shares Fleury's `TuiRuntime`
   framework-service/root lifecycle, `FrameScheduler`, and `TuiFrameLoop`
   buffer/damage lifecycle with native hosts.
 - **Visual DOM:** `DomGridSurface` retains one row element per visible row and

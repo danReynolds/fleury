@@ -20,6 +20,7 @@ const GITHUB = 'https://github.com/danReynolds/fleury/blob/main/docs';
 
 const ROUTES = {
   'architecture-overview.md': '/architecture/overview/',
+  'architecture-deep-dive.md': '/architecture/deep-dive/',
   'core-and-targets.md': '/architecture/core-and-targets/',
   'serving-and-embedding.md': '/architecture/serving-and-embedding/',
   'agents-and-semantics.md': '/architecture/agents-and-semantics/',
@@ -36,10 +37,18 @@ const DOCS = [
       'that paints a cell grid to a terminal or a browser.',
   },
   {
+    src: 'architecture-deep-dive.md',
+    out: 'deep-dive.md',
+    description:
+      'A deep dive into Fleury\'s retained trees, frame damage, CellBuffer ' +
+      'pipeline, semantic graph, host seam, and terminal/browser presenter ' +
+      'tradeoffs.',
+  },
+  {
     src: 'core-and-targets.md',
     description:
       'How Fleury is layered: a platform-neutral core that produces a cell ' +
-      'grid, plus pluggable targets that paint it to a terminal or a browser ' +
+      'grid, and pluggable targets that paint it to a terminal or a browser ' +
       '(embedded with dart2js, or served).',
   },
   {

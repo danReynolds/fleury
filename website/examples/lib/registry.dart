@@ -35,11 +35,12 @@ Widget themedExampleRoot(
   DocsExampleThemeController controller,
 ) => ListenableBuilder(
   listenable: controller,
-  builder: (context, _) {
+  child: builder(),
+  builder: (context, child) {
     final theme = _themeFor(controller.style);
     return _DocsExampleTheme(
       data: theme,
-      child: Theme(data: theme, child: builder()),
+      child: Theme(data: theme, child: child!),
     );
   },
 );
@@ -533,6 +534,21 @@ Tabs(
 
   // ── Inputs & controls ────────────────────────────────────────────────────
   ExampleInfo(
+    id: 'button.basic',
+    widget: 'Button',
+    category: 'Inputs & controls',
+    blurb: 'A focusable action button; activate with Enter/Space.',
+    cols: 24,
+    rows: 4,
+    interactive: true,
+    code: '''Button(
+  label: 'Save',
+  variant: ButtonVariant.primary,
+  onPressed: () => save(),
+)''',
+    builder: () => const _ButtonExample(),
+  ),
+  ExampleInfo(
     id: 'select.basic',
     widget: 'Select',
     category: 'Inputs & controls',
@@ -540,6 +556,15 @@ Tabs(
     cols: 40,
     rows: 6,
     interactive: true,
+    code: '''Select<String>(
+  value: _size,
+  options: const [
+    SelectOption(value: 'low', label: 'Low'),
+    SelectOption(value: 'medium', label: 'Medium'),
+    SelectOption(value: 'high', label: 'High'),
+  ],
+  onChanged: (value) => setState(() => _size = value),
+)''',
     builder: () => const _SelectExample(),
   ),
   ExampleInfo(
@@ -550,6 +575,14 @@ Tabs(
     cols: 44,
     rows: 3,
     interactive: true,
+    code: '''RangeSlider(
+  values: _range,
+  min: 0,
+  max: 100,
+  label: 'Range',
+  showValues: true,
+  onChanged: (values) => setState(() => _range = values),
+)''',
     builder: () => const _RangeSliderExample(),
   ),
   ExampleInfo(
@@ -560,6 +593,13 @@ Tabs(
     cols: 40,
     rows: 3,
     interactive: true,
+    code: '''Stepper(
+  value: _quantity,
+  min: 0,
+  max: 10,
+  label: 'Quantity',
+  onChanged: (value) => setState(() => _quantity = value),
+)''',
     builder: () => const _StepperExample(),
   ),
   ExampleInfo(
@@ -613,6 +653,17 @@ Tabs(
     cols: 36,
     rows: 4,
     interactive: true,
+    code: '''ColorPicker(
+  value: _color,
+  colors: const [
+    RgbColor(0xFF, 0x5C, 0x57),
+    RgbColor(0xF5, 0xC2, 0x11),
+    RgbColor(0x3D, 0xDC, 0x97),
+    RgbColor(0x56, 0xC2, 0xFF),
+    RgbColor(0xBD, 0x93, 0xF9),
+  ],
+  onChanged: (color) => setState(() => _color = color),
+)''',
     builder: () => const _ColorPickerExample(),
   ),
   ExampleInfo(
@@ -623,6 +674,11 @@ Tabs(
     cols: 30,
     rows: 12,
     interactive: true,
+    code: '''DatePicker(
+  value: _date,
+  label: 'Date',
+  onChanged: (date) => setState(() => _date = date),
+)''',
     builder: () => const _DatePickerExample(),
   ),
 
@@ -1273,6 +1329,33 @@ class _RangeSliderExampleState extends State<_RangeSliderExample> {
       label: 'Range',
       showValues: true,
       onChanged: (v) => setState(() => _v = v),
+    ),
+  );
+}
+
+class _ButtonExample extends StatefulWidget {
+  const _ButtonExample();
+  @override
+  State<_ButtonExample> createState() => _ButtonExampleState();
+}
+
+class _ButtonExampleState extends State<_ButtonExample> {
+  int _count = 0;
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('Pressed $_count×'),
+        const SizedBox(height: 1),
+        Button(
+          label: 'Press me',
+          variant: ButtonVariant.primary,
+          autofocus: true,
+          onPressed: () => setState(() => _count++),
+        ),
+      ],
     ),
   );
 }
