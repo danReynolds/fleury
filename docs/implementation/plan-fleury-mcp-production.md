@@ -38,7 +38,10 @@ coalescing during settle is cleaner once WS-0's generation exists.
   - `fleury`: `cd packages/fleury && dart analyze && dart test -x integration`
   - `fleury_widgets`: `cd packages/fleury_widgets && dart analyze && dart test`
   - `fleury_mcp`: `cd packages/fleury_mcp && dart analyze && dart test`
+    (incl. the **perf gate** `test/mcp_perf_gate_test.dart` — a win regression fails here)
   - `fleury_web`: `cd packages/fleury_web && dart analyze && dart test`
+- **Benchmarks:** `cd packages/fleury_mcp && dart run benchmark/mcp_benchmarks.dart`
+  (`--json`); recorded numbers in `benchmark/BASELINE.md`.
 - **Cross-RFC coordination:** WS-0 is the identity RFC's A3 — framework-core,
   gates M1. Scope/own it jointly before WS-2's MCP-facing work assumes it.
 
@@ -379,3 +382,11 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
   mcp 74 · clean. **M1 + M2 both done and milestone-reviewed.** → Next: **M3** —
   WS-5 (shared spawn / lifecycle), WS-6 (cancellation, logging, error codes),
   WS-7 (per-revision node index) + the deferred real-host smoke.
+- *2026-06-29* — **Benchmarks + perf gate added (priority interjection).** The
+  M1/M2 wins were asserted but never measured. Added `benchmark/mcp_benchmarks.dart`
+  (over a 332-node dashboard) + `test/mcp_perf_gate_test.dart` (runs in `dart
+  test`) + `benchmark/BASELINE.md`. Each metric measures both the pre-change and
+  new path in one run, so it asserts vs where-we-started AND gates regressions.
+  Headline: **WS-1 delta = 0.3% of a full re-read (~322×)**; **WS-2 capped settle
+  3.7× faster on a ticking app**; WS-9/WS-4 affordance+marker overhead +2.4%.
+  mcp 78. → Resume **M3** (WS-5 spawn/lifecycle, WS-6 protocol, WS-7 node index).
