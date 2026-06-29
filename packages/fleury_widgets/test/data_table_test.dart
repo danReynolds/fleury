@@ -207,6 +207,57 @@ void main() {
     );
   });
 
+  testWidgets('setValue routes to the targeted table, not a sibling '
+      '(no cross-fire, no per-widget ownership guard)', (tester) async {
+    // Two tables in one tree. Before WS-3 the dispatch walk offered a setValue
+    // to the first DataTable contributor it reached, so an action aimed at B
+    // could be swallowed by A (only a per-widget `_ownsTarget` check, since
+    // removed, masked it). The id→element dispatch map must route a setValue to
+    // exactly the table whose node id was targeted.
+    final controllerA = DataTableController();
+    final controllerB = DataTableController();
+    addTearDown(controllerA.dispose);
+    addTearDown(controllerB.dispose);
+
+    tester.pumpWidget(
+      Row(
+        children: [
+          Expanded(
+            child: DataTable(
+              key: const ValueKey('table-a'),
+              label: 'A',
+              rowCount: 50,
+              columns: _columns(),
+              rowKeyBuilder: (row) => 'A-$row',
+              cellBuilder: _cell,
+              controller: controllerA,
+            ),
+          ),
+          Expanded(
+            child: DataTable(
+              key: const ValueKey('table-b'),
+              label: 'B',
+              rowCount: 50,
+              columns: _columns(),
+              rowKeyBuilder: (row) => 'B-$row',
+              cellBuilder: _cell,
+              controller: controllerB,
+            ),
+          ),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(48, 8));
+
+    // setValue on table B (resolved by role+label) → B moves, A is untouched.
+    await tester.invokeSemanticAction(SemanticAction.setValue,
+        role: SemanticRole.table, label: 'B', payload: 7);
+    tester.render(size: const CellSize(48, 8));
+
+    expect(controllerB.selectedIndex, 7, reason: 'B (the target) moved');
+    expect(controllerA.selectedIndex, 0, reason: 'A (a sibling) is untouched');
+  });
+
   testWidgets('a sortable header activates to request a sort; state carries '
       'the active direction', (tester) async {
     String? sorted;

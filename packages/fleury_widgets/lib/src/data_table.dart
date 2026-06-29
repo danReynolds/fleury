@@ -1352,32 +1352,21 @@ class _DataTableElement extends LeafRenderObjectElement
     );
   }
 
+  // Action dispatch resolves a target id to its owning element via the semantic
+  // tree's id→element map (built in the same walk that mints the ids), so these
+  // handlers are only ever called for *this* table's own nodes — no per-widget
+  // ownership self-check is needed (a sibling table can't be handed our action).
   @override
   FutureOr<bool> handleSemanticAction(
     SemanticNode target,
     SemanticAction action,
   ) {
-    if (!_ownsTarget(target)) return false;
     return widget.onSemanticAction(target, action);
   }
 
   @override
   FutureOr<bool> handleSemanticSetValue(SemanticNode target, Object? value) {
-    if (!_ownsTarget(target)) return false;
     return widget.onSemanticSetValue(target, value);
-  }
-
-  /// Whether [target] is this table's own node (table/row/cell), not a sibling
-  /// table's. The dispatch walk offers an action to the first matching
-  /// contributor it reaches, and this widget self-identifies by role/state
-  /// rather than id — so without this check the first DataTable in the tree
-  /// would swallow an action meant for another. The id prefix is computed
-  /// exactly as [buildSemanticNode] mints it, so it matches the live tree.
-  bool _ownsTarget(SemanticNode target) {
-    final scope = semanticAnchorOf(this) ?? 'element-$hashCode';
-    // The table node is `$scope/table` and every row/cell id is `$scope/…`, so a
-    // single prefix check covers them all; a sibling table has a different scope.
-    return target.id.value.startsWith('$scope/');
   }
 }
 

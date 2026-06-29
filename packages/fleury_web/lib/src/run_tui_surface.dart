@@ -495,7 +495,6 @@ Future<TuiSurfaceHost> runTuiSurface(
               : null;
           unawaited(
             invokeSemanticActionFromElement(
-              root: mounted,
               tree: semanticTree,
               id: request.id,
               action: request.action,

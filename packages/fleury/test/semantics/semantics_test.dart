@@ -600,7 +600,6 @@ void main() {
     );
 
     final result = await invokeSemanticActionFromElement(
-      root: tester.root!,
       tree: tester.semantics(),
       id: const SemanticNodeId('run-button'),
       action: SemanticAction.activate,
@@ -636,7 +635,6 @@ void main() {
     tester.pumpWidget(button(enabled: false));
 
     final result = await invokeSemanticActionFromElement(
-      root: tester.root!,
       tree: enabledTree,
       id: const SemanticNodeId('run-button'),
       action: SemanticAction.activate,

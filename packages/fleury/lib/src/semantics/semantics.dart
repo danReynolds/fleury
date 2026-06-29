@@ -578,19 +578,40 @@ final class SemanticNode {
 /// backend can produce the same query surface from a maintained tree without
 /// committing callers to the walk.
 final class SemanticTree {
-  const SemanticTree({required this.root});
+  const SemanticTree({required this.root}) : _elementsById = null;
+
+  SemanticTree._({
+    required this.root,
+    required Map<SemanticNodeId, Element> elementsById,
+  }) : _elementsById = elementsById;
 
   factory SemanticTree.fromElement(Element root) {
-    return SemanticTree(
+    final elements = <SemanticNodeId, Element>{};
+    final children = _collectFrom(root, elements);
+    return SemanticTree._(
       root: SemanticNode(
         id: const SemanticNodeId('root'),
         role: SemanticRole.app,
-        children: _collectFrom(root),
+        children: children,
       ),
+      elementsById: elements,
     );
   }
 
   final SemanticNode root;
+
+  /// The mounted [Element] that contributes each node id, captured during the
+  /// [fromElement] build walk. Lets action dispatch resolve a target id to its
+  /// owning contributor in O(1) — without a second element walk, whose id
+  /// recompute can drift from the snapshot's. Null for a tree built via the
+  /// const constructor (a value snapshot with no backing elements).
+  final Map<SemanticNodeId, Element>? _elementsById;
+
+  /// The mounted [Element] that contributes node [id], or null when this tree
+  /// has no element backing or [id] is unknown. The owning contributor for a
+  /// node a widget synthesizes itself (e.g. a `DataTable` row/cell) is that
+  /// widget's element, matching how the node's id was minted.
+  Element? elementById(SemanticNodeId id) => _elementsById?[id];
 
   /// Flattened semantic nodes in depth-first order.
   ///
@@ -630,7 +651,14 @@ final class SemanticTree {
     if (replacements.isEmpty) return this;
     final replacement = _replaceSemanticNode(root, replacements);
     if (identical(replacement, root)) return this;
-    final tree = SemanticTree(root: replacement);
+    // Leaf replacement only rewrites node *values* by id — structure (and thus
+    // id→element ownership) is unchanged (a structural change forces a full
+    // rebuild upstream), so the source tree's element map carries forward and
+    // keeps action dispatch working on the retained path.
+    final elements = _elementsById;
+    final tree = elements == null
+        ? SemanticTree(root: replacement)
+        : SemanticTree._(root: replacement, elementsById: elements);
     _cacheLeafReplacementTree(this, tree, replacements);
     return tree;
   }
@@ -810,7 +838,6 @@ Map<SemanticNodeId, SemanticNode> _cachedNodesById(SemanticTree tree) {
 /// such as the web semantic DOM can use it to route assistive-technology or
 /// mirrored-control activation back into the real Fleury widget tree.
 Future<SemanticActionInvocationResult> invokeSemanticActionFromElement({
-  required Element root,
   required SemanticTree tree,
   required SemanticNodeId id,
   required SemanticAction action,
@@ -824,8 +851,21 @@ Future<SemanticActionInvocationResult> invokeSemanticActionFromElement({
   if (!target.actions.contains(action)) {
     return SemanticActionInvocationResult.unsupported(target, action);
   }
+  // Resolve the id to the element that contributed it — built in the same walk
+  // that minted the id, so it matches exactly — and dispatch straight there. No
+  // second element walk, so a contributor can never be handed an action meant
+  // for a sibling (the cross-fire the per-widget self-checks used to guard).
+  final element = tree.elementById(id);
+  if (element == null) {
+    return SemanticActionInvocationResult.unsupported(target, action);
+  }
   try {
-    final dispatchResult = _dispatchSemanticAction(root, target, action, value);
+    final dispatchResult = _dispatchSemanticActionOnElement(
+      element,
+      target,
+      action,
+      value,
+    );
     final handled = dispatchResult is Future<bool>
         ? await dispatchResult
         : dispatchResult;
@@ -840,61 +880,6 @@ Future<SemanticActionInvocationResult> invokeSemanticActionFromElement({
       stackTrace: stackTrace,
     );
   }
-}
-
-FutureOr<bool> _dispatchSemanticAction(
-  Element element,
-  SemanticNode target,
-  SemanticAction action,
-  Object? value,
-) {
-  final children = _elementChildren(element);
-  for (var index = 0; index < children.length; index++) {
-    final childResult = _dispatchSemanticAction(
-      children[index],
-      target,
-      action,
-      value,
-    );
-    if (childResult is Future<bool>) {
-      return _dispatchSemanticActionAfterAsyncChild(
-        childResult,
-        element,
-        children,
-        index + 1,
-        target,
-        action,
-        value,
-      );
-    }
-    if (childResult) return true;
-  }
-
-  return _dispatchSemanticActionOnElement(element, target, action, value);
-}
-
-Future<bool> _dispatchSemanticActionAfterAsyncChild(
-  Future<bool> childResult,
-  Element element,
-  List<Element> children,
-  int nextIndex,
-  SemanticNode target,
-  SemanticAction action,
-  Object? value,
-) async {
-  if (await childResult) return true;
-  for (var index = nextIndex; index < children.length; index++) {
-    if (await _dispatchSemanticAction(children[index], target, action, value)) {
-      return true;
-    }
-  }
-  final ownResult = _dispatchSemanticActionOnElement(
-    element,
-    target,
-    action,
-    value,
-  );
-  return ownResult is Future<bool> ? await ownResult : ownResult;
 }
 
 FutureOr<bool> _dispatchSemanticActionOnElement(
@@ -917,12 +902,6 @@ FutureOr<bool> _dispatchSemanticActionOnElement(
   if (element is! SemanticActionContributor) return false;
   final contributor = element as SemanticActionContributor;
   return contributor.handleSemanticAction(target, action);
-}
-
-List<Element> _elementChildren(Element element) {
-  final children = <Element>[];
-  element.visitChildren(children.add);
-  return children;
 }
 
 /// A stable, position-derived identity anchor for [element], folding the chain
@@ -1591,33 +1570,70 @@ final class _RenderSemanticBounds extends RenderObject
   }
 }
 
-List<SemanticNode> _collectFrom(Element element) {
+List<SemanticNode> _collectFrom(
+  Element element, [
+  Map<SemanticNodeId, Element>? elements,
+]) {
   final nodes = <SemanticNode>[];
-  _collectInto(element, nodes);
+  _collectInto(element, nodes, elements);
   return nodes;
 }
 
-void _collectInto(Element element, List<SemanticNode> output) {
+void _collectInto(
+  Element element,
+  List<SemanticNode> output,
+  Map<SemanticNodeId, Element>? elements,
+) {
   if (element is SemanticChildrenProvider) {
     if (element is SemanticContributor) {
       final children = <SemanticNode>[];
       (element as SemanticChildrenProvider).visitSemanticChildren(
-        (child) => _collectInto(child, children),
+        (child) => _collectInto(child, children, elements),
       );
-      output.add((element as SemanticContributor).buildSemanticNode(children));
+      final node = (element as SemanticContributor).buildSemanticNode(children);
+      output.add(node);
+      _indexOwnedIds(node, element, children, elements);
       return;
     }
     (element as SemanticChildrenProvider).visitSemanticChildren(
-      (child) => _collectInto(child, output),
+      (child) => _collectInto(child, output, elements),
     );
     return;
   }
 
   if (element is SemanticContributor) {
     final children = <SemanticNode>[];
-    element.visitChildren((child) => _collectInto(child, children));
-    output.add((element as SemanticContributor).buildSemanticNode(children));
+    element.visitChildren((child) => _collectInto(child, children, elements));
+    final node = (element as SemanticContributor).buildSemanticNode(children);
+    output.add(node);
+    _indexOwnedIds(node, element, children, elements);
   } else {
-    element.visitChildren((child) => _collectInto(child, output));
+    element.visitChildren((child) => _collectInto(child, output, elements));
   }
+}
+
+/// Maps every id in [node]'s subtree that [element] *itself* contributed — i.e.
+/// not a node grafted in from a child contributor (those are in
+/// [graftedChildren] and get mapped to their own element when walked) — to
+/// [element]. A widget that synthesizes its own descendants (a `DataTable`'s
+/// rows/cells) owns those ids, so an action on one routes to that widget.
+void _indexOwnedIds(
+  SemanticNode node,
+  Element element,
+  List<SemanticNode> graftedChildren,
+  Map<SemanticNodeId, Element>? elements,
+) {
+  if (elements == null) return;
+  final graftedIds = graftedChildren.isEmpty
+      ? const <SemanticNodeId>{}
+      : <SemanticNodeId>{for (final child in graftedChildren) child.id};
+  void walk(SemanticNode n) {
+    if (graftedIds.contains(n.id)) return; // owned by a child contributor
+    elements[n.id] = element;
+    for (final child in n.children) {
+      walk(child);
+    }
+  }
+
+  walk(node);
 }

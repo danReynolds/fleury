@@ -556,7 +556,6 @@ Future<void> runTui(
             if (root == null) return;
             unawaited(
               invokeSemanticActionFromElement(
-                root: root,
                 tree: SemanticTree.fromElement(root),
                 id: id,
                 action: action,
