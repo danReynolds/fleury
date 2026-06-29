@@ -365,3 +365,17 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
   the WS-3 two-table test; the real-host subprocess smoke is deferred to M3.
   fleury 1736 · mcp 73 · clean. → **M2 complete.** Next: M2 milestone review, then
   M3 (WS-5/6/7).
+- *2026-06-29* — **M2 milestone-reviewed (2 agents) — M2 complete.** WS-4
+  (rate-limit + injection): **clean** — token-bucket bounded + backward-clock
+  guarded, mutex-safe throw, per-session, the untrustedContent marker is
+  envelope-level (collision/spoof-safe) and non-corrupting. Integration found 3,
+  all fixed (`f506548`): **HIGH** the WS-8 concurrency test was false-passing
+  (asserted only dispatch order, which microtask scheduling fixes regardless of
+  the mutex — empirically bypass-confirmed) → replaced with a test that gates on
+  the mutex (a 2nd mutation can't dispatch until the 1st settles; verified it
+  fails when the mutex is bypassed); **MED** find_nodes lacked the WS-4
+  untrustedContent marker (read-path hole) → added via a shared const; **LOW**
+  find_nodes lacked the WS-9 valueSchema → added to _flatNode. New parity test.
+  mcp 74 · clean. **M1 + M2 both done and milestone-reviewed.** → Next: **M3** —
+  WS-5 (shared spawn / lifecycle), WS-6 (cancellation, logging, error codes),
+  WS-7 (per-revision node index) + the deferred real-host smoke.
