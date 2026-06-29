@@ -21,7 +21,7 @@ update the **Status board** as you go.
 | WS-3 | Authoritative id→element dispatch (early win) | M1 | P0 | — | `[x]` **done** (2026-06-29) |
 | WS-0 | ~~Build-owner structure generation (= A3)~~ | M1 | P0 | — | `[~]` **reverted** (2026-06-29) — milestone review found it under-delivered + too coarse; superseded by WS-2 fingerprint. See changelog. |
 | WS-2 | Enriched-fingerprint stale guard + capped settle + web-dispatch fix | M1 | P0 | WS-3 | `[x]` **done** (2026-06-29) |
-| WS-1 | Resource subscriptions + delta push (Route A) | M2 | P0 | WS-0¹ | `[ ]` not started |
+| WS-1 | Resource subscriptions + delta push (Route A) | M2 | P0 | WS-3 | `[x]` **done** (2026-06-29) |
 | WS-4 | Prompt-injection mitigation + rate-limit | M2 | P1 | — | `[ ]` not started |
 | WS-9 | Typed affordances (expose + validate) | M2 | P1 | `setValue` (shipped) | `[ ]` not started |
 | WS-8 | Test shapes (multi-contributor, fuzz, stress) | M2 | P1 | WS-3 | `[ ]` not started |
@@ -150,20 +150,25 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
 
 *(Detail each at M2 kickoff; top-level tasks below are the breakout seeds.)*
 
-### WS-1 — Resource subscriptions + delta push (Route A)  ·  `[ ]`
+### WS-1 — Resource subscriptions + delta push (Route A)  ·  `[x]` done
 
-- [ ] Advertise `resources:{ subscribe:true, listChanged:true }` in `initialize`.
-- [ ] Implement `resources/subscribe` / `unsubscribe`; gate call shape on
-      negotiated `protocolVersion` (draft renames to `subscriptions/listen`).
-- [ ] Emit `notifications/resources/updated` for `fleury://ui/tree` on each
-      **settled** revision, coalesced.
-- [ ] **Route A delta:** surface the decoder's `{changedIds, removedIds}`
-      (computed at `remote_semantics.dart:185-198` but discarded) through a new
-      decoder → `app_bridge` → MCP path; include it in the notification payload.
-- [ ] Keep `wait_for_change` as the synchronous fallback.
-- **Acceptance:** `[ ]` one coalesced `updated` per settled change carrying the
-  delta; `[ ]` no notification storm under animation.
-- **Validate:** `[ ]` `fleury_mcp`.
+- [x] Advertise `resources:{ subscribe:true }` in `initialize`. *(Dropped
+      `listChanged` — the resource list is static, one resource.)*
+- [x] Implement `resources/subscribe` / `unsubscribe` (empty-object ack).
+- [x] Emit `notifications/resources/updated` for `fleury://ui/tree` on each
+      **settled** burst, coalesced.
+- [x] **Route A delta:** decoder surfaces `{changedIds, removedIds, wasFull}`
+      (the wire diff already carries them); the bridge accumulates a NET delta
+      across a burst (`takeDelta`); the notification carries `{uri, changedIds,
+      removedIds}` (or `{uri, full:true}` on resync).
+- [x] `wait_for_change` stays as the synchronous fallback (untouched).
+- **Acceptance:** `[x]` one coalesced `updated` per settled burst carrying the
+  delta; `[x]` no storm under animation (reused the capped `settle()` for
+  coalescing — test: 3 frames → ≤2 notifications).
+- **Validate:** `[x]` `fleury_mcp` (52) · `[x]` `fleury` decoder (1735).
+- **Adapted:** no new decoder→bridge plumbing method was needed — `settle` +
+  `takeDelta` compose to give per-settled-burst coalescing for free; WS-1 no
+  longer depends on WS-0 (reverted), only WS-3.
 
 ### WS-4 — Prompt-injection mitigation + rate-limit  ·  `[ ]`
 
@@ -290,3 +295,16 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
   accepted limits. **M1 (WS-3 + WS-2) done and twice-reviewed.** Suites: fleury
   1734 · web 201 · widgets 920 · mcp 48 · clean. → Next: **M2** (WS-1 deltas,
   WS-4 injection/rate-limit, WS-9 typed affordances, WS-8 test shapes).
+- *2026-06-29* — **WS-1 done (first M2 workstream).** Resource subscriptions +
+  coalesced semantic delta push. Decoder surfaces the per-frame
+  `{changedIds, removedIds, wasFull}` the wire diff already computes; the bridge
+  nets them into a per-burst delta (`takeDelta`); the server advertises
+  `resources.subscribe`, handles subscribe/unsubscribe, and runs ONE push loop
+  that emits `notifications/resources/updated` per settled burst.
+  **Key simplification:** coalescing is free by reusing the capped `settle()` —
+  no bespoke debounce — so a continuously-animating app yields one delta per
+  settle window, not a per-frame storm (test: 3 frames → ≤2 notifications). Writes
+  are serialized through `runMcpServer`'s `writeChain`, so notifications can't
+  corrupt a response line. fleury 1735 · mcp 52 · clean. Focused adversarial
+  review of the push-loop concurrency + protocol surface running. → Next: WS-4 /
+  WS-9 / WS-8, then the M2 milestone review.
