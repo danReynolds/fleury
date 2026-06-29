@@ -23,7 +23,7 @@ update the **Status board** as you go.
 | WS-2 | Enriched-fingerprint stale guard + capped settle + web-dispatch fix | M1 | P0 | WS-3 | `[x]` **done** (2026-06-29) |
 | WS-1 | Resource subscriptions + delta push (Route A) | M2 | P0 | WS-3 | `[x]` **done** (2026-06-29) |
 | WS-4 | Prompt-injection mitigation + rate-limit | M2 | P1 | — | `[ ]` not started |
-| WS-9 | Typed affordances (expose + validate) | M2 | P1 | `setValue` (shipped) | `[ ]` not started |
+| WS-9 | Typed affordances (expose + validate) | M2 | P1 | `setValue` (shipped) | `[x]` **done** (2026-06-29) |
 | WS-8 | Test shapes (multi-contributor, fuzz, stress) | M2 | P1 | WS-3 | `[ ]` not started |
 | WS-5 | Shared spawn / lifecycle | M3 | P1 | coord. `fleury serve` | `[ ]` not started |
 | WS-6 | Cancellation, logging, error codes | M3 | P1/P2 | — | `[ ]` not started |
@@ -181,18 +181,30 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
   `get_ui`; `[ ]` a runaway agent is throttled.
 - **Validate:** `[ ]` `fleury_mcp`.
 
-### WS-9 — Typed affordances  ·  `[ ]`
+### WS-9 — Typed affordances  ·  `[x]` done
 
-- [ ] **Expose:** normalize the already-emitted `Stepper`/`RangeSlider`/
-      `DatePicker` constraint keys into a documented `valueSchema` block; add
-      `Select`'s option set from `widget.options` (`select.dart`).
-- [ ] **Validate-before-dispatch:** reject an out-of-domain `set_value` against
-      the schema in `mcp_server.dart` (today widgets silently clamp/no-op).
-- [ ] Avoid `_looksSensitive` redaction substrings (`value`/`text`/`token`) in
-      schema keys; check against the 800-node / per-node token budget test.
-- **Acceptance:** `[ ]` `get_ui` reports per-node accepted type + constraints;
-  `[ ]` out-of-domain `set_value` rejected by contract, not trial.
-- **Validate:** `[ ]` `fleury_widgets` · `[ ]` `fleury_mcp`.
+- [x] **Expose:** `deriveValueSchema(node)` (fleury_mcp/value_schema.dart)
+      normalizes the constraint keys each widget already emits into `state` —
+      number{min,max,step} (spinButton/slider), boolean (checkbox/toggle), date
+      string{format,pattern,min,max} (datePicker), enum{options} (select), integer
+      row-index (table), string (textField/textArea). Injected per settable node
+      via a new generic `augment` hook on `toJsonCapped` (core stays
+      affordance-agnostic). `Select` now publishes its enabled options
+      ({label,value}) in `state.options`.
+- [x] **Validate-before-dispatch:** `set_value` runs `validateValueForSchema`
+      before `bridge.setValue`; an out-of-domain value throws a typed failure
+      naming the accepted domain, no action frame sent.
+- [x] Schema keys avoid the redaction substrings (`minimum`/`maximum`/`step`/
+      `options`, not `minValue`) — guarded by a test. Budget: the augment adds
+      fields, not nodes, so the 800-node cap is unaffected (a large option set is
+      the one per-node-size caveat, noted).
+- **Acceptance:** `[x]` `get_ui` reports per-node `valueSchema` (type +
+  constraints); `[x]` out-of-domain `set_value` rejected by contract, not trial.
+- **Validate:** `[x]` `fleury_widgets` (920) · `[x]` `fleury_mcp` (66, incl. a
+  value_schema unit suite) · `[x]` `fleury` (1735).
+- **Adapted:** exposed via a generic core `augment` hook rather than a
+  bespoke per-widget `valueSchema` field — keeps widget-key knowledge in the MCP
+  layer and the core model clean.
 
 ### WS-8 — Test shapes  ·  `[ ]`
 
@@ -316,3 +328,13 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
   ~2 s. New re-subscribe test. mcp 53 · clean. → Next: WS-9 (typed affordances,
   the remaining "leading" differentiator), WS-4 (injection + rate-limit), WS-8
   (test shapes), then the M2 milestone review.
+- *2026-06-29* — **WS-9 done (typed affordances — the last "leading"
+  differentiator).** Each settable node now advertises a normalized `valueSchema`
+  (accepted type + constraints/options) in get_ui, and `set_value` validates
+  against it BEFORE dispatch — an out-of-domain value fails by contract naming the
+  domain, instead of the silent clamp/no-op the widget does. **Design choice:** a
+  generic per-node `augment` hook on the core `toJsonCapped` lets the MCP layer
+  inject the schema while keeping widget-key knowledge (and affordance concepts)
+  out of the core model. Select publishes its options. Redaction-substring guard
+  in tests. fleury 1735 · widgets 920 · mcp 66 · clean. Focused review running. →
+  Next: WS-4 (injection + rate-limit), WS-8 (test shapes), then M2 review.
