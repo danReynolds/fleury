@@ -395,6 +395,64 @@ void main() {
     expect(await mutate(), contains('No node'));
   });
 
+  test(
+    'interleaved concurrent mutations are serialized in submission order '
+    '(concurrency stress, WS-8)',
+    () async {
+      Map<String, Object?> root(int tick) => <String, Object?>{
+        'id': 'root',
+        'role': 'app',
+        'children': <Object?>[
+          for (var b = 0; b < 3; b++)
+            <String, Object?>{
+              'id': 'b$b',
+              'role': 'button',
+              'label': 'B$b',
+              'actions': <String>['activate'],
+            },
+          <String, Object?>{'id': 'c', 'role': 'text', 'label': 'C', 'value': tick},
+        ],
+      };
+      pushRoot(root(0));
+      await bridge.ready;
+
+      // Fire 10 invoke_actions concurrently, round-robin over 3 stable buttons.
+      final order = <String>[for (var i = 0; i < 10; i++) 'b${i % 3}'];
+      final pending = <Future<void>>[
+        for (var i = 0; i < order.length; i++)
+          server.handleLine(
+            _rpc(i, 'tools/call', <String, Object?>{
+              'name': 'invoke_action',
+              'arguments': <String, Object?>{
+                'id': order[i],
+                'action': 'activate',
+              },
+            }),
+          ),
+      ];
+      // Drive each queued mutation in lockstep: wait until it has DISPATCHED
+      // (its settle is now open), then feed exactly one reaction so the settle
+      // closes promptly instead of timing out. The mutex guarantees mutation i+1
+      // can't dispatch until i completes, so a frame never extends a prior
+      // mutation's debounce.
+      for (var i = 0; i < order.length; i++) {
+        await waitUntil(
+          () => transport.sent.whereType<SemanticActionFrame>().length >= i + 1,
+        );
+        await pushAndAwait(root(i + 1));
+      }
+      await Future.wait(pending);
+
+      // The mutex serialized them: every action dispatched, none lost, none
+      // reordered — in exact submission order.
+      final sent = transport.sent
+          .whereType<SemanticActionFrame>()
+          .map((f) => f.id.value)
+          .toList();
+      expect(sent, order);
+    },
+  );
+
   test('a request with explicit id:null still gets answered', () async {
     await server.handleLine('{"jsonrpc":"2.0","id":null,"method":"ping"}');
     final ok = jsonDecode(out.removeLast()) as Map<String, Object?>;
