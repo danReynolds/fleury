@@ -57,24 +57,6 @@ void main() {
     }
   }
 
-  /// Pushes [root] stamped with structure generation [gen] (and awaits decode),
-  /// for the generation-based stale-reference guard. [root] must differ from the
-  /// last push or the encoder emits no frame.
-  Future<void> pushRootWithGen(Map<String, Object?> root, int gen) async {
-    final before = bridge.revision;
-    final snapshot = SemanticInspectionSnapshot.fromJson(<String, Object?>{
-      'schemaVersion': 1,
-      'structureGeneration': gen,
-      'root': root,
-    });
-    final bytes = encoder.encode(snapshot);
-    expect(bytes, isNotNull, reason: 'snapshot should differ from the last');
-    transport.addIncoming(SemanticsFrame(bytes!));
-    while (bridge.revision == before) {
-      await Future<void>.delayed(Duration.zero);
-    }
-  }
-
   /// A root holding a single button [id]/[label] plus a [count] text node, so a
   /// value tick (changing count) leaves the button's role+label fingerprint
   /// untouched.
@@ -270,81 +252,6 @@ void main() {
     expect(transport.sent.whereType<SemanticActionFrame>(), isEmpty);
   });
 
-  test('invoke_action fails safe when a positional id is acted on with a stale '
-      'observed_generation', () async {
-    Map<String, Object?> rootWith({required bool banner}) => <String, Object?>{
-      'id': 'root',
-      'role': 'app',
-      'children': <Object?>[
-        if (banner)
-          <String, Object?>{'id': 'b', 'role': 'text', 'label': 'New'},
-        <String, Object?>{
-          'id': 'element-7', // a positional/auto id, subject to the guard
-          'role': 'button',
-          'label': 'Run',
-          'actions': <String>['activate'],
-        },
-      ],
-    };
-
-    await pushRootWithGen(rootWith(banner: false), 5); // agent reads gen 5
-    expect(bridge.structureGeneration, 5);
-    await pushRootWithGen(rootWith(banner: true), 6); // a node inserted → gen 6
-    expect(bridge.structureGeneration, 6);
-
-    // Acting on the positional id with the now-stale generation fails safe —
-    // before any action frame is sent.
-    await server.handleLine(
-      _rpc(20, 'tools/call', <String, Object?>{
-        'name': 'invoke_action',
-        'arguments': <String, Object?>{
-          'id': 'element-7',
-          'action': 'activate',
-          'observed_generation': 5,
-        },
-      }),
-    );
-    expect(toolError(lastResult()), contains('structure changed'));
-    expect(transport.sent.whereType<SemanticActionFrame>(), isEmpty);
-  });
-
-  test('the generation guard is positional-only: a stable id with a stale '
-      'generation is NOT rejected', () async {
-    Map<String, Object?> rootWith({required bool banner}) => <String, Object?>{
-      'id': 'root',
-      'role': 'app',
-      'children': <Object?>[
-        if (banner)
-          <String, Object?>{'id': 'b', 'role': 'text', 'label': 'New'},
-        <String, Object?>{
-          'id': 'run', // a STABLE app-assigned id
-          'role': 'button',
-          'label': 'Run',
-          'actions': <String>['activate'],
-        },
-      ],
-    };
-
-    await pushRootWithGen(rootWith(banner: false), 5);
-    await pushRootWithGen(rootWith(banner: true), 6);
-
-    // Stable id + stale generation: not flagged; the action dispatches (an
-    // in-flight reaction frame lets settle return without waiting the timeout).
-    final pending = server.handleLine(
-      _rpc(21, 'tools/call', <String, Object?>{
-        'name': 'invoke_action',
-        'arguments': <String, Object?>{
-          'id': 'run',
-          'action': 'activate',
-          'observed_generation': 5,
-        },
-      }),
-    );
-    await pushRootWithGen(rootWith(banner: false), 7); // app reacts
-    await pending;
-    expect(transport.sent.whereType<SemanticActionFrame>(), isNotEmpty);
-  });
-
   test('invoke_action rejects an ambiguous id', () async {
     pushRoot(<String, Object?>{
       'id': 'root',
@@ -444,6 +351,99 @@ void main() {
       contains('element-2'),
     );
   });
+
+  test(
+    'invoke_action blocks a same-role/same-label positional swap that role+label '
+    'alone would miss (enriched fingerprint catches the action-set change)',
+    () async {
+      Map<String, Object?> rootWith(List<String> actions) => <String, Object?>{
+        'id': 'root',
+        'role': 'app',
+        'children': <Object?>[
+          <String, Object?>{
+            'id': 'element-9',
+            'role': 'button',
+            'label': 'Go',
+            'actions': actions,
+          },
+        ],
+      };
+
+      // The agent reads a positional button "Go" that only activates.
+      pushRoot(rootWith(<String>['activate']));
+      await bridge.ready;
+      await server.handleLine(
+        _rpc(60, 'tools/call', <String, Object?>{
+          'name': 'get_ui',
+          'arguments': <String, Object?>{},
+        }),
+      );
+      lastResult();
+
+      // The positional slot now holds a same-role, same-label button with a
+      // DIFFERENT capability set — a different logical control. A role+label
+      // fingerprint passes it; the enriched fingerprint (sorted action set
+      // included) fails safe.
+      await pushAndAwait(rootWith(<String>['activate', 'setValue']));
+      await server.handleLine(
+        _rpc(61, 'tools/call', <String, Object?>{
+          'name': 'invoke_action',
+          'arguments': <String, Object?>{'id': 'element-9', 'action': 'activate'},
+        }),
+      );
+      expect(toolError(lastResult()), contains('Stale reference'));
+      expect(transport.sent.whereType<SemanticActionFrame>(), isEmpty);
+    },
+  );
+
+  test(
+    'invoke_action does NOT flag a positional id whose own value ticked '
+    '(value is excluded from the fingerprint, so a live UI never livelocks)',
+    () async {
+      Map<String, Object?> rootWith(int value) => <String, Object?>{
+        'id': 'root',
+        'role': 'app',
+        'children': <Object?>[
+          <String, Object?>{
+            'id': 'element-3',
+            'role': 'spinButton',
+            'label': 'Level',
+            'value': value,
+            'actions': <String>['activate', 'setValue'],
+          },
+        ],
+      };
+
+      pushRoot(rootWith(0));
+      await bridge.ready;
+      await server.handleLine(
+        _rpc(70, 'tools/call', <String, Object?>{
+          'name': 'get_ui',
+          'arguments': <String, Object?>{},
+        }),
+      );
+      lastResult();
+
+      // The SAME control's value ticks between the read and the action. A
+      // value-aware fingerprint would false-flag it as stale on every tick,
+      // livelocking the agent; ours excludes value, so the action dispatches.
+      await pushAndAwait(rootWith(1));
+      final pending = server.handleLine(
+        _rpc(71, 'tools/call', <String, Object?>{
+          'name': 'invoke_action',
+          'arguments': <String, Object?>{'id': 'element-3', 'action': 'activate'},
+        }),
+      );
+      pushRoot(rootWith(2)); // settle reaction
+      await pending;
+
+      expect(toolJson(lastResult())['invoked'], isNotNull);
+      expect(
+        transport.sent.whereType<SemanticActionFrame>().map((f) => f.id.value),
+        contains('element-3'),
+      );
+    },
+  );
 
   test('invoke_action exempts a stable id from the stale check', () async {
     Map<String, Object?> playButton(String label) => <String, Object?>{

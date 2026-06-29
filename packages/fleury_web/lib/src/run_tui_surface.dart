@@ -474,11 +474,12 @@ Future<TuiSurfaceHost> runTuiSurface(
       semanticDirty = true;
       final actions = List<_PendingSemanticAction>.of(pendingSemanticActions);
       pendingSemanticActions.clear();
-      // Force-flush so the action resolves against the tree the assistive
-      // technology actually saw, not a stale retained snapshot.
+      // Force-flush so the displayed tree reflects the action's target, not a
+      // stale retained snapshot.
       if (semanticFlushScheduled) flushSemanticsNow('semantic-action');
-      final semanticTree = semanticsOwner?.currentTree;
-      if (semanticTree == null) {
+      // A semantic frame must have been presented (so the AT/agent had ids to
+      // hold) before an action can resolve; if none has yet, it's notFound.
+      if (semanticsOwner?.currentTree == null) {
         for (final request in actions) {
           scheduleFrame(
             'semantic-action:${request.action.name}:'
@@ -486,6 +487,13 @@ Future<TuiSurfaceHost> runTuiSurface(
           );
         }
       } else {
+        // Dispatch resolves against a FRESH fromElement tree from the live
+        // mounted root — NOT `currentTree`, which can be a const-constructed
+        // coverage-fallback or retained-leaf tree with a null element map
+        // (elementById → null → the action silently no-ops). Actionable ids are
+        // always real element nodes (text fallbacks carry no actions), so this
+        // resolves the same ids the AT saw, with a live element map.
+        final semanticTree = SemanticTree.fromElement(mounted);
         for (final request in actions) {
           semanticActivationInFrame = request.id;
           semanticActivationForFlush = request.id;

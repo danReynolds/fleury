@@ -36,7 +36,6 @@ final class SemanticInspectionSnapshot {
     required this.focusedNodeId,
     required Map<String, int> roleCounts,
     required this.actionCount,
-    this.structureGeneration = 0,
   }) : roleCounts = Map<String, int>.unmodifiable(roleCounts);
 
   factory SemanticInspectionSnapshot.fromTree(
@@ -48,7 +47,6 @@ final class SemanticInspectionSnapshot {
       schemaVersion: schemaVersion,
       root: root,
       preferredFocusedNodeId: null,
-      structureGeneration: tree.structureGeneration,
     );
   }
 
@@ -75,7 +73,6 @@ final class SemanticInspectionSnapshot {
       schemaVersion: schemaVersion,
       root: SemanticInspectionNode.fromJson(rootJson),
       preferredFocusedNodeId: _jsonString(json['focusedNodeId']),
-      structureGeneration: _jsonInt(json['structureGeneration'], fallback: 0),
     );
   }
 
@@ -87,7 +84,6 @@ final class SemanticInspectionSnapshot {
     required int schemaVersion,
     required SemanticInspectionNode root,
     required String? preferredFocusedNodeId,
-    int structureGeneration = 0,
   }) {
     final nodes = root.selfAndDescendants.toList(growable: false);
     var actionCount = 0;
@@ -117,18 +113,10 @@ final class SemanticInspectionSnapshot {
           : firstFocusedNodeId,
       roleCounts: sortedRoleCounts,
       actionCount: actionCount,
-      structureGeneration: structureGeneration,
     );
   }
 
   final int schemaVersion;
-
-  /// The build owner's structure generation when this snapshot was taken (see
-  /// `BuildOwner.structureGeneration`). Bumps only on tree-*shape* change, so a
-  /// consumer can pass the value it observed back with an action and have a
-  /// *positional* node id rejected as stale on a mismatch. 0 for a snapshot
-  /// parsed from JSON that predates the field.
-  final int structureGeneration;
   final SemanticInspectionNode root;
   final int nodeCount;
   final String? focusedNodeId;
@@ -217,7 +205,6 @@ final class SemanticInspectionSnapshot {
 
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': schemaVersion,
-    'structureGeneration': structureGeneration,
     'nodeCount': nodeCount,
     'focusedNodeId': focusedNodeId,
     'roleCounts': roleCounts,
@@ -234,7 +221,6 @@ final class SemanticInspectionSnapshot {
     final budget = _NodeBudget(maxNodes <= 1 ? 0 : maxNodes - 1);
     return <String, Object?>{
       'schemaVersion': schemaVersion,
-      'structureGeneration': structureGeneration,
       'nodeCount': nodeCount,
       if (nodeCount > maxNodes) 'truncated': true,
       'focusedNodeId': focusedNodeId,
@@ -252,10 +238,7 @@ final class SemanticInspectionSnapshot {
   /// drive its accessible DOM presenter from a `SemanticsFrame`, so a served
   /// session stays screen-reader- and agent-readable without shipping the live
   /// widget tree.
-  SemanticTree toSemanticTree() => SemanticTree(
-    root: root.toSemanticNode(),
-    structureGeneration: structureGeneration,
-  );
+  SemanticTree toSemanticTree() => SemanticTree(root: root.toSemanticNode());
 
   /// Returns a deterministic, redaction-aware tree summary for humans.
   ///

@@ -83,12 +83,6 @@ final class FleuryAppBridge {
   /// action, then [settle] past it to observe the result.
   int get revision => _revision;
 
-  /// The app's build-owner structure generation (from the latest frame), which
-  /// advances only on a tree-*shape* change. Carried over the wire on each
-  /// semantics frame. A held positional node id observed at one generation is
-  /// stale once this advances; [settle] also debounces on it.
-  int get structureGeneration => _tree?.structureGeneration ?? 0;
-
   /// Whether the app is still connected (false once it sends BYE or the
   /// transport drops).
   bool get isRunning => !_exited.isCompleted;
@@ -194,12 +188,11 @@ final class FleuryAppBridge {
     int? sinceRevision,
     Duration quiet = const Duration(milliseconds: 60),
     Duration timeout = const Duration(seconds: 2),
+    Duration settleCap = const Duration(milliseconds: 500),
   }) async {
     final stopwatch = Stopwatch()..start();
-    Duration remaining() {
-      final left = timeout - stopwatch.elapsed;
-      return left.isNegative ? Duration.zero : left;
-    }
+    Duration clampToZero(Duration d) => d.isNegative ? Duration.zero : d;
+    Duration remaining() => clampToZero(timeout - stopwatch.elapsed);
 
     // Phase 1: wait for the first reaction past the captured revision.
     if (sinceRevision != null) {
@@ -210,17 +203,29 @@ final class FleuryAppBridge {
       }
     }
 
-    // Phase 2: settle on STRUCTURE stability, not raw revision. A continuously
-    // animating app (a ticking dashboard) bumps `revision` every frame while its
-    // shape stays put, so a revision-keyed debounce never closes and falls
-    // through to `timeout`. The structure generation only advances on a shape
-    // change, so keying the debounce on it returns ~`quiet` after the shape stops
-    // moving — promptly even while values keep ticking.
-    while (isRunning && stopwatch.elapsed < timeout) {
-      final before = structureGeneration;
-      final window = quiet < remaining() ? quiet : remaining();
+    // Phase 2: event-driven debounce. Wait `quiet` for the next frame; if none
+    // arrives in that window the burst has settled, so return — discrete
+    // reactions (even multi-frame animations) settle correctly here.
+    //
+    // But a continuously-animating app (a ticking dashboard) bumps the revision
+    // faster than `quiet` forever and NEVER goes quiet, so the debounce alone
+    // would chase quiet until the full `timeout` on every observe. Bound Phase 2
+    // by `settleCap` past this point: Phase 1 already captured the reaction, so
+    // when the app simply won't go quiet we return the live frame in ~settleCap
+    // rather than eating `timeout`. (The returned tree is correct either way —
+    // this only bounds latency, never the result.)
+    final phase2Deadline = stopwatch.elapsed + settleCap;
+    Duration phase2Remaining() => clampToZero(phase2Deadline - stopwatch.elapsed);
+    while (isRunning &&
+        stopwatch.elapsed < timeout &&
+        stopwatch.elapsed < phase2Deadline) {
+      final before = _revision;
+      final budget = remaining() < phase2Remaining()
+          ? remaining()
+          : phase2Remaining();
+      final window = quiet < budget ? quiet : budget;
       await _nextTick(window);
-      if (structureGeneration == before) break;
+      if (_revision == before) break;
     }
     return snapshot;
   }

@@ -578,13 +578,11 @@ final class SemanticNode {
 /// backend can produce the same query surface from a maintained tree without
 /// committing callers to the walk.
 final class SemanticTree {
-  const SemanticTree({required this.root, this.structureGeneration = 0})
-    : _elementsById = null;
+  const SemanticTree({required this.root}) : _elementsById = null;
 
   SemanticTree._({
     required this.root,
     required Map<SemanticNodeId, Element> elementsById,
-    required this.structureGeneration,
   }) : _elementsById = elementsById;
 
   factory SemanticTree.fromElement(Element root) {
@@ -597,18 +595,10 @@ final class SemanticTree {
         children: children,
       ),
       elementsById: elements,
-      structureGeneration: root.owner.structureGeneration,
     );
   }
 
   final SemanticNode root;
-
-  /// The build owner's structure generation at the instant this tree was built
-  /// (see `BuildOwner.structureGeneration`). Stamped onto the inspection
-  /// snapshot so a consumer holding a *positional* node id can detect — by an
-  /// observed-generation mismatch — that the tree shape moved, and fail safely
-  /// rather than drive whatever now occupies that slot.
-  final int structureGeneration;
 
   /// The mounted [Element] that contributes each node id, captured during the
   /// [fromElement] build walk. Lets action dispatch resolve a target id to its
@@ -661,21 +651,12 @@ final class SemanticTree {
     if (replacements.isEmpty) return this;
     final replacement = _replaceSemanticNode(root, replacements);
     if (identical(replacement, root)) return this;
-    // Leaf replacement only rewrites node *values* by id — structure (and thus
-    // id→element ownership) is unchanged (a structural change forces a full
-    // rebuild upstream), so the source tree's element map carries forward and
-    // keeps action dispatch working on the retained path.
-    final elements = _elementsById;
-    final tree = elements == null
-        ? SemanticTree(root: replacement)
-        : SemanticTree._(
-            root: replacement,
-            elementsById: elements,
-            // A leaf-only update means no shape change, so the generation is
-            // unchanged from the source tree (a structural change forces a full
-            // rebuild upstream, which re-reads the owner).
-            structureGeneration: structureGeneration,
-          );
+    // The element map is intentionally NOT carried forward: action dispatch
+    // always resolves against a fresh `fromElement` tree built from the live
+    // root (terminal, web, and tester paths all do this), so a retained-leaf
+    // snapshot never needs to back dispatch — and carrying a prior frame's
+    // elements risks pointing at since-unmounted ones.
+    final tree = SemanticTree(root: replacement);
     _cacheLeafReplacementTree(this, tree, replacements);
     return tree;
   }

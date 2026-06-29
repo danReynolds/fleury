@@ -442,7 +442,6 @@ abstract class Element implements BuildContext {
     _lifecycle = _ElementLifecycle.active;
     final key = _widget.key;
     if (key is GlobalKey) key._register(this);
-    _owner?._markStructureChanged(); // an element entered the tree
   }
 
   /// Removes this element from the tree permanently.
@@ -503,7 +502,6 @@ abstract class Element implements BuildContext {
     _detachDependencies();
     _owner?._dirtyElements.remove(this);
     _lifecycle = _ElementLifecycle.inactive;
-    _owner?._markStructureChanged(); // an element left its tree slot
     deactivate();
   }
 
@@ -533,7 +531,6 @@ abstract class Element implements BuildContext {
   void _activate() {
     assert(_lifecycle == _ElementLifecycle.inactive);
     _lifecycle = _ElementLifecycle.active;
-    _owner?._markStructureChanged(); // an element re-entered the tree (reparent)
     // A rebuild that was pending when the subtree was deactivated still
     // needs to run; re-enqueue it. The element's own `update` (driven by
     // the reclaiming parent) handles the move-induced rebuild.
@@ -990,25 +987,6 @@ class BuildOwner {
   /// fully isolated and lets deferred consumers accumulate damage across
   /// frames until they take it.
   final RenderDamageTracker renderDamageTracker = RenderDamageTracker();
-
-  /// A monotonic counter bumped **only** when the element tree's *shape* changes
-  /// — an element mounted, deactivated (removed), reactivated (reparented), or a
-  /// child reordered in place — and **never** on a value-only rebuild. It is the
-  /// build owner's authoritative "did the structure move?" signal: stamped on
-  /// each semantic snapshot so a held *positional* node id can be detected as
-  /// stale and fail safely instead of driving whatever now occupies that slot.
-  /// Only equality across snapshots is meaningful, so over-counting (e.g. a
-  /// reparent bumps twice) is harmless.
-  int _structureGeneration = 0;
-
-  /// The current structure generation (see [_structureGeneration]).
-  int get structureGeneration => _structureGeneration;
-
-  /// Bumped from [Element] lifecycle (mount / deactivate / activate) and the
-  /// in-place child-reorder path whenever the tree shape changes.
-  void _markStructureChanged() {
-    _structureGeneration++;
-  }
 
   final Set<Element> _dirtyElements = <Element>{};
 
@@ -1583,10 +1561,6 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
     final owner = renderObject as RenderObjectWithChildren;
     final current = owner.children;
     if (_sameRenderObjectOrder(current, desired)) return;
-    // Children reordered in place (compatible unkeyed slots updated, no
-    // mount/unmount) — the one shape change the Element lifecycle hooks miss.
-    // `owner` above is the render object; bump the build owner.
-    _owner?._markStructureChanged();
     owner.replaceAllChildren(desired);
   }
 

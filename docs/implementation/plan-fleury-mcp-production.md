@@ -19,8 +19,8 @@ update the **Status board** as you go.
 | WS | Goal | Milestone | Priority | Depends | Status |
 | --- | --- | --- | --- | --- | --- |
 | WS-3 | Authoritative id→element dispatch (early win) | M1 | P0 | — | `[x]` **done** (2026-06-29) |
-| WS-0 | Build-owner structure generation (= A3) | M1 | P0 | — | `[x]` **done** (2026-06-29) — wire delivery → WS-2 |
-| WS-2 | Generation-keyed settle + stale guard | M1 | P0 | WS-0 | `[x]` **done** (2026-06-29) |
+| WS-0 | ~~Build-owner structure generation (= A3)~~ | M1 | P0 | — | `[~]` **reverted** (2026-06-29) — milestone review found it under-delivered + too coarse; superseded by WS-2 fingerprint. See changelog. |
+| WS-2 | Enriched-fingerprint stale guard + capped settle + web-dispatch fix | M1 | P0 | WS-3 | `[x]` **done** (2026-06-29) |
 | WS-1 | Resource subscriptions + delta push (Route A) | M2 | P0 | WS-0¹ | `[ ]` not started |
 | WS-4 | Prompt-injection mitigation + rate-limit | M2 | P1 | — | `[ ]` not started |
 | WS-9 | Typed affordances (expose + validate) | M2 | P1 | `setValue` (shipped) | `[ ]` not started |
@@ -80,77 +80,65 @@ existing tree walk, so dispatch is O(1) and matches snapshot ids by construction
 **Validate** — `[x]` `fleury` (1734) · `[x]` `fleury_widgets` (920) ·
 `[x]` `fleury_web` (201, retained-leaf parity) · `[x]` `fleury_mcp` (45) · `[x]` analyze 0 errors.
 
-### WS-0 — Build-owner structure generation (= identity-RFC A3)  ·  `[ ]`
+### WS-0 — ~~Build-owner structure generation (= identity-RFC A3)~~  ·  `[~]` REVERTED
 
-**Goal.** A monotonic counter that bumps **only on tree-shape change**, covering
-**all** elements (incl. non-`Semantics`), threaded onto the snapshot/wire. The
-foundation under WS-2, cross-snapshot WS-3, and A3.
-**⚠ Framework-core change with a real correctness surface** — the hot path
-reshuffles shape *in place with no lifecycle event*; the reverted memo proves a
-too-narrow signal is unsafe.
+**Built, then reverted (2026-06-29).** The generation was implemented and committed
+(`42eb8d9`), but the M1 milestone review found the *global* counter unfit as a
+stale-guard primitive. Two independent holes:
+- **Under-delivered (→ silent mis-target):** the counter bumps on any element
+  change, but the wire only ships it on a *semantic-dirty* frame, and the bump
+  itself missed direct-unmount paths (lazy `ListView` removal bypasses
+  `_deactivate` — proven: itemCount 4→3 left the generation unchanged). A
+  positional id could shift while the bridge's generation stayed stale.
+- **Too coarse (→ false positives):** one whole-tree counter invalidates *every*
+  positional id on *any* structural change anywhere, false-flagging held ids in
+  static corners of a dynamic UI — which would push agents to stop passing it,
+  neutering the guard.
 
-**Tasks**
-- [x] Added `BuildOwner._structureGeneration` + `structureGeneration` getter +
-      `_markStructureChanged()`.
-- [x] Bump on base `Element` lifecycle: `mount`, `_deactivate`, `_activate`
-      (these cover add / remove / reparent — `_deactivate` precedes every
-      `unmount`).
-- [x] Bump on the in-place child reorder (`_syncChildRenderObjects`'s
-      `!_sameRenderObjectOrder` branch) — the one shape change the lifecycle hooks
-      miss.
-- [x] Value-only updates do **not** bump (verified by the property test).
-- [x] Threaded onto `SemanticTree.structureGeneration` (read from `root.owner` in
-      `fromElement`; carried through `replaceNodes` for the retained-leaf path) →
-      `SemanticInspectionSnapshot.structureGeneration` → `toJson`/`toJsonCapped`.
-- [~] **Wire + bridge delivery moved to WS-2** (its consumption boundary): add the
-      generation to the semantics frame envelope + decode in `app_bridge`.
+A per-node fingerprint (WS-2) is both safe (no false positives) and reliable (no
+wire/bump dependency), so WS-0 was reverted in full. A *scoped* per-subtree
+generation remains a possible future "leading" investment if durable positional
+targeting on dynamic UIs becomes a priority — **parked, not built.**
 
-**Acceptance**
-- [x] Property test (`structure_generation_test.dart`, 6 cases): bumps **iff**
-      shape changed (add / remove / keyed reorder / non-Semantics sibling shift),
-      **never** on a value-only rebuild or an unkeyed same-type "swap". *(Pins the
-      reverted-memo failure mode.)*
-- [x] The in-process inspection snapshot carries the generation; *(over-the-wire
-      to the bridge → WS-2)*.
+### WS-2 — Enriched-fingerprint stale guard + capped settle + web-dispatch fix  ·  `[x]` done
 
-**Validate** — `[x]` `fleury` (1740, incl. framework + semantics + remote) ·
-`[x]` `fleury_web` (201, parity) · `[x]` `fleury_mcp` (45, additive JSON key) ·
-`[x]` analyze 0 errors.
-
-### WS-2 — Generation-keyed settle + stale guard  ·  `[ ]`
-
-**Goal.** Deterministic "observe after X": fail safe on a stale positional id via
-the generation (catches the same-role/same-label swap the fingerprint misses),
-and fix the never-close-under-animation settle.
-**Depends.** WS-0.
+**Goal.** Deterministic "observe after X" without the global-generation holes:
+fail safe on a stale positional id via a per-node fingerprint, fix the
+never-close-under-animation settle, and fix the web-dispatch regression the
+milestone review surfaced. **Depends.** WS-3 (dispatch map).
 
 **Tasks**
-- [x] **Wire delivery** (from WS-0): `gen` field on the semantics frame envelope
-      (`remote_semantics.dart`, full + patch), decoded into the tree
-      (`SemanticTree.structureGeneration`) and exposed as `bridge.structureGeneration`.
-- [x] `get_ui` / resource stamp `structureGeneration` (automatic via
-      `toJsonCapped`/`toJson`); `observed_generation` added to the tool schemas.
-- [x] Accept `observed_generation` on `invoke_action`/`set_value`; thread to
-      `_resolveActionableNode`.
-- [x] Stale guard: for a positional id, fail typed `stale` when
-      `observedGeneration != bridge.structureGeneration` (catches the
-      same-role/same-label swap the fingerprint can't); fingerprint kept as the
-      no-generation fallback.
-- [x] **Settle keyed on the structure generation, not raw revision** — Phase-2
-      debounces on `structureGeneration`, so a continuously-animating app (stable
-      shape, ticking values) settles in ~`quiet` instead of eating the 2 s timeout
-      (the bonus bug). Elegant: needed no extra wall-clock cap.
-- [x] `wait_for_change` rides the same path (uses `settle`).
-- [~] *(Decision logged)* a wire idle/busy bit was **not** needed — generation-keyed
-      settle handles the animation case correctly.
+- [x] **Web-dispatch fix (HIGH, from the review).** Web action dispatch resolved
+      against `semanticsOwner.currentTree`, which can be a const-constructed
+      coverage-fallback or retained-leaf tree with a null element map → a live,
+      actionable button silently no-ops. Now dispatch builds a fresh
+      `fromElement(mounted)` (matching the terminal path); reverted the
+      now-needless `replaceNodes` element-map carry-forward (also a MED
+      stale-element risk). Regression test reproduces a real fallback frame.
+- [x] **Enriched fingerprint** (`_fingerprint`): role + label + child-count +
+      sorted action-set (NUL-joined). Catches same-role/same-label swaps that
+      role+label alone misses, while deliberately excluding `value`/mutable state
+      so a node whose value ticks between read and action never false-flags (no
+      livelock). Positional-id-only; stable `Semantics(id:)` exempt.
+- [x] **Capped settle** (`app_bridge.dart`): keep the revision-quiet debounce (so
+      discrete reactions, even multi-frame animations, settle correctly), but
+      bound Phase-2 by a `settleCap` (500 ms) past the first reaction so a
+      continuously-animating app returns promptly instead of eating the 2 s
+      timeout. Latency-only — the returned tree is always the latest.
+- [x] `wait_for_change` already rides `settle`.
+- [~] *(Decision logged)* No wire idle/busy bit and no `observed_generation` arg —
+      the fingerprint needs neither.
 
 **Acceptance**
-- [x] A positional id acted on with a stale `observed_generation` → typed `stale`,
-      no action frame sent (new `mcp_server_test`); a stable id is exempt.
-- [x] The stable-id dispatch test confirms `settle` returns promptly (the
-      generation-keyed debounce), not after the timeout.
+- [x] A same-role/same-label positional swap differing only in the action set →
+      typed `stale`, no action frame sent (the enrichment in action).
+- [x] A positional id whose own value ticked → NOT flagged; the action dispatches
+      (no livelock).
+- [x] Web dispatch fires through a coverage-fallback (null-map `currentTree`)
+      frame (`run_tui_surface_test`).
+- [x] Stable id exempt; existing label-swap + value-tick cases preserved.
 
-**Validate** — `[x]` `fleury` (1740) · `[x]` `fleury_web` (201) ·
+**Validate** — `[x]` `fleury` (1734) · `[x]` `fleury_web` (201) ·
 `[x]` `fleury_widgets` (920) · `[x]` `fleury_mcp` (47) · `[x]` analyze 0 errors.
 
 ---
@@ -258,23 +246,30 @@ and fix the never-close-under-animation settle.
   Suites: fleury 1734 · widgets 920 · web 201 · mcp 45 · analyze clean. Adapted
   vs the plan: dispatch lived in `invokeSemanticActionFromElement` (not a
   separate `_dispatchSemanticAction`), and the retained-leaf `replaceNodes` map
-  carry-forward was an unplanned-but-necessary fix.
-- *2026-06-29* — **WS-0 done.** `BuildOwner.structureGeneration` bumps on
-  mount/deactivate/activate + in-place reorder; property test (6 cases) pins
-  "bumps iff shape changed, never on value tick", incl. the reverted-memo case
-  (non-Semantics sibling shift). Threaded onto `SemanticTree` →
-  `SemanticInspectionSnapshot` → JSON. Suites: fleury 1740 · web 201 · widgets
-  920 · mcp 45 · analyze clean. **Adapted:** the wire/bridge delivery of the
-  generation moved into WS-2 (where it's consumed) rather than WS-0, since the
-  in-process snapshot already carries it and the wire field only matters once the
-  bridge/get_ui consume it.
-- *2026-06-29* — **WS-2 done. M1 (correctness spine) complete.** Generation rides
-  the wire (`gen` on the semantics envelope) → `bridge.structureGeneration` →
-  `get_ui`. `observed_generation` arg + a positional-id generation stale guard
-  (catches the same-role/same-label swap the fingerprint misses; stable ids
-  exempt). **Settle now debounces on the structure generation** — a ticking
-  dashboard settles promptly instead of eating the 2 s timeout (the never-close
-  bug). 2 new mcp tests. **Adapted:** the settle fix came out cleaner than the
-  planned wall-clock cap — keying Phase-2 on the generation (stable under value
-  ticks) solves it directly. Suites: fleury 1740 · web 201 · widgets 920 ·
-  mcp 47 · clean. → Next: **M1 milestone code review** before M2.
+  carry-forward was an unplanned-but-necessary fix. *(The carry-forward was later
+  reverted in the WS-2 rework — see below — once web dispatch moved to a fresh
+  `fromElement` tree and no longer needed `currentTree`'s map.)*
+- *2026-06-29* — **WS-0 built (`42eb8d9`) and WS-2 first cut (`c72aed1`), then an
+  M1 milestone review (3 adversarial agents over the framework generation, the
+  dispatch map, and the wire/settle/guard) found THREE HIGH issues — two
+  empirically proven:**
+  1. *(framework)* lazy `ListView` removal bypasses `_deactivate`, so the
+     generation didn't bump on a real shape change → stale-guard silently passes.
+  2. *(WS-3 web dispatch)* dispatch against `currentTree` fails after a
+     coverage-fallback frame (null element map) → live buttons no-op.
+  3. *(WS-2 wire)* the generation ships only on semantic-dirty frames, so a
+     non-semantic positional shift isn't delivered → mis-target. Plus the global
+     counter is too coarse (false-positives every positional id on any churn).
+- *2026-06-29* — **WS-2 reworked per the review (Option A, user-approved).**
+  Reverted WS-0 + WS-2's generation guard entirely; kept WS-3's dispatch map.
+  (1) Web dispatch now builds a fresh `fromElement(mounted)` (HIGH #2 fixed +
+  regression test); `replaceNodes` carry-forward reverted. (2) Stale guard now a
+  per-node **enriched fingerprint** (role+label+childCount+actions, value
+  excluded → no livelock) — safe (no false positives) and needs no wire/bump
+  machinery. (3) Settle keeps revision-quiet but caps Phase-2 at 500 ms so a
+  ticking app returns promptly (latency-only). **Why this beats fixing the
+  generation:** the global counter was simultaneously under-delivered (unsafe)
+  and too coarse (unusable); a per-node fingerprint is more precise *and* removes
+  the whole wire/bump failure surface. A scoped generation is parked as a future
+  "leading" option. Suites: fleury 1734 · web 201 · widgets 920 · mcp 47 · clean.
+  → Next: re-run the M1 milestone review on the rework, then M2.
