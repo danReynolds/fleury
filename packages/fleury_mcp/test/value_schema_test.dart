@@ -101,10 +101,11 @@ void main() {
   });
 
   group('validateValueForSchema', () {
-    test('number: range + type', () {
+    test('number: range + type (mirrors widget coercion)', () {
       final s = {'type': 'number', 'minimum': 0, 'maximum': 10};
       expect(validateValueForSchema(s, 5), isNull);
-      expect(validateValueForSchema(s, '5'), isNull); // coerced
+      expect(validateValueForSchema(s, '5'), isNull); // numeric string
+      expect(validateValueForSchema(s, true), isNull); // bool → 1, like widget
       expect(validateValueForSchema(s, 11), contains('above the maximum'));
       expect(validateValueForSchema(s, -1), contains('below the minimum'));
       expect(validateValueForSchema(s, 'abc'), contains('expected a number'));
@@ -117,11 +118,14 @@ void main() {
       expect(validateValueForSchema(s, 10), contains('above the maximum'));
     });
 
-    test('boolean', () {
+    test('boolean (mirrors widget spellings, not just true/false)', () {
       const s = {'type': 'boolean'};
       expect(validateValueForSchema(s, true), isNull);
       expect(validateValueForSchema(s, 'false'), isNull);
-      expect(validateValueForSchema(s, 3), contains('expected a boolean'));
+      expect(validateValueForSchema(s, 'yes'), isNull); // widget spelling
+      expect(validateValueForSchema(s, 'on'), isNull);
+      expect(validateValueForSchema(s, 1), isNull); // num, like widget
+      expect(validateValueForSchema(s, 'maybe'), contains('expected a boolean'));
     });
 
     test('date: format + range', () {
@@ -132,9 +136,11 @@ void main() {
         'maximum': '2020-12-31',
       };
       expect(validateValueForSchema(s, '2020-06-15'), isNull);
+      // A non-ISO but DateTime-parseable form is accepted, like the widget.
+      expect(validateValueForSchema(s, '2020-06-15T09:00:00'), isNull);
       expect(validateValueForSchema(s, '2019-12-31'), contains('earliest'));
       expect(validateValueForSchema(s, '2021-01-01'), contains('latest'));
-      expect(validateValueForSchema(s, 'June 15'), contains('ISO date'));
+      expect(validateValueForSchema(s, 'not a date'), contains('date'));
     });
 
     test('enum: matches label or value, case-insensitive', () {

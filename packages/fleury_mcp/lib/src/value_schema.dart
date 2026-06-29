@@ -71,17 +71,14 @@ Map<String, Object?>? deriveValueSchema(SemanticInspectionNode node) {
 String? validateValueForSchema(Map<String, Object?> schema, Object? value) {
   switch (schema['type']) {
     case 'number':
-      final n = _asNum(value);
+      final n = _coerceNum(value);
       if (n == null) return 'expected a number';
       return _rangeError(n, schema);
     case 'integer':
-      final n = _asNum(value);
-      if (n == null || n != n.truncateToDouble()) return 'expected an integer';
-      return _rangeError(n, schema);
+      if (!_isIntegerLike(value)) return 'expected an integer';
+      return _rangeError(_coerceNum(value)!, schema);
     case 'boolean':
-      if (value is bool) return null;
-      if (value is String && (value == 'true' || value == 'false')) return null;
-      return 'expected a boolean (true or false)';
+      return _isBoolLike(value) ? null : 'expected a boolean (true or false)';
     case 'string':
       if (schema['format'] == 'date') return _dateError(value, schema);
       return null;
@@ -106,8 +103,47 @@ String? validateValueForSchema(Map<String, Object?> schema, Object? value) {
   }
 }
 
-num? _asNum(Object? v) =>
-    v is num ? v : (v is String ? num.tryParse(v.trim()) : null);
+// The coercion below MIRRORS fleury_widgets' semantic_coercion.dart so validation
+// accepts exactly what the widgets accept — never rejecting a value that would in
+// fact apply (a `bool` for a number, the many boolean spellings, any
+// DateTime-parseable date). The MCP layer is widget-agnostic and can't import
+// those helpers, so the rules are restated here; keep them in sync.
+
+num? _coerceNum(Object? v) {
+  if (v is num) return v;
+  if (v is bool) return v ? 1 : 0;
+  if (v is String) return num.tryParse(v.trim());
+  return null;
+}
+
+bool _isIntegerLike(Object? v) {
+  if (v is int || v is bool) return true;
+  if (v is double) return v == v.roundToDouble();
+  if (v is String) return int.tryParse(v.trim()) != null;
+  return false;
+}
+
+bool _isBoolLike(Object? v) {
+  if (v is bool || v is num) return true;
+  if (v is String) {
+    switch (v.trim().toLowerCase()) {
+      case 'true' ||
+          '1' ||
+          'yes' ||
+          'on' ||
+          'checked' ||
+          'enabled' ||
+          'false' ||
+          '0' ||
+          'no' ||
+          'off' ||
+          'unchecked' ||
+          'disabled':
+        return true;
+    }
+  }
+  return false;
+}
 
 String? _rangeError(num n, Map<String, Object?> schema) {
   final min = schema['minimum'];
@@ -118,17 +154,22 @@ String? _rangeError(num n, Map<String, Object?> schema) {
 }
 
 String? _dateError(Object? value, Map<String, Object?> schema) {
-  final s = value?.toString() ?? '';
-  if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s)) {
-    return 'expected an ISO date (YYYY-MM-DD)';
-  }
+  final parsed = value is String ? DateTime.tryParse(value.trim()) : null;
+  if (parsed == null) return 'expected a date (ISO YYYY-MM-DD)';
+  final day = DateTime(parsed.year, parsed.month, parsed.day);
   final min = schema['minimum'];
   final max = schema['maximum'];
-  if (min is String && s.compareTo(min) < 0) {
-    return 'before the earliest allowed date ($min)';
+  if (min is String) {
+    final earliest = DateTime.tryParse(min);
+    if (earliest != null && day.isBefore(earliest)) {
+      return 'before the earliest allowed date ($min)';
+    }
   }
-  if (max is String && s.compareTo(max) > 0) {
-    return 'after the latest allowed date ($max)';
+  if (max is String) {
+    final latest = DateTime.tryParse(max);
+    if (latest != null && day.isAfter(latest)) {
+      return 'after the latest allowed date ($max)';
+    }
   }
   return null;
 }
