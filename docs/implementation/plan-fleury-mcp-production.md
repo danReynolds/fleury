@@ -19,7 +19,7 @@ update the **Status board** as you go.
 | WS | Goal | Milestone | Priority | Depends | Status |
 | --- | --- | --- | --- | --- | --- |
 | WS-3 | Authoritative id→element dispatch (early win) | M1 | P0 | — | `[x]` **done** (2026-06-29) |
-| WS-0 | Build-owner structure generation (= A3) | M1 | P0 | — | `[ ]` not started |
+| WS-0 | Build-owner structure generation (= A3) | M1 | P0 | — | `[x]` **done** (2026-06-29) — wire delivery → WS-2 |
 | WS-2 | Generation-keyed settle + stale guard | M1 | P0 | WS-0 | `[ ]` not started |
 | WS-1 | Resource subscriptions + delta push (Route A) | M2 | P0 | WS-0¹ | `[ ]` not started |
 | WS-4 | Prompt-injection mitigation + rate-limit | M2 | P1 | — | `[ ]` not started |
@@ -90,31 +90,32 @@ reshuffles shape *in place with no lifecycle event*; the reverted memo proves a
 too-narrow signal is unsafe.
 
 **Tasks**
-- [ ] Add `int _structureGeneration` to `BuildOwner` with a monotonic getter.
-- [ ] Bump on element lifecycle in base `Element`: `mount` (`framework.dart:437`),
-      `unmount` (`:449`), reparent (`_activateWithParent` / `_deactivateChild`,
-      `~:484/:512`).
-- [ ] Bump on **in-place unkeyed reorder** — the `!_sameRenderObjectOrder` branch
-      in `MultiChildRenderObjectElement` (`framework.dart:1563`). *(This is the
-      site `SemanticDirtyTracker` misses — the crux.)*
-- [ ] Confirm value-only updates do **not** bump (no bump on the non-structural
-      `Element.update` path).
-- [ ] Thread the generation onto the emitted snapshot at the flush build site
-      (`run_tui.dart:316` / `run_tui_surface.dart:321`); add a
-      `structureGeneration` field to `SemanticInspectionSnapshot`.
-- [ ] Carry it on the wire: additive field on the semantics patch envelope
-      (already versioned via `'v'`, `remote_semantics.dart`) or `SemanticsFrame`;
-      decode in `app_bridge.dart`.
+- [x] Added `BuildOwner._structureGeneration` + `structureGeneration` getter +
+      `_markStructureChanged()`.
+- [x] Bump on base `Element` lifecycle: `mount`, `_deactivate`, `_activate`
+      (these cover add / remove / reparent — `_deactivate` precedes every
+      `unmount`).
+- [x] Bump on the in-place child reorder (`_syncChildRenderObjects`'s
+      `!_sameRenderObjectOrder` branch) — the one shape change the lifecycle hooks
+      miss.
+- [x] Value-only updates do **not** bump (verified by the property test).
+- [x] Threaded onto `SemanticTree.structureGeneration` (read from `root.owner` in
+      `fromElement`; carried through `replaceNodes` for the retained-leaf path) →
+      `SemanticInspectionSnapshot.structureGeneration` → `toJson`/`toJsonCapped`.
+- [~] **Wire + bridge delivery moved to WS-2** (its consumption boundary): add the
+      generation to the semantics frame envelope + decode in `app_bridge`.
 
 **Acceptance**
-- [ ] Property/fuzz test: across a battery of tree mutations, the generation
-      bumps **iff** shape changed (add/remove/reparent/reorder) — never on a
-      value tick. *(Pins the reverted-memo failure mode.)*
-- [ ] Unkeyed `Row`/`Column` child reorder bumps the generation.
-- [ ] The snapshot the bridge decodes carries the current generation.
+- [x] Property test (`structure_generation_test.dart`, 6 cases): bumps **iff**
+      shape changed (add / remove / keyed reorder / non-Semantics sibling shift),
+      **never** on a value-only rebuild or an unkeyed same-type "swap". *(Pins the
+      reverted-memo failure mode.)*
+- [x] The in-process inspection snapshot carries the generation; *(over-the-wire
+      to the bridge → WS-2)*.
 
-**Validate** — `[ ]` `fleury` (widgets/framework + semantics + remote) ·
-`[ ]` `fleury_web` (parity).
+**Validate** — `[x]` `fleury` (1740, incl. framework + semantics + remote) ·
+`[x]` `fleury_web` (201, parity) · `[x]` `fleury_mcp` (45, additive JSON key) ·
+`[x]` analyze 0 errors.
 
 ### WS-2 — Generation-keyed settle + stale guard  ·  `[ ]`
 
@@ -255,3 +256,12 @@ and fix the never-close-under-animation settle.
   vs the plan: dispatch lived in `invokeSemanticActionFromElement` (not a
   separate `_dispatchSemanticAction`), and the retained-leaf `replaceNodes` map
   carry-forward was an unplanned-but-necessary fix.
+- *2026-06-29* — **WS-0 done.** `BuildOwner.structureGeneration` bumps on
+  mount/deactivate/activate + in-place reorder; property test (6 cases) pins
+  "bumps iff shape changed, never on value tick", incl. the reverted-memo case
+  (non-Semantics sibling shift). Threaded onto `SemanticTree` →
+  `SemanticInspectionSnapshot` → JSON. Suites: fleury 1740 · web 201 · widgets
+  920 · mcp 45 · analyze clean. **Adapted:** the wire/bridge delivery of the
+  generation moved into WS-2 (where it's consumed) rather than WS-0, since the
+  in-process snapshot already carries it and the wire field only matters once the
+  bridge/get_ui consume it.

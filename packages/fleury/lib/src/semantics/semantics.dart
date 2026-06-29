@@ -578,11 +578,14 @@ final class SemanticNode {
 /// backend can produce the same query surface from a maintained tree without
 /// committing callers to the walk.
 final class SemanticTree {
-  const SemanticTree({required this.root}) : _elementsById = null;
+  const SemanticTree({required this.root})
+    : _elementsById = null,
+      structureGeneration = 0;
 
   SemanticTree._({
     required this.root,
     required Map<SemanticNodeId, Element> elementsById,
+    required this.structureGeneration,
   }) : _elementsById = elementsById;
 
   factory SemanticTree.fromElement(Element root) {
@@ -595,10 +598,18 @@ final class SemanticTree {
         children: children,
       ),
       elementsById: elements,
+      structureGeneration: root.owner.structureGeneration,
     );
   }
 
   final SemanticNode root;
+
+  /// The build owner's structure generation at the instant this tree was built
+  /// (see `BuildOwner.structureGeneration`). Stamped onto the inspection
+  /// snapshot so a consumer holding a *positional* node id can detect — by an
+  /// observed-generation mismatch — that the tree shape moved, and fail safely
+  /// rather than drive whatever now occupies that slot.
+  final int structureGeneration;
 
   /// The mounted [Element] that contributes each node id, captured during the
   /// [fromElement] build walk. Lets action dispatch resolve a target id to its
@@ -658,7 +669,14 @@ final class SemanticTree {
     final elements = _elementsById;
     final tree = elements == null
         ? SemanticTree(root: replacement)
-        : SemanticTree._(root: replacement, elementsById: elements);
+        : SemanticTree._(
+            root: replacement,
+            elementsById: elements,
+            // A leaf-only update means no shape change, so the generation is
+            // unchanged from the source tree (a structural change forces a full
+            // rebuild upstream, which re-reads the owner).
+            structureGeneration: structureGeneration,
+          );
     _cacheLeafReplacementTree(this, tree, replacements);
     return tree;
   }
