@@ -396,18 +396,18 @@ void main() {
   });
 
   test(
-    'interleaved concurrent mutations are serialized in submission order '
+    'the mutation mutex gates a 2nd concurrent mutation until the 1st settles '
     '(concurrency stress, WS-8)',
     () async {
       Map<String, Object?> root(int tick) => <String, Object?>{
         'id': 'root',
         'role': 'app',
         'children': <Object?>[
-          for (var b = 0; b < 3; b++)
+          for (final id in <String>['a', 'b'])
             <String, Object?>{
-              'id': 'b$b',
+              'id': id,
               'role': 'button',
-              'label': 'B$b',
+              'label': id.toUpperCase(),
               'actions': <String>['activate'],
             },
           <String, Object?>{'id': 'c', 'role': 'text', 'label': 'C', 'value': tick},
@@ -416,40 +416,83 @@ void main() {
       pushRoot(root(0));
       await bridge.ready;
 
-      // Fire 10 invoke_actions concurrently, round-robin over 3 stable buttons.
-      final order = <String>[for (var i = 0; i < 10; i++) 'b${i % 3}'];
-      final pending = <Future<void>>[
-        for (var i = 0; i < order.length; i++)
-          server.handleLine(
-            _rpc(i, 'tools/call', <String, Object?>{
-              'name': 'invoke_action',
-              'arguments': <String, Object?>{
-                'id': order[i],
-                'action': 'activate',
-              },
-            }),
-          ),
-      ];
-      // Drive each queued mutation in lockstep: wait until it has DISPATCHED
-      // (its settle is now open), then feed exactly one reaction so the settle
-      // closes promptly instead of timing out. The mutex guarantees mutation i+1
-      // can't dispatch until i completes, so a frame never extends a prior
-      // mutation's debounce.
-      for (var i = 0; i < order.length; i++) {
-        await waitUntil(
-          () => transport.sent.whereType<SemanticActionFrame>().length >= i + 1,
-        );
-        await pushAndAwait(root(i + 1));
-      }
-      await Future.wait(pending);
-
-      // The mutex serialized them: every action dispatched, none lost, none
-      // reordered — in exact submission order.
-      final sent = transport.sent
+      List<String> dispatched() => transport.sent
           .whereType<SemanticActionFrame>()
           .map((f) => f.id.value)
           .toList();
-      expect(sent, order);
+      Future<void> drainTurns([int n = 25]) async {
+        for (var i = 0; i < n; i++) {
+          await Future<void>.delayed(Duration.zero);
+        }
+      }
+
+      // Fire two mutations concurrently; feed NO reaction yet.
+      final pA = server.handleLine(_rpc(1, 'tools/call', <String, Object?>{
+        'name': 'invoke_action',
+        'arguments': <String, Object?>{'id': 'a', 'action': 'activate'},
+      }));
+      final pB = server.handleLine(_rpc(2, 'tools/call', <String, Object?>{
+        'name': 'invoke_action',
+        'arguments': <String, Object?>{'id': 'b', 'action': 'activate'},
+      }));
+
+      // A dispatches and opens its settle; B is queued behind it. Even after many
+      // event-loop turns, B must NOT have dispatched — THIS is the mutex's job,
+      // and what a removed/regressed mutex would break: without serialization
+      // both bodies run concurrently and 'b' dispatches immediately (each body
+      // only awaits its own snapshot, not the other's settle). So this assertion
+      // FAILS if the mutex is bypassed — it genuinely guards serialization.
+      await waitUntil(() => dispatched().isNotEmpty);
+      await drainTurns();
+      expect(dispatched(), <String>['a'],
+          reason: 'B must wait for A to settle — the mutex gates it');
+
+      // Settle A → B now runs and dispatches.
+      await pushAndAwait(root(1));
+      await waitUntil(() => dispatched().length >= 2);
+      expect(dispatched(), <String>['a', 'b']);
+
+      // Drain B and finish cleanly.
+      await pushAndAwait(root(2));
+      await Future.wait(<Future<void>>[pA, pB]);
+    },
+  );
+
+  test(
+    'find_nodes carries the untrustedContent marker and per-node valueSchema '
+    '(M2 read-path parity)',
+    () async {
+      pushRoot(<String, Object?>{
+        'id': 'root',
+        'role': 'app',
+        'children': <Object?>[
+          <String, Object?>{
+            'id': 'qty',
+            'role': 'spinButton',
+            'label': 'Quantity',
+            'actions': <String>['increment', 'setValue'],
+            'state': <String, Object?>{'min': 0, 'max': 5, 'step': 1},
+          },
+        ],
+      });
+      await bridge.ready;
+      await server.handleLine(
+        _rpc(1, 'tools/call', <String, Object?>{
+          'name': 'find_nodes',
+          'arguments': <String, Object?>{'role': 'spinButton'},
+        }),
+      );
+      final result = toolJson(lastResult());
+      // Same injection-defense delimiter get_ui carries — no read-path hole.
+      expect('${result['untrustedContent']}', contains('untrusted'));
+      // Same typed affordance — no round-trip back to get_ui to learn the domain.
+      final node = (result['nodes'] as List).first as Map<String, Object?>;
+      expect(node['valueSchema'], <String, Object?>{
+        'type': 'number',
+        'minimum': 0,
+        'maximum': 5,
+        'step': 1,
+      });
     },
   );
 
