@@ -252,7 +252,10 @@ final class SemanticInspectionSnapshot {
   /// drive its accessible DOM presenter from a `SemanticsFrame`, so a served
   /// session stays screen-reader- and agent-readable without shipping the live
   /// widget tree.
-  SemanticTree toSemanticTree() => SemanticTree(root: root.toSemanticNode());
+  SemanticTree toSemanticTree() => SemanticTree(
+    root: root.toSemanticNode(),
+    structureGeneration: structureGeneration,
+  );
 
   /// Returns a deterministic, redaction-aware tree summary for humans.
   ///

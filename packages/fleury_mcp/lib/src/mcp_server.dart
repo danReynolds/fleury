@@ -312,6 +312,18 @@ final class McpServer {
 
   // ---- tools ---------------------------------------------------------------
 
+  /// Shared schema for the optional `observed_generation` argument on mutating
+  /// tools: the `structureGeneration` the agent saw in the `get_ui` it read the
+  /// id from, used to fail safe if the UI shape moved under a positional id.
+  static const Map<String, Object?> _observedGenerationSchema = <String, Object?>{
+    'type': 'integer',
+    'description':
+        "Optional. The `structureGeneration` from the get_ui you read this id "
+        "from. If the UI's shape changed since (and the id is auto-generated / "
+        'positional), the call fails safe instead of driving the wrong node. '
+        'Stable app-assigned ids (Semantics(id:)) ignore it.',
+  };
+
   static final List<Map<String, Object?>> _toolDefs = <Map<String, Object?>>[
     <String, Object?>{
       'name': 'get_ui',
@@ -374,6 +386,7 @@ final class McpServer {
             'description': 'The SemanticAction to invoke.',
             'enum': <Object?>[for (final a in SemanticAction.values) a.name],
           },
+          'observed_generation': _observedGenerationSchema,
         },
         'required': <Object?>['id', 'action'],
       },
@@ -403,6 +416,7 @@ final class McpServer {
                 'The value to set; its meaning depends on the node (see the '
                 'tool description) — e.g. a row index for a table.',
           },
+          'observed_generation': _observedGenerationSchema,
         },
         'required': <Object?>['id', 'value'],
       },
@@ -616,7 +630,11 @@ final class McpServer {
         'Unknown action "$actionName". Valid actions: $_actionNames.',
       );
     }
-    await _resolveActionableNode(id, actionName);
+    await _resolveActionableNode(
+      id,
+      actionName,
+      observedGeneration: _optInt(args['observed_generation']),
+    );
 
     final before = bridge.revision;
     bridge.invokeAction(SemanticNodeId(id), action);
@@ -640,8 +658,9 @@ final class McpServer {
   /// on any of them.
   Future<SemanticInspectionNode> _resolveActionableNode(
     String id,
-    String requiredAction,
-  ) async {
+    String requiredAction, {
+    int? observedGeneration,
+  }) async {
     // Capture the agent-held baseline up front: a concurrent get_ui/find_nodes
     // can reassign _lastServed across the awaits below, which would compare the
     // stale-reference guard against a frame the agent never saw.
@@ -679,6 +698,22 @@ final class McpServer {
     // contributor-assigned) track their logical node, so they're exempt: a
     // legitimate label change on a stable id must not falsely fire.
     if (isPositionalSemanticId(id)) {
+      // Strong check: if the agent passed the structure generation it observed
+      // and the tree's shape has moved since, this positional id may now denote a
+      // different node — including a same-role/same-label swap the fingerprint
+      // below can't catch. Fail safely.
+      if (observedGeneration != null &&
+          observedGeneration != bridge.structureGeneration) {
+        throw _ToolFailure(
+          'Stale reference: the UI structure changed since you read id "$id" '
+          '(you observed generation $observedGeneration; it is now '
+          '${bridge.structureGeneration}). Auto-generated ids are positional and '
+          'shift when the tree shape moves — re-read get_ui and retry, or target '
+          'an app-assigned Semantics(id:).',
+        );
+      }
+      // Fallback when no generation was supplied: a role+label fingerprint vs
+      // the frame the agent last read.
       final observed = lastServed?.nodeById(id);
       if (observed != null && _fingerprint(observed) != _fingerprint(node)) {
         throw _ToolFailure(
@@ -709,7 +744,11 @@ final class McpServer {
         '$_maxInputChars).',
       );
     }
-    await _resolveActionableNode(id, SemanticAction.setValue.name);
+    await _resolveActionableNode(
+      id,
+      SemanticAction.setValue.name,
+      observedGeneration: _optInt(args['observed_generation']),
+    );
 
     final before = bridge.revision;
     bridge.setValue(SemanticNodeId(id), value);

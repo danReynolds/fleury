@@ -578,9 +578,8 @@ final class SemanticNode {
 /// backend can produce the same query surface from a maintained tree without
 /// committing callers to the walk.
 final class SemanticTree {
-  const SemanticTree({required this.root})
-    : _elementsById = null,
-      structureGeneration = 0;
+  const SemanticTree({required this.root, this.structureGeneration = 0})
+    : _elementsById = null;
 
   SemanticTree._({
     required this.root,

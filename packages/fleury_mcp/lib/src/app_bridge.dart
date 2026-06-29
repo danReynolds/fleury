@@ -83,6 +83,12 @@ final class FleuryAppBridge {
   /// action, then [settle] past it to observe the result.
   int get revision => _revision;
 
+  /// The app's build-owner structure generation (from the latest frame), which
+  /// advances only on a tree-*shape* change. Carried over the wire on each
+  /// semantics frame. A held positional node id observed at one generation is
+  /// stale once this advances; [settle] also debounces on it.
+  int get structureGeneration => _tree?.structureGeneration ?? 0;
+
   /// Whether the app is still connected (false once it sends BYE or the
   /// transport drops).
   bool get isRunning => !_exited.isCompleted;
@@ -204,13 +210,17 @@ final class FleuryAppBridge {
       }
     }
 
-    // Phase 2: event-driven debounce. Wait `quiet` for the next frame; if none
-    // arrives in that window the burst has settled, so return — no fixed sleep.
+    // Phase 2: settle on STRUCTURE stability, not raw revision. A continuously
+    // animating app (a ticking dashboard) bumps `revision` every frame while its
+    // shape stays put, so a revision-keyed debounce never closes and falls
+    // through to `timeout`. The structure generation only advances on a shape
+    // change, so keying the debounce on it returns ~`quiet` after the shape stops
+    // moving — promptly even while values keep ticking.
     while (isRunning && stopwatch.elapsed < timeout) {
-      final before = _revision;
+      final before = structureGeneration;
       final window = quiet < remaining() ? quiet : remaining();
       await _nextTick(window);
-      if (_revision == before) break;
+      if (structureGeneration == before) break;
     }
     return snapshot;
   }

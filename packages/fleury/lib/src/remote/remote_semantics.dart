@@ -66,6 +66,7 @@ final class SemanticsWireEncoder {
       return _bytes(<String, Object?>{
         'v': semanticsWireVersion,
         'mode': 'full',
+        'gen': snapshot.structureGeneration,
         'root': snapshot.root.id,
         'nodes': flat.values.toList(growable: false),
       });
@@ -88,6 +89,7 @@ final class SemanticsWireEncoder {
     return _bytes(<String, Object?>{
       'v': semanticsWireVersion,
       'mode': 'patch',
+      'gen': snapshot.structureGeneration,
       'root': snapshot.root.id,
       if (set.isNotEmpty) 'set': set,
       if (removed.isNotEmpty) 'removed': removed,
@@ -155,6 +157,7 @@ final class SemanticsWireDecoder {
   final Map<String, Map<String, Object?>> _flat = {};
   String _rootId = 'root';
   bool _hasState = false;
+  int _generation = 0;
 
   /// Whether a full frame has been applied (so patches have a base to land on).
   bool get isPrimed => _hasState;
@@ -201,11 +204,15 @@ final class SemanticsWireDecoder {
         return null;
     }
 
+    final gen = decoded['gen'];
+    if (gen is int) _generation = gen;
+
     final nested = _nest(_rootId, <String>{}, 0);
     if (nested == null) return null;
     try {
       return SemanticInspectionSnapshot.fromJson(<String, Object?>{
         'schemaVersion': SemanticInspectionSnapshot.currentSchemaVersion,
+        'structureGeneration': _generation,
         'root': nested,
       }).toSemanticTree();
     } on FormatException {

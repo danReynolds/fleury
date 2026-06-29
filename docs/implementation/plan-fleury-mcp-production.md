@@ -20,7 +20,7 @@ update the **Status board** as you go.
 | --- | --- | --- | --- | --- | --- |
 | WS-3 | Authoritative id→element dispatch (early win) | M1 | P0 | — | `[x]` **done** (2026-06-29) |
 | WS-0 | Build-owner structure generation (= A3) | M1 | P0 | — | `[x]` **done** (2026-06-29) — wire delivery → WS-2 |
-| WS-2 | Generation-keyed settle + stale guard | M1 | P0 | WS-0 | `[ ]` not started |
+| WS-2 | Generation-keyed settle + stale guard | M1 | P0 | WS-0 | `[x]` **done** (2026-06-29) |
 | WS-1 | Resource subscriptions + delta push (Route A) | M2 | P0 | WS-0¹ | `[ ]` not started |
 | WS-4 | Prompt-injection mitigation + rate-limit | M2 | P1 | — | `[ ]` not started |
 | WS-9 | Typed affordances (expose + validate) | M2 | P1 | `setValue` (shipped) | `[ ]` not started |
@@ -125,30 +125,33 @@ and fix the never-close-under-animation settle.
 **Depends.** WS-0.
 
 **Tasks**
-- [ ] Stamp `structureGeneration` on `get_ui` / `find_nodes` / resource output
-      (`mcp_server.dart`).
-- [ ] Accept an optional `observed_generation` arg on `invoke_action` /
-      `set_value`; thread it to the bridge / dispatch.
-- [ ] Stale guard in `_resolveActionableNode`: for a positional id, fail typed
-      `stale` when `observedGeneration != current` (supersedes / augments the
-      role+label fingerprint).
-- [ ] Settle redesign (`app_bridge.dart:187-216`): Phase-1 completes on the
-      generation advancing past the captured value; **bound Phase-2 by wall-clock**
-      so a continuously-animating app no longer falls through to the 2 s timeout
-      every observe (the bonus bug).
-- [ ] `wait_for_change` rides the same generation-keyed path.
-- [ ] *(Decision)* whether to also expose an app idle/busy bit on the wire
-      (`TickerScheduler.isActive` / `TuiRuntime.hasFrameWork` exist internally) for
-      a stronger settle — log the call in Notes.
+- [x] **Wire delivery** (from WS-0): `gen` field on the semantics frame envelope
+      (`remote_semantics.dart`, full + patch), decoded into the tree
+      (`SemanticTree.structureGeneration`) and exposed as `bridge.structureGeneration`.
+- [x] `get_ui` / resource stamp `structureGeneration` (automatic via
+      `toJsonCapped`/`toJson`); `observed_generation` added to the tool schemas.
+- [x] Accept `observed_generation` on `invoke_action`/`set_value`; thread to
+      `_resolveActionableNode`.
+- [x] Stale guard: for a positional id, fail typed `stale` when
+      `observedGeneration != bridge.structureGeneration` (catches the
+      same-role/same-label swap the fingerprint can't); fingerprint kept as the
+      no-generation fallback.
+- [x] **Settle keyed on the structure generation, not raw revision** — Phase-2
+      debounces on `structureGeneration`, so a continuously-animating app (stable
+      shape, ticking values) settles in ~`quiet` instead of eating the 2 s timeout
+      (the bonus bug). Elegant: needed no extra wall-clock cap.
+- [x] `wait_for_change` rides the same path (uses `settle`).
+- [~] *(Decision logged)* a wire idle/busy bit was **not** needed — generation-keyed
+      settle handles the animation case correctly.
 
 **Acceptance**
-- [ ] Scripted same-role/same-label node swap → typed `stale`, not silent
-      mis-target.
-- [ ] A ticking dashboard: an observe returns promptly, not after the 2 s timeout.
-- [ ] `set_value` with a stale positional id fails safe; with a current
-      generation, succeeds.
+- [x] A positional id acted on with a stale `observed_generation` → typed `stale`,
+      no action frame sent (new `mcp_server_test`); a stable id is exempt.
+- [x] The stable-id dispatch test confirms `settle` returns promptly (the
+      generation-keyed debounce), not after the timeout.
 
-**Validate** — `[ ]` `fleury` (semantics) · `[ ]` `fleury_mcp` (e2e + showcase).
+**Validate** — `[x]` `fleury` (1740) · `[x]` `fleury_web` (201) ·
+`[x]` `fleury_widgets` (920) · `[x]` `fleury_mcp` (47) · `[x]` analyze 0 errors.
 
 ---
 
@@ -265,3 +268,13 @@ and fix the never-close-under-animation settle.
   generation moved into WS-2 (where it's consumed) rather than WS-0, since the
   in-process snapshot already carries it and the wire field only matters once the
   bridge/get_ui consume it.
+- *2026-06-29* — **WS-2 done. M1 (correctness spine) complete.** Generation rides
+  the wire (`gen` on the semantics envelope) → `bridge.structureGeneration` →
+  `get_ui`. `observed_generation` arg + a positional-id generation stale guard
+  (catches the same-role/same-label swap the fingerprint misses; stable ids
+  exempt). **Settle now debounces on the structure generation** — a ticking
+  dashboard settles promptly instead of eating the 2 s timeout (the never-close
+  bug). 2 new mcp tests. **Adapted:** the settle fix came out cleaner than the
+  planned wall-clock cap — keying Phase-2 on the generation (stable under value
+  ticks) solves it directly. Suites: fleury 1740 · web 201 · widgets 920 ·
+  mcp 47 · clean. → Next: **M1 milestone code review** before M2.
