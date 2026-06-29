@@ -724,22 +724,32 @@ final class McpServer {
   /// A stable proxy for "is this the same logical node", compared between the
   /// frame the agent last read and the live node now at a positional id.
   ///
-  /// Includes only fields INVARIANT under value-only updates — role, label, child
-  /// count, and the sorted action set. It deliberately excludes `value` and
-  /// mutable state: a node whose value ticks between the agent's read and its
-  /// action would otherwise false-flag as stale every time, livelocking an agent
-  /// on a live UI (the broad false-positive the global structure-generation guard
-  /// suffered, in miniature). Within that constraint it is as discriminating as
-  /// possible, so a positional id that has come to denote a structurally- or
-  /// behaviorally-different node is caught. Two nodes identical across all of
-  /// these are interchangeable by construction; durably targeting a specific one
-  /// needs a stable `Semantics(id:)`.
+  /// Includes only fields that stay fixed while a node merely *updates in place*
+  /// — role, label, and the sorted action set — so a positional id that has come
+  /// to denote a different node is caught without false-flagging a node that is
+  /// just changing. It deliberately excludes:
+  ///   • `value` / mutable state — a node whose value ticks between the agent's
+  ///     read and its action would false-flag every time, livelocking an agent on
+  ///     a live UI (the broad false-positive the global structure generation
+  ///     suffered, in miniature);
+  ///   • `children.length` — which *looks* invariant but is NOT for a
+  ///     virtualized/windowed container (a `DataTable`, log, or long list): its
+  ///     visible-child count changes every frame as rows stream in or the window
+  ///     reflows, so including it would livelock an agent acting on exactly the
+  ///     containers it most often targets.
+  /// (`actions` changing is safe by contrast: it shifts only on a discrete state
+  /// transition — a one-time re-read, not every frame — so it can't livelock; and
+  /// a *dropped* target action is already caught earlier by the advertise check.)
+  ///
+  /// Two nodes identical across role+label+actions but differing only in value
+  /// are interchangeable here — a positional swap between them is the accepted
+  /// residual gap; durably targeting a specific one needs a stable
+  /// `Semantics(id:)`.
   static String _fingerprint(SemanticInspectionNode node) {
     final actions = node.actions.toList()..sort();
     return <String>[
       node.role,
       node.label ?? '',
-      '${node.children.length}',
       actions.join(','),
     ].join('\u0000');
   }

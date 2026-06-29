@@ -204,16 +204,22 @@ final class FleuryAppBridge {
     }
 
     // Phase 2: event-driven debounce. Wait `quiet` for the next frame; if none
-    // arrives in that window the burst has settled, so return — discrete
-    // reactions (even multi-frame animations) settle correctly here.
+    // arrives in that window the burst has settled, so return — a discrete
+    // reaction whose frames are spaced wider than `quiet` settles fully here.
     //
-    // But a continuously-animating app (a ticking dashboard) bumps the revision
-    // faster than `quiet` forever and NEVER goes quiet, so the debounce alone
-    // would chase quiet until the full `timeout` on every observe. Bound Phase 2
-    // by `settleCap` past this point: Phase 1 already captured the reaction, so
-    // when the app simply won't go quiet we return the live frame in ~settleCap
-    // rather than eating `timeout`. (The returned tree is correct either way —
-    // this only bounds latency, never the result.)
+    // But a continuously-animating region (a ticking dashboard) bumps the
+    // revision faster than `quiet` forever and NEVER goes quiet, so the debounce
+    // alone would chase quiet until the full `timeout` on every observe. Bound
+    // Phase 2 by `settleCap` past this point: Phase 1 already captured the
+    // reaction, so when the app won't go quiet we return the live frame in
+    // ~settleCap rather than eating `timeout`.
+    //
+    // Trade-off: for a *finite* animation that runs faster than `quiet` and lasts
+    // longer than `settleCap` (e.g. a 700 ms progress fill), this returns a
+    // transitional frame — the latest, but not the final settled one. That is the
+    // accepted cost of not waiting out `timeout` on the common ticking case; an
+    // agent that needs the settled value should `wait_for_change` or re-read.
+    // Sub-`settleCap` reactions are unaffected.
     final phase2Deadline = stopwatch.elapsed + settleCap;
     Duration phase2Remaining() => clampToZero(phase2Deadline - stopwatch.elapsed);
     while (isRunning &&
@@ -276,7 +282,12 @@ final class FleuryAppBridge {
   }
 
   Future<void> _nextTick(Duration timeout) {
-    if (timeout <= Duration.zero) return Future<void>.value();
+    // A non-positive window yields a real event-loop turn (a zero-delay timer),
+    // not just a microtask (Future.value): the settle loops can momentarily
+    // compute a zero window at a deadline boundary, and a microtask would not let
+    // frame I/O or timers run — so a future loop edit could hot-spin. A real turn
+    // keeps that impossible by construction.
+    if (timeout <= Duration.zero) return Future<void>.delayed(Duration.zero);
     return _tick.future.timeout(timeout, onTimeout: () {});
   }
 

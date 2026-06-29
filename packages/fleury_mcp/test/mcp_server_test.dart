@@ -445,6 +445,63 @@ void main() {
     },
   );
 
+  test(
+    'invoke_action does NOT flag a positional container whose visible child '
+    'count changed (virtualized/streaming rows must not livelock)',
+    () async {
+      Map<String, Object?> rootWith(int rows) => <String, Object?>{
+        'id': 'root',
+        'role': 'app',
+        'children': <Object?>[
+          <String, Object?>{
+            'id': 'element-5',
+            'role': 'table',
+            'label': 'Log',
+            'actions': <String>['activate', 'setValue'],
+            'children': <Object?>[
+              for (var i = 0; i < rows; i++)
+                <String, Object?>{
+                  'id': 'element-5-row-$i',
+                  'role': 'row',
+                  'label': 'line $i',
+                },
+            ],
+          },
+        ],
+      };
+
+      pushRoot(rootWith(2));
+      await bridge.ready;
+      await server.handleLine(
+        _rpc(80, 'tools/call', <String, Object?>{
+          'name': 'get_ui',
+          'arguments': <String, Object?>{},
+        }),
+      );
+      lastResult();
+
+      // The windowed container streams in more visible rows between the read and
+      // the action — its child count changes, but it is the SAME logical control.
+      // child count is excluded from the fingerprint precisely so this does not
+      // livelock (it would flag on every frame as rows stream).
+      await pushAndAwait(rootWith(5));
+      final pending = server.handleLine(
+        _rpc(81, 'tools/call', <String, Object?>{
+          'name': 'invoke_action',
+          'arguments': <String, Object?>{'id': 'element-5', 'action': 'activate'},
+        }),
+      );
+      pushRoot(rootWith(6)); // settle reaction
+      await pending;
+
+      expect(toolJson(lastResult())['invoked'], isNotNull);
+      expect(
+        transport.sent.whereType<SemanticActionFrame>().map((f) => f.id.value),
+        contains('element-5'),
+      );
+    },
+  );
+
   test('invoke_action exempts a stable id from the stale check', () async {
     Map<String, Object?> playButton(String label) => <String, Object?>{
       'id': 'root',
