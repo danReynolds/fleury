@@ -74,10 +74,35 @@ void main() {
       expect(s['options'], hasLength(2));
     });
 
+    test('range slider (activeHandle) notes it moves the active handle', () {
+      final s = deriveValueSchema(
+        _node('slider', state: {
+          'min': 0,
+          'max': 10,
+          'activeHandle': 'low',
+          'lowValue': 2,
+          'highValue': 8,
+        }),
+      );
+      expect(s!['type'], 'number');
+      expect(s['description'], contains('active handle'));
+    });
+
+    test('single slider (no activeHandle) → plain number, no handle note', () {
+      final s = deriveValueSchema(_node('slider', state: {'min': 0, 'max': 5}));
+      expect(s!.containsKey('description'), isFalse);
+    });
+
+    test('all-disabled select (empty options) → enum that rejects any value', () {
+      final s = deriveValueSchema(_node('button', state: {'options': <Object?>[]}));
+      expect(s, {'type': 'enum', 'options': <Object?>[]});
+      expect(validateValueForSchema(s!, 'anything'), contains('no options'));
+    });
+
     test('null when not settable, or a plain button with no options', () {
       expect(deriveValueSchema(_node('spinButton', actions: ['activate'])),
           isNull);
-      expect(deriveValueSchema(_node('button')), isNull); // no options
+      expect(deriveValueSchema(_node('button')), isNull); // no options key
     });
 
     test('schema keys never contain redaction-trigger substrings', () {

@@ -27,6 +27,12 @@ Map<String, Object?>? deriveValueSchema(SemanticInspectionNode node) {
         if (state['min'] is num) 'minimum': state['min'],
         if (state['max'] is num) 'maximum': state['max'],
         if (state['step'] is num) 'step': state['step'],
+        // A 2-handle range slider sets only its *active* handle — the [min,max]
+        // domain alone reads like a single-value control, so spell it out.
+        if (node.role == 'slider' && state['activeHandle'] != null)
+          'description':
+              'moves the active handle of a range (see state.activeHandle / '
+              'lowValue / highValue); the other handle constrains it',
       };
     case 'checkbox':
     case 'toggle':
@@ -53,9 +59,13 @@ Map<String, Object?>? deriveValueSchema(SemanticInspectionNode node) {
       };
     case 'button':
       // A Select trigger is a button that advertises setValue and lists its
-      // settable domain under state.options (label + stringified value).
+      // settable domain under state.options (label + stringified value). Emit
+      // the enum even when the list is EMPTY (an all-disabled Select still
+      // advertises setValue) so validation rejects it rather than letting an
+      // unguarded value through to a silent no-op. A plain button with setValue
+      // but no options key (a custom widget) gets no schema — domain unknown.
       final options = state['options'];
-      if (options is List && options.isNotEmpty) {
+      if (options is List) {
         return <String, Object?>{'type': 'enum', 'options': options};
       }
       return null;
@@ -84,7 +94,8 @@ String? validateValueForSchema(Map<String, Object?> schema, Object? value) {
       return null;
     case 'enum':
       final options = schema['options'];
-      if (options is! List || options.isEmpty) return null;
+      if (options is! List) return null;
+      if (options.isEmpty) return 'no options are currently available to set';
       final wanted = value?.toString().trim().toLowerCase() ?? '';
       for (final o in options) {
         if (o is Map &&
