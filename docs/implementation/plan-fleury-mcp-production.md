@@ -305,6 +305,14 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
   no bespoke debounce — so a continuously-animating app yields one delta per
   settle window, not a per-frame storm (test: 3 frames → ≤2 notifications). Writes
   are serialized through `runMcpServer`'s `writeChain`, so notifications can't
-  corrupt a response line. fleury 1735 · mcp 52 · clean. Focused adversarial
-  review of the push-loop concurrency + protocol surface running. → Next: WS-4 /
-  WS-9 / WS-8, then the M2 milestone review.
+  corrupt a response line. fleury 1735 · mcp 52 · clean.
+- *2026-06-29* — **WS-1 reviewed + hardened.** Adversarial review confirmed the
+  coalescing/lifecycle core correct (no lost/duplicate updates, accumulator
+  atomicity holds, `full` dominates, settle unblocks on close). Closed 3
+  robustness findings (`4043b36`): **MED** guard the loop by a future handle (not
+  a bool) so a re-subscribe during teardown can't be dropped; **LOW** wrap the
+  emit so an injected throwing `send` can't silently kill the loop; **LOW** 5-min
+  push-settle timeout so an idle subscription sleeps instead of re-polling every
+  ~2 s. New re-subscribe test. mcp 53 · clean. → Next: WS-9 (typed affordances,
+  the remaining "leading" differentiator), WS-4 (injection + rate-limit), WS-8
+  (test shapes), then the M2 milestone review.
