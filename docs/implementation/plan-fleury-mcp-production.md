@@ -336,5 +336,15 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
   generic per-node `augment` hook on the core `toJsonCapped` lets the MCP layer
   inject the schema while keeping widget-key knowledge (and affordance concepts)
   out of the core model. Select publishes its options. Redaction-substring guard
-  in tests. fleury 1735 · widgets 920 · mcp 66 · clean. Focused review running. →
+  in tests. fleury 1735 · widgets 920 · mcp 66 · clean.
+- *2026-06-29* — **WS-9 reviewed + hardened.** The review found the validator was
+  STRICTER than the widgets it guards → false rejections: number/integer rejected
+  `bool` (widgets accept true→1), boolean accepted only true/false (widgets accept
+  yes/on/1/0/…), date used a strict ISO regex (widget uses `DateTime.tryParse`).
+  Fixed by mirroring `semantic_coercion.dart` acceptance exactly (restated, since
+  the MCP layer is widget-agnostic) while keeping the domain checks (`2bd9272`).
+  Then two more (`d8093ae`): **MED** RangeSlider schema now notes it moves the
+  *active* handle; **LOW** an all-disabled Select emits an empty-options enum that
+  validation rejects, instead of a silent no-op. Review confirmed clean: augment
+  hook, redaction, ordering/mutex-safety, enum-match superset. mcp 69 · clean. →
   Next: WS-4 (injection + rate-limit), WS-8 (test shapes), then M2 review.
