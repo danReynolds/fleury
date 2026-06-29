@@ -115,11 +115,14 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
       `fromElement(mounted)` (matching the terminal path); reverted the
       now-needless `replaceNodes` element-map carry-forward (also a MED
       stale-element risk). Regression test reproduces a real fallback frame.
-- [x] **Enriched fingerprint** (`_fingerprint`): role + label + child-count +
-      sorted action-set (NUL-joined). Catches same-role/same-label swaps that
-      role+label alone misses, while deliberately excluding `value`/mutable state
-      so a node whose value ticks between read and action never false-flags (no
-      livelock). Positional-id-only; stable `Semantics(id:)` exempt.
+- [x] **Enriched fingerprint** (`_fingerprint`): role + label + sorted action-set
+      (NUL-joined). Catches same-role/same-label swaps that role+label alone
+      misses, while excluding `value` AND `children.length` so a node merely
+      updating in place never false-flags (no livelock). *(child-count was tried
+      and dropped in the re-review — it changes every frame for a virtualized
+      container, the prime agent target; `actions` is safe because it shifts only
+      on a discrete transition.)* Positional-id-only; stable `Semantics(id:)`
+      exempt.
 - [x] **Capped settle** (`app_bridge.dart`): keep the revision-quiet debounce (so
       discrete reactions, even multi-frame animations, settle correctly), but
       bound Phase-2 by a `settleCap` (500 ms) past the first reaction so a
@@ -273,3 +276,17 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
   the whole wire/bump failure surface. A scoped generation is parked as a future
   "leading" option. Suites: fleury 1734 · web 201 · widgets 920 · mcp 47 · clean.
   → Next: re-run the M1 milestone review on the rework, then M2.
+- *2026-06-29* — **M1 rework re-reviewed (2 adversarial agents) — M1 complete.**
+  Web-dispatch + dispatch-map surface: **zero findings** (all four dispatch sites
+  use a fresh `fromElement` tree; the fallback-id → `notFound` path is unreachable
+  to browser actions; perf fine). Fingerprint + settle surface found one HIGH +
+  minors, all fixed (`603f26e`): **HIGH** — `children.length` in the fingerprint
+  re-created the livelock for virtualized/streaming containers (visible-row count
+  flips every frame); dropped it → fingerprint is now role+label+actions, with a
+  new container regression test. **MED** — corrected the settle comment (the cap
+  *can* return a transitional frame for a finite >settleCap animation; it is not
+  "result-preserving"). **LOW** — hardened `_nextTick(0)` to a real event-loop
+  turn; documented the value-only missed-swap and the `actions` one-time-reread as
+  accepted limits. **M1 (WS-3 + WS-2) done and twice-reviewed.** Suites: fleury
+  1734 · web 201 · widgets 920 · mcp 48 · clean. → Next: **M2** (WS-1 deltas,
+  WS-4 injection/rate-limit, WS-9 typed affordances, WS-8 test shapes).
