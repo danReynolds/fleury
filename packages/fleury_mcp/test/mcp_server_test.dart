@@ -228,6 +228,32 @@ void main() {
     expect(updatedNotifications().length, before);
   });
 
+  test('re-subscribe resumes notifications after an unsubscribe', () async {
+    pushCount(0);
+    await bridge.ready;
+    Future<void> subscribe() => server.handleLine(
+      _rpc(1, 'resources/subscribe', <String, Object?>{
+        'uri': 'fleury://ui/tree',
+      }),
+    );
+
+    await subscribe();
+    pushCount(1);
+    await waitUntil(() => updatedNotifications().isNotEmpty);
+
+    await server.handleLine(
+      _rpc(2, 'resources/unsubscribe', <String, Object?>{
+        'uri': 'fleury://ui/tree',
+      }),
+    );
+    await subscribe(); // re-subscribe must restart (or keep) the push loop
+    final before = updatedNotifications().length;
+
+    pushCount(2);
+    await waitUntil(() => updatedNotifications().length > before);
+    expect(updatedNotifications().length, greaterThan(before));
+  });
+
   test('a request with explicit id:null still gets answered', () async {
     await server.handleLine('{"jsonrpc":"2.0","id":null,"method":"ping"}');
     final ok = jsonDecode(out.removeLast()) as Map<String, Object?>;

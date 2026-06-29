@@ -124,7 +124,11 @@ final class McpServer {
   /// Resource URIs the client has resources/subscribe'd to. While non-empty, a
   /// single push loop coalesces frames and emits notifications/resources/updated.
   final Set<String> _subscriptions = <String>{};
-  bool _pushLoopRunning = false;
+
+  /// The running push loop's future (null when none). A future handle rather than
+  /// a bool so the loop's completion can re-check for a subscription that arrived
+  /// during its teardown and restart — no lost re-subscribe.
+  Future<void>? _pushLoopFuture;
 
   /// Serializes mutating tool calls (invoke_action/set_value/type_text/
   /// press_key/resize) so two in-flight mutations can't interleave their
@@ -343,32 +347,51 @@ final class McpServer {
     return const <String, Object?>{};
   }
 
-  /// Starts the single coalescing push loop if it is not already running.
+  /// Ensures the single coalescing push loop is running. Guarded by a future
+  /// handle: when the loop ends, its `whenComplete` re-checks for a subscription
+  /// that may have arrived during teardown and restarts — closing the gap where a
+  /// re-subscribe between the loop's exit and the handle clearing is dropped.
   void _startPushLoop() {
-    if (_pushLoopRunning) return;
-    _pushLoopRunning = true;
+    if (_pushLoopFuture != null) return;
     bridge.takeDelta(); // reset baseline: only push changes from now on.
-    unawaited(_pushLoop().whenComplete(() => _pushLoopRunning = false));
+    final future = _pushLoop();
+    _pushLoopFuture = future;
+    unawaited(
+      future.whenComplete(() {
+        if (!identical(_pushLoopFuture, future)) return;
+        _pushLoopFuture = null;
+        if (_subscriptions.isNotEmpty && bridge.isRunning) _startPushLoop();
+      }),
+    );
   }
 
   /// Emits one coalesced `notifications/resources/updated` per *settled* burst
   /// while a subscriber exists. Reusing [FleuryAppBridge.settle] supplies the
   /// coalescing: a continuously-animating app yields one delta per settle window
   /// (≈ settleCap) instead of a per-frame notification storm, and a quiet app
-  /// emits as soon as its burst settles.
+  /// emits as soon as its burst settles. The long settle timeout lets an idle
+  /// subscription sleep on the next frame rather than re-polling every ~2 s.
   Future<void> _pushLoop() async {
     var since = bridge.revision;
     while (_subscriptions.isNotEmpty && bridge.isRunning) {
       try {
-        await bridge.settle(sinceRevision: since);
+        await bridge.settle(
+          sinceRevision: since,
+          timeout: const Duration(minutes: 5),
+        );
       } catch (_) {
         break;
       }
       if (_subscriptions.isEmpty || !bridge.isRunning) break;
-      if (bridge.revision == since) continue; // idle timeout — nothing changed.
+      if (bridge.revision == since) continue; // woke with no change — re-arm.
       since = bridge.revision;
       final delta = bridge.takeDelta();
-      if (!delta.isEmpty) _emitResourceUpdated(delta);
+      if (delta.isEmpty) continue;
+      try {
+        _emitResourceUpdated(delta);
+      } catch (_) {
+        break; // transport is broken (an injected send threw); stop pushing.
+      }
     }
   }
 
