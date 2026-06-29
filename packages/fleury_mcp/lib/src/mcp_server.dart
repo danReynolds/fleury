@@ -121,6 +121,11 @@ final class McpServer {
   /// [isPositionalSemanticId] / [_fingerprint]).
   SemanticInspectionSnapshot? _lastServed;
 
+  /// Resource URIs the client has resources/subscribe'd to. While non-empty, a
+  /// single push loop coalesces frames and emits notifications/resources/updated.
+  final Set<String> _subscriptions = <String>{};
+  bool _pushLoopRunning = false;
+
   /// Serializes mutating tool calls (invoke_action/set_value/type_text/
   /// press_key/resize) so two in-flight mutations can't interleave their
   /// revision/settle bookkeeping — one's frame satisfying the other's
@@ -231,6 +236,10 @@ final class McpServer {
           );
         case 'resources/read':
           _sendMessage(_resultMessage(id, await _readResource(params)));
+        case 'resources/subscribe':
+          _sendMessage(_resultMessage(id, _subscribeResource(params)));
+        case 'resources/unsubscribe':
+          _sendMessage(_resultMessage(id, _unsubscribeResource(params)));
         default:
           _sendMessage(
             _errorMessage(id, _methodNotFound, 'Unknown method: $method'),
@@ -257,7 +266,10 @@ final class McpServer {
       'protocolVersion': version,
       'capabilities': <String, Object?>{
         'tools': <String, Object?>{},
-        'resources': <String, Object?>{},
+        // `subscribe`: clients may resources/subscribe to fleury://ui/tree and
+        // receive notifications/resources/updated when the UI settles.
+        // `listChanged` is omitted — the resource list is static (one resource).
+        'resources': <String, Object?>{'subscribe': true},
       },
       'serverInfo': <String, Object?>{
         'name': mcpServerName,
@@ -269,7 +281,10 @@ final class McpServer {
           'with the actions each node supports, then invoke_action / type_text '
           '/ press_key to operate it. Re-read get_ui after each action to see '
           'what changed. Never guess keystrokes — prefer the advertised '
-          'SemanticActions.',
+          'SemanticActions. To react to UI changes the app makes on its own, '
+          'resources/subscribe to fleury://ui/tree: you will get a '
+          'notifications/resources/updated (with the changed/removed node ids) '
+          'each time the UI settles, instead of polling.',
     };
   }
 
@@ -308,6 +323,70 @@ final class McpServer {
         },
       ],
     };
+  }
+
+  // ---- resource subscription (coalesced delta push) ------------------------
+
+  Map<String, Object?> _subscribeResource(Map<String, Object?> params) {
+    final uri = params['uri'];
+    if (uri != _treeUri) {
+      throw _RpcError(_resourceNotFound, 'Unknown resource: $uri');
+    }
+    _subscriptions.add(uri as String);
+    _startPushLoop();
+    return const <String, Object?>{};
+  }
+
+  Map<String, Object?> _unsubscribeResource(Map<String, Object?> params) {
+    _subscriptions.remove(params['uri']);
+    // The push loop observes the now-empty set and exits on its next turn.
+    return const <String, Object?>{};
+  }
+
+  /// Starts the single coalescing push loop if it is not already running.
+  void _startPushLoop() {
+    if (_pushLoopRunning) return;
+    _pushLoopRunning = true;
+    bridge.takeDelta(); // reset baseline: only push changes from now on.
+    unawaited(_pushLoop().whenComplete(() => _pushLoopRunning = false));
+  }
+
+  /// Emits one coalesced `notifications/resources/updated` per *settled* burst
+  /// while a subscriber exists. Reusing [FleuryAppBridge.settle] supplies the
+  /// coalescing: a continuously-animating app yields one delta per settle window
+  /// (≈ settleCap) instead of a per-frame notification storm, and a quiet app
+  /// emits as soon as its burst settles.
+  Future<void> _pushLoop() async {
+    var since = bridge.revision;
+    while (_subscriptions.isNotEmpty && bridge.isRunning) {
+      try {
+        await bridge.settle(sinceRevision: since);
+      } catch (_) {
+        break;
+      }
+      if (_subscriptions.isEmpty || !bridge.isRunning) break;
+      if (bridge.revision == since) continue; // idle timeout — nothing changed.
+      since = bridge.revision;
+      final delta = bridge.takeDelta();
+      if (!delta.isEmpty) _emitResourceUpdated(delta);
+    }
+  }
+
+  void _emitResourceUpdated(SemanticTreeDelta delta) {
+    // Standard clients act on `uri` (re-read the resource); Fleury-aware clients
+    // use the delta to react to only what changed. On a full resync we flag
+    // `full` and omit the (whole-tree) id lists.
+    _sendMessage(<String, Object?>{
+      'jsonrpc': '2.0',
+      'method': 'notifications/resources/updated',
+      'params': delta.full
+          ? <String, Object?>{'uri': _treeUri, 'full': true}
+          : <String, Object?>{
+              'uri': _treeUri,
+              'changedIds': delta.changedIds,
+              'removedIds': delta.removedIds,
+            },
+    });
   }
 
   // ---- tools ---------------------------------------------------------------

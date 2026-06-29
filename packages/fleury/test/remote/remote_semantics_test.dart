@@ -118,6 +118,30 @@ void main() {
       expect(_envelope(shrinkPatch)['removed'], containsAll(['msg:4', 'msg:5']));
     });
 
+    test('apply() surfaces the per-frame delta (changedIds / removedIds / full)',
+        () {
+      final encoder = SemanticsWireEncoder();
+      final decoder = SemanticsWireDecoder();
+
+      // FULL frame: every id counts as changed, nothing removed, full flag set.
+      decoder.apply(encoder.encode(_snap(messages: 5, tick: 0))!);
+      expect(decoder.wasFull, isTrue);
+      expect(decoder.changedIds, isNotEmpty);
+      expect(decoder.removedIds, isEmpty);
+
+      // PATCH growing the list by one: the new message id is among changedIds.
+      decoder.apply(encoder.encode(_snap(messages: 6, tick: 1))!);
+      expect(decoder.wasFull, isFalse);
+      expect(decoder.changedIds, contains('msg:5'));
+      expect(decoder.removedIds, isEmpty);
+
+      // PATCH shrinking by two: those ids appear in removedIds, not changedIds.
+      decoder.apply(encoder.encode(_snap(messages: 4, tick: 2))!);
+      expect(decoder.wasFull, isFalse);
+      expect(decoder.removedIds, containsAll(<String>['msg:4', 'msg:5']));
+      expect(decoder.changedIds, isNot(contains('msg:4')));
+    });
+
     test('redaction survives the diff — no plaintext crosses the wire', () {
       final encoder = SemanticsWireEncoder();
       final decoder = SemanticsWireDecoder();

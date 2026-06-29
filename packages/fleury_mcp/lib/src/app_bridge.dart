@@ -25,6 +25,30 @@ import 'package:fleury/fleury_host_io.dart';
 /// real stdout is reserved for JSON-RPC, so app logs must never land there.
 typedef BridgeLog = void Function(String line);
 
+/// The net change to the semantic tree across one settled burst: which node ids
+/// changed and which were removed (and whether a full resync occurred). Lets a
+/// consumer push *what* changed instead of re-sending the whole tree.
+final class SemanticTreeDelta {
+  const SemanticTreeDelta({
+    required this.changedIds,
+    required this.removedIds,
+    required this.full,
+  });
+
+  /// Ids whose serialized node changed; on a [full] burst, every current id.
+  final List<String> changedIds;
+
+  /// Ids removed from the tree during the burst.
+  final List<String> removedIds;
+
+  /// A full (resync) frame occurred in the burst — treat [changedIds] as
+  /// "re-read everything".
+  final bool full;
+
+  /// No observable change (no ids touched and not a full resync).
+  bool get isEmpty => !full && changedIds.isEmpty && removedIds.isEmpty;
+}
+
 /// Drives a single Fleury app over the structured remote wire and keeps its
 /// latest semantic snapshot. One bridge per app session.
 final class FleuryAppBridge {
@@ -63,6 +87,13 @@ final class FleuryAppBridge {
   bool _closed = false;
   bool _renderTimedOut = false;
 
+  // Coalesced semantic delta: the net changed/removed ids accumulated across
+  // frames since the last [takeDelta]. Paired with [settle], this yields one
+  // delta per settled burst for resource-update push (no per-frame storm).
+  final Set<String> _accChanged = <String>{};
+  final Set<String> _accRemoved = <String>{};
+  bool _accFull = false;
+
   // Replaced and completed on every semantics update so [settle] can await the
   // next one without polling.
   Completer<void> _tick = Completer<void>();
@@ -82,6 +113,44 @@ final class FleuryAppBridge {
   /// Monotonic counter bumped on every semantics update. Capture it before an
   /// action, then [settle] past it to observe the result.
   int get revision => _revision;
+
+  /// Returns the net semantic delta accumulated since the last call, and clears
+  /// the accumulator. Call once after each [settle] to push exactly one coalesced
+  /// delta per settled burst (a continuously-animating app coalesces into one
+  /// delta per settle window rather than a per-frame storm).
+  SemanticTreeDelta takeDelta() {
+    final delta = SemanticTreeDelta(
+      changedIds: _accChanged.toList(growable: false),
+      removedIds: _accRemoved.toList(growable: false),
+      full: _accFull,
+    );
+    _accChanged.clear();
+    _accRemoved.clear();
+    _accFull = false;
+    return delta;
+  }
+
+  // Folds the most recent decoded frame's delta into the running accumulator. A
+  // full frame resets it to "everything changed"; a patch nets out changed vs
+  // removed so an id that flips both ways within a burst lands on its final side.
+  void _accumulateDelta() {
+    if (_decoder.wasFull) {
+      _accFull = true;
+      _accRemoved.clear();
+      _accChanged
+        ..clear()
+        ..addAll(_decoder.changedIds);
+      return;
+    }
+    for (final id in _decoder.removedIds) {
+      _accChanged.remove(id);
+      _accRemoved.add(id);
+    }
+    for (final id in _decoder.changedIds) {
+      _accRemoved.remove(id);
+      _accChanged.add(id);
+    }
+  }
 
   /// Whether the app is still connected (false once it sends BYE or the
   /// transport drops).
@@ -262,6 +331,7 @@ final class FleuryAppBridge {
         _tree = tree;
         _cachedSnapshot = null; // rebuilt lazily on the next read.
         _revision++;
+        _accumulateDelta();
         _renderWatchdog?.cancel();
         if (!_firstSnapshot.isCompleted) _firstSnapshot.complete();
         _signalTick();

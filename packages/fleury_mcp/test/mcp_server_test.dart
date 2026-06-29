@@ -101,6 +101,29 @@ void main() {
         as String;
   }
 
+  /// All `notifications/resources/updated` params the server has sent, in order.
+  List<Map<String, Object?>> updatedNotifications() {
+    final result = <Map<String, Object?>>[];
+    for (final line in out) {
+      final msg = jsonDecode(line) as Map<String, Object?>;
+      if (msg['method'] == 'notifications/resources/updated') {
+        result.add((msg['params'] as Map).cast<String, Object?>());
+      }
+    }
+    return result;
+  }
+
+  /// Polls until [cond] holds or [timeout] elapses (the push loop is async).
+  Future<void> waitUntil(
+    bool Function() cond, {
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
+    final sw = Stopwatch()..start();
+    while (!cond() && sw.elapsed < timeout) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+  }
+
   test('start sends an INIT handshake at protocol v2', () {
     final init = transport.sent.whereType<InitFrame>().single;
     expect(init.protocolVersion, remoteProtocolVersion);
@@ -128,6 +151,81 @@ void main() {
       '{"jsonrpc":"2.0","method":"notifications/initialized"}',
     );
     expect(out, isEmpty);
+  });
+
+  test('initialize advertises the resources.subscribe capability', () async {
+    await server.handleLine(_rpc(1, 'initialize', <String, Object?>{}));
+    final resources = (lastResult()['capabilities'] as Map)['resources'] as Map;
+    expect(resources['subscribe'], isTrue);
+  });
+
+  test(
+    'a subscriber receives coalesced resources/updated deltas (no per-frame '
+    'storm)',
+    () async {
+      pushCount(0);
+      await bridge.ready;
+      await server.handleLine(
+        _rpc(1, 'resources/subscribe', <String, Object?>{
+          'uri': 'fleury://ui/tree',
+        }),
+      );
+      expect(lastResult(), isEmpty); // subscribe ack
+
+      // A burst of value ticks with no awaits between them lands in one settle
+      // window → coalesced into far fewer notifications than frames.
+      pushCount(1);
+      pushCount(2);
+      pushCount(3);
+      await waitUntil(() => updatedNotifications().isNotEmpty);
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+
+      final notes = updatedNotifications();
+      expect(notes, isNotEmpty);
+      expect(
+        notes.length,
+        lessThanOrEqualTo(2),
+        reason: 'three frames must coalesce, not emit one notification each',
+      );
+      expect(notes.last['uri'], 'fleury://ui/tree');
+      // Always carries a delta (changedIds) or the full-resync flag — never
+      // a bare "something changed".
+      expect(
+        notes.last.containsKey('changedIds') || notes.last['full'] == true,
+        isTrue,
+      );
+    },
+  );
+
+  test('no resources/updated is sent without a subscription', () async {
+    pushCount(0);
+    await bridge.ready;
+    await pushAndAwait(buttonAndCount('go', 'Go', 1));
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    expect(updatedNotifications(), isEmpty);
+  });
+
+  test('after unsubscribe the push loop stops emitting updates', () async {
+    pushCount(0);
+    await bridge.ready;
+    await server.handleLine(
+      _rpc(1, 'resources/subscribe', <String, Object?>{
+        'uri': 'fleury://ui/tree',
+      }),
+    );
+    pushCount(1);
+    await waitUntil(() => updatedNotifications().isNotEmpty);
+    final before = updatedNotifications().length;
+
+    await server.handleLine(
+      _rpc(2, 'resources/unsubscribe', <String, Object?>{
+        'uri': 'fleury://ui/tree',
+      }),
+    );
+    // A further change must not produce another notification.
+    pushCount(2);
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    expect(updatedNotifications().length, before);
   });
 
   test('a request with explicit id:null still gets answered', () async {
