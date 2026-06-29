@@ -260,6 +260,17 @@ class _SelectState<T> extends State<Select<T>> {
           'open': _isOpen,
           'selectedKey': widget.value,
           'selectedOptionLabel': _currentLabel,
+          // The settable domain: each enabled option's label and stringified
+          // value, in the exact forms `_selectByPayload` matches on, so an agent
+          // (and the WS-9 valueSchema) sees precisely what set_value accepts.
+          'options': <Object?>[
+            for (final o in widget.options)
+              if (o.enabled)
+                <String, Object?>{
+                  'label': sanitizeOptionLabel(o.label),
+                  'value': '${o.value}',
+                },
+          ],
         }),
         onAction: (action) {
           switch (action) {

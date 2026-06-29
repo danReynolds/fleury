@@ -299,6 +299,19 @@ void main() {
         expect(trigger.state.selectedKey, 'green');
         expect(trigger.state['selectedOptionLabel'], 'Green');
 
+        // WS-9: the settable domain is published as {label, value} pairs so an
+        // agent (and the MCP valueSchema) sees exactly what set_value accepts.
+        final options = trigger.state['options']! as List;
+        expect(options, hasLength(3));
+        for (final option in options) {
+          expect(option, isA<Map<Object?, Object?>>());
+          expect((option as Map).keys, containsAll(<String>['label', 'value']));
+        }
+        expect(
+          options.map((o) => (o as Map)['value']),
+          contains('green'),
+        );
+
         final result = await tester.invokeSemanticAction(
           SemanticAction.open,
           node: trigger,

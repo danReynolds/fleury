@@ -254,6 +254,73 @@ void main() {
     expect(updatedNotifications().length, greaterThan(before));
   });
 
+  test(
+    'get_ui carries a valueSchema and set_value rejects out-of-domain (WS-9)',
+    () async {
+      Map<String, Object?> spinRoot(int value) => <String, Object?>{
+        'id': 'root',
+        'role': 'app',
+        'children': <Object?>[
+          <String, Object?>{
+            'id': 'qty',
+            'role': 'spinButton',
+            'label': 'Quantity',
+            'value': value,
+            'actions': <String>['increment', 'setValue'],
+            'state': <String, Object?>{'min': 0, 'max': 5, 'step': 1},
+          },
+        ],
+      };
+
+      pushRoot(spinRoot(2));
+      await bridge.ready;
+
+      // get_ui exposes the typed affordance on the settable node.
+      await server.handleLine(
+        _rpc(1, 'tools/call', <String, Object?>{
+          'name': 'get_ui',
+          'arguments': <String, Object?>{},
+        }),
+      );
+      final ui = toolJson(lastResult());
+      final qty =
+          ((ui['root'] as Map)['children'] as List).first as Map<String, Object?>;
+      expect(qty['valueSchema'], <String, Object?>{
+        'type': 'number',
+        'minimum': 0,
+        'maximum': 5,
+        'step': 1,
+      });
+
+      // Out-of-domain set_value is rejected by contract — naming the schema —
+      // before any action frame is dispatched.
+      await server.handleLine(
+        _rpc(2, 'tools/call', <String, Object?>{
+          'name': 'set_value',
+          'arguments': <String, Object?>{'id': 'qty', 'value': 9},
+        }),
+      );
+      final err = toolError(lastResult());
+      expect(err, contains('above the maximum'));
+      expect(err, contains('valueSchema'));
+      expect(transport.sent.whereType<SemanticActionFrame>(), isEmpty);
+
+      // In-domain set_value dispatches.
+      final pending = server.handleLine(
+        _rpc(3, 'tools/call', <String, Object?>{
+          'name': 'set_value',
+          'arguments': <String, Object?>{'id': 'qty', 'value': 4},
+        }),
+      );
+      pushRoot(spinRoot(4)); // the app reacts
+      await pending;
+      expect(
+        transport.sent.whereType<SemanticActionFrame>().map((f) => f.id.value),
+        contains('qty'),
+      );
+    },
+  );
+
   test('a request with explicit id:null still gets answered', () async {
     await server.handleLine('{"jsonrpc":"2.0","id":null,"method":"ping"}');
     final ok = jsonDecode(out.removeLast()) as Map<String, Object?>;

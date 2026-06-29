@@ -217,7 +217,15 @@ final class SemanticInspectionSnapshot {
   /// true`. For token-limited consumers (the MCP `get_ui` tool); the wire/serve
   /// path uses the unbounded [toJson]. `roleCounts`/`nodeCount` still describe
   /// the *full* tree so a consumer knows what it didn't see.
-  Map<String, Object?> toJsonCapped({required int maxNodes}) {
+  /// [augment] is an optional per-node hook: its returned map (if any) is merged
+  /// into that node's JSON. A generic extension point — the caller owns what it
+  /// adds (e.g. the MCP server injects a normalized `valueSchema`); this keeps
+  /// such consumer-specific fields out of the core node model while still
+  /// respecting the budget walk.
+  Map<String, Object?> toJsonCapped({
+    required int maxNodes,
+    Map<String, Object?>? Function(SemanticInspectionNode node)? augment,
+  }) {
     final budget = _NodeBudget(maxNodes <= 1 ? 0 : maxNodes - 1);
     return <String, Object?>{
       'schemaVersion': schemaVersion,
@@ -226,7 +234,7 @@ final class SemanticInspectionSnapshot {
       'focusedNodeId': focusedNodeId,
       'roleCounts': roleCounts,
       'actionCount': actionCount,
-      'root': root._toJsonCapped(budget),
+      'root': root._toJsonCapped(budget, augment),
     };
   }
 
@@ -469,14 +477,19 @@ final class SemanticInspectionNode {
   /// descendant nodes. A node whose children are dropped to stay within budget
   /// gets `childrenTruncated: <count>` so a consumer knows to drill in with a
   /// targeted query rather than assume it saw everything.
-  Map<String, Object?> _toJsonCapped(_NodeBudget budget) {
+  Map<String, Object?> _toJsonCapped(
+    _NodeBudget budget, [
+    Map<String, Object?>? Function(SemanticInspectionNode node)? augment,
+  ]) {
     final json = _scalarJson(includeBounds: false, dedupeValue: true);
+    final extra = augment?.call(this);
+    if (extra != null) json.addAll(extra);
     if (children.isEmpty) return json;
     final emitted = <Object?>[];
     for (final child in children) {
       if (budget.remaining <= 0) break;
       budget.remaining--;
-      emitted.add(child._toJsonCapped(budget));
+      emitted.add(child._toJsonCapped(budget, augment));
     }
     if (emitted.isNotEmpty) json['children'] = emitted;
     final dropped = children.length - emitted.length;

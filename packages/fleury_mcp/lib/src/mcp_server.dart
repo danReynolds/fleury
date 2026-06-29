@@ -19,6 +19,7 @@ import 'package:characters/characters.dart';
 import 'package:fleury/fleury_core.dart';
 
 import 'app_bridge.dart';
+import 'value_schema.dart';
 
 /// MCP protocol revision this server prefers. The handshake echoes the client's
 /// requested revision when it is one we support, falling back to this.
@@ -315,9 +316,7 @@ final class McpServer {
     }
     final snapshot = await _currentSnapshot();
     if (snapshot != null) _lastServed = snapshot;
-    final text = snapshot == null
-        ? '{}'
-        : jsonEncode(snapshot.toJsonCapped(maxNodes: _getUiNodeCap));
+    final text = snapshot == null ? '{}' : jsonEncode(_cappedUi(snapshot));
     return <String, Object?>{
       'contents': <Object?>[
         <String, Object?>{
@@ -489,9 +488,12 @@ final class McpServer {
           'activate), spinButton/slider (a number), select (an option label or '
           'value, without opening it), datePicker (an ISO date YYYY-MM-DD), and '
           'a table (a 0-based row INDEX — jumps a windowed grid so an '
-          'off-screen row scrolls into view, then read it from get_ui). The '
-          'value is a JSON scalar, coerced for the widget; an unreadable value '
-          'is a no-op. Returns the UI after it settles.',
+          'off-screen row scrolls into view, then read it from get_ui). Each '
+          'settable node carries a `valueSchema` in get_ui (accepted type + '
+          'range/options): pass an in-domain value — an out-of-domain one is '
+          'rejected by contract (naming the domain), not silently clamped. The '
+          'value is a JSON scalar, coerced for the widget. Returns the UI after '
+          'it settles.',
       'inputSchema': <String, Object?>{
         'type': 'object',
         'properties': <String, Object?>{
@@ -654,10 +656,25 @@ final class McpServer {
   /// frame cap, with a clear error instead of a silent giant frame.
   static const int _maxInputChars = 200000;
 
+  /// The capped UI JSON with a normalized `valueSchema` injected on every
+  /// settable node (WS-9), so an agent reads each node's accepted input type +
+  /// constraints alongside it. Shared by get_ui, the resource read, and the
+  /// post-action `ui` block.
+  Map<String, Object?> _cappedUi(SemanticInspectionSnapshot snapshot) =>
+      snapshot.toJsonCapped(
+        maxNodes: _getUiNodeCap,
+        augment: (node) {
+          final schema = deriveValueSchema(node);
+          return schema == null
+              ? null
+              : <String, Object?>{'valueSchema': schema};
+        },
+      );
+
   Future<Map<String, Object?>> _toolGetUi() async {
     final snapshot = await _requireSnapshot();
     _lastServed = snapshot;
-    return _toolJson(snapshot.toJsonCapped(maxNodes: _getUiNodeCap));
+    return _toolJson(_cappedUi(snapshot));
   }
 
   Future<Map<String, Object?>> _toolFindNodes(Map<String, Object?> args) async {
@@ -811,7 +828,22 @@ final class McpServer {
         '$_maxInputChars).',
       );
     }
-    await _resolveActionableNode(id, SemanticAction.setValue.name);
+    final node = await _resolveActionableNode(id, SemanticAction.setValue.name);
+
+    // Validate against the node's typed affordance BEFORE dispatch (WS-9): an
+    // out-of-domain value would otherwise be silently clamped/ignored by the
+    // widget. Fail by contract, naming the accepted domain so the agent can fix
+    // it without trial-and-error.
+    final schema = deriveValueSchema(node);
+    if (schema != null) {
+      final reason = validateValueForSchema(schema, value);
+      if (reason != null) {
+        throw _ToolFailure(
+          'set_value rejected for ${_describeNode(node)}: $reason. '
+          'Accepted input — valueSchema: ${jsonEncode(schema)}.',
+        );
+      }
+    }
 
     final before = bridge.revision;
     bridge.setValue(SemanticNodeId(id), value);
@@ -1021,7 +1053,7 @@ final class McpServer {
   Object? _uiResult(SemanticInspectionSnapshot? after) {
     if (after == null) return null;
     _lastServed = after;
-    return after.toJsonCapped(maxNodes: _getUiNodeCap);
+    return _cappedUi(after);
   }
 
   /// A node flattened for find_nodes results — its own fields, no children
