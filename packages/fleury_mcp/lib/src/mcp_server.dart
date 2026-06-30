@@ -146,6 +146,16 @@ final class McpServer {
   /// during its teardown and restart — no lost re-subscribe.
   Future<void>? _pushLoopFuture;
 
+  /// In-flight tools/call requests by JSON-RPC id, each with a canceller that
+  /// `notifications/cancelled` completes — so a long `wait_for_change` can be
+  /// abandoned by the client. Removed when the call returns.
+  final Map<Object?, Completer<void>> _inFlight = <Object?, Completer<void>>{};
+
+  void _cancelRequest(Object? requestId) {
+    final canceller = _inFlight[requestId];
+    if (canceller != null && !canceller.isCompleted) canceller.complete();
+  }
+
   /// Serializes mutating tool calls (invoke_action/set_value/type_text/
   /// press_key/resize) so two in-flight mutations can't interleave their
   /// revision/settle bookkeeping — one's frame satisfying the other's
@@ -226,7 +236,14 @@ final class McpServer {
     // A message with no `id` key is a notification — never respond to it (even
     // if it's malformed). A request carries an `id`, which may legitimately be
     // null and must still be echoed in the response.
-    if (!decoded.containsKey('id')) return;
+    if (!decoded.containsKey('id')) {
+      // Honor the notifications we act on; ignore the rest (e.g. initialized).
+      if (decoded['method'] == 'notifications/cancelled' &&
+          decoded['params'] is Map) {
+        _cancelRequest((decoded['params'] as Map)['requestId']);
+      }
+      return;
+    }
 
     final id = decoded['id'];
     final method = decoded['method'];
@@ -253,7 +270,18 @@ final class McpServer {
             _resultMessage(id, <String, Object?>{'tools': _toolDefs}),
           );
         case 'tools/call':
-          _sendMessage(_resultMessage(id, await _callTool(params)));
+          final canceller = Completer<void>();
+          _inFlight[id] = canceller;
+          try {
+            final result = await _callTool(params, cancel: canceller.future);
+            // Per MCP, a cancelled request's client is no longer awaiting — so
+            // suppress the response once it's been cancelled.
+            if (!canceller.isCompleted) {
+              _sendMessage(_resultMessage(id, result));
+            }
+          } finally {
+            _inFlight.remove(id);
+          }
         case 'resources/list':
           _sendMessage(
             _resultMessage(id, <String, Object?>{'resources': _resourceDefs}),
@@ -633,7 +661,10 @@ final class McpServer {
   static String get _actionNames =>
       SemanticAction.values.map((a) => a.name).join(', ');
 
-  Future<Map<String, Object?>> _callTool(Map<String, Object?> params) async {
+  Future<Map<String, Object?>> _callTool(
+    Map<String, Object?> params, {
+    Future<void>? cancel,
+  }) async {
     final name = params['name'];
     final args = params['arguments'] is Map
         ? (params['arguments'] as Map).cast<String, Object?>()
@@ -667,7 +698,7 @@ final class McpServer {
         case 'resize':
           return await _serializeMutation(() => _toolResize(args));
         case 'wait_for_change':
-          return await _toolWaitForChange(args);
+          return await _toolWaitForChange(args, cancel: cancel);
         default:
           return _toolError('Unknown tool: $name', code: _ErrorCode.unknownTool);
       }
@@ -1054,15 +1085,34 @@ final class McpServer {
   }
 
   Future<Map<String, Object?>> _toolWaitForChange(
-    Map<String, Object?> args,
-  ) async {
+    Map<String, Object?> args, {
+    Future<void>? cancel,
+  }) async {
     final timeoutMs = (_optInt(args['timeout_ms']) ?? 15000).clamp(100, 60000);
     await _requireSnapshot(); // ensure the app has rendered at least once.
     final before = bridge.revision;
-    final after = await bridge.settle(
+    final settleFuture = bridge.settle(
       sinceRevision: before,
       timeout: Duration(milliseconds: timeoutMs),
     );
+    // Cancellable: a notifications/cancelled for this request completes `cancel`,
+    // so the client can abandon the wait before it settles or times out.
+    if (cancel != null) {
+      var cancelled = false;
+      await Future.any<void>([
+        settleFuture.then((_) {}),
+        cancel.then((_) => cancelled = true),
+      ]);
+      if (cancelled) {
+        unawaited(settleFuture); // bounded by `timeout`; let it finish, discarded
+        return _toolJson(<String, Object?>{
+          'changed': false,
+          'cancelled': true,
+          'note': 'wait_for_change was cancelled by the client.',
+        });
+      }
+    }
+    final after = await settleFuture;
     final changed = bridge.revision != before;
     // On a timeout the tree is unchanged from the agent's last read, so echoing
     // it back is pure wasted tokens — return just the verdict.

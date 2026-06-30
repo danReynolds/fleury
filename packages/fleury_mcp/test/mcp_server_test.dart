@@ -539,6 +539,39 @@ void main() {
     },
   );
 
+  test(
+    'notifications/cancelled abandons an in-flight wait_for_change (WS-6)',
+    () async {
+      pushCount(0);
+      await bridge.ready;
+
+      // A long wait with no change coming — it would otherwise run 60 s.
+      final pending = server.handleLine(
+        _rpc(7, 'tools/call', <String, Object?>{
+          'name': 'wait_for_change',
+          'arguments': <String, Object?>{'timeout_ms': 60000},
+        }),
+      );
+      // Let it reach the settle.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      await server.handleLine(
+        '{"jsonrpc":"2.0","method":"notifications/cancelled",'
+        '"params":{"requestId":7}}',
+      );
+
+      // The wait returns promptly (well under the 60 s timeout).
+      await pending.timeout(const Duration(seconds: 5));
+
+      // Per MCP, a cancelled request gets NO response.
+      final answered = out.where((line) {
+        final m = jsonDecode(line) as Map<String, Object?>;
+        return m['id'] == 7;
+      });
+      expect(answered, isEmpty, reason: 'cancelled request must not be answered');
+    },
+  );
+
   test('a request with explicit id:null still gets answered', () async {
     await server.handleLine('{"jsonrpc":"2.0","id":null,"method":"ping"}');
     final ok = jsonDecode(out.removeLast()) as Map<String, Object?>;
