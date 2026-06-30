@@ -1010,6 +1010,13 @@ class _SpawnSession {
   /// brought up ahead of a browser), so [attach] can pair instantly.
   bool get isReady => _app != null && !_shuttingDown;
 
+  /// Marks this session dead — so a stray [isReady] reads false — and completes
+  /// [done] so the warm pool drops it. Used on every terminal path.
+  void _markDead() {
+    _shuttingDown = true;
+    if (!_done.isCompleted) _done.complete();
+  }
+
   String _socketPathFor(String handleDir) =>
       '${Directory(handleDir).absolute.path}/spawn-$pid-$id.sock';
 
@@ -1032,11 +1039,11 @@ class _SpawnSession {
       );
     } on ProcessException catch (e) {
       stderr.writeln('[serve $tag] failed to spawn ${command.first}: $e');
-      if (!_done.isCompleted) _done.complete();
+      _markDead();
       return false;
     } on FleurySpawnException catch (e) {
       stderr.writeln('[serve $tag] warm subprocess never connected: $e');
-      if (!_done.isCompleted) _done.complete();
+      _markDead();
       return false;
     }
     stderr.writeln(
@@ -1097,12 +1104,12 @@ class _SpawnSession {
     } on ProcessException catch (e) {
       stderr.writeln('[serve $tag] failed to spawn ${command.first}: $e');
       await browserInput.dispose();
-      if (!_done.isCompleted) _done.complete();
+      _markDead();
       return false;
     } on FleurySpawnException catch (e) {
       stderr.writeln('[serve $tag] subprocess never connected: $e');
       await browserInput.dispose();
-      if (!_done.isCompleted) _done.complete();
+      _markDead();
       return false;
     }
     stderr.writeln(
@@ -1120,11 +1127,11 @@ class _SpawnSession {
     // removes the session socket.
     final app = _app;
     if (app != null) {
-      await app.dispose();
+      // dispose() returns the exit code, so we don't re-await process.exitCode
+      // (which could block on a process slow to die under SIGKILL).
+      final code = await app.dispose();
       // Logging the exit code keeps subprocess crashes auditable.
-      stderr.writeln(
-        '[serve s$id] subprocess exited (${await app.process.exitCode})',
-      );
+      stderr.writeln('[serve s$id] subprocess exited ($code)');
     }
     try {
       await _browser?.close();

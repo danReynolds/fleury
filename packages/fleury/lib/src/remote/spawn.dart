@@ -20,12 +20,14 @@ final class SpawnedFleuryApp {
   /// The app subprocess.
   final Process process;
 
-  final Future<void> Function() _dispose;
+  final Future<int> Function() _dispose;
 
   /// Tears down: cancels stdout/stderr forwarding, signals the process
   /// (SIGTERM, then SIGKILL after a grace period), and removes the socket (and
-  /// its temp dir, if this spawn created it). Idempotent.
-  Future<void> dispose() => _dispose();
+  /// its temp dir, if this spawn created it). Idempotent. Returns the process's
+  /// exit code (or the grace-kill sentinel), so a caller needn't await
+  /// `process.exitCode` itself.
+  Future<int> dispose() => _dispose();
 }
 
 /// Thrown when an app can't be attached — failed to spawn, never connected, or
@@ -127,9 +129,9 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
   final outSub = forward('out', process.stdout);
   final errSub = forward('err', process.stderr);
 
-  Future<void> killProcess() async {
+  Future<int> killProcess() {
     process.kill(ProcessSignal.sigterm);
-    await process.exitCode
+    return process.exitCode
         .timeout(killGrace, onTimeout: () {
           process.kill(ProcessSignal.sigkill);
           return -9;
@@ -137,12 +139,19 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
         .catchError((_) => -1);
   }
 
+  // A cancellable timeout arm, so a successful connect doesn't leave a timer
+  // armed for the rest of connectTimeout.
+  final timedOut = Completer<Object>();
+  final timer = Timer(connectTimeout, () {
+    if (!timedOut.isCompleted) timedOut.complete(const _ConnectTimedOut());
+  });
   final connection = await Future.any<Object>([
     server.first,
     process.exitCode.then((code) => _AppExited(code)),
-    Future<Object>.delayed(connectTimeout, () => const _ConnectTimedOut()),
+    timedOut.future,
     if (abort != null) abort.then((_) => const _Aborted()),
   ]);
+  timer.cancel();
 
   if (connection is! Socket) {
     await outSub.cancel();
@@ -164,13 +173,15 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
   await closeServer();
 
   var disposed = false;
-  Future<void> dispose() async {
-    if (disposed) return;
+  var exitCode = -1;
+  Future<int> dispose() async {
+    if (disposed) return exitCode;
     disposed = true;
     await outSub.cancel();
     await errSub.cancel();
-    await killProcess();
+    exitCode = await killProcess();
     await removeSocket();
+    return exitCode;
   }
 
   return SpawnedFleuryApp._(connection, process, dispose);
