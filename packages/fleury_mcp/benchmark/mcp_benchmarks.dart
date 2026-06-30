@@ -183,6 +183,33 @@ Map<String, Object?> affordanceOverhead(SemanticInspectionSnapshot s) {
   };
 }
 
+/// WS-7: per-lookup cost — the cached id index (`nodeById`) vs the old full-tree
+/// re-walk (`root.selfAndDescendants` scan, what nodeById did before). The
+/// resolve-action path and stale guard do this on every mutating call.
+Map<String, Object?> lookupCost(SemanticInspectionSnapshot s) {
+  const target = 'cell-60-name'; // a node deep in the table
+  const iterations = 2000;
+  double avgMicros(void Function() body) {
+    final sw = Stopwatch()..start();
+    for (var i = 0; i < iterations; i++) {
+      body();
+    }
+    return sw.elapsedMicroseconds / iterations;
+  }
+
+  final fullWalk = avgMicros(() {
+    for (final n in s.root.selfAndDescendants) {
+      if (n.id == target) break;
+    }
+  });
+  final indexed = avgMicros(() => s.nodeById(target));
+  return <String, Object?>{
+    'fullWalkUs': fullWalk,
+    'indexedUs': indexed,
+    'speedup': indexed == 0 ? double.infinity : fullWalk / indexed,
+  };
+}
+
 /// WS-2: wall-clock for `settle` to return on a CONTINUOUSLY animating app —
 /// capped (new) vs uncapped (old: it eats the full timeout). Lower is better;
 /// the win is capped << uncapped. Durations are scaled small to keep the bench
@@ -269,6 +296,7 @@ Future<void> main(List<String> args) async {
     'nodeCount': dashboard.nodeCount,
     'deltaVsFull': deltaVsFull(dashboard),
     'affordanceOverhead': affordanceOverhead(dashboard),
+    'lookupCost': lookupCost(dashboard),
     'settleLatency': await settleLatency(),
   };
 
@@ -279,9 +307,11 @@ Future<void> main(List<String> args) async {
 
   final d = results['deltaVsFull'] as Map<String, Object?>;
   final a = results['affordanceOverhead'] as Map<String, Object?>;
+  final lu = results['lookupCost'] as Map<String, Object?>;
   final st = results['settleLatency'] as Map<String, Object?>;
   String pct(Object? v) => (v as num).toStringAsFixed(1);
   String ms(Object? v) => (v as num).toStringAsFixed(0);
+  String us(Object? v) => (v as num).toStringAsFixed(2);
 
   stdout.writeln('MCP benchmarks — dashboard of $rows rows '
       '(${dashboard.nodeCount} nodes)\n');
@@ -295,6 +325,10 @@ Future<void> main(List<String> args) async {
   stdout.writeln('  get_ui baseline     : ${a['baselineBytes']} B');
   stdout.writeln('  + affordances       : ${a['withAffordancesBytes']} B  '
       '(+${pct(a['overheadPct'])}%)\n');
+  stdout.writeln('WS-7  node lookup (per call) — cached index vs full re-walk');
+  stdout.writeln('  full re-walk (old)  : ${us(lu['fullWalkUs'])} us');
+  stdout.writeln('  cached index (new)  : ${us(lu['indexedUs'])} us  '
+      '(${pct(lu['speedup'])}x faster)\n');
   stdout.writeln('WS-2  capped settle on a ticking app');
   stdout.writeln('  uncapped (old)      : ${ms(st['uncappedMs'])} ms');
   stdout.writeln('  capped (new)        : ${ms(st['cappedMs'])} ms  '

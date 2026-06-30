@@ -54,5 +54,18 @@ void main() {
       );
       expect(st['speedup'] as num, greaterThan(1.5));
     });
+
+    test('WS-7: the cached id index is far cheaper than a full re-walk', () {
+      final lu = lookupCost(dashboard);
+      expect(
+        lu['indexedUs'] as num,
+        lessThan((lu['fullWalkUs'] as num) * 0.5),
+        reason: 'cached nodeById ${lu['indexedUs']}us must beat the full '
+            're-walk ${lu['fullWalkUs']}us',
+      );
+      // And the flattened node list is cached per snapshot (identity) — repeated
+      // reads on an unchanged revision do no further walk.
+      expect(identical(dashboard.nodes, dashboard.nodes), isTrue);
+    });
   });
 }

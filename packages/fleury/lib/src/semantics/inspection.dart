@@ -123,13 +123,31 @@ final class SemanticInspectionSnapshot {
   final Map<String, int> roleCounts;
   final int actionCount;
 
-  Iterable<SemanticInspectionNode> get nodes => root.selfAndDescendants;
+  // Per-snapshot lazy caches. A snapshot is immutable for its revision, so the
+  // flattened node list and the id index are computed once on first use and
+  // reused across every read AND the stale-reference guard — repeated lookups on
+  // an unchanged revision do no further full-tree walk (WS-7).
+  List<SemanticInspectionNode>? _nodeList;
+  Map<String, List<SemanticInspectionNode>>? _idIndex;
+
+  Iterable<SemanticInspectionNode> get nodes =>
+      _nodeList ??= root.selfAndDescendants.toList(growable: false);
+
+  /// id → the node(s) carrying it — usually one, but a list so the ambiguity
+  /// guard (`where(id:)` returning >1) still works on duplicate ids.
+  Map<String, List<SemanticInspectionNode>> get _byId {
+    final cached = _idIndex;
+    if (cached != null) return cached;
+    final index = <String, List<SemanticInspectionNode>>{};
+    for (final node in nodes) {
+      (index[node.id] ??= <SemanticInspectionNode>[]).add(node);
+    }
+    return _idIndex = index;
+  }
 
   SemanticInspectionNode? nodeById(String id) {
-    for (final node in nodes) {
-      if (node.id == id) return node;
-    }
-    return null;
+    final list = _byId[id];
+    return (list == null || list.isEmpty) ? null : list.first;
   }
 
   Iterable<SemanticInspectionNode> where({
@@ -144,7 +162,12 @@ final class SemanticInspectionSnapshot {
     bool? enabled,
     Map<String, Object?> stateContains = const <String, Object?>{},
   }) {
-    return nodes.where(
+    // An id query starts from the O(1) index bucket instead of a full walk; the
+    // bucket is already id-matched, so `_matches` re-applies the OTHER filters.
+    final base = id == null
+        ? nodes
+        : (_byId[id] ?? const <SemanticInspectionNode>[]);
+    return base.where(
       (node) => node._matches(
         id: id,
         role: role,

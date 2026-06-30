@@ -18,6 +18,7 @@ without checking out old commits.
 | …and to *act* on it (delta + read the one node) | 23,505 B | **136 B** | 0.6% of a re-read | act < 5% of full |
 | **WS-9/WS-4 affordances** — valueSchema + untrusted marker on get_ui | baseline: 22,951 B | with: **23,505 B** | **+2.4%** (typed contract ~free) | overhead < 10% |
 | **WS-2 capped settle** — wall-clock on a *ticking* app | uncapped (old, runs to timeout): **602 ms** | capped: **164 ms** | **3.7× faster** | capped < 0.7× uncapped |
+| **WS-7 node lookup** — per `nodeById` (resolve + stale guard) | full tree re-walk: **42.25 µs** | cached id index: **0.09 µs** | **≈477× faster** | indexed < 0.5× re-walk |
 
 Notes:
 - The settle bench scales durations down (cap 150 ms / timeout 600 ms) to stay
@@ -40,7 +41,5 @@ These guard the robustness claims; they assert pass/fail, not numbers.
 
 ## Gaps / future (not blocking)
 
-- Per-revision node-index latency (WS-7) — `where(id:)`/`nodeById` are currently
-  O(nodes) on the MCP side; a benchmark + gate belongs with WS-7.
 - A soak/endurance loop and latency percentiles over the e2e path — would add
   reliability *metrics* on top of the correctness e2e above.
