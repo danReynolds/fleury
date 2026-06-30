@@ -22,6 +22,7 @@ import 'package:test/test.dart';
 void main() {
   final binary = _resolve('bin/fleury_mcp.dart');
   final fixture = _resolve('test/fixtures/counter_app.dart');
+  final loggingFixture = _resolve('test/fixtures/logging_app.dart');
 
   test(
     'the real fleury_mcp binary speaks MCP over stdio to a host',
@@ -105,6 +106,54 @@ void main() {
     },
     timeout: const Timeout(Duration(seconds: 120)),
   );
+
+  test(
+    "the app's stdout/stderr reaches the host as notifications/message (WS-6)",
+    () async {
+      final process = await Process.start('dart', <String>[
+        'run',
+        binary,
+        '--',
+        'dart',
+        'run',
+        loggingFixture,
+      ]);
+      final client = _McpStdioClient(process);
+      addTearDown(client.close);
+
+      // The logging capability is advertised; then the handshake completes (so
+      // the app's startup output, held during the handshake, can flush).
+      final init = await client.request(1, 'initialize', <String, Object?>{
+        'protocolVersion': '2025-06-18',
+        'capabilities': <String, Object?>{},
+        'clientInfo': <String, Object?>{'name': 'e2e-host', 'version': '1'},
+      });
+      final caps = (init['result'] as Map<String, Object?>)['capabilities']
+          as Map<String, Object?>;
+      expect(caps.containsKey('logging'), isTrue);
+      client.notify('notifications/initialized');
+
+      bool appLog(Map<String, Object?> n, String needle) {
+        if (n['method'] != 'notifications/message') return false;
+        final params = n['params'] as Map<String, Object?>;
+        return params['logger'] == 'app' &&
+            '${params['data']}'.contains(needle);
+      }
+
+      // The app's stdout marker is forwarded at info; its stderr marker at
+      // warning (so a raised client level wouldn't drop the app's errors).
+      final outLog = await client.waitForNotification(
+        (n) => appLog(n, 'FLEURY_LOG_OUT'),
+      );
+      expect((outLog['params'] as Map<String, Object?>)['level'], 'info');
+
+      final errLog = await client.waitForNotification(
+        (n) => appLog(n, 'FLEURY_LOG_ERR'),
+      );
+      expect((errLog['params'] as Map<String, Object?>)['level'], 'warning');
+    },
+    timeout: const Timeout(Duration(seconds: 120)),
+  );
 }
 
 Map<String, Object?> _toolJson(Map<String, Object?> response) {
@@ -125,8 +174,20 @@ final class _McpStdioClient {
         .listen((line) {
           if (line.trim().isEmpty) return;
           final message = jsonDecode(line) as Map<String, Object?>;
-          final completer = _pending.remove(message['id']);
-          completer?.complete(message);
+          // A response carries an id we're awaiting; anything else with a method
+          // is a server-initiated notification (e.g. notifications/message).
+          if (message.containsKey('id') && _pending.containsKey(message['id'])) {
+            _pending.remove(message['id'])!.complete(message);
+          } else if (message['method'] != null) {
+            notifications.add(message);
+            _waiters.removeWhere((w) {
+              if (w.predicate(message)) {
+                w.completer.complete(message);
+                return true;
+              }
+              return false;
+            });
+          }
         });
     // Drain stderr (server + app logs) so the pipe never blocks; keep the tail
     // for failure diagnostics.
@@ -137,6 +198,36 @@ final class _McpStdioClient {
   final Map<Object?, Completer<Map<String, Object?>>> _pending =
       <Object?, Completer<Map<String, Object?>>>{};
   final StringBuffer _stderr = StringBuffer();
+
+  /// Server-initiated notifications (no awaited id), e.g. notifications/message.
+  final List<Map<String, Object?>> notifications = <Map<String, Object?>>[];
+  final List<
+    ({
+      bool Function(Map<String, Object?>) predicate,
+      Completer<Map<String, Object?>> completer,
+    })
+  >
+  _waiters = [];
+
+  /// Completes with the first notification matching [predicate] — whether it has
+  /// already arrived or arrives within [timeout].
+  Future<Map<String, Object?>> waitForNotification(
+    bool Function(Map<String, Object?>) predicate, {
+    Duration timeout = const Duration(seconds: 30),
+  }) {
+    for (final n in notifications) {
+      if (predicate(n)) return Future<Map<String, Object?>>.value(n);
+    }
+    final completer = Completer<Map<String, Object?>>();
+    _waiters.add((predicate: predicate, completer: completer));
+    return completer.future.timeout(
+      timeout,
+      onTimeout: () => throw StateError(
+        'No matching notification within ${timeout.inSeconds}s.\n'
+        '--- stderr ---\n$_stderr',
+      ),
+    );
+  }
 
   Future<Map<String, Object?>> request(
     Object id,
