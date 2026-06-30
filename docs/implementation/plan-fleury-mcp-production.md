@@ -2,8 +2,9 @@
 
 **Tracks:** [Production-hardening RFC](rfc-fleury-mcp-production-hardening.md) ·
 [Stable ids + `setValue` RFC](rfc-stable-semantic-ids-and-setvalue.md) (WS-0 = its A3).
-**Status:** M1 + M2 + M3 (WS-5/6/7) all complete (2026-06-30); M1/M2 milestone-
-reviewed, M3 review in progress. The production-hardening scope is essentially done.
+**Status:** M1 + M2 + M3 (WS-5/6/7) all complete and milestone-reviewed
+(2026-06-30). The production-hardening scope is **done**; the only remaining items
+are explicitly out of scope (installability, docs). See the changelog tail.
 
 ## How to use this doc
 
@@ -443,3 +444,21 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
   0.5× re-walk + node-list identity. fleury 1736 · mcp 83 · clean.
   **→ M3 workstreams (WS-5/6/7) all complete. Next: M3 milestone review (adversarial),
   then the deferred real-host smoke, then close out the plan.**
+- *2026-06-30* — **M3 milestone review (adversarial) + fixes.** Three skeptical
+  reviewers swept WS-5/6/7 in parallel. **WS-7 clean** — verified semantically
+  equivalent to the un-cached path (bucket-based `where(id:)`, multimap ordering,
+  immutability, no caller mutates the cached list). **WS-6 — 2 HIGH + 3 LOW, all
+  fixed + tested:** (HIGH) cancellation suppression was global — a cancel during
+  ANY non-wait tool's settle dropped its valid response; now only a
+  `wait_for_change` that honors the cancel throws a `_RequestCancelled` sentinel
+  the dispatcher suppresses. (HIGH) app logs were forwarded before `initialize`;
+  now held (bounded 200) and flushed post-handshake. (LOW) `_inFlight` deregisters
+  only its own canceller; `_requireSnapshot` → `not_ready` (transient) not
+  `invalid_arguments`; app stderr → `warning` not `info`. **WS-5 — 3 LOW fixed:**
+  temp-dir no longer leaks on bind-throw; concurrent `dispose()` shares one
+  teardown future (real exit code); refusal docstring corrected. Commits `fb548e9`
+  (fixes) + `203c022` (deferred real-host logging smoke — closes the last WS-8
+  item). fleury 1736 · fleury_mcp 79 unit + host-e2e 2 + integration green · clean.
+  **→ Production-hardening plan COMPLETE.** Out of scope by prior agreement:
+  installability, end-user docs; the pre-existing remote_client_asset drift is a
+  separate ticket.
