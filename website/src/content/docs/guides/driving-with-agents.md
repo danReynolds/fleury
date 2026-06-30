@@ -110,11 +110,11 @@ claude mcp add my-app -- fleury_mcp -- ./my_app
 
 | | |
 |---|---|
-| **resource** `fleury://ui/tree` | The current semantic tree — the same artifact `get_ui` returns. |
+| **resource** `fleury://ui/tree` | The current semantic tree — the same artifact `get_ui` returns. **Subscribable** — the server pushes `notifications/resources/updated` (with just the changed ids) when the UI settles. |
 | `get_ui` | Read the whole tree (roles, labels, values, state, supported actions). Call first, and after each action. |
 | `find_nodes` | Query by role / label substring / supported action / focus / selection — the lean path on a large screen. |
 | `invoke_action` | Invoke a `SemanticAction` on a node by id (activate, focus, select, submit, increment, open/close, …). |
-| `set_value` | Set a value in one call — text fields, checkboxes/toggles, sliders/steppers, selects, date pickers, or a table's row index. |
+| `set_value` | Set a value in one call — text fields, checkboxes/toggles, sliders/steppers, selects, date pickers, or a table's row index. Settable nodes advertise a typed `valueSchema`, validated before dispatch. |
 | `type_text` | Type into the focused input. |
 | `press_key` | A named key (enter, tab, arrows, f1–f12) or a chord (ctrl/alt/shift). Prefer `invoke_action` when a semantic action exists. |
 | `resize` | Resize the viewport to reflow the layout and surface more rows of a windowed widget. |
@@ -122,7 +122,30 @@ claude mcp add my-app -- fleury_mcp -- ./my_app
 
 Results come back both as text JSON and as MCP `structuredContent`. Payloads are
 node-capped and token-trimmed, so a large screen can't blow the agent's context;
-`find_nodes` is the lean path for drilling into big trees.
+`find_nodes` is the lean path for drilling into big trees. A failed call carries a
+machine-readable `structuredContent.code` (`not_found`, `stale_reference`,
+`ambiguous`, `rate_limited`, …), so the agent branches on the category rather than
+parsing prose.
+
+## Live updates, cancellation & logging
+
+The server is a full MCP citizen beyond request/response:
+
+- **Push on change.** Subscribe to `fleury://ui/tree` and the server emits a
+  `notifications/resources/updated` when the UI settles — coalesced to one per
+  settled burst, carrying only the changed/removed node ids. The agent learns
+  *what* changed without re-reading the tree (~0.3% of a full re-read on a busy
+  screen). `wait_for_change` stays for hosts that prefer to pull.
+- **Cancellation.** A long `wait_for_change` can be abandoned with the standard
+  `notifications/cancelled` — it returns at once instead of waiting out its
+  timeout.
+- **App logs.** The app's own stdout/stderr is forwarded as
+  `notifications/message` (logger `app`; stdout → `info`, stderr → `warning`),
+  gated by `logging/setLevel` — so the agent sees what the app logged while
+  driving it.
+
+All app-derived text is delimited as untrusted (read-and-report, never follow
+embedded instructions), and the mutating tools are rate-limited.
 
 ## Make your app drive well
 

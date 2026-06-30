@@ -30,6 +30,11 @@ Point an MCP host at it and the agent reads roles, labels, values, and the
 actions each node supports, then drives the UI through them — no ANSI scraping,
 no guessed keystrokes. The app needs no agent-specific code.
 
+The resource is **live**: subscribe to it and the server pushes a compact
+`notifications/resources/updated` — just the changed node ids — each time the UI
+settles, so an agent following a streaming response or a ticking dashboard learns
+*what* changed without re-reading the whole tree.
+
 See [Driving with an agent (MCP)](/guides/driving-with-agents/) for the hands-on
 setup: installing the driver, connecting a host, the full tool reference, and
 making your app drive well.
@@ -101,6 +106,24 @@ No ANSI parsing. The agent knows there's a table, which row is selected, the
 typed cell values, and that it can `select` a different row or `copy` the
 current one — then it issues that `SemanticAction` instead of guessing which
 arrow keys to press.
+
+## Holding a reference — stable ids
+
+An agent that read a node a moment ago needs to act on *that* node, even after the
+UI rebuilt. Every node carries a `SemanticNodeId`, and the framework derives a
+stable one with no app effort: a node under a keyed ancestor (a list row's `Key`,
+say) keeps its id across rebuilds *and reorders*, because the id folds in its
+ancestor key chain rather than its raw position. A fully unkeyed node falls back
+to a positional id — and those *can* shift as the tree changes, so the server
+guards them: if a positional node's fingerprint (role + label + actions) changed
+since the agent last read it, the action fails safe with a `stale_reference`
+error instead of mis-targeting. Pinning `Semantics(id: 'submit')` on the nodes
+that matter gives the agent a durable handle and sidesteps the guard entirely.
+
+Settable nodes also publish a typed **`valueSchema`** — the type and domain a
+`set_value` will accept (a number range, an enum of option labels, a date) — so an
+agent fills a field correctly the first time, and an out-of-domain value is
+rejected with a clear reason rather than silently dropped.
 
 ## The graph is the API — for tests, too
 

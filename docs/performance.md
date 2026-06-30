@@ -35,6 +35,18 @@ patches** against a shared style table, varint-packed, so a live, churning app
 stays small over a socket. The [semantics tree](/architecture/agents-and-semantics/)
 rides the same wire.
 
+## Driving an agent stays cheap, too
+
+The same discipline carries to the [MCP agent surface](/guides/driving-with-agents/).
+Reads are bounded — `get_ui` and every action result are node-capped and
+token-trimmed, so a large screen can't blow an agent's context. Change delivery is
+incremental: a host that subscribes to the tree gets a **delta** — only the
+changed node ids — when the UI settles, ~0.3% of a full re-read on a busy
+dashboard. Id→node lookup is O(1) per revision (~477× vs a full tree walk), and
+the settle behind `wait_for_change` is capped so a continuously-animating app
+returns promptly (~3.7× faster than running to its timeout). A committed benchmark
+and a perf gate hold these numbers against regression.
+
 ## Measured against peers, not asserted
 
 Fleury is benchmarked against current releases of the frameworks people actually

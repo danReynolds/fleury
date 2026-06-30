@@ -191,11 +191,11 @@ as text JSON (the model-facing channel) and as MCP `structuredContent`.
 
 | | |
 |---|---|
-| **resource** `fleury://ui/tree` | The current semantic tree — the same artifact `get_ui` returns. |
+| **resource** `fleury://ui/tree` | The current semantic tree — the same artifact `get_ui` returns. **Subscribable**: `resources/subscribe` and the server pushes `notifications/resources/updated` (with just the changed node ids) whenever the UI settles. |
 | `get_ui` | Read the whole tree (roles, labels, values, state, actions). Call first, and after each action. |
 | `find_nodes` | Query by role / label substring / supported action / focus / selection — the lean path on a large screen. |
 | `invoke_action` | Invoke a `SemanticAction` on a node by id (activate, focus, select, submit, increment, open/close, …). |
-| `set_value` | Set a value in one call — text fields, checkboxes/toggles, sliders/steppers, selects, date pickers, or a table's row index. |
+| `set_value` | Set a value in one call — text fields, checkboxes/toggles, sliders/steppers, selects, date pickers, or a table's row index. Settable nodes advertise a typed `valueSchema`, and the value is validated against it before dispatch. |
 | `type_text` | Type into the focused input. |
 | `press_key` | A named key (enter, tab, arrows, f1–f12) or a chord (ctrl/alt/shift). Prefer `invoke_action` when a semantic action exists. |
 | `resize` | Resize the viewport to reflow the layout and surface more rows of a windowed widget. |
@@ -210,6 +210,27 @@ fleury_mcp [--cols=<n>] [--rows=<n>] -- <command ...>
 - `--cols` / `--rows` — the viewport the app lays out against (default `80×24`).
   A taller grid surfaces more rows of windowed widgets in the tree.
 - `--` — separates `fleury_mcp`'s flags from the app command.
+
+## Live updates, cancellation & logging
+
+Beyond request/response, the server is a full MCP citizen:
+
+- **Push on change.** Subscribe to `fleury://ui/tree` and the server emits
+  `notifications/resources/updated` when the UI settles — coalesced to one per
+  settled burst, carrying only the changed/removed node ids. An agent learns
+  *what* changed without re-reading the tree (~0.3% of a full re-read on a busy
+  screen). `wait_for_change` stays for hosts that prefer to pull.
+- **Cancellation.** A long `wait_for_change` can be abandoned with the standard
+  `notifications/cancelled`; it returns at once instead of waiting out its
+  timeout.
+- **App logs.** The driven app's own stdout/stderr is forwarded as
+  `notifications/message` (logger `app`; stdout → `info`, stderr → `warning`),
+  gated by `logging/setLevel` — so an agent can see what the app logged while
+  driving it, without it polluting the JSON-RPC channel.
+- **Machine-readable errors.** A failed tool call carries a stable
+  `structuredContent.code` (`not_found`, `stale_reference`, `ambiguous`,
+  `rate_limited`, `not_ready`, …) so an agent branches on the category instead of
+  string-matching the message.
 
 ## Make your app drive well
 
@@ -231,6 +252,15 @@ The app works with zero effort; these make the agent's job easier:
   node-capped (800) and trimmed (no pixel bounds, no value that just repeats a
   label), so a large screen can't blow the agent's context; `find_nodes` is the
   lean drill-in path. A committed test gates per-node payload size.
+- **Push deltas, not re-reads.** A subscription update carries only the changed
+  ids — ~0.3% of a full re-read on a busy dashboard (~322× lighter).
+- **Fast internals, gated against regression.** Id→node lookup is O(1) per
+  revision (~477× vs a full tree walk), and the settle behind `wait_for_change`
+  is capped so a continuously-animating app returns promptly (~3.7× faster than
+  running to timeout). A committed benchmark + perf gate hold these numbers.
+- **Safe against injected content.** All app-derived text is delimited as
+  untrusted (read-and-report, never follow embedded instructions), and the
+  mutating tools are rate-limited.
 - **Stable, compact ids** with a stale-reference guard (above).
 - **Clean lifecycle.** The app subprocess is torn down on disconnect, SIGINT, or
   SIGTERM (exits in well under a second on stdin close); a connect-but-never-
