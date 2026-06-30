@@ -4,7 +4,6 @@ import 'package:characters/characters.dart';
 import 'package:fleury/fleury_host.dart';
 
 import 'component_theme.dart';
-import 'semantic_coercion.dart';
 import 'table.dart' show FixedColumnWidth, FlexColumnWidth, TableColumnWidth;
 
 /// Direction for an app-provided [DataTable] sort state.
@@ -1287,9 +1286,7 @@ class _DataTableElement extends LeafRenderObjectElement
     final rowId = widget.rowKeyBuilder == null
         ? '$scope/table/row/~$key'
         : '$scope/table/row/${escapeSemanticIdSegment('$key')}';
-    final rowSelected = widget.selectionMode == DataTableSelectionMode.row
-        ? rowIndex == selected
-        : rowIndex == selected;
+    final rowSelected = rowIndex == selected;
     return SemanticNode(
       id: SemanticNodeId(rowId),
       role: SemanticRole.tableRow,

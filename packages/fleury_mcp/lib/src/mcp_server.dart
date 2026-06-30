@@ -107,6 +107,7 @@ Future<void> runMcpServer({
   await done.future;
   await sub.cancel();
   await appLogSub?.cancel();
+  server.dispose(); // stop the push loop; don't leave it settling on a dead channel.
   // On a clean shutdown (the host closed stdin), let in-flight handlers finish
   // so their responses flush — bounded, so a wedged tool call can't hang
   // teardown. On a write failure the pipe is already broken, so skip it.
@@ -214,7 +215,15 @@ final class McpServer {
   /// Before the handshake completes the line is held (bounded), not sent.
   void forwardAppLog(String message, {String level = 'info'}) {
     if (!_initialized) {
-      if (_preInitLog.length >= _preInitLogCap) _preInitLog.removeAt(0);
+      if (_preInitLog.length >= _preInitLogCap) {
+        // Over the cap, drop the oldest LOW-severity line first, so a startup
+        // crash's warning/error output survives a chatty info stream rather than
+        // being evicted as the oldest arrival.
+        final low = _preInitLog.indexWhere(
+          (e) => (_levelSeverity[e.level] ?? 1) < _levelSeverity['warning']!,
+        );
+        _preInitLog.removeAt(low >= 0 ? low : 0);
+      }
       _preInitLog.add((level: level, message: message));
       return;
     }
@@ -484,14 +493,27 @@ final class McpServer {
       throw _RpcError(_resourceNotFound, 'Unknown resource: $uri');
     }
     _subscriptions.add(uri as String);
+    bridge.accumulateDeltas = true; // fold deltas only while someone listens.
     _startPushLoop();
     return const <String, Object?>{};
   }
 
   Map<String, Object?> _unsubscribeResource(Map<String, Object?> params) {
     _subscriptions.remove(params['uri']);
+    if (_subscriptions.isEmpty) bridge.accumulateDeltas = false;
     // The push loop observes the now-empty set and exits on its next turn.
     return const <String, Object?>{};
+  }
+
+  /// Releases server-initiated work when the transport is gone (the host closed
+  /// stdin, or a write failed). Clearing [_subscriptions] makes the push loop
+  /// exit on its next turn and never restart or emit into the dead channel — so
+  /// it doesn't keep settling against the bridge after the session ends. Any
+  /// in-flight settle is bounded by its timeout and harmlessly discarded.
+  void dispose() {
+    _subscriptions.clear();
+    bridge.accumulateDeltas = false;
+    _preInitLog.clear();
   }
 
   /// Ensures the single coalescing push loop is running. Guarded by a future
@@ -877,8 +899,8 @@ final class McpServer {
           role: role,
           labelContains: _optString(args['label']),
           action: action,
-          focused: args['focused'] is bool ? args['focused'] as bool : null,
-          selected: args['selected'] is bool ? args['selected'] as bool : null,
+          focused: _optBool(args['focused']),
+          selected: _optBool(args['selected']),
         )
         .toList(growable: false);
 
@@ -979,6 +1001,18 @@ final class McpServer {
     // legitimate label change on a stable id must not falsely fire.
     if (isPositionalSemanticId(id)) {
       final observed = lastServed?.nodeById(id);
+      if (observed == null && lastServed != null) {
+        // The agent read a frame, but this positional id isn't in it — so the id
+        // is from an OLDER view and can't be confirmed to still denote the same
+        // node. Fail safe rather than dispatch to whatever recycled into the slot
+        // (the guard's blind spot the review flagged: it only fired when the id
+        // was present in the last-served frame).
+        throw _ToolFailure(
+          'Stale reference: positional id "$id" is not in the UI you last read '
+          '— re-read get_ui and retry (prefer an app-assigned Semantics(id:)).',
+          code: _ErrorCode.staleReference,
+        );
+      }
       if (observed != null && _fingerprint(observed) != _fingerprint(node)) {
         throw _ToolFailure(
           'Stale reference: id "$id" now denotes a different node '
@@ -1113,12 +1147,21 @@ final class McpServer {
     if (rawMods is List) {
       for (final m in rawMods) {
         switch (m) {
-          case 'ctrl':
+          case 'ctrl' || 'control':
             modifiers.add(KeyModifier.ctrl);
-          case 'alt':
+          case 'alt' || 'option':
             modifiers.add(KeyModifier.alt);
           case 'shift':
             modifiers.add(KeyModifier.shift);
+          case 'super' || 'cmd' || 'command' || 'meta' || 'win':
+            // The Command/Windows/Meta key. Folded to one alias set rather than
+            // silently dropped (which would mis-fire the chord as plain typing).
+            modifiers.add(KeyModifier.superKey);
+          default:
+            throw _ToolFailure(
+              'press_key got unknown modifier "$m". Supported: ctrl, alt, '
+              'shift, super (a.k.a. cmd/command/meta/win).',
+            );
         }
       }
     }
@@ -1158,12 +1201,27 @@ final class McpServer {
     });
   }
 
+  /// Upper bound per resize dimension. Generous for any real screen (a windowed
+  /// widget surfaces plenty of rows well under this) while bounding the cell
+  /// buffer the app allocates — unlike type_text/set_value, resize sizes a
+  /// `cols×rows` grid, so an unbounded value is the one mutation that can OOM the
+  /// app. 1000×1000 ≈ a megacell ceiling.
+  static const int _maxViewportDimension = 1000;
+
   Future<Map<String, Object?>> _toolResize(Map<String, Object?> args) async {
     final cols = _optInt(args['cols']);
     final rows = _optInt(args['rows']);
     if (cols == null || cols < 1 || rows == null || rows < 1) {
       throw const _ToolFailure(
         'resize requires positive integer "cols" and "rows".',
+      );
+    }
+    if (cols > _maxViewportDimension || rows > _maxViewportDimension) {
+      throw _ToolFailure(
+        'resize "cols"/"rows" must each be <= $_maxViewportDimension '
+        '(got ${cols}x$rows); a larger viewport would allocate an '
+        'unreasonable cell buffer.',
+        code: _ErrorCode.tooLarge,
       );
     }
     final before = bridge.revision;
@@ -1273,7 +1331,7 @@ final class McpServer {
     return <String, Object?>{
       ...node.toScalarJson(),
       'childCount': node.children.length,
-      if (schema != null) 'valueSchema': schema,
+      'valueSchema': ?schema,
     };
   }
 
@@ -1321,6 +1379,8 @@ final class McpServer {
   };
 
   static String? _optString(Object? value) => value is String ? value : null;
+
+  static bool? _optBool(Object? value) => value is bool ? value : null;
 
   // Accepts a JSON integer, or a whole-valued double (some clients encode
   // integer arguments as `80.0`); rejects fractional or non-numeric values.

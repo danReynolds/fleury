@@ -55,7 +55,10 @@ Map<String, Object?>? deriveValueSchema(SemanticInspectionNode node) {
         'description':
             'a 0-based row index; jumps a windowed grid so that row scrolls in',
         'minimum': 0,
-        if (rows is int && rows > 0) 'maximum': rows - 1,
+        // When the row count is known, bound it — including rows==0 (an empty
+        // grid → maximum -1, so every index is rejected rather than silently
+        // clamped to a no-op). Only an unknown/non-int count leaves it open.
+        if (rows is int) 'maximum': rows - 1,
       };
     case 'button':
       // A Select trigger is a button that advertises setValue and lists its
@@ -81,14 +84,19 @@ Map<String, Object?>? deriveValueSchema(SemanticInspectionNode node) {
 String? validateValueForSchema(Map<String, Object?> schema, Object? value) {
   switch (schema['type']) {
     case 'number':
-      final n = _coerceNum(value);
+      final n = coerceSemanticNum(value);
       if (n == null) return 'expected a number';
-      return _rangeError(n, schema);
+      return _numberDomainError(n, schema);
     case 'integer':
-      if (!_isIntegerLike(value)) return 'expected an integer';
-      return _rangeError(_coerceNum(value)!, schema);
+      // coerceSemanticInt rejects a non-integral number (2.5) by returning null,
+      // so an off-target index/step can't slip through as "integer-ish".
+      final n = coerceSemanticInt(value);
+      if (n == null) return 'expected an integer';
+      return _numberDomainError(n.toDouble(), schema);
     case 'boolean':
-      return _isBoolLike(value) ? null : 'expected a boolean (true or false)';
+      return coerceSemanticBool(value) != null
+          ? null
+          : 'expected a boolean (true or false)';
     case 'string':
       if (schema['format'] == 'date') return _dateError(value, schema);
       return null;
@@ -114,58 +122,40 @@ String? validateValueForSchema(Map<String, Object?> schema, Object? value) {
   }
 }
 
-// The coercion below MIRRORS fleury_widgets' semantic_coercion.dart so validation
-// accepts exactly what the widgets accept — never rejecting a value that would in
-// fact apply (a `bool` for a number, the many boolean spellings, any
-// DateTime-parseable date). The MCP layer is widget-agnostic and can't import
-// those helpers, so the rules are restated here; keep them in sync.
+// Numeric/bool coercion uses fleury core's shared coerceSemantic* helpers — the
+// SAME ones the widgets apply — so validation accepts exactly what the widget
+// would, with no second copy of the rules to drift. (Date handling stays here,
+// below, since it layers the YYYY-MM-DD contract on top.)
 
-num? _coerceNum(Object? v) {
-  if (v is num) return v;
-  if (v is bool) return v ? 1 : 0;
-  if (v is String) return num.tryParse(v.trim());
-  return null;
-}
-
-bool _isIntegerLike(Object? v) {
-  if (v is int || v is bool) return true;
-  if (v is double) return v == v.roundToDouble();
-  if (v is String) return int.tryParse(v.trim()) != null;
-  return false;
-}
-
-bool _isBoolLike(Object? v) {
-  if (v is bool || v is num) return true;
-  if (v is String) {
-    switch (v.trim().toLowerCase()) {
-      case 'true' ||
-          '1' ||
-          'yes' ||
-          'on' ||
-          'checked' ||
-          'enabled' ||
-          'false' ||
-          '0' ||
-          'no' ||
-          'off' ||
-          'unchecked' ||
-          'disabled':
-        return true;
-    }
-  }
-  return false;
-}
-
-String? _rangeError(num n, Map<String, Object?> schema) {
+String? _numberDomainError(num n, Map<String, Object?> schema) {
   final min = schema['minimum'];
   final max = schema['maximum'];
   if (min is num && n < min) return 'below the minimum ($min)';
   if (max is num && n > max) return 'above the maximum ($max)';
+  // A stepped control (Stepper/spinButton) only lands on min + k·step; an
+  // off-grid value would otherwise pass and the widget would apply it un-snapped,
+  // reaching a state the keyboard can't produce. Reject it by contract instead.
+  final step = schema['step'];
+  if (step is num && step > 0) {
+    final base = min is num ? min : 0;
+    final k = (n - base) / step;
+    if ((k - k.roundToDouble()).abs() > 1e-9) {
+      return 'not on the step grid (step $step from $base)';
+    }
+  }
   return null;
 }
 
+final RegExp _isoDate = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+
 String? _dateError(Object? value, Map<String, Object?> schema) {
-  final parsed = value is String ? DateTime.tryParse(value.trim()) : null;
+  final text = value is String ? value.trim() : null;
+  if (text == null) return 'expected a date (ISO YYYY-MM-DD)';
+  // The advertised contract is date-only. Reject a full date-time rather than
+  // silently discarding its time component, so the agent's value means what the
+  // schema says it does.
+  if (!_isoDate.hasMatch(text)) return 'expected a date in YYYY-MM-DD form';
+  final parsed = DateTime.tryParse(text);
   if (parsed == null) return 'expected a date (ISO YYYY-MM-DD)';
   final day = DateTime(parsed.year, parsed.month, parsed.day);
   final min = schema['minimum'];

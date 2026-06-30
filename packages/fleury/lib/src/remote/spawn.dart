@@ -174,7 +174,11 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
   if (connection is! Socket) {
     await outSub.cancel();
     await errSub.cancel();
-    process.kill(ProcessSignal.sigkill);
+    // SIGTERM→grace→SIGKILL and, crucially, AWAIT exitCode — a bare fire-and-
+    // forget kill never reaps the child, leaking a process handle per failed
+    // spawn (a host that retries flaky apps accumulates them). For _AppExited the
+    // process is already gone, so this resolves instantly.
+    await killProcess();
     await removeSocket();
     final reason = switch (connection) {
       _AppExited(:final code) => 'app exited (code $code) before connecting',

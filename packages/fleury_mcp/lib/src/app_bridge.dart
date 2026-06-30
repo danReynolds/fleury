@@ -93,6 +93,24 @@ final class FleuryAppBridge {
   final Set<String> _accRemoved = <String>{};
   bool _accFull = false;
 
+  // Per-frame delta folding runs only while a consumer (a resource subscription)
+  // is active, set via [accumulateDeltas]. Off by default so a busy app pays no
+  // delta-fold cost when nobody subscribes, and a fresh subscription starts from
+  // an empty accumulator instead of inheriting an unbounded pre-subscribe backlog.
+  bool _accumulateDeltas = false;
+
+  /// Turns per-frame delta accumulation on/off. The server enables it while a
+  /// resource subscription is active. Disabling clears any pending delta, so the
+  /// next subscription begins from "now".
+  set accumulateDeltas(bool enabled) {
+    _accumulateDeltas = enabled;
+    if (!enabled) {
+      _accChanged.clear();
+      _accRemoved.clear();
+      _accFull = false;
+    }
+  }
+
   // Replaced and completed on every semantics update so [settle] can await the
   // next one without polling.
   Completer<void> _tick = Completer<void>();
@@ -330,7 +348,7 @@ final class FleuryAppBridge {
         _tree = tree;
         _cachedSnapshot = null; // rebuilt lazily on the next read.
         _revision++;
-        _accumulateDelta();
+        if (_accumulateDeltas) _accumulateDelta();
         _renderWatchdog?.cancel();
         if (!_firstSnapshot.isCompleted) _firstSnapshot.complete();
         _signalTick();

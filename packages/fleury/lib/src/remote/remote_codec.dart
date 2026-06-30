@@ -234,6 +234,10 @@ class _Reader {
 
   bool boolean() => u8() != 0;
 
+  /// Whether any bytes remain — lets a decoder treat an absent trailing field as
+  /// its default (e.g. a pre-value SEMANTIC_ACTION frame from an older peer).
+  bool get hasMore => _pos < _data.length;
+
   void _need(int n) {
     if (_pos + n > _data.length) {
       throw const RemoteCodecException('truncated payload');
@@ -765,7 +769,11 @@ Uint8List encodeSemanticAction(
   final id = r.vstr();
   final actionName = r.vstr();
   Object? value;
-  if (r.boolean()) {
+  // The value byte is additive (protocol v3). Tolerate its absence so a frame
+  // from an older peer — e.g. a stale cached browser asset that still sends the
+  // 2-field id+action form — decodes as a plain parameterless action instead of
+  // throwing 'truncated payload' and killing the connection.
+  if (r.hasMore && r.boolean()) {
     final raw = r.vstr();
     try {
       value = jsonDecode(raw);

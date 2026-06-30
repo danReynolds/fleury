@@ -539,6 +539,84 @@ void main() {
     },
   );
 
+  test('resize rejects an oversized viewport (too_large)', () async {
+    pushCount(0);
+    await bridge.ready;
+    await server.handleLine(
+      _rpc(1, 'tools/call', <String, Object?>{
+        'name': 'resize',
+        'arguments': <String, Object?>{'cols': 2000000, 'rows': 2000000},
+      }),
+    );
+    final result = lastResult();
+    expect(result['isError'], isTrue);
+    expect((result['structuredContent'] as Map)['code'], 'too_large');
+  });
+
+  test('press_key maps meta→super and rejects an unknown modifier', () async {
+    pushRoot(buttonAndCount('btn', 'Go', 0));
+    await bridge.ready;
+
+    await server.handleLine(
+      _rpc(1, 'tools/call', <String, Object?>{
+        'name': 'press_key',
+        'arguments': <String, Object?>{'key': 'a', 'modifiers': ['meta']},
+      }),
+    );
+    final ok = toolJson(lastResult());
+    expect(
+      (ok['pressed'] as Map<String, Object?>)['modifiers'],
+      contains('superKey'),
+    );
+
+    await server.handleLine(
+      _rpc(2, 'tools/call', <String, Object?>{
+        'name': 'press_key',
+        'arguments': <String, Object?>{'key': 'a', 'modifiers': ['bogus']},
+      }),
+    );
+    final err = lastResult();
+    expect(err['isError'], isTrue);
+    expect(toolError(err), contains('unknown modifier'));
+  });
+
+  test('a positional id absent from the last-read frame is rejected as stale',
+      () async {
+    pushRoot(buttonAndCount('btn', 'Go', 0));
+    await bridge.ready;
+    // Read frame A — it has no element-99.
+    await server.handleLine(
+      _rpc(1, 'tools/call', <String, Object?>{
+        'name': 'get_ui',
+        'arguments': <String, Object?>{},
+      }),
+    );
+
+    // Frame B introduces a positional id the agent never read.
+    await pushAndAwait(<String, Object?>{
+      'id': 'root',
+      'role': 'app',
+      'children': <Object?>[
+        <String, Object?>{
+          'id': 'element-99',
+          'role': 'button',
+          'label': 'Mystery',
+          'actions': <String>['activate'],
+        },
+      ],
+    });
+
+    await server.handleLine(
+      _rpc(2, 'tools/call', <String, Object?>{
+        'name': 'invoke_action',
+        'arguments': <String, Object?>{'id': 'element-99', 'action': 'activate'},
+      }),
+    );
+    final result = lastResult();
+    expect(result['isError'], isTrue);
+    expect((result['structuredContent'] as Map)['code'], 'stale_reference');
+  });
+
   test(
     'notifications/cancelled abandons an in-flight wait_for_change (WS-6)',
     () async {

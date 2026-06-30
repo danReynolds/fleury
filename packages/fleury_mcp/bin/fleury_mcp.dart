@@ -99,10 +99,17 @@ Future<int> _run(List<String> args) async {
   }
 
   final exitCode = Completer<int>();
-  Future<void> finish(int code) async {
-    await bridge.close();
-    await appLog.close();
-    if (!exitCode.isCompleted) exitCode.complete(code);
+  // Idempotent: stdin-close, app-exit, and a signal can all race to finish().
+  // Run the teardown exactly once (cached future), so appLog.close() can't fire
+  // while a concurrent caller's bridge.close() is still cancelling the log
+  // forwarders — which would StateError on the next app line hitting a closed sink.
+  Future<void>? finishing;
+  Future<void> finish(int code) {
+    return finishing ??= () async {
+      await bridge.close();
+      await appLog.close();
+      if (!exitCode.isCompleted) exitCode.complete(code);
+    }();
   }
 
   // The host closes our stdin (or its pipe) to disconnect; the app exiting ends

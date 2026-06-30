@@ -1,7 +1,6 @@
 import 'package:fleury/fleury_host.dart';
 
 import 'component_theme.dart';
-import 'semantic_coercion.dart';
 
 /// Shared focus + activation chrome for the form controls. Focusable;
 /// Enter or Space activates ([onActivate]) when enabled. The [builder] gets

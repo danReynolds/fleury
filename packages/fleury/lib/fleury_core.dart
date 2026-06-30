@@ -150,6 +150,8 @@ export 'src/semantics/inspection.dart'
         SemanticInspectionNode,
         SemanticInspectionSnapshot,
         SemanticTreeInspection;
+export 'src/semantics/semantic_coercion.dart'
+    show coerceSemanticBool, coerceSemanticInt, coerceSemanticNum;
 export 'src/semantics/semantics.dart'
     show
         SemanticAction,

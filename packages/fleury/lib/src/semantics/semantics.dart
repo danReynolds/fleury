@@ -1001,12 +1001,17 @@ int _childIndexOf(Element element) {
   final parent = element.elementParent;
   if (parent == null) return 0;
   var index = 0;
-  var result = 0;
+  var result = -1;
   parent.visitChildren((child) {
     if (identical(child, element)) result = index;
     index++;
   });
-  return result;
+  // Not found ⇒ the id is being derived mid-reparent, before this child is
+  // listed under its (new) parent — a transient, legitimate window (e.g.
+  // SemanticsElement.update during a move). Return an out-of-range index (the
+  // child count) rather than a silent 0 that would alias the genuine first
+  // sibling; the id re-derives correctly once the move settles.
+  return result >= 0 ? result : index;
 }
 
 /// Implemented by elements that contribute a semantic node.
@@ -1627,7 +1632,21 @@ void _indexOwnedIds(
       : <SemanticNodeId>{for (final child in graftedChildren) child.id};
   void walk(SemanticNode n) {
     if (graftedIds.contains(n.id)) return; // owned by a child contributor
-    elements[n.id] = element;
+    final existing = elements[n.id];
+    if (existing != null && !identical(existing, element)) {
+      // Two DIFFERENT contributors derived the same id — e.g. a reused key under
+      // distinct unkeyed parents, which `semanticAnchorOf` can fold to one
+      // `auto:` id. Drop it so dispatch fails CLOSED (elementById → null →
+      // "unsupported") instead of silently routing to whichever was walked last.
+      // The snapshot's `where(id:)` still sees both nodes, so the MCP layer
+      // already rejects the id as ambiguous; this gives the terminal/AT dispatch
+      // path the same fail-closed behaviour. (Ids dup'd WITHIN one contributor
+      // map to the same element and are kept; a 3+-way collision — vanishingly
+      // rare — degrades to the last writer, still caught by the MCP guard.)
+      elements.remove(n.id);
+    } else {
+      elements[n.id] = element;
+    }
     for (final child in n.children) {
       walk(child);
     }

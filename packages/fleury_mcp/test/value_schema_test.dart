@@ -58,6 +58,24 @@ void main() {
       expect(s['maximum'], 49);
     });
 
+    test('table with 0 rows bounds maximum to -1 (every index rejected)', () {
+      final s = deriveValueSchema(
+        _node('table', state: {'collectionRowCount': 0}),
+      )!;
+      expect(s['maximum'], -1);
+      // An empty grid rejects any index rather than silently clamping to a no-op.
+      expect(validateValueForSchema(s, 0), contains('above the maximum'));
+    });
+
+    test('a stepped number rejects an off-grid value', () {
+      final s = deriveValueSchema(
+        _node('spinButton', state: {'min': 0, 'max': 10, 'step': 2}),
+      )!;
+      expect(s['step'], 2);
+      expect(validateValueForSchema(s, 4), isNull); // on the step grid
+      expect(validateValueForSchema(s, 3), contains('step')); // off the grid
+    });
+
     test('select trigger (button + setValue + options) → enum', () {
       final s = deriveValueSchema(
         _node(
@@ -161,8 +179,12 @@ void main() {
         'maximum': '2020-12-31',
       };
       expect(validateValueForSchema(s, '2020-06-15'), isNull);
-      // A non-ISO but DateTime-parseable form is accepted, like the widget.
-      expect(validateValueForSchema(s, '2020-06-15T09:00:00'), isNull);
+      // A full date-time is rejected: the contract is date-only (YYYY-MM-DD), so
+      // its time component must not be silently discarded.
+      expect(
+        validateValueForSchema(s, '2020-06-15T09:00:00'),
+        contains('YYYY-MM-DD'),
+      );
       expect(validateValueForSchema(s, '2019-12-31'), contains('earliest'));
       expect(validateValueForSchema(s, '2021-01-01'), contains('latest'));
       expect(validateValueForSchema(s, 'not a date'), contains('date'));

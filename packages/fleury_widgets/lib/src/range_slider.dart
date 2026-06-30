@@ -1,6 +1,5 @@
 import 'package:fleury/fleury_host.dart';
 
-import 'semantic_coercion.dart';
 
 /// Which of the two handles a [RangeSlider] is editing.
 enum _ActiveHandle { low, high }
