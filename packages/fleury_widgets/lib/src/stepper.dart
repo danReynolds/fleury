@@ -1,5 +1,6 @@
 import 'package:fleury/fleury_host.dart';
 
+
 /// A numeric stepper: `[ − 42 + ]`. Focusable; arrow chords (and +/−)
 /// adjust the value by [step], PageUp / PageDown by [largeStep], Home /
 /// End jump to [min] / [max]. Clicking the `−` or `+` half also nudges
@@ -326,6 +327,7 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
         SemanticAction.focus,
         if (canInc) SemanticAction.increment,
         if (canDec) SemanticAction.decrement,
+        SemanticAction.setValue,
       },
       state: SemanticState({
         'numericValue': widget.value,
@@ -352,6 +354,12 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
           case _:
             return;
         }
+      },
+      // Set an exact value in one call (clamped to [min,max]) — same as typing
+      // the digits and committing, without the keystroke dance.
+      onSetValue: (payload) {
+        final next = coerceSemanticNum(payload);
+        if (next != null) _jump(next);
       },
       child: FocusWithin(
         onFocusChange: _handleFocusChange,

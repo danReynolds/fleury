@@ -274,5 +274,45 @@ void main() {
       expect(node.state['canIncrement'], isFalse);
       expect(node.state['canDecrement'], isTrue);
     });
+
+    group('semantic setValue (B4)', () {
+      testWidgets('advertises setValue and sets an exact value, clamped',
+          (tester) async {
+        num? received;
+        tester.pumpWidget(
+          Stepper(value: 10, min: 0, max: 100, onChanged: (v) => received = v),
+        );
+        final node = tester.semantics().single(role: SemanticRole.spinButton);
+        expect(node.actions, contains(SemanticAction.setValue));
+
+        await tester.invokeSemanticAction(
+          SemanticAction.setValue,
+          node: node,
+          payload: 42,
+        );
+        expect(received, 42);
+
+        // An out-of-range request is clamped to the max, not rejected.
+        await tester.invokeSemanticAction(
+          SemanticAction.setValue,
+          role: SemanticRole.spinButton,
+          payload: 1000,
+        );
+        expect(received, 100);
+      });
+
+      testWidgets('reads a numeric string and ignores garbage', (tester) async {
+        num? received;
+        tester.pumpWidget(Stepper(value: 10, onChanged: (v) => received = v));
+        await tester.invokeSemanticAction(SemanticAction.setValue,
+            role: SemanticRole.spinButton, payload: '7');
+        expect(received, 7);
+
+        received = null;
+        await tester.invokeSemanticAction(SemanticAction.setValue,
+            role: SemanticRole.spinButton, payload: 'lots');
+        expect(received, isNull, reason: 'a non-numeric payload is a no-op');
+      });
+    });
   });
 }

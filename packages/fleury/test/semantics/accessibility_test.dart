@@ -58,7 +58,10 @@ void main() {
       ]),
     );
     expect(field.announcement, contains('error: Command unavailable'));
-    expect(field.announcement, contains('actions: clear, focus, submit'));
+    expect(
+      field.announcement,
+      contains('actions: clear, focus, setValue, submit'),
+    );
   });
 
   testWidgets('accessibility snapshot exposes typed query fields', (tester) {

@@ -1,6 +1,7 @@
 @TestOn('browser')
 library;
 
+import 'dart:js_interop';
 import 'dart:math' as math;
 
 import 'package:fleury/fleury_host.dart';
@@ -94,6 +95,104 @@ void main() {
       ),
       CellOffset(lastCol, lastRow),
     );
+  });
+
+  test('DomCellMetrics maps viewport points after host movement', () {
+    final container = web.document.createElement('div');
+    container.setAttribute(
+      'style',
+      'position:absolute;left:0;top:0;width:160px;height:64px;'
+          'font-family:monospace;font-size:16px;line-height:16px;',
+    );
+    web.document.body!.appendChild(container);
+    final metrics = DomCellMetrics(container: container);
+    addTearDown(() {
+      metrics.dispose();
+      container.parentNode?.removeChild(container);
+    });
+
+    final box = metrics.measure();
+    container.setAttribute(
+      'style',
+      'position:absolute;left:40px;top:80px;width:160px;height:64px;'
+          'font-family:monospace;font-size:16px;line-height:16px;',
+    );
+    final rect = container.getBoundingClientRect();
+
+    expect(
+      metrics.cellForViewportPoint(
+        rect.left + box.cssCellWidth * 1.5,
+        rect.top + box.cssCellHeight * 1.5,
+      ),
+      const CellOffset(1, 1),
+    );
+    expect(metrics.cachedMeasurement, same(box));
+    expect(metrics.isDirty, isFalse);
+  });
+
+  test('DomCellMetrics maps viewport points through padding and border', () {
+    final container = web.document.createElement('div');
+    container.setAttribute(
+      'style',
+      'position:absolute;left:30px;top:50px;width:220px;height:96px;'
+          'box-sizing:border-box;padding:6px;border:2px solid black;'
+          'font-family:monospace;font-size:16px;line-height:16px;',
+    );
+    web.document.body!.appendChild(container);
+    final metrics = DomCellMetrics(container: container);
+    addTearDown(() {
+      metrics.dispose();
+      container.parentNode?.removeChild(container);
+    });
+
+    final box = metrics.measure();
+    final rect = container.getBoundingClientRect();
+
+    expect(
+      metrics.cellForViewportPoint(
+        rect.left + 8 + box.cssCellWidth * 2.5,
+        rect.top + 8 + box.cssCellHeight * 1.5,
+      ),
+      const CellOffset(2, 1),
+    );
+  });
+
+  test('DomCellMetrics maps viewport points after page scroll', () {
+    final body = web.document.body!;
+    final previousBodyStyle = body.getAttribute('style');
+    web.window.scrollTo(0.toJS, 0);
+    body.setAttribute('style', '${previousBodyStyle ?? ''};min-height:2400px;');
+    final container = web.document.createElement('div');
+    container.setAttribute(
+      'style',
+      'position:absolute;left:20px;top:1200px;width:160px;height:64px;'
+          'font-family:monospace;font-size:16px;line-height:16px;',
+    );
+    web.document.body!.appendChild(container);
+    final metrics = DomCellMetrics(container: container);
+    addTearDown(() {
+      metrics.dispose();
+      container.parentNode?.removeChild(container);
+      if (previousBodyStyle == null) {
+        body.removeAttribute('style');
+      } else {
+        body.setAttribute('style', previousBodyStyle);
+      }
+      web.window.scrollTo(0.toJS, 0);
+    });
+
+    final box = metrics.measure();
+    web.window.scrollTo(0.toJS, 900);
+    final rect = container.getBoundingClientRect();
+
+    expect(
+      metrics.cellForViewportPoint(
+        rect.left + box.cssCellWidth * 1.5,
+        rect.top + box.cssCellHeight * 1.5,
+      ),
+      const CellOffset(1, 1),
+    );
+    expect(metrics.cachedMeasurement, same(box));
   });
 
   test('DomCellMetrics caches until explicitly marked dirty', () {

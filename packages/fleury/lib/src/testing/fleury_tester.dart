@@ -464,6 +464,9 @@ class FleuryTester {
   /// node that advertises [action]. This is intentionally semantic-first: tests
   /// can exercise app commands, controls, fields, and app-authored regions by
   /// role/label/action instead of reaching through widget internals.
+  ///
+  /// For [SemanticAction.setValue], pass the value to apply as [payload] (the
+  /// [value] argument is a node *filter*, not the payload).
   Future<SemanticActionInvocationResult> invokeSemanticAction(
     SemanticAction action, {
     SemanticNode? node,
@@ -471,6 +474,7 @@ class FleuryTester {
     SemanticRole? role,
     String? label,
     Object? value,
+    Object? payload,
     bool? focused,
     bool? selected,
     bool? enabled,
@@ -510,21 +514,17 @@ class FleuryTester {
       return SemanticActionInvocationResult.unsupported(target, action);
     }
 
-    try {
-      final handled = await _dispatchSemanticAction(root, target, action);
-      _owner.flushBuild();
-      return handled
-          ? SemanticActionInvocationResult.completed(target, action)
-          : SemanticActionInvocationResult.unsupported(target, action);
-    } catch (error, stackTrace) {
-      _owner.flushBuild();
-      return SemanticActionInvocationResult.failed(
-        target,
-        action,
-        error: error,
-        stackTrace: stackTrace,
-      );
-    }
+    // Dispatch through the same map-based path the live wire uses, so the tester
+    // can't pass where production fails (the divergence that previously hid a
+    // cross-fire bug). The tree from `semantics()` carries the id→element map.
+    final result = await invokeSemanticActionFromElement(
+      tree: tree,
+      id: target.id,
+      action: action,
+      value: payload,
+    );
+    _owner.flushBuild();
+    return result;
   }
 
   /// Returns the active command registry for [context], or for the current
@@ -718,56 +718,6 @@ class FleuryTester {
     }
   }
 
-  Future<bool> _dispatchSemanticAction(
-    Element element,
-    SemanticNode target,
-    SemanticAction action,
-  ) async {
-    final children = <Element>[];
-    if (element is SemanticChildrenProvider) {
-      (element as SemanticChildrenProvider).visitSemanticChildren(children.add);
-    } else {
-      element.visitChildren(children.add);
-    }
-    for (final child in children) {
-      if (await _dispatchSemanticAction(child, target, action)) {
-        return true;
-      }
-    }
-
-    if (element is! SemanticActionContributor) return false;
-    if (!_semanticSubtreeContains(element, target.id)) return false;
-    final contributor = element as SemanticActionContributor;
-    return await contributor.handleSemanticAction(target, action);
-  }
-
-  bool _semanticSubtreeContains(Element element, SemanticNodeId id) {
-    for (final node in _collectSemanticNodes(element)) {
-      if (node.selfAndDescendants.any((candidate) => candidate.id == id)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  List<SemanticNode> _collectSemanticNodes(Element element) {
-    final children = <SemanticNode>[];
-    void visitChild(Element child) {
-      children.addAll(_collectSemanticNodes(child));
-    }
-
-    if (element is SemanticChildrenProvider) {
-      (element as SemanticChildrenProvider).visitSemanticChildren(visitChild);
-    } else {
-      element.visitChildren(visitChild);
-    }
-
-    if (element is SemanticContributor) {
-      final contributor = element as SemanticContributor;
-      return <SemanticNode>[contributor.buildSemanticNode(children)];
-    }
-    return children;
-  }
 }
 
 final class _CommandResolution {

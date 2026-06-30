@@ -86,10 +86,7 @@ final class DomCellMetrics implements CellMetrics {
       probeRect.width / _probeText.length,
       _minimumCellWidth,
     );
-    final naturalCellHeight = math.max(
-      probeRect.height,
-      _minimumCellHeight,
-    );
+    final naturalCellHeight = math.max(probeRect.height, _minimumCellHeight);
     final cssCellWidth = math.max(
       snapToDevicePixels(naturalCellWidth),
       _minimumCellWidth,
@@ -180,6 +177,14 @@ final class DomCellMetrics implements CellMetrics {
   }
 
   @override
+  CellOffset? cellForViewportPoint(double clientX, double clientY) {
+    final box = _cached;
+    if (box == null || box.cols <= 0 || box.rows <= 0) return null;
+    final origin = _currentCanvasOrigin();
+    return cellForPoint(clientX - origin.left, clientY - origin.top);
+  }
+
+  @override
   void dispose() {
     _fontObserverGeneration += 1;
     _onMetricsDirty = null;
@@ -238,6 +243,24 @@ final class DomCellMetrics implements CellMetrics {
     if (callback == null) return;
     markDirty();
     callback();
+  }
+
+  ({double left, double top}) _currentCanvasOrigin() {
+    final containerRect = _container.getBoundingClientRect();
+    if (containerRect.width <= 0 && containerRect.height <= 0) {
+      final cached = _cached;
+      return (left: cached?.cssCanvasLeft ?? 0, top: cached?.cssCanvasTop ?? 0);
+    }
+    final style = _window.getComputedStyle(_container);
+    final left =
+        containerRect.left +
+        _edgePx(style, 'padding-left') +
+        _edgePx(style, 'border-left-width');
+    final top =
+        containerRect.top +
+        _edgePx(style, 'padding-top') +
+        _edgePx(style, 'border-top-width');
+    return (left: left, top: top);
   }
 
   web.CSSStyleDeclaration _syncProbeFont() {

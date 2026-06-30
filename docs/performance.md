@@ -45,6 +45,18 @@ expensive:
 The full scenario matrix and peer target rationale live in the
 [benchmark index](https://github.com/danReynolds/fleury/blob/main/benchmarks/README.md).
 
+## Driving an agent stays cheap, too
+
+The same discipline carries to the [MCP agent surface](/guides/driving-with-agents/).
+Reads are bounded — `get_ui` and every action result are node-capped and
+token-trimmed, so a large screen can't blow an agent's context. Change delivery is
+incremental: a host that subscribes to the tree gets a **delta** — only the
+changed node ids — when the UI settles, ~0.3% of a full re-read on a busy
+dashboard. Id→node lookup is O(1) per revision (~477× vs a full tree walk), and
+the settle behind `wait_for_change` is capped so a continuously-animating app
+returns promptly (~3.7× faster than running to its timeout). A committed benchmark
+and a perf gate hold these numbers against regression.
+
 ## How to inspect it
 
 From a Fleury framework checkout:

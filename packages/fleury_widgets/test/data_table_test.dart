@@ -79,6 +79,232 @@ void main() {
     });
   });
 
+  group('semantic id stability (RFC A1/A2)', () {
+    DataTable runs({bool keyed = true}) => DataTable(
+      label: 'Runs',
+      rowCount: 100,
+      columns: _columns(),
+      rowKeyBuilder: keyed ? (row) => 'RUN-$row' : null,
+      cellBuilder: _cell,
+    );
+
+    testWidgets('a keyed-row table gives rows a stable, ~-free id that '
+        'survives a from-scratch rebuild', (tester) {
+      tester.pumpWidget(runs());
+      tester.render(size: const CellSize(20, 6));
+      final rowId = tester
+          .semantics()
+          .single(role: SemanticRole.tableRow, label: 'RUN-0')
+          .id;
+      expect(rowId.value, contains('/table/row/RUN-0'));
+      expect(
+        rowId.value,
+        isNot(contains('/row/~')),
+        reason: 'a real row key is stable, not positional',
+      );
+
+      // Rebuild from scratch: the row id is identical — derived from the row
+      // key, not the (now-different) element instance.
+      tester.pumpWidget(const SizedBox());
+      tester.pumpWidget(runs());
+      tester.render(size: const CellSize(20, 6));
+      final rowId2 = tester
+          .semantics()
+          .single(role: SemanticRole.tableRow, label: 'RUN-0')
+          .id;
+      expect(rowId2, rowId);
+    });
+
+    testWidgets('a row key containing / or ~ is escaped, so it cannot inject a '
+        'segment or collide', (tester) {
+      tester.pumpWidget(
+        DataTable(
+          label: 'Runs',
+          rowCount: 10,
+          columns: _columns(),
+          rowKeyBuilder: (row) => 'a/b~$row',
+          cellBuilder: _cell,
+        ),
+      );
+      tester.render(size: const CellSize(20, 6));
+      final rowId = tester
+          .semantics()
+          .byRole(SemanticRole.tableRow)
+          .firstWhere((n) => n.state['rowIndex'] == 0)
+          .id
+          .value;
+      // The row key 'a/b~0' is folded escaped, so it adds exactly one segment
+      // ('row/<key>') and its '/' can't fork the path or alias another row.
+      expect(rowId, contains('/table/row/a%2Fb%7E0'));
+      expect(rowId, isNot(contains('row/a/b')));
+    });
+
+    testWidgets('a table without a rowKeyBuilder marks its index-keyed rows ~',
+        (tester) {
+      tester.pumpWidget(runs(keyed: false));
+      tester.render(size: const CellSize(20, 6));
+      final rowId = tester
+          .semantics()
+          .byRole(SemanticRole.tableRow)
+          .firstWhere((n) => n.state['rowIndex'] == 0)
+          .id;
+      expect(
+        rowId.value,
+        contains('/table/row/~0'),
+        reason: 'an index-based row is positional / version-fragile',
+      );
+    });
+  });
+
+  testWidgets('setValue(index) jumps the window to an off-screen row (R1 reach)',
+      (tester) async {
+    tester.pumpWidget(
+      DataTable(
+        label: 'Runs',
+        rowCount: 100000,
+        columns: _columns(),
+        rowKeyBuilder: (row) => 'RUN-$row',
+        cellBuilder: _cell,
+      ),
+    );
+    tester.render(size: const CellSize(20, 6));
+
+    final table = tester.semantics().single(role: SemanticRole.table);
+    expect(table.actions, contains(SemanticAction.setValue));
+    expect(table.state['collectionRowCount'], 100000);
+    // Row 5000 is far off-window — absent from the tree, unreachable by id.
+    expect(
+      tester
+          .semantics()
+          .byRole(SemanticRole.tableRow)
+          .where((n) => n.state['rowIndex'] == 5000),
+      isEmpty,
+    );
+
+    await tester.invokeSemanticAction(SemanticAction.setValue,
+        node: table, payload: 5000);
+    tester.render(size: const CellSize(20, 6)); // relayout windows row 5000 in
+
+    expect(
+      tester
+          .semantics()
+          .byRole(SemanticRole.tableRow)
+          .where((n) => n.state['rowIndex'] == 5000),
+      isNotEmpty,
+      reason: 'the window followed the selection to the requested index',
+    );
+
+    // Out-of-range index is clamped to the last row, not rejected.
+    await tester.invokeSemanticAction(SemanticAction.setValue,
+        role: SemanticRole.table, payload: 999999);
+    tester.render(size: const CellSize(20, 6));
+    expect(
+      tester
+          .semantics()
+          .byRole(SemanticRole.tableRow)
+          .where((n) => n.state['rowIndex'] == 99999),
+      isNotEmpty,
+    );
+  });
+
+  testWidgets('setValue routes to the targeted table, not a sibling '
+      '(no cross-fire, no per-widget ownership guard)', (tester) async {
+    // Two tables in one tree. Before WS-3 the dispatch walk offered a setValue
+    // to the first DataTable contributor it reached, so an action aimed at B
+    // could be swallowed by A (only a per-widget `_ownsTarget` check, since
+    // removed, masked it). The id→element dispatch map must route a setValue to
+    // exactly the table whose node id was targeted.
+    final controllerA = DataTableController();
+    final controllerB = DataTableController();
+    addTearDown(controllerA.dispose);
+    addTearDown(controllerB.dispose);
+
+    tester.pumpWidget(
+      Row(
+        children: [
+          Expanded(
+            child: DataTable(
+              key: const ValueKey('table-a'),
+              label: 'A',
+              rowCount: 50,
+              columns: _columns(),
+              rowKeyBuilder: (row) => 'A-$row',
+              cellBuilder: _cell,
+              controller: controllerA,
+            ),
+          ),
+          Expanded(
+            child: DataTable(
+              key: const ValueKey('table-b'),
+              label: 'B',
+              rowCount: 50,
+              columns: _columns(),
+              rowKeyBuilder: (row) => 'B-$row',
+              cellBuilder: _cell,
+              controller: controllerB,
+            ),
+          ),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(48, 8));
+
+    // setValue on table B (resolved by role+label) → B moves, A is untouched.
+    await tester.invokeSemanticAction(SemanticAction.setValue,
+        role: SemanticRole.table, label: 'B', payload: 7);
+    tester.render(size: const CellSize(48, 8));
+
+    expect(controllerB.selectedIndex, 7, reason: 'B (the target) moved');
+    expect(controllerA.selectedIndex, 0, reason: 'A (a sibling) is untouched');
+  });
+
+  testWidgets('a sortable header activates to request a sort; state carries '
+      'the active direction', (tester) async {
+    String? sorted;
+    DataTable build({void Function(String)? onSort}) => DataTable(
+      label: 'Runs',
+      rowCount: 10,
+      columns: _columns(),
+      rowKeyBuilder: (row) => 'RUN-$row',
+      cellBuilder: _cell,
+      sortColumnId: 'run',
+      sortDirection: DataTableSortDirection.descending,
+      onSort: onSort,
+    );
+
+    SemanticNode header(FleuryTester t, String columnId) => t
+        .semantics()
+        .byRole(SemanticRole.tableCell)
+        .firstWhere(
+          (n) => n.state['header'] == true && n.state['columnId'] == columnId,
+        );
+
+    // No onSort ⇒ headers aren't activatable.
+    tester.pumpWidget(build());
+    tester.render(size: const CellSize(24, 6));
+    expect(
+      header(tester, 'run').actions,
+      isNot(contains(SemanticAction.activate)),
+    );
+
+    // With onSort, a header advertises activate; the sorted column carries the
+    // active direction so an agent can see/toggle it.
+    tester.pumpWidget(build(onSort: (id) => sorted = id));
+    tester.render(size: const CellSize(24, 6));
+    final runHeader = header(tester, 'run');
+    expect(runHeader.actions, contains(SemanticAction.activate));
+    expect(runHeader.state['sortDirection'], 'descending');
+    expect(header(tester, 'status').state['sortDirection'], isNull);
+
+    await tester.invokeSemanticAction(SemanticAction.activate, node: runHeader);
+    expect(sorted, 'run');
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      node: header(tester, 'status'),
+    );
+    expect(sorted, 'status');
+  });
+
   testWidgets('renders visible rows only and exposes virtualized semantics', (
     tester,
   ) {

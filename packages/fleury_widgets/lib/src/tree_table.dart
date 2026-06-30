@@ -1205,6 +1205,15 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
     _controller.expand(row.key);
   }
 
+  void _collapseRow(List<TreeTableRow<T>> rows, int index) {
+    if (index < 0 || index >= rows.length) return;
+    _focusNode.requestFocus();
+    _controller.selectedIndex = index;
+    final row = rows[index];
+    if (!row.node.isBranch) return;
+    _controller.collapse(row.key);
+  }
+
   void _activateRow(List<TreeTableRow<T>> rows, int index) {
     if (index < 0 || index >= rows.length) return;
     _focusNode.requestFocus();
@@ -1236,6 +1245,9 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
         return;
       case SemanticAction.open:
         _openRow(rows, _selectedIndex(rows));
+        return;
+      case SemanticAction.close:
+        _collapseRow(rows, _selectedIndex(rows));
         return;
       case SemanticAction.copy:
         await _copySelection(rows);
@@ -1366,6 +1378,7 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
                   onSelectEnabled: widget.onSelect != null,
                   copyEnabled: copyEnabled,
                   onOpen: () => _openRow(rows, index),
+                  onClose: () => _collapseRow(rows, index),
                   onActivate: () => _activateRow(rows, index),
                   onCopy: () => _copyRow(rows, index),
                 );
@@ -1396,7 +1409,16 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
         actions: {
           SemanticAction.focus,
           SemanticAction.navigate,
-          if (selected != null && selected.node.isBranch) SemanticAction.open,
+          // Symmetric expand/collapse on the selected branch (collapse used to
+          // be Left-arrow-only).
+          if (selected != null &&
+              selected.node.isBranch &&
+              !_controller.isExpanded(selected.key))
+            SemanticAction.open,
+          if (selected != null &&
+              selected.node.isBranch &&
+              _controller.isExpanded(selected.key))
+            SemanticAction.close,
           if (copyEnabled) SemanticAction.copy,
         },
         onAction: (action) => _handleTreeAction(action, rows),
@@ -1471,6 +1493,7 @@ class _TreeTableRowWidget<T> extends StatelessWidget {
     required this.onSelectEnabled,
     required this.copyEnabled,
     required this.onOpen,
+    required this.onClose,
     required this.onActivate,
     required this.onCopy,
   });
@@ -1488,6 +1511,7 @@ class _TreeTableRowWidget<T> extends StatelessWidget {
   final bool onSelectEnabled;
   final bool copyEnabled;
   final void Function() onOpen;
+  final void Function() onClose;
   final void Function() onActivate;
   final Future<void> Function() onCopy;
 
@@ -1501,7 +1525,8 @@ class _TreeTableRowWidget<T> extends StatelessWidget {
       selected: selected,
       enabled: true,
       actions: {
-        if (row.node.isBranch) SemanticAction.open,
+        if (row.node.isBranch && !expanded) SemanticAction.open,
+        if (row.node.isBranch && expanded) SemanticAction.close,
         if (!row.node.isBranch && onSelectEnabled) SemanticAction.activate,
         if (selected && copyEnabled) SemanticAction.copy,
       },
@@ -1509,6 +1534,9 @@ class _TreeTableRowWidget<T> extends StatelessWidget {
         switch (action) {
           case SemanticAction.open:
             if (row.node.isBranch) onOpen();
+            return;
+          case SemanticAction.close:
+            if (row.node.isBranch) onClose();
             return;
           case SemanticAction.activate:
             if (!row.node.isBranch && onSelectEnabled) onActivate();

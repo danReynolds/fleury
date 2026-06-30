@@ -81,6 +81,19 @@ mountApp(() => const Dashboard(), into: appHost);
 
 [Embed Fleury in any page →](/architecture/serving-and-embedding/)
 
+And that same widget tree is *agent-first*: every node already carries its role,
+value, and the actions it supports, so an AI agent can **drive** your app instead
+of screen-scraping it. Point any [Model Context Protocol](https://modelcontextprotocol.io)
+host — Claude included — at a Fleury app and it reads the UI by meaning and
+operates it through those actions. No ANSI parsing, no guessed keystrokes, and
+nothing to wire up: it's the same semantic tree your tests and accessibility use.
+
+```sh
+fleury_mcp -- dart run my_app.dart
+```
+
+[Drive it with an agent (MCP) →](/guides/driving-with-agents/)
+
 ## Why Fleury
 
 <CardGrid>
@@ -92,9 +105,10 @@ mountApp(() => const Dashboard(), into: appHost);
     The same app renders to a real terminal *or* the browser. A parity oracle
     keeps the two surfaces honest.
   </FeatureCard>
-  <FeatureCard icon="seti:default" title="Built for agents" href="/architecture/agents-and-semantics/" cta="How agents drive it">
+  <FeatureCard icon="seti:default" title="Agent-first, over MCP" href="/guides/driving-with-agents/" cta="Drive it with an agent">
     A semantics tree — roles, state, actions — ships as a headline feature, so
-    tests and AI agents can *drive* the UI, not screen-scrape it.
+    tests and AI agents *drive* the UI over the Model Context Protocol instead of
+    screen-scraping it.
   </FeatureCard>
   <FeatureCard icon="rocket" title="Runs anywhere" href="/architecture/serving-and-embedding/" cta="Serving & embedding">
     Embed widgets client-side with dart2js (no backend), or stream a full native

@@ -50,6 +50,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   String? _pendingCompositionInput;
   String? _suppressNextInputText;
   MouseButton _pressedButton = MouseButton.none;
+  CellOffset? _lastPointerUpCell;
 
   @override
   void start(TuiInputSink onEvent) {
@@ -77,6 +78,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _add(_pointerTarget, 'pointercancel', _handlePointerCancel);
     _add(_pointerTarget, 'lostpointercapture', _handlePointerCancel);
     _add(_pointerTarget, 'pointermove', _handlePointerMove);
+    _add(_pointerTarget, 'click', _handleClick);
     _add(_pointerTarget, 'wheel', _handleWheel);
 
     _clearTextArea();
@@ -104,6 +106,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _pendingCompositionInput = null;
     _suppressNextInputText = null;
     _pressedButton = MouseButton.none;
+    _lastPointerUpCell = null;
     _focusCoordinator?.handleBrowserFocusOut(WebFocusTarget.keyboardCapture);
     _clearTextArea();
     final textArea = _activeTextArea;
@@ -337,6 +340,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     final cell = _cellForPointer(event);
     if (button == MouseButton.none || cell == null) return;
     _pressedButton = button;
+    _lastPointerUpCell = null;
     try {
       _pointerTarget.setPointerCapture(event.pointerId);
     } catch (_) {
@@ -358,7 +362,10 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
 
   void _handlePointerUp(web.Event raw) {
     final event = raw as web.PointerEvent;
-    final button = _buttonFor(event.button);
+    var button = _buttonFor(event.button);
+    if (button == MouseButton.none && _pressedButton != MouseButton.none) {
+      button = _pressedButton;
+    }
     final cell = _cellForPointer(event);
     if (button == MouseButton.none || cell == null) return;
     try {
@@ -368,6 +375,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     } catch (_) {
       // Best-effort counterpart to pointerdown capture.
     }
+    _lastPointerUpCell = cell;
     _pressedButton = MouseButton.none;
     raw.preventDefault();
     _emit(
@@ -391,6 +399,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
       // Best-effort counterpart to pointerdown capture.
     }
     _pressedButton = MouseButton.none;
+    _lastPointerUpCell = null;
   }
 
   void _handlePointerMove(web.Event raw) {
@@ -408,6 +417,52 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
         modifiers: _modifiersFromMouse(event),
       ),
     );
+  }
+
+  void _handleClick(web.Event raw) {
+    final event = raw as web.MouseEvent;
+    if (event.button != 0) return;
+    final cell = _cellForPointer(event);
+    if (cell == null) return;
+    if (_lastPointerUpCell == cell) {
+      _lastPointerUpCell = null;
+      return;
+    }
+    raw.preventDefault();
+    final modifiers = _modifiersFromMouse(event);
+    if (_pressedButton != MouseButton.none) {
+      _emit(
+        MouseEvent(
+          kind: MouseEventKind.up,
+          button: _pressedButton,
+          col: cell.col,
+          row: cell.row,
+          modifiers: modifiers,
+        ),
+      );
+      _pressedButton = MouseButton.none;
+      _lastPointerUpCell = null;
+      return;
+    }
+    _emit(
+      MouseEvent(
+        kind: MouseEventKind.down,
+        button: MouseButton.left,
+        col: cell.col,
+        row: cell.row,
+        modifiers: modifiers,
+      ),
+    );
+    _emit(
+      MouseEvent(
+        kind: MouseEventKind.up,
+        button: MouseButton.left,
+        col: cell.col,
+        row: cell.row,
+        modifiers: modifiers,
+      ),
+    );
+    _pressedButton = MouseButton.none;
   }
 
   // Accumulated wheel travel (CSS px) toward the next scroll step. Browsers —
@@ -495,9 +550,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     // events report integer coords, so they slip through — exactly the
     // "scroll works, click doesn't" symptom).
     final coords = _PointerCoords(event as JSObject);
-    final x = coords.clientX - box.cssCanvasLeft;
-    final y = coords.clientY - box.cssCanvasTop;
-    return _cellMetrics.cellForPoint(x, y);
+    return _cellMetrics.cellForViewportPoint(coords.clientX, coords.clientY);
   }
 }
 

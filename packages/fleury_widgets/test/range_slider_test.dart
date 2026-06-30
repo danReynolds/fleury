@@ -452,5 +452,29 @@ void main() {
       expect(high.actions, contains(SemanticAction.decrement));
       expect(high.state['activeHandle'], 'high');
     });
+
+    testWidgets('semantic setValue sets the active handle to an exact value '
+        '(B4)', (tester) async {
+      _HostedSlider.lastValues = null;
+      tester.pumpWidget(const _HostedSlider(initial: (2, 8), min: 0, max: 10));
+      final node = tester.semantics().single(role: SemanticRole.slider);
+      expect(node.actions, contains(SemanticAction.setValue));
+      expect(node.state['activeHandle'], 'low'); // default active handle
+
+      await tester.invokeSemanticAction(
+        SemanticAction.setValue,
+        node: node,
+        payload: 5,
+      );
+      expect(_HostedSlider.lastValues!.$1, 5, reason: 'low handle moved to 5');
+      expect(_HostedSlider.lastValues!.$2, 8, reason: 'high handle unchanged');
+
+      // Switch the active handle, then set it — reaches the other handle
+      // without an increment loop.
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      await tester.invokeSemanticAction(SemanticAction.setValue,
+          role: SemanticRole.slider, payload: 9);
+      expect(_HostedSlider.lastValues!.$2, 9, reason: 'high handle moved to 9');
+    });
   });
 }

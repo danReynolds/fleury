@@ -60,8 +60,9 @@ const DOCS = [
   {
     src: 'agents-and-semantics.md',
     description:
-      'Fleury produces a semantic app graph — roles, state, and actions — so ' +
-      'tests and AI agents can drive the UI by meaning instead of scraping ANSI.',
+      'Drive a Fleury app with an AI agent over MCP — it reads and operates the ' +
+      'UI by meaning, powered by the same semantic tree that drives tests and ' +
+      'accessibility.',
   },
   {
     src: 'performance.md',

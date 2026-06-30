@@ -461,4 +461,30 @@ void main() {
       expect(_lines(tester, rows: 1).first, 'x', reason: 'placeholder gone');
     });
   });
+
+  group('semantic setValue (B4)', () {
+    testWidgets('replaces the whole body in one call', (tester) async {
+      final ctl = TextEditingController(text: 'old');
+      tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
+      expect(
+        tester.semantics().single(role: SemanticRole.textArea).actions,
+        contains(SemanticAction.setValue),
+      );
+      await tester.invokeSemanticAction(
+        SemanticAction.setValue,
+        role: SemanticRole.textArea,
+        payload: 'first\nsecond',
+      );
+      expect(ctl.text, 'first\nsecond');
+    });
+
+    testWidgets('a readOnly TextArea does not advertise setValue', (tester) {
+      final ctl = TextEditingController(text: 'x');
+      tester.pumpWidget(TextArea(controller: ctl, readOnly: true));
+      expect(
+        tester.semantics().single(role: SemanticRole.textArea).actions,
+        isNot(contains(SemanticAction.setValue)),
+      );
+    });
+  });
 }

@@ -296,6 +296,228 @@ void main() {
   });
 
   test(
+    'DomInputSource synthesizes a tap from click when pointerup is missing',
+    () {
+      final events = <TuiEvent>[];
+      final host = web.document.createElement('div');
+      final textArea =
+          web.document.createElement('textarea') as web.HTMLTextAreaElement;
+      web.document.body!.appendChild(host);
+      final source = DomInputSource(
+        hostElement: host,
+        textArea: textArea,
+        cellMetrics: _FakeMetrics(
+          const MeasuredCellBox(
+            cssCellWidth: 10,
+            cssCellHeight: 20,
+            cssCanvasWidth: 80,
+            cssCanvasHeight: 60,
+            cssCanvasLeft: 10,
+            cssCanvasTop: 20,
+            devicePixelRatio: 1,
+            cols: 8,
+            rows: 3,
+          ),
+        ),
+      );
+      addTearDown(() {
+        source.dispose();
+        host.parentNode?.removeChild(host);
+      });
+
+      source.start(events.add);
+
+      host.dispatchEvent(
+        web.PointerEvent(
+          'pointerdown',
+          web.PointerEventInit(
+            pointerId: 1,
+            clientX: 25,
+            clientY: 65,
+            button: 0,
+            buttons: 1,
+            bubbles: true,
+            cancelable: true,
+          ),
+        ),
+      );
+      host.dispatchEvent(
+        web.MouseEvent(
+          'click',
+          web.MouseEventInit(
+            clientX: 25,
+            clientY: 65,
+            button: 0,
+            bubbles: true,
+            cancelable: true,
+          ),
+        ),
+      );
+
+      expect(events, [
+        const MouseEvent(
+          kind: MouseEventKind.down,
+          button: MouseButton.left,
+          col: 1,
+          row: 2,
+        ),
+        const MouseEvent(
+          kind: MouseEventKind.up,
+          button: MouseButton.left,
+          col: 1,
+          row: 2,
+        ),
+      ]);
+    },
+  );
+
+  test('DomInputSource synthesizes a full tap from click-only input', () {
+    final events = <TuiEvent>[];
+    final host = web.document.createElement('div');
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    web.document.body!.appendChild(host);
+    final source = DomInputSource(
+      hostElement: host,
+      textArea: textArea,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          cssCanvasLeft: 10,
+          cssCanvasTop: 20,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.parentNode?.removeChild(host);
+    });
+
+    source.start(events.add);
+
+    host.dispatchEvent(
+      web.MouseEvent(
+        'click',
+        web.MouseEventInit(
+          clientX: 25,
+          clientY: 65,
+          button: 0,
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+
+    expect(events, [
+      const MouseEvent(
+        kind: MouseEventKind.down,
+        button: MouseButton.left,
+        col: 1,
+        row: 2,
+      ),
+      const MouseEvent(
+        kind: MouseEventKind.up,
+        button: MouseButton.left,
+        col: 1,
+        row: 2,
+      ),
+    ]);
+  });
+
+  test('DomInputSource ignores click fallback after normal pointerup', () {
+    final events = <TuiEvent>[];
+    final host = web.document.createElement('div');
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    web.document.body!.appendChild(host);
+    final source = DomInputSource(
+      hostElement: host,
+      textArea: textArea,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          cssCanvasLeft: 10,
+          cssCanvasTop: 20,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.parentNode?.removeChild(host);
+    });
+
+    source.start(events.add);
+
+    host.dispatchEvent(
+      web.PointerEvent(
+        'pointerdown',
+        web.PointerEventInit(
+          pointerId: 1,
+          clientX: 25,
+          clientY: 65,
+          button: 0,
+          buttons: 1,
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+    host.dispatchEvent(
+      web.PointerEvent(
+        'pointerup',
+        web.PointerEventInit(
+          pointerId: 1,
+          clientX: 25,
+          clientY: 65,
+          button: -1,
+          buttons: 0,
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+    host.dispatchEvent(
+      web.MouseEvent(
+        'click',
+        web.MouseEventInit(
+          clientX: 25,
+          clientY: 65,
+          button: 0,
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+
+    expect(events, [
+      const MouseEvent(
+        kind: MouseEventKind.down,
+        button: MouseButton.left,
+        col: 1,
+        row: 2,
+      ),
+      const MouseEvent(
+        kind: MouseEventKind.up,
+        button: MouseButton.left,
+        col: 1,
+        row: 2,
+      ),
+    ]);
+  });
+
+  test(
     'DomInputSource uses in-process clipboard when paste data is missing',
     () {
       final events = <TuiEvent>[];
@@ -696,7 +918,7 @@ void main() {
     ]);
   });
 
-  test('DomInputSource delegates pointer coordinates to CellMetrics', () {
+  test('DomInputSource delegates viewport coordinates to CellMetrics', () {
     final events = <TuiEvent>[];
     final host = web.document.createElement('div');
     final textArea =
@@ -744,8 +966,8 @@ void main() {
     );
 
     expect(metrics.pointCalls, 1);
-    expect(metrics.lastX, 33);
-    expect(metrics.lastY, 65);
+    expect(metrics.lastClientX, 45);
+    expect(metrics.lastClientY, 95);
     expect(events, [
       const MouseEvent(
         kind: MouseEventKind.down,
@@ -926,6 +1148,15 @@ final class _FakeMetrics implements CellMetrics {
   }
 
   @override
+  CellOffset? cellForViewportPoint(double clientX, double clientY) {
+    if (box.cols <= 0 || box.rows <= 0) return null;
+    return cellForPoint(
+      clientX - box.cssCanvasLeft,
+      clientY - box.cssCanvasTop,
+    );
+  }
+
+  @override
   void dispose() {}
 }
 
@@ -935,8 +1166,8 @@ final class _RecordingMetrics implements CellMetrics {
   final MeasuredCellBox box;
   final CellOffset mappedCell;
   var pointCalls = 0;
-  double? lastX;
-  double? lastY;
+  double? lastClientX;
+  double? lastClientY;
 
   @override
   MeasuredCellBox? get cachedMeasurement => box;
@@ -953,8 +1184,14 @@ final class _RecordingMetrics implements CellMetrics {
   @override
   CellOffset cellForPoint(double x, double y) {
     pointCalls += 1;
-    lastX = x;
-    lastY = y;
+    return mappedCell;
+  }
+
+  @override
+  CellOffset? cellForViewportPoint(double clientX, double clientY) {
+    pointCalls += 1;
+    lastClientX = clientX;
+    lastClientY = clientY;
     return mappedCell;
   }
 

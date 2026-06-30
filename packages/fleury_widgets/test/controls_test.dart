@@ -290,4 +290,99 @@ void main() {
     final buf = tester.render(size: const CellSize(4, 1));
     expect(buf.atColRow(0, 0).style.bold, isTrue);
   });
+
+  // B4: an agent can set a boolean control to an exact value in one call —
+  // idempotent, unlike `activate` which only toggles.
+  group('semantic setValue (B4)', () {
+    testWidgets('checkbox advertises setValue when enabled, not when disabled',
+        (tester) {
+      tester.pumpWidget(Checkbox(value: false, label: 'Wrap', onChanged: (_) {}));
+      expect(
+        tester.semantics().single(role: SemanticRole.checkbox).actions,
+        contains(SemanticAction.setValue),
+      );
+      tester.pumpWidget(
+        const Checkbox(value: false, label: 'Wrap', onChanged: null),
+      );
+      expect(
+        tester.semantics().single(role: SemanticRole.checkbox).actions,
+        isNot(contains(SemanticAction.setValue)),
+      );
+    });
+
+    testWidgets('setValue drives the checkbox to the exact value (round-trip)',
+        (tester) async {
+      var checked = false;
+      Widget build() => Checkbox(
+        value: checked,
+        label: 'Wrap',
+        onChanged: (v) => checked = v,
+      );
+      tester.pumpWidget(build());
+
+      final on = await tester.invokeSemanticAction(
+        SemanticAction.setValue,
+        role: SemanticRole.checkbox,
+        payload: true,
+      );
+      expect(on.completed, isTrue);
+      tester.pumpWidget(build()); // controlled widget reflects the new value
+      expect(tester.semantics().single(role: SemanticRole.checkbox).checked,
+          isTrue);
+
+      // Idempotent: setting true again leaves it true (no toggle).
+      await tester.invokeSemanticAction(SemanticAction.setValue,
+          role: SemanticRole.checkbox, payload: true);
+      tester.pumpWidget(build());
+      expect(checked, isTrue);
+
+      await tester.invokeSemanticAction(SemanticAction.setValue,
+          role: SemanticRole.checkbox, payload: false);
+      tester.pumpWidget(build());
+      expect(tester.semantics().single(role: SemanticRole.checkbox).checked,
+          isFalse);
+    });
+
+    testWidgets('setValue reads agent string spellings (on/off)', (tester) async {
+      bool? changed;
+      tester.pumpWidget(
+        Checkbox(value: false, label: 'W', onChanged: (v) => changed = v),
+      );
+      await tester.invokeSemanticAction(SemanticAction.setValue,
+          role: SemanticRole.checkbox, payload: 'on');
+      expect(changed, isTrue);
+      await tester.invokeSemanticAction(SemanticAction.setValue,
+          role: SemanticRole.checkbox, payload: 'off');
+      expect(changed, isFalse);
+    });
+
+    testWidgets('setValue with an uncoercible payload no-ops (no wrong toggle)',
+        (tester) async {
+      bool? changed;
+      tester.pumpWidget(
+        Checkbox(value: false, label: 'W', onChanged: (v) => changed = v),
+      );
+      final result = await tester.invokeSemanticAction(SemanticAction.setValue,
+          role: SemanticRole.checkbox, payload: 'maybe');
+      // The action dispatches, but the garbage value is ignored: onChanged is
+      // never called, so the box can't flip to a value the agent didn't mean.
+      expect(result.completed, isTrue);
+      expect(changed, isNull);
+    });
+
+    testWidgets('Toggle and Switch also accept setValue', (tester) async {
+      for (final make in <Widget Function(bool, void Function(bool))>[
+        (v, f) => Toggle(value: v, label: 'T', onChanged: f),
+        (v, f) => Switch(value: v, label: 'S', onChanged: f),
+      ]) {
+        bool? changed;
+        tester.pumpWidget(make(false, (v) => changed = v));
+        final node = tester.semantics().single(role: SemanticRole.toggle);
+        expect(node.actions, contains(SemanticAction.setValue));
+        await tester.invokeSemanticAction(SemanticAction.setValue,
+            node: node, payload: true);
+        expect(changed, isTrue);
+      }
+    });
+  });
 }

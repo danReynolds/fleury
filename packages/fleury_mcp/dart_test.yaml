@@ -1,0 +1,8 @@
+# `integration`-tagged tests spawn a real `dart run` subprocess and take
+# seconds rather than milliseconds. They run by default; use
+# `dart test -t integration` to run only them or `dart test -x integration`
+# to skip them.
+
+tags:
+  integration:
+    timeout: 90s
