@@ -26,7 +26,7 @@ remains. A living checklist — tick boxes and update the **Status board** as yo
 | WS-9 | Typed affordances (expose + validate) | M2 | P1 | `setValue` (shipped) | `[x]` **done** (2026-06-29) |
 | WS-8 | Test shapes (multi-contributor, fuzz, stress) | M2 | P1 | WS-3 | `[x]` **done** (2026-06-29) |
 | WS-5 | Shared spawn / lifecycle | M3 | P1 | coord. `fleury serve` | `[x]` **done** (2026-06-30) |
-| WS-6 | Cancellation, logging, error codes | M3 | P1/P2 | — | `[ ]` not started |
+| WS-6 | Cancellation, logging, error codes | M3 | P1/P2 | — | `[x]` **done** (2026-06-30) |
 | WS-7 | Per-revision node index | M3 | P2 | — | `[ ]` not started |
 
 ¹ WS-1's delta granularity (whole-node, next-frame) is independent of WS-0, but
@@ -243,15 +243,22 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
 - **Adapted:** added an `abort` param to the primitive so serve's cold path can
   pass the browser-closed signal (no orphan app) while the bridge passes none.
 
-### WS-6 — Protocol completeness  ·  `[ ]`
+### WS-6 — Protocol completeness  ·  `[x]` done
 
-- [ ] Request cancellation (`notifications/cancelled`) — cancel an in-flight
-      `wait_for_change`.
-- [ ] `logging` capability — forward sanitized app logs as `notifications/message`.
-- [ ] Machine-readable error `code` inside `isError` payloads (stale-ref vs
-      not-found).
-- [ ] *(P2)* progress notifications, `listChanged`, pagination cursors.
-- **Validate:** `[ ]` `fleury_mcp`.
+- [x] Request cancellation (`notifications/cancelled`) — `wait_for_change` races
+      its settle against a per-request canceller and returns promptly; the
+      response is suppressed (the client is no longer awaiting). No capability
+      needed (inbound notification).
+- [x] `logging` capability — the app's `[app …]` stdout/stderr is forwarded as
+      `notifications/message` (logger:`app`, sanitized by the spawn forwarder),
+      gated by `logging/setLevel`. Wired bin → `runMcpServer(appLog:)` → server.
+- [x] Machine-readable error `code` in `isError` `structuredContent`
+      (`not_found` / `stale_reference` / `out_of_domain` / `rate_limited` / …);
+      prose stays in `content`.
+- [~] *(P2)* progress notifications, `listChanged`, pagination cursors — **parked**
+      (not needed: the tree is one resource, reads are capped not paginated, and
+      no tool is long-running except `wait_for_change`, now cancellable).
+- **Validate:** `[x]` `fleury_mcp` 82 (3 new tests) · analyze clean.
 
 ### WS-7 — Per-revision node index  ·  `[ ]`
 
@@ -415,3 +422,14 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
   integration green · mcp 79 (real-app e2e + refusal test). Focused review of the
   serve adoption running. → Next: WS-6 (cancellation/logging/error codes), WS-7
   (per-revision node index), + the deferred real-host smoke.
+- *2026-06-30* — **WS-6 done — protocol completeness** (3 commits). (1) Error
+  codes: every isError carries a stable `structuredContent.code`
+  (`not_found`/`stale_reference`/`out_of_domain`/`rate_limited`/…) so an agent
+  branches on a category, prose stays in `content`. (2) Cancellation:
+  `notifications/cancelled` completes a per-request canceller; `wait_for_change`
+  races it and returns promptly, response suppressed per MCP. (3) Logging: the
+  app's `[app …]` output forwards as `notifications/message` (gated by
+  `logging/setLevel`), wired bin → runMcpServer(appLog:) → server. P2 frills
+  (progress/listChanged/pagination) parked as not-needed. mcp 82 (3 new tests) ·
+  clean. → Next: WS-7 (per-revision node index), the deferred real-host smoke,
+  then the M3 milestone review.
