@@ -47,11 +47,13 @@ import 'dart:async';
 import '../animation/animation.dart';
 import '../animation/curves.dart';
 import '../foundation/key.dart';
+import '../rendering/cell.dart' show Color;
 import '../rendering/render_navigator.dart';
 import '../rendering/render_object.dart';
 import '../semantics/semantics.dart';
 import '../terminal/events.dart';
 import 'align.dart' show Align, Alignment;
+import 'basic.dart' show Container, Surface;
 import 'effects.dart';
 import 'focus.dart';
 import 'framework.dart';
@@ -119,7 +121,13 @@ class RouteTransition {
 }
 
 class _Route {
-  _Route(this.screen, this.transition, {this.presentAlignment});
+  _Route(
+    this.screen,
+    this.transition, {
+    this.presentAlignment,
+    this.barrierColor,
+    this.barrierDismissible = true,
+  });
 
   final Widget screen;
   final RouteTransition? transition; // null = instant
@@ -142,6 +150,17 @@ class _Route {
   /// shown via [NavigatorState.present]; null for an ordinary page. Its
   /// non-null-ness is what marks a route as a non-opaque modal.
   final Alignment? presentAlignment;
+
+  /// For a modal ([presentAlignment] != null): a fill painted over the screen
+  /// behind, around the presented content. null leaves the surround composited
+  /// with the route beneath. (The content itself always sits on an opaque
+  /// [Surface], so it never shows through regardless of this.)
+  final Color? barrierColor;
+
+  /// For a modal: whether Esc / a dismiss action pops it. Default true; set
+  /// false for a modal that must be answered deliberately (e.g. a confirmation
+  /// the user can't skip past). Page routes ignore this — Esc is always back.
+  final bool barrierDismissible;
 
   /// A route this one replaces: removed once this route settles over it
   /// (set by [NavigatorState.pushReplacement]). [replacingResult] is the
@@ -304,19 +323,28 @@ class NavigatorState extends State<Navigator> {
   /// the stack of the navigator it's presented on — present on a nested
   /// navigator for a pane-scoped modal, or the root for an app-wide one.
   ///
-  /// Framing (a border, padding, an edge for a sheet) is just widgets —
-  /// wrap [screen] in a `Container`/`Align` — and [alignment] is the only
-  /// placement knob you usually need.
+  /// The presented [screen] is placed on an opaque [Surface] automatically, so
+  /// nothing painted beneath shows through it — a modal is never see-through.
+  /// [barrierColor] optionally fills the surround (over the screen behind);
+  /// null leaves it composited. [barrierDismissible] (default true) controls
+  /// whether Esc dismisses it.
+  ///
+  /// Framing (a border, padding, an edge for a sheet) is just widgets — wrap
+  /// [screen] — and [alignment] is the only placement knob you usually need.
   Future<T?> present<T>(
     Widget screen, {
     Alignment alignment = Alignment.center,
     RouteTransition? transition,
+    Color? barrierColor,
+    bool barrierDismissible = true,
   }) {
     final resolved = transition ?? RouteTransition.fade;
     final route = _Route(
       screen,
       resolved.isInstant ? null : resolved,
       presentAlignment: alignment,
+      barrierColor: barrierColor,
+      barrierDismissible: barrierDismissible,
     );
     _pushRoute(route);
     return route.completer.future.then((v) => v as T?);
@@ -600,9 +628,24 @@ class _RouteHost extends StatelessWidget {
     // non-opaque). Any framing — a border, padding — is the caller's
     // widgets, not baked in here.
     final align = route.presentAlignment;
-    final screen = align == null
-        ? route.screen
-        : Align(alignment: align, child: route.screen);
+    final Widget screen;
+    if (align == null) {
+      screen = route.screen;
+    } else {
+      // Modal: the presented content sits on an opaque Surface so nothing
+      // painted beneath shows through it (closes the bleed-through leak). A
+      // barrierColor, when set, fills the surround over the screen behind;
+      // null leaves the surround composited with the route beneath.
+      Widget content = Align(
+        alignment: align,
+        child: Surface(child: route.screen),
+      );
+      final barrier = route.barrierColor;
+      if (barrier != null) {
+        content = Container(color: barrier, child: content);
+      }
+      screen = content;
+    }
 
     // Presented routes trap focus like modals. Normal page routes still let
     // ancestor app-level bindings participate, which keeps global commands
@@ -612,11 +655,14 @@ class _RouteHost extends StatelessWidget {
     // (e.g. a TextInput) autofocuses. Focus is restored to the route beneath
     // on pop.
     final modal = active && align != null;
+    // Esc dismisses an active route — always for a page (back navigation), and
+    // for a modal only when it's barrierDismissible.
+    final dismissible = align == null || route.barrierDismissible;
     Widget content = FocusScope(
       modal: modal,
       suppressGlobals: modal,
       child: KeyBindings(
-        bindings: active
+        bindings: active && dismissible
             ? [
                 KeyBinding(
                   KeyChord.key(KeyCode.escape),
@@ -647,7 +693,7 @@ class _RouteHost extends StatelessWidget {
       actions: active
           ? <SemanticAction>{
               SemanticAction.navigate,
-              if (navigator.canPop)
+              if (navigator.canPop && dismissible)
                 route.presentAlignment == null
                     ? SemanticAction.close
                     : SemanticAction.dismiss,
@@ -812,14 +858,21 @@ extension NavigatorContext on BuildContext {
       Navigator.of(this).pushAndClear<T>(screen, transition: transition);
 
   /// Presents [screen] as a modal over the current screen (centered by
-  /// default). Dismiss with [pop].
+  /// default), on an opaque [Surface]. Dismiss with [pop]. [barrierColor]
+  /// fills the surround; [barrierDismissible] (default true) controls Esc.
   Future<T?> present<T>(
     Widget screen, {
     Alignment alignment = Alignment.center,
     RouteTransition? transition,
-  }) => Navigator.of(
-    this,
-  ).present<T>(screen, alignment: alignment, transition: transition);
+    Color? barrierColor,
+    bool barrierDismissible = true,
+  }) => Navigator.of(this).present<T>(
+    screen,
+    alignment: alignment,
+    transition: transition,
+    barrierColor: barrierColor,
+    barrierDismissible: barrierDismissible,
+  );
 
   /// Pops the current screen with an optional [result].
   void pop([Object? result]) => Navigator.of(this).pop(result);

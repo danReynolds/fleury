@@ -105,6 +105,71 @@ void main() {
     expect(home!.navigator.depth, 2);
   });
 
+  testWidgets('present() puts content on an opaque Surface (no bleed-through)', (
+    tester,
+  ) {
+    BuildContext? home;
+    tester.pumpWidget(
+      Navigator(home: _Capture(sink: (x) => home = x, label: 'ABCDEFGH')),
+    );
+    // A modal box wider than its text: without an opaque surface, the empty
+    // cells inside its box would composite the home text beneath (the leak).
+    home!.present<void>(
+      const SizedBox(width: 8, height: 1, child: Text('X')),
+      transition: RouteTransition.none,
+    );
+    tester.pump();
+    expect(
+      _screen(tester, cols: 8),
+      'X',
+      reason: 'the opaque Surface covers the home row — no bleed-through',
+    );
+  });
+
+  testWidgets('present(barrierColor:) fills the surround over the screen behind',
+      (tester) {
+    BuildContext? home;
+    tester.pumpWidget(
+      Navigator(home: _Capture(sink: (x) => home = x, label: 'ABCDEFGH')),
+    );
+    home!.present<void>(
+      const Text('X'),
+      barrierColor: Colors.black,
+      transition: RouteTransition.none,
+    );
+    tester.pump();
+    final out = _screen(tester, cols: 8);
+    expect(out, contains('X'));
+    expect(
+      out,
+      isNot(contains('A')),
+      reason: 'the barrier fills the surround, covering the home row',
+    );
+  });
+
+  testWidgets('present(barrierDismissible: false) ignores Esc', (tester) {
+    BuildContext? home;
+    tester.pumpWidget(
+      Navigator(home: _Capture(sink: (x) => home = x, label: 'home')),
+    );
+    home!.present<void>(
+      const Focus(autofocus: true, child: Text('locked')),
+      barrierDismissible: false,
+      transition: RouteTransition.none,
+    );
+    tester.pump();
+    expect(home!.navigator.depth, 2);
+    expect(_screen(tester), contains('locked'));
+
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.pump();
+    expect(
+      home!.navigator.depth,
+      2,
+      reason: 'a non-dismissible modal stays put on Esc',
+    );
+  });
+
   testWidgets('pop at the root is a no-op; canPop reflects depth', (tester) {
     BuildContext? home;
     tester.pumpWidget(

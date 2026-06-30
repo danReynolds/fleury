@@ -354,6 +354,7 @@ export 'src/widgets/basic.dart'
         SizedBox,
         Spacer,
         Stack,
+        Surface,
         Text,
         Wrap;
 export 'src/widgets/framework.dart'
