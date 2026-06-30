@@ -602,6 +602,68 @@ void main() {
     expect(messages(), isEmpty);
   });
 
+  test('app logs before initialize are held, then flushed on the handshake (WS-6)',
+      () async {
+    bool hasMessage() =>
+        out.any((l) => (jsonDecode(l) as Map)['method'] == 'notifications/message');
+
+    // Pre-handshake: a server must not emit notifications, so the line is held.
+    server.forwardAppLog('[app out] early startup line');
+    expect(hasMessage(), isFalse, reason: 'no notification before initialize');
+
+    // initialize completes the handshake → the held line flushes.
+    await server.handleLine(_rpc(1, 'initialize', <String, Object?>{}));
+    final flushed = out
+        .where((l) => (jsonDecode(l) as Map)['method'] == 'notifications/message')
+        .toList();
+    expect(flushed, hasLength(1));
+    expect(
+      '${((jsonDecode(flushed.single) as Map)['params'] as Map)['data']}',
+      contains('early startup line'),
+    );
+
+    // After the handshake, logs go out immediately.
+    out.clear();
+    server.forwardAppLog('[app out] later line');
+    expect(hasMessage(), isTrue);
+  });
+
+  test("notifications/cancelled does NOT suppress a non-wait tool's response "
+      '(WS-6)', () async {
+    pushRoot(buttonAndCount('btn', 'Go', 0));
+    await bridge.ready;
+
+    // A mutating tool parks in settle (the fake app emits no frame until we push
+    // one), so the cancel below lands while it is genuinely in flight.
+    List<String> answered() =>
+        out.where((l) => (jsonDecode(l) as Map)['id'] == 5).toList();
+    final pending = server.handleLine(
+      _rpc(5, 'tools/call', <String, Object?>{
+        'name': 'invoke_action',
+        'arguments': <String, Object?>{'id': 'btn', 'action': 'activate'},
+      }),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+
+    await server.handleLine(
+      '{"jsonrpc":"2.0","method":"notifications/cancelled",'
+      '"params":{"requestId":5}}',
+    );
+    // The cancel landed mid-flight: invoke_action can't honor it, so it is still
+    // unanswered (and must NOT be dropped — the old global guard hung the client).
+    expect(answered(), isEmpty, reason: 'still in flight when the cancel arrived');
+
+    // Release the settle; the action completes and MUST still answer id 5.
+    pushRoot(buttonAndCount('btn', 'Go', 1));
+    await pending.timeout(const Duration(seconds: 5));
+
+    expect(answered(), hasLength(1),
+        reason: 'an un-cancellable tool must answer despite a late cancel');
+    final result = (jsonDecode(answered().single) as Map<String, Object?>)['result']
+        as Map<String, Object?>;
+    expect(result['isError'], isFalse);
+  });
+
   test('a request with explicit id:null still gets answered', () async {
     await server.handleLine('{"jsonrpc":"2.0","id":null,"method":"ping"}');
     final ok = jsonDecode(out.removeLast()) as Map<String, Object?>;

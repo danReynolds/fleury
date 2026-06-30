@@ -73,8 +73,15 @@ Future<void> runMcpServer({
 
   final server = McpServer(bridge: bridge, send: send);
   // Forward the driven app's stdout/stderr to the client as notifications/message
-  // (gated by logging/setLevel), instead of letting it vanish to our stderr.
-  final appLogSub = appLog?.listen(server.forwardAppLog);
+  // (gated by logging/setLevel), instead of letting it vanish to our stderr. The
+  // app's stderr (`[app err]`) maps to `warning` — above `info` — so a client
+  // that raises its level to cut noise still receives the app's error output.
+  final appLogSub = appLog?.listen(
+    (line) => server.forwardAppLog(
+      line,
+      level: line.startsWith('[app err]') ? 'warning' : 'info',
+    ),
+  );
   final lines = input
       .transform(utf8.decoder)
       .transform(const LineSplitter());
@@ -165,6 +172,17 @@ final class McpServer {
   /// it via `logging/setLevel` (default `info`).
   String _minLogLevel = 'info';
 
+  /// Whether the `initialize` handshake has completed. A server must not send
+  /// notifications (beyond the handshake itself) before then, so app logs that
+  /// arrive earlier are held in [_preInitLog] and flushed once we're initialized.
+  bool _initialized = false;
+  final List<({String level, String message})> _preInitLog =
+      <({String level, String message})>[];
+
+  /// Bounds the pre-init hold so a chatty app on a client that never finishes the
+  /// handshake can't grow it without limit (oldest dropped).
+  static const int _preInitLogCap = 200;
+
   /// Syslog-style severities (MCP's `logging` levels), low → high.
   static const Map<String, int> _levelSeverity = <String, int>{
     'debug': 0,
@@ -177,10 +195,29 @@ final class McpServer {
     'emergency': 7,
   };
 
+  /// Marks the session initialized and flushes any app logs held during the
+  /// handshake (re-run through [forwardAppLog] so the current level filter
+  /// applies). Called right after the `initialize` response is sent.
+  void _markInitialized() {
+    if (_initialized) return;
+    _initialized = true;
+    final held = List<({String level, String message})>.of(_preInitLog);
+    _preInitLog.clear();
+    for (final entry in held) {
+      forwardAppLog(entry.message, level: entry.level);
+    }
+  }
+
   /// Forwards one line of the driven app's own stdout/stderr to the client as a
   /// `notifications/message`, if it meets the client's [_minLogLevel]. Lets an
   /// agent observe the app's logs without them polluting the JSON-RPC channel.
+  /// Before the handshake completes the line is held (bounded), not sent.
   void forwardAppLog(String message, {String level = 'info'}) {
+    if (!_initialized) {
+      if (_preInitLog.length >= _preInitLogCap) _preInitLog.removeAt(0);
+      _preInitLog.add((level: level, message: message));
+      return;
+    }
     if ((_levelSeverity[level] ?? 1) < (_levelSeverity[_minLogLevel] ?? 1)) {
       return;
     }
@@ -302,6 +339,8 @@ final class McpServer {
       switch (method) {
         case 'initialize':
           _sendMessage(_resultMessage(id, _initializeResult(params)));
+          // Handshake done — safe to emit notifications now; flush held app logs.
+          _markInitialized();
         case 'ping':
           _sendMessage(_resultMessage(id, const <String, Object?>{}));
         case 'tools/list':
@@ -313,13 +352,16 @@ final class McpServer {
           _inFlight[id] = canceller;
           try {
             final result = await _callTool(params, cancel: canceller.future);
-            // Per MCP, a cancelled request's client is no longer awaiting — so
-            // suppress the response once it's been cancelled.
-            if (!canceller.isCompleted) {
-              _sendMessage(_resultMessage(id, result));
-            }
+            _sendMessage(_resultMessage(id, result));
+          } on _RequestCancelled {
+            // ONLY a wait_for_change that honored notifications/cancelled lands
+            // here — the client stopped awaiting this id, so send nothing (per
+            // MCP). Every other tool is un-cancellable mid-flight and still
+            // returns its result above, even if a late cancel arrived.
           } finally {
-            _inFlight.remove(id);
+            // Deregister only OUR canceller — a (mis-)duplicated id must not
+            // remove a different in-flight request's entry.
+            if (identical(_inFlight[id], canceller)) _inFlight.remove(id);
           }
         case 'resources/list':
           _sendMessage(
@@ -750,6 +792,8 @@ final class McpServer {
         default:
           return _toolError('Unknown tool: $name', code: _ErrorCode.unknownTool);
       }
+    } on _RequestCancelled {
+      rethrow; // control-flow, not an error — the dispatcher suppresses the reply.
     } on _ToolFailure catch (failure) {
       return _toolError(failure.message, code: failure.code);
     } catch (error) {
@@ -1153,11 +1197,10 @@ final class McpServer {
       ]);
       if (cancelled) {
         unawaited(settleFuture); // bounded by `timeout`; let it finish, discarded
-        return _toolJson(<String, Object?>{
-          'changed': false,
-          'cancelled': true,
-          'note': 'wait_for_change was cancelled by the client.',
-        });
+        // Signal the dispatcher to suppress this request's response — the client
+        // abandoned it. A sentinel (not a result) so suppression is scoped to
+        // THIS wait, never to another tool that merely had a late cancel arrive.
+        throw const _RequestCancelled();
       }
     }
     final after = await settleFuture;
@@ -1192,11 +1235,14 @@ final class McpServer {
   Future<SemanticInspectionSnapshot> _requireSnapshot() async {
     final snapshot = await _currentSnapshot();
     if (snapshot == null) {
+      // A transient availability condition, NOT a bad argument — coded so an
+      // agent waits/retries instead of "fixing" arguments that were fine.
       throw _ToolFailure(
         bridge.renderTimedOut
             ? 'The app connected but never rendered a UI (no semantic frame '
                   'within the first-frame timeout). Does it call runTui(...)?'
             : 'The app has not rendered a UI yet (no semantic frame received).',
+        code: _ErrorCode.notReady,
       );
     }
     return snapshot;
@@ -1307,6 +1353,15 @@ final class _ToolFailure implements Exception {
   final String code;
 }
 
+/// Control-flow sentinel: a `wait_for_change` honored a `notifications/cancelled`
+/// and abandoned. It is NOT an error — the dispatcher catches it to suppress the
+/// response for that one request (the client stopped awaiting it). Distinct from
+/// returning a result so suppression can never spill onto an un-cancellable tool
+/// that merely had a late cancel arrive while it was completing.
+final class _RequestCancelled implements Exception {
+  const _RequestCancelled();
+}
+
 /// Stable `code` values surfaced in an isError tool result's `structuredContent`.
 /// Additive: new categories may appear; an agent should treat an unknown code as
 /// a generic failure.
@@ -1320,6 +1375,7 @@ abstract final class _ErrorCode {
   static const rateLimited = 'rate_limited';
   static const tooLarge = 'too_large';
   static const appExited = 'app_exited';
+  static const notReady = 'not_ready';
   static const unknownTool = 'unknown_tool';
   static const internal = 'internal';
 }

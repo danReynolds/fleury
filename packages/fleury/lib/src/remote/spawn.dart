@@ -42,8 +42,10 @@ final class FleurySpawnException implements Exception {
 /// Binds a Unix socket, spawns [command] with `FLEURY_HANDLE` pointed at it, and
 /// awaits the app's FIRST connection — racing the process exiting before it
 /// connects and [connectTimeout]. Once connected the listening socket is CLOSED,
-/// so a second (rogue) process is refused at connect time rather than silently
-/// queued in the OS backlog. The accepted connection stays open.
+/// so the host only ever reads that one connection: a later connect is refused
+/// (ECONNREFUSED), and any connection already queued in the OS backlog is never
+/// accepted or read — so it can inject nothing and its writes ultimately fail.
+/// The accepted connection stays open.
 ///
 /// [socketPath] overrides the auto-generated path (e.g. a per-session socket);
 /// when null a short `/tmp/fleury-host-*/app-$pid.sock` is used and removed on
@@ -81,10 +83,26 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
     // Not there — fine.
   }
 
-  final server = await ServerSocket.bind(
-    InternetAddress(path, type: InternetAddressType.unix),
-    0,
-  );
+  final ServerSocket server;
+  try {
+    server = await ServerSocket.bind(
+      InternetAddress(path, type: InternetAddressType.unix),
+      0,
+    );
+  } catch (_) {
+    // Bind failed (e.g. the unix path exceeded the ~104-byte limit, or the
+    // address is in use) — release the temp dir we just created so a failed
+    // spawn doesn't leak it under /tmp. The socket file (if any) goes too.
+    try {
+      File(path).deleteSync();
+    } catch (_) {}
+    if (ownedDir != null) {
+      try {
+        ownedDir.deleteSync(recursive: true);
+      } catch (_) {}
+    }
+    rethrow;
+  }
   var serverClosed = false;
   Future<void> closeServer() async {
     if (serverClosed) return;
@@ -169,19 +187,24 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
     );
   }
 
-  // Connected: refuse any further (rogue) connection. The accepted socket lives.
+  // Connected: stop accepting, so the host only ever reads this one socket. A
+  // later connect is refused; one already queued in the backlog may complete at
+  // the socket layer but is never accept()ed or read, so it injects nothing and
+  // its writes eventually fail. The accepted socket lives on.
   await closeServer();
 
-  var disposed = false;
-  var exitCode = -1;
-  Future<int> dispose() async {
-    if (disposed) return exitCode;
-    disposed = true;
-    await outSub.cancel();
-    await errSub.cancel();
-    exitCode = await killProcess();
-    await removeSocket();
-    return exitCode;
+  // Cache the teardown future so concurrent (or repeat) dispose() calls all await
+  // the SAME run and observe the real exit code — not a stale sentinel from a
+  // second call that raced in while the first was still inside killProcess().
+  Future<int>? disposing;
+  Future<int> dispose() {
+    return disposing ??= () async {
+      await outSub.cancel();
+      await errSub.cancel();
+      final code = await killProcess();
+      await removeSocket();
+      return code;
+    }();
   }
 
   return SpawnedFleuryApp._(connection, process, dispose);
