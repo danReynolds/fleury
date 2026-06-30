@@ -572,6 +572,36 @@ void main() {
     },
   );
 
+  test('app logs forward as notifications/message, gated by setLevel (WS-6)',
+      () async {
+    await server.handleLine(_rpc(1, 'initialize', <String, Object?>{}));
+    expect(
+      (lastResult()['capabilities'] as Map).containsKey('logging'),
+      isTrue,
+    );
+
+    List<Map<String, Object?>> messages() => [
+      for (final line in out)
+        if ((jsonDecode(line) as Map)['method'] == 'notifications/message')
+          ((jsonDecode(line) as Map)['params'] as Map).cast<String, Object?>(),
+    ];
+
+    out.clear();
+    server.forwardAppLog('[app out] hello from the app');
+    expect(messages(), hasLength(1));
+    expect(messages().single['logger'], 'app');
+    expect(messages().single['level'], 'info');
+    expect('${messages().single['data']}', contains('hello from the app'));
+
+    // Raising the level above info suppresses the app's info-level output.
+    await server.handleLine(
+      _rpc(2, 'logging/setLevel', <String, Object?>{'level': 'error'}),
+    );
+    out.clear();
+    server.forwardAppLog('[app out] another line');
+    expect(messages(), isEmpty);
+  });
+
   test('a request with explicit id:null still gets answered', () async {
     await server.handleLine('{"jsonrpc":"2.0","id":null,"method":"ping"}');
     final ok = jsonDecode(out.removeLast()) as Map<String, Object?>;

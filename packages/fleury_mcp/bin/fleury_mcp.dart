@@ -74,11 +74,21 @@ Future<int> _run(List<String> args) async {
     );
   }
 
+  // The app's own stdout/stderr is forwarded to the client as
+  // notifications/message (WS-6); the bridge's own diagnostics stay on stderr.
+  final appLog = StreamController<String>();
   final FleuryAppBridge bridge;
   try {
     bridge = await FleuryAppBridge.spawn(
       command: command,
       viewport: CellSize(cols, rows),
+      log: (line) {
+        if (line.startsWith('[app ')) {
+          appLog.add(line);
+        } else {
+          stderr.writeln(line);
+        }
+      },
     );
   } on FleuryAppBridgeException catch (e) {
     stderr.writeln('fleury_mcp: ${e.message}');
@@ -91,13 +101,19 @@ Future<int> _run(List<String> args) async {
   final exitCode = Completer<int>();
   Future<void> finish(int code) async {
     await bridge.close();
+    await appLog.close();
     if (!exitCode.isCompleted) exitCode.complete(code);
   }
 
   // The host closes our stdin (or its pipe) to disconnect; the app exiting ends
   // the session too. Either way, tear down and exit.
   unawaited(
-    runMcpServer(bridge: bridge, input: stdin, output: stdout).then(
+    runMcpServer(
+      bridge: bridge,
+      input: stdin,
+      output: stdout,
+      appLog: appLog.stream,
+    ).then(
       (_) => finish(0),
       onError: (Object error, StackTrace _) {
         stderr.writeln('fleury_mcp: $error');

@@ -51,6 +51,7 @@ Future<void> runMcpServer({
   required FleuryAppBridge bridge,
   required Stream<List<int>> input,
   required IOSink output,
+  Stream<String>? appLog,
 }) async {
   final done = Completer<void>();
   var writeFailed = false;
@@ -71,6 +72,9 @@ Future<void> runMcpServer({
   }
 
   final server = McpServer(bridge: bridge, send: send);
+  // Forward the driven app's stdout/stderr to the client as notifications/message
+  // (gated by logging/setLevel), instead of letting it vanish to our stderr.
+  final appLogSub = appLog?.listen(server.forwardAppLog);
   final lines = input
       .transform(utf8.decoder)
       .transform(const LineSplitter());
@@ -95,6 +99,7 @@ Future<void> runMcpServer({
 
   await done.future;
   await sub.cancel();
+  await appLogSub?.cancel();
   // On a clean shutdown (the host closed stdin), let in-flight handlers finish
   // so their responses flush — bounded, so a wedged tool call can't hang
   // teardown. On a write failure the pipe is already broken, so skip it.
@@ -154,6 +159,40 @@ final class McpServer {
   void _cancelRequest(Object? requestId) {
     final canceller = _inFlight[requestId];
     if (canceller != null && !canceller.isCompleted) canceller.complete();
+  }
+
+  /// The minimum severity to forward as notifications/message; the client tunes
+  /// it via `logging/setLevel` (default `info`).
+  String _minLogLevel = 'info';
+
+  /// Syslog-style severities (MCP's `logging` levels), low → high.
+  static const Map<String, int> _levelSeverity = <String, int>{
+    'debug': 0,
+    'info': 1,
+    'notice': 2,
+    'warning': 3,
+    'error': 4,
+    'critical': 5,
+    'alert': 6,
+    'emergency': 7,
+  };
+
+  /// Forwards one line of the driven app's own stdout/stderr to the client as a
+  /// `notifications/message`, if it meets the client's [_minLogLevel]. Lets an
+  /// agent observe the app's logs without them polluting the JSON-RPC channel.
+  void forwardAppLog(String message, {String level = 'info'}) {
+    if ((_levelSeverity[level] ?? 1) < (_levelSeverity[_minLogLevel] ?? 1)) {
+      return;
+    }
+    _sendMessage(<String, Object?>{
+      'jsonrpc': '2.0',
+      'method': 'notifications/message',
+      'params': <String, Object?>{
+        'level': level,
+        'logger': 'app',
+        'data': message,
+      },
+    });
   }
 
   /// Serializes mutating tool calls (invoke_action/set_value/type_text/
@@ -296,6 +335,12 @@ final class McpServer {
           _sendMessage(_resultMessage(id, _subscribeResource(params)));
         case 'resources/unsubscribe':
           _sendMessage(_resultMessage(id, _unsubscribeResource(params)));
+        case 'logging/setLevel':
+          final level = _optString(params['level']);
+          if (level != null && _levelSeverity.containsKey(level)) {
+            _minLogLevel = level;
+          }
+          _sendMessage(_resultMessage(id, const <String, Object?>{}));
         default:
           _sendMessage(
             _errorMessage(id, _methodNotFound, 'Unknown method: $method'),
@@ -326,6 +371,9 @@ final class McpServer {
         // receive notifications/resources/updated when the UI settles.
         // `listChanged` is omitted — the resource list is static (one resource).
         'resources': <String, Object?>{'subscribe': true},
+        // The driven app's own stdout/stderr is forwarded as
+        // notifications/message; `logging/setLevel` sets the minimum severity.
+        'logging': <String, Object?>{},
       },
       'serverInfo': <String, Object?>{
         'name': mcpServerName,
