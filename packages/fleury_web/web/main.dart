@@ -10,7 +10,7 @@ void main() {
 
 Future<void> _run() async {
   final host = _hostElement();
-  await runTuiWebDom(() => const _Demo(), hostElement: host);
+  await mountApp(() => const _Demo(), into: host);
 }
 
 web.Element _hostElement() {

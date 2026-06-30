@@ -85,29 +85,76 @@ class CompletionTextInput extends StatefulWidget {
     this.maxVisible = 6,
   });
 
+  /// Produces completion options for the current request.
   final TextCompletionProvider provider;
+
+  /// Builds the completion range and query from the current text value.
   final TextCompletionRequestBuilder requestBuilder;
+
+  /// Text editing controller for the underlying input.
   final TextEditingController? controller;
+
+  /// External completion state controller. If omitted, this widget owns one.
   final TextCompletionController? completionController;
+
+  /// Optional command-history controller shared with the input.
   final TextHistoryController? historyController;
+
+  /// Focus node used by the underlying text input.
   final FocusNode? focusNode;
+
+  /// Whether the field should request focus when mounted.
   final bool autofocus;
+
+  /// Called when the user submits the current text.
   final void Function(String text)? onSubmit;
+
+  /// Called when Escape is pressed and the completion menu does not consume it.
   final void Function()? onEscape;
+
+  /// Called after a completion option is accepted into the input.
   final void Function(TextCompletionOption option)? onCompletionAccepted;
+
+  /// Placeholder text shown when the input is empty.
   final String placeholder;
+
+  /// Style used for [placeholder].
   final CellStyle placeholderStyle;
+
+  /// Style used for entered text.
   final CellStyle style;
+
+  /// Style applied to the cursor cell.
   final CellStyle cursorStyle;
+
+  /// Cursor blink period.
   final Duration blinkInterval;
+
+  /// Whether cursor blinking is enabled.
   final bool enableBlink;
+
+  /// Whether editing, completion, and focus behavior are enabled.
   final bool enabled;
+
+  /// Whether the field can receive focus but not edit text.
   final bool readOnly;
+
+  /// Optional validation error displayed by the underlying input.
   final String? validationError;
+
+  /// Clipboard write/read policy for input copy and paste.
   final TextClipboardPolicy? clipboardPolicy;
+
+  /// Paste normalization and size policy for inserted text.
   final TextPastePolicy pastePolicy;
+
+  /// Whether submitted text is added to [historyController].
   final bool commitHistoryOnSubmit;
+
+  /// Whether to show completions even when the current query is empty.
   final bool showOnEmptyQuery;
+
+  /// Maximum number of completion rows visible in the overlay.
   final int maxVisible;
 
   @override

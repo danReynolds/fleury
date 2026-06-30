@@ -6,7 +6,7 @@
 
 import 'package:fleury/fleury.dart';
 
-void main() => runTui(const DemoApp(), mode: const TerminalMode(mouse: true));
+void main() => runApp(const DemoApp(), mode: const TerminalMode(mouse: true));
 
 class DemoApp extends StatefulWidget {
   const DemoApp({super.key});

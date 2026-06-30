@@ -41,14 +41,31 @@ final class ContextItem {
   /// Stable identity used by semantics, selection, and callbacks.
   final Object id;
 
+  /// Primary display label for the context item.
   final String label;
+
+  /// Optional longer detail text.
   final String? detail;
+
+  /// Kind of context represented by this item.
   final ContextItemKind kind;
+
+  /// Priority hint for display and pruning.
   final ContextItemPriority priority;
+
+  /// Token count attributed to this item.
   final int tokenCount;
+
+  /// Optional source/origin label.
   final String? source;
+
+  /// Whether this item is pinned in the context set.
   final bool pinned;
+
+  /// Whether this item can be selected and activated.
   final bool enabled;
+
+  /// App-specific semantic state carried by the item.
   final Map<String, Object?> metadata;
 
   String get displayId => id.toString();
@@ -105,10 +122,19 @@ final class ContextPanelCopyOptions {
     this.clipboardPolicy = ClipboardWritePolicy.standard,
   }) : assert(maxDetailLength == null || maxDetailLength >= 0);
 
+  /// Whether copied item text includes [ContextItem.detail].
   final bool includeDetail;
+
+  /// Whether copied item text includes [ContextItem.source].
   final bool includeSource;
+
+  /// Whether copied item text includes [ContextItem.tokenCount].
   final bool includeTokenCount;
+
+  /// Maximum copied detail length.
   final int? maxDetailLength;
+
+  /// Clipboard write behavior for copied context text.
   final ClipboardWritePolicy clipboardPolicy;
 }
 
@@ -176,12 +202,25 @@ class ContextPanel extends StatefulWidget {
     this.onCopy,
   }) : assert(maxVisible > 0);
 
+  /// Context items to display, select, activate, and copy.
   final List<ContextItem> items;
+
+  /// Optional overall token-usage totals used for share display.
   final TokenUsage? usage;
+
+  /// External selection and visible-range controller.
   final ContextPanelController? controller;
+
+  /// Focus node used for keyboard navigation.
   final FocusNode? focusNode;
+
+  /// Whether the panel should request focus when mounted.
   final bool autofocus;
+
+  /// Semantic and visual label for the panel.
   final String label;
+
+  /// Maximum visible rows before the list scrolls.
   final int maxVisible;
 
   /// Append each item's share of the panel's total token budget — e.g.
@@ -189,9 +228,17 @@ class ContextPanel extends StatefulWidget {
   /// obvious at a glance which items dominate the context window. Items
   /// with no tokens, or when the total is zero, get no share suffix.
   final bool showTokenShare;
+
+  /// Whether Ctrl+C and semantic copy export the selected item.
   final bool copySelection;
+
+  /// Clipboard/export options for selected-item copy.
   final ContextPanelCopyOptions copyOptions;
+
+  /// Called when a context item is activated.
   final void Function(ContextPanelSelectResult result)? onSelect;
+
+  /// Called after a copy attempt completes.
   final void Function(ContextPanelCopyResult result)? onCopy;
 
   @override
@@ -637,10 +684,10 @@ String _rowText({
   int? tokenShareTotal,
 }) {
   final prefix = activeSelection ? '> ' : '  ';
-  final tokens = item.tokenCount > 0 ? _formatTokenCount(item.tokenCount) : null;
-  final share = tokens != null &&
-          tokenShareTotal != null &&
-          tokenShareTotal > 0
+  final tokens = item.tokenCount > 0
+      ? _formatTokenCount(item.tokenCount)
+      : null;
+  final share = tokens != null && tokenShareTotal != null && tokenShareTotal > 0
       ? ' (${(item.tokenCount / tokenShareTotal * 100).round()}%)'
       : '';
   final meta = <String>[

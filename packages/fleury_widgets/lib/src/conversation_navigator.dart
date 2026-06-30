@@ -35,16 +35,37 @@ final class ConversationEntry {
   /// Stable identity used by semantics, selection, and callbacks.
   final Object id;
 
+  /// Primary row text.
   final String title;
+
+  /// Secondary row text displayed under or beside [title].
   final String? subtitle;
+
+  /// Current lifecycle status for the conversation.
   final ConversationStatus status;
+
+  /// Latest message preview text.
   final String? latestMessage;
+
+  /// Optional author/source label for the latest activity.
   final String? author;
+
+  /// Optional latest-activity timestamp.
   final DateTime? timestamp;
+
+  /// Number of unread messages in the conversation.
   final int unreadCount;
+
+  /// Total known message count.
   final int messageCount;
+
+  /// Whether this conversation should be visually marked as pinned.
   final bool pinned;
+
+  /// Whether this row can be selected and activated.
   final bool enabled;
+
+  /// App-specific semantic state carried by the row.
   final Map<String, Object?> metadata;
 
   String get displayId => id.toString();
@@ -104,9 +125,16 @@ final class ConversationNavigatorCopyOptions {
     this.clipboardPolicy = ClipboardWritePolicy.standard,
   }) : assert(maxLatestLength == null || maxLatestLength >= 0);
 
+  /// Whether copied row text includes [ConversationEntry.status].
   final bool includeStatus;
+
+  /// Whether copied row text includes [ConversationEntry.latestMessage].
   final bool includeLatestMessage;
+
+  /// Maximum copied latest-message length.
   final int? maxLatestLength;
+
+  /// Clipboard write behavior for copied conversation text.
   final ClipboardWritePolicy clipboardPolicy;
 }
 
@@ -225,24 +253,53 @@ class ConversationNavigator extends StatefulWidget {
   }) : assert(width > 0),
        assert(maxVisible > 0);
 
+  /// Source conversations to search, display, activate, and copy.
   final List<ConversationEntry> conversations;
+
+  /// External controller for the query input.
   final TextEditingController? queryController;
+
+  /// External controller for list selection and visible range.
   final ConversationNavigatorController? controller;
+
+  /// Optional app-owned matcher used instead of default ranked search.
   final ConversationMatcher? matcher;
+
+  /// Semantic and visual label for the navigator.
   final String label;
+
+  /// Placeholder shown in the query input.
   final String placeholder;
+
+  /// Width, in terminal cells, reserved for query and rows.
   final int width;
+
+  /// Maximum visible rows before the list scrolls.
   final int maxVisible;
 
   /// Prefix each row with the conversation's [ConversationEntry.timestamp]
   /// as a local `HH:mm:ss` clock, when one is set. Off by default.
   final bool showTimestamp;
+
+  /// Focus node used by the query input.
   final FocusNode? queryFocusNode;
+
+  /// Focus node used by the conversation list.
   final FocusNode? listFocusNode;
+
+  /// Whether the query input should request focus when mounted.
   final bool autofocus;
+
+  /// Whether Ctrl+C and semantic copy export the selected row.
   final bool copySelection;
+
+  /// Clipboard/export options for selected-row copy.
   final ConversationNavigatorCopyOptions copyOptions;
+
+  /// Called when a conversation row is activated.
   final void Function(ConversationNavigatorSelectResult result)? onSelect;
+
+  /// Called after a copy attempt completes.
   final void Function(ConversationNavigatorCopyResult result)? onCopy;
 
   @override

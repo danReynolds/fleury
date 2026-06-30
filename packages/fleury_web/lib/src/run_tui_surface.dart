@@ -13,8 +13,8 @@ import 'semantics/semantic_flush_scheduler.dart';
 import 'semantics/semantic_presenter.dart';
 
 /// Handle returned by [runTuiSurface].
-final class TuiSurfaceHost {
-  TuiSurfaceHost._({
+final class MountedApp {
+  MountedApp._({
     required TuiRuntime runtime,
     required FrameScheduler frameScheduler,
     required FrameSurface surface,
@@ -119,7 +119,7 @@ final class TuiSurfaceHost {
 /// installed through [clipboard] for the lifetime of the host. A semantic
 /// presenter may be supplied through [semanticPresenter]; it receives a full
 /// semantic snapshot after visual presentation for the same frame.
-Future<TuiSurfaceHost> runTuiSurface(
+Future<MountedApp> runTuiSurface(
   Widget Function() rootFactory, {
   required FrameSurface surface,
   CellMetrics? cellMetrics,
@@ -174,7 +174,7 @@ Future<TuiSurfaceHost> runTuiSurface(
   var lastSemanticCoverageAudit = SemanticCoverageAudit.empty;
   var lastSize = surface.size;
   FrameScheduler? frameScheduler;
-  TuiSurfaceHost? returnedHost;
+  MountedApp? returnedHost;
 
   Future<void> cleanupSetupFailure() async {
     if (disposed) return;
@@ -757,7 +757,7 @@ Future<TuiSurfaceHost> runTuiSurface(
     root = runtime.mountRoot(buildRoot());
     scheduleFrame('initial');
 
-    final host = TuiSurfaceHost._(
+    final host = MountedApp._(
       runtime: runtime,
       frameScheduler: scheduler,
       surface: surface,

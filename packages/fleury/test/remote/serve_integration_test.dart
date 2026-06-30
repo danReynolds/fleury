@@ -179,7 +179,7 @@ void main() {
       );
 
       test(
-        'browser-first bridge preserves INIT for a real runTui app',
+        'browser-first bridge preserves INIT for a real runApp app',
         () async {
           final socketPath = '${tempDir.path}/.fleury/shell.sock';
           final ws = await WebSocket.connect(

@@ -5,7 +5,7 @@ description: Move between screens with a Navigator stack — push, pop, return r
 
 Multi-screen terminal apps — a list that drills into a detail view, a wizard, a
 settings page — use a `Navigator`, exactly like Flutter. You don't set one up:
-`runTui` installs a root `Navigator` over your app, so `context.push` and
+`runApp` installs a root `Navigator` over your app, so `context.push` and
 `context.pop` work everywhere out of the box.
 
 ## Push and pop

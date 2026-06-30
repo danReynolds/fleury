@@ -16,8 +16,17 @@ interface Props {
   rows?: number;
   /** Whether the widget responds to keyboard/mouse input. */
   interactive?: boolean;
+  /** Visual theme for the embedded widget. `site` follows Starlight light/dark. */
+  surfaceTheme?: 'dark' | 'light' | 'site';
 }
-const { id, title, cols = 60, rows = 12, interactive = false } = Astro.props;
+const {
+  id,
+  title,
+  cols = 60,
+  rows = 12,
+  interactive = false,
+  surfaceTheme = 'dark',
+} = Astro.props;
 // ch ≈ one monospace column; 1 row = line-height (1.25) em at the host font size.
 const style = `width:${cols}ch;height:${(rows * 1.25).toFixed(2)}em`;
 const badgeLabel = interactive ? 'Live · interactive' : 'Live';
@@ -28,7 +37,7 @@ const badgeTitle = interactive
 
 <figure class="fleury-example">
   {title && <figcaption>{title}</figcaption>}
-  <div class="fleury-frame">
+  <div class="fleury-frame" data-fleury-theme={surfaceTheme}>
     <div class="fleury-bar">
       <span class="fleury-badge" title={badgeTitle}>
         <span class="fleury-dot"></span>{badgeLabel}
@@ -46,6 +55,7 @@ const badgeTitle = interactive
           data-id={id}
           data-cols={cols}
           data-rows={rows}
+          data-theme={surfaceTheme}
           aria-label="Expand this example to full screen"
         >⛶ Expand</button>
       </div>
@@ -54,6 +64,7 @@ const badgeTitle = interactive
       <div
         class="fleury-host"
         data-fleury-example={id}
+        data-fleury-theme={surfaceTheme}
         style={style}
         role="img"
         aria-label={title ?? `Live Fleury example: ${id}`}
@@ -79,13 +90,14 @@ const badgeTitle = interactive
       if (window.fleuryMountExamples) window.fleuryMountExamples();
     });
 
-    function expand(id, cols, rows) {
+    function expand(id, cols, rows, theme) {
       const fc = Math.min(Math.round(cols * 1.5), 160);
       const fr = Math.min(Math.round(rows * 1.4), 46);
       const overlay = document.createElement('div');
       overlay.className = 'fleury-overlay';
       const card = document.createElement('div');
       card.className = 'fleury-overlay-card';
+      card.dataset.fleuryTheme = theme || 'dark';
       const bar = document.createElement('div');
       bar.className = 'fleury-overlay-bar';
       const close = document.createElement('button');
@@ -95,6 +107,7 @@ const badgeTitle = interactive
       bar.appendChild(close);
       const host = document.createElement('div');
       host.className = 'fleury-host';
+      host.dataset.fleuryTheme = theme || 'dark';
       host.style.cssText =
         `width:${fc}ch;height:${(fr * 1.25).toFixed(1)}em;max-width:92vw;max-height:78vh`;
       card.appendChild(bar);
@@ -125,7 +138,7 @@ const badgeTitle = interactive
     document.addEventListener('click', (e) => {
       const btn = e.target.closest && e.target.closest('.fleury-expand');
       if (!btn) return;
-      expand(btn.dataset.id, +btn.dataset.cols, +btn.dataset.rows);
+      expand(btn.dataset.id, +btn.dataset.cols, +btn.dataset.rows, btn.dataset.theme);
     });
   })();
 </script>

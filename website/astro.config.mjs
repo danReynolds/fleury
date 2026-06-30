@@ -82,6 +82,7 @@ export default defineConfig({
           label: 'Architecture',
           items: [
             { label: 'Overview', slug: 'architecture/overview' },
+            { label: 'Deep dive', slug: 'architecture/deep-dive' },
             { label: 'Core and targets', slug: 'architecture/core-and-targets' },
             {
               label: 'Serving and embedding',

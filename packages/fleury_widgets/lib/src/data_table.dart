@@ -391,10 +391,19 @@ final class DataTableColumn {
     this.headerStyle = const CellStyle(bold: true),
   });
 
+  /// Stable column identifier passed to [DataTableCellBuilder].
   final String id;
+
+  /// Header label shown at the top of the column.
   final String title;
+
+  /// Layout policy for this column's cell width.
   final TableColumnWidth width;
+
+  /// Default style applied to body cells in this column.
   final CellStyle style;
+
+  /// Style applied to this column's header cell.
   final CellStyle headerStyle;
 }
 
@@ -560,23 +569,58 @@ class DataTable extends StatefulWidget {
     this.label = 'Data table',
   });
 
+  /// Number of source rows available to the table.
   final int rowCount;
+
+  /// Column definitions, in display order.
   final List<DataTableColumn> columns;
+
+  /// Returns the display text for a visible cell.
   final DataTableCellBuilder cellBuilder;
+
+  /// Optional stable row identity used by semantics and copy callbacks.
   final DataTableRowKeyBuilder? rowKeyBuilder;
+
+  /// External selection controller. If omitted, the table owns one.
   final DataTableController? controller;
+
+  /// Focus node used for keyboard navigation.
   final FocusNode? focusNode;
+
+  /// Whether the table should request focus when mounted.
   final bool autofocus;
+
+  /// Called when the focused row is activated.
   final void Function(int rowIndex)? onSelect;
+
+  /// Whether keyboard selection targets whole rows or individual cells.
   final DataTableSelectionMode selectionMode;
+
+  /// Whether Ctrl+C and semantic copy export the current selection.
   final bool copySelectedRow;
+
+  /// Export and clipboard options used when copying table data.
   final DataTableCopyOptions copyOptions;
+
+  /// Called after a copy attempt completes.
   final void Function(DataTableCopyResult result)? onCopy;
+
+  /// Empty cells inserted between adjacent columns.
   final int columnSpacing;
+
+  /// Whether to draw a separator below the header row.
   final bool headerSeparator;
+
+  /// Style used for header and row separators.
   final CellStyle? separatorStyle;
+
+  /// Style merged onto the focused row or focused cell.
   final CellStyle? selectedStyle;
+
+  /// App-owned sort column identifier exposed through semantics.
   final String? sortColumnId;
+
+  /// App-owned sort direction exposed through semantics.
   final DataTableSortDirection? sortDirection;
 
   /// Called with a column's id when an agent activates its header cell, so the
@@ -585,7 +629,10 @@ class DataTable extends StatefulWidget {
   /// `columnId`. When non-null, header cells advertise `activate`.
   final void Function(String columnId)? onSort;
 
+  /// App-owned filter text exposed through semantics.
   final String? filterText;
+
+  /// Semantic label for the table.
   final String? label;
 
   @override

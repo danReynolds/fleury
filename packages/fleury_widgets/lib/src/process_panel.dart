@@ -45,20 +45,49 @@ class ProcessPanel extends StatelessWidget {
     this.padding,
   });
 
+  /// Task controller that owns process status, progress, events, and output.
   final ProcessTaskController controller;
+
+  /// Command metadata displayed in the panel header.
   final ProcessTaskCommand? command;
+
+  /// Optional label overriding the controller label in the header and semantics.
   final String? label;
+
+  /// External output-list controller.
   final LogRegionController? outputController;
+
+  /// Focus node used by the output region.
   final FocusNode? focusNode;
+
+  /// Whether the output region should request focus when mounted.
   final bool autofocus;
+
+  /// Optional filter applied to process output rows.
   final LogRegionFilterDescriptor? outputFilter;
+
+  /// Whether Ctrl+C and semantic copy export the selected output row.
   final bool copyOutput;
+
+  /// Clipboard/export options for copied output.
   final LogRegionCopyOptions copyOptions;
+
+  /// Called after a process-output copy attempt completes.
   final void Function(LogRegionCopyResult result)? onCopy;
+
+  /// Shortcut that cancels the running process; null disables the binding.
   final KeyChord? cancelShortcut;
+
+  /// Whether to render the status/command header above output.
   final bool showHeader;
+
+  /// Whether to render a progress bar when progress is available.
   final bool showProgress;
+
+  /// Optional border around the whole process panel.
   final BoxBorder? border;
+
+  /// Optional padding inside [border].
   final EdgeInsets? padding;
 
   @override

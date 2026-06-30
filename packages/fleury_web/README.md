@@ -2,7 +2,7 @@
 
 Run [fleury](../fleury) apps in a browser through the retained DOM host:
 
-- **`runTuiWebDom`** runs Fleury-owned apps through the retained DOM host:
+- **`mountApp`** runs Fleury-owned apps through the retained DOM host:
   Fleury paints into a `CellBuffer`, browser frames flush under
   `requestAnimationFrame` with an asynchronous timer fallback for embedded
   browser surfaces that lack rAF, dirty rows update retained DOM row elements,
@@ -16,12 +16,12 @@ own hosts.
 
 ## How it works
 
-fleury's core (`package:fleury/fleury_core.dart`) and host SPI
+Fleury's core (`package:fleury/fleury_core.dart`) and host SPI
 (`package:fleury/fleury_host.dart`) are free of `dart:io`, so they compile to
 JavaScript. This package imports the host SPI and supplies the missing browser
 platform pieces:
 
-- **Runtime and frame loop:** `runTuiSurface` shares Fleury's `TuiRuntime`
+- **Runtime and frame loop:** the DOM host shares Fleury's `TuiRuntime`
   framework-service/root lifecycle, `FrameScheduler`, and `TuiFrameLoop`
   buffer/damage lifecycle with native hosts.
 - **Visual DOM:** `DomGridSurface` retains one row element per visible row and
@@ -35,7 +35,7 @@ platform pieces:
   unavailable.
 - **Semantics:** `SemanticDomPresenter` projects Fleury semantics into a
   separate accessibility DOM. Visual rows stay `aria-hidden`, so
-  `runTuiWebDom` keeps semantics enabled for product use and requires
+  `mountApp` keeps semantics enabled for product use and requires
   `allowInaccessibleDiagnostics: true` before callers can disable them for
   focused local performance diagnostics.
 - **Instrumentation:** `RecordingWebHostInstrumentation`,

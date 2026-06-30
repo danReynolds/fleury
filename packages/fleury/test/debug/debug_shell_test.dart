@@ -9,7 +9,7 @@
 //      KeyEvent against the controller. Lives outside the widget tree
 //      so it can fire even inside Navigator's modal-route suppression,
 //      so it's tested directly rather than through the tester's focus
-//      chain (which doesn't simulate runTui's pre-dispatcher tier).
+//      chain (which doesn't simulate runApp's pre-dispatcher tier).
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';

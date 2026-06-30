@@ -21,7 +21,7 @@ import '../widgets/focus.dart';
 import '../widgets/key_bindings.dart';
 import '../widgets/pointer.dart';
 
-/// Owns the runtime input pipeline. One instance per [runTui]. Tests
+/// Owns the runtime input pipeline. One instance per [runApp]. Tests
 /// can construct one against a hand-built [FocusManager].
 class InputDispatcher {
   InputDispatcher({
@@ -438,7 +438,7 @@ class InputDispatcher {
   }
 
   /// Releases pending-sequence resources. Idempotent. Called by
-  /// `runTui` during teardown.
+  /// `runApp` during teardown.
   void dispose() {
     if (_disposed) return;
     _disposed = true;

@@ -14,7 +14,6 @@ void main() {
     expect(output, contains('verify'));
     expect(output, contains('snapshot'));
     expect(output, contains('coverage'));
-    expect(output, contains('--list'));
     expect(output, contains('--story <id>'));
     expect(output, contains('--variant <id>'));
     expect(output, contains('--control <id=value>'));
@@ -23,7 +22,7 @@ void main() {
   }, timeout: cliTimeout);
 
   test('list json exposes story metadata and typed controls', () async {
-    final result = await _runStorybook(<String>['--list', '--json']);
+    final result = await _runStorybook(<String>['list', '--json']);
 
     expect(result.exitCode, 0, reason: result.stderr.toString());
     final decoded = jsonDecode(result.stdout.toString());

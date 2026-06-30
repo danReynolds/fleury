@@ -2402,11 +2402,11 @@ List<Map<String, Object?>> _completionPhaseStatus({
       'releaseBlocking': false,
       'evidence': const <String>[
         'packages/fleury_web/lib/src/run_tui_surface.dart',
-        'packages/fleury_web/lib/src/run_tui_web_dom.dart',
+        'packages/fleury_web/lib/src/mount_app.dart',
         'packages/fleury_web/lib/src/frame_presentation.dart',
         'packages/fleury_web/lib/src/dom_grid/dom_grid_surface.dart',
         'packages/fleury_web/test/run_tui_surface_test.dart',
-        'packages/fleury_web/test/run_tui_web_dom_test.dart',
+        'packages/fleury_web/test/mount_app_test.dart',
       ],
     },
     <String, Object?>{

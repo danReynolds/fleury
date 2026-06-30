@@ -6,7 +6,7 @@
 //   - Focus is the widget that wires a FocusNode into the tree.
 //   - FocusScope groups focusable children for traversal; with
 //     modal: true it stops events from reaching ancestor widgets.
-//   - FocusManager is the singleton (one per BuildOwner / runTui)
+//   - FocusManager is the singleton (one per BuildOwner / runApp)
 //     that holds which node is focused, the broadcast for changes,
 //     and the dispatch entry point.
 //
@@ -264,7 +264,7 @@ class FocusScopeRef {
 // ---------------------------------------------------------------------------
 
 /// Manages which [FocusNode] is currently focused for one runtime
-/// (one [BuildOwner] / one [runTui]).
+/// (one [BuildOwner] / one [runApp]).
 ///
 /// Listeners are notified when the focused node changes or when the
 /// active focus chain composition shifts (e.g. modal scope opens /
@@ -711,7 +711,7 @@ class _FocusManagerProvider extends InheritedNotifier<FocusManager> {
     if (provider == null) {
       throw StateError(
         'No FocusManager found in this context. Did you call '
-        'runTui (which installs one)?',
+        'runApp (which installs one)?',
       );
     }
     return provider.notifier;
@@ -724,7 +724,7 @@ class _FocusManagerProvider extends InheritedNotifier<FocusManager> {
   }
 }
 
-/// Root of the focus tree. Installed by `runTui` so application widget
+/// Root of the focus tree. Installed by `runApp` so application widget
 /// code can always reach a `FocusManager` via [Focus.of].
 class FocusManagerScope extends StatelessWidget {
   const FocusManagerScope({
@@ -983,12 +983,7 @@ class _RenderFocusBounds extends RenderObject
     _node.rect = clipRect == null || clipRect.intersect(bounds) != null
         ? bounds
         : null;
-    _child?.paint(
-      buffer,
-      offset,
-      screenOffset: screen,
-      clipRect: clipRect,
-    );
+    _child?.paint(buffer, offset, screenOffset: screen, clipRect: clipRect);
   }
 }
 

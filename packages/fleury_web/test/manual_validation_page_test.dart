@@ -35,7 +35,7 @@ void main() {
     hostElement.id = 'fleury-manual-validation-test';
     web.document.body!.appendChild(hostElement);
 
-    final TuiSurfaceHost host = await manual_validation.runManualValidation(
+    final MountedApp host = await manual_validation.runManualValidation(
       hostElement: hostElement,
       flushScheduler: flush.schedule,
     );
@@ -191,7 +191,7 @@ void main() {
     hostElement.id = 'fleury-manual-validation-no-raf-test';
     web.document.body!.appendChild(hostElement);
 
-    final TuiSurfaceHost host = await manual_validation.runManualValidation(
+    final MountedApp host = await manual_validation.runManualValidation(
       hostElement: hostElement,
     );
     addTearDown(() async {

@@ -5,7 +5,7 @@
 
 import 'package:fleury/fleury.dart';
 
-void main() => runTui(const NavApp());
+void main() => runApp(const NavApp());
 
 class NavApp extends StatelessWidget {
   const NavApp({super.key});
@@ -40,9 +40,7 @@ class DetailScreen extends StatelessWidget {
     canPop: true,
     child: GestureDetector(
       onTap: () => context.pop(true),
-      child: Text(
-        Navigator.of(context).canPop ? 'Close' : 'Home',
-      ),
+      child: Text(Navigator.of(context).canPop ? 'Close' : 'Home'),
     ),
   );
 }

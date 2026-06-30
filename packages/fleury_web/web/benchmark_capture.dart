@@ -25,13 +25,13 @@ Future<void> _run() async {
     _applyHostSize(hostElement, scenario.cols, scenario.rows);
     final instrumentation = RecordingWebHostInstrumentation();
     final key = GlobalKey<_BenchmarkAppState>();
-    final host = await runTuiWebDom(
+    final host = await mountApp(
       () => _BenchmarkApp(
         key: key,
         scenario: scenario,
         textInputController: TextEditingController(),
       ),
-      hostElement: hostElement,
+      into: hostElement,
       instrumentation: instrumentation,
       semanticsEnabled: options.semanticsEnabled,
       allowInaccessibleDiagnostics: !options.semanticsEnabled,
@@ -131,7 +131,7 @@ void _applyHostSize(web.Element host, int cols, int rows) {
 void _driveStep({
   required WebBenchmarkScenario scenario,
   required int step,
-  required TuiSurfaceHost host,
+  required MountedApp host,
   required _BenchmarkAppState? appState,
   required web.Element hostElement,
 }) {

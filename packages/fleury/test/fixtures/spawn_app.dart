@@ -4,7 +4,7 @@
 // subprocess connected, then sits waiting for BYE.
 //
 // Lives under test/fixtures/ rather than example/ because it's a test
-// helper — it doesn't use runTui at all (we're testing the transport +
+// helper — it doesn't use runApp at all (we're testing the transport +
 // spawn lifecycle, not the framework).
 
 import 'dart:io';
@@ -36,7 +36,7 @@ Future<void> main(List<String> args) async {
 
   // Sit on the socket until the peer (the serve pump, via the
   // browser WS) closes or sends BYE. This is what a real TUI's
-  // event loop does — it's `runTui`'s `await exit.future` in
+  // event loop does — it's `runApp`'s `await exit.future` in
   // miniature.
   await for (final frame in transport.incoming) {
     if (frame is ByeFrame) break;

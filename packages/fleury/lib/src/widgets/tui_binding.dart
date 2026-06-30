@@ -8,7 +8,7 @@
 // on the binding rather than via inheritance into the binding type.
 //
 // Modelled on Flutter's WidgetsBinding but per-runtime rather than
-// process-global. runTui installs one binding per invocation;
+// process-global. runApp installs one binding per invocation;
 // tests construct one explicitly.
 
 import '../animation/animation_policy.dart';
@@ -65,13 +65,13 @@ class TuiBinding implements TickerProvider {
   final AnimationPolicy _animationPolicy;
 
   /// Returns the [TuiBinding] enclosing [context]. Throws if no
-  /// binding is installed — almost always means `runTui` wasn't
+  /// binding is installed — almost always means `runApp` wasn't
   /// used or the call site is outside the app's root.
   static TuiBinding of(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<TuiBindingScope>();
     if (scope == null) {
       throw StateError(
-        'No TuiBinding above this BuildContext. runTui() installs '
+        'No TuiBinding above this BuildContext. runApp() installs '
         'one automatically; if you are constructing a tree manually '
         '(e.g. in a test), wrap it in TuiBindingScope(binding: ...).',
       );
@@ -118,7 +118,7 @@ class TuiBinding implements TickerProvider {
   /// [FleuryTester.pump] after the build flush. Idempotent — a no-op
   /// when no callbacks are queued.
   ///
-  /// Driven by `TuiBinding` consumers (`run_tui`, `run_tui_web`,
+  /// Driven by `TuiBinding` consumers (`run_app`, web hosts,
   /// `FleuryTester.pump`); app code should use [addPostFrameCallback].
   void flushPostFrameCallbacks(Duration timeStamp) {
     if (_disposed) return;

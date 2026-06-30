@@ -37,7 +37,7 @@ const int maxRemoteGridRows = 4000;
 /// terminal, e.g. `fleury shell`) receives ANSI via [write]; a v2 peer (the
 /// browser surface client) receives [PlanFrame]s via [presentPlan] and
 /// sends structured input. [wantsPresentationPlans] reflects the negotiated
-/// version and is read by [runTui] after [enter] completes.
+/// version and is read by [runApp] after [enter] completes.
 final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
   RemoteTerminalDriver(this._transport);
 
@@ -105,7 +105,7 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
     );
 
     // Block until the peer's INIT frame lands so size + capabilities
-    // are correct before the first paint. Without this, `runTui` would
+    // are correct before the first paint. Without this, `runApp` would
     // race the handshake and allocate the buffer pool at the default
     // 80×24, then immediately resize on the first frame.
     await _handshake!.future;
@@ -142,7 +142,11 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
     FramePresentationPlan plan,
   ) {
     if (!_active) return;
-    final remotePlan = buildRemotePlan(prev, next, fullRepaint: plan.fullRepaint);
+    final remotePlan = buildRemotePlan(
+      prev,
+      next,
+      fullRepaint: plan.fullRepaint,
+    );
     // Ship the bytes for each image that (re)appears this frame — placed now but
     // not on the previous frame — before the plan that references it. An image
     // that stays on screen ships once; one that scrolls away and back is re-sent
@@ -258,7 +262,7 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
       return;
     }
     _active = false;
-    // Closing the events stream surfaces as `onDone` in `runTui`, which
+    // Closing the events stream surfaces as `onDone` in `runApp`, which
     // completes the exit completer and runs cleanup. No custom event
     // type or out-of-band signaling required.
     _events.close();

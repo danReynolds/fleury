@@ -9,7 +9,7 @@ and style their cells from it, so a single theme drives the whole tree.
 
 ## Apply a theme
 
-`runTui` doesn't install a `Theme` for you — until you add one, widgets fall back
+`runApp` doesn't install a `Theme` for you — until you add one, widgets fall back
 to sensible built-in defaults (`Theme.of(context)` always returns *something*).
 To customize, wrap a subtree in a `Theme`:
 

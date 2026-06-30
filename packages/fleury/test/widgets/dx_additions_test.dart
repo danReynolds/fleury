@@ -1,5 +1,5 @@
 // Locks the human-factor additions: Colors named constants,
-// Container.color, runTui's Widget-not-factory signature.
+// Container.color, runApp's Widget-not-factory signature.
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
@@ -93,13 +93,13 @@ void main() {
     );
   });
 
-  group('runTui(Widget) accepts a direct widget', () {
+  group('runApp(Widget) accepts a direct widget', () {
     test('does not require a factory wrapper', () async {
       // Strictly a type-check: this test runs to completion only if the
       // signature accepts a Widget. (Behavior is covered exhaustively by
-      // run_tui_test.dart.)
+      // run_app_test.dart.)
       final driver = FakeTerminalDriver();
-      final future = runTui(
+      final future = runApp(
         const Text('hi'),
         driver: driver,
         enableHotReload: false,

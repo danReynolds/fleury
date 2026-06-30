@@ -236,10 +236,10 @@ A `Ticker` can't stand alone — it has to be wired into the runtime. Mixing in
    firing when it shouldn't run; you don't check anything.
 3. **Disposes the ticker** when the `State` is torn down.
 
-"Single" means one ticker per `State` (it asserts if you ask for two — use
-`TickerProviderStateMixin` when a widget needs several). The higher-level tools
-all do this wiring internally, which is the whole reason you don't see a ticker
-or this mixin when you use them.
+"Single" means one ticker per `State` — it asserts if you ask for a second.
+(Multi-ticker support is planned but not yet available, so a `State` drives one
+ticker for now.) The higher-level tools all do this wiring internally, which is
+the whole reason you don't see a ticker or this mixin when you use them.
 
 ### Smooth motion is a cadence concern, not a perf one
 
@@ -261,7 +261,7 @@ void _onTick(Duration elapsed) {
 
 ## In the browser and in tests
 
-None of this changes across targets. `runTuiWebDom` installs the same binding,
+None of this changes across targets. `mountApp` installs the same binding,
 so every layer here runs client-side under `requestAnimationFrame` with no code
 change. In tests, `tester.pump(duration)` advances tickers, springs, and effects
 deterministically — and because animation respects the `AnimationPolicy`, a

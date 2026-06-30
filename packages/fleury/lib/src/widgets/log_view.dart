@@ -11,7 +11,7 @@ import 'layout_builder.dart';
 import 'listenable_builder.dart';
 import 'theme.dart';
 
-/// Shares a [LogBuffer] with descendants. `runTui` installs one above the
+/// Shares a [LogBuffer] with descendants. `runApp` installs one above the
 /// app so [LogView] / [LogConsole] (including in floating overlays) can find
 /// the captured output without it being threaded through constructors.
 class LogBufferScope extends InheritedNotifier<LogBuffer> {
@@ -31,7 +31,7 @@ class LogBufferScope extends InheritedNotifier<LogBuffer> {
     if (buffer == null) {
       throw StateError(
         'LogBufferScope.of: no LogBufferScope ancestor. Provide a [buffer] to '
-        'the widget directly, or run under runTui (which installs one).',
+        'the widget directly, or run under runApp (which installs one).',
       );
     }
     return buffer;
@@ -57,7 +57,7 @@ class LogView extends StatelessWidget {
     final explicit = buffer;
     if (explicit != null) {
       return ListenableBuilder(
-        animation: explicit,
+        listenable: explicit,
         builder: (context, _) => _list(context, explicit),
       );
     }
@@ -99,7 +99,7 @@ class LogView extends StatelessWidget {
   }
 }
 
-/// The floating dev-tool console `runTui` toggles: a bordered, **opaque**
+/// The floating dev-tool console `runApp` toggles: a bordered, **opaque**
 /// log panel pinned to the bottom, [height] rows tall (clamped to fit).
 ///
 /// Every cell it covers is painted, so it stays legible over a busy screen

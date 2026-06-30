@@ -12,7 +12,7 @@ Future<void> _run() async {
   await runManualValidation();
 }
 
-Future<TuiSurfaceHost> runManualValidation({
+Future<MountedApp> runManualValidation({
   web.Element? hostElement,
   FrameFlushScheduler? flushScheduler,
 }) async {
@@ -21,9 +21,9 @@ Future<TuiSurfaceHost> runManualValidation({
   final provenance = _ManualValidationProvenance.capture();
   provenance.applyToBody();
   final instrumentation = _ReadyMarkerInstrumentation();
-  final surfaceHost = await runTuiWebDom(
+  final surfaceHost = await mountApp(
     () => _ManualValidationApp(provenance: provenance),
-    hostElement: host,
+    into: host,
     flushScheduler: flushScheduler,
     instrumentation: instrumentation,
   );

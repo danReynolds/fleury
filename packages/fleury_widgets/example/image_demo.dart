@@ -21,7 +21,7 @@ Future<void> main() async {
   // Image widget below so they all share the same cached pixel buffer.
   final source = ImageSource.decoded(_gradient(32, 32));
 
-  await runTui(
+  await runApp(
     _ImageShowcase(source: source),
     onEvent: (event) {
       if (event is KeyEvent && event.hasCtrl && event.char == 'c') {

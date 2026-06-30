@@ -1254,6 +1254,12 @@ final class _PromptParseResult {
   final String? _error;
 }
 
+/// Renders a [FormDefinition] as an interactive Fleury form.
+///
+/// A panel owns field focus, validation display, submit/cancel actions, and
+/// optional form-level semantics. Provide a [FormController] when the parent
+/// needs to read or mutate values directly; otherwise the panel creates one
+/// from [definition].
 class FormPanel extends StatefulWidget {
   const FormPanel({
     super.key,
@@ -1270,16 +1276,37 @@ class FormPanel extends StatefulWidget {
     this.includeFormSemantics = true,
   });
 
+  /// The form schema, including fields, labels, defaults, and validators.
   final FormDefinition definition;
+
+  /// External form state. If omitted, the panel creates and owns a controller.
   final FormController? controller;
+
+  /// Optional ordered subset of fields to show from [definition].
   final List<String>? fieldIds;
+
+  /// Whether to render the panel as a full-screen form or inline group.
   final FormPanelLayout layout;
+
+  /// Called when the user submits the form, after validation runs.
   final void Function(FormSubmitResult result)? onSubmit;
+
+  /// Called when the user cancels the form.
   final void Function()? onCancel;
+
+  /// Whether the first visible field requests focus on mount.
   final bool autofocus;
+
+  /// Preferred input width for text-like fields, in cells.
   final int fieldWidth;
+
+  /// Whether to render the form title.
   final bool showTitle;
+
+  /// Whether to render submit/cancel actions.
   final bool showActions;
+
+  /// Whether to expose a semantic form node around the rendered fields.
   final bool includeFormSemantics;
 
   @override

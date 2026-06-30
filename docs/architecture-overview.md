@@ -18,7 +18,7 @@ four parallel trees, each with a single responsibility:
 | **widget** | Immutable, throwaway configuration. Widgets describe *what* the UI should be; rebuilding one is cheap. |
 | **element** | The durable spine. Elements hold identity and state across rebuilds — your `setState` lives here, and it's what lets Fleury rebuild only the subtree that changed. |
 | **render** | Layout and paint over a **grid of cells**: constraints flow down, sizes come back up, and each render object paints graphemes-plus-style into a shared buffer. |
-| **semantics** | A machine-readable shadow of the UI — roles, state, and the actions each node supports — produced every frame for tests and agents. |
+| **semantics** | A machine-readable shadow of the UI — roles, state, geometry, and supported actions — retained for tests, accessibility, agents, and browser hosts. |
 
 A state change runs one **incremental** pipeline:
 
@@ -36,9 +36,11 @@ see [Influences](#influences).)
 ## A platform-neutral core, plus targets
 
 Everything above is **platform-neutral**: it never mentions a terminal, a socket,
-or the DOM. The core's only output is a `CellBuffer` — an abstract grid where
-each cell is a grapheme plus a style (fg/bg, bold, dim, inverse…). A **target**
-takes that buffer and paints it somewhere real.
+or the DOM. The core's primary visual output is a `CellBuffer` — an abstract
+grid where each cell is a grapheme plus a style (fg/bg, bold, dim, inverse…).
+The same mounted tree also produces semantics for hosts that need accessibility,
+agent control, or structured browser sessions. A **target** takes the visual
+buffer and semantic model it needs and presents them somewhere real.
 
 ```
         your app (widgets)
@@ -53,10 +55,10 @@ takes that buffer and paints it somewhere real.
                │  host SPI (the seam)
    ┌───────────┼───────────────────────────┐
    ▼           ▼                            ▼
- Terminal    Browser, embedded           Browser, served
- (ANSI)      (runTuiWebDom)              (fleury serve)
- dart:io     the app compiles to JS      the app runs on a server;
-             and runs in the page        the browser paints streamed frames
+ Terminal    Browser, embedded        Browser, served
+ (ANSI)      (mountApp)                (fleury serve)
+ dart:io     the app compiles to JS    the app runs on a server;
+             and runs in the page      the browser paints streamed frames
 ```
 
 The two browser targets are not the same thing. **Embedded** compiles your whole
@@ -71,17 +73,23 @@ is the only part that knows about ANSI bytes, DOM nodes, or sockets. A parity
 oracle asserts the terminal and the browser render the same tree, so the surfaces
 can't quietly diverge.
 
-## Go deeper
+## How this section is organized
 
-- **[Core and targets](core-and-targets.md)** — the core/target seam in detail:
-  the `dart:io`-free boundary, the host SPI, and exactly which code compiles
-  where.
-- **[Serving and embedding](serving-and-embedding.md)** — the two browser paths
-  above, and when to reach for each.
-- **[Built for agents](agents-and-semantics.md)** — the semantics tree, and how
-  agents and tests drive the UI by *meaning* instead of scraping ANSI.
-- **[Performance](performance.md)** — why that incremental pipeline stays cheap
-  as apps get busy, measured against peer frameworks.
+This page is the map. The rest of the architecture section splits the system by
+the question you are trying to answer:
+
+- **[Architecture deep dive](architecture-deep-dive.md)** — the retained trees
+  in detail: widget, element, render, cell buffer, semantics, frame damage,
+  presentation planning, tradeoffs, and pressure points.
+- **[Core and targets](core-and-targets.md)** — the package/import split: the
+  `dart:io`-free core, the host SPI, and exactly which code compiles where.
+- **[Serving and embedding](serving-and-embedding.md)** — the two browser paths:
+  embedded `mountApp` versus served `fleury serve`, and when to reach for each.
+- **[Built for agents](agents-and-semantics.md)** — the semantic app graph, and
+  how tests, accessibility, and agents drive the UI by meaning instead of
+  scraping ANSI.
+- **[Performance](performance.md)** — the performance contract and benchmark
+  surface that keep the incremental pipeline honest.
 
 ## Influences
 

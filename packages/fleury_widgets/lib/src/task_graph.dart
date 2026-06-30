@@ -18,13 +18,28 @@ final class TaskGraphNode {
     this.metadata = const <String, Object?>{},
   });
 
+  /// Stable task identity used by semantics and selection preservation.
   final String id;
+
+  /// Primary task label.
   final String title;
+
+  /// Optional longer task description.
   final String? description;
+
+  /// Current task lifecycle status.
   final TaskGraphStatus status;
+
+  /// Task ids that must complete before this task.
   final List<String> dependsOn;
+
+  /// Current progress value, when known.
   final num? progressCurrent;
+
+  /// Total progress value, when known.
   final num? progressTotal;
+
+  /// App-specific semantic state carried by the task.
   final Map<String, Object?> metadata;
 
   bool get busy => status == TaskGraphStatus.running;
@@ -79,8 +94,13 @@ final class TaskGraphCopyOptions {
     this.clipboardPolicy = ClipboardWritePolicy.standard,
   });
 
+  /// Whether copied node text includes [TaskGraphNode.description].
   final bool includeDescription;
+
+  /// Whether copied node text includes [TaskGraphNode.dependsOn].
   final bool includeDependencies;
+
+  /// Clipboard write behavior for copied node text.
   final ClipboardWritePolicy clipboardPolicy;
 }
 
@@ -136,13 +156,28 @@ class TaskGraph extends StatefulWidget {
     this.onCopy,
   });
 
+  /// Source task nodes to display and copy.
   final List<TaskGraphNode> nodes;
+
+  /// External selection and visible-range controller.
   final TaskGraphController? controller;
+
+  /// Focus node used for keyboard navigation.
   final FocusNode? focusNode;
+
+  /// Whether the graph should request focus when mounted.
   final bool autofocus;
+
+  /// Semantic and visual label for the task graph.
   final String label;
+
+  /// Whether Ctrl+C and semantic copy export the selected task.
   final bool copySelection;
+
+  /// Clipboard/export options for selected-task copy.
   final TaskGraphCopyOptions copyOptions;
+
+  /// Called after a copy attempt completes.
   final void Function(TaskGraphCopyResult result)? onCopy;
 
   @override

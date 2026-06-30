@@ -34,26 +34,36 @@ external set _fleuryMountKnobs(JSFunction value);
 
 void main() {
   _fleuryMountExamples = (() => _mountAll()).toJS;
-  _fleuryMountInto =
-      ((web.Element host, String id) => _mountInto(host, id)).toJS;
+  _fleuryMountInto = ((web.Element host, String id) => _mountInto(
+    host,
+    id,
+  )).toJS;
   _fleuryMountKnobs =
-      ((web.Element host, String id, String paramsJson) =>
-          _mountKnobs(host, id, paramsJson)).toJS;
+      ((web.Element host, String id, String paramsJson) => _mountKnobs(
+        host,
+        id,
+        paramsJson,
+      )).toJS;
   _mountAll();
 }
 
 JSObject _mountKnobs(web.Element host, String id, String paramsJson) {
   final params = KnobParams(_decodeParams(paramsJson));
-  TuiSurfaceHost? surface;
+  MountedApp? surface;
   var disposed = false;
-  unawaited(runTuiWebDom(() => knobRoot(id, params),
-      hostElement: host, flushScheduler: _docsFlush).then((h) {
-    if (disposed) {
-      h.dispose();
-    } else {
-      surface = h;
-    }
-  }));
+  unawaited(
+    mountApp(
+      () => knobRoot(id, params),
+      into: host,
+      flushScheduler: _docsFlush,
+    ).then((h) {
+      if (disposed) {
+        h.dispose();
+      } else {
+        surface = h;
+      }
+    }),
+  );
   final handle = JSObject();
   handle['update'] = ((String json) {
     params.value = _decodeParams(json);
@@ -69,7 +79,9 @@ JSObject _mountKnobs(web.Element host, String id, String paramsJson) {
 Map<String, Object?> _decodeParams(String json) {
   try {
     final decoded = jsonDecode(json);
-    return decoded is Map ? decoded.cast<String, Object?>() : <String, Object?>{};
+    return decoded is Map
+        ? decoded.cast<String, Object?>()
+        : <String, Object?>{};
   } catch (_) {
     return <String, Object?>{};
   }
@@ -77,21 +89,32 @@ Map<String, Object?> _decodeParams(String json) {
 
 JSObject _mountInto(web.Element host, String id) {
   final builder = examples[id];
-  TuiSurfaceHost? surface;
+  MountedApp? surface;
+  DocsExampleThemeController? followed;
   var disposed = false;
   if (builder != null) {
-    unawaited(runTuiWebDom(builder, hostElement: host, flushScheduler: _docsFlush)
-        .then((h) {
-      if (disposed) {
-        h.dispose();
-      } else {
-        surface = h;
-      }
-    }));
+    final themeController = DocsExampleThemeController(
+      _docsExampleStyleForHost(host),
+    );
+    followed = _followSiteTheme(host, themeController);
+    unawaited(
+      mountApp(
+        () => themedExampleRoot(builder, themeController),
+        into: host,
+        flushScheduler: _docsFlush,
+      ).then((h) {
+        if (disposed) {
+          h.dispose();
+        } else {
+          surface = h;
+        }
+      }),
+    );
   }
   final handle = JSObject();
   handle['dispose'] = (() {
     disposed = true;
+    _unfollowSiteTheme(followed);
     surface?.dispose();
     surface = null;
   }).toJS;
@@ -116,12 +139,82 @@ void mountExample(web.Element host) {
     host.textContent = 'Unknown Fleury example: $id';
     return;
   }
+  final themeController = DocsExampleThemeController(
+    _docsExampleStyleForHost(host),
+  );
+  _followSiteTheme(host, themeController);
   host.setAttribute('data-fleury-state', 'mounting');
   unawaited(
-    runTuiWebDom(builder, hostElement: host, flushScheduler: _docsFlush).then(
-      (_) => host.setAttribute('data-fleury-state', 'ready'),
-    ),
+    mountApp(
+      () => themedExampleRoot(builder, themeController),
+      into: host,
+      flushScheduler: _docsFlush,
+    ).then((_) => host.setAttribute('data-fleury-state', 'ready')),
   );
+}
+
+DocsExampleStyle _docsExampleStyleForHost(web.Element host) {
+  switch (host.getAttribute('data-fleury-theme')) {
+    case 'light':
+      return DocsExampleStyle.light;
+    case 'site':
+      return _siteDocsExampleStyle();
+    case 'dark':
+    default:
+      return DocsExampleStyle.dark;
+  }
+}
+
+DocsExampleStyle _siteDocsExampleStyle() =>
+    web.document.documentElement?.getAttribute('data-theme') == 'light'
+    ? DocsExampleStyle.light
+    : DocsExampleStyle.dark;
+
+// Embeds that follow the site (Starlight) light/dark theme. A single shared
+// MutationObserver fans `data-theme` changes out to all of them, rather than
+// spinning up one observer per embed. Each entry carries its host so we can drop
+// embeds whose host has detached (e.g. an Astro client-side navigation replaced
+// the page) — the `mountExample` path has no dispose hook to unregister itself.
+final List<(web.Element, DocsExampleThemeController)> _siteThemeEmbeds =
+    <(web.Element, DocsExampleThemeController)>[];
+web.MutationObserver? _siteThemeObserver;
+
+/// Registers [controller] to follow the site theme when [host] opted in with
+/// `data-fleury-theme="site"`. Returns the controller when registered, so a
+/// caller with a dispose path can later [_unfollowSiteTheme] it.
+DocsExampleThemeController? _followSiteTheme(
+  web.Element host,
+  DocsExampleThemeController controller,
+) {
+  if (host.getAttribute('data-fleury-theme') != 'site') return null;
+  final root = web.document.documentElement;
+  if (root == null) return null;
+  _siteThemeEmbeds.add((host, controller));
+  _siteThemeObserver ??= web.MutationObserver(
+    ((JSArray<web.MutationRecord> _, web.MutationObserver __) {
+      _siteThemeEmbeds.removeWhere((e) => !e.$1.isConnected);
+      final style = _siteDocsExampleStyle();
+      for (final (_, c) in _siteThemeEmbeds) {
+        c.style = style;
+      }
+    }).toJS,
+  )..observe(
+      root,
+      web.MutationObserverInit(
+        attributes: true,
+        attributeFilter: <JSString>['data-theme'.toJS].toJS,
+      ),
+    );
+  return controller;
+}
+
+void _unfollowSiteTheme(DocsExampleThemeController? controller) {
+  if (controller == null) return;
+  _siteThemeEmbeds.removeWhere((e) => identical(e.$2, controller));
+  if (_siteThemeEmbeds.isEmpty) {
+    _siteThemeObserver?.disconnect();
+    _siteThemeObserver = null;
+  }
 }
 
 /// Flush scheduler for the docs examples: prefer `requestAnimationFrame`
@@ -140,9 +233,11 @@ void _docsFlush(Duration delay, void Function() flush) {
     }
 
     try {
-      web.window.requestAnimationFrame(((JSNumber _) {
-        run();
-      }).toJS);
+      web.window.requestAnimationFrame(
+        ((JSNumber _) {
+          run();
+        }).toJS,
+      );
     } catch (_) {
       // Partial window API — the Timer fallback still flushes.
     }

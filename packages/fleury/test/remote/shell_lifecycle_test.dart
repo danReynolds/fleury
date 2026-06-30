@@ -54,7 +54,7 @@ void main() {
           colorMode: ColorMode.truecolor,
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
-            protocolVersion: 1,
+          protocolVersion: 1,
         ),
       );
       await entering;
@@ -66,7 +66,7 @@ void main() {
       expect(driver.isActive, isFalse);
     });
 
-    test('real runTui app exits when the shell peer sends BYE', () async {
+    test('real runApp app exits when the shell peer sends BYE', () async {
       final pkgRoot = Directory.current.path;
       final socketPath = '${tempDir.path}/.fleury/shell.sock';
       final accepted = server.first;
@@ -109,7 +109,7 @@ void main() {
           colorMode: ColorMode.truecolor,
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
-            protocolVersion: 1,
+          protocolVersion: 1,
         ),
       );
 

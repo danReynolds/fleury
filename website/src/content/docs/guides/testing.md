@@ -39,10 +39,14 @@ Send key events and re-render to test interactions:
 
 ```dart
 testWidgets('enter submits', (tester) {
-  tester.pumpWidget(TextInput(controller: controller, onSubmit: onSubmit));
-  tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+  var submitted = false;
+  final controller = TextEditingController(text: 'ship it');
+  tester.pumpWidget(TextInput(
+    controller: controller,
+    onSubmit: (text) => submitted = true,
+  ));
   tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
-  expect(tester.renderToString(size: const CellSize(40, 5)), contains('…'));
+  expect(submitted, isTrue);
 });
 ```
 

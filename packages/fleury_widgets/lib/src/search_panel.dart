@@ -197,12 +197,25 @@ class SearchPanel extends StatefulWidget {
   }) : assert(width > 0),
        assert(maxVisible > 0);
 
+  /// Source results to search, display, activate, and copy.
   final List<SearchResult> results;
+
+  /// External controller for the query input.
   final TextEditingController? queryController;
+
+  /// External controller for result-list selection.
   final ListController? controller;
+
+  /// Optional app-owned matcher used instead of the default ranked search.
   final SearchResultMatcher? matcher;
+
+  /// Semantic and visual label for the search surface.
   final String label;
+
+  /// Placeholder shown in the query input.
   final String placeholder;
+
+  /// Width, in terminal cells, reserved for the query and result rows.
   final int width;
 
   /// Cap on the number of result rows when [fillHeight] is false. When
@@ -221,12 +234,26 @@ class SearchPanel extends StatefulWidget {
   /// category. Searching re-ranks results, so headers are hidden while a query
   /// is active.
   final bool groupByCategory;
+
+  /// Focus node used by the query input.
   final FocusNode? queryFocusNode;
+
+  /// Focus node used by the result list.
   final FocusNode? resultsFocusNode;
+
+  /// Whether the query input should request focus when mounted.
   final bool autofocus;
+
+  /// Whether Ctrl+C and semantic copy export the selected result.
   final bool copySelection;
+
+  /// Clipboard/export options for the selected result.
   final SearchPanelCopyOptions copyOptions;
+
+  /// Called when a result is activated.
   final void Function(SearchResult result, int resultIndex)? onActivate;
+
+  /// Called after a copy attempt completes.
   final void Function(SearchPanelCopyResult result)? onCopy;
 
   @override
@@ -543,10 +570,7 @@ class _SearchPanelState extends State<SearchPanel> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _CategoryHeader(
-                    label: category,
-                    topGap: viewIndex != 0,
-                  ),
+                  _CategoryHeader(label: category, topGap: viewIndex != 0),
                   row,
                 ],
               );

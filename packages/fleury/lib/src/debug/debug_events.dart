@@ -220,7 +220,7 @@ final class TerminalDebugEvent extends DebugEvent {
 }
 
 /// Global broadcast bus. Always alive (no setup), so framework code
-/// can emit unconditionally — `runTui` wires this through to the
+/// can emit unconditionally — `runApp` wires this through to the
 /// debug panel; tests or external observers can also subscribe.
 ///
 /// When no one is listening, broadcast streams drop events on the
@@ -244,7 +244,7 @@ final class DebugEvents {
   /// nothing.
   static bool get hasListeners => _controller.hasListener;
 
-  /// Emit a frame-timing record. Called from `runTui.renderFrame`.
+  /// Emit a frame-timing record. Called from `runApp.renderFrame`.
   /// Callers should gate the *capture* on [hasListeners] (skipping
   /// Stopwatch + record allocation) — this method's own no-listener
   /// short-circuit only avoids the broadcast cost.

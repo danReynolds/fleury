@@ -11,7 +11,7 @@ import 'run_tui_surface.dart';
 import 'semantics/semantic_flush_scheduler.dart';
 import 'semantics/semantic_dom_presenter.dart';
 
-/// Runs a Fleury app through the retained DOM web host.
+/// Mounts a Fleury app into a browser DOM element.
 ///
 /// This is the assembled DOM-host path: retained row DOM for presentation,
 /// browser cell metrics for resize, DOM input events for keyboard/pointer/paste,
@@ -27,9 +27,9 @@ import 'semantics/semantic_dom_presenter.dart';
 /// This is the public browser entry point for Fleury-owned apps. The
 /// serve/remote paths reuse the same core runtime contracts behind their own
 /// hosts.
-Future<TuiSurfaceHost> runTuiWebDom(
+Future<MountedApp> mountApp(
   Widget Function() rootFactory, {
-  web.Element? hostElement,
+  required web.Element into,
   web.Element? surfaceElement,
   web.Element? semanticElement,
   bool semanticsEnabled = true,
@@ -44,7 +44,7 @@ Future<TuiSurfaceHost> runTuiWebDom(
   if (!semanticsEnabled) {
     if (!allowInaccessibleDiagnostics) {
       throw StateError(
-        'runTuiWebDom disables accessibility when semanticsEnabled is false. '
+        'mountApp disables accessibility when semanticsEnabled is false. '
         'Keep semantics enabled for product use, or pass '
         'allowInaccessibleDiagnostics: true for focused local diagnostics.',
       );
@@ -58,7 +58,7 @@ Future<TuiSurfaceHost> runTuiWebDom(
     }
   }
 
-  final host = hostElement ?? _defaultHostElement();
+  final host = into;
   final surfaceRoot = surfaceElement ?? web.document.createElement('div');
   final removeSurfaceRoot = surfaceElement == null;
   if (surfaceRoot.parentNode == null) host.appendChild(surfaceRoot);
@@ -109,14 +109,4 @@ Future<TuiSurfaceHost> runTuiWebDom(
     removeGeneratedRoots();
     rethrow;
   }
-}
-
-web.Element _defaultHostElement() {
-  final existing = web.document.querySelector('#fleury-app');
-  if (existing != null) return existing;
-  final body = web.document.body;
-  if (body != null) return body;
-  throw StateError(
-    'runTuiWebDom requires a hostElement when document.body is null.',
-  );
 }

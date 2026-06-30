@@ -1,5 +1,5 @@
 // End-to-end smoke test for example/selection_demo.dart driven
-// through runTui. Proves the demo (and the SelectionArea stack
+// through runApp. Proves the demo (and the SelectionArea stack
 // behind it) actually boots, paints, and processes mouse +
 // keyboard events in a realistic event-loop context — the unit
 // tests use a synchronous tester that bypasses most of the
@@ -14,10 +14,10 @@ Future<void> _settle() =>
     Future<void>.delayed(const Duration(milliseconds: 30));
 
 void main() {
-  group('selection_demo (e2e through runTui)', () {
+  group('selection_demo (e2e through runApp)', () {
     test('boots, renders a frame, and exits cleanly on Ctrl+C', () async {
       final driver = FakeTerminalDriver(size: const CellSize(60, 12));
-      final future = runTui(
+      final future = runApp(
         const SelectionDemo(),
         driver: driver,
         enableHotReload: false,
@@ -45,7 +45,7 @@ void main() {
       'a mouse drag through the demo highlights cells and reports text',
       () async {
         final driver = FakeTerminalDriver(size: const CellSize(80, 14));
-        final future = runTui(
+        final future = runApp(
           const SelectionDemo(),
           driver: driver,
           enableHotReload: false,

@@ -3,7 +3,7 @@ import 'debug_events.dart';
 /// Debug-only collector for frame invalidation causes.
 ///
 /// The hot path checks [DebugEvents.hasListeners] before allocating labels, so
-/// production runs with no debug subscriber pay only a branch. `runTui` drains
+/// production runs with no debug subscriber pay only a branch. `runApp` drains
 /// the pending sources once per emitted [FrameEvent].
 final class DebugInvalidations {
   DebugInvalidations._();

@@ -33,8 +33,13 @@ final class MessageEntry {
   /// Optional display author/source.
   final String? author;
 
+  /// Optional message timestamp.
   final DateTime? timestamp;
+
+  /// Message body text.
   final String text;
+
+  /// App-specific semantic state carried by the message.
   final Map<String, Object?> metadata;
 }
 
@@ -49,9 +54,16 @@ final class MessageListExportOptions {
        assert(maxMessages == null || maxMessages >= 0),
        assert(maxLineLength == null || maxLineLength >= 0);
 
+  /// Whether exported rows include role/status/author prefixes.
   final bool includePrefix;
+
+  /// First message index to export.
   final int startIndex;
+
+  /// Maximum number of messages to export.
   final int? maxMessages;
+
+  /// Maximum copied/displayed message length per row.
   final int? maxLineLength;
 }
 
@@ -77,7 +89,10 @@ final class MessageListCopyOptions {
     this.clipboardPolicy = ClipboardWritePolicy.standard,
   });
 
+  /// Whether copied rows include role/status/author prefixes.
   final bool includePrefix;
+
+  /// Clipboard write behavior for copied message text.
   final ClipboardWritePolicy clipboardPolicy;
 }
 
@@ -208,11 +223,22 @@ class MessageList extends StatefulWidget {
     this.onCopy,
   }) : assert(maxLineLength == null || maxLineLength >= 0);
 
+  /// Source messages to render and copy.
   final List<MessageEntry> messages;
+
+  /// External selection and tail-follow controller.
   final MessageListController? controller;
+
+  /// Focus node used for keyboard navigation.
   final FocusNode? focusNode;
+
+  /// Whether the list should request focus when mounted.
   final bool autofocus;
+
+  /// Semantic and visual label for the message list.
   final String label;
+
+  /// Whether rows render role/status/author prefixes.
   final bool showPrefix;
 
   /// Prefix each row with the message's [MessageEntry.timestamp] as a
@@ -221,9 +247,17 @@ class MessageList extends StatefulWidget {
   /// without a timestamp are left unprefixed (no spacer), so a mixed list
   /// stays aligned only where times exist.
   final bool showTimestamp;
+
+  /// Maximum displayed message length per row.
   final int? maxLineLength;
+
+  /// Whether Ctrl+C and semantic copy export the selected message.
   final bool copySelection;
+
+  /// Clipboard/export options for selected-message copy.
   final MessageListCopyOptions copyOptions;
+
+  /// Called after a copy attempt completes.
   final void Function(MessageListCopyResult result)? onCopy;
 
   @override

@@ -1,4 +1,4 @@
-// runTui: the application entry point that ties everything together.
+// runApp: the application entry point that ties everything together.
 //
 // Mounts a root widget, owns a terminal driver, runs a frame loop
 // (event -> setState -> flushBuild -> renderFrame -> ANSI diff -> stdout),
@@ -50,7 +50,7 @@ import 'remote_surface_sink.dart';
 import 'tui_frame_loop.dart';
 import 'tui_runtime.dart';
 
-/// A signal returned by an event handler in [runTui] to ask the loop to
+/// A signal returned by an event handler in [runApp] to ask the loop to
 /// exit cleanly.
 class ExitRequested {
   const ExitRequested();
@@ -104,15 +104,13 @@ typedef TuiEventHandler = ExitRequested? Function(TuiEvent event);
 /// cursor-control sequences into the stream. Pass
 /// [requireInteractiveTerminal] = false to run anyway (screen control and
 /// raw input are skipped where there's no terminal).
-Future<void> runTui(
+Future<void> runApp(
   Widget root, {
   TerminalDriver? driver,
   TerminalMode mode = TerminalMode.interactive,
   bool enableHotReload = true,
   bool requireInteractiveTerminal = true,
   void Function(LogLine line)? onStrayOutput,
-  bool debugConsole = false,
-  KeyChord debugConsoleKey = const KeyChord.key(KeyCode.f12),
   TuiEventHandler? onEvent,
   List<KeyBinding> globalBindings = const [],
   Duration sequenceTimeout = const Duration(milliseconds: 500),
@@ -120,7 +118,7 @@ Future<void> runTui(
   Duration frameInterval = Duration.zero,
 }) async {
   final runtimeMarkers = _RuntimeMarkerRecorder.fromEnvironment();
-  runtimeMarkers?.mark('runTui.entry');
+  runtimeMarkers?.mark('runApp.entry');
   final usedDriver = driver ?? await _resolveDefaultDriver();
   // Long-lived shell-state holder. Survives setState / rebuilds; the
   // root is rebuilt whenever the viewport resizes, so a per-build
@@ -143,7 +141,7 @@ Future<void> runTui(
   if (requireInteractiveTerminal && !usedDriver.isInteractive) {
     throw FleuryError(
       summary:
-          'runTui needs an interactive terminal, but standard output '
+          'runApp needs an interactive terminal, but standard output '
           'is not a TTY.',
       details:
           'Standard output looks piped or redirected — `app > out.txt`, '
@@ -166,14 +164,11 @@ Future<void> runTui(
   // Install the build-error boundary: a thrown build() renders an error
   // panel for that subtree instead of crashing the app.
   Element.errorBuilder ??= (error, stack) => ErrorWidget.builder(error, stack);
-  // Floating LogConsole is migrating into the unified DebugShell —
-  // F12 is now a binding on DebugShell that opens the docked panel
-  // with the Logs tab focused (rather than a separate Overlay entry).
-  // The deprecated `debugConsole` / `debugConsoleKey` parameters are
-  // kept for backward compatibility but are no-ops; new code should
-  // rely on the always-available `debug` config.
+  // Floating LogConsole lives in the unified DebugShell — F12 is a binding on
+  // DebugShell that opens the docked panel with the Logs tab focused (rather
+  // than a separate Overlay entry), backed by the always-available `debug`
+  // config.
   final overlayKey = GlobalKey<OverlayState>();
-  bool maybeToggleDebugConsole(KeyEvent event) => false;
 
   final dispatcher = InputDispatcher(
     focusManager: focusManager,
@@ -518,7 +513,7 @@ Future<void> runTui(
     if (byteTelemetry != null) {
       stderr.write(_formatByteTelemetry(byteTelemetry));
     }
-    runtimeMarkers?.mark('runTui.cleanup.complete');
+    runtimeMarkers?.mark('runApp.cleanup.complete');
     runtimeMarkers?.write();
   }
 
@@ -667,10 +662,6 @@ Future<void> runTui(
                 if (event is KeyEvent &&
                     tryConsumeDebugKey(debugController, event)) {
                   scheduleFrame('debug-key');
-                  return;
-                }
-                if (event is KeyEvent && maybeToggleDebugConsole(event)) {
-                  scheduleFrame('debug-console');
                   return;
                 }
 

@@ -160,15 +160,34 @@ class FileBrowser extends StatefulWidget {
     this.onCopy,
   }) : assert(maxVisible > 0);
 
+  /// Directory opened when the browser mounts.
   final String initialDirectory;
+
+  /// External selection and visible-range controller.
   final FileBrowserController? controller;
+
+  /// Focus node used for keyboard navigation.
   final FocusNode? focusNode;
+
+  /// Whether the browser should request focus when mounted.
   final bool autofocus;
+
+  /// Semantic and visual label for the browser.
   final String label;
+
+  /// Maximum visible rows before the list scrolls.
   final int maxVisible;
+
+  /// Text and hidden-file filter applied to loaded entries.
   final FileBrowserFilterDescriptor filter;
+
+  /// Optional filesystem-entity predicate applied before rows are built.
   final FileBrowserEntityFilter? entityFilter;
+
+  /// Whether Ctrl+C and semantic copy export the selected entry.
   final bool copySelection;
+
+  /// Clipboard/export options for the selected entry.
   final FileBrowserCopyOptions copyOptions;
 
   /// Called when Enter activates a non-directory entry.
@@ -177,6 +196,7 @@ class FileBrowser extends StatefulWidget {
   /// Called after the browser changes directories.
   final void Function(String directory)? onDirectoryChanged;
 
+  /// Called after a copy attempt completes.
   final void Function(FileBrowserCopyResult result)? onCopy;
 
   @override

@@ -85,7 +85,12 @@ function usageSection(slug, widget, snippet) {
       .join('\n');
     return `## Usage\n\n<Tabs>\n${items}\n</Tabs>\n\n`;
   }
-  if (snippet) {
+  // Interactive examples built from a private `_FooExample()` wrapper extract to
+  // that wrapper call, which is a meaningless, leaky snippet (the wrapper is a
+  // registry implementation detail, not how you use the widget). Suppress the
+  // Usage block in that case — the page still has the live example + properties.
+  // Add an explicit `code:` to the registry entry to show real usage instead.
+  if (snippet && !/^const\s+_\w+\(\)$/.test(snippet.trim())) {
     return `## Usage\n\n\`\`\`dart title=${yaml(widget + '.dart')}\n${snippet}\n\`\`\`\n\n`;
   }
   return '';
@@ -238,15 +243,22 @@ for (const e of widgets) {
 // processes, image decoding) or are invoked imperatively. They still get a full
 // reference page (description, properties, source), just no live demo.
 const DOC_ONLY = [
-  { slug: 'filebrowser', widget: 'FileBrowser', category: 'Inputs & controls', reason: 'native' },
-  { slug: 'filepicker', widget: 'FilePicker', category: 'Inputs & controls', reason: 'native' },
-  { slug: 'form', widget: 'FormPanel', category: 'Inputs & controls', reason: 'native' },
+  { slug: 'filebrowser', widget: 'FileBrowser', category: 'Inputs & controls', reason: 'native',
+    code: "FileBrowser(\n  initialDirectory: Directory.current.path,\n  onActivate: (entry) => openFile(entry.path),\n)" },
+  { slug: 'filepicker', widget: 'FilePicker', category: 'Inputs & controls', reason: 'native',
+    code: "FilePicker(\n  initialDirectory: Directory.current.path,\n  filter: (entity) => entity is Directory || entity.path.endsWith('.dart'),\n  onSelected: (file) => openFile(file.path),\n)" },
+  { slug: 'form', widget: 'FormPanel', category: 'Inputs & controls', reason: 'native',
+    code: "FormPanel(\n  definition: FormDefinition(\n    title: 'Project settings',\n    fields: const [\n      FormFieldSpec.text(id: 'name', label: 'Name', required: true),\n      FormFieldSpec.checkbox(id: 'private', label: 'Private'),\n    ],\n  ),\n  onSubmit: (result) => saveSettings(result.values),\n)" },
   { slug: 'image', widget: 'Image', category: 'Data & lists', reason: 'native',
     code: "Image.file('assets/logo.png', fit: ImageFit.contain)" },
-  { slug: 'logregion', widget: 'LogRegion', category: 'Agent surfaces', reason: 'native' },
-  { slug: 'processpanel', widget: 'ProcessPanel', category: 'Agent surfaces', reason: 'native' },
-  { slug: 'terminaloutputregion', widget: 'TerminalOutputRegion', category: 'Agent surfaces', reason: 'native' },
-  { slug: 'workflowsnapshot', widget: 'WorkflowSnapshot', category: 'Agent surfaces', reason: 'native' },
+  { slug: 'logregion', widget: 'LogRegion', category: 'Agent surfaces', reason: 'native',
+    code: "LogRegion(\n  entries: const [\n    LogEntry(message: 'Starting build', source: 'build'),\n    LogEntry(message: 'Tests failed', severity: LogSeverity.error),\n  ],\n  filter: const LogRegionFilterDescriptor(query: 'build'),\n)" },
+  { slug: 'processpanel', widget: 'ProcessPanel', category: 'Agent surfaces', reason: 'native',
+    code: "final controller = ProcessTaskController(id: 'doctor', label: 'Doctor');\n\nProcessPanel(\n  controller: controller,\n  command: const ProcessTaskCommand('dart', ['--version']),\n)" },
+  { slug: 'terminaloutputregion', widget: 'TerminalOutputRegion', category: 'Agent surfaces', reason: 'native',
+    code: "TerminalOutputRegion(\n  buffer: LogBuffer(),\n  label: 'Build output',\n  filter: const LogRegionFilterDescriptor(severities: {LogSeverity.error}),\n)" },
+  { slug: 'workflowsnapshot', widget: 'WorkflowSnapshot', category: 'Agent surfaces', reason: 'native',
+    code: "final snapshot = WorkflowSnapshot(\n  title: 'Release check',\n  tasks: const [\n    TaskGraphNode(id: 'tests', label: 'Tests', status: TaskGraphStatus.running),\n  ],\n);\n\nfinal health = snapshot.summary.health;" },
   { slug: 'toaster', widget: 'Toaster', category: 'Navigation & overlays', reason: 'imperative',
     code: "// Wrap your app once:\nToaster(child: app)\n\n// …then from anywhere below it:\nToaster.show(context, 'Saved', severity: ToastSeverity.success);" },
 ];
@@ -278,30 +290,44 @@ const CORE = [
   { slug: 'text', widget: 'Text', code: "Text('hello', style: CellStyle(bold: true))" },
   { slug: 'richtext', widget: 'RichText',
     code: "RichText(text: TextSpan(children: [\n  TextSpan(text: 'deploy '),\n  TextSpan(text: 'ok', style: CellStyle(bold: true)),\n]))" },
-  { slug: 'textspan', widget: 'TextSpan' },
+  { slug: 'textspan', widget: 'TextSpan',
+    code: "TextSpan(\n  text: 'deploy ',\n  children: [TextSpan(text: 'ok', style: CellStyle(bold: true))],\n)" },
   { slug: 'listview', widget: 'ListView',
     code: "ListView.builder(\n  itemCount: rows.length,\n  itemBuilder: (context, i, selected) => Text(rows[i].label),\n)" },
   { slug: 'scrollview', widget: 'ScrollView',
     code: "ScrollView(child: Column(children: [/* tall content */]))" },
   { slug: 'futurebuilder', widget: 'FutureBuilder',
     code: "FutureBuilder<List<Item>>(\n  future: load(),\n  builder: (context, snapshot) => snapshot.hasData\n      ? ItemList(snapshot.data!)\n      : const Text('Loading…'),\n)" },
-  { slug: 'streambuilder', widget: 'StreamBuilder' },
+  { slug: 'streambuilder', widget: 'StreamBuilder',
+    code: "StreamBuilder<int>(\n  stream: ticks,\n  initialData: 0,\n  builder: (context, snapshot) => Text('tick ${snapshot.data ?? 0}'),\n)" },
   { slug: 'gesturedetector', widget: 'GestureDetector',
     code: "GestureDetector(\n  onTap: _select,\n  onTapDown: (col, row) => _placeAt(col, row),\n  child: child,\n)" },
-  { slug: 'mouseregion', widget: 'MouseRegion' },
+  { slug: 'mouseregion', widget: 'MouseRegion',
+    code: "MouseRegion(\n  onEnter: () => setHover(true),\n  onExit: () => setHover(false),\n  child: Text('hover me'),\n)" },
   { slug: 'layoutbuilder', widget: 'LayoutBuilder',
     code: "LayoutBuilder(\n  builder: (context, constraints) =>\n      (constraints.maxCols ?? 0) > 60 ? Wide() : Narrow(),\n)" },
-  { slug: 'listenablebuilder', widget: 'ListenableBuilder' },
-  { slug: 'container', widget: 'Container' },
-  { slug: 'sizedbox', widget: 'SizedBox' },
-  { slug: 'padding', widget: 'Padding' },
-  { slug: 'align', widget: 'Align' },
-  { slug: 'positioned', widget: 'Positioned' },
-  { slug: 'wrap', widget: 'Wrap' },
-  { slug: 'flexible', widget: 'Flexible' },
-  { slug: 'spacer', widget: 'Spacer' },
-  { slug: 'constrainedbox', widget: 'ConstrainedBox' },
-  { slug: 'aspectratio', widget: 'AspectRatio' },
+  { slug: 'listenablebuilder', widget: 'ListenableBuilder',
+    code: "ListenableBuilder(\n  listenable: model,\n  builder: (context, child) => Text(model.statusLabel),\n)" },
+  { slug: 'container', widget: 'Container',
+    code: "Container(\n  width: 32,\n  padding: const EdgeInsets.symmetric(horizontal: 1),\n  border: BoxBorder(style: BorderStyle.rounded),\n  child: Text('Settings'),\n)" },
+  { slug: 'sizedbox', widget: 'SizedBox',
+    code: "SizedBox(\n  width: 20,\n  height: 3,\n  child: Text('fixed area'),\n)" },
+  { slug: 'padding', widget: 'Padding',
+    code: "Padding(\n  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),\n  child: Text('inset'),\n)" },
+  { slug: 'align', widget: 'Align',
+    code: "Align(\n  alignment: Alignment.centerRight,\n  child: Text('status'),\n)" },
+  { slug: 'positioned', widget: 'Positioned',
+    code: "Stack(children: [\n  Text('base'),\n  Positioned(left: 4, top: 1, child: Text('overlay')),\n])" },
+  { slug: 'wrap', widget: 'Wrap',
+    code: "Wrap(\n  spacing: 1,\n  runSpacing: 1,\n  children: tags.map((tag) => Text('#$tag')).toList(),\n)" },
+  { slug: 'flexible', widget: 'Flexible',
+    code: "Row(children: [\n  Flexible(child: Text(longLabel)),\n  Text('ready'),\n])" },
+  { slug: 'spacer', widget: 'Spacer',
+    code: "Row(children: [\n  Text('left'),\n  const Spacer(),\n  Text('right'),\n])" },
+  { slug: 'constrainedbox', widget: 'ConstrainedBox',
+    code: "ConstrainedBox(\n  minWidth: 24,\n  maxWidth: 48,\n  child: Text('bounded content'),\n)" },
+  { slug: 'aspectratio', widget: 'AspectRatio',
+    code: "AspectRatio(\n  aspectRatio: 2.0,\n  child: Heatmap(values: values),\n)" },
 ].map((d) => ({ ...d, category: 'Core widgets', reason: 'core' }));
 
 const DOC_PAGES = [...DOC_ONLY, ...CORE];
@@ -338,10 +364,11 @@ for (const d of DOC_PAGES) {
   byCategory.get(d.category).push({ widget: d.widget, id: d.slug, blurb });
 }
 let widgetIndex =
-  `---\ntitle: Overview\ndescription: The Fleury widget library — every page has a live, client-side example.\n---\n\n` +
+  `---\ntitle: Overview\ndescription: The Fleury widget library — live examples where they can run in the browser, source-backed references everywhere else.\n---\n\n` +
   `Fleury ships a broad widget library: charts and meters, data and lists, ` +
-  `document viewers, and agent surfaces. Each widget below has its own page ` +
-  `with a **live example that runs in your browser** (compiled with dart2js).\n\n`;
+  `document viewers, and agent surfaces. Browser-safe widgets have **live, ` +
+  `client-side examples** compiled with dart2js; native and imperative widgets ` +
+  `still get source-backed reference pages.\n\n`;
 for (const [category, items] of byCategory) {
   widgetIndex += `## ${category}\n\n`;
   for (const e of items)

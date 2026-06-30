@@ -108,10 +108,10 @@ class _ShrinkTextAppState extends State<_ShrinkTextApp> {
 Future<void> _settle() => Future<void>.delayed(const Duration(milliseconds: 5));
 
 void main() {
-  group('runTui terminal restoration', () {
+  group('runApp terminal restoration', () {
     test('a normal Ctrl+C exit restores the terminal', () async {
       final driver = FakeTerminalDriver();
-      final future = runTui(
+      final future = runApp(
         const Text('hi'),
         driver: driver,
         enableHotReload: false,
@@ -137,7 +137,7 @@ void main() {
           ..textSelection = const TextSelection(baseOffset: 0, extentOffset: 4);
         final driver = FakeTerminalDriver();
         try {
-          final future = runTui(
+          final future = runApp(
             TextInput(controller: controller, autofocus: true),
             driver: driver,
             enableHotReload: false,
@@ -173,7 +173,7 @@ void main() {
       () async {
         final driver = FakeTerminalDriver();
         var sessionFailed = false;
-        final future = runTui(
+        final future = runApp(
           const Text('hi'),
           driver: driver,
           enableHotReload: false,
@@ -214,7 +214,7 @@ void main() {
     test('an error during a scheduled frame restores the terminal and '
         'surfaces the error', () async {
       final driver = FakeTerminalDriver();
-      final future = runTui(
+      final future = runApp(
         const _BoomWidget(),
         driver: driver,
         enableHotReload: false,
@@ -232,7 +232,7 @@ void main() {
 
     test('the terminal is restored exactly once', () async {
       final driver = FakeTerminalDriver();
-      final future = runTui(
+      final future = runApp(
         const _BoomWidget(),
         driver: driver,
         enableHotReload: false,
@@ -246,11 +246,11 @@ void main() {
     });
   });
 
-  group('runTui non-interactive terminals', () {
+  group('runApp non-interactive terminals', () {
     test('refuses to run when output is not a terminal', () async {
       final driver = FakeTerminalDriver(isInteractive: false);
       await expectLater(
-        runTui(const Text('x'), driver: driver, enableHotReload: false),
+        runApp(const Text('x'), driver: driver, enableHotReload: false),
         throwsA(isA<Error>()),
       );
       expect(
@@ -263,7 +263,7 @@ void main() {
 
     test('runs without a terminal when explicitly allowed', () async {
       final driver = FakeTerminalDriver(isInteractive: false);
-      final future = runTui(
+      final future = runApp(
         const Text('x'),
         driver: driver,
         enableHotReload: false,
@@ -279,11 +279,11 @@ void main() {
     });
   });
 
-  group('runTui stray-output capture', () {
+  group('runApp stray-output capture', () {
     test('a stray print is captured and replayed once the terminal is '
         'restored', () async {
       final driver = FakeTerminalDriver();
-      final future = runTui(
+      final future = runApp(
         const Text('ui'),
         driver: driver,
         enableHotReload: false,
@@ -307,7 +307,7 @@ void main() {
       () async {
         final driver = FakeTerminalDriver();
         final captured = <LogLine>[];
-        final future = runTui(
+        final future = runApp(
           const Text('ui'),
           driver: driver,
           enableHotReload: false,
@@ -334,7 +334,7 @@ void main() {
     test('direct stderr writes are captured and tagged as stderr', () async {
       final driver = FakeTerminalDriver();
       final captured = <LogLine>[];
-      final future = runTui(
+      final future = runApp(
         const Text('ui'),
         driver: driver,
         enableHotReload: false,
@@ -355,7 +355,7 @@ void main() {
 
     test('F12 opens debug-shell Logs tab showing captured output', () async {
       final driver = FakeTerminalDriver(size: const CellSize(30, 12));
-      final future = runTui(
+      final future = runApp(
         const Text('app'),
         driver: driver,
         enableHotReload: false,
@@ -393,7 +393,7 @@ void main() {
         });
         final driver = FakeTerminalDriver(size: const CellSize(20, 4));
         try {
-          final future = runTui(
+          final future = runApp(
             const Text('dirty'),
             driver: driver,
             enableHotReload: false,
@@ -430,7 +430,7 @@ void main() {
       final driver = FakeTerminalDriver(size: const CellSize(20, 4));
       final counterKey = GlobalKey<_CounterAppState>();
       try {
-        final future = runTui(
+        final future = runApp(
           Column(
             children: [
               const RepaintBoundary(child: Text('cached')),
@@ -482,7 +482,7 @@ void main() {
       final key = GlobalKey<_ShrinkTextAppState>();
       final driver = FakeTerminalDriver(size: const CellSize(12, 2));
       try {
-        final future = runTui(
+        final future = runApp(
           _ShrinkTextApp(key: key),
           driver: driver,
           enableHotReload: false,
@@ -522,7 +522,7 @@ void main() {
       });
       final driver = FakeTerminalDriver(size: const CellSize(24, 4));
       try {
-        final future = runTui(
+        final future = runApp(
           _CounterApp(key: key),
           driver: driver,
           enableHotReload: false,
@@ -563,7 +563,7 @@ void main() {
         final recorder = DebugCaptureRecorder()..attach();
         final driver = FakeTerminalDriver(size: const CellSize(20, 4));
         try {
-          final future = runTui(
+          final future = runApp(
             const Text('capture'),
             driver: driver,
             enableHotReload: false,
@@ -617,10 +617,10 @@ void main() {
       // The Navigator's active route sets `suppressGlobals: true`,
       // which previously would have prevented a tree-level KeyBindings
       // from firing. The debug-shell hotkeys are escape-hatches routed
-      // through runTui BEFORE the dispatcher, so they bypass the modal
+      // through runApp BEFORE the dispatcher, so they bypass the modal
       // scope — this test locks that contract.
       final driver = FakeTerminalDriver(size: const CellSize(30, 12));
-      final future = runTui(
+      final future = runApp(
         const _ModalApp(),
         driver: driver,
         enableHotReload: false,
@@ -650,7 +650,7 @@ void main() {
     test('partial writes are assembled into whole lines', () async {
       final driver = FakeTerminalDriver();
       final captured = <LogLine>[];
-      final future = runTui(
+      final future = runApp(
         const Text('ui'),
         driver: driver,
         enableHotReload: false,

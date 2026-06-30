@@ -354,15 +354,34 @@ class JsonView extends StatefulWidget {
     );
   }
 
+  /// Parsed or already-materialized JSON document to render.
   final JsonViewDocument document;
+
+  /// External expansion, selection, and visible-range controller.
   final JsonViewController? controller;
+
+  /// Focus node used for keyboard navigation.
   final FocusNode? focusNode;
+
+  /// Whether the viewer should request focus when mounted.
   final bool autofocus;
+
+  /// Semantic and visual label for the JSON viewer.
   final String label;
+
+  /// Depth expanded by default before user-controlled collapse state applies.
   final int initialExpandedDepth;
+
+  /// Maximum displayed row length.
   final int? maxLineLength;
+
+  /// Whether Ctrl+C and semantic copy export the selected row/node.
   final bool copySelection;
+
+  /// Clipboard/export options for copied JSON text.
   final JsonViewCopyOptions copyOptions;
+
+  /// Called after a copy attempt completes.
   final void Function(JsonViewCopyResult result)? onCopy;
 
   @override

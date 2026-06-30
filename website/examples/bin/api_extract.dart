@@ -18,8 +18,14 @@ void main(List<String> args) {
   // "view source" link. fleury_widgets is scanned first; on the (unlikely) name
   // clash it wins, preserving existing pages.
   const sources = <(String, String)>[
-    ('../../packages/fleury_widgets/lib/src', 'packages/fleury_widgets/lib/src'),
-    ('../../packages/fleury/lib/src/widgets', 'packages/fleury/lib/src/widgets'),
+    (
+      '../../packages/fleury_widgets/lib/src',
+      'packages/fleury_widgets/lib/src',
+    ),
+    (
+      '../../packages/fleury/lib/src/widgets',
+      'packages/fleury/lib/src/widgets',
+    ),
   ];
   final result = <String, Object?>{};
 
@@ -82,21 +88,25 @@ List<Map<String, Object?>> _params(
 
     var type = 'dynamic';
     String? doc;
+    final field = _field(cls, name);
     if (normal is FieldFormalParameter) {
-      final field = _field(cls, name);
       type = field?.$1 ?? 'dynamic';
       doc = field?.$2;
     } else if (normal is SimpleFormalParameter) {
-      type = normal.type?.toSource() ?? 'dynamic';
+      type = field?.$1 ?? normal.type?.toSource() ?? 'dynamic';
+      doc = field?.$2;
     } else if (normal is FunctionTypedFormalParameter) {
       type = '${normal.returnType?.toSource() ?? 'void'} Function(…)';
+      doc = field?.$2;
     }
 
     out.add(<String, Object?>{
       'name': name,
       'type': type,
       'required': p.isRequired,
-      'default': p is DefaultFormalParameter ? p.defaultValue?.toSource() : null,
+      'default': p is DefaultFormalParameter
+          ? p.defaultValue?.toSource()
+          : null,
       'doc': doc,
     });
   }
@@ -109,8 +119,10 @@ List<Map<String, Object?>> _params(
     if (m is! FieldDeclaration) continue;
     for (final v in m.fields.variables) {
       if (v.name.lexeme == name) {
-        return (m.fields.type?.toSource() ?? 'dynamic',
-            _docText(m.documentationComment));
+        return (
+          m.fields.type?.toSource() ?? 'dynamic',
+          _docText(m.documentationComment),
+        );
       }
     }
   }

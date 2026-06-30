@@ -31,7 +31,7 @@ That binary is the whole app. Ship it like any CLI tool.
 
 The *same* widget tree compiles to JavaScript and runs client-side — no server.
 Write a tiny web entry point that mounts your app with
-[`runTuiWebDom`](/concepts/app-entry/):
+[`mountApp`](/concepts/app-entry/):
 
 ```dart
 // web/main.dart
@@ -40,7 +40,7 @@ import 'package:web/web.dart' as web;
 
 void main() {
   final host = web.document.getElementById('app')!;
-  runTuiWebDom(() => const MyApp(), hostElement: host);
+  mountApp(() => const MyApp(), into: host);
 }
 ```
 
@@ -60,11 +60,12 @@ nothing:
 ```
 
 The output is a static `.js` file — host it on any CDN or static site, ship it
-offline, scale it for free. The one constraint: a client-side bundle can only use
-**web-safe widgets**. The handful that need the platform (file pickers, the log
-and process panels, anything touching `dart:io`) won't compile to JS — import
-`package:fleury_widgets/fleury_widgets_web.dart` rather than the full barrel, and
-the compiler will hold you to it. For those, use serve instead.
+offline, and scale it like a normal web asset. The one constraint: a client-side
+bundle can only use **web-safe widgets**. The handful that need the platform
+(file pickers, the log and process panels, anything touching `dart:io`) won't
+compile to JS — import `package:fleury_widgets/fleury_widgets_web.dart` rather
+than the full barrel, and the compiler will hold you to it. For those, use serve
+instead.
 
 ## Serve it
 
@@ -74,7 +75,7 @@ browser over a WebSocket, painting into a DOM cell grid. The app keeps full
 URL is shareable:
 
 ```sh
-# Run the app yourself and bridge one browser session to it:
+# Spawn a fresh app process for each browser session:
 fleury serve --spawn dart run my_app.dart
 ```
 
@@ -101,12 +102,12 @@ fleury serve --port=8080 --host=0.0.0.0 --allow-origin=https://example.com --spa
 
 ## Embed or serve?
 
-| | Embed (`runTuiWebDom`) | Serve (`fleury serve`) |
+| | Embed (`mountApp`) | Serve (`fleury serve`) |
 |---|---|---|
 | Where it runs | In the browser | A native process |
 | Backend needed | None — static asset | Yes — the running app |
 | Widgets | Web-safe only | All, incl. file/process/log |
-| Scaling | Free (CDN) | One process per session |
+| Scaling | Static/CDN asset | One process per session |
 | Use when | It fits the browser sandbox | It needs the real machine |
 
 Rule of thumb: if it can run in the sandbox, embed it; reach for serve when the

@@ -88,7 +88,7 @@ void main() {
     });
 
     test('lifecycle private modes are categorized as session, not sync', () {
-      // The exact enter sequence runTui emits for an interactive session.
+      // The exact enter sequence runApp emits for an interactive session.
       const enter = '\x1B[?1049h\x1B[?25l\x1B[?2004h';
       final b = AnsiByteBreakdown.analyze(enter);
       expect(b.session, enter.length);

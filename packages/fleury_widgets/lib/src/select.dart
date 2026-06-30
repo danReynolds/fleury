@@ -42,13 +42,22 @@ class Select<T> extends StatefulWidget {
     this.semanticLabel,
   });
 
+  /// Choices shown in the opened dropdown.
   final List<SelectOption<T>> options;
 
   /// The currently-selected value, or null to show the [placeholder].
   final T? value;
+
+  /// Called when the user picks an enabled option; null disables the picker.
   final void Function(T value)? onChanged;
+
+  /// Text shown when [value] is null.
   final String placeholder;
+
+  /// Focus node used by the closed trigger.
   final FocusNode? focusNode;
+
+  /// Whether the closed trigger should request focus when mounted.
   final bool autofocus;
 
   /// Stable label for semantic snapshots.
@@ -723,9 +732,9 @@ class _SelectListState<T> extends State<_SelectList<T>> {
     for (var k = 0; k < widget.options.length; k++) {
       final i = (start + k) % widget.options.length;
       if (!_enabled(i)) continue;
-      if (sanitizeOptionLabel(widget.options[i].label).toLowerCase().startsWith(
-        lower,
-      )) {
+      if (sanitizeOptionLabel(
+        widget.options[i].label,
+      ).toLowerCase().startsWith(lower)) {
         _list.selectedIndex = i;
         break;
       }

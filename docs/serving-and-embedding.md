@@ -13,7 +13,7 @@ Both are targets behind the same host SPI; see
 [Core and targets](core-and-targets.md) for the layering.
 
 ```
- EMBED  (runTuiWebDom)                SERVE  (fleury serve)
+ EMBED  (mountApp)                    SERVE  (fleury serve)
  ─────────────────────                ─────────────────────
  dart2js bundle:                      server (native Dart):
    widget tree                          widget tree  ← runs here
@@ -28,7 +28,7 @@ Both are targets behind the same host SPI; see
 
 ---
 
-## Embed — `runTuiWebDom` (client-side)
+## Embed — `mountApp` (client-side)
 
 dart2js compiles your widget tree **plus** the Fleury core **plus** the
 `fleury_web` DOM host into one JS bundle. The whole program runs in the browser;
@@ -42,7 +42,7 @@ import 'package:web/web.dart' as web;
 
 void main() {
   final host = web.document.querySelector('#app')! as web.Element;
-  runTuiWebDom(() => const MyApp(), hostElement: host);
+  mountApp(() => const MyApp(), into: host);
 }
 ```
 
@@ -57,8 +57,8 @@ void main() {
 
 **Properties**
 
-- **No backend.** The bundle is a static asset — ship it on any CDN, host
-  unlimited concurrent users for free, works offline.
+- **No backend.** The bundle is a static asset — ship it on any CDN, scale it
+  like a normal web asset, and support offline use.
 - **Self-contained.** Drop a widget into an existing web page (the docs site
   embeds live examples this exact way).
 
@@ -73,7 +73,7 @@ void main() {
 - The host element needs an explicit CSS size.
 
 **Use it for:** docs examples, marketing demos, self-contained web tools,
-offline apps, anything you want on a CDN with zero ops.
+offline apps, or anything that should deploy as a static asset.
 
 ---
 
@@ -123,21 +123,21 @@ machine.
 
 ## Which do I want?
 
-| | **Embed** (`runTuiWebDom`) | **Serve** (`fleury serve`) |
+| | **Embed** (`mountApp`) | **Serve** (`fleury serve`) |
 |---|---|---|
 | Widget tree runs… | in the browser (dart2js) | on a server (native Dart) |
 | Backend required | **none** — static asset | a running process per session |
-| Scaling | free, CDN, unlimited | one process per user |
+| Scaling | static/CDN asset | one process per user |
 | `dart:io` widgets (files/process/log) | ❌ no | ✅ yes |
 | Host machine access | ❌ sandbox only | ✅ full |
 | Latency | local | network round-trip |
 | Offline | ✅ | ❌ |
 | Best for | docs, demos, self-contained web apps | remote sessions, full-fidelity apps |
 
-Rule of thumb: **if it can run in the browser sandbox, embed it** — it's cheaper
-and scales for free. **Reach for serve when the app needs the real machine**
-(files, processes, the host environment) or when you want to expose an existing
-native session over a URL.
+Rule of thumb: **if it can run in the browser sandbox, embed it** — it deploys
+and scales like a static web asset. **Reach for serve when the app needs the real
+machine** (files, processes, the host environment) or when you want to expose an
+existing native session over a URL.
 
 Because both paths drive the same DOM cell-grid presenter, you can start by
 embedding and move to serve later (or offer both) without changing your app.

@@ -657,7 +657,7 @@ class TaskStatusView<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      animation: controller,
+      listenable: controller,
       builder: (context, _) {
         final progress = controller.progress;
         final latestOutput = controller.output.isEmpty

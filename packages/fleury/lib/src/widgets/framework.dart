@@ -396,7 +396,7 @@ abstract class Element implements BuildContext {
   static Element? _current;
 
   /// Builds the widget shown in place of a subtree whose `build` threw.
-  /// Installed by the runtime (`runTui` / the test harness) so the catch
+  /// Installed by the runtime (`runApp` / the test harness) so the catch
   /// in [ComponentElement.performRebuild] can render an error panel
   /// instead of crashing. Null means "no boundary" — errors propagate.
   static Widget Function(Object error, StackTrace stack)? errorBuilder;
@@ -1020,7 +1020,7 @@ class BuildOwner {
   Element? _root;
 
   /// Invoked by [scheduleBuildFor] when the dirty queue transitions from
-  /// empty to non-empty. Runtimes (e.g. `runTui`) set this so they can
+  /// empty to non-empty. Runtimes (e.g. `runApp`) set this so they can
   /// schedule a render after `setState` without polling.
   void Function()? onScheduleBuild;
 
@@ -1183,7 +1183,7 @@ class BuildOwner {
   /// root render object for inspection in tests.
   ///
   /// [onPhaseTiming] is invoked once with the build / layout / paint
-  /// durations when supplied. Used by `runTui` to feed the debug
+  /// durations when supplied. Used by `runApp` to feed the debug
   /// overlay's frame timeline; tests / `FleuryTester` omit it.
   RenderObject renderFrame(
     Element root,
