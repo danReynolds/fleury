@@ -525,6 +525,37 @@ class FocusManager extends ChangeNotifier {
     return false;
   }
 
+  /// The nearest enclosing [_FocusScopeMarkerElement] of [node] (its
+  /// [FocusScope]), or null when [node] sits directly under the root with no
+  /// scope between. The stable element — not the per-build [FocusScopeRef] — is
+  /// the scope's durable identity.
+  _FocusScopeMarkerElement? _enclosingScopeMarker(FocusNode node) {
+    Element? element = node._element;
+    while (element != null) {
+      if (element is _FocusScopeMarkerElement) return element;
+      element = element.elementParent;
+    }
+    return null;
+  }
+
+  /// Whether [node]'s enclosing [FocusScope] already contains the focused node.
+  ///
+  /// This is the gate for **scope-aware autofocus**: a node claims autofocus
+  /// when *its* scope has no focused descendant — not (as a flat global gate
+  /// would) only when nothing is focused anywhere in the tree. So a screen
+  /// swapped into a fresh scope autofocuses even though another scope still
+  /// holds focus. A node with no enclosing scope sits at the root, which
+  /// contains all focus, so any focus blocks it (the historical global
+  /// behaviour, preserved for un-scoped trees).
+  @internal
+  bool scopeHasFocusedNode(FocusNode node) {
+    final focused = _focusedNode;
+    if (focused == null) return false;
+    final marker = _enclosingScopeMarker(node);
+    if (marker == null) return true;
+    return _isUnderScopeMarker(focused, marker);
+  }
+
   /// Whether [node] sits under the currently-active modal (when one is
   /// open) or always, when no modal is open. Used by the input
   /// dispatcher to scope click-to-focus to the modal frontier.
@@ -807,6 +838,13 @@ class _FocusState extends State<Focus> {
   FocusNode? _attachedNode;
   FocusManager? _manager;
 
+  /// Autofocus is a one-shot: it claims focus when the node first enters, not
+  /// every time the element re-attaches. Without this, a node that reactivates
+  /// (e.g. a route's content rebuilding while it animates out) would
+  /// re-autofocus into its now-empty scope and steal focus that has moved on.
+  /// Reset when the [Focus.focusNode] is swapped for a genuinely new node.
+  bool _didAutofocus = false;
+
   FocusNode get _node => widget.focusNode ?? _internalNode!;
 
   @override
@@ -839,6 +877,8 @@ class _FocusState extends State<Focus> {
             )
           : null;
       _node.onKey = widget.onKey;
+      // A genuinely new node gets a fresh autofocus opportunity.
+      _didAutofocus = false;
       _attach();
     } else {
       _node.onKey = widget.onKey;
@@ -878,10 +918,14 @@ class _FocusState extends State<Focus> {
     // Carry the nearest enclosing scope down.
     _node._enclosingScope = FocusScope._enclosingOf(context as Element);
 
-    if (widget.autofocus &&
-        manager.focusedNode == null &&
-        manager.isTraversable(_node)) {
-      _node.requestFocus();
+    if (widget.autofocus && !_didAutofocus) {
+      // Consume the one-shot opportunity on first attach (even if the scope is
+      // occupied and we don't actually claim focus) so reactivation can't
+      // re-autofocus.
+      _didAutofocus = true;
+      if (manager.isTraversable(_node) && !manager.scopeHasFocusedNode(_node)) {
+        _node.requestFocus();
+      }
     }
   }
 

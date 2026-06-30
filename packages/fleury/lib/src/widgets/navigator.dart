@@ -678,7 +678,13 @@ class _RouteHost extends StatelessWidget {
     );
 
     final transition = route.transition;
-    if (transition != null && (route.leaving || t < 1.0)) {
+    if (transition != null) {
+      // Always wrap when a transition exists — even when settled (enter at full
+      // progress) — so the effect wrapper is a STABLE element. Wrapping only
+      // while animating would add/remove the wrapper on every transition-state
+      // change (enter -> settled -> leaving), remounting the route's content
+      // and losing its State (scroll position, text, focus) — and re-firing
+      // autofocus, which could steal focus a pop just restored.
       content = route.leaving
           ? transition.exit.build(content, (1 - t).clamp(0.0, 1.0))
           : transition.enter.build(content, t.clamp(0.0, 1.0));

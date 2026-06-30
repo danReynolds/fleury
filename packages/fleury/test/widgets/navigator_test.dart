@@ -204,6 +204,28 @@ void main() {
     expect(_screen(tester), 'home');
   });
 
+  testWidgets('Esc pops a pushed route that has no focusable content', (
+    tester,
+  ) {
+    BuildContext? home;
+    tester.pumpWidget(
+      Navigator(home: _Capture(sink: (x) => home = x, label: 'home')),
+    );
+    // No autofocus target on the pushed route — its own Esc binding must still
+    // be reachable (the route claims focus on entry), or keys get dropped.
+    home!.push<void>(const Text('detail'), transition: RouteTransition.none);
+    tester.pump();
+    expect(_screen(tester), 'detail');
+
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.pump();
+    expect(
+      _screen(tester),
+      'home',
+      reason: 'Esc reaches the route binding despite no autofocus target',
+    );
+  });
+
   testWidgets('focus traps to the pushed screen and restores on pop', (tester) {
     BuildContext? home;
     final homeInput = TextEditingController();
