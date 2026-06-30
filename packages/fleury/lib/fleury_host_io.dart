@@ -7,4 +7,5 @@
 library;
 
 export 'fleury_host.dart';
+export 'src/remote/spawn.dart';
 export 'src/remote/unix_socket_transport.dart';

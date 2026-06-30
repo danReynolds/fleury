@@ -33,8 +33,8 @@ import 'package:fleury/src/foundation/geometry.dart';
 import 'package:fleury/src/remote/remote_client_asset.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/remote/serve_index_html.dart';
+import 'package:fleury/src/remote/spawn.dart';
 import 'package:fleury/src/remote/unix_socket_transport.dart';
-import 'package:fleury/src/rendering/text_sanitizer.dart';
 import 'package:fleury/src/terminal/capabilities.dart';
 import 'package:fleury/src/terminal/diagnostics.dart';
 import 'package:fleury/src/terminal/native_driver.dart';
@@ -990,15 +990,17 @@ Directory _createSpawnHandleDir() {
 
 /// One spawn-mode session: a subprocess, its session socket, and the
 /// browser WebSocket that paired with it. Owns the full lifecycle.
+/// Unified connect deadline for a spawned session's app (warm + cold). The MCP
+/// bridge uses its own (longer) default; serve's interactive sessions want a
+/// snappier give-up.
+const Duration _spawnConnectTimeout = Duration(seconds: 10);
+
 class _SpawnSession {
   _SpawnSession({required this.id});
 
   final int id;
-  Process? _process;
-  ServerSocket? _server;
-  String? _socketPath;
+  SpawnedFleuryApp? _app;
   WebSocket? _browser;
-  Socket? _appSocket;
   final _done = Completer<void>();
   var _shuttingDown = false;
 
@@ -1006,49 +1008,10 @@ class _SpawnSession {
 
   /// Whether this session's subprocess is up and connected (a warm standby
   /// brought up ahead of a browser), so [attach] can pair instantly.
-  bool get isReady => _appSocket != null && !_shuttingDown;
+  bool get isReady => _app != null && !_shuttingDown;
 
-  /// Binds the per-session socket and spawns the command. Throws
-  /// [ProcessException] if the executable can't be started. Shared by the
-  /// cold ([start]) and warm ([bringUp]) paths.
-  Future<void> _bindAndSpawn({
-    required List<String> command,
-    required String handleDir,
-    required String tag,
-  }) async {
-    _socketPath = '${Directory(handleDir).absolute.path}/spawn-$pid-$id.sock';
-    try {
-      File(_socketPath!).deleteSync();
-    } on FileSystemException {
-      /* not there */
-    }
-    _server = await ServerSocket.bind(
-      InternetAddress(_socketPath!, type: InternetAddressType.unix),
-      0,
-    );
-    final env = Map<String, String>.from(Platform.environment);
-    env['FLEURY_HANDLE'] = _socketPath!;
-    // Pure cosmetic: most TUIs sniff $TERM to pick colors. The browser
-    // advertises truecolor, so encourage the subprocess to do the same.
-    env['COLORTERM'] = env['COLORTERM'] ?? 'truecolor';
-    _process = await Process.start(
-      command.first,
-      command.sublist(1),
-      environment: env,
-    );
-    stderr.writeln(
-      '[serve $tag] spawned ${command.first} (pid ${_process!.pid})',
-    );
-    // Forward the subprocess's own stdout/stderr to ours, prefixed. The TUI
-    // never writes to its own stdout (renders go via the socket), so anything
-    // here is print()/log output.
-    _process!.stdout
-        .transform(utf8.decoder)
-        .listen((line) => _forwardLog(tag, 'out', line));
-    _process!.stderr
-        .transform(utf8.decoder)
-        .listen((line) => _forwardLog(tag, 'err', line));
-  }
+  String _socketPathFor(String handleDir) =>
+      '${Directory(handleDir).absolute.path}/spawn-$pid-$id.sock';
 
   /// Brings the subprocess up *ahead of a browser* — a warm standby. The app
   /// connects to its session socket and (for a runTui app) blocks awaiting
@@ -1061,30 +1024,25 @@ class _SpawnSession {
     required String tag,
   }) async {
     try {
-      await _bindAndSpawn(command: command, handleDir: handleDir, tag: tag);
+      _app = await spawnFleuryApp(
+        command: command,
+        socketPath: _socketPathFor(handleDir),
+        connectTimeout: _spawnConnectTimeout,
+        onLog: (stream, line) => stderr.writeln('[$tag $stream] $line'),
+      );
     } on ProcessException catch (e) {
       stderr.writeln('[serve $tag] failed to spawn ${command.first}: $e');
-      await _cleanupSocket();
+      if (!_done.isCompleted) _done.complete();
+      return false;
+    } on FleurySpawnException catch (e) {
+      stderr.writeln('[serve $tag] warm subprocess never connected: $e');
       if (!_done.isCompleted) _done.complete();
       return false;
     }
-    final firstEvent = await Future.any([
-      _server!.first.then((s) => _Connected(s)),
-      _process!.exitCode.then((_) => _ExitedBeforeConnect()),
-      Future<dynamic>.delayed(
-        const Duration(seconds: 10),
-        () => _ConnectTimeout(),
-      ),
-    ]);
-    if (firstEvent is! _Connected) {
-      stderr.writeln(
-        '[serve $tag] warm subprocess never connected ($firstEvent)',
-      );
-      await shutdown();
-      return false;
-    }
-    _appSocket = firstEvent.socket;
-    unawaited(_process!.exitCode.then((_) => shutdown()));
+    stderr.writeln(
+      '[serve $tag] spawned ${command.first} (pid ${_app!.process.pid})',
+    );
+    unawaited(_app!.process.exitCode.then((_) => shutdown()));
     return true;
   }
 
@@ -1093,7 +1051,7 @@ class _SpawnSession {
   /// the waiting app, which renders its first frame straight away.
   void attach(WebSocket browser) {
     _browser = browser;
-    _attachPump(browser, _BufferedBrowserInput(browser), _appSocket!);
+    _attachPump(browser, _BufferedBrowserInput(browser), _app!.socket);
   }
 
   void _attachPump(
@@ -1125,110 +1083,54 @@ class _SpawnSession {
     _browser = browser;
     // The browser sends INIT immediately after the WebSocket opens, before the
     // subprocess can connect back. Listen + buffer now so the handshake isn't
-    // missed.
+    // missed — and pass its close as the spawn's abort, so a browser that leaves
+    // before the app connects doesn't orphan the process.
     final browserInput = _BufferedBrowserInput(browser);
     try {
-      await _bindAndSpawn(command: command, handleDir: handleDir, tag: tag);
+      _app = await spawnFleuryApp(
+        command: command,
+        socketPath: _socketPathFor(handleDir),
+        connectTimeout: _spawnConnectTimeout,
+        abort: browserInput.closed,
+        onLog: (stream, line) => stderr.writeln('[$tag $stream] $line'),
+      );
     } on ProcessException catch (e) {
       stderr.writeln('[serve $tag] failed to spawn ${command.first}: $e');
       await browserInput.dispose();
-      await _cleanupSocket();
+      if (!_done.isCompleted) _done.complete();
+      return false;
+    } on FleurySpawnException catch (e) {
+      stderr.writeln('[serve $tag] subprocess never connected: $e');
+      await browserInput.dispose();
       if (!_done.isCompleted) _done.complete();
       return false;
     }
-    final firstEvent = await Future.any([
-      _server!.first.then((s) => _Connected(s)),
-      _process!.exitCode.then((_) => _ExitedBeforeConnect()),
-      Future<dynamic>.delayed(
-        const Duration(seconds: 10),
-        () => _ConnectTimeout(),
-      ),
-      browserInput.closed.then((_) => const _BrowserClosedBeforeConnect()),
-    ]);
-    if (firstEvent is! _Connected) {
-      stderr.writeln(
-        '[serve $tag] subprocess never connected to session '
-        'socket ($firstEvent); shutting down',
-      );
-      await browserInput.dispose();
-      await shutdown();
-      return false;
-    }
-    _appSocket = firstEvent.socket;
-    _attachPump(browser, browserInput, _appSocket!);
-    unawaited(_process!.exitCode.then((_) => shutdown()));
+    stderr.writeln(
+      '[serve $tag] spawned ${command.first} (pid ${_app!.process.pid})',
+    );
+    _attachPump(browser, browserInput, _app!.socket);
+    unawaited(_app!.process.exitCode.then((_) => shutdown()));
     return true;
   }
 
   Future<void> shutdown() async {
     if (_shuttingDown) return;
     _shuttingDown = true;
-    final proc = _process;
-    if (proc != null) {
-      proc.kill(ProcessSignal.sigterm);
-      final killed = await proc.exitCode.timeout(
-        const Duration(seconds: 2),
-        onTimeout: () {
-          proc.kill(ProcessSignal.sigkill);
-          return -9;
-        },
-      );
+    // dispose() signals the process (SIGTERM → SIGKILL after a grace period) and
+    // removes the session socket.
+    final app = _app;
+    if (app != null) {
+      await app.dispose();
       // Logging the exit code keeps subprocess crashes auditable.
-      stderr.writeln('[serve s$id] subprocess exited ($killed)');
+      stderr.writeln(
+        '[serve s$id] subprocess exited (${await app.process.exitCode})',
+      );
     }
     try {
       await _browser?.close();
     } catch (_) {}
-    await _server?.close();
-    await _cleanupSocket();
     if (!_done.isCompleted) _done.complete();
   }
-
-  Future<void> _cleanupSocket() async {
-    final p = _socketPath;
-    if (p == null) return;
-    try {
-      File(p).deleteSync();
-    } catch (_) {}
-  }
-
-  void _forwardLog(String tag, String stream, String chunk) {
-    // Honour line boundaries so multi-line print() output reads cleanly
-    // alongside other sessions.
-    final lines = chunk.split('\n');
-    for (var i = 0; i < lines.length; i++) {
-      final line = sanitizeForDisplay(lines[i]);
-      if (line.isEmpty && i == lines.length - 1) continue;
-      stderr.writeln('[$tag $stream] $line');
-    }
-  }
-}
-
-sealed class _StartEvent {
-  const _StartEvent();
-}
-
-class _Connected extends _StartEvent {
-  const _Connected(this.socket);
-  final Socket socket;
-}
-
-class _ExitedBeforeConnect extends _StartEvent {
-  const _ExitedBeforeConnect();
-  @override
-  String toString() => 'subprocess exited before connecting';
-}
-
-class _ConnectTimeout extends _StartEvent {
-  const _ConnectTimeout();
-  @override
-  String toString() => 'timed out waiting for subprocess to connect (10s)';
-}
-
-class _BrowserClosedBeforeConnect extends _StartEvent {
-  const _BrowserClosedBeforeConnect();
-  @override
-  String toString() => 'browser disconnected before subprocess connected';
 }
 
 /// `fleury diagnose` prints terminal environment, capabilities, and

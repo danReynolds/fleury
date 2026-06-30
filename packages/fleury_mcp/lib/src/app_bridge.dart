@@ -13,7 +13,6 @@
 // `fleury serve --spawn` uses), and wires the two together.
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 // The host SPI: semantics + the remote-render wire (frame protocol, codec,
@@ -388,118 +387,33 @@ final class FleuryAppBridge {
     Duration firstFrameTimeout = const Duration(seconds: 10),
     BridgeLog? log,
   }) async {
-    if (command.isEmpty) {
-      throw ArgumentError.value(command, 'command', 'must be non-empty');
-    }
     final logLine = log ?? stderr.writeln;
-    final handleDir = _createHandleDir();
-    final socketPath = '${handleDir.path}/app-$pid.sock';
+    final SpawnedFleuryApp app;
     try {
-      File(socketPath).deleteSync();
-    } on FileSystemException {
-      // Not there — fine.
+      app = await spawnFleuryApp(
+        command: command,
+        connectTimeout: connectTimeout,
+        onLog: (tag, line) => logLine('[app $tag] $line'),
+      );
+    } on FleurySpawnException catch (e) {
+      // Preserve the bridge's exception type for existing callers/tests.
+      throw FleuryAppBridgeException(e.message);
     }
-
-    final server = await ServerSocket.bind(
-      InternetAddress(socketPath, type: InternetAddressType.unix),
-      0,
+    logLine(
+      '[fleury_mcp] attached to ${command.join(' ')} (pid ${app.process.pid})',
     );
 
-    Future<void> cleanupSocket() async {
-      await server.close();
-      try {
-        File(socketPath).deleteSync();
-      } catch (_) {}
-      try {
-        handleDir.deleteSync(recursive: true);
-      } catch (_) {}
-    }
-
-    final env = Map<String, String>.from(Platform.environment);
-    env['FLEURY_HANDLE'] = socketPath;
-    env['COLORTERM'] = env['COLORTERM'] ?? 'truecolor';
-
-    final Process process;
-    try {
-      process = await Process.start(
-        command.first,
-        command.sublist(1),
-        environment: env,
-      );
-    } on ProcessException {
-      await cleanupSocket();
-      rethrow;
-    }
-    logLine('[fleury_mcp] spawned ${command.join(' ')} (pid ${process.pid})');
-
-    // The app renders to the socket; anything on its stdout/stderr is its own
-    // print()/log output. Forward it to our log sink, line by line, and keep
-    // the subscriptions so they can be cancelled on teardown.
-    StreamSubscription<String> forward(String tag, Stream<List<int>> source) {
-      return source
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .listen((line) => logLine('[app $tag] ${sanitizeForDisplay(line)}'));
-    }
-
-    final outSub = forward('out', process.stdout);
-    final errSub = forward('err', process.stderr);
-
-    final connection = await Future.any<Object>([
-      server.first,
-      process.exitCode.then((code) => _AppExited(code)),
-      Future<Object>.delayed(connectTimeout, () => const _ConnectTimedOut()),
-    ]);
-
-    if (connection is! Socket) {
-      await outSub.cancel();
-      await errSub.cancel();
-      process.kill(ProcessSignal.sigkill);
-      await cleanupSocket();
-      final reason = connection is _AppExited
-          ? 'app exited (code ${connection.code}) before connecting'
-          : 'app did not connect within ${connectTimeout.inSeconds}s';
-      throw FleuryAppBridgeException(
-        'Failed to attach to `${command.join(' ')}`: $reason. '
-        'Make sure it calls runTui(...) so it auto-discovers FLEURY_HANDLE.',
-      );
-    }
-
-    final transport = UnixSocketFrameTransport.fromSocket(connection);
+    final transport = UnixSocketFrameTransport.fromSocket(app.socket);
     final bridge = FleuryAppBridge(
       transport,
       viewport: viewport,
       firstFrameTimeout: firstFrameTimeout,
-      onClose: () async {
-        await outSub.cancel();
-        await errSub.cancel();
-        process.kill(ProcessSignal.sigterm);
-        await process.exitCode
-            .timeout(
-              const Duration(seconds: 2),
-              onTimeout: () {
-                process.kill(ProcessSignal.sigkill);
-                return -9;
-              },
-            )
-            .catchError((_) => -1);
-        await cleanupSocket();
-      },
+      onClose: app.dispose,
     );
     // A crashing app tears the bridge down too.
-    unawaited(process.exitCode.then((_) => bridge.close()));
+    unawaited(app.process.exitCode.then((_) => bridge.close()));
     bridge.start();
     return bridge;
-  }
-
-  // Unix socket paths cap at ~104 bytes on macOS, so prefer a short /tmp base
-  // over the (often deep) system temp dir — same reasoning as `fleury serve`.
-  static Directory _createHandleDir() {
-    final shortTemp = Directory('/tmp');
-    final base = !Platform.isWindows && shortTemp.existsSync()
-        ? shortTemp
-        : Directory.systemTemp;
-    return base.createTempSync('fleury-mcp-');
   }
 }
 
@@ -512,15 +426,3 @@ final class FleuryAppBridgeException implements Exception {
   String toString() => 'FleuryAppBridgeException: $message';
 }
 
-sealed class _ConnectOutcome {
-  const _ConnectOutcome();
-}
-
-final class _AppExited extends _ConnectOutcome {
-  const _AppExited(this.code);
-  final int code;
-}
-
-final class _ConnectTimedOut extends _ConnectOutcome {
-  const _ConnectTimedOut();
-}

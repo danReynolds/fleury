@@ -13,11 +13,38 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_host_io.dart' show spawnFleuryApp;
 import 'package:fleury_mcp/fleury_mcp.dart';
 import 'package:test/test.dart';
 
 void main() {
   final fixture = _fixturePath();
+
+  test(
+    'spawnFleuryApp refuses a second connection once the app has attached',
+    () async {
+      final dir = Directory.systemTemp.createTempSync('spawn-refuse-');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final socketPath = '${dir.path}/app.sock';
+
+      final app = await spawnFleuryApp(
+        command: <String>['dart', 'run', fixture],
+        socketPath: socketPath,
+      );
+      addTearDown(app.dispose);
+
+      // The app connected; the listening socket was closed after the first
+      // accept, so a second (rogue) connection to the same path is refused —
+      // not silently queued in the OS backlog as before.
+      await expectLater(
+        Socket.connect(
+          InternetAddress(socketPath, type: InternetAddressType.unix),
+          0,
+        ),
+        throwsA(isA<SocketException>()),
+      );
+    },
+  );
 
   test(
     'bridge spawns a real app, reads its tree, and drives an action',
