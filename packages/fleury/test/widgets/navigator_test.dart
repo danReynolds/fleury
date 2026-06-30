@@ -90,6 +90,21 @@ void main() {
     expect(home!.navigator.depth, 1);
   });
 
+  testWidgets('RouteTransition.none settles in a single pump (instant)', (
+    tester,
+  ) {
+    BuildContext? home;
+    tester.pumpWidget(
+      Navigator(home: _Capture(sink: (x) => home = x, label: 'home')),
+    );
+    // No duration is pumped: an animated push would still be mid-fade, but
+    // RouteTransition.none snaps the route fully present in one frame.
+    home!.push<void>(const Text('instant'), transition: RouteTransition.none);
+    tester.pump();
+    expect(_screen(tester), 'instant');
+    expect(home!.navigator.depth, 2);
+  });
+
   testWidgets('pop at the root is a no-op; canPop reflects depth', (tester) {
     BuildContext? home;
     tester.pumpWidget(

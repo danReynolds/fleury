@@ -65,10 +65,22 @@ class RouteTransition {
     required this.exit,
     this.duration,
     this.curve,
-  });
+  }) : isInstant = false;
+
+  RouteTransition._instant()
+      : enter = Effects.fadeIn(),
+        exit = Effects.fadeOut(),
+        duration = Duration.zero,
+        curve = null,
+        isInstant = true;
 
   final Effect enter;
   final Effect exit;
+
+  /// True only for [none]: the route settles in a single frame with no
+  /// enter/exit effect. The navigator maps this to its internal no-transition
+  /// path (so [enter]/[exit] are never played).
+  final bool isInstant;
 
   /// How long the enter/exit plays. When null, the navigator falls back
   /// to [defaultDuration].
@@ -97,6 +109,13 @@ class RouteTransition {
     curve: Curves.easeOut,
     duration: defaultDuration,
   );
+
+  /// Instant — the route settles in a single frame with no enter/exit
+  /// animation. The reachable opt-out from the animated default: [push] and
+  /// [NavigatorState.present] detect it and skip transition building entirely.
+  /// Pass per-push (`push(screen, transition: RouteTransition.none)`) or as a
+  /// Navigator-wide default (`Navigator(transition: RouteTransition.none)`).
+  static final RouteTransition none = RouteTransition._instant();
 }
 
 class _Route {
@@ -293,9 +312,10 @@ class NavigatorState extends State<Navigator> {
     Alignment alignment = Alignment.center,
     RouteTransition? transition,
   }) {
+    final resolved = transition ?? RouteTransition.fade;
     final route = _Route(
       screen,
-      transition ?? RouteTransition.fade,
+      resolved.isInstant ? null : resolved,
       presentAlignment: alignment,
     );
     _pushRoute(route);
@@ -385,8 +405,10 @@ class NavigatorState extends State<Navigator> {
 
   // ---------------------------------------------------------------
 
-  _Route _newRoute(Widget screen, RouteTransition? transition) =>
-      _Route(screen, transition ?? widget.transition ?? RouteTransition.fade);
+  _Route _newRoute(Widget screen, RouteTransition? transition) {
+    final resolved = transition ?? widget.transition ?? RouteTransition.fade;
+    return _Route(screen, resolved.isInstant ? null : resolved);
+  }
 
   void _pushRoute(_Route route) {
     route.priorFocus = _manager?.focusedNode;

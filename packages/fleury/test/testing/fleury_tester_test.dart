@@ -1,10 +1,23 @@
 // Meta-tests: exercise FleuryTester / finders / goldens themselves.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
+
+/// Captures the BuildContext its build runs under (for present() tests).
+class _CtxCapture extends StatelessWidget {
+  const _CtxCapture({required this.sink, required this.label});
+  final void Function(BuildContext) sink;
+  final String label;
+  @override
+  Widget build(BuildContext context) {
+    sink(context);
+    return Text(label);
+  }
+}
 
 void main() {
   group('FleuryTester lifecycle', () {
@@ -29,6 +42,53 @@ void main() {
     testWidgets('throws after dispose', (tester) {
       tester.dispose();
       expect(() => tester.pump(), throwsStateError);
+    });
+  });
+
+  group('settle / pumpApp', () {
+    testWidgets('settle() surfaces async stream values pump() cannot', (
+      tester,
+    ) async {
+      final controller = StreamController<String>();
+      tester.pumpWidget(
+        StreamBuilder<String>(
+          stream: controller.stream,
+          builder: (_, snap) => Text(snap.data ?? 'loading'),
+        ),
+      );
+      expect(
+        tester.renderToString(size: const CellSize(8, 1)),
+        contains('loading'),
+      );
+
+      // Emit on a timer (truly async): a synchronous pump() can't observe it,
+      // but settle() yields to the event loop until the value lands.
+      Timer(const Duration(milliseconds: 10), () => controller.add('ready'));
+      await tester.settle();
+      expect(
+        tester.renderToString(size: const CellSize(8, 1)),
+        contains('ready'),
+      );
+      await controller.close();
+    });
+
+    testWidgets('pumpApp installs a root Navigator so present() works', (
+      tester,
+    ) async {
+      BuildContext? ctx;
+      tester.pumpApp(_CtxCapture(sink: (c) => ctx = c, label: 'home'));
+      expect(
+        tester.renderToString(size: const CellSize(8, 1)),
+        contains('home'),
+      );
+
+      // Without pumpApp's root Navigator this would throw "No Navigator above".
+      ctx!.present<void>(const Text('modal'), transition: RouteTransition.none);
+      await tester.settle();
+      expect(
+        tester.renderToString(size: const CellSize(8, 1)),
+        contains('modal'),
+      );
     });
   });
 
