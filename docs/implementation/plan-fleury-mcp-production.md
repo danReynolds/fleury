@@ -2,8 +2,8 @@
 
 **Tracks:** [Production-hardening RFC](rfc-fleury-mcp-production-hardening.md) ·
 [Stable ids + `setValue` RFC](rfc-stable-semantic-ids-and-setvalue.md) (WS-0 = its A3).
-**Status:** M1 + M2 complete, each milestone-reviewed (2026-06-29). M3 (WS-5/6/7)
-remains. A living checklist — tick boxes and update the **Status board** as you go.
+**Status:** M1 + M2 + M3 (WS-5/6/7) all complete (2026-06-30); M1/M2 milestone-
+reviewed, M3 review in progress. The production-hardening scope is essentially done.
 
 ## How to use this doc
 
@@ -27,7 +27,7 @@ remains. A living checklist — tick boxes and update the **Status board** as yo
 | WS-8 | Test shapes (multi-contributor, fuzz, stress) | M2 | P1 | WS-3 | `[x]` **done** (2026-06-29) |
 | WS-5 | Shared spawn / lifecycle | M3 | P1 | coord. `fleury serve` | `[x]` **done** (2026-06-30) |
 | WS-6 | Cancellation, logging, error codes | M3 | P1/P2 | — | `[x]` **done** (2026-06-30) |
-| WS-7 | Per-revision node index | M3 | P2 | — | `[ ]` not started |
+| WS-7 | Per-revision node index | M3 | P2 | — | `[x]` **done** (2026-06-30) |
 
 ¹ WS-1's delta granularity (whole-node, next-frame) is independent of WS-0, but
 coalescing during settle is cleaner once WS-0's generation exists.
@@ -260,21 +260,21 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
       no tool is long-running except `wait_for_change`, now cancellable).
 - **Validate:** `[x]` `fleury_mcp` 82 (3 new tests) · analyze clean.
 
-### WS-7 — Per-revision node index  ·  `[ ]`
+### WS-7 — Per-revision node index  ·  `[x]` done
 
-- [ ] Build an id→node index once per revision (likely the same map as WS-3);
+- [x] Build an id→node index once per revision (likely the same map as WS-3);
       `nodeById`/`where(id:)` become O(1)/O(matches), reused across reads + guard.
-- **Acceptance:** `[ ]` repeated reads against an unchanged revision do no full
+- **Acceptance:** `[x]` repeated reads against an unchanged revision do no full
   walk.
-- **Validate:** `[ ]` `fleury` · `[ ]` `fleury_mcp`.
+- **Validate:** `[x]` `fleury` · `[x]` `fleury_mcp`.
 
 ---
 
 ## Pre-flight (before writing M1 code)
 
-- [ ] Confirm WS-0 ownership + scope jointly with the identity RFC (it *is* A3).
-- [ ] Decide WS-2 settle: generation-only vs generation + wire idle bit (Notes).
-- [ ] Confirm WS-3's `elementsById` is the index WS-7 will reuse (avoid two maps).
+- [x] Confirm WS-0 ownership + scope jointly with the identity RFC (it *is* A3).
+- [x] Decide WS-2 settle: generation-only vs generation + wire idle bit (Notes).
+- [x] Confirm WS-3's `elementsById` is the index WS-7 will reuse (avoid two maps).
 
 ## Notes / changelog
 
@@ -433,3 +433,13 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
   (progress/listChanged/pagination) parked as not-needed. mcp 82 (3 new tests) ·
   clean. → Next: WS-7 (per-revision node index), the deferred real-host smoke,
   then the M3 milestone review.
+- *2026-06-30* — **WS-7 done — per-revision node index.** SemanticInspectionSnapshot
+  now lazily caches its flattened node list + an id→node(s) multimap (multimap so
+  the ambiguity guard's `where(id:)` still sees duplicate ids); `nodeById` is an
+  index hit, `where(id:)` starts from the O(1) bucket. The bridge memoizes the
+  snapshot per frame, so the cache persists across reads on an unchanged revision
+  (no further walk). Benchmark + gate: cached nodeById vs the old full re-walk =
+  **42.25 µs → 0.09 µs, ~477×** on the 332-node dashboard; gate asserts indexed <
+  0.5× re-walk + node-list identity. fleury 1736 · mcp 83 · clean.
+  **→ M3 workstreams (WS-5/6/7) all complete. Next: M3 milestone review (adversarial),
+  then the deferred real-host smoke, then close out the plan.**
