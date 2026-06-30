@@ -164,6 +164,7 @@ final class McpServer {
         'Rate limit: too many UI mutations in a short window. Pause and read '
         'get_ui / wait_for_change before issuing more invoke_action / set_value '
         '/ type_text / press_key / resize calls.',
+        code: _ErrorCode.rateLimited,
       );
     }
     final prior = _mutationTail;
@@ -638,10 +639,16 @@ final class McpServer {
         ? (params['arguments'] as Map).cast<String, Object?>()
         : const <String, Object?>{};
     if (name is! String) {
-      return _toolError('tools/call is missing a tool name.');
+      return _toolError(
+        'tools/call is missing a tool name.',
+        code: _ErrorCode.invalidArguments,
+      );
     }
     if (!bridge.isRunning) {
-      return _toolError('The Fleury app has exited; no UI to drive.');
+      return _toolError(
+        'The Fleury app has exited; no UI to drive.',
+        code: _ErrorCode.appExited,
+      );
     }
     try {
       switch (name) {
@@ -662,14 +669,17 @@ final class McpServer {
         case 'wait_for_change':
           return await _toolWaitForChange(args);
         default:
-          return _toolError('Unknown tool: $name');
+          return _toolError('Unknown tool: $name', code: _ErrorCode.unknownTool);
       }
     } on _ToolFailure catch (failure) {
-      return _toolError(failure.message);
+      return _toolError(failure.message, code: failure.code);
     } catch (error) {
       // Any other failure (e.g. a transport error mid-action) is surfaced to
       // the model as a tool error, never thrown back through the read loop.
-      return _toolError('Internal error handling $name: $error');
+      return _toolError(
+        'Internal error handling $name: $error',
+        code: _ErrorCode.internal,
+      );
     }
   }
 
@@ -816,6 +826,7 @@ final class McpServer {
         'No node with id "$id" in the current UI. Call get_ui or find_nodes for '
         'current ids (auto-generated ids are snapshot-local and change as the UI '
         'rebuilds).',
+        code: _ErrorCode.notFound,
       );
     }
     if (matches.length > 1) {
@@ -823,6 +834,7 @@ final class McpServer {
         'id "$id" is ambiguous — ${matches.length} nodes share it. Target a node '
         'with an app-assigned stable Semantics(id:), or use find_nodes to '
         'disambiguate by role/label.',
+        code: _ErrorCode.ambiguous,
       );
     }
     final node = matches.single;
@@ -831,6 +843,7 @@ final class McpServer {
         'Node "$id" (${_describeNode(node)}) does not advertise '
         '"$requiredAction". It supports: '
         '${node.actions.isEmpty ? '(none)' : node.actions.join(', ')}.',
+        code: _ErrorCode.actionUnsupported,
       );
     }
 
@@ -849,6 +862,7 @@ final class McpServer {
           '(${_describeNode(observed)} → ${_describeNode(node)}). The UI changed '
           'since you read it — re-read get_ui and retry. (Auto-generated ids are '
           'positional; prefer an app-assigned Semantics(id:).)',
+          code: _ErrorCode.staleReference,
         );
       }
     }
@@ -870,6 +884,7 @@ final class McpServer {
       throw _ToolFailure(
         'set_value "value" is too long (${value.length} chars; max '
         '$_maxInputChars).',
+        code: _ErrorCode.tooLarge,
       );
     }
     final node = await _resolveActionableNode(id, SemanticAction.setValue.name);
@@ -885,6 +900,7 @@ final class McpServer {
         throw _ToolFailure(
           'set_value rejected for ${_describeNode(node)}: $reason. '
           'Accepted input — valueSchema: ${jsonEncode(schema)}.',
+          code: _ErrorCode.outOfDomain,
         );
       }
     }
@@ -944,6 +960,7 @@ final class McpServer {
       throw _ToolFailure(
         'type_text "text" is too long (${text.length} chars; max '
         '$_maxInputChars). Send it in smaller chunks.',
+        code: _ErrorCode.tooLarge,
       );
     }
     if (text.isEmpty) {
@@ -1145,11 +1162,17 @@ final class McpServer {
   };
 
   /// A tool-domain failure surfaced to the model (not a JSON-RPC error), so it
-  /// can read the reason and adjust.
-  Map<String, Object?> _toolError(String message) => <String, Object?>{
+  /// can read the reason and adjust. The prose goes in `content` (for the model);
+  /// the machine-readable [code] + message go in `structuredContent` (for a
+  /// programmatic client to branch on).
+  Map<String, Object?> _toolError(
+    String message, {
+    String code = _ErrorCode.internal,
+  }) => <String, Object?>{
     'content': <Object?>[
       <String, Object?>{'type': 'text', 'text': message},
     ],
+    'structuredContent': <String, Object?>{'code': code, 'message': message},
     'isError': true,
   };
 
@@ -1176,10 +1199,31 @@ final class _RpcError implements Exception {
 }
 
 /// A recoverable tool-domain failure (bad args, missing node, …). Caught in
-/// [McpServer._callTool] and returned as an isError result.
+/// [McpServer._callTool] and returned as an isError result. [code] is a stable
+/// machine-readable category (see [_ErrorCode]) so an agent can branch without
+/// string-matching the human-readable [message]. Defaults to `invalid_arguments`
+/// — the category of most failures (a missing/ill-typed argument).
 final class _ToolFailure implements Exception {
-  const _ToolFailure(this.message);
+  const _ToolFailure(this.message, {this.code = _ErrorCode.invalidArguments});
   final String message;
+  final String code;
+}
+
+/// Stable `code` values surfaced in an isError tool result's `structuredContent`.
+/// Additive: new categories may appear; an agent should treat an unknown code as
+/// a generic failure.
+abstract final class _ErrorCode {
+  static const invalidArguments = 'invalid_arguments';
+  static const notFound = 'not_found';
+  static const ambiguous = 'ambiguous';
+  static const actionUnsupported = 'action_unsupported';
+  static const staleReference = 'stale_reference';
+  static const outOfDomain = 'out_of_domain';
+  static const rateLimited = 'rate_limited';
+  static const tooLarge = 'too_large';
+  static const appExited = 'app_exited';
+  static const unknownTool = 'unknown_tool';
+  static const internal = 'internal';
 }
 
 /// A token-bucket rate limiter: [capacity] tokens, refilling at

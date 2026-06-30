@@ -496,6 +496,49 @@ void main() {
     },
   );
 
+  test(
+    'isError results carry a machine-readable structuredContent.code (WS-6)',
+    () async {
+      pushRoot(buttonAndCount('element-1', 'Alice', 0));
+      await bridge.ready;
+
+      Future<String> codeFor(String tool, Map<String, Object?> args) async {
+        out.clear();
+        await server.handleLine(
+          _rpc(1, 'tools/call', <String, Object?>{
+            'name': tool,
+            'arguments': args,
+          }),
+        );
+        final result = lastResult();
+        expect(result['isError'], isTrue);
+        return (result['structuredContent'] as Map)['code'] as String;
+      }
+
+      // A stable category per failure kind — an agent branches on these instead
+      // of string-matching the prose.
+      expect(
+        await codeFor('invoke_action', <String, Object?>{
+          'id': 'nope',
+          'action': 'activate',
+        }),
+        'not_found',
+      );
+      expect(
+        await codeFor('invoke_action', <String, Object?>{
+          'id': 'count', // exists but advertises no actions
+          'action': 'activate',
+        }),
+        'action_unsupported',
+      );
+      expect(
+        await codeFor('invoke_action', <String, Object?>{'id': 'element-1'}),
+        'invalid_arguments',
+      );
+      expect(await codeFor('bogus_tool', <String, Object?>{}), 'unknown_tool');
+    },
+  );
+
   test('a request with explicit id:null still gets answered', () async {
     await server.handleLine('{"jsonrpc":"2.0","id":null,"method":"ping"}');
     final ok = jsonDecode(out.removeLast()) as Map<String, Object?>;
