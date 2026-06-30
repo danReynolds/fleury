@@ -25,7 +25,7 @@ remains. A living checklist — tick boxes and update the **Status board** as yo
 | WS-4 | Prompt-injection mitigation + rate-limit | M2 | P1 | — | `[x]` **done** (2026-06-29) |
 | WS-9 | Typed affordances (expose + validate) | M2 | P1 | `setValue` (shipped) | `[x]` **done** (2026-06-29) |
 | WS-8 | Test shapes (multi-contributor, fuzz, stress) | M2 | P1 | WS-3 | `[x]` **done** (2026-06-29) |
-| WS-5 | Shared spawn / lifecycle | M3 | P1 | coord. `fleury serve` | `[ ]` not started |
+| WS-5 | Shared spawn / lifecycle | M3 | P1 | coord. `fleury serve` | `[x]` **done** (2026-06-30) |
 | WS-6 | Cancellation, logging, error codes | M3 | P1/P2 | — | `[ ]` not started |
 | WS-7 | Per-revision node index | M3 | P2 | — | `[ ]` not started |
 
@@ -222,14 +222,26 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
 
 ## M3 — Robustness & polish
 
-### WS-5 — Shared spawn / lifecycle  ·  `[ ]`
+### WS-5 — Shared spawn / lifecycle  ·  `[x]` done
 
-- [ ] Extract a shared spawn-and-attach primitive into `fleury_host_io`; adopt in
-      both `FleuryAppBridge.spawn` and `fleury serve --spawn` (no serve regression).
-- [ ] Close/refuse extra socket connections after first attach.
-- [ ] Unify timeouts (`firstFrameTimeout` / `connectTimeout` / `settle` /
-      server-side ready-wait) into one coherent, configurable budget.
-- **Validate:** `[ ]` `fleury` (remote) · `[ ]` `fleury_mcp`.
+- [x] Extracted `spawnFleuryApp` into `fleury_host_io` (src/remote/spawn.dart):
+      bind socket → FLEURY_HANDLE → spawn → forward sanitized stdout/stderr →
+      await first connection (racing exit / connectTimeout / an optional `abort`)
+      → return socket+process+dispose. Adopted in BOTH `FleuryAppBridge.spawn`
+      and serve's `_SpawnSession` (warm-standby + cold-spawn + INIT preservation +
+      teardown preserved bit-for-bit; serve_spawn_test green 3×).
+- [x] **Refuse extras:** the listening socket is CLOSED after the first accept, so
+      a rogue second process is refused at connect time (not queued + hung). The
+      accepted socket lives → warm-standby unaffected. New e2e refusal test.
+- [x] Timeouts: serve's two hard-coded 10 s connect waits → one
+      `_spawnConnectTimeout`; the primitive owns `connectTimeout`/`killGrace`;
+      `firstFrameTimeout` + the render watchdog stay bridge-local (not all
+      timeouts collapse into one — settle/watchdog are a different concern).
+- **Validate:** `[x]` `fleury` 1736 (unit) + serve integration green ·
+  `[x]` `fleury_mcp` 79 (real-app e2e + refusal). *(Pre-existing, unrelated:
+  remote_client_asset drift — fails on the clean tree too.)*
+- **Adapted:** added an `abort` param to the primitive so serve's cold path can
+  pass the browser-closed signal (no orphan app) while the bridge passes none.
 
 ### WS-6 — Protocol completeness  ·  `[ ]`
 
@@ -390,3 +402,16 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
   Headline: **WS-1 delta = 0.3% of a full re-read (~322×)**; **WS-2 capped settle
   3.7× faster on a ticking app**; WS-9/WS-4 affordance+marker overhead +2.4%.
   mcp 78. → Resume **M3** (WS-5 spawn/lifecycle, WS-6 protocol, WS-7 node index).
+- *2026-06-30* — **WS-5 done (M3 begins) — shared spawn/lifecycle (`f2c1c11`).**
+  Extracted `spawnFleuryApp` (fleury_host_io); the MCP bridge and serve's
+  `_SpawnSession` both adopt it — serve's _process/_server/_socketPath/_appSocket
+  collapse into one `SpawnedFleuryApp`. New: the listening socket closes after the
+  first accept, so a rogue second connection is REFUSED (not queued + hung), while
+  the accepted socket lives so the warm-standby pairing is untouched. Serve's two
+  hard-coded 10 s timeouts unified to `_spawnConnectTimeout`; an `abort` param
+  carries serve's browser-closed signal so a vanished browser can't orphan the
+  app. The only serve regression was a log-wording change (`subprocess shut down`
+  vs `exited`) caught by serve_spawn_test — restored. fleury 1736 + serve
+  integration green · mcp 79 (real-app e2e + refusal test). Focused review of the
+  serve adoption running. → Next: WS-6 (cancellation/logging/error codes), WS-7
+  (per-revision node index), + the deferred real-host smoke.
