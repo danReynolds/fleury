@@ -454,21 +454,12 @@ void main() {
             },
           ),
         ],
-        child: const Column(
-          children: [
-            Expanded(child: Focus(autofocus: true, child: Text('Body'))),
-            KeyHintBar(),
-          ],
-        ),
+        child: const Focus(autofocus: true, child: Text('Body')),
       ),
     );
 
-    final hint = tester.renderToString(
-      size: const CellSize(40, 2),
-      emptyMark: ' ',
-    );
-    expect(hint, contains('[Ctrl+O] Open Workspace'));
-
+    // Hint-bar display of extension commands is covered by
+    // key_hint_bar_test.dart in fleury_widgets.
     final result = await tester.invokeCommand(_openWorkspace);
 
     expect(result.completed, isTrue);
@@ -977,34 +968,6 @@ void main() {
     expect(app.state.lastCommandId, 'go.runs');
     expect(app.state.lastCommandStatus, 'completed');
     expect(app.state.activeScreenId, 'runs');
-  });
-
-  testWidgets('app command shortcuts appear in KeyHintBar', (tester) {
-    tester.pumpWidget(
-      FleuryApp(
-        title: 'Ops Console',
-        commands: [
-          AppCommand(
-            id: _goRuns,
-            title: 'Go to Runs',
-            shortcuts: [KeyChord.ctrl.r],
-            run: (_) {},
-          ),
-        ],
-        child: const Column(
-          children: [
-            Expanded(child: Focus(autofocus: true, child: Text('Body'))),
-            KeyHintBar(),
-          ],
-        ),
-      ),
-    );
-
-    final out = tester.renderToString(
-      size: const CellSize(40, 2),
-      emptyMark: ' ',
-    );
-    expect(out.contains('[Ctrl+R] Go to Runs'), isTrue);
   });
 
   testWidgets('app shell provides root focus traversal', (tester) {

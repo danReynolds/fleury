@@ -32,7 +32,7 @@
 import 'dart:async' show unawaited;
 
 import 'package:characters/characters.dart';
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 import 'component_theme.dart';
 

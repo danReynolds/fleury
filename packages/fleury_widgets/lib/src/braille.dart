@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 import 'glyphs.dart';
 

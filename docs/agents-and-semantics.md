@@ -43,8 +43,11 @@ making your app drive well.
 
 The MCP server is a *thin shim*, not a bolted-on adapter, because **the app
 already produces everything the agent reads.** Alongside the visual tree, Fleury
-keeps a **semantic tree**: every frame, the framework produces a *semantic app
-graph* describing what the UI **means**, not how it's painted. That graph *is* the
+keeps a **semantic tree**: a *semantic app graph* describing what the UI
+**means**, not how it's painted. On every agent-reachable surface (`fleury
+serve`, the browser hosts, the headless tester) the framework rebuilds it
+whenever semantics change; a plain terminal run skips the work until a
+debug consumer asks. That graph *is* the
 MCP resource; the `SemanticAction`s on it *are* the MCP tools. There's no scraping
 layer to maintain — driving the UI is just reading the graph and invoking its
 actions. The rest of this page is that graph.
@@ -117,13 +120,14 @@ ancestor key chain rather than its raw position. A fully unkeyed node falls back
 to a positional id — and those *can* shift as the tree changes, so the server
 guards them: if a positional node's fingerprint (role + label + actions) changed
 since the agent last read it, the action fails safe with a `stale_reference`
-error instead of mis-targeting. Pinning `Semantics(id: 'submit')` on the nodes
+error instead of mis-targeting. Pinning `Semantics(id: SemanticNodeId('submit'))` on the nodes
 that matter gives the agent a durable handle and sidesteps the guard entirely.
 
-Settable nodes also publish a typed **`valueSchema`** — the type and domain a
-`set_value` will accept (a number range, an enum of option labels, a date) — so an
-agent fills a field correctly the first time, and an out-of-domain value is
-rejected with a clear reason rather than silently dropped.
+Settable nodes publish their raw constraints (min/max, option labels, a date
+format) in semantic state; the MCP server derives a typed **`valueSchema`**
+from them — the type and domain a `set_value` will accept — so an agent fills
+a field correctly the first time, and an out-of-domain value is rejected with
+a clear reason rather than silently dropped.
 
 ## The graph is the API — for tests, too
 
@@ -177,9 +181,11 @@ testWidgets('activating Save runs its handler', (tester) async {
 
 That `read graph → invoke action → observe change` loop is the whole story, and
 it isn't terminal-only. [`fleury serve`](/architecture/serving-and-embedding/)
-exposes the same loop over a socket: the tree ships out as JSON
-(`tester.semanticInspectionJson()` is that exact payload, redaction and all), and
-`SemanticAction`s come back on the same channel. So an MCP agent, a test, and the
+exposes the same loop over a socket: the tree ships out as JSON — the same
+node fields `tester.semanticInspectionJson()` shows, redaction and all,
+flattened into a full-then-patch diff envelope (`childIds` instead of nested
+children) so it stays inside DEFLATE's window — and `SemanticAction`s come
+back on the same channel, each answered with an invocation-status result. So an MCP agent, a test, and the
 browser's accessibility mirror are all the same kind of consumer — reading
 meaning and acting on it — with different goals.
 

@@ -34,6 +34,12 @@
 //                            host emits PLAN/SEMANTICS instead)
 //     0x12 PLAN     payload = binary presentation plan (see remote_codec)
 //     0x13 SEMANTICS payload = UTF-8 JSON semantic snapshot
+//     0x1A SEMANTIC_ACTION_RESULT payload = `<nodeId><action><status>` (see
+//                   remote_codec) — the invocation status for a peer's
+//                   SEMANTIC_ACTION, so agents/AT get real outcomes instead
+//                   of guessing from tree diffs. The app also echoes INIT
+//                   (v3+) after receiving the peer's, carrying its protocol
+//                   version so the client can detect skew.
 //
 //   Peer (serve / shell) → App, structured input
 //     0x14 INPUT_EVENT payload = binary TuiEvent (see remote_codec)
@@ -50,11 +56,19 @@
 // is treated as v1 (ANSI host). The payload size is a 32-bit unsigned
 // length so a single frame can hold a fat-screen full repaint.
 //
-// SEMANTIC_ACTION later gained an OPTIONAL trailing value byte (set_value). It
-// stays at v2 because the change is backward-compatible: the decoder treats an
-// absent byte as "no value" (see decodeSemanticAction), so a peer that predates
-// the field — e.g. a stale cached browser asset — still interoperates rather
-// than mis-decoding.
+// Versioning rule (the one rule, stated once): NEW FRAME TYPES and
+// OPTIONAL TRAILING FIELDS are additive — decoders skip unknown type
+// discriminators and tolerate absent trailing fields, so peers one
+// version apart interoperate. CELL/ENUM ENCODINGS inside existing
+// frames are version-gated: server and client ship from the same
+// fleury build (the client bundle is embedded in the binary), so
+// changing them requires a version bump and matching peers.
+//
+// Under that rule: SEMANTIC_ACTION's optional trailing value byte
+// (set_value) was additive. v3 added SEMANTIC_ACTION_RESULT (0x1A)
+// and the app-side INIT echo — both additive: a v2 peer skips the
+// result frame and ignores the echo; a v3 client merely can't show
+// action results or detect version skew against a v2 app.
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -66,8 +80,9 @@ import '../terminal/events.dart';
 import 'remote_codec.dart';
 
 /// Current serve/shell protocol version. Bumped when frame semantics
-/// change incompatibly; carried in the INIT handshake.
-const int remoteProtocolVersion = 2;
+/// change incompatibly; carried in the INIT handshake (and, since v3,
+/// echoed app → peer so the client can detect version skew).
+const int remoteProtocolVersion = 3;
 
 /// Default remote frame payload cap.
 ///
@@ -97,7 +112,10 @@ enum FrameType {
   semantics(0x13),
   inputEvent(0x14),
   semanticAction(0x15),
-  inlineImage(0x16);
+  inlineImage(0x16),
+  // 0x17-0x19 reserved for CLIPBOARD_WRITE / CLIPBOARD_RESULT / CARET
+  // (pipeline-program RFC §5.2).
+  semanticActionResult(0x1A);
 
   const FrameType(this.code);
   final int code;
@@ -212,6 +230,18 @@ final class InlineImageFrame extends RemoteFrame {
   final Uint8List bytes;
 }
 
+/// The app's answer to a [SemanticActionFrame]: the node id and action echoed
+/// back with the invocation status, so the peer (browser AT mirror, agent
+/// bridge) can distinguish "handler ran", "disabled", "not found",
+/// "unsupported", and "handler threw" instead of guessing from tree diffs.
+/// App → peer.
+final class SemanticActionResultFrame extends RemoteFrame {
+  const SemanticActionResultFrame(this.id, this.action, this.status);
+  final SemanticNodeId id;
+  final SemanticAction action;
+  final SemanticActionInvocationStatus status;
+}
+
 /// Either side signals a clean shutdown. Empty payload.
 final class ByeFrame extends RemoteFrame {
   const ByeFrame();
@@ -233,6 +263,10 @@ Uint8List encodeFrame(RemoteFrame frame) {
     SemanticActionFrame f => (
       FrameType.semanticAction,
       encodeSemanticAction(f.id, f.action, value: f.value),
+    ),
+    SemanticActionResultFrame f => (
+      FrameType.semanticActionResult,
+      encodeSemanticActionResult(f.id, f.action, f.status),
     ),
     InlineImageFrame f => (FrameType.inlineImage, _encodeInlineImage(f)),
     ByeFrame() => (FrameType.bye, const <int>[]),
@@ -370,6 +404,15 @@ final class FrameDecoder {
           return SemanticActionFrame(id, action, value: value);
         } on RemoteCodecException catch (e) {
           throw RemoteProtocolException('SEMANTIC_ACTION frame: ${e.message}.');
+        }
+      case FrameType.semanticActionResult:
+        try {
+          final (:id, :action, :status) = decodeSemanticActionResult(payload);
+          return SemanticActionResultFrame(id, action, status);
+        } on RemoteCodecException catch (e) {
+          throw RemoteProtocolException(
+            'SEMANTIC_ACTION_RESULT frame: ${e.message}.',
+          );
         }
       case FrameType.inlineImage:
         return _decodeInlineImage(payload);

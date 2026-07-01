@@ -1,15 +1,22 @@
 name: fleury_widgets
 description: Batteries-included widgets for fleury — tabs, panes, command palette, and more, composed on the core primitives.
-version: 0.0.0
-publish_to: none
+version: 0.1.0
+repository: https://github.com/danReynolds/fleury/tree/main/packages/fleury_widgets
+issue_tracker: https://github.com/danReynolds/fleury/issues
+topics:
+  - tui
+  - terminal
+  - widgets
+  - cli
 
 environment:
   sdk: ^3.10.4
 
 dependencies:
   characters: ^1.4.0
-  fleury:
-    path: ../fleury
+  # fleury's published API; pubspec_overrides.yaml resolves it from the
+  # monorepo during development.
+  fleury: ^0.1.0
   image: ^4.5.4
   meta: ^1.17.0
 

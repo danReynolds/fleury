@@ -5,7 +5,7 @@
 // drivers and the dart:io-backed widgets.
 import 'dart:math';
 
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 import 'package:fleury_samples/samples.dart';
 import 'package:fleury_widgets/fleury_widgets_web.dart';
 

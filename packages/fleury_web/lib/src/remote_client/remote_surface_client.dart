@@ -3,9 +3,6 @@ import 'dart:js_interop';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury_host.dart';
-import 'package:fleury/src/remote/remote_codec.dart' show ImagePlacement;
-import 'package:fleury/src/remote/remote_protocol.dart';
-import 'package:fleury/src/remote/remote_semantics.dart';
 import 'package:web/web.dart' as web;
 
 import '../dom_grid/dom_grid_surface.dart';
@@ -269,7 +266,29 @@ final class RemoteSurfaceClient {
         _presentSemantics(f);
       case ByeFrame():
         _teardown('The fleury session ended.');
-      case InitFrame _:
+      case InitFrame f:
+        // v3 apps echo INIT with their protocol version after receiving
+        // ours, so a stale cached client bundle is detectable instead of
+        // silently mis-decoding. Same major version: silence.
+        if (f.protocolVersion != remoteProtocolVersion) {
+          web.console.warn(
+            'fleury: protocol version skew — client v$remoteProtocolVersion, '
+                    'app v${f.protocolVersion}. Reload with a fresh bundle '
+                    '(the serve asset is no-store; check any caching proxy).'
+                .toJS,
+          );
+        }
+      case SemanticActionResultFrame f:
+        // Outcome of a semantic action this client (AT mirror) fired. A
+        // failed handler is an app bug — surface it in the console rather
+        // than letting it vanish.
+        if (f.status == SemanticActionInvocationStatus.failed) {
+          web.console.error(
+            'fleury: semantic action ${f.action.name} on ${f.id.value} '
+                    'failed in the app (see server logs).'
+                .toJS,
+          );
+        }
       case ResizeFrame _:
       case InputFrame _:
       case OutputFrame _:

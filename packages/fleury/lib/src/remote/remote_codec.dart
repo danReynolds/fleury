@@ -789,3 +789,46 @@ Uint8List encodeSemanticAction(
   }
   throw RemoteCodecException('unknown semantic action "$actionName"');
 }
+
+/// Encodes the app's answer to a peer's semantic-action request: the node id
+/// and action echoed back, plus the invocation status. Status travels by name
+/// (like the action) so the encoding stays additive-tolerant rather than
+/// index-coupled.
+Uint8List encodeSemanticActionResult(
+  SemanticNodeId id,
+  SemanticAction action,
+  SemanticActionInvocationStatus status,
+) {
+  final w = _Writer();
+  w.vstr(id.value);
+  w.vstr(action.name);
+  w.vstr(status.name);
+  return w.take();
+}
+
+/// Decodes a semantic-action result. Throws [RemoteCodecException] on an
+/// unrecognized action or status name so the caller rejects it rather than
+/// misinterpreting it.
+({
+  SemanticNodeId id,
+  SemanticAction action,
+  SemanticActionInvocationStatus status,
+})
+decodeSemanticActionResult(Uint8List bytes) {
+  final r = _Reader(bytes);
+  final id = r.vstr();
+  final actionName = r.vstr();
+  final statusName = r.vstr();
+  r.expectEnd();
+  final action = SemanticAction.values.where((a) => a.name == actionName);
+  if (action.isEmpty) {
+    throw RemoteCodecException('unknown semantic action "$actionName"');
+  }
+  final status = SemanticActionInvocationStatus.values.where(
+    (s) => s.name == statusName,
+  );
+  if (status.isEmpty) {
+    throw RemoteCodecException('unknown action status "$statusName"');
+  }
+  return (id: SemanticNodeId(id), action: action.first, status: status.first);
+}

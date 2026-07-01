@@ -1,6 +1,11 @@
 # RFC: Retained, geometry-bearing semantics pipeline
 
-Status: proposed (companion to `web-render-backend.md`, recommendation R1)
+Status: largely implemented — kept for rationale. The "Current state
+(evidence)" section below is a HISTORICAL snapshot: semantics now carry
+geometry (`SemanticNode.bounds`), ids are derived by default (keyed-ancestor
+`auto:` scheme), and structured serve/web frames build semantics per change.
+Read the code (`src/semantics/`) for current behavior.
+(Originally: proposed, companion to `web-render-backend.md`, R1)
 Motivation: make Fleury's accessibility/semantics a first-class frame output so
 the web host can be an *accessible, structured* app — the differentiator over
 xterm.js/Ratzilla — and so caret/focus/selection have a shared spatial model.

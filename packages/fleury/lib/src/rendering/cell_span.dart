@@ -1,4 +1,6 @@
-import 'package:fleury/fleury_host.dart';
+import '../runtime/tui_frame_loop.dart' show TuiDirtyRows;
+import 'cell.dart';
+import 'cell_buffer.dart';
 
 const String protocolPlaceholderGlyph = '▩';
 const String protocolPlaceholderTitle = 'unsupported inline image';

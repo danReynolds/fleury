@@ -74,8 +74,9 @@ Resolved positions:
   pipeline described in the companion RFC.
 - **Testing:** the live DOM renderer and the HTML artifact renderer share one
   pure span model so VM tests cover the real role-walking logic.
-- **Terminal transport:** xterm.js remains for arbitrary ANSI sessions such as
-  `fleury serve` until Fleury has a structured remote frame protocol.
+- **Terminal transport:** superseded — the structured remote frame protocol
+  shipped, and `fleury serve` now drives the same DOM cell grid through the
+  embedded structured client. No xterm.js anywhere.
 
 This revises the original RFC in these important ways:
 

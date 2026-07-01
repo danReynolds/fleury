@@ -14,6 +14,7 @@ import '../rendering/cell_buffer.dart';
 import '../runtime/frame_presentation.dart';
 import '../runtime/remote_surface_sink.dart';
 import '../semantics/inspection.dart';
+import '../semantics/semantics.dart';
 import '../terminal/capabilities.dart';
 import '../terminal/events.dart';
 import '../terminal/input_parser.dart';
@@ -177,6 +178,16 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
   }
 
   @override
+  void presentSemanticActionResult(
+    SemanticNodeId id,
+    SemanticAction action,
+    SemanticActionInvocationStatus status,
+  ) {
+    if (!_active || !wantsPresentationPlans) return;
+    _transport.send(SemanticActionResultFrame(id, action, status));
+  }
+
+  @override
   set onSemanticAction(RemoteSemanticActionHandler? handler) {
     _onSemanticAction = handler;
   }
@@ -194,6 +205,21 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
         );
         if (!_handshakeReceived) {
           _handshakeReceived = true;
+          // v3: echo INIT back with the app's protocol version so the
+          // peer can detect version skew (e.g. a cached client bundle).
+          // The echoed size/capabilities restate what the peer sent;
+          // only `v` carries new information. A v2 peer ignores it.
+          if (f.protocolVersion >= 3) {
+            _transport.send(
+              InitFrame(
+                size: _size,
+                colorMode: f.colorMode,
+                glyphTier: f.glyphTier,
+                imageProtocol: f.imageProtocol,
+                tmuxPassthrough: f.tmuxPassthrough,
+              ),
+            );
+          }
           _handshake?.complete();
         }
       case ResizeFrame f:
@@ -205,6 +231,7 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
       case PlanFrame _:
       case SemanticsFrame _:
       case InlineImageFrame _:
+      case SemanticActionResultFrame _:
         // App→peer render frames; an app never receives them. Ignore so a
         // malformed peer can't crash the session.
         break;

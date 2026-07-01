@@ -99,8 +99,11 @@ backend diffs cell buffers and emits byte-frugal ANSI — it accounts for
 every escape byte, writes through small gaps when that's cheaper than
 moving the cursor, and skips the synchronized-output wrapper when a diff
 is tiny. The web backend applies the *same damage* to retained DOM rows.
-Both sit behind one host interface, and an oracle in the test suite
-asserts the two surfaces render the same tree.
+Both hosts assemble the same building blocks (`TuiFrameLoop`, the
+presentation planner, the span builder) and an oracle in the test suite
+asserts the two surfaces render the same tree. (A single extracted frame
+driver owning the choreography end-to-end is designed in the pipeline
+program RFC and lands with the web render backend.)
 
 Around that pipeline sits the app layer: a typed command registry, focus
 and overlay management, a capability contract (terminals differ in

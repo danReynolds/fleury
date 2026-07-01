@@ -1,6 +1,6 @@
 // A tiny, deterministic Fleury app used by the MCP integration tests. It is
 // spawned as a subprocess by FleuryAppBridge.spawn (which sets FLEURY_HANDLE,
-// so runTui auto-connects over the remote wire). The UI is built entirely from
+// so runApp auto-connects over the remote wire). The UI is built entirely from
 // `Semantics` widgets with stable ids so a test can target nodes precisely:
 //
 //   • count      — text node whose value is the running count
@@ -10,7 +10,7 @@
 import 'package:fleury/fleury.dart';
 
 void main() {
-  runTui(const CounterApp());
+  runApp(const CounterApp());
 }
 
 class CounterApp extends StatefulWidget {

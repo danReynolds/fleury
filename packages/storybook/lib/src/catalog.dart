@@ -242,6 +242,7 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       'Dialog',
       'Toaster',
       'Tooltip',
+      'KeyHintBar',
     ],
     initialHeight: 13,
     builder: (context) =>
@@ -818,6 +819,9 @@ const Map<String, String> _widgetDescriptions = <String, String>{
       'Modal-style framed content for confirmations and focused decisions.',
   'Toaster': 'Transient notification host for contextual app feedback.',
   'Tooltip': 'Anchored help text for compact controls.',
+  'KeyHintBar':
+      'One-line bar that auto-discovers the active key bindings on the focus '
+      'chain and renders their hints.',
   'Tabs': 'Mounted tab panels with keyboard navigation and retained content.',
   'TabItem': 'Tab metadata and content pairing for tabbed surfaces.',
   'TabController': 'Programmatic tab state for command-driven navigation.',
@@ -1778,6 +1782,31 @@ class _OverlayStory extends StatelessWidget {
               ],
             ),
           ],
+        ),
+        'KeyHintBar' => KeyBindings(
+          bindings: <KeyBinding>[
+            KeyBinding(KeyChord.ctrl.k, onEvent: (_) {}, label: 'palette'),
+            KeyBinding(KeyChord.char('?'), onEvent: (_) {}, label: 'help'),
+            KeyBinding(
+              KeyChord.ctrl.s,
+              onEvent: (_) {},
+              label: 'hidden binding',
+              hideFromHintBar: true,
+            ),
+          ],
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Focus(
+                autofocus: true,
+                child: Text('Focused surface — its active bindings render '
+                    'below (hidden/label-less ones stay out):'),
+              ),
+              SizedBox(height: 1),
+              KeyHintBar(),
+            ],
+          ),
         ),
         'Toaster' => Column(
           mainAxisSize: MainAxisSize.min,

@@ -1,6 +1,6 @@
 import 'dart:async' show scheduleMicrotask, unawaited;
 
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 /// Type of target exposed by [FileMentionPicker].
 enum FileMentionKind { file, directory, symbol, url, other }

@@ -1,4 +1,4 @@
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 /// Large-numeral display for clocks, timers, counters — the "calculator
 /// face" look popularized by Textual's Digits widget. Each digit is drawn

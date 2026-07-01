@@ -43,11 +43,11 @@ void main() {
     });
   });
 
-  group('LogView', () {
+  group('OutputCaptureView', () {
     testWidgets('tails to the most recent lines that fit', (tester) {
       final b = _buffer(['one', 'two', 'three', 'four']);
       tester.pumpWidget(
-        SizedBox(width: 10, height: 2, child: LogView(buffer: b)),
+        SizedBox(width: 10, height: 2, child: OutputCaptureView(buffer: b)),
       );
       final out = tester.renderToString(size: const CellSize(10, 2));
       expect(out.contains('three'), isTrue);
@@ -57,7 +57,7 @@ void main() {
 
     testWidgets('renders nothing when empty', (tester) {
       tester.pumpWidget(
-        SizedBox(width: 10, height: 2, child: LogView(buffer: LogBuffer())),
+        SizedBox(width: 10, height: 2, child: OutputCaptureView(buffer: LogBuffer())),
       );
       expect(tester.renderToString(size: const CellSize(10, 2)).trim(), '');
     });
@@ -65,7 +65,7 @@ void main() {
     testWidgets('rebuilds as new lines arrive', (tester) {
       final b = LogBuffer();
       tester.pumpWidget(
-        SizedBox(width: 10, height: 2, child: LogView(buffer: b)),
+        SizedBox(width: 10, height: 2, child: OutputCaptureView(buffer: b)),
       );
       b.add(const LogLine('live', LogSource.stdout));
       tester.pump();
@@ -80,7 +80,7 @@ void main() {
       tester.pumpWidget(
         Theme(
           data: const ThemeData(),
-          child: SizedBox(width: 10, height: 1, child: LogView(buffer: b)),
+          child: SizedBox(width: 10, height: 1, child: OutputCaptureView(buffer: b)),
         ),
       );
       final buf = tester.render(size: const CellSize(10, 1));
@@ -92,7 +92,7 @@ void main() {
       tester.pumpWidget(
         LogBufferScope(
           buffer: b,
-          child: const SizedBox(width: 10, height: 1, child: LogView()),
+          child: const SizedBox(width: 10, height: 1, child: OutputCaptureView()),
         ),
       );
       expect(
@@ -102,13 +102,13 @@ void main() {
     });
   });
 
-  group('LogConsole', () {
+  group('OutputCaptureConsole', () {
     testWidgets('shows recent lines in a panel pinned to the bottom', (tester) {
       final b = _buffer(['hello-log']);
       tester.pumpWidget(
         LogBufferScope(
           buffer: b,
-          child: const LogConsole(height: 6, toggleHint: 'F12'),
+          child: const OutputCaptureConsole(height: 6, toggleHint: 'F12'),
         ),
       );
       final out = tester.renderToString(size: const CellSize(24, 10));
@@ -134,7 +134,7 @@ void main() {
                   ],
                 ),
               ),
-              const LogConsole(height: 6),
+              const OutputCaptureConsole(height: 6),
             ],
           ),
         ),
@@ -153,7 +153,7 @@ void main() {
 
     testWidgets('shows an empty state', (tester) {
       tester.pumpWidget(
-        LogBufferScope(buffer: LogBuffer(), child: const LogConsole(height: 6)),
+        LogBufferScope(buffer: LogBuffer(), child: const OutputCaptureConsole(height: 6)),
       );
       expect(
         tester
@@ -168,7 +168,7 @@ void main() {
       tester.pumpWidget(
         Theme(
           data: const ThemeData(),
-          child: LogBufferScope(buffer: b, child: const LogConsole(height: 6)),
+          child: LogBufferScope(buffer: b, child: const OutputCaptureConsole(height: 6)),
         ),
       );
       expect(

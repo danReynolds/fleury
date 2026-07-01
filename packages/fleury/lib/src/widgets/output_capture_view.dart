@@ -12,7 +12,7 @@ import 'listenable_builder.dart';
 import 'theme.dart';
 
 /// Shares a [LogBuffer] with descendants. `runApp` installs one above the
-/// app so [LogView] / [LogConsole] (including in floating overlays) can find
+/// app so [OutputCaptureView] / [OutputCaptureConsole] (including in floating overlays) can find
 /// the captured output without it being threaded through constructors.
 class LogBufferScope extends InheritedNotifier<LogBuffer> {
   const LogBufferScope({
@@ -45,8 +45,13 @@ class LogBufferScope extends InheritedNotifier<LogBuffer> {
 ///
 /// Reads its [LogBuffer] from [buffer] if given, otherwise from the nearest
 /// [LogBufferScope]. Rebuilds as new lines arrive.
-class LogView extends StatelessWidget {
-  const LogView({super.key, this.buffer, this.style, this.errorStyle});
+class OutputCaptureView extends StatelessWidget {
+  const OutputCaptureView({
+    super.key,
+    this.buffer,
+    this.style,
+    this.errorStyle,
+  });
 
   final LogBuffer? buffer;
   final CellStyle? style;
@@ -103,12 +108,12 @@ class LogView extends StatelessWidget {
 /// log panel pinned to the bottom, [height] rows tall (clamped to fit).
 ///
 /// Every cell it covers is painted, so it stays legible over a busy screen
-/// (unlike a bare [LogView], which only paints its glyphs). It reads the
+/// (unlike a bare [OutputCaptureView], which only paints its glyphs). It reads the
 /// captured output from the nearest [LogBufferScope] and dresses it up: an
 /// accent-colored frame, a reversed header bar with a line count, a
 /// source-tagged body (stderr in the error color), and a footer key hint.
-class LogConsole extends StatelessWidget {
-  const LogConsole({
+class OutputCaptureConsole extends StatelessWidget {
+  const OutputCaptureConsole({
     super.key,
     this.height = 12,
     this.title = 'console',

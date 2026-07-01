@@ -1,6 +1,6 @@
 import 'dart:async' show scheduleMicrotask, unawaited;
 
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 import 'diff_view.dart';
 

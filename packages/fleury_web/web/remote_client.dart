@@ -29,9 +29,15 @@ web.Element _hostElement() {
 }
 
 /// The serve page is served same-origin, so the WebSocket lives at the
-/// same host with the ws(s) scheme.
+/// same host with the ws(s) scheme. When the page was opened with a
+/// `?token=` (fleury serve --token=...), forward it so the upgrade
+/// passes the server's auth check.
 String _socketUrl() {
   final loc = web.window.location;
   final scheme = loc.protocol == 'https:' ? 'wss' : 'ws';
-  return '$scheme://${loc.host}/ws';
+  final token = Uri.parse(loc.href).queryParameters['token'];
+  final query = token == null || token.isEmpty
+      ? ''
+      : '?token=${Uri.encodeQueryComponent(token)}';
+  return '$scheme://${loc.host}/ws$query';
 }

@@ -63,9 +63,12 @@ capture**, **process** tasks, the external editor, and **file I/O** — lives
 
 That gives a simple rule for any code that might run in the browser:
 
-> Import **`package:fleury/fleury_host.dart`**, not `package:fleury/fleury.dart`.
-> The host SPI has everything a widget needs; the umbrella drags in the native
-> runtime and stops the program from compiling to JS.
+> Import **`package:fleury/fleury_core.dart`**, not `package:fleury/fleury.dart`.
+> The core has everything a widget or app needs; the umbrella drags in the
+> native runtime and stops the program from compiling to JS. Reserve
+> `fleury_host.dart` for code that *hosts* a Fleury tree — a platform target,
+> a serve bridge — not for application UI; what it adds beyond the core is
+> host machinery whose API is versioned for targets, not apps.
 
 `fleury_widgets` follows exactly this split:
 

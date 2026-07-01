@@ -1,4 +1,4 @@
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 /// Modal chrome — a bordered, padded panel with an optional [title] —
 /// ready to hand to `present`:

@@ -1,6 +1,4 @@
 import 'package:fleury/fleury_host.dart';
-import 'package:fleury/src/remote/remote_codec.dart'
-    show RemotePlan, applyRemotePlanToBuffer;
 
 
 /// Applies a decoded [plan] to the client's [CellBuffer] mirror and returns

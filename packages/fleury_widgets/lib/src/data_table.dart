@@ -1,7 +1,7 @@
 import 'dart:async' show FutureOr, unawaited;
 
 import 'package:characters/characters.dart';
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 import 'component_theme.dart';
 import 'table.dart' show FixedColumnWidth, FlexColumnWidth, TableColumnWidth;

@@ -1,7 +1,7 @@
 import 'dart:async' show unawaited;
 import 'dart:typed_data' show Uint32List;
 
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 import 'component_theme.dart';
 import 'data_table.dart' show DataTableColumn, DataTableExportFormat;

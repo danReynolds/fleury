@@ -35,8 +35,12 @@ see [Influences](#influences).)
 
 ## A platform-neutral core, plus targets
 
-Everything above is **platform-neutral**: it never mentions a terminal, a socket,
-or the DOM. The core's primary visual output is a `CellBuffer` — an abstract
+Everything above is **platform-neutral in the way that matters**: free of
+`dart:io` (it compiles to JavaScript, guarded by a transitive-import test) and
+presenter-agnostic — nothing in it writes bytes to a terminal, a socket, or
+the DOM. Terminal *vocabulary* (capability enums, the ANSI renderer as a pure
+`CellBuffer → bytes` function) does live in the core; the escape hatches out
+of it are the presenters. The core's primary visual output is a `CellBuffer` — an abstract
 grid where each cell is a grapheme plus a style (fg/bg, bold, dim, inverse…).
 The same mounted tree also produces semantics for hosts that need accessibility,
 agent control, or structured browser sessions. A **target** takes the visual
@@ -68,8 +72,8 @@ server (so it can use the filesystem, processes, anything `dart:io`) and streams
 the changed cells to a thin browser client. Same widget tree, different place the
 code lives.
 
-Everything above the seam is identical regardless of where it ends up; the target
-is the only part that knows about ANSI bytes, DOM nodes, or sockets. A parity
+Everything above the seam is identical regardless of where it ends up; the
+target is the only part that *talks to* a terminal, the DOM, or a socket. A parity
 oracle asserts the terminal and the browser render the same tree, so the surfaces
 can't quietly diverge.
 

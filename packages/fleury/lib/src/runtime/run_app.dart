@@ -35,15 +35,17 @@ import '../widgets/focus.dart';
 import '../widgets/basic.dart' show ErrorWidget;
 import '../widgets/framework.dart';
 import '../widgets/key_bindings.dart';
-import '../widgets/log_view.dart';
+import '../widgets/output_capture_view.dart';
 import '../widgets/media_query.dart';
 import '../widgets/navigator.dart';
 import '../widgets/overlay.dart';
 import '../widgets/pointer.dart';
 import '../widgets/tui_binding.dart';
+import 'clipboard.dart';
 import 'frame_presentation.dart';
 import 'frame_scheduler.dart';
 import 'hot_reload.dart';
+import 'system_clipboard.dart';
 import 'input_dispatcher.dart';
 import 'output_capture.dart';
 import 'remote_surface_sink.dart';
@@ -156,6 +158,14 @@ Future<void> runApp(
     );
   }
 
+  // Native clipboard: the neutral core defaults Clipboard.instance to the
+  // in-process register; the native host upgrades it to the platform
+  // implementation (platform tools + OSC 52) unless the app or a test
+  // already installed its own.
+  if (Clipboard.instanceIsNeutralDefault) {
+    Clipboard.instance = SystemClipboard();
+  }
+
   final runtime = TuiRuntime();
   final owner = runtime.owner;
   final focusManager = runtime.focusManager;
@@ -164,7 +174,7 @@ Future<void> runApp(
   // Install the build-error boundary: a thrown build() renders an error
   // panel for that subtree instead of crashing the app.
   Element.errorBuilder ??= (error, stack) => ErrorWidget.builder(error, stack);
-  // Floating LogConsole lives in the unified DebugShell — F12 is a binding on
+  // Floating OutputCaptureConsole lives in the unified DebugShell — F12 is a binding on
   // DebugShell that opens the docked panel with the Logs tab focused (rather
   // than a separate Overlay entry), backed by the always-available `debug`
   // config.
@@ -549,14 +559,30 @@ Future<void> runApp(
           maybeSurfaceSink.onSemanticAction = (id, action, value) {
             final root = rootElement;
             if (root == null) return;
-            unawaited(
-              invokeSemanticActionFromElement(
+            unawaited(() async {
+              final result = await invokeSemanticActionFromElement(
                 tree: SemanticTree.fromElement(root),
                 id: id,
                 action: action,
                 value: value,
-              ),
-            );
+              );
+              // Ship the outcome back so the peer (agent bridge, AT
+              // mirror) gets a real status instead of guessing from
+              // tree diffs — and surface a throwing onAction handler
+              // like any other app error rather than swallowing it.
+              maybeSurfaceSink.presentSemanticActionResult(
+                id,
+                action,
+                result.status,
+              );
+              if (result.status == SemanticActionInvocationStatus.failed) {
+                errorReporter.report(
+                  result.error ??
+                      StateError('semantic action ${action.name} failed'),
+                  result.stackTrace ?? StackTrace.current,
+                );
+              }
+            }());
             scheduleFrame('semantic-action:${action.name}');
           };
         }
@@ -681,10 +707,18 @@ Future<void> runApp(
                 // Ctrl+C exits only when the app did not handle it first.
                 // SelectionArea and focused text fields use Ctrl+C for copy and
                 // bubble when no selection exists, preserving the escape hatch.
+                //
+                // Structured remote sessions (a browser peer) are exempt: the
+                // browser key map folds macOS Cmd into Ctrl, so a reflexive
+                // Cmd+C with nothing selected would otherwise kill the served
+                // session. A browser user ends the session by closing the tab;
+                // the v1 ANSI shell path (a real terminal on the far end)
+                // keeps the escape hatch.
                 if (event is KeyEvent &&
                     event.char == 'c' &&
                     event.hasCtrl &&
-                    dispatchResult != KeyEventResult.handled) {
+                    dispatchResult != KeyEventResult.handled &&
+                    surfaceSink == null) {
                   if (!exit.isCompleted) exit.complete();
                   return;
                 }

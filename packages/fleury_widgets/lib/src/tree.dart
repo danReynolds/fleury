@@ -1,4 +1,4 @@
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 /// A node in a [Tree]: a [label] to display, an optional [value] payload,
 /// and any [children]. A node with children is a branch (expandable); one

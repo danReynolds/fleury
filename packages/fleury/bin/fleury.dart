@@ -86,7 +86,11 @@ void _printUsage() {
     '--host=<addr> (default 127.0.0.1),',
   );
   stderr.writeln(
-    '                    --allow-origin=<origin>, --spawn <cmd ...> '
+    '                    --allow-origin=<origin>, --token=<secret> '
+    '(require ?token= on /ws),',
+  );
+  stderr.writeln(
+    '                    --spawn <cmd ...> '
     '(per-browser subprocess isolation).',
   );
   stderr.writeln(
@@ -392,6 +396,7 @@ Future<int> _runServe(List<String> args) async {
   var port = 5777;
   var host = '127.0.0.1';
   var originPolicy = const _ServeOriginPolicy.sameOrigin();
+  String? token;
   List<String>? spawnCmd;
   // `--spawn` is greedy: everything after it (in argv order) becomes
   // the subprocess command. So `--port=N` and `--host=...` must come
@@ -413,6 +418,12 @@ Future<int> _runServe(List<String> args) async {
         return 2;
       }
       originPolicy = updated;
+    } else if (arg.startsWith('--token=')) {
+      token = arg.substring('--token='.length);
+      if (token.isEmpty) {
+        stderr.writeln('--token requires a non-empty secret.');
+        return 2;
+      }
     } else if (arg == '--spawn') {
       spawnCmd = args.sublist(i + 1);
       if (spawnCmd.isEmpty) {
@@ -426,7 +437,7 @@ Future<int> _runServe(List<String> args) async {
     } else if (arg == '-h' || arg == '--help') {
       stderr.writeln(
         'fleury serve [--port=<n>] [--host=<addr>] '
-        '[--allow-origin=<origin>] [--spawn <cmd> ...]',
+        '[--allow-origin=<origin>] [--token=<secret>] [--spawn <cmd> ...]',
       );
       return 0;
     } else {
@@ -435,14 +446,58 @@ Future<int> _runServe(List<String> args) async {
     }
   }
 
+  // The wire carries full app control: semantic actions, key/text
+  // injection, and the (redacted) semantic tree. Off loopback, anyone
+  // who can reach the port owns the app — make that loud.
+  if (!_isLoopbackHost(host)) {
+    stderr.writeln(
+      '[serve] WARNING: binding to $host exposes this app to the '
+      'network. Anyone who can reach the port can drive the UI and '
+      'read its (redacted) semantic tree.',
+    );
+    if (token == null) {
+      stderr.writeln(
+        '[serve] WARNING: no --token set. Pass --token=<secret> and '
+        'share the URL as http://$host:$port/?token=<secret>.',
+      );
+    }
+  }
+
   return spawnCmd != null
       ? _runServeSpawn(
           host: host,
           port: port,
           originPolicy: originPolicy,
+          token: token,
           command: spawnCmd,
         )
-      : _runServeBridge(host: host, port: port, originPolicy: originPolicy);
+      : _runServeBridge(
+          host: host,
+          port: port,
+          originPolicy: originPolicy,
+          token: token,
+        );
+}
+
+bool _isLoopbackHost(String host) {
+  if (host == 'localhost' || host == '127.0.0.1' || host == '::1') return true;
+  final parsed = InternetAddress.tryParse(host);
+  return parsed != null && parsed.isLoopback;
+}
+
+/// Token gate for the WebSocket endpoint. Origin checks stop cross-site
+/// browser pages; the token additionally stops any local process (or,
+/// off loopback, any network peer) that can open a socket but doesn't
+/// know the secret.
+bool _isAuthorizedWebSocketRequest(HttpRequest req, String? token) {
+  if (token == null) return true;
+  return req.uri.queryParameters['token'] == token;
+}
+
+Future<void> _rejectUnauthorizedWebSocket(HttpRequest req) async {
+  req.response.statusCode = HttpStatus.forbidden;
+  req.response.write('missing or invalid token');
+  await req.response.close();
 }
 
 /// Bridge mode: one shared socket; user starts the app process
@@ -452,6 +507,7 @@ Future<int> _runServeBridge({
   required String host,
   required int port,
   required _ServeOriginPolicy originPolicy,
+  String? token,
 }) async {
   final handleDir = Directory('.fleury');
   if (!handleDir.existsSync()) handleDir.createSync(recursive: true);
@@ -551,6 +607,10 @@ Future<int> _runServeBridge({
       }
       if (!_isAllowedWebSocketOrigin(req, originPolicy)) {
         await _rejectForbiddenWebSocketOrigin(req);
+        return;
+      }
+      if (!_isAuthorizedWebSocketRequest(req, token)) {
+        await _rejectUnauthorizedWebSocket(req);
         return;
       }
       final ws = await WebSocketTransformer.upgrade(req);
@@ -841,6 +901,7 @@ Future<int> _runServeSpawn({
   required int port,
   required _ServeOriginPolicy originPolicy,
   required List<String> command,
+  String? token,
 }) async {
   final handleDir = _createSpawnHandleDir();
   final httpServer = await HttpServer.bind(host, port);
@@ -902,6 +963,10 @@ Future<int> _runServeSpawn({
     }
     if (!_isAllowedWebSocketOrigin(req, originPolicy)) {
       await _rejectForbiddenWebSocketOrigin(req);
+      return;
+    }
+    if (!_isAuthorizedWebSocketRequest(req, token)) {
+      await _rejectUnauthorizedWebSocket(req);
       return;
     }
     final ws = await WebSocketTransformer.upgrade(req);

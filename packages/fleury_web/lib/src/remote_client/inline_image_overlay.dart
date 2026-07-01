@@ -1,7 +1,7 @@
 import 'dart:js_interop';
 import 'dart:typed_data';
 
-import 'package:fleury/src/remote/remote_codec.dart' show ImagePlacement;
+import 'package:fleury/fleury_host.dart' show ImagePlacement;
 import 'package:web/web.dart' as web;
 
 import '../metrics/cell_metrics.dart';

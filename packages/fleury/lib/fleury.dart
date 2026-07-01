@@ -34,9 +34,12 @@ export 'src/effects/external_editor.dart'
         ExternalEditorProcessRunner,
         resolveExternalEditorCommand;
 export 'src/rendering/io_sink_ansi_sink.dart' show IoSinkAnsiSink;
+export 'src/runtime/hot_reload.dart' show HotReloadController;
 export 'src/runtime/output_capture.dart' show LogBuffer, LogLine, LogSource;
+export 'src/runtime/system_clipboard.dart' show SystemClipboard;
 export 'src/runtime/run_app.dart' show ExitRequested, TuiEventHandler, runApp;
 export 'src/terminal/native_driver.dart' show createNativeTerminalDriver;
 export 'src/terminal/posix_driver.dart' show PosixTerminalDriver;
 export 'src/terminal/windows_driver.dart' show WindowsTerminalDriver;
-export 'src/widgets/log_view.dart' show LogBufferScope, LogConsole, LogView;
+export 'src/widgets/output_capture_view.dart'
+    show LogBufferScope, OutputCaptureConsole, OutputCaptureView;

@@ -63,6 +63,56 @@ void main() {
       final decoded = (FrameDecoder()..feed(wire)).drain().toList();
       expect(decoded.single, isA<ByeFrame>());
     });
+
+    test('SEMANTIC_ACTION_RESULT carries id, action, and status', () {
+      final frame = SemanticActionResultFrame(
+        const SemanticNodeId('save'),
+        SemanticAction.activate,
+        SemanticActionInvocationStatus.disabled,
+      );
+      final wire = encodeFrame(frame);
+      final decoder = FrameDecoder()..feed(wire);
+      final out = decoder.drain().toList();
+      expect(out, hasLength(1));
+      final decoded = out.single as SemanticActionResultFrame;
+      expect(decoded.id, const SemanticNodeId('save'));
+      expect(decoded.action, SemanticAction.activate);
+      expect(decoded.status, SemanticActionInvocationStatus.disabled);
+    });
+
+    test('SEMANTIC_ACTION_RESULT rejects an unknown status name', () {
+      final wire = encodeFrame(
+        SemanticActionResultFrame(
+          const SemanticNodeId('save'),
+          SemanticAction.activate,
+          SemanticActionInvocationStatus.completed,
+        ),
+      );
+      // Corrupt the status by rewriting the payload with a bogus name via
+      // the raw framing helper: id 's', action 'activate', status 'nope'.
+      Uint8List vstr(String v) {
+        final b = BytesBuilder()
+          ..addByte(v.length)
+          ..add(v.codeUnits);
+        return b.toBytes();
+      }
+
+      final payload = BytesBuilder()
+        ..add(vstr('s'))
+        ..add(vstr('activate'))
+        ..add(vstr('nope'));
+      final raw = _rawFrame(
+        FrameType.semanticActionResult,
+        payload.toBytes(),
+      );
+      final decoder = FrameDecoder()..feed(raw);
+      expect(
+        () => decoder.drain().toList(),
+        throwsA(isA<RemoteProtocolException>()),
+      );
+      expect(wire, isNotEmpty);
+    });
+
   });
 
   group('decoder framing', () {

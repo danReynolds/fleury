@@ -1,6 +1,6 @@
 import 'dart:async' show unawaited;
 
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 /// One result rendered by [SearchPanel].
 final class SearchResult {

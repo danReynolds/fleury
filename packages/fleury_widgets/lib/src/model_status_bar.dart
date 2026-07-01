@@ -1,4 +1,4 @@
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 /// Protocol-neutral lifecycle state for a model-backed workflow.
 enum ModelRuntimeStatus {

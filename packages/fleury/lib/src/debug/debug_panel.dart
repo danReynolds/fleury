@@ -19,7 +19,7 @@ import '../semantics/semantics.dart';
 import '../terminal/diagnostics.dart';
 import '../widgets/basic.dart';
 import '../widgets/framework.dart';
-import '../widgets/log_view.dart';
+import '../widgets/output_capture_view.dart';
 import 'debug_events.dart';
 import 'debug_monitors.dart';
 import 'debug_state.dart';
@@ -116,8 +116,8 @@ class _DebugPanelState extends State<DebugPanel> {
         return _rebuildsBody();
       case DebugTab.logs:
         // Captured stdout/stderr lives in the ambient LogBufferScope
-        // installed by runApp; LogView wires itself to it.
-        return const [Expanded(child: LogView())];
+        // installed by runApp; OutputCaptureView wires itself to it.
+        return const [Expanded(child: OutputCaptureView())];
     }
   }
 

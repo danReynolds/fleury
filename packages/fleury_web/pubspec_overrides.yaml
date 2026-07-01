@@ -1,0 +1,5 @@
+# Local development: resolve fleury from the monorepo. pub ignores this file
+# when publishing, so no hand-edit is needed at release time.
+dependency_overrides:
+  fleury:
+    path: ../fleury

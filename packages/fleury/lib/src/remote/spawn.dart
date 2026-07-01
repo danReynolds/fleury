@@ -187,7 +187,7 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
     };
     throw FleurySpawnException(
       'Failed to attach to `${command.join(' ')}`: $reason. '
-      'Make sure it calls runTui(...) so it auto-discovers FLEURY_HANDLE.',
+      'Make sure it calls runApp(...) so it auto-discovers FLEURY_HANDLE.',
     );
   }
 

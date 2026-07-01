@@ -10,7 +10,8 @@
 //     a focused widget (left/right from a vertical ListView; up at
 //     the top of the composer-adjacent list) move focus directly to
 //     the spatial neighbor — no Tab cycling needed.
-//   - KeyHintBar surfaces the live bindings at the bottom.
+//   - A static hint line surfaces the bindings at the bottom. (The
+//     auto-discovering KeyHintBar lives in fleury_widgets.)
 //   - Wrapping Text inside ListView lets long messages span multiple
 //     rows without manual line management.
 //
@@ -125,7 +126,10 @@ class _ChatAppState extends State<ChatApp> {
               ),
             ),
             _buildComposer(context),
-            KeyHintBar(separator: '  '),
+            const Text(
+              '[F1] help  [Ctrl+K] switch channel',
+              softWrap: false,
+            ),
           ],
         ),
       ),

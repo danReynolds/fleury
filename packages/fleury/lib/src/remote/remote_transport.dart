@@ -5,9 +5,9 @@
 //
 //   - `UnixSocketFrameTransport` — `fleury shell` IDE-debug workflow,
 //     app side connects to a Unix domain socket the shell created.
-//   - (future) `WebSocketFrameTransport` — `fleury serve` browser
-//     delivery, app side accepts a websocket from the embedded
-//     xterm.js client.
+//   - `fleury serve` browser delivery — the serve process bridges the
+//     app's Unix socket to a WebSocket; the browser end is the embedded
+//     structured client (RemoteSurfaceClient), not a transport here.
 //   - `_FakeFrameTransport` (tests) — a pair of in-memory streams.
 //
 // Each transport speaks the same wire protocol (`remote_protocol.dart`)

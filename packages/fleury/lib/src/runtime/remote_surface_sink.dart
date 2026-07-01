@@ -40,6 +40,16 @@ abstract interface class RemoteSurfaceSink {
   /// 32 KiB window. Called when the semantic tree changed.
   void presentSemantics(SemanticInspectionSnapshot snapshot);
 
+  /// Reports the invocation status for a peer's semantic-action request back
+  /// to the peer, so an agent or AT mirror can distinguish "handler ran",
+  /// "disabled", "not found", "unsupported", and "handler threw" instead of
+  /// inferring success from tree diffs.
+  void presentSemanticActionResult(
+    SemanticNodeId id,
+    SemanticAction action,
+    SemanticActionInvocationStatus status,
+  );
+
   /// Registers a handler for inbound semantic-action requests from the peer —
   /// the browser activating a node in its accessible DOM (a screen reader or
   /// agent driving the a11y tree, not the visual grid). The host invokes the

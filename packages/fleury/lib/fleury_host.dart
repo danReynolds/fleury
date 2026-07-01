@@ -53,10 +53,8 @@ export 'src/semantics/semantics_owner.dart'
     show SemanticsOwner, SemanticTreeUpdate, debugSemanticTreeDivergence;
 export 'src/semantics/semantics.dart'
     show
-        SemanticActionContributor,
         SemanticActionInvocationResult,
         SemanticActionInvocationStatus,
-        SemanticContributor,
         SemanticDirtyOwner,
         SemanticDirtySnapshot,
         SemanticDirtyTracker,
@@ -67,6 +65,45 @@ export 'src/semantics/semantics.dart'
 // interface a host uses to drive a Fleury app over a connection (and a
 // browser/agent host uses to mirror it). Platform-neutral; `dart:io` transports
 // live in `fleury_host_io.dart`.
-export 'src/remote/remote_protocol.dart';
-export 'src/remote/remote_semantics.dart';
-export 'src/remote/remote_transport.dart';
+export 'src/remote/remote_protocol.dart'
+    show
+        ByeFrame,
+        FrameDecoder,
+        FrameType,
+        InitFrame,
+        InlineImageFrame,
+        InputEventFrame,
+        InputFrame,
+        OutputFrame,
+        PlanFrame,
+        RemoteFrame,
+        RemoteProtocolException,
+        ResizeFrame,
+        SemanticActionFrame,
+        SemanticActionResultFrame,
+        SemanticsFrame,
+        defaultMaxRemoteFramePayloadLength,
+        encodeFrame,
+        remoteProtocolVersion;
+export 'src/remote/remote_codec.dart'
+    show
+        ImagePlacement,
+        RemoteCodecException,
+        RemotePatchRun,
+        RemotePlan,
+        RemoteRowPatch,
+        applyRemotePlanToBuffer,
+        buildRemotePlan,
+        decodeInputEvent,
+        decodeRemotePlan,
+        decodeSemanticAction,
+        encodeInputEvent,
+        encodeRemotePlan,
+        encodeSemanticAction;
+export 'src/remote/remote_semantics.dart'
+    show
+        SemanticsWireDecoder,
+        SemanticsWireEncoder,
+        maxSemanticTreeDepth,
+        semanticsWireVersion;
+export 'src/remote/remote_transport.dart' show RemoteFrameTransport;

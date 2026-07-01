@@ -134,9 +134,6 @@ export 'src/rendering/text_sanitizer.dart'
 export 'src/rendering/width_resolver.dart'
     show DefaultWidthResolver, TerminalProfile, WidthResolver;
 
-// Runtime
-export 'src/runtime/hot_reload.dart' show HotReloadController;
-
 // Semantics
 export 'src/semantics/accessibility.dart'
     show
@@ -156,6 +153,9 @@ export 'src/semantics/semantics.dart'
     show
         SemanticAction,
         SemanticActionCallback,
+        SemanticActionContributor,
+        SemanticChildrenProvider,
+        SemanticContributor,
         SemanticNode,
         SemanticNodeId,
         SemanticRole,
@@ -268,7 +268,6 @@ export 'src/widgets/key_bindings.dart'
         KeyChordChain,
         PendingKeyChord,
         PendingKeyChordChain;
-export 'src/widgets/key_hint_bar.dart' show KeyHintBar;
 export 'src/widgets/list_view.dart' show EdgeBehavior, ListController, ListView;
 export 'src/widgets/navigator.dart'
     show Navigator, NavigatorContext, NavigatorState, PopScope, RouteTransition;
@@ -306,7 +305,7 @@ export 'src/runtime/clipboard.dart'
         ClipboardWritePolicy,
         ClipboardWriteReport,
         ClipboardWriteResult,
-        SystemClipboard;
+        InProcessClipboard;
 export 'src/widgets/selection/selection_area.dart'
     show SelectionArea, SelectionChangedCallback;
 export 'src/widgets/selection/selection_container_delegate.dart'

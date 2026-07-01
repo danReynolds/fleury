@@ -353,7 +353,7 @@ Required for M1.1:
 | `CommandPalette` / commands | `commandPalette`, `command`, commandId, shortcut, enabled, activate action. |
 | `ProgressBar` / `Spinner` | `progress`, busy, value/total/label where determinate. |
 | `Table` | `table`, row/cell visible semantics, selected key, visible range, row count. |
-| `LogView` | `log`, source/severity metadata where available, copy action. |
+| `OutputCaptureView` (formerly `LogView`) | `log`, source/severity metadata where available, copy action. |
 | terminal diagnostics | `diagnostic`, capability/fallback nodes. |
 
 ## 12. Demo-App Mapping
