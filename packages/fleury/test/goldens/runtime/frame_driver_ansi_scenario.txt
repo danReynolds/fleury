@@ -1,0 +1,8 @@
+=== mount ===
+[2J[H[Hcount: 0[2Hsteady line
+=== after t (rebuild) ===
+[1;8H1
+=== after s (no-work: must be empty) ===
+
+=== after resize (full repaint) ===
+[2J[H[Hcount: 1[2Hsteady line

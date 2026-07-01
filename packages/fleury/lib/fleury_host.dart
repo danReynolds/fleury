@@ -37,6 +37,8 @@ export 'src/runtime/frame_presentation.dart'
         FramePresentationPlan,
         FramePresentationPlanner;
 export 'src/widgets/framework.dart' show BuildFlushStats;
+export 'src/runtime/frame_driver.dart'
+    show FrameDriver, FramePresentInfo, FramePresenter;
 export 'src/runtime/frame_scheduler.dart'
     show FrameFlushScheduler, FrameRenderCallback, FrameScheduler;
 export 'src/runtime/input_dispatcher.dart' show InputDispatcher;
@@ -49,6 +51,7 @@ export 'src/runtime/tui_frame_loop.dart'
         TuiFramePaintCallback,
         TuiRenderedFrame;
 export 'src/runtime/tui_runtime.dart' show TuiRuntime;
+export 'src/runtime/wire_frame_presenter.dart' show WireFramePresenter;
 export 'src/semantics/semantics_owner.dart'
     show SemanticsOwner, SemanticTreeUpdate, debugSemanticTreeDivergence;
 export 'src/semantics/semantics.dart'
