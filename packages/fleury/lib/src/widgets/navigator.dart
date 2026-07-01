@@ -138,7 +138,13 @@ class _Route {
   /// reordering as the stack grows and shrinks.
   final Key key = UniqueKey();
 
-  FocusNode? priorFocus;
+  /// Anchors [FocusManager.restoreFocusInScope] inside this route's chrome:
+  /// the route's FocusScope remembers the node last focused within it, and a
+  /// pop that reveals this route restores through this key. Replaces the old
+  /// hand-tracked `priorFocus` snapshot — the scope memory is recorded where
+  /// the focus actually lives, so it also survives pushReplacement and
+  /// popUntil (whose intermediate routes are gone by restore time).
+  final GlobalKey restoreKey = GlobalKey();
   bool leaving = false;
 
   /// True once the route has settled fully present with no in-flight
@@ -298,9 +304,9 @@ class NavigatorState extends State<Navigator> {
       ..replacing = replaced
       ..replacingResult = result;
     _pushRoute(route);
-    // Inherit the replaced route's restore target so popping the
-    // replacement returns focus where the replaced route would have.
-    if (replaced != null) route.priorFocus = replaced.priorFocus;
+    // No focus bookkeeping to inherit from the replaced route: restore reads
+    // the covered route's own FocusScope memory, which is untouched by the
+    // replacement.
     return route.completer.future.then((v) => v as T?);
   }
 
@@ -384,9 +390,14 @@ class NavigatorState extends State<Navigator> {
     if (!route.completer.isCompleted) route.completer.complete(result);
 
     // Restore focus to the revealed screen immediately — not after the
-    // exit animation — so input lands on it right away.
+    // exit animation — so input lands on it right away. The revealed route's
+    // FocusScope remembers what was focused within it; restore through it
+    // (correct even for popUntil, where the routes between are already gone).
     _manager?.requestFocus(null);
-    _restoreFocus(route);
+    final revealed = _topLive;
+    if (revealed != null) {
+      _manager?.restoreFocusInScope(revealed.restoreKey.currentContext);
+    }
 
     final transition = route.transition;
     if (transition == null) {
@@ -439,8 +450,10 @@ class NavigatorState extends State<Navigator> {
   }
 
   void _pushRoute(_Route route) {
-    route.priorFocus = _manager?.focusedNode;
-    _manager?.requestFocus(null); // let the new route's chrome autofocus
+    // Clear focus so the new route's content autofocuses. What was focused is
+    // already remembered by the covered route's FocusScope (recorded when it
+    // was focused), so pop can restore it — no snapshot needed here.
+    _manager?.requestFocus(null);
     _routes.add(route);
     _animateIn(route);
     _rebuild();
@@ -516,12 +529,6 @@ class NavigatorState extends State<Navigator> {
   void _remove(_Route route) {
     _routes.remove(route);
     route.presence.dispose();
-  }
-
-  /// Restores focus to whatever was focused before [route] was pushed.
-  void _restoreFocus(_Route route) {
-    final prior = route.priorFocus;
-    if (prior != null && prior.isAttached) prior.requestFocus();
   }
 
   void _rebuild() {
@@ -661,7 +668,11 @@ class _RouteHost extends StatelessWidget {
     Widget content = FocusScope(
       modal: modal,
       suppressGlobals: modal,
+      // The restoreKey anchors focus restoration: it sits INSIDE the route's
+      // FocusScope, so restoreFocusInScope(key.currentContext) resolves this
+      // route's scope memory when a pop reveals the route again.
       child: KeyBindings(
+        key: route.restoreKey,
         bindings: active && dismissible
             ? [
                 KeyBinding(

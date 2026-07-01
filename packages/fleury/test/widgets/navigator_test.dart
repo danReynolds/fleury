@@ -254,6 +254,64 @@ void main() {
     expect(homeInput.text, 'ac', reason: 'focus restored to home');
   });
 
+  testWidgets('popUntil restores focus to the target route', (tester) {
+    // The old priorFocus chain pointed into intermediate routes that popUntil
+    // removes — restore died with them. Scope memory lives on the TARGET
+    // route's own FocusScope, so it survives.
+    BuildContext? home;
+    final homeInput = TextEditingController();
+    tester.pumpWidget(
+      Navigator(
+        home: _CaptureChild(
+          sink: (x) => home = x,
+          child: TextInput(controller: homeInput, autofocus: true),
+        ),
+      ),
+    );
+    tester.type('a');
+    expect(homeInput.text, 'a');
+
+    home!.push<void>(TextInput(controller: TextEditingController(), autofocus: true));
+    tester.pump(const Duration(milliseconds: 300));
+    home!.push<void>(TextInput(controller: TextEditingController(), autofocus: true));
+    tester.pump(const Duration(milliseconds: 300));
+
+    home!.navigator.popToRoot();
+    tester.pump(const Duration(milliseconds: 300));
+    tester.type('b');
+    expect(homeInput.text, 'ab',
+        reason: 'focus restored to home across removed intermediates');
+  });
+
+  testWidgets("pushReplacement: popping the replacement restores the covered "
+      "route's focus", (tester) async {
+    BuildContext? home;
+    final homeInput = TextEditingController();
+    tester.pumpWidget(
+      Navigator(
+        home: _CaptureChild(
+          sink: (x) => home = x,
+          child: TextInput(controller: homeInput, autofocus: true),
+        ),
+      ),
+    );
+    tester.type('a');
+
+    home!.push<void>(const Text('interim'));
+    tester.pump(const Duration(milliseconds: 300));
+    home!.navigator.pushReplacement<void>(const Text('replacement'));
+    tester.pump(const Duration(milliseconds: 300));
+    // The replaced route is removed in the settle callback (a microtask);
+    // yield so it runs — otherwise pop below reveals the zombie interim.
+    await tester.settle();
+
+    home!.navigator.pop();
+    tester.pump(const Duration(milliseconds: 300));
+    tester.type('b');
+    expect(homeInput.text, 'ab',
+        reason: "the covered route's own scope memory survives replacement");
+  });
+
   testWidgets(
     'page routes allow ancestor bindings while modals suppress them',
     (tester) {

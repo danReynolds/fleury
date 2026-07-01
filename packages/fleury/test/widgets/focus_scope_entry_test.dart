@@ -18,6 +18,36 @@ class _Flag extends ChangeNotifier {
   }
 }
 
+/// Rebuilds [builder] with the flag's value — the generic parent-rebuild host.
+class _Rebuilder extends StatefulWidget {
+  const _Rebuilder({required this.flag, required this.builder});
+  final _Flag flag;
+  final Widget Function(bool on) builder;
+  @override
+  State<_Rebuilder> createState() => _RebuilderState();
+}
+
+class _RebuilderState extends State<_Rebuilder> {
+  @override
+  void initState() {
+    super.initState();
+    widget.flag.addListener(_rebuild);
+  }
+
+  void _rebuild() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.flag.removeListener(_rebuild);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(widget.flag.value);
+}
+
 /// Scope A is always present (autofocus a). Scope B appears once [flag] flips.
 class _TwoScopes extends StatefulWidget {
   const _TwoScopes({required this.flag, required this.a, required this.b});
@@ -82,6 +112,62 @@ void main() {
     expect(tester.focusManager.focusedNode, same(b),
         reason: 'b autofocuses into its empty scope despite scope A holding '
             'focus — the global gate would have skipped it');
+  });
+
+  testWidgets('a FocusScope reconciles a swapped child (marker rebuild)',
+      (tester) {
+    // Regression: _FocusScopeMarkerElement.update didn't rebuild its child, so
+    // a structural change flowing THROUGH a FocusScope was silently dropped —
+    // the old subtree stayed mounted forever.
+    final flag = _Flag();
+    tester.pumpWidget(
+      _Rebuilder(
+        flag: flag,
+        builder: (on) => FocusScope(child: Text(on ? 'after' : 'before')),
+      ),
+    );
+    expect(tester.renderToString(size: const CellSize(8, 1)),
+        contains('before'));
+    flag.enable();
+    tester.pump();
+    expect(tester.renderToString(size: const CellSize(8, 1)), contains('after'),
+        reason: 'the swap must flow through the scope marker');
+  });
+
+  testWidgets('autofocus lands after a view swap within one scope', (tester) {
+    // The drill-down pattern (menu -> detail): the old focused view unmounts,
+    // the new view autofocuses. Deactivate detaches the old node before the
+    // new child attaches, so the scope is empty at the gate.
+    final a = FocusNode(debugLabel: 'a');
+    final b = FocusNode(debugLabel: 'b');
+    final flag = _Flag();
+    tester.pumpWidget(
+      _Rebuilder(
+        flag: flag,
+        builder: (on) => FocusScope(
+          child: on
+              ? Focus(
+                  key: const ValueKey('b'),
+                  focusNode: b,
+                  autofocus: true,
+                  child: const EmptyBox(),
+                )
+              : Focus(
+                  key: const ValueKey('a'),
+                  focusNode: a,
+                  autofocus: true,
+                  child: const EmptyBox(),
+                ),
+        ),
+      ),
+    );
+    expect(tester.focusManager.focusedNode, same(a));
+
+    flag.enable(); // a unmounts, b mounts — the drill-down swap
+    tester.pump();
+    expect(tester.focusManager.focusedNode, same(b),
+        reason: "the new view's autofocus claims the vacated scope — the "
+            'Future.microtask(requestFocus) workaround replacement');
   });
 
   testWidgets('a still-focused sibling in the SAME scope is not stolen from',
