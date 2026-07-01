@@ -114,6 +114,15 @@ class _FakeMetrics implements CellMetrics {
   }
 
   @override
+  CellOffset? cellForViewportPoint(double clientX, double clientY) {
+    if (box.cols <= 0 || box.rows <= 0) return null;
+    return cellForPoint(
+      clientX - box.cssCanvasLeft,
+      clientY - box.cssCanvasTop,
+    );
+  }
+
+  @override
   void dispose() {
     disposed = true;
   }
@@ -1368,6 +1377,94 @@ void main() {
       expect(
         instrumentation.frames.last.reason,
         'semantic-action:activate:notFound',
+      );
+
+      await host.dispose();
+    },
+  );
+
+  test(
+    'web semantic activation survives a coverage-fallback frame: dispatch '
+    'resolves against the live element tree, not a null-map currentTree',
+    () async {
+      var calls = 0;
+      final visualRoot = web.document.createElement('div');
+      final semanticRoot = web.document.createElement('div');
+      final surface = DomGridSurface(
+        root: visualRoot,
+        size: const CellSize(16, 2),
+      );
+      final semantics = SemanticDomPresenter(root: semanticRoot);
+      final input = _FakeInputSource();
+      final focusCoordinator = WebFocusCoordinator();
+      final instrumentation = RecordingWebHostInstrumentation();
+      final flush = _FakeFlush();
+
+      final host = await runTuiSurface(
+        () => Column(
+          children: [
+            Semantics(
+              id: const SemanticNodeId('run'),
+              role: SemanticRole.button,
+              label: 'Run',
+              actions: const {SemanticAction.activate},
+              onAction: (action) {
+                expect(action, SemanticAction.activate);
+                calls += 1;
+              },
+              child: const Text('Run'),
+            ),
+            // Uncovered painted text forces applySemanticTextFallback, which
+            // rebuilds currentTree via the const SemanticTree(root:) ctor — a
+            // tree with NO element map. Action dispatch must resolve against the
+            // live element tree (fromElement), not that map-less currentTree, or
+            // a real, actionable button silently no-ops after any fallback frame.
+            const _RawPaintedText('raw'),
+          ],
+        ),
+        surface: surface,
+        inputSource: input,
+        semanticPresenter: semantics,
+        flushScheduler: flush.schedule,
+        focusCoordinator: focusCoordinator,
+        instrumentation: instrumentation,
+      );
+
+      flush.fire();
+      await host.awaitSemanticIdle();
+
+      // Precondition: the fallback actually engaged, so currentTree is now the
+      // map-less tree — the exact state that regressed dispatch.
+      expect(
+        instrumentation.semanticFlushes.last.semanticFallbackNodeCount,
+        greaterThan(0),
+        reason: 'raw painted text must be uncovered to reproduce the regression',
+      );
+
+      final button = semanticRoot.querySelector(
+        '[data-fleury-semantic-id="run"]',
+      )!;
+      button.dispatchEvent(
+        web.Event('click', web.EventInit(bubbles: true, cancelable: true)),
+      );
+      expect(calls, 0);
+
+      flush.fire();
+      await host.awaitSemanticIdle();
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        calls,
+        1,
+        reason: 'the action must fire despite the null-map currentTree',
+      );
+
+      flush.fire();
+      await host.awaitSemanticIdle();
+      expect(
+        instrumentation.frames.last.reason,
+        'semantic-action:activate:completed',
       );
 
       await host.dispose();

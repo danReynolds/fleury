@@ -93,6 +93,14 @@ abstract interface class CellMetrics {
   /// outside that phase.
   CellOffset cellForPoint(double x, double y);
 
+  /// Maps a browser viewport/client point to a surface cell.
+  ///
+  /// DOM-backed implementations may read the host's current origin so pointer
+  /// input remains correct when the page scrolls or surrounding layout moves
+  /// the host after the last size measurement. The cached measurement remains
+  /// authoritative for cell size and grid extent.
+  CellOffset? cellForViewportPoint(double clientX, double clientY);
+
   /// Releases browser observers and hidden probes.
   void dispose();
 }

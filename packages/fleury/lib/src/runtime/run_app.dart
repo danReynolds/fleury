@@ -546,15 +546,15 @@ Future<void> runApp(
           // action against the live tree and re-render, completing the
           // semantics round trip (presentSemantics ships the tree out, this
           // brings activations back). Mirrors the in-browser host.
-          maybeSurfaceSink.onSemanticAction = (id, action) {
+          maybeSurfaceSink.onSemanticAction = (id, action, value) {
             final root = rootElement;
             if (root == null) return;
             unawaited(
               invokeSemanticActionFromElement(
-                root: root,
                 tree: SemanticTree.fromElement(root),
                 id: id,
                 action: action,
+                value: value,
               ),
             );
             scheduleFrame('semantic-action:${action.name}');

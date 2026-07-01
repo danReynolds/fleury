@@ -389,5 +389,37 @@ void main() {
         ),
       );
     });
+
+    testWidgets('semantic setValue jumps to an exact ISO date (B4)',
+        (tester) async {
+      DateTime? selected;
+      tester.pumpWidget(
+        DatePicker(
+          value: _d(2024, 3, 1),
+          firstDate: _d(2024, 1, 1),
+          lastDate: _d(2024, 12, 31),
+          onChanged: (d) => selected = d,
+        ),
+      );
+      expect(
+        tester.semantics().single(role: SemanticRole.datePicker).actions,
+        contains(SemanticAction.setValue),
+      );
+
+      await tester.invokeSemanticAction(SemanticAction.setValue,
+          role: SemanticRole.datePicker, payload: '2024-07-04');
+      expect(selected, _d(2024, 7, 4));
+
+      // Out of [firstDate, lastDate] is a no-op, not a clamp to a wrong date.
+      selected = null;
+      await tester.invokeSemanticAction(SemanticAction.setValue,
+          role: SemanticRole.datePicker, payload: '2025-01-01');
+      expect(selected, isNull);
+
+      // Unparseable date is a no-op.
+      await tester.invokeSemanticAction(SemanticAction.setValue,
+          role: SemanticRole.datePicker, payload: 'someday');
+      expect(selected, isNull);
+    });
   });
 }

@@ -184,6 +184,33 @@ class _SelectState<T> extends State<Select<T>> {
     if (mounted) setState(() {});
   }
 
+  /// Picks the option matching [payload] (by label or value string) without
+  /// opening the dropdown — the one-call `setValue` path an agent uses instead
+  /// of open → read options → select. Prefers an exact match, then a
+  /// case-insensitive one; only enabled options match.
+  void _selectByPayload(Object? payload) {
+    if (widget.onChanged == null) return;
+    final wanted = payload?.toString().trim();
+    if (wanted == null || wanted.isEmpty) return;
+    final lower = wanted.toLowerCase();
+    SelectOption<T>? fuzzy;
+    for (final o in widget.options) {
+      if (!o.enabled) continue;
+      final label = sanitizeOptionLabel(o.label);
+      if (label == wanted || '${o.value}' == wanted) {
+        if (o.value != widget.value) widget.onChanged!(o.value);
+        return;
+      }
+      fuzzy ??=
+          (label.toLowerCase() == lower || '${o.value}'.toLowerCase() == lower)
+          ? o
+          : null;
+    }
+    if (fuzzy != null && fuzzy.value != widget.value) {
+      widget.onChanged!(fuzzy.value);
+    }
+  }
+
   @override
   void dispose() {
     _entry?.remove();
@@ -235,12 +262,24 @@ class _SelectState<T> extends State<Select<T>> {
           if (widget.options.isNotEmpty) SemanticAction.activate,
           if (widget.options.isNotEmpty)
             _isOpen ? SemanticAction.close : SemanticAction.open,
+          if (widget.options.isNotEmpty) SemanticAction.setValue,
         },
         state: SemanticState({
           'menuItemCount': widget.options.length,
           'open': _isOpen,
           'selectedKey': widget.value,
           'selectedOptionLabel': _currentLabel,
+          // The settable domain: each enabled option's label and stringified
+          // value, in the exact forms `_selectByPayload` matches on, so an agent
+          // (and the WS-9 valueSchema) sees precisely what set_value accepts.
+          'options': <Object?>[
+            for (final o in widget.options)
+              if (o.enabled)
+                <String, Object?>{
+                  'label': sanitizeOptionLabel(o.label),
+                  'value': '${o.value}',
+                },
+          ],
         }),
         onAction: (action) {
           switch (action) {
@@ -260,6 +299,7 @@ class _SelectState<T> extends State<Select<T>> {
               return;
           }
         },
+        onSetValue: _selectByPayload,
         child: GestureDetector(
           onTap: () {
             _triggerFocus.requestFocus();

@@ -234,6 +234,10 @@ class _Reader {
 
   bool boolean() => u8() != 0;
 
+  /// Whether any bytes remain — lets a decoder treat an absent trailing field as
+  /// its default (e.g. a pre-value SEMANTIC_ACTION frame from an older peer).
+  bool get hasMore => _pos < _data.length;
+
   void _need(int n) {
     if (_pos + n > _data.length) {
       throw const RemoteCodecException('truncated payload');
@@ -739,28 +743,48 @@ TuiEvent decodeInputEvent(Uint8List bytes) {
   return event;
 }
 
-/// Encodes a peer's semantic-action request — the browser activating a node in
-/// its accessible DOM — as the node id plus the action name.
-Uint8List encodeSemanticAction(SemanticNodeId id, SemanticAction action) {
+/// Encodes a peer's semantic-action request — the browser or an agent
+/// activating a node in its accessible DOM — as the node id, the action name,
+/// and an optional JSON-encoded payload (carried only by `setValue`).
+Uint8List encodeSemanticAction(
+  SemanticNodeId id,
+  SemanticAction action, {
+  Object? value,
+}) {
   final w = _Writer();
   w.vstr(id.value);
   w.vstr(action.name);
+  w.boolean(value != null);
+  if (value != null) w.vstr(jsonEncode(value));
   return w.take();
 }
 
 /// Decodes a semantic-action request. Throws [RemoteCodecException] on an
-/// unrecognized action name (e.g. a peer on a newer protocol) so the caller
-/// rejects it rather than misinterpreting it.
-({SemanticNodeId id, SemanticAction action}) decodeSemanticAction(
+/// unrecognized action name (e.g. a peer on a newer protocol) or a malformed
+/// payload so the caller rejects it rather than misinterpreting it.
+({SemanticNodeId id, SemanticAction action, Object? value}) decodeSemanticAction(
   Uint8List bytes,
 ) {
   final r = _Reader(bytes);
   final id = r.vstr();
   final actionName = r.vstr();
+  Object? value;
+  // The value byte is additive (protocol v3). Tolerate its absence so a frame
+  // from an older peer — e.g. a stale cached browser asset that still sends the
+  // 2-field id+action form — decodes as a plain parameterless action instead of
+  // throwing 'truncated payload' and killing the connection.
+  if (r.hasMore && r.boolean()) {
+    final raw = r.vstr();
+    try {
+      value = jsonDecode(raw);
+    } on FormatException {
+      throw const RemoteCodecException('invalid setValue payload JSON');
+    }
+  }
   r.expectEnd();
   for (final action in SemanticAction.values) {
     if (action.name == actionName) {
-      return (id: SemanticNodeId(id), action: action);
+      return (id: SemanticNodeId(id), action: action, value: value);
     }
   }
   throw RemoteCodecException('unknown semantic action "$actionName"');

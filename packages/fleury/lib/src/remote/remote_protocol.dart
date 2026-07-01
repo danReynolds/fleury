@@ -49,6 +49,12 @@
 // structured PLAN/SEMANTICS/INPUT_EVENT frames; a peer omitting `v`
 // is treated as v1 (ANSI host). The payload size is a 32-bit unsigned
 // length so a single frame can hold a fat-screen full repaint.
+//
+// SEMANTIC_ACTION later gained an OPTIONAL trailing value byte (set_value). It
+// stays at v2 because the change is backward-compatible: the decoder treats an
+// absent byte as "no value" (see decodeSemanticAction), so a peer that predates
+// the field — e.g. a stale cached browser asset — still interoperates rather
+// than mis-decoding.
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -186,9 +192,13 @@ final class InputEventFrame extends RemoteFrame {
 /// the live node [id]. Peer → app; the structured counterpart to the
 /// app → peer [SemanticsFrame].
 final class SemanticActionFrame extends RemoteFrame {
-  const SemanticActionFrame(this.id, this.action);
+  const SemanticActionFrame(this.id, this.action, {this.value});
   final SemanticNodeId id;
   final SemanticAction action;
+
+  /// Optional payload, carried only by [SemanticAction.setValue] (a
+  /// JSON-friendly scalar). Null for every parameterless action.
+  final Object? value;
 }
 
 /// The bytes of one inline image (browser surface), keyed by content-hash
@@ -222,7 +232,7 @@ Uint8List encodeFrame(RemoteFrame frame) {
     InputEventFrame f => (FrameType.inputEvent, encodeInputEvent(f.event)),
     SemanticActionFrame f => (
       FrameType.semanticAction,
-      encodeSemanticAction(f.id, f.action),
+      encodeSemanticAction(f.id, f.action, value: f.value),
     ),
     InlineImageFrame f => (FrameType.inlineImage, _encodeInlineImage(f)),
     ByeFrame() => (FrameType.bye, const <int>[]),
@@ -356,8 +366,8 @@ final class FrameDecoder {
         }
       case FrameType.semanticAction:
         try {
-          final (:id, :action) = decodeSemanticAction(payload);
-          return SemanticActionFrame(id, action);
+          final (:id, :action, :value) = decodeSemanticAction(payload);
+          return SemanticActionFrame(id, action, value: value);
         } on RemoteCodecException catch (e) {
           throw RemoteProtocolException('SEMANTIC_ACTION frame: ${e.message}.');
         }

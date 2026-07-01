@@ -155,9 +155,25 @@ final class SemanticsWireDecoder {
   final Map<String, Map<String, Object?>> _flat = {};
   String _rootId = 'root';
   bool _hasState = false;
+  List<String> _changedIds = const <String>[];
+  List<String> _removedIds = const <String>[];
+  bool _wasFull = false;
 
   /// Whether a full frame has been applied (so patches have a base to land on).
   bool get isPrimed => _hasState;
+
+  /// Node ids whose serialized form changed in the most recently applied frame
+  /// (every id on a full frame). The wire diff already carries exactly this, so
+  /// surfacing it lets a consumer push a delta instead of the whole tree.
+  List<String> get changedIds => _changedIds;
+
+  /// Node ids removed by the most recently applied frame (empty on a full frame,
+  /// which replaces the whole tree).
+  List<String> get removedIds => _removedIds;
+
+  /// Whether the most recently applied frame was a full (resync) frame — a
+  /// consumer should treat [changedIds] as "re-read everything".
+  bool get wasFull => _wasFull;
 
   /// Applies one wire payload and returns the reconstructed tree, or null if
   /// the payload is malformed or a patch arrives before any full frame (a
@@ -182,21 +198,36 @@ final class SemanticsWireDecoder {
         }
         _rootId = _stringOr(decoded['root'], _rootId);
         _hasState = true;
+        _changedIds = _flat.keys.toList(growable: false);
+        _removedIds = const <String>[];
+        _wasFull = true;
       case 'patch':
         if (!_hasState) return null;
         final set = decoded['set'];
+        final changed = <String>[];
         if (set is List) {
           for (final node in set) {
-            if (node is Map) _put(node);
+            if (node is Map) {
+              _put(node);
+              final id = node['id'];
+              if (id is String) changed.add(id);
+            }
           }
         }
+        final removedList = <String>[];
         final removed = decoded['removed'];
         if (removed is List) {
           for (final id in removed) {
-            if (id is String) _flat.remove(id);
+            if (id is String) {
+              _flat.remove(id);
+              removedList.add(id);
+            }
           }
         }
         _rootId = _stringOr(decoded['root'], _rootId);
+        _changedIds = changed;
+        _removedIds = removedList;
+        _wasFull = false;
       default:
         return null;
     }

@@ -123,19 +123,38 @@ final class SemanticInspectionSnapshot {
   final Map<String, int> roleCounts;
   final int actionCount;
 
-  Iterable<SemanticInspectionNode> get nodes => root.selfAndDescendants;
+  // Per-snapshot lazy caches. A snapshot is immutable for its revision, so the
+  // flattened node list and the id index are computed once on first use and
+  // reused across every read AND the stale-reference guard — repeated lookups on
+  // an unchanged revision do no further full-tree walk (WS-7).
+  List<SemanticInspectionNode>? _nodeList;
+  Map<String, List<SemanticInspectionNode>>? _idIndex;
+
+  Iterable<SemanticInspectionNode> get nodes =>
+      _nodeList ??= root.selfAndDescendants.toList(growable: false);
+
+  /// id → the node(s) carrying it — usually one, but a list so the ambiguity
+  /// guard (`where(id:)` returning >1) still works on duplicate ids.
+  Map<String, List<SemanticInspectionNode>> get _byId {
+    final cached = _idIndex;
+    if (cached != null) return cached;
+    final index = <String, List<SemanticInspectionNode>>{};
+    for (final node in nodes) {
+      (index[node.id] ??= <SemanticInspectionNode>[]).add(node);
+    }
+    return _idIndex = index;
+  }
 
   SemanticInspectionNode? nodeById(String id) {
-    for (final node in nodes) {
-      if (node.id == id) return node;
-    }
-    return null;
+    final list = _byId[id];
+    return (list == null || list.isEmpty) ? null : list.first;
   }
 
   Iterable<SemanticInspectionNode> where({
     String? id,
     String? role,
     String? label,
+    String? labelContains,
     Object? value,
     String? action,
     bool? focused,
@@ -143,11 +162,17 @@ final class SemanticInspectionSnapshot {
     bool? enabled,
     Map<String, Object?> stateContains = const <String, Object?>{},
   }) {
-    return nodes.where(
+    // An id query starts from the O(1) index bucket instead of a full walk; the
+    // bucket is already id-matched, so `_matches` re-applies the OTHER filters.
+    final base = id == null
+        ? nodes
+        : (_byId[id] ?? const <SemanticInspectionNode>[]);
+    return base.where(
       (node) => node._matches(
         id: id,
         role: role,
         label: label,
+        labelContains: labelContains,
         value: value,
         action: action,
         focused: focused,
@@ -162,6 +187,7 @@ final class SemanticInspectionSnapshot {
     String? id,
     String? role,
     String? label,
+    String? labelContains,
     Object? value,
     String? action,
     bool? focused,
@@ -173,6 +199,7 @@ final class SemanticInspectionSnapshot {
       id: id,
       role: role,
       label: label,
+      labelContains: labelContains,
       value: value,
       action: action,
       focused: focused,
@@ -185,6 +212,7 @@ final class SemanticInspectionSnapshot {
       id: id,
       role: role,
       label: label,
+      labelContains: labelContains,
       value: value,
       action: action,
       focused: focused,
@@ -206,6 +234,32 @@ final class SemanticInspectionSnapshot {
     'actionCount': actionCount,
     'root': root.toJson(),
   };
+
+  /// Like [toJson] but bounds the tree to at most [maxNodes] nodes — dropped
+  /// subtrees carry `childrenTruncated` and the envelope carries `truncated:
+  /// true`. For token-limited consumers (the MCP `get_ui` tool); the wire/serve
+  /// path uses the unbounded [toJson]. `roleCounts`/`nodeCount` still describe
+  /// the *full* tree so a consumer knows what it didn't see.
+  /// [augment] is an optional per-node hook: its returned map (if any) is merged
+  /// into that node's JSON. A generic extension point — the caller owns what it
+  /// adds (e.g. the MCP server injects a normalized `valueSchema`); this keeps
+  /// such consumer-specific fields out of the core node model while still
+  /// respecting the budget walk.
+  Map<String, Object?> toJsonCapped({
+    required int maxNodes,
+    Map<String, Object?>? Function(SemanticInspectionNode node)? augment,
+  }) {
+    final budget = _NodeBudget(maxNodes <= 1 ? 0 : maxNodes - 1);
+    return <String, Object?>{
+      'schemaVersion': schemaVersion,
+      'nodeCount': nodeCount,
+      if (nodeCount > maxNodes) 'truncated': true,
+      'focusedNodeId': focusedNodeId,
+      'roleCounts': roleCounts,
+      'actionCount': actionCount,
+      'root': root._toJsonCapped(budget, augment),
+    };
+  }
 
   /// Reconstructs a [SemanticTree] from this snapshot.
   ///
@@ -250,6 +304,13 @@ final class SemanticInspectionSnapshot {
 }
 
 /// Redacted, JSON-safe semantic node used by [SemanticInspectionSnapshot].
+/// Mutable remaining-node budget threaded through
+/// [SemanticInspectionNode._toJsonCapped].
+class _NodeBudget {
+  _NodeBudget(this.remaining);
+  int remaining;
+}
+
 final class SemanticInspectionNode {
   /// Stable node JSON keys for semantic inspection schema v1.
   static const Set<String> stableJsonFields = <String>{
@@ -393,10 +454,35 @@ final class SemanticInspectionNode {
   Object? operator [](String key) => toJson()[key];
 
   Map<String, Object?> toJson() => <String, Object?>{
+    ..._scalarJson(),
+    if (children.isNotEmpty)
+      'children': <Object?>[for (final child in children) child.toJson()],
+  };
+
+  /// This node's own fields, without children — the flat shape a consumer that
+  /// *lists* matching nodes (e.g. an MCP `find_nodes`) wants, rather than the
+  /// nested [toJson]. Computed by the same `_scalarJson` as [toJson], so the two
+  /// can't drift on the fields they share; unlike [toJson], `includeBounds`
+  /// defaults to false, so `bounds` is omitted unless asked for.
+  Map<String, Object?> toScalarJson({bool includeBounds = false}) =>
+      _scalarJson(includeBounds: includeBounds);
+
+  /// This node's own fields without children — shared by [toJson] and the
+  /// budgeted [_toJsonCapped].
+  ///
+  /// [includeBounds] / [dedupeValue] trim noise for token-limited agent
+  /// consumers: an MCP agent dispatches by id, not pixels, so it doesn't need
+  /// [bounds]; and a `value` that merely repeats `label` (a display node) is
+  /// redundant. The wire/serve path keeps both (the accessible DOM mirror uses
+  /// bounds), so these default to off only in the capped path.
+  Map<String, Object?> _scalarJson({
+    bool includeBounds = true,
+    bool dedupeValue = false,
+  }) => <String, Object?>{
     'id': id,
     'role': role,
     if (label != null) 'label': label,
-    if (value != null) 'value': value,
+    if (value != null && !(dedupeValue && value == label)) 'value': value,
     if (hint != null) 'hint': hint,
     'enabled': enabled,
     if (focused) 'focused': true,
@@ -405,12 +491,34 @@ final class SemanticInspectionNode {
     if (expanded != null) 'expanded': expanded,
     if (busy) 'busy': true,
     if (validationError != null) 'validationError': validationError,
-    if (bounds != null) 'bounds': _cellRectToJson(bounds!),
+    if (includeBounds && bounds != null) 'bounds': _cellRectToJson(bounds!),
     if (actions.isNotEmpty) 'actions': actions,
     if (state.isNotEmpty) 'state': state,
-    if (children.isNotEmpty)
-      'children': <Object?>[for (final child in children) child.toJson()],
   };
+
+  /// Serializes this subtree depth-first, emitting at most [budget] more
+  /// descendant nodes. A node whose children are dropped to stay within budget
+  /// gets `childrenTruncated: <count>` so a consumer knows to drill in with a
+  /// targeted query rather than assume it saw everything.
+  Map<String, Object?> _toJsonCapped(
+    _NodeBudget budget, [
+    Map<String, Object?>? Function(SemanticInspectionNode node)? augment,
+  ]) {
+    final json = _scalarJson(includeBounds: false, dedupeValue: true);
+    final extra = augment?.call(this);
+    if (extra != null) json.addAll(extra);
+    if (children.isEmpty) return json;
+    final emitted = <Object?>[];
+    for (final child in children) {
+      if (budget.remaining <= 0) break;
+      budget.remaining--;
+      emitted.add(child._toJsonCapped(budget, augment));
+    }
+    if (emitted.isNotEmpty) json['children'] = emitted;
+    final dropped = children.length - emitted.length;
+    if (dropped > 0) json['childrenTruncated'] = dropped;
+    return json;
+  }
 
   /// Reconstructs a [SemanticNode] from this inspection node, recursively.
   ///
@@ -485,6 +593,7 @@ final class SemanticInspectionNode {
     String? id,
     String? role,
     String? label,
+    String? labelContains,
     Object? value,
     String? action,
     bool? focused,
@@ -495,6 +604,12 @@ final class SemanticInspectionNode {
     if (id != null && this.id != id) return false;
     if (role != null && this.role != role) return false;
     if (label != null && this.label != label) return false;
+    if (labelContains != null &&
+        !(this.label ?? '').toLowerCase().contains(
+          labelContains.toLowerCase(),
+        )) {
+      return false;
+    }
     if (value != null && this.value != value) return false;
     if (action != null && !actions.contains(action)) return false;
     if (focused != null && this.focused != focused) return false;
@@ -538,6 +653,7 @@ String _queryDescription({
   required String? id,
   required String? role,
   required String? label,
+  required String? labelContains,
   required Object? value,
   required String? action,
   required bool? focused,
@@ -549,6 +665,7 @@ String _queryDescription({
     if (id != null) 'id:${_debugValue(id)}',
     if (role != null) 'role:${_debugValue(role)}',
     if (label != null) 'label:${_debugValue(label)}',
+    if (labelContains != null) 'labelContains:${_debugValue(labelContains)}',
     if (value != null) 'value:${_debugValue(value)}',
     if (action != null) 'action:${_debugValue(action)}',
     if (focused != null) 'focused:$focused',

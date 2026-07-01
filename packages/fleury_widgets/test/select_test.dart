@@ -108,6 +108,40 @@ void main() {
       expect(out.contains('▾'), isTrue);
     });
 
+    testWidgets('semantic setValue picks an option without opening (B4)',
+        (tester) async {
+      String? picked;
+      tester.pumpWidget(_Host(initial: 'red', onPick: (v) => picked = v));
+      final node =
+          tester.semantics().single(role: SemanticRole.button, label: 'Color');
+      expect(node.actions, contains(SemanticAction.setValue));
+
+      // Exact label match, and the dropdown never opens.
+      await tester.invokeSemanticAction(SemanticAction.setValue,
+          node: node, payload: 'Blue');
+      expect(picked, 'blue');
+      expect(tester.semantics().byRole(SemanticRole.menuItem), isEmpty,
+          reason: 'no open/read/select dance — the list never mounts');
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.button, label: 'Color')
+            .state['selectedKey'],
+        'blue',
+      );
+
+      // Case-insensitive match (label 'Green', payload 'GREEN').
+      await tester.invokeSemanticAction(SemanticAction.setValue,
+          role: SemanticRole.button, label: 'Color', payload: 'GREEN');
+      expect(picked, 'green');
+
+      // An unknown option is a no-op, not a wrong pick.
+      picked = null;
+      await tester.invokeSemanticAction(SemanticAction.setValue,
+          role: SemanticRole.button, label: 'Color', payload: 'purple');
+      expect(picked, isNull);
+    });
+
     testWidgets('null onChanged disables the trigger', (tester) async {
       tester.pumpWidget(
         const Select<String>(
@@ -264,6 +298,19 @@ void main() {
         expect(trigger.state.menuItemCount, 3);
         expect(trigger.state.selectedKey, 'green');
         expect(trigger.state['selectedOptionLabel'], 'Green');
+
+        // WS-9: the settable domain is published as {label, value} pairs so an
+        // agent (and the MCP valueSchema) sees exactly what set_value accepts.
+        final options = trigger.state['options']! as List;
+        expect(options, hasLength(3));
+        for (final option in options) {
+          expect(option, isA<Map<Object?, Object?>>());
+          expect((option as Map).keys, containsAll(<String>['label', 'value']));
+        }
+        expect(
+          options.map((o) => (o as Map)['value']),
+          contains('green'),
+        );
 
         final result = await tester.invokeSemanticAction(
           SemanticAction.open,

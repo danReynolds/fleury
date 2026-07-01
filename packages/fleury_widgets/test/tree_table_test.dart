@@ -183,6 +183,34 @@ void main() {
     expect(selected?.key, 'search');
   });
 
+  testWidgets('semantic close collapses an expanded TreeTable branch',
+      (tester) async {
+    final controller = TreeTableController();
+    tester.pumpWidget(
+      TreeTable<String>(
+        roots: _roots,
+        columns: _columns,
+        controller: controller,
+      ),
+    );
+    tester.render(size: const CellSize(60, 8));
+    await tester.invokeSemanticAction(SemanticAction.open,
+        role: SemanticRole.treeItem, label: 'App');
+    expect(controller.expandedKeys, contains('app'));
+    tester.render(size: const CellSize(60, 8));
+
+    // Expanded ⇒ the row offers close, not open (the symmetric pair).
+    final expanded =
+        tester.semantics().single(role: SemanticRole.treeItem, label: 'App');
+    expect(expanded.actions, contains(SemanticAction.close));
+    expect(expanded.actions, isNot(contains(SemanticAction.open)));
+
+    final result = await tester.invokeSemanticAction(SemanticAction.close,
+        role: SemanticRole.treeItem, label: 'App');
+    expect(result.completed, isTrue);
+    expect(controller.expandedKeys, isNot(contains('app')));
+  });
+
   testWidgets('filter reveals matching collapsed descendants with ancestors', (
     tester,
   ) {

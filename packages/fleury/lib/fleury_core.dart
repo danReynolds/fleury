@@ -150,6 +150,8 @@ export 'src/semantics/inspection.dart'
         SemanticInspectionNode,
         SemanticInspectionSnapshot,
         SemanticTreeInspection;
+export 'src/semantics/semantic_coercion.dart'
+    show coerceSemanticBool, coerceSemanticInt, coerceSemanticNum;
 export 'src/semantics/semantics.dart'
     show
         SemanticAction,
@@ -157,9 +159,15 @@ export 'src/semantics/semantics.dart'
         SemanticNode,
         SemanticNodeId,
         SemanticRole,
+        SemanticSetValueCallback,
         SemanticState,
         SemanticTree,
-        Semantics;
+        SemanticValueContributor,
+        Semantics,
+        ExcludeSemantics,
+        escapeSemanticIdSegment,
+        isPositionalSemanticId,
+        semanticAnchorOf;
 
 // Terminal
 export 'src/terminal/capabilities.dart'

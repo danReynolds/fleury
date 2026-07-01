@@ -176,6 +176,41 @@ void main() {
     expect(version.state['jsonPointer'], '/meta/version');
   });
 
+  testWidgets('semantic close collapses an expanded JSON branch', (tester) async {
+    tester.pumpWidget(
+      JsonView(
+        value: const {
+          'name': 'fleury',
+          'meta': {'version': 1, 'status': 'active'},
+        },
+      ),
+    );
+    tester.render(size: const CellSize(80, 8));
+    await tester.invokeSemanticAction(SemanticAction.open,
+        role: SemanticRole.jsonNode, label: 'meta');
+    tester.render(size: const CellSize(80, 8));
+    expect(
+      tester.semantics().where(role: SemanticRole.jsonNode, label: 'version'),
+      isNotEmpty,
+    );
+
+    // Expanded ⇒ meta offers close, not open.
+    final meta =
+        tester.semantics().single(role: SemanticRole.jsonNode, label: 'meta');
+    expect(meta.actions, contains(SemanticAction.close));
+    expect(meta.actions, isNot(contains(SemanticAction.open)));
+
+    final result = await tester.invokeSemanticAction(SemanticAction.close,
+        role: SemanticRole.jsonNode, label: 'meta');
+    expect(result.completed, isTrue);
+    tester.render(size: const CellSize(80, 8));
+    expect(
+      tester.semantics().where(role: SemanticRole.jsonNode, label: 'version'),
+      isEmpty,
+      reason: 'collapsing meta hides its children',
+    );
+  });
+
   group('copy/export', () {
     late Clipboard originalClipboard;
     late TestClipboard clipboard;

@@ -62,3 +62,11 @@ export 'src/semantics/semantics.dart'
         SemanticDirtyTracker,
         SemanticsElement,
         invokeSemanticActionFromElement;
+
+// The remote-render wire: the frame protocol, semantic codec, and transport
+// interface a host uses to drive a Fleury app over a connection (and a
+// browser/agent host uses to mirror it). Platform-neutral; `dart:io` transports
+// live in `fleury_host_io.dart`.
+export 'src/remote/remote_protocol.dart';
+export 'src/remote/remote_semantics.dart';
+export 'src/remote/remote_transport.dart';
