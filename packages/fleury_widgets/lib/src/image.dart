@@ -815,7 +815,12 @@ class RenderImage extends RenderObject {
   /// whole source (the historical behaviour). When the box already matches the
   /// source aspect, `contain` degenerates to the full box.
   static _FitRect _resolveFit(
-      int srcW, int srcH, int cols, int rows, ImageFit fit) {
+    int srcW,
+    int srcH,
+    int cols,
+    int rows,
+    ImageFit fit,
+  ) {
     int centerOffset(int outer, int inner) =>
         ((outer - inner) / 2).round().clamp(0, outer - inner);
     switch (fit) {
@@ -827,25 +832,48 @@ class RenderImage extends RenderObject {
         final scale = (tgtW / srcW < tgtH / srcH) ? tgtW / srcW : tgtH / srcH;
         final dCols = (srcW * scale).round().clamp(1, cols);
         final dRows = (srcH * scale / 2).round().clamp(1, rows);
-        return _FitRect(centerOffset(cols, dCols), centerOffset(rows, dRows),
-            dCols, dRows, 0, 0, srcW, srcH);
+        return _FitRect(
+          centerOffset(cols, dCols),
+          centerOffset(rows, dRows),
+          dCols,
+          dRows,
+          0,
+          0,
+          srcW,
+          srcH,
+        );
       case ImageFit.cover:
         final tgtW = cols.toDouble();
         final tgtH = (rows * 2).toDouble();
         final scale = (tgtW / srcW > tgtH / srcH) ? tgtW / srcW : tgtH / srcH;
         final cropW = (tgtW / scale).round().clamp(1, srcW);
         final cropH = (tgtH / scale).round().clamp(1, srcH);
-        return _FitRect(0, 0, cols, rows, centerOffset(srcW, cropW),
-            centerOffset(srcH, cropH), cropW, cropH);
+        return _FitRect(
+          0,
+          0,
+          cols,
+          rows,
+          centerOffset(srcW, cropW),
+          centerOffset(srcH, cropH),
+          cropW,
+          cropH,
+        );
       case ImageFit.none:
         // Native resolution, centered: 1 source px = 1 column, 2 px = 1 row.
         final cropW = srcW <= cols ? srcW : cols;
         final cropH = srcH <= rows * 2 ? srcH : rows * 2;
         final dCols = cropW.clamp(1, cols);
         final dRows = (cropH / 2).round().clamp(1, rows);
-        return _FitRect(centerOffset(cols, dCols), centerOffset(rows, dRows),
-            dCols, dRows, centerOffset(srcW, cropW), centerOffset(srcH, cropH),
-            cropW, cropH);
+        return _FitRect(
+          centerOffset(cols, dCols),
+          centerOffset(rows, dRows),
+          dCols,
+          dRows,
+          centerOffset(srcW, cropW),
+          centerOffset(srcH, cropH),
+          cropW,
+          cropH,
+        );
     }
   }
 
@@ -918,8 +946,13 @@ class RenderImage extends RenderObject {
       out.write('\x1B\\');
       pos = end;
     }
-    _writeProtocolRegion(buffer, CellOffset(offset.col + f.col, offset.row + f.row),
-        out.toString(), f.cols, f.rows);
+    _writeProtocolRegion(
+      buffer,
+      CellOffset(offset.col + f.col, offset.row + f.row),
+      out.toString(),
+      f.cols,
+      f.rows,
+    );
   }
 
   /// Emits the image for the browser "serve" surface. The PNG bytes go into the
@@ -1595,8 +1628,13 @@ class RenderImage extends RenderObject {
     final out =
         '\x1B]1337;File=inline=1;size=${png.length};'
         'width=${f.cols};height=${f.rows};preserveAspectRatio=0:$b64\x07';
-    _writeProtocolRegion(buffer, CellOffset(offset.col + f.col, offset.row + f.row),
-        out, f.cols, f.rows);
+    _writeProtocolRegion(
+      buffer,
+      CellOffset(offset.col + f.col, offset.row + f.row),
+      out,
+      f.cols,
+      f.rows,
+    );
   }
 
   /// Hand off a fully-assembled protocol payload to the cell buffer,

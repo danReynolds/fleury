@@ -215,26 +215,40 @@ void main() {
     tester.pumpWidget(_tree());
     tester.render(size: const CellSize(20, 4));
 
-    await tester.invokeSemanticAction(SemanticAction.open,
-        role: SemanticRole.treeItem, label: 'src');
+    await tester.invokeSemanticAction(
+      SemanticAction.open,
+      role: SemanticRole.treeItem,
+      label: 'src',
+    );
     tester.render(size: const CellSize(20, 4));
     expect(tester.semantics().single(label: 'a.dart'), isA<SemanticNode>());
 
     // An expanded branch advertises close (not open) — the symmetric pair an
     // agent needs; collapsing used to be Left-arrow-only.
-    final expanded =
-        tester.semantics().single(role: SemanticRole.treeItem, label: 'src');
+    final expanded = tester.semantics().single(
+      role: SemanticRole.treeItem,
+      label: 'src',
+    );
     expect(expanded.actions, contains(SemanticAction.close));
     expect(expanded.actions, isNot(contains(SemanticAction.open)));
 
-    final result = await tester.invokeSemanticAction(SemanticAction.close,
-        role: SemanticRole.treeItem, label: 'src');
+    final result = await tester.invokeSemanticAction(
+      SemanticAction.close,
+      role: SemanticRole.treeItem,
+      label: 'src',
+    );
     expect(result.completed, isTrue);
     tester.render(size: const CellSize(20, 4));
-    expect(tester.semantics().where(label: 'a.dart'), isEmpty,
-        reason: 'collapsing removed the children from the tree');
     expect(
-      tester.semantics().single(role: SemanticRole.treeItem, label: 'src').actions,
+      tester.semantics().where(label: 'a.dart'),
+      isEmpty,
+      reason: 'collapsing removed the children from the tree',
+    );
+    expect(
+      tester
+          .semantics()
+          .single(role: SemanticRole.treeItem, label: 'src')
+          .actions,
       contains(SemanticAction.open),
       reason: 'collapsed again ⇒ offers open',
     );

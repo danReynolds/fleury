@@ -2,7 +2,7 @@ import 'dart:async';
 
 import '../foundation/geometry.dart';
 import 'capabilities.dart';
-import 'events.dart';
+import '../input/events.dart';
 import 'terminal_driver.dart';
 
 /// A [TerminalDriver] for tests and offline rendering. No real I/O —

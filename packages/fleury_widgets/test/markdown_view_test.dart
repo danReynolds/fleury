@@ -140,19 +140,6 @@ void main() {
   );
 
   group('copy/export', () {
-    late Clipboard originalClipboard;
-    late TestClipboard clipboard;
-
-    setUp(() {
-      originalClipboard = Clipboard.instance;
-      clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
-    });
-
-    tearDown(() {
-      Clipboard.instance = originalClipboard;
-    });
-
     testWidgets('Ctrl+C copies the selected sanitized markdown block', (
       tester,
     ) async {
@@ -174,9 +161,9 @@ void main() {
       tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, contains('> unsafe safe'));
-      expect(clipboard.lastWritten, isNot(contains('secret')));
-      expect(clipboard.lastWritten, isNot(contains('\x1b]52')));
+      expect(tester.clipboard.readInProcess(), contains('> unsafe safe'));
+      expect(tester.clipboard.readInProcess(), isNot(contains('secret')));
+      expect(tester.clipboard.readInProcess(), isNot(contains('\x1b]52')));
       expect(copied, isNotNull);
       expect(copied!.blockIndex, 5);
       expect(copied!.block.kind, MarkdownBlockKind.blockquote);
@@ -213,8 +200,8 @@ void main() {
       );
 
       expect(result.completed, isTrue);
-      expect(clipboard.lastWritten, contains('> unsafe safe'));
-      expect(clipboard.lastWritten, isNot(contains('secret')));
+      expect(tester.clipboard.readInProcess(), contains('> unsafe safe'));
+      expect(tester.clipboard.readInProcess(), isNot(contains('secret')));
       expect(copied?.block.kind, MarkdownBlockKind.blockquote);
       expect(copied?.report.result, ClipboardWriteResult.inProcessOnly);
     });

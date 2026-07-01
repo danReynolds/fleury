@@ -395,16 +395,6 @@ abstract class Element implements BuildContext {
   static Element? get current => _current;
   static Element? _current;
 
-  /// Builds the widget shown in place of a subtree whose `build` threw.
-  /// Installed by the runtime (`runApp` / the test harness) so the catch
-  /// in [ComponentElement.performRebuild] can render an error panel
-  /// instead of crashing. Null means "no boundary" — errors propagate.
-  static Widget Function(Object error, StackTrace stack)? errorBuilder;
-
-  /// Optional sink for build errors (logging/telemetry). Called before the
-  /// error widget is substituted.
-  static void Function(Object error, StackTrace stack)? onBuildError;
-
   Widget _widget;
   @override
   Widget get widget => _widget;
@@ -832,8 +822,9 @@ abstract class ComponentElement extends Element {
       built = buildChild();
     } catch (error, stack) {
       Element._current = previous;
-      Element.onBuildError?.call(error, stack);
-      final builder = Element.errorBuilder;
+      final owner = _owner;
+      owner?.onBuildError?.call(error, stack);
+      final builder = owner?.errorBuilder;
       if (builder == null) rethrow; // no boundary installed → propagate
       built = builder(error, stack);
     } finally {
@@ -979,6 +970,21 @@ final class BuildFlushStats {
 /// Drives the build pipeline. Holds the set of dirty elements and flushes
 /// them in shallow-first order.
 class BuildOwner {
+  BuildOwner({this.errorBuilder, this.onBuildError});
+
+  /// Builds the widget shown in place of a subtree whose `build` threw, so
+  /// the catch in [ComponentElement.performRebuild] renders an error panel
+  /// instead of crashing. Null means "no boundary" — errors propagate (the
+  /// raw-owner default; [TuiRuntime] and the test harness install
+  /// `ErrorWidget.builder`). Per-owner, not process-global: two runtimes in
+  /// one isolate never share a boundary, and a host cannot forget to
+  /// install one.
+  Widget Function(Object error, StackTrace stack)? errorBuilder;
+
+  /// Optional sink for build errors (logging/telemetry). Called before the
+  /// error widget is substituted.
+  void Function(Object error, StackTrace stack)? onBuildError;
+
   /// Per-runtime frame damage signal for this owner's render tree.
   ///
   /// [renderFrame] attaches it at the root render object, where layout and

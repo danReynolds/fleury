@@ -148,19 +148,6 @@ void main() {
   });
 
   group('copy/export', () {
-    late Clipboard originalClipboard;
-    late TestClipboard clipboard;
-
-    setUp(() {
-      originalClipboard = Clipboard.instance;
-      clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
-    });
-
-    tearDown(() {
-      Clipboard.instance = originalClipboard;
-    });
-
     testWidgets('Ctrl+C copies the selected source line', (tester) async {
       final controller = CodeViewController(selectedIndex: 2);
       CodeViewCopyResult? copied;
@@ -181,7 +168,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(
-        clipboard.lastWritten,
+        tester.clipboard.readInProcess(),
         'final class DemoScreen extends StatelessWidget {',
       );
       expect(copied, isNotNull);
@@ -233,7 +220,7 @@ void main() {
 
       expect(result.completed, isTrue);
       expect(
-        clipboard.lastWritten,
+        tester.clipboard.readInProcess(),
         'final class DemoScreen extends StatelessWidget {',
       );
       expect(copied?.line.lineNumber, 3);
@@ -336,9 +323,9 @@ void main() {
       tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, contains("final note = 'safe"));
-      expect(clipboard.lastWritten, isNot(contains('secret')));
-      expect(clipboard.lastWritten, isNot(contains('\x1b]52')));
+      expect(tester.clipboard.readInProcess(), contains("final note = 'safe"));
+      expect(tester.clipboard.readInProcess(), isNot(contains('secret')));
+      expect(tester.clipboard.readInProcess(), isNot(contains('\x1b]52')));
     });
   });
 }

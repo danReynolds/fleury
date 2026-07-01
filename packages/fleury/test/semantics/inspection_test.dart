@@ -340,35 +340,38 @@ void main() {
       expect(checkbox.expanded, isFalse);
     });
 
-    test('redaction survives reconstruction — no plaintext reaches the tree', () {
-      final rebuilt = SemanticTree(
-        root: SemanticNode(
-          id: const SemanticNodeId('root'),
-          role: SemanticRole.app,
-          children: [
-            SemanticNode(
-              id: const SemanticNodeId('field:key'),
-              role: SemanticRole.textField,
-              label: 'API key',
-              value: 'secret-token',
-              state: const SemanticState({
-                'redactedValue': true,
-                'apiToken': 'secret-token',
-              }),
-            ),
-          ],
-        ),
-      ).toInspectionSnapshot().toSemanticTree();
+    test(
+      'redaction survives reconstruction — no plaintext reaches the tree',
+      () {
+        final rebuilt = SemanticTree(
+          root: SemanticNode(
+            id: const SemanticNodeId('root'),
+            role: SemanticRole.app,
+            children: [
+              SemanticNode(
+                id: const SemanticNodeId('field:key'),
+                role: SemanticRole.textField,
+                label: 'API key',
+                value: 'secret-token',
+                state: const SemanticState({
+                  'redactedValue': true,
+                  'apiToken': 'secret-token',
+                }),
+              ),
+            ],
+          ),
+        ).toInspectionSnapshot().toSemanticTree();
 
-      final field = rebuilt.root.children.single;
-      expect(field.value, '<redacted>');
-      expect(field.state['apiToken'], '<redacted>');
-      // The reconstructed tree, re-serialized, still carries no plaintext.
-      expect(
-        rebuilt.toInspectionSnapshot().toJson().toString(),
-        isNot(contains('secret-token')),
-      );
-    });
+        final field = rebuilt.root.children.single;
+        expect(field.value, '<redacted>');
+        expect(field.state['apiToken'], '<redacted>');
+        // The reconstructed tree, re-serialized, still carries no plaintext.
+        expect(
+          rebuilt.toInspectionSnapshot().toJson().toString(),
+          isNot(contains('secret-token')),
+        );
+      },
+    );
 
     test('an unknown role degrades to text; unknown actions are dropped', () {
       final snapshot = SemanticInspectionSnapshot.fromJson({
@@ -390,11 +393,9 @@ void main() {
       final node = snapshot.toSemanticTree().root.children.single;
       expect(node.role, SemanticRole.text, reason: 'unknown role falls back');
       expect(node.label, 'Future node');
-      expect(
-        node.actions,
-        {SemanticAction.activate},
-        reason: 'the unrecognized action is dropped, not an error',
-      );
+      expect(node.actions, {
+        SemanticAction.activate,
+      }, reason: 'the unrecognized action is dropped, not an error');
     });
   });
 

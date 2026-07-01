@@ -169,17 +169,15 @@ void main() {
       );
     });
 
-    testWidgets('## heading renders bold + underline + a color tint', (
-      tester,
-    ) {
+    testWidgets('## heading renders bold + underline + a color tint', (tester) {
       tester.pumpWidget(const MarkdownText('## Sub'));
       final buf = tester.render(size: const CellSize(20, 1));
       expect(
-        _anyCellMatches(
-          buf,
-          {'S', 'u', 'b'},
-          (s) => s.bold && s.underline && !s.inverse && s.foreground != null,
-        ),
+        _anyCellMatches(buf, {
+          'S',
+          'u',
+          'b',
+        }, (s) => s.bold && s.underline && !s.inverse && s.foreground != null),
         isTrue,
       );
     });
@@ -188,11 +186,11 @@ void main() {
       tester.pumpWidget(const MarkdownText('### Deep'));
       final buf = tester.render(size: const CellSize(20, 1));
       expect(
-        _anyCellMatches(
-          buf,
-          {'D', 'e', 'p'},
-          (s) => s.bold && s.underline && s.foreground == null,
-        ),
+        _anyCellMatches(buf, {
+          'D',
+          'e',
+          'p',
+        }, (s) => s.bold && s.underline && s.foreground == null),
         isTrue,
       );
     });

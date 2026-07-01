@@ -143,48 +143,34 @@ void main() {
     testWidgets('writes the selected text to the active Clipboard on release', (
       tester,
     ) async {
-      final originalClipboard = Clipboard.instance;
-      final captured = TestClipboard();
-      Clipboard.instance = captured;
-      try {
-        tester.pumpWidget(
-          const SelectionArea(copyOnRelease: true, child: Text('hello world')),
-        );
-        tester.render(size: const CellSize(20, 1));
+      tester.pumpWidget(
+        const SelectionArea(copyOnRelease: true, child: Text('hello world')),
+      );
+      tester.render(size: const CellSize(20, 1));
 
-        tester.sendMouse(_down(2, 0));
-        tester.sendMouse(_drag(7, 0));
-        tester.sendMouse(_up(7, 0));
+      tester.sendMouse(_down(2, 0));
+      tester.sendMouse(_drag(7, 0));
+      tester.sendMouse(_up(7, 0));
 
-        // Clipboard.write is async; await one event-loop tick.
-        await Future<void>.delayed(Duration.zero);
-        expect(captured.lastWritten, 'llo w');
-      } finally {
-        Clipboard.instance = originalClipboard;
-      }
+      // Clipboard.write is async; await one event-loop tick.
+      await Future<void>.delayed(Duration.zero);
+      expect(tester.clipboard.readInProcess(), 'llo w');
     });
 
     testWidgets('a release with no selection does not write to clipboard', (
       tester,
     ) async {
-      final originalClipboard = Clipboard.instance;
-      final captured = TestClipboard();
-      Clipboard.instance = captured;
-      try {
-        tester.pumpWidget(
-          const SelectionArea(copyOnRelease: true, child: Text('hello')),
-        );
-        tester.render(size: const CellSize(10, 1));
+      tester.pumpWidget(
+        const SelectionArea(copyOnRelease: true, child: Text('hello')),
+      );
+      tester.render(size: const CellSize(10, 1));
 
-        // Click without drag → no selection.
-        tester.sendMouse(_down(2, 0));
-        tester.sendMouse(_up(2, 0));
+      // Click without drag → no selection.
+      tester.sendMouse(_down(2, 0));
+      tester.sendMouse(_up(2, 0));
 
-        await Future<void>.delayed(Duration.zero);
-        expect(captured.lastWritten, isNull);
-      } finally {
-        Clipboard.instance = originalClipboard;
-      }
+      await Future<void>.delayed(Duration.zero);
+      expect(tester.clipboard.readInProcess(), isNull);
     });
   });
 
@@ -203,30 +189,21 @@ void main() {
       expect(captured?.plainText, 'abc');
     });
 
-    testWidgets('Ctrl+C copies the selection via Clipboard.instance', (
+    testWidgets('Ctrl+C copies the selection via the ambient clipboard', (
       tester,
     ) async {
-      final originalClipboard = Clipboard.instance;
-      final clip = TestClipboard();
-      Clipboard.instance = clip;
-      try {
-        tester.pumpWidget(const SelectionArea(child: Text('hello world')));
-        tester.render(size: const CellSize(20, 1));
+      tester.pumpWidget(const SelectionArea(child: Text('hello world')));
+      tester.render(size: const CellSize(20, 1));
 
-        // First select via drag.
-        tester.sendMouse(_down(2, 0));
-        tester.sendMouse(_drag(7, 0));
-        tester.sendMouse(_up(7, 0));
+      // First select via drag.
+      tester.sendMouse(_down(2, 0));
+      tester.sendMouse(_drag(7, 0));
+      tester.sendMouse(_up(7, 0));
 
-        // Then Ctrl+C.
-        tester.sendKey(
-          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
-        );
-        await Future<void>.delayed(Duration.zero);
-        expect(clip.lastWritten, 'llo w');
-      } finally {
-        Clipboard.instance = originalClipboard;
-      }
+      // Then Ctrl+C.
+      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      await Future<void>.delayed(Duration.zero);
+      expect(tester.clipboard.readInProcess(), 'llo w');
     });
 
     testWidgets('Ctrl+C bubbles when no selection exists', (tester) async {

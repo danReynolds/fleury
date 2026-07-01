@@ -1307,10 +1307,9 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
         maxRows: 1,
       ),
     );
-    final report = await Clipboard.instance.writeWithReport(
-      export.text,
-      policy: widget.copyOptions.clipboardPolicy,
-    );
+    final report = await ClipboardScope.of(
+      context,
+    ).writeWithReport(export.text, policy: widget.copyOptions.clipboardPolicy);
     if (!mounted) return;
     final row = rows[selectedIndex];
     widget.onCopy?.call(

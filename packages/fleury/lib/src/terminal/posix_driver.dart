@@ -17,7 +17,7 @@ import 'dart:io';
 
 import '../foundation/geometry.dart';
 import 'capabilities.dart';
-import 'events.dart';
+import '../input/events.dart';
 import 'input_parser.dart';
 import 'terminal_driver.dart';
 import 'terminal_probe.dart';
@@ -107,7 +107,9 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
 
   @override
   TerminalCapabilities get capabilities {
-    final base = detectTerminalCapabilitiesFromEnvironment(Platform.environment);
+    final base = detectTerminalCapabilitiesFromEnvironment(
+      Platform.environment,
+    );
     final override = _imageProtocolOverride;
     return override == null ? base : base.copyWith(imageProtocol: override);
   }

@@ -1,6 +1,5 @@
 import 'package:fleury/fleury_core.dart';
 
-
 /// A numeric stepper: `[ − 42 + ]`. Focusable; arrow chords (and +/−)
 /// adjust the value by [step], PageUp / PageDown by [largeStep], Home /
 /// End jump to [min] / [max]. Clicking the `−` or `+` half also nudges

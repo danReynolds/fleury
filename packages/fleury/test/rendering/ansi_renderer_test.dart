@@ -347,11 +347,17 @@ void main() {
       final next = CellBuffer(const CellSize(4, 1))
         ..writeText(const CellOffset(0, 0), '─x');
       final sink = StringAnsiSink();
-      const AnsiRenderer(synchronizedOutput: false).renderDiff(prev, next, sink);
+      const AnsiRenderer(
+        synchronizedOutput: false,
+      ).renderDiff(prev, next, sink);
 
-      expect(sink.output, contains('─\x1B[1;2Hx'),
-          reason: 'an absolute CUP separates the ambiguous glyph from the '
-              'next cell');
+      expect(
+        sink.output,
+        contains('─\x1B[1;2Hx'),
+        reason:
+            'an absolute CUP separates the ambiguous glyph from the '
+            'next cell',
+      );
     });
 
     test('a pure-ASCII run is NOT broken up (stays compact)', () {
@@ -359,7 +365,9 @@ void main() {
       final next = CellBuffer(const CellSize(6, 1))
         ..writeText(const CellOffset(0, 0), 'abcde');
       final sink = StringAnsiSink();
-      const AnsiRenderer(synchronizedOutput: false).renderDiff(prev, next, sink);
+      const AnsiRenderer(
+        synchronizedOutput: false,
+      ).renderDiff(prev, next, sink);
       // No interior cursor moves — ASCII width is unambiguous.
       expect(sink.output, '\x1B[Habcde');
     });

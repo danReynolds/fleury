@@ -595,7 +595,10 @@ class _CommandRow extends StatelessWidget {
               ? theme.mutedStyle
               : theme.mutedStyle.merge(const CellStyle(dim: true)));
     final labelRegion = (width - (shortcut?.length ?? 0)).clamp(0, width);
-    final labelText = _fitWidth('${selected ? '› ' : '  '}${command.label}', labelRegion);
+    final labelText = _fitWidth(
+      '${selected ? '› ' : '  '}${command.label}',
+      labelRegion,
+    );
     return Semantics(
       role: SemanticRole.command,
       label: command.label,

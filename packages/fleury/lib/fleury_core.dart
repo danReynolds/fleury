@@ -213,7 +213,7 @@ export 'src/terminal/terminal_probe.dart'
         TerminalProbeStatus,
         TerminalProbeTransport,
         runTerminalProbeSuite;
-export 'src/terminal/events.dart'
+export 'src/input/events.dart'
     show
         KeyCode,
         KeyEvent,
@@ -290,6 +290,7 @@ export 'src/widgets/scroll_view.dart' show ScrollController, ScrollView;
 export 'src/widgets/scrollbar.dart' show Scrollbar;
 export 'src/widgets/listenable_builder.dart' show ListenableBuilder;
 export 'src/widgets/blinking_cursor.dart' show BlinkingCursor;
+export 'src/widgets/clipboard_scope.dart' show ClipboardScope;
 export 'src/widgets/frame_builder.dart' show FrameBuilder;
 export 'src/widgets/animation_builder.dart' show AnimationBuilder;
 export 'src/widgets/effects.dart'

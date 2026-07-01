@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:fleury/fleury_host.dart';
 
 import 'browser_frame_flush_scheduler.dart';
+import 'clipboard/web_clipboard.dart';
 import 'focus/web_focus_coordinator.dart';
 import 'frame_presentation.dart';
 import 'input/input_source.dart';
@@ -22,7 +23,6 @@ final class MountedApp {
     TuiInputSource? inputSource,
     SemanticsOwner? semanticsOwner,
     SemanticFramePresenter? semanticPresenter,
-    Clipboard? previousClipboard,
     FutureOr<void> Function()? disposeHostResources,
     required void Function() markDisposed,
     SemanticFlushScheduler? semanticFlushScheduler,
@@ -36,7 +36,6 @@ final class MountedApp {
        _semanticPresenter = semanticPresenter,
        _semanticFlushScheduler = semanticFlushScheduler,
        _awaitSemanticIdle = awaitSemanticIdle,
-       _previousClipboard = previousClipboard,
        _disposeHostResources = disposeHostResources,
        _markDisposed = markDisposed;
 
@@ -49,7 +48,6 @@ final class MountedApp {
   final SemanticFramePresenter? _semanticPresenter;
   final SemanticFlushScheduler? _semanticFlushScheduler;
   final Future<void> Function()? _awaitSemanticIdle;
-  final Clipboard? _previousClipboard;
   final FutureOr<void> Function()? _disposeHostResources;
   final void Function() _markDisposed;
   var _disposed = false;
@@ -103,7 +101,6 @@ final class MountedApp {
       runtime: _runtime,
       surface: _surface,
       disposeHostResources: _disposeHostResources,
-      previousClipboard: _previousClipboard,
     );
   }
 }
@@ -134,11 +131,9 @@ Future<MountedApp> runTuiSurface(
   WebFocusCoordinator? focusCoordinator,
   FutureOr<void> Function()? disposeHostResources,
 }) async {
-  Clipboard? previousClipboard;
-  if (clipboard != null) {
-    previousClipboard = _tryReadClipboardInstance();
-    Clipboard.instance = clipboard;
-  }
+  // The clipboard is a host service shared via ClipboardScope in
+  // buildRoot — no process-global mutation, no restore-on-dispose dance.
+  final effectiveClipboard = clipboard ?? WebClipboard();
   final runtime = TuiRuntime();
   final owner = runtime.owner;
   final focusManager = runtime.focusManager;
@@ -155,8 +150,6 @@ Future<MountedApp> runTuiSurface(
   final semanticScheduler = semanticPresenter == null
       ? null
       : (semanticFlushScheduler ?? TimerSemanticFlushScheduler());
-  Element.errorBuilder ??= (error, stack) => ErrorWidget.builder(error, stack);
-
   Element? root;
   var disposed = false;
   var semanticDirty = true;
@@ -189,7 +182,6 @@ Future<MountedApp> runTuiSurface(
       runtime: runtime,
       surface: surface,
       disposeHostResources: disposeHostResources,
-      previousClipboard: previousClipboard,
     );
   }
 
@@ -216,7 +208,10 @@ Future<MountedApp> runTuiSurface(
         manager: focusManager,
         child: PointerRouterScope(
           router: pointerRouter,
-          child: Overlay(initialEntries: [rootEntry]),
+          child: ClipboardScope(
+            clipboard: effectiveClipboard,
+            child: Overlay(initialEntries: [rootEntry]),
+          ),
         ),
       ),
     ),
@@ -767,7 +762,6 @@ Future<MountedApp> runTuiSurface(
       semanticPresenter: semanticPresenter,
       semanticFlushScheduler: semanticScheduler,
       awaitSemanticIdle: awaitSemanticIdleNow,
-      previousClipboard: previousClipboard,
       disposeHostResources: disposeHostResources,
       markDisposed: () {
         disposed = true;
@@ -821,7 +815,6 @@ Future<void> _disposeHostResourcesBestEffort({
   TuiRuntime? runtime,
   FrameSurface? surface,
   FutureOr<void> Function()? disposeHostResources,
-  Clipboard? previousClipboard,
 }) async {
   Object? firstError;
   StackTrace? firstStackTrace;
@@ -861,9 +854,7 @@ Future<void> _disposeHostResourcesBestEffort({
   });
   await runStep(() => surface?.dispose());
   await runStep(() => disposeHostResources?.call());
-  await runStep(() {
-    if (previousClipboard != null) Clipboard.instance = previousClipboard;
-  });
+  await runStep(() {});
 
   final error = firstError;
   final stackTrace = firstStackTrace;
@@ -877,14 +868,6 @@ final class _PendingSemanticAction {
 
   final SemanticNodeId id;
   final SemanticAction action;
-}
-
-Clipboard? _tryReadClipboardInstance() {
-  try {
-    return Clipboard.instance;
-  } catch (_) {
-    return null;
-  }
 }
 
 String _frameReasonForEvent(TuiEvent event) {

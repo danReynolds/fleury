@@ -53,8 +53,9 @@ FramePresentationPlan _fullPlan(CellBuffer mirror) {
   );
 }
 
-List<String> _domRows(DomGridSurface s) =>
-    [for (final r in s.rowElements) r.textContent ?? ''];
+List<String> _domRows(DomGridSurface s) => [
+  for (final r in s.rowElements) r.textContent ?? '',
+];
 
 List<String> _bufRows(CellBuffer b) => [
   for (var r = 0; r < b.size.rows; r++)
@@ -103,7 +104,11 @@ CellBuffer _background(CellSize size, int phase) {
   return b;
 }
 
-CellBuffer _withOverlay(CellBuffer base, {required int boxW, required int boxH}) {
+CellBuffer _withOverlay(
+  CellBuffer base, {
+  required int boxW,
+  required int boxH,
+}) {
   final out = CellBuffer(base.size);
   _seed(base, out);
   final left = (base.size.cols - boxW) ~/ 2;
@@ -163,7 +168,10 @@ void main() {
       CellBuffer screen(int top) {
         final b = CellBuffer(size);
         for (var r = 0; r < size.rows; r++) {
-          b.writeText(CellOffset(0, r), 'log line ${top + r} payload=${(top + r) * 7}');
+          b.writeText(
+            CellOffset(0, r),
+            'log line ${top + r} payload=${(top + r) * 7}',
+          );
         }
         return b;
       }
@@ -187,7 +195,10 @@ void main() {
       expect(viewportSizeForMeasurement(_box(1, 24)), isNull, reason: '1 col');
       expect(viewportSizeForMeasurement(_box(80, 24)), const CellSize(80, 24));
       // Sane reads pass through; absurd ones still clamp to the upper bound.
-      expect(viewportSizeForMeasurement(_box(5000, 24)), const CellSize(1000, 24));
+      expect(
+        viewportSizeForMeasurement(_box(5000, 24)),
+        const CellSize(1000, 24),
+      );
     });
 
     test('a full repaint from the mirror restores a blanked grid', () {
@@ -209,7 +220,11 @@ void main() {
 
       // The resync repaints every row from the (correct) mirror.
       surface.present(mirror, mirror, _fullPlan(mirror));
-      expect(_domRows(surface), _bufRows(content), reason: 'restored from mirror');
+      expect(
+        _domRows(surface),
+        _bufRows(content),
+        reason: 'restored from mirror',
+      );
     });
 
     test('a mixed scroll + overlay sequence renders identically', () {

@@ -9,8 +9,8 @@ import 'dart:async' show Timer, unawaited;
 
 import '../../foundation/geometry.dart';
 import '../../foundation/key.dart';
-import '../../runtime/clipboard.dart';
-import '../../terminal/events.dart' show KeyModifier;
+import '../clipboard_scope.dart';
+import '../../input/events.dart' show KeyModifier;
 import '../framework.dart';
 import '../key_bindings.dart';
 import '../pointer.dart';
@@ -35,7 +35,7 @@ typedef SelectionChangedCallback = void Function(SelectedContent? content);
 ///   2. A [GestureDetector] that turns mouse drag into
 ///      [SelectionEdgeUpdateEvent]s.
 ///   3. A [KeyBindings] block providing Ctrl+A (select all), Ctrl+C
-///      (copy via [Clipboard.instance]), and Esc (clear). Bindings
+///      (copy via the ambient [ClipboardScope]), and Esc (clear). Bindings
 ///      bubble when there's nothing to act on, so ancestors still
 ///      see the event.
 ///
@@ -45,7 +45,7 @@ typedef SelectionChangedCallback = void Function(SelectedContent? content);
 /// row transitions.
 ///
 /// **Keyboard.** Ctrl+A selects everything below the area; Ctrl+C
-/// pushes the selection through [Clipboard.instance.write] (which
+/// pushes the selection through the ambient clipboard's `write` (which
 /// tries platform tools, OSC 52, and an in-process register in that
 /// order); Esc clears.
 ///
@@ -152,7 +152,7 @@ class SelectionArea extends StatefulWidget {
   /// when nothing is selected.
   final SelectionChangedCallback? onSelectionChanged;
 
-  /// When true, the active selection is pushed to [Clipboard.instance]
+  /// When true, the active selection is pushed to the ambient [ClipboardScope]
   /// on every mouse-release that completes a non-empty drag. Off by
   /// default — most apps want explicit Ctrl+C wiring or a different
   /// trigger.
@@ -321,8 +321,8 @@ class _SelectionAreaState extends State<SelectionArea> {
     final text = _delegate.getSelectedText();
     if (text.isEmpty) return;
     // Fire-and-forget — apps that need to observe the result should
-    // call Clipboard.instance.write themselves.
-    unawaited(Clipboard.instance.write(text));
+    // write to ClipboardScope.of(context) themselves.
+    unawaited(ClipboardScope.of(context).write(text));
   }
 
   // ----- Auto-scroll -------------------------------------------------
@@ -528,7 +528,7 @@ class _SelectionAreaState extends State<SelectionArea> {
       event.bubble();
       return;
     }
-    unawaited(Clipboard.instance.write(text));
+    unawaited(ClipboardScope.of(context).write(text));
   }
 
   void _onEscape(KeyBindingEvent event) {

@@ -489,14 +489,16 @@ final class CellBuffer {
     // Bytes are deduplicated by id; geometry is recorded per placement so the
     // same image drawn twice (or at two sizes) keeps independent rectangles.
     _images[id] = InlineImage(id: id, bytes: bytes);
-    _imagePlacements.add(InlineImagePlacement(
-      id: id,
-      col: topLeft.col,
-      row: topLeft.row,
-      cols: width,
-      rows: height,
-      fit: fit,
-    ));
+    _imagePlacements.add(
+      InlineImagePlacement(
+        id: id,
+        col: topLeft.col,
+        row: topLeft.row,
+        cols: width,
+        rows: height,
+        fit: fit,
+      ),
+    );
     writeProtocol(topLeft, id, width: width, height: height);
   }
 
@@ -513,14 +515,16 @@ final class CellBuffer {
   }) {
     if (!_containsColRow(topLeft.col, topLeft.row)) return;
     _images[id] = InlineImage(id: id, bytes: bytes);
-    _imagePlacements.add(InlineImagePlacement(
-      id: id,
-      col: topLeft.col,
-      row: topLeft.row,
-      cols: width,
-      rows: height,
-      fit: fit,
-    ));
+    _imagePlacements.add(
+      InlineImagePlacement(
+        id: id,
+        col: topLeft.col,
+        row: topLeft.row,
+        cols: width,
+        rows: height,
+        fit: fit,
+      ),
+    );
     writeProtocol(topLeft, id, width: width, height: height);
   }
 
@@ -539,7 +543,8 @@ final class CellBuffer {
   /// compiles to dart2js, where ints are 53-bit).
   static String _hashBytes(Uint8List bytes) {
     const mod1 = 0x7FFFFFFF; // 2^31 - 1
-    const mod2 = 0x7FFFFFED; // largest prime below 2^31 - 1, independent of mod1
+    const mod2 =
+        0x7FFFFFED; // largest prime below 2^31 - 1, independent of mod1
     var h1 = 0;
     var h2 = 0;
     for (final b in bytes) {

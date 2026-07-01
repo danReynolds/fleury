@@ -127,19 +127,6 @@ void main() {
   });
 
   group('copy/export', () {
-    late Clipboard originalClipboard;
-    late TestClipboard clipboard;
-
-    setUp(() {
-      originalClipboard = Clipboard.instance;
-      clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
-    });
-
-    tearDown(() {
-      Clipboard.instance = originalClipboard;
-    });
-
     testWidgets('Ctrl+C copies the selected log entry', (tester) async {
       final controller = LogRegionController(
         selectedIndex: 1,
@@ -174,7 +161,7 @@ void main() {
       tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, '[WARN worker] needs attention');
+      expect(tester.clipboard.readInProcess(), '[WARN worker] needs attention');
       expect(copied, isNotNull);
       expect(copied!.entryIndex, 1);
       expect(copied!.viewIndex, 1);
@@ -222,7 +209,7 @@ void main() {
       );
 
       expect(result.completed, isTrue);
-      expect(clipboard.lastWritten, '[WARN worker] needs attention');
+      expect(tester.clipboard.readInProcess(), '[WARN worker] needs attention');
       expect(copied?.entryIndex, 1);
       expect(copied?.viewIndex, 1);
     });
@@ -387,7 +374,7 @@ void main() {
       tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, '[ERROR worker] deploy failed');
+      expect(tester.clipboard.readInProcess(), '[ERROR worker] deploy failed');
       expect(copied, isNotNull);
       expect(copied!.entryIndex, 2);
       expect(copied!.viewIndex, 0);

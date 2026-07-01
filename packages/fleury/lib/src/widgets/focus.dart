@@ -27,7 +27,7 @@ import '../foundation/geometry.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
-import '../terminal/events.dart';
+import '../input/events.dart';
 import 'framework.dart';
 import 'inherited_notifier.dart';
 import 'key_bindings.dart' show KeyBinding;

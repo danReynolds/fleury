@@ -143,7 +143,13 @@ void main() {
     testWidgets('direct entry clamps to max on commit', (tester) {
       final calls = <num>[];
       tester.pumpWidget(
-        Stepper(value: 5, min: 0, max: 10, autofocus: true, onChanged: calls.add),
+        Stepper(
+          value: 5,
+          min: 0,
+          max: 10,
+          autofocus: true,
+          onChanged: calls.add,
+        ),
       );
       tester.type('9');
       tester.type('9');
@@ -276,8 +282,9 @@ void main() {
     });
 
     group('semantic setValue (B4)', () {
-      testWidgets('advertises setValue and sets an exact value, clamped',
-          (tester) async {
+      testWidgets('advertises setValue and sets an exact value, clamped', (
+        tester,
+      ) async {
         num? received;
         tester.pumpWidget(
           Stepper(value: 10, min: 0, max: 100, onChanged: (v) => received = v),
@@ -304,13 +311,19 @@ void main() {
       testWidgets('reads a numeric string and ignores garbage', (tester) async {
         num? received;
         tester.pumpWidget(Stepper(value: 10, onChanged: (v) => received = v));
-        await tester.invokeSemanticAction(SemanticAction.setValue,
-            role: SemanticRole.spinButton, payload: '7');
+        await tester.invokeSemanticAction(
+          SemanticAction.setValue,
+          role: SemanticRole.spinButton,
+          payload: '7',
+        );
         expect(received, 7);
 
         received = null;
-        await tester.invokeSemanticAction(SemanticAction.setValue,
-            role: SemanticRole.spinButton, payload: 'lots');
+        await tester.invokeSemanticAction(
+          SemanticAction.setValue,
+          role: SemanticRole.spinButton,
+          payload: 'lots',
+        );
         expect(received, isNull, reason: 'a non-numeric payload is a no-op');
       });
     });

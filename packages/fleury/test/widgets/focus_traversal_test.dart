@@ -885,7 +885,11 @@ void main() {
       // on-screen position, not the content-space origin (col 0) — feeding the
       // latter to directional traversal put scrolled controls at phantom
       // positions over sibling panes.
-      expect(rect!.left, 20, reason: 'screen col = left padding, not content 0');
+      expect(
+        rect!.left,
+        20,
+        reason: 'screen col = left padding, not content 0',
+      );
       expect(rect.top, 5, reason: 'screen row = top padding 3 + content row 2');
     });
 

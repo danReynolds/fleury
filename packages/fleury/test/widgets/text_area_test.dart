@@ -357,19 +357,6 @@ void main() {
   });
 
   group('copy and cut', () {
-    late Clipboard originalClipboard;
-    late TestClipboard clipboard;
-
-    setUp(() {
-      originalClipboard = Clipboard.instance;
-      clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
-    });
-
-    tearDown(() {
-      Clipboard.instance = originalClipboard;
-    });
-
     testWidgets('Ctrl+C copies selected multiline text', (tester) async {
       final ctl = TextEditingController(text: 'one\ntwo')
         ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 5);
@@ -378,7 +365,7 @@ void main() {
       tester.sendKey(_ctrlChar('c'));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, 'ne\nt');
+      expect(tester.clipboard.readInProcess(), 'ne\nt');
       expect(ctl.text, 'one\ntwo');
     });
 
@@ -390,7 +377,7 @@ void main() {
       tester.sendKey(_ctrlChar('x'));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, 'ne\nt');
+      expect(tester.clipboard.readInProcess(), 'ne\nt');
       expect(ctl.text, 'owo');
       expect(ctl.textSelection, const TextSelection.collapsed(1));
     });
@@ -411,7 +398,7 @@ void main() {
       tester.sendKey(_ctrlChar('c'));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, '••\n•');
+      expect(tester.clipboard.readInProcess(), '••\n•');
     });
 
     testWidgets('disabled policy blocks copy and bubbling', (tester) async {
@@ -434,7 +421,7 @@ void main() {
       tester.sendKey(_ctrlChar('c'));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, isNull);
+      expect(tester.clipboard.readInProcess(), isNull);
       expect(ancestorCopies, 0);
     });
   });

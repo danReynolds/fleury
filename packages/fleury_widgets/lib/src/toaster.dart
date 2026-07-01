@@ -248,7 +248,10 @@ class _ToasterState extends State<Toaster> {
     final dot = Text(_severityDot, style: toast.style);
     final message = Text(' ${toast.message}');
     if (action == null) {
-      return Row(mainAxisSize: MainAxisSize.min, children: <Widget>[dot, message]);
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[dot, message],
+      );
     }
     final theme = Theme.of(context);
     return Row(

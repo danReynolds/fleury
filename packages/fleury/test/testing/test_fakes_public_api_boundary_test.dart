@@ -14,16 +14,17 @@ void main() {
         final source = File(path).readAsStringSync();
         expect(source, isNot(contains('FakeClock')), reason: path);
         expect(source, isNot(contains('FakeTickerScheduler')), reason: path);
-        expect(source, isNot(contains('TestClipboard')), reason: path);
       }
     });
 
     test('fleury_test exposes deterministic test fakes', () {
       final source = File('lib/fleury_test.dart').readAsStringSync();
 
+      // The clipboard test double is InProcessClipboard, a production class
+      // (the neutral default) exported from fleury_core — FleuryTester
+      // installs one per test, so fleury_test needs no clipboard fake.
       expect(source, contains('FakeClock'));
       expect(source, contains('FakeTickerScheduler'));
-      expect(source, contains('TestClipboard'));
     });
   });
 }

@@ -93,12 +93,13 @@ Map<String, List<String>> _exports(File barrel) {
   final result = <String, List<String>>{};
   final pattern = RegExp('''export '([^']+)'(?: show ([^;]+))?;''');
   for (final m in pattern.allMatches(source)) {
-    final symbols = (m.group(2) ?? '')
-        .split(',')
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .toList()
-      ..sort();
+    final symbols =
+        (m.group(2) ?? '')
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList()
+          ..sort();
     result[m.group(1)!] = symbols;
   }
   return result;

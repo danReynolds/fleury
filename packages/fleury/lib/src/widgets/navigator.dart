@@ -50,7 +50,7 @@ import '../foundation/key.dart';
 import '../rendering/render_navigator.dart';
 import '../rendering/render_object.dart';
 import '../semantics/semantics.dart';
-import '../terminal/events.dart';
+import '../input/events.dart';
 import 'align.dart' show Align, Alignment;
 import 'effects.dart';
 import 'focus.dart';

@@ -481,10 +481,9 @@ class _PatchReviewState extends State<PatchReview> {
     );
     final file = widget.files[selected];
     final text = exportPatchReviewFile(file, options: widget.copyOptions);
-    final report = await Clipboard.instance.writeWithReport(
-      text,
-      policy: widget.copyOptions.clipboardPolicy,
-    );
+    final report = await ClipboardScope.of(
+      context,
+    ).writeWithReport(text, policy: widget.copyOptions.clipboardPolicy);
     if (!mounted) return;
     widget.onCopyFile?.call(
       PatchReviewCopyResult(

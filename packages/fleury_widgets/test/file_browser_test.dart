@@ -161,19 +161,6 @@ void main() {
   });
 
   group('copy/export', () {
-    late Clipboard originalClipboard;
-    late TestClipboard clipboard;
-
-    setUp(() {
-      originalClipboard = Clipboard.instance;
-      clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
-    });
-
-    tearDown(() {
-      Clipboard.instance = originalClipboard;
-    });
-
     testWidgets('Ctrl+C copies selected path with source index result', (
       tester,
     ) async {
@@ -196,7 +183,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(
-        clipboard.lastWritten,
+        tester.clipboard.readInProcess(),
         endsWith('${Platform.pathSeparator}deploy.log'),
       );
       expect(copied, isNotNull);
@@ -237,7 +224,7 @@ void main() {
 
       expect(result.completed, isTrue);
       expect(
-        clipboard.lastWritten,
+        tester.clipboard.readInProcess(),
         endsWith('${Platform.pathSeparator}deploy.log'),
       );
       expect(copied?.entryIndex, 2);

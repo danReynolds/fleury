@@ -63,7 +63,8 @@ class ColorPicker extends StatefulWidget {
   State<ColorPicker> createState() => _ColorPickerState();
 }
 
-class _ColorPickerState extends State<ColorPicker> implements TextInputClaimant {
+class _ColorPickerState extends State<ColorPicker>
+    implements TextInputClaimant {
   late FocusNode _node;
   bool _owns = false;
 

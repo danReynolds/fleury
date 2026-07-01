@@ -280,10 +280,11 @@ final class _DataTable100kScenario implements _ScenarioBenchmark {
 Future<_DataTableJourneySample> _runDataTableJourney(
   _ScenarioConfig config,
 ) async {
-  final tester = FleuryTester(viewportSize: config.terminalSize);
-  final originalClipboard = Clipboard.instance;
-  final clipboard = TestClipboard();
-  Clipboard.instance = clipboard;
+  final clipboard = InProcessClipboard();
+  final tester = FleuryTester(
+    viewportSize: config.terminalSize,
+    clipboard: clipboard,
+  );
   final requestedRows = <int>{};
   var cellBuilderCalls = 0;
   final total = Stopwatch()..start();
@@ -346,7 +347,7 @@ Future<_DataTableJourneySample> _runDataTableJourney(
     final visibleStart = table.state.visibleRangeStart ?? -1;
     final visibleEnd = table.state.visibleRangeEnd ?? -1;
     final maxExpectedUniqueRows = (config.terminalSize.rows * 4).clamp(8, 512);
-    final copiedText = clipboard.lastWritten ?? '';
+    final copiedText = clipboard.readInProcess() ?? '';
     final correct =
         table.state.collectionRowCount == config.rowCount &&
         table.state.collectionColumnCount == _columns.length &&
@@ -383,7 +384,6 @@ Future<_DataTableJourneySample> _runDataTableJourney(
       correct: correct,
     );
   } finally {
-    Clipboard.instance = originalClipboard;
     tester.dispose();
   }
 }
@@ -642,10 +642,11 @@ final class _LogRegionTailingScenario implements _ScenarioBenchmark {
 Future<_LogRegionJourneySample> _runLogRegionJourney(
   _ScenarioConfig config,
 ) async {
-  final tester = FleuryTester(viewportSize: config.terminalSize);
-  final originalClipboard = Clipboard.instance;
-  final clipboard = TestClipboard();
-  Clipboard.instance = clipboard;
+  final clipboard = InProcessClipboard();
+  final tester = FleuryTester(
+    viewportSize: config.terminalSize,
+    clipboard: clipboard,
+  );
   final total = Stopwatch()..start();
   try {
     final fixture = _LogFixture(seed: config.seed);
@@ -767,7 +768,7 @@ Future<_LogRegionJourneySample> _runLogRegionJourney(
     total.stop();
 
     final expectedLastKey = fixture.key(entries.length - 1);
-    final copiedText = clipboard.lastWritten ?? '';
+    final copiedText = clipboard.readInProcess() ?? '';
     final finalVisibleRange = controller.visibleRange;
     final visibleStart = finalVisibleRange?.first ?? -1;
     final visibleEnd = finalVisibleRange?.last ?? -1;
@@ -843,7 +844,6 @@ Future<_LogRegionJourneySample> _runLogRegionJourney(
     appendIndexTask.dispose();
     return sample;
   } finally {
-    Clipboard.instance = originalClipboard;
     tester.dispose();
   }
 }
@@ -1138,10 +1138,11 @@ final class _StreamingMarkdownScenario implements _ScenarioBenchmark {
 Future<_StreamingMarkdownJourneySample> _runStreamingMarkdownJourney(
   _ScenarioConfig config,
 ) async {
-  final tester = FleuryTester(viewportSize: config.terminalSize);
-  final originalClipboard = Clipboard.instance;
-  final clipboard = TestClipboard();
-  Clipboard.instance = clipboard;
+  final clipboard = InProcessClipboard();
+  final tester = FleuryTester(
+    viewportSize: config.terminalSize,
+    clipboard: clipboard,
+  );
   final chunkCount = _markdownChunkCountFor(config.rowCount);
   final fixture = _MarkdownFixture(seed: config.seed);
   final buffer = StringBuffer();
@@ -1219,7 +1220,7 @@ Future<_StreamingMarkdownJourneySample> _runStreamingMarkdownJourney(
     semantics.stop();
     total.stop();
 
-    final copiedText = clipboard.lastWritten ?? '';
+    final copiedText = clipboard.readInProcess() ?? '';
     final finalVisible = _visibleText(finalFrame, config.terminalSize);
     final sanitizedBlockCount = document.blocks
         .where((block) => block.outputSanitized)
@@ -1289,7 +1290,6 @@ Future<_StreamingMarkdownJourneySample> _runStreamingMarkdownJourney(
       correct: correct,
     );
   } finally {
-    Clipboard.instance = originalClipboard;
     tester.dispose();
   }
 }
@@ -3097,10 +3097,11 @@ final class _SubprocessOutputScenario implements _ScenarioBenchmark {
 Future<_SubprocessOutputJourneySample> _runSubprocessOutputJourney(
   _ScenarioConfig config,
 ) async {
-  final tester = FleuryTester(viewportSize: config.terminalSize);
-  final originalClipboard = Clipboard.instance;
-  final clipboard = TestClipboard();
-  Clipboard.instance = clipboard;
+  final clipboard = InProcessClipboard();
+  final tester = FleuryTester(
+    viewportSize: config.terminalSize,
+    clipboard: clipboard,
+  );
   final total = Stopwatch()..start();
   final tempDir = await Directory.systemTemp.createTemp('fleury_sb9_');
   final driver = FakeTerminalDriver(size: config.terminalSize);
@@ -3282,7 +3283,7 @@ Future<_SubprocessOutputJourneySample> _runSubprocessOutputJourney(
       terminalOutputFrame,
       config.terminalSize,
     );
-    final copiedText = clipboard.lastWritten ?? '';
+    final copiedText = clipboard.readInProcess() ?? '';
     final unsafeArtifactLeakCount =
         _unsafeLeakCount(visibleProcess) +
         _unsafeLeakCount(visibleTerminal) +
@@ -3372,7 +3373,6 @@ Future<_SubprocessOutputJourneySample> _runSubprocessOutputJourney(
       correct: correct,
     );
   } finally {
-    Clipboard.instance = originalClipboard;
     await driver.restore();
     await driver.dispose();
     tester.dispose();
@@ -3881,10 +3881,11 @@ final class _TreeTableHierarchyScenario implements _ScenarioBenchmark {
 Future<_TreeTableJourneySample> _runTreeTableJourney(
   _ScenarioConfig config,
 ) async {
-  final tester = FleuryTester(viewportSize: config.terminalSize);
-  final originalClipboard = Clipboard.instance;
-  final clipboard = TestClipboard();
-  Clipboard.instance = clipboard;
+  final clipboard = InProcessClipboard();
+  final tester = FleuryTester(
+    viewportSize: config.terminalSize,
+    clipboard: clipboard,
+  );
   final requestedNodes = <Object>{};
   var cellBuilderCalls = 0;
   final total = Stopwatch()..start();
@@ -4012,7 +4013,7 @@ Future<_TreeTableJourneySample> _runTreeTableJourney(
     semantics.stop();
     total.stop();
 
-    final copiedText = clipboard.lastWritten ?? '';
+    final copiedText = clipboard.readInProcess() ?? '';
     final filteredText = _visibleText(filteredFrame, config.terminalSize);
     final initialVisibleRange = controller.visibleRange;
     final filterVisibleRange = filterController.visibleRange;
@@ -4091,7 +4092,6 @@ Future<_TreeTableJourneySample> _runTreeTableJourney(
     indexTask.dispose();
     return sample;
   } finally {
-    Clipboard.instance = originalClipboard;
     tester.dispose();
   }
 }

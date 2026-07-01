@@ -962,7 +962,8 @@ String _renderSemanticKeySegment(Key key) {
 
 String? semanticAnchorOf(Element element) {
   final scope = <String>[]; // keyed segments, leaf→root
-  final tail = <String>[]; // positional segments below the nearest key, leaf→root
+  final tail =
+      <String>[]; // positional segments below the nearest key, leaf→root
   var sawKey = false;
   Element? e = element;
   while (e != null) {
@@ -1294,7 +1295,9 @@ final class SemanticsElement extends ComponentElement
     if (explicitId != null) return explicitId;
     final key = widget.key;
     if (key != null) {
-      return SemanticNodeId('key:${escapeSemanticIdSegment(_renderSemanticKeySegment(key))}');
+      return SemanticNodeId(
+        'key:${escapeSemanticIdSegment(_renderSemanticKeySegment(key))}',
+      );
     }
     final anchor = semanticAnchorOf(this);
     if (anchor == null) return SemanticNodeId('element-$hashCode');
@@ -1392,8 +1395,7 @@ final class SemanticsElement extends ComponentElement
   ) async {
     final callback = widget.onSetValue;
     if (callback == null || target.id != _nodeId) return false;
-    if (!widget.enabled ||
-        !widget.actions.contains(SemanticAction.setValue)) {
+    if (!widget.enabled || !widget.actions.contains(SemanticAction.setValue)) {
       return false;
     }
     await callback(value);

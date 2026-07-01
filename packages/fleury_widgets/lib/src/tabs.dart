@@ -188,10 +188,7 @@ class _TabsState extends State<Tabs> {
       index: active,
       children: [
         for (var i = 0; i < widget.tabs.length; i++)
-          ExcludeFocus(
-            excluding: i != active,
-            child: widget.tabs[i].content,
-          ),
+          ExcludeFocus(excluding: i != active, child: widget.tabs[i].content),
       ],
     );
 

@@ -16,7 +16,7 @@ import '../runtime/remote_surface_sink.dart';
 import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
 import '../terminal/capabilities.dart';
-import '../terminal/events.dart';
+import '../input/events.dart';
 import '../terminal/input_parser.dart';
 import '../terminal/terminal_driver.dart';
 import 'remote_codec.dart';

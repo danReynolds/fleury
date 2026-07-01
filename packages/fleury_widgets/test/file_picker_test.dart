@@ -44,8 +44,9 @@ void _clickAt(FleuryTester tester, {required int col, required int row}) {
 String _bigDir(int count) {
   final tmp = Directory.systemTemp.createTempSync('fleuryfpbig_');
   for (var i = 0; i < count; i++) {
-    File('${tmp.path}/file_${i.toString().padLeft(2, '0')}.txt')
-        .writeAsStringSync('x');
+    File(
+      '${tmp.path}/file_${i.toString().padLeft(2, '0')}.txt',
+    ).writeAsStringSync('x');
   }
   addTearDown(() => tmp.deleteSync(recursive: true));
   return tmp.path;
@@ -70,7 +71,10 @@ void main() {
       // End jumps to the last entry; the window must scroll it into view and
       // push the top entry off (a plain Column would have clipped it).
       tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
-      final out = tester.renderToString(size: const CellSize(40, 8), emptyMark: ' ');
+      final out = tester.renderToString(
+        size: const CellSize(40, 8),
+        emptyMark: ' ',
+      );
       expect(out.contains('file_19.txt'), isTrue, reason: 'cursor scrolled in');
       expect(out.contains('file_00.txt'), isFalse, reason: 'top scrolled off');
     });
@@ -85,7 +89,9 @@ void main() {
       tester.render(size: const CellSize(70, 8));
       _clickAt(tester, col: 3, row: 2); // the sub/ directory row
       expect(
-        tester.renderToString(size: const CellSize(70, 8)).contains('inside.dart'),
+        tester
+            .renderToString(size: const CellSize(70, 8))
+            .contains('inside.dart'),
         isTrue,
         reason: 'clicking the directory opened it',
       );

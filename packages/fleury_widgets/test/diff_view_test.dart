@@ -123,19 +123,6 @@ void main() {
   });
 
   group('copy/export', () {
-    late Clipboard originalClipboard;
-    late TestClipboard clipboard;
-
-    setUp(() {
-      originalClipboard = Clipboard.instance;
-      clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
-    });
-
-    tearDown(() {
-      Clipboard.instance = originalClipboard;
-    });
-
     testWidgets('Ctrl+C copies the selected hunk when configured', (
       tester,
     ) async {
@@ -159,7 +146,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(
-        clipboard.lastWritten,
+        tester.clipboard.readInProcess(),
         '@@ -1,4 +1,5 @@\n'
         ' void main() {\n'
         '-  print("old");\n'
@@ -204,8 +191,8 @@ void main() {
       );
 
       expect(result.completed, isTrue);
-      expect(clipboard.lastWritten, contains('@@ -1,4 +1,5 @@'));
-      expect(clipboard.lastWritten, contains('+  print("new");'));
+      expect(tester.clipboard.readInProcess(), contains('@@ -1,4 +1,5 @@'));
+      expect(tester.clipboard.readInProcess(), contains('+  print("new");'));
       expect(copied?.row.text, '+  print("new");');
       expect(copied?.report.result, ClipboardWriteResult.inProcessOnly);
     });
@@ -300,9 +287,9 @@ void main() {
       tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, contains('+bad'));
-      expect(clipboard.lastWritten, isNot(contains('secret')));
-      expect(clipboard.lastWritten, isNot(contains('\x1b]52')));
+      expect(tester.clipboard.readInProcess(), contains('+bad'));
+      expect(tester.clipboard.readInProcess(), isNot(contains('secret')));
+      expect(tester.clipboard.readInProcess(), isNot(contains('\x1b]52')));
     });
   });
 }

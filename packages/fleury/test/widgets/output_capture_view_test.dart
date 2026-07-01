@@ -57,7 +57,11 @@ void main() {
 
     testWidgets('renders nothing when empty', (tester) {
       tester.pumpWidget(
-        SizedBox(width: 10, height: 2, child: OutputCaptureView(buffer: LogBuffer())),
+        SizedBox(
+          width: 10,
+          height: 2,
+          child: OutputCaptureView(buffer: LogBuffer()),
+        ),
       );
       expect(tester.renderToString(size: const CellSize(10, 2)).trim(), '');
     });
@@ -80,7 +84,11 @@ void main() {
       tester.pumpWidget(
         Theme(
           data: const ThemeData(),
-          child: SizedBox(width: 10, height: 1, child: OutputCaptureView(buffer: b)),
+          child: SizedBox(
+            width: 10,
+            height: 1,
+            child: OutputCaptureView(buffer: b),
+          ),
         ),
       );
       final buf = tester.render(size: const CellSize(10, 1));
@@ -92,7 +100,11 @@ void main() {
       tester.pumpWidget(
         LogBufferScope(
           buffer: b,
-          child: const SizedBox(width: 10, height: 1, child: OutputCaptureView()),
+          child: const SizedBox(
+            width: 10,
+            height: 1,
+            child: OutputCaptureView(),
+          ),
         ),
       );
       expect(
@@ -153,7 +165,10 @@ void main() {
 
     testWidgets('shows an empty state', (tester) {
       tester.pumpWidget(
-        LogBufferScope(buffer: LogBuffer(), child: const OutputCaptureConsole(height: 6)),
+        LogBufferScope(
+          buffer: LogBuffer(),
+          child: const OutputCaptureConsole(height: 6),
+        ),
       );
       expect(
         tester
@@ -168,7 +183,10 @@ void main() {
       tester.pumpWidget(
         Theme(
           data: const ThemeData(),
-          child: LogBufferScope(buffer: b, child: const OutputCaptureConsole(height: 6)),
+          child: LogBufferScope(
+            buffer: b,
+            child: const OutputCaptureConsole(height: 6),
+          ),
         ),
       );
       expect(

@@ -150,10 +150,13 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
   Future<int> killProcess() {
     process.kill(ProcessSignal.sigterm);
     return process.exitCode
-        .timeout(killGrace, onTimeout: () {
-          process.kill(ProcessSignal.sigkill);
-          return -9;
-        })
+        .timeout(
+          killGrace,
+          onTimeout: () {
+            process.kill(ProcessSignal.sigkill);
+            return -9;
+          },
+        )
         .catchError((_) => -1);
   }
 

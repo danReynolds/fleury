@@ -17,9 +17,8 @@
 // This file is platform-neutral (no dart:io): it holds the contract,
 // the policies/reports, and the in-process default. The production
 // SystemClipboard (paths 1 and 2 above) lives in system_clipboard.dart
-// and is exported only from the native `fleury.dart` umbrella; hosts
-// install it (runApp does so automatically when [Clipboard.instance]
-// hasn't been customized).
+// and is exported only from the native `fleury.dart` umbrella; each host
+// owns an instance and shares it with widgets via ClipboardScope.
 
 import 'dart:async';
 import 'dart:convert';
@@ -128,27 +127,12 @@ final class ClipboardWriteReport {
 
 /// System-clipboard interop.
 ///
-/// The neutral default is [InProcessClipboard] — writes land in the
-/// in-process register only, so paste-within-app works on every
-/// target. Hosts install a platform implementation on top: `runApp`
-/// installs `SystemClipboard` (platform tools + OSC 52) when
-/// [instance] hasn't been customized, and the browser hosts install
-/// their own. Tests can replace [instance] with [TestClipboard] to
-/// capture writes.
+/// A host service, not a global. Each host owns a concrete instance —
+/// `runApp` a `SystemClipboard` (platform tools + OSC 52), the browser
+/// hosts a `WebClipboard`, `FleuryTester` an [InProcessClipboard] — and
+/// shares it with widgets through `ClipboardScope`; call sites resolve it
+/// with `ClipboardScope.of(context)`.
 abstract class Clipboard {
-  static final InProcessClipboard _neutralDefault = InProcessClipboard();
-
-  /// The active clipboard implementation. Neutral in-process default
-  /// until a host or the app installs something richer.
-  static Clipboard instance = _neutralDefault;
-
-  /// True while [instance] is still the neutral in-process default —
-  /// i.e. neither a host nor the app has installed an implementation.
-  /// Hosts use this to install their platform clipboard without
-  /// clobbering an app- or test-provided one.
-  static bool get instanceIsNeutralDefault =>
-      identical(instance, _neutralDefault);
-
   /// Writes [text] to the system clipboard and the in-process
   /// register. Returns the transport that actually delivered it.
   Future<ClipboardWriteResult> write(String text) async {
@@ -170,11 +154,16 @@ abstract class Clipboard {
 }
 
 /// Platform-neutral clipboard: writes populate the in-process
-/// register only, never touching stdout or spawning subprocesses.
-/// The default [Clipboard.instance] on every target until a host
-/// installs a platform implementation.
+/// register only, never touching stdout or spawning subprocesses. The
+/// test default (`FleuryTester` installs one and exposes it as
+/// `tester.clipboard`) and the io-free fallback for embedders that have
+/// no platform clipboard.
 class InProcessClipboard extends Clipboard {
   String? _register;
+
+  /// The text passed to the most recent [write], or null if nothing has
+  /// been written — the assertion hook for tests.
+  String? get lastWritten => _register;
 
   @override
   String? readInProcess() => _register;
@@ -203,12 +192,4 @@ class InProcessClipboard extends Clipboard {
       osc52Emitted: false,
     );
   }
-}
-
-/// Test-only clipboard: an [InProcessClipboard] whose last write is
-/// inspectable via [lastWritten].
-class TestClipboard extends InProcessClipboard {
-  /// The text passed to the most recent [write], or null if nothing
-  /// has been written.
-  String? get lastWritten => readInProcess();
 }

@@ -76,7 +76,7 @@ import 'dart:typed_data';
 import '../foundation/geometry.dart';
 import '../semantics/semantics.dart';
 import '../terminal/capabilities.dart';
-import '../terminal/events.dart';
+import '../input/events.dart';
 import 'remote_codec.dart';
 
 /// Current serve/shell protocol version. Bumped when frame semantics

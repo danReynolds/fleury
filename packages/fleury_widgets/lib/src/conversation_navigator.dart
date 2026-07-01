@@ -543,10 +543,9 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
       selected.entry,
       options: widget.copyOptions,
     );
-    final report = await Clipboard.instance.writeWithReport(
-      text,
-      policy: widget.copyOptions.clipboardPolicy,
-    );
+    final report = await ClipboardScope.of(
+      context,
+    ).writeWithReport(text, policy: widget.copyOptions.clipboardPolicy);
     if (!mounted) return;
     widget.onCopy?.call(
       ConversationNavigatorCopyResult(

@@ -17,7 +17,7 @@ import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/scroll_detection.dart';
 import '../semantics/semantics.dart';
-import '../terminal/events.dart';
+import '../input/events.dart';
 
 /// A frame reduced to its changed cells for the wire: the grid size,
 /// repaint/scroll flags, a per-frame style table, and the changed
@@ -195,7 +195,10 @@ class _Reader {
   String str() {
     final len = u32();
     _need(len);
-    final s = utf8.decode(_data.sublist(_pos, _pos + len), allowMalformed: true);
+    final s = utf8.decode(
+      _data.sublist(_pos, _pos + len),
+      allowMalformed: true,
+    );
     _pos += len;
     return s;
   }
@@ -227,7 +230,10 @@ class _Reader {
   String vstr() {
     final len = varint();
     _need(len);
-    final s = utf8.decode(_data.sublist(_pos, _pos + len), allowMalformed: true);
+    final s = utf8.decode(
+      _data.sublist(_pos, _pos + len),
+      allowMalformed: true,
+    );
     _pos += len;
     return s;
   }
@@ -489,7 +495,11 @@ RemotePlan buildRemotePlan(
   // patches then compare against prev shifted up by `shift`.
   int? scrollUpRows;
   if (!full && rows >= 2) {
-    final shift = detectBeneficialScrollUp(prev, next, screenDiffStats(prev, next));
+    final shift = detectBeneficialScrollUp(
+      prev,
+      next,
+      screenDiffStats(prev, next),
+    );
     if (shift != null && shift > 0) scrollUpRows = shift;
   }
   final shift = scrollUpRows ?? 0;
@@ -570,7 +580,8 @@ List<RemoteRowPatch> _buildPatches(
             // static image isn't dropped on unchanged frames). Covered cells
             // already render as spaces; a terminal-escape anchor still writes
             // its grapheme.
-            final isImage = cell.role == CellRole.protocolAnchor &&
+            final isImage =
+                cell.role == CellRole.protocolAnchor &&
                 g != null &&
                 next.images.containsKey(g);
             buffer.write(isImage ? ' ' : (g ?? ' '));
@@ -578,7 +589,10 @@ List<RemoteRowPatch> _buildPatches(
           col++;
         }
         runs.add(
-          RemotePatchRun(styleIndex: styleIndex(style), text: buffer.toString()),
+          RemotePatchRun(
+            styleIndex: styleIndex(style),
+            text: buffer.toString(),
+          ),
         );
       }
       patches.add(RemoteRowPatch(row: row, startCol: startCol, runs: runs));
@@ -762,9 +776,8 @@ Uint8List encodeSemanticAction(
 /// Decodes a semantic-action request. Throws [RemoteCodecException] on an
 /// unrecognized action name (e.g. a peer on a newer protocol) or a malformed
 /// payload so the caller rejects it rather than misinterpreting it.
-({SemanticNodeId id, SemanticAction action, Object? value}) decodeSemanticAction(
-  Uint8List bytes,
-) {
+({SemanticNodeId id, SemanticAction action, Object? value})
+decodeSemanticAction(Uint8List bytes) {
   final r = _Reader(bytes);
   final id = r.vstr();
   final actionName = r.vstr();

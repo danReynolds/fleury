@@ -18,7 +18,6 @@ library;
 
 export 'src/animation/clock.dart' show FakeClock;
 export 'src/animation/ticker_scheduler.dart' show FakeTickerScheduler;
-export 'src/runtime/clipboard.dart' show TestClipboard;
 export 'src/testing/fleury_tester.dart' show FleuryTester, testWidgets;
 export 'src/testing/finders.dart'
     show Finder, byKey, byPredicate, byType, descendantOf, text;

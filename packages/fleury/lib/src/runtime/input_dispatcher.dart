@@ -16,7 +16,7 @@ import 'dart:async';
 
 import 'package:characters/characters.dart';
 
-import '../terminal/events.dart';
+import '../input/events.dart';
 import '../widgets/focus.dart';
 import '../widgets/key_bindings.dart';
 import '../widgets/pointer.dart';

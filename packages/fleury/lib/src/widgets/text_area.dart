@@ -25,9 +25,9 @@ import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
 import '../rendering/text_sanitizer.dart';
 import '../rendering/width_resolver.dart';
-import '../runtime/clipboard.dart';
+import 'clipboard_scope.dart';
 import '../semantics/semantics.dart';
-import '../terminal/events.dart';
+import '../input/events.dart';
 import 'focus.dart';
 import 'framework.dart';
 import 'text_input.dart'
@@ -230,10 +230,12 @@ class _TextAreaState extends State<TextArea>
 
     switch (widget.clipboardPolicy) {
       case TextClipboardPolicy.allowed:
-        unawaited(Clipboard.instance.write(selected));
+        unawaited(ClipboardScope.of(context).write(selected));
         break;
       case TextClipboardPolicy.redacted:
-        unawaited(Clipboard.instance.write(_redactClipboardText(selected)));
+        unawaited(
+          ClipboardScope.of(context).write(_redactClipboardText(selected)),
+        );
         break;
       case TextClipboardPolicy.disabled:
         return KeyEventResult.handled;

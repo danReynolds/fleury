@@ -19,7 +19,7 @@
 
 import '../foundation/geometry.dart';
 import '../rendering/render_flex.dart' show CrossAxisAlignment;
-import '../terminal/events.dart';
+import '../input/events.dart';
 import '../widgets/basic.dart';
 import '../widgets/framework.dart';
 import '../widgets/layout_builder.dart';

@@ -39,13 +39,28 @@ class _HostedSliderState extends State<_HostedSlider> {
 }
 
 void _press(FleuryTester tester, int col) => tester.sendMouse(
-  MouseEvent(kind: MouseEventKind.down, button: MouseButton.left, col: col, row: 0),
+  MouseEvent(
+    kind: MouseEventKind.down,
+    button: MouseButton.left,
+    col: col,
+    row: 0,
+  ),
 );
 void _moveTo(FleuryTester tester, int col) => tester.sendMouse(
-  MouseEvent(kind: MouseEventKind.drag, button: MouseButton.left, col: col, row: 0),
+  MouseEvent(
+    kind: MouseEventKind.drag,
+    button: MouseButton.left,
+    col: col,
+    row: 0,
+  ),
 );
 void _release(FleuryTester tester, int col) => tester.sendMouse(
-  MouseEvent(kind: MouseEventKind.up, button: MouseButton.left, col: col, row: 0),
+  MouseEvent(
+    kind: MouseEventKind.up,
+    button: MouseButton.left,
+    col: col,
+    row: 0,
+  ),
 );
 
 void _click(FleuryTester tester, int col) {
@@ -65,7 +80,9 @@ void main() {
       expect(_HostedSlider.lastValues, (3, 10));
     });
 
-    testWidgets('clicking near the high handle moves it, not the low', (tester) {
+    testWidgets('clicking near the high handle moves it, not the low', (
+      tester,
+    ) {
       _HostedSlider.lastValues = null;
       tester.pumpWidget(const _HostedSlider(initial: (0, 10), min: 0, max: 10));
       tester.render(size: const CellSize(11, 1));
@@ -248,8 +265,11 @@ void main() {
       // so the low handle is still active and at its min — Left then bubbles
       // too. Neither fires onChanged.
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
-      expect(received, isNull,
-          reason: 'Tab and Left both bubble; nothing on the slider moved');
+      expect(
+        received,
+        isNull,
+        reason: 'Tab and Left both bubble; nothing on the slider moved',
+      );
     });
 
     testWidgets('low handle clamps against high (no crossing)', (tester) {
@@ -318,7 +338,9 @@ void main() {
           ),
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight)); // active=high
+      tester.sendKey(
+        const KeyEvent(keyCode: KeyCode.arrowRight),
+      ); // active=high
       tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
       expect(received, (2, 10));
     });
@@ -472,8 +494,11 @@ void main() {
       // Switch the active handle, then set it — reaches the other handle
       // without an increment loop.
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
-      await tester.invokeSemanticAction(SemanticAction.setValue,
-          role: SemanticRole.slider, payload: 9);
+      await tester.invokeSemanticAction(
+        SemanticAction.setValue,
+        role: SemanticRole.slider,
+        payload: 9,
+      );
       expect(_HostedSlider.lastValues!.$2, 9, reason: 'high handle moved to 9');
     });
   });

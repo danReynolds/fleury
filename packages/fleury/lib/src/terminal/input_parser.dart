@@ -36,7 +36,7 @@
 
 import 'dart:convert';
 
-import 'events.dart';
+import '../input/events.dart';
 
 /// Sink interface used by the parser to emit events. The terminal
 /// driver supplies the real implementation (typically a

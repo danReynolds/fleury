@@ -492,16 +492,18 @@ class _MenuBodyState extends State<_MenuBody> {
                       case MenuItem(:final label, :final enabled):
                         final sel = enabled && selected;
                         final child = Text(
-                          _rowText(sanitizeOptionLabel(label),
-                              selected: sel,
-                              isSub: false,
-                              hasIndicator: hasSubmenu,
-                              width: width),
+                          _rowText(
+                            sanitizeOptionLabel(label),
+                            selected: sel,
+                            isSub: false,
+                            hasIndicator: hasSubmenu,
+                            width: width,
+                          ),
                           style: !enabled
                               ? widget.mutedStyle
                               : sel
-                                  ? widget.selectionStyle
-                                  : CellStyle.empty,
+                              ? widget.selectionStyle
+                              : CellStyle.empty,
                         );
                         return _semanticMenuItem(
                           entry: entry,
@@ -512,16 +514,18 @@ class _MenuBodyState extends State<_MenuBody> {
                       case SubMenu(:final label, :final enabled):
                         final sel = enabled && selected;
                         final child = Text(
-                          _rowText(sanitizeOptionLabel(label),
-                              selected: sel,
-                              isSub: true,
-                              hasIndicator: hasSubmenu,
-                              width: width),
+                          _rowText(
+                            sanitizeOptionLabel(label),
+                            selected: sel,
+                            isSub: true,
+                            hasIndicator: hasSubmenu,
+                            width: width,
+                          ),
                           style: !enabled
                               ? widget.mutedStyle
                               : sel
-                                  ? widget.selectionStyle
-                                  : CellStyle.empty,
+                              ? widget.selectionStyle
+                              : CellStyle.empty,
                         );
                         final item = _semanticMenuItem(
                           entry: entry,

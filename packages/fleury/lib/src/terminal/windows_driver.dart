@@ -11,7 +11,7 @@ import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
 import 'capabilities.dart';
-import 'events.dart';
+import '../input/events.dart';
 import 'input_parser.dart';
 import 'terminal_driver.dart';
 import 'terminal_sequences.dart';

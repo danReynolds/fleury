@@ -48,8 +48,10 @@ void main() {
     final bytes = json.length;
     final perNode = bytes / nodes;
     // ignore: avoid_print
-    print('PAYLOAD nodes=$nodes bytes=$bytes per-node=${perNode.toStringAsFixed(1)} '
-        '(~${(bytes / 4).round()} tokens)');
+    print(
+      'PAYLOAD nodes=$nodes bytes=$bytes per-node=${perNode.toStringAsFixed(1)} '
+      '(~${(bytes / 4).round()} tokens)',
+    );
 
     // Headroom over the measured ~114 B/node (after compact ids + dropping
     // bounds/duplicate-value in the agent path). A regression that re-bloats

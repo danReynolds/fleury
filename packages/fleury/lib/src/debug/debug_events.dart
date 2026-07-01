@@ -14,7 +14,7 @@ import '../foundation/geometry.dart';
 import '../rendering/render_layout_stats.dart';
 import '../rendering/render_repaint_boundary.dart';
 import '../terminal/diagnostics.dart';
-import '../terminal/events.dart';
+import '../input/events.dart';
 
 /// One frame's per-phase timing breakdown plus the headline counters
 /// the live overlay shows. Emitted once per rendered frame.

@@ -508,10 +508,9 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
     final selected = _selectedMention(_currentOrder);
     if (selected == null) return;
     final text = exportFileMention(selected.entry, options: widget.copyOptions);
-    final report = await Clipboard.instance.writeWithReport(
-      text,
-      policy: widget.copyOptions.clipboardPolicy,
-    );
+    final report = await ClipboardScope.of(
+      context,
+    ).writeWithReport(text, policy: widget.copyOptions.clipboardPolicy);
     if (!mounted) return;
     widget.onCopy?.call(
       FileMentionCopyResult(

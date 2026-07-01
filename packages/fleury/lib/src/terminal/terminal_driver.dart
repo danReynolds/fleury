@@ -4,7 +4,7 @@ import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
 import 'capabilities.dart';
-import 'events.dart';
+import '../input/events.dart';
 
 /// The set of terminal modes the driver should enable for a TUI session.
 ///

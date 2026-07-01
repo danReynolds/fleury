@@ -50,8 +50,10 @@ import '../semantics/accessibility.dart';
 import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
 import '../terminal/capabilities.dart';
-import '../terminal/events.dart';
+import '../input/events.dart';
 import '../widgets/basic.dart';
+import '../runtime/clipboard.dart';
+import '../widgets/clipboard_scope.dart';
 import '../widgets/focus.dart';
 import '../widgets/framework.dart';
 import '../widgets/media_query.dart';
@@ -72,7 +74,9 @@ class FleuryTester {
     this.glyphTier = GlyphTier.unicode,
     this.imageProtocol = ImageProtocol.halfBlock,
     this.tmuxPassthrough = false,
-  }) : _clock = FakeClock(),
+    Clipboard? clipboard,
+  }) : clipboard = clipboard ?? InProcessClipboard(),
+       _clock = FakeClock(),
        _focusManager = FocusManager() {
     _scheduler = FakeTickerScheduler(clock: _clock);
     _binding = TuiBinding(
@@ -83,15 +87,22 @@ class FleuryTester {
       focusManager: _focusManager,
       pointerRouter: _pointerRouter,
     );
-    _owner = BuildOwner();
     // Match the runtime: render an error panel for a thrown build()
-    // rather than letting the exception escape the test harness.
-    Element.errorBuilder ??= (error, stack) =>
-        ErrorWidget.builder(error, stack);
+    // rather than letting the exception escape the test harness. Per-owner,
+    // so a test customizing hooks can't leak into the next test.
+    _owner = BuildOwner(
+      errorBuilder: (error, stack) => ErrorWidget.builder(error, stack),
+    );
     // Off by default in tests so it doesn't perturb golden output; an
     // overflow-specific test opts back in.
     RenderFlex.debugShowOverflow = false;
   }
+
+  /// The clipboard the tester installs via `ClipboardScope`. Defaults to a
+  /// fresh [InProcessClipboard]; assert copies with
+  /// `(tester.clipboard as InProcessClipboard).lastWritten` or pass a
+  /// custom fake to the constructor.
+  final Clipboard clipboard;
 
   /// Default size used by [render] / [renderToString] when no
   /// explicit size is given. Mutable so tests can grow / shrink the
@@ -605,7 +616,10 @@ class FleuryTester {
           manager: _focusManager,
           child: PointerRouterScope(
             router: _pointerRouter,
-            child: Overlay(initialEntries: [_userEntry]),
+            child: ClipboardScope(
+              clipboard: clipboard,
+              child: Overlay(initialEntries: [_userEntry]),
+            ),
           ),
         ),
       ),
@@ -717,7 +731,6 @@ class FleuryTester {
       return null;
     }
   }
-
 }
 
 final class _CommandResolution {

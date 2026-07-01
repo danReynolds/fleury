@@ -3,8 +3,8 @@
 // Split out of clipboard.dart so the platform-neutral contract
 // (Clipboard, policies, reports, the in-process register) stays free
 // of dart:io. This file is exported only from the native `fleury.dart`
-// umbrella; `runApp` installs [SystemClipboard] as [Clipboard.instance]
-// when the app hasn't provided its own.
+// umbrella; `runApp` owns a [SystemClipboard] (unless the app passed its
+// own clipboard) and shares it with widgets via ClipboardScope.
 
 import 'dart:async';
 import 'dart:convert';

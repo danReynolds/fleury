@@ -101,10 +101,7 @@ void main() {
         ..add(vstr('s'))
         ..add(vstr('activate'))
         ..add(vstr('nope'));
-      final raw = _rawFrame(
-        FrameType.semanticActionResult,
-        payload.toBytes(),
-      );
+      final raw = _rawFrame(FrameType.semanticActionResult, payload.toBytes());
       final decoder = FrameDecoder()..feed(raw);
       expect(
         () => decoder.drain().toList(),
@@ -112,7 +109,6 @@ void main() {
       );
       expect(wire, isNotEmpty);
     });
-
   });
 
   group('decoder framing', () {

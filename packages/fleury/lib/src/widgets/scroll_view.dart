@@ -29,7 +29,7 @@ import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
-import '../terminal/events.dart';
+import '../input/events.dart';
 import 'focus.dart';
 import 'framework.dart';
 import 'list_view.dart' show EdgeBehavior;

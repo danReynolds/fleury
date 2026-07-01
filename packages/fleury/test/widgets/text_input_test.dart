@@ -711,19 +711,6 @@ void main() {
   });
 
   group('copy and cut', () {
-    late Clipboard originalClipboard;
-    late TestClipboard clipboard;
-
-    setUp(() {
-      originalClipboard = Clipboard.instance;
-      clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
-    });
-
-    tearDown(() {
-      Clipboard.instance = originalClipboard;
-    });
-
     testWidgets('Ctrl+C copies selected text', (tester) async {
       final controller = TextEditingController(text: 'abcdef')
         ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 4);
@@ -732,7 +719,7 @@ void main() {
       tester.sendKey(_ctrlChar('c'));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, 'bcd');
+      expect(tester.clipboard.readInProcess(), 'bcd');
       expect(controller.text, 'abcdef');
     });
 
@@ -744,7 +731,7 @@ void main() {
       tester.sendKey(_ctrlChar('x'));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, 'bcd');
+      expect(tester.clipboard.readInProcess(), 'bcd');
       expect(controller.text, 'aef');
       expect(controller.textSelection, const TextSelection.collapsed(1));
     });
@@ -764,7 +751,7 @@ void main() {
       tester.sendKey(_ctrlChar('c'));
 
       expect(ancestorCopies, 1);
-      expect(clipboard.lastWritten, isNull);
+      expect(tester.clipboard.readInProcess(), isNull);
     });
 
     testWidgets('disabled clipboard policy blocks copy and bubbling', (
@@ -789,7 +776,7 @@ void main() {
       tester.sendKey(_ctrlChar('c'));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, isNull);
+      expect(tester.clipboard.readInProcess(), isNull);
       expect(ancestorCopies, 0);
     });
 
@@ -810,7 +797,7 @@ void main() {
       tester.sendKey(_ctrlChar('c'));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, '******');
+      expect(tester.clipboard.readInProcess(), '******');
     });
 
     testWidgets('readOnly field can copy but not cut', (tester) async {
@@ -822,11 +809,11 @@ void main() {
 
       tester.sendKey(_ctrlChar('c'));
       await Future<void>.delayed(Duration.zero);
-      expect(clipboard.lastWritten, 'bcd');
+      expect(tester.clipboard.readInProcess(), 'bcd');
 
       tester.sendKey(_ctrlChar('x'));
       await Future<void>.delayed(Duration.zero);
-      expect(clipboard.lastWritten, 'bcd');
+      expect(tester.clipboard.readInProcess(), 'bcd');
       expect(controller.text, 'abcdef');
     });
   });

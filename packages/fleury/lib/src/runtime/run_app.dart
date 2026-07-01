@@ -28,7 +28,7 @@ import 'runtime_error_overlay.dart';
 import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
 import '../terminal/diagnostics.dart';
-import '../terminal/events.dart';
+import '../input/events.dart';
 import '../terminal/native_driver.dart';
 import '../terminal/terminal_driver.dart';
 import '../widgets/focus.dart';
@@ -41,6 +41,7 @@ import '../widgets/navigator.dart';
 import '../widgets/overlay.dart';
 import '../widgets/pointer.dart';
 import '../widgets/tui_binding.dart';
+import '../widgets/clipboard_scope.dart';
 import 'clipboard.dart';
 import 'frame_presentation.dart';
 import 'frame_scheduler.dart';
@@ -114,6 +115,7 @@ Future<void> runApp(
   bool requireInteractiveTerminal = true,
   void Function(LogLine line)? onStrayOutput,
   TuiEventHandler? onEvent,
+  Clipboard? clipboard,
   List<KeyBinding> globalBindings = const [],
   Duration sequenceTimeout = const Duration(milliseconds: 500),
   DebugConfig debug = const DebugConfig(),
@@ -158,22 +160,16 @@ Future<void> runApp(
     );
   }
 
-  // Native clipboard: the neutral core defaults Clipboard.instance to the
-  // in-process register; the native host upgrades it to the platform
-  // implementation (platform tools + OSC 52) unless the app or a test
-  // already installed its own.
-  if (Clipboard.instanceIsNeutralDefault) {
-    Clipboard.instance = SystemClipboard();
-  }
+  // The clipboard is a host service: the native host owns a SystemClipboard
+  // (platform tools + OSC 52) unless the app supplied its own, and shares it
+  // with widgets via ClipboardScope in buildRoot.
+  final effectiveClipboard = clipboard ?? SystemClipboard();
 
   final runtime = TuiRuntime();
   final owner = runtime.owner;
   final focusManager = runtime.focusManager;
   final binding = runtime.binding;
   final pointerRouter = runtime.pointerRouter;
-  // Install the build-error boundary: a thrown build() renders an error
-  // panel for that subtree instead of crashing the app.
-  Element.errorBuilder ??= (error, stack) => ErrorWidget.builder(error, stack);
   // Floating OutputCaptureConsole lives in the unified DebugShell — F12 is a binding on
   // DebugShell that opens the docked panel with the Logs tab focused (rather
   // than a separate Overlay entry), backed by the always-available `debug`
@@ -621,20 +617,23 @@ Future<void> runApp(
                 manager: focusManager,
                 child: PointerRouterScope(
                   router: pointerRouter,
-                  // LogBufferScope sits above the Overlay so both the app and
-                  // the floating console can read the captured output.
-                  child: LogBufferScope(
-                    buffer: logBuffer,
-                    // DebugShell wraps the Overlay so docking it shrinks
-                    // the user's app AND the floating console region —
-                    // they share the available cells. When the shell's
-                    // mode is off the shell is a pure pass-through and
-                    // pays no layout cost.
-                    child: DebugShell(
-                      controller: debugController,
-                      child: Overlay(
-                        key: overlayKey,
-                        initialEntries: [rootEntry, errorEntry],
+                  // Host services sit above the Overlay so both the app
+                  // and the floating console can reach them.
+                  child: ClipboardScope(
+                    clipboard: effectiveClipboard,
+                    child: LogBufferScope(
+                      buffer: logBuffer,
+                      // DebugShell wraps the Overlay so docking it shrinks
+                      // the user's app AND the floating console region —
+                      // they share the available cells. When the shell's
+                      // mode is off the shell is a pure pass-through and
+                      // pays no layout cost.
+                      child: DebugShell(
+                        controller: debugController,
+                        child: Overlay(
+                          key: overlayKey,
+                          initialEntries: [rootEntry, errorEntry],
+                        ),
                       ),
                     ),
                   ),

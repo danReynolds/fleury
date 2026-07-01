@@ -176,7 +176,9 @@ void main() {
     expect(version.state['jsonPointer'], '/meta/version');
   });
 
-  testWidgets('semantic close collapses an expanded JSON branch', (tester) async {
+  testWidgets('semantic close collapses an expanded JSON branch', (
+    tester,
+  ) async {
     tester.pumpWidget(
       JsonView(
         value: const {
@@ -186,8 +188,11 @@ void main() {
       ),
     );
     tester.render(size: const CellSize(80, 8));
-    await tester.invokeSemanticAction(SemanticAction.open,
-        role: SemanticRole.jsonNode, label: 'meta');
+    await tester.invokeSemanticAction(
+      SemanticAction.open,
+      role: SemanticRole.jsonNode,
+      label: 'meta',
+    );
     tester.render(size: const CellSize(80, 8));
     expect(
       tester.semantics().where(role: SemanticRole.jsonNode, label: 'version'),
@@ -195,13 +200,18 @@ void main() {
     );
 
     // Expanded ⇒ meta offers close, not open.
-    final meta =
-        tester.semantics().single(role: SemanticRole.jsonNode, label: 'meta');
+    final meta = tester.semantics().single(
+      role: SemanticRole.jsonNode,
+      label: 'meta',
+    );
     expect(meta.actions, contains(SemanticAction.close));
     expect(meta.actions, isNot(contains(SemanticAction.open)));
 
-    final result = await tester.invokeSemanticAction(SemanticAction.close,
-        role: SemanticRole.jsonNode, label: 'meta');
+    final result = await tester.invokeSemanticAction(
+      SemanticAction.close,
+      role: SemanticRole.jsonNode,
+      label: 'meta',
+    );
     expect(result.completed, isTrue);
     tester.render(size: const CellSize(80, 8));
     expect(
@@ -212,19 +222,6 @@ void main() {
   });
 
   group('copy/export', () {
-    late Clipboard originalClipboard;
-    late TestClipboard clipboard;
-
-    setUp(() {
-      originalClipboard = Clipboard.instance;
-      clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
-    });
-
-    tearDown(() {
-      Clipboard.instance = originalClipboard;
-    });
-
     testWidgets('Ctrl+C copies the selected JSON subtree', (tester) async {
       final controller = JsonViewController(selectedIndex: 2);
       JsonViewCopyResult? copied;
@@ -248,7 +245,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(
-        clipboard.lastWritten,
+        tester.clipboard.readInProcess(),
         '{\n'
         '  "version": 1,\n'
         '  "status": "active"\n'
@@ -295,7 +292,7 @@ void main() {
       );
 
       expect(result.completed, isTrue);
-      expect(clipboard.lastWritten, contains('"version": 1'));
+      expect(tester.clipboard.readInProcess(), contains('"version": 1'));
       expect(copied?.row.path, r'$.meta');
       expect(copied?.report.result, ClipboardWriteResult.inProcessOnly);
     });
@@ -349,9 +346,9 @@ void main() {
       tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, isNot(contains('secret')));
-      expect(clipboard.lastWritten, isNot(contains('\x1b]52')));
-      expect(clipboard.lastWritten, contains('"unsafe"'));
+      expect(tester.clipboard.readInProcess(), isNot(contains('secret')));
+      expect(tester.clipboard.readInProcess(), isNot(contains('\x1b]52')));
+      expect(tester.clipboard.readInProcess(), contains('"unsafe"'));
     });
   });
 

@@ -56,9 +56,7 @@ void main() {
       });
     });
 
-    testWidgets('a known total with unknown current renders "— / N"', (
-      tester,
-    ) {
+    testWidgets('a known total with unknown current renders "— / N"', (tester) {
       tester.pumpWidget(
         TaskGraph(
           nodes: const [
@@ -130,9 +128,6 @@ void main() {
     });
 
     testWidgets('semantic copy copies selected task', (tester) async {
-      final originalClipboard = Clipboard.instance;
-      final clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
       TaskGraphCopyResult? copied;
       try {
         final controller = TaskGraphController(selectedIndex: 1);
@@ -156,14 +151,14 @@ void main() {
         );
 
         expect(result.completed, isTrue);
-        expect(clipboard.lastWritten, contains('[>] Run checks'));
-        expect(clipboard.lastWritten, contains('Status: running'));
-        expect(clipboard.lastWritten, contains('Depends on: plan'));
-        expect(clipboard.lastWritten, isNot(contains('secret')));
+        expect(tester.clipboard.readInProcess(), contains('[>] Run checks'));
+        expect(tester.clipboard.readInProcess(), contains('Status: running'));
+        expect(tester.clipboard.readInProcess(), contains('Depends on: plan'));
+        expect(tester.clipboard.readInProcess(), isNot(contains('secret')));
         expect(copied?.node.id, 'run');
         expect(copied?.report.policy.name, 'inProcessOnly');
       } finally {
-        Clipboard.instance = originalClipboard;
+        // clipboard is tester-scoped; nothing to restore
       }
     });
 

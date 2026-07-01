@@ -775,8 +775,11 @@ void main() {
         ),
       );
       final buf = tester.render(size: const CellSize(8, 8));
-      expect(buf.atColRow(0, 0).role, CellRole.empty,
-          reason: 'top row is letterbox, not covered');
+      expect(
+        buf.atColRow(0, 0).role,
+        CellRole.empty,
+        reason: 'top row is letterbox, not covered',
+      );
       var anchors = 0;
       int? anchorRow;
       final coveredRows = <int>{};
@@ -794,15 +797,19 @@ void main() {
         }
       }
       expect(anchors, 1, reason: 'one image region');
-      expect(coveredRows.length, 1,
-          reason: 'a 4:1 image in a square box occupies one row');
-      expect(anchorRow, greaterThan(0),
-          reason: 'the band is vertically centered, not top-aligned');
+      expect(
+        coveredRows.length,
+        1,
+        reason: 'a 4:1 image in a square box occupies one row',
+      );
+      expect(
+        anchorRow,
+        greaterThan(0),
+        reason: 'the band is vertically centered, not top-aligned',
+      );
     });
 
-    testWidgets('cover fills the whole box (cropping the source)', (
-      tester,
-    ) {
+    testWidgets('cover fills the whole box (cropping the source)', (tester) {
       tester.pumpWidget(
         kittyHosted(
           SizedBox(
@@ -820,8 +827,11 @@ void main() {
       for (var r = 0; r < 6; r++) {
         for (var c = 0; c < 6; c++) {
           if (r == 0 && c == 0) continue;
-          expect(buf.atColRow(c, r).role, CellRole.protocolCovered,
-              reason: 'cover scales to fill, so every cell is covered');
+          expect(
+            buf.atColRow(c, r).role,
+            CellRole.protocolCovered,
+            reason: 'cover scales to fill, so every cell is covered',
+          );
         }
       }
     });
@@ -943,9 +953,7 @@ void main() {
       );
     }
 
-    testWidgets('routes bytes off-grid and carries the widget fit', (
-      tester,
-    ) {
+    testWidgets('routes bytes off-grid and carries the widget fit', (tester) {
       tester.pumpWidget(
         browserHosted(
           SizedBox(
@@ -966,16 +974,22 @@ void main() {
       final placement = buf.imagePlacements.single;
       expect(placement.cols, 4);
       expect(placement.rows, 3);
-      expect(placement.fit, InlineImageFit.cover,
-          reason: 'widget ImageFit.cover maps to the wire fit');
+      expect(
+        placement.fit,
+        InlineImageFit.cover,
+        reason: 'widget ImageFit.cover maps to the wire fit',
+      );
 
       // The anchor carries only the id (a key in the image table), and the
       // region is protocol-covered — no glyph art, no Kitty escape.
       final anchor = buf.atColRow(0, 0);
       expect(anchor.role, CellRole.protocolAnchor);
       expect(buf.images.containsKey(anchor.grapheme), isTrue);
-      expect(anchor.grapheme!.startsWith('\x1B'), isFalse,
-          reason: 'browser anchors hold an id, not a terminal escape');
+      expect(
+        anchor.grapheme!.startsWith('\x1B'),
+        isFalse,
+        reason: 'browser anchors hold an id, not a terminal escape',
+      );
       expect(buf.atColRow(1, 0).role, CellRole.protocolCovered);
     });
 

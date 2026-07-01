@@ -97,7 +97,11 @@ void main() {
       // the literal glyphs are gone from the markup.
       expect(html, contains('linear-gradient(currentColor,currentColor)'));
       for (final glyph in ['┌', '┐', '└', '┘', '─', '│']) {
-        expect(html, isNot(contains(glyph)), reason: '$glyph should be CSS-drawn');
+        expect(
+          html,
+          isNot(contains(glyph)),
+          reason: '$glyph should be CSS-drawn',
+        );
       }
       // Three rows emitted.
       expect('<div class="r">'.allMatches(html).length, 3);

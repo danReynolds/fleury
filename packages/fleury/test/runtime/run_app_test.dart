@@ -130,9 +130,7 @@ void main() {
     test(
       'Ctrl+C copies a focused text selection before falling back to exit',
       () async {
-        final originalClipboard = Clipboard.instance;
-        final clipboard = TestClipboard();
-        Clipboard.instance = clipboard;
+        final clipboard = InProcessClipboard();
         final controller = TextEditingController(text: 'copyme')
           ..textSelection = const TextSelection(baseOffset: 0, extentOffset: 4);
         final driver = FakeTerminalDriver();
@@ -140,6 +138,7 @@ void main() {
           final future = runApp(
             TextInput(controller: controller, autofocus: true),
             driver: driver,
+            clipboard: clipboard,
             enableHotReload: false,
           );
           await _settle();
@@ -151,7 +150,7 @@ void main() {
           await Future<void>.delayed(Duration.zero);
 
           expect(driver.isActive, isTrue);
-          expect(clipboard.lastWritten, 'copy');
+          expect(clipboard.readInProcess(), 'copy');
 
           driver.enqueue(const KeyEvent(keyCode: KeyCode.arrowRight));
           await Future<void>.delayed(Duration.zero);
@@ -162,7 +161,6 @@ void main() {
 
           expect(driver.isActive, isFalse);
         } finally {
-          Clipboard.instance = originalClipboard;
           await driver.dispose();
         }
       },

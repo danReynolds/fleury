@@ -187,11 +187,8 @@ void main() {
       // selection (it bubbles to directional focus traversal). The DatePicker
       // is controlled, so re-pump per case rather than chaining moves.
       DateTime? selected;
-      Widget cal(DateTime v) => DatePicker(
-        value: v,
-        autofocus: true,
-        onChanged: (d) => selected = d,
-      );
+      Widget cal(DateTime v) =>
+          DatePicker(value: v, autofocus: true, onChanged: (d) => selected = d);
 
       // 2024-03-02 is a Saturday — the last column of a Sunday-start week.
       tester.pumpWidget(cal(_d(2024, 3, 2)));
@@ -390,8 +387,9 @@ void main() {
       );
     });
 
-    testWidgets('semantic setValue jumps to an exact ISO date (B4)',
-        (tester) async {
+    testWidgets('semantic setValue jumps to an exact ISO date (B4)', (
+      tester,
+    ) async {
       DateTime? selected;
       tester.pumpWidget(
         DatePicker(
@@ -406,19 +404,28 @@ void main() {
         contains(SemanticAction.setValue),
       );
 
-      await tester.invokeSemanticAction(SemanticAction.setValue,
-          role: SemanticRole.datePicker, payload: '2024-07-04');
+      await tester.invokeSemanticAction(
+        SemanticAction.setValue,
+        role: SemanticRole.datePicker,
+        payload: '2024-07-04',
+      );
       expect(selected, _d(2024, 7, 4));
 
       // Out of [firstDate, lastDate] is a no-op, not a clamp to a wrong date.
       selected = null;
-      await tester.invokeSemanticAction(SemanticAction.setValue,
-          role: SemanticRole.datePicker, payload: '2025-01-01');
+      await tester.invokeSemanticAction(
+        SemanticAction.setValue,
+        role: SemanticRole.datePicker,
+        payload: '2025-01-01',
+      );
       expect(selected, isNull);
 
       // Unparseable date is a no-op.
-      await tester.invokeSemanticAction(SemanticAction.setValue,
-          role: SemanticRole.datePicker, payload: 'someday');
+      await tester.invokeSemanticAction(
+        SemanticAction.setValue,
+        role: SemanticRole.datePicker,
+        payload: 'someday',
+      );
       expect(selected, isNull);
     });
   });
