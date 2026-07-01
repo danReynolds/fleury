@@ -302,6 +302,12 @@ class FleuryTester {
   bool _settleStep(Duration step) {
     if (step > Duration.zero) _scheduler.advance(step);
     final built = _owner.flushBuild().rebuiltElementCount;
+    // Run a real layout+paint like a production frame: widgets that build
+    // during layout (LayoutBuilder subtrees) don't exist after a bare build
+    // flush, so their streams/subscriptions would never start and settle
+    // would report a hollow quiescence. Rendering each step mirrors the
+    // runtime's frame order (build → layout/paint → post-frame drain).
+    if (_root != null) render();
     _binding.flushPostFrameCallbacks(_clock.now);
     final afterDrain = _owner.flushBuild().rebuiltElementCount;
     return built == 0 && afterDrain == 0;
