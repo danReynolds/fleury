@@ -60,11 +60,17 @@ class KeyHintBar extends StatelessWidget {
   List<KeyBinding> _collectVisibleBindings(FocusManager manager) {
     final result = <KeyBinding>[];
     final seenChords = <String>{};
+    // Honesty filter: while a text field holds focus, bare-printable chords —
+    // chain and global alike — are swallowed as typed text and can never
+    // fire. Don't advertise dead keys. Modifier/function chords (Ctrl+S, F1,
+    // Esc) bypass the text claimant and stay shown.
+    final textFocused = manager.focusedNodeClaimsText;
 
     void consider(KeyBinding binding) {
       if (binding.label == null) return;
       if (binding.hideFromHintBar) return;
       if (!binding.enabled) return;
+      if (textFocused && binding.chords.first.isShadowedByTextInput) return;
       final key = binding.chords.first.hintLabel;
       if (seenChords.contains(key)) return;
       seenChords.add(key);

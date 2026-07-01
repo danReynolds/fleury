@@ -328,6 +328,31 @@ class FocusManager extends ChangeNotifier {
     scheduleMicrotask(notifyListeners);
   }
 
+  /// Monotonic counter bumped by [notifyBindingsChanged]. Lets listeners
+  /// that key off the *content* of the active bindings (the hint bar)
+  /// distinguish "bindings changed under an unchanged focus" from no-ops.
+  int get bindingsRevision => _bindingsRevision;
+  int _bindingsRevision = 0;
+
+  /// Called by [KeyBindings] when its binding list changes in place (a
+  /// rebuild produced a new list — new labels, enabled flags, or chords)
+  /// without any focus movement. Manager listeners (the hint bar depends on
+  /// the manager) are notified on a microtask — this is invoked from
+  /// `didUpdateWidget`, mid-build, where a synchronous notify would re-enter
+  /// `setState` on a dependent.
+  void notifyBindingsChanged() {
+    if (_disposed) return;
+    _bindingsRevision++;
+    _notifyManagerScopeChanged();
+  }
+
+  /// Whether the focused node claims typed text (a focused, editable
+  /// [TextInput]). While true, chords shadowed by text input
+  /// ([KeyChord.isShadowedByTextInput]) can never fire — the claimant
+  /// consumes the characters before chord matching runs. The hint bar uses
+  /// this to hide such bindings instead of advertising dead keys.
+  bool get focusedNodeClaimsText => _focusedNode?.textInputClaimant != null;
+
   /// Read-only view of every node currently attached to this manager,
   /// in attachment order. `FocusTraversalGroup` uses this to find
   /// candidates for directional focus.
