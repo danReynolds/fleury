@@ -55,6 +55,7 @@ import '../widgets/basic.dart';
 import '../widgets/focus.dart';
 import '../widgets/framework.dart';
 import '../widgets/media_query.dart';
+import '../widgets/navigator.dart';
 import '../widgets/overlay.dart';
 import '../widgets/pointer.dart';
 import '../widgets/tui_binding.dart';
@@ -116,8 +117,15 @@ class FleuryTester {
   late final BuildOwner _owner;
   Element? _root;
   Widget _currentUserWidget = const EmptyBox();
+  bool _appMode = false;
   late final OverlayEntry _userEntry = OverlayEntry(
-    builder: (_) => _currentUserWidget,
+    // In app mode ([pumpApp]), wrap the user widget in a root Navigator
+    // exactly as the runtime does (run_app.dart) so `context.present` /
+    // `context.push` and `TuiBinding.rootNavigator` work in tests without
+    // hand-wrapping. Otherwise mount the widget bare (Flutter-`pumpWidget`
+    // parity — no implicit Navigator).
+    builder: (_) =>
+        _appMode ? Navigator(home: _currentUserWidget) : _currentUserWidget,
   );
   bool _disposed = false;
 
@@ -206,9 +214,34 @@ class FleuryTester {
     }
   }
 
+  /// Like [pumpWidget], but mounts [widget] as the `home` of a root
+  /// [Navigator] (inside the Overlay) — reproducing the runtime's root wrapper
+  /// (`run_app.dart`), which always installs a Navigator. Use this for
+  /// app-level tests so `context.present(...)` / `context.push(...)` and
+  /// `TuiBinding.rootNavigator` resolve without hand-wrapping; use bare
+  /// [pumpWidget] for widget-level tests. Mirrors Flutter's
+  /// `pumpWidget(MyWidget())` vs `pumpWidget(MaterialApp(...))` split.
+  ///
+  /// The Navigator's `home` is set at first mount (the Navigator ignores later
+  /// `home` changes, as in production), so call [pumpApp] once per test; drive
+  /// further navigation via `context.push`/`present` and the [settle]/[pump]
+  /// family.
+  void pumpApp(Widget widget) {
+    _assertNotDisposed('pumpApp');
+    _appMode = true;
+    pumpWidget(widget);
+  }
+
   /// Advances time and flushes any pending rebuilds. When [duration]
   /// is null, just flushes — useful after dispatching an event that
   /// only mutates state.
+  ///
+  /// SYNCHRONOUS: `pump` never turns the event loop, so it cannot observe
+  /// async work — a `StreamBuilder`/`QueryBuilder` whose first value arrives
+  /// on a microtask/timer still shows its loading state after `pump()`. Reach
+  /// for the async [settle] (or [pumpAndSettle] for animation-only trees) when
+  /// a test binds to async data; don't hand-roll an `await Future.delayed` +
+  /// `pump` loop.
   ///
   /// Time is moved by stepping the scheduler at every
   /// `scheduler.frameInterval` boundary across [duration], firing
@@ -253,29 +286,113 @@ class FleuryTester {
     _binding.flushPostFrameCallbacks(_clock.now);
   }
 
-  /// Pumps in [step] increments until no tickers are active (the
-  /// usual proxy for "no further animation work to do") or [timeout]
-  /// elapses. Throws when [timeout] is hit with tickers still active.
+  /// One settle step: advance the scheduler by [step], flush builds and
+  /// post-frame callbacks, and report whether the tree did any *build* work.
   ///
-  /// Mirrors `WidgetTester.pumpAndSettle` for animation tests where
-  /// the precise frame count doesn't matter and you want to read the
-  /// final state.
+  /// A step that rebuilds nothing is "quiescent" — no animation advanced a
+  /// value and no pending `setState` remained. This is the test-side analog
+  /// of Flutter's `hasScheduledFrame`: Fleury has no single scheduled-frame
+  /// bool, but "did `flushBuild` rebuild anything this step" answers the same
+  /// question. A perpetual-but-idle ticker (a 500 ms cursor blink) only
+  /// rebuilds on the step that crosses its interval, so quiescence is reached
+  /// in the gaps between its toggles — exactly as Flutter's `pumpAndSettle`
+  /// returns *between* cursor blinks (a periodic-Timer blink leaves
+  /// `hasScheduledFrame` false between fires). A second build flush is folded
+  /// in so a post-frame callback that schedules a rebuild isn't read as idle.
+  bool _settleStep(Duration step) {
+    if (step > Duration.zero) _scheduler.advance(step);
+    final built = _owner.flushBuild().rebuiltElementCount;
+    // Run a real layout+paint like a production frame: widgets that build
+    // during layout (LayoutBuilder subtrees) don't exist after a bare build
+    // flush, so their streams/subscriptions would never start and settle
+    // would report a hollow quiescence. Rendering each step mirrors the
+    // runtime's frame order (build → layout/paint → post-frame drain).
+    if (_root != null) render();
+    _binding.flushPostFrameCallbacks(_clock.now);
+    final afterDrain = _owner.flushBuild().rebuiltElementCount;
+    return built == 0 && afterDrain == 0;
+  }
+
+  /// Pumps in [step] increments until a frame does no build work (the tree
+  /// has settled) or [timeout] elapses. Throws when [timeout] is hit while
+  /// the tree still rebuilds every step.
+  ///
+  /// Mirrors `WidgetTester.pumpAndSettle`, and like it keys off "is another
+  /// frame's worth of work pending" (here: did `flushBuild` rebuild anything)
+  /// rather than "are any tickers registered" — so a focused `TextInput`'s
+  /// perpetual cursor-blink ticker no longer hangs settle; it returns in the
+  /// gaps between blinks. A genuinely *continuous* animation (one that
+  /// rebuilds on every step) is what trips the timeout — pump a bounded
+  /// duration for those instead of settling.
+  ///
+  /// NOTE: synchronous, so it cannot observe async work (stream/Future
+  /// emissions). For data-bound widgets (`StreamBuilder`/`QueryBuilder`) use
+  /// the async [settle].
   void pumpAndSettle({
     Duration step = const Duration(milliseconds: 16),
     Duration timeout = const Duration(seconds: 10),
   }) {
     _assertNotDisposed('pumpAndSettle');
     var elapsed = Duration.zero;
-    while (_scheduler.activeTickerCount > 0 && elapsed < timeout) {
-      pump(step);
+    while (elapsed < timeout) {
+      if (_settleStep(step)) return;
       elapsed += step;
     }
-    if (_scheduler.activeTickerCount > 0) {
-      throw StateError(
-        'pumpAndSettle timed out after $timeout with '
-        '${_scheduler.activeTickerCount} active ticker(s) still running.',
-      );
+    throw StateError(
+      'pumpAndSettle timed out after $timeout: the tree never reached a '
+      'quiescent frame — something rebuilds on every step. '
+      '${_scheduler.activeTickerCount} ticker(s) are active; if a continuous '
+      'animation is intentional, pump a bounded duration instead of settling. '
+      '(A perpetual-but-idle ticker such as a cursor blink does NOT cause '
+      'this — settle returns in the gaps between its frames.)',
+    );
+  }
+
+  /// The async analog of [pumpAndSettle] for data-bound widgets: yields to the
+  /// real event loop between steps so pending microtasks, timers, and **stream
+  /// emissions** land (a `StreamBuilder`/`QueryBuilder`'s first value arrives
+  /// on a later event-loop turn), then flushes builds — repeating until a step
+  /// does no build work or [timeout]/[maxSteps] is hit.
+  ///
+  /// This replaces the hand-rolled `for (i in 0..N) { await Future.delayed(d);
+  /// pump(); }` loop every async test would otherwise need: synchronous [pump]
+  /// can't observe async emissions because it never turns the event loop.
+  ///
+  /// Returns once the tree has been quiescent for [stableSteps] consecutive
+  /// steps. Requiring a short run of idle steps (rather than returning on the
+  /// first) guards the cold-start case: in-flight async work (a real DB query,
+  /// an HTTP call) that hasn't produced its first rebuild yet gets a window to
+  /// land and interrupt the idle streak — so `settle()` doesn't conclude
+  /// "done" before the data arrives. Tune up for slower backends.
+  ///
+  /// Throws a [StateError] on timeout (the tree never settled) — the same
+  /// signal as Flutter's `pumpAndSettle` timeout.
+  Future<void> settle({
+    Duration step = const Duration(milliseconds: 16),
+    Duration timeout = const Duration(seconds: 5),
+    int maxSteps = 600,
+    int stableSteps = 4,
+  }) async {
+    _assertNotDisposed('settle');
+    var elapsed = Duration.zero;
+    var steps = 0;
+    var stable = 0;
+    while (elapsed < timeout && steps < maxSteps) {
+      // Turn the real event loop so async completions (stream/Future) run
+      // their setState before we flush + test for quiescence.
+      await Future<void>.delayed(step);
+      stable = _settleStep(step) ? stable + 1 : 0;
+      if (stable >= stableSteps) return;
+      elapsed += step;
+      steps++;
     }
+    throw StateError(
+      'settle() timed out after $timeout ($steps steps): the tree never '
+      'reached $stableSteps consecutive quiescent frames. A stream that never '
+      'stops emitting, or a continuous animation, will not settle — assert on '
+      'a bounded pump instead. ${_scheduler.activeTickerCount} ticker(s) are '
+      'active.',
+    );
   }
 
   /// Applies [finder] to the current tree, returning every match

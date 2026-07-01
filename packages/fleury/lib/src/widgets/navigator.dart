@@ -47,11 +47,13 @@ import 'dart:async';
 import '../animation/animation.dart';
 import '../animation/curves.dart';
 import '../foundation/key.dart';
+import '../rendering/cell.dart' show Color;
 import '../rendering/render_navigator.dart';
 import '../rendering/render_object.dart';
 import '../semantics/semantics.dart';
 import '../terminal/events.dart';
 import 'align.dart' show Align, Alignment;
+import 'basic.dart' show Container, Surface;
 import 'effects.dart';
 import 'focus.dart';
 import 'framework.dart';
@@ -65,10 +67,22 @@ class RouteTransition {
     required this.exit,
     this.duration,
     this.curve,
-  });
+  }) : isInstant = false;
+
+  RouteTransition._instant()
+      : enter = Effects.fadeIn(),
+        exit = Effects.fadeOut(),
+        duration = Duration.zero,
+        curve = null,
+        isInstant = true;
 
   final Effect enter;
   final Effect exit;
+
+  /// True only for [none]: the route settles in a single frame with no
+  /// enter/exit effect. The navigator maps this to its internal no-transition
+  /// path (so [enter]/[exit] are never played).
+  final bool isInstant;
 
   /// How long the enter/exit plays. When null, the navigator falls back
   /// to [defaultDuration].
@@ -97,10 +111,23 @@ class RouteTransition {
     curve: Curves.easeOut,
     duration: defaultDuration,
   );
+
+  /// Instant — the route settles in a single frame with no enter/exit
+  /// animation. The reachable opt-out from the animated default: [push] and
+  /// [NavigatorState.present] detect it and skip transition building entirely.
+  /// Pass per-push (`push(screen, transition: RouteTransition.none)`) or as a
+  /// Navigator-wide default (`Navigator(transition: RouteTransition.none)`).
+  static final RouteTransition none = RouteTransition._instant();
 }
 
 class _Route {
-  _Route(this.screen, this.transition, {this.presentAlignment});
+  _Route(
+    this.screen,
+    this.transition, {
+    this.presentAlignment,
+    this.barrierColor,
+    this.barrierDismissible = true,
+  });
 
   final Widget screen;
   final RouteTransition? transition; // null = instant
@@ -111,7 +138,13 @@ class _Route {
   /// reordering as the stack grows and shrinks.
   final Key key = UniqueKey();
 
-  FocusNode? priorFocus;
+  /// Anchors [FocusManager.restoreFocusInScope] inside this route's chrome:
+  /// the route's FocusScope remembers the node last focused within it, and a
+  /// pop that reveals this route restores through this key. Replaces the old
+  /// hand-tracked `priorFocus` snapshot — the scope memory is recorded where
+  /// the focus actually lives, so it also survives pushReplacement and
+  /// popUntil (whose intermediate routes are gone by restore time).
+  final GlobalKey restoreKey = GlobalKey();
   bool leaving = false;
 
   /// True once the route has settled fully present with no in-flight
@@ -123,6 +156,17 @@ class _Route {
   /// shown via [NavigatorState.present]; null for an ordinary page. Its
   /// non-null-ness is what marks a route as a non-opaque modal.
   final Alignment? presentAlignment;
+
+  /// For a modal ([presentAlignment] != null): a fill painted over the screen
+  /// behind, around the presented content. null leaves the surround composited
+  /// with the route beneath. (The content itself always sits on an opaque
+  /// [Surface], so it never shows through regardless of this.)
+  final Color? barrierColor;
+
+  /// For a modal: whether Esc / a dismiss action pops it. Default true; set
+  /// false for a modal that must be answered deliberately (e.g. a confirmation
+  /// the user can't skip past). Page routes ignore this — Esc is always back.
+  final bool barrierDismissible;
 
   /// A route this one replaces: removed once this route settles over it
   /// (set by [NavigatorState.pushReplacement]). [replacingResult] is the
@@ -260,9 +304,9 @@ class NavigatorState extends State<Navigator> {
       ..replacing = replaced
       ..replacingResult = result;
     _pushRoute(route);
-    // Inherit the replaced route's restore target so popping the
-    // replacement returns focus where the replaced route would have.
-    if (replaced != null) route.priorFocus = replaced.priorFocus;
+    // No focus bookkeeping to inherit from the replaced route: restore reads
+    // the covered route's own FocusScope memory, which is untouched by the
+    // replacement.
     return route.completer.future.then((v) => v as T?);
   }
 
@@ -285,18 +329,28 @@ class NavigatorState extends State<Navigator> {
   /// the stack of the navigator it's presented on — present on a nested
   /// navigator for a pane-scoped modal, or the root for an app-wide one.
   ///
-  /// Framing (a border, padding, an edge for a sheet) is just widgets —
-  /// wrap [screen] in a `Container`/`Align` — and [alignment] is the only
-  /// placement knob you usually need.
+  /// The presented [screen] is placed on an opaque [Surface] automatically, so
+  /// nothing painted beneath shows through it — a modal is never see-through.
+  /// [barrierColor] optionally fills the surround (over the screen behind);
+  /// null leaves it composited. [barrierDismissible] (default true) controls
+  /// whether Esc dismisses it.
+  ///
+  /// Framing (a border, padding, an edge for a sheet) is just widgets — wrap
+  /// [screen] — and [alignment] is the only placement knob you usually need.
   Future<T?> present<T>(
     Widget screen, {
     Alignment alignment = Alignment.center,
     RouteTransition? transition,
+    Color? barrierColor,
+    bool barrierDismissible = true,
   }) {
+    final resolved = transition ?? RouteTransition.fade;
     final route = _Route(
       screen,
-      transition ?? RouteTransition.fade,
+      resolved.isInstant ? null : resolved,
       presentAlignment: alignment,
+      barrierColor: barrierColor,
+      barrierDismissible: barrierDismissible,
     );
     _pushRoute(route);
     return route.completer.future.then((v) => v as T?);
@@ -336,9 +390,14 @@ class NavigatorState extends State<Navigator> {
     if (!route.completer.isCompleted) route.completer.complete(result);
 
     // Restore focus to the revealed screen immediately — not after the
-    // exit animation — so input lands on it right away.
+    // exit animation — so input lands on it right away. The revealed route's
+    // FocusScope remembers what was focused within it; restore through it
+    // (correct even for popUntil, where the routes between are already gone).
     _manager?.requestFocus(null);
-    _restoreFocus(route);
+    final revealed = _topLive;
+    if (revealed != null) {
+      _manager?.restoreFocusInScope(revealed.restoreKey.currentContext);
+    }
 
     final transition = route.transition;
     if (transition == null) {
@@ -385,12 +444,16 @@ class NavigatorState extends State<Navigator> {
 
   // ---------------------------------------------------------------
 
-  _Route _newRoute(Widget screen, RouteTransition? transition) =>
-      _Route(screen, transition ?? widget.transition ?? RouteTransition.fade);
+  _Route _newRoute(Widget screen, RouteTransition? transition) {
+    final resolved = transition ?? widget.transition ?? RouteTransition.fade;
+    return _Route(screen, resolved.isInstant ? null : resolved);
+  }
 
   void _pushRoute(_Route route) {
-    route.priorFocus = _manager?.focusedNode;
-    _manager?.requestFocus(null); // let the new route's chrome autofocus
+    // Clear focus so the new route's content autofocuses. What was focused is
+    // already remembered by the covered route's FocusScope (recorded when it
+    // was focused), so pop can restore it — no snapshot needed here.
+    _manager?.requestFocus(null);
     _routes.add(route);
     _animateIn(route);
     _rebuild();
@@ -466,12 +529,6 @@ class NavigatorState extends State<Navigator> {
   void _remove(_Route route) {
     _routes.remove(route);
     route.presence.dispose();
-  }
-
-  /// Restores focus to whatever was focused before [route] was pushed.
-  void _restoreFocus(_Route route) {
-    final prior = route.priorFocus;
-    if (prior != null && prior.isAttached) prior.requestFocus();
   }
 
   void _rebuild() {
@@ -578,9 +635,24 @@ class _RouteHost extends StatelessWidget {
     // non-opaque). Any framing — a border, padding — is the caller's
     // widgets, not baked in here.
     final align = route.presentAlignment;
-    final screen = align == null
-        ? route.screen
-        : Align(alignment: align, child: route.screen);
+    final Widget screen;
+    if (align == null) {
+      screen = route.screen;
+    } else {
+      // Modal: the presented content sits on an opaque Surface so nothing
+      // painted beneath shows through it (closes the bleed-through leak). A
+      // barrierColor, when set, fills the surround over the screen behind;
+      // null leaves the surround composited with the route beneath.
+      Widget content = Align(
+        alignment: align,
+        child: Surface(child: route.screen),
+      );
+      final barrier = route.barrierColor;
+      if (barrier != null) {
+        content = Container(color: barrier, child: content);
+      }
+      screen = content;
+    }
 
     // Presented routes trap focus like modals. Normal page routes still let
     // ancestor app-level bindings participate, which keeps global commands
@@ -590,11 +662,18 @@ class _RouteHost extends StatelessWidget {
     // (e.g. a TextInput) autofocuses. Focus is restored to the route beneath
     // on pop.
     final modal = active && align != null;
+    // Esc dismisses an active route — always for a page (back navigation), and
+    // for a modal only when it's barrierDismissible.
+    final dismissible = align == null || route.barrierDismissible;
     Widget content = FocusScope(
       modal: modal,
       suppressGlobals: modal,
+      // The restoreKey anchors focus restoration: it sits INSIDE the route's
+      // FocusScope, so restoreFocusInScope(key.currentContext) resolves this
+      // route's scope memory when a pop reveals the route again.
       child: KeyBindings(
-        bindings: active
+        key: route.restoreKey,
+        bindings: active && dismissible
             ? [
                 KeyBinding(
                   KeyChord.key(KeyCode.escape),
@@ -610,7 +689,13 @@ class _RouteHost extends StatelessWidget {
     );
 
     final transition = route.transition;
-    if (transition != null && (route.leaving || t < 1.0)) {
+    if (transition != null) {
+      // Always wrap when a transition exists — even when settled (enter at full
+      // progress) — so the effect wrapper is a STABLE element. Wrapping only
+      // while animating would add/remove the wrapper on every transition-state
+      // change (enter -> settled -> leaving), remounting the route's content
+      // and losing its State (scroll position, text, focus) — and re-firing
+      // autofocus, which could steal focus a pop just restored.
       content = route.leaving
           ? transition.exit.build(content, (1 - t).clamp(0.0, 1.0))
           : transition.enter.build(content, t.clamp(0.0, 1.0));
@@ -625,7 +710,7 @@ class _RouteHost extends StatelessWidget {
       actions: active
           ? <SemanticAction>{
               SemanticAction.navigate,
-              if (navigator.canPop)
+              if (navigator.canPop && dismissible)
                 route.presentAlignment == null
                     ? SemanticAction.close
                     : SemanticAction.dismiss,
@@ -790,14 +875,21 @@ extension NavigatorContext on BuildContext {
       Navigator.of(this).pushAndClear<T>(screen, transition: transition);
 
   /// Presents [screen] as a modal over the current screen (centered by
-  /// default). Dismiss with [pop].
+  /// default), on an opaque [Surface]. Dismiss with [pop]. [barrierColor]
+  /// fills the surround; [barrierDismissible] (default true) controls Esc.
   Future<T?> present<T>(
     Widget screen, {
     Alignment alignment = Alignment.center,
     RouteTransition? transition,
-  }) => Navigator.of(
-    this,
-  ).present<T>(screen, alignment: alignment, transition: transition);
+    Color? barrierColor,
+    bool barrierDismissible = true,
+  }) => Navigator.of(this).present<T>(
+    screen,
+    alignment: alignment,
+    transition: transition,
+    barrierColor: barrierColor,
+    barrierDismissible: barrierDismissible,
+  );
 
   /// Pops the current screen with an optional [result].
   void pop([Object? result]) => Navigator.of(this).pop(result);
