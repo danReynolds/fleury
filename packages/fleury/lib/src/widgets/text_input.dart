@@ -1271,7 +1271,11 @@ class _TextInputState extends State<TextInput>
       child: Focus(
         focusNode: _focusNode,
         autofocus: widget.autofocus && widget.enabled,
-        canRequestFocus: widget.enabled,
+        // canRequestFocus is deliberately NOT passed: the enabled ↔
+        // focusability sync applies only to a node this state OWNS (see the
+        // `_ownsFocusNode` guard in didUpdateWidget) — a caller-provided
+        // node's flags belong to the caller, and a non-null value here
+        // would make the Focus widget overwrite them on every rebuild.
         onKey: _handleKey,
         child: _TextInputDisplay(
           focusNode: _focusNode,

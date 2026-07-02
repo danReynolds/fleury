@@ -708,6 +708,30 @@ void main() {
       );
       expect(field.focused, isFalse);
     });
+
+    testWidgets('a caller-provided focusNode keeps its own canRequestFocus '
+        '(not clobbered by enabled)', (tester) {
+      // TextInput's enabled↔focusable sync is only for a node it OWNS; a
+      // provided node's flags belong to the caller. TextInput must not pass a
+      // non-null canRequestFocus to its inner Focus (which would re-impose it
+      // on the caller's node every rebuild).
+      final controller = TextEditingController();
+      final node = FocusNode(debugLabel: 'provided', canRequestFocus: false);
+      addTearDown(node.dispose);
+
+      tester.pumpWidget(TextInput(controller: controller, focusNode: node));
+      tester.render(size: const CellSize(20, 1));
+      expect(node.canRequestFocus, isFalse,
+          reason: 'mount must not overwrite the provided flag');
+
+      // A rebuild (enabled defaults true) must not re-enable it either.
+      tester.pumpWidget(
+        TextInput(controller: controller, focusNode: node, placeholder: 'x'),
+      );
+      tester.render(size: const CellSize(20, 1));
+      expect(node.canRequestFocus, isFalse,
+          reason: 'rebuild must not re-impose enabled→focusable');
+    });
   });
 
   group('copy and cut', () {
