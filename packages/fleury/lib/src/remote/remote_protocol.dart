@@ -34,6 +34,11 @@
 //                            host emits PLAN/SEMANTICS instead)
 //     0x12 PLAN     payload = binary presentation plan (see remote_codec)
 //     0x13 SEMANTICS payload = UTF-8 JSON semantic snapshot
+//     0x17 CLIPBOARD_WRITE payload = [u32 seq][utf8 text] — place text on
+//                   the PEER's clipboard (the user's machine); answered by
+//                   CLIPBOARD_RESULT
+//     0x19 CARET    payload = [u8 present][i16 col][i16 row][u16 cols][u16 rows]
+//                   — the focused editable's caret rect for IME positioning
 //     0x1A SEMANTIC_ACTION_RESULT payload = `<nodeId><action><status>` (see
 //                   remote_codec) — the invocation status for a peer's
 //                   SEMANTIC_ACTION, so agents/AT get real outcomes instead
@@ -43,6 +48,8 @@
 //
 //   Peer (serve / shell) → App, structured input
 //     0x14 INPUT_EVENT payload = binary TuiEvent (see remote_codec)
+//     0x18 CLIPBOARD_RESULT payload = [u32 seq][u8 status] — how the peer's
+//                   clipboard write went (written / denied / unavailable)
 //     0x15 SEMANTIC_ACTION payload = `<nodeId><action>` (see remote_codec) —
 //                   the peer activating a node in its accessible DOM, so a
 //                   served session is operable through the a11y tree, not just
@@ -113,8 +120,9 @@ enum FrameType {
   inputEvent(0x14),
   semanticAction(0x15),
   inlineImage(0x16),
-  // 0x17-0x19 reserved for CLIPBOARD_WRITE / CLIPBOARD_RESULT / CARET
-  // (pipeline-program RFC §5.2).
+  clipboardWrite(0x17),
+  clipboardResult(0x18),
+  caret(0x19),
   semanticActionResult(0x1A);
 
   const FrameType(this.code);
@@ -230,6 +238,35 @@ final class InlineImageFrame extends RemoteFrame {
   final Uint8List bytes;
 }
 
+/// The app asks the peer to place [text] on the PEER's clipboard — the
+/// machine the user is actually sitting at. Sequenced so the app can match
+/// the peer's [ClipboardResultFrame]. App → peer. Without this, copy in a
+/// served session lands on the server's clipboard (or nowhere).
+final class ClipboardWriteFrame extends RemoteFrame {
+  const ClipboardWriteFrame(this.seq, this.text);
+  final int seq;
+  final String text;
+}
+
+/// How the peer's clipboard write went.
+enum RemoteClipboardStatus { written, denied, unavailable }
+
+/// The peer's answer to a [ClipboardWriteFrame]. Peer → app.
+final class ClipboardResultFrame extends RemoteFrame {
+  const ClipboardResultFrame(this.seq, this.status);
+  final int seq;
+  final RemoteClipboardStatus status;
+}
+
+/// The focused editable's caret rectangle in cell space, or absent when
+/// nothing editable is focused. The peer positions its hidden IME capture
+/// element there so composition candidate windows appear at the caret.
+/// App → peer, sent when the rect changes.
+final class CaretFrame extends RemoteFrame {
+  const CaretFrame(this.caret);
+  final CellRect? caret;
+}
+
 /// The app's answer to a [SemanticActionFrame]: the node id and action echoed
 /// back with the invocation status, so the peer (browser AT mirror, agent
 /// bridge) can distinguish "handler ran", "disabled", "not found",
@@ -269,6 +306,15 @@ Uint8List encodeFrame(RemoteFrame frame) {
       encodeSemanticActionResult(f.id, f.action, f.status),
     ),
     InlineImageFrame f => (FrameType.inlineImage, _encodeInlineImage(f)),
+    ClipboardWriteFrame f => (
+      FrameType.clipboardWrite,
+      _encodeClipboardWrite(f),
+    ),
+    ClipboardResultFrame f => (
+      FrameType.clipboardResult,
+      _encodeClipboardResult(f),
+    ),
+    CaretFrame f => (FrameType.caret, _encodeCaret(f)),
     ByeFrame() => (FrameType.bye, const <int>[]),
   };
   final out = BytesBuilder(copy: false);
@@ -312,6 +358,87 @@ InlineImageFrame _decodeInlineImage(Uint8List payload) {
   final id = utf8.decode(payload.sublist(2, 2 + idLen), allowMalformed: true);
   final bytes = Uint8List.fromList(payload.sublist(2 + idLen));
   return InlineImageFrame(id, bytes);
+}
+
+/// Wire layout: [u32 seq][utf-8 text...].
+Uint8List _encodeClipboardWrite(ClipboardWriteFrame f) {
+  final textBytes = utf8.encode(f.text);
+  final out = BytesBuilder(copy: false);
+  out.add((ByteData(4)..setUint32(0, f.seq)).buffer.asUint8List());
+  out.add(textBytes);
+  return out.toBytes();
+}
+
+ClipboardWriteFrame _decodeClipboardWrite(Uint8List payload) {
+  if (payload.length < 4) {
+    throw const RemoteProtocolException(
+      'CLIPBOARD_WRITE frame: truncated header.',
+    );
+  }
+  final seq = ByteData.sublistView(payload, 0, 4).getUint32(0);
+  final text = utf8.decode(payload.sublist(4), allowMalformed: true);
+  return ClipboardWriteFrame(seq, text);
+}
+
+/// Wire layout: [u32 seq][u8 status]. Status travels by index; the enum is
+/// wire-frozen (append-only), matching the codec's version-locked posture.
+Uint8List _encodeClipboardResult(ClipboardResultFrame f) {
+  final out = ByteData(5)
+    ..setUint32(0, f.seq)
+    ..setUint8(4, f.status.index);
+  return out.buffer.asUint8List();
+}
+
+ClipboardResultFrame _decodeClipboardResult(Uint8List payload) {
+  if (payload.length < 5) {
+    throw const RemoteProtocolException(
+      'CLIPBOARD_RESULT frame: truncated payload.',
+    );
+  }
+  final data = ByteData.sublistView(payload);
+  final statusIndex = data.getUint8(4);
+  if (statusIndex >= RemoteClipboardStatus.values.length) {
+    throw RemoteProtocolException(
+      'CLIPBOARD_RESULT frame: unknown status $statusIndex.',
+    );
+  }
+  return ClipboardResultFrame(
+    data.getUint32(0),
+    RemoteClipboardStatus.values[statusIndex],
+  );
+}
+
+/// Wire layout: [u8 present][i16 col][i16 row][u16 cols][u16 rows].
+Uint8List _encodeCaret(CaretFrame f) {
+  final caret = f.caret;
+  final out = ByteData(9)..setUint8(0, caret == null ? 0 : 1);
+  if (caret != null) {
+    out
+      ..setInt16(1, caret.left)
+      ..setInt16(3, caret.top)
+      ..setUint16(5, caret.size.cols)
+      ..setUint16(7, caret.size.rows);
+  }
+  return out.buffer.asUint8List();
+}
+
+CaretFrame _decodeCaret(Uint8List payload) {
+  if (payload.isEmpty) {
+    throw const RemoteProtocolException('CARET frame: empty payload.');
+  }
+  if (payload[0] == 0) return const CaretFrame(null);
+  if (payload.length < 9) {
+    throw const RemoteProtocolException('CARET frame: truncated payload.');
+  }
+  final data = ByteData.sublistView(payload);
+  return CaretFrame(
+    CellRect.fromLTWH(
+      data.getInt16(1),
+      data.getInt16(3),
+      data.getUint16(5),
+      data.getUint16(7),
+    ),
+  );
 }
 
 /// Streaming frame decoder. Feed bytes as they arrive from the
@@ -416,6 +543,12 @@ final class FrameDecoder {
         }
       case FrameType.inlineImage:
         return _decodeInlineImage(payload);
+      case FrameType.clipboardWrite:
+        return _decodeClipboardWrite(payload);
+      case FrameType.clipboardResult:
+        return _decodeClipboardResult(payload);
+      case FrameType.caret:
+        return _decodeCaret(payload);
       case FrameType.bye:
         return const ByeFrame();
     }

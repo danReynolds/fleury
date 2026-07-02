@@ -38,8 +38,31 @@ final class MountedApp {
        _disposeHostResources = disposeHostResources,
        _markDisposed = markDisposed;
 
-  final TuiRuntime _runtime;
-  final FrameDriver _frameDriver;
+  /// A session driven by a [BrowserFrameSource] with no local runtime —
+  /// the serve client: frames arrive over the wire, so there is no
+  /// FrameDriver to request frames from and no runtime to dispose.
+  MountedApp.forFrameSource({
+    required FrameSurface surface,
+    CellMetrics? cellMetrics,
+    TuiInputSource? inputSource,
+    SemanticFramePresenter? semanticPresenter,
+    SemanticFlushScheduler? semanticFlushScheduler,
+    FutureOr<void> Function()? disposeHostResources,
+  }) : _runtime = null,
+       _frameDriver = null,
+       _surface = surface,
+       _cellMetrics = cellMetrics,
+       _inputSource = inputSource,
+       _semanticsOwner = null,
+       _semanticPresenter = semanticPresenter,
+       _semanticsPipeline = null,
+       _semanticFlushScheduler = semanticFlushScheduler,
+       _awaitSemanticIdle = null,
+       _disposeHostResources = disposeHostResources,
+       _markDisposed = (() {});
+
+  final TuiRuntime? _runtime;
+  final FrameDriver? _frameDriver;
   final FrameSurface _surface;
   final CellMetrics? _cellMetrics;
   final TuiInputSource? _inputSource;
@@ -56,7 +79,9 @@ final class MountedApp {
   /// Requests a frame from host-owned browser code.
   void requestFrame([String reason = 'host']) {
     if (_disposed) return;
-    _frameDriver.requestFrame(reason);
+    // Wire-driven sessions have no local frame program; the server owns
+    // frame production.
+    _frameDriver?.requestFrame(reason);
   }
 
   /// Completes when no deferred semantic flush is outstanding.

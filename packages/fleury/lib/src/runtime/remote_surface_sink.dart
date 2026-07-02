@@ -1,3 +1,5 @@
+import '../foundation/geometry.dart';
+import '../remote/remote_protocol.dart' show RemoteClipboardStatus;
 import '../rendering/cell_buffer.dart';
 import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
@@ -39,6 +41,21 @@ abstract interface class RemoteSurfaceSink {
   /// patches after — because a full resend stops compressing past DEFLATE's
   /// 32 KiB window. Called when the semantic tree changed.
   void presentSemantics(SemanticInspectionSnapshot snapshot);
+
+  /// Ships the focused editable's caret rect (or its absence) so the peer
+  /// can position its hidden IME capture element at the caret. Callers
+  /// dedupe; implementations just transmit.
+  void presentCaret(CellRect? caret);
+
+  /// Asks the peer to place [text] on the PEER's clipboard, tagged with
+  /// [seq] so the answer can be matched.
+  void sendClipboardWrite(int seq, String text);
+
+  /// Registers the handler for the peer's clipboard-write answers. Set to
+  /// null to clear.
+  set onClipboardResult(
+    void Function(int seq, RemoteClipboardStatus status)? handler,
+  );
 
   /// Reports the invocation status for a peer's semantic-action request back
   /// to the peer, so an agent or AT mirror can distinguish "handler ran",

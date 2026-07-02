@@ -28,6 +28,7 @@ export 'src/host/browser_presentation_host.dart'
         BrowserHostComponents,
         BrowserPresentationHost,
         LocalRuntimeFrameSource;
+export 'src/host/wire_frame_source.dart' show WireFrameSource;
 export 'src/mount_app.dart' show mountApp;
 export 'package:fleury/fleury_host.dart'
     show SemanticFlushScheduler, TimerSemanticFlushScheduler;

@@ -40,6 +40,10 @@ enum ClipboardWriteResult {
   /// transport. Either the payload exceeded the safe OSC 52 cap or
   /// every other path failed.
   inProcessOnly,
+
+  /// The presenting surface's host accepted the payload — a served
+  /// session's browser placed it on the USER's clipboard over the wire.
+  hostSurface,
 }
 
 /// Policy for one clipboard write operation.

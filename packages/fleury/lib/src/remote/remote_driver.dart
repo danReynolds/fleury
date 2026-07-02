@@ -49,6 +49,7 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
   final _RemoteParserSink _sink = _RemoteParserSink();
   final SemanticsWireEncoder _semanticsEncoder = SemanticsWireEncoder();
   RemoteSemanticActionHandler? _onSemanticAction;
+  void Function(int seq, RemoteClipboardStatus status)? _onClipboardResult;
 
   StreamSubscription<RemoteFrame>? _frameSub;
   CellSize _size = const CellSize(80, 24);
@@ -192,6 +193,25 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
     _onSemanticAction = handler;
   }
 
+  @override
+  void presentCaret(CellRect? caret) {
+    if (!_active || !wantsPresentationPlans) return;
+    _transport.send(CaretFrame(caret));
+  }
+
+  @override
+  void sendClipboardWrite(int seq, String text) {
+    if (!_active || !wantsPresentationPlans) return;
+    _transport.send(ClipboardWriteFrame(seq, text));
+  }
+
+  @override
+  set onClipboardResult(
+    void Function(int seq, RemoteClipboardStatus status)? handler,
+  ) {
+    _onClipboardResult = handler;
+  }
+
   void _onFrame(RemoteFrame frame) {
     switch (frame) {
       case InitFrame f:
@@ -232,9 +252,13 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
       case SemanticsFrame _:
       case InlineImageFrame _:
       case SemanticActionResultFrame _:
+      case CaretFrame _:
+      case ClipboardWriteFrame _:
         // App→peer render frames; an app never receives them. Ignore so a
         // malformed peer can't crash the session.
         break;
+      case ClipboardResultFrame f:
+        if (_active) _onClipboardResult?.call(f.seq, f.status);
       case SemanticActionFrame f:
         // The peer activated a node in its accessible DOM; invoke it on the
         // live tree (only on the structured path, like the other v2 input).

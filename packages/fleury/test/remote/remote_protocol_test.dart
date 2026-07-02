@@ -64,6 +64,51 @@ void main() {
       expect(decoded.single, isA<ByeFrame>());
     });
 
+    test('CLIPBOARD_WRITE round-trips seq and text', () {
+      final wire = encodeFrame(const ClipboardWriteFrame(42, 'copy me — ✂'));
+      final decoded =
+          (FrameDecoder()..feed(wire)).drain().single as ClipboardWriteFrame;
+      expect(decoded.seq, 42);
+      expect(decoded.text, 'copy me — ✂');
+    });
+
+    test('CLIPBOARD_RESULT round-trips seq and status', () {
+      final wire = encodeFrame(
+        const ClipboardResultFrame(7, RemoteClipboardStatus.denied),
+      );
+      final decoded =
+          (FrameDecoder()..feed(wire)).drain().single as ClipboardResultFrame;
+      expect(decoded.seq, 7);
+      expect(decoded.status, RemoteClipboardStatus.denied);
+    });
+
+    test('CLIPBOARD_RESULT rejects an unknown status index', () {
+      final raw = _rawFrame(FrameType.clipboardResult, const [
+        0,
+        0,
+        0,
+        1,
+        0xEE,
+      ]);
+      final decoder = FrameDecoder()..feed(raw);
+      expect(
+        () => decoder.drain().toList(),
+        throwsA(isA<RemoteProtocolException>()),
+      );
+    });
+
+    test('CARET round-trips a rect and its absence', () {
+      final withCaret = encodeFrame(CaretFrame(CellRect.fromLTWH(12, 3, 1, 1)));
+      final decoded =
+          (FrameDecoder()..feed(withCaret)).drain().single as CaretFrame;
+      expect(decoded.caret, CellRect.fromLTWH(12, 3, 1, 1));
+
+      final without = encodeFrame(const CaretFrame(null));
+      final decodedNull =
+          (FrameDecoder()..feed(without)).drain().single as CaretFrame;
+      expect(decodedNull.caret, isNull);
+    });
+
     test('SEMANTIC_ACTION_RESULT carries id, action, and status', () {
       final frame = SemanticActionResultFrame(
         const SemanticNodeId('save'),

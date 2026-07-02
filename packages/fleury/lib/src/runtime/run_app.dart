@@ -40,6 +40,7 @@ import '../terminal/ansi_frame_presenter.dart';
 import 'frame_driver.dart';
 import 'frame_semantics_pipeline.dart';
 import 'frame_presentation.dart';
+import '../remote/remote_clipboard.dart';
 import '../remote/wire_semantic_frame_presenter.dart';
 import 'wire_frame_presenter.dart';
 import 'hot_reload.dart';
@@ -158,11 +159,6 @@ Future<void> runApp(
     );
   }
 
-  // The clipboard is a host service: the native host owns a SystemClipboard
-  // (platform tools + OSC 52) unless the app supplied its own, and shares it
-  // with widgets via ClipboardScope in buildRoot.
-  final effectiveClipboard = clipboard ?? SystemClipboard();
-
   final runtime = TuiRuntime();
   final focusManager = runtime.focusManager;
   final binding = runtime.binding;
@@ -223,6 +219,12 @@ Future<void> runApp(
   // The shared semantics engine (structured path only): coverage fallback,
   // retained-leaf updates, and same-task wire flushes.
   FrameSemanticsPipeline? semanticsPipeline;
+  // Structured-path clipboard (copy travels to the peer); disposed with
+  // the session.
+  RemoteClipboard? remoteClipboard;
+  // Assigned once the negotiated path is known (buildRoot closes over it
+  // but only runs at mount, after assignment).
+  late final Clipboard effectiveClipboard;
 
   // Shared double-buffer and damage lifecycle. The host still owns
   // presentation, debug timings, input, and post-frame behavior.
@@ -271,6 +273,7 @@ Future<void> runApp(
     // the guarded zone.
     frameDriver?.dispose();
     semanticsPipeline?.dispose();
+    remoteClipboard?.dispose();
     await eventSub?.cancel();
     eventSub = null;
     await hotReload?.dispose();
@@ -426,6 +429,16 @@ Future<void> runApp(
             ),
           );
           final activeSurfaceSink = surfaceSink;
+          // The clipboard is a host service shared via ClipboardScope in
+          // buildRoot. Selection follows the negotiated path: a structured
+          // remote session copies to the PEER's clipboard over the wire
+          // (the user's machine — a SystemClipboard here would hit the
+          // server's); everything else gets the platform clipboard.
+          effectiveClipboard =
+              clipboard ??
+              (activeSurfaceSink != null
+                  ? (remoteClipboard = RemoteClipboard(activeSurfaceSink))
+                  : SystemClipboard());
           if (activeSurfaceSink != null) {
             semanticsPipeline = FrameSemanticsPipeline(
               presenter: WireSemanticFramePresenter(activeSurfaceSink),
@@ -444,7 +457,10 @@ Future<void> runApp(
             presenter: activeSurfaceSink != null
                 // Structured serve path: hand the frame's buffers and
                 // damage plan to the driver instead of emitting ANSI.
-                ? WireFramePresenter(activeSurfaceSink)
+                ? WireFramePresenter(
+                    activeSurfaceSink,
+                    readCaret: () => focusManager.focusedNode?.caretRect,
+                  )
                 : AnsiFramePresenter(
                     sink: sink,
                     renderer: renderer,

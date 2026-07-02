@@ -91,6 +91,9 @@ export 'src/semantics/semantics.dart'
 export 'src/remote/remote_protocol.dart'
     show
         ByeFrame,
+        CaretFrame,
+        ClipboardResultFrame,
+        ClipboardWriteFrame,
         FrameDecoder,
         FrameType,
         InitFrame,
@@ -99,6 +102,7 @@ export 'src/remote/remote_protocol.dart'
         InputFrame,
         OutputFrame,
         PlanFrame,
+        RemoteClipboardStatus,
         RemoteFrame,
         RemoteProtocolException,
         ResizeFrame,

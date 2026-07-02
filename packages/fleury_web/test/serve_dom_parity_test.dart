@@ -14,7 +14,7 @@ import 'package:fleury/src/remote/remote_codec.dart';
 import 'package:fleury_web/src/dom_grid/dom_grid_surface.dart';
 import 'package:fleury_web/src/metrics/cell_metrics.dart';
 import 'package:fleury_web/src/remote_client/plan_adapter.dart';
-import 'package:fleury_web/src/remote_client/remote_surface_client.dart'
+import 'package:fleury_web/src/host/wire_frame_source.dart'
     show viewportSizeForMeasurement;
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;
