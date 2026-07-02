@@ -17,7 +17,7 @@ Future<void> main(List<String> args) async {
       ? null
       : (DebugCaptureRecorder(maxFrames: options.steps + 4)..attach());
   try {
-    await runTui(
+    await runApp(
       _WireDashboardApp(
         driver: driver,
         rows: options.rows,

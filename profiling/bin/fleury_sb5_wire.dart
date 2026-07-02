@@ -9,7 +9,7 @@ import 'package:fleury_widgets/fleury_widgets.dart';
 Future<void> main(List<String> args) async {
   final options = _WireOptions.parse(args);
   final driver = _WireTerminalDriver();
-  await runTui(
+  await runApp(
     _WireMarkdownApp(
       driver: driver,
       rows: options.rows,
