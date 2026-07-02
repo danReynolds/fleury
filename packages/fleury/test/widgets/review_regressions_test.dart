@@ -14,6 +14,8 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
+import '../support/reactive_helpers.dart';
+
 /// Captures the BuildContext its build runs under.
 class _Cap extends StatelessWidget {
   const _Cap({required this.sink, required this.label});
@@ -26,19 +28,12 @@ class _Cap extends StatelessWidget {
   }
 }
 
-class _Flag extends ChangeNotifier {
-  bool value = false;
-  void enable() {
-    value = true;
-    notifyListeners();
-  }
-}
 
 /// Home screen that late-mounts an autofocus Focus when [flag] flips —
 /// the async-data-arrives-while-covered pattern.
 class _LateMountHome extends StatefulWidget {
   const _LateMountHome({required this.flag, required this.late, required this.sink});
-  final _Flag flag;
+  final Flag flag;
   final FocusNode late;
   final void Function(BuildContext) sink;
   @override
@@ -167,7 +162,7 @@ void main() {
   testWidgets('a covered route cannot steal focus; the modal stays '
       'keyboard-dismissable', (tester) {
     BuildContext? home;
-    final flag = _Flag();
+    final flag = Flag();
     final late = FocusNode(debugLabel: 'late');
     tester.pumpWidget(
       Navigator(
@@ -255,6 +250,33 @@ void main() {
       contains('modal'),
       reason: 'Navigator(transition: none) must apply to present() too',
     );
+  });
+
+  testWidgets('pointer hit-targets use screen coordinates inside a '
+      'composited (mid-transition) route', (tester) {
+    BuildContext? home;
+    var taps = 0;
+    tester.pumpWidget(
+      Container(
+        padding: const EdgeInsets.only(left: 5, top: 2),
+        child: Navigator(home: _Cap(sink: (x) => home = x, label: 'home')),
+      ),
+    );
+    home!.push<void>(
+      GestureDetector(onTap: () => taps++, child: const Text('btn')),
+    ); // default fade — mid-transition the route paints via a scratch buffer
+    tester.pump(const Duration(milliseconds: 100));
+    tester.render(size: const CellSize(20, 6)); // registers pointer rects
+
+    // 'btn' sits at screen (5,2): the padded navigator's origin. A
+    // scratch-local rect would claim (0,0) and this tap would miss.
+    tester.sendMouse(const MouseEvent(
+        kind: MouseEventKind.down, button: MouseButton.left, col: 6, row: 2));
+    tester.sendMouse(const MouseEvent(
+        kind: MouseEventKind.up, button: MouseButton.left, col: 6, row: 2));
+    expect(taps, 1,
+        reason: 'hit-testing must use absolute terminal coordinates even '
+            'while the route paints through the effect scratch buffer');
   });
 
   testWidgets('keyed children mount once — no duplicate build, no '

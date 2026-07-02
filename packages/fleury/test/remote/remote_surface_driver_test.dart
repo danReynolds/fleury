@@ -8,10 +8,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/remote/remote_driver.dart';
-import 'package:fleury/src/remote/remote_semantics.dart';
-import 'package:fleury/src/remote/remote_transport.dart';
 import 'package:test/test.dart';
 
 class _FakeTransport implements RemoteFrameTransport {

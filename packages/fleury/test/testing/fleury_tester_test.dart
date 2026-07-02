@@ -111,6 +111,49 @@ void main() {
           reason: 'pumpWidget after pumpApp mounts bare (no latched mode)');
     });
 
+    testWidgets('a LayoutBuilder subtree still mounts + subscribes under the '
+        'render-skip settle', (tester) async {
+      // settle() only renders on the first step and build-work steps; the
+      // first render must still mount layout-time subtrees so their streams
+      // subscribe (else hollow quiescence).
+      final controller = StreamController<String>();
+      tester.pumpWidget(
+        LayoutBuilder(
+          builder: (context, constraints) => StreamBuilder<String>(
+            stream: controller.stream,
+            builder: (_, snap) => Text(snap.data ?? 'loading'),
+          ),
+        ),
+      );
+      Timer(const Duration(milliseconds: 10), () => controller.add('ready'));
+      await tester.settle();
+      expect(tester.renderToString(size: const CellSize(8, 1)),
+          contains('ready'),
+          reason: 'the LayoutBuilder-hosted StreamBuilder must resolve');
+      await controller.close();
+    });
+
+    testWidgets('pumpAndSettle after settle() still renders its first step '
+        '(no shared render flag)', (tester) async {
+      // A prior settle() must not leave a latched flag that makes a later
+      // pumpAndSettle skip its guaranteed first render (hollow quiescence).
+      tester.pumpWidget(const Text('warm'));
+      await tester.settle(); // sets any shared render state
+      final probe = GlobalKey<_PaintOnlyAnimState>();
+      tester.pumpWidget(_PaintOnlyAnim(key: probe));
+      tester.pump();
+      tester.pumpAndSettle();
+      expect(probe.currentState!.completed, isTrue,
+          reason: 'pumpAndSettle must render from its own first step '
+              'regardless of a prior settle()');
+    });
+
+    testWidgets('settle rejects a zero step (would spin forever)', (tester) {
+      tester.pumpWidget(const Text('x'));
+      expect(() => tester.settle(step: Duration.zero), throwsA(anything),
+          reason: 'a zero step never advances elapsed → timeout unreachable');
+    });
+
     testWidgets('pumpAndSettle runs a paint-only ticker animation to '
         'completion', (tester) {
       final probe = GlobalKey<_PaintOnlyAnimState>();

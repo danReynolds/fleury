@@ -73,18 +73,36 @@ class KeyHintBar extends StatelessWidget {
       if (binding.label == null) return;
       if (binding.hideFromHintBar) return;
       if (!binding.enabled) return;
-      KeyChord? chord;
-      for (final c in binding.chords) {
-        if (!textFocused || !c.isShadowedByTextInput) {
-          chord = c;
+      // The keys this binding can actually FIRE on right now: while a text
+      // field holds focus, a bare-printable alias is swallowed as typed text,
+      // so it neither fires nor claims a key. A binding with no firable alias
+      // shows nothing and claims nothing (so it can't poison a shallower
+      // binding that shares one of its dead aliases).
+      final firable = [
+        for (final c in binding.chords)
+          if (!textFocused || !c.isShadowedByTextInput) c,
+      ];
+      if (firable.isEmpty) return;
+      // Advertise the first firable key not already owned by a DEEPER binding
+      // — dispatch is deepest-first, so a deeper binding wins every key they
+      // share, and a shallower binding advertising a lost key would lie. Test
+      // only THIS binding's firable keys against what deeper bindings claimed
+      // (not against its own earlier aliases — a repeated alias must not
+      // self-suppress).
+      KeyChord? advertise;
+      for (final c in firable) {
+        if (!seenChords.contains(c.hintLabel)) {
+          advertise = c;
           break;
         }
       }
-      if (chord == null) return; // every alias is shadowed
-      final key = chord.hintLabel;
-      if (seenChords.contains(key)) return;
-      seenChords.add(key);
-      result.add(_Hint(binding, chord));
+      if (advertise == null) return; // every firable alias is claimed deeper
+      // Now claim ALL of this binding's firable keys: it wins them for
+      // dispatch, so a shallower binding bound to any of them is dead.
+      for (final c in firable) {
+        seenChords.add(c.hintLabel);
+      }
+      result.add(_Hint(binding, advertise));
     }
 
     for (final node in manager.activeChain()) {

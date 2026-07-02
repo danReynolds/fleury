@@ -269,6 +269,20 @@ class FocusScopeRef {
 /// Listeners are notified when the focused node changes or when the
 /// active focus chain composition shifts (e.g. modal scope opens /
 /// closes above the focused node).
+/// Nearest [_FocusScopeMarkerElement] at or above [from] — THE definition of
+/// "the enclosing FocusScope" (the stable element, not the per-build
+/// [FocusScopeRef]). Every scope-boundary consumer (autofocus gating, focus
+/// memory recording/restoring, [FocusScope._enclosingOf]) walks through this
+/// one helper so the boundary rule can never diverge between them.
+_FocusScopeMarkerElement? _nearestScopeMarker(Element? from) {
+  Element? element = from;
+  while (element != null) {
+    if (element is _FocusScopeMarkerElement) return element;
+    element = element.elementParent;
+  }
+  return null;
+}
+
 class FocusManager extends ChangeNotifier {
   FocusManager();
 
@@ -328,21 +342,14 @@ class FocusManager extends ChangeNotifier {
     scheduleMicrotask(notifyListeners);
   }
 
-  /// Monotonic counter bumped by [notifyBindingsChanged]. Lets listeners
-  /// that key off the *content* of the active bindings (the hint bar)
-  /// distinguish "bindings changed under an unchanged focus" from no-ops.
-  int get bindingsRevision => _bindingsRevision;
-  int _bindingsRevision = 0;
-
   /// Called by [KeyBindings] when its binding list changes in place (a
   /// rebuild produced a new list — new labels, enabled flags, or chords)
-  /// without any focus movement. Manager listeners (the hint bar depends on
-  /// the manager) are notified on a microtask — this is invoked from
-  /// `didUpdateWidget`, mid-build, where a synchronous notify would re-enter
-  /// `setState` on a dependent.
+  /// without any focus movement. Notifies manager listeners (the hint bar
+  /// depends on the manager) so they repaint against the new bindings. On a
+  /// microtask — this is invoked from `didUpdateWidget`, mid-build, where a
+  /// synchronous notify would re-enter `setState` on a dependent.
   void notifyBindingsChanged() {
     if (_disposed) return;
-    _bindingsRevision++;
     _notifyManagerScopeChanged();
   }
 
@@ -445,20 +452,15 @@ class FocusManager extends ChangeNotifier {
   bool restoreFocusInScope(BuildContext? context) {
     _checkNotDisposed();
     if (context is! Element) return false;
-    Element? element = context;
-    while (element != null) {
-      if (element is _FocusScopeMarkerElement) {
-        final remembered = element._rememberedFocus;
-        if (remembered != null &&
-            identical(remembered._manager, this) &&
-            _attachedNodes.contains(remembered) &&
-            remembered.canRequestFocus &&
-            _isUnderScopeMarker(remembered, element)) {
-          return requestFocus(remembered);
-        }
-        return false;
-      }
-      element = element.elementParent;
+    final marker = _nearestScopeMarker(context);
+    if (marker == null) return false;
+    final remembered = marker._rememberedFocus;
+    if (remembered != null &&
+        identical(remembered._manager, this) &&
+        _attachedNodes.contains(remembered) &&
+        remembered.canRequestFocus &&
+        _isUnderScopeMarker(remembered, marker)) {
+      return requestFocus(remembered);
     }
     return false;
   }
@@ -599,14 +601,8 @@ class FocusManager extends ChangeNotifier {
   /// [FocusScope]), or null when [node] sits directly under the root with no
   /// scope between. The stable element — not the per-build [FocusScopeRef] — is
   /// the scope's durable identity.
-  _FocusScopeMarkerElement? _enclosingScopeMarker(FocusNode node) {
-    Element? element = node._element;
-    while (element != null) {
-      if (element is _FocusScopeMarkerElement) return element;
-      element = element.elementParent;
-    }
-    return null;
-  }
+  _FocusScopeMarkerElement? _enclosingScopeMarker(FocusNode node) =>
+      _nearestScopeMarker(node._element);
 
   /// Whether [node]'s enclosing [FocusScope] already contains the focused node.
   ///
@@ -1133,16 +1129,8 @@ class FocusScope extends StatelessWidget {
 
   /// Returns the nearest enclosing [FocusScopeRef] by walking the
   /// element tree. Used internally by [Focus] when it mounts.
-  static FocusScopeRef? _enclosingOf(Element from) {
-    Element? element = from.elementParent;
-    while (element != null) {
-      if (element is _FocusScopeMarkerElement) {
-        return element.scope;
-      }
-      element = element.elementParent;
-    }
-    return null;
-  }
+  static FocusScopeRef? _enclosingOf(Element from) =>
+      _nearestScopeMarker(from.elementParent)?.scope;
 }
 
 class _FocusScopeMarker extends Widget {

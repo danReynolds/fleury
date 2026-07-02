@@ -11,53 +11,21 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
-class _Flag extends ChangeNotifier {
-  bool value = false;
-  void set(bool v) {
-    value = v;
-    notifyListeners();
-  }
-}
+import '../support/reactive_helpers.dart';
+
 
 /// Rebuilds alone when [flag] fires — a leaf dependent, like the hint bar.
-class _Listen extends StatefulWidget {
-  const _Listen({required this.flag, required this.builder});
-  final _Flag flag;
-  final Widget Function(bool on) builder;
-  @override
-  State<_Listen> createState() => _ListenState();
-}
 
-class _ListenState extends State<_Listen> {
-  @override
-  void initState() {
-    super.initState();
-    widget.flag.addListener(_changed);
-  }
-
-  void _changed() {
-    if (mounted) setState(() {});
-  }
-
-  @override
-  void dispose() {
-    widget.flag.removeListener(_changed);
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.builder(widget.flag.value);
-}
 
 void main() {
   testWidgets(
       'a leaf-rebuilt EmptyBox -> Text swap under a Column attaches and paints',
       (tester) {
-    final flag = _Flag();
+    final flag = Flag();
     tester.pumpWidget(
       Column(children: [
         const Text('head'),
-        _Listen(
+        Reactive(
           flag: flag,
           builder: (on) => on ? const Text('shown') : const EmptyBox(),
         ),

@@ -1,3 +1,4 @@
+import '../foundation/collections.dart';
 import '../foundation/key.dart';
 import '../rendering/border.dart';
 import '../rendering/cell.dart';
@@ -205,7 +206,7 @@ final class ThemeData {
       other.focusedStyle == focusedStyle &&
       other.borderStyle == borderStyle &&
       other.colorScheme == colorScheme &&
-      _listEquals(other.extensions, extensions);
+      listEquals(other.extensions, extensions);
 
   @override
   int get hashCode => Object.hash(
@@ -220,14 +221,6 @@ final class ThemeData {
   );
 }
 
-bool _listEquals(List<Object> a, List<Object> b) {
-  if (identical(a, b)) return true;
-  if (a.length != b.length) return false;
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) return false;
-  }
-  return true;
-}
 
 /// Shares a [ThemeData] with its subtree. Read it with `Theme.of(context)`
 /// (which falls back to [ThemeData.fallback] when absent, so widgets can

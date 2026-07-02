@@ -2,6 +2,8 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
+import '../support/reactive_helpers.dart';
+
 void main() {
   testWidgets('builds against the incoming constraints', (tester) {
     Widget responsive() => LayoutBuilder(
@@ -78,9 +80,9 @@ void main() {
     // The builder only runs inside performLayout, which short-circuits when
     // constraints are unchanged — a notifier-driven rebuild used to leave the
     // subtree permanently stale.
-    final flag = _Flag();
+    final flag = Flag();
     tester.pumpWidget(
-      _Listen(
+      Reactive(
         flag: flag,
         builder: (on) => LayoutBuilder(
           builder: (context, constraints) => Text(on ? 'after' : 'before'),
@@ -90,7 +92,7 @@ void main() {
     String flat() => tester.renderToString(size: const CellSize(10, 1)).trim();
     expect(flat(), 'before');
 
-    flag.set(true); // rebuilds only the _Listen leaf; constraints unchanged
+    flag.set(true); // rebuilds only the Reactive leaf; constraints unchanged
     tester.pump();
     expect(flat(), 'after',
         reason: 'the dirtied LayoutBuilder must relayout and re-run its '
@@ -162,40 +164,4 @@ void main() {
   });
 }
 
-class _Flag extends ChangeNotifier {
-  bool value = false;
-  void set(bool v) {
-    value = v;
-    notifyListeners();
-  }
-}
 
-/// Rebuilds alone when [flag] fires — an external-dependency leaf rebuild.
-class _Listen extends StatefulWidget {
-  const _Listen({required this.flag, required this.builder});
-  final _Flag flag;
-  final Widget Function(bool on) builder;
-  @override
-  State<_Listen> createState() => _ListenState();
-}
-
-class _ListenState extends State<_Listen> {
-  @override
-  void initState() {
-    super.initState();
-    widget.flag.addListener(_changed);
-  }
-
-  void _changed() {
-    if (mounted) setState(() {});
-  }
-
-  @override
-  void dispose() {
-    widget.flag.removeListener(_changed);
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.builder(widget.flag.value);
-}

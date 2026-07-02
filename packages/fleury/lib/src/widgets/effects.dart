@@ -64,6 +64,17 @@ abstract class Effect {
   Effect operator +(Effect other) => _CombinedEffect(<Effect>[this, other]);
 }
 
+/// An effect that never animates — [build] at any progress delegates straight
+/// to the child (via [buildSettled]). Used as the inert sentinel effect for a
+/// no-transition route ([RouteTransition.none]) so that even code which plays
+/// the effect directly, rather than honoring an isInstant flag, produces no
+/// animation.
+class NoopEffect extends Effect {
+  const NoopEffect();
+  @override
+  Widget build(Widget child, double t) => buildSettled(child);
+}
+
 class _CombinedEffect extends Effect {
   const _CombinedEffect(this._effects);
   final List<Effect> _effects;

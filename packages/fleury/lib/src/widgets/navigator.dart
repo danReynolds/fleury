@@ -70,8 +70,8 @@ class RouteTransition {
   }) : isInstant = false;
 
   RouteTransition._instant()
-      : enter = Effects.fadeIn(),
-        exit = Effects.fadeOut(),
+      : enter = const NoopEffect(),
+        exit = const NoopEffect(),
         duration = Duration.zero,
         curve = null,
         isInstant = true;

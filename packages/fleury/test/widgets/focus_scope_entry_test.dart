@@ -8,50 +8,12 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
-/// Flips a flag and rebuilds its listeners — lets a test mount a second scope
-/// (or swap content) in a later frame, after the first scope is focused.
-class _Flag extends ChangeNotifier {
-  bool value = false;
-  void enable() {
-    value = true;
-    notifyListeners();
-  }
-}
-
-/// Rebuilds [builder] with the flag's value — the generic parent-rebuild host.
-class _Rebuilder extends StatefulWidget {
-  const _Rebuilder({required this.flag, required this.builder});
-  final _Flag flag;
-  final Widget Function(bool on) builder;
-  @override
-  State<_Rebuilder> createState() => _RebuilderState();
-}
-
-class _RebuilderState extends State<_Rebuilder> {
-  @override
-  void initState() {
-    super.initState();
-    widget.flag.addListener(_rebuild);
-  }
-
-  void _rebuild() {
-    if (mounted) setState(() {});
-  }
-
-  @override
-  void dispose() {
-    widget.flag.removeListener(_rebuild);
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.builder(widget.flag.value);
-}
+import '../support/reactive_helpers.dart';
 
 /// Scope A is always present (autofocus a). Scope B appears once [flag] flips.
 class _TwoScopes extends StatefulWidget {
   const _TwoScopes({required this.flag, required this.a, required this.b});
-  final _Flag flag;
+  final Flag flag;
   final FocusNode a;
   final FocusNode b;
   @override
@@ -102,7 +64,7 @@ void main() {
       'focused (scope-gated)', (tester) {
     final a = FocusNode(debugLabel: 'a');
     final b = FocusNode(debugLabel: 'b');
-    final flag = _Flag();
+    final flag = Flag();
     tester.pumpWidget(_TwoScopes(flag: flag, a: a, b: b));
     expect(tester.focusManager.focusedNode, same(a),
         reason: 'a autofocuses on first mount');
@@ -119,9 +81,9 @@ void main() {
     // Regression: _FocusScopeMarkerElement.update didn't rebuild its child, so
     // a structural change flowing THROUGH a FocusScope was silently dropped —
     // the old subtree stayed mounted forever.
-    final flag = _Flag();
+    final flag = Flag();
     tester.pumpWidget(
-      _Rebuilder(
+      Reactive(
         flag: flag,
         builder: (on) => FocusScope(child: Text(on ? 'after' : 'before')),
       ),
@@ -140,9 +102,9 @@ void main() {
     // new child attaches, so the scope is empty at the gate.
     final a = FocusNode(debugLabel: 'a');
     final b = FocusNode(debugLabel: 'b');
-    final flag = _Flag();
+    final flag = Flag();
     tester.pumpWidget(
-      _Rebuilder(
+      Reactive(
         flag: flag,
         builder: (on) => FocusScope(
           child: on

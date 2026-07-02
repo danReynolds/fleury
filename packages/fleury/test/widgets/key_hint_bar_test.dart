@@ -118,6 +118,65 @@ void main() {
       expect(out, isNot(contains('[j]')));
     });
 
+    testWidgets('a binding stays visible when only a NON-advertised alias '
+        'is claimed by a deeper binding', (tester) {
+      // Deep binding claims Down; shallow [j, Down] advertises j (free) and
+      // must NOT be suppressed just because it also aliases Down.
+      tester.pumpWidget(
+        Column(
+          children: [
+            KeyBindings(
+              bindings: [
+                KeyBinding(KeyChord.key(KeyCode.arrowDown),
+                    label: 'scroll', onEvent: (_) {}),
+              ],
+              child: KeyBindings(
+                bindings: [
+                  KeyBinding.list(
+                    [KeyChord.char('j'), KeyChord.key(KeyCode.arrowDown)],
+                    label: 'next',
+                    onEvent: (_) {},
+                  ),
+                ],
+                child: const Focus(autofocus: true, child: Text('x')),
+              ),
+            ),
+            const KeyHintBar(),
+          ],
+        ),
+      );
+      final out = bar(tester);
+      expect(out, contains('next'),
+          reason: 'j is free and firable — the shared Down alias (owned by '
+              'the deeper binding) must not hide the whole binding');
+      expect(out, contains('[j]'));
+    });
+
+    testWidgets('a binding with a self-colliding alias list does not '
+        'suppress itself', (tester) {
+      // Two aliases canonicalizing to the same hintLabel within one binding.
+      tester.pumpWidget(
+        Column(
+          children: [
+            KeyBindings(
+              bindings: [
+                KeyBinding.list(
+                  [KeyChord.char('s', shift: true), KeyChord.char('S')],
+                  label: 'save-as',
+                  onEvent: (_) {},
+                ),
+              ],
+              child: const Focus(autofocus: true, child: Text('x')),
+            ),
+            const KeyHintBar(),
+          ],
+        ),
+      );
+      expect(bar(tester), contains('save-as'),
+          reason: 'a repeated alias within one binding must not mark it '
+              'already-claimed against itself');
+    });
+
     testWidgets('a disabled field with an app-provided node does not '
         'suppress printables that still fire', (tester) {
       final node = FocusNode(debugLabel: 'app-node');
@@ -146,7 +205,7 @@ void main() {
     });
   });
 
-  group('live labels (bindingsRevision)', () {
+  group('live labels (rebuild on binding change)', () {
     testWidgets('a label toggled by setState repaints the bar without a '
         'focus move', (tester) async {
       tester.pumpWidget(
@@ -164,19 +223,19 @@ void main() {
       expect(bar(tester), isNot(contains('reveal')));
     });
 
-    testWidgets('a binding content change bumps bindingsRevision; pumping '
-        'alone does not', (tester) async {
+    testWidgets('a plain pump (no binding change) does not repaint the '
+        'label', (tester) async {
       tester.pumpWidget(const Column(
         children: [_TogglingLabel(), KeyHintBar()],
       ));
-      final before = tester.focusManager.bindingsRevision;
+      expect(bar(tester), contains('reveal'));
       tester.pump();
-      expect(tester.focusManager.bindingsRevision, before,
-          reason: 'no rebuild, no churn');
+      expect(bar(tester), contains('reveal'),
+          reason: 'no rebuild, no content change → label unchanged');
 
-      tester.sendKey(const KeyEvent(char: 'r'));
+      tester.sendKey(const KeyEvent(char: 'r')); // real content change
       await tester.settle();
-      expect(tester.focusManager.bindingsRevision, greaterThan(before));
+      expect(bar(tester), contains('hide'));
     });
   });
 }

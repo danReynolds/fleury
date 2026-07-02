@@ -76,7 +76,10 @@ class RenderAnchorBounds extends RenderObject
     CellOffset? screenOffset,
     CellRect? clipRect,
   }) {
-    _link.rect = CellRect(offset: offset, size: size);
+    // Screen coordinates: a Follower positions overlay content from this
+    // rect in root/absolute space, so a scratch-local offset would misplace
+    // dropdowns anchored inside composited subtrees.
+    _link.rect = CellRect(offset: screenOffset ?? offset, size: size);
     _child?.paint(
       buffer,
       offset,
