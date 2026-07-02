@@ -498,6 +498,17 @@ Future<void> runApp(
                 ? null
                 : (frame, plan) =>
                       semanticsPipeline?.onFramePresented(frame, plan),
+            // A visually-skipped frame (input changed only semantic state,
+            // no repaint) must still flush the owed semantics on serve —
+            // otherwise the peer's a11y/agent tree goes stale until an
+            // unrelated visual frame. The embed host wires the same hook;
+            // this closes the shared-engine parity gap. (While the output
+            // is backlogged the producer gate returns before the skip gate,
+            // so this stays behind backpressure like frame production.)
+            onFrameSkipped: activeSurfaceSink == null
+                ? null
+                : (reason, size) =>
+                      semanticsPipeline?.onFrameSkippedWithPendingWork(),
             isDebugWatching: () =>
                 // Capture per-phase timings only when the debug stream has
                 // live listeners — when no one's watching this
@@ -540,9 +551,15 @@ Future<void> runApp(
               try {
                 DebugEvents.emitInput(event);
                 if (event is ResizeEvent) {
-                  // The driver detects the size change on its next viewport
-                  // read and resets the diff base + rebuilds the root; the
-                  // scheduled frame below is a full repaint at the new size.
+                  // Force the next frame to a full repaint. A real size
+                  // change also rebuilds the root via the driver's own
+                  // size-change detection, but a SAME-SIZE ResizeEvent —
+                  // which PosixTerminalDriver emits on SIGCONT (`fg`) and
+                  // after a terminal handoff, precisely to repaint a
+                  // blanked alt-screen — is invisible to that detection, so
+                  // the diff-base reset must be driven from the event here
+                  // (the scheduled frame below then re-emits the screen).
+                  frameDriver?.forceFullRepaint();
                   DebugEvents.emitTerminalDiagnosis(currentTerminalDiagnosis());
                 }
 

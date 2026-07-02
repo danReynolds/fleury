@@ -159,13 +159,21 @@ final class BrowserPresentationHost {
 
     final host = _into;
     final surfaceRoot = _surfaceElement ?? web.document.createElement('div');
-    final removeSurfaceRoot = _surfaceElement == null;
-    if (surfaceRoot.parentNode == null) host.appendChild(surfaceRoot);
+    // We remove exactly what we appended: an element we attach because it
+    // was detached (a generated root, or a caller-supplied element not yet
+    // in the DOM). A caller-supplied element that is ALREADY attached is
+    // the caller's to place and remove — we never touch it. Removing on
+    // teardown restores the pre-mount state, so re-mounting the same
+    // element into a different host works instead of leaving it orphaned
+    // in the old one.
+    final removeSurfaceRoot = surfaceRoot.parentNode == null;
+    if (removeSurfaceRoot) host.appendChild(surfaceRoot);
     final semanticRoot = _semanticsEnabled
         ? _semanticElement ?? web.document.createElement('div')
         : null;
-    final removeSemanticRoot = _semanticsEnabled && _semanticElement == null;
-    if (semanticRoot != null && semanticRoot.parentNode == null) {
+    final removeSemanticRoot =
+        semanticRoot != null && semanticRoot.parentNode == null;
+    if (removeSemanticRoot) {
       host.appendChild(semanticRoot);
     }
 
@@ -173,7 +181,7 @@ final class BrowserPresentationHost {
     void removeGeneratedRoots() {
       imageOverlay?.dispose();
       if (removeSemanticRoot) {
-        semanticRoot?.parentNode?.removeChild(semanticRoot);
+        semanticRoot.parentNode?.removeChild(semanticRoot);
       }
       if (removeSurfaceRoot) surfaceRoot.parentNode?.removeChild(surfaceRoot);
     }

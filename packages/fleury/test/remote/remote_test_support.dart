@@ -63,6 +63,20 @@ class GatedFakeTransport extends FakeFrameTransport {
   /// The peer catches up: pending [sendDrained] futures complete.
   void drain() {
     _backlogged = false;
+    _completeDrain();
+  }
+
+  @override
+  Future<void> close() async {
+    // The transport contract (and UnixSocketFrameTransport) completes the
+    // drain future on close so a gated host never waits on a dead peer —
+    // the fake must honor it too, or dead-peer wake-up is untestable.
+    _backlogged = false;
+    _completeDrain();
+    await super.close();
+  }
+
+  void _completeDrain() {
     final completer = _drain;
     _drain = null;
     completer?.complete();

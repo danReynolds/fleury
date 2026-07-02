@@ -804,22 +804,52 @@ void main() {
   group('renderDiff — overlay regions', () {
     const renderer = AnsiRenderer(synchronizedOutput: false);
 
-    test('overlay cells emit no cursor move and no content', () {
-      final prev = CellBuffer(const CellSize(3, 1));
-      final next = CellBuffer(const CellSize(3, 1));
-      next.writeImage(
-        const CellOffset(0, 0),
-        Uint8List.fromList([1]),
-        width: 3,
-        height: 1,
-      );
-      final sink = StringAnsiSink();
+    test(
+      'an overlay over a blank cell emits nothing (static image is free)',
+      () {
+        final prev = CellBuffer(const CellSize(3, 1));
+        final next = CellBuffer(const CellSize(3, 1));
+        next.writeImage(
+          const CellOffset(0, 0),
+          Uint8List.fromList([1]),
+          width: 3,
+          height: 1,
+        );
+        final sink = StringAnsiSink();
 
-      renderer.renderDiff(prev, next, sink);
-      // The presenter's image encoder owns the region; the text diff
-      // must contribute zero bytes for it.
-      expect(sink.output, isEmpty);
-    });
+        renderer.renderDiff(prev, next, sink);
+        // The region was already blank and the encoder paints the pixels
+        // out-of-band, so the text diff contributes zero bytes.
+        expect(sink.output, isEmpty);
+      },
+    );
+
+    test(
+      'an overlay over prior content clears it (no stale letterbox bars)',
+      () {
+        // The image box marks the WHOLE region overlay, but the encoder only
+        // paints the fitted sub-rect; the bar cells must be cleared here or
+        // the old text shows through the image's letterbox on a terminal.
+        final prev = CellBuffer(const CellSize(4, 1));
+        prev.writeText(const CellOffset(0, 0), 'OLD!');
+        final next = CellBuffer(const CellSize(4, 1));
+        next.writeImage(
+          const CellOffset(0, 0),
+          Uint8List.fromList([1]),
+          width: 4,
+          height: 1,
+        );
+        final sink = StringAnsiSink();
+
+        renderer.renderDiff(prev, next, sink);
+        expect(
+          sink.output,
+          contains('    '),
+          reason: 'the stale text is overwritten with blanks',
+        );
+        expect(sink.output, isNot(contains('OLD!')));
+      },
+    );
 
     test('a vacated overlay region is repainted (image removal clears)', () {
       final prev = CellBuffer(const CellSize(3, 1));

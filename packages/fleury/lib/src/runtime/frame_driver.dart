@@ -216,6 +216,23 @@ final class FrameDriver {
     }
   }
 
+  /// Forces the next rendered frame to be a full repaint, WITHOUT rebuilding
+  /// the root — the widget tree is unchanged; only the surface's prior
+  /// content is gone.
+  ///
+  /// Drops the buffer pool so the diff base is empty (the full frame
+  /// re-emits after the presenter's screen clear), but leaves the mounted
+  /// tree alone. The terminal host calls this on a same-size resize signal:
+  /// SIGCONT (`fg`) and terminal handoff re-enter a blanked alt-screen and
+  /// emit a `ResizeEvent` with unchanged size purely to force a repaint —
+  /// [handleResize]'s size-change detection can't see that, so the reset
+  /// must be driven explicitly. A real size change still routes through
+  /// [handleResize] for the root rebuild.
+  void forceFullRepaint() {
+    if (_disposed) return;
+    _frameLoop.resetBuffers();
+  }
+
   /// Coalesced frame request.
   void requestFrame([String reason = 'scheduled']) {
     if (_disposed) return;

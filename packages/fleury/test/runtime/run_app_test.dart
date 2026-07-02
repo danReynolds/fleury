@@ -263,6 +263,70 @@ void main() {
     });
   });
 
+  group('runApp full-repaint recovery', () {
+    // A SIGCONT (`fg`) / terminal-handoff resume re-enters a blanked
+    // alt-screen and signals it with a SAME-SIZE ResizeEvent. The diff
+    // base must be reset so the next frame re-emits the whole screen;
+    // otherwise the diff sees "nothing changed" and the screen stays
+    // blank. (Regression: the FrameDriver's own size-change detection
+    // can't see a same-size resize.)
+    test('a same-size ResizeEvent forces a full repaint', () async {
+      final driver = FakeTerminalDriver();
+      final future = runApp(
+        const Text('SIGCONT-MARKER'),
+        driver: driver,
+        enableHotReload: false,
+      );
+      await _settle();
+      expect(driver.output, contains('SIGCONT-MARKER'));
+
+      // The terminal was blanked and re-entered at the same size.
+      driver.clearOutput();
+      driver.enqueue(ResizeEvent(driver.size));
+      await _settle();
+
+      expect(
+        driver.output,
+        contains('\x1B[2J'),
+        reason: 'a full repaint clears the screen first',
+      );
+      expect(
+        driver.output,
+        contains('SIGCONT-MARKER'),
+        reason: 'the whole screen is re-emitted, not diffed away as unchanged',
+      );
+
+      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      await future;
+      await driver.dispose();
+    });
+
+    test('a terminal handoff repaints on resume', () async {
+      final driver = FakeTerminalDriver();
+      final future = runApp(
+        const Text('HANDOFF-MARKER'),
+        driver: driver,
+        enableHotReload: false,
+      );
+      await _settle();
+      driver.clearOutput();
+
+      // The handoff hook restores the terminal, runs an operation, then
+      // re-enters and fires a same-size ResizeEvent (fake_driver does this
+      // in its finally) to force a repaint of the screen the operation
+      // scribbled over.
+      await driver.runWithTerminalHandoff(() async {});
+      await _settle();
+
+      expect(driver.output, contains('\x1B[2J'));
+      expect(driver.output, contains('HANDOFF-MARKER'));
+
+      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      await future;
+      await driver.dispose();
+    });
+  });
+
   group('runApp non-interactive terminals', () {
     test('refuses to run when output is not a terminal', () async {
       final driver = FakeTerminalDriver(isInteractive: false);

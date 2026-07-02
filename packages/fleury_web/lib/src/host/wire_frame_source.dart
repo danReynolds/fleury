@@ -36,6 +36,7 @@ final class WireFrameSource implements BrowserFrameSource {
   bool _handshakeSent = false;
   bool _closed = false;
   web.HTMLElement? _disconnectBanner;
+  web.ResizeObserver? _resizeObserver;
 
   /// The host-assembled inline-image layer (shared with the embed path).
   InlineImageOverlay? get _imageOverlay => _components?.imageOverlay;
@@ -48,7 +49,9 @@ final class WireFrameSource implements BrowserFrameSource {
     _socket = socket;
 
     final opened = Completer<void>();
+    var handshakeOpened = false;
     socket.onopen = ((web.Event _) {
+      handshakeOpened = true;
       _onOpen();
       if (!opened.isCompleted) opened.complete();
     }).toJS;
@@ -56,7 +59,31 @@ final class WireFrameSource implements BrowserFrameSource {
       _onMessage(event);
     }).toJS;
     socket.onclose = ((web.CloseEvent _) {
+      // A close BEFORE the socket ever opened is a failed connection
+      // (serve down, wrong URL, rejected upgrade). Fail start() so the
+      // caller's Future resolves and attach()'s cleanup runs — don't show
+      // the mid-session disconnect banner or hang on `opened`.
+      if (!handshakeOpened) {
+        if (!opened.isCompleted) {
+          opened.completeError(
+            StateError(
+              'fleury serve connection closed before it opened: $_url',
+            ),
+          );
+        }
+        return;
+      }
       _teardown('Disconnected from the fleury session.');
+    }).toJS;
+    socket.onerror = ((web.Event _) {
+      // Errors before open (connection refused, TLS failure) fire error
+      // then close; surface the failure through start() rather than
+      // stranding it.
+      if (!handshakeOpened && !opened.isCompleted) {
+        opened.completeError(
+          StateError('fleury serve connection failed: $_url'),
+        );
+      }
     }).toJS;
     await opened.future;
 
@@ -148,6 +175,7 @@ final class WireFrameSource implements BrowserFrameSource {
   void _observeResize() {
     final observer = web.ResizeObserver(
       ((JSArray<JSAny?> _, web.ResizeObserver __) {
+        if (_closed) return;
         // A ResizeObserver callback can fire mid-reflow with the container
         // momentarily collapsed; [_measureViewport] returns null for such
         // a degenerate read. Adopting it would resize the grid to a
@@ -157,7 +185,12 @@ final class WireFrameSource implements BrowserFrameSource {
         if (next == null || next == _size) return;
         _size = next;
         _components?.surface.resize(next, metrics: _cellBox());
-        _mirror = CellBuffer(next);
+        // Do NOT reset _mirror here: an in-flight plan built against the
+        // old size (sent before the server saw our ResizeFrame) would then
+        // patch a blank new-size mirror and blank every unchanged cell.
+        // The mirror is reset by [_handleFrame] when the server's
+        // size-matched full-repaint plan arrives (plan.size != mirror.size),
+        // so old-size plans keep applying to the old mirror until then.
         // Reposition the overlay images to the new cell pitch now, so they
         // stay pinned to their cells even if the host doesn't send a fresh
         // plan; the next PlanFrame (the usual case) supersedes this.
@@ -167,6 +200,7 @@ final class WireFrameSource implements BrowserFrameSource {
       }).toJS,
     );
     observer.observe(_components!.hostElement);
+    _resizeObserver = observer;
   }
 
   void _onMessage(web.MessageEvent event) {
@@ -178,21 +212,27 @@ final class WireFrameSource implements BrowserFrameSource {
     // silently stops processing — a single malformed frame would wedge the
     // session blank with no recovery. Decode and apply each frame
     // defensively: log the failure and repair the screen from the mirror.
-    final List<RemoteFrame> frames;
+    //
+    // drain() is a lazy generator that removes each frame from the decoder
+    // buffer AS it yields, so it must be iterated directly — collecting to
+    // a list first would, on a decode error partway through, discard the
+    // good frames already pulled (and applied-from) the buffer, leaving the
+    // mirror diverged from what the server thinks the peer holds.
     try {
-      frames = _decoder.drain().toList();
+      for (final frame in _decoder.drain()) {
+        try {
+          _handleFrame(frame);
+        } catch (error) {
+          web.console.error('fleury: remote frame apply failed: $error'.toJS);
+          _resyncFromMirror();
+        }
+      }
     } catch (error) {
+      // A malformed frame mid-stream: the frames decoded before it were
+      // already applied above; repair the screen from the (now-current)
+      // mirror.
       web.console.error('fleury: remote frame decode failed: $error'.toJS);
       _resyncFromMirror();
-      return;
-    }
-    for (final frame in frames) {
-      try {
-        _handleFrame(frame);
-      } catch (error) {
-        web.console.error('fleury: remote frame apply failed: $error'.toJS);
-        _resyncFromMirror();
-      }
     }
   }
 
@@ -336,6 +376,11 @@ final class WireFrameSource implements BrowserFrameSource {
   }
 
   void _send(Uint8List bytes) {
+    // After teardown the socket is gone for good; drop sends rather than
+    // letting a late resize/semantic-action append to the capture list
+    // forever. (Tests drive frames through attachComponentsForTest with no
+    // socket and without closing, so they still capture into sentForTest.)
+    if (_closed) return;
     final socket = _socket;
     if (socket == null) {
       sentForTest.add(bytes);
@@ -362,6 +407,8 @@ final class WireFrameSource implements BrowserFrameSource {
   void _teardown(String message, {bool banner = true}) {
     if (_closed) return;
     _closed = true;
+    _resizeObserver?.disconnect();
+    _resizeObserver = null;
     _components?.inputSource.dispose();
     try {
       _socket?.close();

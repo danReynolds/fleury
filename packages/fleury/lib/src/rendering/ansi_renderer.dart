@@ -212,12 +212,21 @@ final class AnsiRenderer {
       // advances the terminal cursor across them.
       if (newCell.role == CellRole.continuation) return;
 
-      // Overlay cells are owned by an inline-image placement — the
-      // presenter's image encoder paints the region out-of-band. Don't
-      // emit a cursor move, don't emit content, don't emit a clear.
-      if (newCell.role == CellRole.overlay) return;
-
       final oldCell = previous.atColRow(col, row);
+
+      // Overlay cells are owned by an inline-image placement: the
+      // presenter's image encoder paints pixels over the region
+      // out-of-band. The cell itself is still CLEARED to a blank here, so
+      // stale text/styled content can't survive in the image's letterbox
+      // bars (which the encoder leaves unpainted) — the encoder's escapes
+      // ride the frame trailer and draw on top. But an overlay over an
+      // already-blank cell (empty, or a prior overlay from a static image)
+      // needs nothing, so an unchanging image costs zero bytes.
+      if (newCell.role == CellRole.overlay &&
+          (oldCell.role == CellRole.empty ||
+              oldCell.role == CellRole.overlay)) {
+        return;
+      }
       if (newCell == oldCell) return;
 
       anyDirty = true;
@@ -288,8 +297,13 @@ final class AnsiRenderer {
         emittedStyle = newCell.style;
       }
 
-      // Emit the cell's content.
-      final grapheme = newCell.role == CellRole.empty ? ' ' : newCell.grapheme!;
+      // Emit the cell's content. Empty and overlay cells both render as a
+      // blank in the text layer (overlay pixels are painted over it by the
+      // encoder trailer).
+      final grapheme =
+          (newCell.role == CellRole.empty || newCell.role == CellRole.overlay)
+          ? ' '
+          : newCell.grapheme!;
       buf.write(grapheme);
 
       // Advance the cursor for next iteration. A leading cell with a

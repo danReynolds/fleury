@@ -86,7 +86,14 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
   final List<List<int>> _sendQueue = <List<int>>[];
   int _pendingSendBytes = 0;
   bool _pumpRunning = false;
+  Future<void>? _pumpFuture;
   Completer<void>? _drained;
+
+  /// A graceful [close] waits at most this long for the send pump to flush
+  /// already-queued frames (the final ByeFrame / plan) before giving up and
+  /// resetting the connection — so shutdown can't hang on a socket that is
+  /// slow but not yet over the high-water mark.
+  static const Duration _closeFlushTimeout = Duration(seconds: 2);
 
   @override
   Stream<RemoteFrame> get incoming => _incoming.stream;
@@ -109,7 +116,9 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
     _pendingSendBytes += bytes.length;
     if (!_pumpRunning) {
       _pumpRunning = true;
-      unawaited(_sendPump());
+      // Kept so a graceful [close] can await the in-flight flush. _sendPump
+      // never throws (it catches flush errors), so this future never rejects.
+      _pumpFuture = _sendPump();
     }
   }
 
@@ -152,18 +161,39 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
   @override
   Future<void> close() async {
     if (_closed) return;
+    // Snapshot the backlog BEFORE flipping _closed (which forces
+    // isSendBacklogged false): only a genuine over-HWM stall justifies
+    // dropping unsent bytes.
+    final wasBacklogged = _pendingSendBytes > sendHighWaterMark;
     _closed = true;
     // Wake any host gated on the backlog — it must never wait on a dead
     // peer (the drain future's contract).
     _completeDrained();
     await _socketSub?.cancel();
     _socketSub = null;
-    if (_pumpRunning) {
-      // A flush is pending on a stalled peer; a graceful close would
-      // wait behind it indefinitely. Abort hard — undelivered bytes are
-      // gone either way once we're closing on a backlog.
+    if (wasBacklogged) {
+      // The peer stalled past the high-water mark; a graceful flush could
+      // block forever. Reset the connection — undelivered bytes are lost
+      // either way once we're closing on a backlog.
       _socket.destroy();
     } else {
+      // Setting _closed stops the pump from starting NEW laps, but it
+      // finishes flushing the bytes it already handed to the socket — the
+      // final ByeFrame / plan. Wait that out (bounded) so a clean shutdown
+      // delivers them instead of resetting the connection under them.
+      final pump = _pumpFuture;
+      if (pump != null) {
+        var timedOut = false;
+        await pump.timeout(
+          _closeFlushTimeout,
+          onTimeout: () => timedOut = true,
+        );
+        if (timedOut) {
+          _socket.destroy();
+          if (!_incoming.isClosed) await _incoming.close();
+          return;
+        }
+      }
       try {
         await _socket.flush();
       } catch (_) {

@@ -219,14 +219,23 @@ final class CellBuffer {
           p.row < srcRow + rows &&
           p.row + p.rows > srcRow;
       if (!intersects) continue;
+      final newCol = p.col - srcCol + dstCol0;
+      final newRow = p.row - srcRow + dstRow0;
+      // Only carry a placement whose top-left lands in-bounds — the same
+      // rule [writeImageWithId] applies. A blit at a negative destOffset
+      // (a repaint boundary under a negatively-positioned parent) would
+      // otherwise record a placement at a negative cell, which a terminal
+      // presenter turns into an invalid cursor address and the wire codec
+      // into an out-of-range varint.
+      if (!_containsColRow(newCol, newRow)) continue;
       final image = source._images[p.id];
       if (image == null) continue;
       _images[p.id] = image;
       _imagePlacements.add(
         InlineImagePlacement(
           id: p.id,
-          col: p.col - srcCol + dstCol0,
-          row: p.row - srcRow + dstRow0,
+          col: newCol,
+          row: newRow,
           cols: p.cols,
           rows: p.rows,
           fit: p.fit,
@@ -477,6 +486,11 @@ final class CellBuffer {
     int? sourceHeight,
     Uint8List Function()? pixels,
   }) {
+    // A zero (or negative) dimension is a no-op, like a width-0 grapheme:
+    // recording it would hand the terminal image encoder a degenerate box
+    // whose fit math divides/clamps by zero and throws in the present
+    // phase — outside the render backstop, so it would wedge the session.
+    if (width <= 0 || height <= 0) return;
     if (!_containsColRow(topLeft.col, topLeft.row)) return;
     // Bytes are deduplicated by id; geometry is recorded per placement so the
     // same image drawn twice (or at two sizes) keeps independent rectangles.
@@ -506,6 +520,38 @@ final class CellBuffer {
       for (var c = c0; c < maxC; c++) {
         _cells[r * _size.cols + c] = const Cell.overlay();
       }
+    }
+  }
+
+  /// Carries the inline-image placements of [source] into this buffer,
+  /// translated by [destOffset] — the image analogue of a manual cell
+  /// composite.
+  ///
+  /// Widgets that paint their children into a scratch [CellBuffer] and then
+  /// copy the visible cells back (ScrollView, an overflow-clipped Flex, the
+  /// effect layers) must also carry the scratch's placements, or an Image
+  /// inside them renders nothing on a true-pixel surface: the presenter
+  /// sees no placement and the renderer emits nothing for the overlay
+  /// cells. Each placement is re-recorded through [writeImageWithId] (so
+  /// the overlay cells, damage, and image dedup all happen the normal way)
+  /// and dropped when its translated top-left lands out of bounds — the
+  /// same clip the manual cell loops apply.
+  void compositeImagesFrom(CellBuffer source, CellOffset destOffset) {
+    if (source._imagePlacements.isEmpty) return;
+    for (final p in source._imagePlacements) {
+      final image = source._images[p.id];
+      if (image == null) continue;
+      writeImageWithId(
+        CellOffset(p.col + destOffset.col, p.row + destOffset.row),
+        p.id,
+        image.bytes,
+        width: p.cols,
+        height: p.rows,
+        fit: p.fit,
+        sourceWidth: image.sourceWidth,
+        sourceHeight: image.sourceHeight,
+        pixels: image.pixels,
+      );
     }
   }
 

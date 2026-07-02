@@ -153,6 +153,36 @@ void main() {
       await driver.restore();
     });
 
+    test(
+      'a second INIT mid-session does not re-negotiate the protocol',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final entered = driver.enter(TerminalMode.interactive);
+        transport.emit(_init); // v3 → structured path
+        await entered;
+        expect(driver.wantsPresentationPlans, isTrue);
+
+        // A buggy/hostile peer sends a v1 INIT after the handshake.
+        transport.emit(
+          const InitFrame(
+            size: CellSize(40, 10),
+            colorMode: ColorMode.truecolor,
+            imageProtocol: ImageProtocol.halfBlock,
+            tmuxPassthrough: false,
+            protocolVersion: 1,
+          ),
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(
+          driver.wantsPresentationPlans,
+          isTrue,
+          reason: 'the negotiated protocol is frozen; a repeat INIT is ignored',
+        );
+        await driver.restore();
+      },
+    );
+
     test('restore sends BYE and closes the events stream', () async {
       final transport = _FakeTransport();
       final driver = RemoteTerminalDriver(transport);
@@ -396,8 +426,8 @@ void main() {
       return driver;
     }
 
-    test('ships bytes once while an image stays on screen, then re-ships when '
-        'it leaves and returns', () async {
+    test('ships bytes once, then not while the peer still caches them '
+        '(no re-ship on leave-and-return under the cache bound)', () async {
       final transport = _FakeTransport();
       final driver = await connected(transport);
       final size = const CellSize(40, 10);
@@ -421,17 +451,57 @@ void main() {
       );
       transport.sent.clear();
 
-      // Frame 3: image gone.
+      // Frame 3: image gone. The peer keeps the blob cached (it evicts only
+      // over its cache bound), so the app keeps believing it's held.
       driver.presentFrame(withImage([1, 2, 3, 4]), empty, fullPlan(size));
       expect(transport.sent.whereType<InlineImageFrame>(), isEmpty);
       transport.sent.clear();
 
-      // Frame 4: returns → re-shipped (the client may have evicted its blob).
+      // Frame 4: returns → NOT re-shipped; the client still holds the bytes.
       driver.presentFrame(empty, withImage([1, 2, 3, 4]), fullPlan(size));
       expect(
         transport.sent.whereType<InlineImageFrame>(),
+        isEmpty,
+        reason:
+            'the peer never evicted the blob (well under the cache bound), '
+            'so re-shipping would be wasted bandwidth — this is what stops '
+            'an animation from re-sending every frame on each loop',
+      );
+
+      await driver.restore();
+    });
+
+    test('re-ships an id only after the peer would have evicted it '
+        '(cache bound exceeded)', () async {
+      final transport = _FakeTransport();
+      final driver = await connected(transport);
+      final size = const CellSize(40, 10);
+      final empty = CellBuffer(size);
+
+      // The image under test.
+      final target = [7, 7, 7, 7];
+      driver.presentFrame(empty, withImage(target), fullPlan(size));
+      expect(transport.sent.whereType<InlineImageFrame>(), hasLength(1));
+      transport.sent.clear();
+
+      // Push > 512 OTHER distinct images through, each on its own frame with
+      // the target absent — the peer (and the app's mirror) evicts the
+      // longest-unplaced ids first, so the target eventually falls out.
+      for (var i = 0; i < 600; i++) {
+        driver.presentFrame(
+          empty,
+          withImage([i, i >> 8, 1, 2]),
+          fullPlan(size),
+        );
+      }
+      transport.sent.clear();
+
+      // The target returns after being evicted → re-shipped.
+      driver.presentFrame(empty, withImage(target), fullPlan(size));
+      expect(
+        transport.sent.whereType<InlineImageFrame>(),
         hasLength(1),
-        reason: 'a re-appearing image is re-sent',
+        reason: 'an id the peer evicted (past the cache bound) is re-sent',
       );
 
       await driver.restore();

@@ -95,6 +95,57 @@ void main() {
       expect(other.images, isEmpty);
     });
 
+    test('a zero-size image is a no-op (no placement, no overlay cells)', () {
+      // A degenerate box would hand the terminal encoder a fit whose math
+      // divides/clamps by zero and throws in the present phase (outside the
+      // backstop). Treat it like a width-0 grapheme: drop it.
+      final buf = CellBuffer(const CellSize(6, 4));
+      buf.writeImage(
+        const CellOffset(1, 1),
+        Uint8List.fromList([1, 2, 3]),
+        width: 0,
+        height: 3,
+      );
+      buf.writeImage(
+        const CellOffset(1, 1),
+        Uint8List.fromList([4, 5, 6]),
+        width: 3,
+        height: 0,
+      );
+      expect(buf.imagePlacements, isEmpty);
+      expect(buf.images, isEmpty);
+      expect(buf.atColRow(1, 1).role, CellRole.empty);
+    });
+
+    test('a blit at a negative offset drops the placement, not negates it', () {
+      // A repaint-boundary cache blitted at a negative destOffset (a parent
+      // painting above the buffer origin) must NOT record a placement at a
+      // negative cell — that becomes an invalid cursor address on terminals
+      // and an out-of-range varint on the wire.
+      final cache = CellBuffer(const CellSize(6, 4));
+      cache.writeImage(
+        const CellOffset(0, 0),
+        Uint8List.fromList([7, 7]),
+        width: 3,
+        height: 2,
+      );
+      final frame = CellBuffer(const CellSize(12, 8));
+      frame.copyRectFrom(
+        cache,
+        CellRect.fromLTWH(0, 0, 6, 4),
+        const CellOffset(-2, -1),
+      );
+      expect(
+        frame.imagePlacements,
+        isEmpty,
+        reason: 'the translated top-left (-2,-1) is out of bounds',
+      );
+      for (final p in frame.imagePlacements) {
+        expect(p.col, greaterThanOrEqualTo(0));
+        expect(p.row, greaterThanOrEqualTo(0));
+      }
+    });
+
     test('a region clipped by the buffer edge writes only in-bounds cells', () {
       final buf = CellBuffer(const CellSize(4, 2));
       buf.writeImage(

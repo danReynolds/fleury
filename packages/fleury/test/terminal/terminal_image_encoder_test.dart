@@ -385,6 +385,30 @@ void main() {
             'moves must stay visible to tmux',
       );
     });
+
+    test('a large kitty transmit gets one passthrough envelope per chunk', () {
+      // >4 KiB of incompressible base64 forces multiple transmit chunks.
+      // Under tmux each MUST get its own envelope, or tmux drops the
+      // oversized single one and the image never arrives.
+      final noisy = Uint8List.fromList(
+        List<int>.generate(9000, (i) => (i * 31 + 7) & 0xFF),
+      );
+      final out = TerminalImageEncoder(
+        protocol: ImageProtocol.kitty,
+        tmuxPassthrough: true,
+      ).encodeFrame(bufferWith(bytes: noisy), fullRepaint: true);
+
+      final envelopes = '\x1BPtmux;'.allMatches(out).length;
+      final chunks = 'm=1'.allMatches(out).length; // continuation chunks
+      expect(chunks, greaterThanOrEqualTo(1), reason: 'multi-chunk transmit');
+      expect(
+        envelopes,
+        greaterThan(chunks),
+        reason:
+            'every transmit chunk (plus the a=p placement) is its own '
+            'envelope — not one envelope around the whole stream',
+      );
+    });
   });
 
   group('presenter integration', () {

@@ -228,6 +228,9 @@ final class TerminalImageEncoder {
 
     // Free terminal-side data for content nothing references anymore
     // (successive animation frames would otherwise accumulate forever).
+    // Drop the id mapping too, so the content→id table doesn't grow
+    // without bound over a long session of ever-changing images; if the
+    // same content returns it simply gets a fresh id and re-transmits.
     final referenced = {for (final s in survivors) s.contentId};
     for (final contentId in _transmitted.toList()) {
       if (referenced.contains(contentId)) continue;
@@ -235,6 +238,7 @@ final class TerminalImageEncoder {
         _wrap('\x1B_Ga=d,d=I,i=${_kittyIdByContent[contentId]},q=2\x1B\\'),
       );
       _transmitted.remove(contentId);
+      _kittyIdByContent.remove(contentId);
     }
 
     _kittyLive = survivors;
@@ -243,28 +247,34 @@ final class TerminalImageEncoder {
   /// Transmit-only (`a=t`) upload: PNG bytes pass through untouched
   /// (format 100), base64-wrapped, chunked at 4 KiB with `m=1`
   /// continuations. `q=2` suppresses terminal responses (we don't read
-  /// them). The whole chunk stream shares one tmux envelope.
+  /// them).
+  ///
+  /// Under tmux, EACH chunk gets its OWN passthrough envelope rather than
+  /// wrapping the whole multi-chunk stream once: tmux caps the size of a
+  /// single passthrough sequence and silently drops one that exceeds it,
+  /// so a large image wrapped as one envelope would never reach the host
+  /// terminal (and _transmitted would then lie about it being delivered).
+  /// Per-chunk envelopes keep every piece under the cap.
   void _writeKittyTransmit(StringBuffer out, int kittyId, Uint8List png) {
     final b64 = base64.encode(png);
     const chunkSize = 4096;
-    final buf = StringBuffer();
     var pos = 0;
     var first = true;
     while (pos < b64.length) {
       final end = (pos + chunkSize < b64.length) ? pos + chunkSize : b64.length;
       final isLast = end == b64.length;
-      buf.write('\x1B_G');
+      final chunk = StringBuffer('\x1B_G');
       if (first) {
-        buf.write('a=t,f=100,i=$kittyId,q=2,m=${isLast ? 0 : 1};');
+        chunk.write('a=t,f=100,i=$kittyId,q=2,m=${isLast ? 0 : 1};');
         first = false;
       } else {
-        buf.write('m=${isLast ? 0 : 1};');
+        chunk.write('m=${isLast ? 0 : 1};');
       }
-      buf.write(b64.substring(pos, end));
-      buf.write('\x1B\\');
+      chunk.write(b64.substring(pos, end));
+      chunk.write('\x1B\\');
+      out.write(_wrap(chunk.toString()));
       pos = end;
     }
-    out.write(_wrap(buf.toString()));
   }
 
   // ---- iTerm2 --------------------------------------------------------------
@@ -501,6 +511,41 @@ String encodeSixel(Uint8List rgba, int width, int height) {
   return buf.toString();
 }
 
+/// Scores the `order[start..end)` box: its widest RGB channel and the
+/// split priority (widest range × population). Computed once per box.
+({int start, int end, int channel, int score}) _scoreBox(
+  Uint32List order,
+  Uint8List rgba,
+  int start,
+  int end,
+) {
+  final n = end - start;
+  if (n < 2) return (start: start, end: end, channel: 0, score: 0);
+  var minR = 255, maxR = 0, minG = 255, maxG = 0, minB = 255, maxB = 0;
+  for (var i = start; i < end; i++) {
+    final o = order[i] * 4;
+    final r = rgba[o], g = rgba[o + 1], bl = rgba[o + 2];
+    if (r < minR) minR = r;
+    if (r > maxR) maxR = r;
+    if (g < minG) minG = g;
+    if (g > maxG) maxG = g;
+    if (bl < minB) minB = bl;
+    if (bl > maxB) maxB = bl;
+  }
+  final rangeR = maxR - minR, rangeG = maxG - minG, rangeB = maxB - minB;
+  var channel = 0;
+  var widest = rangeR;
+  if (rangeG > widest) {
+    channel = 1;
+    widest = rangeG;
+  }
+  if (rangeB > widest) {
+    channel = 2;
+    widest = rangeB;
+  }
+  return (start: start, end: end, channel: channel, score: widest * n);
+}
+
 /// Median-cut color quantization: recursively splits the pixel population
 /// on the widest RGB channel at its median until [maxColors] boxes exist,
 /// then assigns each box its mean color. Pure Dart, deterministic, no
@@ -521,48 +566,37 @@ String encodeSixel(Uint8List rgba, int width, int height) {
     order[i] = i;
   }
 
-  final boxes = <({int start, int end})>[(start: 0, end: pixelCount)];
+  // Each box caches its widest channel + split score (range × population),
+  // computed ONCE when the box is created. A split re-scores only its two
+  // children, so total work is O(pixels × log maxColors) instead of the
+  // O(maxColors × pixels) a full rescan-every-box-every-split would cost —
+  // the difference between a few ms and hundreds of ms on a full-screen
+  // sixel raster.
+  final boxes = <({int start, int end, int channel, int score})>[
+    _scoreBox(order, rgba, 0, pixelCount),
+  ];
   while (boxes.length < maxColors) {
-    // Split the box with the largest (range × population) first — a good
-    // proxy for "where quantization error lives".
+    // Split the box with the largest cached score first — a good proxy for
+    // "where quantization error lives". Strict > keeps the earliest box on
+    // ties (deterministic output).
     var bestBox = -1;
     var bestScore = 0;
-    var bestChannel = 0;
     for (var b = 0; b < boxes.length; b++) {
-      final box = boxes[b];
-      final n = box.end - box.start;
-      if (n < 2) continue;
-      var minR = 255, maxR = 0, minG = 255, maxG = 0, minB = 255, maxB = 0;
-      for (var i = box.start; i < box.end; i++) {
-        final o = order[i] * 4;
-        final r = rgba[o], g = rgba[o + 1], bl = rgba[o + 2];
-        if (r < minR) minR = r;
-        if (r > maxR) maxR = r;
-        if (g < minG) minG = g;
-        if (g > maxG) maxG = g;
-        if (bl < minB) minB = bl;
-        if (bl > maxB) maxB = bl;
-      }
-      final ranges = [maxR - minR, maxG - minG, maxB - minB];
-      var channel = 0;
-      if (ranges[1] > ranges[channel]) channel = 1;
-      if (ranges[2] > ranges[channel]) channel = 2;
-      final score = ranges[channel] * n;
-      if (score > bestScore) {
-        bestScore = score;
+      if (boxes[b].score > bestScore) {
+        bestScore = boxes[b].score;
         bestBox = b;
-        bestChannel = channel;
       }
     }
     if (bestBox < 0) break; // every box is a single color/pixel
 
     final box = boxes[bestBox];
+    final channel = box.channel;
     final slice = order.sublist(box.start, box.end)
-      ..sort((a, b) => rgba[a * 4 + bestChannel] - rgba[b * 4 + bestChannel]);
+      ..sort((a, b) => rgba[a * 4 + channel] - rgba[b * 4 + channel]);
     order.setRange(box.start, box.end, slice);
     final mid = box.start + (box.end - box.start) ~/ 2;
-    boxes[bestBox] = (start: box.start, end: mid);
-    boxes.add((start: mid, end: box.end));
+    boxes[bestBox] = _scoreBox(order, rgba, box.start, mid);
+    boxes.add(_scoreBox(order, rgba, mid, box.end));
   }
 
   final palette = <int>[];

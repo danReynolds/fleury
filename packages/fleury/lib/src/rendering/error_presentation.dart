@@ -14,10 +14,13 @@
 // tier policy for error surfaces is a single follow-up if ASCII terminals
 // need it.
 
+import 'package:characters/characters.dart';
+
 import '../foundation/geometry.dart';
 import 'border.dart';
 import 'cell.dart';
 import 'cell_buffer.dart';
+import 'width_resolver.dart';
 
 const _errorStyle = CellStyle(foreground: AnsiColor(1));
 
@@ -94,67 +97,133 @@ void paintCellErrorPresentation(
     }
   }
 
-  // Wrapped `⚠ <error>` text in the interior.
+  // Wrapped `⚠ <error>` text in the interior. All widths are measured in
+  // CELLS (not UTF-16 code units), so wide graphemes (CJK, emoji) wrap at
+  // the panel edge instead of overrunning the border, and splits land on
+  // grapheme-cluster boundaries (never inside a surrogate pair).
+  const resolver = DefaultWidthResolver();
+  const profile = TerminalProfile.standard;
   final innerLeft = left + 1;
   final innerWidth = size.cols - 2;
   final innerTop = top + 1;
   final innerRows = size.rows - 2;
+  if (innerWidth <= 0 || innerRows <= 0) return;
+
   final words = '⚠ $error'
       .replaceAll('\n', ' ')
       .split(' ')
       .where((w) => w.isNotEmpty)
       .toList();
-  var row = innerTop;
-  var line = StringBuffer();
-  void flushLine() {
-    if (line.isEmpty) return;
-    var text = line.toString();
-    if (row == innerTop + innerRows - 1 && words.isNotEmpty) {
-      // Last visible row with content left over: ellipsize.
-      if (text.length >= innerWidth) {
-        text = '${text.substring(0, innerWidth - 1)}…';
-      } else {
-        text = '$text…';
-      }
-    }
-    if (row >= visible.top && row < visible.bottom) {
-      var run = text.length > innerWidth ? text.substring(0, innerWidth) : text;
-      var startCol = innerLeft;
-      // Clip the run to the visible column range (buffer bounds are
-      // handled by writeText; clipRect is not).
-      if (startCol < visible.left) {
-        final skip = visible.left - startCol;
-        run = skip >= run.length ? '' : run.substring(skip);
-        startCol = visible.left;
-      }
-      final maxLen = visible.right - startCol;
-      if (maxLen > 0 && run.isNotEmpty) {
-        if (run.length > maxLen) run = run.substring(0, maxLen);
-        buffer.writeText(CellOffset(startCol, row), run, style: _errorStyle);
-      }
-    }
-    line = StringBuffer();
-    row++;
-  }
 
-  while (words.isNotEmpty && row < innerTop + innerRows) {
+  // Greedy word-wrap into at most innerRows lines. A word wider than the
+  // interior is hard-split along grapheme boundaries.
+  final lines = <String>[];
+  var line = StringBuffer();
+  var lineWidth = 0;
+  while (words.isNotEmpty && lines.length < innerRows) {
     final word = words.first;
-    final candidate = line.isEmpty ? word : '${line.toString()} $word';
-    if (candidate.length <= innerWidth) {
+    final wordWidth = resolver.widthOfText(word, profile);
+    final sep = lineWidth == 0 ? 0 : 1;
+    if (lineWidth + sep + wordWidth <= innerWidth) {
+      if (sep == 1) line.write(' ');
+      line.write(word);
+      lineWidth += sep + wordWidth;
       words.removeAt(0);
-      line
-        ..clear()
-        ..write(candidate);
-    } else if (line.isEmpty) {
-      // A single word wider than the interior: hard-split it.
+    } else if (lineWidth == 0) {
+      // Word wider than the whole interior: take as many leading
+      // graphemes as fit, defer the rest.
+      final head = StringBuffer();
+      final rest = StringBuffer();
+      var headWidth = 0;
+      var filling = true;
+      for (final g in word.characters) {
+        final gw = resolver.widthOfGrapheme(g, profile);
+        if (filling && headWidth + gw <= innerWidth) {
+          head.write(g);
+          headWidth += gw;
+        } else {
+          filling = false;
+          rest.write(g);
+        }
+      }
       words.removeAt(0);
-      line.write(word.substring(0, innerWidth));
-      final rest = word.substring(innerWidth);
-      if (rest.isNotEmpty) words.insert(0, rest);
-      flushLine();
+      if (rest.isNotEmpty) words.insert(0, rest.toString());
+      lines.add(head.toString());
     } else {
-      flushLine();
+      lines.add(line.toString());
+      line = StringBuffer();
+      lineWidth = 0;
     }
   }
-  flushLine();
+  if (line.isNotEmpty && lines.length < innerRows) lines.add(line.toString());
+
+  final overflowed = words.isNotEmpty;
+  for (var i = 0; i < lines.length; i++) {
+    final row = innerTop + i;
+    if (row < visible.top || row >= visible.bottom) continue;
+    var text = lines[i];
+    if (i == lines.length - 1 && overflowed) {
+      text = _ellipsize(text, innerWidth, resolver, profile);
+    }
+    _paintClippedRun(buffer, row, innerLeft, text, visible, resolver, profile);
+  }
+}
+
+/// Trims [text] along grapheme boundaries until it plus a trailing `…`
+/// fits [maxCols] cells.
+String _ellipsize(
+  String text,
+  int maxCols,
+  WidthResolver resolver,
+  TerminalProfile profile,
+) {
+  if (resolver.widthOfText(text, profile) < maxCols) return '$text…';
+  final kept = StringBuffer();
+  var width = 0;
+  for (final g in text.characters) {
+    final gw = resolver.widthOfGrapheme(g, profile);
+    if (width + gw > maxCols - 1) break; // leave a cell for the ellipsis
+    kept.write(g);
+    width += gw;
+  }
+  return '$kept…';
+}
+
+/// Writes [text] starting at column [startCol], clipped (width-aware) to the
+/// [visible] column window — buffer bounds are handled by writeText; a
+/// tighter ancestor clipRect is handled here so wide graphemes are dropped,
+/// never split.
+void _paintClippedRun(
+  CellBuffer buffer,
+  int row,
+  int startCol,
+  String text,
+  CellRect visible,
+  WidthResolver resolver,
+  TerminalProfile profile,
+) {
+  var col = startCol;
+  final out = StringBuffer();
+  var outCol = startCol;
+  var started = false;
+  for (final g in text.characters) {
+    final gw = resolver.widthOfGrapheme(g, profile);
+    if (col >= visible.left && col + gw <= visible.right) {
+      if (!started) {
+        outCol = col;
+        started = true;
+      }
+      out.write(g);
+    } else if (started) {
+      break; // left the visible window
+    }
+    col += gw;
+  }
+  if (started && out.isNotEmpty) {
+    buffer.writeText(
+      CellOffset(outCol, row),
+      out.toString(),
+      style: _errorStyle,
+    );
+  }
 }

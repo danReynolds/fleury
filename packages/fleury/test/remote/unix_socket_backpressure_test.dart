@@ -109,6 +109,35 @@ void main() {
     },
   );
 
+  test('a clean close delivers the final frame (healthy socket)', () async {
+    // The graceful-shutdown path: send a frame then close() immediately on a
+    // healthy (not backlogged) socket — the peer must still receive it. A
+    // reset-on-any-pending-flush close would drop it.
+    await start(highWaterMark: 64 * 1024);
+    final received = BytesBuilder(copy: true);
+    final drained = Completer<void>();
+    accepted.listen(
+      received.add,
+      onDone: () {
+        if (!drained.isCompleted) drained.complete();
+      },
+    );
+
+    final bye = Uint8List.fromList([0xB, 0xE, 0x1, 0x2, 0x3]);
+    transport.send(OutputFrame(bye));
+    await transport.close();
+    await drained.future.timeout(const Duration(seconds: 5));
+
+    final decoder = FrameDecoder();
+    decoder.feed(received.takeBytes());
+    final frames = decoder.drain().toList();
+    expect(frames, hasLength(1), reason: 'the final frame survived close()');
+    expect((frames.single as OutputFrame).bytes, bye);
+
+    await server.close();
+    tmp.deleteSync(recursive: true);
+  });
+
   test(
     'close() while backlogged completes sendDrained (no wedged host)',
     () async {
