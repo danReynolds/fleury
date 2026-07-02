@@ -143,6 +143,83 @@ void main() {
     expect(out, contains('main'), reason: 'lays out without throwing');
   });
 
+  testWidgets('the builder is memoized: repeated layout passes with '
+      'unchanged constraints do not re-run it', (tester) {
+    var runs = 0;
+    tester.pumpWidget(
+      LayoutBuilder(
+        builder: (context, constraints) {
+          runs++;
+          return const Text('stable');
+        },
+      ),
+    );
+    tester.renderToString(size: const CellSize(10, 1));
+    expect(runs, 1);
+
+    // Same constraints, more passes: layout recurses through the node but
+    // the built child is reused. Re-running here is the seed of a rebuild
+    // loop when the subtree isn't identity-stable (each re-run produces
+    // damage that schedules the next frame).
+    tester.renderToString(size: const CellSize(10, 1));
+    tester.pump();
+    tester.renderToString(size: const CellSize(10, 1));
+    expect(runs, 1,
+        reason: 'unchanged constraints + clean element = no builder re-run');
+
+    // A genuine constraint change still rebuilds.
+    tester.renderToString(size: const CellSize(6, 1));
+    expect(runs, 2);
+
+    // And returning to a previously-seen size rebuilds again (the memo is
+    // last-constraints, not a cache).
+    tester.renderToString(size: const CellSize(10, 1));
+    expect(runs, 3);
+  });
+
+  testWidgets('memoization does not swallow widget updates delivered under '
+      'identical constraints', (tester) {
+    var runs = 0;
+    Widget labeled(String label) => LayoutBuilder(
+      builder: (context, constraints) {
+        runs++;
+        return Text(label);
+      },
+    );
+
+    tester.pumpWidget(labeled('first'));
+    expect(tester.renderToString(size: const CellSize(10, 1)).trim(), 'first');
+    final after = runs;
+
+    tester.pumpWidget(labeled('second')); // new closure, same constraints
+    expect(
+      tester.renderToString(size: const CellSize(10, 1)).trim(),
+      'second',
+      reason: 'a new builder closure invalidates the memoized child',
+    );
+    expect(runs, after + 1);
+  });
+
+  testWidgets('memoization does not swallow a child setState under '
+      'identical constraints', (tester) {
+    // State BELOW the LayoutBuilder rebuilds through the normal build phase,
+    // not through the builder callback — the memo must not interfere.
+    final flag = Flag();
+    tester.pumpWidget(
+      LayoutBuilder(
+        builder: (context, constraints) => Reactive(
+          flag: flag,
+          builder: (on) => Text(on ? 'after' : 'before'),
+        ),
+      ),
+    );
+    String flat() => tester.renderToString(size: const CellSize(10, 1)).trim();
+    expect(flat(), 'before');
+    flag.set(true);
+    tester.pump();
+    expect(flat(), 'after');
+  });
+
   testWidgets('a bounded LayoutBuilder in a Row (via Expanded) lays out fine',
       (tester) {
     tester.pumpWidget(

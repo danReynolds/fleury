@@ -307,4 +307,99 @@ void main() {
       expect(received, ['inner']);
     });
   });
+
+  group('Focus widget flags on a caller-provided node', () {
+    Element mount(FocusManager manager, Widget child) =>
+        BuildOwner().mountRoot(FocusManagerScope(manager: manager, child: child));
+
+    test('skipTraversal applies to a provided node', () {
+      // Silently ignoring the widget flag was a footgun: the code compiled
+      // and looked right while Tab still landed on the node.
+      final manager = FocusManager();
+      final node = FocusNode(debugLabel: 'provided');
+      mount(
+        manager,
+        Focus(focusNode: node, skipTraversal: true, child: const EmptyBox()),
+      );
+      expect(node.skipTraversal, isTrue);
+      expect(manager.isTraversable(node), isFalse);
+    });
+
+    test('canRequestFocus applies to a provided node', () {
+      final manager = FocusManager();
+      final node = FocusNode(debugLabel: 'provided');
+      mount(
+        manager,
+        Focus(focusNode: node, canRequestFocus: false, child: const EmptyBox()),
+      );
+      expect(node.canRequestFocus, isFalse);
+      node.requestFocus();
+      expect(manager.focusedNode, isNull, reason: 'request silently refused');
+    });
+
+    test('a widget update re-applies changed flags to the provided node', () {
+      final manager = FocusManager();
+      final node = FocusNode(debugLabel: 'provided');
+      final owner = BuildOwner();
+      final root = owner.mountRoot(
+        FocusManagerScope(
+          manager: manager,
+          child: Focus(
+            focusNode: node,
+            skipTraversal: true,
+            child: const EmptyBox(),
+          ),
+        ),
+      );
+      expect(node.skipTraversal, isTrue);
+
+      owner.updateRoot(
+        root,
+        FocusManagerScope(
+          manager: manager,
+          child: Focus(
+            focusNode: node,
+            skipTraversal: false,
+            child: const EmptyBox(),
+          ),
+        ),
+      );
+      expect(node.skipTraversal, isFalse);
+    });
+
+    test('a null flag leaves the node\'s own setting alone', () {
+      // Null = "the widget doesn't manage this": a provided node's
+      // constructor flags survive (and a previously applied value sticks).
+      final manager = FocusManager();
+      final node = FocusNode(debugLabel: 'provided', skipTraversal: true);
+      final owner = BuildOwner();
+      final root = owner.mountRoot(
+        FocusManagerScope(
+          manager: manager,
+          child: Focus(focusNode: node, child: const EmptyBox()),
+        ),
+      );
+      expect(node.skipTraversal, isTrue, reason: 'constructor flag kept');
+
+      owner.updateRoot(
+        root,
+        FocusManagerScope(
+          manager: manager,
+          child: Focus(focusNode: node, child: const EmptyBox()),
+        ),
+      );
+      expect(node.skipTraversal, isTrue);
+    });
+
+    test('an internal node keeps the focusable/traversable defaults', () {
+      final manager = FocusManager();
+      mount(manager, Focus(debugLabel: 'internal', child: const EmptyBox()));
+      // The node attached to the manager is the internal one.
+      final attached = manager.attachedNodes
+          .where((n) => n.debugLabel == 'internal')
+          .single;
+      expect(attached.canRequestFocus, isTrue);
+      expect(attached.skipTraversal, isFalse);
+    });
+  });
 }

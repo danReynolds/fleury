@@ -854,8 +854,8 @@ class Focus extends StatefulWidget {
     super.key,
     this.focusNode,
     this.autofocus = false,
-    this.canRequestFocus = true,
-    this.skipTraversal = false,
+    this.canRequestFocus,
+    this.skipTraversal,
     this.onKey,
     this.debugLabel,
     required this.child,
@@ -869,8 +869,14 @@ class Focus extends StatefulWidget {
   /// currently focused.
   final bool autofocus;
 
-  final bool canRequestFocus;
-  final bool skipTraversal;
+  /// When non-null, applied to the node — including a caller-provided
+  /// [focusNode] — on mount and on every widget update. Null means the
+  /// widget doesn't manage the flag: the node keeps its own value
+  /// (internal nodes default to focusable / traversable). Silently
+  /// ignoring these for provided nodes was a footgun: the code compiled
+  /// and looked right while the flag never took effect.
+  final bool? canRequestFocus;
+  final bool? skipTraversal;
   final FocusOnKeyCallback? onKey;
   final String? debugLabel;
   final Widget child;
@@ -918,15 +924,23 @@ class _FocusState extends State<Focus> {
     super.initState();
     if (widget.focusNode == null) {
       _internalNode = FocusNode(
-        canRequestFocus: widget.canRequestFocus,
-        skipTraversal: widget.skipTraversal,
+        canRequestFocus: widget.canRequestFocus ?? true,
+        skipTraversal: widget.skipTraversal ?? false,
         debugLabel: widget.debugLabel,
       );
-    } else {
-      // The user-provided node carries its own canRequestFocus and
-      // skipTraversal — we don't override.
     }
     _node.onKey = widget.onKey;
+    _applyWidgetFlags();
+  }
+
+  /// Non-null widget flags configure the node — a caller-provided one
+  /// too. Null leaves the node's own setting alone (so a provided node's
+  /// constructor flags survive unless the widget explicitly manages them).
+  void _applyWidgetFlags() {
+    final canRequestFocus = widget.canRequestFocus;
+    if (canRequestFocus != null) _node.canRequestFocus = canRequestFocus;
+    final skipTraversal = widget.skipTraversal;
+    if (skipTraversal != null) _node.skipTraversal = skipTraversal;
   }
 
   @override
@@ -937,21 +951,19 @@ class _FocusState extends State<Focus> {
       _internalNode?.dispose();
       _internalNode = widget.focusNode == null
           ? FocusNode(
-              canRequestFocus: widget.canRequestFocus,
-              skipTraversal: widget.skipTraversal,
+              canRequestFocus: widget.canRequestFocus ?? true,
+              skipTraversal: widget.skipTraversal ?? false,
               debugLabel: widget.debugLabel,
             )
           : null;
       _node.onKey = widget.onKey;
+      _applyWidgetFlags();
       // A genuinely new node gets a fresh autofocus opportunity.
       _didAutofocus = false;
       _attach();
     } else {
       _node.onKey = widget.onKey;
-      if (widget.focusNode == null) {
-        _node.canRequestFocus = widget.canRequestFocus;
-        _node.skipTraversal = widget.skipTraversal;
-      }
+      _applyWidgetFlags();
     }
   }
 

@@ -12,10 +12,16 @@ typedef LayoutWidgetBuilder =
 /// can adapt to the available space — a sidebar that collapses below a
 /// width, a list that switches to a grid when wide, etc.
 ///
-/// The [builder] runs during the layout pass (and the whole tree lays out
-/// every frame), so it always sees current constraints. Reading an
-/// inherited widget (e.g. [MediaQuery]) inside it works and re-runs when
-/// that ancestor changes.
+/// The [builder] runs during the layout pass, so it always sees current
+/// constraints — but NOT on every pass: it re-runs only when the incoming
+/// constraints change or the element was invalidated (a parent rebuild
+/// delivering a new widget, an inherited dependency changing, a setState
+/// above). Reading an inherited widget (e.g. [MediaQuery]) inside it works
+/// and re-runs when that ancestor changes. The memoization matters: layout
+/// re-enters from the root every frame that renders, and an
+/// unconditionally re-run builder re-instantiates its subtree per frame —
+/// if that subtree isn't identity-stable, each re-run produces damage that
+/// schedules the next frame, a self-sustaining rebuild loop.
 class LayoutBuilder extends RenderObjectWidget {
   const LayoutBuilder({super.key, required this.builder});
 
@@ -33,7 +39,9 @@ class LayoutBuilder extends RenderObjectWidget {
     BuildContext context,
     covariant RenderLayoutBuilder renderObject,
   ) {
-    renderObject.markNeedsLayout();
+    // A new widget means a new builder closure (fresh captured state) —
+    // the memoized child is stale even under identical constraints.
+    renderObject.invalidateBuilder();
   }
 }
 
@@ -62,14 +70,16 @@ class _LayoutBuilderElement extends RenderObjectElement {
     // the builder never re-runs and the subtree goes stale. Flutter's
     // equivalent is scheduleLayoutCallback() = markNeedsLayout() +
     // owner-registration; Fleury re-enters layout from the root every frame,
-    // so marking the spine dirty is sufficient. Mark it unconditionally on
-    // every invalidation: `dirty` (an element-build flag) and the render
-    // object's needs-layout are independent states, so gating layout on
-    // `!dirty` could drop a relayout if the two ever diverge (a mid-build
-    // geometry read, a manual render between marks). `mounted` covers the
-    // window before mount / after unmount, where markNeedsLayout has no
+    // so marking the spine dirty is sufficient. invalidateBuilder both marks
+    // needs-layout and flags the memoized child stale — the builder re-runs
+    // on the pass that flushes this even under identical constraints. Mark
+    // it unconditionally on every invalidation: `dirty` (an element-build
+    // flag) and the render object's needs-layout are independent states, so
+    // gating on `!dirty` could drop a relayout if the two ever diverge (a
+    // mid-build geometry read, a manual render between marks). `mounted`
+    // covers the window before mount / after unmount, where there is no
     // valid render object to reach.
-    if (mounted) _ro.markNeedsLayout();
+    if (mounted) _ro.invalidateBuilder();
     super.markNeedsBuild();
   }
 
@@ -109,12 +119,33 @@ class _LayoutBuilderElement extends RenderObjectElement {
 /// Render object behind [LayoutBuilder]: runs the element's build callback
 /// with the incoming constraints, then lays out and paints the resulting
 /// child. Layout-transparent (sizes to the child).
+///
+/// The callback is memoized on the constraints it last built for: a layout
+/// pass reaching this node re-invokes it only when the constraints differ
+/// or [invalidateBuilder] flagged the built child stale (element
+/// invalidation / a new widget). Layout itself still recurses into the
+/// child every pass — only the BUILD is skipped.
 class RenderLayoutBuilder extends RenderObject
     implements RenderObjectWithSingleChild {
   void Function(CellConstraints)? _callback;
   set callback(void Function(CellConstraints)? value) {
     if (identical(_callback, value)) return;
     _callback = value;
+    invalidateBuilder();
+  }
+
+  /// Constraints the current child subtree was built for; null before the
+  /// first build.
+  CellConstraints? _builtFor;
+
+  /// Whether the built child is stale regardless of constraints (element
+  /// invalidated, new builder closure, callback swapped).
+  bool _builderStale = true;
+
+  /// Flags the built child stale and schedules the relayout that rebuilds
+  /// it. Called by the element on invalidation and by the widget on update.
+  void invalidateBuilder() {
+    _builderStale = true;
     markNeedsLayout();
   }
 
@@ -131,9 +162,14 @@ class RenderLayoutBuilder extends RenderObject
 
   @override
   CellSize performLayout(CellConstraints constraints) {
-    _callback?.call(
-      constraints,
-    ); // builds/updates the child for these constraints
+    // Build/update the child only when it's stale for these constraints —
+    // an ancestor-driven relayout with unchanged constraints and a clean
+    // element reuses the built subtree as-is.
+    if (_builderStale || constraints != _builtFor) {
+      _callback?.call(constraints);
+      _builtFor = constraints;
+      _builderStale = false;
+    }
     final c = _child;
     if (c == null) return constraints.constrain(CellSize.zero);
     final size = c.layout(constraints);
