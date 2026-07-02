@@ -1580,6 +1580,8 @@ String _roleLabel(SemanticRole role) {
   switch (role) {
     case SemanticRole.app:
       return 'application';
+    case SemanticRole.errorBoundary:
+      return 'rendering error';
     case SemanticRole.screen:
       return 'screen';
     case SemanticRole.route:

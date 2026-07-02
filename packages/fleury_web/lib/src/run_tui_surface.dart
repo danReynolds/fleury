@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:js_interop';
 
 import 'package:fleury/fleury_host.dart';
+
+import 'package:web/web.dart' as web;
 
 import 'browser_frame_flush_scheduler.dart';
 import 'clipboard/web_clipboard.dart';
@@ -161,6 +164,13 @@ Future<MountedApp> runTuiSurface(
   // buildRoot — no process-global mutation, no restore-on-dispose dance.
   final effectiveClipboard = clipboard ?? WebClipboard();
   final runtime = TuiRuntime();
+  // Contained layout/paint failures surface in the console (the boundary
+  // renders the in-place presentation; without this they'd be silent).
+  runtime.owner.onContainedRenderError = (contained) => web.console.error(
+    'fleury: contained render failure (${contained.phase.name}): '
+            '${contained.error}\n${contained.stack}'
+        .toJS,
+  );
   final owner = runtime.owner;
   final focusManager = runtime.focusManager;
   final binding = runtime.binding;
@@ -448,6 +458,16 @@ Future<MountedApp> runTuiSurface(
           ),
         );
       },
+      // Backstop errors keep the session (the driver substitutes a
+      // full-screen error frame); surface them in the console so they
+      // don't vanish.
+      onBackstopError: (error, stack) => web.console.error(
+        'fleury: render crashed outside all error boundaries: '
+                '$error\n$stack'
+            .toJS,
+      ),
+      // Only unrecoverable failures escape the driver now (backstop
+      // storm): tear the host down.
       onFrameError: (error, stack) {
         final host = returnedHost;
         if (host == null) {

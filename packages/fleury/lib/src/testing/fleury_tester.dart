@@ -93,6 +93,11 @@ class FleuryTester {
     _owner = BuildOwner(
       errorBuilder: (error, stack) => ErrorWidget.builder(error, stack),
     );
+    // Containment inverts for tests: a layout/paint bug should FAIL the
+    // test loudly, not render a red panel behind passing assertions. A
+    // containment test opts back in per-boundary with
+    // `ErrorBoundary(rethrowContained: false)`.
+    _owner.rethrowContainedRenderErrors = true;
     // Off by default in tests so it doesn't perturb golden output; an
     // overflow-specific test opts back in.
     RenderFlex.debugShowOverflow = false;

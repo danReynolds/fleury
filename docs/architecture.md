@@ -201,6 +201,21 @@ hooks. Suspend (Ctrl+Z), subprocess handoff, and crash paths restore the
 user's terminal — the unglamorous correctness that decides whether a TUI
 feels professional.
 
+**Errors are contained at every phase.** A thrown `build()` renders an
+error panel for that subtree (`ErrorWidget`); a thrown layout or paint is
+absorbed by the nearest `ErrorBoundary` — the framework installs one at
+every route and overlay-entry root, so a crashing dialog can't take down
+the page beneath it — and renders the same red panel in the boundary's
+cells, with the full error in stderr and the on-screen banner. Whatever
+escapes every boundary hits the frame driver's backstop: a full-screen
+error frame, session still live, hot reload as the recovery path. Only a
+backstop storm (a hard crash every frame) or an error before mount tears
+the session down — and then the terminal is restored. Assistive tech and
+agents see an errored subtree as a single announced `errorBoundary` node;
+its invisible descendants are dropped and actions against them fail
+closed. Under the test harness, containment inverts: a layout bug fails
+the test loudly instead of rendering a panel.
+
 **Run it anywhere a binary runs — and beyond the terminal.** One static
 AOT executable, ~20 ms to first frame, no runtime to install. The same
 app renders into a browser as a first-class DOM target, and a remote

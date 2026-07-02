@@ -442,6 +442,7 @@ final class SemanticDomPresenter
   String? _ariaRoleFor(SemanticRole role) {
     return switch (role) {
       SemanticRole.app => 'group',
+      SemanticRole.errorBoundary => 'alert',
       SemanticRole.screen ||
       SemanticRole.route ||
       SemanticRole.region ||

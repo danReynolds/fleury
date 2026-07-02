@@ -399,7 +399,14 @@ final class FleuryAppBridge {
       case ResizeFrame _:
       case InputEventFrame _:
       case SemanticActionFrame _:
+      case CaretFrame _:
+      case ClipboardResultFrame _:
         break;
+      case ClipboardWriteFrame f:
+        // The app copied. An MCP bridge has no user clipboard; answer
+        // immediately so the app's report degrades to its in-process
+        // register without waiting out the result timeout.
+        _send(ClipboardResultFrame(f.seq, RemoteClipboardStatus.unavailable));
       case SemanticActionResultFrame f:
         final pending = _pendingActionResult;
         _pendingActionResult = null;

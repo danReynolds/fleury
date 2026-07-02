@@ -291,6 +291,8 @@ export 'src/widgets/scrollbar.dart' show Scrollbar;
 export 'src/widgets/listenable_builder.dart' show ListenableBuilder;
 export 'src/widgets/blinking_cursor.dart' show BlinkingCursor;
 export 'src/widgets/clipboard_scope.dart' show ClipboardScope;
+export 'src/widgets/error_boundary.dart'
+    show ErrorBoundary, FrameContainmentError, FrameContainmentPhase;
 export 'src/widgets/frame_builder.dart' show FrameBuilder;
 export 'src/widgets/animation_builder.dart' show AnimationBuilder;
 export 'src/widgets/effects.dart'

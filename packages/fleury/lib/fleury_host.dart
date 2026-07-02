@@ -9,6 +9,8 @@
 library;
 
 export 'fleury_core.dart';
+export 'src/rendering/render_error_boundary.dart'
+    show RenderErrorBoundary, RenderErrorContainment;
 export 'src/rendering/render_object.dart' show RenderDamageTracker;
 export 'src/rendering/scroll_detection.dart'
     show detectBeneficialScrollUp, rowsEqual, screenDiffStats;

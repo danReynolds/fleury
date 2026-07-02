@@ -79,6 +79,9 @@ const _validAriaRoles = <String>{
   'progressbar',
   'log',
   'status',
+  // WAI-ARIA live-region role; carried by errorBoundary (a rendering
+  // failure replacing visible content is announced assertively).
+  'alert',
   'tab',
   'tree',
   'treeitem',

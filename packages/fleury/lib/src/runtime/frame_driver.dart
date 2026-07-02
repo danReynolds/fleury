@@ -21,6 +21,7 @@
 // contract.
 
 import '../foundation/geometry.dart';
+import '../rendering/error_presentation.dart';
 import '../rendering/render_layout_stats.dart';
 import '../rendering/render_repaint_boundary.dart';
 import '../widgets/framework.dart';
@@ -111,7 +112,9 @@ final class FrameDriver {
     void Function(TuiRenderedFrame frame, FramePresentationPlan? plan)?
     onFramePresented,
     void Function(String reason, CellSize size)? onFrameSkipped,
+    void Function(Object error, StackTrace stack)? onBackstopError,
     void Function(Object error, StackTrace stack)? onFrameError,
+    this.backstopStormLimit = 8,
     bool Function()? isDebugWatching,
     void Function(Duration build, Duration layout, Duration paint)?
     onPhaseTiming,
@@ -125,6 +128,7 @@ final class FrameDriver {
        _onBeforeFrame = onBeforeFrame,
        _onFramePresented = onFramePresented,
        _onFrameSkipped = onFrameSkipped,
+       _onBackstopError = onBackstopError,
        _onFrameError = onFrameError,
        _isDebugWatching = isDebugWatching,
        _onPhaseTiming = onPhaseTiming,
@@ -151,7 +155,12 @@ final class FrameDriver {
   final void Function(TuiRenderedFrame, FramePresentationPlan?)?
   _onFramePresented;
   final void Function(String reason, CellSize size)? _onFrameSkipped;
+  final void Function(Object, StackTrace)? _onBackstopError;
   final void Function(Object, StackTrace)? _onFrameError;
+
+  /// Consecutive backstop frames before the driver declares the session
+  /// unrecoverable (an every-frame hard crash outside all boundaries).
+  final int backstopStormLimit;
   final bool Function()? _isDebugWatching;
   final void Function(Duration, Duration, Duration)? _onPhaseTiming;
   final void Function(String marker)? _markOnce;
@@ -162,11 +171,17 @@ final class FrameDriver {
   CellSize? _lastSize;
   var _disposed = false;
   var _inFrameRender = false;
+  var _consecutiveBackstopFrames = 0;
+  var _renderUnrecoverable = false;
 
   /// True only while the synchronous render pipeline (build/layout/paint)
   /// runs. Hosts' zone guards read it to classify a throw as a render
   /// crash versus a survivable event-handler/async error.
   bool get inFrameRender => _inFrameRender;
+
+  /// True once the backstop storm limit tripped: the session cannot
+  /// render. Hosts' fatal-error criteria read it.
+  bool get renderUnrecoverable => _renderUnrecoverable;
 
   /// The mounted root element, or null before [mountRoot].
   Element? get rootElement => _rootElement;
@@ -210,9 +225,10 @@ final class FrameDriver {
     try {
       _renderNowBody(reason);
     } catch (error, stack) {
-      // The host gets first look (the browser host starts teardown) and
-      // the error still propagates — to the guarded zone on native, the
-      // scheduler task elsewhere. PR6's error containment lands here.
+      // Only genuinely unrecoverable failures escape the program now (the
+      // backstop absorbs render throws): the host gets first look — the
+      // browser host starts teardown — and the error still propagates to
+      // the guarded zone / scheduler task.
       _onFrameError?.call(error, stack);
       rethrow;
     }
@@ -254,25 +270,55 @@ final class FrameDriver {
     var buildStats = BuildFlushStats.zero;
     final renderStopwatch = Stopwatch()..start();
     _inFrameRender = true;
-    final frame = _frameLoop.render(
-      size: size,
-      paint: (next) {
-        RenderLayoutDebugStats.beginFrame(enabled: debugWatching);
-        RepaintBoundaryDebugStats.beginFrame(enabled: debugWatching);
-        runtime.renderFrame(
-          next,
-          onPhaseTiming: (b, l, p) {
-            phaseBuild = b;
-            phaseLayout = l;
-            phasePaint = p;
-            if (debugWatching) _onPhaseTiming?.call(b, l, p);
-          },
-          onBuildStats: (stats) {
-            buildStats = stats;
-          },
+    TuiRenderedFrame? frame;
+    try {
+      frame = _frameLoop.render(
+        size: size,
+        paint: (next) {
+          RenderLayoutDebugStats.beginFrame(enabled: debugWatching);
+          RepaintBoundaryDebugStats.beginFrame(enabled: debugWatching);
+          runtime.renderFrame(
+            next,
+            onPhaseTiming: (b, l, p) {
+              phaseBuild = b;
+              phaseLayout = l;
+              phasePaint = p;
+              if (debugWatching) _onPhaseTiming?.call(b, l, p);
+            },
+            onBuildStats: (stats) {
+              buildStats = stats;
+            },
+          );
+        },
+      );
+      _consecutiveBackstopFrames = 0;
+    } catch (error, stack) {
+      // Root backstop: whatever escaped every ErrorBoundary (a throw in
+      // the scope stack above the first boundary, framework bookkeeping,
+      // a boundary-free embedded host). Substitute a full-screen error
+      // frame and keep the session — the input loop stays live and hot
+      // reload becomes a recovery path — unless it storms.
+      _inFrameRender = false;
+      _onBackstopError?.call(error, stack);
+      _consecutiveBackstopFrames += 1;
+      if (_consecutiveBackstopFrames >= backstopStormLimit) {
+        _renderUnrecoverable = true;
+        rethrow;
+      }
+      _frameLoop.resetBuffers();
+      try {
+        frame = _frameLoop.render(
+          size: size,
+          paint: (next) =>
+              paintCellErrorPresentation(next, CellOffset.zero, size, error),
         );
-      },
-    );
+      } catch (_) {
+        // The backstop frame itself failed to render: nothing left to
+        // try locally.
+        _renderUnrecoverable = true;
+        rethrow;
+      }
+    }
     _inFrameRender = false;
     renderStopwatch.stop();
     if (frame == null) return;
@@ -317,11 +363,5 @@ final class FrameDriver {
   void dispose() {
     _disposed = true;
     _scheduler.dispose();
-  }
-
-  /// Clears [inFrameRender] after a host's fatal handler classified a
-  /// render crash — keeps a subsequent cleanup frame from re-classifying.
-  void acknowledgeRenderCrash() {
-    _inFrameRender = false;
   }
 }

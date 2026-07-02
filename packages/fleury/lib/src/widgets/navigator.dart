@@ -54,6 +54,7 @@ import '../input/events.dart';
 import 'align.dart' show Align, Alignment;
 import 'effects.dart';
 import 'focus.dart';
+import 'error_boundary.dart';
 import 'framework.dart';
 import 'key_bindings.dart';
 import 'tui_binding.dart';
@@ -590,6 +591,9 @@ class _RouteHost extends StatelessWidget {
     // (e.g. a TextInput) autofocuses. Focus is restored to the route beneath
     // on pop.
     final modal = active && align != null;
+    // Implicit containment: a route whose layout or paint fails renders
+    // the error presentation in its slot; sibling routes, the overlay
+    // above, and the session survive.
     Widget content = FocusScope(
       modal: modal,
       suppressGlobals: modal,
@@ -605,7 +609,10 @@ class _RouteHost extends StatelessWidget {
             : const <KeyBinding>[],
         // Expose this route to its subtree so a PopScope can register
         // its veto with the right route.
-        child: _RouteScope(route: route, child: screen),
+        child: _RouteScope(
+          route: route,
+          child: ErrorBoundary(child: screen),
+        ),
       ),
     );
 

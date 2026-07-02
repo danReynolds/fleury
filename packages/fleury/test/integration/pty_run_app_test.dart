@@ -132,7 +132,12 @@ void main() {
       _expectTerminalReentered(capture.output);
     }, skip: skipPty);
 
-    test('fatal render crash still restores terminal modes', () async {
+    // DELIBERATE INVERSION (pipeline-program PR6): a render crash used to
+    // be fatal; containment keeps the session alive on the error
+    // presentation. The process now exits via SIGINT (130), not the crash,
+    // and the terminal still restores exactly as before.
+    test('a contained render crash keeps the session; SIGINT still '
+        'restores terminal modes', () async {
       final capture = await _capturePty(
         tempDir,
         'layout-crash',
@@ -141,16 +146,26 @@ void main() {
           '40',
           '--rows',
           '8',
-          '--allow-exit-codes',
-          '1,255',
+          '--interrupt-after-output-ms',
+          '700',
+          '--allow-exit-code',
+          '130',
         ],
         fixtureArgs: const ['--layout-crash'],
       );
       if (capture == null) return;
 
       expect(capture.metadata['timedOut'], isFalse);
-      expect(capture.metadata['exitCode'], isNot(0));
-      expect(capture.output, contains('layout-boom'));
+      expect(
+        capture.metadata['exitCode'],
+        130,
+        reason: 'the session survived the crash and exited on SIGINT',
+      );
+      expect(
+        capture.output,
+        contains('layout-boom'),
+        reason: 'the error presentation/banner reached the terminal',
+      );
       _expectTerminalRestored(capture.output);
     }, skip: skipPty);
   });

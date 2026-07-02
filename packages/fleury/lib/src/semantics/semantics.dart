@@ -4,6 +4,7 @@ import '../foundation/geometry.dart';
 import '../foundation/key.dart' show Key, ValueKey;
 import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
+import '../rendering/render_error_boundary.dart';
 import '../rendering/render_object.dart';
 import '../widgets/framework.dart';
 
@@ -34,6 +35,7 @@ final class SemanticNodeId {
 /// The durable meaning of a semantic node.
 enum SemanticRole {
   app,
+  errorBoundary,
   screen,
   route,
   region,
@@ -1589,6 +1591,41 @@ void _collectInto(
   List<SemanticNode> output,
   Map<SemanticNodeId, Element>? elements,
 ) {
+  // An errored containment boundary: its subtree's elements are mounted
+  // but its content is NOT on screen (the boundary paints the error
+  // presentation instead). Projecting the descendants would let AT and
+  // agents see — and actuate — invisible UI, so the walk emits a single
+  // errorBoundary node with the presentation's bounds and drops the rest.
+  // Actions against dropped ids resolve notFound: fail-closed, matching
+  // the stale-id posture.
+  if (element is RenderObjectElement) {
+    final render = element.renderObject;
+    if (render is RenderErrorContainment) {
+      final contained = (render as RenderErrorContainment).containedError;
+      if (contained != null) {
+        // Synthesized id, positional like the coverage-fallback scheme:
+        // anchored to the presentation's screen position so two errored
+        // boundaries never collide, stable while the boundary stays put.
+        final region = contained.paintedRegion;
+        output.add(
+          SemanticNode(
+            id: SemanticNodeId(
+              '__fleury_error_boundary_'
+              '${region?.top ?? 0}_${region?.left ?? 0}',
+            ),
+            role: SemanticRole.errorBoundary,
+            label: 'Rendering failed: ${contained.error}',
+            state: SemanticState({
+              'error': '${contained.error}',
+              'phase': contained.phase.name,
+            }),
+            bounds: contained.paintedRegion,
+          ),
+        );
+        return;
+      }
+    }
+  }
   if (element is SemanticChildrenProvider) {
     if (element is SemanticContributor) {
       final children = <SemanticNode>[];

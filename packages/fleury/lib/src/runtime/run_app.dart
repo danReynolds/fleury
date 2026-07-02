@@ -161,6 +161,7 @@ Future<void> runApp(
 
   final runtime = TuiRuntime();
   final focusManager = runtime.focusManager;
+  final owner = runtime.owner;
   final binding = runtime.binding;
   final pointerRouter = runtime.pointerRouter;
   // Floating OutputCaptureConsole lives in the unified DebugShell — F12 is a binding on
@@ -260,6 +261,11 @@ Future<void> runApp(
   final errorReporter = RuntimeErrorReporter(
     onLog: (message) => stderr.writeln(message),
   )..addListener(() => scheduleFrame('runtime-error'));
+  // Contained layout/paint failures surface like any other survivable
+  // error: stderr + the on-screen banner (once per error-state entry),
+  // while the boundary renders the in-place presentation.
+  owner.onContainedRenderError = (contained) =>
+      errorReporter.report(contained.error, contained.stack);
 
   // Single idempotent teardown, driven by either the normal exit path
   // (the finally below) or the zone's uncaught-error handler.
@@ -477,6 +483,10 @@ Future<void> runApp(
                 // short-circuits to zero per-frame debug cost. NOTE: do NOT
                 // gate on `DebugEvents.stream.isBroadcast`.
                 debugController.config.enabled && DebugEvents.hasListeners,
+            // Backstop errors (escaped every boundary; session continues
+            // on a full-screen error frame) surface like other survivable
+            // errors: stderr + banner.
+            onBackstopError: errorReporter.report,
             markOnce: runtimeMarkers?.markOnce,
             frameInterval: frameInterval,
           );
@@ -601,17 +611,17 @@ Future<void> runApp(
         // storm of errors every frame (an unrecoverable loop) — both restore
         // the terminal and fail the run.
         errorReporter.report(error, stack);
-        // Stay fatal (restore the terminal, fail the run) for the cases that
-        // genuinely can't continue: a crash inside the render pipeline
-        // (build/layout/paint can't be recovered per-frame), an error before
-        // the app mounted (nothing to recover into), or a storm of errors every
-        // frame (an unrecoverable loop). Everything else is reported and
+        // Stay fatal (restore the terminal, fail the run) only for the
+        // cases that genuinely can't continue: the driver declared the
+        // session unrecoverable (a backstop storm — render crashes are
+        // otherwise contained per-boundary or absorbed by the backstop),
+        // an error before the app mounted (nothing to recover into), or
+        // a storm of errors every frame. Everything else is reported and
         // survived.
         final driver = frameDriver;
-        if ((driver?.inFrameRender ?? false) ||
+        if ((driver?.renderUnrecoverable ?? false) ||
             driver?.rootElement == null ||
             errorReporter.isStorming) {
-          driver?.acknowledgeRenderCrash();
           cleanup().whenComplete(() {
             if (!done.isCompleted) done.completeError(error, stack);
           });

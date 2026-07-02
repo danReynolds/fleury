@@ -209,36 +209,55 @@ void main() {
       },
     );
 
-    test('an error during a scheduled frame restores the terminal and '
-        'surfaces the error', () async {
+    // DELIBERATE INVERSION (pipeline-program PR6): these two tests used to
+    // assert that a layout/paint crash tears the session down. Containment
+    // overturns that posture — the implicit route boundary renders the
+    // error presentation, the session survives, and Ctrl+C still exits
+    // with exactly one terminal restore.
+    test('a render crash is contained; the session survives', () async {
       final driver = FakeTerminalDriver();
       final future = runApp(
         const _BoomWidget(),
         driver: driver,
         enableHotReload: false,
       );
+      await _settle();
 
-      await expectLater(future, throwsA(isA<Error>()));
       expect(
         driver.isActive,
-        isFalse,
-        reason: 'a paint/layout crash must not leave the terminal wedged',
+        isTrue,
+        reason: 'the crash is contained per-boundary, not fatal',
       );
+      expect(
+        driver.output,
+        contains('layout-boom'),
+        reason: 'the error presentation (or banner) is on screen',
+      );
+
+      // The session is still interactive: Ctrl+C exits cleanly.
+      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      await future;
+      expect(driver.isActive, isFalse);
       expect(driver.restoreCallCount, 1);
       await driver.dispose();
     });
 
-    test('the terminal is restored exactly once', () async {
+    test('the terminal is restored exactly once after a contained crash '
+        'and exit', () async {
       final driver = FakeTerminalDriver();
       final future = runApp(
         const _BoomWidget(),
         driver: driver,
         enableHotReload: false,
       );
-      await expectLater(future, throwsA(isA<Error>()));
-      // Push more events after the crash — cleanup must not run again.
+      await _settle();
+      // Events after the contained crash still dispatch (the session is
+      // alive); then exit.
       driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
       await _settle();
+      expect(driver.isActive, isTrue);
+      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      await future;
       expect(driver.restoreCallCount, 1);
       await driver.dispose();
     });

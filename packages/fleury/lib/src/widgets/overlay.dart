@@ -29,6 +29,7 @@ import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
 import 'basic.dart' show Stack;
+import 'error_boundary.dart';
 import 'framework.dart';
 
 /// One renderable layer inside an [Overlay]. Holds a builder and a
@@ -326,7 +327,10 @@ class _OverlayEntryWidgetState extends State<_OverlayEntryWidget> {
     // Stack don't shift.
     return _Visibility(
       visible: widget.visible,
-      child: widget.entry.builder(context),
+      // Implicit containment: a crashing overlay entry (a dialog, a
+      // dropdown, a toast) renders the error presentation in its own
+      // cells instead of taking down the entries beneath it.
+      child: ErrorBoundary(child: widget.entry.builder(context)),
     );
   }
 }
