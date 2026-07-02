@@ -49,31 +49,40 @@ pop-call plumbing collapses into "mark this route's scope active/inactive."
   a small `NavigatorState`-style helper it can reuse rather than pushing the
   concept into the focus core.
 
-## C15 — Manager-keyed scope memory (survive pane unmount)
+## C15 — Durable scope focus-memory across pane unmount — **WITHDRAWN (wrong design)**
 
 **Observation.** Scope focus-memory lives on the `_FocusScopeMarkerElement`, so
-it dies with the element. `restoreFocusInScope`'s doc advertises "a re-entered
-pane," but the standard pane pattern — `build(active ? A() : B())`, which
-*unmounts* the inactive pane — destroys the marker; re-entry mounts a fresh one
-with no memory. So cross-pane focus restoration silently never works outside
-the navigator (where lower routes stay mounted).
+it dies with the element. The pane pattern `build(active ? A() : B())` *unmounts*
+the inactive pane, so re-entry mounts a fresh marker with no memory —
+`restoreFocusInScope`'s "re-entered pane" wording doesn't hold for unmounted panes.
 
-**Proposal.** Key memory by a *stable* scope identity in the manager, not the
-element, so it survives unmount/remount.
+**Original proposal (rejected).** Key memory by a stable scope identity in the
+manager so it survives unmount/remount.
 
-**Assessment — defer (it is a feature, not cleanup).**
-- There is no stable identity across unmount/remount unless the app supplies
-  one — i.e. this needs new API surface: `FocusScope(restorationId: '…')`, a
-  manager-side `Map<Object, FocusNode>` keyed by it, and an eviction policy
-  (when is a remembered node stale forever?). That is a focus-restoration
-  *feature*, comparable to Flutter's `RestorationScope`.
-- No consumer has asked for it. dune_cli switches sections by unmounting panes
-  and is well served by autofocus-on-re-entry; "return to the exact widget you
-  left in Conversations after visiting Posts" is a nicety nobody requested.
-- **Recommendation:** build it when a consumer wants durable per-region focus
-  restoration, as its own small RFC with the `restorationId` surface — not as
-  ambient behavior (ambient cross-mount memory has surprising lifetime/eviction
-  semantics).
+**Why it's the wrong design.** Focus dying on unmount is not a bug — it is
+*consistent* with every other piece of State (scroll position, text drafts,
+ephemeral fields all die on unmount too). Making focus alone survive would be a
+focus-specific special case for something no other state gets, with surprising
+lifetime/eviction semantics.
+
+**The correct answer: keep the pane mounted.** If a surface wants to preserve a
+pane across switches, don't unmount it — and Fleury already has the primitive:
+`IndexedStack` (basic.dart), whose own doc says it "keeps the rest mounted but
+unpainted, so their state survives switching between them — the basis for tabbed
+or paged surfaces that must remember each page." Mounting-toggle preserves focus
+*and* scroll *and* drafts, together, for free.
+
+**This matches Flutter exactly.** Flutter has no ambient cross-unmount focus
+memory either — unmounting destroys State the same way. Flutter's answers are (a)
+keep the subtree mounted (`IndexedStack`/`Offstage`/`KeepAlive`), or (b)
+`RestorationScope`/`restorationId` — which is for state restoration across
+*process death / app relaunch* (serialized), a different concern from
+within-session pane switching.
+
+**Recommendation:** no framework work. A consumer that wants section-state
+persistence (e.g. dune_cli's home) uses `IndexedStack` for its sections instead
+of a `switch`-that-returns-one-screen. That is an app-level product choice
+(persist each section vs. fresh-on-entry), not a Fleury gap.
 
 ## C16 — Make `pump()` a full production frame
 
@@ -103,8 +112,17 @@ pumps. One frame semantics, no divergence.
 
 ## Decision
 
-Ship the mechanical cleanup (done). Hold C14–C16 behind demonstrated need:
-C14 at the second modal producer, C15 when a consumer wants durable
-region-restoration (as a `restorationId` RFC), C16 as its own suite-audited PR.
-The through-line lesson from PR #24 — *locally-correct focus/render changes leak
-globally; gate them* — applies most to exactly these three.
+- **C14 — defer** until the second modal producer (the palette) makes the
+  shared "active scope" abstraction pay for itself. The focus-steal it would
+  have prevented is already fixed structurally by `ExcludeFocus`, so there is no
+  correctness gap open in the meantime.
+- **C15 — withdrawn.** Not a framework change: focus dying on unmount is
+  intended, and the fix for panes that must persist is to keep them mounted
+  (`IndexedStack`, which already exists) — an app-level choice, matching Flutter.
+- **C16 — defer** to its own suite-audited PR (flip `pump()` to a full frame,
+  fix the fallout, review). High-churn, DX-only payoff, and a framework-owner
+  call on whether fast build-only pumps are worth keeping.
+
+The through-line lesson from PRs #24 and #26 — *locally-correct focus/render
+changes leak globally; gate them* — is exactly why none of these ships as a
+speculative add.
