@@ -137,12 +137,16 @@ void main() {
       contains('count: 0'),
     );
 
-    // --- Invariant 2: initial post-frame callback ran after the send.
+    // --- Invariant 2: initial post-frame callback ran after its frame's
+    // plan was sent. Semantics flush as a same-task microtask (the shared
+    // pipeline's deferred engine), so they land after the callbacks but
+    // before anything else runs — the ordering assertion above already
+    // pinned plan-before-semantics on the wire.
     expect(postFrameTags, isNotEmpty);
     expect(
       postFrameTags.first,
-      'after-frame-0@p1s1',
-      reason: 'callback for frame 0 runs after plan+semantics are on the wire',
+      'after-frame-0@p1s0',
+      reason: 'callback for frame 0 runs after its plan is on the wire',
     );
 
     // --- Invariant 5: input dispatched before the skip gate.

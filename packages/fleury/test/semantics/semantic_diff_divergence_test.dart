@@ -1,0 +1,142 @@
+// The audit's M1 finding: two parallel semantic diff implementations —
+// SemanticsOwner's node equality (drives the embed DOM patch) and the
+// wire encoder's JSON equality (drives the serve patch). Both consume
+// the same snapshot, so their changed-node verdicts must agree, or the
+// two surfaces notify different node sets for the same mutation. This
+// pins that agreement across representative mutations; unifying the two
+// implementations remains future work.
+
+import 'dart:convert';
+
+import 'package:fleury/fleury_host.dart';
+import 'package:test/test.dart';
+
+SemanticTree _tree({
+  String rootLabel = 'app',
+  String aLabel = 'alpha',
+  String aValue = 'one',
+  String bLabel = 'beta',
+  bool includeC = false,
+}) {
+  return SemanticTree(
+    root: SemanticNode(
+      id: const SemanticNodeId('root'),
+      role: SemanticRole.app,
+      label: rootLabel,
+      children: [
+        SemanticNode(
+          id: const SemanticNodeId('a'),
+          role: SemanticRole.text,
+          label: aLabel,
+          value: aValue,
+          bounds: CellRect.fromLTWH(0, 0, 5, 1),
+        ),
+        SemanticNode(
+          id: const SemanticNodeId('b'),
+          role: SemanticRole.button,
+          label: bLabel,
+          actions: const {SemanticAction.activate},
+          bounds: CellRect.fromLTWH(0, 1, 5, 1),
+        ),
+        if (includeC)
+          SemanticNode(
+            id: const SemanticNodeId('c'),
+            role: SemanticRole.text,
+            label: 'gamma',
+            bounds: CellRect.fromLTWH(0, 2, 5, 1),
+          ),
+      ],
+    ),
+  );
+}
+
+/// The wire's verdict: ids in the patch's `set` (added or changed) and
+/// `removed` lists for the transition prev → next.
+({Set<String> set_, Set<String> removed}) _wireVerdict(
+  SemanticTree prev,
+  SemanticTree next,
+) {
+  final encoder = SemanticsWireEncoder();
+  expect(encoder.encode(SemanticInspectionSnapshot.fromTree(prev)), isNotNull);
+  final patchBytes = encoder.encode(SemanticInspectionSnapshot.fromTree(next));
+  if (patchBytes == null) {
+    return (set_: const <String>{}, removed: const <String>{});
+  }
+  final envelope = jsonDecode(utf8.decode(patchBytes)) as Map<String, Object?>;
+  expect(envelope['mode'], 'patch');
+  return (
+    set_: {
+      for (final node in (envelope['set'] as List? ?? const []))
+        (node as Map)['id'] as String,
+    },
+    removed: {
+      for (final id in (envelope['removed'] as List? ?? const [])) id as String,
+    },
+  );
+}
+
+/// The owner's verdict: added ∪ updated, and removed, for prev → next.
+({Set<String> set_, Set<String> removed}) _ownerVerdict(
+  SemanticTree prev,
+  SemanticTree next,
+) {
+  final owner = SemanticsOwner();
+  owner.update(prev);
+  final update = owner.update(next);
+  return (
+    set_: {
+      for (final id in update.added) id.value,
+      for (final id in update.updated) id.value,
+    },
+    removed: {for (final id in update.removed) id.value},
+  );
+}
+
+void _expectAgreement(SemanticTree prev, SemanticTree next, String label) {
+  final wire = _wireVerdict(prev, next);
+  final owner = _ownerVerdict(prev, next);
+  expect(
+    wire.set_,
+    owner.set_,
+    reason: '$label: changed/added node sets must agree across the two diffs',
+  );
+  expect(
+    wire.removed,
+    owner.removed,
+    reason: '$label: removed node sets must agree across the two diffs',
+  );
+}
+
+void main() {
+  group('SemanticsOwner diff vs wire diff', () {
+    test('no change → both report nothing', () {
+      _expectAgreement(_tree(), _tree(), 'identity');
+    });
+
+    test('label change', () {
+      _expectAgreement(_tree(), _tree(aLabel: 'ALPHA'), 'label change');
+    });
+
+    test('value change', () {
+      _expectAgreement(_tree(), _tree(aValue: 'two'), 'value change');
+    });
+
+    test('node added', () {
+      // The parent's child list changes too — both diffs must agree on
+      // whether that counts as a root change.
+      _expectAgreement(_tree(), _tree(includeC: true), 'node added');
+    });
+
+    test('node removed', () {
+      _expectAgreement(_tree(includeC: true), _tree(), 'node removed');
+    });
+
+    test('compound mutation', () {
+      _expectAgreement(
+        _tree(),
+        _tree(aValue: 'two', bLabel: 'BETA', includeC: true),
+        'compound',
+      );
+    });
+  });
+}

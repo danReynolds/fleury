@@ -39,6 +39,8 @@ export 'src/runtime/frame_presentation.dart'
 export 'src/widgets/framework.dart' show BuildFlushStats;
 export 'src/runtime/frame_driver.dart'
     show FrameDriver, FramePresentInfo, FramePresenter;
+export 'src/runtime/frame_semantics_pipeline.dart'
+    show FrameSemanticsPipeline, SemanticFlushStats;
 export 'src/runtime/frame_scheduler.dart'
     show FrameFlushScheduler, FrameRenderCallback, FrameScheduler;
 export 'src/runtime/input_dispatcher.dart' show InputDispatcher;
@@ -50,8 +52,26 @@ export 'src/runtime/tui_frame_loop.dart'
         TuiFrameLoop,
         TuiFramePaintCallback,
         TuiRenderedFrame;
+export 'src/runtime/semantic_flush_scheduler.dart'
+    show
+        MicrotaskSemanticFlushScheduler,
+        SemanticFlushScheduler,
+        TimerSemanticFlushScheduler;
 export 'src/runtime/tui_runtime.dart' show TuiRuntime;
 export 'src/runtime/wire_frame_presenter.dart' show WireFramePresenter;
+export 'src/remote/wire_semantic_frame_presenter.dart'
+    show WireSemanticFramePresenter;
+export 'src/semantics/semantic_coverage.dart'
+    show
+        SemanticCoverageAudit,
+        SemanticCoverageResult,
+        applySemanticTextFallback;
+export 'src/semantics/semantic_presenter.dart'
+    show
+        SemanticActionRequestHandler,
+        SemanticActionRequestSink,
+        SemanticFramePresenter,
+        SemanticPresentationStats;
 export 'src/semantics/semantics_owner.dart'
     show SemanticsOwner, SemanticTreeUpdate, debugSemanticTreeDivergence;
 export 'src/semantics/semantics.dart'

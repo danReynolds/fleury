@@ -3,8 +3,6 @@ import 'dart:js_interop';
 import 'package:fleury/fleury_host.dart';
 import 'package:web/web.dart' as web;
 
-import 'semantic_presenter.dart';
-
 /// Projects Fleury semantics into a hidden-but-accessible DOM tree.
 ///
 /// This is the browser accessibility backstop for the retained DOM renderer.

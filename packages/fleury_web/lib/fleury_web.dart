@@ -23,6 +23,6 @@ export 'src/instrumentation/web_host_instrumentation.dart'
         WebSemanticFlushSummary,
         defaultWebFrameBudgetMs;
 export 'src/mount_app.dart' show mountApp;
-export 'src/semantics/semantic_flush_scheduler.dart'
+export 'package:fleury/fleury_host.dart'
     show SemanticFlushScheduler, TimerSemanticFlushScheduler;
 export 'src/run_tui_surface.dart' show MountedApp;

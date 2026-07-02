@@ -1,4 +1,8 @@
-import 'package:fleury/fleury_host.dart';
+import '../foundation/geometry.dart';
+import '../rendering/cell.dart';
+import '../rendering/cell_buffer.dart';
+import '../runtime/tui_frame_loop.dart';
+import 'semantics.dart';
 
 /// Result of applying the web semantic text fallback to a frame.
 final class SemanticCoverageResult {

@@ -87,7 +87,8 @@ final class FrameDriver {
     required CellSize Function() readViewport,
     required FramePresenter presenter,
     FramePresentationPlanner planner = const FramePresentationPlanner(),
-    void Function(TuiRenderedFrame frame)? onFramePresented,
+    void Function(TuiRenderedFrame frame, FramePresentationPlan? plan)?
+    onFramePresented,
     bool Function()? isDebugWatching,
     void Function(Duration build, Duration layout, Duration paint)?
     onPhaseTiming,
@@ -120,7 +121,8 @@ final class FrameDriver {
   final CellSize Function() _readViewport;
   final FramePresenter _presenter;
   final FramePresentationPlanner _planner;
-  final void Function(TuiRenderedFrame frame)? _onFramePresented;
+  final void Function(TuiRenderedFrame, FramePresentationPlan?)?
+  _onFramePresented;
   final bool Function()? _isDebugWatching;
   final void Function(Duration, Duration, Duration)? _onPhaseTiming;
   final void Function(String marker)? _markOnce;
@@ -228,10 +230,9 @@ final class FrameDriver {
       phasePaint: phasePaint,
     );
     _presenter.presentFrame(frame, info);
-    // Ship semantics while the dirty tracker still holds this frame's
-    // dirt; the hook consumes it (PR3 replaces this with the shared
-    // FrameSemanticsPipeline).
-    _onFramePresented?.call(frame);
+    // Semantics ride the same frame: the pipeline accumulates the
+    // presented buffer + visual damage and schedules its flush.
+    _onFramePresented?.call(frame, info.plan);
     _markOnce?.call('first.render.end');
     _frameLoop.commit(frame);
     _presenter.onFrameCommitted(frame, info);

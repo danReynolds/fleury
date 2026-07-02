@@ -20,7 +20,6 @@ import '../remote/unix_socket_transport.dart';
 import '../rendering/ansi_byte_budget.dart';
 import '../rendering/ansi_renderer.dart';
 import 'runtime_error_overlay.dart';
-import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
 import '../terminal/diagnostics.dart';
 import '../input/events.dart';
@@ -39,9 +38,12 @@ import '../widgets/clipboard_scope.dart';
 import 'clipboard.dart';
 import '../terminal/ansi_frame_presenter.dart';
 import 'frame_driver.dart';
+import 'frame_semantics_pipeline.dart';
 import 'frame_presentation.dart';
+import '../remote/wire_semantic_frame_presenter.dart';
 import 'wire_frame_presenter.dart';
 import 'hot_reload.dart';
+import 'semantic_flush_scheduler.dart';
 import 'system_clipboard.dart';
 import 'input_dispatcher.dart';
 import 'output_capture.dart';
@@ -218,6 +220,9 @@ Future<void> runApp(
   // Constructed after the handshake (the presenter choice depends on the
   // negotiated path) and owns the frame program from then on.
   FrameDriver? frameDriver;
+  // The shared semantics engine (structured path only): coverage fallback,
+  // retained-leaf updates, and same-task wire flushes.
+  FrameSemanticsPipeline? semanticsPipeline;
 
   // Shared double-buffer and damage lifecycle. The host still owns
   // presentation, debug timings, input, and post-frame behavior.
@@ -265,6 +270,7 @@ Future<void> runApp(
     // find the driver disposed, or it re-renders a crashing tree outside
     // the guarded zone.
     frameDriver?.dispose();
+    semanticsPipeline?.dispose();
     await eventSub?.cancel();
     eventSub = null;
     await hotReload?.dispose();
@@ -329,6 +335,10 @@ Future<void> runApp(
           maybeSurfaceSink.onSemanticAction = (id, action, value) {
             final root = frameDriver?.rootElement;
             if (root == null) return;
+            // Flush pending semantics first so the peer's view is current
+            // when the action's result lands — the embed contract, now on
+            // both paths.
+            semanticsPipeline?.flushPendingNow('semantic-action');
             unawaited(() async {
               final result = await invokeSemanticActionFromElement(
                 tree: SemanticTree.fromElement(root),
@@ -416,6 +426,17 @@ Future<void> runApp(
             ),
           );
           final activeSurfaceSink = surfaceSink;
+          if (activeSurfaceSink != null) {
+            semanticsPipeline = FrameSemanticsPipeline(
+              presenter: WireSemanticFramePresenter(activeSurfaceSink),
+              dirtyTracker: runtime.semanticDirtyTracker,
+              readRoot: () => frameDriver?.rootElement,
+              // Same-task flush: semantics for a rendered frame reach the
+              // peer in the same event-loop task as its plan, so agents
+              // still read "semantics for the just-rendered frame".
+              flushScheduler: MicrotaskSemanticFlushScheduler(),
+            );
+          }
           final driver = frameDriver = FrameDriver(
             runtime: runtime,
             frameLoop: frameLoop,
@@ -430,29 +451,10 @@ Future<void> runApp(
                     debug: debugController,
                   ),
             planner: presentationPlanner,
-            // Ship the semantic tree when it changed, so the served session
-            // stays agent-drivable and accessible. Gated on the dirty
-            // tracker so we pay the tree build only on semantic changes.
-            // (PR3 replaces this shim with the shared semantics pipeline.)
             onFramePresented: activeSurfaceSink == null
                 ? null
-                : (frame) {
-                    final semanticRoot = frameDriver?.rootElement;
-                    if (semanticRoot != null &&
-                        runtime.semanticDirtyTracker.hasDirt) {
-                      // The sink diffs this against the last snapshot and
-                      // ships only the changed nodes; a full resend would
-                      // stop compressing past DEFLATE's window.
-                      activeSurfaceSink.presentSemantics(
-                        SemanticInspectionSnapshot.fromTree(
-                          SemanticTree.fromElement(semanticRoot),
-                        ),
-                      );
-                      // Consume the dirt so the next frame only re-sends
-                      // on a real change.
-                      runtime.semanticDirtyTracker.takeDirtySnapshot();
-                    }
-                  },
+                : (frame, plan) =>
+                      semanticsPipeline?.onFramePresented(frame, plan),
             isDebugWatching: () =>
                 // Capture per-phase timings only when the debug stream has
                 // live listeners — when no one's watching this
@@ -519,6 +521,11 @@ Future<void> runApp(
                     event is PasteEvent ||
                     event is MouseEvent) {
                   dispatchResult = dispatcher.dispatch(event);
+                  // Conservative rule (shared with the embed host): a
+                  // dispatched event may change state the dirty tracker
+                  // can't see; the next flush re-walks and the encoder
+                  // dedupes, so an unchanged tree still sends nothing.
+                  semanticsPipeline?.markSemanticsDirty();
                 }
 
                 // Ctrl+C exits only when the app did not handle it first.

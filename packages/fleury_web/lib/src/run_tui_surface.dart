@@ -9,9 +9,6 @@ import 'frame_presentation.dart';
 import 'input/input_source.dart';
 import 'instrumentation/web_host_instrumentation.dart';
 import 'metrics/cell_metrics.dart';
-import 'semantics/semantic_coverage.dart';
-import 'semantics/semantic_flush_scheduler.dart';
-import 'semantics/semantic_presenter.dart';
 
 /// Handle returned by [runTuiSurface].
 final class MountedApp {
@@ -23,6 +20,7 @@ final class MountedApp {
     TuiInputSource? inputSource,
     SemanticsOwner? semanticsOwner,
     SemanticFramePresenter? semanticPresenter,
+    FrameSemanticsPipeline? semanticsPipeline,
     FutureOr<void> Function()? disposeHostResources,
     required void Function() markDisposed,
     SemanticFlushScheduler? semanticFlushScheduler,
@@ -34,6 +32,7 @@ final class MountedApp {
        _inputSource = inputSource,
        _semanticsOwner = semanticsOwner,
        _semanticPresenter = semanticPresenter,
+       _semanticsPipeline = semanticsPipeline,
        _semanticFlushScheduler = semanticFlushScheduler,
        _awaitSemanticIdle = awaitSemanticIdle,
        _disposeHostResources = disposeHostResources,
@@ -46,6 +45,7 @@ final class MountedApp {
   final TuiInputSource? _inputSource;
   final SemanticsOwner? _semanticsOwner;
   final SemanticFramePresenter? _semanticPresenter;
+  final FrameSemanticsPipeline? _semanticsPipeline;
   final SemanticFlushScheduler? _semanticFlushScheduler;
   final Future<void> Function()? _awaitSemanticIdle;
   final FutureOr<void> Function()? _disposeHostResources;
@@ -95,6 +95,7 @@ final class MountedApp {
       inputSource: _inputSource,
       frameScheduler: _frameScheduler,
       cellMetrics: _cellMetrics,
+      semanticsPipeline: _semanticsPipeline,
       semanticFlushScheduler: _semanticFlushScheduler,
       semanticsOwner: _semanticsOwner,
       semanticPresenter: _semanticPresenter,
@@ -152,22 +153,16 @@ Future<MountedApp> runTuiSurface(
       : (semanticFlushScheduler ?? TimerSemanticFlushScheduler());
   Element? root;
   var disposed = false;
-  var semanticDirty = true;
-  // Deferred-semantics state: the visual frame accumulates here and a later
-  // task flushes it to the semantic presenter.
-  CellBuffer? lastPresentedBuffer;
-  final pendingCoverageRows = <int>{};
-  var pendingCoverageFull = false;
-  var semanticFlushScheduled = false;
-  var coalescedFramesSinceFlush = 0;
   SemanticNodeId? semanticActivationForFlush;
-  final semanticScheduleLatency = Stopwatch();
-  Completer<void>? semanticIdleCompleter;
   MeasuredCellBox? lastMetrics;
-  var lastSemanticCoverageAudit = SemanticCoverageAudit.empty;
   var lastSize = surface.size;
   FrameScheduler? frameScheduler;
   MountedApp? returnedHost;
+  // The shared semantics engine (deferred flush, retained-leaf updates,
+  // coverage fallback); host-specific focus sync + instrumentation ride
+  // its callbacks. Assigned right after the host closures it needs exist.
+  FrameSemanticsPipeline? semanticsPipeline;
+  var semanticFocusSyncTimeForFlush = Duration.zero;
 
   Future<void> cleanupSetupFailure() async {
     if (disposed) return;
@@ -176,6 +171,7 @@ Future<MountedApp> runTuiSurface(
       inputSource: inputSource,
       frameScheduler: frameScheduler,
       cellMetrics: cellMetrics,
+      semanticsPipeline: semanticsPipeline,
       semanticFlushScheduler: semanticScheduler,
       semanticsOwner: semanticsOwner,
       semanticPresenter: semanticPresenter,
@@ -217,225 +213,68 @@ Future<MountedApp> runTuiSurface(
     ),
   );
 
-  void completeSemanticIdleIfQuiet() {
-    if (semanticFlushScheduled) return;
-    final completer = semanticIdleCompleter;
-    semanticIdleCompleter = null;
-    completer?.complete();
-  }
-
-  Future<void> awaitSemanticIdleNow() {
-    if (!semanticFlushScheduled) return Future.value();
-    return (semanticIdleCompleter ??= Completer<void>()).future;
-  }
-
-  /// Presents accumulated semantic state to the semantic presenter.
-  ///
-  /// Runs in a deferred task (or synchronously as a force-flush before
-  /// semantic action dispatch) — never inside the visual frame budget. One
-  /// flush covers every frame presented since the previous flush.
-  void flushSemanticsNow(String reason) {
-    semanticFlushScheduled = false;
-    if (disposed) {
-      completeSemanticIdleIfQuiet();
-      return;
-    }
-    final presenter = semanticPresenter;
-    final owner = semanticsOwner;
-    final currentRoot = root;
-    final buffer = lastPresentedBuffer;
-    if (presenter == null ||
-        owner == null ||
-        currentRoot == null ||
-        buffer == null) {
-      completeSemanticIdleIfQuiet();
-      return;
-    }
-    final scheduleLatency = semanticScheduleLatency.isRunning
-        ? semanticScheduleLatency.elapsed
-        : Duration.zero;
-    semanticScheduleLatency
-      ..stop()
-      ..reset();
-    final coalescedFrameCount = coalescedFramesSinceFlush;
-    coalescedFramesSinceFlush = 0;
-    final coverageRows = pendingCoverageFull
-        ? TuiDirtyRows.full(buffer.size.rows)
-        : TuiDirtyRows.fromRows(
-            pendingCoverageRows,
-            rowCount: buffer.size.rows,
-          );
-    pendingCoverageRows.clear();
-    pendingCoverageFull = false;
-
-    final totalFlushStopwatch = Stopwatch()..start();
-    final semanticDirtySnapshot = runtime.semanticDirtyTracker
-        .takeDirtySnapshot();
-    final retainedTree = owner.currentTree;
-
-    var semanticStats = SemanticPresentationStats.none;
-    var semanticCoverageAudit = lastSemanticCoverageAudit;
-    var semanticTreeBuildTime = Duration.zero;
-    var semanticCoverageTime = Duration.zero;
-    var semanticDiffTime = Duration.zero;
-    var semanticPresenterTime = Duration.zero;
-    var semanticFocusSyncTime = Duration.zero;
-
-    // No semantic dirt, no repainted rows, and full coverage: the retained
-    // semantic output is still exact.
-    final canRetainSemanticOutput =
-        retainedTree != null &&
-        !semanticDirty &&
-        semanticDirtySnapshot.isClean &&
-        !lastSemanticCoverageAudit.hasUncoveredText &&
-        coverageRows.isEmpty;
-    var retainedOutput = false;
-    if (canRetainSemanticOutput) {
-      retainedOutput = true;
-      semanticStats = SemanticPresentationStats.retained(
-        nodeCount: retainedTree.nodeCount,
-      );
-    } else {
-      Map<SemanticNodeId, SemanticNode>? retainedLeafUpdates;
-      // Leaf replacement requires a fallback-free retained tree: coverage
-      // fallback nodes mirror painted buffer text, and patching around one
-      // would keep its stale label "covering" cells whose text has since
-      // changed. A full rebuild regenerates fallback from the live buffer.
-      final canApplyRetainedLeafUpdates =
-          retainedTree != null &&
-          !lastSemanticCoverageAudit.hasUncoveredText &&
-          !semanticDirtySnapshot.requiresFullRebuild &&
-          semanticDirtySnapshot.leafUpdates.isNotEmpty &&
-          _semanticTreeContainsAll(
-            retainedTree,
-            semanticDirtySnapshot.leafUpdates.keys,
-          );
-      final semanticTreeBuildStopwatch = Stopwatch()..start();
-      final semanticTree = canApplyRetainedLeafUpdates
-          ? retainedTree.replaceNodes(semanticDirtySnapshot.leafUpdates)
-          : SemanticTree.fromElement(currentRoot);
-      if (canApplyRetainedLeafUpdates) {
-        retainedLeafUpdates = semanticDirtySnapshot.leafUpdates;
-      }
-      semanticTreeBuildStopwatch.stop();
-      semanticTreeBuildTime = semanticTreeBuildStopwatch.elapsed;
-      assert(() {
-        // The retained path must be indistinguishable from a full rebuild.
-        // A divergence here means SemanticDirtyTracker failed to escalate a
-        // structural change, which would silently corrupt the accessible
-        // projection; fail loudly in debug builds instead.
-        if (canApplyRetainedLeafUpdates) {
-          final divergence = debugSemanticTreeDivergence(
-            SemanticTree.fromElement(currentRoot),
-            semanticTree,
-          );
-          if (divergence != null) {
-            throw StateError(
-              'Retained semantic leaf replacement diverged from a full '
-              'semantic rebuild at $divergence',
-            );
-          }
+  if (semanticPresenter != null) {
+    semanticsPipeline = FrameSemanticsPipeline(
+      presenter: semanticPresenter,
+      dirtyTracker: runtime.semanticDirtyTracker,
+      readRoot: () => root,
+      owner: semanticsOwner,
+      flushScheduler: semanticScheduler,
+      onTreePresented: (tree) {
+        // Host-side per-flush work: browser focus projection, and restoring
+        // an AT activation performed since the last flush without
+        // disturbing later browser focus ownership.
+        final focusSyncStopwatch = Stopwatch()..start();
+        focusCoordinator?.syncFromSemanticTree(
+          tree,
+          activeCaretRect: focusManager.focusedNode?.caretRect,
+        );
+        final activation = semanticActivationForFlush;
+        if (activation != null) {
+          semanticActivationForFlush = null;
+          focusCoordinator?.restoreSemanticActivationNode(activation);
         }
-        return true;
-      }());
-
-      final semanticCoverageStopwatch = Stopwatch()..start();
-      final semanticCoverage = applySemanticTextFallback(
-        tree: semanticTree,
-        buffer: buffer,
-        dirtyRows: coverageRows,
-        previousAudit: lastSemanticCoverageAudit,
-      );
-      semanticCoverageStopwatch.stop();
-      semanticCoverageTime = semanticCoverageStopwatch.elapsed;
-
-      semanticCoverageAudit = semanticCoverage.audit;
-      lastSemanticCoverageAudit = semanticCoverage.audit;
-      final presentedSemanticTree = semanticCoverage.tree;
-      final semanticFocusSyncStopwatch = Stopwatch()..start();
-      focusCoordinator?.syncFromSemanticTree(
-        presentedSemanticTree,
-        activeCaretRect: focusManager.focusedNode?.caretRect,
-      );
-      // Tree-projected focus must not clobber an activation the assistive
-      // technology performed since the last flush; restore its node
-      // projection without disturbing later browser focus ownership.
-      final activation = semanticActivationForFlush;
-      if (activation != null) {
-        semanticActivationForFlush = null;
-        focusCoordinator?.restoreSemanticActivationNode(activation);
-      }
-      semanticFocusSyncStopwatch.stop();
-      semanticFocusSyncTime += semanticFocusSyncStopwatch.elapsed;
-
-      final semanticDiffStopwatch = Stopwatch()..start();
-      final retainedUpdate =
-          retainedLeafUpdates == null ||
-              !identical(presentedSemanticTree, semanticTree)
-          ? null
-          : owner.updateRetainedNodes(
-              next: presentedSemanticTree,
-              replacements: retainedLeafUpdates,
-            );
-      final semanticUpdate =
-          retainedUpdate ?? owner.update(presentedSemanticTree);
-      semanticDiffStopwatch.stop();
-      semanticDiffTime = semanticDiffStopwatch.elapsed;
-
-      final semanticPresenterStopwatch = Stopwatch()..start();
-      semanticStats = presenter.present(
-        presentedSemanticTree,
-        update: semanticUpdate,
-      );
-      semanticPresenterStopwatch.stop();
-      semanticPresenterTime = semanticPresenterStopwatch.elapsed;
-      semanticDirty = false;
-    }
-    totalFlushStopwatch.stop();
-    instrumentation.recordSemanticFlush(
-      WebSemanticFlushInstrumentation(
-        reason: reason,
-        coalescedFrameCount: coalescedFrameCount,
-        scheduleLatency: scheduleLatency,
-        retainedOutput: retainedOutput,
-        semanticNodeCount: semanticStats.nodeCount,
-        semanticAddedNodeCount: semanticStats.addedNodeCount,
-        semanticRemovedNodeCount: semanticStats.removedNodeCount,
-        semanticUpdatedNodeCount: semanticStats.updatedNodeCount,
-        semanticDomCreatedElementCount: semanticStats.createdElementCount,
-        semanticDomReusedElementCount: semanticStats.reusedElementCount,
-        semanticDomReplacedElementCount: semanticStats.replacedElementCount,
-        semanticFallbackNodeCount: semanticCoverageAudit.fallbackNodeCount,
-        semanticUncoveredCellCount: semanticCoverageAudit.uncoveredCellCount,
-        semanticTreeBuildTime: semanticTreeBuildTime,
-        semanticCoverageTime: semanticCoverageTime,
-        semanticDiffTime: semanticDiffTime,
-        semanticPresenterTime: semanticPresenterTime,
-        semanticFocusSyncTime: semanticFocusSyncTime,
-        totalFlushTime: totalFlushStopwatch.elapsed,
-      ),
+        focusSyncStopwatch.stop();
+        semanticFocusSyncTimeForFlush = focusSyncStopwatch.elapsed;
+      },
+      onFlushStats: (stats) {
+        instrumentation.recordSemanticFlush(
+          WebSemanticFlushInstrumentation(
+            reason: stats.reason,
+            coalescedFrameCount: stats.coalescedFrameCount,
+            scheduleLatency: stats.scheduleLatency,
+            retainedOutput: stats.retainedOutput,
+            semanticNodeCount: stats.presentation.nodeCount,
+            semanticAddedNodeCount: stats.presentation.addedNodeCount,
+            semanticRemovedNodeCount: stats.presentation.removedNodeCount,
+            semanticUpdatedNodeCount: stats.presentation.updatedNodeCount,
+            semanticDomCreatedElementCount:
+                stats.presentation.createdElementCount,
+            semanticDomReusedElementCount:
+                stats.presentation.reusedElementCount,
+            semanticDomReplacedElementCount:
+                stats.presentation.replacedElementCount,
+            semanticFallbackNodeCount: stats.coverageAudit.fallbackNodeCount,
+            semanticUncoveredCellCount: stats.coverageAudit.uncoveredCellCount,
+            semanticTreeBuildTime: stats.treeBuildTime,
+            semanticCoverageTime: stats.coverageTime,
+            semanticDiffTime: stats.diffTime,
+            semanticPresenterTime: stats.presenterTime,
+            semanticFocusSyncTime: semanticFocusSyncTimeForFlush,
+            totalFlushTime: stats.totalFlushTime,
+          ),
+        );
+        semanticFocusSyncTimeForFlush = Duration.zero;
+      },
+      onFlushError: (error, stack) {
+        final host = returnedHost;
+        if (host == null) {
+          unawaited(cleanupSetupFailure().catchError((_) {}));
+        } else {
+          host._startFrameFailureCleanup();
+        }
+      },
     );
-    completeSemanticIdleIfQuiet();
-  }
-
-  void runScheduledSemanticFlush() {
-    // A force-flush may have run since this task was scheduled; the flag is
-    // the single source of truth for outstanding work.
-    if (!semanticFlushScheduled) {
-      completeSemanticIdleIfQuiet();
-      return;
-    }
-    try {
-      flushSemanticsNow('deferred');
-    } catch (_) {
-      final host = returnedHost;
-      if (host == null) {
-        unawaited(cleanupSetupFailure().catchError((_) {}));
-      } else {
-        host._startFrameFailureCleanup();
-      }
-      rethrow;
-    }
   }
 
   void renderFrameBody(String reason) {
@@ -451,13 +290,13 @@ Future<MountedApp> runTuiSurface(
     final measured = cellMetrics?.measure();
     if (cellMetrics != null) metricsReadCount = 1;
     final metricsChanged = measured != null && measured != lastMetrics;
-    if (metricsChanged) semanticDirty = true;
+    if (metricsChanged) semanticsPipeline?.markSemanticsDirty();
     if (measured != null) {
       lastMetrics = measured;
       surface.resize(measured.size, metrics: measured);
     }
     if (pendingInput.isNotEmpty) {
-      semanticDirty = true;
+      semanticsPipeline?.markSemanticsDirty();
       final input = List<TuiEvent>.of(pendingInput);
       pendingInput.clear();
       for (final event in input) {
@@ -466,12 +305,12 @@ Future<MountedApp> runTuiSurface(
     }
     SemanticNodeId? semanticActivationInFrame;
     if (pendingSemanticActions.isNotEmpty) {
-      semanticDirty = true;
+      semanticsPipeline?.markSemanticsDirty();
       final actions = List<_PendingSemanticAction>.of(pendingSemanticActions);
       pendingSemanticActions.clear();
       // Force-flush so the displayed tree reflects the action's target, not a
       // stale retained snapshot.
-      if (semanticFlushScheduled) flushSemanticsNow('semantic-action');
+      semanticsPipeline?.flushPendingNow('semantic-action');
       // A semantic frame must have been presented (so the AT/agent had ids to
       // hold) before an action can resolve; if none has yet, it's notFound.
       if (semanticsOwner?.currentTree == null) {
@@ -531,7 +370,7 @@ Future<MountedApp> runTuiSurface(
     Element currentRoot = mounted;
     if (currentSize != lastSize) {
       lastSize = currentSize;
-      semanticDirty = true;
+      semanticsPipeline?.markSemanticsDirty();
       currentRoot = runtime.updateRoot(buildRoot());
       root = currentRoot;
       frameLoop.resetBuffers();
@@ -544,18 +383,7 @@ Future<MountedApp> runTuiSurface(
       // Skip build/layout/paint/present entirely — the committed frame is
       // still exact. Semantic work may still be owed (e.g. dispatched input
       // that changed no visuals keeps the conservative rebuild contract).
-      if (semanticPresenter != null &&
-          semanticsOwner != null &&
-          (semanticDirty || runtime.semanticDirtyTracker.hasDirt)) {
-        coalescedFramesSinceFlush += 1;
-        if (!semanticFlushScheduled) {
-          semanticFlushScheduled = true;
-          semanticScheduleLatency
-            ..reset()
-            ..start();
-          semanticScheduler!.schedule(runScheduledSemanticFlush);
-        }
-      }
+      semanticsPipeline?.onFrameSkippedWithPendingWork();
       runtime.flushPostFrameCallbacks();
       totalFrameStopwatch.stop();
       instrumentation.recordFrame(
@@ -564,9 +392,13 @@ Future<MountedApp> runTuiSurface(
           viewportSize: currentSize,
           semanticNodeCount: semanticsOwner?.currentTree?.nodeCount ?? 0,
           semanticFallbackNodeCount:
-              lastSemanticCoverageAudit.fallbackNodeCount,
+              (semanticsPipeline?.lastCoverageAudit ??
+                      SemanticCoverageAudit.empty)
+                  .fallbackNodeCount,
           semanticUncoveredCellCount:
-              lastSemanticCoverageAudit.uncoveredCellCount,
+              (semanticsPipeline?.lastCoverageAudit ??
+                      SemanticCoverageAudit.empty)
+                  .uncoveredCellCount,
           totalFrameTime: totalFrameStopwatch.elapsed,
         ),
       );
@@ -631,41 +463,7 @@ Future<MountedApp> runTuiSurface(
       lastMetrics,
     );
     frameLoop.commit(frame);
-    lastPresentedBuffer = frame.next;
-    if (semanticPresenter != null && semanticsOwner != null) {
-      // Accumulate the rows this frame visually changed; the deferred flush
-      // re-scans exactly these for semantic text coverage. Plans can be
-      // conservative (damage recorded for identical repaints), so confirm
-      // cells actually differ before treating the frame as a visual change.
-      if ((surfaceStats.rowsReplaced > 0 || plan.fullRepaint) &&
-          !_dirtyRowsUnchanged(
-            frame.previous,
-            frame.next,
-            plan.damage.dirtyRows,
-          )) {
-        if (plan.damage.dirtyRows.isFull) {
-          pendingCoverageFull = true;
-        } else {
-          pendingCoverageRows.addAll(plan.damage.dirtyRows.rows);
-        }
-      }
-      final semanticWorkPending =
-          semanticDirty ||
-          runtime.semanticDirtyTracker.hasDirt ||
-          semanticsOwner.currentTree == null ||
-          pendingCoverageFull ||
-          pendingCoverageRows.isNotEmpty;
-      if (semanticWorkPending) {
-        coalescedFramesSinceFlush += 1;
-        if (!semanticFlushScheduled) {
-          semanticFlushScheduled = true;
-          semanticScheduleLatency
-            ..reset()
-            ..start();
-          semanticScheduler!.schedule(runScheduledSemanticFlush);
-        }
-      }
-    }
+    semanticsPipeline?.onFramePresented(frame, plan);
     runtime.flushPostFrameCallbacks();
     totalFrameStopwatch.stop();
     instrumentation.recordFrame(
@@ -677,7 +475,8 @@ Future<MountedApp> runTuiSurface(
             : SemanticPresentationStats.retained(
                 nodeCount: semanticsOwner!.currentTree!.nodeCount,
               ),
-        coverageAudit: lastSemanticCoverageAudit,
+        coverageAudit:
+            semanticsPipeline?.lastCoverageAudit ?? SemanticCoverageAudit.empty,
         metricsReadCount: metricsReadCount,
         runtimeRenderTime: runtimeRenderStopwatch.elapsed,
         runtimeBuildStats: runtimeBuildStats,
@@ -726,25 +525,25 @@ Future<MountedApp> runTuiSurface(
     frameScheduler = scheduler;
 
     owner.onScheduleBuild = () {
-      semanticDirty = true;
+      semanticsPipeline?.markSemanticsDirty();
       scheduleFrame('build');
     };
     binding.onPostFrameCallback = () => scheduleFrame('post-frame');
     cellMetrics?.startObserving(() {
-      semanticDirty = true;
+      semanticsPipeline?.markSemanticsDirty();
       scheduleFrame('metrics');
     });
     inputSource?.start((event) {
       if (disposed) return;
       pendingInput.add(event);
-      semanticDirty = true;
+      semanticsPipeline?.markSemanticsDirty();
       scheduleFrame(_frameReasonForEvent(event));
     });
     if (semanticPresenter case SemanticActionRequestSink actionSink) {
       actionSink.onSemanticActionRequest = (id, action) {
         if (disposed) return;
         pendingSemanticActions.add(_PendingSemanticAction(id, action));
-        semanticDirty = true;
+        semanticsPipeline?.markSemanticsDirty();
         scheduleFrame('semantic-action-request:${action.name}');
       };
     }
@@ -760,8 +559,10 @@ Future<MountedApp> runTuiSurface(
       inputSource: inputSource,
       semanticsOwner: semanticsOwner,
       semanticPresenter: semanticPresenter,
+      semanticsPipeline: semanticsPipeline,
       semanticFlushScheduler: semanticScheduler,
-      awaitSemanticIdle: awaitSemanticIdleNow,
+      awaitSemanticIdle: () =>
+          semanticsPipeline?.awaitIdle() ?? Future<void>.value(),
       disposeHostResources: disposeHostResources,
       markDisposed: () {
         disposed = true;
@@ -783,32 +584,12 @@ Future<MountedApp> runTuiSurface(
 
 /// Whether every cell in [dirtyRows] is identical between the two buffers.
 ///
-/// Presentation plans are allowed to be conservative; this is the precise
-/// signal for "the user-visible grid did not change", which gates semantic
-/// flush scheduling.
-bool _dirtyRowsUnchanged(
-  CellBuffer previous,
-  CellBuffer next,
-  TuiDirtyRows dirtyRows,
-) {
-  if (previous.size != next.size) return false;
-  final cols = next.size.cols;
-  for (final range in dirtyRows.ranges) {
-    for (var row = range.startRow; row < range.endRow; row++) {
-      for (var col = 0; col < cols; col++) {
-        if (previous.atColRow(col, row) != next.atColRow(col, row)) {
-          return false;
-        }
-      }
-    }
-  }
-  return true;
-}
 
 Future<void> _disposeHostResourcesBestEffort({
   TuiInputSource? inputSource,
   FrameScheduler? frameScheduler,
   CellMetrics? cellMetrics,
+  FrameSemanticsPipeline? semanticsPipeline,
   SemanticFlushScheduler? semanticFlushScheduler,
   SemanticsOwner? semanticsOwner,
   SemanticFramePresenter? semanticPresenter,
@@ -836,6 +617,11 @@ Future<void> _disposeHostResourcesBestEffort({
   });
   await runStep(() {
     cellMetrics?.dispose();
+  });
+  await runStep(() {
+    // Also completes any outstanding awaitIdle() so a disposed host can't
+    // leave a test (or caller) hanging on a cancelled flush.
+    semanticsPipeline?.dispose();
   });
   await runStep(() {
     semanticFlushScheduler?.dispose();
@@ -880,12 +666,4 @@ String _frameReasonForEvent(TuiEvent event) {
     PasteEvent() => 'paste',
     MouseEvent() => 'mouse',
   };
-}
-
-bool _semanticTreeContainsAll(SemanticTree tree, Iterable<SemanticNodeId> ids) {
-  final nodesById = tree.nodesById;
-  for (final id in ids) {
-    if (!nodesById.containsKey(id)) return false;
-  }
-  return true;
 }

@@ -12,8 +12,6 @@ import 'package:fleury_web/src/instrumentation/web_host_instrumentation.dart';
 import 'package:fleury_web/src/metrics/cell_metrics.dart';
 import 'package:fleury_web/src/run_tui_surface.dart';
 import 'package:fleury_web/src/semantics/semantic_dom_presenter.dart';
-import 'package:fleury_web/src/semantics/semantic_flush_scheduler.dart';
-import 'package:fleury_web/src/semantics/semantic_presenter.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;
 

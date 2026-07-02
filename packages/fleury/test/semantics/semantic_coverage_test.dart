@@ -1,5 +1,4 @@
 import 'package:fleury/fleury_host.dart';
-import 'package:fleury_web/src/semantics/semantic_coverage.dart';
 import 'package:test/test.dart';
 
 void main() {
