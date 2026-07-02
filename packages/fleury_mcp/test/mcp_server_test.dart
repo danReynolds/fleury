@@ -1718,7 +1718,9 @@ Map<String, Object?> _counterRoot(int count) => <String, Object?>{
   ],
 };
 
-final class _FakeTransport implements RemoteFrameTransport {
+final class _FakeTransport 
+    with SynchronousSendTransport
+    implements RemoteFrameTransport {
   final StreamController<RemoteFrame> _incoming =
       StreamController<RemoteFrame>.broadcast();
   final List<RemoteFrame> sent = <RemoteFrame>[];

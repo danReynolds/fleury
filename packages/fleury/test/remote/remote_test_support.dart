@@ -6,7 +6,9 @@ import 'dart:async';
 
 import 'package:fleury/fleury_host.dart';
 
-class FakeFrameTransport implements RemoteFrameTransport {
+class FakeFrameTransport
+    with SynchronousSendTransport
+    implements RemoteFrameTransport {
   final _in = StreamController<RemoteFrame>.broadcast();
 
   /// Every frame the app sent, in order.
@@ -34,5 +36,35 @@ class FakeFrameTransport implements RemoteFrameTransport {
   /// Simulates the peer dropping the connection.
   Future<void> disconnect() async {
     if (!_in.isClosed) await _in.close();
+  }
+}
+
+/// A [FakeFrameTransport] whose send backlog the test controls — the
+/// harness for asserting the frame program's producer gate ("a stalled
+/// peer defers frame production; drain resumes with one coalesced
+/// frame").
+class GatedFakeTransport extends FakeFrameTransport {
+  bool _backlogged = false;
+  Completer<void>? _drain;
+
+  @override
+  bool get isSendBacklogged => _backlogged;
+
+  @override
+  Future<void> get sendDrained {
+    if (!_backlogged) return Future<void>.value();
+    return (_drain ??= Completer<void>()).future;
+  }
+
+  /// The peer stalls: sends still record (nothing produced should send
+  /// anyway while gated), and the app's frame program defers.
+  void stall() => _backlogged = true;
+
+  /// The peer catches up: pending [sendDrained] futures complete.
+  void drain() {
+    _backlogged = false;
+    final completer = _drain;
+    _drain = null;
+    completer?.complete();
   }
 }

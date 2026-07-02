@@ -20,10 +20,13 @@
 // (frame_driver_choreography_test) and the ANSI byte golden pin the
 // contract.
 
+import 'dart:async' show unawaited;
+
 import '../foundation/geometry.dart';
 import '../rendering/error_presentation.dart';
 import '../rendering/render_layout_stats.dart';
 import '../rendering/render_repaint_boundary.dart';
+import '../terminal/terminal_driver.dart' show OutputFlowControl;
 import '../widgets/framework.dart';
 import 'frame_presentation.dart';
 import 'frame_scheduler.dart';
@@ -119,9 +122,11 @@ final class FrameDriver {
     void Function(Duration build, Duration layout, Duration paint)?
     onPhaseTiming,
     void Function(String marker)? markOnce,
+    OutputFlowControl? flowControl,
     Duration frameInterval = Duration.zero,
     FrameFlushScheduler? flushScheduler,
   }) : _frameLoop = frameLoop,
+       _flowControl = flowControl,
        _readViewport = readViewport,
        _presenter = presenter,
        _planner = planner,
@@ -162,6 +167,10 @@ final class FrameDriver {
   /// unrecoverable (an every-frame hard crash outside all boundaries).
   final int backstopStormLimit;
   final bool Function()? _isDebugWatching;
+
+  /// Output-channel backpressure, when the presentation target has one
+  /// (a remote driver writing to a stalled peer). Null for local hosts.
+  final OutputFlowControl? _flowControl;
   final void Function(Duration, Duration, Duration)? _onPhaseTiming;
   final void Function(String marker)? _markOnce;
   late final FrameScheduler _scheduler;
@@ -171,6 +180,7 @@ final class FrameDriver {
   CellSize? _lastSize;
   var _disposed = false;
   var _inFrameRender = false;
+  var _frameDeferredOnBacklog = false;
   var _consecutiveBackstopFrames = 0;
   var _renderUnrecoverable = false;
 
@@ -239,6 +249,30 @@ final class FrameDriver {
     final snapshot = _readViewport();
     final size = snapshot.size;
     if (size.isEmpty) return;
+    // Producer gate: while the output channel is backlogged (a stalled
+    // serve peer), produce NOTHING — no build, no layout, no paint. The
+    // retained tree keeps absorbing state; the diff base stays at the
+    // last frame the peer received; the wake-up renders one coalesced
+    // patch that is exactly the delta the peer needs (strictly better
+    // than dropping frames and resyncing with a full repaint). The drain
+    // future also completes on transport close, so a dead peer can't
+    // wedge the gate.
+    final flow = _flowControl;
+    if (flow != null && flow.isOutputBacklogged) {
+      if (!_frameDeferredOnBacklog) {
+        _frameDeferredOnBacklog = true;
+        unawaited(
+          flow.outputDrained.then((_) {
+            _frameDeferredOnBacklog = false;
+            if (!_disposed) requestFrame('transport-drained');
+          }),
+        );
+      }
+      // Post-frame callbacks are deliberately NOT flushed here: the
+      // pending frame hasn't laid out, so their geometry contract
+      // ("matches what the user sees") wouldn't hold.
+      return;
+    }
     // Host frame-entry work (the browser host dispatches queued input and
     // semantic actions here) runs after the viewport read, before the
     // resize check — the order the embed host always had.

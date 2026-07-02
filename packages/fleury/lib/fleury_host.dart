@@ -129,4 +129,5 @@ export 'src/remote/remote_semantics.dart'
         SemanticsWireEncoder,
         maxSemanticTreeDepth,
         semanticsWireVersion;
-export 'src/remote/remote_transport.dart' show RemoteFrameTransport;
+export 'src/remote/remote_transport.dart'
+    show RemoteFrameTransport, SynchronousSendTransport;

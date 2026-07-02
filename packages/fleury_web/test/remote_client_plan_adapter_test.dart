@@ -1,5 +1,4 @@
 import 'package:fleury/fleury_host.dart';
-import 'package:fleury/src/remote/remote_codec.dart';
 import 'package:fleury_web/src/remote_client/plan_adapter.dart';
 import 'package:test/test.dart';
 

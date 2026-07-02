@@ -10,7 +10,6 @@ library;
 // buffer. A divergence here is the blank, reproduced deterministically.
 
 import 'package:fleury/fleury_host.dart';
-import 'package:fleury/src/remote/remote_codec.dart';
 import 'package:fleury_web/src/dom_grid/dom_grid_surface.dart';
 import 'package:fleury_web/src/metrics/cell_metrics.dart';
 import 'package:fleury_web/src/remote_client/plan_adapter.dart';

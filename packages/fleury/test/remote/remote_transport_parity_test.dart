@@ -11,9 +11,6 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/src/remote/remote_codec.dart';
-import 'package:fleury/src/remote/remote_protocol.dart';
-import 'package:fleury/src/remote/remote_semantics.dart';
 import 'package:test/test.dart';
 
 String _render(CellBuffer b) {

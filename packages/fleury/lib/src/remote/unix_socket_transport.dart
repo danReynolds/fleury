@@ -19,7 +19,7 @@ import 'remote_protocol.dart';
 import 'remote_transport.dart';
 
 final class UnixSocketFrameTransport implements RemoteFrameTransport {
-  UnixSocketFrameTransport._(this._socket)
+  UnixSocketFrameTransport._(this._socket, this.sendHighWaterMark)
     : _decoder = FrameDecoder(),
       _incoming = StreamController<RemoteFrame>.broadcast() {
     _socketSub = _socket.listen(
@@ -42,49 +42,138 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
 
   /// Opens the Unix socket at [path] and wraps it as a transport.
   /// Used by the app side after detecting a `shell_handle` file.
-  static Future<UnixSocketFrameTransport> connect(String path) async {
+  static Future<UnixSocketFrameTransport> connect(
+    String path, {
+    int sendHighWaterMark = defaultSendHighWaterMark,
+  }) async {
     final socket = await Socket.connect(
       InternetAddress(path, type: InternetAddressType.unix),
       0,
     );
-    return UnixSocketFrameTransport._(socket);
+    return UnixSocketFrameTransport._(socket, sendHighWaterMark);
   }
 
   /// Wraps an already-accepted [Socket]. Used by the shell side once a
   /// client connects.
-  factory UnixSocketFrameTransport.fromSocket(Socket socket) =>
-      UnixSocketFrameTransport._(socket);
+  factory UnixSocketFrameTransport.fromSocket(
+    Socket socket, {
+    int sendHighWaterMark = defaultSendHighWaterMark,
+  }) => UnixSocketFrameTransport._(socket, sendHighWaterMark);
+
+  /// Send bytes accepted but not yet handed to the OS before the
+  /// transport reports itself backlogged. 256 KiB holds a few frames of
+  /// a busy dashboard without tripping, while bounding app-side memory
+  /// when the peer stalls (the kernel socket buffer sits below this).
+  static const int defaultSendHighWaterMark = 256 * 1024;
 
   final Socket _socket;
   final FrameDecoder _decoder;
   final StreamController<RemoteFrame> _incoming;
+
+  /// See [defaultSendHighWaterMark].
+  final int sendHighWaterMark;
+
   StreamSubscription<List<int>>? _socketSub;
   bool _closed = false;
+
+  // The send pump owns ALL socket writes: dart:io forbids `add()` while
+  // a `flush()` is pending ("StreamSink is bound to a stream"), so
+  // [send] only enqueues. The pump hands the queue to the socket, then
+  // awaits `flush()` — which completes once the OS accepts the bytes and
+  // PENDS while the peer stalls: that pending flush is the backpressure
+  // signal. [_pendingSendBytes] counts queued + handed-but-unflushed
+  // bytes.
+  final List<List<int>> _sendQueue = <List<int>>[];
+  int _pendingSendBytes = 0;
+  bool _pumpRunning = false;
+  Completer<void>? _drained;
 
   @override
   Stream<RemoteFrame> get incoming => _incoming.stream;
 
   @override
+  bool get isSendBacklogged =>
+      !_closed && _pendingSendBytes > sendHighWaterMark;
+
+  @override
+  Future<void> get sendDrained {
+    if (!isSendBacklogged) return Future<void>.value();
+    return (_drained ??= Completer<void>()).future;
+  }
+
+  @override
   void send(RemoteFrame frame) {
     if (_closed) return;
-    _socket.add(encodeFrame(frame));
+    final bytes = encodeFrame(frame);
+    _sendQueue.add(bytes);
+    _pendingSendBytes += bytes.length;
+    if (!_pumpRunning) {
+      _pumpRunning = true;
+      unawaited(_sendPump());
+    }
+  }
+
+  Future<void> _sendPump() async {
+    try {
+      while (!_closed && _sendQueue.isNotEmpty) {
+        // Hand the whole queue over, then flush. Sends that arrive while
+        // the flush pends land in the queue and drive the next lap.
+        var handed = 0;
+        for (final chunk in _sendQueue) {
+          _socket.add(chunk);
+          handed += chunk.length;
+        }
+        _sendQueue.clear();
+        try {
+          await _socket.flush();
+        } catch (_) {
+          // Peer vanished mid-flush; the incoming stream's error/done
+          // path drives the session teardown. Stop counting so gated
+          // hosts wake instead of waiting on a dead pipe.
+          _sendQueue.clear();
+          _pendingSendBytes = 0;
+          break;
+        }
+        _pendingSendBytes -= handed;
+        if (_pendingSendBytes < 0) _pendingSendBytes = 0;
+      }
+    } finally {
+      _pumpRunning = false;
+      _completeDrained();
+    }
+  }
+
+  void _completeDrained() {
+    final completer = _drained;
+    _drained = null;
+    completer?.complete();
   }
 
   @override
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
-    try {
-      await _socket.flush();
-    } catch (_) {
-      /* peer may already be gone */
-    }
+    // Wake any host gated on the backlog — it must never wait on a dead
+    // peer (the drain future's contract).
+    _completeDrained();
     await _socketSub?.cancel();
     _socketSub = null;
-    try {
-      await _socket.close();
-    } catch (_) {
-      /* idem */
+    if (_pumpRunning) {
+      // A flush is pending on a stalled peer; a graceful close would
+      // wait behind it indefinitely. Abort hard — undelivered bytes are
+      // gone either way once we're closing on a backlog.
+      _socket.destroy();
+    } else {
+      try {
+        await _socket.flush();
+      } catch (_) {
+        /* peer may already be gone */
+      }
+      try {
+        await _socket.close();
+      } catch (_) {
+        /* idem */
+      }
     }
     if (!_incoming.isClosed) await _incoming.close();
   }

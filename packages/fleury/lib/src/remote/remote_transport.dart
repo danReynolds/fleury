@@ -28,6 +28,29 @@ abstract interface class RemoteFrameTransport {
   /// Send one frame to the peer.
   void send(RemoteFrame frame);
 
+  /// True while bytes accepted by [send] exceed the transport's
+  /// high-water mark and have not yet been handed to the OS — the peer
+  /// (or the pipe to it) has stalled. Hosts defer frame PRODUCTION while
+  /// this is true; frames already sent are never dropped (the wire
+  /// protocol's diffs are only valid against the exact previous frame
+  /// the peer holds).
+  bool get isSendBacklogged;
+
+  /// Completes when the send backlog drains — immediately when not
+  /// backlogged, and always on [close] (a gated host must never wait
+  /// forever on a dead peer).
+  Future<void> get sendDrained;
+
   /// Tear the connection down. Idempotent.
   Future<void> close();
+}
+
+/// Mixin for transports whose [send] hands bytes off synchronously (an
+/// in-memory pair, a test fake): they can never back up.
+mixin SynchronousSendTransport implements RemoteFrameTransport {
+  @override
+  bool get isSendBacklogged => false;
+
+  @override
+  Future<void> get sendDrained => Future<void>.value();
 }

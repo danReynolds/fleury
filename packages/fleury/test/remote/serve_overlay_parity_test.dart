@@ -9,7 +9,6 @@
 import 'dart:math';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/src/remote/remote_codec.dart';
 import 'package:test/test.dart';
 
 String _render(CellBuffer b) {

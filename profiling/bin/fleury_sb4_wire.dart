@@ -82,6 +82,9 @@ Never _printUsage() {
 }
 
 final class _WireTerminalDriver implements TerminalDriver {
+  @override
+  RemoteSurfaceSink? get surfaceSink => null; // byte presentation only
+
   _WireTerminalDriver() : _stdout = stdout;
 
   final Stdout _stdout;

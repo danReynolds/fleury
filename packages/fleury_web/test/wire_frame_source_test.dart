@@ -10,7 +10,6 @@ import 'dart:typed_data';
 
 import 'package:fleury/fleury_host.dart';
 import 'package:fleury_web/fleury_web.dart';
-import 'package:fleury_web/src/host/wire_frame_source.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;
 

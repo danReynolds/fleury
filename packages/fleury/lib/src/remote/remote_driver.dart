@@ -41,8 +41,21 @@ const int maxRemoteGridRows = 4000;
 /// sends structured input. [wantsPresentationPlans] reflects the negotiated
 /// version and is read by [runApp] after [enter] completes.
 final class RemoteTerminalDriver
-    implements TerminalDriver, RemoteSurfaceSink, SurfaceCapabilitiesProvider {
+    implements
+        TerminalDriver,
+        RemoteSurfaceSink,
+        SurfaceCapabilitiesProvider,
+        OutputFlowControl {
   RemoteTerminalDriver(this._transport);
+
+  /// The transport's send backlog IS this driver's output backlog: the
+  /// frame program defers production while the peer (or the serve bridge
+  /// to it) stalls, and resumes with one coalesced frame on drain.
+  @override
+  bool get isOutputBacklogged => _transport.isSendBacklogged;
+
+  @override
+  Future<void> get outputDrained => _transport.sendDrained;
 
   final RemoteFrameTransport _transport;
   final InputParser _parser = InputParser();
@@ -96,6 +109,9 @@ final class RemoteTerminalDriver
 
   @override
   bool get isInteractive => true;
+
+  @override
+  RemoteSurfaceSink? get surfaceSink => wantsPresentationPlans ? this : null;
 
   @override
   Future<void> enter(TerminalMode mode) async {

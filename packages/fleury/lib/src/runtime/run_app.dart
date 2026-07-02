@@ -204,16 +204,11 @@ Future<void> runApp(
     colorMode: usedDriver.capabilities.colorMode,
     synchronizedOutput: Platform.environment['FLEURY_SYNC_OUTPUT'] != '0',
   );
-  // When the driver wants structured presentation plans (the serve path,
-  // rendering through the fleury web surface instead of a terminal
-  // emulator), the render loop hands it plans instead of ANSI bytes. Null
-  // for every ordinary terminal session — that path is byte-unchanged.
-  // A driver may want structured presentation plans (the serve path) rather
-  // than ANSI. Whether it does is negotiated during the handshake, so the
-  // decision is finalized after enter() — see [surfaceSink] below.
-  final maybeSurfaceSink = usedDriver is RemoteSurfaceSink
-      ? usedDriver as RemoteSurfaceSink
-      : null;
+  // A driver may negotiate structured presentation plans (the serve
+  // path, rendering through the fleury web surface) rather than ANSI.
+  // The driver owns that answer — TerminalDriver.surfaceSink — and it is
+  // finalized by the handshake, so it's read after enter() below. Null
+  // for every ordinary terminal session; that path is byte-unchanged.
   RemoteSurfaceSink? surfaceSink;
   const presentationPlanner = FramePresentationPlanner();
   var disposed = false;
@@ -337,14 +332,14 @@ Future<void> runApp(
         runtimeMarkers?.mark('terminal.enter.end');
         // The handshake has landed, so the driver now knows whether the
         // peer negotiated the structured (plan) path.
-        if (maybeSurfaceSink != null &&
-            maybeSurfaceSink.wantsPresentationPlans) {
-          surfaceSink = maybeSurfaceSink;
+        final negotiatedSink = usedDriver.surfaceSink;
+        if (negotiatedSink != null) {
+          surfaceSink = negotiatedSink;
           // The peer can activate a node in its accessible DOM; invoke the
           // action against the live tree and re-render, completing the
           // semantics round trip (presentSemantics ships the tree out, this
           // brings activations back). Mirrors the in-browser host.
-          maybeSurfaceSink.onSemanticAction = (id, action, value) {
+          negotiatedSink.onSemanticAction = (id, action, value) {
             final root = frameDriver?.rootElement;
             if (root == null) return;
             // Flush pending semantics first so the peer's view is current
@@ -362,7 +357,7 @@ Future<void> runApp(
               // mirror) gets a real status instead of guessing from
               // tree diffs — and surface a throwing onAction handler
               // like any other app error rather than swallowing it.
-              maybeSurfaceSink.presentSemanticActionResult(
+              negotiatedSink.presentSemanticActionResult(
                 id,
                 action,
                 result.status,
@@ -467,6 +462,13 @@ Future<void> runApp(
             runtime: runtime,
             frameLoop: frameLoop,
             readViewport: () => FrameViewportSnapshot(usedDriver.size),
+            // Remote drivers surface their transport's send backlog;
+            // the frame program defers production while the peer stalls
+            // (structured AND v1-byte modes — dropped bytes are never
+            // safe on either).
+            flowControl: usedDriver is OutputFlowControl
+                ? usedDriver as OutputFlowControl
+                : null,
             presenter: activeSurfaceSink != null
                 // Structured serve path: hand the frame's buffers and
                 // damage plan to the driver instead of emitting ANSI.

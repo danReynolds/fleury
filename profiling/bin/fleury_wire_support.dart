@@ -6,6 +6,9 @@ import 'package:fleury/src/terminal/terminal_sequences.dart'
     show buildTerminalEnterSequences, buildTerminalExitSequences;
 
 final class WireTerminalDriver implements TerminalDriver {
+  @override
+  RemoteSurfaceSink? get surfaceSink => null; // byte presentation only
+
   WireTerminalDriver() : _stdout = stdout;
 
   final Stdout _stdout;
