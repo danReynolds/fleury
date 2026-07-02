@@ -73,18 +73,23 @@ class KeyHintBar extends StatelessWidget {
       if (binding.label == null) return;
       if (binding.hideFromHintBar) return;
       if (!binding.enabled) return;
-      KeyChord? chord;
+      // Dedup registers EVERY alias this binding would fire on (dispatch is
+      // deepest-first over all chords), so a shallower binding can't surface
+      // a label for a key a deeper binding actually claims. Advertise the
+      // first alias that isn't text-shadowed.
+      KeyChord? advertise;
+      var alreadyClaimed = false;
       for (final c in binding.chords) {
-        if (!textFocused || !c.isShadowedByTextInput) {
-          chord = c;
-          break;
+        final key = c.hintLabel;
+        if (seenChords.contains(key)) alreadyClaimed = true;
+        seenChords.add(key);
+        if (advertise == null && !(textFocused && c.isShadowedByTextInput)) {
+          advertise = c;
         }
       }
-      if (chord == null) return; // every alias is shadowed
-      final key = chord.hintLabel;
-      if (seenChords.contains(key)) return;
-      seenChords.add(key);
-      result.add(_Hint(binding, chord));
+      if (alreadyClaimed) return; // a deeper binding owns one of these keys
+      if (advertise == null) return; // every alias is text-shadowed
+      result.add(_Hint(binding, advertise));
     }
 
     for (final node in manager.activeChain()) {

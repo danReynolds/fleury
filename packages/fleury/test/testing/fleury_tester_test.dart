@@ -111,6 +111,28 @@ void main() {
           reason: 'pumpWidget after pumpApp mounts bare (no latched mode)');
     });
 
+    testWidgets('a LayoutBuilder subtree still mounts + subscribes under the '
+        'render-skip settle', (tester) async {
+      // settle() only renders on the first step and build-work steps; the
+      // first render must still mount layout-time subtrees so their streams
+      // subscribe (else hollow quiescence).
+      final controller = StreamController<String>();
+      tester.pumpWidget(
+        LayoutBuilder(
+          builder: (context, constraints) => StreamBuilder<String>(
+            stream: controller.stream,
+            builder: (_, snap) => Text(snap.data ?? 'loading'),
+          ),
+        ),
+      );
+      Timer(const Duration(milliseconds: 10), () => controller.add('ready'));
+      await tester.settle();
+      expect(tester.renderToString(size: const CellSize(8, 1)),
+          contains('ready'),
+          reason: 'the LayoutBuilder-hosted StreamBuilder must resolve');
+      await controller.close();
+    });
+
     testWidgets('pumpAndSettle runs a paint-only ticker animation to '
         'completion', (tester) {
       final probe = GlobalKey<_PaintOnlyAnimState>();

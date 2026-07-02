@@ -41,7 +41,6 @@ class _LayoutBuilderElement extends RenderObjectElement {
   _LayoutBuilderElement(LayoutBuilder super.widget);
 
   Element? _child;
-  bool _hasRenderObject = false;
 
   @override
   LayoutBuilder get widget => super.widget as LayoutBuilder;
@@ -51,14 +50,7 @@ class _LayoutBuilderElement extends RenderObjectElement {
   @override
   void mount(Element? parent) {
     super.mount(parent);
-    _hasRenderObject = true;
     _ro.callback = _buildChild;
-  }
-
-  @override
-  void unmount() {
-    _hasRenderObject = false;
-    super.unmount();
   }
 
   @override
@@ -70,8 +62,12 @@ class _LayoutBuilderElement extends RenderObjectElement {
     // the builder never re-runs and the subtree goes stale. Flutter's
     // equivalent is scheduleLayoutCallback() = markNeedsLayout() +
     // owner-registration; Fleury re-enters layout from the root every frame,
-    // so marking the spine dirty is sufficient.
-    if (_hasRenderObject) _ro.markNeedsLayout();
+    // so marking the spine dirty is sufficient. Guard on !dirty: a repeat
+    // invalidation before the flush (several inherited deps notifying
+    // together) would otherwise re-walk the spine to the root each time,
+    // though the first mark already dirtied it. `mounted` covers the window
+    // before mount / after unmount, where super.markNeedsBuild no-ops anyway.
+    if (mounted && !dirty) _ro.markNeedsLayout();
     super.markNeedsBuild();
   }
 

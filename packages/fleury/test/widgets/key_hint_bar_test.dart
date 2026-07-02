@@ -164,19 +164,19 @@ void main() {
       expect(bar(tester), isNot(contains('reveal')));
     });
 
-    testWidgets('a binding content change bumps bindingsRevision; pumping '
-        'alone does not', (tester) async {
+    testWidgets('a plain pump (no binding change) does not repaint the '
+        'label', (tester) async {
       tester.pumpWidget(const Column(
         children: [_TogglingLabel(), KeyHintBar()],
       ));
-      final before = tester.focusManager.bindingsRevision;
+      expect(bar(tester), contains('reveal'));
       tester.pump();
-      expect(tester.focusManager.bindingsRevision, before,
-          reason: 'no rebuild, no churn');
+      expect(bar(tester), contains('reveal'),
+          reason: 'no rebuild, no content change → label unchanged');
 
-      tester.sendKey(const KeyEvent(char: 'r'));
+      tester.sendKey(const KeyEvent(char: 'r')); // real content change
       await tester.settle();
-      expect(tester.focusManager.bindingsRevision, greaterThan(before));
+      expect(bar(tester), contains('hide'));
     });
   });
 }

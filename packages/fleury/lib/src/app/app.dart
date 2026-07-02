@@ -1,5 +1,6 @@
 import 'dart:async' show unawaited;
 
+import '../foundation/collections.dart';
 import '../foundation/change_notifier.dart';
 import '../semantics/semantics.dart';
 import '../widgets/basic.dart';
@@ -131,7 +132,7 @@ class FleuryAppController extends ChangeNotifier implements StatusHost {
 
   void updateExtensions(List<Object> extensions) {
     _checkNotDisposed();
-    if (_listEquals(_extensions, extensions)) return;
+    if (listEquals(_extensions, extensions)) return;
     _extensions = List<Object>.unmodifiable(extensions);
     notifyListeners();
   }
@@ -438,14 +439,6 @@ final class _AppExtensionTheme extends StatelessWidget {
   }
 }
 
-bool _listEquals(List<Object> a, List<Object> b) {
-  if (identical(a, b)) return true;
-  if (a.length != b.length) return false;
-  for (var i = 0; i < a.length; i += 1) {
-    if (a[i] != b[i]) return false;
-  }
-  return true;
-}
 
 final class _ScopedCommandContext implements CommandContext {
   const _ScopedCommandContext({

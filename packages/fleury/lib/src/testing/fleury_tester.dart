@@ -292,15 +292,24 @@ class FleuryTester {
   /// returns *between* cursor blinks (a periodic-Timer blink leaves
   /// `hasScheduledFrame` false between fires). A second build flush is folded
   /// in so a post-frame callback that schedules a rebuild isn't read as idle.
+  bool _settleHasRendered = false;
+
   bool _settleStep(Duration step) {
     if (step > Duration.zero) _scheduler.advance(step);
     final built = _owner.flushBuild().rebuiltElementCount;
-    // Run a real layout+paint like a production frame: widgets that build
-    // during layout (LayoutBuilder subtrees) don't exist after a bare build
-    // flush, so their streams/subscriptions would never start and settle
-    // would report a hollow quiescence. Rendering each step mirrors the
-    // runtime's frame order (build → layout/paint → post-frame drain).
-    if (_root != null) render();
+    // Render a real layout+paint like a production frame — but only when it
+    // can matter: the FIRST step (so widgets that build during layout, e.g.
+    // LayoutBuilder subtrees, exist and their streams subscribe), and any
+    // step that did build work (which is the only way a dirty LayoutBuilder
+    // re-enters layout — its element marks BUILD, then relayouts). A
+    // build-quiescent step after the first would render an unchanged tree,
+    // so skipping it is free; a suite with hundreds of settle() calls saves
+    // the wasted tail layouts+paints. Damage from paint-only tickers is
+    // still consumed below whether or not we rendered.
+    if (_root != null && (!_settleHasRendered || built > 0)) {
+      render();
+      _settleHasRendered = true;
+    }
     _binding.flushPostFrameCallbacks(_clock.now);
     final afterDrain = _owner.flushBuild().rebuiltElementCount;
     // Paint-only work counts as activity: a Ticker driving markNeedsPaintOnly
@@ -371,14 +380,14 @@ class FleuryTester {
   Future<void> settle({
     Duration step = const Duration(milliseconds: 16),
     Duration timeout = const Duration(seconds: 5),
-    int maxSteps = 600,
     int stableSteps = 4,
   }) async {
     _assertNotDisposed('settle');
+    _settleHasRendered = false;
     var elapsed = Duration.zero;
     var steps = 0;
     var stable = 0;
-    while (elapsed < timeout && steps < maxSteps) {
+    while (elapsed < timeout) {
       // Turn the real event loop so async completions (stream/Future) run
       // their setState before we flush + test for quiescence.
       await Future<void>.delayed(step);

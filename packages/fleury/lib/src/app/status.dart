@@ -1,3 +1,4 @@
+import '../foundation/collections.dart';
 import '../foundation/change_notifier.dart';
 import '../rendering/cell.dart';
 import '../semantics/semantics.dart';
@@ -114,7 +115,7 @@ class StatusController extends ChangeNotifier {
 
   void update(List<StatusItem> items) {
     _checkNotDisposed();
-    if (_listEquals(_items, items)) return;
+    if (listEquals(_items, items)) return;
     _items = List<StatusItem>.of(items);
     notifyListeners();
   }
@@ -133,14 +134,6 @@ class StatusController extends ChangeNotifier {
   }
 }
 
-bool _listEquals(List<StatusItem> a, List<StatusItem> b) {
-  if (identical(a, b)) return true;
-  if (a.length != b.length) return false;
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) return false;
-  }
-  return true;
-}
 
 /// Renders the current app status items as a compact terminal status bar.
 class AppStatusBar extends StatelessWidget {

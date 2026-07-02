@@ -62,6 +62,7 @@
 
 import 'package:meta/meta.dart';
 
+import '../foundation/collections.dart';
 import '../terminal/events.dart';
 import 'focus.dart';
 import 'framework.dart';
@@ -1013,10 +1014,7 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
           x.hideFromHintBar != y.hideFromHintBar) {
         return true;
       }
-      if (x.chords.length != y.chords.length) return true;
-      for (var j = 0; j < x.chords.length; j++) {
-        if (x.chords[j] != y.chords[j]) return true;
-      }
+      if (!listEquals(x.chords, y.chords)) return true;
     }
     return false;
   }
