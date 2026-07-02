@@ -191,10 +191,14 @@ class FocusNode {
   }
 
   /// Whether traversal (Tab cycling, etc.) should skip this node.
-  // ignore: unnecessary_getters_setters
   bool get skipTraversal => _skipTraversal;
-  // ignore: unnecessary_getters_setters
-  set skipTraversal(bool value) => _skipTraversal = value;
+  // No-op on same value (mirrors canRequestFocus), so re-application from
+  // Focus.didUpdateWidget is genuinely free and a future side effect added
+  // here wouldn't fire spuriously.
+  set skipTraversal(bool value) {
+    if (_skipTraversal == value) return;
+    _skipTraversal = value;
+  }
 
   /// Whether this node is currently the focused node in its manager.
   bool get hasFocus => _manager?.focusedNode == this;

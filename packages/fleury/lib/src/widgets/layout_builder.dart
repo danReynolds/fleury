@@ -108,8 +108,16 @@ class _LayoutBuilderElement extends RenderObjectElement {
   void forgetChild(Element child) {
     // A GlobalKey reclaim of the built child must clear our reference, or
     // the next builder run would updateChild() an element that is now
-    // active under another parent (double-adopt / subtree theft).
-    if (identical(_child, child)) _child = null;
+    // active under another parent (double-adopt / subtree theft). It must
+    // ALSO re-arm the builder: clearing `_child` alone leaves the memo
+    // satisfied (constraints unchanged, not stale), so performLayout would
+    // skip the builder and return zero size — the pane goes blank until an
+    // unrelated invalidation. markNeedsBuild → invalidateBuilder re-runs the
+    // builder to produce a replacement child.
+    if (identical(_child, child)) {
+      _child = null;
+      markNeedsBuild();
+    }
     super.forgetChild(child);
   }
 
@@ -203,6 +211,16 @@ class RenderLayoutBuilder extends RenderObject
         rethrow;
       }
     }
+    // If the builder still hasn't converged, it invalidated itself on every
+    // run — a bug (a builder that unconditionally calls markNeedsBuild, or
+    // reads a source it also mutates during the build). Left undiagnosed this
+    // renders stale and re-lays-out every frame; surface it in dev instead.
+    assert(
+      !(_builderStale || constraints != _builtFor),
+      'LayoutBuilder builder did not converge after $attempts self-'
+      'invalidations under the same constraints. The builder likely calls '
+      'markNeedsBuild() (or reads a listenable it mutates) on every run.',
+    );
     final c = _child;
     if (c == null) return constraints.constrain(CellSize.zero);
     final size = c.layout(constraints);

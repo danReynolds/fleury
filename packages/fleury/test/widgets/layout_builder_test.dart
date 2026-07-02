@@ -220,6 +220,42 @@ void main() {
     expect(flat(), 'after');
   });
 
+  testWidgets('a descendant relayout forces performLayout but the memo still '
+      'skips the builder (isolates the memo from the RO layout cache)',
+      (tester) {
+    // The 'repeated passes' test above is also satisfied by the render-object
+    // layout cache (layout() short-circuits unchanged constraints without
+    // calling performLayout). THIS drives the case only the builder-memo
+    // covers: a descendant whose size change walks markNeedsLayout UP through
+    // the RenderLayoutBuilder, forcing performLayout under unchanged
+    // constraints. The builder must NOT re-run (the LB element wasn't
+    // invalidated) — pre-memo it re-inflated the subtree every such pass,
+    // the render-damage loop this fix removes.
+    final flag = Flag();
+    var runs = 0;
+    tester.pumpWidget(
+      LayoutBuilder(
+        builder: (context, constraints) {
+          runs++;
+          return Reactive(
+            flag: flag,
+            builder: (on) => Text(on ? 'wiiiide' : 'x'), // size changes
+          );
+        },
+      ),
+    );
+    String flat() => tester.renderToString(size: const CellSize(12, 1)).trim();
+    expect(flat(), 'x');
+    expect(runs, 1);
+
+    flag.set(true); // descendant setState → child size change → spine relayout
+    tester.pump();
+    expect(flat(), 'wiiiide', reason: 'the descendant change still renders');
+    expect(runs, 1,
+        reason: 'the forced relayout did NOT re-run the builder — the memo '
+            'skipped it (pre-memo this re-inflated the subtree every pass)');
+  });
+
   testWidgets('a bounded LayoutBuilder in a Row (via Expanded) lays out fine',
       (tester) {
     tester.pumpWidget(
