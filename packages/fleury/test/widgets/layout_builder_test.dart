@@ -70,4 +70,132 @@ void main() {
       'screen=24',
     );
   });
+
+  // --- Regressions -------------------------------------------------------
+
+  testWidgets('an element-level invalidation re-runs the builder '
+      '(markNeedsBuild forces relayout)', (tester) {
+    // The builder only runs inside performLayout, which short-circuits when
+    // constraints are unchanged — a notifier-driven rebuild used to leave the
+    // subtree permanently stale.
+    final flag = _Flag();
+    tester.pumpWidget(
+      _Listen(
+        flag: flag,
+        builder: (on) => LayoutBuilder(
+          builder: (context, constraints) => Text(on ? 'after' : 'before'),
+        ),
+      ),
+    );
+    String flat() => tester.renderToString(size: const CellSize(10, 1)).trim();
+    expect(flat(), 'before');
+
+    flag.set(true); // rebuilds only the _Listen leaf; constraints unchanged
+    tester.pump();
+    expect(flat(), 'after',
+        reason: 'the dirtied LayoutBuilder must relayout and re-run its '
+            'builder even though its constraints did not change');
+  });
+
+  testWidgets('collapsing to zero under an unbounded axis throws in debug '
+      '(instead of blanking silently)', (tester) {
+    // An inflexible Row child receives an unbounded main axis
+    // (maxCols == null); a width-keyed builder computes (null ?? 0) ~/ 3 = 0
+    // and used to blank the pane with no diagnostic.
+    tester.pumpWidget(
+      Row(children: [
+        LayoutBuilder(
+          builder: (context, constraints) => SizedBox(
+            width: (constraints.maxCols ?? 0) ~/ 3,
+            child: const Text('nav'),
+          ),
+        ),
+        const Expanded(child: Text('main')),
+      ]),
+    );
+    expect(
+      () => tester.renderToString(size: const CellSize(24, 2)),
+      throwsA(isA<StateError>().having(
+        (e) => e.message,
+        'message',
+        contains('unbounded maxCols'),
+      )),
+    );
+  });
+
+  testWidgets('a min-forced empty child under an unbounded axis does not '
+      'assert (stretch exemption)', (tester) {
+    // CrossAxisAlignment.stretch forces minRows = crossMax, so a deliberately
+    // empty child sizes (0 x crossMax) under the unbounded Row axis — the
+    // collapse assert must not fire for extents the child did not choose.
+    tester.pumpWidget(
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LayoutBuilder(builder: (context, constraints) => const Text('')),
+          const Expanded(child: Text('main')),
+        ],
+      ),
+    );
+    final out = tester.renderToString(size: const CellSize(20, 2));
+    expect(out, contains('main'), reason: 'lays out without throwing');
+  });
+
+  testWidgets('a bounded LayoutBuilder in a Row (via Expanded) lays out fine',
+      (tester) {
+    tester.pumpWidget(
+      Row(children: [
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) => SizedBox(
+              width: (constraints.maxCols ?? 0) ~/ 3,
+              child: const Text('nav'),
+            ),
+          ),
+        ),
+        const Expanded(child: Text('main')),
+      ]),
+    );
+    final out = tester.renderToString(size: const CellSize(24, 2));
+    expect(out, contains('nav'));
+    expect(out, contains('main'));
+  });
+}
+
+class _Flag extends ChangeNotifier {
+  bool value = false;
+  void set(bool v) {
+    value = v;
+    notifyListeners();
+  }
+}
+
+/// Rebuilds alone when [flag] fires — an external-dependency leaf rebuild.
+class _Listen extends StatefulWidget {
+  const _Listen({required this.flag, required this.builder});
+  final _Flag flag;
+  final Widget Function(bool on) builder;
+  @override
+  State<_Listen> createState() => _ListenState();
+}
+
+class _ListenState extends State<_Listen> {
+  @override
+  void initState() {
+    super.initState();
+    widget.flag.addListener(_changed);
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.flag.removeListener(_changed);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(widget.flag.value);
 }

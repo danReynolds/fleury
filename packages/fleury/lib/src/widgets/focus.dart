@@ -328,6 +328,31 @@ class FocusManager extends ChangeNotifier {
     scheduleMicrotask(notifyListeners);
   }
 
+  /// Monotonic counter bumped by [notifyBindingsChanged]. Lets listeners
+  /// that key off the *content* of the active bindings (the hint bar)
+  /// distinguish "bindings changed under an unchanged focus" from no-ops.
+  int get bindingsRevision => _bindingsRevision;
+  int _bindingsRevision = 0;
+
+  /// Called by [KeyBindings] when its binding list changes in place (a
+  /// rebuild produced a new list — new labels, enabled flags, or chords)
+  /// without any focus movement. Manager listeners (the hint bar depends on
+  /// the manager) are notified on a microtask — this is invoked from
+  /// `didUpdateWidget`, mid-build, where a synchronous notify would re-enter
+  /// `setState` on a dependent.
+  void notifyBindingsChanged() {
+    if (_disposed) return;
+    _bindingsRevision++;
+    _notifyManagerScopeChanged();
+  }
+
+  /// Whether the focused node claims typed text (a focused, editable
+  /// [TextInput]). While true, chords shadowed by text input
+  /// ([KeyChord.isShadowedByTextInput]) can never fire — the claimant
+  /// consumes the characters before chord matching runs. The hint bar uses
+  /// this to hide such bindings instead of advertising dead keys.
+  bool get focusedNodeClaimsText => _focusedNode?.textInputClaimant != null;
+
   /// Read-only view of every node currently attached to this manager,
   /// in attachment order. `FocusTraversalGroup` uses this to find
   /// candidates for directional focus.
@@ -389,8 +414,53 @@ class FocusManager extends ChangeNotifier {
     if (node != null && !node.canRequestFocus) return false;
     if (identical(_focusedNode, node)) return false;
     _focusedNode = node;
+    if (node != null) _rememberFocusInScopes(node);
     notifyListeners();
     return true;
+  }
+
+  /// Records [node] as the focus memory of every [FocusScope] enclosing it,
+  /// so [restoreFocusInScope] can return focus to where it last was when a
+  /// scope becomes current again. Every marker on the ancestor path records
+  /// it (not just the nearest) so an outer scope — a route — remembers focus
+  /// held inside a nested inner scope.
+  void _rememberFocusInScopes(FocusNode node) {
+    Element? element = node._element;
+    while (element != null) {
+      if (element is _FocusScopeMarkerElement) element._rememberedFocus = node;
+      element = element.elementParent;
+    }
+  }
+
+  /// Restores focus to the node most recently focused within the nearest
+  /// [FocusScope] enclosing [context] (the scope's focus memory). Returns
+  /// whether focus moved.
+  ///
+  /// This is how a scope that becomes current again — a route revealed by a
+  /// pop, a re-entered pane — puts the user back where they were, instead of
+  /// the caller hand-tracking prior focus. The remembered node is liveness-
+  /// checked: it must still be registered with this manager, focusable, and
+  /// still sit under the same scope (a swapped-out subtree fails the check
+  /// and the restore is a no-op returning false).
+  bool restoreFocusInScope(BuildContext? context) {
+    _checkNotDisposed();
+    if (context is! Element) return false;
+    Element? element = context;
+    while (element != null) {
+      if (element is _FocusScopeMarkerElement) {
+        final remembered = element._rememberedFocus;
+        if (remembered != null &&
+            identical(remembered._manager, this) &&
+            _attachedNodes.contains(remembered) &&
+            remembered.canRequestFocus &&
+            _isUnderScopeMarker(remembered, element)) {
+          return requestFocus(remembered);
+        }
+        return false;
+      }
+      element = element.elementParent;
+    }
+    return false;
   }
 
   /// Moves focus to the next focusable node in reading order
@@ -523,6 +593,37 @@ class FocusManager extends ChangeNotifier {
       element = element.elementParent;
     }
     return false;
+  }
+
+  /// The nearest enclosing [_FocusScopeMarkerElement] of [node] (its
+  /// [FocusScope]), or null when [node] sits directly under the root with no
+  /// scope between. The stable element — not the per-build [FocusScopeRef] — is
+  /// the scope's durable identity.
+  _FocusScopeMarkerElement? _enclosingScopeMarker(FocusNode node) {
+    Element? element = node._element;
+    while (element != null) {
+      if (element is _FocusScopeMarkerElement) return element;
+      element = element.elementParent;
+    }
+    return null;
+  }
+
+  /// Whether [node]'s enclosing [FocusScope] already contains the focused node.
+  ///
+  /// This is the gate for **scope-aware autofocus**: a node claims autofocus
+  /// when *its* scope has no focused descendant — not (as a flat global gate
+  /// would) only when nothing is focused anywhere in the tree. So a screen
+  /// swapped into a fresh scope autofocuses even though another scope still
+  /// holds focus. A node with no enclosing scope sits at the root, which
+  /// contains all focus, so any focus blocks it (the historical global
+  /// behaviour, preserved for un-scoped trees).
+  @internal
+  bool scopeHasFocusedNode(FocusNode node) {
+    final focused = _focusedNode;
+    if (focused == null) return false;
+    final marker = _enclosingScopeMarker(node);
+    if (marker == null) return true;
+    return _isUnderScopeMarker(focused, marker);
   }
 
   /// Whether [node] sits under the currently-active modal (when one is
@@ -807,6 +908,13 @@ class _FocusState extends State<Focus> {
   FocusNode? _attachedNode;
   FocusManager? _manager;
 
+  /// Autofocus is a one-shot: it claims focus when the node first enters, not
+  /// every time the element re-attaches. Without this, a node that reactivates
+  /// (e.g. a route's content rebuilding while it animates out) would
+  /// re-autofocus into its now-empty scope and steal focus that has moved on.
+  /// Reset when the [Focus.focusNode] is swapped for a genuinely new node.
+  bool _didAutofocus = false;
+
   FocusNode get _node => widget.focusNode ?? _internalNode!;
 
   @override
@@ -839,6 +947,8 @@ class _FocusState extends State<Focus> {
             )
           : null;
       _node.onKey = widget.onKey;
+      // A genuinely new node gets a fresh autofocus opportunity.
+      _didAutofocus = false;
       _attach();
     } else {
       _node.onKey = widget.onKey;
@@ -878,10 +988,14 @@ class _FocusState extends State<Focus> {
     // Carry the nearest enclosing scope down.
     _node._enclosingScope = FocusScope._enclosingOf(context as Element);
 
-    if (widget.autofocus &&
-        manager.focusedNode == null &&
-        manager.isTraversable(_node)) {
-      _node.requestFocus();
+    if (widget.autofocus && !_didAutofocus) {
+      // Consume the one-shot opportunity on first attach (even if the scope is
+      // occupied and we don't actually claim focus) so reactivation can't
+      // re-autofocus.
+      _didAutofocus = true;
+      if (manager.isTraversable(_node) && !manager.scopeHasFocusedNode(_node)) {
+        _node.requestFocus();
+      }
     }
   }
 
@@ -1051,6 +1165,16 @@ class _FocusScopeMarkerElement extends ComponentElement {
   FocusScopeRef get scope => (widget as _FocusScopeMarker).scope;
   FocusManager? _registeredManager;
 
+  /// The node most recently focused within this scope — the scope's focus
+  /// memory. Written by [FocusManager.requestFocus] (every enclosing marker
+  /// of the newly-focused node records it); read by
+  /// [FocusManager.restoreFocusInScope] to return focus to where it last was
+  /// when the scope becomes current again (a route revealed by pop, a pane
+  /// re-entered). Deliberately NOT cleared when the node detaches — liveness
+  /// is checked at restore time, so a node that detaches and re-attaches
+  /// (rebuild, GlobalKey move) keeps its memory.
+  FocusNode? _rememberedFocus;
+
   /// Snapshot of `scope.modal` taken at mount and refreshed in `update`.
   /// We read this — not the live widget — to decide what's modal because
   /// `FocusScope.build` constructs a fresh `FocusScopeRef` on every
@@ -1128,6 +1252,12 @@ class _FocusScopeMarkerElement extends ComponentElement {
       // notify dependents so any cached value (e.g. a debug overlay) syncs.
       _registeredManager?._notifyManagerScopeChanged();
     }
+    // Rebuild with the new widget's child, like every other ComponentElement
+    // (StatelessElement does the same in its update). Without this the
+    // marker's child element was never reconciled on a parent rebuild — a
+    // structural change flowing THROUGH a FocusScope (a screen swapping the
+    // scope's child) was silently dropped and the old subtree stayed mounted.
+    rebuild(force: true);
   }
 
   @override
@@ -1225,13 +1355,19 @@ class _ExcludeFocusMarkerElement extends ComponentElement {
   void update(Widget newWidget) {
     super.update(newWidget);
     final newExcluding = (newWidget as _ExcludeFocusMarker).excluding;
-    if (newExcluding == _capturedExcluding) return;
-    _capturedExcluding = newExcluding;
-    if (newExcluding) {
-      _registerIfExcluding();
-    } else {
-      _unregisterIfRegistered();
+    if (newExcluding != _capturedExcluding) {
+      _capturedExcluding = newExcluding;
+      if (newExcluding) {
+        _registerIfExcluding();
+      } else {
+        _unregisterIfRegistered();
+      }
     }
+    // Rebuild with the new widget's child, like every other ComponentElement
+    // (and like the FocusScope marker, fixed the same way): without this, a
+    // structural change flowing THROUGH an ExcludeFocus was silently dropped
+    // and the old subtree stayed mounted.
+    rebuild(force: true);
   }
 
   @override

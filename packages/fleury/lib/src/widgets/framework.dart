@@ -1501,7 +1501,15 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
       }
 
       if (matched != null) {
-        matched.update(newWidget);
+        // Same identical-instance skip updateChild and the stable-unkeyed
+        // fast path apply: without it, a keyed child whose widget instance
+        // didn't change deep-rebuilds anyway — and its State receives a
+        // didUpdateWidget where oldWidget is IDENTICAL to widget (a contract
+        // violation) — on every pass that reaches this path (e.g. the
+        // re-reconcile scheduled by insertChildRenderObject after a mount).
+        if (!canSkipWidgetUpdate(matched.widget, newWidget)) {
+          matched.update(newWidget);
+        }
         result[i] = matched;
       } else {
         result[i] = inflateWidget(newWidget);
@@ -1601,9 +1609,27 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
     RenderObject child,
     RenderObjectElement element,
   ) {
-    // No-op: additions are installed in order by performRebuild via
-    // _syncChildRenderObjects. The single-child attach hook used by other
-    // render object elements doesn't apply.
+    // When THIS element rebuilds, performRebuild installs children in order
+    // via _syncChildRenderObjects and this hook fires for already-installed
+    // render objects (the identical-guard below no-ops). But an attach can
+    // also arrive from a DESCENDANT rebuilding alone — a leaf dependent
+    // (notifyDependents / setState below) swapping its subtree's render
+    // object while this element never rebuilds. Ignoring that attach
+    // silently dropped the new render object: the old one was eagerly
+    // removed by removeChildRenderObject and nothing ever installed the
+    // replacement, so the child simply vanished from the screen.
+    //
+    // Append eagerly so the render object is attached within this frame,
+    // then mark this element dirty: our own performRebuild re-syncs the
+    // order from the (by then updated) element children in the SAME
+    // flushBuild pass loop, correcting the append position if the child
+    // belongs between existing siblings. Sibling widgets are identical
+    // instances (this element's widget didn't change), so the re-run is
+    // skip-cheap.
+    final ro = renderObject as RenderObjectWithChildren;
+    if (ro.children.any((c) => identical(c, child))) return;
+    ro.replaceAllChildren([...ro.children, child]);
+    markNeedsBuild();
   }
 
   @override

@@ -41,6 +41,7 @@ class _LayoutBuilderElement extends RenderObjectElement {
   _LayoutBuilderElement(LayoutBuilder super.widget);
 
   Element? _child;
+  bool _hasRenderObject = false;
 
   @override
   LayoutBuilder get widget => super.widget as LayoutBuilder;
@@ -50,15 +51,36 @@ class _LayoutBuilderElement extends RenderObjectElement {
   @override
   void mount(Element? parent) {
     super.mount(parent);
+    _hasRenderObject = true;
     _ro.callback = _buildChild;
+  }
+
+  @override
+  void unmount() {
+    _hasRenderObject = false;
+    super.unmount();
+  }
+
+  @override
+  void markNeedsBuild() {
+    // The builder only runs inside performLayout, and the layout pass
+    // short-circuits a node whose constraints are unchanged — so an
+    // element-level invalidation (an InheritedWidget dependency firing, a
+    // setState-driven parent rebuild reaching us) must force a relayout or
+    // the builder never re-runs and the subtree goes stale. Flutter's
+    // equivalent is scheduleLayoutCallback() = markNeedsLayout() +
+    // owner-registration; Fleury re-enters layout from the root every frame,
+    // so marking the spine dirty is sufficient.
+    if (_hasRenderObject) _ro.markNeedsLayout();
+    super.markNeedsBuild();
   }
 
   @override
   void performRebuild() {
     // The child depends on constraints unknown until layout, so it's
     // (re)built from [_buildChild] during the render object's layout, not
-    // here. Layout runs every frame, so a changed builder or dependency
-    // is reflected on the next frame.
+    // here. markNeedsBuild forces the accompanying relayout, so a changed
+    // builder or dependency is reflected on the frame that flushes it.
   }
 
   // Invoked by RenderLayoutBuilder.performLayout with the live constraints.
@@ -116,7 +138,41 @@ class RenderLayoutBuilder extends RenderObject
     ); // builds/updates the child for these constraints
     final c = _child;
     if (c == null) return constraints.constrain(CellSize.zero);
-    return c.layout(constraints);
+    final size = c.layout(constraints);
+    assert(() {
+      // A width/height-keyed builder under an unbounded axis silently
+      // computes zero (`constraints.maxCols ?? 0`) and blanks the subtree —
+      // where Flutter's `infinity` would fail loudly downstream, Fleury's
+      // null-as-unbounded just vanishes. Make it diagnosable in dev. Gated on
+      // "zero on the unbounded axis but non-zero on the other" so an
+      // intentionally empty child (0x0) doesn't trip it.
+      // Fire only when the child CHOSE the non-zero cross extent
+      // (size > the parent-imposed minimum): a stretch Row/Column or a
+      // ScrollView forces min on the cross axis, which would otherwise make
+      // a deliberately empty child (0 on the unbounded axis) look collapsed.
+      final collapsedCols =
+          constraints.maxCols == null &&
+          size.cols == 0 &&
+          size.rows > 0 &&
+          size.rows > constraints.minRows;
+      final collapsedRows =
+          constraints.maxRows == null &&
+          size.rows == 0 &&
+          size.cols > 0 &&
+          size.cols > constraints.minCols;
+      if (collapsedCols || collapsedRows) {
+        throw StateError(
+          'LayoutBuilder collapsed to zero ${collapsedCols ? 'width' : 'height'} '
+          'under an unbounded ${collapsedCols ? 'maxCols' : 'maxRows'} '
+          '(an inflexible Row/Column child gets an unbounded main axis). '
+          'A builder keyed off that axis (e.g. `constraints.maxCols ?? 0`) '
+          'computes 0 here. Bound the axis instead: wrap the LayoutBuilder '
+          'in Expanded/SizedBox, or size the child to its content.',
+        );
+      }
+      return true;
+    }());
+    return size;
   }
 
   @override
