@@ -393,13 +393,23 @@ class FocusManager extends ChangeNotifier {
     return true;
   }
 
-  /// Attaches [node] to this manager. Idempotent.
+  /// Attaches [node] to this manager, or refreshes its element if it is
+  /// already attached here.
+  ///
+  /// A single [FocusNode] can attach under a NEW element without an
+  /// intervening manager change — a widget that holds a long-lived node and
+  /// is unmounted then remounted (a view swap, a reparent) reuses the node
+  /// but builds a fresh element. The node's `_element` MUST be updated to the
+  /// live one: [dispatchKey]/[activeChain] walk up from `node._element`, so a
+  /// stale pointer traverses the defunct element tree and the remounted
+  /// widget's bindings never fire (focus reports acquired, but its keys are
+  /// dead). So always refresh `_element`; only the attachment-list insert is
+  /// deduped.
   void _register(FocusNode node, Element element) {
     _checkNotDisposed();
-    if (identical(node._manager, this)) return;
     node._manager = this;
     node._element = element;
-    _attachedNodes.add(node);
+    if (!_attachedNodes.contains(node)) _attachedNodes.add(node);
   }
 
   /// Detaches [node] from this manager. Safe if not attached.

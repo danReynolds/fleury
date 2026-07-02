@@ -403,4 +403,54 @@ void main() {
       expect(attached.skipTraversal, isFalse);
     });
   });
+
+  group('FocusNode reattach', () {
+    test('a reused node reattaches to a new element — ANCESTOR bindings stay '
+        'live after unmount + remount', () {
+      // A widget that holds a long-lived node, unmounts, then remounts reuses
+      // the node but builds a FRESH element. dispatchKey walks UP from
+      // `node._element`; if `_register` keeps the stale pointer, that walk
+      // traverses the defunct tree and never reaches the remounted ANCESTOR
+      // bindings (the focused node's own handler still fires — the head of the
+      // chain — so the bug only shows for ancestors, as it did in the app).
+      final manager = FocusManager();
+      final node = FocusNode(debugLabel: 'reused');
+      var hits = 0;
+      final owner = BuildOwner();
+
+      // The focused child bubbles (returns ignored); an ANCESTOR Focus counts
+      // the hit. The hit only lands if dispatchKey's upward walk from the
+      // child's element reaches the ancestor.
+      Widget host({required bool show}) => FocusManagerScope(
+            manager: manager,
+            child: show
+                ? Focus(
+                    onKey: (e) {
+                      hits++;
+                      return KeyEventResult.handled;
+                    },
+                    child: Focus(
+                      focusNode: node,
+                      onKey: (e) => KeyEventResult.ignored,
+                      child: const EmptyBox(),
+                    ),
+                  )
+                : const EmptyBox(),
+          );
+
+      var root = owner.mountRoot(host(show: true));
+      node.requestFocus();
+      manager.dispatchKey(_key('a'));
+      expect(hits, 1, reason: 'the ancestor Focus is reached when first mounted');
+
+      root = owner.updateRoot(root, host(show: false)); // subtree unmounts
+      root = owner.updateRoot(root, host(show: true)); // remounts, reusing node
+
+      node.requestFocus();
+      manager.dispatchKey(_key('a'));
+      expect(hits, 2,
+          reason: 'the remounted ancestor binding still fires — the reattach '
+              'refreshed node._element so the upward walk reaches it');
+    });
+  });
 }
