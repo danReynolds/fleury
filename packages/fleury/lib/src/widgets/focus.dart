@@ -875,6 +875,13 @@ class Focus extends StatefulWidget {
   /// (internal nodes default to focusable / traversable). Silently
   /// ignoring these for provided nodes was a footgun: the code compiled
   /// and looked right while the flag never took effect.
+  ///
+  /// Ownership: a non-null flag means THIS WIDGET owns that flag — don't
+  /// also mutate it externally (each widget update re-imposes the widget's
+  /// value), and don't have two Focus widgets manage one node (last build
+  /// order wins). Applied values persist after the widget unmounts: pass
+  /// null and configure the node directly when the node should keep
+  /// caller-controlled flags across use sites.
   final bool? canRequestFocus;
   final bool? skipTraversal;
   final FocusOnKeyCallback? onKey;
@@ -936,6 +943,10 @@ class _FocusState extends State<Focus> {
   /// Non-null widget flags configure the node — a caller-provided one
   /// too. Null leaves the node's own setting alone (so a provided node's
   /// constructor flags survive unless the widget explicitly manages them).
+  /// The node setters no-op on same-value, so re-application from every
+  /// didUpdateWidget is free; a GENUINE canRequestFocus=false on the
+  /// focused node unfocuses it (by design — a widget disabling focus while
+  /// holding it must release it).
   void _applyWidgetFlags() {
     final canRequestFocus = widget.canRequestFocus;
     if (canRequestFocus != null) _node.canRequestFocus = canRequestFocus;

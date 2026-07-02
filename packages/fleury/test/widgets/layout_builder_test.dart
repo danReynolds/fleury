@@ -239,6 +239,78 @@ void main() {
     expect(out, contains('nav'));
     expect(out, contains('main'));
   });
+
+  testWidgets('a listenable read inside the builder stays live under the memo',
+      (tester) {
+    // The builder runs during layout, where the active build target used to be
+    // unset — so an ElementDependency read (Animation.value) never subscribed,
+    // and the memo then froze it. With the build target set, the read
+    // subscribes the LayoutBuilder element and the value change invalidates
+    // the memoized child even though constraints don't move.
+    final anim = Animation<int>(1);
+    addTearDown(anim.dispose);
+    tester.pumpWidget(
+      LayoutBuilder(builder: (context, constraints) => Text('v=${anim.value}')),
+    );
+    String flat() => tester.renderToString(size: const CellSize(10, 1)).trim();
+    expect(flat(), 'v=1');
+
+    anim.snap(2); // notifies subscribers; constraints unchanged
+    tester.pump();
+    expect(flat(), 'v=2',
+        reason: 'the layout-time read auto-subscribed the element, so the '
+            'change invalidates the memo');
+  });
+
+  testWidgets('a throwing builder is retried on the next pass, not skipped '
+      'as clean', (tester) {
+    // The stale flag is cleared BEFORE the callback and restored if it throws,
+    // so an unchanged-constraints retry re-runs the builder instead of serving
+    // the never-built (or half-built) child.
+    var boom = true;
+    var runs = 0;
+    tester.pumpWidget(
+      LayoutBuilder(
+        builder: (context, constraints) {
+          runs++;
+          if (boom) throw StateError('builder boom');
+          return const Text('recovered');
+        },
+      ),
+    );
+    expect(() => tester.renderToString(size: const CellSize(12, 1)),
+        throwsA(isA<StateError>()));
+    final afterThrow = runs;
+
+    boom = false;
+    expect(tester.renderToString(size: const CellSize(12, 1)).trim(),
+        'recovered');
+    expect(runs, greaterThan(afterThrow),
+        reason: 'the retry re-ran the builder despite unchanged constraints');
+  });
+
+  testWidgets('an invalidation fired during the build itself is honored, '
+      'not swallowed', (tester) {
+    // Clearing the stale flag before the callback means a re-entrant
+    // markNeedsBuild (from within the builder) survives: the loop re-runs the
+    // builder on the same pass instead of the flag being wiped by the epilogue.
+    var runs = 0;
+    var reentered = false;
+    tester.pumpWidget(
+      LayoutBuilder(
+        builder: (context, constraints) {
+          runs++;
+          if (!reentered) {
+            reentered = true;
+            (context as Element).markNeedsBuild(); // invalidate mid-build
+          }
+          return Text('runs=$runs');
+        },
+      ),
+    );
+    expect(tester.renderToString(size: const CellSize(12, 1)).trim(), 'runs=2',
+        reason: 'the re-entrant invalidation forced a second build this pass');
+  });
 }
 
 

@@ -390,10 +390,26 @@ abstract class Element implements BuildContext {
   /// The element whose `build` is currently running, or null when no
   /// build is in progress. Read by [ElementDependency] sources (e.g.
   /// `Animation.value`) to auto-subscribe the building element. Maintained
-  /// as a stack by [ComponentElement.performRebuild] so nested builds
-  /// attribute correctly.
+  /// as a stack via [runWithBuildTarget] so nested builds attribute
+  /// correctly.
   static Element? get current => _current;
   static Element? _current;
+
+  /// Runs [fn] with this element as the active build target ([current]),
+  /// so [ElementDependency] sources read inside auto-subscribe it. Restores
+  /// the previous target on the way out (stack discipline for nested
+  /// builds). For any element that invokes a build callback — including
+  /// outside the build phase (e.g. a layout-time builder).
+  @protected
+  T runWithBuildTarget<T>(T Function() fn) {
+    final previous = _current;
+    _current = this;
+    try {
+      return fn();
+    } finally {
+      _current = previous;
+    }
+  }
 
   /// Builds the widget shown in place of a subtree whose `build` threw.
   /// Installed by the runtime (`runApp` / the test harness) so the catch
@@ -496,9 +512,16 @@ abstract class Element implements BuildContext {
     visitChildren((c) => c._deactivateRecursively());
   }
 
+  /// Whether the element held dependency edges when it was deactivated.
+  /// Consumed by [_activate]: those edges were dropped on the OLD tree
+  /// position and only a rebuild re-registers them — see [_detachDependencies].
+  bool _hadDependenciesWhenDeactivated = false;
+
   @mustCallSuper
   void _deactivate() {
     assert(_lifecycle == _ElementLifecycle.active);
+    _hadDependenciesWhenDeactivated =
+        _inheritedDependencies.isNotEmpty || _externalDependencies.isNotEmpty;
     _detachDependencies();
     _owner?._dirtyElements.remove(this);
     _lifecycle = _ElementLifecycle.inactive;
@@ -535,6 +558,16 @@ abstract class Element implements BuildContext {
     // needs to run; re-enqueue it. The element's own `update` (driven by
     // the reclaiming parent) handles the move-induced rebuild.
     if (_dirty) _owner?.scheduleBuildFor(this);
+    // Deactivation dropped this element's dependency edges; only a rebuild
+    // re-registers them against the NEW tree position. When the reclaiming
+    // parent delivers an IDENTICAL widget, update() skips that rebuild —
+    // force it, or the element stays permanently deaf to the inherited /
+    // external values it reads (Flutter's activate() likewise calls
+    // didChangeDependencies()).
+    if (_hadDependenciesWhenDeactivated) {
+      _hadDependenciesWhenDeactivated = false;
+      markNeedsBuild();
+    }
     activate();
   }
 
@@ -820,24 +853,18 @@ abstract class ComponentElement extends Element {
 
   @override
   void performRebuild() {
-    // Mark this element as the active build target while its build
-    // runs, so ElementDependency sources (e.g. Animation.value) read
-    // during buildChild auto-subscribe it. Saved/restored as a stack
-    // for nested builds; restored before updateChild so children
-    // attribute their own reads.
-    final previous = Element._current;
-    Element._current = this;
+    // Build with this element as the active target so ElementDependency
+    // sources (e.g. Animation.value) read during buildChild auto-subscribe
+    // it; runWithBuildTarget restores before the catch/updateChild so the
+    // error builder and children attribute their own reads.
     Widget? built;
     try {
-      built = buildChild();
+      built = runWithBuildTarget(buildChild);
     } catch (error, stack) {
-      Element._current = previous;
       Element.onBuildError?.call(error, stack);
       final builder = Element.errorBuilder;
       if (builder == null) rethrow; // no boundary installed → propagate
       built = builder(error, stack);
-    } finally {
-      Element._current = previous;
     }
     _child = updateChild(_child, built);
   }

@@ -93,7 +93,24 @@ class _LayoutBuilderElement extends RenderObjectElement {
 
   // Invoked by RenderLayoutBuilder.performLayout with the live constraints.
   void _buildChild(CellConstraints constraints) {
-    _child = updateChild(_child, widget.builder(this, constraints));
+    // Run the builder with this element as the active build target (as
+    // ComponentElement.performRebuild does) so ElementDependency sources
+    // (e.g. Animation.value) read inside it auto-subscribe this element —
+    // their notifications then invalidate the memoized child. Without this,
+    // a listenable read in a layout-time builder never registers anywhere
+    // and the memo would freeze it. Restored before updateChild so children
+    // attribute their own reads.
+    final built = runWithBuildTarget(() => widget.builder(this, constraints));
+    _child = updateChild(_child, built);
+  }
+
+  @override
+  void forgetChild(Element child) {
+    // A GlobalKey reclaim of the built child must clear our reference, or
+    // the next builder run would updateChild() an element that is now
+    // active under another parent (double-adopt / subtree theft).
+    if (identical(_child, child)) _child = null;
+    super.forgetChild(child);
   }
 
   @override
@@ -164,11 +181,27 @@ class RenderLayoutBuilder extends RenderObject
   CellSize performLayout(CellConstraints constraints) {
     // Build/update the child only when it's stale for these constraints —
     // an ancestor-driven relayout with unchanged constraints and a clean
-    // element reuses the built subtree as-is.
-    if (_builderStale || constraints != _builtFor) {
-      _callback?.call(constraints);
-      _builtFor = constraints;
+    // element reuses the built subtree as-is. The stale flag is cleared
+    // BEFORE the callback so an invalidation fired re-entrantly from within
+    // the build itself survives (it re-sets the flag; the loop re-runs the
+    // builder before this pass finishes — the re-entrant markNeedsLayout
+    // alone would be wiped by layout()'s epilogue and the rebuild deferred
+    // indefinitely). A throwing builder restores the flag so the next pass
+    // retries instead of serving a half-built child. The attempt cap only
+    // guards a builder that unconditionally self-invalidates: the flag
+    // stays set, and the rebuild lands on the next natural pass rather
+    // than spinning this one.
+    var attempts = 0;
+    while ((_builderStale || constraints != _builtFor) && attempts < 3) {
+      attempts++;
       _builderStale = false;
+      _builtFor = constraints;
+      try {
+        _callback?.call(constraints);
+      } catch (_) {
+        _builderStale = true;
+        rethrow;
+      }
     }
     final c = _child;
     if (c == null) return constraints.constrain(CellSize.zero);
