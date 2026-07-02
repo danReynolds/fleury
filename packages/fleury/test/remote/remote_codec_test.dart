@@ -9,7 +9,6 @@ import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/src/remote/remote_codec.dart';
-import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:test/test.dart';
 
 void main() {

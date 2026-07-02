@@ -422,7 +422,11 @@ class RenderPointerListener extends RenderObject
     CellOffset? screenOffset,
     CellRect? clipRect,
   }) {
-    _rect = CellRect(offset: offset, size: size);
+    // Screen coordinates: mouse events arrive in absolute terminal
+    // coordinates, and inside a composited subtree (an effect's scratch
+    // buffer) the local offset is scratch-relative — hit-testing against it
+    // targets phantom positions.
+    _rect = CellRect(offset: screenOffset ?? offset, size: size);
     _router?._register(this);
     _child?.paint(
       buffer,

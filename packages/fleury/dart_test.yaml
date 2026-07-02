@@ -6,5 +6,9 @@
 tags:
   integration:
     timeout: 30s
+  # Needs a real PTY (openpty): fails in sandboxed shells / most CI.
+  # Exclude with `dart test -x pty`.
+  pty:
+    timeout: 30s
   coverage-incompatible:
     timeout: 30s

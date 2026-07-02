@@ -257,6 +257,33 @@ void main() {
     );
   });
 
+  testWidgets('pointer hit-targets use screen coordinates inside a '
+      'composited (mid-transition) route', (tester) {
+    BuildContext? home;
+    var taps = 0;
+    tester.pumpWidget(
+      Container(
+        padding: const EdgeInsets.only(left: 5, top: 2),
+        child: Navigator(home: _Cap(sink: (x) => home = x, label: 'home')),
+      ),
+    );
+    home!.push<void>(
+      GestureDetector(onTap: () => taps++, child: const Text('btn')),
+    ); // default fade — mid-transition the route paints via a scratch buffer
+    tester.pump(const Duration(milliseconds: 100));
+    tester.render(size: const CellSize(20, 6)); // registers pointer rects
+
+    // 'btn' sits at screen (5,2): the padded navigator's origin. A
+    // scratch-local rect would claim (0,0) and this tap would miss.
+    tester.sendMouse(const MouseEvent(
+        kind: MouseEventKind.down, button: MouseButton.left, col: 6, row: 2));
+    tester.sendMouse(const MouseEvent(
+        kind: MouseEventKind.up, button: MouseButton.left, col: 6, row: 2));
+    expect(taps, 1,
+        reason: 'hit-testing must use absolute terminal coordinates even '
+            'while the route paints through the effect scratch buffer');
+  });
+
   testWidgets('keyed children mount once — no duplicate build, no '
       'didUpdateWidget(identical)', (tester) {
     final builds = <String, int>{};

@@ -8,7 +8,9 @@ void main() {
       ? 'PTY capture uses POSIX openpty and posix_spawnp.'
       : null;
 
-  group('runApp over a real PTY', tags: ['integration'], () {
+  // `pty` tag: needs a real openpty-capable environment — exclude with
+  // `dart test -x pty` in sandboxes/CI where PTY allocation fails.
+  group('runApp over a real PTY', tags: ['integration', 'pty'], () {
     late Directory tempDir;
 
     setUp(() {

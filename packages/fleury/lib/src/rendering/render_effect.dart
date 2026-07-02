@@ -204,7 +204,8 @@ class RenderClip extends RenderObject implements RenderObjectWithSingleChild {
     if (clipped.isEmpty) return;
 
     final scratch = CellBuffer(c.size);
-    c.paint(scratch, CellOffset.zero);
+    // Scratch-local origin, true screen position — see RenderCellEffect.
+    c.paint(scratch, CellOffset.zero, screenOffset: screenOffset ?? offset);
 
     final cols = buffer.size.cols;
     final rows = buffer.size.rows;
