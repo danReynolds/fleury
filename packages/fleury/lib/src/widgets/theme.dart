@@ -1,3 +1,4 @@
+import '../foundation/collections.dart';
 import '../foundation/key.dart';
 import '../rendering/border.dart';
 import '../rendering/cell.dart';
@@ -17,6 +18,7 @@ final class ColorScheme {
   const ColorScheme({
     this.foreground,
     this.background,
+    this.surface,
     this.primary = Colors.mint,
     this.success = const AnsiColor(2),
     this.warning = const AnsiColor(3),
@@ -27,6 +29,14 @@ final class ColorScheme {
   /// Default text/background — null means the terminal's own.
   final Color? foreground;
   final Color? background;
+
+  /// Opaque fill for raised surfaces and modal content — a [Surface] widget,
+  /// or content shown via [NavigatorState.present]. Unlike [background]
+  /// (nullable = the terminal's own, i.e. effectively transparent), a surface
+  /// must fully cover the cells it occupies so nothing painted beneath shows
+  /// through. null derives a concrete fill from the theme brightness
+  /// (near-black on dark terminals, near-white on light).
+  final Color? surface;
 
   /// Accent for interactive/active affordances.
   final Color primary;
@@ -52,6 +62,7 @@ final class ColorScheme {
   ColorScheme copyWith({
     Color? foreground,
     Color? background,
+    Color? surface,
     Color? primary,
     Color? success,
     Color? warning,
@@ -60,6 +71,7 @@ final class ColorScheme {
   }) => ColorScheme(
     foreground: foreground ?? this.foreground,
     background: background ?? this.background,
+    surface: surface ?? this.surface,
     primary: primary ?? this.primary,
     success: success ?? this.success,
     warning: warning ?? this.warning,
@@ -72,6 +84,7 @@ final class ColorScheme {
       other is ColorScheme &&
       other.foreground == foreground &&
       other.background == background &&
+      other.surface == surface &&
       other.primary == primary &&
       other.success == success &&
       other.warning == warning &&
@@ -82,6 +95,7 @@ final class ColorScheme {
   int get hashCode => Object.hash(
     foreground,
     background,
+    surface,
     primary,
     success,
     warning,
@@ -192,7 +206,7 @@ final class ThemeData {
       other.focusedStyle == focusedStyle &&
       other.borderStyle == borderStyle &&
       other.colorScheme == colorScheme &&
-      _listEquals(other.extensions, extensions);
+      listEquals(other.extensions, extensions);
 
   @override
   int get hashCode => Object.hash(
@@ -205,15 +219,6 @@ final class ThemeData {
     colorScheme,
     Object.hashAll(extensions),
   );
-}
-
-bool _listEquals(List<Object> a, List<Object> b) {
-  if (identical(a, b)) return true;
-  if (a.length != b.length) return false;
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) return false;
-  }
-  return true;
 }
 
 /// Shares a [ThemeData] with its subtree. Read it with `Theme.of(context)`

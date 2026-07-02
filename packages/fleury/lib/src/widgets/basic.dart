@@ -230,7 +230,7 @@ class _RawTextElement extends LeafRenderObjectElement {
 /// take down the whole UI (and the dev sees what failed).
 ///
 /// Customize globally via [ErrorWidget.builder]. The runtime wires this
-/// in as the build-error boundary; see `Element.errorBuilder`.
+/// in as the build-error boundary; see `BuildOwner.errorBuilder`.
 final class ErrorWidget extends StatelessWidget {
   const ErrorWidget(this.error, {this.stackTrace, super.key});
 
@@ -695,6 +695,34 @@ final class Container extends StatelessWidget {
       result = Padding(padding: m, child: result ?? const EmptyBox());
     }
     return result ?? const EmptyBox();
+  }
+}
+
+/// An opaque, theme-aware background that fills its slot — the terminal analog
+/// of a card or sheet. Put screen or dialog content on a [Surface] and nothing
+/// painted beneath shows through; [NavigatorState.present] wraps presented
+/// content in one by default, so a modal is never see-through.
+///
+/// The fill resolves to [color], else [ColorScheme.surface], else a concrete
+/// brightness-appropriate default — always opaque, unlike
+/// [ColorScheme.background] (nullable = the terminal default, i.e. transparent).
+class Surface extends StatelessWidget {
+  const Surface({super.key, this.color, this.child});
+
+  /// Explicit fill. When null, resolves from the theme (see the class doc).
+  final Color? color;
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.theme;
+    final fill =
+        color ??
+        theme.colorScheme.surface ??
+        (theme.brightness == Brightness.dark
+            ? const RgbColor(0x12, 0x12, 0x14)
+            : const RgbColor(0xF2, 0xF2, 0xF4));
+    return _FilledBox(color: fill, child: child);
   }
 }
 

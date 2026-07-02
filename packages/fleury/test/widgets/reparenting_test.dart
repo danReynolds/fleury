@@ -226,6 +226,70 @@ class _ConfigHostState extends State<_ConfigHost> {
   }
 }
 
+/// Hosts a CACHED, identical [LayoutBuilder] instance inside a GlobalKey'd
+/// wrapper that moves between two [_Tag] subtrees. Because the child instance
+/// is identical across the wrapper's rebuilds, `updateChild` SKIPS it on the
+/// move — so re-registering the builder's severed inherited dependency depends
+/// on reactivation forcing a rebuild (an element that had dependencies when
+/// deactivated must rebuild on activate). The builder reads `_Tag.of(ctx)`, so
+/// the LayoutBuilder element itself carries the dependency.
+class _CachedLbHost extends StatefulWidget {
+  const _CachedLbHost({super.key, required this.wrapperKey});
+  final GlobalKey wrapperKey;
+  @override
+  State<_CachedLbHost> createState() => _CachedLbHostState();
+}
+
+class _CachedLbHostState extends State<_CachedLbHost> {
+  late final Widget _lb = LayoutBuilder(
+    builder: (ctx, c) => Text('tag=${_Tag.of(ctx)}'),
+  );
+  bool first = true;
+  void swap() => setState(() => first = !first);
+  @override
+  Widget build(BuildContext context) {
+    final wrapper = Center(key: widget.wrapperKey, child: _lb);
+    return Column(
+      children: [
+        _Tag(
+          label: 'A',
+          child: Center(child: first ? wrapper : const Text('-')),
+        ),
+        _Tag(
+          label: 'B',
+          child: Center(child: first ? const Text('-') : wrapper),
+        ),
+      ],
+    );
+  }
+}
+
+/// A LayoutBuilder whose builder output is a GlobalKey'd probe that another
+/// slot then reclaims — exercising _LayoutBuilderElement.forgetChild (the
+/// built child must be cleared when its element moves out, or the next build
+/// updateChild()s an element now active elsewhere).
+class _LbForgetHost extends StatefulWidget {
+  const _LbForgetHost({super.key, required this.probeKey});
+  final GlobalKey<_ProbeState> probeKey;
+  @override
+  State<_LbForgetHost> createState() => _LbForgetHostState();
+}
+
+class _LbForgetHostState extends State<_LbForgetHost> {
+  bool inLb = true;
+  void moveOut() => setState(() => inLb = false);
+  @override
+  Widget build(BuildContext context) {
+    final probe = _Probe(key: widget.probeKey);
+    return Column(
+      children: [
+        LayoutBuilder(builder: (ctx, c) => inLb ? probe : const Text('-')),
+        inLb ? const Text('-') : probe,
+      ],
+    );
+  }
+}
+
 List<String> _lines(FleuryTester tester) {
   final lines = tester
       .renderToString(size: const CellSize(10, 2))
@@ -388,6 +452,59 @@ void main() {
     expect(identical(probeKey.currentState, probe), isTrue);
     expect(probeKey.currentState!.count, 1);
     expect(_lines(tester), ['count=1', '-']);
+  });
+
+  testWidgets('a moved subtree re-registers a SKIPPED child\'s severed '
+      'inherited dependency (cached identical LayoutBuilder)', (tester) {
+    final wrapperKey = GlobalKey();
+    final hostKey = GlobalKey<_CachedLbHostState>();
+    tester.pumpWidget(_CachedLbHost(key: hostKey, wrapperKey: wrapperKey));
+    expect(_lines(tester), ['tag=A', '-'], reason: 'reads _Tag above slot A');
+
+    // Move the wrapper A -> B. Its cached child (the LayoutBuilder) is the same
+    // instance, so updateChild skips it — only reactivation forcing a rebuild
+    // re-reads _Tag. Pre-fix this stayed 'tag=A' (dep severed, never re-run).
+    hostKey.currentState!.swap();
+    tester.pump();
+    expect(
+      _lines(tester),
+      ['-', 'tag=B'],
+      reason: 'the skipped child re-resolved _Tag at its new position',
+    );
+
+    // And back, to prove the old _Tag no longer drives it.
+    hostKey.currentState!.swap();
+    tester.pump();
+    expect(_lines(tester), ['tag=A', '-']);
+  });
+
+  testWidgets('a GlobalKey child of a LayoutBuilder reclaimed by another slot '
+      'clears the builder\'s reference (forgetChild)', (tester) {
+    final hostKey = GlobalKey<_LbForgetHostState>();
+    final probeKey = GlobalKey<_ProbeState>();
+    tester.pumpWidget(_LbForgetHost(key: hostKey, probeKey: probeKey));
+    // The LB builds its child during layout, so render before reaching in.
+    _lines(tester);
+    probeKey.currentState!.bump();
+    expect(_lines(tester), ['count=1', '-'], reason: 'probe built by the LB');
+    final probe = probeKey.currentState!;
+
+    // Reclaim the probe into the sibling slot; the LayoutBuilder now builds
+    // Text('-'). Without forgetChild, the LB's stale _child pointer would make
+    // the next builder run updateChild() an element active elsewhere.
+    hostKey.currentState!.moveOut();
+    tester.pump();
+    expect(
+      identical(probeKey.currentState, probe),
+      isTrue,
+      reason: 'the probe moved (same State), was not recreated',
+    );
+    expect(probeKey.currentState!.count, 1, reason: 'state survived the move');
+    expect(
+      _lines(tester),
+      ['-', 'count=1'],
+      reason: 'LB shows its new child; probe renders in the sibling slot',
+    );
   });
 
   testWidgets('a reparent with a changed configuration fires didUpdateWidget', (

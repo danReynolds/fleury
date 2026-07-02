@@ -47,11 +47,13 @@ import 'dart:async';
 import '../animation/animation.dart';
 import '../animation/curves.dart';
 import '../foundation/key.dart';
+import '../rendering/cell.dart' show Color;
 import '../rendering/render_navigator.dart';
 import '../rendering/render_object.dart';
 import '../semantics/semantics.dart';
 import '../input/events.dart';
 import 'align.dart' show Align, Alignment;
+import 'basic.dart' show Container, Surface;
 import 'effects.dart';
 import 'focus.dart';
 import 'error_boundary.dart';
@@ -66,10 +68,22 @@ class RouteTransition {
     required this.exit,
     this.duration,
     this.curve,
-  });
+  }) : isInstant = false;
+
+  RouteTransition._instant()
+    : enter = const NoopEffect(),
+      exit = const NoopEffect(),
+      duration = Duration.zero,
+      curve = null,
+      isInstant = true;
 
   final Effect enter;
   final Effect exit;
+
+  /// True only for [none]: the route settles in a single frame with no
+  /// enter/exit effect. The navigator maps this to its internal no-transition
+  /// path (so [enter]/[exit] are never played).
+  final bool isInstant;
 
   /// How long the enter/exit plays. When null, the navigator falls back
   /// to [defaultDuration].
@@ -98,13 +112,32 @@ class RouteTransition {
     curve: Curves.easeOut,
     duration: defaultDuration,
   );
+
+  /// Instant — the route settles in a single frame with no enter/exit
+  /// animation. The reachable opt-out from the animated default: [push] and
+  /// [NavigatorState.present] detect it and skip transition building entirely.
+  /// Pass per-push (`push(screen, transition: RouteTransition.none)`) or as a
+  /// Navigator-wide default (`Navigator(transition: RouteTransition.none)`).
+  static final RouteTransition none = RouteTransition._instant();
 }
 
 class _Route {
-  _Route(this.screen, this.transition, {this.presentAlignment});
+  _Route(
+    this.screen,
+    RouteTransition? transition, {
+    this.presentAlignment,
+    this.barrierColor,
+    this.barrierDismissible = true,
+  }) : transition = (transition == null || transition.isInstant)
+           ? null
+           : transition;
 
   final Widget screen;
-  final RouteTransition? transition; // null = instant
+
+  /// null = instant. Normalized in the constructor: [RouteTransition.none]
+  /// maps to null here so EVERY construction site inherits the instant path
+  /// (no per-call-site mapping to forget).
+  final RouteTransition? transition;
   final Completer<Object?> completer = Completer<Object?>();
   final Animation<double> presence = Animation(0.0); // 0 absent, 1 present
 
@@ -112,6 +145,18 @@ class _Route {
   /// reordering as the stack grows and shrinks.
   final Key key = UniqueKey();
 
+  /// Anchors [FocusManager.restoreFocusInScope] inside this route's chrome:
+  /// the route's FocusScope remembers the node last focused within it, and a
+  /// pop that reveals this route restores through this key. Scope memory is
+  /// the primary restore path — recorded where the focus actually lives, so
+  /// it survives pushReplacement and popUntil (whose intermediate routes are
+  /// gone by restore time).
+  final GlobalKey restoreKey = GlobalKey();
+
+  /// Fallback restore target: whatever held focus when this route was
+  /// pushed. Covers focus that lived OUTSIDE this navigator's route scopes
+  /// (a sidebar pane, app chrome) — no route's FocusScope ever recorded it,
+  /// so scope memory alone would strand the keyboard on pop.
   FocusNode? priorFocus;
   bool leaving = false;
 
@@ -124,6 +169,17 @@ class _Route {
   /// shown via [NavigatorState.present]; null for an ordinary page. Its
   /// non-null-ness is what marks a route as a non-opaque modal.
   final Alignment? presentAlignment;
+
+  /// For a modal ([presentAlignment] != null): a fill painted over the screen
+  /// behind, around the presented content. null leaves the surround composited
+  /// with the route beneath. (The content itself always sits on an opaque
+  /// [Surface], so it never shows through regardless of this.)
+  final Color? barrierColor;
+
+  /// For a modal: whether Esc / a dismiss action pops it. Default true; set
+  /// false for a modal that must be answered deliberately (e.g. a confirmation
+  /// the user can't skip past). Page routes ignore this — Esc is always back.
+  final bool barrierDismissible;
 
   /// A route this one replaces: removed once this route settles over it
   /// (set by [NavigatorState.pushReplacement]). [replacingResult] is the
@@ -261,8 +317,10 @@ class NavigatorState extends State<Navigator> {
       ..replacing = replaced
       ..replacingResult = result;
     _pushRoute(route);
-    // Inherit the replaced route's restore target so popping the
-    // replacement returns focus where the replaced route would have.
+    // Scope memory needs no inheritance (the covered route's own FocusScope
+    // remembers), but the outside-navigator FALLBACK does: the replaced
+    // route's snapshot is the pre-push focus; the replacement's own snapshot
+    // saw only the replaced route's state.
     if (replaced != null) route.priorFocus = replaced.priorFocus;
     return route.completer.future.then((v) => v as T?);
   }
@@ -286,18 +344,31 @@ class NavigatorState extends State<Navigator> {
   /// the stack of the navigator it's presented on — present on a nested
   /// navigator for a pane-scoped modal, or the root for an app-wide one.
   ///
-  /// Framing (a border, padding, an edge for a sheet) is just widgets —
-  /// wrap [screen] in a `Container`/`Align` — and [alignment] is the only
-  /// placement knob you usually need.
+  /// The presented [screen] is placed on an opaque [Surface] automatically, so
+  /// nothing painted beneath shows through it — a modal is never see-through.
+  /// [barrierColor] optionally fills the surround (over the screen behind);
+  /// null leaves it composited. [barrierDismissible] (default true) controls
+  /// whether Esc dismisses it.
+  ///
+  /// Framing (a border, padding, an edge for a sheet) is just widgets — wrap
+  /// [screen] — and [alignment] is the only placement knob you usually need.
   Future<T?> present<T>(
     Widget screen, {
     Alignment alignment = Alignment.center,
     RouteTransition? transition,
+    Color? barrierColor,
+    bool barrierDismissible = true,
   }) {
     final route = _Route(
       screen,
-      transition ?? RouteTransition.fade,
+      // Same resolution chain as push (_newRoute): per-call override, then
+      // the Navigator-wide default, then fade. Modals previously skipped
+      // widget.transition, so Navigator(transition: RouteTransition.none)
+      // silently animated every present().
+      transition ?? widget.transition ?? RouteTransition.fade,
       presentAlignment: alignment,
+      barrierColor: barrierColor,
+      barrierDismissible: barrierDismissible,
     );
     _pushRoute(route);
     return route.completer.future.then((v) => v as T?);
@@ -337,9 +408,23 @@ class NavigatorState extends State<Navigator> {
     if (!route.completer.isCompleted) route.completer.complete(result);
 
     // Restore focus to the revealed screen immediately — not after the
-    // exit animation — so input lands on it right away.
+    // exit animation — so input lands on it right away. The revealed route's
+    // FocusScope memory is the primary path (correct even for popUntil,
+    // where the routes between are already gone); the push-time snapshot is
+    // the fallback for focus that lived OUTSIDE this navigator's routes (a
+    // sidebar pane, app chrome), which no route scope ever recorded.
     _manager?.requestFocus(null);
-    _restoreFocus(route);
+    final revealed = _topLive;
+    var restored = false;
+    if (revealed != null) {
+      restored =
+          _manager?.restoreFocusInScope(revealed.restoreKey.currentContext) ??
+          false;
+    }
+    if (!restored) {
+      final prior = route.priorFocus;
+      if (prior != null && prior.isAttached) prior.requestFocus();
+    }
 
     final transition = route.transition;
     if (transition == null) {
@@ -379,6 +464,11 @@ class NavigatorState extends State<Navigator> {
         return false;
       }
     }
+    // A non-dismissible modal refuses semantic/back dismissal on EVERY
+    // consult path — the route-level Esc binding alone isn't enough, since
+    // app back bindings and semantics drivers route through maybePop.
+    // Programmatic pop() stays unconditional.
+    if (top != null && !top.barrierDismissible) return false;
     if (!canPop) return false;
     pop();
     return true;
@@ -390,8 +480,12 @@ class NavigatorState extends State<Navigator> {
       _Route(screen, transition ?? widget.transition ?? RouteTransition.fade);
 
   void _pushRoute(_Route route) {
+    // Snapshot BEFORE clearing: the covered route's FocusScope memory is the
+    // primary restore path, but focus held outside this navigator's routes
+    // (a sibling pane) is only reachable through this fallback.
     route.priorFocus = _manager?.focusedNode;
-    _manager?.requestFocus(null); // let the new route's chrome autofocus
+    // Clear focus so the new route's content autofocuses.
+    _manager?.requestFocus(null);
     _routes.add(route);
     _animateIn(route);
     _rebuild();
@@ -467,12 +561,6 @@ class NavigatorState extends State<Navigator> {
   void _remove(_Route route) {
     _routes.remove(route);
     route.presence.dispose();
-  }
-
-  /// Restores focus to whatever was focused before [route] was pushed.
-  void _restoreFocus(_Route route) {
-    final prior = route.priorFocus;
-    if (prior != null && prior.isAttached) prior.requestFocus();
   }
 
   void _rebuild() {
@@ -579,9 +667,24 @@ class _RouteHost extends StatelessWidget {
     // non-opaque). Any framing — a border, padding — is the caller's
     // widgets, not baked in here.
     final align = route.presentAlignment;
-    final screen = align == null
-        ? route.screen
-        : Align(alignment: align, child: route.screen);
+    final Widget screen;
+    if (align == null) {
+      screen = route.screen;
+    } else {
+      // Modal: the presented content sits on an opaque Surface so nothing
+      // painted beneath shows through it (closes the bleed-through leak). A
+      // barrierColor, when set, fills the surround over the screen behind;
+      // null leaves the surround composited with the route beneath.
+      Widget content = Align(
+        alignment: align,
+        child: Surface(child: route.screen),
+      );
+      final barrier = route.barrierColor;
+      if (barrier != null) {
+        content = Container(color: barrier, child: content);
+      }
+      screen = content;
+    }
 
     // Presented routes trap focus like modals. Normal page routes still let
     // ancestor app-level bindings participate, which keeps global commands
@@ -591,14 +694,18 @@ class _RouteHost extends StatelessWidget {
     // (e.g. a TextInput) autofocuses. Focus is restored to the route beneath
     // on pop.
     final modal = active && align != null;
-    // Implicit containment: a route whose layout or paint fails renders
-    // the error presentation in its slot; sibling routes, the overlay
-    // above, and the session survive.
+    // Esc dismisses an active route — always for a page (back navigation), and
+    // for a modal only when it's barrierDismissible.
+    final dismissible = align == null || route.barrierDismissible;
     Widget content = FocusScope(
       modal: modal,
       suppressGlobals: modal,
+      // The restoreKey anchors focus restoration: it sits INSIDE the route's
+      // FocusScope, so restoreFocusInScope(key.currentContext) resolves this
+      // route's scope memory when a pop reveals the route again.
       child: KeyBindings(
-        bindings: active
+        key: route.restoreKey,
+        bindings: active && dismissible
             ? [
                 KeyBinding(
                   KeyChord.key(KeyCode.escape),
@@ -607,20 +714,42 @@ class _RouteHost extends StatelessWidget {
                 ),
               ]
             : const <KeyBinding>[],
-        // Expose this route to its subtree so a PopScope can register
-        // its veto with the right route.
-        child: _RouteScope(
-          route: route,
-          child: ErrorBoundary(child: screen),
+        // its veto with the right route. Covered routes are focus-inert
+        // (ExcludeFocus): they stay mounted and keep building, so without
+        // this a late-mounting autofocus in an occluded route would steal
+        // focus from the active route — even out of a modal, leaving it
+        // keyboard-undismissable. Exclusion also keeps Tab traversal from
+        // wandering into invisible screens. The ErrorBoundary contains a
+        // route whose layout/paint throws so siblings and the session
+        // survive.
+        child: ExcludeFocus(
+          excluding: !active,
+          child: _RouteScope(
+            route: route,
+            child: ErrorBoundary(child: screen),
+          ),
         ),
       ),
     );
 
     final transition = route.transition;
-    if (transition != null && (route.leaving || t < 1.0)) {
+    if (transition != null) {
+      // Always wrap when a transition exists — even when settled (enter at full
+      // progress) — so the effect wrapper is a STABLE element. Wrapping only
+      // while animating would add/remove the wrapper on every transition-state
+      // change (enter -> settled -> leaving), remounting the route's content
+      // and losing its State (scroll position, text, focus) — and re-firing
+      // autofocus, which could steal focus a pop just restored.
+      //
+      // Settled routes use the effect's AT-REST form (same element shape,
+      // passthrough paint): the live composite at full progress would pay a
+      // scratch-buffer double paint every frame, drop protocol (image) cells,
+      // and record scratch-local focus/pointer geometry.
       content = route.leaving
           ? transition.exit.build(content, (1 - t).clamp(0.0, 1.0))
-          : transition.enter.build(content, t.clamp(0.0, 1.0));
+          : (t >= 1.0
+                ? transition.enter.buildSettled(content)
+                : transition.enter.build(content, t.clamp(0.0, 1.0)));
     }
     final routeName = route.screen.runtimeType.toString();
     return Semantics(
@@ -632,7 +761,7 @@ class _RouteHost extends StatelessWidget {
       actions: active
           ? <SemanticAction>{
               SemanticAction.navigate,
-              if (navigator.canPop)
+              if (navigator.canPop && dismissible)
                 route.presentAlignment == null
                     ? SemanticAction.close
                     : SemanticAction.dismiss,
@@ -797,14 +926,21 @@ extension NavigatorContext on BuildContext {
       Navigator.of(this).pushAndClear<T>(screen, transition: transition);
 
   /// Presents [screen] as a modal over the current screen (centered by
-  /// default). Dismiss with [pop].
+  /// default), on an opaque [Surface]. Dismiss with [pop]. [barrierColor]
+  /// fills the surround; [barrierDismissible] (default true) controls Esc.
   Future<T?> present<T>(
     Widget screen, {
     Alignment alignment = Alignment.center,
     RouteTransition? transition,
-  }) => Navigator.of(
-    this,
-  ).present<T>(screen, alignment: alignment, transition: transition);
+    Color? barrierColor,
+    bool barrierDismissible = true,
+  }) => Navigator.of(this).present<T>(
+    screen,
+    alignment: alignment,
+    transition: transition,
+    barrierColor: barrierColor,
+    barrierDismissible: barrierDismissible,
+  );
 
   /// Pops the current screen with an optional [result].
   void pop([Object? result]) => Navigator.of(this).pop(result);

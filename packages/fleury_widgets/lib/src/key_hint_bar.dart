@@ -44,27 +44,61 @@ class KeyHintBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final manager = Focus.maybeOf(context);
     if (manager == null) return const EmptyBox();
-    final bindings = _collectVisibleBindings(manager);
-    if (bindings.isEmpty) return const EmptyBox();
-    final rendered = bindings
+    final hints = _collectVisibleHints(manager);
+    if (hints.isEmpty) return const EmptyBox();
+    final rendered = hints
         .take(maxBindings)
-        .map((b) => '[${b.chords.first.hintLabel}] ${b.displayLabel}')
+        .map((h) => '[${h.chord.hintLabel}] ${h.binding.displayLabel}')
         .join(separator);
     return Text(rendered, style: style, softWrap: false);
   }
 
-  List<KeyBinding> _collectVisibleBindings(FocusManager manager) {
-    final result = <KeyBinding>[];
+  List<_Hint> _collectVisibleHints(FocusManager manager) {
+    final result = <_Hint>[];
     final seenChords = <String>{};
+    // Honesty filter: while a text field holds focus, bare-printable chords —
+    // chain and global alike — are swallowed as typed text and can never
+    // fire. Shadowing is a PER-CHORD property: a binding with several aliases
+    // (`KeyBinding.list([j, ↓], …)`) stays visible through its first
+    // non-shadowed chord (dispatch fires on any alias), and is hidden only
+    // when every alias is shadowed. Modifier/function chords (Ctrl+S, F1,
+    // Esc) bypass the text claimant and stay shown.
+    final textFocused = manager.focusedNodeClaimsText;
 
     void consider(KeyBinding binding) {
       if (binding.label == null) return;
       if (binding.hideFromHintBar) return;
       if (!binding.enabled) return;
-      final key = binding.chords.first.hintLabel;
-      if (seenChords.contains(key)) return;
-      seenChords.add(key);
-      result.add(binding);
+      // The keys this binding can actually FIRE on right now: while a text
+      // field holds focus, a bare-printable alias is swallowed as typed text,
+      // so it neither fires nor claims a key. A binding with no firable alias
+      // shows nothing and claims nothing (so it can't poison a shallower
+      // binding that shares one of its dead aliases).
+      final firable = [
+        for (final c in binding.chords)
+          if (!textFocused || !c.isShadowedByTextInput) c,
+      ];
+      if (firable.isEmpty) return;
+      // Advertise the first firable key not already owned by a DEEPER binding
+      // — dispatch is deepest-first, so a deeper binding wins every key they
+      // share, and a shallower binding advertising a lost key would lie. Test
+      // only THIS binding's firable keys against what deeper bindings claimed
+      // (not against its own earlier aliases — a repeated alias must not
+      // self-suppress).
+      KeyChord? advertise;
+      for (final c in firable) {
+        if (!seenChords.contains(c.hintLabel)) {
+          advertise = c;
+          break;
+        }
+      }
+      if (advertise == null) return; // every firable alias is claimed deeper
+      // Now claim ALL of this binding's firable keys: it wins them for
+      // dispatch, so a shallower binding bound to any of them is dead.
+      for (final c in firable) {
+        seenChords.add(c.hintLabel);
+      }
+      result.add(_Hint(binding, advertise));
     }
 
     for (final node in manager.activeChain()) {
@@ -81,4 +115,12 @@ class KeyHintBar extends StatelessWidget {
     }
     return result;
   }
+}
+
+/// A binding paired with the chord the bar advertises for it — the first
+/// alias that can actually fire in the current focus context.
+class _Hint {
+  const _Hint(this.binding, this.chord);
+  final KeyBinding binding;
+  final KeyChord chord;
 }

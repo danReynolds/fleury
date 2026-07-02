@@ -1,10 +1,23 @@
 // Meta-tests: exercise FleuryTester / finders / goldens themselves.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
+
+/// Captures the BuildContext its build runs under (for present() tests).
+class _CtxCapture extends StatelessWidget {
+  const _CtxCapture({required this.sink, required this.label});
+  final void Function(BuildContext) sink;
+  final String label;
+  @override
+  Widget build(BuildContext context) {
+    sink(context);
+    return Text(label);
+  }
+}
 
 void main() {
   group('FleuryTester lifecycle', () {
@@ -29,6 +42,149 @@ void main() {
     testWidgets('throws after dispose', (tester) {
       tester.dispose();
       expect(() => tester.pump(), throwsStateError);
+    });
+  });
+
+  group('settle / pumpApp', () {
+    testWidgets('settle() surfaces async stream values pump() cannot', (
+      tester,
+    ) async {
+      final controller = StreamController<String>();
+      tester.pumpWidget(
+        StreamBuilder<String>(
+          stream: controller.stream,
+          builder: (_, snap) => Text(snap.data ?? 'loading'),
+        ),
+      );
+      expect(
+        tester.renderToString(size: const CellSize(8, 1)),
+        contains('loading'),
+      );
+
+      // Emit on a timer (truly async): a synchronous pump() can't observe it,
+      // but settle() yields to the event loop until the value lands.
+      Timer(const Duration(milliseconds: 10), () => controller.add('ready'));
+      await tester.settle();
+      expect(
+        tester.renderToString(size: const CellSize(8, 1)),
+        contains('ready'),
+      );
+      await controller.close();
+    });
+
+    testWidgets('pumpApp installs a root Navigator so present() works', (
+      tester,
+    ) async {
+      BuildContext? ctx;
+      tester.pumpApp(_CtxCapture(sink: (c) => ctx = c, label: 'home'));
+      expect(
+        tester.renderToString(size: const CellSize(8, 1)),
+        contains('home'),
+      );
+
+      // Without pumpApp's root Navigator this would throw "No Navigator above".
+      ctx!.present<void>(const Text('modal'), transition: RouteTransition.none);
+      await tester.settle();
+      expect(
+        tester.renderToString(size: const CellSize(8, 1)),
+        contains('modal'),
+      );
+    });
+  });
+
+  group('pumpApp re-pump / paint-only settle (review regressions)', () {
+    testWidgets('pumpApp replaces the app on re-pump; pumpWidget unwraps', (
+      tester,
+    ) {
+      tester.pumpApp(const Text('one'));
+      expect(
+        tester.renderToString(size: const CellSize(8, 1)),
+        contains('one'),
+      );
+
+      tester.pumpApp(const Text('two'));
+      final second = tester.renderToString(size: const CellSize(8, 1));
+      expect(
+        second,
+        contains('two'),
+        reason: 'a later pumpApp must not be silently ignored',
+      );
+      expect(second, isNot(contains('one')));
+
+      tester.pumpWidget(const Text('three'));
+      expect(
+        tester.renderToString(size: const CellSize(8, 1)),
+        contains('three'),
+        reason: 'pumpWidget after pumpApp mounts bare (no latched mode)',
+      );
+    });
+
+    testWidgets('a LayoutBuilder subtree still mounts + subscribes under the '
+        'render-skip settle', (tester) async {
+      // settle() only renders on the first step and build-work steps; the
+      // first render must still mount layout-time subtrees so their streams
+      // subscribe (else hollow quiescence).
+      final controller = StreamController<String>();
+      tester.pumpWidget(
+        LayoutBuilder(
+          builder: (context, constraints) => StreamBuilder<String>(
+            stream: controller.stream,
+            builder: (_, snap) => Text(snap.data ?? 'loading'),
+          ),
+        ),
+      );
+      Timer(const Duration(milliseconds: 10), () => controller.add('ready'));
+      await tester.settle();
+      expect(
+        tester.renderToString(size: const CellSize(8, 1)),
+        contains('ready'),
+        reason: 'the LayoutBuilder-hosted StreamBuilder must resolve',
+      );
+      await controller.close();
+    });
+
+    testWidgets('pumpAndSettle after settle() still renders its first step '
+        '(no shared render flag)', (tester) async {
+      // A prior settle() must not leave a latched flag that makes a later
+      // pumpAndSettle skip its guaranteed first render (hollow quiescence).
+      tester.pumpWidget(const Text('warm'));
+      await tester.settle(); // sets any shared render state
+      final probe = GlobalKey<_PaintOnlyAnimState>();
+      tester.pumpWidget(_PaintOnlyAnim(key: probe));
+      tester.pump();
+      tester.pumpAndSettle();
+      expect(
+        probe.currentState!.completed,
+        isTrue,
+        reason:
+            'pumpAndSettle must render from its own first step '
+            'regardless of a prior settle()',
+      );
+    });
+
+    testWidgets('settle rejects a zero step (would spin forever)', (tester) {
+      tester.pumpWidget(const Text('x'));
+      expect(
+        () => tester.settle(step: Duration.zero),
+        throwsA(anything),
+        reason: 'a zero step never advances elapsed → timeout unreachable',
+      );
+    });
+
+    testWidgets('pumpAndSettle runs a paint-only ticker animation to '
+        'completion', (tester) {
+      final probe = GlobalKey<_PaintOnlyAnimState>();
+      tester.pumpWidget(_PaintOnlyAnim(key: probe));
+      tester.pump(); // start the ticker
+      tester.pumpAndSettle();
+      expect(
+        probe.currentState!.completed,
+        isTrue,
+        reason:
+            'a bounded animation that only marks paint (no rebuilds) '
+            'must still run to completion — paint damage counts as '
+            'activity in the settle predicate',
+      );
     });
   });
 
@@ -220,4 +376,84 @@ void main() {
       );
     });
   });
+}
+
+/// A bounded 200ms animation driven entirely through markNeedsPaintOnly —
+/// zero rebuilds per tick (the render-layer animation pattern).
+class _PaintOnlyAnim extends StatefulWidget {
+  const _PaintOnlyAnim({super.key});
+  @override
+  State<_PaintOnlyAnim> createState() => _PaintOnlyAnimState();
+}
+
+class _PaintOnlyAnimState extends State<_PaintOnlyAnim>
+    with SingleTickerProviderStateMixin {
+  late final Ticker _ticker;
+  final _holder = _ProgressHolder();
+  bool completed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = createTicker((elapsed) {
+      _holder.set((elapsed.inMilliseconds / 200).clamp(0.0, 1.0));
+      if (elapsed >= const Duration(milliseconds: 200)) {
+        completed = true;
+        _ticker.stop();
+      }
+    });
+    _ticker.start();
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _PaintPulse(holder: _holder);
+}
+
+class _ProgressHolder extends ChangeNotifier {
+  double value = 0;
+  void set(double v) {
+    value = v;
+    notifyListeners();
+  }
+}
+
+class _PaintPulse extends LeafRenderObjectWidget {
+  const _PaintPulse({required this.holder});
+  final _ProgressHolder holder;
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderPaintPulse(holder);
+  @override
+  void updateRenderObject(BuildContext context, RenderObject renderObject) {}
+}
+
+class _RenderPaintPulse extends RenderObject {
+  _RenderPaintPulse(this._holder) {
+    _holder.addListener(markNeedsPaintOnly);
+  }
+  final _ProgressHolder _holder;
+
+  @override
+  CellSize performLayout(CellConstraints constraints) =>
+      constraints.constrain(const CellSize(4, 1));
+
+  @override
+  void paint(
+    CellBuffer buffer,
+    CellOffset offset, {
+    CellOffset? screenOffset,
+    CellRect? clipRect,
+  }) {
+    buffer.writeGrapheme(
+      offset,
+      _holder.value >= 1.0 ? 'D' : 'p',
+      style: CellStyle.empty,
+    );
+  }
 }

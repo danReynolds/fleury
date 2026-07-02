@@ -473,5 +473,33 @@ void main() {
         isNot(contains(SemanticAction.setValue)),
       );
     });
+
+    testWidgets('a caller-provided focusNode keeps its own canRequestFocus '
+        '(not clobbered by enabled)', (tester) {
+      // Same contract as TextInput: the enabled↔focusable sync is for an
+      // OWNED node only; TextArea must not pass a non-null canRequestFocus to
+      // its inner Focus and overwrite the caller's node.
+      final controller = TextEditingController();
+      final node = FocusNode(debugLabel: 'provided', canRequestFocus: false);
+      addTearDown(node.dispose);
+
+      tester.pumpWidget(TextArea(controller: controller, focusNode: node));
+      tester.render(size: const CellSize(20, 3));
+      expect(
+        node.canRequestFocus,
+        isFalse,
+        reason: 'mount must not overwrite the provided flag',
+      );
+
+      tester.pumpWidget(
+        TextArea(controller: controller, focusNode: node, placeholder: 'x'),
+      );
+      tester.render(size: const CellSize(20, 3));
+      expect(
+        node.canRequestFocus,
+        isFalse,
+        reason: 'rebuild must not re-impose enabled→focusable',
+      );
+    });
   });
 }

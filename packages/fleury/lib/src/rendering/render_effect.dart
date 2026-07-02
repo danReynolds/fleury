@@ -42,7 +42,11 @@ typedef CellComposite =
 /// [composite]. Layout-transparent (reports the child's size).
 class RenderCellEffect extends RenderObject
     implements RenderObjectWithSingleChild {
-  RenderCellEffect(this._composite, {RenderObject? child}) {
+  RenderCellEffect(
+    this._composite, {
+    bool passthrough = false,
+    RenderObject? child,
+  }) : _passthrough = passthrough {
     if (child != null) this.child = child;
   }
 
@@ -50,6 +54,21 @@ class RenderCellEffect extends RenderObject
   set composite(CellComposite value) {
     if (identical(_composite, value)) return;
     _composite = value;
+    markNeedsPaintOnly();
+  }
+
+  /// When true, painting delegates straight to the child — no scratch
+  /// buffer, no per-cell composite. Used for an effect at rest (a route's
+  /// enter effect at full progress): the wrapper element stays mounted (so
+  /// the subtree keeps its State), but paint costs nothing and, crucially,
+  /// non-text cells survive — the composite path copies only leading text
+  /// cells, so protocol cells (terminal images) would be dropped, and it
+  /// paints the child at a scratch-local origin, so recorded focus/pointer
+  /// rects would go stale.
+  bool _passthrough;
+  set passthrough(bool value) {
+    if (_passthrough == value) return;
+    _passthrough = value;
     markNeedsPaintOnly();
   }
 
@@ -80,11 +99,23 @@ class RenderCellEffect extends RenderObject
   }) {
     final c = _child;
     if (c == null) return;
+    if (_passthrough) {
+      c.paint(
+        buffer,
+        offset,
+        screenOffset: screenOffset ?? offset,
+        clipRect: clipRect,
+      );
+      return;
+    }
     final size = c.size;
     if (size.isEmpty) return;
 
     final scratch = CellBuffer(size);
-    c.paint(scratch, CellOffset.zero);
+    // Paint at a scratch-local origin but propagate the TRUE screen position:
+    // descendants that record absolute geometry (focus bounds, pointer
+    // regions) must not capture scratch-local coordinates.
+    c.paint(scratch, CellOffset.zero, screenOffset: screenOffset ?? offset);
 
     final cols = buffer.size.cols;
     final rows = buffer.size.rows;
@@ -176,7 +207,8 @@ class RenderClip extends RenderObject implements RenderObjectWithSingleChild {
     if (clipped.isEmpty) return;
 
     final scratch = CellBuffer(c.size);
-    c.paint(scratch, CellOffset.zero);
+    // Scratch-local origin, true screen position — see RenderCellEffect.
+    c.paint(scratch, CellOffset.zero, screenOffset: screenOffset ?? offset);
 
     final cols = buffer.size.cols;
     final rows = buffer.size.rows;

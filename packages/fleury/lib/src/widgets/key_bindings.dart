@@ -62,6 +62,7 @@
 
 import 'package:meta/meta.dart';
 
+import '../foundation/collections.dart';
 import '../input/events.dart';
 import 'focus.dart';
 import 'framework.dart';
@@ -308,6 +309,16 @@ final class KeyChord {
   /// chords have their continuation matched by [InputDispatcher] via
   /// [KeyChordInternals.matchesStepAt].
   bool matches(KeyEvent event) => _matchStep(this, event);
+
+  /// Whether a focused text field swallows this chord before chord matching
+  /// runs: its first step is a bare printable (a `char` with no Ctrl/Alt —
+  /// Shift allowed, shifted characters arrive as text). Printables are
+  /// delivered to the focused [TextInputClaimant] first and only fall through
+  /// to chord matching when unclaimed, so such a chord can never fire while an
+  /// editable widget holds focus. A sequence starting with a bare printable is
+  /// equally dead — its first step never lands. The hint bar uses this to stop
+  /// advertising keys that won't work while the user is typing.
+  bool get isShadowedByTextInput => _char != null && !_ctrl && !_alt;
 
   /// Short human-readable label for hint bars: `j` / `Ctrl+S` / `↑` /
   /// `Ctrl+X Ctrl+S`.
@@ -972,6 +983,40 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
       skipTraversal: true,
       debugLabel: 'KeyBindings',
     )..bindingSource = this;
+  }
+
+  @override
+  void didUpdateWidget(KeyBindings oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Labels/enabled/chords may have changed without any focus movement —
+    // tell the manager so listeners keyed to the *content* of the active
+    // bindings (the hint bar) repaint. Compared by hint-relevant CONTENT,
+    // not list identity: rebuilds routinely construct a fresh `bindings:
+    // [...]` list with identical content (the navigator's route chrome does,
+    // on every rebuild), and identity alone would notify → dependents
+    // rebuild → fresh list → notify — a self-sustaining loop, since the
+    // Navigator itself depends on the manager. Callbacks are deliberately
+    // ignored: the bar renders chords + labels, not handlers. The notify is
+    // microtask-deferred by the manager (we're mid-build here).
+    if (_hintContentChanged(oldWidget.bindings, widget.bindings)) {
+      Focus.maybeOf(context)?.notifyBindingsChanged();
+    }
+  }
+
+  static bool _hintContentChanged(List<KeyBinding> a, List<KeyBinding> b) {
+    if (identical(a, b)) return false;
+    if (a.length != b.length) return true;
+    for (var i = 0; i < a.length; i++) {
+      final x = a[i];
+      final y = b[i];
+      if (x.label != y.label ||
+          x.enabled != y.enabled ||
+          x.hideFromHintBar != y.hideFromHintBar) {
+        return true;
+      }
+      if (!listEquals(x.chords, y.chords)) return true;
+    }
+    return false;
   }
 
   @override

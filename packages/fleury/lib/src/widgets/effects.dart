@@ -20,6 +20,7 @@ import 'dart:math' as math;
 import '../animation/animation.dart';
 import '../animation/curves.dart';
 import '../animation/lerp.dart';
+import '../foundation/geometry.dart' show CellSize;
 import '../rendering/cell.dart';
 import '../rendering/render_effect.dart';
 import '../rendering/render_flex.dart' show Axis;
@@ -37,12 +38,44 @@ abstract class Effect {
   /// Wraps [child], applying this effect at progress [t].
   Widget build(Widget child, double t);
 
+  /// Wraps [child] in this effect's AT-REST form: the same widget tree
+  /// shape as [build] (so the element — and the subtree's State — survives
+  /// the animating→settled switch), but painting delegates straight to the
+  /// child. Used by the navigator for settled routes: keeping the live
+  /// composite at full progress would pay a scratch-buffer double paint
+  /// every frame, drop protocol (image) cells, and record scratch-local
+  /// focus/pointer geometry. Override alongside [build] if an effect wraps
+  /// in something other than a single cell-effect widget.
+  Widget buildSettled(Widget child) => _CellEffectWidget(
+    composite: _identityComposite,
+    passthrough: true,
+    child: child,
+  );
+
+  static CellPlacement? _identityComposite(
+    int col,
+    int row,
+    Cell cell,
+    CellSize size,
+  ) => CellPlacement(col, row, cell.style);
+
   /// Whether this effect runs continuously (shimmer, pulse). When
   /// true, [Animate] loops the progress instead of playing once.
   bool get loops => false;
 
   /// Runs this effect and [other] together at the same progress.
   Effect operator +(Effect other) => _CombinedEffect(<Effect>[this, other]);
+}
+
+/// An effect that never animates — [build] at any progress delegates straight
+/// to the child (via [buildSettled]). Used as the inert sentinel effect for a
+/// no-transition route ([RouteTransition.none]) so that even code which plays
+/// the effect directly, rather than honoring an isInstant flag, produces no
+/// animation.
+class NoopEffect extends Effect {
+  const NoopEffect();
+  @override
+  Widget build(Widget child, double t) => buildSettled(child);
 }
 
 class _CombinedEffect extends Effect {
@@ -59,6 +92,17 @@ class _CombinedEffect extends Effect {
   }
 
   @override
+  Widget buildSettled(Widget child) {
+    // Mirror [build]'s nesting exactly so the element tree keeps its shape
+    // (one wrapper per effect) across the animating→settled switch.
+    var result = child;
+    for (final effect in _effects) {
+      result = effect.buildSettled(result);
+    }
+    return result;
+  }
+
+  @override
   bool get loops => _effects.any((e) => e.loops);
 
   @override
@@ -70,21 +114,28 @@ class _CombinedEffect extends Effect {
 class _CellEffectWidget extends SingleChildRenderObjectWidget {
   const _CellEffectWidget({
     required this.composite,
+    this.passthrough = false,
     required Widget super.child,
   });
 
   final CellComposite composite;
 
+  /// When true the render object paints the child directly (no composite):
+  /// the at-rest form produced by [Effect.buildSettled].
+  final bool passthrough;
+
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      RenderCellEffect(composite);
+      RenderCellEffect(composite, passthrough: passthrough);
 
   @override
   void updateRenderObject(
     BuildContext context,
     covariant RenderCellEffect renderObject,
   ) {
-    renderObject.composite = composite;
+    renderObject
+      ..composite = composite
+      ..passthrough = passthrough;
   }
 }
 
