@@ -4,50 +4,10 @@ import 'package:characters/characters.dart';
 
 import '../foundation/geometry.dart';
 import 'cell.dart';
+import 'inline_image.dart';
 import 'width_resolver.dart';
 
-/// An inline image placed into a [CellBuffer] (browser "serve" surface). The
-/// How an inline image fills its placement rectangle on a true-pixel surface.
-/// The four modes mirror the widget-level `ImageFit`, and — by design — their
-/// names are exactly the CSS `object-fit` keywords, so the serve client applies
-/// `el.style.objectFit = fit.name` with no lookup table. [contain] (the default)
-/// preserves the source aspect ratio; without it a wrong-aspect cell box would
-/// stretch the image.
-enum InlineImageFit { contain, cover, fill, none }
-
-/// One inline image's bytes, off the cell grid, content-addressed by [id]. The
-/// grid carries a protocol-anchor cell whose grapheme is the id; the serve
-/// codec ships the bytes once and the DOM client renders an `<img>`. Geometry
-/// (where and how big) is NOT here — it belongs to the *placement*, since the
-/// same bytes can appear at several sizes/positions in one frame.
-final class InlineImage {
-  const InlineImage({required this.id, required this.bytes});
-
-  final String id;
-  final Uint8List bytes;
-}
-
-/// One placement of an inline image: which [id]'s bytes go where ([col], [row])
-/// over how many cells ([cols]×[rows]) and how they fill that box ([fit]). One
-/// is recorded per [CellBuffer.writeImage] call, so the same image drawn twice
-/// yields two placements with independent geometry.
-final class InlineImagePlacement {
-  const InlineImagePlacement({
-    required this.id,
-    required this.col,
-    required this.row,
-    required this.cols,
-    required this.rows,
-    required this.fit,
-  });
-
-  final String id;
-  final int col;
-  final int row;
-  final int cols;
-  final int rows;
-  final InlineImageFit fit;
-}
+export 'inline_image.dart';
 
 /// A two-dimensional grid of [Cell]s representing one frame of the terminal
 /// rendering output.
@@ -89,9 +49,9 @@ final class CellBuffer {
 
   CellSize get size => _size;
 
-  /// Inline image bytes placed this frame, deduplicated by content hash. The
-  /// cell grid references each via a protocol-anchor cell whose grapheme is the
-  /// id. Read-only.
+  /// Inline image content placed this frame, deduplicated by content hash.
+  /// The cell grid marks each placement's region with [Cell.overlay] cells;
+  /// presenters resolve geometry through [imagePlacements]. Read-only.
   Map<String, InlineImage> get images => _images;
 
   /// Per-placement geometry for the inline images placed this frame, in paint
@@ -246,6 +206,33 @@ final class CellBuffer {
     final dstRow0 = destOffset.row;
     final srcStride = source._size.cols;
     _recordDamageRect(dstCol0, dstRow0, cols, rows);
+
+    // Inline images ride along: placements live on the buffer, not in
+    // cells, so a cached-subtree blit (RenderRepaintBoundary) must carry
+    // them or the presenter would see overlay cells with no placement and
+    // the image would vanish on the first cached frame. Geometry
+    // translates by the copy delta; content dedupes by id.
+    for (final p in source._imagePlacements) {
+      final intersects =
+          p.col < srcCol + cols &&
+          p.col + p.cols > srcCol &&
+          p.row < srcRow + rows &&
+          p.row + p.rows > srcRow;
+      if (!intersects) continue;
+      final image = source._images[p.id];
+      if (image == null) continue;
+      _images[p.id] = image;
+      _imagePlacements.add(
+        InlineImagePlacement(
+          id: p.id,
+          col: p.col - srcCol + dstCol0,
+          row: p.row - srcRow + dstRow0,
+          cols: p.cols,
+          rows: p.rows,
+          fit: p.fit,
+        ),
+      );
+    }
 
     // Fast path: full-width rows landing at column 0 of this buffer — the
     // sliced source rows map to a contiguous range in the destination, so
@@ -440,66 +427,40 @@ final class CellBuffer {
     return col - startCol;
   }
 
-  /// Writes a terminal-protocol region into the buffer: a single
-  /// [Cell.protocolAnchor] at [topLeft] holding the raw escape-sequence
-  /// [bytes], plus [width] × [height] − 1 [Cell.protocolCovered] cells
-  /// covering the remaining region. The renderer emits [bytes] verbatim
-  /// at the anchor's terminal position; the covered cells emit nothing.
+  /// Places an inline image over a [width]×[height] cell region. The bytes are
+  /// stored in [images] keyed by a content hash; the geometry (plus [fit]) is
+  /// recorded as an [InlineImagePlacement]; the grid cells become
+  /// [Cell.overlay] so text renderers leave the region alone. The PRESENTER
+  /// renders the pixels: the serve codec ships the bytes once per id and the
+  /// DOM client overlays an `<img>`; the terminal image encoder emits the
+  /// active graphics protocol (Kitty/iTerm2/Sixel).
   ///
-  /// Used by `Image` to ship Kitty graphics / Sixel / iTerm2 inline
-  /// images through the cell-grid model without breaking the diff
-  /// renderer.
-  void writeProtocol(
-    CellOffset topLeft,
-    String bytes, {
-    required int width,
-    required int height,
-  }) {
-    if (!_containsColRow(topLeft.col, topLeft.row)) return;
-    _recordDamageRect(topLeft.col, topLeft.row, width, height);
-    final r0 = topLeft.row;
-    final c0 = topLeft.col;
-    final maxR = (r0 + height).clamp(0, _size.rows);
-    final maxC = (c0 + width).clamp(0, _size.cols);
-    _cells[r0 * _size.cols + c0] = Cell.protocolAnchor(grapheme: bytes);
-    for (var r = r0; r < maxR; r++) {
-      for (var c = c0; c < maxC; c++) {
-        if (r == r0 && c == c0) continue;
-        _cells[r * _size.cols + c] = const Cell.protocolCovered();
-      }
-    }
-  }
-
-  /// Places an inline image over a [width]×[height] cell region for the browser
-  /// "serve" surface. The bytes are stored in [images] keyed by a content hash;
-  /// the grid only carries a protocol-anchor cell whose grapheme is that id
-  /// (plus protocol-covered cells). The serve codec ships the bytes once per id
-  /// and the DOM client renders an `<img>` overlay — true pixels, not glyph art.
-  /// Distinct from [writeProtocol], whose anchor grapheme is a terminal escape;
-  /// a backend tells them apart by whether the grapheme is a key in [images].
+  /// [sourceWidth]/[sourceHeight] (decoded pixel dimensions) let terminal
+  /// presenters resolve aspect-preserving fits without decoding the bytes;
+  /// without them a terminal presenter falls back to `fill` geometry.
+  /// [pixels] lazily provides decoded RGBA (row-major, 4 bytes/pixel) —
+  /// required only by Sixel, which must re-rasterize.
   void writeImage(
     CellOffset topLeft,
     Uint8List bytes, {
     required int width,
     required int height,
     InlineImageFit fit = InlineImageFit.contain,
+    int? sourceWidth,
+    int? sourceHeight,
+    Uint8List Function()? pixels,
   }) {
-    if (!_containsColRow(topLeft.col, topLeft.row)) return;
-    final id = _hashBytes(bytes);
-    // Bytes are deduplicated by id; geometry is recorded per placement so the
-    // same image drawn twice (or at two sizes) keeps independent rectangles.
-    _images[id] = InlineImage(id: id, bytes: bytes);
-    _imagePlacements.add(
-      InlineImagePlacement(
-        id: id,
-        col: topLeft.col,
-        row: topLeft.row,
-        cols: width,
-        rows: height,
-        fit: fit,
-      ),
+    writeImageWithId(
+      topLeft,
+      _hashBytes(bytes),
+      bytes,
+      width: width,
+      height: height,
+      fit: fit,
+      sourceWidth: sourceWidth,
+      sourceHeight: sourceHeight,
+      pixels: pixels,
     );
-    writeProtocol(topLeft, id, width: width, height: height);
   }
 
   /// Records an inline image whose bytes are already hashed/encoded (the widget
@@ -512,9 +473,20 @@ final class CellBuffer {
     required int width,
     required int height,
     InlineImageFit fit = InlineImageFit.contain,
+    int? sourceWidth,
+    int? sourceHeight,
+    Uint8List Function()? pixels,
   }) {
     if (!_containsColRow(topLeft.col, topLeft.row)) return;
-    _images[id] = InlineImage(id: id, bytes: bytes);
+    // Bytes are deduplicated by id; geometry is recorded per placement so the
+    // same image drawn twice (or at two sizes) keeps independent rectangles.
+    _images[id] = InlineImage(
+      id: id,
+      bytes: bytes,
+      sourceWidth: sourceWidth,
+      sourceHeight: sourceHeight,
+      pixels: pixels,
+    );
     _imagePlacements.add(
       InlineImagePlacement(
         id: id,
@@ -525,7 +497,16 @@ final class CellBuffer {
         fit: fit,
       ),
     );
-    writeProtocol(topLeft, id, width: width, height: height);
+    _recordDamageRect(topLeft.col, topLeft.row, width, height);
+    final r0 = topLeft.row;
+    final c0 = topLeft.col;
+    final maxR = (r0 + height).clamp(0, _size.rows);
+    final maxC = (c0 + width).clamp(0, _size.cols);
+    for (var r = r0; r < maxR; r++) {
+      for (var c = c0; c < maxC; c++) {
+        _cells[r * _size.cols + c] = const Cell.overlay();
+      }
+    }
   }
 
   /// Public content hash for inline-image bytes — the same scheme [writeImage]
@@ -658,10 +639,9 @@ final class CellBuffer {
           case CellRole.continuation:
             // Wide-grapheme trailer — already emitted by its leading cell.
             break;
-          case CellRole.protocolAnchor:
-          case CellRole.protocolCovered:
-            // Terminal-protocol region (Kitty image, Sixel, etc.) —
-            // not human-readable text; emit a space placeholder.
+          case CellRole.overlay:
+            // Inline-image region — not human-readable text; emit a
+            // space placeholder.
             buf.write(' ');
         }
       }

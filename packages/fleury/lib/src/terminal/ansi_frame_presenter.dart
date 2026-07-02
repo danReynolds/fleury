@@ -13,6 +13,7 @@ import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
 import '../runtime/frame_driver.dart';
 import '../runtime/tui_frame_loop.dart';
+import 'terminal_image_encoder.dart';
 
 /// Presents rendered frames as diffed ANSI bytes on [sink].
 final class AnsiFramePresenter implements FramePresenter {
@@ -20,13 +21,19 @@ final class AnsiFramePresenter implements FramePresenter {
     required AnsiSink sink,
     required AnsiRenderer renderer,
     required DebugController debug,
+    TerminalImageEncoder? imageEncoder,
   }) : _sink = sink,
        _renderer = renderer,
-       _debug = debug;
+       _debug = debug,
+       _imageEncoder = imageEncoder;
 
   final AnsiSink _sink;
   final AnsiRenderer _renderer;
   final DebugController _debug;
+
+  /// Emits inline-image placements as the terminal's graphics protocol,
+  /// or null when the terminal has none (glyph art needs no encoder).
+  final TerminalImageEncoder? _imageEncoder;
 
   var _frameCounter = 0;
   // Cells we tinted green in the previous frame's paint-flash pass.
@@ -78,12 +85,22 @@ final class AnsiFramePresenter implements FramePresenter {
       currentDirty?.add(row * next.size.cols + col);
     }
 
+    // Image escapes ride the diff's trailer so text and pixels land in
+    // one synchronized-output frame; the encoder diffs placements itself,
+    // so an unchanged image contributes zero bytes.
+    final imageTrailer =
+        _imageEncoder?.encodeFrame(
+          next,
+          fullRepaint: frame.damage.fullRepaint,
+        ) ??
+        '';
     _renderer.renderDiff(
       prev,
       next,
       _sink,
       dirtyBounds: frame.damage.diffBounds,
       onDirtyCell: debugWatching ? recordDirtyCell : null,
+      trailer: imageTrailer,
     );
     _phaseDiff = diffSw?.elapsed ?? Duration.zero;
     _dirtyCellCount = dirtyCellCount;
@@ -177,9 +194,7 @@ void emitPaintFlash({
     final row = idx ~/ cols;
     if (row >= next.size.rows) continue;
     final cell = next.atColRow(col, row);
-    if (cell.role == CellRole.continuation ||
-        cell.role == CellRole.protocolCovered ||
-        cell.role == CellRole.protocolAnchor) {
+    if (cell.role == CellRole.continuation || cell.role == CellRole.overlay) {
       continue;
     }
     buf.write('\x1B[${row + 1};${col + 1}H');
@@ -206,9 +221,7 @@ void emitPaintFlash({
     final row = idx ~/ cols;
     if (row >= next.size.rows) continue;
     final cell = next.atColRow(col, row);
-    if (cell.role == CellRole.continuation ||
-        cell.role == CellRole.protocolCovered ||
-        cell.role == CellRole.protocolAnchor) {
+    if (cell.role == CellRole.continuation || cell.role == CellRole.overlay) {
       continue;
     }
     buf.write('\x1B[${row + 1};${col + 1}H');

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
@@ -317,22 +319,29 @@ void main() {
       expect(sink.output, contains('\x1B[S'));
     });
 
-    test('falls back to cell diff when protocol cells are present', () {
+    test('falls back to cell diff when overlay cells are present', () {
       final prev = CellBuffer(const CellSize(4, 3));
       final next = CellBuffer(const CellSize(4, 3));
       prev.writeText(const CellOffset(0, 1), 'bbbb');
       prev.writeText(const CellOffset(0, 2), 'cccc');
       next.writeText(const CellOffset(0, 0), 'bbbb');
       next.writeText(const CellOffset(0, 1), 'cccc');
-      next.writeProtocol(const CellOffset(0, 2), 'P', width: 1, height: 1);
+      next.writeImage(
+        const CellOffset(0, 2),
+        Uint8List.fromList([1]),
+        width: 1,
+        height: 1,
+      );
       final sink = StringAnsiSink();
 
       const AnsiRenderer(
         synchronizedOutput: false,
       ).renderDiff(prev, next, sink);
 
+      // Overlay pixels are not row-relocatable, so no SU escape — the
+      // moved text is repainted cell-by-cell instead.
       expect(sink.output.contains('\x1B[S'), isFalse);
-      expect(sink.output.contains('P'), isTrue);
+      expect(sink.output.contains('bbbb'), isTrue);
     });
   });
 
@@ -792,64 +801,136 @@ void main() {
     });
   });
 
-  group('renderDiff — protocol regions', () {
+  group('renderDiff — overlay regions', () {
     const renderer = AnsiRenderer(synchronizedOutput: false);
 
-    test('anchor grapheme is emitted verbatim after a cursor move', () {
-      final prev = CellBuffer(const CellSize(4, 2));
-      final next = CellBuffer(const CellSize(4, 2));
-      const payload = '\x1B_GRAW\x1B\\';
-      next.writeProtocol(const CellOffset(1, 1), payload, width: 3, height: 1);
-      final sink = StringAnsiSink();
-
-      renderer.renderDiff(prev, next, sink);
-      // Cursor to (row 1, col 1) is "\x1B[2;2H" (1-indexed). Then the
-      // raw escape payload, verbatim.
-      expect(sink.output, contains('\x1B[2;2H$payload'));
-    });
-
-    test('covered cells emit no cursor move and no content', () {
+    test('overlay cells emit no cursor move and no content', () {
       final prev = CellBuffer(const CellSize(3, 1));
       final next = CellBuffer(const CellSize(3, 1));
-      next.writeProtocol(const CellOffset(0, 0), 'P', width: 3, height: 1);
+      next.writeImage(
+        const CellOffset(0, 0),
+        Uint8List.fromList([1]),
+        width: 3,
+        height: 1,
+      );
       final sink = StringAnsiSink();
 
       renderer.renderDiff(prev, next, sink);
-      // Exactly one cursor move (for the anchor at home); no per-cell moves
-      // for the two covered cells.
-      expect('\x1B[H'.allMatches(sink.output).length, 1);
-      expect(sink.output.contains('\x1B[1;2H'), isFalse);
-      expect(sink.output.contains('\x1B[1;3H'), isFalse);
+      // The presenter's image encoder owns the region; the text diff
+      // must contribute zero bytes for it.
+      expect(sink.output, isEmpty);
     });
 
-    test('style is invalidated after a protocol anchor', () {
-      // After a protocol anchor the cursor and style cache are
-      // unknown — the next dirty cell must re-emit its SGR.
-      final prev = CellBuffer(const CellSize(4, 1));
-      final next = CellBuffer(const CellSize(4, 1));
-      next.writeProtocol(const CellOffset(0, 0), 'P', width: 2, height: 1);
-      next.writeGrapheme(
-        const CellOffset(2, 0),
-        'a',
-        style: const CellStyle(foreground: RgbColor(255, 0, 0)),
+    test('a vacated overlay region is repainted (image removal clears)', () {
+      final prev = CellBuffer(const CellSize(3, 1));
+      prev.writeImage(
+        const CellOffset(0, 0),
+        Uint8List.fromList([1]),
+        width: 3,
+        height: 1,
       );
+      final next = CellBuffer(const CellSize(3, 1));
       final sink = StringAnsiSink();
 
       renderer.renderDiff(prev, next, sink);
-      // The cell at col 2 follows the anchor, so a fresh cursor move
-      // and SGR must appear.
-      final anchorIdx = sink.output.indexOf('P');
-      final afterAnchor = sink.output.substring(anchorIdx + 1);
-      expect(
-        afterAnchor.contains('\x1B[1;3H'),
-        isTrue,
-        reason: 'cursor must be re-emitted after the anchor',
+      // overlay → empty differs, so the diff paints spaces over the
+      // region — this is what erases a cell-attached image (iTerm2,
+      // Sixel) when the widget goes away.
+      expect(sink.output, '\x1B[H   ');
+    });
+
+    test('text painted over a former overlay region re-emits', () {
+      final prev = CellBuffer(const CellSize(3, 1));
+      prev.writeImage(
+        const CellOffset(0, 0),
+        Uint8List.fromList([1]),
+        width: 3,
+        height: 1,
       );
-      expect(
-        afterAnchor.contains('\x1B[0;38;2;255;0;0m'),
-        isTrue,
-        reason: 'style cache invalidated — reset and fg must be re-emitted',
+      final next = CellBuffer(const CellSize(3, 1));
+      next.writeText(const CellOffset(0, 0), 'abc');
+      final sink = StringAnsiSink();
+
+      renderer.renderDiff(prev, next, sink);
+      expect(sink.output, contains('abc'));
+    });
+  });
+
+  group('renderDiff — trailer', () {
+    test('trailer bytes ride after the cell diff', () {
+      final prev = CellBuffer(const CellSize(4, 1));
+      final next = CellBuffer(const CellSize(4, 1));
+      next.writeText(const CellOffset(0, 0), 'ab');
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer(
+        synchronizedOutput: false,
+      ).renderDiff(prev, next, sink, trailer: '\x1B_GIMG\x1B\\');
+      expect(sink.output, '\x1B[Hab\x1B_GIMG\x1B\\');
+    });
+
+    test('a non-empty trailer is written even when no cell changed', () {
+      // An animation frame can swap image content without touching a
+      // single cell (the region stays overlay); the escape bytes must
+      // still reach the terminal.
+      final prev = CellBuffer(const CellSize(3, 1));
+      prev.writeImage(
+        const CellOffset(0, 0),
+        Uint8List.fromList([1]),
+        width: 3,
+        height: 1,
       );
+      final next = CellBuffer(const CellSize(3, 1));
+      next.writeImage(
+        const CellOffset(0, 0),
+        Uint8List.fromList([2]),
+        width: 3,
+        height: 1,
+      );
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer(
+        synchronizedOutput: false,
+      ).renderDiff(prev, next, sink, trailer: 'TRAILER');
+      expect(sink.output, 'TRAILER');
+    });
+
+    test('no bytes at all when nothing changed and the trailer is empty', () {
+      final prev = CellBuffer(const CellSize(3, 1));
+      final next = CellBuffer(const CellSize(3, 1));
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer(
+        synchronizedOutput: false,
+      ).renderDiff(prev, next, sink);
+      expect(sink.output, isEmpty);
+    });
+
+    test('the trailer lands inside the synchronized-output wrapper', () {
+      final prev = CellBuffer(const CellSize(80, 1));
+      final next = CellBuffer(const CellSize(80, 1));
+      next.writeText(const CellOffset(0, 0), 'x' * 70);
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer().renderDiff(prev, next, sink, trailer: 'IMGBYTES');
+      expect(sink.output.startsWith('\x1B[?2026h'), isTrue);
+      expect(sink.output.endsWith('IMGBYTES\x1B[?2026l'), isTrue);
+    });
+
+    test('trailer rides the bounded-diff path too', () {
+      final prev = CellBuffer(const CellSize(4, 2));
+      final next = CellBuffer(const CellSize(4, 2));
+      next.writeText(const CellOffset(0, 0), 'ab');
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer(synchronizedOutput: false).renderDiff(
+        prev,
+        next,
+        sink,
+        dirtyBounds: CellRect.fromLTWH(0, 0, 4, 1),
+        trailer: 'T',
+      );
+      expect(sink.output.endsWith('T'), isTrue);
     });
   });
 }

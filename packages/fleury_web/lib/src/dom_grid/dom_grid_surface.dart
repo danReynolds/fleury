@@ -50,7 +50,6 @@ final class DomGridSurface implements FrameSurface {
   WebSurfaceCapabilities get capabilities => const WebSurfaceCapabilities(
     supportsTrueColor: true,
     supportsSemanticLinks: false,
-    inlineImages: InlineImageCapability.none,
     supportsGlyphOverlay: false,
   );
 

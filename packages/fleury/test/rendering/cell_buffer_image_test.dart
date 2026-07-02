@@ -7,7 +7,7 @@ import 'package:test/test.dart';
 
 void main() {
   group('CellBuffer.writeImage', () {
-    test('stores bytes off-grid and anchors the region by id', () {
+    test('stores bytes off-grid and marks the region as overlay cells', () {
       final buf = CellBuffer(const CellSize(6, 4));
       final bytes = Uint8List.fromList(List<int>.generate(20, (i) => i));
       buf.writeImage(const CellOffset(1, 1), bytes, width: 3, height: 2);
@@ -24,20 +24,90 @@ void main() {
         [1, 1, 3, 2],
       );
 
-      // The anchor carries only the id; covered cells fill the 3×2 region.
-      final anchor = buf.atColRow(1, 1);
-      expect(anchor.role, CellRole.protocolAnchor);
-      expect(anchor.grapheme, image.id);
-      expect(
-        buf.images.containsKey(anchor.grapheme),
-        isTrue,
-        reason:
-            'grapheme is a key in the image table → it is an image, '
-            'not a terminal escape',
+      // Every cell in the 3×2 region is an overlay cell: no grapheme, no
+      // escape bytes, no id — presenters resolve pixels via the placement
+      // list, never via cell content.
+      for (var r = 1; r <= 2; r++) {
+        for (var c = 1; c <= 3; c++) {
+          final cell = buf.atColRow(c, r);
+          expect(cell.role, CellRole.overlay, reason: 'cell ($c,$r)');
+          expect(cell.grapheme, isNull);
+        }
+      }
+      // Outside the region stays untouched.
+      expect(buf.atColRow(0, 1).role, CellRole.empty);
+      expect(buf.atColRow(4, 1).role, CellRole.empty);
+      expect(buf.atColRow(1, 3).role, CellRole.empty);
+    });
+
+    test('records source dimensions and the RGBA thunk on the content', () {
+      final buf = CellBuffer(const CellSize(6, 2));
+      final rgba = Uint8List(4 * 2 * 4);
+      buf.writeImage(
+        const CellOffset(0, 0),
+        Uint8List.fromList([1, 2, 3]),
+        width: 3,
+        height: 1,
+        sourceWidth: 4,
+        sourceHeight: 2,
+        pixels: () => rgba,
       );
-      expect(buf.atColRow(2, 1).role, CellRole.protocolCovered);
-      expect(buf.atColRow(3, 1).role, CellRole.protocolCovered);
-      expect(buf.atColRow(1, 2).role, CellRole.protocolCovered);
+      final image = buf.images.values.single;
+      expect(image.sourceWidth, 4);
+      expect(image.sourceHeight, 2);
+      expect(image.pixels!(), same(rgba));
+    });
+
+    test('rect copies carry intersecting placements, translated', () {
+      // RenderRepaintBoundary blits a cached sub-buffer into the frame;
+      // placements live on the buffer, so the blit must carry them or an
+      // image inside a repaint boundary vanishes on the first cached
+      // frame.
+      final cache = CellBuffer(const CellSize(6, 4));
+      cache.writeImage(
+        const CellOffset(1, 1),
+        Uint8List.fromList([7, 7]),
+        width: 3,
+        height: 2,
+        fit: InlineImageFit.cover,
+      );
+      final frame = CellBuffer(const CellSize(12, 8));
+      frame.copyRectFrom(
+        cache,
+        CellRect.fromLTWH(0, 0, 6, 4),
+        const CellOffset(4, 2),
+      );
+
+      final p = frame.imagePlacements.single;
+      expect([p.col, p.row, p.cols, p.rows], [5, 3, 3, 2]);
+      expect(p.fit, InlineImageFit.cover);
+      expect(frame.images.containsKey(p.id), isTrue);
+      expect(frame.atColRow(5, 3).role, CellRole.overlay);
+
+      // A copy that misses the placement carries nothing.
+      final other = CellBuffer(const CellSize(12, 8));
+      other.copyRectFrom(
+        cache,
+        CellRect.fromLTWH(4, 0, 2, 4),
+        const CellOffset(0, 0),
+      );
+      expect(other.imagePlacements, isEmpty);
+      expect(other.images, isEmpty);
+    });
+
+    test('a region clipped by the buffer edge writes only in-bounds cells', () {
+      final buf = CellBuffer(const CellSize(4, 2));
+      buf.writeImage(
+        const CellOffset(2, 1),
+        Uint8List.fromList([1]),
+        width: 5,
+        height: 3,
+      );
+      expect(buf.atColRow(2, 1).role, CellRole.overlay);
+      expect(buf.atColRow(3, 1).role, CellRole.overlay);
+      // The placement itself keeps the full requested geometry (presenters
+      // clip at the screen edge, matching terminal protocol behavior).
+      expect(buf.imagePlacements.single.cols, 5);
     });
 
     test('fit defaults to contain and records an explicit fit', () {

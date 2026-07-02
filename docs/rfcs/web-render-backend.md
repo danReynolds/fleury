@@ -170,7 +170,7 @@ The browser host should satisfy these local contracts.
 | Text input | Fleury already has `TextInputEvent`, `KeyEvent`, `PasteEvent`, and composing APIs; browser events should map into those. |
 | Clipboard | `Clipboard.instance` is swappable; web should provide a browser implementation plus in-process fallback behavior. |
 | Accessibility | Existing accessibility snapshots are text-first, rebuilt on demand, and geometry-less; rich web ARIA needs the retained geometry-bearing semantics pipeline in the companion RFC. |
-| Protocol/image cells | `protocolAnchor` exists in cells, but current DOM rendering treats it as a placeholder, not a supported capability. |
+| Protocol/image cells | Superseded by the overlay model: cells never carry escape bytes. Images are neutral placements (`CellBuffer.imagePlacements` + `CellRole.overlay` cells); the browser renders them via `InlineImageOverlay` (`<img>` layer), terminals via the presenter's `TerminalImageEncoder`. §10.6 below predates this and is retained for history. |
 
 ## 7. Architecture Overview
 
@@ -624,9 +624,16 @@ not replace the existing selection model.
 
 ### 10.6 Protocol and Images
 
-The current DOM surface reports no inline image support.
+> **Superseded (2026-07):** the `protocolAnchor`/`protocolCovered` cell
+> roles were replaced by `CellRole.overlay` + buffer-level
+> `InlineImagePlacement`s. The DOM surface renders placements through the
+> host-assembled `InlineImageOverlay` (`<img>` layer over the grid) — the
+> same component the serve client uses — so the web render backend gets
+> true-pixel images for free. `CellRunKind.protocolPlaceholder` no longer
+> exists; overlay cells coalesce into blank runs. The span-model sketch in
+> §10.5 above reflects the pre-overlay enum for the same reason.
 
-Rules:
+Original (historical) rules:
 
 - `protocolAnchor` is rendered as an unsupported placeholder or omitted per
   capability policy;

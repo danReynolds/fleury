@@ -44,12 +44,12 @@ import '../app/commands.dart';
 import '../foundation/geometry.dart';
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
+import '../rendering/surface_capabilities.dart';
 import '../rendering/render_flex.dart' show RenderFlex;
 import '../runtime/input_dispatcher.dart';
 import '../semantics/accessibility.dart';
 import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
-import '../terminal/capabilities.dart';
 import '../input/events.dart';
 import '../widgets/basic.dart';
 import '../runtime/clipboard.dart';
@@ -72,8 +72,7 @@ class FleuryTester {
     this.viewportSize = const CellSize(80, 24),
     this.colorMode = ColorMode.truecolor,
     this.glyphTier = GlyphTier.unicode,
-    this.imageProtocol = ImageProtocol.halfBlock,
-    this.tmuxPassthrough = false,
+    this.images = InlineImageSupport.none,
     Clipboard? clipboard,
   }) : clipboard = clipboard ?? InProcessClipboard(),
        _clock = FakeClock(),
@@ -117,11 +116,12 @@ class FleuryTester {
   CellSize viewportSize;
 
   /// Capability profile installed in the ambient [MediaQuery]. Tests set
-  /// [glyphTier] to [GlyphTier.ascii] to exercise the ASCII drawing fallback.
+  /// [glyphTier] to [GlyphTier.ascii] to exercise the ASCII drawing fallback,
+  /// or [images] to [InlineImageSupport.placements] to exercise the
+  /// true-pixel image path.
   ColorMode colorMode;
   GlyphTier glyphTier;
-  ImageProtocol imageProtocol;
-  bool tmuxPassthrough;
+  InlineImageSupport images;
 
   final FakeClock _clock;
   late final FakeTickerScheduler _scheduler;
@@ -401,12 +401,10 @@ class FleuryTester {
           case CellRole.leading:
             line.write(cell.grapheme);
           case CellRole.continuation:
-          case CellRole.protocolAnchor:
-          case CellRole.protocolCovered:
-            // Protocol cells render in the terminal via raw escape
-            // bytes that have no string representation in the cell
-            // grid; the snapshot is text-only so we treat them as
-            // emptyMark.
+          case CellRole.overlay:
+            // Overlay (inline-image) cells render as pixels via the
+            // presenter, not text; the snapshot is text-only so we
+            // treat them as emptyMark.
             break;
         }
       }
@@ -612,10 +610,11 @@ class FleuryTester {
       child: MediaQuery(
         data: MediaQueryData(
           size: viewportSize,
-          colorMode: colorMode,
-          glyphTier: glyphTier,
-          imageProtocol: imageProtocol,
-          tmuxPassthrough: tmuxPassthrough,
+          capabilities: SurfaceCapabilities(
+            colorMode: colorMode,
+            glyphTier: glyphTier,
+            images: images,
+          ),
         ),
         child: FocusManagerScope(
           manager: _focusManager,
@@ -771,8 +770,7 @@ void testWidgets(
   CellSize viewportSize = const CellSize(80, 24),
   ColorMode colorMode = ColorMode.truecolor,
   GlyphTier glyphTier = GlyphTier.unicode,
-  ImageProtocol imageProtocol = ImageProtocol.halfBlock,
-  bool tmuxPassthrough = false,
+  InlineImageSupport images = InlineImageSupport.none,
   pkg_test.Timeout? timeout,
   Object? skip,
 }) {
@@ -784,8 +782,7 @@ void testWidgets(
         viewportSize: viewportSize,
         colorMode: colorMode,
         glyphTier: glyphTier,
-        imageProtocol: imageProtocol,
-        tmuxPassthrough: tmuxPassthrough,
+        images: images,
       );
       try {
         await body(tester);

@@ -15,7 +15,7 @@ import 'package:web/web.dart' as web;
 
 import '../focus/web_focus_coordinator.dart';
 import '../metrics/cell_metrics.dart';
-import '../remote_client/inline_image_overlay.dart';
+import '../dom_grid/inline_image_overlay.dart';
 import '../remote_client/plan_adapter.dart';
 import '../run_tui_surface.dart';
 import 'browser_presentation_host.dart';
@@ -36,7 +36,9 @@ final class WireFrameSource implements BrowserFrameSource {
   bool _handshakeSent = false;
   bool _closed = false;
   web.HTMLElement? _disconnectBanner;
-  InlineImageOverlay? _imageOverlay;
+
+  /// The host-assembled inline-image layer (shared with the embed path).
+  InlineImageOverlay? get _imageOverlay => _components?.imageOverlay;
 
   @override
   Future<MountedApp> start(BrowserHostComponents components) async {
@@ -89,9 +91,6 @@ final class WireFrameSource implements BrowserFrameSource {
       _send(encodeFrame(SemanticActionFrame(id, action)));
     };
     _mirror = CellBuffer(_size);
-    _imageOverlay = InlineImageOverlay(
-      components.hostElement as web.HTMLElement,
-    );
     components.inputSource.start(_sendInput);
     _sendInit();
     _observeResize();
@@ -122,13 +121,15 @@ final class WireFrameSource implements BrowserFrameSource {
       encodeFrame(
         InitFrame(
           // The browser renders real images via an <img> overlay (the
-          // serve path lifts inline-image payloads out of the cell grid),
-          // so it advertises the `browser` image protocol rather than the
-          // half-block glyph fallback.
+          // serve path lifts inline-image payloads out of the cell grid):
+          // the neutral capability is `images=placements`. The legacy
+          // terminal-projection field stays halfBlock — a browser has no
+          // escape protocol.
           size: _size,
           colorMode: ColorMode.truecolor,
-          imageProtocol: ImageProtocol.browser,
+          imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
+          images: InlineImageSupport.placements,
           protocolVersion: remoteProtocolVersion,
         ),
       ),
@@ -368,8 +369,9 @@ final class WireFrameSource implements BrowserFrameSource {
       // Already closing.
     }
     _socket = null;
+    // Drop the pixel layer so ghost images don't sit over the banner; the
+    // overlay tolerates the host's later dispose call.
     _imageOverlay?.dispose();
-    _imageOverlay = null;
     if (banner) _showDisconnected(message);
   }
 

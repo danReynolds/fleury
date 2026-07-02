@@ -42,7 +42,6 @@ const String cellGridCss = '''
 }
 .fleury-screen .r { display: block; }
 .fleury-screen .w2 { display: inline-block; width: 2ch; overflow: hidden; }
-.fleury-screen .proto { display: inline-block; opacity: .7; }
 ''';
 
 /// Renders a whole [buffer] frame to an HTML string (a stack of row divs).
@@ -72,21 +71,6 @@ void renderRowHtml(RowSpanModel row, StringBuffer out) {
         _writeBoxDrawingSpan(run, out);
       case CellRunKind.wideText:
         _writeWideSpan(run, out);
-      case CellRunKind.protocolPlaceholder:
-        out
-          ..write('<span class="proto" title="')
-          ..write(protocolPlaceholderTitle)
-          ..write('" ')
-          ..write(protocolPlaceholderKindAttribute)
-          ..write('="')
-          ..write(protocolPlaceholderKind)
-          ..write('" ')
-          ..write(protocolPlaceholderUnsupportedAttribute)
-          ..write('="')
-          ..write(protocolPlaceholderUnsupported)
-          ..write('">')
-          ..write(protocolPlaceholderGlyph)
-          ..write('</span>');
     }
   }
 }

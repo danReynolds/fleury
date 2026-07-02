@@ -126,10 +126,7 @@ class _ChatAppState extends State<ChatApp> {
               ),
             ),
             _buildComposer(context),
-            const Text(
-              '[F1] help  [Ctrl+K] switch channel',
-              softWrap: false,
-            ),
+            const Text('[F1] help  [Ctrl+K] switch channel', softWrap: false),
           ],
         ),
       ),

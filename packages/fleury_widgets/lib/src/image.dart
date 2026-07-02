@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -143,14 +142,18 @@ class _DecodedSource implements ImageSource {
   img.Image decode() => _image;
 }
 
-/// Renders a raster image into the terminal as half-block ANSI art.
+/// Renders a raster image, adapting to what the surface can do.
 ///
-/// Each terminal cell holds two vertical "pixels": the top half is
-/// drawn via the foreground of `▀`, the bottom half via its
-/// background. With a truecolor terminal that's 24-bit color per
-/// half-cell — full-fidelity image rendering for charts, logos,
-/// previews, screenshots. On lesser terminals, [AnsiRenderer]'s color
-/// cascade downsamples to 256 / 16 / none automatically.
+/// On surfaces that support inline pixels (`MediaQuery`'s
+/// [SurfaceCapabilities.images] reports placements — a Kitty/iTerm2/
+/// Sixel terminal, or a browser surface) the widget records a neutral
+/// image placement and the presenter renders true pixels. Everywhere
+/// else it paints glyph art: each terminal cell holds two vertical
+/// "pixels", the top half drawn via the foreground of `▀`, the bottom
+/// half via its background — 24-bit color per half-cell on truecolor
+/// terminals, downsampled to 256 / 16 / none by [AnsiRenderer]'s color
+/// cascade on lesser ones. Both paths resolve [fit] through the same
+/// core geometry, so a letterbox lands on the same cells either way.
 ///
 /// ```dart
 /// Image.file('logo.png')                      // most common
@@ -162,11 +165,6 @@ class _DecodedSource implements ImageSource {
 /// Decoding is synchronous and cached on the [ImageSource]; the
 /// widget itself is cheap to rebuild. For HTTP or other async
 /// sources, decode upstream and pass via [ImageSource.decoded].
-///
-/// Future protocol upgrades (Kitty graphics, Sixel) will layer on
-/// top transparently — terminals that support them will get true
-/// pixel fidelity; everyone else continues to see the half-block
-/// render this widget produces today.
 class Image extends StatefulWidget {
   const Image({
     super.key,
@@ -214,12 +212,12 @@ class Image extends StatefulWidget {
   final ImageSource source;
   final ImageFit fit;
 
-  /// Symbol palette for the ANSI-art fallback. [ImageGlyph.halfBlock]
+  /// Symbol palette for the glyph-art fallback. [ImageGlyph.halfBlock]
   /// is the conservative default; [ImageGlyph.quarterBlock] roughly
   /// doubles horizontal resolution at the cost of more font-glyph
-  /// reliance. Ignored when the active terminal supports a native
-  /// image protocol (Kitty/iTerm2) — that path is already pixel-
-  /// perfect and ignores the palette.
+  /// reliance. Ignored when the surface renders inline pixels
+  /// ([SurfaceCapabilities.images] reports placements) — that path is
+  /// already pixel-perfect and needs no palette.
   final ImageGlyph glyph;
 
   /// If non-null, semitransparent pixels (0 < α < 255) are alpha-
@@ -331,28 +329,31 @@ class _ImageState extends State<Image> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final colorMode = MediaQuery.colorModeOf(context);
-    final protocol = MediaQuery.imageProtocolOf(context);
-    final tmuxPassthrough = MediaQuery.tmuxPassthroughOf(context);
+    final images = MediaQuery.imagesOf(context);
+    final pixels = images == InlineImageSupport.placements;
+    // The requirement framework wants a terminal-capability summary; the
+    // widget only knows the neutral surface answer, so it reports
+    // availability through the sanctioned side-channel instead of
+    // fabricating a protocol. Which protocol (if any) renders the
+    // placement is the presenter's business.
     final capabilityResolution = resolveCapabilityRequirement(
       CapabilityRequirement(
         feature: TerminalFeature.inlineImages,
         level: CapabilityLevel.preferred,
-        reason: 'Render image widgets with native terminal pixels.',
+        reason: 'Render image widgets with true pixels.',
         fallback: CapabilityFallback(label: '${widget.glyph.name} glyph image'),
       ),
-      TerminalCapabilities(
-        colorMode: colorMode,
-        imageProtocol: protocol,
-        tmuxPassthrough: tmuxPassthrough,
-      ),
+      const TerminalCapabilities(),
+      additionalAvailableFeatures: pixels
+          ? const <TerminalFeature>{TerminalFeature.inlineImages}
+          : const <TerminalFeature>{},
     );
     final semanticState = capabilityResolution
         .toSemanticState()
         .merge(<String, Object?>{
-          'imageProtocol': protocol.name,
+          'images': images.name,
           'imageGlyph': widget.glyph.name,
           'colorMode': colorMode.name,
-          'tmuxPassthrough': tmuxPassthrough,
           'frameIndex': _frameIndex,
           'frameCount': _source.frames.length,
         });
@@ -360,15 +361,16 @@ class _ImageState extends State<Image> with SingleTickerProviderStateMixin {
     return Semantics(
       role: SemanticRole.image,
       label: widget.semanticLabel,
-      value: protocol.name,
+      // How the image actually renders: a true-pixel placement, or the
+      // active glyph palette.
+      value: pixels ? 'placements' : widget.glyph.name,
       state: semanticState,
       child: _RawImage(
         decoded: _source.frames[_frameIndex],
         fit: widget.fit,
         glyph: widget.glyph,
         colorMode: colorMode,
-        protocol: protocol,
-        tmuxPassthrough: tmuxPassthrough,
+        images: images,
         backgroundColor: widget.backgroundColor,
       ),
     );
@@ -381,8 +383,7 @@ class _RawImage extends LeafRenderObjectWidget {
     required this.fit,
     required this.glyph,
     required this.colorMode,
-    required this.protocol,
-    required this.tmuxPassthrough,
+    required this.images,
     required this.backgroundColor,
   });
 
@@ -390,8 +391,7 @@ class _RawImage extends LeafRenderObjectWidget {
   final ImageFit fit;
   final ImageGlyph glyph;
   final ColorMode colorMode;
-  final ImageProtocol protocol;
-  final bool tmuxPassthrough;
+  final InlineImageSupport images;
   final Color? backgroundColor;
 
   @override
@@ -400,8 +400,7 @@ class _RawImage extends LeafRenderObjectWidget {
     fit: fit,
     glyph: glyph,
     colorMode: colorMode,
-    protocol: protocol,
-    tmuxPassthrough: tmuxPassthrough,
+    images: images,
     backgroundColor: backgroundColor,
   );
 
@@ -412,8 +411,7 @@ class _RawImage extends LeafRenderObjectWidget {
       ..fit = fit
       ..glyph = glyph
       ..colorMode = colorMode
-      ..protocol = protocol
-      ..tmuxPassthrough = tmuxPassthrough
+      ..images = images
       ..backgroundColor = backgroundColor;
   }
 }
@@ -425,15 +423,13 @@ class RenderImage extends RenderObject {
     required ImageFit fit,
     required ImageGlyph glyph,
     required ColorMode colorMode,
-    required ImageProtocol protocol,
-    bool tmuxPassthrough = false,
+    InlineImageSupport images = InlineImageSupport.none,
     Color? backgroundColor,
   }) : _decoded = decoded,
        _fit = fit,
        _glyph = glyph,
        _colorMode = colorMode,
-       _protocol = protocol,
-       _tmuxPassthrough = tmuxPassthrough,
+       _images = images,
        _backgroundColor = backgroundColor;
 
   img.Image _decoded;
@@ -442,20 +438,26 @@ class RenderImage extends RenderObject {
     _decoded = v;
     _encodedPng = null;
     _encodedId = null;
-    _fitCropPng = null;
-    _fitCropKey = null;
+    _rgba = null;
     markNeedsLayout();
   }
 
   // Cached PNG encode of [_decoded] and its content-hash id, recomputed only
-  // when the decoded image changes. The native-protocol (kitty/iTerm2) and
-  // browser paint paths run on every frame the tree repaints; without this they
-  // would re-encode (zlib) and re-hash the same pixels each frame.
+  // when the decoded image changes. The placement paint path runs on every
+  // frame the tree repaints; without this it would re-encode (zlib) and
+  // re-hash the same pixels each frame.
   Uint8List? _encodedPng;
   String? _encodedId;
 
   Uint8List get _png => _encodedPng ??= img.encodePng(_decoded);
   String get _pngId => _encodedId ??= CellBuffer.hashImageBytes(_png);
+
+  // Cached decoded-RGBA extraction, produced lazily and only when a
+  // presenter actually asks for it (Sixel re-rasterizes; browsers and
+  // PNG-passthrough protocols never call the thunk).
+  Uint8List? _rgba;
+  Uint8List _rgbaPixels() =>
+      _rgba ??= _decoded.getBytes(order: img.ChannelOrder.rgba);
 
   ImageFit _fit;
   set fit(ImageFit v) {
@@ -478,17 +480,10 @@ class RenderImage extends RenderObject {
     markNeedsPaintOnly();
   }
 
-  ImageProtocol _protocol;
-  set protocol(ImageProtocol v) {
-    if (_protocol == v) return;
-    _protocol = v;
-    markNeedsPaintOnly();
-  }
-
-  bool _tmuxPassthrough;
-  set tmuxPassthrough(bool v) {
-    if (_tmuxPassthrough == v) return;
-    _tmuxPassthrough = v;
+  InlineImageSupport _images;
+  set images(InlineImageSupport v) {
+    if (_images == v) return;
+    _images = v;
     markNeedsPaintOnly();
   }
 
@@ -522,22 +517,12 @@ class RenderImage extends RenderObject {
     final rows = size.rows;
     if (cols == 0 || rows == 0) return;
 
-    // Native protocol path takes over completely when supported — the
-    // terminal paints the pixels itself, no per-cell half-block math.
-    if (_protocol == ImageProtocol.kitty) {
-      _paintKitty(buffer, offset, cols, rows);
-      return;
-    }
-    if (_protocol == ImageProtocol.iterm2) {
-      _paintIterm2(buffer, offset, cols, rows);
-      return;
-    }
-    if (_protocol == ImageProtocol.sixel) {
-      _paintSixel(buffer, offset, cols, rows);
-      return;
-    }
-    if (_protocol == ImageProtocol.browser) {
-      _paintBrowser(buffer, offset, cols, rows);
+    // True-pixel path: the surface renders placements (a terminal
+    // graphics protocol via the presenter's image encoder, or a DOM
+    // <img> overlay). The widget just records neutral content + geometry;
+    // no per-cell glyph math, no escape bytes.
+    if (_images == InlineImageSupport.placements) {
+      _paintPlacement(buffer, offset, cols, rows);
       return;
     }
 
@@ -559,7 +544,7 @@ class RenderImage extends RenderObject {
     final tgtW = cols;
     final tgtH = rows * 2;
 
-    final (sampleX, sampleY) = _sampleMappers(srcW, srcH, tgtW, tgtH, _fit);
+    final (sampleX, sampleY) = _sampleMappers(cols, rows, 1, 2);
 
     // Pass 1: sample every half-pixel at full RGB into a flat buffer.
     // Indexed (y * tgtW + x); null means "fully transparent / no
@@ -770,197 +755,58 @@ class RenderImage extends RenderObject {
     }
   }
 
-  /// Returns mappers from target coordinates (cell columns, half-cell
-  /// vertical pixels) into UNCLAMPED source pixel space. The sampler
-  /// computes the source rect covered by each target half-pixel and
-  /// clips to source bounds — pixels outside the source area are
-  /// excluded from the average, rather than treated as transparent.
+  /// Returns mappers from target coordinates (glyph sub-pixels at
+  /// [pxPerCellX]×[pxPerCellY] per cell) into UNCLAMPED source pixel
+  /// space. The sampler computes the source rect covered by each target
+  /// sub-pixel and clips to source bounds — pixels outside the source
+  /// area are excluded from the average, rather than treated as
+  /// transparent.
+  ///
+  /// Geometry comes from the core [resolveInlineImageFit] — the SAME
+  /// resolution the terminal image encoder and the serve overlay use, so
+  /// a half-block letterbox and a Kitty letterbox land on the same cells.
+  /// (The one consequence: glyph letterboxes snap to whole cells rather
+  /// than centering at sub-pixel precision.)
   (double Function(int), double Function(int)) _sampleMappers(
-    int srcW,
-    int srcH,
-    int tgtW,
-    int tgtH,
-    ImageFit fit,
-  ) {
-    switch (fit) {
-      case ImageFit.fill:
-        return ((rx) => rx * srcW / tgtW, (py) => py * srcH / tgtH);
-      case ImageFit.contain:
-        final scale = (tgtW / srcW < tgtH / srcH) ? tgtW / srcW : tgtH / srcH;
-        final dispW = srcW * scale;
-        final dispH = srcH * scale;
-        final ox = (tgtW - dispW) / 2;
-        final oy = (tgtH - dispH) / 2;
-        return ((rx) => (rx - ox) / scale, (py) => (py - oy) / scale);
-      case ImageFit.cover:
-        final scale = (tgtW / srcW > tgtH / srcH) ? tgtW / srcW : tgtH / srcH;
-        final dispW = srcW * scale;
-        final dispH = srcH * scale;
-        final ox = (tgtW - dispW) / 2;
-        final oy = (tgtH - dispH) / 2;
-        return ((rx) => (rx - ox) / scale, (py) => (py - oy) / scale);
-      case ImageFit.none:
-        final ox = (tgtW - srcW) / 2;
-        final oy = (tgtH - srcH) / 2;
-        return ((rx) => (rx - ox).toDouble(), (py) => (py - oy).toDouble());
-    }
-  }
-
-  /// The cell sub-rectangle the source occupies inside a [cols]×[rows] box under
-  /// [fit] — `col`/`row` relative to the box top-left, `cols`/`rows` its size —
-  /// plus the source-pixel crop (`cropX/Y/W/H`) to transmit. Mirrors
-  /// [_sampleMappers]' contain/cover/none math against the conventional 1×2 cell
-  /// pixel aspect, so the kitty/iTerm2 paths letterbox or crop exactly like the
-  /// glyph tiers and the browser (CSS `object-fit`). `fill` is the whole box and
-  /// whole source (the historical behaviour). When the box already matches the
-  /// source aspect, `contain` degenerates to the full box.
-  static _FitRect _resolveFit(
-    int srcW,
-    int srcH,
     int cols,
     int rows,
-    ImageFit fit,
+    int pxPerCellX,
+    int pxPerCellY,
   ) {
-    int centerOffset(int outer, int inner) =>
-        ((outer - inner) / 2).round().clamp(0, outer - inner);
-    switch (fit) {
-      case ImageFit.fill:
-        return _FitRect(0, 0, cols, rows, 0, 0, srcW, srcH);
-      case ImageFit.contain:
-        final tgtW = cols.toDouble();
-        final tgtH = (rows * 2).toDouble();
-        final scale = (tgtW / srcW < tgtH / srcH) ? tgtW / srcW : tgtH / srcH;
-        final dCols = (srcW * scale).round().clamp(1, cols);
-        final dRows = (srcH * scale / 2).round().clamp(1, rows);
-        return _FitRect(
-          centerOffset(cols, dCols),
-          centerOffset(rows, dRows),
-          dCols,
-          dRows,
-          0,
-          0,
-          srcW,
-          srcH,
-        );
-      case ImageFit.cover:
-        final tgtW = cols.toDouble();
-        final tgtH = (rows * 2).toDouble();
-        final scale = (tgtW / srcW > tgtH / srcH) ? tgtW / srcW : tgtH / srcH;
-        final cropW = (tgtW / scale).round().clamp(1, srcW);
-        final cropH = (tgtH / scale).round().clamp(1, srcH);
-        return _FitRect(
-          0,
-          0,
-          cols,
-          rows,
-          centerOffset(srcW, cropW),
-          centerOffset(srcH, cropH),
-          cropW,
-          cropH,
-        );
-      case ImageFit.none:
-        // Native resolution, centered: 1 source px = 1 column, 2 px = 1 row.
-        final cropW = srcW <= cols ? srcW : cols;
-        final cropH = srcH <= rows * 2 ? srcH : rows * 2;
-        final dCols = cropW.clamp(1, cols);
-        final dRows = (cropH / 2).round().clamp(1, rows);
-        return _FitRect(
-          centerOffset(cols, dCols),
-          centerOffset(rows, dRows),
-          dCols,
-          dRows,
-          centerOffset(srcW, cropW),
-          centerOffset(srcH, cropH),
-          cropW,
-          cropH,
-        );
-    }
-  }
-
-  // Single-entry cache of the cropped+encoded PNG for cover/none fits (contain
-  // and fill reuse the full-image [_png]). Keyed by the crop rect, invalidated
-  // when the decoded image changes.
-  Uint8List? _fitCropPng;
-  String? _fitCropKey;
-
-  /// PNG bytes for [f]'s crop: the full-image [_png] when the crop is the whole
-  /// source (fill/contain), else a cached encode of the cropped region.
-  Uint8List _fitPng(_FitRect f) {
-    if (f.cropX == 0 &&
-        f.cropY == 0 &&
-        f.cropW == _decoded.width &&
-        f.cropH == _decoded.height) {
-      return _png;
-    }
-    final key = '${f.cropX},${f.cropY},${f.cropW},${f.cropH}';
-    if (_fitCropKey == key && _fitCropPng != null) return _fitCropPng!;
-    final cropped = img.copyCrop(
-      _decoded,
-      x: f.cropX,
-      y: f.cropY,
-      width: f.cropW,
-      height: f.cropH,
+    final f = resolveInlineImageFit(
+      sourceWidth: _decoded.width,
+      sourceHeight: _decoded.height,
+      cols: cols,
+      rows: rows,
+      fit: _inlineFit(_fit),
+      pixelsPerCellX: pxPerCellX,
+      pixelsPerCellY: pxPerCellY,
     );
-    final png = img.encodePng(cropped);
-    _fitCropPng = png;
-    _fitCropKey = key;
-    return png;
-  }
-
-  /// Emits the image via the Kitty graphics protocol — terminal renders
-  /// actual pixels, not half-blocks. Encodes the source as PNG (Kitty's
-  /// best-supported format; format `f=100`), base64-wraps the payload,
-  /// chunks at 4 KiB (Kitty requires `m=1` for not-last and `m=0` for
-  /// final, with each chunk in its own `ESC_G…ESC\` envelope), and
-  /// constrains the displayed region to our allotted cell box via
-  /// `c=<cols>,r=<rows>` so the terminal scales to fit.
-  ///
-  /// Action `a=T` ("transmit and display now") tells Kitty to put the
-  /// image at the current cursor position. The renderer positions the
-  /// cursor at the cell anchor before emitting these bytes.
-  void _paintKitty(CellBuffer buffer, CellOffset offset, int cols, int rows) {
-    // Resolve the fit: contain letterboxes into a centered sub-rect, cover/none
-    // crop, fill takes the whole box — matching the glyph + browser surfaces.
-    final f = _resolveFit(_decoded.width, _decoded.height, cols, rows, _fit);
-    // Encode (cached across repaints) — Kitty's RGBA path (`f=32`) has fewer
-    // well-tested decoders across terminals than PNG (`f=100`).
-    final png = _fitPng(f);
-    final b64 = base64.encode(png);
-    const chunkSize = 4096;
-    final out = StringBuffer();
-    var pos = 0;
-    var first = true;
-    while (pos < b64.length) {
-      final end = (pos + chunkSize < b64.length) ? pos + chunkSize : b64.length;
-      final isLast = end == b64.length;
-      out.write('\x1B_G');
-      if (first) {
-        // First chunk carries the parameters; subsequent ones only
-        // carry `m=` (continuation flag).
-        out.write('f=100,a=T,c=${f.cols},r=${f.rows},m=${isLast ? 0 : 1};');
-        first = false;
-      } else {
-        out.write('m=${isLast ? 0 : 1};');
-      }
-      out.write(b64.substring(pos, end));
-      out.write('\x1B\\');
-      pos = end;
-    }
-    _writeProtocolRegion(
-      buffer,
-      CellOffset(offset.col + f.col, offset.row + f.row),
-      out.toString(),
-      f.cols,
-      f.rows,
+    final destX0 = f.col * pxPerCellX;
+    final destY0 = f.row * pxPerCellY;
+    final destW = f.cols * pxPerCellX;
+    final destH = f.rows * pxPerCellY;
+    return (
+      (rx) => f.cropX + (rx - destX0) * f.cropW / destW,
+      (py) => f.cropY + (py - destY0) * f.cropH / destH,
     );
   }
 
-  /// Emits the image for the browser "serve" surface. The PNG bytes go into the
-  /// buffer's inline-image table (keyed by content hash) via [CellBuffer.writeImage];
-  /// the cell grid only carries the lightweight id. The serve codec ships the
-  /// bytes once and the DOM client renders an `<img>` overlay — true pixels,
-  /// like a native terminal image protocol, without bloating the cell wire.
-  void _paintBrowser(CellBuffer buffer, CellOffset offset, int cols, int rows) {
+  /// Records the image as a neutral inline placement: PNG bytes into the
+  /// buffer's content table (keyed by content hash), geometry + fit as an
+  /// [InlineImagePlacement], overlay cells over the box. The PRESENTER
+  /// renders the pixels — a DOM `<img>` on browser surfaces, the active
+  /// graphics protocol (Kitty/iTerm2/Sixel) via the terminal image
+  /// encoder. Source dimensions ride along so presenters resolve
+  /// aspect-preserving fits without decoding; the RGBA thunk feeds
+  /// presenters that must re-rasterize (Sixel) and costs nothing until
+  /// called.
+  void _paintPlacement(
+    CellBuffer buffer,
+    CellOffset offset,
+    int cols,
+    int rows,
+  ) {
     // Reuse the cached PNG + id so a static image isn't re-encoded or re-hashed
     // on every repaint (writeImageWithId skips the per-paint content hash).
     buffer.writeImageWithId(
@@ -970,6 +816,9 @@ class RenderImage extends RenderObject {
       width: cols,
       height: rows,
       fit: _inlineFit(_fit),
+      sourceWidth: _decoded.width,
+      sourceHeight: _decoded.height,
+      pixels: _rgbaPixels,
     );
   }
 
@@ -1012,9 +861,7 @@ class RenderImage extends RenderObject {
   ) {
     final srcW = _decoded.width;
     final srcH = _decoded.height;
-    final tgtW = cols * 2;
-    final tgtH = rows * 2;
-    final (sampleX, sampleY) = _sampleMappers(srcW, srcH, tgtW, tgtH, _fit);
+    final (sampleX, sampleY) = _sampleMappers(cols, rows, 2, 2);
 
     // Bit layout: TL=8, TR=4, BL=2, BR=1. Index = pattern.
     const glyphs = [
@@ -1186,9 +1033,7 @@ class RenderImage extends RenderObject {
   void _paintSextant(CellBuffer buffer, CellOffset offset, int cols, int rows) {
     final srcW = _decoded.width;
     final srcH = _decoded.height;
-    final tgtW = cols * 2;
-    final tgtH = rows * 3;
-    final (sampleX, sampleY) = _sampleMappers(srcW, srcH, tgtW, tgtH, _fit);
+    final (sampleX, sampleY) = _sampleMappers(cols, rows, 2, 3);
 
     for (var ry = 0; ry < rows; ry++) {
       for (var rx = 0; rx < cols; rx++) {
@@ -1348,9 +1193,7 @@ class RenderImage extends RenderObject {
   void _paintBraille(CellBuffer buffer, CellOffset offset, int cols, int rows) {
     final srcW = _decoded.width;
     final srcH = _decoded.height;
-    final tgtW = cols * 2;
-    final tgtH = rows * 4;
-    final (sampleX, sampleY) = _sampleMappers(srcW, srcH, tgtW, tgtH, _fit);
+    final (sampleX, sampleY) = _sampleMappers(cols, rows, 2, 4);
 
     // Bit index per (col-in-cell, row-in-cell): the layout above.
     const bitIndex = <List<int>>[
@@ -1416,252 +1259,6 @@ class RenderImage extends RenderObject {
         );
       }
     }
-  }
-
-  /// Emits the image via the DEC Sixel protocol — terminal renders
-  /// actual pixels. Targets a default cell-pixel grid of 10×20
-  /// (a sensible average across modern terminal cell sizes; the
-  /// terminal scales the emitted image to its real cell dimensions
-  /// since the raster attributes carry our chosen pixel extents).
-  /// A future refinement will probe `CSI 14 t` for the active
-  /// terminal's pixel-per-cell dimensions and adapt the encoding
-  /// resolution accordingly.
-  ///
-  /// Pipeline:
-  ///   1. Resize the source to (cols·10, rows·20) — `fit: fill`
-  ///      semantics by default. `fit: contain` / `cover` are honored
-  ///      by letterboxing or cropping via a sample-and-stamp pass
-  ///      onto a black canvas.
-  ///   2. Run a Neural-net quantizer for 128 palette colors.
-  ///   3. Encode 6-pixel-tall bands with per-color column masks,
-  ///      RLE-compressing runs of identical sixel bytes.
-  void _paintSixel(CellBuffer buffer, CellOffset offset, int cols, int rows) {
-    const cellPxW = 10;
-    const cellPxH = 20;
-    final tgtW = cols * cellPxW;
-    final tgtH = rows * cellPxH;
-
-    // Build the target pixel buffer with the user's chosen fit.
-    final resized = _resizeForSixel(tgtW, tgtH);
-
-    // Quantize to a 128-color palette. 128 is a good middle ground:
-    // enough fidelity for photos / logos, small enough that the
-    // palette emission stays compact (~16 bytes per color).
-    final quantizer = img.NeuralQuantizer(resized, numberOfColors: 128);
-    final indexed = quantizer.getIndexImage(resized);
-    final palette = quantizer.palette;
-
-    final sixel = _encodeSixel(indexed, palette, tgtW, tgtH);
-    _writeProtocolRegion(buffer, offset, sixel, cols, rows);
-  }
-
-  /// Builds the pixel canvas to feed the Sixel quantizer. Honors
-  /// `_fit` so contain / cover behave like their cell-grid
-  /// counterparts. `none` centers the source at its native resolution
-  /// (which may exceed the target on large source images — clipping
-  /// is fine, the rest is just black canvas).
-  img.Image _resizeForSixel(int tgtW, int tgtH) {
-    final srcW = _decoded.width;
-    final srcH = _decoded.height;
-
-    // Pick a (dispW, dispH, ox, oy) window into the target where the
-    // source pixels actually land. Pixels outside that window stay
-    // at the canvas default (zero / black).
-    int dispW, dispH, ox, oy;
-    switch (_fit) {
-      case ImageFit.fill:
-        return img.copyResize(
-          _decoded,
-          width: tgtW,
-          height: tgtH,
-          interpolation: img.Interpolation.linear,
-        );
-      case ImageFit.contain:
-        final scale = (tgtW / srcW < tgtH / srcH) ? tgtW / srcW : tgtH / srcH;
-        dispW = (srcW * scale).round().clamp(1, tgtW);
-        dispH = (srcH * scale).round().clamp(1, tgtH);
-        ox = (tgtW - dispW) ~/ 2;
-        oy = (tgtH - dispH) ~/ 2;
-      case ImageFit.cover:
-        final scale = (tgtW / srcW > tgtH / srcH) ? tgtW / srcW : tgtH / srcH;
-        dispW = (srcW * scale).round();
-        dispH = (srcH * scale).round();
-        ox = (tgtW - dispW) ~/ 2;
-        oy = (tgtH - dispH) ~/ 2;
-      case ImageFit.none:
-        dispW = srcW;
-        dispH = srcH;
-        ox = (tgtW - dispW) ~/ 2;
-        oy = (tgtH - dispH) ~/ 2;
-    }
-
-    final scaled = img.copyResize(
-      _decoded,
-      width: dispW,
-      height: dispH,
-      interpolation: img.Interpolation.linear,
-    );
-    final canvas = img.Image(width: tgtW, height: tgtH, numChannels: 3);
-    final bg = _backgroundColor?.toRgb();
-    if (bg != null) {
-      img.fill(canvas, color: img.ColorRgb8(bg.r, bg.g, bg.b));
-    }
-    img.compositeImage(canvas, scaled, dstX: ox, dstY: oy);
-    return canvas;
-  }
-
-  /// Encodes a single-channel indexed image into a Sixel byte stream.
-  /// Caller is responsible for already having sized [indexed] to the
-  /// final on-screen pixel dimensions; the encoder just translates
-  /// pixels → DCS bytes.
-  String _encodeSixel(
-    img.Image indexed,
-    img.Palette palette,
-    int width,
-    int height,
-  ) {
-    final buf = StringBuffer();
-    // DCS introducer. `q` is the Sixel control. No parameters means
-    // the terminal applies its default aspect / background settings.
-    buf.write('\x1BPq');
-    // Raster attributes: pan/pad of 1:1 (square pixels), Ph/Pv =
-    // emitted image extent. Terminals use this to scale into cell
-    // space.
-    buf.write('"1;1;$width;$height');
-
-    // Palette definitions: `# Pc ; 2 ; R ; G ; B` per color, 0..100.
-    final numColors = palette.numColors;
-    for (var i = 0; i < numColors; i++) {
-      final r = (palette.getRed(i) * 100 / 255).round().clamp(0, 100);
-      final g = (palette.getGreen(i) * 100 / 255).round().clamp(0, 100);
-      final b = (palette.getBlue(i) * 100 / 255).round().clamp(0, 100);
-      buf.write('#$i;2;$r;$g;$b');
-    }
-
-    // Per 6-row band: for each palette color appearing in the band,
-    // emit a color-select then a per-column 6-bit mask. Sort colors
-    // for deterministic output (the wire bytes are visible in tests).
-    for (var bandY = 0; bandY < height; bandY += 6) {
-      final bandH = (height - bandY < 6) ? height - bandY : 6;
-
-      final colorsInBand = <int>{};
-      for (var y = bandY; y < bandY + bandH; y++) {
-        for (var x = 0; x < width; x++) {
-          colorsInBand.add(indexed.getPixel(x, y).r.toInt());
-        }
-      }
-      final sorted = colorsInBand.toList()..sort();
-
-      var first = true;
-      for (final color in sorted) {
-        // Carriage return resets to column 0 within the same band so
-        // subsequent colors overlay onto the same pixel row group.
-        if (!first) buf.write(r'$');
-        first = false;
-        buf.write('#$color');
-
-        // Build the column sequence as sixel bytes, RLE-compressing
-        // runs of identical bytes via `!Pn X`. `!Pn X` consumes
-        // 2 + len(Pn) chars; runs of 4+ save bytes.
-        var prevByte = -1;
-        var runLen = 0;
-
-        void flushRun() {
-          if (runLen == 0) return;
-          if (runLen >= 4) {
-            buf.write('!$runLen');
-            buf.writeCharCode(prevByte);
-          } else {
-            for (var i = 0; i < runLen; i++) {
-              buf.writeCharCode(prevByte);
-            }
-          }
-          runLen = 0;
-        }
-
-        for (var x = 0; x < width; x++) {
-          var mask = 0;
-          for (var by = 0; by < bandH; by++) {
-            final y = bandY + by;
-            if (indexed.getPixel(x, y).r.toInt() == color) {
-              mask |= (1 << by);
-            }
-          }
-          final byte = 0x3F + mask; // sixel byte is in '?'..'~' range
-          if (byte == prevByte) {
-            runLen++;
-          } else {
-            flushRun();
-            prevByte = byte;
-            runLen = 1;
-          }
-        }
-        flushRun();
-      }
-
-      // Advance to next 6-row band (no `-` after the final band — the
-      // terminator handles end-of-image).
-      if (bandY + 6 < height) buf.write('-');
-    }
-
-    // ST terminator.
-    buf.write('\x1B\\');
-    return buf.toString();
-  }
-
-  /// Emits the image via iTerm2's inline-image protocol — terminal
-  /// renders actual pixels via an OSC 1337 escape carrying a base64
-  /// PNG payload. `inline=1` makes it display rather than download;
-  /// `width`/`height` in cell units constrain the displayed size to
-  /// our allotted box; `preserveAspectRatio=0` lets us own the fit
-  /// math (we already laid out for the right shape, the terminal
-  /// shouldn't second-guess us).
-  ///
-  /// Unlike Kitty there's no chunking — the entire payload rides in
-  /// one OSC sequence terminated by BEL.
-  void _paintIterm2(CellBuffer buffer, CellOffset offset, int cols, int rows) {
-    // Resolve the fit into a sub-rect + crop (see _paintKitty); the sub-rect is
-    // aspect-correct, so preserveAspectRatio=0 fills it without distortion.
-    final f = _resolveFit(_decoded.width, _decoded.height, cols, rows, _fit);
-    final png = _fitPng(f);
-    final b64 = base64.encode(png);
-    final out =
-        '\x1B]1337;File=inline=1;size=${png.length};'
-        'width=${f.cols};height=${f.rows};preserveAspectRatio=0:$b64\x07';
-    _writeProtocolRegion(
-      buffer,
-      CellOffset(offset.col + f.col, offset.row + f.row),
-      out,
-      f.cols,
-      f.rows,
-    );
-  }
-
-  /// Hand off a fully-assembled protocol payload to the cell buffer,
-  /// applying the tmux/screen passthrough envelope first when the
-  /// surface needs it. tmux drops unknown DCS / APC sequences by
-  /// default; the envelope re-emits them via `ESC P tmux ; payload
-  /// ESC \\`, where every embedded `ESC` is doubled. Modern tmux 3.3+
-  /// users can opt out by setting `allow-passthrough on` and ignoring
-  /// this branch entirely — until they do, this is the only way to
-  /// land Kitty / Sixel / iTerm2 bytes in the host terminal.
-  void _writeProtocolRegion(
-    CellBuffer buffer,
-    CellOffset offset,
-    String payload,
-    int cols,
-    int rows,
-  ) {
-    final bytes = _tmuxPassthrough ? _wrapForTmux(payload) : payload;
-    buffer.writeProtocol(offset, bytes, width: cols, height: rows);
-  }
-
-  /// Wrap [payload] in tmux's passthrough envelope. Every embedded
-  /// `ESC` is doubled so tmux's own DCS parser doesn't terminate on
-  /// the payload's internal ST.
-  String _wrapForTmux(String payload) {
-    final doubled = payload.replaceAll('\x1B', '\x1B\x1B');
-    return '\x1BPtmux;$doubled\x1B\\';
   }
 
   /// Samples the source rect covered by a single half-pixel at
@@ -1772,29 +1369,4 @@ class RenderImage extends RenderObject {
       (alpha * srcB + (1 - alpha) * bgRgb.b).round().clamp(0, 255),
     );
   }
-}
-
-/// Destination cell rectangle (relative to the image box) plus the source-pixel
-/// crop that a protocol paint path transmits, as resolved by
-/// [RenderImage._resolveFit] for a given [ImageFit].
-class _FitRect {
-  const _FitRect(
-    this.col,
-    this.row,
-    this.cols,
-    this.rows,
-    this.cropX,
-    this.cropY,
-    this.cropW,
-    this.cropH,
-  );
-
-  final int col;
-  final int row;
-  final int cols;
-  final int rows;
-  final int cropX;
-  final int cropY;
-  final int cropW;
-  final int cropH;
 }

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -535,58 +534,62 @@ void main() {
         label: 'Preview',
       );
 
-      expect(node.value, 'halfBlock');
+      expect(node.value, 'quarterBlock', reason: 'value = active glyph mode');
       expect(node.state.terminalCapability, 'inlineImages');
       expect(node.state.capabilityRequirement, 'preferred');
       expect(node.state.capabilityResolution, 'degraded');
       expect(node.state.activeFallback, 'quarterBlock glyph image');
-      expect(node.state.values['imageProtocol'], 'halfBlock');
+      expect(node.state.values['images'], 'none');
       expect(node.state.values['imageGlyph'], 'quarterBlock');
       expect(node.state.values['frameIndex'], 0);
       expect(node.state.values['frameCount'], 1);
     });
 
-    testWidgets('reports native image capability when a protocol is active', (
-      tester,
-    ) {
-      tester.pumpWidget(
-        MediaQuery(
-          data: const MediaQueryData(
-            size: CellSize(10, 10),
-            imageProtocol: ImageProtocol.kitty,
-            tmuxPassthrough: true,
-          ),
-          child: SizedBox(
-            width: 2,
-            height: 1,
-            child: Image(
-              source: ImageSource.decoded(_solid(4, 2, 20, 40, 80)),
-              fit: ImageFit.fill,
-              semanticLabel: 'Logo',
+    testWidgets(
+      'reports true-pixel capability when the surface renders placements',
+      (tester) {
+        tester.pumpWidget(
+          MediaQuery(
+            data: const MediaQueryData(
+              size: CellSize(10, 10),
+              capabilities: SurfaceCapabilities(
+                images: InlineImageSupport.placements,
+              ),
+            ),
+            child: SizedBox(
+              width: 2,
+              height: 1,
+              child: Image(
+                source: ImageSource.decoded(_solid(4, 2, 20, 40, 80)),
+                fit: ImageFit.fill,
+                semanticLabel: 'Logo',
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      final node = tester.semantics().single(
-        role: SemanticRole.image,
-        label: 'Logo',
-      );
+        final node = tester.semantics().single(
+          role: SemanticRole.image,
+          label: 'Logo',
+        );
 
-      expect(node.value, 'kitty');
-      expect(node.state.terminalCapability, 'inlineImages');
-      expect(node.state.capabilityRequirement, 'preferred');
-      expect(node.state.capabilityResolution, 'available');
-      expect(node.state.activeFallback, isNull);
-      expect(node.state.values['imageProtocol'], 'kitty');
-      expect(node.state.values['tmuxPassthrough'], isTrue);
-    });
+        expect(node.value, 'placements');
+        expect(node.state.terminalCapability, 'inlineImages');
+        expect(node.state.capabilityRequirement, 'preferred');
+        expect(node.state.capabilityResolution, 'available');
+        expect(node.state.activeFallback, isNull);
+        expect(node.state.values['images'], 'placements');
+      },
+    );
   });
 
   group('Image — color-mode quantization', () {
     Widget hosted(Widget child, ColorMode mode) {
       return MediaQuery(
-        data: MediaQueryData(size: const CellSize(10, 10), colorMode: mode),
+        data: MediaQueryData(
+          size: const CellSize(10, 10),
+          capabilities: SurfaceCapabilities(colorMode: mode),
+        ),
         child: child,
       );
     }
@@ -711,221 +714,169 @@ void main() {
     });
   });
 
-  group('Image — Kitty graphics protocol', () {
-    Widget kittyHosted(Widget child) {
+  group('Image — inline placements (true-pixel surfaces)', () {
+    Widget placementsHosted(Widget child) {
       return MediaQuery(
         data: const MediaQueryData(
           size: CellSize(10, 10),
-          imageProtocol: ImageProtocol.kitty,
+          capabilities: SurfaceCapabilities(
+            images: InlineImageSupport.placements,
+          ),
         ),
         child: child,
       );
     }
 
-    testWidgets('emits a protocolAnchor at the top-left of the image box', (
-      tester,
-    ) {
+    testWidgets('routes bytes off-grid and carries the widget fit', (tester) {
       tester.pumpWidget(
-        kittyHosted(
+        placementsHosted(
           SizedBox(
             width: 4,
             height: 3,
             child: Image(
               source: ImageSource.decoded(_solid(8, 8, 10, 20, 30)),
-              fit: ImageFit.fill,
-            ),
-          ),
-        ),
-      );
-      final buf = tester.render(size: const CellSize(4, 3));
-      final anchor = buf.atColRow(0, 0);
-      expect(
-        anchor.role,
-        CellRole.protocolAnchor,
-        reason: 'fill covers the whole box; top-left holds the Kitty escape',
-      );
-      // No half-block content should appear under Kitty.
-      for (var r = 0; r < 3; r++) {
-        for (var c = 0; c < 4; c++) {
-          if (r == 0 && c == 0) continue;
-          expect(
-            buf.atColRow(c, r).role,
-            CellRole.protocolCovered,
-            reason: 'cells inside the image region are protocol-covered',
-          );
-        }
-      }
-    });
-
-    testWidgets('contain letterboxes a wide image into a centered band', (
-      tester,
-    ) {
-      // A 4:1 source in a square box: contain preserves aspect, so it occupies
-      // a single centered row band — NOT the whole box (that would distort).
-      tester.pumpWidget(
-        kittyHosted(
-          SizedBox(
-            width: 8,
-            height: 8,
-            child: Image(
-              source: ImageSource.decoded(_solid(16, 4, 1, 2, 3)),
-              fit: ImageFit.contain,
-            ),
-          ),
-        ),
-      );
-      final buf = tester.render(size: const CellSize(8, 8));
-      expect(
-        buf.atColRow(0, 0).role,
-        CellRole.empty,
-        reason: 'top row is letterbox, not covered',
-      );
-      var anchors = 0;
-      int? anchorRow;
-      final coveredRows = <int>{};
-      for (var r = 0; r < 8; r++) {
-        for (var c = 0; c < 8; c++) {
-          final role = buf.atColRow(c, r).role;
-          if (role == CellRole.protocolAnchor) {
-            anchors++;
-            anchorRow = r;
-          }
-          if (role == CellRole.protocolAnchor ||
-              role == CellRole.protocolCovered) {
-            coveredRows.add(r);
-          }
-        }
-      }
-      expect(anchors, 1, reason: 'one image region');
-      expect(
-        coveredRows.length,
-        1,
-        reason: 'a 4:1 image in a square box occupies one row',
-      );
-      expect(
-        anchorRow,
-        greaterThan(0),
-        reason: 'the band is vertically centered, not top-aligned',
-      );
-    });
-
-    testWidgets('cover fills the whole box (cropping the source)', (tester) {
-      tester.pumpWidget(
-        kittyHosted(
-          SizedBox(
-            width: 6,
-            height: 6,
-            child: Image(
-              source: ImageSource.decoded(_solid(16, 4, 9, 9, 9)),
               fit: ImageFit.cover,
             ),
           ),
         ),
       );
-      final buf = tester.render(size: const CellSize(6, 6));
-      expect(buf.atColRow(0, 0).role, CellRole.protocolAnchor);
-      for (var r = 0; r < 6; r++) {
-        for (var c = 0; c < 6; c++) {
-          if (r == 0 && c == 0) continue;
-          expect(
-            buf.atColRow(c, r).role,
-            CellRole.protocolCovered,
-            reason: 'cover scales to fill, so every cell is covered',
-          );
+      final buf = tester.render(size: const CellSize(4, 3));
+
+      // Bytes live in the off-grid image table, not in cells.
+      expect(buf.images.length, 1, reason: 'one inline image registered');
+      // Geometry + fit ride on the placement.
+      final placement = buf.imagePlacements.single;
+      expect(placement.cols, 4);
+      expect(placement.rows, 3);
+      expect(
+        placement.fit,
+        InlineImageFit.cover,
+        reason: 'widget ImageFit.cover maps to the placement fit',
+      );
+
+      // Every cell in the box is an overlay cell — no glyph art, no
+      // escape bytes, no id in the grid. Presenters render from the
+      // placement list.
+      for (var r = 0; r < 3; r++) {
+        for (var c = 0; c < 4; c++) {
+          final cell = buf.atColRow(c, r);
+          expect(cell.role, CellRole.overlay, reason: 'cell ($c,$r)');
+          expect(cell.grapheme, isNull);
         }
       }
     });
 
-    testWidgets('anchor grapheme contains the Kitty f=100,a=T,c=,r= header', (
+    testWidgets('fit defaults to contain', (tester) {
+      tester.pumpWidget(
+        placementsHosted(
+          SizedBox(
+            width: 4,
+            height: 2,
+            child: Image(source: ImageSource.decoded(_solid(8, 8, 1, 2, 3))),
+          ),
+        ),
+      );
+      final buf = tester.render(size: const CellSize(4, 2));
+      expect(buf.imagePlacements.single.fit, InlineImageFit.contain);
+    });
+
+    testWidgets('content carries source dimensions and a decoded-RGBA thunk', (
       tester,
     ) {
       tester.pumpWidget(
-        kittyHosted(
+        placementsHosted(
           SizedBox(
-            width: 5,
+            width: 4,
             height: 2,
             child: Image(
-              source: ImageSource.decoded(_solid(4, 4, 0, 0, 0)),
+              source: ImageSource.decoded(_solid(8, 6, 200, 10, 10)),
               fit: ImageFit.fill,
             ),
           ),
         ),
       );
-      final anchor = tester.render(size: const CellSize(5, 2)).atColRow(0, 0);
-      final escape = anchor.grapheme!;
-      expect(
-        escape.startsWith('\x1B_G'),
-        isTrue,
-        reason: 'first chunk opens with the Kitty APC prefix',
+      final image = tester
+          .render(size: const CellSize(4, 2))
+          .images
+          .values
+          .single;
+      // Terminal presenters resolve aspect fits from these without
+      // decoding the PNG; sixel re-rasterizes via the thunk.
+      expect(image.sourceWidth, 8);
+      expect(image.sourceHeight, 6);
+      final rgba = image.pixels!();
+      expect(rgba.length, 8 * 6 * 4);
+      expect(rgba[0], 200, reason: 'row-major RGBA, red first');
+      expect(rgba[3], 255, reason: 'opaque alpha');
+    });
+
+    testWidgets('a repaint reuses the cached content id (no re-hash churn)', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        placementsHosted(
+          SizedBox(
+            width: 2,
+            height: 1,
+            child: Image(
+              source: ImageSource.decoded(_solid(2, 2, 5, 6, 7)),
+              fit: ImageFit.fill,
+            ),
+          ),
+        ),
       );
-      expect(escape.contains('f=100'), isTrue, reason: 'PNG transfer format');
-      expect(escape.contains('a=T'), isTrue, reason: 'transmit + display now');
-      expect(escape.contains('c=5'), isTrue, reason: 'display width in cells');
-      expect(escape.contains('r=2'), isTrue, reason: 'display height in rows');
+      final first = tester.render(size: const CellSize(2, 1));
+      final id1 = first.imagePlacements.single.id;
+      final second = tester.render(size: const CellSize(2, 1));
+      expect(second.imagePlacements.single.id, id1);
+    });
+
+    testWidgets('an animation frame swaps the placement content id', (tester) {
+      final frame0 = img.Image(width: 1, height: 2);
+      img.fill(frame0, color: img.ColorRgb8(255, 0, 0));
+      frame0.frameDuration = 100;
+      final frame1 = img.Image(width: 1, height: 2);
+      img.fill(frame1, color: img.ColorRgb8(0, 0, 255));
+      frame1.frameDuration = 100;
+      frame0.addFrame(frame1);
+
+      tester.pumpWidget(
+        placementsHosted(
+          SizedBox(
+            width: 1,
+            height: 1,
+            child: Image(
+              source: ImageSource.decoded(frame0),
+              fit: ImageFit.fill,
+            ),
+          ),
+        ),
+      );
+      final id0 = tester
+          .render(size: const CellSize(1, 1))
+          .imagePlacements
+          .single
+          .id;
+      tester.pump(const Duration(milliseconds: 150));
+      final id1 = tester
+          .render(size: const CellSize(1, 1))
+          .imagePlacements
+          .single
+          .id;
       expect(
-        escape.endsWith('\x1B\\'),
-        isTrue,
-        reason: 'last chunk closes with ST',
+        id1,
+        isNot(id0),
+        reason:
+            'each animation frame is distinct content — presenters swap '
+            'the displayed image by id',
       );
     });
 
-    testWidgets(
-      'large payloads chunk: multiple m=1 fragments terminated by m=0',
-      (tester) {
-        // PNG compresses solid colors aggressively, so a flat 200×200
-        // image fits in one chunk. Use a deterministic noise pattern that
-        // doesn't compress — guarantees the encoder hits its 4KiB chunk
-        // boundary.
-        final noisy = img.Image(width: 200, height: 200);
-        for (var y = 0; y < 200; y++) {
-          for (var x = 0; x < 200; x++) {
-            final r = (x * 17 + y * 23) & 0xFF;
-            final g = (x * 41 + y * 7) & 0xFF;
-            final b = (x * 53 + y * 31) & 0xFF;
-            noisy.setPixel(x, y, img.ColorRgb8(r, g, b));
-          }
-        }
-        tester.pumpWidget(
-          kittyHosted(
-            SizedBox(
-              width: 8,
-              height: 4,
-              child: Image(
-                source: ImageSource.decoded(noisy),
-                fit: ImageFit.fill,
-              ),
-            ),
-          ),
-        );
-        final escape = tester
-            .render(size: const CellSize(8, 4))
-            .atColRow(0, 0)
-            .grapheme!;
-        final continuations = 'm=1'.allMatches(escape).length;
-        final finals = 'm=0'.allMatches(escape).length;
-        expect(
-          continuations,
-          greaterThanOrEqualTo(1),
-          reason: 'a >4KiB payload should produce at least one m=1 chunk',
-        );
-        expect(finals, 1, reason: 'exactly one final m=0 closes the stream');
-        // Every chunk is wrapped in its own ESC_G…ESC\ envelope.
-        expect(
-          '\x1B_G'.allMatches(escape).length,
-          equals(continuations + finals),
-        );
-        expect(
-          '\x1B\\'.allMatches(escape).length,
-          equals(continuations + finals),
-        );
-      },
-    );
-
-    testWidgets('halfBlock mode keeps painting ▀ (no protocol regression)', (
+    testWidgets('the default surface (no placements) still paints ▀ art', (
       tester,
     ) {
-      // Default protocol is halfBlock — sanity-check the kitty path is
-      // strictly opt-in.
+      // The glyph fallback is the default — placements are strictly an
+      // upgrade the surface must declare.
       tester.pumpWidget(
         SizedBox(
           width: 2,
@@ -939,193 +890,6 @@ void main() {
       final cell = tester.render(size: const CellSize(2, 1)).atColRow(0, 0);
       expect(cell.role, CellRole.leading);
       expect(cell.grapheme, '▀');
-    });
-  });
-
-  group('Image — browser (serve) protocol', () {
-    Widget browserHosted(Widget child) {
-      return MediaQuery(
-        data: const MediaQueryData(
-          size: CellSize(10, 10),
-          imageProtocol: ImageProtocol.browser,
-        ),
-        child: child,
-      );
-    }
-
-    testWidgets('routes bytes off-grid and carries the widget fit', (tester) {
-      tester.pumpWidget(
-        browserHosted(
-          SizedBox(
-            width: 4,
-            height: 3,
-            child: Image(
-              source: ImageSource.decoded(_solid(8, 8, 10, 20, 30)),
-              fit: ImageFit.cover,
-            ),
-          ),
-        ),
-      );
-      final buf = tester.render(size: const CellSize(4, 3));
-
-      // Bytes live in the off-grid image table, not in a cell escape.
-      expect(buf.images.length, 1, reason: 'one inline image registered');
-      // Geometry + fit ride on the placement.
-      final placement = buf.imagePlacements.single;
-      expect(placement.cols, 4);
-      expect(placement.rows, 3);
-      expect(
-        placement.fit,
-        InlineImageFit.cover,
-        reason: 'widget ImageFit.cover maps to the wire fit',
-      );
-
-      // The anchor carries only the id (a key in the image table), and the
-      // region is protocol-covered — no glyph art, no Kitty escape.
-      final anchor = buf.atColRow(0, 0);
-      expect(anchor.role, CellRole.protocolAnchor);
-      expect(buf.images.containsKey(anchor.grapheme), isTrue);
-      expect(
-        anchor.grapheme!.startsWith('\x1B'),
-        isFalse,
-        reason: 'browser anchors hold an id, not a terminal escape',
-      );
-      expect(buf.atColRow(1, 0).role, CellRole.protocolCovered);
-    });
-
-    testWidgets('fit defaults to contain', (tester) {
-      tester.pumpWidget(
-        browserHosted(
-          SizedBox(
-            width: 4,
-            height: 2,
-            child: Image(source: ImageSource.decoded(_solid(8, 8, 1, 2, 3))),
-          ),
-        ),
-      );
-      final buf = tester.render(size: const CellSize(4, 2));
-      expect(buf.imagePlacements.single.fit, InlineImageFit.contain);
-    });
-  });
-
-  group('Image — iTerm2 inline-image protocol', () {
-    Widget itermHosted(Widget child) {
-      return MediaQuery(
-        data: const MediaQueryData(
-          size: CellSize(10, 10),
-          imageProtocol: ImageProtocol.iterm2,
-        ),
-        child: child,
-      );
-    }
-
-    testWidgets('emits a protocolAnchor at the top-left of the image box', (
-      tester,
-    ) {
-      tester.pumpWidget(
-        itermHosted(
-          SizedBox(
-            width: 4,
-            height: 3,
-            child: Image(
-              source: ImageSource.decoded(_solid(8, 8, 10, 20, 30)),
-              fit: ImageFit.fill,
-            ),
-          ),
-        ),
-      );
-      final buf = tester.render(size: const CellSize(4, 3));
-      expect(buf.atColRow(0, 0).role, CellRole.protocolAnchor);
-      for (var r = 0; r < 3; r++) {
-        for (var c = 0; c < 4; c++) {
-          if (r == 0 && c == 0) continue;
-          expect(buf.atColRow(c, r).role, CellRole.protocolCovered);
-        }
-      }
-    });
-
-    testWidgets('anchor grapheme is OSC 1337 + base64 PNG + BEL', (tester) {
-      tester.pumpWidget(
-        itermHosted(
-          SizedBox(
-            width: 6,
-            height: 4,
-            child: Image(
-              source: ImageSource.decoded(_solid(8, 8, 0, 128, 255)),
-              fit: ImageFit.fill,
-            ),
-          ),
-        ),
-      );
-      final escape = tester
-          .render(size: const CellSize(6, 4))
-          .atColRow(0, 0)
-          .grapheme!;
-      expect(
-        escape.startsWith('\x1B]1337;File='),
-        isTrue,
-        reason: 'OSC 1337 introducer with File argument list',
-      );
-      expect(escape.contains('inline=1'), isTrue, reason: 'display inline');
-      expect(
-        escape.contains('width=6'),
-        isTrue,
-        reason: 'display width in cells',
-      );
-      expect(
-        escape.contains('height=4'),
-        isTrue,
-        reason: 'display height in rows',
-      );
-      expect(
-        escape.contains('preserveAspectRatio=0'),
-        isTrue,
-        reason: 'caller (us) already laid out the fit',
-      );
-      expect(escape.endsWith('\x07'), isTrue, reason: 'BEL terminator');
-      // The payload separator ':' precedes the base64 body. Body must be
-      // non-empty and consist of valid base64 chars only.
-      final colon = escape.indexOf(':');
-      expect(colon, greaterThan(0));
-      final body = escape.substring(colon + 1, escape.length - 1);
-      expect(body, isNotEmpty);
-      expect(
-        RegExp(r'^[A-Za-z0-9+/=]+$').hasMatch(body),
-        isTrue,
-        reason: 'base64 payload between : and BEL',
-      );
-    });
-
-    testWidgets('size= header reports the PNG byte length', (tester) {
-      tester.pumpWidget(
-        itermHosted(
-          SizedBox(
-            width: 3,
-            height: 2,
-            child: Image(
-              source: ImageSource.decoded(_solid(2, 2, 50, 60, 70)),
-              fit: ImageFit.fill,
-            ),
-          ),
-        ),
-      );
-      final escape = tester
-          .render(size: const CellSize(3, 2))
-          .atColRow(0, 0)
-          .grapheme!;
-      final sizeMatch = RegExp(r'size=(\d+)').firstMatch(escape);
-      expect(sizeMatch, isNotNull);
-      final declared = int.parse(sizeMatch!.group(1)!);
-      final colon = escape.indexOf(':');
-      final b64 = escape.substring(colon + 1, escape.length - 1);
-      // base64 expansion: 4 chars per 3 bytes (with padding). Decoded
-      // length must match the declared size.
-      final decodedLen = base64.decode(b64).length;
-      expect(
-        decodedLen,
-        declared,
-        reason: 'size= must match the decoded PNG byte length exactly',
-      );
     });
   });
 
@@ -1608,151 +1372,6 @@ void main() {
     });
   });
 
-  group('Image — Sixel protocol', () {
-    Widget sixelHosted(Widget child) {
-      return MediaQuery(
-        data: const MediaQueryData(
-          size: CellSize(20, 20),
-          imageProtocol: ImageProtocol.sixel,
-        ),
-        child: child,
-      );
-    }
-
-    testWidgets('emits a protocolAnchor + protocolCovered region', (tester) {
-      tester.pumpWidget(
-        sixelHosted(
-          SizedBox(
-            width: 3,
-            height: 2,
-            child: Image(
-              source: ImageSource.decoded(_solid(8, 8, 100, 50, 200)),
-              fit: ImageFit.fill,
-            ),
-          ),
-        ),
-      );
-      final buf = tester.render(size: const CellSize(3, 2));
-      expect(buf.atColRow(0, 0).role, CellRole.protocolAnchor);
-      for (var r = 0; r < 2; r++) {
-        for (var c = 0; c < 3; c++) {
-          if (r == 0 && c == 0) continue;
-          expect(buf.atColRow(c, r).role, CellRole.protocolCovered);
-        }
-      }
-    });
-
-    testWidgets('anchor grapheme is a well-formed Sixel DCS envelope', (
-      tester,
-    ) {
-      tester.pumpWidget(
-        sixelHosted(
-          SizedBox(
-            width: 2,
-            height: 1,
-            child: Image(
-              source: ImageSource.decoded(_solid(4, 4, 255, 128, 0)),
-              fit: ImageFit.fill,
-            ),
-          ),
-        ),
-      );
-      final escape = tester
-          .render(size: const CellSize(2, 1))
-          .atColRow(0, 0)
-          .grapheme!;
-      expect(
-        escape.startsWith('\x1BPq'),
-        isTrue,
-        reason: 'DCS introducer + Sixel selector',
-      );
-      expect(
-        escape.endsWith('\x1B\\'),
-        isTrue,
-        reason: 'ST terminator closes the DCS',
-      );
-      // Raster attribute must be present immediately after 'q' with
-      // 1:1 pan/pad. Width/height of (cols·10, rows·20) for the
-      // default 10×20 cell-pixel target.
-      expect(
-        escape.contains('"1;1;20;20'),
-        isTrue,
-        reason: 'raster attrs declare image extent',
-      );
-      // At least one color-register definition (`#N;2;R;G;B`).
-      expect(
-        RegExp(r'#\d+;2;\d+;\d+;\d+').hasMatch(escape),
-        isTrue,
-        reason: 'palette emission produces at least one RGB register',
-      );
-    });
-
-    testWidgets('sixel data bytes stay inside the legal `?`..`~` range '
-        '(plus control chars)', (tester) {
-      // Sixel data bytes are ASCII 63 ('?') to 126 ('~'). The only
-      // allowed control chars in the payload are `$` (CR), `-` (NL),
-      // and `!` (RLE introducer). Plus digits / `;` for palette and
-      // RLE counts, plus `#`, `"`, `\x1B`, `P`, `q`, `\\`.
-      tester.pumpWidget(
-        sixelHosted(
-          SizedBox(
-            width: 2,
-            height: 2,
-            child: Image(
-              source: ImageSource.decoded(_solid(8, 8, 50, 200, 100)),
-              fit: ImageFit.fill,
-            ),
-          ),
-        ),
-      );
-      final escape = tester
-          .render(size: const CellSize(2, 2))
-          .atColRow(0, 0)
-          .grapheme!;
-      // Strip the envelope to focus on the payload.
-      final payload = escape
-          .substring(3, escape.length - 2) // drop \x1BPq … \x1B\
-          .replaceAll(RegExp(r'"[\d;]+'), '') // drop raster attrs
-          .replaceAll(RegExp(r'#\d+(;\d+;\d+;\d+;\d+)?'), '');
-      for (final code in payload.codeUnits) {
-        final ok =
-            (code >= 0x3F && code <= 0x7E) || // sixel chars
-            code == 0x24 || // $  CR within band
-            code == 0x2D || // -  NL between bands
-            code == 0x21 || // !  RLE
-            (code >= 0x30 && code <= 0x39) || // 0-9 (RLE counts)
-            code == 0x3B; // ;  separator (unlikely here, safety)
-        expect(
-          ok,
-          isTrue,
-          reason:
-              'unexpected code point 0x${code.toRadixString(16)} '
-              'in sixel payload',
-        );
-      }
-    });
-
-    testWidgets('halfBlock-mode rendering unaffected by sixel encoder', (
-      tester,
-    ) {
-      // Default protocol stays halfBlock — the sixel encoder must be
-      // strictly opt-in.
-      tester.pumpWidget(
-        SizedBox(
-          width: 2,
-          height: 1,
-          child: Image(
-            source: ImageSource.decoded(_solid(2, 2, 10, 20, 30)),
-            fit: ImageFit.fill,
-          ),
-        ),
-      );
-      final cell = tester.render(size: const CellSize(2, 1)).atColRow(0, 0);
-      expect(cell.role, CellRole.leading);
-      expect(cell.grapheme, '▀');
-    });
-  });
-
   group('Image — animated frames', () {
     // Build a 2-frame animation: frame 0 red, frame 1 blue, each
     // [durationMs] apart. `package:image` exposes the multi-frame
@@ -1881,151 +1500,6 @@ void main() {
         tester.scheduler.activeTickerCount,
         0,
         reason: 'no animation means no ticker',
-      );
-    });
-  });
-
-  group('Image — tmux passthrough', () {
-    Widget tmuxKittyHosted(Widget child) {
-      return MediaQuery(
-        data: const MediaQueryData(
-          size: CellSize(10, 10),
-          imageProtocol: ImageProtocol.kitty,
-          tmuxPassthrough: true,
-        ),
-        child: child,
-      );
-    }
-
-    testWidgets('wraps a Kitty payload in the tmux passthrough envelope', (
-      tester,
-    ) {
-      tester.pumpWidget(
-        tmuxKittyHosted(
-          SizedBox(
-            width: 3,
-            height: 2,
-            child: Image(
-              source: ImageSource.decoded(_solid(4, 4, 50, 60, 70)),
-              fit: ImageFit.fill,
-            ),
-          ),
-        ),
-      );
-      final anchor = tester.render(size: const CellSize(3, 2)).atColRow(0, 0);
-      final bytes = anchor.grapheme!;
-      expect(
-        bytes.startsWith('\x1BPtmux;'),
-        isTrue,
-        reason: 'opens with tmux DCS introducer',
-      );
-      expect(bytes.endsWith('\x1B\\'), isTrue, reason: 'closes with ST');
-      // Every embedded ESC inside the payload must be doubled. The
-      // Kitty APC opener `\x1B_G` should therefore become `\x1B\x1B_G`
-      // at the start of the body.
-      final body = bytes.substring(7, bytes.length - 2);
-      expect(
-        body.startsWith('\x1B\x1B_G'),
-        isTrue,
-        reason: 'doubled-ESC form is what tmux unwraps',
-      );
-      // And no lone (un-doubled) ESC bytes should remain — i.e. every
-      // ESC has another ESC adjacent.
-      for (var i = 0; i < body.length; i++) {
-        if (body.codeUnitAt(i) != 0x1B) continue;
-        final paired =
-            (i + 1 < body.length && body.codeUnitAt(i + 1) == 0x1B) ||
-            (i > 0 && body.codeUnitAt(i - 1) == 0x1B);
-        expect(paired, isTrue, reason: 'lone ESC at body offset $i');
-      }
-    });
-
-    testWidgets('passthrough off → payload is emitted bare', (tester) {
-      tester.pumpWidget(
-        MediaQuery(
-          data: const MediaQueryData(
-            size: CellSize(10, 10),
-            imageProtocol: ImageProtocol.kitty,
-          ),
-          child: SizedBox(
-            width: 3,
-            height: 2,
-            child: Image(
-              source: ImageSource.decoded(_solid(4, 4, 50, 60, 70)),
-              fit: ImageFit.fill,
-            ),
-          ),
-        ),
-      );
-      final bytes = tester
-          .render(size: const CellSize(3, 2))
-          .atColRow(0, 0)
-          .grapheme!;
-      expect(
-        bytes.startsWith('\x1B_G'),
-        isTrue,
-        reason: 'no tmux wrapper, native Kitty APC opener',
-      );
-    });
-
-    testWidgets('Sixel and iTerm2 also flow through the same wrapper', (
-      tester,
-    ) {
-      // Sixel payload contains DCS \x1BP; the wrapper must double it.
-      tester.pumpWidget(
-        MediaQuery(
-          data: const MediaQueryData(
-            size: CellSize(10, 10),
-            imageProtocol: ImageProtocol.sixel,
-            tmuxPassthrough: true,
-          ),
-          child: SizedBox(
-            width: 2,
-            height: 1,
-            child: Image(
-              source: ImageSource.decoded(_solid(20, 20, 200, 0, 0)),
-              fit: ImageFit.fill,
-            ),
-          ),
-        ),
-      );
-      final sixelBytes = tester
-          .render(size: const CellSize(2, 1))
-          .atColRow(0, 0)
-          .grapheme!;
-      expect(sixelBytes.startsWith('\x1BPtmux;'), isTrue);
-      expect(
-        sixelBytes.contains('\x1B\x1BP'),
-        isTrue,
-        reason: 'the inner Sixel DCS must be doubled',
-      );
-
-      tester.pumpWidget(
-        MediaQuery(
-          data: const MediaQueryData(
-            size: CellSize(10, 10),
-            imageProtocol: ImageProtocol.iterm2,
-            tmuxPassthrough: true,
-          ),
-          child: SizedBox(
-            width: 2,
-            height: 1,
-            child: Image(
-              source: ImageSource.decoded(_solid(4, 4, 0, 200, 0)),
-              fit: ImageFit.fill,
-            ),
-          ),
-        ),
-      );
-      final itermBytes = tester
-          .render(size: const CellSize(2, 1))
-          .atColRow(0, 0)
-          .grapheme!;
-      expect(itermBytes.startsWith('\x1BPtmux;'), isTrue);
-      expect(
-        itermBytes.contains('\x1B\x1B]1337;'),
-        isTrue,
-        reason: 'the inner iTerm2 OSC must be doubled',
       );
     });
   });

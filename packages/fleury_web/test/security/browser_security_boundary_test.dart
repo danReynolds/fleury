@@ -1,6 +1,8 @@
 @TestOn('browser')
 library;
 
+import 'dart:typed_data';
+
 import 'package:fleury/fleury_host.dart';
 import 'package:fleury_web/src/dom_grid/cell_grid_html.dart';
 import 'package:fleury_web/src/dom_grid/dom_grid_surface.dart';
@@ -94,16 +96,20 @@ void main() {
       expect(link.getAttribute('data-fleury-link-url'), 'javascript:alert(1)');
     });
 
-    test('protocol placeholders do not expose protocol payload bytes', () {
+    test('inline-image regions expose no bytes and no id to the DOM', () {
+      // Image bytes never enter cells under the overlay model (there is
+      // no API that would put escape payloads in a cell at all); the
+      // remaining leak surface is the content-hash id — assert the grid
+      // carries neither.
       final root = web.document.createElement('div');
       final surface = DomGridSurface(root: root, size: const CellSize(6, 1));
       final damage = RenderDamageTracker();
       final loop = TuiFrameLoop(renderDamage: damage);
       final frame = loop.render(
         size: const CellSize(6, 1),
-        paint: (buffer) => buffer.writeProtocol(
+        paint: (buffer) => buffer.writeImage(
           const CellOffset(1, 0),
-          '\x1b_Gf=100,a=T;SECRET_IMAGE_PAYLOAD\x1b\\',
+          Uint8List.fromList('SECRET_IMAGE_PAYLOAD'.codeUnits),
           width: 2,
           height: 1,
         ),
@@ -115,13 +121,15 @@ void main() {
         const FramePresentationPlanner().build(reason: 'initial', frame: frame),
       );
 
-      final placeholder = surface.rowElements.single.querySelector('.proto')!;
-      expect(placeholder.textContent, protocolPlaceholderGlyph);
       expect(
         surface.rowElements.single.textContent,
         isNot(contains('SECRET_IMAGE_PAYLOAD')),
       );
       expect(root.innerHTML, isNot(contains('SECRET_IMAGE_PAYLOAD')));
+      expect(
+        root.innerHTML,
+        isNot(contains(frame.next.imagePlacements.single.id)),
+      );
     });
   });
 }

@@ -573,18 +573,12 @@ List<RemoteRowPatch> _buildPatches(
           final cell = next.atColRow(col, row);
           // continuation cells contribute nothing (the leading cell's
           // grapheme already spans them); empty/blank render as a space.
+          // Overlay (inline-image) cells have no grapheme and blank the
+          // grid — the client overlays an <img> from the plan's
+          // placements, which come from a full scan rather than the diff
+          // so a static image isn't dropped on unchanged frames.
           if (cell.role != CellRole.continuation) {
-            final g = cell.grapheme;
-            // Browser inline image: blank the grid here — the client overlays
-            // an <img> (placement comes from a full scan, not the diff, so a
-            // static image isn't dropped on unchanged frames). Covered cells
-            // already render as spaces; a terminal-escape anchor still writes
-            // its grapheme.
-            final isImage =
-                cell.role == CellRole.protocolAnchor &&
-                g != null &&
-                next.images.containsKey(g);
-            buffer.write(isImage ? ' ' : (g ?? ' '));
+            buffer.write(cell.grapheme ?? ' ');
           }
           col++;
         }

@@ -25,13 +25,7 @@ export 'src/rendering/cell_span.dart'
         boxSegmentEast,
         boxSegmentNorth,
         boxSegmentSouth,
-        boxSegmentWest,
-        protocolPlaceholderGlyph,
-        protocolPlaceholderKind,
-        protocolPlaceholderKindAttribute,
-        protocolPlaceholderTitle,
-        protocolPlaceholderUnsupported,
-        protocolPlaceholderUnsupportedAttribute;
+        boxSegmentWest;
 export 'src/runtime/frame_presentation.dart'
     show
         FrameDamageSource,

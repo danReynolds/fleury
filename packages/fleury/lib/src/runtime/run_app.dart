@@ -21,6 +21,8 @@ import '../rendering/ansi_byte_budget.dart';
 import '../rendering/ansi_renderer.dart';
 import 'runtime_error_overlay.dart';
 import '../semantics/semantics.dart';
+import '../rendering/surface_capabilities.dart';
+import '../terminal/capabilities.dart';
 import '../terminal/diagnostics.dart';
 import '../input/events.dart';
 import '../terminal/native_driver.dart';
@@ -37,6 +39,7 @@ import '../widgets/tui_binding.dart';
 import '../widgets/clipboard_scope.dart';
 import 'clipboard.dart';
 import '../terminal/ansi_frame_presenter.dart';
+import '../terminal/terminal_image_encoder.dart';
 import 'frame_driver.dart';
 import 'frame_semantics_pipeline.dart';
 import 'frame_presentation.dart';
@@ -401,10 +404,14 @@ Future<void> runApp(
             child: MediaQuery(
               data: MediaQueryData(
                 size: usedDriver.size,
-                colorMode: usedDriver.capabilities.colorMode,
-                glyphTier: usedDriver.capabilities.glyphTier,
-                imageProtocol: usedDriver.capabilities.imageProtocol,
-                tmuxPassthrough: usedDriver.capabilities.tmuxPassthrough,
+                // The widget-facing capability vocabulary is backend-
+                // neutral; the terminal snapshot is one projection of it.
+                // A structured remote driver reports what its PEER
+                // declared (a browser: placements, sub-cell pointer).
+                capabilities: usedDriver is SurfaceCapabilitiesProvider
+                    ? (usedDriver as SurfaceCapabilitiesProvider)
+                          .surfaceCapabilities
+                    : usedDriver.capabilities.toSurfaceCapabilities(),
               ),
               child: FocusManagerScope(
                 manager: focusManager,
@@ -471,6 +478,18 @@ Future<void> runApp(
                     sink: sink,
                     renderer: renderer,
                     debug: debugController,
+                    // Native graphics protocol, when the terminal has one:
+                    // widgets place neutral image placements; the encoder
+                    // emits Kitty/iTerm2/Sixel escapes after each diff.
+                    imageEncoder:
+                        usedDriver.capabilities.imageProtocol ==
+                            ImageProtocol.halfBlock
+                        ? null
+                        : TerminalImageEncoder(
+                            protocol: usedDriver.capabilities.imageProtocol,
+                            tmuxPassthrough:
+                                usedDriver.capabilities.tmuxPassthrough,
+                          ),
                   ),
             planner: presentationPlanner,
             onFramePresented: activeSurfaceSink == null

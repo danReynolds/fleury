@@ -14,6 +14,7 @@ import 'package:web/web.dart' as web;
 
 import '../clipboard/web_clipboard.dart';
 import '../dom_grid/dom_grid_surface.dart';
+import '../dom_grid/inline_image_overlay.dart';
 import '../focus/web_focus_coordinator.dart';
 import '../input/dom_input_source.dart';
 import '../instrumentation/web_host_instrumentation.dart';
@@ -28,6 +29,7 @@ final class BrowserHostComponents {
     required this.surface,
     required this.metrics,
     required this.inputSource,
+    required this.imageOverlay,
     required this.semanticPresenter,
     required this.focusCoordinator,
     required this.clipboard,
@@ -41,6 +43,12 @@ final class BrowserHostComponents {
   final DomCellMetrics metrics;
   final DomInputSource inputSource;
 
+  /// The true-pixel inline-image layer both frame sources present
+  /// placements through — the embed path from the frame buffer, the
+  /// serve client from the wire plan. Assembled here so neither source
+  /// can silently lack it.
+  final InlineImageOverlay imageOverlay;
+
   /// Null only in the explicitly-opted inaccessible-diagnostics mode.
   final SemanticDomPresenter? semanticPresenter;
   final WebFocusCoordinator focusCoordinator;
@@ -49,7 +57,8 @@ final class BrowserHostComponents {
   final SemanticFlushScheduler? semanticFlushScheduler;
 
   /// Removes the DOM roots the host generated (no-op for caller-supplied
-  /// elements). Sources wire this into their dispose path.
+  /// elements) and the overlay layer. Sources wire this into their
+  /// dispose path.
   final void Function() removeGeneratedRoots;
 }
 
@@ -83,6 +92,7 @@ final class LocalRuntimeFrameSource implements BrowserFrameSource {
       surface: components.surface,
       cellMetrics: components.metrics,
       inputSource: components.inputSource,
+      imageOverlay: components.imageOverlay,
       semanticPresenter: components.semanticPresenter,
       semanticFlushScheduler: components.semanticFlushScheduler,
       clipboard: components.clipboard,
@@ -159,7 +169,9 @@ final class BrowserPresentationHost {
       host.appendChild(semanticRoot);
     }
 
+    InlineImageOverlay? imageOverlay;
     void removeGeneratedRoots() {
+      imageOverlay?.dispose();
       if (removeSemanticRoot) {
         semanticRoot?.parentNode?.removeChild(semanticRoot);
       }
@@ -169,6 +181,9 @@ final class BrowserPresentationHost {
     try {
       final metrics = DomCellMetrics(container: host);
       final surface = DomGridSurface(root: surfaceRoot, size: CellSize.zero);
+      final overlay = imageOverlay = InlineImageOverlay(
+        host as web.HTMLElement,
+      );
       final semanticPresenter = semanticRoot == null
           ? null
           : SemanticDomPresenter(root: semanticRoot);
@@ -186,6 +201,7 @@ final class BrowserPresentationHost {
         surface: surface,
         metrics: metrics,
         inputSource: input,
+        imageOverlay: overlay,
         semanticPresenter: semanticPresenter,
         focusCoordinator: webFocusCoordinator,
         clipboard: webClipboard,

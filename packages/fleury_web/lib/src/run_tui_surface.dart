@@ -7,6 +7,7 @@ import 'package:web/web.dart' as web;
 
 import 'browser_frame_flush_scheduler.dart';
 import 'clipboard/web_clipboard.dart';
+import 'dom_grid/inline_image_overlay.dart';
 import 'focus/web_focus_coordinator.dart';
 import 'frame_presentation.dart';
 import 'input/input_source.dart';
@@ -150,6 +151,7 @@ Future<MountedApp> runTuiSurface(
   required FrameSurface surface,
   CellMetrics? cellMetrics,
   TuiInputSource? inputSource,
+  InlineImageOverlay? imageOverlay,
   SemanticFramePresenter? semanticPresenter,
   SemanticFlushScheduler? semanticFlushScheduler,
   Clipboard? clipboard,
@@ -228,9 +230,18 @@ Future<MountedApp> runTuiSurface(
     child: MediaQuery(
       data: MediaQueryData(
         size: surface.size,
-        colorMode: ColorMode.truecolor,
-        imageProtocol: ImageProtocol.halfBlock,
-        tmuxPassthrough: false,
+        // First-class browser capabilities — no terminal cosplay. Inline
+        // images render as true pixels when the host assembled the <img>
+        // overlay layer; a bare surface (no overlay) gets glyph art.
+        capabilities: SurfaceCapabilities(
+          colorMode: ColorMode.truecolor,
+          glyphTier: GlyphTier.unicode,
+          images: imageOverlay == null
+              ? InlineImageSupport.none
+              : InlineImageSupport.placements,
+          hyperlinks: true,
+          pointer: PointerPrecision.subCell,
+        ),
       ),
       child: FocusManagerScope(
         manager: focusManager,
@@ -417,6 +428,7 @@ Future<MountedApp> runTuiSurface(
       presenter: _SurfaceFramePresenter(
         surface: surface,
         inputSource: inputSource,
+        imageOverlay: imageOverlay,
         focusCoordinator: focusCoordinator,
         focusManager: focusManager,
         instrumentation: instrumentation,
@@ -631,6 +643,7 @@ final class _SurfaceFramePresenter implements FramePresenter {
   _SurfaceFramePresenter({
     required this.surface,
     required this.inputSource,
+    required this.imageOverlay,
     required this.focusCoordinator,
     required this.focusManager,
     required this.instrumentation,
@@ -644,6 +657,7 @@ final class _SurfaceFramePresenter implements FramePresenter {
 
   final FrameSurface surface;
   final TuiInputSource? inputSource;
+  final InlineImageOverlay? imageOverlay;
   final WebFocusCoordinator? focusCoordinator;
   final FocusManager focusManager;
   final WebHostInstrumentation instrumentation;
@@ -667,6 +681,7 @@ final class _SurfaceFramePresenter implements FramePresenter {
     final plan = info.plan!;
     final domApplyStopwatch = Stopwatch()..start();
     _surfaceStats = surface.present(frame.previous, frame.next, plan);
+    _applyImagePlacements(frame.next);
     domApplyStopwatch.stop();
     _domApplyTime = domApplyStopwatch.elapsed;
 
@@ -697,6 +712,31 @@ final class _SurfaceFramePresenter implements FramePresenter {
       focusManager.focusedNode?.caretRect,
       readLastMetrics(),
     );
+  }
+
+  /// Feeds this frame's inline images to the `<img>` overlay: bytes are
+  /// cached by content id (idempotent), then the full placement set is
+  /// reconciled — the same overlay the serve client drives from the wire
+  /// plan, here fed straight from the frame buffer.
+  void _applyImagePlacements(CellBuffer next) {
+    final overlay = imageOverlay;
+    if (overlay == null) return;
+    final metrics = readLastMetrics();
+    if (metrics == null) return;
+    for (final image in next.images.values) {
+      overlay.cacheImage(image.id, image.bytes);
+    }
+    overlay.apply([
+      for (final p in next.imagePlacements)
+        ImagePlacement(
+          id: p.id,
+          col: p.col,
+          row: p.row,
+          cols: p.cols,
+          rows: p.rows,
+          fit: p.fit,
+        ),
+    ], metrics);
   }
 
   @override

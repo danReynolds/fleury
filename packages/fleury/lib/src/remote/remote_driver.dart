@@ -11,6 +11,7 @@ import 'dart:typed_data';
 
 import '../foundation/geometry.dart';
 import '../rendering/cell_buffer.dart';
+import '../rendering/surface_capabilities.dart';
 import '../runtime/frame_presentation.dart';
 import '../runtime/remote_surface_sink.dart';
 import '../semantics/inspection.dart';
@@ -39,7 +40,8 @@ const int maxRemoteGridRows = 4000;
 /// browser surface client) receives [PlanFrame]s via [presentPlan] and
 /// sends structured input. [wantsPresentationPlans] reflects the negotiated
 /// version and is read by [runApp] after [enter] completes.
-final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
+final class RemoteTerminalDriver
+    implements TerminalDriver, RemoteSurfaceSink, SurfaceCapabilitiesProvider {
   RemoteTerminalDriver(this._transport);
 
   final RemoteFrameTransport _transport;
@@ -54,6 +56,15 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
   StreamSubscription<RemoteFrame>? _frameSub;
   CellSize _size = const CellSize(80, 24);
   TerminalCapabilities _capabilities = TerminalCapabilities.defaultCapabilities;
+  SurfaceCapabilities? _peerSurfaceCapabilities;
+
+  /// What the PEER's surface can do: from the v3 `images=` INIT param when
+  /// present, else the terminal projection (a v1 `fleury shell` peer is a
+  /// real terminal). A structured browser peer gets sub-cell pointer
+  /// fidelity — its input source reports real mouse geometry.
+  @override
+  SurfaceCapabilities get surfaceCapabilities =>
+      _peerSurfaceCapabilities ?? _capabilities.toSurfaceCapabilities();
 
   // Content-hash ids of inline images placed on the PREVIOUS frame. An image's
   // bytes are (re)shipped whenever it appears or re-appears — i.e. its id is
@@ -223,6 +234,17 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
           imageProtocol: f.imageProtocol,
           tmuxPassthrough: f.tmuxPassthrough,
         );
+        final peerImages = f.images;
+        _peerSurfaceCapabilities = peerImages == null
+            ? null
+            : SurfaceCapabilities(
+                colorMode: f.colorMode,
+                glyphTier: f.glyphTier,
+                images: peerImages,
+                pointer: f.protocolVersion >= 2
+                    ? PointerPrecision.subCell
+                    : PointerPrecision.cell,
+              );
         if (!_handshakeReceived) {
           _handshakeReceived = true;
           // v3: echo INIT back with the app's protocol version so the

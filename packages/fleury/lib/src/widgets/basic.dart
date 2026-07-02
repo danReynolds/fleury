@@ -786,8 +786,7 @@ class _RenderFilledBox extends RenderObject
         if (cell.style.background != null) continue; // child set its own
         if (cell.role == CellRole.empty) continue; // already our fill
         if (cell.role == CellRole.continuation ||
-            cell.role == CellRole.protocolAnchor ||
-            cell.role == CellRole.protocolCovered) {
+            cell.role == CellRole.overlay) {
           continue;
         }
         buffer.writeGrapheme(

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:fleury/fleury_host.dart';
 import 'package:fleury_web/src/dom_grid/cell_grid_html.dart';
 import 'package:test/test.dart';
@@ -195,27 +197,25 @@ void main() {
     });
   });
 
-  group('protocol placeholders', () {
-    test('mark unsupported inline images explicitly', () {
-      final html = renderFrameHtml(
-        frame(
-          4,
-          1,
-          (b) => b.writeProtocol(
-            const CellOffset(1, 0),
-            'image-bytes',
-            width: 2,
-            height: 1,
-          ),
+  group('overlay regions', () {
+    test('inline-image cells render as blanks with no content leakage', () {
+      final buffer = frame(
+        4,
+        1,
+        (b) => b.writeImage(
+          const CellOffset(1, 0),
+          Uint8List.fromList([1, 2, 3]),
+          width: 2,
+          height: 1,
         ),
       );
+      final html = renderFrameHtml(buffer);
 
-      expect(html, contains('class="proto"'));
-      expect(html, contains('title="unsupported inline image"'));
-      expect(html, contains('data-fleury-cell-kind="protocol-placeholder"'));
-      expect(html, contains('data-fleury-unsupported="inline-image"'));
-      expect(html, contains('>▩</span>'));
-      expect(html, isNot(contains('image-bytes')));
+      // The grid under an <img> overlay is plain blank cells: no id, no
+      // bytes, no placeholder glyph.
+      expect(html, contains('>    <'), reason: 'a full row of spaces');
+      expect(html, isNot(contains(buffer.imagePlacements.single.id)));
+      expect(html, isNot(contains('▩')));
     });
   });
 

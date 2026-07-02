@@ -3488,11 +3488,16 @@ final class _DemoDiagnosticSnapshot {
     required bool streaming,
   }) {
     final media = MediaQuery.of(context);
-    final capabilities = TerminalCapabilities(
-      colorMode: media.colorMode,
-      imageProtocol: media.imageProtocol,
-      tmuxPassthrough: media.tmuxPassthrough,
-    );
+    // The widget layer only sees neutral surface capabilities; protocol
+    // details (which escape protocol, tmux passthrough) are presenter
+    // concerns and never reach MediaQuery. The demo's requirement
+    // resolution reports inline-image availability through the
+    // side-channel, like the Image widget does.
+    final surfaceImages = media.capabilities.images;
+    final capabilities = TerminalCapabilities(colorMode: media.colorMode);
+    final availableFeatures = surfaceImages == InlineImageSupport.placements
+        ? const <TerminalFeature>{TerminalFeature.inlineImages}
+        : const <TerminalFeature>{};
     final driver = FakeTerminalDriver(
       size: media.size,
       capabilities: capabilities,
@@ -3523,6 +3528,7 @@ final class _DemoDiagnosticSnapshot {
         fallback: CapabilityFallback(label: 'glyph image'),
       ),
       capabilities,
+      additionalAvailableFeatures: availableFeatures,
     );
     final osc8 = resolveCapabilityRequirement(
       const CapabilityRequirement(
@@ -3562,7 +3568,7 @@ final class _DemoDiagnosticSnapshot {
       ),
       _CapabilityDiagnosticItem(
         label: 'Inline images',
-        value: diagnosis.capabilities.imageProtocol.name,
+        value: surfaceImages.name,
         resolution: images,
       ),
       _CapabilityDiagnosticItem(

@@ -81,6 +81,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../foundation/geometry.dart';
+import '../rendering/surface_capabilities.dart';
 import '../semantics/semantics.dart';
 import '../terminal/capabilities.dart';
 import '../input/events.dart';
@@ -152,14 +153,22 @@ final class InitFrame extends RemoteFrame {
     this.glyphTier = GlyphTier.unicode,
     required this.imageProtocol,
     required this.tmuxPassthrough,
+    this.images,
     this.protocolVersion = remoteProtocolVersion,
   });
 
   final CellSize size;
   final ColorMode colorMode;
   final GlyphTier glyphTier;
+
+  /// The terminal-projection fields: a v1 ANSI peer (`fleury shell`, a
+  /// real terminal) genuinely has an escape protocol and a multiplexer.
   final ImageProtocol imageProtocol;
   final bool tmuxPassthrough;
+
+  /// The peer's neutral image capability (v3 `images=` param). Null from
+  /// older peers — the app projects [imageProtocol] instead.
+  final InlineImageSupport? images;
 
   /// Negotiated protocol version. A peer omitting `v` in INIT is read as
   /// v1 (the legacy ANSI host).
@@ -332,6 +341,7 @@ String _encodeInit(InitFrame f) =>
     'glyph=${f.glyphTier.name},'
     'image=${f.imageProtocol.name},'
     'tmux=${f.tmuxPassthrough ? 1 : 0},'
+    '${f.images == null ? '' : 'images=${f.images!.name},'}'
     'v=${f.protocolVersion}';
 
 /// Wire layout: [u16 id length][id utf-8][image bytes...].
@@ -582,6 +592,11 @@ InitFrame _decodeInit(String body) {
       orElse: () => ImageProtocol.halfBlock,
     ),
     tmuxPassthrough: params['tmux'] == '1',
+    images: switch (params['images']) {
+      'none' => InlineImageSupport.none,
+      'placements' => InlineImageSupport.placements,
+      _ => null,
+    },
     protocolVersion: int.tryParse(params['v'] ?? '') ?? 1,
   );
 }

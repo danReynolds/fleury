@@ -99,7 +99,14 @@ export 'src/rendering/cell.dart'
         Colors,
         IndexedColor,
         RgbColor;
-export 'src/rendering/cell_buffer.dart' show CellBuffer, InlineImageFit;
+export 'src/rendering/cell_buffer.dart'
+    show
+        CellBuffer,
+        InlineImage,
+        InlineImageFit,
+        InlineImagePlacement,
+        ResolvedImageFit,
+        resolveInlineImageFit;
 export 'src/rendering/edge_insets.dart' show EdgeInsets;
 export 'src/rendering/layout.dart' show CellConstraints;
 export 'src/rendering/render_flex.dart'
@@ -118,6 +125,14 @@ export 'src/rendering/render_object.dart'
         RenderObjectWithChildren,
         RenderObjectWithSingleChild;
 export 'src/rendering/render_repaint_boundary.dart' show RenderRepaintBoundary;
+export 'src/rendering/surface_capabilities.dart'
+    show
+        ColorMode,
+        GlyphTier,
+        InlineImageSupport,
+        PointerPrecision,
+        SurfaceCapabilities,
+        SurfaceCapabilitiesProvider;
 export 'src/rendering/render_objects.dart'
     show
         RenderBorder,
@@ -172,10 +187,9 @@ export 'src/semantics/semantics.dart'
 // Terminal
 export 'src/terminal/capabilities.dart'
     show
-        ColorMode,
-        GlyphTier,
         ImageProtocol,
         TerminalCapabilities,
+        TerminalSurfaceCapabilities,
         detectColorModeFromEnvironment,
         detectGlyphTierFromEnvironment,
         detectImageProtocolFromEnvironment,

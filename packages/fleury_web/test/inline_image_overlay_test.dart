@@ -12,7 +12,7 @@ import 'dart:typed_data';
 import 'package:fleury/fleury_host.dart' show InlineImageFit;
 import 'package:fleury/src/remote/remote_codec.dart' show ImagePlacement;
 import 'package:fleury_web/src/metrics/cell_metrics.dart';
-import 'package:fleury_web/src/remote_client/inline_image_overlay.dart';
+import 'package:fleury_web/src/dom_grid/inline_image_overlay.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;
 
