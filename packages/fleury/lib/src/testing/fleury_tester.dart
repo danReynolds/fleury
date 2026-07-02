@@ -42,6 +42,7 @@ import '../animation/ticker_scheduler.dart';
 import '../app/app.dart';
 import '../app/commands.dart';
 import '../foundation/geometry.dart';
+import '../foundation/key.dart' show UniqueKey;
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/render_flex.dart' show RenderFlex;
@@ -117,15 +118,8 @@ class FleuryTester {
   late final BuildOwner _owner;
   Element? _root;
   Widget _currentUserWidget = const EmptyBox();
-  bool _appMode = false;
   late final OverlayEntry _userEntry = OverlayEntry(
-    // In app mode ([pumpApp]), wrap the user widget in a root Navigator
-    // exactly as the runtime does (run_app.dart) so `context.present` /
-    // `context.push` and `TuiBinding.rootNavigator` work in tests without
-    // hand-wrapping. Otherwise mount the widget bare (Flutter-`pumpWidget`
-    // parity — no implicit Navigator).
-    builder: (_) =>
-        _appMode ? Navigator(home: _currentUserWidget) : _currentUserWidget,
+    builder: (_) => _currentUserWidget,
   );
   bool _disposed = false;
 
@@ -215,21 +209,20 @@ class FleuryTester {
   }
 
   /// Like [pumpWidget], but mounts [widget] as the `home` of a root
-  /// [Navigator] (inside the Overlay) — reproducing the runtime's root wrapper
-  /// (`run_app.dart`), which always installs a Navigator. Use this for
-  /// app-level tests so `context.present(...)` / `context.push(...)` and
+  /// [Navigator] — reproducing the runtime's root wrapper (`run_app.dart`),
+  /// which always installs one. Use this for app-level tests so
+  /// `context.present(...)` / `context.push(...)` and
   /// `TuiBinding.rootNavigator` resolve without hand-wrapping; use bare
   /// [pumpWidget] for widget-level tests. Mirrors Flutter's
   /// `pumpWidget(MyWidget())` vs `pumpWidget(MaterialApp(...))` split.
   ///
-  /// The Navigator's `home` is set at first mount (the Navigator ignores later
-  /// `home` changes, as in production), so call [pumpApp] once per test; drive
-  /// further navigation via `context.push`/`present` and the [settle]/[pump]
-  /// family.
+  /// Plain composition over [pumpWidget] — nothing latches: a later
+  /// [pumpApp] REPLACES the whole app (fresh Navigator, fresh home; the
+  /// Navigator is keyed because it snapshots `home` once and would silently
+  /// ignore a swap), and a later [pumpWidget] mounts its widget bare.
   void pumpApp(Widget widget) {
     _assertNotDisposed('pumpApp');
-    _appMode = true;
-    pumpWidget(widget);
+    pumpWidget(Navigator(key: UniqueKey(), home: widget));
   }
 
   /// Advances time and flushes any pending rebuilds. When [duration]
@@ -310,7 +303,15 @@ class FleuryTester {
     if (_root != null) render();
     _binding.flushPostFrameCallbacks(_clock.now);
     final afterDrain = _owner.flushBuild().rebuiltElementCount;
-    return built == 0 && afterDrain == 0;
+    // Paint-only work counts as activity: a Ticker driving markNeedsPaintOnly
+    // rebuilds nothing, but its animation is still in flight — treating the
+    // tree as settled would abandon it mid-animation with the fake clock
+    // stopped. The damage tracker records those audited paint invalidations;
+    // consume it per step (the runtime's frame loop does the same). A
+    // perpetual-but-idle ticker (cursor blink) stays settle-able: it records
+    // damage only on the step that crosses its interval.
+    final visualDamage = _owner.renderDamageTracker.takeVisualChange();
+    return built == 0 && afterDrain == 0 && !visualDamage;
   }
 
   /// Pumps in [step] increments until a frame does no build work (the tree

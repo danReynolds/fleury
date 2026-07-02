@@ -106,9 +106,17 @@ class _TextAreaState extends State<TextArea>
     _focusNode =
         widget.focusNode ??
         FocusNode(debugLabel: 'TextArea', canRequestFocus: widget.enabled);
-    _focusNode.textInputClaimant = this;
-    _focusNode.textCompositionClaimant = this;
+    _syncClaimants();
     _ownsFocusNode = widget.focusNode == null;
+  }
+
+  /// Claim typed text only while enabled — mirrors TextInput: a disabled
+  /// area declines printables (they fall through to chord matching), so a
+  /// registered claimant would make the hint bar hide keys that still work.
+  void _syncClaimants() {
+    final claimant = widget.enabled ? this : null;
+    _focusNode.textInputClaimant = claimant;
+    _focusNode.textCompositionClaimant = claimant;
   }
 
   @override
@@ -129,9 +137,11 @@ class _TextAreaState extends State<TextArea>
       _focusNode =
           widget.focusNode ??
           FocusNode(debugLabel: 'TextArea', canRequestFocus: widget.enabled);
-      _focusNode.textInputClaimant = this;
-      _focusNode.textCompositionClaimant = this;
+      _syncClaimants();
       _ownsFocusNode = widget.focusNode == null;
+    }
+    if (widget.enabled != oldWidget.enabled) {
+      _syncClaimants();
     }
     if (_ownsFocusNode) {
       _focusNode.canRequestFocus = widget.enabled;

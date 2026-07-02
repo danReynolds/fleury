@@ -123,14 +123,20 @@ class RouteTransition {
 class _Route {
   _Route(
     this.screen,
-    this.transition, {
+    RouteTransition? transition, {
     this.presentAlignment,
     this.barrierColor,
     this.barrierDismissible = true,
-  });
+  }) : transition = (transition == null || transition.isInstant)
+           ? null
+           : transition;
 
   final Widget screen;
-  final RouteTransition? transition; // null = instant
+
+  /// null = instant. Normalized in the constructor: [RouteTransition.none]
+  /// maps to null here so EVERY construction site inherits the instant path
+  /// (no per-call-site mapping to forget).
+  final RouteTransition? transition;
   final Completer<Object?> completer = Completer<Object?>();
   final Animation<double> presence = Animation(0.0); // 0 absent, 1 present
 
@@ -140,11 +146,17 @@ class _Route {
 
   /// Anchors [FocusManager.restoreFocusInScope] inside this route's chrome:
   /// the route's FocusScope remembers the node last focused within it, and a
-  /// pop that reveals this route restores through this key. Replaces the old
-  /// hand-tracked `priorFocus` snapshot — the scope memory is recorded where
-  /// the focus actually lives, so it also survives pushReplacement and
-  /// popUntil (whose intermediate routes are gone by restore time).
+  /// pop that reveals this route restores through this key. Scope memory is
+  /// the primary restore path — recorded where the focus actually lives, so
+  /// it survives pushReplacement and popUntil (whose intermediate routes are
+  /// gone by restore time).
   final GlobalKey restoreKey = GlobalKey();
+
+  /// Fallback restore target: whatever held focus when this route was
+  /// pushed. Covers focus that lived OUTSIDE this navigator's route scopes
+  /// (a sidebar pane, app chrome) — no route's FocusScope ever recorded it,
+  /// so scope memory alone would strand the keyboard on pop.
+  FocusNode? priorFocus;
   bool leaving = false;
 
   /// True once the route has settled fully present with no in-flight
@@ -304,9 +316,11 @@ class NavigatorState extends State<Navigator> {
       ..replacing = replaced
       ..replacingResult = result;
     _pushRoute(route);
-    // No focus bookkeeping to inherit from the replaced route: restore reads
-    // the covered route's own FocusScope memory, which is untouched by the
-    // replacement.
+    // Scope memory needs no inheritance (the covered route's own FocusScope
+    // remembers), but the outside-navigator FALLBACK does: the replaced
+    // route's snapshot is the pre-push focus; the replacement's own snapshot
+    // saw only the replaced route's state.
+    if (replaced != null) route.priorFocus = replaced.priorFocus;
     return route.completer.future.then((v) => v as T?);
   }
 
@@ -344,10 +358,13 @@ class NavigatorState extends State<Navigator> {
     Color? barrierColor,
     bool barrierDismissible = true,
   }) {
-    final resolved = transition ?? RouteTransition.fade;
     final route = _Route(
       screen,
-      resolved.isInstant ? null : resolved,
+      // Same resolution chain as push (_newRoute): per-call override, then
+      // the Navigator-wide default, then fade. Modals previously skipped
+      // widget.transition, so Navigator(transition: RouteTransition.none)
+      // silently animated every present().
+      transition ?? widget.transition ?? RouteTransition.fade,
       presentAlignment: alignment,
       barrierColor: barrierColor,
       barrierDismissible: barrierDismissible,
@@ -391,12 +408,21 @@ class NavigatorState extends State<Navigator> {
 
     // Restore focus to the revealed screen immediately — not after the
     // exit animation — so input lands on it right away. The revealed route's
-    // FocusScope remembers what was focused within it; restore through it
-    // (correct even for popUntil, where the routes between are already gone).
+    // FocusScope memory is the primary path (correct even for popUntil,
+    // where the routes between are already gone); the push-time snapshot is
+    // the fallback for focus that lived OUTSIDE this navigator's routes (a
+    // sidebar pane, app chrome), which no route scope ever recorded.
     _manager?.requestFocus(null);
     final revealed = _topLive;
+    var restored = false;
     if (revealed != null) {
-      _manager?.restoreFocusInScope(revealed.restoreKey.currentContext);
+      restored =
+          _manager?.restoreFocusInScope(revealed.restoreKey.currentContext) ??
+          false;
+    }
+    if (!restored) {
+      final prior = route.priorFocus;
+      if (prior != null && prior.isAttached) prior.requestFocus();
     }
 
     final transition = route.transition;
@@ -437,6 +463,11 @@ class NavigatorState extends State<Navigator> {
         return false;
       }
     }
+    // A non-dismissible modal refuses semantic/back dismissal on EVERY
+    // consult path — the route-level Esc binding alone isn't enough, since
+    // app back bindings and semantics drivers route through maybePop.
+    // Programmatic pop() stays unconditional.
+    if (top != null && !top.barrierDismissible) return false;
     if (!canPop) return false;
     pop();
     return true;
@@ -444,15 +475,15 @@ class NavigatorState extends State<Navigator> {
 
   // ---------------------------------------------------------------
 
-  _Route _newRoute(Widget screen, RouteTransition? transition) {
-    final resolved = transition ?? widget.transition ?? RouteTransition.fade;
-    return _Route(screen, resolved.isInstant ? null : resolved);
-  }
+  _Route _newRoute(Widget screen, RouteTransition? transition) =>
+      _Route(screen, transition ?? widget.transition ?? RouteTransition.fade);
 
   void _pushRoute(_Route route) {
-    // Clear focus so the new route's content autofocuses. What was focused is
-    // already remembered by the covered route's FocusScope (recorded when it
-    // was focused), so pop can restore it — no snapshot needed here.
+    // Snapshot BEFORE clearing: the covered route's FocusScope memory is the
+    // primary restore path, but focus held outside this navigator's routes
+    // (a sibling pane) is only reachable through this fallback.
+    route.priorFocus = _manager?.focusedNode;
+    // Clear focus so the new route's content autofocuses.
     _manager?.requestFocus(null);
     _routes.add(route);
     _animateIn(route);
@@ -683,8 +714,16 @@ class _RouteHost extends StatelessWidget {
               ]
             : const <KeyBinding>[],
         // Expose this route to its subtree so a PopScope can register
-        // its veto with the right route.
-        child: _RouteScope(route: route, child: screen),
+        // its veto with the right route. Covered routes are focus-inert
+        // (ExcludeFocus): they stay mounted and keep building, so without
+        // this a late-mounting autofocus in an occluded route would steal
+        // focus from the active route — even out of a modal, leaving it
+        // keyboard-undismissable. Exclusion also keeps Tab traversal from
+        // wandering into invisible screens.
+        child: ExcludeFocus(
+          excluding: !active,
+          child: _RouteScope(route: route, child: screen),
+        ),
       ),
     );
 
@@ -696,9 +735,16 @@ class _RouteHost extends StatelessWidget {
       // change (enter -> settled -> leaving), remounting the route's content
       // and losing its State (scroll position, text, focus) — and re-firing
       // autofocus, which could steal focus a pop just restored.
+      //
+      // Settled routes use the effect's AT-REST form (same element shape,
+      // passthrough paint): the live composite at full progress would pay a
+      // scratch-buffer double paint every frame, drop protocol (image) cells,
+      // and record scratch-local focus/pointer geometry.
       content = route.leaving
           ? transition.exit.build(content, (1 - t).clamp(0.0, 1.0))
-          : transition.enter.build(content, t.clamp(0.0, 1.0));
+          : (t >= 1.0
+                ? transition.enter.buildSettled(content)
+                : transition.enter.build(content, t.clamp(0.0, 1.0)));
     }
     final routeName = route.screen.runtimeType.toString();
     return Semantics(

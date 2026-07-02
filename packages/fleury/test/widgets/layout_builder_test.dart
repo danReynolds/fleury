@@ -123,6 +123,24 @@ void main() {
     );
   });
 
+  testWidgets('a min-forced empty child under an unbounded axis does not '
+      'assert (stretch exemption)', (tester) {
+    // CrossAxisAlignment.stretch forces minRows = crossMax, so a deliberately
+    // empty child sizes (0 x crossMax) under the unbounded Row axis — the
+    // collapse assert must not fire for extents the child did not choose.
+    tester.pumpWidget(
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LayoutBuilder(builder: (context, constraints) => const Text('')),
+          const Expanded(child: Text('main')),
+        ],
+      ),
+    );
+    final out = tester.renderToString(size: const CellSize(20, 2));
+    expect(out, contains('main'), reason: 'lays out without throwing');
+  });
+
   testWidgets('a bounded LayoutBuilder in a Row (via Expanded) lays out fine',
       (tester) {
     tester.pumpWidget(

@@ -146,10 +146,20 @@ class RenderLayoutBuilder extends RenderObject
       // null-as-unbounded just vanishes. Make it diagnosable in dev. Gated on
       // "zero on the unbounded axis but non-zero on the other" so an
       // intentionally empty child (0x0) doesn't trip it.
+      // Fire only when the child CHOSE the non-zero cross extent
+      // (size > the parent-imposed minimum): a stretch Row/Column or a
+      // ScrollView forces min on the cross axis, which would otherwise make
+      // a deliberately empty child (0 on the unbounded axis) look collapsed.
       final collapsedCols =
-          constraints.maxCols == null && size.cols == 0 && size.rows > 0;
+          constraints.maxCols == null &&
+          size.cols == 0 &&
+          size.rows > 0 &&
+          size.rows > constraints.minRows;
       final collapsedRows =
-          constraints.maxRows == null && size.rows == 0 && size.cols > 0;
+          constraints.maxRows == null &&
+          size.rows == 0 &&
+          size.cols > 0 &&
+          size.cols > constraints.minCols;
       if (collapsedCols || collapsedRows) {
         throw StateError(
           'LayoutBuilder collapsed to zero ${collapsedCols ? 'width' : 'height'} '

@@ -89,6 +89,63 @@ void main() {
     });
   });
 
+  group('per-chord suppression (review regressions)', () {
+    testWidgets('a multi-chord binding stays visible via its non-shadowed '
+        'alias while typing', (tester) {
+      tester.pumpWidget(
+        Column(
+          children: [
+            KeyBindings(
+              bindings: [
+                KeyBinding.list(
+                  [KeyChord.char('j'), KeyChord.key(KeyCode.arrowDown)],
+                  label: 'next',
+                  onEvent: (_) {},
+                ),
+              ],
+              child: TextInput(autofocus: true),
+            ),
+            const KeyHintBar(),
+          ],
+        ),
+      );
+      final out = bar(tester);
+      expect(out, contains('next'),
+          reason: 'the Down alias still fires — hiding the whole binding '
+              'would conceal live functionality exactly while typing');
+      expect(out, contains('[↓]'),
+          reason: 'advertise the alias that works, not the shadowed j');
+      expect(out, isNot(contains('[j]')));
+    });
+
+    testWidgets('a disabled field with an app-provided node does not '
+        'suppress printables that still fire', (tester) {
+      final node = FocusNode(debugLabel: 'app-node');
+      var fired = 0;
+      tester.pumpWidget(
+        Column(
+          children: [
+            KeyBindings(
+              bindings: [
+                KeyBinding(KeyChord.char('?'),
+                    label: 'help', onEvent: (_) => fired++),
+              ],
+              child: TextInput(focusNode: node, enabled: false),
+            ),
+            const KeyHintBar(),
+          ],
+        ),
+      );
+      node.requestFocus();
+      tester.pump();
+      expect(bar(tester), contains('help'),
+          reason: 'a disabled field declines text (no claimant), so ? '
+              'falls through to chord matching and must stay advertised');
+      tester.type('?');
+      expect(fired, 1, reason: 'and it really does fire');
+    });
+  });
+
   group('live labels (bindingsRevision)', () {
     testWidgets('a label toggled by setState repaints the bar without a '
         'focus move', (tester) async {

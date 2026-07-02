@@ -1501,7 +1501,15 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
       }
 
       if (matched != null) {
-        matched.update(newWidget);
+        // Same identical-instance skip updateChild and the stable-unkeyed
+        // fast path apply: without it, a keyed child whose widget instance
+        // didn't change deep-rebuilds anyway — and its State receives a
+        // didUpdateWidget where oldWidget is IDENTICAL to widget (a contract
+        // violation) — on every pass that reaches this path (e.g. the
+        // re-reconcile scheduled by insertChildRenderObject after a mount).
+        if (!canSkipWidgetUpdate(matched.widget, newWidget)) {
+          matched.update(newWidget);
+        }
         result[i] = matched;
       } else {
         result[i] = inflateWidget(newWidget);

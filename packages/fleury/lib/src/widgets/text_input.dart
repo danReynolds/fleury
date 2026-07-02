@@ -659,9 +659,19 @@ class _TextInputState extends State<TextInput>
     _focusNode =
         widget.focusNode ??
         FocusNode(debugLabel: 'TextInput', canRequestFocus: widget.enabled);
-    _focusNode.textInputClaimant = this;
-    _focusNode.textCompositionClaimant = this;
+    _syncClaimants();
     _ownsFocusNode = widget.focusNode == null;
+  }
+
+  /// Claim typed text only while [TextInput.enabled]: a disabled field
+  /// DECLINES every printable (`onTextInput` returns ignored), so the chars
+  /// fall through to chord matching and bindings still fire — a registered
+  /// claimant would make the hint bar hide keys that actually work. A
+  /// read-only field keeps claiming (it swallows input, honestly).
+  void _syncClaimants() {
+    final claimant = widget.enabled ? this : null;
+    _focusNode.textInputClaimant = claimant;
+    _focusNode.textCompositionClaimant = claimant;
   }
 
   @override
@@ -691,9 +701,11 @@ class _TextInputState extends State<TextInput>
       _focusNode =
           widget.focusNode ??
           FocusNode(debugLabel: 'TextInput', canRequestFocus: widget.enabled);
-      _focusNode.textInputClaimant = this;
-      _focusNode.textCompositionClaimant = this;
+      _syncClaimants();
       _ownsFocusNode = widget.focusNode == null;
+    }
+    if (widget.enabled != oldWidget.enabled) {
+      _syncClaimants();
     }
     if (_ownsFocusNode) {
       _focusNode.canRequestFocus = widget.enabled;

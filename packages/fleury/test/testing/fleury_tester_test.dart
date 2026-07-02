@@ -92,6 +92,38 @@ void main() {
     });
   });
 
+  group('pumpApp re-pump / paint-only settle (review regressions)', () {
+    testWidgets('pumpApp replaces the app on re-pump; pumpWidget unwraps', (
+      tester,
+    ) {
+      tester.pumpApp(const Text('one'));
+      expect(tester.renderToString(size: const CellSize(8, 1)), contains('one'));
+
+      tester.pumpApp(const Text('two'));
+      final second = tester.renderToString(size: const CellSize(8, 1));
+      expect(second, contains('two'),
+          reason: 'a later pumpApp must not be silently ignored');
+      expect(second, isNot(contains('one')));
+
+      tester.pumpWidget(const Text('three'));
+      expect(tester.renderToString(size: const CellSize(8, 1)),
+          contains('three'),
+          reason: 'pumpWidget after pumpApp mounts bare (no latched mode)');
+    });
+
+    testWidgets('pumpAndSettle runs a paint-only ticker animation to '
+        'completion', (tester) {
+      final probe = GlobalKey<_PaintOnlyAnimState>();
+      tester.pumpWidget(_PaintOnlyAnim(key: probe));
+      tester.pump(); // start the ticker
+      tester.pumpAndSettle();
+      expect(probe.currentState!.completed, isTrue,
+          reason: 'a bounded animation that only marks paint (no rebuilds) '
+              'must still run to completion — paint damage counts as '
+              'activity in the settle predicate');
+    });
+  });
+
   group('pumpWidget / pump', () {
     testWidgets('mounts the user widget under the binding scope', (tester) {
       tester.pumpWidget(const Text('hello'));
@@ -280,4 +312,84 @@ void main() {
       );
     });
   });
+}
+
+/// A bounded 200ms animation driven entirely through markNeedsPaintOnly —
+/// zero rebuilds per tick (the render-layer animation pattern).
+class _PaintOnlyAnim extends StatefulWidget {
+  const _PaintOnlyAnim({super.key});
+  @override
+  State<_PaintOnlyAnim> createState() => _PaintOnlyAnimState();
+}
+
+class _PaintOnlyAnimState extends State<_PaintOnlyAnim>
+    with SingleTickerProviderStateMixin {
+  late final Ticker _ticker;
+  final _holder = _ProgressHolder();
+  bool completed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = createTicker((elapsed) {
+      _holder.set((elapsed.inMilliseconds / 200).clamp(0.0, 1.0));
+      if (elapsed >= const Duration(milliseconds: 200)) {
+        completed = true;
+        _ticker.stop();
+      }
+    });
+    _ticker.start();
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _PaintPulse(holder: _holder);
+}
+
+class _ProgressHolder extends ChangeNotifier {
+  double value = 0;
+  void set(double v) {
+    value = v;
+    notifyListeners();
+  }
+}
+
+class _PaintPulse extends LeafRenderObjectWidget {
+  const _PaintPulse({required this.holder});
+  final _ProgressHolder holder;
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderPaintPulse(holder);
+  @override
+  void updateRenderObject(BuildContext context, RenderObject renderObject) {}
+}
+
+class _RenderPaintPulse extends RenderObject {
+  _RenderPaintPulse(this._holder) {
+    _holder.addListener(markNeedsPaintOnly);
+  }
+  final _ProgressHolder _holder;
+
+  @override
+  CellSize performLayout(CellConstraints constraints) =>
+      constraints.constrain(const CellSize(4, 1));
+
+  @override
+  void paint(
+    CellBuffer buffer,
+    CellOffset offset, {
+    CellOffset? screenOffset,
+    CellRect? clipRect,
+  }) {
+    buffer.writeGrapheme(
+      offset,
+      _holder.value >= 1.0 ? 'D' : 'p',
+      style: CellStyle.empty,
+    );
+  }
 }

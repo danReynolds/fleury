@@ -1355,13 +1355,19 @@ class _ExcludeFocusMarkerElement extends ComponentElement {
   void update(Widget newWidget) {
     super.update(newWidget);
     final newExcluding = (newWidget as _ExcludeFocusMarker).excluding;
-    if (newExcluding == _capturedExcluding) return;
-    _capturedExcluding = newExcluding;
-    if (newExcluding) {
-      _registerIfExcluding();
-    } else {
-      _unregisterIfRegistered();
+    if (newExcluding != _capturedExcluding) {
+      _capturedExcluding = newExcluding;
+      if (newExcluding) {
+        _registerIfExcluding();
+      } else {
+        _unregisterIfRegistered();
+      }
     }
+    // Rebuild with the new widget's child, like every other ComponentElement
+    // (and like the FocusScope marker, fixed the same way): without this, a
+    // structural change flowing THROUGH an ExcludeFocus was silently dropped
+    // and the old subtree stayed mounted.
+    rebuild(force: true);
   }
 
   @override
