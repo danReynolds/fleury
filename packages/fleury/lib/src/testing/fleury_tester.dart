@@ -292,9 +292,16 @@ class FleuryTester {
   /// returns *between* cursor blinks (a periodic-Timer blink leaves
   /// `hasScheduledFrame` false between fires). A second build flush is folded
   /// in so a post-frame callback that schedules a rebuild isn't read as idle.
-  bool _settleHasRendered = false;
 
-  bool _settleStep(Duration step) {
+  /// One settle step. [hasRendered] says whether a render already happened
+  /// in this loop; returns `(quiescent, rendered)` so the caller threads the
+  /// render state as a LOOP-LOCAL — sharing it as an instance field would let
+  /// `pumpAndSettle` inherit a stale `true` from a prior `settle`/
+  /// `pumpAndSettle` on the same tester and skip its own first render.
+  (bool quiescent, bool rendered) _settleStep(
+    Duration step, {
+    required bool hasRendered,
+  }) {
     if (step > Duration.zero) _scheduler.advance(step);
     final built = _owner.flushBuild().rebuiltElementCount;
     // Render a real layout+paint like a production frame — but only when it
@@ -306,9 +313,10 @@ class FleuryTester {
     // so skipping it is free; a suite with hundreds of settle() calls saves
     // the wasted tail layouts+paints. Damage from paint-only tickers is
     // still consumed below whether or not we rendered.
-    if (_root != null && (!_settleHasRendered || built > 0)) {
+    var rendered = false;
+    if (_root != null && (!hasRendered || built > 0)) {
       render();
-      _settleHasRendered = true;
+      rendered = true;
     }
     _binding.flushPostFrameCallbacks(_clock.now);
     final afterDrain = _owner.flushBuild().rebuiltElementCount;
@@ -320,7 +328,7 @@ class FleuryTester {
     // perpetual-but-idle ticker (cursor blink) stays settle-able: it records
     // damage only on the step that crosses its interval.
     final visualDamage = _owner.renderDamageTracker.takeVisualChange();
-    return built == 0 && afterDrain == 0 && !visualDamage;
+    return (built == 0 && afterDrain == 0 && !visualDamage, rendered);
   }
 
   /// Pumps in [step] increments until a frame does no build work (the tree
@@ -343,9 +351,15 @@ class FleuryTester {
     Duration timeout = const Duration(seconds: 10),
   }) {
     _assertNotDisposed('pumpAndSettle');
+    assert(step > Duration.zero,
+        'pumpAndSettle needs a positive step; a zero step never advances the '
+        'clock, so timeout is never reached.');
     var elapsed = Duration.zero;
+    var hasRendered = false;
     while (elapsed < timeout) {
-      if (_settleStep(step)) return;
+      final (quiescent, rendered) = _settleStep(step, hasRendered: hasRendered);
+      hasRendered = hasRendered || rendered;
+      if (quiescent) return;
       elapsed += step;
     }
     throw StateError(
@@ -362,7 +376,7 @@ class FleuryTester {
   /// real event loop between steps so pending microtasks, timers, and **stream
   /// emissions** land (a `StreamBuilder`/`QueryBuilder`'s first value arrives
   /// on a later event-loop turn), then flushes builds — repeating until a step
-  /// does no build work or [timeout]/[maxSteps] is hit.
+  /// does no build work or [timeout] is hit.
   ///
   /// This replaces the hand-rolled `for (i in 0..N) { await Future.delayed(d);
   /// pump(); }` loop every async test would otherwise need: synchronous [pump]
@@ -383,15 +397,20 @@ class FleuryTester {
     int stableSteps = 4,
   }) async {
     _assertNotDisposed('settle');
-    _settleHasRendered = false;
+    assert(step > Duration.zero,
+        'settle needs a positive step; a zero step never advances the clock '
+        '(nor elapsed), so timeout is never reached and the loop spins.');
     var elapsed = Duration.zero;
     var steps = 0;
     var stable = 0;
+    var hasRendered = false;
     while (elapsed < timeout) {
       // Turn the real event loop so async completions (stream/Future) run
       // their setState before we flush + test for quiescence.
       await Future<void>.delayed(step);
-      stable = _settleStep(step) ? stable + 1 : 0;
+      final (quiescent, rendered) = _settleStep(step, hasRendered: hasRendered);
+      hasRendered = hasRendered || rendered;
+      stable = quiescent ? stable + 1 : 0;
       if (stable >= stableSteps) return;
       elapsed += step;
       steps++;

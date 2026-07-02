@@ -14,6 +14,8 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
+import '../support/reactive_helpers.dart';
+
 /// Captures the BuildContext its build runs under.
 class _Cap extends StatelessWidget {
   const _Cap({required this.sink, required this.label});
@@ -26,19 +28,12 @@ class _Cap extends StatelessWidget {
   }
 }
 
-class _Flag extends ChangeNotifier {
-  bool value = false;
-  void enable() {
-    value = true;
-    notifyListeners();
-  }
-}
 
 /// Home screen that late-mounts an autofocus Focus when [flag] flips —
 /// the async-data-arrives-while-covered pattern.
 class _LateMountHome extends StatefulWidget {
   const _LateMountHome({required this.flag, required this.late, required this.sink});
-  final _Flag flag;
+  final Flag flag;
   final FocusNode late;
   final void Function(BuildContext) sink;
   @override
@@ -167,7 +162,7 @@ void main() {
   testWidgets('a covered route cannot steal focus; the modal stays '
       'keyboard-dismissable', (tester) {
     BuildContext? home;
-    final flag = _Flag();
+    final flag = Flag();
     final late = FocusNode(debugLabel: 'late');
     tester.pumpWidget(
       Navigator(

@@ -62,12 +62,14 @@ class _LayoutBuilderElement extends RenderObjectElement {
     // the builder never re-runs and the subtree goes stale. Flutter's
     // equivalent is scheduleLayoutCallback() = markNeedsLayout() +
     // owner-registration; Fleury re-enters layout from the root every frame,
-    // so marking the spine dirty is sufficient. Guard on !dirty: a repeat
-    // invalidation before the flush (several inherited deps notifying
-    // together) would otherwise re-walk the spine to the root each time,
-    // though the first mark already dirtied it. `mounted` covers the window
-    // before mount / after unmount, where super.markNeedsBuild no-ops anyway.
-    if (mounted && !dirty) _ro.markNeedsLayout();
+    // so marking the spine dirty is sufficient. Mark it unconditionally on
+    // every invalidation: `dirty` (an element-build flag) and the render
+    // object's needs-layout are independent states, so gating layout on
+    // `!dirty` could drop a relayout if the two ever diverge (a mid-build
+    // geometry read, a manual render between marks). `mounted` covers the
+    // window before mount / after unmount, where markNeedsLayout has no
+    // valid render object to reach.
+    if (mounted) _ro.markNeedsLayout();
     super.markNeedsBuild();
   }
 

@@ -60,16 +60,6 @@ import 'framework.dart';
 import 'key_bindings.dart';
 import 'tui_binding.dart';
 
-/// The inert effect carried by [RouteTransition.none]: even if some future
-/// code plays the sentinel's effects directly (instead of honoring
-/// [RouteTransition.isInstant]), nothing animates — the sentinel is
-/// no-animation by construction, not by call-site convention.
-class _NoopEffect extends Effect {
-  const _NoopEffect();
-  @override
-  Widget build(Widget child, double t) => buildSettled(child);
-}
-
 /// The enter/exit effects (and timing) a route animates with.
 class RouteTransition {
   const RouteTransition({
@@ -80,8 +70,8 @@ class RouteTransition {
   }) : isInstant = false;
 
   RouteTransition._instant()
-      : enter = const _NoopEffect(),
-        exit = const _NoopEffect(),
+      : enter = const NoopEffect(),
+        exit = const NoopEffect(),
         duration = Duration.zero,
         curve = null,
         isInstant = true;
