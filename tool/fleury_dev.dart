@@ -355,7 +355,14 @@ class _Runner {
     await _run('dart', ['analyze'], workingDirectory: storybook);
     await _run('dart', ['test'], workingDirectory: storybook);
     await _run('dart', ['analyze'], workingDirectory: web);
-    await _run('dart', ['test'], workingDirectory: web);
+    // Explicit platforms: fleury_web splits VM-safe suites from
+    // @TestOn('browser') ones, and a bare `dart test` silently skips the
+    // browser set.
+    await _run('dart', [
+      'test',
+      '-p',
+      'vm,chrome',
+    ], workingDirectory: web);
     await _run('dart', ['analyze'], workingDirectory: samples);
     await _run('dart', ['test'], workingDirectory: samples);
     await _run('dart', ['analyze'], workingDirectory: mcp);

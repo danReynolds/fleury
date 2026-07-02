@@ -14,7 +14,7 @@ import 'metrics/cell_metrics.dart';
 final class MountedApp {
   MountedApp._({
     required TuiRuntime runtime,
-    required FrameScheduler frameScheduler,
+    required FrameDriver frameDriver,
     required FrameSurface surface,
     CellMetrics? cellMetrics,
     TuiInputSource? inputSource,
@@ -26,7 +26,7 @@ final class MountedApp {
     SemanticFlushScheduler? semanticFlushScheduler,
     Future<void> Function()? awaitSemanticIdle,
   }) : _runtime = runtime,
-       _frameScheduler = frameScheduler,
+       _frameDriver = frameDriver,
        _surface = surface,
        _cellMetrics = cellMetrics,
        _inputSource = inputSource,
@@ -39,7 +39,7 @@ final class MountedApp {
        _markDisposed = markDisposed;
 
   final TuiRuntime _runtime;
-  final FrameScheduler _frameScheduler;
+  final FrameDriver _frameDriver;
   final FrameSurface _surface;
   final CellMetrics? _cellMetrics;
   final TuiInputSource? _inputSource;
@@ -56,7 +56,7 @@ final class MountedApp {
   /// Requests a frame from host-owned browser code.
   void requestFrame([String reason = 'host']) {
     if (_disposed) return;
-    _frameScheduler.requestFrame(reason);
+    _frameDriver.requestFrame(reason);
   }
 
   /// Completes when no deferred semantic flush is outstanding.
@@ -93,7 +93,7 @@ final class MountedApp {
   Future<void> _dispose() async {
     await _disposeHostResourcesBestEffort(
       inputSource: _inputSource,
-      frameScheduler: _frameScheduler,
+      frameDriver: _frameDriver,
       cellMetrics: _cellMetrics,
       semanticsPipeline: _semanticsPipeline,
       semanticFlushScheduler: _semanticFlushScheduler,
@@ -151,12 +151,10 @@ Future<MountedApp> runTuiSurface(
   final semanticScheduler = semanticPresenter == null
       ? null
       : (semanticFlushScheduler ?? TimerSemanticFlushScheduler());
-  Element? root;
   var disposed = false;
   SemanticNodeId? semanticActivationForFlush;
   MeasuredCellBox? lastMetrics;
-  var lastSize = surface.size;
-  FrameScheduler? frameScheduler;
+  FrameDriver? frameDriver;
   MountedApp? returnedHost;
   // The shared semantics engine (deferred flush, retained-leaf updates,
   // coverage fallback); host-specific focus sync + instrumentation ride
@@ -169,7 +167,7 @@ Future<MountedApp> runTuiSurface(
     disposed = true;
     await _disposeHostResourcesBestEffort(
       inputSource: inputSource,
-      frameScheduler: frameScheduler,
+      frameDriver: frameDriver,
       cellMetrics: cellMetrics,
       semanticsPipeline: semanticsPipeline,
       semanticFlushScheduler: semanticScheduler,
@@ -182,9 +180,8 @@ Future<MountedApp> runTuiSurface(
   }
 
   void scheduleFrame([String reason = 'scheduled']) {
-    final scheduler = frameScheduler;
-    if (disposed || scheduler == null) return;
-    scheduler.requestFrame(reason);
+    if (disposed) return;
+    frameDriver?.requestFrame(reason);
   }
 
   final rootEntry = OverlayEntry(
@@ -217,7 +214,7 @@ Future<MountedApp> runTuiSurface(
     semanticsPipeline = FrameSemanticsPipeline(
       presenter: semanticPresenter,
       dirtyTracker: runtime.semanticDirtyTracker,
-      readRoot: () => root,
+      readRoot: () => frameDriver?.rootElement,
       owner: semanticsOwner,
       flushScheduler: semanticScheduler,
       onTreePresented: (tree) {
@@ -277,24 +274,29 @@ Future<MountedApp> runTuiSurface(
     );
   }
 
-  void renderFrameBody(String reason) {
-    final totalFrameStopwatch = Stopwatch()..start();
-    if (disposed) {
-      runtime.flushPostFrameCallbacks();
-      return;
-    }
-    final mounted = root;
-    if (mounted == null) return;
+  // Per-frame state shared between the driver hooks and the presenter.
+  var metricsReadCountThisFrame = 0;
+  SemanticNodeId? semanticActivationInFrame;
 
-    var metricsReadCount = 0;
+  FrameViewportSnapshot readViewport() {
+    if (disposed) {
+      return FrameViewportSnapshot(surface.size);
+    }
+    metricsReadCountThisFrame = cellMetrics != null ? 1 : 0;
     final measured = cellMetrics?.measure();
-    if (cellMetrics != null) metricsReadCount = 1;
     final metricsChanged = measured != null && measured != lastMetrics;
     if (metricsChanged) semanticsPipeline?.markSemanticsDirty();
     if (measured != null) {
       lastMetrics = measured;
       surface.resize(measured.size, metrics: measured);
     }
+    return FrameViewportSnapshot(surface.size, metricsChanged: metricsChanged);
+  }
+
+  void dispatchPendingWork(String reason) {
+    if (disposed) return;
+    final mounted = frameDriver?.rootElement;
+    if (mounted == null) return;
     if (pendingInput.isNotEmpty) {
       semanticsPipeline?.markSemanticsDirty();
       final input = List<TuiEvent>.of(pendingInput);
@@ -303,7 +305,6 @@ Future<MountedApp> runTuiSurface(
         inputDispatcher.dispatch(event);
       }
     }
-    SemanticNodeId? semanticActivationInFrame;
     if (pendingSemanticActions.isNotEmpty) {
       semanticsPipeline?.markSemanticsDirty();
       final actions = List<_PendingSemanticAction>.of(pendingSemanticActions);
@@ -365,147 +366,6 @@ Future<MountedApp> runTuiSurface(
         }
       }
     }
-    final currentSize = surface.size;
-    if (currentSize.isEmpty) return;
-    Element currentRoot = mounted;
-    if (currentSize != lastSize) {
-      lastSize = currentSize;
-      semanticsPipeline?.markSemanticsDirty();
-      currentRoot = runtime.updateRoot(buildRoot());
-      root = currentRoot;
-      frameLoop.resetBuffers();
-    }
-
-    if (!metricsChanged &&
-        !frameLoop.needsRender(currentSize) &&
-        !runtime.hasFrameWork) {
-      // No-change frame: nothing rebuilt, nothing invalidated, buffers warm.
-      // Skip build/layout/paint/present entirely — the committed frame is
-      // still exact. Semantic work may still be owed (e.g. dispatched input
-      // that changed no visuals keeps the conservative rebuild contract).
-      semanticsPipeline?.onFrameSkippedWithPendingWork();
-      runtime.flushPostFrameCallbacks();
-      totalFrameStopwatch.stop();
-      instrumentation.recordFrame(
-        WebFrameInstrumentation.skipped(
-          reason: reason,
-          viewportSize: currentSize,
-          semanticNodeCount: semanticsOwner?.currentTree?.nodeCount ?? 0,
-          semanticFallbackNodeCount:
-              (semanticsPipeline?.lastCoverageAudit ??
-                      SemanticCoverageAudit.empty)
-                  .fallbackNodeCount,
-          semanticUncoveredCellCount:
-              (semanticsPipeline?.lastCoverageAudit ??
-                      SemanticCoverageAudit.empty)
-                  .uncoveredCellCount,
-          totalFrameTime: totalFrameStopwatch.elapsed,
-        ),
-      );
-      return;
-    }
-
-    var runtimeBuildTime = Duration.zero;
-    var runtimeLayoutTime = Duration.zero;
-    var runtimePaintTime = Duration.zero;
-    var runtimeBuildStats = BuildFlushStats.zero;
-    final runtimeRenderStopwatch = Stopwatch()..start();
-    final frame = frameLoop.render(
-      size: currentSize,
-      paint: (buffer) {
-        runtime.renderFrame(
-          buffer,
-          onPhaseTiming: (build, layout, paint) {
-            runtimeBuildTime = build;
-            runtimeLayoutTime = layout;
-            runtimePaintTime = paint;
-          },
-          onBuildStats: (stats) {
-            runtimeBuildStats = stats;
-          },
-        );
-      },
-    );
-    runtimeRenderStopwatch.stop();
-    if (frame == null) return;
-    final plan = planner.build(
-      reason: reason,
-      frame: frame,
-      metricsChanged: metricsChanged,
-    );
-
-    final domApplyStopwatch = Stopwatch()..start();
-    final surfaceStats = surface.present(frame.previous, frame.next, plan);
-    domApplyStopwatch.stop();
-
-    final semanticApplyStopwatch = Stopwatch()..start();
-    var semanticFocusSyncTime = Duration.zero;
-    if (semanticPresenter == null) {
-      final semanticFocusSyncStopwatch = Stopwatch()..start();
-      focusCoordinator?.syncFromFleuryFocus(
-        WebFocusSnapshot(
-          activeSemanticNode: null,
-          activeCaretRect: focusManager.focusedNode?.caretRect,
-        ),
-      );
-      semanticFocusSyncStopwatch.stop();
-      semanticFocusSyncTime += semanticFocusSyncStopwatch.elapsed;
-    }
-    if (semanticActivationInFrame != null) {
-      final semanticFocusSyncStopwatch = Stopwatch()..start();
-      focusCoordinator?.handleSemanticActivation(semanticActivationInFrame);
-      semanticFocusSyncStopwatch.stop();
-      semanticFocusSyncTime += semanticFocusSyncStopwatch.elapsed;
-    }
-    semanticApplyStopwatch.stop();
-    inputSource?.syncCaretGeometry(
-      focusManager.focusedNode?.caretRect,
-      lastMetrics,
-    );
-    frameLoop.commit(frame);
-    semanticsPipeline?.onFramePresented(frame, plan);
-    runtime.flushPostFrameCallbacks();
-    totalFrameStopwatch.stop();
-    instrumentation.recordFrame(
-      WebFrameInstrumentation.fromPresentation(
-        plan: plan,
-        surfaceStats: surfaceStats,
-        semanticStats: semanticsOwner?.currentTree == null
-            ? SemanticPresentationStats.none
-            : SemanticPresentationStats.retained(
-                nodeCount: semanticsOwner!.currentTree!.nodeCount,
-              ),
-        coverageAudit:
-            semanticsPipeline?.lastCoverageAudit ?? SemanticCoverageAudit.empty,
-        metricsReadCount: metricsReadCount,
-        runtimeRenderTime: runtimeRenderStopwatch.elapsed,
-        runtimeBuildStats: runtimeBuildStats,
-        runtimeBufferPrepareTime: frame.bufferPrepareTime,
-        runtimeBuildTime: runtimeBuildTime,
-        runtimeLayoutTime: runtimeLayoutTime,
-        runtimePaintTime: runtimePaintTime,
-        dirtyRowDiffTime: plan.dirtyRowDiffTime,
-        spanBuildTime: plan.spanBuildTime,
-        domApplyTime: domApplyStopwatch.elapsed,
-        semanticFocusSyncTime: semanticFocusSyncTime,
-        semanticApplyTime: semanticApplyStopwatch.elapsed,
-        totalFrameTime: totalFrameStopwatch.elapsed,
-      ),
-    );
-  }
-
-  void renderFrame(String reason) {
-    try {
-      renderFrameBody(reason);
-    } catch (_) {
-      final host = returnedHost;
-      if (host == null) {
-        unawaited(cleanupSetupFailure().catchError((_) {}));
-      } else {
-        host._startFrameFailureCleanup();
-      }
-      rethrow;
-    }
   }
 
   try {
@@ -514,15 +374,66 @@ Future<MountedApp> runTuiSurface(
       lastMetrics = initialMetrics;
       surface.resize(initialMetrics.size, metrics: initialMetrics);
     }
-    lastSize = surface.size;
 
-    final scheduler = FrameScheduler(
-      clock: binding.tickerScheduler.clock,
-      minFrameInterval: frameInterval,
-      onRender: renderFrame,
+    final driver = frameDriver = FrameDriver(
+      runtime: runtime,
+      frameLoop: frameLoop,
+      readViewport: readViewport,
+      presenter: _SurfaceFramePresenter(
+        surface: surface,
+        inputSource: inputSource,
+        focusCoordinator: focusCoordinator,
+        focusManager: focusManager,
+        instrumentation: instrumentation,
+        hasSemanticPresenter: semanticPresenter != null,
+        readSemanticsOwner: () => semanticsOwner,
+        readPipeline: () => semanticsPipeline,
+        readLastMetrics: () => lastMetrics,
+        takeActivation: () {
+          final activation = semanticActivationInFrame;
+          semanticActivationInFrame = null;
+          return activation;
+        },
+        takeMetricsReadCount: () {
+          final count = metricsReadCountThisFrame;
+          metricsReadCountThisFrame = 0;
+          return count;
+        },
+      ),
+      planner: planner,
+      onBeforeFrame: dispatchPendingWork,
+      onFramePresented: (frame, plan) =>
+          semanticsPipeline?.onFramePresented(frame, plan),
+      onFrameSkipped: (reason, size) {
+        semanticsPipeline?.onFrameSkippedWithPendingWork();
+        instrumentation.recordFrame(
+          WebFrameInstrumentation.skipped(
+            reason: reason,
+            viewportSize: size,
+            semanticNodeCount: semanticsOwner?.currentTree?.nodeCount ?? 0,
+            semanticFallbackNodeCount:
+                (semanticsPipeline?.lastCoverageAudit ??
+                        SemanticCoverageAudit.empty)
+                    .fallbackNodeCount,
+            semanticUncoveredCellCount:
+                (semanticsPipeline?.lastCoverageAudit ??
+                        SemanticCoverageAudit.empty)
+                    .uncoveredCellCount,
+            totalFrameTime: Duration.zero,
+          ),
+        );
+      },
+      onFrameError: (error, stack) {
+        final host = returnedHost;
+        if (host == null) {
+          unawaited(cleanupSetupFailure().catchError((_) {}));
+        } else {
+          host._startFrameFailureCleanup();
+        }
+      },
+      frameInterval: frameInterval,
       flushScheduler: flushScheduler ?? browserFrameFlushScheduler,
     );
-    frameScheduler = scheduler;
 
     owner.onScheduleBuild = () {
       semanticsPipeline?.markSemanticsDirty();
@@ -548,12 +459,12 @@ Future<MountedApp> runTuiSurface(
       };
     }
 
-    root = runtime.mountRoot(buildRoot());
+    driver.mountRoot(buildRoot);
     scheduleFrame('initial');
 
     final host = MountedApp._(
       runtime: runtime,
-      frameScheduler: scheduler,
+      frameDriver: driver,
       surface: surface,
       cellMetrics: cellMetrics,
       inputSource: inputSource,
@@ -587,7 +498,7 @@ Future<MountedApp> runTuiSurface(
 
 Future<void> _disposeHostResourcesBestEffort({
   TuiInputSource? inputSource,
-  FrameScheduler? frameScheduler,
+  FrameDriver? frameDriver,
   CellMetrics? cellMetrics,
   FrameSemanticsPipeline? semanticsPipeline,
   SemanticFlushScheduler? semanticFlushScheduler,
@@ -613,7 +524,7 @@ Future<void> _disposeHostResourcesBestEffort({
     inputSource?.dispose();
   });
   await runStep(() {
-    frameScheduler?.dispose();
+    frameDriver?.dispose();
   });
   await runStep(() {
     cellMetrics?.dispose();
@@ -666,4 +577,112 @@ String _frameReasonForEvent(TuiEvent event) {
     PasteEvent() => 'paste',
     MouseEvent() => 'mouse',
   };
+}
+
+/// The embed host's write phase: paints the frame into the retained DOM
+/// surface, projects focus, syncs the IME caret, and records per-frame
+/// instrumentation after commit.
+final class _SurfaceFramePresenter implements FramePresenter {
+  _SurfaceFramePresenter({
+    required this.surface,
+    required this.inputSource,
+    required this.focusCoordinator,
+    required this.focusManager,
+    required this.instrumentation,
+    required this.hasSemanticPresenter,
+    required this.readSemanticsOwner,
+    required this.readPipeline,
+    required this.readLastMetrics,
+    required this.takeActivation,
+    required this.takeMetricsReadCount,
+  });
+
+  final FrameSurface surface;
+  final TuiInputSource? inputSource;
+  final WebFocusCoordinator? focusCoordinator;
+  final FocusManager focusManager;
+  final WebHostInstrumentation instrumentation;
+  final bool hasSemanticPresenter;
+  final SemanticsOwner? Function() readSemanticsOwner;
+  final FrameSemanticsPipeline? Function() readPipeline;
+  final MeasuredCellBox? Function() readLastMetrics;
+  final SemanticNodeId? Function() takeActivation;
+  final int Function() takeMetricsReadCount;
+
+  FrameSurfacePresentationStats? _surfaceStats;
+  Duration _domApplyTime = Duration.zero;
+  Duration _semanticApplyTime = Duration.zero;
+  Duration _semanticFocusSyncTime = Duration.zero;
+
+  @override
+  bool get wantsPresentationPlan => true;
+
+  @override
+  void presentFrame(TuiRenderedFrame frame, FramePresentInfo info) {
+    final plan = info.plan!;
+    final domApplyStopwatch = Stopwatch()..start();
+    _surfaceStats = surface.present(frame.previous, frame.next, plan);
+    domApplyStopwatch.stop();
+    _domApplyTime = domApplyStopwatch.elapsed;
+
+    final semanticApplyStopwatch = Stopwatch()..start();
+    var semanticFocusSyncTime = Duration.zero;
+    if (!hasSemanticPresenter) {
+      final focusSyncStopwatch = Stopwatch()..start();
+      focusCoordinator?.syncFromFleuryFocus(
+        WebFocusSnapshot(
+          activeSemanticNode: null,
+          activeCaretRect: focusManager.focusedNode?.caretRect,
+        ),
+      );
+      focusSyncStopwatch.stop();
+      semanticFocusSyncTime += focusSyncStopwatch.elapsed;
+    }
+    final activation = takeActivation();
+    if (activation != null) {
+      final focusSyncStopwatch = Stopwatch()..start();
+      focusCoordinator?.handleSemanticActivation(activation);
+      focusSyncStopwatch.stop();
+      semanticFocusSyncTime += focusSyncStopwatch.elapsed;
+    }
+    semanticApplyStopwatch.stop();
+    _semanticApplyTime = semanticApplyStopwatch.elapsed;
+    _semanticFocusSyncTime = semanticFocusSyncTime;
+    inputSource?.syncCaretGeometry(
+      focusManager.focusedNode?.caretRect,
+      readLastMetrics(),
+    );
+  }
+
+  @override
+  void onFrameCommitted(TuiRenderedFrame frame, FramePresentInfo info) {
+    final semanticsOwner = readSemanticsOwner();
+    final pipeline = readPipeline();
+    instrumentation.recordFrame(
+      WebFrameInstrumentation.fromPresentation(
+        plan: info.plan!,
+        surfaceStats: _surfaceStats!,
+        semanticStats: semanticsOwner?.currentTree == null
+            ? SemanticPresentationStats.none
+            : SemanticPresentationStats.retained(
+                nodeCount: semanticsOwner!.currentTree!.nodeCount,
+              ),
+        coverageAudit:
+            pipeline?.lastCoverageAudit ?? SemanticCoverageAudit.empty,
+        metricsReadCount: takeMetricsReadCount(),
+        runtimeRenderTime: info.renderTime,
+        runtimeBuildStats: info.buildStats,
+        runtimeBufferPrepareTime: frame.bufferPrepareTime,
+        runtimeBuildTime: info.phaseBuild,
+        runtimeLayoutTime: info.phaseLayout,
+        runtimePaintTime: info.phasePaint,
+        dirtyRowDiffTime: info.plan!.dirtyRowDiffTime,
+        spanBuildTime: info.plan!.spanBuildTime,
+        domApplyTime: _domApplyTime,
+        semanticFocusSyncTime: _semanticFocusSyncTime,
+        semanticApplyTime: _semanticApplyTime,
+        totalFrameTime: info.renderTime + _domApplyTime + _semanticApplyTime,
+      ),
+    );
+  }
 }

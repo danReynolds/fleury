@@ -22,6 +22,12 @@ export 'src/instrumentation/web_host_instrumentation.dart'
         WebSemanticFlushInstrumentation,
         WebSemanticFlushSummary,
         defaultWebFrameBudgetMs;
+export 'src/host/browser_presentation_host.dart'
+    show
+        BrowserFrameSource,
+        BrowserHostComponents,
+        BrowserPresentationHost,
+        LocalRuntimeFrameSource;
 export 'src/mount_app.dart' show mountApp;
 export 'package:fleury/fleury_host.dart'
     show SemanticFlushScheduler, TimerSemanticFlushScheduler;

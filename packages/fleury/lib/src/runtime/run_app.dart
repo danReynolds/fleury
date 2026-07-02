@@ -440,7 +440,7 @@ Future<void> runApp(
           final driver = frameDriver = FrameDriver(
             runtime: runtime,
             frameLoop: frameLoop,
-            readViewport: () => usedDriver.size,
+            readViewport: () => FrameViewportSnapshot(usedDriver.size),
             presenter: activeSurfaceSink != null
                 // Structured serve path: hand the frame's buffers and
                 // damage plan to the driver instead of emitting ANSI.
@@ -493,10 +493,9 @@ Future<void> runApp(
               try {
                 DebugEvents.emitInput(event);
                 if (event is ResizeEvent) {
-                  // Reset the diff base and rebuild the root against the
-                  // new viewport (propagates through MediaQuery); the next
-                  // frame is a full repaint at the new size.
-                  frameDriver?.handleResize();
+                  // The driver detects the size change on its next viewport
+                  // read and resets the diff base + rebuilds the root; the
+                  // scheduled frame below is a full repaint at the new size.
                   DebugEvents.emitTerminalDiagnosis(currentTerminalDiagnosis());
                 }
 

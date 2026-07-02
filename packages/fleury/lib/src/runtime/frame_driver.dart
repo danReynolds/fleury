@@ -29,6 +29,20 @@ import 'frame_scheduler.dart';
 import 'tui_frame_loop.dart';
 import 'tui_runtime.dart';
 
+/// Read phase: the host's viewport, sampled once at the top of every
+/// frame. The ONLY phase permitted to perform host layout reads (DOM
+/// measurement, terminal size ioctls).
+final class FrameViewportSnapshot {
+  const FrameViewportSnapshot(this.size, {this.metricsChanged = false});
+
+  final CellSize size;
+
+  /// Host cell geometry changed (font/DPR/zoom) without necessarily
+  /// changing the cell count — forces a render (and a full-fidelity plan)
+  /// even when the runtime reports no frame work.
+  final bool metricsChanged;
+}
+
 /// Write phase: turns one rendered frame into host output (ANSI bytes,
 /// wire frames, DOM mutations). Called exactly once per rendered frame,
 /// after damage capture and BEFORE commit.
@@ -60,6 +74,8 @@ final class FramePresentInfo {
     this.phaseBuild = Duration.zero,
     this.phaseLayout = Duration.zero,
     this.phasePaint = Duration.zero,
+    this.renderTime = Duration.zero,
+    this.buildStats = BuildFlushStats.zero,
   });
 
   final String reason;
@@ -77,6 +93,10 @@ final class FramePresentInfo {
   final Duration phaseBuild;
   final Duration phaseLayout;
   final Duration phasePaint;
+
+  /// Wall time of the whole render call (build+layout+paint+bookkeeping).
+  final Duration renderTime;
+  final BuildFlushStats buildStats;
 }
 
 /// The frame program for one Fleury runtime.
@@ -84,11 +104,14 @@ final class FrameDriver {
   FrameDriver({
     required this.runtime,
     required TuiFrameLoop frameLoop,
-    required CellSize Function() readViewport,
+    required FrameViewportSnapshot Function() readViewport,
     required FramePresenter presenter,
     FramePresentationPlanner planner = const FramePresentationPlanner(),
+    void Function(String reason)? onBeforeFrame,
     void Function(TuiRenderedFrame frame, FramePresentationPlan? plan)?
     onFramePresented,
+    void Function(String reason, CellSize size)? onFrameSkipped,
+    void Function(Object error, StackTrace stack)? onFrameError,
     bool Function()? isDebugWatching,
     void Function(Duration build, Duration layout, Duration paint)?
     onPhaseTiming,
@@ -99,7 +122,10 @@ final class FrameDriver {
        _readViewport = readViewport,
        _presenter = presenter,
        _planner = planner,
+       _onBeforeFrame = onBeforeFrame,
        _onFramePresented = onFramePresented,
+       _onFrameSkipped = onFrameSkipped,
+       _onFrameError = onFrameError,
        _isDebugWatching = isDebugWatching,
        _onPhaseTiming = onPhaseTiming,
        _markOnce = markOnce {
@@ -118,11 +144,14 @@ final class FrameDriver {
 
   final TuiRuntime runtime;
   final TuiFrameLoop _frameLoop;
-  final CellSize Function() _readViewport;
+  final FrameViewportSnapshot Function() _readViewport;
   final FramePresenter _presenter;
   final FramePresentationPlanner _planner;
+  final void Function(String reason)? _onBeforeFrame;
   final void Function(TuiRenderedFrame, FramePresentationPlan?)?
   _onFramePresented;
+  final void Function(String reason, CellSize size)? _onFrameSkipped;
+  final void Function(Object, StackTrace)? _onFrameError;
   final bool Function()? _isDebugWatching;
   final void Function(Duration, Duration, Duration)? _onPhaseTiming;
   final void Function(String marker)? _markOnce;
@@ -130,6 +159,7 @@ final class FrameDriver {
 
   Element? _rootElement;
   Widget Function()? _rootBuilder;
+  CellSize? _lastSize;
   var _disposed = false;
   var _inFrameRender = false;
 
@@ -177,13 +207,41 @@ final class FrameDriver {
       runtime.flushPostFrameCallbacks();
       return;
     }
+    try {
+      _renderNowBody(reason);
+    } catch (error, stack) {
+      // The host gets first look (the browser host starts teardown) and
+      // the error still propagates — to the guarded zone on native, the
+      // scheduler task elsewhere. PR6's error containment lands here.
+      _onFrameError?.call(error, stack);
+      rethrow;
+    }
+  }
+
+  void _renderNowBody(String reason) {
     if (_rootElement == null) return;
-    final size = _readViewport();
+    final snapshot = _readViewport();
+    final size = snapshot.size;
     if (size.isEmpty) return;
-    if (!_frameLoop.needsRender(size) && !runtime.hasFrameWork) {
+    // Host frame-entry work (the browser host dispatches queued input and
+    // semantic actions here) runs after the viewport read, before the
+    // resize check — the order the embed host always had.
+    _onBeforeFrame?.call(reason);
+    if (_lastSize != null && size != _lastSize) {
+      // The viewport changed size: reset the diff base and rebuild the
+      // root (propagates through MediaQuery). The rendered frame below is
+      // a full repaint at the new size.
+      handleResize();
+    }
+    _lastSize = size;
+    if (!snapshot.metricsChanged &&
+        !_frameLoop.needsRender(size) &&
+        !runtime.hasFrameWork) {
       // No-change frame: nothing rebuilt, nothing invalidated, buffers
       // warm. Skip build/layout/paint and write nothing — the surface
-      // already shows exactly this frame.
+      // already shows exactly this frame. Semantic work may still be owed
+      // (the host's skip hook keeps the conservative rebuild contract).
+      _onFrameSkipped?.call(reason, size);
       runtime.flushPostFrameCallbacks();
       return;
     }
@@ -193,6 +251,8 @@ final class FrameDriver {
     var phaseBuild = Duration.zero;
     var phaseLayout = Duration.zero;
     var phasePaint = Duration.zero;
+    var buildStats = BuildFlushStats.zero;
+    final renderStopwatch = Stopwatch()..start();
     _inFrameRender = true;
     final frame = _frameLoop.render(
       size: size,
@@ -201,18 +261,20 @@ final class FrameDriver {
         RepaintBoundaryDebugStats.beginFrame(enabled: debugWatching);
         runtime.renderFrame(
           next,
-          onPhaseTiming: debugWatching
-              ? (b, l, p) {
-                  phaseBuild = b;
-                  phaseLayout = l;
-                  phasePaint = p;
-                  _onPhaseTiming?.call(b, l, p);
-                }
-              : null,
+          onPhaseTiming: (b, l, p) {
+            phaseBuild = b;
+            phaseLayout = l;
+            phasePaint = p;
+            if (debugWatching) _onPhaseTiming?.call(b, l, p);
+          },
+          onBuildStats: (stats) {
+            buildStats = stats;
+          },
         );
       },
     );
     _inFrameRender = false;
+    renderStopwatch.stop();
     if (frame == null) return;
     final layoutStats = RenderLayoutDebugStats.takeFrameStats();
     final repaintBoundaryStats = RepaintBoundaryDebugStats.takeFrameStats();
@@ -220,7 +282,11 @@ final class FrameDriver {
     final info = FramePresentInfo(
       reason: reason,
       plan: _presenter.wantsPresentationPlan
-          ? _planner.build(reason: reason, frame: frame)
+          ? _planner.build(
+              reason: reason,
+              frame: frame,
+              metricsChanged: snapshot.metricsChanged,
+            )
           : null,
       debugWatching: debugWatching,
       layoutStats: layoutStats,
@@ -228,6 +294,8 @@ final class FrameDriver {
       phaseBuild: phaseBuild,
       phaseLayout: phaseLayout,
       phasePaint: phasePaint,
+      renderTime: renderStopwatch.elapsed,
+      buildStats: buildStats,
     );
     _presenter.presentFrame(frame, info);
     // Semantics ride the same frame: the pipeline accumulates the

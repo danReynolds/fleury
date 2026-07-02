@@ -38,7 +38,7 @@ export 'src/runtime/frame_presentation.dart'
         FramePresentationPlanner;
 export 'src/widgets/framework.dart' show BuildFlushStats;
 export 'src/runtime/frame_driver.dart'
-    show FrameDriver, FramePresentInfo, FramePresenter;
+    show FrameDriver, FramePresentInfo, FramePresenter, FrameViewportSnapshot;
 export 'src/runtime/frame_semantics_pipeline.dart'
     show FrameSemanticsPipeline, SemanticFlushStats;
 export 'src/runtime/frame_scheduler.dart'
