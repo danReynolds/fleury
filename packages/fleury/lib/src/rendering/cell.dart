@@ -353,9 +353,15 @@ enum CellRole {
   /// A cell whose visual is owned by an out-of-band overlay — an inline
   /// image placement recorded on the buffer ([CellBuffer.imagePlacements])
   /// and rendered by the PRESENTER (a terminal graphics protocol, a DOM
-  /// `<img>`), never by cell content. Renderers emit nothing for these
-  /// cells: no cursor move, no glyph, no clear. Escape bytes never ride
-  /// in a cell; presenters read the placement list instead.
+  /// `<img>`), never by cell content. Escape bytes never ride in a cell;
+  /// presenters read the placement list instead.
+  ///
+  /// The renderer paints no glyph for these cells, but it DOES clear the
+  /// cell to a blank when it transitions from content to overlay — so
+  /// stale text can't survive in an image's letterbox bars (which the
+  /// image encoder leaves unpainted). An overlay cell that was already
+  /// blank (or overlay) the previous frame emits nothing, so an unchanging
+  /// image costs zero bytes.
   overlay,
 }
 

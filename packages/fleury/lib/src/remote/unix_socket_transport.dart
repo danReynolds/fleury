@@ -161,49 +161,54 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
   @override
   Future<void> close() async {
     if (_closed) return;
-    // Snapshot the backlog BEFORE flipping _closed (which forces
-    // isSendBacklogged false): only a genuine over-HWM stall justifies
-    // dropping unsent bytes.
-    final wasBacklogged = _pendingSendBytes > sendHighWaterMark;
-    _closed = true;
-    // Wake any host gated on the backlog — it must never wait on a dead
-    // peer (the drain future's contract).
-    _completeDrained();
-    await _socketSub?.cancel();
-    _socketSub = null;
-    if (wasBacklogged) {
+    final backlogged = _pendingSendBytes > sendHighWaterMark;
+
+    if (backlogged) {
       // The peer stalled past the high-water mark; a graceful flush could
       // block forever. Reset the connection — undelivered bytes are lost
       // either way once we're closing on a backlog.
+      _closed = true;
+      _completeDrained();
+      await _socketSub?.cancel();
+      _socketSub = null;
       _socket.destroy();
-    } else {
-      // Setting _closed stops the pump from starting NEW laps, but it
-      // finishes flushing the bytes it already handed to the socket — the
-      // final ByeFrame / plan. Wait that out (bounded) so a clean shutdown
-      // delivers them instead of resetting the connection under them.
-      final pump = _pumpFuture;
-      if (pump != null) {
-        var timedOut = false;
-        await pump.timeout(
-          _closeFlushTimeout,
-          onTimeout: () => timedOut = true,
-        );
-        if (timedOut) {
-          _socket.destroy();
-          if (!_incoming.isClosed) await _incoming.close();
-          return;
-        }
+      if (!_incoming.isClosed) await _incoming.close();
+      return;
+    }
+
+    // Clean shutdown: let the pump DRAIN the whole queue first — including a
+    // ByeFrame just enqueued behind an in-flight flush — before marking the
+    // transport closed. Flipping _closed now would make the pump's
+    // `while (!_closed ...)` loop abandon un-handed queued frames. Bounded
+    // so a slow-but-not-backlogged socket can't hang shutdown.
+    final pump = _pumpFuture;
+    if (pump != null) {
+      var timedOut = false;
+      await pump.timeout(_closeFlushTimeout, onTimeout: () => timedOut = true);
+      if (timedOut) {
+        _closed = true;
+        _completeDrained();
+        await _socketSub?.cancel();
+        _socketSub = null;
+        _socket.destroy();
+        if (!_incoming.isClosed) await _incoming.close();
+        return;
       }
-      try {
-        await _socket.flush();
-      } catch (_) {
-        /* peer may already be gone */
-      }
-      try {
-        await _socket.close();
-      } catch (_) {
-        /* idem */
-      }
+    }
+
+    _closed = true;
+    _completeDrained();
+    await _socketSub?.cancel();
+    _socketSub = null;
+    try {
+      await _socket.flush();
+    } catch (_) {
+      /* peer may already be gone */
+    }
+    try {
+      await _socket.close();
+    } catch (_) {
+      /* idem */
     }
     if (!_incoming.isClosed) await _incoming.close();
   }

@@ -139,6 +139,48 @@ void main() {
   });
 
   test(
+    'a clean close delivers a frame queued behind an in-flight flush',
+    () async {
+      // Case B: the pump is already flushing frame 1 when the final frame is
+      // enqueued, so it sits in the queue for the pump's NEXT lap. close()
+      // must let the pump drain it, not abandon it.
+      await start(highWaterMark: 64 * 1024);
+      final received = BytesBuilder(copy: true);
+      final drained = Completer<void>();
+      final sub = accepted.listen(
+        received.add,
+        onDone: () {
+          if (!drained.isCompleted) drained.complete();
+        },
+      );
+
+      // Stall the reader so frame 1's flush pends → the pump stays on lap 1.
+      sub.pause();
+      final first = Uint8List.fromList(
+        List<int>.generate(2000, (i) => i & 0xFF),
+      );
+      final bye = Uint8List.fromList([9, 9, 9]);
+      transport.send(OutputFrame(first)); // pump starts, flush pends
+      await _pump();
+      transport.send(OutputFrame(bye)); // queued behind the pending flush
+      sub.resume();
+      await transport.close();
+      await drained.future.timeout(const Duration(seconds: 5));
+
+      final decoder = FrameDecoder();
+      decoder.feed(received.takeBytes());
+      final frames = decoder.drain().toList();
+      expect(frames, hasLength(2), reason: 'both frames survived close()');
+      expect((frames[0] as OutputFrame).bytes, first);
+      expect((frames[1] as OutputFrame).bytes, bye);
+
+      await sub.cancel();
+      await server.close();
+      tmp.deleteSync(recursive: true);
+    },
+  );
+
+  test(
     'close() while backlogged completes sendDrained (no wedged host)',
     () async {
       await start(highWaterMark: 32 * 1024);
