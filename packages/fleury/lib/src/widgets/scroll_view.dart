@@ -29,7 +29,7 @@ import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
-import '../terminal/events.dart';
+import '../input/events.dart';
 import 'focus.dart';
 import 'framework.dart';
 import 'list_view.dart' show EdgeBehavior;
@@ -401,5 +401,11 @@ class _RenderScrollView extends RenderObject
         );
       }
     }
+    // Inline images live on the buffer as placements, not in cells, so the
+    // cell loop above can't carry them — an Image scrolled into view would
+    // otherwise be blank on a true-pixel surface. The scratch placements
+    // are already scroll-adjusted (the child painted at row -scroll), so a
+    // plain translate by [offset] lands them in screen space.
+    buffer.compositeImagesFrom(scratch, offset);
   }
 }

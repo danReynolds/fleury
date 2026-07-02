@@ -12,7 +12,7 @@ import 'dart:typed_data';
 import 'package:fleury/fleury_host.dart' show InlineImageFit;
 import 'package:fleury/src/remote/remote_codec.dart' show ImagePlacement;
 import 'package:fleury_web/src/metrics/cell_metrics.dart';
-import 'package:fleury_web/src/remote_client/inline_image_overlay.dart';
+import 'package:fleury_web/src/dom_grid/inline_image_overlay.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;
 
@@ -21,18 +21,17 @@ MeasuredCellBox _box({
   double ch = 20,
   double ox = 0,
   double oy = 0,
-}) =>
-    MeasuredCellBox(
-      cssCellWidth: cw,
-      cssCellHeight: ch,
-      cssCanvasWidth: cw * 80,
-      cssCanvasHeight: ch * 24,
-      devicePixelRatio: 1,
-      cols: 80,
-      rows: 24,
-      cssCanvasLeft: ox,
-      cssCanvasTop: oy,
-    );
+}) => MeasuredCellBox(
+  cssCellWidth: cw,
+  cssCellHeight: ch,
+  cssCanvasWidth: cw * 80,
+  cssCanvasHeight: ch * 24,
+  devicePixelRatio: 1,
+  cols: 80,
+  rows: 24,
+  cssCanvasLeft: ox,
+  cssCanvasTop: oy,
+);
 
 ImagePlacement _place(
   String id,
@@ -41,8 +40,14 @@ ImagePlacement _place(
   int cols,
   int rows, [
   InlineImageFit fit = InlineImageFit.contain,
-]) =>
-    ImagePlacement(id: id, col: col, row: row, cols: cols, rows: rows, fit: fit);
+]) => ImagePlacement(
+  id: id,
+  col: col,
+  row: row,
+  cols: cols,
+  rows: rows,
+  fit: fit,
+);
 
 List<web.HTMLImageElement> _imgs(web.HTMLElement host) {
   final nodes = host.querySelectorAll('img');
@@ -63,10 +68,9 @@ void main() {
     final host = _makeHost();
     final overlay = InlineImageOverlay(host)
       ..cacheImage('a', Uint8List.fromList([1, 2, 3, 4]))
-      ..apply(
-        [_place('a', 2, 1, 3, 2, InlineImageFit.cover)],
-        _box(cw: 10, ch: 20, ox: 5, oy: 7),
-      );
+      ..apply([
+        _place('a', 2, 1, 3, 2, InlineImageFit.cover),
+      ], _box(cw: 10, ch: 20, ox: 5, oy: 7));
 
     final imgs = _imgs(host);
     expect(imgs, hasLength(1));
@@ -87,13 +91,17 @@ void main() {
     final host = _makeHost();
     final overlay = InlineImageOverlay(host)
       ..cacheImage('logo', Uint8List.fromList([9, 9, 9]))
-      ..apply(
-        [_place('logo', 0, 0, 2, 1), _place('logo', 10, 0, 2, 1)],
-        _box(),
-      );
+      ..apply([
+        _place('logo', 0, 0, 2, 1),
+        _place('logo', 10, 0, 2, 1),
+      ], _box());
 
     final imgs = _imgs(host);
-    expect(imgs, hasLength(2), reason: 'one element per placement, shared bytes');
+    expect(
+      imgs,
+      hasLength(2),
+      reason: 'one element per placement, shared bytes',
+    );
     expect(imgs.map((e) => e.style.left).toSet(), {'0px', '100px'});
 
     overlay.dispose();

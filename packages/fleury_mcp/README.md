@@ -236,10 +236,10 @@ Beyond request/response, the server is a full MCP citizen:
 
 The app works with zero effort; these make the agent's job easier:
 
-- **Pin stable ids on the nodes that matter** with `Semantics(id: …)` or a
+- **Pin stable ids on the nodes that matter** with `Semantics(id: SemanticNodeId(…))` or a
   `Key`. Without one, a node gets a derived id that stays stable across rebuilds
   *when it has a keyed ancestor*, but a fully-unkeyed node falls back to a
-  positional id that can shift as the tree changes. A `Semantics(id: 'submit')`
+  positional id that can shift as the tree changes. A `Semantics(id: SemanticNodeId('submit'))`
   is a durable handle. (The server guards against acting on a *stale* positional
   id, so the worst case is a clear "re-read and retry", not a mis-click.)
 - **Give nodes meaningful labels.** Labels are how the agent recognizes a node.

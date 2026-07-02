@@ -11,11 +11,13 @@ import 'dart:typed_data';
 
 import '../foundation/geometry.dart';
 import '../rendering/cell_buffer.dart';
+import '../rendering/surface_capabilities.dart';
 import '../runtime/frame_presentation.dart';
 import '../runtime/remote_surface_sink.dart';
 import '../semantics/inspection.dart';
+import '../semantics/semantics.dart';
 import '../terminal/capabilities.dart';
-import '../terminal/events.dart';
+import '../input/events.dart';
 import '../terminal/input_parser.dart';
 import '../terminal/terminal_driver.dart';
 import 'remote_codec.dart';
@@ -38,8 +40,22 @@ const int maxRemoteGridRows = 4000;
 /// browser surface client) receives [PlanFrame]s via [presentPlan] and
 /// sends structured input. [wantsPresentationPlans] reflects the negotiated
 /// version and is read by [runApp] after [enter] completes.
-final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
+final class RemoteTerminalDriver
+    implements
+        TerminalDriver,
+        RemoteSurfaceSink,
+        SurfaceCapabilitiesProvider,
+        OutputFlowControl {
   RemoteTerminalDriver(this._transport);
+
+  /// The transport's send backlog IS this driver's output backlog: the
+  /// frame program defers production while the peer (or the serve bridge
+  /// to it) stalls, and resumes with one coalesced frame on drain.
+  @override
+  bool get isOutputBacklogged => _transport.isSendBacklogged;
+
+  @override
+  Future<void> get outputDrained => _transport.sendDrained;
 
   final RemoteFrameTransport _transport;
   final InputParser _parser = InputParser();
@@ -48,19 +64,35 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
   final _RemoteParserSink _sink = _RemoteParserSink();
   final SemanticsWireEncoder _semanticsEncoder = SemanticsWireEncoder();
   RemoteSemanticActionHandler? _onSemanticAction;
+  void Function(int seq, RemoteClipboardStatus status)? _onClipboardResult;
 
   StreamSubscription<RemoteFrame>? _frameSub;
   CellSize _size = const CellSize(80, 24);
   TerminalCapabilities _capabilities = TerminalCapabilities.defaultCapabilities;
+  SurfaceCapabilities? _peerSurfaceCapabilities;
 
-  // Content-hash ids of inline images placed on the PREVIOUS frame. An image's
-  // bytes are (re)shipped whenever it appears or re-appears — i.e. its id is
-  // placed this frame but was not last frame — never per-session "once ever".
-  // This keeps the host's notion of what the peer has bounded by the on-screen
-  // set and consistent with the client, which freely evicts off-screen blobs:
-  // a scrolled-back image is always re-sent. (A continuously on-screen image
-  // ships once and is not re-sent while it stays placed.)
-  Set<String> _prevPlacedImageIds = <String>{};
+  /// What the PEER's surface can do: from the v3 `images=` INIT param when
+  /// present, else the terminal projection (a v1 `fleury shell` peer is a
+  /// real terminal). A structured browser peer gets sub-cell pointer
+  /// fidelity — its input source reports real mouse geometry.
+  @override
+  SurfaceCapabilities get surfaceCapabilities =>
+      _peerSurfaceCapabilities ?? _capabilities.toSurfaceCapabilities();
+
+  // Content-hash ids of inline images the peer is believed to hold — an
+  // app-side mirror of the client's blob cache (InlineImageOverlay). Bytes
+  // ship once per id and the id stays "held" until it falls out of this
+  // bounded, insertion-ordered set under the SAME policy the client uses
+  // (evict only ids not placed this frame, once over the cap). So a
+  // re-appearing image — including every frame of an animation, which is a
+  // fresh id per tick — re-ships bytes only when the client would actually
+  // have evicted them, not on every loop. (Dart Sets iterate in insertion
+  // order.)
+  final Set<String> _shippedImageIds = <String>{};
+
+  /// The peer's inline-image cache bound (mirrors
+  /// `InlineImageOverlay._maxCachedImages`).
+  static const int _maxShippedImageIds = 512;
   bool _active = false;
   bool _handshakeReceived = false;
   int _protocolVersion = 1;
@@ -83,6 +115,9 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
 
   @override
   bool get isInteractive => true;
+
+  @override
+  RemoteSurfaceSink? get surfaceSink => wantsPresentationPlans ? this : null;
 
   @override
   Future<void> enter(TerminalMode mode) async {
@@ -147,22 +182,37 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
       next,
       fullRepaint: plan.fullRepaint,
     );
-    // Ship the bytes for each image that (re)appears this frame — placed now but
-    // not on the previous frame — before the plan that references it. An image
-    // that stays on screen ships once; one that scrolls away and back is re-sent
-    // (the client may have evicted its blob in the meantime). Each distinct id
-    // ships at most once per frame even if placed several times.
+    // Ship the bytes for each image the peer does not yet hold, before the
+    // plan that references it. An id ships at most once per frame even if
+    // placed several times, and at most once while the peer keeps it cached
+    // (see [_shippedImageIds]) — so a static or animated image doesn't
+    // re-transmit bytes the client already has.
     final placedIds = <String>{};
     for (final placement in remotePlan.placements) {
-      if (!placedIds.add(placement.id)) continue; // already sent this frame
-      if (_prevPlacedImageIds.contains(placement.id)) continue; // peer has it
+      if (!placedIds.add(placement.id)) continue; // already handled this frame
+      if (_shippedImageIds.contains(placement.id)) continue; // peer holds it
       final image = next.images[placement.id];
       if (image != null) {
         _transport.send(InlineImageFrame(placement.id, image.bytes));
+        _shippedImageIds.add(placement.id);
       }
     }
-    _prevPlacedImageIds = placedIds;
+    _evictShippedImageIds(placedIds);
     _transport.send(PlanFrame(remotePlan));
+  }
+
+  /// Bounds [_shippedImageIds] to the peer's cache size, evicting only ids
+  /// NOT placed this frame, oldest first — the exact policy
+  /// `InlineImageOverlay._evictStale` runs against the same placements, so
+  /// the app's belief of what the peer holds stays in step with the peer's
+  /// actual cache.
+  void _evictShippedImageIds(Set<String> placedThisFrame) {
+    if (_shippedImageIds.length <= _maxShippedImageIds) return;
+    for (final id in _shippedImageIds.toList()) {
+      if (_shippedImageIds.length <= _maxShippedImageIds) break;
+      if (placedThisFrame.contains(id)) continue;
+      _shippedImageIds.remove(id);
+    }
   }
 
   /// Diffs the semantic [snapshot] against the last one sent to this peer and
@@ -177,13 +227,49 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
   }
 
   @override
+  void presentSemanticActionResult(
+    SemanticNodeId id,
+    SemanticAction action,
+    SemanticActionInvocationStatus status,
+  ) {
+    if (!_active || !wantsPresentationPlans) return;
+    _transport.send(SemanticActionResultFrame(id, action, status));
+  }
+
+  @override
   set onSemanticAction(RemoteSemanticActionHandler? handler) {
     _onSemanticAction = handler;
+  }
+
+  @override
+  void presentCaret(CellRect? caret) {
+    if (!_active || !wantsPresentationPlans) return;
+    _transport.send(CaretFrame(caret));
+  }
+
+  @override
+  void sendClipboardWrite(int seq, String text) {
+    if (!_active || !wantsPresentationPlans) return;
+    _transport.send(ClipboardWriteFrame(seq, text));
+  }
+
+  @override
+  set onClipboardResult(
+    void Function(int seq, RemoteClipboardStatus status)? handler,
+  ) {
+    _onClipboardResult = handler;
   }
 
   void _onFrame(RemoteFrame frame) {
     switch (frame) {
       case InitFrame f:
+        // The handshake is ONE-SHOT: the negotiated protocol version and
+        // capabilities are frozen for the session. A later INIT (a buggy or
+        // hostile peer) must not flip wantsPresentationPlans, retarget
+        // surfaceSink, or restyle MediaQuery under a live session — the
+        // size channel after the handshake is ResizeFrame. Ignore repeats.
+        if (_handshakeReceived) break;
+        _handshakeReceived = true;
         _size = _clampSize(f.size);
         _protocolVersion = f.protocolVersion;
         _capabilities = TerminalCapabilities(
@@ -192,10 +278,33 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
           imageProtocol: f.imageProtocol,
           tmuxPassthrough: f.tmuxPassthrough,
         );
-        if (!_handshakeReceived) {
-          _handshakeReceived = true;
-          _handshake?.complete();
+        final peerImages = f.images;
+        _peerSurfaceCapabilities = peerImages == null
+            ? null
+            : SurfaceCapabilities(
+                colorMode: f.colorMode,
+                glyphTier: f.glyphTier,
+                images: peerImages,
+                pointer: f.protocolVersion >= 2
+                    ? PointerPrecision.subCell
+                    : PointerPrecision.cell,
+              );
+        // v3: echo INIT back with the app's protocol version so the peer
+        // can detect version skew (e.g. a cached client bundle). The
+        // echoed size/capabilities restate what the peer sent; only `v`
+        // carries new information. A v2 peer ignores it.
+        if (f.protocolVersion >= 3) {
+          _transport.send(
+            InitFrame(
+              size: _size,
+              colorMode: f.colorMode,
+              glyphTier: f.glyphTier,
+              imageProtocol: f.imageProtocol,
+              tmuxPassthrough: f.tmuxPassthrough,
+            ),
+          );
         }
+        _handshake?.complete();
       case ResizeFrame f:
         _size = _clampSize(f.size);
         if (_active) _events.add(ResizeEvent(_size));
@@ -205,9 +314,14 @@ final class RemoteTerminalDriver implements TerminalDriver, RemoteSurfaceSink {
       case PlanFrame _:
       case SemanticsFrame _:
       case InlineImageFrame _:
+      case SemanticActionResultFrame _:
+      case CaretFrame _:
+      case ClipboardWriteFrame _:
         // App→peer render frames; an app never receives them. Ignore so a
         // malformed peer can't crash the session.
         break;
+      case ClipboardResultFrame f:
+        if (_active) _onClipboardResult?.call(f.seq, f.status);
       case SemanticActionFrame f:
         // The peer activated a node in its accessible DOM; invoke it on the
         // live tree (only on the structured path, like the other v2 input).

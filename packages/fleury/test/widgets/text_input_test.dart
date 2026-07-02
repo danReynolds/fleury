@@ -721,33 +721,26 @@ void main() {
 
       tester.pumpWidget(TextInput(controller: controller, focusNode: node));
       tester.render(size: const CellSize(20, 1));
-      expect(node.canRequestFocus, isFalse,
-          reason: 'mount must not overwrite the provided flag');
+      expect(
+        node.canRequestFocus,
+        isFalse,
+        reason: 'mount must not overwrite the provided flag',
+      );
 
       // A rebuild (enabled defaults true) must not re-enable it either.
       tester.pumpWidget(
         TextInput(controller: controller, focusNode: node, placeholder: 'x'),
       );
       tester.render(size: const CellSize(20, 1));
-      expect(node.canRequestFocus, isFalse,
-          reason: 'rebuild must not re-impose enabled→focusable');
+      expect(
+        node.canRequestFocus,
+        isFalse,
+        reason: 'rebuild must not re-impose enabled→focusable',
+      );
     });
   });
 
   group('copy and cut', () {
-    late Clipboard originalClipboard;
-    late TestClipboard clipboard;
-
-    setUp(() {
-      originalClipboard = Clipboard.instance;
-      clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
-    });
-
-    tearDown(() {
-      Clipboard.instance = originalClipboard;
-    });
-
     testWidgets('Ctrl+C copies selected text', (tester) async {
       final controller = TextEditingController(text: 'abcdef')
         ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 4);
@@ -756,7 +749,7 @@ void main() {
       tester.sendKey(_ctrlChar('c'));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, 'bcd');
+      expect(tester.clipboard.readInProcess(), 'bcd');
       expect(controller.text, 'abcdef');
     });
 
@@ -768,7 +761,7 @@ void main() {
       tester.sendKey(_ctrlChar('x'));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, 'bcd');
+      expect(tester.clipboard.readInProcess(), 'bcd');
       expect(controller.text, 'aef');
       expect(controller.textSelection, const TextSelection.collapsed(1));
     });
@@ -788,7 +781,7 @@ void main() {
       tester.sendKey(_ctrlChar('c'));
 
       expect(ancestorCopies, 1);
-      expect(clipboard.lastWritten, isNull);
+      expect(tester.clipboard.readInProcess(), isNull);
     });
 
     testWidgets('disabled clipboard policy blocks copy and bubbling', (
@@ -813,7 +806,7 @@ void main() {
       tester.sendKey(_ctrlChar('c'));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, isNull);
+      expect(tester.clipboard.readInProcess(), isNull);
       expect(ancestorCopies, 0);
     });
 
@@ -834,7 +827,7 @@ void main() {
       tester.sendKey(_ctrlChar('c'));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, '******');
+      expect(tester.clipboard.readInProcess(), '******');
     });
 
     testWidgets('readOnly field can copy but not cut', (tester) async {
@@ -846,11 +839,11 @@ void main() {
 
       tester.sendKey(_ctrlChar('c'));
       await Future<void>.delayed(Duration.zero);
-      expect(clipboard.lastWritten, 'bcd');
+      expect(tester.clipboard.readInProcess(), 'bcd');
 
       tester.sendKey(_ctrlChar('x'));
       await Future<void>.delayed(Duration.zero);
-      expect(clipboard.lastWritten, 'bcd');
+      expect(tester.clipboard.readInProcess(), 'bcd');
       expect(controller.text, 'abcdef');
     });
   });

@@ -20,17 +20,12 @@ environment:
 
 dependencies:
   # Depends on fleury's PUBLIC host SPI (fleury_host_io.dart) — safe under
-  # semver. fleury must be published first; until then the override below
-  # resolves it from the local path. Remove the override before the final
-  # `dart pub publish` of this package (or it will warn).
+  # semver. pubspec_overrides.yaml resolves it from the monorepo during
+  # development; pub ignores that file when publishing.
   fleury: ^0.1.0
   # Grapheme-cluster counting for press_key, matching how fleury core treats
   # user-typed text (input_dispatcher / text_editing).
   characters: ^1.4.0
-
-dependency_overrides:
-  fleury:
-    path: ../fleury
 
 dev_dependencies:
   lints: ^6.0.0

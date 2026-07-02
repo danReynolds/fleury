@@ -229,8 +229,11 @@ states, bounds, and actions.
 Browser semantics are deferred from the visual frame by default. The host keeps
 the last presented buffer and dirty coverage rows so it can patch text fallback
 and semantic DOM state without lengthening the critical paint path. If an
-assistive technology or agent activates a semantic node, the host flushes pending
-semantics first so the action resolves against the tree the user actually saw.
+assistive technology or agent activates a semantic node, the host flushes
+pending semantics first so the peer's view is current — the shared
+FrameSemanticsPipeline enforces this on the browser and serve paths alike —
+then dispatch resolves against a fresh tree built from the live root (never
+stale). Both paths return the invocation status to the peer.
 
 ## Served browser target
 

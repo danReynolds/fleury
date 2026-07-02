@@ -150,10 +150,13 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
   Future<int> killProcess() {
     process.kill(ProcessSignal.sigterm);
     return process.exitCode
-        .timeout(killGrace, onTimeout: () {
-          process.kill(ProcessSignal.sigkill);
-          return -9;
-        })
+        .timeout(
+          killGrace,
+          onTimeout: () {
+            process.kill(ProcessSignal.sigkill);
+            return -9;
+          },
+        )
         .catchError((_) => -1);
   }
 
@@ -187,7 +190,7 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
     };
     throw FleurySpawnException(
       'Failed to attach to `${command.join(' ')}`: $reason. '
-      'Make sure it calls runTui(...) so it auto-discovers FLEURY_HANDLE.',
+      'Make sure it calls runApp(...) so it auto-discovers FLEURY_HANDLE.',
     );
   }
 

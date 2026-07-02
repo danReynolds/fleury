@@ -1,7 +1,7 @@
 import 'dart:async' show unawaited;
 
 import 'package:characters/characters.dart';
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 import 'controls.dart' show Button, ButtonVariant;
 
@@ -161,10 +161,9 @@ class _ToolCallCardState extends State<ToolCallCard> {
       widget.record,
       options: widget.copyOptions,
     );
-    final report = await Clipboard.instance.writeWithReport(
-      text,
-      policy: widget.copyOptions.clipboardPolicy,
-    );
+    final report = await ClipboardScope.of(
+      context,
+    ).writeWithReport(text, policy: widget.copyOptions.clipboardPolicy);
     if (!mounted) return;
     widget.onCopy?.call(
       ToolCallCopyResult(record: widget.record, text: text, report: report),

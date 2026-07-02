@@ -371,9 +371,6 @@ void main() {
     testWidgets('semantic copy copies the selected trace event', (
       tester,
     ) async {
-      final originalClipboard = Clipboard.instance;
-      final clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
       TraceTimelineCopyResult? copied;
       try {
         tester.pumpWidget(
@@ -396,14 +393,14 @@ void main() {
 
         expect(result.completed, isTrue);
         expect(
-          clipboard.lastWritten,
+          tester.clipboard.readInProcess(),
           'Boot demo console | app | succeeded | 12ms | app | '
           'App shell mounted',
         );
         expect(copied?.eventIndex, 0);
         expect(copied?.report.policy.name, 'inProcessOnly');
       } finally {
-        Clipboard.instance = originalClipboard;
+        // clipboard is tester-scoped; nothing to restore
       }
     });
   });

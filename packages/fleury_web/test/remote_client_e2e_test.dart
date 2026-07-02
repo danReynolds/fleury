@@ -12,9 +12,6 @@ library;
 import 'dart:typed_data';
 
 import 'package:fleury/fleury_host.dart';
-import 'package:fleury/src/remote/remote_codec.dart';
-import 'package:fleury/src/remote/remote_protocol.dart';
-import 'package:fleury/src/remote/remote_semantics.dart';
 import 'package:fleury_web/src/dom_grid/dom_grid_surface.dart';
 import 'package:fleury_web/src/remote_client/plan_adapter.dart';
 import 'package:fleury_web/src/semantics/semantic_dom_presenter.dart';
@@ -57,10 +54,16 @@ void main() {
       );
 
       final wire = <int>[
-        ...encodeFrame(PlanFrame(buildRemotePlan(blank, frame0, fullRepaint: true))),
-        ...encodeFrame(PlanFrame(buildRemotePlan(frame0, frame1, fullRepaint: false))),
         ...encodeFrame(
-          SemanticsFrame(SemanticsWireEncoder().encode(tree.toInspectionSnapshot())!),
+          PlanFrame(buildRemotePlan(blank, frame0, fullRepaint: true)),
+        ),
+        ...encodeFrame(
+          PlanFrame(buildRemotePlan(frame0, frame1, fullRepaint: false)),
+        ),
+        ...encodeFrame(
+          SemanticsFrame(
+            SemanticsWireEncoder().encode(tree.toInspectionSnapshot())!,
+          ),
         ),
       ];
 
@@ -80,7 +83,8 @@ void main() {
       final mirror = CellBuffer(size);
       final semanticsDecoder = SemanticsWireDecoder();
 
-      for (final frame in (FrameDecoder()..feed(Uint8List.fromList(wire))).drain()) {
+      for (final frame
+          in (FrameDecoder()..feed(Uint8List.fromList(wire))).drain()) {
         switch (frame) {
           case PlanFrame f:
             final plan = applyRemotePlan(f.plan, mirror);
@@ -94,19 +98,24 @@ void main() {
       }
 
       // The visual grid DOM shows the server's final frame.
-      expect(surface.rowElements[0].textContent?.trimRight(), 'status: running');
+      expect(
+        surface.rowElements[0].textContent?.trimRight(),
+        'status: running',
+      );
       expect(surface.rowElements[2].textContent?.trimRight(), '[ Run ]');
 
       // The accessible DOM exposes the app's roles, labels, and actions — the
       // path that keeps a served session screen-reader- and agent-readable.
-      final button =
-          semanticRoot.querySelector('[data-fleury-semantic-id="btn:run"]')!;
+      final button = semanticRoot.querySelector(
+        '[data-fleury-semantic-id="btn:run"]',
+      )!;
       expect(button.getAttribute('role'), 'button');
       expect(button.getAttribute('aria-label'), 'Run');
       expect(button.getAttribute('data-fleury-actions'), 'activate');
 
-      final status =
-          semanticRoot.querySelector('[data-fleury-semantic-id="status"]')!;
+      final status = semanticRoot.querySelector(
+        '[data-fleury-semantic-id="status"]',
+      )!;
       expect(status.getAttribute('role'), 'status');
       expect(status.getAttribute('aria-live'), 'polite');
     },

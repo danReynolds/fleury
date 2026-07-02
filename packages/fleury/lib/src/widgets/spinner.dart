@@ -1,5 +1,14 @@
 // Spinner: ready-to-use loading indicator built on the discrete
 // animation lane.
+//
+// Why this lives in core rather than fleury_widgets: Spinner is the
+// reference consumer of the discrete animation lane (FrameBuilder +
+// the shared TickerScheduler) — the primitive it demonstrates is a
+// core contract, the widget is ~40 lines on top of it, and core's
+// own async affordances (TaskStatusView-style progress surfaces)
+// need a loading glyph without reaching up into the batteries
+// package. Higher-level progress widgets (ProgressBar, Toaster)
+// stay in fleury_widgets.
 
 import '../rendering/cell.dart';
 import 'basic.dart' show Text;

@@ -1,7 +1,7 @@
 import 'dart:async' show scheduleMicrotask, unawaited;
 
 import 'package:characters/characters.dart';
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 /// Protocol-neutral role for one message in a [MessageList].
 enum MessageRole { user, assistant, system, tool, log, event }
@@ -404,10 +404,9 @@ class _MessageListState extends State<MessageList> {
       includePrefix: widget.copyOptions.includePrefix,
       maxLineLength: widget.maxLineLength,
     );
-    final report = await Clipboard.instance.writeWithReport(
-      line.text,
-      policy: widget.copyOptions.clipboardPolicy,
-    );
+    final report = await ClipboardScope.of(
+      context,
+    ).writeWithReport(line.text, policy: widget.copyOptions.clipboardPolicy);
     if (!mounted) return;
     widget.onCopy?.call(
       MessageListCopyResult(

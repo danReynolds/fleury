@@ -499,6 +499,10 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
         );
       }
     }
+    // Carry inline-image placements the cell loop can't (they live on the
+    // buffer, not in cells) so an Image inside an overflow-clipped Flex
+    // still renders on a true-pixel surface.
+    buffer.compositeImagesFrom(scratch, offset);
     if (debugShowOverflow) _paintOverflow(buffer, offset);
   }
 

@@ -21,14 +21,20 @@ void main() {
       final reply = '\x1B_Gi=31;OK\x1B\\\x1B[?62;4c'.codeUnits;
       final transport = _FakeTransport(reply);
       expect(await probeImageProtocol(transport), ImageProtocol.kitty);
-      expect(transport.sent, contains('_G'),
-          reason: 'sent the Kitty graphics query');
+      expect(
+        transport.sent,
+        contains('_G'),
+        reason: 'sent the Kitty graphics query',
+      );
     });
 
-    test('returns null when only DA replies (terminal lacks graphics)', () async {
-      final reply = '\x1B[?62;4c'.codeUnits; // DA1 only — no graphics APC.
-      expect(await probeImageProtocol(_FakeTransport(reply)), isNull);
-    });
+    test(
+      'returns null when only DA replies (terminal lacks graphics)',
+      () async {
+        final reply = '\x1B[?62;4c'.codeUnits; // DA1 only — no graphics APC.
+        expect(await probeImageProtocol(_FakeTransport(reply)), isNull);
+      },
+    );
 
     test('returns null on no reply (timeout)', () async {
       expect(await probeImageProtocol(_FakeTransport(const <int>[])), isNull);

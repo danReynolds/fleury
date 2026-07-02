@@ -217,15 +217,50 @@ final class FleuryAppBridge {
   }
 
   /// Invokes [action] on the live node [id]. The app dispatches it against its
-  /// real element tree and re-renders; observe the result with [settle].
-  void invokeAction(SemanticNodeId id, SemanticAction action) =>
-      _send(SemanticActionFrame(id, action));
+  /// real element tree and re-renders; observe the visual result with
+  /// [settle]. The returned future carries the app-reported invocation
+  /// status (v3 SEMANTIC_ACTION_RESULT), or null against an older app that
+  /// doesn't send results.
+  Future<SemanticActionInvocationStatus?> invokeAction(
+    SemanticNodeId id,
+    SemanticAction action,
+  ) {
+    final status = _expectActionResult(id, action);
+    _send(SemanticActionFrame(id, action));
+    return status;
+  }
 
   /// Sets node [id]'s value to [value] — the payload for a `setValue` action
   /// (text into a field, a slider position…). The node must advertise
-  /// `setValue`; observe the result with [settle].
-  void setValue(SemanticNodeId id, Object? value) =>
-      _send(SemanticActionFrame(id, SemanticAction.setValue, value: value));
+  /// `setValue`; observe the visual result with [settle]. Returns the
+  /// app-reported invocation status like [invokeAction].
+  Future<SemanticActionInvocationStatus?> setValue(
+    SemanticNodeId id,
+    Object? value,
+  ) {
+    final status = _expectActionResult(id, SemanticAction.setValue);
+    _send(SemanticActionFrame(id, SemanticAction.setValue, value: value));
+    return status;
+  }
+
+  Completer<SemanticActionInvocationStatus?>? _pendingActionResult;
+
+  /// Arms a one-shot listener for the next matching SEMANTIC_ACTION_RESULT.
+  /// Mutations are serialized by the MCP server, so at most one is pending.
+  /// Bounded: resolves null when no result lands (pre-v3 app) so callers
+  /// degrade to the tree-diff heuristic instead of hanging.
+  Future<SemanticActionInvocationStatus?> _expectActionResult(
+    SemanticNodeId id,
+    SemanticAction action,
+  ) {
+    _pendingActionResult?.complete(null); // superseded (shouldn't happen)
+    final completer = Completer<SemanticActionInvocationStatus?>();
+    _pendingActionResult = completer;
+    return completer.future.timeout(
+      const Duration(seconds: 2),
+      onTimeout: () => null,
+    );
+  }
 
   /// Types [text] into the focused widget (a structured text-input event, the
   /// same one a keypress would produce on the serve path).
@@ -364,7 +399,20 @@ final class FleuryAppBridge {
       case ResizeFrame _:
       case InputEventFrame _:
       case SemanticActionFrame _:
+      case CaretFrame _:
+      case ClipboardResultFrame _:
         break;
+      case ClipboardWriteFrame f:
+        // The app copied. An MCP bridge has no user clipboard; answer
+        // immediately so the app's report degrades to its in-process
+        // register without waiting out the result timeout.
+        _send(ClipboardResultFrame(f.seq, RemoteClipboardStatus.unavailable));
+      case SemanticActionResultFrame f:
+        final pending = _pendingActionResult;
+        _pendingActionResult = null;
+        if (pending != null && !pending.isCompleted) {
+          pending.complete(f.status);
+        }
     }
   }
 

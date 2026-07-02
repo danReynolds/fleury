@@ -51,11 +51,12 @@ import '../rendering/cell.dart' show Color;
 import '../rendering/render_navigator.dart';
 import '../rendering/render_object.dart';
 import '../semantics/semantics.dart';
-import '../terminal/events.dart';
+import '../input/events.dart';
 import 'align.dart' show Align, Alignment;
 import 'basic.dart' show Container, Surface;
 import 'effects.dart';
 import 'focus.dart';
+import 'error_boundary.dart';
 import 'framework.dart';
 import 'key_bindings.dart';
 import 'tui_binding.dart';
@@ -70,11 +71,11 @@ class RouteTransition {
   }) : isInstant = false;
 
   RouteTransition._instant()
-      : enter = const NoopEffect(),
-        exit = const NoopEffect(),
-        duration = Duration.zero,
-        curve = null,
-        isInstant = true;
+    : enter = const NoopEffect(),
+      exit = const NoopEffect(),
+      duration = Duration.zero,
+      curve = null,
+      isInstant = true;
 
   final Effect enter;
   final Effect exit;
@@ -713,16 +714,20 @@ class _RouteHost extends StatelessWidget {
                 ),
               ]
             : const <KeyBinding>[],
-        // Expose this route to its subtree so a PopScope can register
         // its veto with the right route. Covered routes are focus-inert
         // (ExcludeFocus): they stay mounted and keep building, so without
         // this a late-mounting autofocus in an occluded route would steal
         // focus from the active route — even out of a modal, leaving it
         // keyboard-undismissable. Exclusion also keeps Tab traversal from
-        // wandering into invisible screens.
+        // wandering into invisible screens. The ErrorBoundary contains a
+        // route whose layout/paint throws so siblings and the session
+        // survive.
         child: ExcludeFocus(
           excluding: !active,
-          child: _RouteScope(route: route, child: screen),
+          child: _RouteScope(
+            route: route,
+            child: ErrorBoundary(child: screen),
+          ),
         ),
       ),
     );

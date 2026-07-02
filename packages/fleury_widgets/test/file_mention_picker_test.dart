@@ -269,9 +269,6 @@ void main() {
     });
 
     testWidgets('semantic copy copies selected mention text', (tester) async {
-      final originalClipboard = Clipboard.instance;
-      final clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
       FileMentionCopyResult? copied;
       try {
         tester.pumpWidget(
@@ -293,12 +290,12 @@ void main() {
         );
 
         expect(result.completed, isTrue);
-        expect(clipboard.lastWritten, '@lib/main.dart:12');
+        expect(tester.clipboard.readInProcess(), '@lib/main.dart:12');
         expect(copied?.entryIndex, 0);
         expect(copied?.viewIndex, 0);
         expect(copied?.report.policy.name, 'inProcessOnly');
       } finally {
-        Clipboard.instance = originalClipboard;
+        // clipboard is tester-scoped; nothing to restore
       }
     });
   });

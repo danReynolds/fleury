@@ -230,7 +230,7 @@ class _RawTextElement extends LeafRenderObjectElement {
 /// take down the whole UI (and the dev sees what failed).
 ///
 /// Customize globally via [ErrorWidget.builder]. The runtime wires this
-/// in as the build-error boundary; see `Element.errorBuilder`.
+/// in as the build-error boundary; see `BuildOwner.errorBuilder`.
 final class ErrorWidget extends StatelessWidget {
   const ErrorWidget(this.error, {this.stackTrace, super.key});
 
@@ -814,8 +814,7 @@ class _RenderFilledBox extends RenderObject
         if (cell.style.background != null) continue; // child set its own
         if (cell.role == CellRole.empty) continue; // already our fill
         if (cell.role == CellRole.continuation ||
-            cell.role == CellRole.protocolAnchor ||
-            cell.role == CellRole.protocolCovered) {
+            cell.role == CellRole.overlay) {
           continue;
         }
         buffer.writeGrapheme(

@@ -336,19 +336,6 @@ void main() {
   });
 
   group('copy/export', () {
-    late Clipboard originalClipboard;
-    late TestClipboard clipboard;
-
-    setUp(() {
-      originalClipboard = Clipboard.instance;
-      clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
-    });
-
-    tearDown(() {
-      Clipboard.instance = originalClipboard;
-    });
-
     testWidgets('Ctrl+C copies the selected message', (tester) async {
       final controller = MessageListController(
         selectedIndex: 1,
@@ -379,7 +366,7 @@ void main() {
       tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, '[assistant Agent] answer');
+      expect(tester.clipboard.readInProcess(), '[assistant Agent] answer');
       expect(copied, isNotNull);
       expect(copied!.messageIndex, 1);
       expect(copied!.message.id, 'm2');
@@ -419,7 +406,7 @@ void main() {
       );
 
       expect(result.completed, isTrue);
-      expect(clipboard.lastWritten, '[assistant Agent] answer');
+      expect(tester.clipboard.readInProcess(), '[assistant Agent] answer');
       expect(copied?.messageIndex, 1);
     });
 

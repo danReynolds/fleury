@@ -2,7 +2,7 @@ import 'dart:async' show unawaited;
 import 'dart:convert';
 
 import 'package:characters/characters.dart';
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 import 'component_theme.dart';
 
@@ -503,10 +503,9 @@ class _JsonViewState extends State<JsonView> {
     final selected = (_controller.selectedIndex ?? 0).clamp(0, rows.length - 1);
     final row = rows[selected];
     final text = exportJsonViewRow(row, options: widget.copyOptions);
-    final report = await Clipboard.instance.writeWithReport(
-      text,
-      policy: widget.copyOptions.clipboardPolicy,
-    );
+    final report = await ClipboardScope.of(
+      context,
+    ).writeWithReport(text, policy: widget.copyOptions.clipboardPolicy);
     if (!mounted) return;
     widget.onCopy?.call(
       JsonViewCopyResult(

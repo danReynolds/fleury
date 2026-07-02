@@ -46,8 +46,11 @@ abstract class Effect {
   /// every frame, drop protocol (image) cells, and record scratch-local
   /// focus/pointer geometry. Override alongside [build] if an effect wraps
   /// in something other than a single cell-effect widget.
-  Widget buildSettled(Widget child) =>
-      _CellEffectWidget(composite: _identityComposite, passthrough: true, child: child);
+  Widget buildSettled(Widget child) => _CellEffectWidget(
+    composite: _identityComposite,
+    passthrough: true,
+    child: child,
+  );
 
   static CellPlacement? _identityComposite(
     int col,

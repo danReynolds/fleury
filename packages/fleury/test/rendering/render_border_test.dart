@@ -13,8 +13,7 @@ String _rowContent(CellBuffer buffer, int row) {
       case CellRole.leading:
         buf.write(cell.grapheme);
       case CellRole.continuation:
-      case CellRole.protocolAnchor:
-      case CellRole.protocolCovered:
+      case CellRole.overlay:
         break;
     }
   }

@@ -1,7 +1,7 @@
 import 'dart:js_interop';
 import 'dart:typed_data';
 
-import 'package:fleury/src/remote/remote_codec.dart' show ImagePlacement;
+import 'package:fleury/fleury_host.dart' show ImagePlacement;
 import 'package:web/web.dart' as web;
 
 import '../metrics/cell_metrics.dart';
@@ -39,7 +39,8 @@ class InlineImageOverlay {
   // decode); <img> elements and last-applied geometry by 'id#occurrence' so
   // repeated placements of one image each get a distinct element.
   final Map<String, String> _blobUrls = <String, String>{};
-  final Map<String, web.HTMLImageElement> _els = <String, web.HTMLImageElement>{};
+  final Map<String, web.HTMLImageElement> _els =
+      <String, web.HTMLImageElement>{};
   final Map<String, String> _rects = <String, String>{};
   List<ImagePlacement> _last = const <ImagePlacement>[];
 

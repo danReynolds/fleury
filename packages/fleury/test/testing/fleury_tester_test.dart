@@ -97,18 +97,26 @@ void main() {
       tester,
     ) {
       tester.pumpApp(const Text('one'));
-      expect(tester.renderToString(size: const CellSize(8, 1)), contains('one'));
+      expect(
+        tester.renderToString(size: const CellSize(8, 1)),
+        contains('one'),
+      );
 
       tester.pumpApp(const Text('two'));
       final second = tester.renderToString(size: const CellSize(8, 1));
-      expect(second, contains('two'),
-          reason: 'a later pumpApp must not be silently ignored');
+      expect(
+        second,
+        contains('two'),
+        reason: 'a later pumpApp must not be silently ignored',
+      );
       expect(second, isNot(contains('one')));
 
       tester.pumpWidget(const Text('three'));
-      expect(tester.renderToString(size: const CellSize(8, 1)),
-          contains('three'),
-          reason: 'pumpWidget after pumpApp mounts bare (no latched mode)');
+      expect(
+        tester.renderToString(size: const CellSize(8, 1)),
+        contains('three'),
+        reason: 'pumpWidget after pumpApp mounts bare (no latched mode)',
+      );
     });
 
     testWidgets('a LayoutBuilder subtree still mounts + subscribes under the '
@@ -127,9 +135,11 @@ void main() {
       );
       Timer(const Duration(milliseconds: 10), () => controller.add('ready'));
       await tester.settle();
-      expect(tester.renderToString(size: const CellSize(8, 1)),
-          contains('ready'),
-          reason: 'the LayoutBuilder-hosted StreamBuilder must resolve');
+      expect(
+        tester.renderToString(size: const CellSize(8, 1)),
+        contains('ready'),
+        reason: 'the LayoutBuilder-hosted StreamBuilder must resolve',
+      );
       await controller.close();
     });
 
@@ -143,15 +153,22 @@ void main() {
       tester.pumpWidget(_PaintOnlyAnim(key: probe));
       tester.pump();
       tester.pumpAndSettle();
-      expect(probe.currentState!.completed, isTrue,
-          reason: 'pumpAndSettle must render from its own first step '
-              'regardless of a prior settle()');
+      expect(
+        probe.currentState!.completed,
+        isTrue,
+        reason:
+            'pumpAndSettle must render from its own first step '
+            'regardless of a prior settle()',
+      );
     });
 
     testWidgets('settle rejects a zero step (would spin forever)', (tester) {
       tester.pumpWidget(const Text('x'));
-      expect(() => tester.settle(step: Duration.zero), throwsA(anything),
-          reason: 'a zero step never advances elapsed → timeout unreachable');
+      expect(
+        () => tester.settle(step: Duration.zero),
+        throwsA(anything),
+        reason: 'a zero step never advances elapsed → timeout unreachable',
+      );
     });
 
     testWidgets('pumpAndSettle runs a paint-only ticker animation to '
@@ -160,10 +177,14 @@ void main() {
       tester.pumpWidget(_PaintOnlyAnim(key: probe));
       tester.pump(); // start the ticker
       tester.pumpAndSettle();
-      expect(probe.currentState!.completed, isTrue,
-          reason: 'a bounded animation that only marks paint (no rebuilds) '
-              'must still run to completion — paint damage counts as '
-              'activity in the settle predicate');
+      expect(
+        probe.currentState!.completed,
+        isTrue,
+        reason:
+            'a bounded animation that only marks paint (no rebuilds) '
+            'must still run to completion — paint damage counts as '
+            'activity in the settle predicate',
+      );
     });
   });
 

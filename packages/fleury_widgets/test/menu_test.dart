@@ -273,7 +273,11 @@ void main() {
       final out = _screen(tester, cols: 30);
       expect(out.contains('Recent'), isFalse, reason: 'submenu closed');
       expect(out.contains('Open'), isTrue, reason: 'parent still open');
-      expect(out.contains('▸'), isTrue, reason: 'cascade indicator still shown');
+      expect(
+        out.contains('▸'),
+        isTrue,
+        reason: 'cascade indicator still shown',
+      );
     });
 
     testWidgets('Esc from a submenu returns to the parent, not all the way', (

@@ -299,10 +299,22 @@ class _Runner {
   String get demo => '$root/packages/fleury_example_console';
   String get storybook => '$root/packages/storybook';
   String get samples => '$root/packages/samples';
+  String get mcp => '$root/packages/fleury_mcp';
+  String get webExamples => '$root/website/examples';
   String get profiling => '$root/profiling';
 
   Future<void> bootstrap() async {
-    for (final dir in [fleury, widgets, web, git, demo, storybook]) {
+    for (final dir in [
+      fleury,
+      widgets,
+      web,
+      git,
+      demo,
+      storybook,
+      samples,
+      mcp,
+      webExamples,
+    ]) {
       await _run('dart', ['pub', 'get'], workingDirectory: dir);
     }
   }
@@ -342,6 +354,32 @@ class _Runner {
     ], workingDirectory: demo);
     await _run('dart', ['analyze'], workingDirectory: storybook);
     await _run('dart', ['test'], workingDirectory: storybook);
+    await _run('dart', ['analyze'], workingDirectory: web);
+    // Explicit platforms: fleury_web splits VM-safe suites from
+    // @TestOn('browser') ones, and a bare `dart test` silently skips the
+    // browser set.
+    await _run('dart', [
+      'test',
+      '-p',
+      'vm,chrome',
+    ], workingDirectory: web);
+    await _run('dart', ['analyze'], workingDirectory: samples);
+    await _run('dart', ['test'], workingDirectory: samples);
+    await _run('dart', ['analyze'], workingDirectory: mcp);
+    await _run('dart', ['test'], workingDirectory: mcp);
+    if (!quick) {
+      // dart2js smoke: the doc-examples entrypoint pulls in fleury_core,
+      // fleury_widgets_web, fleury_web, and the samples — the whole
+      // browser-safe surface compiles or this fails.
+      await _run('dart', [
+        'compile',
+        'js',
+        'web/main.dart',
+        '-o',
+        '${Directory.systemTemp.path}/fleury-check-examples.js',
+        '-O1',
+      ], workingDirectory: webExamples);
+    }
   }
 
   /// Compiles the structured serve client (web/remote_client.dart) and

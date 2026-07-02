@@ -1,4 +1,4 @@
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 /// Which day starts a week in a [CalendarHeatmap] row.
 ///

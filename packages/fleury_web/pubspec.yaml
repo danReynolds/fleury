@@ -1,15 +1,21 @@
 name: fleury_web
 description: >-
   Run fleury in a browser through the retained DOM host.
-version: 0.0.0
-publish_to: none
+version: 0.1.0
+repository: https://github.com/danReynolds/fleury/tree/main/packages/fleury_web
+issue_tracker: https://github.com/danReynolds/fleury/issues
+topics:
+  - tui
+  - terminal
+  - web
 
 environment:
   sdk: ^3.10.4
 
 dependencies:
-  fleury:
-    path: ../fleury
+  # fleury's published API; pubspec_overrides.yaml resolves it from the
+  # monorepo during development.
+  fleury: ^0.1.0
   web: ^1.1.1
 
 dev_dependencies:

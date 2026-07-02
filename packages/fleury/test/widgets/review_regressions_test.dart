@@ -10,6 +10,8 @@
 //   7. keyed children mount once (no duplicate build / spurious
 //      didUpdateWidget(identical))
 
+import 'dart:typed_data';
+
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
@@ -28,11 +30,14 @@ class _Cap extends StatelessWidget {
   }
 }
 
-
 /// Home screen that late-mounts an autofocus Focus when [flag] flips —
 /// the async-data-arrives-while-covered pattern.
 class _LateMountHome extends StatefulWidget {
-  const _LateMountHome({required this.flag, required this.late, required this.sink});
+  const _LateMountHome({
+    required this.flag,
+    required this.late,
+    required this.sink,
+  });
   final Flag flag;
   final FocusNode late;
   final void Function(BuildContext) sink;
@@ -60,15 +65,22 @@ class _LateMountHomeState extends State<_LateMountHome> {
   @override
   Widget build(BuildContext context) {
     widget.sink(context);
-    return Column(children: [
-      const Text('home'),
-      if (widget.flag.value)
-        Focus(focusNode: widget.late, autofocus: true, child: const Text('late')),
-    ]);
+    return Column(
+      children: [
+        const Text('home'),
+        if (widget.flag.value)
+          Focus(
+            focusNode: widget.late,
+            autofocus: true,
+            child: const Text('late'),
+          ),
+      ],
+    );
   }
 }
 
-/// Leaf that writes a protocol (image) region — the Kitty/Sixel cell shape.
+/// Leaf that records an inline-image placement — the overlay cell shape a
+/// Kitty/Sixel/browser surface renders as pixels.
 class _ProtocolBox extends LeafRenderObjectWidget {
   const _ProtocolBox();
   @override
@@ -89,14 +101,19 @@ class _RenderProtocolBox extends RenderObject {
     CellOffset? screenOffset,
     CellRect? clipRect,
   }) {
-    buffer.writeProtocol(offset, 'IMG-BYTES', width: 2, height: 1);
+    buffer.writeImage(
+      offset,
+      Uint8List.fromList('IMG-BYTES'.codeUnits),
+      width: 2,
+      height: 1,
+    );
   }
 }
 
-bool _hasProtocolAnchor(CellBuffer buf) {
+bool _hasOverlay(CellBuffer buf) {
   for (var r = 0; r < buf.size.rows; r++) {
     for (var c = 0; c < buf.size.cols; c++) {
-      if (buf.atColRow(c, r).role == CellRole.protocolAnchor) return true;
+      if (buf.atColRow(c, r).role == CellRole.overlay) return true;
     }
   }
   return false;
@@ -104,7 +121,12 @@ bool _hasProtocolAnchor(CellBuffer buf) {
 
 /// Keyed stateful child that counts builds and didUpdateWidget calls.
 class _Counting extends StatefulWidget {
-  const _Counting({super.key, required this.builds, required this.updates, required this.id});
+  const _Counting({
+    super.key,
+    required this.builds,
+    required this.updates,
+    required this.id,
+  });
   final Map<String, int> builds;
   final Map<String, int> updates;
   final String id;
@@ -127,17 +149,25 @@ class _CountingState extends State<_Counting> {
 }
 
 void main() {
-  testWidgets('protocol cells render inside a settled pushed route', (tester) {
+  testWidgets('overlay (image) cells render inside a settled pushed route', (
+    tester,
+  ) {
     BuildContext? home;
     tester.pumpWidget(
-      Navigator(home: _Cap(sink: (x) => home = x, label: 'home')),
+      Navigator(
+        home: _Cap(sink: (x) => home = x, label: 'home'),
+      ),
     );
     home!.push<void>(const _ProtocolBox()); // default fade transition
     tester.pump(const Duration(milliseconds: 300)); // settle fully
     final buf = tester.render(size: const CellSize(10, 3));
-    expect(_hasProtocolAnchor(buf), isTrue,
-        reason: 'the settled effect wrapper must pass protocol cells '
-            'through — the composite path drops non-leading cells');
+    expect(
+      _hasOverlay(buf),
+      isTrue,
+      reason:
+          'a settled route paints through (passthrough), so the image '
+          'placement survives to the buffer',
+    );
   });
 
   testWidgets('focus rects are screen-correct in an offset navigator once '
@@ -147,16 +177,24 @@ void main() {
     tester.pumpWidget(
       Container(
         padding: const EdgeInsets.only(left: 5, top: 2),
-        child: Navigator(home: _Cap(sink: (x) => home = x, label: 'home')),
+        child: Navigator(
+          home: _Cap(sink: (x) => home = x, label: 'home'),
+        ),
       ),
     );
-    home!.push<void>(Focus(focusNode: f, autofocus: true, child: const Text('x')));
+    home!.push<void>(
+      Focus(focusNode: f, autofocus: true, child: const Text('x')),
+    );
     tester.pump(const Duration(milliseconds: 300)); // settle fully
     tester.render(size: const CellSize(20, 6));
     expect(f.rect, isNotNull);
-    expect(f.rect!.offset, const CellOffset(5, 2),
-        reason: 'settled routes must record true screen coordinates, not '
-            'scratch-local ones — click-to-focus targets these rects');
+    expect(
+      f.rect!.offset,
+      const CellOffset(5, 2),
+      reason:
+          'settled routes must record true screen coordinates, not '
+          'scratch-local ones — click-to-focus targets these rects',
+    );
   });
 
   testWidgets('a covered route cannot steal focus; the modal stays '
@@ -179,9 +217,13 @@ void main() {
 
     flag.enable(); // covered home late-mounts an autofocus field
     tester.pump();
-    expect(tester.focusManager.focusedNode, same(modalNode),
-        reason: 'occluded routes are focus-inert (ExcludeFocus) — a late '
-            'autofocus must not yank focus out of the modal');
+    expect(
+      tester.focusManager.focusedNode,
+      same(modalNode),
+      reason:
+          'occluded routes are focus-inert (ExcludeFocus) — a late '
+          'autofocus must not yank focus out of the modal',
+    );
 
     tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
     tester.pump();
@@ -192,7 +234,9 @@ void main() {
       'unconditional', (tester) {
     BuildContext? home;
     tester.pumpWidget(
-      Navigator(home: _Cap(sink: (x) => home = x, label: 'home')),
+      Navigator(
+        home: _Cap(sink: (x) => home = x, label: 'home'),
+      ),
     );
     home!.present<void>(
       const Text('confirm'),
@@ -202,8 +246,11 @@ void main() {
     tester.pump();
     expect(home!.navigator.depth, 2);
 
-    expect(home!.navigator.maybePop(), isFalse,
-        reason: 'semantic/back dismissal must respect barrierDismissible');
+    expect(
+      home!.navigator.maybePop(),
+      isFalse,
+      reason: 'semantic/back dismissal must respect barrierDismissible',
+    );
     expect(home!.navigator.depth, 2);
 
     home!.navigator.pop();
@@ -215,10 +262,14 @@ void main() {
     BuildContext? home;
     final sidebar = FocusNode(debugLabel: 'sidebar');
     tester.pumpWidget(
-      Column(children: [
-        Focus(focusNode: sidebar, child: const Text('side')),
-        Navigator(home: _Cap(sink: (x) => home = x, label: 'home')),
-      ]),
+      Column(
+        children: [
+          Focus(focusNode: sidebar, child: const Text('side')),
+          Navigator(
+            home: _Cap(sink: (x) => home = x, label: 'home'),
+          ),
+        ],
+      ),
     );
     sidebar.requestFocus();
     tester.pump();
@@ -228,9 +279,13 @@ void main() {
     tester.pump();
     home!.navigator.pop();
     tester.pump();
-    expect(tester.focusManager.focusedNode, same(sidebar),
-        reason: 'no route scope recorded the sidebar — the push-time '
-            'snapshot fallback must restore it');
+    expect(
+      tester.focusManager.focusedNode,
+      same(sidebar),
+      reason:
+          'no route scope recorded the sidebar — the push-time '
+          'snapshot fallback must restore it',
+    );
   });
 
   testWidgets('present() honors the Navigator-wide transition default', (
@@ -259,7 +314,9 @@ void main() {
     tester.pumpWidget(
       Container(
         padding: const EdgeInsets.only(left: 5, top: 2),
-        child: Navigator(home: _Cap(sink: (x) => home = x, label: 'home')),
+        child: Navigator(
+          home: _Cap(sink: (x) => home = x, label: 'home'),
+        ),
       ),
     );
     home!.push<void>(
@@ -270,13 +327,29 @@ void main() {
 
     // 'btn' sits at screen (5,2): the padded navigator's origin. A
     // scratch-local rect would claim (0,0) and this tap would miss.
-    tester.sendMouse(const MouseEvent(
-        kind: MouseEventKind.down, button: MouseButton.left, col: 6, row: 2));
-    tester.sendMouse(const MouseEvent(
-        kind: MouseEventKind.up, button: MouseButton.left, col: 6, row: 2));
-    expect(taps, 1,
-        reason: 'hit-testing must use absolute terminal coordinates even '
-            'while the route paints through the effect scratch buffer');
+    tester.sendMouse(
+      const MouseEvent(
+        kind: MouseEventKind.down,
+        button: MouseButton.left,
+        col: 6,
+        row: 2,
+      ),
+    );
+    tester.sendMouse(
+      const MouseEvent(
+        kind: MouseEventKind.up,
+        button: MouseButton.left,
+        col: 6,
+        row: 2,
+      ),
+    );
+    expect(
+      taps,
+      1,
+      reason:
+          'hit-testing must use absolute terminal coordinates even '
+          'while the route paints through the effect scratch buffer',
+    );
   });
 
   testWidgets('keyed children mount once — no duplicate build, no '
@@ -284,16 +357,36 @@ void main() {
     final builds = <String, int>{};
     final updates = <String, int>{};
     tester.pumpWidget(
-      Column(children: [
-        _Counting(key: const ValueKey('a'), builds: builds, updates: updates, id: 'a'),
-        _Counting(key: const ValueKey('b'), builds: builds, updates: updates, id: 'b'),
-      ]),
+      Column(
+        children: [
+          _Counting(
+            key: const ValueKey('a'),
+            builds: builds,
+            updates: updates,
+            id: 'a',
+          ),
+          _Counting(
+            key: const ValueKey('b'),
+            builds: builds,
+            updates: updates,
+            id: 'b',
+          ),
+        ],
+      ),
     );
-    expect(builds, {'a': 1, 'b': 1},
-        reason: 'the attach-time re-reconcile must skip identical keyed '
-            'widget instances');
-    expect(updates, isEmpty,
-        reason: 'didUpdateWidget must never fire with oldWidget identical '
-            'to widget');
+    expect(
+      builds,
+      {'a': 1, 'b': 1},
+      reason:
+          'the attach-time re-reconcile must skip identical keyed '
+          'widget instances',
+    );
+    expect(
+      updates,
+      isEmpty,
+      reason:
+          'didUpdateWidget must never fire with oldWidget identical '
+          'to widget',
+    );
   });
 }

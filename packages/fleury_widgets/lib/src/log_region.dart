@@ -410,10 +410,9 @@ class _LogRegionState extends State<LogRegion> {
       includePrefix: widget.copyOptions.includePrefix,
       maxLineLength: widget.maxLineLength,
     );
-    final report = await Clipboard.instance.writeWithReport(
-      line.text,
-      policy: widget.copyOptions.clipboardPolicy,
-    );
+    final report = await ClipboardScope.of(
+      context,
+    ).writeWithReport(line.text, policy: widget.copyOptions.clipboardPolicy);
     if (!mounted) return;
     widget.onCopy?.call(
       LogRegionCopyResult(

@@ -1,5 +1,4 @@
-import 'package:fleury/fleury_host.dart';
-
+import 'package:fleury/fleury_core.dart';
 
 /// A numeric stepper: `[ − 42 + ]`. Focusable; arrow chords (and +/−)
 /// adjust the value by [step], PageUp / PageDown by [largeStep], Home /

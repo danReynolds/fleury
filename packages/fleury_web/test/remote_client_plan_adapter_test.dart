@@ -1,5 +1,4 @@
 import 'package:fleury/fleury_host.dart';
-import 'package:fleury/src/remote/remote_codec.dart';
 import 'package:fleury_web/src/remote_client/plan_adapter.dart';
 import 'package:test/test.dart';
 
@@ -48,8 +47,19 @@ void main() {
 
     test('scroll-up plan scrolls the mirror and carries the shift', () {
       const size = CellSize(60, 8);
-      const words = ['connect', 'GET /api', 'cache miss', 'retry', 'flush',
-        'commit', 'timeout', 'parse', 'spawn', 'gc pause', 'drain'];
+      const words = [
+        'connect',
+        'GET /api',
+        'cache miss',
+        'retry',
+        'flush',
+        'commit',
+        'timeout',
+        'parse',
+        'spawn',
+        'gc pause',
+        'drain',
+      ];
       String line(int n) =>
           '${n.toString().padLeft(5)} ${(n * 31) % 9999} '
           '${words[(n * 7) % words.length]} shard=${n % 64} '
@@ -71,8 +81,11 @@ void main() {
         mirror.writeText(CellOffset(0, r), line(r));
       }
       final presentation = applyRemotePlan(plan, mirror);
-      expect(presentation.scrollUpRows, 1,
-          reason: 'the surface gets the DOM scroll hint');
+      expect(
+        presentation.scrollUpRows,
+        1,
+        reason: 'the surface gets the DOM scroll hint',
+      );
       // The mirror reproduces next exactly.
       for (var r = 0; r < 8; r++) {
         expect(_rowText(mirror, r), _rowText(next, r), reason: 'row $r');

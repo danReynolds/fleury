@@ -439,7 +439,6 @@ final class _AppExtensionTheme extends StatelessWidget {
   }
 }
 
-
 final class _ScopedCommandContext implements CommandContext {
   const _ScopedCommandContext({
     required this.commands,

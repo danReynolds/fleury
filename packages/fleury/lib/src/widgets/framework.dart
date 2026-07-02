@@ -20,10 +20,12 @@
 import 'package:meta/meta.dart';
 
 import '../debug/debug_invalidation.dart';
+import '../foundation/fleury_error.dart';
 import '../foundation/geometry.dart';
 import '../foundation/key.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
+import '../rendering/render_error_boundary.dart';
 import '../rendering/render_object.dart';
 
 /// Signature for `setState` and similar one-shot mutators.
@@ -411,15 +413,9 @@ abstract class Element implements BuildContext {
     }
   }
 
-  /// Builds the widget shown in place of a subtree whose `build` threw.
-  /// Installed by the runtime (`runApp` / the test harness) so the catch
-  /// in [ComponentElement.performRebuild] can render an error panel
-  /// instead of crashing. Null means "no boundary" — errors propagate.
-  static Widget Function(Object error, StackTrace stack)? errorBuilder;
-
-  /// Optional sink for build errors (logging/telemetry). Called before the
-  /// error widget is substituted.
-  static void Function(Object error, StackTrace stack)? onBuildError;
+  // Error-boundary hooks (errorBuilder / onBuildError) live on BuildOwner,
+  // not as Element statics — installed per-runtime so a test harness and a
+  // production host don't share a global. See BuildOwner.
 
   Widget _widget;
   @override
@@ -861,8 +857,11 @@ abstract class ComponentElement extends Element {
     try {
       built = runWithBuildTarget(buildChild);
     } catch (error, stack) {
-      Element.onBuildError?.call(error, stack);
-      final builder = Element.errorBuilder;
+      // runWithBuildTarget already restored [current] on its way out of the
+      // throw; report + substitute through the per-owner error hooks.
+      final owner = _owner;
+      owner?.onBuildError?.call(error, stack);
+      final builder = owner?.errorBuilder;
       if (builder == null) rethrow; // no boundary installed → propagate
       built = builder(error, stack);
     }
@@ -1005,7 +1004,38 @@ final class BuildFlushStats {
 
 /// Drives the build pipeline. Holds the set of dirty elements and flushes
 /// them in shallow-first order.
+/// Convergence cap for [BuildOwner.flushBuild]: legitimate cascades settle
+/// in a handful of passes; hundreds means a self-dirtying loop.
+const int _maxBuildPasses = 512;
+
 class BuildOwner {
+  BuildOwner({this.errorBuilder, this.onBuildError});
+
+  /// Builds the widget shown in place of a subtree whose `build` threw, so
+  /// the catch in [ComponentElement.performRebuild] renders an error panel
+  /// instead of crashing. Null means "no boundary" — errors propagate (the
+  /// raw-owner default; [TuiRuntime] and the test harness install
+  /// `ErrorWidget.builder`). Per-owner, not process-global: two runtimes in
+  /// one isolate never share a boundary, and a host cannot forget to
+  /// install one.
+  Widget Function(Object error, StackTrace stack)? errorBuilder;
+
+  /// Optional sink for build errors (logging/telemetry). Called before the
+  /// error widget is substituted.
+  void Function(Object error, StackTrace stack)? onBuildError;
+
+  /// Containment policy for layout/paint exceptions absorbed by
+  /// [ErrorBoundary] render objects (explicit or the implicit route/
+  /// overlay boundaries). False in production hosts — contain and render
+  /// the error presentation; FleuryTester sets true so a widget test with
+  /// a layout bug fails the test instead of silently rendering a panel.
+  bool rethrowContainedRenderErrors = false;
+
+  /// Sink for newly contained layout/paint failures (once per error-state
+  /// entry). Hosts wire this to their error reporter so a contained panel
+  /// still lands in stderr/the debug banner.
+  void Function(FrameContainmentError error)? onContainedRenderError;
+
   /// Per-runtime frame damage signal for this owner's render tree.
   ///
   /// [renderFrame] attaches it at the root render object, where layout and
@@ -1117,6 +1147,28 @@ class BuildOwner {
     var rebuiltElementCount = 0;
     var maxDirtyElementCount = 0;
     while (_dirtyElements.isNotEmpty) {
+      if (passCount >= _maxBuildPasses) {
+        // A rebuild storm: some widget re-dirties itself (or a partner)
+        // every pass, so the flush would never converge. Fail loudly and
+        // name the culprits — a silent hang is the one outcome worse than
+        // a crash here. The throw surfaces through the frame program's
+        // containment like any other render-phase failure.
+        final culprits =
+            (_dirtyElements.toList()..sort((a, b) => a._depth - b._depth))
+                .take(8)
+                .map((e) => e.widget.runtimeType.toString())
+                .join(', ');
+        _dirtyElements.clear();
+        throw FleuryError(
+          summary: 'flushBuild did not converge after $_maxBuildPasses passes.',
+          details:
+              'Every pass produced newly dirty elements, so the build would '
+              'loop forever. Still dirty (shallowest first): $culprits.',
+          hint:
+              'Look for setState called unconditionally during build, or '
+              'two widgets that mark each other dirty every frame.',
+        );
+      }
       final snapshot = _dirtyElements.toList()
         ..sort((a, b) => a._depth - b._depth);
       _dirtyElements.clear();

@@ -267,7 +267,9 @@ Future<Map<String, Object?>> settleLatency() async {
 
 // ---- a minimal in-memory transport for the settle bench --------------------
 
-class _BenchTransport implements RemoteFrameTransport {
+class _BenchTransport 
+    with SynchronousSendTransport
+    implements RemoteFrameTransport {
   final StreamController<RemoteFrame> _in = StreamController<RemoteFrame>();
   void add(RemoteFrame f) => _in.add(f);
   @override

@@ -95,7 +95,9 @@ void main() {
   ) {
     BuildContext? home;
     tester.pumpWidget(
-      Navigator(home: _Capture(sink: (x) => home = x, label: 'home')),
+      Navigator(
+        home: _Capture(sink: (x) => home = x, label: 'home'),
+      ),
     );
     // No duration is pumped: an animated push would still be mid-fade, but
     // RouteTransition.none snaps the route fully present in one frame.
@@ -105,52 +107,61 @@ void main() {
     expect(home!.navigator.depth, 2);
   });
 
-  testWidgets('present() puts content on an opaque Surface (no bleed-through)', (
-    tester,
-  ) {
-    BuildContext? home;
-    tester.pumpWidget(
-      Navigator(home: _Capture(sink: (x) => home = x, label: 'ABCDEFGH')),
-    );
-    // A modal box wider than its text: without an opaque surface, the empty
-    // cells inside its box would composite the home text beneath (the leak).
-    home!.present<void>(
-      const SizedBox(width: 8, height: 1, child: Text('X')),
-      transition: RouteTransition.none,
-    );
-    tester.pump();
-    expect(
-      _screen(tester, cols: 8),
-      'X',
-      reason: 'the opaque Surface covers the home row — no bleed-through',
-    );
-  });
+  testWidgets(
+    'present() puts content on an opaque Surface (no bleed-through)',
+    (tester) {
+      BuildContext? home;
+      tester.pumpWidget(
+        Navigator(
+          home: _Capture(sink: (x) => home = x, label: 'ABCDEFGH'),
+        ),
+      );
+      // A modal box wider than its text: without an opaque surface, the empty
+      // cells inside its box would composite the home text beneath (the leak).
+      home!.present<void>(
+        const SizedBox(width: 8, height: 1, child: Text('X')),
+        transition: RouteTransition.none,
+      );
+      tester.pump();
+      expect(
+        _screen(tester, cols: 8),
+        'X',
+        reason: 'the opaque Surface covers the home row — no bleed-through',
+      );
+    },
+  );
 
-  testWidgets('present(barrierColor:) fills the surround over the screen behind',
-      (tester) {
-    BuildContext? home;
-    tester.pumpWidget(
-      Navigator(home: _Capture(sink: (x) => home = x, label: 'ABCDEFGH')),
-    );
-    home!.present<void>(
-      const Text('X'),
-      barrierColor: Colors.black,
-      transition: RouteTransition.none,
-    );
-    tester.pump();
-    final out = _screen(tester, cols: 8);
-    expect(out, contains('X'));
-    expect(
-      out,
-      isNot(contains('A')),
-      reason: 'the barrier fills the surround, covering the home row',
-    );
-  });
+  testWidgets(
+    'present(barrierColor:) fills the surround over the screen behind',
+    (tester) {
+      BuildContext? home;
+      tester.pumpWidget(
+        Navigator(
+          home: _Capture(sink: (x) => home = x, label: 'ABCDEFGH'),
+        ),
+      );
+      home!.present<void>(
+        const Text('X'),
+        barrierColor: Colors.black,
+        transition: RouteTransition.none,
+      );
+      tester.pump();
+      final out = _screen(tester, cols: 8);
+      expect(out, contains('X'));
+      expect(
+        out,
+        isNot(contains('A')),
+        reason: 'the barrier fills the surround, covering the home row',
+      );
+    },
+  );
 
   testWidgets('present(barrierDismissible: false) ignores Esc', (tester) {
     BuildContext? home;
     tester.pumpWidget(
-      Navigator(home: _Capture(sink: (x) => home = x, label: 'home')),
+      Navigator(
+        home: _Capture(sink: (x) => home = x, label: 'home'),
+      ),
     );
     home!.present<void>(
       const Focus(autofocus: true, child: Text('locked')),
@@ -209,7 +220,9 @@ void main() {
   ) {
     BuildContext? home;
     tester.pumpWidget(
-      Navigator(home: _Capture(sink: (x) => home = x, label: 'home')),
+      Navigator(
+        home: _Capture(sink: (x) => home = x, label: 'home'),
+      ),
     );
     // No autofocus target on the pushed route — its own Esc binding must still
     // be reachable (the route claims focus on entry), or keys get dropped.
@@ -271,16 +284,23 @@ void main() {
     tester.type('a');
     expect(homeInput.text, 'a');
 
-    home!.push<void>(TextInput(controller: TextEditingController(), autofocus: true));
+    home!.push<void>(
+      TextInput(controller: TextEditingController(), autofocus: true),
+    );
     tester.pump(const Duration(milliseconds: 300));
-    home!.push<void>(TextInput(controller: TextEditingController(), autofocus: true));
+    home!.push<void>(
+      TextInput(controller: TextEditingController(), autofocus: true),
+    );
     tester.pump(const Duration(milliseconds: 300));
 
     home!.navigator.popToRoot();
     tester.pump(const Duration(milliseconds: 300));
     tester.type('b');
-    expect(homeInput.text, 'ab',
-        reason: 'focus restored to home across removed intermediates');
+    expect(
+      homeInput.text,
+      'ab',
+      reason: 'focus restored to home across removed intermediates',
+    );
   });
 
   testWidgets("pushReplacement: popping the replacement restores the covered "
@@ -308,8 +328,11 @@ void main() {
     home!.navigator.pop();
     tester.pump(const Duration(milliseconds: 300));
     tester.type('b');
-    expect(homeInput.text, 'ab',
-        reason: "the covered route's own scope memory survives replacement");
+    expect(
+      homeInput.text,
+      'ab',
+      reason: "the covered route's own scope memory survives replacement",
+    );
   });
 
   testWidgets(

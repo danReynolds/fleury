@@ -3,8 +3,9 @@ import 'dart:async' show FutureOr;
 import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
+import '../input/events.dart';
+import '../runtime/remote_surface_sink.dart';
 import 'capabilities.dart';
-import 'events.dart';
 
 /// The set of terminal modes the driver should enable for a TUI session.
 ///
@@ -122,6 +123,34 @@ abstract interface class TerminalDriver {
   /// guarantees these are pre-sanitized ANSI from the diff renderer —
   /// the driver does not re-validate.
   void write(String data);
+
+  /// The structured presentation sink this session negotiated, or null
+  /// for byte (ANSI) presentation — the answer every driver owns.
+  ///
+  /// Negotiation rides the connection handshake, so the value is
+  /// meaningful only after [enter] returns: a structured remote driver
+  /// returns its sink once the peer declared a plan-capable protocol
+  /// version, and null for a v1 byte peer. Ordinary terminals always
+  /// return null. `runApp` builds the matching presenter around the
+  /// answer (wire plans vs ANSI diff) — the driver never constructs
+  /// presenters, which need host-owned services.
+  RemoteSurfaceSink? get surfaceSink;
+}
+
+/// Implemented by drivers whose output channel can back up — a remote
+/// driver writing to a socket a slow peer drains. The frame program
+/// defers frame PRODUCTION while [isOutputBacklogged] and resumes on
+/// [outputDrained]: state keeps accumulating in the retained tree, the
+/// diff base stays at the last frame the peer actually received, and the
+/// resumed frame ships one coalesced patch. Local terminal drivers don't
+/// implement this (a blocking stdout already applies backpressure).
+abstract interface class OutputFlowControl {
+  /// True while unsent output exceeds the channel's high-water mark.
+  bool get isOutputBacklogged;
+
+  /// Completes when the backlog drains — immediately when not
+  /// backlogged, and always when the channel closes.
+  Future<void> get outputDrained;
 }
 
 /// Optional terminal lifecycle hook for subprocesses, external editors, and

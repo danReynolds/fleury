@@ -311,9 +311,6 @@ void main() {
     testWidgets('semantic copy copies the selected conversation', (
       tester,
     ) async {
-      final originalClipboard = Clipboard.instance;
-      final clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
       ConversationNavigatorCopyResult? copied;
       try {
         tester.pumpWidget(
@@ -336,7 +333,7 @@ void main() {
 
         expect(result.completed, isTrue);
         expect(
-          clipboard.lastWritten,
+          tester.clipboard.readInProcess(),
           'Ops thread | active | 1 unread | 12 messages | pinned | '
           'Ready for launch',
         );
@@ -344,7 +341,7 @@ void main() {
         expect(copied?.viewIndex, 0);
         expect(copied?.report.policy.name, 'inProcessOnly');
       } finally {
-        Clipboard.instance = originalClipboard;
+        // clipboard is tester-scoped; nothing to restore
       }
     });
   });

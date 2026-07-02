@@ -309,8 +309,9 @@ void main() {
   });
 
   group('Focus widget flags on a caller-provided node', () {
-    Element mount(FocusManager manager, Widget child) =>
-        BuildOwner().mountRoot(FocusManagerScope(manager: manager, child: child));
+    Element mount(FocusManager manager, Widget child) => BuildOwner().mountRoot(
+      FocusManagerScope(manager: manager, child: child),
+    );
 
     test('skipTraversal applies to a provided node', () {
       // Silently ignoring the widget flag was a footgun: the code compiled

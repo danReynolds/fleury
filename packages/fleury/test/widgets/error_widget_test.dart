@@ -24,8 +24,7 @@ void main() {
 
   testWidgets('onBuildError observes the error', (tester) {
     Object? seen;
-    Element.onBuildError = (e, s) => seen = e;
-    addTearDown(() => Element.onBuildError = null);
+    tester.owner.onBuildError = (e, s) => seen = e;
     tester.pumpWidget(const _Boom());
     tester.render(size: const CellSize(20, 4));
     expect(seen, isA<StateError>());

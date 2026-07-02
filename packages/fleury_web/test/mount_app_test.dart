@@ -57,10 +57,6 @@ class _FakeClipboard extends Clipboard {
 
 void main() {
   test('mountApp assembles retained DOM rendering and browser input', () async {
-    final previousClipboard = _FakeClipboard();
-    Clipboard.instance = previousClipboard;
-    addTearDown(() => Clipboard.instance = previousClipboard);
-
     final hostElement = web.document.createElement('div');
     hostElement.setAttribute(
       'style',
@@ -161,17 +157,12 @@ void main() {
     expect(hostElement.querySelector('.fleury-screen'), isNull);
     expect(hostElement.querySelector('.fleury-semantics'), isNull);
     expect(hostElement.querySelector('textarea'), isNull);
-    expect(Clipboard.instance, same(previousClipboard));
     expect(focusCoordinator.browserFocusTarget, isNull);
   });
 
   test(
     'mountApp disposes generated DOM roots after contained build errors',
     () async {
-      final previousClipboard = _FakeClipboard();
-      Clipboard.instance = previousClipboard;
-      addTearDown(() => Clipboard.instance = previousClipboard);
-
       final hostElement = web.document.createElement('div');
       hostElement.setAttribute(
         'style',
@@ -194,7 +185,6 @@ void main() {
       expect(hostElement.querySelector('.fleury-screen'), isNotNull);
       expect(hostElement.querySelector('.fleury-semantics'), isNotNull);
       expect(hostElement.querySelector('textarea'), isNotNull);
-      expect(Clipboard.instance, isNot(same(previousClipboard)));
 
       flush.fire();
       await host.awaitSemanticIdle();
@@ -206,17 +196,12 @@ void main() {
       expect(hostElement.querySelector('.fleury-screen'), isNull);
       expect(hostElement.querySelector('.fleury-semantics'), isNull);
       expect(hostElement.querySelector('textarea'), isNull);
-      expect(Clipboard.instance, same(previousClipboard));
     },
   );
 
   test(
     'mountApp retains but clears caller-supplied visual and semantic roots',
     () async {
-      final previousClipboard = _FakeClipboard();
-      Clipboard.instance = previousClipboard;
-      addTearDown(() => Clipboard.instance = previousClipboard);
-
       final hostElement = web.document.createElement('div');
       hostElement.setAttribute(
         'style',
@@ -259,7 +244,6 @@ void main() {
       expect(surfaceElement.children.length, 0);
       expect(semanticElement.children.length, 0);
       expect(hostElement.querySelector('textarea'), isNull);
-      expect(Clipboard.instance, same(previousClipboard));
     },
   );
 
@@ -308,10 +292,6 @@ void main() {
   test(
     'mountApp allows disabled semantics only for acknowledged diagnostics',
     () async {
-      final previousClipboard = _FakeClipboard();
-      Clipboard.instance = previousClipboard;
-      addTearDown(() => Clipboard.instance = previousClipboard);
-
       final hostElement = web.document.createElement('div');
       hostElement.setAttribute(
         'style',
@@ -350,7 +330,6 @@ void main() {
       expect(hostElement.querySelector('.fleury-screen'), isNull);
       expect(hostElement.querySelector('.fleury-semantics'), isNull);
       expect(hostElement.querySelector('textarea'), isNull);
-      expect(Clipboard.instance, same(previousClipboard));
     },
   );
 }

@@ -1,6 +1,6 @@
 import 'dart:async' show scheduleMicrotask, unawaited;
 
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 /// Protocol-neutral status for a node in a [TaskGraph].
 enum TaskGraphStatus { pending, running, succeeded, failed, cancelled, skipped }
@@ -312,10 +312,9 @@ class _TaskGraphState extends State<TaskGraph> {
     );
     final node = widget.nodes[selected];
     final text = exportTaskGraphNode(node, options: widget.copyOptions);
-    final report = await Clipboard.instance.writeWithReport(
-      text,
-      policy: widget.copyOptions.clipboardPolicy,
-    );
+    final report = await ClipboardScope.of(
+      context,
+    ).writeWithReport(text, policy: widget.copyOptions.clipboardPolicy);
     if (!mounted) return;
     widget.onCopy?.call(
       TaskGraphCopyResult(

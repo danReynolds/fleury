@@ -1,8 +1,6 @@
 import 'package:fleury/fleury_host.dart';
 
 import '../frame_presentation.dart';
-import '../semantics/semantic_coverage.dart';
-import '../semantics/semantic_presenter.dart';
 
 const double defaultWebFrameBudgetMs = 16.67;
 

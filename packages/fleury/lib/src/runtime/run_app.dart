@@ -15,35 +15,40 @@ import '../debug/debug_invalidation.dart';
 import '../debug/debug_shell.dart';
 import '../debug/debug_state.dart';
 import '../foundation/fleury_error.dart';
-import '../foundation/geometry.dart';
 import '../remote/remote_driver.dart';
 import '../remote/unix_socket_transport.dart';
 import '../rendering/ansi_byte_budget.dart';
 import '../rendering/ansi_renderer.dart';
-import '../rendering/cell.dart';
-import '../rendering/cell_buffer.dart';
-import '../rendering/render_layout_stats.dart';
-import '../rendering/render_repaint_boundary.dart';
 import 'runtime_error_overlay.dart';
-import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
+import '../rendering/surface_capabilities.dart';
+import '../terminal/capabilities.dart';
 import '../terminal/diagnostics.dart';
-import '../terminal/events.dart';
+import '../input/events.dart';
 import '../terminal/native_driver.dart';
 import '../terminal/terminal_driver.dart';
 import '../widgets/focus.dart';
-import '../widgets/basic.dart' show ErrorWidget;
 import '../widgets/framework.dart';
 import '../widgets/key_bindings.dart';
-import '../widgets/log_view.dart';
+import '../widgets/output_capture_view.dart';
 import '../widgets/media_query.dart';
 import '../widgets/navigator.dart';
 import '../widgets/overlay.dart';
 import '../widgets/pointer.dart';
 import '../widgets/tui_binding.dart';
+import '../widgets/clipboard_scope.dart';
+import 'clipboard.dart';
+import '../terminal/ansi_frame_presenter.dart';
+import '../terminal/terminal_image_encoder.dart';
+import 'frame_driver.dart';
+import 'frame_semantics_pipeline.dart';
 import 'frame_presentation.dart';
-import 'frame_scheduler.dart';
+import '../remote/remote_clipboard.dart';
+import '../remote/wire_semantic_frame_presenter.dart';
+import 'wire_frame_presenter.dart';
 import 'hot_reload.dart';
+import 'semantic_flush_scheduler.dart';
+import 'system_clipboard.dart';
 import 'input_dispatcher.dart';
 import 'output_capture.dart';
 import 'remote_surface_sink.dart';
@@ -112,6 +117,7 @@ Future<void> runApp(
   bool requireInteractiveTerminal = true,
   void Function(LogLine line)? onStrayOutput,
   TuiEventHandler? onEvent,
+  Clipboard? clipboard,
   List<KeyBinding> globalBindings = const [],
   Duration sequenceTimeout = const Duration(milliseconds: 500),
   DebugConfig debug = const DebugConfig(),
@@ -157,14 +163,11 @@ Future<void> runApp(
   }
 
   final runtime = TuiRuntime();
-  final owner = runtime.owner;
   final focusManager = runtime.focusManager;
+  final owner = runtime.owner;
   final binding = runtime.binding;
   final pointerRouter = runtime.pointerRouter;
-  // Install the build-error boundary: a thrown build() renders an error
-  // panel for that subtree instead of crashing the app.
-  Element.errorBuilder ??= (error, stack) => ErrorWidget.builder(error, stack);
-  // Floating LogConsole lives in the unified DebugShell — F12 is a binding on
+  // Floating OutputCaptureConsole lives in the unified DebugShell — F12 is a binding on
   // DebugShell that opens the docked panel with the Logs tab focused (rather
   // than a separate Overlay entry), backed by the always-available `debug`
   // config.
@@ -201,258 +204,37 @@ Future<void> runApp(
     colorMode: usedDriver.capabilities.colorMode,
     synchronizedOutput: Platform.environment['FLEURY_SYNC_OUTPUT'] != '0',
   );
-  // When the driver wants structured presentation plans (the serve path,
-  // rendering through the fleury web surface instead of a terminal
-  // emulator), the render loop hands it plans instead of ANSI bytes. Null
-  // for every ordinary terminal session — that path is byte-unchanged.
-  // A driver may want structured presentation plans (the serve path) rather
-  // than ANSI. Whether it does is negotiated during the handshake, so the
-  // decision is finalized after enter() — see [surfaceSink] below.
-  final maybeSurfaceSink = usedDriver is RemoteSurfaceSink
-      ? usedDriver as RemoteSurfaceSink
-      : null;
+  // A driver may negotiate structured presentation plans (the serve
+  // path, rendering through the fleury web surface) rather than ANSI.
+  // The driver owns that answer — TerminalDriver.surfaceSink — and it is
+  // finalized by the handshake, so it's read after enter() below. Null
+  // for every ordinary terminal session; that path is byte-unchanged.
   RemoteSurfaceSink? surfaceSink;
   const presentationPlanner = FramePresentationPlanner();
-  Element? rootElement;
   var disposed = false;
+  // Constructed after the handshake (the presenter choice depends on the
+  // negotiated path) and owns the frame program from then on.
+  FrameDriver? frameDriver;
+  // The shared semantics engine (structured path only): coverage fallback,
+  // retained-leaf updates, and same-task wire flushes.
+  FrameSemanticsPipeline? semanticsPipeline;
+  // Structured-path clipboard (copy travels to the peer); disposed with
+  // the session.
+  RemoteClipboard? remoteClipboard;
+  // Assigned once the negotiated path is known (buildRoot closes over it
+  // but only runs at mount, after assignment).
+  late final Clipboard effectiveClipboard;
 
   // Shared double-buffer and damage lifecycle. The host still owns
   // presentation, debug timings, input, and post-frame behavior.
   final frameLoop = TuiFrameLoop(renderDamage: runtime.renderDamageTracker);
-  var frameCounter = 0;
-  // Cells we tinted green in the previous frame's paint-flash pass.
-  // Empty when paint-flash is off; populated each frame the flash is
-  // active. Kept as flat indices (row * cols + col) to avoid per-cell
-  // tuple allocation.
-  List<int> lastFlashedCells = const [];
-
-  // True only while the synchronous render pipeline (build/layout/paint) runs.
-  // A throw with this set is an unrecoverable render crash (kept fatal); an
-  // event-handler or async throw happens with this clear and is reported and
-  // survived instead.
-  var inFrameRender = false;
-
-  void renderFrame(String reason) {
-    if (disposed) {
-      // Late frame after cleanup started: drain any callbacks that
-      // arrived between `disposed = true` and the scheduled microtask
-      // firing so their side effects (a final log line, releasing a
-      // captured resource) aren't silently dropped. `binding.dispose()`
-      // also drains, but only the FIRST cleanup branch reaches it.
-      runtime.flushPostFrameCallbacks();
-      return;
-    }
-    final r = rootElement;
-    if (r == null) return;
-    final size = usedDriver.size;
-    if (size.isEmpty) return;
-    if (!frameLoop.needsRender(size) && !runtime.hasFrameWork) {
-      // No-change frame: nothing rebuilt, nothing invalidated, buffers warm.
-      // Skip build/layout/paint and write no bytes — the terminal already
-      // shows exactly this frame.
-      runtime.flushPostFrameCallbacks();
-      return;
-    }
-    runtimeMarkers?.markOnce('first.render.start');
-
-    // Capture per-phase timings only when the debug stream has live
-    // listeners — when no one's watching, we skip the Stopwatch
-    // allocation entirely. In production (no DebugPanel subscribed)
-    // this short-circuits to zero per-frame debug cost. NOTE: do NOT
-    // gate on `DebugEvents.stream.isBroadcast` — that's always true
-    // for a broadcast controller and would defeat the optimisation.
-    final debugWatching =
-        debugController.config.enabled && DebugEvents.hasListeners;
-    Duration phaseBuild = Duration.zero;
-    Duration phaseLayout = Duration.zero;
-    Duration phasePaint = Duration.zero;
-    inFrameRender = true;
-    final frame = frameLoop.render(
-      size: size,
-      paint: (next) {
-        RenderLayoutDebugStats.beginFrame(enabled: debugWatching);
-        RepaintBoundaryDebugStats.beginFrame(enabled: debugWatching);
-        runtime.renderFrame(
-          next,
-          onPhaseTiming: debugWatching
-              ? (b, l, p) {
-                  phaseBuild = b;
-                  phaseLayout = l;
-                  phasePaint = p;
-                }
-              : null,
-        );
-      },
-    );
-    inFrameRender = false;
-    if (frame == null) return;
-    final prev = frame.previous;
-    final next = frame.next;
-    final layoutStats = RenderLayoutDebugStats.takeFrameStats();
-    final repaintBoundaryStats = RepaintBoundaryDebugStats.takeFrameStats();
-
-    final activeSurfaceSink = surfaceSink;
-    if (activeSurfaceSink != null) {
-      // Structured serve path: hand the frame's buffers and damage plan to
-      // the driver instead of emitting ANSI. The driver encodes only the
-      // changed cells; the client applies them to a mirror and rebuilds.
-      final plan = presentationPlanner.build(reason: reason, frame: frame);
-      activeSurfaceSink.presentFrame(prev, next, plan);
-      // Ship the semantic tree when it changed, so the served session stays
-      // agent-drivable and accessible — the differentiator an ANSI-to-xterm
-      // relay structurally cannot offer. Gated on the dirty tracker so we
-      // pay the tree build only on semantic changes, not every frame.
-      final semanticRoot = rootElement;
-      if (semanticRoot != null && runtime.semanticDirtyTracker.hasDirt) {
-        // The sink diffs this against the last snapshot and ships only the
-        // changed nodes; a full resend would stop compressing past DEFLATE's
-        // window on a large tree.
-        activeSurfaceSink.presentSemantics(
-          SemanticInspectionSnapshot.fromTree(
-            SemanticTree.fromElement(semanticRoot),
-          ),
-        );
-        // Consume the dirt so the next frame only re-sends on a real change.
-        runtime.semanticDirtyTracker.takeDirtySnapshot();
-      }
-      runtimeMarkers?.markOnce('first.render.end');
-      frameLoop.commit(frame);
-      DebugInvalidations.reset();
-      runtime.flushPostFrameCallbacks();
-      return;
-    }
-
-    if (frame.damage.fullRepaint) {
-      // Clear screen + home so any stale content (from the alt-screen
-      // switch, terminal scrollback, or a previous size) doesn't leak.
-      sink.write('\x1B[2J\x1B[H');
-    }
-    // renderDiff against an all-empty prev (post-clear) produces the
-    // same byte output as renderFull, so the same path handles first
-    // frame and resize without a separate branch.
-    final diffSw = debugWatching ? (Stopwatch()..start()) : null;
-    // Debug mode captures every cell the diff emits. Paint flash uses the same
-    // stream to overlay a tint, while captures/panels use it for dirty-shape
-    // diagnostics.
-    final currentDirty = debugWatching ? <int>[] : null;
-    var dirtyCellCount = 0;
-    int? dirtyMinCol;
-    int? dirtyMinRow;
-    int? dirtyMaxCol;
-    int? dirtyMaxRow;
-
-    void recordDirtyCell(int col, int row) {
-      dirtyCellCount += 1;
-      if (dirtyMinCol == null || col < dirtyMinCol!) dirtyMinCol = col;
-      if (dirtyMaxCol == null || col > dirtyMaxCol!) dirtyMaxCol = col;
-      if (dirtyMinRow == null || row < dirtyMinRow!) dirtyMinRow = row;
-      if (dirtyMaxRow == null || row > dirtyMaxRow!) dirtyMaxRow = row;
-      currentDirty?.add(row * next.size.cols + col);
-    }
-
-    renderer.renderDiff(
-      prev,
-      next,
-      sink,
-      dirtyBounds: frame.damage.diffBounds,
-      onDirtyCell: debugWatching ? recordDirtyCell : null,
-    );
-    final phaseDiff = diffSw?.elapsed ?? Duration.zero;
-    final dirtyBounds = dirtyCellCount == 0
-        ? null
-        : CellRect.fromLTWH(
-            dirtyMinCol!,
-            dirtyMinRow!,
-            dirtyMaxCol! - dirtyMinCol! + 1,
-            dirtyMaxRow! - dirtyMinRow! + 1,
-          );
-    final dirtySpanStats = debugWatching
-        ? DirtySpanFrameStats.fromFlatCells(
-            currentDirty ?? const [],
-            columns: next.size.cols,
-          )
-        : DirtySpanFrameStats.empty;
-
-    // Paint-flash overlay: emit ANSI directly to the sink (not into
-    // the buffer) so the buffer state stays "the app's truth" and the
-    // diff doesn't get confused next frame. Two phases:
-    //   1. UN-tint cells from last frame's flash that didn't re-emit
-    //      this frame — restores them to their real style.
-    //   2. Tint this frame's dirty cells green.
-    if (debugController.paintFlash) {
-      _emitPaintFlash(
-        sink: sink,
-        next: next,
-        currentDirty: currentDirty ?? const [],
-        lastFlashed: lastFlashedCells,
-      );
-      lastFlashedCells = currentDirty ?? const [];
-    } else if (lastFlashedCells.isNotEmpty) {
-      // Flash got toggled off — clear any lingering tints from the
-      // last on-frame so the terminal doesn't carry stale highlights.
-      _emitPaintFlash(
-        sink: sink,
-        next: next,
-        currentDirty: const [],
-        lastFlashed: lastFlashedCells,
-      );
-      lastFlashedCells = const [];
-    }
-    runtimeMarkers?.markOnce('first.render.end');
-
-    frameLoop.commit(frame);
-
-    if (debugWatching) {
-      frameCounter++;
-      final dirtySources = DebugInvalidations.drain();
-      DebugEvents.emitFrame(
-        FrameEvent(
-          frameNumber: frameCounter,
-          reason: reason,
-          build: phaseBuild,
-          layout: phaseLayout,
-          paint: phasePaint,
-          diff: phaseDiff,
-          dirtyCells: dirtyCellCount,
-          dirtyBounds: dirtyBounds,
-          dirtySpans: dirtySpanStats,
-          dirtySources: dirtySources,
-          layoutStats: layoutStats,
-          repaintBoundaries: repaintBoundaryStats,
-          bufferSize: next.size,
-        ),
-      );
-    } else {
-      DebugInvalidations.reset();
-    }
-
-    // Drain post-frame callbacks AFTER bytes are out. Callers can now
-    // safely read render-object geometry (sizes / offsets reflect the
-    // frame the user is seeing). A callback that schedules another frame goes
-    // through scheduleFrame; the FrameScheduler has already cleared its pending
-    // flag before invoking us, so the new request schedules a fresh flush.
-    runtime.flushPostFrameCallbacks();
-  }
-
-  // Coalesces frame requests and, when [frameInterval] > 0, caps the render
-  // rate so bursts (high-rate streams, rapid setState) collapse to one frame
-  // per interval. The default (Duration.zero) is uncapped — identical to the
-  // historical microtask-per-turn behaviour.
-  final frameScheduler = FrameScheduler(
-    clock: binding.tickerScheduler.clock,
-    minFrameInterval: frameInterval,
-    onRender: renderFrame,
-  );
+  // The frame program lives in FrameDriver (constructed post-handshake);
+  // this shim keeps every call site stable and safely coalesces requests
+  // that arrive before mount.
   void scheduleFrame([String reason = 'scheduled']) {
     if (disposed) return;
-    frameScheduler.requestFrame(reason);
+    frameDriver?.requestFrame(reason);
   }
-
-  owner.onScheduleBuild = () => scheduleFrame('build');
-  // Pump the next frame whenever a post-frame callback is enqueued —
-  // a Timer.run that adds one while the app is idle would otherwise
-  // queue indefinitely (no setState, no event).
-  binding.onPostFrameCallback = () => scheduleFrame('post-frame');
 
   HotReloadController? hotReload;
   StreamSubscription<TuiEvent>? eventSub;
@@ -477,6 +259,11 @@ Future<void> runApp(
   final errorReporter = RuntimeErrorReporter(
     onLog: (message) => stderr.writeln(message),
   )..addListener(() => scheduleFrame('runtime-error'));
+  // Contained layout/paint failures surface like any other survivable
+  // error: stderr + the on-screen banner (once per error-state entry),
+  // while the boundary renders the in-place presentation.
+  owner.onContainedRenderError = (contained) =>
+      errorReporter.report(contained.error, contained.stack);
 
   // Single idempotent teardown, driven by either the normal exit path
   // (the finally below) or the zone's uncaught-error handler.
@@ -484,6 +271,13 @@ Future<void> runApp(
     if (cleanedUp) return;
     cleanedUp = true;
     disposed = true;
+    // Synchronously, before the first await: a frame microtask scheduled
+    // just before cleanup (e.g. by the error reporter's listener) must
+    // find the driver disposed, or it re-renders a crashing tree outside
+    // the guarded zone.
+    frameDriver?.dispose();
+    semanticsPipeline?.dispose();
+    remoteClipboard?.dispose();
     await eventSub?.cancel();
     eventSub = null;
     await hotReload?.dispose();
@@ -491,7 +285,6 @@ Future<void> runApp(
     debugController.setSemanticTreeProvider(null);
     debugController.setTerminalDiagnosisProvider(null);
     DebugInvalidations.reset();
-    frameScheduler.dispose();
     dispatcher.dispose();
     errorReporter.dispose();
     runtime.dispose();
@@ -539,24 +332,44 @@ Future<void> runApp(
         runtimeMarkers?.mark('terminal.enter.end');
         // The handshake has landed, so the driver now knows whether the
         // peer negotiated the structured (plan) path.
-        if (maybeSurfaceSink != null &&
-            maybeSurfaceSink.wantsPresentationPlans) {
-          surfaceSink = maybeSurfaceSink;
+        final negotiatedSink = usedDriver.surfaceSink;
+        if (negotiatedSink != null) {
+          surfaceSink = negotiatedSink;
           // The peer can activate a node in its accessible DOM; invoke the
           // action against the live tree and re-render, completing the
           // semantics round trip (presentSemantics ships the tree out, this
           // brings activations back). Mirrors the in-browser host.
-          maybeSurfaceSink.onSemanticAction = (id, action, value) {
-            final root = rootElement;
+          negotiatedSink.onSemanticAction = (id, action, value) {
+            final root = frameDriver?.rootElement;
             if (root == null) return;
-            unawaited(
-              invokeSemanticActionFromElement(
+            // Flush pending semantics first so the peer's view is current
+            // when the action's result lands — the embed contract, now on
+            // both paths.
+            semanticsPipeline?.flushPendingNow('semantic-action');
+            unawaited(() async {
+              final result = await invokeSemanticActionFromElement(
                 tree: SemanticTree.fromElement(root),
                 id: id,
                 action: action,
                 value: value,
-              ),
-            );
+              );
+              // Ship the outcome back so the peer (agent bridge, AT
+              // mirror) gets a real status instead of guessing from
+              // tree diffs — and surface a throwing onAction handler
+              // like any other app error rather than swallowing it.
+              negotiatedSink.presentSemanticActionResult(
+                id,
+                action,
+                result.status,
+              );
+              if (result.status == SemanticActionInvocationStatus.failed) {
+                errorReporter.report(
+                  result.error ??
+                      StateError('semantic action ${action.name} failed'),
+                  result.stackTrace ?? StackTrace.current,
+                );
+              }
+            }());
             scheduleFrame('semantic-action:${action.name}');
           };
         }
@@ -586,29 +399,36 @@ Future<void> runApp(
             child: MediaQuery(
               data: MediaQueryData(
                 size: usedDriver.size,
-                colorMode: usedDriver.capabilities.colorMode,
-                glyphTier: usedDriver.capabilities.glyphTier,
-                imageProtocol: usedDriver.capabilities.imageProtocol,
-                tmuxPassthrough: usedDriver.capabilities.tmuxPassthrough,
+                // The widget-facing capability vocabulary is backend-
+                // neutral; the terminal snapshot is one projection of it.
+                // A structured remote driver reports what its PEER
+                // declared (a browser: placements, sub-cell pointer).
+                capabilities: usedDriver is SurfaceCapabilitiesProvider
+                    ? (usedDriver as SurfaceCapabilitiesProvider)
+                          .surfaceCapabilities
+                    : usedDriver.capabilities.toSurfaceCapabilities(),
               ),
               child: FocusManagerScope(
                 manager: focusManager,
                 child: PointerRouterScope(
                   router: pointerRouter,
-                  // LogBufferScope sits above the Overlay so both the app and
-                  // the floating console can read the captured output.
-                  child: LogBufferScope(
-                    buffer: logBuffer,
-                    // DebugShell wraps the Overlay so docking it shrinks
-                    // the user's app AND the floating console region —
-                    // they share the available cells. When the shell's
-                    // mode is off the shell is a pure pass-through and
-                    // pays no layout cost.
-                    child: DebugShell(
-                      controller: debugController,
-                      child: Overlay(
-                        key: overlayKey,
-                        initialEntries: [rootEntry, errorEntry],
+                  // Host services sit above the Overlay so both the app
+                  // and the floating console can reach them.
+                  child: ClipboardScope(
+                    clipboard: effectiveClipboard,
+                    child: LogBufferScope(
+                      buffer: logBuffer,
+                      // DebugShell wraps the Overlay so docking it shrinks
+                      // the user's app AND the floating console region —
+                      // they share the available cells. When the shell's
+                      // mode is off the shell is a pure pass-through and
+                      // pays no layout cost.
+                      child: DebugShell(
+                        controller: debugController,
+                        child: Overlay(
+                          key: overlayKey,
+                          initialEntries: [rootEntry, errorEntry],
+                        ),
                       ),
                     ),
                   ),
@@ -616,10 +436,96 @@ Future<void> runApp(
               ),
             ),
           );
-          rootElement = runtime.mountRoot(buildRoot());
+          final activeSurfaceSink = surfaceSink;
+          // The clipboard is a host service shared via ClipboardScope in
+          // buildRoot. Selection follows the negotiated path: a structured
+          // remote session copies to the PEER's clipboard over the wire
+          // (the user's machine — a SystemClipboard here would hit the
+          // server's); everything else gets the platform clipboard.
+          effectiveClipboard =
+              clipboard ??
+              (activeSurfaceSink != null
+                  ? (remoteClipboard = RemoteClipboard(activeSurfaceSink))
+                  : SystemClipboard());
+          if (activeSurfaceSink != null) {
+            semanticsPipeline = FrameSemanticsPipeline(
+              presenter: WireSemanticFramePresenter(activeSurfaceSink),
+              dirtyTracker: runtime.semanticDirtyTracker,
+              readRoot: () => frameDriver?.rootElement,
+              // Same-task flush: semantics for a rendered frame reach the
+              // peer in the same event-loop task as its plan, so agents
+              // still read "semantics for the just-rendered frame".
+              flushScheduler: MicrotaskSemanticFlushScheduler(),
+            );
+          }
+          final driver = frameDriver = FrameDriver(
+            runtime: runtime,
+            frameLoop: frameLoop,
+            readViewport: () => FrameViewportSnapshot(usedDriver.size),
+            // Remote drivers surface their transport's send backlog;
+            // the frame program defers production while the peer stalls
+            // (structured AND v1-byte modes — dropped bytes are never
+            // safe on either).
+            flowControl: usedDriver is OutputFlowControl
+                ? usedDriver as OutputFlowControl
+                : null,
+            presenter: activeSurfaceSink != null
+                // Structured serve path: hand the frame's buffers and
+                // damage plan to the driver instead of emitting ANSI.
+                ? WireFramePresenter(
+                    activeSurfaceSink,
+                    readCaret: () => focusManager.focusedNode?.caretRect,
+                  )
+                : AnsiFramePresenter(
+                    sink: sink,
+                    renderer: renderer,
+                    debug: debugController,
+                    // Native graphics protocol, when the terminal has one:
+                    // widgets place neutral image placements; the encoder
+                    // emits Kitty/iTerm2/Sixel escapes after each diff.
+                    imageEncoder:
+                        usedDriver.capabilities.imageProtocol ==
+                            ImageProtocol.halfBlock
+                        ? null
+                        : TerminalImageEncoder(
+                            protocol: usedDriver.capabilities.imageProtocol,
+                            tmuxPassthrough:
+                                usedDriver.capabilities.tmuxPassthrough,
+                          ),
+                  ),
+            planner: presentationPlanner,
+            onFramePresented: activeSurfaceSink == null
+                ? null
+                : (frame, plan) =>
+                      semanticsPipeline?.onFramePresented(frame, plan),
+            // A visually-skipped frame (input changed only semantic state,
+            // no repaint) must still flush the owed semantics on serve —
+            // otherwise the peer's a11y/agent tree goes stale until an
+            // unrelated visual frame. The embed host wires the same hook;
+            // this closes the shared-engine parity gap. (While the output
+            // is backlogged the producer gate returns before the skip gate,
+            // so this stays behind backpressure like frame production.)
+            onFrameSkipped: activeSurfaceSink == null
+                ? null
+                : (reason, size) =>
+                      semanticsPipeline?.onFrameSkippedWithPendingWork(),
+            isDebugWatching: () =>
+                // Capture per-phase timings only when the debug stream has
+                // live listeners — when no one's watching this
+                // short-circuits to zero per-frame debug cost. NOTE: do NOT
+                // gate on `DebugEvents.stream.isBroadcast`.
+                debugController.config.enabled && DebugEvents.hasListeners,
+            // Backstop errors (escaped every boundary; session continues
+            // on a full-screen error frame) surface like other survivable
+            // errors: stderr + banner.
+            onBackstopError: errorReporter.report,
+            markOnce: runtimeMarkers?.markOnce,
+            frameInterval: frameInterval,
+          );
+          driver.mountRoot(buildRoot);
           runtimeMarkers?.mark('root.mounted');
           debugController.setSemanticTreeProvider(() {
-            final root = rootElement;
+            final root = frameDriver?.rootElement;
             return root == null ? null : SemanticTree.fromElement(root);
           });
           scheduleFrame('initial');
@@ -645,13 +551,15 @@ Future<void> runApp(
               try {
                 DebugEvents.emitInput(event);
                 if (event is ResizeEvent) {
-                  // Force buffer-pool reallocation and a full repaint on the
-                  // next frame; the existing buffers are the wrong size.
-                  frameLoop.resetBuffers();
-                  // Propagate the new size through MediaQuery (layout already
-                  // re-runs against the new buffer constraints).
-                  final r = rootElement;
-                  if (r != null) rootElement = runtime.updateRoot(buildRoot());
+                  // Force the next frame to a full repaint. A real size
+                  // change also rebuilds the root via the driver's own
+                  // size-change detection, but a SAME-SIZE ResizeEvent —
+                  // which PosixTerminalDriver emits on SIGCONT (`fg`) and
+                  // after a terminal handoff, precisely to repaint a
+                  // blanked alt-screen — is invisible to that detection, so
+                  // the diff-base reset must be driven from the event here
+                  // (the scheduled frame below then re-emits the screen).
+                  frameDriver?.forceFullRepaint();
                   DebugEvents.emitTerminalDiagnosis(currentTerminalDiagnosis());
                 }
 
@@ -676,15 +584,28 @@ Future<void> runApp(
                     event is PasteEvent ||
                     event is MouseEvent) {
                   dispatchResult = dispatcher.dispatch(event);
+                  // Conservative rule (shared with the embed host): a
+                  // dispatched event may change state the dirty tracker
+                  // can't see; the next flush re-walks and the encoder
+                  // dedupes, so an unchanged tree still sends nothing.
+                  semanticsPipeline?.markSemanticsDirty();
                 }
 
                 // Ctrl+C exits only when the app did not handle it first.
                 // SelectionArea and focused text fields use Ctrl+C for copy and
                 // bubble when no selection exists, preserving the escape hatch.
+                //
+                // Structured remote sessions (a browser peer) are exempt: the
+                // browser key map folds macOS Cmd into Ctrl, so a reflexive
+                // Cmd+C with nothing selected would otherwise kill the served
+                // session. A browser user ends the session by closing the tab;
+                // the v1 ANSI shell path (a real terminal on the far end)
+                // keeps the escape hatch.
                 if (event is KeyEvent &&
                     event.char == 'c' &&
                     event.hasCtrl &&
-                    dispatchResult != KeyEventResult.handled) {
+                    dispatchResult != KeyEventResult.handled &&
+                    surfaceSink == null) {
                   if (!exit.isCompleted) exit.complete();
                   return;
                 }
@@ -728,14 +649,17 @@ Future<void> runApp(
         // storm of errors every frame (an unrecoverable loop) — both restore
         // the terminal and fail the run.
         errorReporter.report(error, stack);
-        // Stay fatal (restore the terminal, fail the run) for the cases that
-        // genuinely can't continue: a crash inside the render pipeline
-        // (build/layout/paint can't be recovered per-frame), an error before
-        // the app mounted (nothing to recover into), or a storm of errors every
-        // frame (an unrecoverable loop). Everything else is reported and
+        // Stay fatal (restore the terminal, fail the run) only for the
+        // cases that genuinely can't continue: the driver declared the
+        // session unrecoverable (a backstop storm — render crashes are
+        // otherwise contained per-boundary or absorbed by the backstop),
+        // an error before the app mounted (nothing to recover into), or
+        // a storm of errors every frame. Everything else is reported and
         // survived.
-        if (inFrameRender || rootElement == null || errorReporter.isStorming) {
-          inFrameRender = false;
+        final driver = frameDriver;
+        if ((driver?.renderUnrecoverable ?? false) ||
+            driver?.rootElement == null ||
+            errorReporter.isStorming) {
           cleanup().whenComplete(() {
             if (!done.isCompleted) done.completeError(error, stack);
           });
@@ -968,66 +892,3 @@ File? _findHandleUpward() {
 ///
 /// We accept the doubled emit cost on dirty cells; paint-flash is a
 /// dev-only mode and the overhead is bounded by the dirty count.
-void _emitPaintFlash({
-  required AnsiSink sink,
-  required CellBuffer next,
-  required List<int> currentDirty,
-  required List<int> lastFlashed,
-}) {
-  if (lastFlashed.isEmpty && currentDirty.isEmpty) return;
-  final cols = next.size.cols;
-  final dirtySet = currentDirty.toSet();
-  final buf = StringBuffer();
-
-  // Untint pass — restore underlying cell for previously-flashed cells
-  // that the diff didn't re-emit (and so we couldn't re-tint cleanly).
-  for (final idx in lastFlashed) {
-    if (dirtySet.contains(idx)) continue;
-    final col = idx % cols;
-    final row = idx ~/ cols;
-    if (row >= next.size.rows) continue;
-    final cell = next.atColRow(col, row);
-    if (cell.role == CellRole.continuation ||
-        cell.role == CellRole.protocolCovered ||
-        cell.role == CellRole.protocolAnchor) {
-      continue;
-    }
-    buf.write('\x1B[${row + 1};${col + 1}H');
-    // Reset to clear any lingering bg, then emit the cell's real style.
-    buf.write('\x1B[0m');
-    final fg = cell.style.foreground;
-    if (fg != null) {
-      if (fg is RgbColor) {
-        buf.write('\x1B[38;2;${fg.r};${fg.g};${fg.b}m');
-      }
-    }
-    final bg = cell.style.background;
-    if (bg != null) {
-      if (bg is RgbColor) {
-        buf.write('\x1B[48;2;${bg.r};${bg.g};${bg.b}m');
-      }
-    }
-    buf.write(cell.role == CellRole.empty ? ' ' : cell.grapheme!);
-  }
-
-  // Tint pass — overlay green-bg on this frame's dirty cells.
-  for (final idx in currentDirty) {
-    final col = idx % cols;
-    final row = idx ~/ cols;
-    if (row >= next.size.rows) continue;
-    final cell = next.atColRow(col, row);
-    if (cell.role == CellRole.continuation ||
-        cell.role == CellRole.protocolCovered ||
-        cell.role == CellRole.protocolAnchor) {
-      continue;
-    }
-    buf.write('\x1B[${row + 1};${col + 1}H');
-    buf.write('\x1B[42m'); // green background
-    buf.write(cell.role == CellRole.empty ? ' ' : cell.grapheme!);
-  }
-
-  if (buf.isNotEmpty) {
-    buf.write('\x1B[0m'); // leave terminal in a known style
-    sink.write(buf.toString());
-  }
-}

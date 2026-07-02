@@ -1,0 +1,20 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - name: Bootstrap (pub get across packages)
+        run: dart tool/fleury_dev.dart bootstrap
+      - name: Check (analyze + test + dart2js smoke, all packages)
+        run: dart tool/fleury_dev.dart check

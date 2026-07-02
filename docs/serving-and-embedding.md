@@ -1,8 +1,10 @@
 # Serving and embedding Fleury in the browser
 
 Fleury runs in a browser two different ways. They paint to the **same** DOM
-cell-grid surface, so they look identical — they differ in **where your widget
-tree actually executes**:
+cell-grid surface, so cell output renders identically — inline images are the
+one exception (served sessions get true-pixel `<img>` overlays; embedded apps
+don't ship the `Image` widget at all). They differ in **where your widget tree
+actually executes**:
 
 - **Embed** — compile your app to JavaScript with **dart2js** and run the whole
   widget tree **in the browser**. No server.
@@ -65,8 +67,8 @@ void main() {
 **Constraints**
 
 - **Web-safe widgets only.** Anything that reaches `dart:io` won't compile to JS
-  — that's the 7 native-only `fleury_widgets` (file I/O, log capture, process).
-  Import `package:fleury/fleury_host.dart`, not `fleury.dart` (see
+  — that's the 8 native-only `fleury_widgets` (file I/O, log capture, process, and the widgets built on them).
+  Import `package:fleury/fleury_core.dart`, not `fleury.dart` (see
   [Core and targets](core-and-targets.md#the-web-safety-boundary-practical-rule)).
 - **No host machine.** No filesystem, processes, or environment — the browser
   sandbox is all you get.
@@ -89,13 +91,39 @@ sends input events back.
 # Run any fleury app and open it in a browser at http://127.0.0.1:5777
 fleury serve --spawn dart run my_app.dart
 
-# Options
+# Exposed beyond localhost — set a token and share the URL with it
 fleury serve --port=8080 --host=0.0.0.0 \
              --allow-origin=https://example.com \
+             --token=$(openssl rand -hex 16) \
              --spawn dart run my_app.dart
+# → share http://<host>:8080/?token=<secret>
 ```
 
 `--spawn` runs your app as a subprocess, isolated per browser connection.
+
+### Trust model
+
+**Anyone who can open the WebSocket owns the app.** The wire carries full
+control — key and text injection, semantic actions, and the app's (redacted)
+semantic tree. There is no user-account layer; `fleury serve` gives you three
+gates and nothing else:
+
+- **Bind address.** The default `--host=127.0.0.1` keeps the port
+  loopback-only. Binding anything else prints a warning and exposes the app to
+  every peer that can reach the port.
+- **Origin check.** WebSocket upgrades are same-origin by default;
+  `--allow-origin` adds origins. This stops *cross-site browser pages* from
+  attaching — it does not stop non-browser clients, which simply omit the
+  Origin header.
+- **`--token=<secret>`.** Requires `?token=` on the WebSocket URL (the served
+  page forwards its own `?token=` query automatically). This is the gate that
+  covers non-browser clients and other local users; always set it when the
+  host is not loopback. Prefer HTTPS/WSS termination in front (a reverse
+  proxy) so the token and session aren't readable on the wire.
+
+For anything beyond a trusted network, put the port behind the access control
+you already trust — an SSH tunnel (`ssh -L 5777:localhost:5777 …`), a VPN, or
+an authenticating reverse proxy.
 
 **Properties**
 

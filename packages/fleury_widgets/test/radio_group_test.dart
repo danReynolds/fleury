@@ -34,9 +34,7 @@ class _HostState extends State<_Host> {
 }
 
 void main() {
-  testWidgets('arrows move and select the adjacent option, wrapping', (
-    tester,
-  ) {
+  testWidgets('arrows move and select the adjacent option, wrapping', (tester) {
     final picked = <String>[];
     tester.pumpWidget(_Host(picked: picked));
     tester.render(size: const CellSize(20, 4));
@@ -61,7 +59,9 @@ void main() {
       ),
     );
     tester.render(size: const CellSize(20, 4));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // a -> c (skip b)
+    tester.sendKey(
+      const KeyEvent(keyCode: KeyCode.arrowDown),
+    ); // a -> c (skip b)
     expect(picked, ['c']);
   });
 }

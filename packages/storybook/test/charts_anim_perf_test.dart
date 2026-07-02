@@ -10,14 +10,13 @@ library;
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/src/remote/remote_codec.dart';
 import 'package:fleury/src/remote/remote_driver.dart';
-import 'package:fleury/src/remote/remote_protocol.dart';
-import 'package:fleury/src/remote/remote_transport.dart';
 import 'package:fleury_storybook/storybook.dart';
 import 'package:test/test.dart';
 
-class _FakeTransport implements RemoteFrameTransport {
+class _FakeTransport
+    with SynchronousSendTransport
+    implements RemoteFrameTransport {
   final _in = StreamController<RemoteFrame>.broadcast();
   final List<RemoteFrame> sent = [];
   bool closed = false;

@@ -64,9 +64,6 @@ void main() {
     });
 
     testWidgets('semantic copy copies sanitized summary', (tester) async {
-      final originalClipboard = Clipboard.instance;
-      final clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
       ToolCallCopyResult? copied;
       try {
         tester.pumpWidget(
@@ -86,14 +83,17 @@ void main() {
         );
 
         expect(result.completed, isTrue);
-        expect(clipboard.lastWritten, contains('Tool: shell'));
-        expect(clipboard.lastWritten, contains('Status: succeeded'));
-        expect(clipboard.lastWritten, contains('Arguments: cmd=dart test'));
-        expect(clipboard.lastWritten, isNot(contains('secret')));
+        expect(tester.clipboard.readInProcess(), contains('Tool: shell'));
+        expect(tester.clipboard.readInProcess(), contains('Status: succeeded'));
+        expect(
+          tester.clipboard.readInProcess(),
+          contains('Arguments: cmd=dart test'),
+        );
+        expect(tester.clipboard.readInProcess(), isNot(contains('secret')));
         expect(copied?.record.id, 'tool-1');
         expect(copied?.report.policy.name, 'inProcessOnly');
       } finally {
-        Clipboard.instance = originalClipboard;
+        // clipboard is tester-scoped; nothing to restore
       }
     });
 

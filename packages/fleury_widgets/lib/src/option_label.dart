@@ -1,4 +1,4 @@
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 final _optionLabelLineBreakPattern = RegExp(r'[\r\n\t]');
 

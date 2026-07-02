@@ -99,7 +99,14 @@ export 'src/rendering/cell.dart'
         Colors,
         IndexedColor,
         RgbColor;
-export 'src/rendering/cell_buffer.dart' show CellBuffer, InlineImageFit;
+export 'src/rendering/cell_buffer.dart'
+    show
+        CellBuffer,
+        InlineImage,
+        InlineImageFit,
+        InlineImagePlacement,
+        ResolvedImageFit,
+        resolveInlineImageFit;
 export 'src/rendering/edge_insets.dart' show EdgeInsets;
 export 'src/rendering/layout.dart' show CellConstraints;
 export 'src/rendering/render_flex.dart'
@@ -118,6 +125,14 @@ export 'src/rendering/render_object.dart'
         RenderObjectWithChildren,
         RenderObjectWithSingleChild;
 export 'src/rendering/render_repaint_boundary.dart' show RenderRepaintBoundary;
+export 'src/rendering/surface_capabilities.dart'
+    show
+        ColorMode,
+        GlyphTier,
+        InlineImageSupport,
+        PointerPrecision,
+        SurfaceCapabilities,
+        SurfaceCapabilitiesProvider;
 export 'src/rendering/render_objects.dart'
     show
         RenderBorder,
@@ -133,9 +148,6 @@ export 'src/rendering/text_sanitizer.dart'
     show isUnsafeRune, replacementCharacter, sanitizeForDisplay;
 export 'src/rendering/width_resolver.dart'
     show DefaultWidthResolver, TerminalProfile, WidthResolver;
-
-// Runtime
-export 'src/runtime/hot_reload.dart' show HotReloadController;
 
 // Semantics
 export 'src/semantics/accessibility.dart'
@@ -156,6 +168,9 @@ export 'src/semantics/semantics.dart'
     show
         SemanticAction,
         SemanticActionCallback,
+        SemanticActionContributor,
+        SemanticChildrenProvider,
+        SemanticContributor,
         SemanticNode,
         SemanticNodeId,
         SemanticRole,
@@ -172,10 +187,9 @@ export 'src/semantics/semantics.dart'
 // Terminal
 export 'src/terminal/capabilities.dart'
     show
-        ColorMode,
-        GlyphTier,
         ImageProtocol,
         TerminalCapabilities,
+        TerminalSurfaceCapabilities,
         detectColorModeFromEnvironment,
         detectGlyphTierFromEnvironment,
         detectImageProtocolFromEnvironment,
@@ -213,7 +227,7 @@ export 'src/terminal/terminal_probe.dart'
         TerminalProbeStatus,
         TerminalProbeTransport,
         runTerminalProbeSuite;
-export 'src/terminal/events.dart'
+export 'src/input/events.dart'
     show
         KeyCode,
         KeyEvent,
@@ -230,8 +244,11 @@ export 'src/terminal/events.dart'
         TuiEvent;
 export 'src/terminal/fake_driver.dart' show FakeTerminalDriver;
 export 'src/terminal/input_parser.dart' show InputParser, TuiEventSink;
+export 'src/runtime/remote_surface_sink.dart'
+    show RemoteSemanticActionHandler, RemoteSurfaceSink;
 export 'src/terminal/terminal_driver.dart'
     show
+        OutputFlowControl,
         TerminalDriver,
         TerminalHandoffDriver,
         TerminalMode,
@@ -268,7 +285,6 @@ export 'src/widgets/key_bindings.dart'
         KeyChordChain,
         PendingKeyChord,
         PendingKeyChordChain;
-export 'src/widgets/key_hint_bar.dart' show KeyHintBar;
 export 'src/widgets/list_view.dart' show EdgeBehavior, ListController, ListView;
 export 'src/widgets/navigator.dart'
     show Navigator, NavigatorContext, NavigatorState, PopScope, RouteTransition;
@@ -291,6 +307,9 @@ export 'src/widgets/scroll_view.dart' show ScrollController, ScrollView;
 export 'src/widgets/scrollbar.dart' show Scrollbar;
 export 'src/widgets/listenable_builder.dart' show ListenableBuilder;
 export 'src/widgets/blinking_cursor.dart' show BlinkingCursor;
+export 'src/widgets/clipboard_scope.dart' show ClipboardScope;
+export 'src/widgets/error_boundary.dart'
+    show ErrorBoundary, FrameContainmentError, FrameContainmentPhase;
 export 'src/widgets/frame_builder.dart' show FrameBuilder;
 export 'src/widgets/animation_builder.dart' show AnimationBuilder;
 export 'src/widgets/effects.dart'
@@ -306,7 +325,7 @@ export 'src/runtime/clipboard.dart'
         ClipboardWritePolicy,
         ClipboardWriteReport,
         ClipboardWriteResult,
-        SystemClipboard;
+        InProcessClipboard;
 export 'src/widgets/selection/selection_area.dart'
     show SelectionArea, SelectionChangedCallback;
 export 'src/widgets/selection/selection_container_delegate.dart'

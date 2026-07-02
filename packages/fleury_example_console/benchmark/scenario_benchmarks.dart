@@ -296,10 +296,11 @@ final class _DemoAppJourneyScenario implements _ScenarioBenchmark {
 }
 
 Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
-  final tester = FleuryTester(viewportSize: config.terminalSize);
-  final originalClipboard = Clipboard.instance;
-  final clipboard = TestClipboard();
-  Clipboard.instance = clipboard;
+  final clipboard = InProcessClipboard();
+  final tester = FleuryTester(
+    viewportSize: config.terminalSize,
+    clipboard: clipboard,
+  );
   final total = Stopwatch()..start();
   var unsafeFrameCount = 0;
 
@@ -432,7 +433,7 @@ Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
     await _flushAsyncUi(tester);
     frame = tester.render(size: config.terminalSize);
     unsafeFrameCount += _unsafeVisibleFrameCount(frame, config.terminalSize);
-    final copiedRun = clipboard.lastWritten ?? '';
+    final copiedRun = clipboard.readInProcess() ?? '';
     runsCopy.stop();
 
     final transcript = Stopwatch()..start();
@@ -576,7 +577,6 @@ Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
       correct: correct,
     );
   } finally {
-    Clipboard.instance = originalClipboard;
     tester.dispose();
   }
 }

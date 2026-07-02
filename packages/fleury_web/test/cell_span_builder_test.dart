@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:fleury/fleury_host.dart';
 import 'package:test/test.dart';
 
@@ -65,29 +67,23 @@ void main() {
       expect(row.runs[2].text, '  ');
     });
 
-    test('emits protocol placeholders and skips covered cells', () {
-      final row = builder.buildRow(
-        frame(4, 1, (b) {
-          b.writeProtocol(
-            const CellOffset(1, 0),
-            'image-bytes',
-            width: 2,
-            height: 1,
-          );
-        }),
-        0,
-      );
+    test('overlay (inline-image) cells become blank runs, nothing leaks', () {
+      final buffer = frame(4, 1, (b) {
+        b.writeImage(
+          const CellOffset(1, 0),
+          Uint8List.fromList([1, 2, 3]),
+          width: 2,
+          height: 1,
+        );
+      });
+      final row = builder.buildRow(buffer, 0);
 
-      final protocol = row.runs.singleWhere(
-        (run) => run.kind == CellRunKind.protocolPlaceholder,
-      );
-      expect(protocol.startCol, 1);
-      expect(protocol.widthCols, 1);
-      expect(protocol.text, protocolPlaceholderGlyph);
-      expect(
-        row.runs.map((run) => run.text).join(),
-        isNot(contains('image-bytes')),
-      );
+      // The whole row coalesces into one blank run — the <img> overlay
+      // renders the pixels; the grid carries no id and no bytes.
+      final run = row.runs.single;
+      expect(run.kind, CellRunKind.emptyText);
+      expect(run.text, '    ');
+      expect(run.text, isNot(contains(buffer.imagePlacements.single.id)));
     });
 
     test('buildDirtyRows builds only requested row models', () {

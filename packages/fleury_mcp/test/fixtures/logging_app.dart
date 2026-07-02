@@ -4,7 +4,7 @@
 // warning). Renders one labelled node so the bridge has a tree to serve.
 //
 // Spawned as a subprocess by the real `fleury_mcp` binary (which sets
-// FLEURY_HANDLE, so runTui auto-connects over the remote wire). The app's
+// FLEURY_HANDLE, so runApp auto-connects over the remote wire). The app's
 // stdout/stderr is its LOG output — separate from the render wire (the socket)
 // and from the binary's own JSON-RPC stdout.
 
@@ -14,10 +14,10 @@ import 'package:fleury/fleury.dart';
 
 void main() {
   // The markers the smoke asserts on: stdout is forwarded at `info`, stderr at
-  // `warning`. Printed before runTui so they exercise the pre-handshake hold.
+  // `warning`. Printed before runApp so they exercise the pre-handshake hold.
   stdout.writeln('FLEURY_LOG_OUT hello from app stdout');
   stderr.writeln('FLEURY_LOG_ERR uh-oh from app stderr');
-  runTui(const _LoggingApp());
+  runApp(const _LoggingApp());
 }
 
 class _LoggingApp extends StatelessWidget {

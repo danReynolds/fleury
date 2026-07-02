@@ -11,7 +11,6 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/src/remote/remote_codec.dart';
 import 'package:test/test.dart';
 
 String _render(CellBuffer b) {
@@ -80,7 +79,10 @@ void main() {
       final mirror = CellBuffer(const CellSize(10, 1));
       applyRemotePlanToBuffer(decoded, mirror);
       expect(mirror.atColRow(0, 0).style.bold, isTrue);
-      expect(mirror.atColRow(0, 0).style.foreground, const RgbColor(220, 40, 40));
+      expect(
+        mirror.atColRow(0, 0).style.foreground,
+        const RgbColor(220, 40, 40),
+      );
     });
 
     test('wide glyphs reproduce with correct width', () {
@@ -109,7 +111,8 @@ void main() {
             final r = rng.nextInt(rows);
             final n = rng.nextInt(cols);
             final text = [
-              for (var i = 0; i < n; i++) alphabet[rng.nextInt(alphabet.length)],
+              for (var i = 0; i < n; i++)
+                alphabet[rng.nextInt(alphabet.length)],
             ].join();
             next.writeText(CellOffset(0, r), text, style: _style(rng));
           }
@@ -130,8 +133,17 @@ void main() {
     // where the detector correctly prefers cell-diffing).
     String logLine(int n) {
       const words = [
-        'connect', 'GET /api', 'cache miss', 'retry', 'flush', 'commit',
-        'timeout', 'parse', 'spawn worker', 'gc pause', 'queue drain',
+        'connect',
+        'GET /api',
+        'cache miss',
+        'retry',
+        'flush',
+        'commit',
+        'timeout',
+        'parse',
+        'spawn worker',
+        'gc pause',
+        'queue drain',
       ];
       final w = words[(n * 7) % words.length];
       return '${n.toString().padLeft(5)} ${(n * 31) % 9999} $w '
@@ -178,7 +190,10 @@ void main() {
         final full = line == 0;
         final plan = buildRemotePlan(prev, next, fullRepaint: full);
         if (plan.scrollUpRows != null) scrollFrames++;
-        applyRemotePlanToBuffer(decodeRemotePlan(encodeRemotePlan(plan)), mirror);
+        applyRemotePlanToBuffer(
+          decodeRemotePlan(encodeRemotePlan(plan)),
+          mirror,
+        );
         expect(_render(mirror), _render(next), reason: 'frame $line');
         prev = next;
       }
@@ -258,12 +273,15 @@ void main() {
           ],
         ),
       );
-      final encoded = SemanticsWireEncoder().encode(tree.toInspectionSnapshot())!;
+      final encoded = SemanticsWireEncoder().encode(
+        tree.toInspectionSnapshot(),
+      )!;
       final wire = encodeFrame(SemanticsFrame(encoded));
 
       // The client side: decode the frame, then the semantic wire diff — the
       // exact path RemoteSurfaceClient drives into its SemanticDomPresenter.
-      final frame = (FrameDecoder()..feed(wire)).drain().single as SemanticsFrame;
+      final frame =
+          (FrameDecoder()..feed(wire)).drain().single as SemanticsFrame;
       final rebuilt = SemanticsWireDecoder().apply(frame.json)!;
 
       expect(rebuilt.root.role, SemanticRole.app);

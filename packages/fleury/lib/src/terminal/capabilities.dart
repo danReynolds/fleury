@@ -1,21 +1,8 @@
 import 'package:meta/meta.dart';
 
-/// Maximum color fidelity the terminal can render.
-///
-/// Detected at startup by the driver from `$COLORTERM`, `$TERM`, and
-/// (eventually) terminal capability queries. The renderer downsamples
-/// styled cells to whatever the driver reports here. P0 detects only
-/// the boundaries clearly indicated by env vars; richer probing lands
-/// with the P1 capabilities work.
-enum ColorMode { none, ansi16, indexed256, truecolor }
+import '../rendering/surface_capabilities.dart';
 
-/// Glyph repertoire a terminal/font combination can render safely.
-///
-/// [unicode] enables box-drawing, braille, block elements, and common
-/// ornaments. [ascii] keeps drawing output to 7-bit characters for legacy
-/// consoles, `TERM=dumb`/`linux`, non-UTF-8 locales, or an explicit user
-/// override. It changes how primitives *draw*, never their semantic state.
-enum GlyphTier { ascii, unicode }
+export '../rendering/surface_capabilities.dart' show ColorMode, GlyphTier;
 
 /// Image-rendering protocol the terminal supports. Decided at startup
 /// from env vars (`KITTY_WINDOW_ID`, `TERM_PROGRAM`, `TERM`); runtime
@@ -39,13 +26,6 @@ enum ImageProtocol {
   /// Kitty graphics protocol — modern, supported by Kitty, Ghostty,
   /// WezTerm, Konsole 22.04+.
   kitty,
-
-  /// Native `<img>` rendering in the browser "serve" surface. Not a terminal
-  /// escape protocol: the DOM client declares it, and image bytes travel
-  /// out-of-band (see the inline-image frames) to an `<img>` overlay rather
-  /// than as an escape sequence. Never produced by terminal capability
-  /// detection.
-  browser,
 }
 
 /// Static snapshot of what the terminal supports.
@@ -208,4 +188,23 @@ bool detectTerminalMultiplexerFromEnvironment(Map<String, String> environment) {
   final term = environment['TERM']?.toLowerCase() ?? '';
   if (term.startsWith('screen') || term.startsWith('tmux')) return true;
   return false;
+}
+
+/// Projects the terminal's capability snapshot into the backend-neutral
+/// [SurfaceCapabilities] widgets read through MediaQuery. The terminal is
+/// one projection; browser hosts construct theirs first-class. Escape
+/// protocols and tmux passthrough deliberately do not survive projection —
+/// they are presenter concerns.
+extension TerminalSurfaceCapabilities on TerminalCapabilities {
+  SurfaceCapabilities toSurfaceCapabilities() {
+    return SurfaceCapabilities(
+      colorMode: colorMode,
+      glyphTier: glyphTier,
+      images: imageProtocol == ImageProtocol.halfBlock
+          ? InlineImageSupport.none
+          : InlineImageSupport.placements,
+      hyperlinks: false,
+      pointer: PointerPrecision.cell,
+    );
+  }
 }

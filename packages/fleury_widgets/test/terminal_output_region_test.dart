@@ -5,19 +5,6 @@ import 'package:test/test.dart';
 
 void main() {
   group('TerminalOutputRegion', () {
-    late Clipboard originalClipboard;
-    late TestClipboard clipboard;
-
-    setUp(() {
-      originalClipboard = Clipboard.instance;
-      clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
-    });
-
-    tearDown(() {
-      Clipboard.instance = originalClipboard;
-    });
-
     test('maps captured output to structured log entries', () {
       final entries = buildTerminalOutputLogEntries(const [
         LogLine('ok', LogSource.stdout),
@@ -144,7 +131,7 @@ void main() {
       tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, '[ERROR stderr] deploy failed');
+      expect(tester.clipboard.readInProcess(), '[ERROR stderr] deploy failed');
       expect(copied, isNotNull);
       expect(copied!.entryIndex, 1);
       expect(copied!.viewIndex, 0);

@@ -2,7 +2,8 @@ import 'dart:async';
 
 import '../foundation/geometry.dart';
 import 'capabilities.dart';
-import 'events.dart';
+import '../input/events.dart';
+import '../runtime/remote_surface_sink.dart';
 import 'terminal_driver.dart';
 
 /// A [TerminalDriver] for tests and offline rendering. No real I/O —
@@ -21,6 +22,9 @@ final class FakeTerminalDriver
   /// exercise the non-TTY (piped/redirected) code paths.
   @override
   bool get isInteractive => _isInteractive;
+
+  @override
+  RemoteSurfaceSink? get surfaceSink => null; // byte presentation only
   set isInteractive(bool value) {
     _checkNotDisposed();
     _isInteractive = value;

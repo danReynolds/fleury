@@ -63,7 +63,7 @@
 import 'package:meta/meta.dart';
 
 import '../foundation/collections.dart';
-import '../terminal/events.dart';
+import '../input/events.dart';
 import 'focus.dart';
 import 'framework.dart';
 

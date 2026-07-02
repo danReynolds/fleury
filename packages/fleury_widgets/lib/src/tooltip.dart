@@ -1,4 +1,4 @@
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 /// Shows a hint anchored below [child] while focus is anywhere inside it.
 ///

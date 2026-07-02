@@ -291,7 +291,11 @@ final class TextEditingModel {
 
   /// Cuts `[start, end)` into the kill ring and returns the value with that
   /// span removed (caret at the cut point). Empty spans are a no-op.
-  static TextEditingValue killRange(TextEditingValue value, int start, int end) {
+  static TextEditingValue killRange(
+    TextEditingValue value,
+    int start,
+    int end,
+  ) {
     final a = snapOffsetToGraphemeBoundary(value.text, start);
     final b = snapOffsetToGraphemeBoundary(value.text, end);
     final lo = a < b ? a : b;

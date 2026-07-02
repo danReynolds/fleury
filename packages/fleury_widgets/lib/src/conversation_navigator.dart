@@ -1,7 +1,7 @@
 import 'dart:async' show scheduleMicrotask, unawaited;
 
 import 'package:characters/characters.dart';
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 /// Protocol-neutral lifecycle for a conversation/session row.
 enum ConversationStatus {
@@ -543,10 +543,9 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
       selected.entry,
       options: widget.copyOptions,
     );
-    final report = await Clipboard.instance.writeWithReport(
-      text,
-      policy: widget.copyOptions.clipboardPolicy,
-    );
+    final report = await ClipboardScope.of(
+      context,
+    ).writeWithReport(text, policy: widget.copyOptions.clipboardPolicy);
     if (!mounted) return;
     widget.onCopy?.call(
       ConversationNavigatorCopyResult(

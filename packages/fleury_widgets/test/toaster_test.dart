@@ -109,8 +109,11 @@ void main() {
       for (var c = 0; c < 20; c++) {
         final cell = buf.atColRow(c, r);
         if (cell.grapheme == '●') {
-          expect(cell.style.foreground, const AnsiColor(1),
-              reason: 'the status dot carries the error color');
+          expect(
+            cell.style.foreground,
+            const AnsiColor(1),
+            reason: 'the status dot carries the error color',
+          );
           dotColored = true;
         }
         // The 'oo' of 'oops' — the message itself stays neutral.
@@ -188,8 +191,11 @@ void main() {
       for (var c = 0; c < 24; c++) {
         if (buf.atColRow(c, r).grapheme == '●') {
           // A non-null foreground = colored (the success accent, not neutral).
-          expect(buf.atColRow(c, r).style.foreground, isNotNull,
-              reason: 'success toast shows a colored status dot');
+          expect(
+            buf.atColRow(c, r).style.foreground,
+            isNotNull,
+            reason: 'success toast shows a colored status dot',
+          );
           found = true;
           break;
         }

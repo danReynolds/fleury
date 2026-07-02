@@ -209,6 +209,7 @@ export 'src/json_view.dart'
         JsonViewRow,
         buildJsonViewRows,
         exportJsonViewRow;
+export 'src/key_hint_bar.dart' show KeyHintBar;
 export 'src/markdown_text.dart'
     show
         MarkdownBlock,

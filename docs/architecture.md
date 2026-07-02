@@ -99,8 +99,11 @@ backend diffs cell buffers and emits byte-frugal ANSI — it accounts for
 every escape byte, writes through small gaps when that's cheaper than
 moving the cursor, and skips the synchronized-output wrapper when a diff
 is tiny. The web backend applies the *same damage* to retained DOM rows.
-Both sit behind one host interface, and an oracle in the test suite
-asserts the two surfaces render the same tree.
+Both hosts assemble the same building blocks (`TuiFrameLoop`, the
+presentation planner, the span builder) and an oracle in the test suite
+asserts the two surfaces render the same tree. (A single extracted frame
+driver owning the choreography end-to-end is designed in the pipeline
+program RFC and lands with the web render backend.)
 
 Around that pipeline sits the app layer: a typed command registry, focus
 and overlay management, a capability contract (terminals differ in
@@ -197,6 +200,21 @@ default; clipboard, links, and images are policy-gated; redaction has
 hooks. Suspend (Ctrl+Z), subprocess handoff, and crash paths restore the
 user's terminal — the unglamorous correctness that decides whether a TUI
 feels professional.
+
+**Errors are contained at every phase.** A thrown `build()` renders an
+error panel for that subtree (`ErrorWidget`); a thrown layout or paint is
+absorbed by the nearest `ErrorBoundary` — the framework installs one at
+every route and overlay-entry root, so a crashing dialog can't take down
+the page beneath it — and renders the same red panel in the boundary's
+cells, with the full error in stderr and the on-screen banner. Whatever
+escapes every boundary hits the frame driver's backstop: a full-screen
+error frame, session still live, hot reload as the recovery path. Only a
+backstop storm (a hard crash every frame) or an error before mount tears
+the session down — and then the terminal is restored. Assistive tech and
+agents see an errored subtree as a single announced `errorBoundary` node;
+its invisible descendants are dropped and actions against them fail
+closed. Under the test harness, containment inverts: a layout bug fails
+the test loudly instead of rendering a panel.
 
 **Run it anywhere a binary runs — and beyond the terminal.** One static
 AOT executable, ~20 ms to first frame, no runtime to install. The same

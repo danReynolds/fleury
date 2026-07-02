@@ -62,6 +62,97 @@ void main() {
       final decoded = (FrameDecoder()..feed(wire)).drain().toList();
       expect(decoded.single, isA<ByeFrame>());
     });
+
+    test('CLIPBOARD_WRITE round-trips seq and text', () {
+      final wire = encodeFrame(const ClipboardWriteFrame(42, 'copy me — ✂'));
+      final decoded =
+          (FrameDecoder()..feed(wire)).drain().single as ClipboardWriteFrame;
+      expect(decoded.seq, 42);
+      expect(decoded.text, 'copy me — ✂');
+    });
+
+    test('CLIPBOARD_RESULT round-trips seq and status', () {
+      final wire = encodeFrame(
+        const ClipboardResultFrame(7, RemoteClipboardStatus.denied),
+      );
+      final decoded =
+          (FrameDecoder()..feed(wire)).drain().single as ClipboardResultFrame;
+      expect(decoded.seq, 7);
+      expect(decoded.status, RemoteClipboardStatus.denied);
+    });
+
+    test('CLIPBOARD_RESULT rejects an unknown status index', () {
+      final raw = _rawFrame(FrameType.clipboardResult, const [
+        0,
+        0,
+        0,
+        1,
+        0xEE,
+      ]);
+      final decoder = FrameDecoder()..feed(raw);
+      expect(
+        () => decoder.drain().toList(),
+        throwsA(isA<RemoteProtocolException>()),
+      );
+    });
+
+    test('CARET round-trips a rect and its absence', () {
+      final withCaret = encodeFrame(CaretFrame(CellRect.fromLTWH(12, 3, 1, 1)));
+      final decoded =
+          (FrameDecoder()..feed(withCaret)).drain().single as CaretFrame;
+      expect(decoded.caret, CellRect.fromLTWH(12, 3, 1, 1));
+
+      final without = encodeFrame(const CaretFrame(null));
+      final decodedNull =
+          (FrameDecoder()..feed(without)).drain().single as CaretFrame;
+      expect(decodedNull.caret, isNull);
+    });
+
+    test('SEMANTIC_ACTION_RESULT carries id, action, and status', () {
+      final frame = SemanticActionResultFrame(
+        const SemanticNodeId('save'),
+        SemanticAction.activate,
+        SemanticActionInvocationStatus.disabled,
+      );
+      final wire = encodeFrame(frame);
+      final decoder = FrameDecoder()..feed(wire);
+      final out = decoder.drain().toList();
+      expect(out, hasLength(1));
+      final decoded = out.single as SemanticActionResultFrame;
+      expect(decoded.id, const SemanticNodeId('save'));
+      expect(decoded.action, SemanticAction.activate);
+      expect(decoded.status, SemanticActionInvocationStatus.disabled);
+    });
+
+    test('SEMANTIC_ACTION_RESULT rejects an unknown status name', () {
+      final wire = encodeFrame(
+        SemanticActionResultFrame(
+          const SemanticNodeId('save'),
+          SemanticAction.activate,
+          SemanticActionInvocationStatus.completed,
+        ),
+      );
+      // Corrupt the status by rewriting the payload with a bogus name via
+      // the raw framing helper: id 's', action 'activate', status 'nope'.
+      Uint8List vstr(String v) {
+        final b = BytesBuilder()
+          ..addByte(v.length)
+          ..add(v.codeUnits);
+        return b.toBytes();
+      }
+
+      final payload = BytesBuilder()
+        ..add(vstr('s'))
+        ..add(vstr('activate'))
+        ..add(vstr('nope'));
+      final raw = _rawFrame(FrameType.semanticActionResult, payload.toBytes());
+      final decoder = FrameDecoder()..feed(raw);
+      expect(
+        () => decoder.drain().toList(),
+        throwsA(isA<RemoteProtocolException>()),
+      );
+      expect(wire, isNotEmpty);
+    });
   });
 
   group('decoder framing', () {

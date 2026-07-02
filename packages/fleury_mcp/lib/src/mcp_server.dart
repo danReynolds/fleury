@@ -16,7 +16,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:characters/characters.dart';
-import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_host.dart';
 
 import 'app_bridge.dart';
 import 'value_schema.dart';
@@ -937,17 +937,33 @@ final class McpServer {
     await _resolveActionableNode(id, actionName);
 
     final before = bridge.revision;
-    bridge.invokeAction(SemanticNodeId(id), action);
+    final statusFuture = bridge.invokeAction(SemanticNodeId(id), action);
     final after = await bridge.settle(sinceRevision: before);
+    final status = await statusFuture;
     final changed = bridge.revision != before;
+    if (status == SemanticActionInvocationStatus.failed) {
+      throw _ToolFailure(
+        'The app\'s handler for "$actionName" on "$id" threw. This is an '
+        'app-side bug (the error is in the app\'s stderr), not a stale '
+        'reference.',
+        code: _ErrorCode.actionFailed,
+      );
+    }
     return _toolJson(<String, Object?>{
       'invoked': <String, Object?>{'id': id, 'action': actionName},
+      // The app-reported invocation status (completed/disabled/unsupported).
+      // Absent against a pre-v3 app, where `changed` is the only signal.
+      if (status != null) 'status': status.name,
       'changed': changed,
-      if (!changed)
+      if (!changed && status == null)
         'note':
             'No semantic change observed. If "$id" was an auto-generated id '
             '(element-…) it is snapshot-local and may be stale — re-read get_ui '
             'and retry.',
+      if (!changed && status == SemanticActionInvocationStatus.completed)
+        'note':
+            'Handler ran (status: completed) but the UI is semantically '
+            'unchanged.',
       'ui': _uiResult(after),
     });
   }
@@ -1063,10 +1079,19 @@ final class McpServer {
     }
 
     final before = bridge.revision;
-    bridge.setValue(SemanticNodeId(id), value);
+    final statusFuture = bridge.setValue(SemanticNodeId(id), value);
     final after = await bridge.settle(sinceRevision: before);
+    final status = await statusFuture;
+    if (status == SemanticActionInvocationStatus.failed) {
+      throw _ToolFailure(
+        'The app\'s setValue handler on "$id" threw. This is an app-side bug '
+        '(the error is in the app\'s stderr), not a stale reference.',
+        code: _ErrorCode.actionFailed,
+      );
+    }
     return _toolJson(<String, Object?>{
       'set': <String, Object?>{'id': id, 'value': value},
+      if (status != null) 'status': status.name,
       'changed': bridge.revision != before,
       'ui': _uiResult(after),
     });
@@ -1430,6 +1455,7 @@ abstract final class _ErrorCode {
   static const notFound = 'not_found';
   static const ambiguous = 'ambiguous';
   static const actionUnsupported = 'action_unsupported';
+  static const actionFailed = 'action_failed';
   static const staleReference = 'stale_reference';
   static const outOfDomain = 'out_of_domain';
   static const rateLimited = 'rate_limited';

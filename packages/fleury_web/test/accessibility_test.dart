@@ -56,10 +56,36 @@ String _accessibleName(web.Element el) {
 /// attribute outside this set is an accessibility bug (screen readers ignore or
 /// mishandle unknown roles).
 const _validAriaRoles = <String>{
-  'group', 'region', 'navigation', 'list', 'listitem', 'table', 'row', 'cell',
-  'link', 'img', 'textbox', 'button', 'checkbox', 'radio', 'switch',
-  'spinbutton', 'slider', 'menu', 'menuitem', 'dialog', 'progressbar', 'log',
-  'status', 'tab', 'tree', 'treeitem', 'form',
+  'group',
+  'region',
+  'navigation',
+  'list',
+  'listitem',
+  'table',
+  'row',
+  'cell',
+  'link',
+  'img',
+  'textbox',
+  'button',
+  'checkbox',
+  'radio',
+  'switch',
+  'spinbutton',
+  'slider',
+  'menu',
+  'menuitem',
+  'dialog',
+  'progressbar',
+  'log',
+  'status',
+  // WAI-ARIA live-region role; carried by errorBoundary (a rendering
+  // failure replacing visible content is announced assertively).
+  'alert',
+  'tab',
+  'tree',
+  'treeitem',
+  'form',
 };
 
 /// Roles that present an interactive control, which ARIA requires to have an
@@ -80,27 +106,31 @@ const _interactiveRoles = <SemanticRole>{
 
 void main() {
   group('accessible names (the #1 a11y rule)', () {
-    test('every labelled interactive node gets a non-empty accessible name', () {
-      final nodes = [
-        for (final (i, role) in _interactiveRoles.indexed)
-          SemanticNode(
-            id: SemanticNodeId('n$i'),
-            role: role,
-            label: 'Control $i',
-            actions: const {SemanticAction.activate},
-          ),
-      ];
-      final root = present(_appOf(nodes));
+    test(
+      'every labelled interactive node gets a non-empty accessible name',
+      () {
+        final nodes = [
+          for (final (i, role) in _interactiveRoles.indexed)
+            SemanticNode(
+              id: SemanticNodeId('n$i'),
+              role: role,
+              label: 'Control $i',
+              actions: const {SemanticAction.activate},
+            ),
+        ];
+        final root = present(_appOf(nodes));
 
-      for (var i = 0; i < nodes.length; i++) {
-        final el = _byId(root, 'n$i');
-        expect(
-          _accessibleName(el),
-          isNotEmpty,
-          reason: '${nodes[i].role} produced an element with no accessible name',
-        );
-      }
-    });
+        for (var i = 0; i < nodes.length; i++) {
+          final el = _byId(root, 'n$i');
+          expect(
+            _accessibleName(el),
+            isNotEmpty,
+            reason:
+                '${nodes[i].role} produced an element with no accessible name',
+          );
+        }
+      },
+    );
 
     test('a button with no label but text content is still named', () {
       final root = present(
@@ -118,28 +148,30 @@ void main() {
   });
 
   group('valid ARIA roles', () {
-    test('EVERY SemanticRole resolves to a valid ARIA role or a plain container',
-        () {
-      // Guards the future: a newly added role that maps to a bogus ARIA string
-      // (or is forgotten) fails here, forcing an accessibility decision.
-      for (final role in SemanticRole.values) {
-        final root = present(
-          _appOf([
-            SemanticNode(
-              id: const SemanticNodeId('x'),
-              role: role,
-              label: 'X',
-            ),
-          ]),
-        );
-        final ariaRole = _byId(root, 'x').getAttribute('role');
-        expect(
-          ariaRole == null || _validAriaRoles.contains(ariaRole),
-          isTrue,
-          reason: 'role $role emitted invalid ARIA role "$ariaRole"',
-        );
-      }
-    });
+    test(
+      'EVERY SemanticRole resolves to a valid ARIA role or a plain container',
+      () {
+        // Guards the future: a newly added role that maps to a bogus ARIA string
+        // (or is forgotten) fails here, forcing an accessibility decision.
+        for (final role in SemanticRole.values) {
+          final root = present(
+            _appOf([
+              SemanticNode(
+                id: const SemanticNodeId('x'),
+                role: role,
+                label: 'X',
+              ),
+            ]),
+          );
+          final ariaRole = _byId(root, 'x').getAttribute('role');
+          expect(
+            ariaRole == null || _validAriaRoles.contains(ariaRole),
+            isTrue,
+            reason: 'role $role emitted invalid ARIA role "$ariaRole"',
+          );
+        }
+      },
+    );
   });
 
   group('structural role mapping (screen-reader navigation depends on it)', () {
@@ -288,8 +320,11 @@ void main() {
         ]),
       );
       final el = _byId(root, 'cmd');
-      expect(el.hasAttribute('tabindex'), isTrue,
-          reason: 'a focused node must be focusable');
+      expect(
+        el.hasAttribute('tabindex'),
+        isTrue,
+        reason: 'a focused node must be focusable',
+      );
       expect(el.getAttribute('data-fleury-focused'), 'true');
     });
   });
@@ -318,10 +353,15 @@ void main() {
         ]),
       );
       final ids = [
-        for (final el in root.querySelectorAll('[data-fleury-semantic-id]').toIterable())
+        for (final el
+            in root.querySelectorAll('[data-fleury-semantic-id]').toIterable())
           (el as web.Element).getAttribute('data-fleury-semantic-id'),
       ];
-      expect(ids.toSet().length, ids.length, reason: 'duplicate semantic ids: $ids');
+      expect(
+        ids.toSet().length,
+        ids.length,
+        reason: 'duplicate semantic ids: $ids',
+      );
     });
 
     test('a list contains its list items (ARIA required-children)', () {

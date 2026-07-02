@@ -151,19 +151,6 @@ void main() {
   });
 
   group('copy and activation', () {
-    late Clipboard originalClipboard;
-    late TestClipboard clipboard;
-
-    setUp(() {
-      originalClipboard = Clipboard.instance;
-      clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
-    });
-
-    tearDown(() {
-      Clipboard.instance = originalClipboard;
-    });
-
     testWidgets('semantic copy copies the selected patch file summary', (
       tester,
     ) async {
@@ -190,7 +177,10 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(result.completed, isTrue);
-      expect(clipboard.lastWritten, 'lib/app.dart | pending | +2 -1 1 hunks');
+      expect(
+        tester.clipboard.readInProcess(),
+        'lib/app.dart | pending | +2 -1 1 hunks',
+      );
       expect(copied?.file.path, 'lib/app.dart');
       expect(copied?.report.result, ClipboardWriteResult.inProcessOnly);
     });

@@ -2,6 +2,7 @@ import '../rendering/cell_buffer.dart';
 import '../rendering/render_object.dart';
 import '../semantics/semantics.dart';
 import '../widgets/focus.dart';
+import '../widgets/basic.dart' show ErrorWidget;
 import '../widgets/framework.dart';
 import '../widgets/pointer.dart';
 import '../widgets/tui_binding.dart';
@@ -19,7 +20,11 @@ final class TuiRuntime {
     FocusManager? focusManager,
     TuiBinding? binding,
     PointerRouter? pointerRouter,
-  }) : owner = owner ?? BuildOwner(),
+  }) : owner =
+           owner ??
+           BuildOwner(
+             errorBuilder: (error, stack) => ErrorWidget.builder(error, stack),
+           ),
        focusManager = focusManager ?? FocusManager(),
        binding = binding ?? TuiBinding(),
        pointerRouter = pointerRouter ?? PointerRouter();

@@ -25,7 +25,7 @@ List<LogEntry> buildTerminalOutputLogEntries(List<LogLine> lines) {
 
 /// Structured terminal-output view backed by a runtime [LogBuffer].
 ///
-/// Core [LogView] remains the minimal captured-output tail view used by the
+/// Core [OutputCaptureView] remains the minimal captured-output tail view used by the
 /// debug console. [TerminalOutputRegion] is the app-facing surface for captured
 /// stdout/stderr when apps need filtering, copy/export semantics, lazy rows, and
 /// safety metadata from [LogRegion].

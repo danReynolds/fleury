@@ -134,7 +134,6 @@ class StatusController extends ChangeNotifier {
   }
 }
 
-
 /// Renders the current app status items as a compact terminal status bar.
 class AppStatusBar extends StatelessWidget {
   const AppStatusBar({

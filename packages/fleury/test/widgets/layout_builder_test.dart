@@ -94,9 +94,13 @@ void main() {
 
     flag.set(true); // rebuilds only the Reactive leaf; constraints unchanged
     tester.pump();
-    expect(flat(), 'after',
-        reason: 'the dirtied LayoutBuilder must relayout and re-run its '
-            'builder even though its constraints did not change');
+    expect(
+      flat(),
+      'after',
+      reason:
+          'the dirtied LayoutBuilder must relayout and re-run its '
+          'builder even though its constraints did not change',
+    );
   });
 
   testWidgets('collapsing to zero under an unbounded axis throws in debug '
@@ -105,23 +109,27 @@ void main() {
     // (maxCols == null); a width-keyed builder computes (null ?? 0) ~/ 3 = 0
     // and used to blank the pane with no diagnostic.
     tester.pumpWidget(
-      Row(children: [
-        LayoutBuilder(
-          builder: (context, constraints) => SizedBox(
-            width: (constraints.maxCols ?? 0) ~/ 3,
-            child: const Text('nav'),
+      Row(
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) => SizedBox(
+              width: (constraints.maxCols ?? 0) ~/ 3,
+              child: const Text('nav'),
+            ),
           ),
-        ),
-        const Expanded(child: Text('main')),
-      ]),
+          const Expanded(child: Text('main')),
+        ],
+      ),
     );
     expect(
       () => tester.renderToString(size: const CellSize(24, 2)),
-      throwsA(isA<StateError>().having(
-        (e) => e.message,
-        'message',
-        contains('unbounded maxCols'),
-      )),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('unbounded maxCols'),
+        ),
+      ),
     );
   });
 
@@ -164,8 +172,11 @@ void main() {
     tester.renderToString(size: const CellSize(10, 1));
     tester.pump();
     tester.renderToString(size: const CellSize(10, 1));
-    expect(runs, 1,
-        reason: 'unchanged constraints + clean element = no builder re-run');
+    expect(
+      runs,
+      1,
+      reason: 'unchanged constraints + clean element = no builder re-run',
+    );
 
     // A genuine constraint change still rebuilds.
     tester.renderToString(size: const CellSize(6, 1));
@@ -221,8 +232,9 @@ void main() {
   });
 
   testWidgets('a descendant relayout forces performLayout but the memo still '
-      'skips the builder (isolates the memo from the RO layout cache)',
-      (tester) {
+      'skips the builder (isolates the memo from the RO layout cache)', (
+    tester,
+  ) {
     // The 'repeated passes' test above is also satisfied by the render-object
     // layout cache (layout() short-circuits unchanged constraints without
     // calling performLayout). THIS drives the case only the builder-memo
@@ -251,33 +263,41 @@ void main() {
     flag.set(true); // descendant setState → child size change → spine relayout
     tester.pump();
     expect(flat(), 'wiiiide', reason: 'the descendant change still renders');
-    expect(runs, 1,
-        reason: 'the forced relayout did NOT re-run the builder — the memo '
-            'skipped it (pre-memo this re-inflated the subtree every pass)');
+    expect(
+      runs,
+      1,
+      reason:
+          'the forced relayout did NOT re-run the builder — the memo '
+          'skipped it (pre-memo this re-inflated the subtree every pass)',
+    );
   });
 
-  testWidgets('a bounded LayoutBuilder in a Row (via Expanded) lays out fine',
-      (tester) {
+  testWidgets('a bounded LayoutBuilder in a Row (via Expanded) lays out fine', (
+    tester,
+  ) {
     tester.pumpWidget(
-      Row(children: [
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) => SizedBox(
-              width: (constraints.maxCols ?? 0) ~/ 3,
-              child: const Text('nav'),
+      Row(
+        children: [
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) => SizedBox(
+                width: (constraints.maxCols ?? 0) ~/ 3,
+                child: const Text('nav'),
+              ),
             ),
           ),
-        ),
-        const Expanded(child: Text('main')),
-      ]),
+          const Expanded(child: Text('main')),
+        ],
+      ),
     );
     final out = tester.renderToString(size: const CellSize(24, 2));
     expect(out, contains('nav'));
     expect(out, contains('main'));
   });
 
-  testWidgets('a listenable read inside the builder stays live under the memo',
-      (tester) {
+  testWidgets('a listenable read inside the builder stays live under the memo', (
+    tester,
+  ) {
     // The builder runs during layout, where the active build target used to be
     // unset — so an ElementDependency read (Animation.value) never subscribed,
     // and the memo then froze it. With the build target set, the read
@@ -293,9 +313,13 @@ void main() {
 
     anim.snap(2); // notifies subscribers; constraints unchanged
     tester.pump();
-    expect(flat(), 'v=2',
-        reason: 'the layout-time read auto-subscribed the element, so the '
-            'change invalidates the memo');
+    expect(
+      flat(),
+      'v=2',
+      reason:
+          'the layout-time read auto-subscribed the element, so the '
+          'change invalidates the memo',
+    );
   });
 
   testWidgets('a throwing builder is retried on the next pass, not skipped '
@@ -314,15 +338,22 @@ void main() {
         },
       ),
     );
-    expect(() => tester.renderToString(size: const CellSize(12, 1)),
-        throwsA(isA<StateError>()));
+    expect(
+      () => tester.renderToString(size: const CellSize(12, 1)),
+      throwsA(isA<StateError>()),
+    );
     final afterThrow = runs;
 
     boom = false;
-    expect(tester.renderToString(size: const CellSize(12, 1)).trim(),
-        'recovered');
-    expect(runs, greaterThan(afterThrow),
-        reason: 'the retry re-ran the builder despite unchanged constraints');
+    expect(
+      tester.renderToString(size: const CellSize(12, 1)).trim(),
+      'recovered',
+    );
+    expect(
+      runs,
+      greaterThan(afterThrow),
+      reason: 'the retry re-ran the builder despite unchanged constraints',
+    );
   });
 
   testWidgets('an invalidation fired during the build itself is honored, '
@@ -344,9 +375,10 @@ void main() {
         },
       ),
     );
-    expect(tester.renderToString(size: const CellSize(12, 1)).trim(), 'runs=2',
-        reason: 'the re-entrant invalidation forced a second build this pass');
+    expect(
+      tester.renderToString(size: const CellSize(12, 1)).trim(),
+      'runs=2',
+      reason: 'the re-entrant invalidation forced a second build this pass',
+    );
   });
 }
-
-

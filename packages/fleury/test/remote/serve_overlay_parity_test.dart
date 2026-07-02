@@ -9,7 +9,6 @@
 import 'dart:math';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/src/remote/remote_codec.dart';
 import 'package:test/test.dart';
 
 String _render(CellBuffer b) {
@@ -36,8 +35,12 @@ void _seed(CellBuffer from, CellBuffer to) {
 
 /// Applies the wire round-trip of (prev → next) to [mirror] in place, the way
 /// the client does across a session.
-void _apply(CellBuffer prev, CellBuffer next, CellBuffer mirror,
-    {bool full = false}) {
+void _apply(
+  CellBuffer prev,
+  CellBuffer next,
+  CellBuffer mirror, {
+  bool full = false,
+}) {
   final plan = buildRemotePlan(prev, next, fullRepaint: full);
   applyRemotePlanToBuffer(decodeRemotePlan(encodeRemotePlan(plan)), mirror);
 }
@@ -54,7 +57,11 @@ CellBuffer _background(CellSize size, int phase) {
 }
 
 /// Draws a centered box (a dialog/palette) over [base], returning a new buffer.
-CellBuffer _withOverlay(CellBuffer base, {required int boxW, required int boxH}) {
+CellBuffer _withOverlay(
+  CellBuffer base, {
+  required int boxW,
+  required int boxH,
+}) {
   final out = CellBuffer(base.size);
   _seed(base, out);
   final left = (base.size.cols - boxW) ~/ 2;
@@ -66,8 +73,11 @@ CellBuffer _withOverlay(CellBuffer base, {required int boxW, required int boxH})
     final line = isEdge
         ? '+${'-' * (boxW - 2)}+'
         : '|${' command $r'.padRight(boxW - 2).substring(0, boxW - 2)}|';
-    out.writeText(CellOffset(left, row), line,
-        style: const CellStyle(bold: true));
+    out.writeText(
+      CellOffset(left, row),
+      line,
+      style: const CellStyle(bold: true),
+    );
   }
   return out;
 }
@@ -105,44 +115,49 @@ void main() {
       expect(_render(mirror), _render(next), reason: 'region scroll');
     });
 
-    test('a long randomized stream of scrolls + overlay toggles stays in sync',
-        () {
-      final rng = Random(0xD1A106);
-      var prev = _background(size, 0);
-      final mirror = CellBuffer(size);
-      _seed(prev, mirror);
-      var phase = 0;
-      var overlayOpen = false;
-      for (var frame = 0; frame < 400; frame++) {
-        final action = rng.nextInt(3);
-        CellBuffer next;
-        switch (action) {
-          case 0: // advance the scrolling pane
-            phase += 1 + rng.nextInt(3);
-            next = _background(size, phase);
-            if (overlayOpen) {
-              next = _withOverlay(next, boxW: 24 + rng.nextInt(20), boxH: 6);
-            }
-          case 1: // toggle the overlay
-            overlayOpen = !overlayOpen;
-            final bg = _background(size, phase);
-            next = overlayOpen
-                ? _withOverlay(bg, boxW: 24 + rng.nextInt(20), boxH: 6)
-                : bg;
-          default: // edit a few cells
-            next = CellBuffer(size);
-            _seed(prev, next);
-            for (var e = 0; e < 1 + rng.nextInt(4); e++) {
-              next.writeText(
-                CellOffset(rng.nextInt(size.cols ~/ 2), rng.nextInt(size.rows)),
-                'x${rng.nextInt(99)}',
-              );
-            }
+    test(
+      'a long randomized stream of scrolls + overlay toggles stays in sync',
+      () {
+        final rng = Random(0xD1A106);
+        var prev = _background(size, 0);
+        final mirror = CellBuffer(size);
+        _seed(prev, mirror);
+        var phase = 0;
+        var overlayOpen = false;
+        for (var frame = 0; frame < 400; frame++) {
+          final action = rng.nextInt(3);
+          CellBuffer next;
+          switch (action) {
+            case 0: // advance the scrolling pane
+              phase += 1 + rng.nextInt(3);
+              next = _background(size, phase);
+              if (overlayOpen) {
+                next = _withOverlay(next, boxW: 24 + rng.nextInt(20), boxH: 6);
+              }
+            case 1: // toggle the overlay
+              overlayOpen = !overlayOpen;
+              final bg = _background(size, phase);
+              next = overlayOpen
+                  ? _withOverlay(bg, boxW: 24 + rng.nextInt(20), boxH: 6)
+                  : bg;
+            default: // edit a few cells
+              next = CellBuffer(size);
+              _seed(prev, next);
+              for (var e = 0; e < 1 + rng.nextInt(4); e++) {
+                next.writeText(
+                  CellOffset(
+                    rng.nextInt(size.cols ~/ 2),
+                    rng.nextInt(size.rows),
+                  ),
+                  'x${rng.nextInt(99)}',
+                );
+              }
+          }
+          _apply(prev, next, mirror, full: frame == 0);
+          expect(_render(mirror), _render(next), reason: 'frame $frame');
+          prev = next;
         }
-        _apply(prev, next, mirror, full: frame == 0);
-        expect(_render(mirror), _render(next), reason: 'frame $frame');
-        prev = next;
-      }
-    });
+      },
+    );
   });
 }

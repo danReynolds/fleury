@@ -269,63 +269,13 @@ void main() {
     });
   });
 
-  group('Acceptance tests — KeyHintBar', () {
-    test('7. KeyHintBar shows currently active focused bindings', () {
-      final h = _TestHarness();
-      late KeyHintBar bar;
-      h.mountRoot(
-        KeyBindings(
-          bindings: [
-            KeyBinding(KeyChord.char('q'), onEvent: (_) {}, label: 'Quit'),
-          ],
-          child: Focus(
-            autofocus: true,
-            child: Builder(
-              builder: (ctx) {
-                bar = const KeyHintBar();
-                return bar;
-              },
-            ),
-          ),
-        ),
-      );
-
-      // Mount triggered build; verify the bar widget exists.
-      expect(bar.maxBindings, greaterThan(0));
-      // Visual content rendering goes through Text; we assert below
-      // via the showcase-style render path.
-    });
-
-    test('8. KeyHintBar dedupes — nearer binding wins', () {
-      final h = _TestHarness();
-      h.mountRoot(
-        KeyBindings(
-          bindings: [
-            KeyBinding(KeyChord.char('q'), onEvent: (_) {}, label: 'outer'),
-          ],
-          child: KeyBindings(
-            bindings: [
-              KeyBinding(KeyChord.char('q'), onEvent: (_) {}, label: 'inner'),
-            ],
-            child: const Focus(autofocus: true, child: EmptyBox()),
-          ),
-        ),
-      );
-
-      // Both contribute to dedup; nearer wins. Test by dispatch order.
-      // The full hint-bar text inspection is covered in
-      // key_hint_bar_test.dart with a render harness.
-      final calls = <String>[];
-      h.dispatch(_char('q'));
-      // Inner takes precedence; verified by handler call.
-      expect(calls, isEmpty); // calls were not configured here
-    });
-
+  group('Acceptance tests — hint-bar binding metadata', () {
+    // KeyHintBar itself moved to fleury_widgets; rendering coverage
+    // lives in fleury_widgets/test/key_hint_bar_test.dart. These
+    // check the binding data fields the bar filters on.
     test('9. Bindings with description=null are hidden from hint bar', () {
-      // Direct unit check on a binding's data fields.
       final binding = KeyBinding(KeyChord.char('q'), onEvent: (_) {});
       expect(binding.label, isNull);
-      // The full collection logic is exercised by KeyHintBar tests.
     });
 
     test('10. Bindings with hideFromHintBar=true are hidden', () {
@@ -341,7 +291,7 @@ void main() {
     test('11. Dynamic binding rebuild updates hint bar', () {
       // Bindings are read from the KeyBindings widget at render
       // time; when bindings change via setState (rebuild), the
-      // KeyHintBar's next read reflects them. Covered by the
+      // hint bar's next read reflects them. Covered by the
       // KeyBindings.bindings field being read live in
       // _KeyBindingsState.activeBindings.
       final stateBindings = <KeyBinding>[

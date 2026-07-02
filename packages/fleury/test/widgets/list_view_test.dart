@@ -42,9 +42,7 @@ void main() {
       expect(activated, [2]);
     });
 
-    testWidgets('tap survives a rebuild between press and release', (
-      tester,
-    ) {
+    testWidgets('tap survives a rebuild between press and release', (tester) {
       // Over the serve wire, down and up arrive in separate frames, and the
       // press triggers a click-to-focus rebuild in between — which recreates
       // the lazy list's item render objects. Acting on the press (not a
@@ -75,9 +73,7 @@ void main() {
       expect(activated, [2]);
     });
 
-    testWidgets('a drag wiggle between press and release still taps', (
-      tester,
-    ) {
+    testWidgets('a drag wiggle between press and release still taps', (tester) {
       // A real mouse click in the browser client emits a tiny drag between
       // pointerdown and pointerup. That wiggle must not suppress the tap.
       final controller = ListController(selectedIndex: 0);

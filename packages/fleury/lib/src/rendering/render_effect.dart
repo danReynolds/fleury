@@ -42,8 +42,11 @@ typedef CellComposite =
 /// [composite]. Layout-transparent (reports the child's size).
 class RenderCellEffect extends RenderObject
     implements RenderObjectWithSingleChild {
-  RenderCellEffect(this._composite, {bool passthrough = false, RenderObject? child})
-    : _passthrough = passthrough {
+  RenderCellEffect(
+    this._composite, {
+    bool passthrough = false,
+    RenderObject? child,
+  }) : _passthrough = passthrough {
     if (child != null) this.child = child;
   }
 

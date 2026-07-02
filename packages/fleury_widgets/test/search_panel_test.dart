@@ -122,7 +122,10 @@ void main() {
     // Typing a query collapses grouping back to a flat, tagged list.
     tester.type('Apple');
     tester.pump();
-    output = tester.renderToString(size: const CellSize(40, 16), emptyMark: ' ');
+    output = tester.renderToString(
+      size: const CellSize(40, 16),
+      emptyMark: ' ',
+    );
     expect(output, isNot(contains('FRUIT')));
     expect(output, contains('Apple  Fruit'));
   });
@@ -215,19 +218,6 @@ void main() {
   });
 
   group('copy/export', () {
-    late Clipboard originalClipboard;
-    late TestClipboard clipboard;
-
-    setUp(() {
-      originalClipboard = Clipboard.instance;
-      clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
-    });
-
-    tearDown(() {
-      Clipboard.instance = originalClipboard;
-    });
-
     testWidgets('Ctrl+C copies selected result and reports source index', (
       tester,
     ) async {
@@ -250,7 +240,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(
-        clipboard.lastWritten,
+        tester.clipboard.readInProcess(),
         'Deploy production | Promote the latest release | Runbook | ops',
       );
       expect(copied, isNotNull);
@@ -283,7 +273,7 @@ void main() {
 
       expect(result.completed, isTrue);
       expect(
-        clipboard.lastWritten,
+        tester.clipboard.readInProcess(),
         'Deploy production | Promote the latest release | Runbook | ops',
       );
       expect(copied?.resultIndex, 1);

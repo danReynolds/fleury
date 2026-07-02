@@ -1,4 +1,4 @@
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 import 'calendar_heatmap.dart' show CalendarWeekStart;
 
@@ -148,7 +148,8 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     var today = _midnight(DateTime.now());
     final first = widget.firstDate;
     final last = widget.lastDate;
-    if (first != null && today.isBefore(_midnight(first))) today = _midnight(first);
+    if (first != null && today.isBefore(_midnight(first)))
+      today = _midnight(first);
     if (last != null && today.isAfter(_midnight(last))) today = _midnight(last);
     if (today != _midnight(widget.value)) widget.onChanged!(today);
   }

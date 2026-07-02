@@ -108,12 +108,19 @@ final class AnsiRenderer {
   /// that rectangle and skips whole-screen passes (diff stats, scroll
   /// detection). Pass null whenever layout, removal, scrolling, or any other
   /// unsafe mutation can change cells outside the known painted region.
+  ///
+  /// [trailer] is appended verbatim after the cell diff, inside the same
+  /// synchronized-output frame — the terminal image encoder's escape bytes
+  /// ride here so pixels and text land atomically. A non-empty trailer is
+  /// written even when no cell changed (an animation frame can swap image
+  /// content without touching a single cell).
   void renderDiff(
     CellBuffer previous,
     CellBuffer next,
     AnsiSink sink, {
     CellRect? dirtyBounds,
     void Function(int col, int row)? onDirtyCell,
+    String trailer = '',
   }) {
     assert(
       previous.size == next.size,
@@ -123,7 +130,10 @@ final class AnsiRenderer {
     final diffBounds = dirtyBounds?.intersect(
       CellRect(offset: CellOffset.zero, size: next.size),
     );
-    if (dirtyBounds != null && diffBounds == null) return;
+    if (dirtyBounds != null && diffBounds == null) {
+      if (trailer.isNotEmpty) sink.write(_wrapSync(trailer));
+      return;
+    }
     if (diffBounds != null) {
       final buf = StringBuffer();
       final anyDirty = _appendCellDiff(
@@ -133,12 +143,16 @@ final class AnsiRenderer {
         bounds: diffBounds,
         onDirtyCell: onDirtyCell,
       );
-      if (!anyDirty) return;
+      if (!anyDirty && trailer.isEmpty) return;
+      buf.write(trailer);
       sink.write(_wrapSync(buf.toString()));
       return;
     }
     final screenStats = screenDiffStats(previous, next);
-    if (screenStats.dirtyCells == 0) return;
+    if (screenStats.dirtyCells == 0) {
+      if (trailer.isNotEmpty) sink.write(_wrapSync(trailer));
+      return;
+    }
 
     final size = next.size;
     final scrollUpRows = detectBeneficialScrollUp(previous, next, screenStats);
@@ -155,6 +169,7 @@ final class AnsiRenderer {
       final buf = StringBuffer();
       buf.write(_scrollUp(scrollUpRows));
       _appendCellDiff(scrolledPrevious, next, buf, onDirtyCell: onDirtyCell);
+      buf.write(trailer);
       sink.write(_wrapSync(buf.toString()));
       return;
     }
@@ -166,7 +181,8 @@ final class AnsiRenderer {
       buf,
       onDirtyCell: onDirtyCell,
     );
-    if (!anyDirty) return;
+    if (!anyDirty && trailer.isEmpty) return;
+    buf.write(trailer);
     sink.write(_wrapSync(buf.toString()));
   }
 
@@ -196,13 +212,21 @@ final class AnsiRenderer {
       // advances the terminal cursor across them.
       if (newCell.role == CellRole.continuation) return;
 
-      // protocolCovered cells are owned by an adjacent protocol
-      // anchor — the terminal protocol has already painted them.
-      // Don't emit a cursor move, don't emit content, don't emit a
-      // clear.
-      if (newCell.role == CellRole.protocolCovered) return;
-
       final oldCell = previous.atColRow(col, row);
+
+      // Overlay cells are owned by an inline-image placement: the
+      // presenter's image encoder paints pixels over the region
+      // out-of-band. The cell itself is still CLEARED to a blank here, so
+      // stale text/styled content can't survive in the image's letterbox
+      // bars (which the encoder leaves unpainted) — the encoder's escapes
+      // ride the frame trailer and draw on top. But an overlay over an
+      // already-blank cell (empty, or a prior overlay from a static image)
+      // needs nothing, so an unchanging image costs zero bytes.
+      if (newCell.role == CellRole.overlay &&
+          (oldCell.role == CellRole.empty ||
+              oldCell.role == CellRole.overlay)) {
+        return;
+      }
       if (newCell == oldCell) return;
 
       anyDirty = true;
@@ -246,27 +270,10 @@ final class AnsiRenderer {
         cursorCol = col;
       }
 
-      // Protocol anchors are emitted verbatim: the grapheme IS the
-      // escape sequence to send to the terminal. No SGR wrapping
-      // (the protocol carries its own colors), no cursor advance
-      // accounting (the protocol moves the cursor however it wants).
-      if (newCell.role == CellRole.protocolAnchor) {
-        buf.write(newCell.grapheme!);
-        // The terminal may leave the cursor anywhere after the
-        // protocol completes; invalidate our cached position/style so
-        // the next dirty cell re-emits a cursor move and resets SGR.
-        cursorRow = null;
-        cursorCol = null;
-        emittedStyle = null;
-        styleResetRequired = true;
-        return;
-      }
-
-      // Style change. Emit a combined SGR delta where the terminal state is
-      // known; fall back to reset+set when a protocol anchor invalidated the
-      // cache. Empty-style runs only emit a reset when transitioning out of
-      // a previously emitted non-empty style, or after an invalidating
-      // protocol anchor.
+      // Style change. Emit a combined SGR delta where the terminal state
+      // is known; fall back to reset+set where it is not. Empty-style
+      // runs only emit a reset when transitioning out of a previously
+      // emitted non-empty style.
       if (newCell.style != emittedStyle) {
         if (newCell.style == CellStyle.empty) {
           if (styleResetRequired ||
@@ -290,8 +297,13 @@ final class AnsiRenderer {
         emittedStyle = newCell.style;
       }
 
-      // Emit the cell's content.
-      final grapheme = newCell.role == CellRole.empty ? ' ' : newCell.grapheme!;
+      // Emit the cell's content. Empty and overlay cells both render as a
+      // blank in the text layer (overlay pixels are painted over it by the
+      // encoder trailer).
+      final grapheme =
+          (newCell.role == CellRole.empty || newCell.role == CellRole.overlay)
+          ? ' '
+          : newCell.grapheme!;
       buf.write(grapheme);
 
       // Advance the cursor for next iteration. A leading cell with a
@@ -478,8 +490,7 @@ final class AnsiRenderer {
           }
           out.write(grapheme);
         case CellRole.continuation:
-        case CellRole.protocolAnchor:
-        case CellRole.protocolCovered:
+        case CellRole.overlay:
           return null;
       }
     }

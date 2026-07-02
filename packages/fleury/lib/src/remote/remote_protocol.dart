@@ -34,9 +34,22 @@
 //                            host emits PLAN/SEMANTICS instead)
 //     0x12 PLAN     payload = binary presentation plan (see remote_codec)
 //     0x13 SEMANTICS payload = UTF-8 JSON semantic snapshot
+//     0x17 CLIPBOARD_WRITE payload = [u32 seq][utf8 text] — place text on
+//                   the PEER's clipboard (the user's machine); answered by
+//                   CLIPBOARD_RESULT
+//     0x19 CARET    payload = [u8 present][i16 col][i16 row][u16 cols][u16 rows]
+//                   — the focused editable's caret rect for IME positioning
+//     0x1A SEMANTIC_ACTION_RESULT payload = `<nodeId><action><status>` (see
+//                   remote_codec) — the invocation status for a peer's
+//                   SEMANTIC_ACTION, so agents/AT get real outcomes instead
+//                   of guessing from tree diffs. The app also echoes INIT
+//                   (v3+) after receiving the peer's, carrying its protocol
+//                   version so the client can detect skew.
 //
 //   Peer (serve / shell) → App, structured input
 //     0x14 INPUT_EVENT payload = binary TuiEvent (see remote_codec)
+//     0x18 CLIPBOARD_RESULT payload = [u32 seq][u8 status] — how the peer's
+//                   clipboard write went (written / denied / unavailable)
 //     0x15 SEMANTIC_ACTION payload = `<nodeId><action>` (see remote_codec) —
 //                   the peer activating a node in its accessible DOM, so a
 //                   served session is operable through the a11y tree, not just
@@ -50,24 +63,34 @@
 // is treated as v1 (ANSI host). The payload size is a 32-bit unsigned
 // length so a single frame can hold a fat-screen full repaint.
 //
-// SEMANTIC_ACTION later gained an OPTIONAL trailing value byte (set_value). It
-// stays at v2 because the change is backward-compatible: the decoder treats an
-// absent byte as "no value" (see decodeSemanticAction), so a peer that predates
-// the field — e.g. a stale cached browser asset — still interoperates rather
-// than mis-decoding.
+// Versioning rule (the one rule, stated once): NEW FRAME TYPES and
+// OPTIONAL TRAILING FIELDS are additive — decoders skip unknown type
+// discriminators and tolerate absent trailing fields, so peers one
+// version apart interoperate. CELL/ENUM ENCODINGS inside existing
+// frames are version-gated: server and client ship from the same
+// fleury build (the client bundle is embedded in the binary), so
+// changing them requires a version bump and matching peers.
+//
+// Under that rule: SEMANTIC_ACTION's optional trailing value byte
+// (set_value) was additive. v3 added SEMANTIC_ACTION_RESULT (0x1A)
+// and the app-side INIT echo — both additive: a v2 peer skips the
+// result frame and ignores the echo; a v3 client merely can't show
+// action results or detect version skew against a v2 app.
 
 import 'dart:convert';
 import 'dart:typed_data';
 
 import '../foundation/geometry.dart';
+import '../rendering/surface_capabilities.dart';
 import '../semantics/semantics.dart';
 import '../terminal/capabilities.dart';
-import '../terminal/events.dart';
+import '../input/events.dart';
 import 'remote_codec.dart';
 
 /// Current serve/shell protocol version. Bumped when frame semantics
-/// change incompatibly; carried in the INIT handshake.
-const int remoteProtocolVersion = 2;
+/// change incompatibly; carried in the INIT handshake (and, since v3,
+/// echoed app → peer so the client can detect version skew).
+const int remoteProtocolVersion = 3;
 
 /// Default remote frame payload cap.
 ///
@@ -97,7 +120,11 @@ enum FrameType {
   semantics(0x13),
   inputEvent(0x14),
   semanticAction(0x15),
-  inlineImage(0x16);
+  inlineImage(0x16),
+  clipboardWrite(0x17),
+  clipboardResult(0x18),
+  caret(0x19),
+  semanticActionResult(0x1A);
 
   const FrameType(this.code);
   final int code;
@@ -126,14 +153,22 @@ final class InitFrame extends RemoteFrame {
     this.glyphTier = GlyphTier.unicode,
     required this.imageProtocol,
     required this.tmuxPassthrough,
+    this.images,
     this.protocolVersion = remoteProtocolVersion,
   });
 
   final CellSize size;
   final ColorMode colorMode;
   final GlyphTier glyphTier;
+
+  /// The terminal-projection fields: a v1 ANSI peer (`fleury shell`, a
+  /// real terminal) genuinely has an escape protocol and a multiplexer.
   final ImageProtocol imageProtocol;
   final bool tmuxPassthrough;
+
+  /// The peer's neutral image capability (v3 `images=` param). Null from
+  /// older peers — the app projects [imageProtocol] instead.
+  final InlineImageSupport? images;
 
   /// Negotiated protocol version. A peer omitting `v` in INIT is read as
   /// v1 (the legacy ANSI host).
@@ -212,6 +247,47 @@ final class InlineImageFrame extends RemoteFrame {
   final Uint8List bytes;
 }
 
+/// The app asks the peer to place [text] on the PEER's clipboard — the
+/// machine the user is actually sitting at. Sequenced so the app can match
+/// the peer's [ClipboardResultFrame]. App → peer. Without this, copy in a
+/// served session lands on the server's clipboard (or nowhere).
+final class ClipboardWriteFrame extends RemoteFrame {
+  const ClipboardWriteFrame(this.seq, this.text);
+  final int seq;
+  final String text;
+}
+
+/// How the peer's clipboard write went.
+enum RemoteClipboardStatus { written, denied, unavailable }
+
+/// The peer's answer to a [ClipboardWriteFrame]. Peer → app.
+final class ClipboardResultFrame extends RemoteFrame {
+  const ClipboardResultFrame(this.seq, this.status);
+  final int seq;
+  final RemoteClipboardStatus status;
+}
+
+/// The focused editable's caret rectangle in cell space, or absent when
+/// nothing editable is focused. The peer positions its hidden IME capture
+/// element there so composition candidate windows appear at the caret.
+/// App → peer, sent when the rect changes.
+final class CaretFrame extends RemoteFrame {
+  const CaretFrame(this.caret);
+  final CellRect? caret;
+}
+
+/// The app's answer to a [SemanticActionFrame]: the node id and action echoed
+/// back with the invocation status, so the peer (browser AT mirror, agent
+/// bridge) can distinguish "handler ran", "disabled", "not found",
+/// "unsupported", and "handler threw" instead of guessing from tree diffs.
+/// App → peer.
+final class SemanticActionResultFrame extends RemoteFrame {
+  const SemanticActionResultFrame(this.id, this.action, this.status);
+  final SemanticNodeId id;
+  final SemanticAction action;
+  final SemanticActionInvocationStatus status;
+}
+
 /// Either side signals a clean shutdown. Empty payload.
 final class ByeFrame extends RemoteFrame {
   const ByeFrame();
@@ -234,7 +310,20 @@ Uint8List encodeFrame(RemoteFrame frame) {
       FrameType.semanticAction,
       encodeSemanticAction(f.id, f.action, value: f.value),
     ),
+    SemanticActionResultFrame f => (
+      FrameType.semanticActionResult,
+      encodeSemanticActionResult(f.id, f.action, f.status),
+    ),
     InlineImageFrame f => (FrameType.inlineImage, _encodeInlineImage(f)),
+    ClipboardWriteFrame f => (
+      FrameType.clipboardWrite,
+      _encodeClipboardWrite(f),
+    ),
+    ClipboardResultFrame f => (
+      FrameType.clipboardResult,
+      _encodeClipboardResult(f),
+    ),
+    CaretFrame f => (FrameType.caret, _encodeCaret(f)),
     ByeFrame() => (FrameType.bye, const <int>[]),
   };
   final out = BytesBuilder(copy: false);
@@ -252,6 +341,7 @@ String _encodeInit(InitFrame f) =>
     'glyph=${f.glyphTier.name},'
     'image=${f.imageProtocol.name},'
     'tmux=${f.tmuxPassthrough ? 1 : 0},'
+    '${f.images == null ? '' : 'images=${f.images!.name},'}'
     'v=${f.protocolVersion}';
 
 /// Wire layout: [u16 id length][id utf-8][image bytes...].
@@ -278,6 +368,87 @@ InlineImageFrame _decodeInlineImage(Uint8List payload) {
   final id = utf8.decode(payload.sublist(2, 2 + idLen), allowMalformed: true);
   final bytes = Uint8List.fromList(payload.sublist(2 + idLen));
   return InlineImageFrame(id, bytes);
+}
+
+/// Wire layout: [u32 seq][utf-8 text...].
+Uint8List _encodeClipboardWrite(ClipboardWriteFrame f) {
+  final textBytes = utf8.encode(f.text);
+  final out = BytesBuilder(copy: false);
+  out.add((ByteData(4)..setUint32(0, f.seq)).buffer.asUint8List());
+  out.add(textBytes);
+  return out.toBytes();
+}
+
+ClipboardWriteFrame _decodeClipboardWrite(Uint8List payload) {
+  if (payload.length < 4) {
+    throw const RemoteProtocolException(
+      'CLIPBOARD_WRITE frame: truncated header.',
+    );
+  }
+  final seq = ByteData.sublistView(payload, 0, 4).getUint32(0);
+  final text = utf8.decode(payload.sublist(4), allowMalformed: true);
+  return ClipboardWriteFrame(seq, text);
+}
+
+/// Wire layout: [u32 seq][u8 status]. Status travels by index; the enum is
+/// wire-frozen (append-only), matching the codec's version-locked posture.
+Uint8List _encodeClipboardResult(ClipboardResultFrame f) {
+  final out = ByteData(5)
+    ..setUint32(0, f.seq)
+    ..setUint8(4, f.status.index);
+  return out.buffer.asUint8List();
+}
+
+ClipboardResultFrame _decodeClipboardResult(Uint8List payload) {
+  if (payload.length < 5) {
+    throw const RemoteProtocolException(
+      'CLIPBOARD_RESULT frame: truncated payload.',
+    );
+  }
+  final data = ByteData.sublistView(payload);
+  final statusIndex = data.getUint8(4);
+  if (statusIndex >= RemoteClipboardStatus.values.length) {
+    throw RemoteProtocolException(
+      'CLIPBOARD_RESULT frame: unknown status $statusIndex.',
+    );
+  }
+  return ClipboardResultFrame(
+    data.getUint32(0),
+    RemoteClipboardStatus.values[statusIndex],
+  );
+}
+
+/// Wire layout: [u8 present][i16 col][i16 row][u16 cols][u16 rows].
+Uint8List _encodeCaret(CaretFrame f) {
+  final caret = f.caret;
+  final out = ByteData(9)..setUint8(0, caret == null ? 0 : 1);
+  if (caret != null) {
+    out
+      ..setInt16(1, caret.left)
+      ..setInt16(3, caret.top)
+      ..setUint16(5, caret.size.cols)
+      ..setUint16(7, caret.size.rows);
+  }
+  return out.buffer.asUint8List();
+}
+
+CaretFrame _decodeCaret(Uint8List payload) {
+  if (payload.isEmpty) {
+    throw const RemoteProtocolException('CARET frame: empty payload.');
+  }
+  if (payload[0] == 0) return const CaretFrame(null);
+  if (payload.length < 9) {
+    throw const RemoteProtocolException('CARET frame: truncated payload.');
+  }
+  final data = ByteData.sublistView(payload);
+  return CaretFrame(
+    CellRect.fromLTWH(
+      data.getInt16(1),
+      data.getInt16(3),
+      data.getUint16(5),
+      data.getUint16(7),
+    ),
+  );
 }
 
 /// Streaming frame decoder. Feed bytes as they arrive from the
@@ -371,8 +542,23 @@ final class FrameDecoder {
         } on RemoteCodecException catch (e) {
           throw RemoteProtocolException('SEMANTIC_ACTION frame: ${e.message}.');
         }
+      case FrameType.semanticActionResult:
+        try {
+          final (:id, :action, :status) = decodeSemanticActionResult(payload);
+          return SemanticActionResultFrame(id, action, status);
+        } on RemoteCodecException catch (e) {
+          throw RemoteProtocolException(
+            'SEMANTIC_ACTION_RESULT frame: ${e.message}.',
+          );
+        }
       case FrameType.inlineImage:
         return _decodeInlineImage(payload);
+      case FrameType.clipboardWrite:
+        return _decodeClipboardWrite(payload);
+      case FrameType.clipboardResult:
+        return _decodeClipboardResult(payload);
+      case FrameType.caret:
+        return _decodeCaret(payload);
       case FrameType.bye:
         return const ByeFrame();
     }
@@ -406,6 +592,11 @@ InitFrame _decodeInit(String body) {
       orElse: () => ImageProtocol.halfBlock,
     ),
     tmuxPassthrough: params['tmux'] == '1',
+    images: switch (params['images']) {
+      'none' => InlineImageSupport.none,
+      'placements' => InlineImageSupport.placements,
+      _ => null,
+    },
     protocolVersion: int.tryParse(params['v'] ?? '') ?? 1,
   );
 }

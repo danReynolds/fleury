@@ -1,9 +1,40 @@
 // ScrollView: windowed viewport onto a tall child — scroll chords,
 // clamping, clipping, and edge bubbling.
 
+import 'dart:typed_data';
+
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
+
+/// A 4×2 leaf that records an inline-image placement (the true-pixel path)
+/// rather than painting glyphs — so a test can assert the placement
+/// survives the ScrollView's scratch-buffer composite.
+class _ImageLeaf extends LeafRenderObjectWidget {
+  const _ImageLeaf();
+  @override
+  RenderObject createRenderObject(BuildContext context) => _ImageLeafRender();
+}
+
+class _ImageLeafRender extends RenderObject {
+  @override
+  CellSize performLayout(CellConstraints constraints) =>
+      constraints.constrain(const CellSize(4, 2));
+  @override
+  void paint(
+    CellBuffer buffer,
+    CellOffset offset, {
+    CellOffset? screenOffset,
+    CellRect? clipRect,
+  }) {
+    buffer.writeImage(
+      offset,
+      Uint8List.fromList([1, 2, 3, 4]),
+      width: 4,
+      height: 2,
+    );
+  }
+}
 
 Matcher _stateError(String message) {
   return throwsA(
@@ -107,6 +138,39 @@ void main() {
   testWidgets('shows the top of the content by default', (tester) {
     tester.pumpWidget(ScrollView(child: _rows(10)));
     expect(_lines(tester, rows: 3), ['r0', 'r1', 'r2']);
+  });
+
+  testWidgets('carries a visible inline image through the scratch composite', (
+    tester,
+  ) {
+    // An Image inside a ScrollView paints into the scroll's scratch buffer;
+    // its placement must be carried back or a true-pixel surface renders a
+    // blank box. (Regression: the cell composite copies only leading cells.)
+    final ctl = ScrollController();
+    tester.pumpWidget(
+      ScrollView(
+        controller: ctl,
+        child: Column(children: [const _ImageLeaf(), _rows(20)]),
+      ),
+    );
+    final buf = tester.render(size: const CellSize(6, 5));
+    final placement = buf.imagePlacements.single;
+    expect(placement.col, 0);
+    expect(placement.row, 0, reason: 'image sits at the top of the viewport');
+    expect(placement.cols, 4);
+    expect(buf.images, isNotEmpty);
+    // The region is overlay (the encoder/overlay renders the pixels).
+    expect(buf.atColRow(0, 0).role, CellRole.overlay);
+
+    // Scroll the image out of view → the placement is no longer carried
+    // (the scratch drops it, so nothing lingers on the surface).
+    ctl.scrollBy(6);
+    final scrolled = tester.render(size: const CellSize(6, 5));
+    expect(
+      scrolled.imagePlacements,
+      isEmpty,
+      reason: 'a scrolled-away image contributes no placement',
+    );
   });
 
   testWidgets('scrollBy reveals lower content; metrics are reported', (tester) {

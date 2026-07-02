@@ -1,6 +1,8 @@
 @TestOn('browser')
 library;
 
+import 'dart:typed_data';
+
 import 'package:fleury/fleury_host.dart';
 import 'package:fleury_web/src/dom_grid/dom_grid_surface.dart';
 import 'package:fleury_web/src/metrics/cell_metrics.dart';
@@ -182,16 +184,16 @@ void main() {
       expect(row.querySelector('a'), isNull);
     });
 
-    test('marks protocol cells as unsupported inline-image placeholders', () {
+    test('renders overlay (inline-image) cells as blanks', () {
       final root = web.document.createElement('div');
       final surface = DomGridSurface(root: root, size: const CellSize(4, 1));
       final damage = RenderDamageTracker();
       final loop = TuiFrameLoop(renderDamage: damage);
       final frame = loop.render(
         size: const CellSize(4, 1),
-        paint: (buffer) => buffer.writeProtocol(
+        paint: (buffer) => buffer.writeImage(
           const CellOffset(1, 0),
-          'image-bytes',
+          Uint8List.fromList([1, 2, 3]),
           width: 2,
           height: 1,
         ),
@@ -200,20 +202,17 @@ void main() {
 
       surface.present(frame.previous, frame.next, plan);
 
-      final placeholder = surface.rowElements.single.querySelector('.proto')!;
-      expect(placeholder.textContent, '▩');
-      expect(placeholder.getAttribute('title'), 'unsupported inline image');
+      final row = surface.rowElements.single;
+      expect(row.querySelector('.proto'), isNull);
       expect(
-        placeholder.getAttribute('data-fleury-cell-kind'),
-        'protocol-placeholder',
+        row.textContent,
+        '    ',
+        reason: 'the grid under an <img> overlay is blank cells',
       );
       expect(
-        placeholder.getAttribute('data-fleury-unsupported'),
-        'inline-image',
-      );
-      expect(
-        surface.rowElements.single.textContent,
-        isNot(contains('image-bytes')),
+        row.textContent,
+        isNot(contains(frame.next.imagePlacements.single.id)),
+        reason: 'no content id leaks into the grid',
       );
     });
 

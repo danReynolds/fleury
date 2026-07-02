@@ -1,12 +1,6 @@
-import 'package:fleury/fleury_host.dart';
-
-const String protocolPlaceholderGlyph = '▩';
-const String protocolPlaceholderTitle = 'unsupported inline image';
-const String protocolPlaceholderKindAttribute = 'data-fleury-cell-kind';
-const String protocolPlaceholderKind = 'protocol-placeholder';
-const String protocolPlaceholderUnsupportedAttribute =
-    'data-fleury-unsupported';
-const String protocolPlaceholderUnsupported = 'inline-image';
+import '../runtime/tui_frame_loop.dart' show TuiDirtyRows;
+import 'cell.dart';
+import 'cell_buffer.dart';
 
 /// Builds row span models from a [CellBuffer].
 ///
@@ -147,21 +141,16 @@ final class CellSpanBuilder {
             col += 1;
           }
 
-        case CellRole.protocolAnchor:
-          flushPending();
-          runs.add(
-            CellSpanRun(
-              startCol: col,
-              widthCols: 1,
-              text: protocolPlaceholderGlyph,
-              style: CellStyle.empty,
-              kind: CellRunKind.protocolPlaceholder,
-              correction: WidthCorrection.none,
-            ),
+        case CellRole.overlay:
+          // Inline-image region: the DOM surface renders the pixels as an
+          // absolutely-positioned <img>; the grid underneath stays blank.
+          appendText(
+            col: col,
+            text: ' ',
+            widthCols: 1,
+            style: CellStyle.empty,
+            kind: CellRunKind.emptyText,
           );
-          col += 1;
-
-        case CellRole.protocolCovered:
           col += 1;
       }
     }
@@ -226,7 +215,7 @@ final class CellSpanRun {
 /// lines rather than the font glyph, which in a browser does not tile
 /// vertically (the glyph ink is shorter than the cell, so stacked borders
 /// dash). See [boxDrawingMask].
-enum CellRunKind { text, wideText, emptyText, protocolPlaceholder, boxDrawing }
+enum CellRunKind { text, wideText, emptyText, boxDrawing }
 
 /// Directional segment bits for a box-drawing grapheme.
 const int boxSegmentNorth = 1;

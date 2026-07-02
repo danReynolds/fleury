@@ -10,27 +10,25 @@ import 'cell.dart';
 import 'cell_buffer.dart';
 
 /// Whole-screen diff stats used as the scroll-detection baseline.
-({int dirtyCells, bool hasProtocolCells}) screenDiffStats(
+({int dirtyCells, bool hasOverlayCells}) screenDiffStats(
   CellBuffer previous,
   CellBuffer next,
 ) {
   final size = previous.size;
   var dirty = 0;
-  var hasProtocolCells = false;
+  var hasOverlayCells = false;
   for (var row = 0; row < size.rows; row++) {
     for (var col = 0; col < size.cols; col++) {
       final previousCell = previous.atColRow(col, row);
       final nextCell = next.atColRow(col, row);
       if (previousCell != nextCell) dirty++;
-      hasProtocolCells =
-          hasProtocolCells ||
-          previousCell.role == CellRole.protocolAnchor ||
-          previousCell.role == CellRole.protocolCovered ||
-          nextCell.role == CellRole.protocolAnchor ||
-          nextCell.role == CellRole.protocolCovered;
+      hasOverlayCells =
+          hasOverlayCells ||
+          previousCell.role == CellRole.overlay ||
+          nextCell.role == CellRole.overlay;
     }
   }
-  return (dirtyCells: dirty, hasProtocolCells: hasProtocolCells);
+  return (dirtyCells: dirty, hasOverlayCells: hasOverlayCells);
 }
 
 /// Returns the upward shift (in rows) that minimizes residual dirty cells,
@@ -38,17 +36,17 @@ import 'cell_buffer.dart';
 ///
 /// A shift of `n` means `next.row(r) == previous.row(r + n)` for most rows:
 /// the presenter can move/scroll the retained region up by `n` and only
-/// repaint the residual rows. Protocol cells disable detection (their
-/// painted output is not row-relocatable).
+/// repaint the residual rows. Overlay (inline-image) cells disable
+/// detection — their painted pixels are not row-relocatable.
 int? detectBeneficialScrollUp(
   CellBuffer previous,
   CellBuffer next,
-  ({int dirtyCells, bool hasProtocolCells}) stats,
+  ({int dirtyCells, bool hasOverlayCells}) stats,
 ) {
   final size = previous.size;
   if (size != next.size || size.rows < 2) return null;
 
-  if (stats.hasProtocolCells) return null;
+  if (stats.hasOverlayCells) return null;
   final normalDirty = stats.dirtyCells;
   var bestShift = 0;
   var bestDirty = normalDirty;

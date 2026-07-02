@@ -1146,527 +1146,484 @@ void main() {
   });
 
   testWidgets('runs table copies the selected DataTable row', (tester) async {
-    final originalClipboard = Clipboard.instance;
-    final clipboard = TestClipboard();
-    Clipboard.instance = clipboard;
-    try {
-      tester.pumpWidget(const DemoConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-      await _invoke(tester, demoCommandGoRuns);
-      await _invoke(tester, demoCommandFocusRunsTable);
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-      tester.render(size: const CellSize(80, 24));
+    await _invoke(tester, demoCommandGoRuns);
+    await _invoke(tester, demoCommandFocusRunsTable);
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.render(size: const CellSize(80, 24));
 
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
-      await _flushAsyncUi(tester);
+    tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    await _flushAsyncUi(tester);
 
-      expect(
-        clipboard.lastWritten,
-        'ID\tStatus\tTitle\tOwner\tProgress\n'
-        'RUN-1002\tfailed\tAPI deploy smoke\tops\t100%',
-      );
-      final table = tester.semantics().single(
-        role: SemanticRole.table,
-        action: SemanticAction.copy,
-      );
-      expect(table.state.selectedKey, 'RUN-1002');
-      expect(table.state['copyFormat'], 'tsv');
-      expect(table.state.clipboardPolicy, 'standard');
-    } finally {
-      Clipboard.instance = originalClipboard;
-    }
+    expect(
+      tester.clipboard.readInProcess(),
+      'ID\tStatus\tTitle\tOwner\tProgress\n'
+      'RUN-1002\tfailed\tAPI deploy smoke\tops\t100%',
+    );
+    final table = tester.semantics().single(
+      role: SemanticRole.table,
+      action: SemanticAction.copy,
+    );
+    expect(table.state.selectedKey, 'RUN-1002');
+    expect(table.state['copyFormat'], 'tsv');
+    expect(table.state.clipboardPolicy, 'standard');
   });
 
   testWidgets('tree screen proves TreeTable navigation, semantics, and copy', (
     tester,
   ) async {
-    final originalClipboard = Clipboard.instance;
-    final clipboard = TestClipboard();
-    Clipboard.instance = clipboard;
-    try {
-      tester.pumpWidget(const DemoConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-      final nav = await _invoke(tester, demoCommandGoTree);
-      expect(nav.status, CommandInvocationStatus.completed);
-      expect(_demoApp(tester).state.activeScreenId, 'tree');
-      expect(tester.exists(text('Tree')), isTrue);
+    final nav = await _invoke(tester, demoCommandGoTree);
+    expect(nav.status, CommandInvocationStatus.completed);
+    expect(_demoApp(tester).state.activeScreenId, 'tree');
+    expect(tester.exists(text('Tree')), isTrue);
 
-      await _invoke(tester, demoCommandFocusTreeTable);
-      tester.render(size: const CellSize(90, 24));
+    await _invoke(tester, demoCommandFocusTreeTable);
+    tester.render(size: const CellSize(90, 24));
 
-      var tree = tester.semantics().single(
-        role: SemanticRole.tree,
-        label: 'Framework component tree',
-      );
-      expect(tree.focused, isTrue);
-      expect(tree.state.collectionColumnCount, 3);
-      expect(tree.state.selectedKey, 'core');
-      expect(tree.state['expandedCount'], 1);
+    var tree = tester.semantics().single(
+      role: SemanticRole.tree,
+      label: 'Framework component tree',
+    );
+    expect(tree.focused, isTrue);
+    expect(tree.state.collectionColumnCount, 3);
+    expect(tree.state.selectedKey, 'core');
+    expect(tree.state['expandedCount'], 1);
 
-      final semanticGraph = tester.semantics().single(
-        role: SemanticRole.treeItem,
-        label: 'Semantic Graph',
-      );
-      expect(semanticGraph.state['rowKey'], 'semantic-graph');
-      expect(semanticGraph.state['depth'], 1);
+    final semanticGraph = tester.semantics().single(
+      role: SemanticRole.treeItem,
+      label: 'Semantic Graph',
+    );
+    expect(semanticGraph.state['rowKey'], 'semantic-graph');
+    expect(semanticGraph.state['depth'], 1);
 
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
-      await _flushAsyncUi(tester);
+    tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    await _flushAsyncUi(tester);
 
-      expect(
-        clipboard.lastWritten,
-        'Component\tStatus\tOwner\n'
-        'Core Framework\tready\truntime',
-      );
-      tree = tester.semantics().single(
-        role: SemanticRole.tree,
-        label: 'Framework component tree',
-        action: SemanticAction.copy,
-      );
-      expect(tree.state.clipboardPolicy, 'inProcessOnly');
+    expect(
+      tester.clipboard.readInProcess(),
+      'Component\tStatus\tOwner\n'
+      'Core Framework\tready\truntime',
+    );
+    tree = tester.semantics().single(
+      role: SemanticRole.tree,
+      label: 'Framework component tree',
+      action: SemanticAction.copy,
+    );
+    expect(tree.state.clipboardPolicy, 'inProcessOnly');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
-      await _flushAsyncUi(tester);
-      await _invoke(tester, demoCommandGoTranscript);
-      tester.render(size: const CellSize(90, 24));
-      expect(
-        tester.exists(text('[log] tree: selected semantic-graph active')),
-        isTrue,
-      );
-    } finally {
-      Clipboard.instance = originalClipboard;
-    }
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    await _flushAsyncUi(tester);
+    await _invoke(tester, demoCommandGoTranscript);
+    tester.render(size: const CellSize(90, 24));
+    expect(
+      tester.exists(text('[log] tree: selected semantic-graph active')),
+      isTrue,
+    );
   });
 
   testWidgets('payload screen proves JsonView semantics and safe copy', (
     tester,
   ) async {
-    final originalClipboard = Clipboard.instance;
-    final clipboard = TestClipboard();
-    Clipboard.instance = clipboard;
-    try {
-      tester.pumpWidget(const DemoConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-      final nav = await _invoke(tester, demoCommandGoPayload);
-      expect(nav.status, CommandInvocationStatus.completed);
-      expect(_demoApp(tester).state.activeScreenId, 'payload');
-      expect(tester.exists(text('Payload')), isTrue);
+    final nav = await _invoke(tester, demoCommandGoPayload);
+    expect(nav.status, CommandInvocationStatus.completed);
+    expect(_demoApp(tester).state.activeScreenId, 'payload');
+    expect(tester.exists(text('Payload')), isTrue);
 
-      await _invoke(tester, demoCommandFocusPayload);
-      final output = tester.renderToString(
-        size: const CellSize(90, 26),
-        emptyMark: ' ',
-      );
-      expect(output, contains('unsafeOutput: "bad'));
-      expect(output, isNot(contains('token')));
-      expect(output, isNot(contains('\x1b]52')));
+    await _invoke(tester, demoCommandFocusPayload);
+    final output = tester.renderToString(
+      size: const CellSize(90, 26),
+      emptyMark: ' ',
+    );
+    expect(output, contains('unsafeOutput: "bad'));
+    expect(output, isNot(contains('token')));
+    expect(output, isNot(contains('\x1b]52')));
 
-      final json = tester.semantics().single(
-        role: SemanticRole.json,
-        label: 'Demo payload',
-        action: SemanticAction.copy,
-      );
-      expect(json.focused, isTrue);
-      expect(json.state.collectionRowCount, 6);
-      expect(json.state['rootType'], 'object');
-      expect(json.state.selectedKey, '');
-      expect(json.state['selectedPath'], r'$');
-      expect(json.state.clipboardPolicy, 'inProcessOnly');
+    final json = tester.semantics().single(
+      role: SemanticRole.json,
+      label: 'Demo payload',
+      action: SemanticAction.copy,
+    );
+    expect(json.focused, isTrue);
+    expect(json.state.collectionRowCount, 6);
+    expect(json.state['rootType'], 'object');
+    expect(json.state.selectedKey, '');
+    expect(json.state['selectedPath'], r'$');
+    expect(json.state.clipboardPolicy, 'inProcessOnly');
 
-      final unsafe = tester.semantics().single(
-        role: SemanticRole.jsonNode,
-        label: 'unsafeOutput',
-      );
-      expect(unsafe.value, isNot(contains('token')));
-      expect(unsafe.state.outputSanitized, isTrue);
-      expect(unsafe.state['jsonPath'], r'$.unsafeOutput');
+    final unsafe = tester.semantics().single(
+      role: SemanticRole.jsonNode,
+      label: 'unsafeOutput',
+    );
+    expect(unsafe.value, isNot(contains('token')));
+    expect(unsafe.state.outputSanitized, isTrue);
+    expect(unsafe.state['jsonPath'], r'$.unsafeOutput');
 
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
-      await _flushAsyncUi(tester);
+    tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    await _flushAsyncUi(tester);
 
-      expect(clipboard.lastWritten, contains('"jsonView": true'));
-      expect(clipboard.lastWritten, isNot(contains('token')));
-      expect(clipboard.lastWritten, isNot(contains('\x1b]52')));
+    expect(tester.clipboard.readInProcess(), contains('"jsonView": true'));
+    expect(tester.clipboard.readInProcess(), isNot(contains('token')));
+    expect(tester.clipboard.readInProcess(), isNot(contains('\x1b]52')));
 
-      await _invoke(tester, demoCommandGoTranscript);
-      tester.render(size: const CellSize(90, 26));
-      expect(tester.exists(text(r'[log] payload: copied $')), isTrue);
-    } finally {
-      Clipboard.instance = originalClipboard;
-    }
+    await _invoke(tester, demoCommandGoTranscript);
+    tester.render(size: const CellSize(90, 26));
+    expect(tester.exists(text(r'[log] payload: copied $')), isTrue);
   });
 
   testWidgets('changes screen proves DiffView semantics and safe hunk copy', (
     tester,
   ) async {
-    final originalClipboard = Clipboard.instance;
-    final clipboard = TestClipboard();
-    Clipboard.instance = clipboard;
-    try {
-      tester.pumpWidget(const DemoConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-      final nav = await _invoke(tester, demoCommandGoChanges);
-      expect(nav.status, CommandInvocationStatus.completed);
-      expect(_demoApp(tester).state.activeScreenId, 'changes');
-      expect(tester.exists(text('Changes')), isTrue);
+    final nav = await _invoke(tester, demoCommandGoChanges);
+    expect(nav.status, CommandInvocationStatus.completed);
+    expect(_demoApp(tester).state.activeScreenId, 'changes');
+    expect(tester.exists(text('Changes')), isTrue);
 
-      tester.render(size: const CellSize(90, 26));
-      final initialPatch = tester.semantics().single(
-        role: SemanticRole.patchReview,
-        label: 'Framework patch review',
-        action: SemanticAction.focus,
-      );
-      expect(initialPatch.focused, isFalse);
-      expect(initialPatch.actions, contains(SemanticAction.navigate));
+    tester.render(size: const CellSize(90, 26));
+    final initialPatch = tester.semantics().single(
+      role: SemanticRole.patchReview,
+      label: 'Framework patch review',
+      action: SemanticAction.focus,
+    );
+    expect(initialPatch.focused, isFalse);
+    expect(initialPatch.actions, contains(SemanticAction.navigate));
 
-      final focusPatch = await tester.invokeSemanticAction(
-        SemanticAction.focus,
-        role: SemanticRole.patchReview,
-        label: 'Framework patch review',
-      );
-      expect(focusPatch.completed, isTrue);
-      tester.render(size: const CellSize(90, 26));
-      expect(
-        tester
-            .semantics()
-            .single(
-              role: SemanticRole.patchReview,
-              label: 'Framework patch review',
-              focused: true,
-            )
-            .state
-            .selectedPatchFilePath,
-        'lib/framework.dart',
-      );
-
-      await _invoke(tester, demoCommandFocusChanges);
-      final output = tester.renderToString(
-        size: const CellSize(90, 26),
-        emptyMark: ' ',
-      );
-      expect(output, contains('Framework patch review: 1 files'));
-      expect(output, contains('+  final mode = \'reactive\';'));
-      expect(output, contains('+  final note = \'safe'));
-      expect(output, isNot(contains('token')));
-      expect(output, isNot(contains('\x1b]52')));
-      expect(
-        _styleForRenderedText(
-          tester,
-          '+  final mode = \'reactive\';',
-        )?.foreground,
-        const AnsiColor(10),
-      );
-
-      final patch = tester.semantics().single(
-        role: SemanticRole.patchReview,
-        label: 'Framework patch review',
-        action: SemanticAction.copy,
-      );
-      expect(patch.value, 'reviewing');
-      expect(patch.state.patchId, 'demo.framework.patch');
-      expect(patch.state.patchStatus, 'reviewing');
-      expect(patch.state['patchFileCount'], 1);
-      expect(patch.state['patchAdditionCount'], 2);
-      expect(patch.state['patchDeletionCount'], 1);
-      expect(patch.state.selectedPatchFilePath, 'lib/framework.dart');
-
-      final patchFile = tester.semantics().single(
-        role: SemanticRole.patchFile,
-        label: 'lib/framework.dart',
-        action: SemanticAction.activate,
-      );
-      expect(patchFile.value, 'reviewing');
-      expect(patchFile.state.patchFilePath, 'lib/framework.dart');
-      expect(patchFile.state.patchFileStatus, 'reviewing');
-      expect(patchFile.state['patchFileAdditionCount'], 2);
-      expect(patchFile.state['patchFileDeletionCount'], 1);
-
-      final diff = tester.semantics().single(
-        role: SemanticRole.diff,
-        label: 'Framework patch review diff',
-        action: SemanticAction.copy,
-      );
-      expect(diff.focused, isTrue);
-      expect(diff.state.collectionRowCount, 10);
-      expect(diff.state['fileCount'], 1);
-      expect(diff.state['hunkCount'], 1);
-      expect(diff.state['additionCount'], 2);
-      expect(diff.state['deletionCount'], 1);
-      expect(diff.state['selectedDiffKind'], 'addition');
-      expect(diff.state['selectedFilePath'], 'lib/framework.dart');
-      expect(diff.state['selectedNewLine'], 2);
-      expect(diff.state.clipboardPolicy, 'inProcessOnly');
-
-      final unsafe = tester
+    final focusPatch = await tester.invokeSemanticAction(
+      SemanticAction.focus,
+      role: SemanticRole.patchReview,
+      label: 'Framework patch review',
+    );
+    expect(focusPatch.completed, isTrue);
+    tester.render(size: const CellSize(90, 26));
+    expect(
+      tester
           .semantics()
-          .where(role: SemanticRole.diffLine)
-          .singleWhere(
-            (node) => node.label!.contains('+  final note = \'safe'),
-          );
-      expect(unsafe.label, isNot(contains('token')));
-      expect(unsafe.state.outputSanitized, isTrue);
-      expect(unsafe.state['newLine'], 3);
+          .single(
+            role: SemanticRole.patchReview,
+            label: 'Framework patch review',
+            focused: true,
+          )
+          .state
+          .selectedPatchFilePath,
+      'lib/framework.dart',
+    );
 
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
-      await _flushAsyncUi(tester);
+    await _invoke(tester, demoCommandFocusChanges);
+    final output = tester.renderToString(
+      size: const CellSize(90, 26),
+      emptyMark: ' ',
+    );
+    expect(output, contains('Framework patch review: 1 files'));
+    expect(output, contains('+  final mode = \'reactive\';'));
+    expect(output, contains('+  final note = \'safe'));
+    expect(output, isNot(contains('token')));
+    expect(output, isNot(contains('\x1b]52')));
+    expect(
+      _styleForRenderedText(
+        tester,
+        '+  final mode = \'reactive\';',
+      )?.foreground,
+      const AnsiColor(10),
+    );
 
-      expect(clipboard.lastWritten, contains('@@ -1,4 +1,5 @@'));
-      expect(clipboard.lastWritten, contains('+  final mode = \'reactive\';'));
-      expect(clipboard.lastWritten, isNot(contains('token')));
-      expect(clipboard.lastWritten, isNot(contains('\x1b]52')));
+    final patch = tester.semantics().single(
+      role: SemanticRole.patchReview,
+      label: 'Framework patch review',
+      action: SemanticAction.copy,
+    );
+    expect(patch.value, 'reviewing');
+    expect(patch.state.patchId, 'demo.framework.patch');
+    expect(patch.state.patchStatus, 'reviewing');
+    expect(patch.state['patchFileCount'], 1);
+    expect(patch.state['patchAdditionCount'], 2);
+    expect(patch.state['patchDeletionCount'], 1);
+    expect(patch.state.selectedPatchFilePath, 'lib/framework.dart');
 
-      final deletedLine = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.diffLine,
-        label: '-  final mode = \'legacy\';',
-      );
-      expect(deletedLine.completed, isTrue);
-      tester.render(size: const CellSize(90, 26));
+    final patchFile = tester.semantics().single(
+      role: SemanticRole.patchFile,
+      label: 'lib/framework.dart',
+      action: SemanticAction.activate,
+    );
+    expect(patchFile.value, 'reviewing');
+    expect(patchFile.state.patchFilePath, 'lib/framework.dart');
+    expect(patchFile.state.patchFileStatus, 'reviewing');
+    expect(patchFile.state['patchFileAdditionCount'], 2);
+    expect(patchFile.state['patchFileDeletionCount'], 1);
 
-      final selectedDeletion = tester.semantics().single(
-        role: SemanticRole.diffLine,
-        label: '-  final mode = \'legacy\';',
-        selected: true,
-        action: SemanticAction.copy,
-      );
-      expect(selectedDeletion.state['oldLine'], 2);
+    final diff = tester.semantics().single(
+      role: SemanticRole.diff,
+      label: 'Framework patch review diff',
+      action: SemanticAction.copy,
+    );
+    expect(diff.focused, isTrue);
+    expect(diff.state.collectionRowCount, 10);
+    expect(diff.state['fileCount'], 1);
+    expect(diff.state['hunkCount'], 1);
+    expect(diff.state['additionCount'], 2);
+    expect(diff.state['deletionCount'], 1);
+    expect(diff.state['selectedDiffKind'], 'addition');
+    expect(diff.state['selectedFilePath'], 'lib/framework.dart');
+    expect(diff.state['selectedNewLine'], 2);
+    expect(diff.state.clipboardPolicy, 'inProcessOnly');
 
-      final updatedDiff = tester.semantics().single(
-        role: SemanticRole.diff,
-        label: 'Framework patch review diff',
-      );
-      expect(updatedDiff.state['selectedDiffKind'], 'deletion');
-      expect(updatedDiff.state['selectedOldLine'], 2);
+    final unsafe = tester
+        .semantics()
+        .where(role: SemanticRole.diffLine)
+        .singleWhere((node) => node.label!.contains('+  final note = \'safe'));
+    expect(unsafe.label, isNot(contains('token')));
+    expect(unsafe.state.outputSanitized, isTrue);
+    expect(unsafe.state['newLine'], 3);
 
-      final selectPatch = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.patchFile,
-        label: 'lib/framework.dart',
-      );
-      expect(selectPatch.completed, isTrue);
+    tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    await _flushAsyncUi(tester);
 
-      await _invoke(tester, demoCommandGoTranscript);
-      tester.render(size: const CellSize(90, 26));
-      expect(
-        tester.exists(
-          text('[log] changes: copied lib/framework.dart addition'),
-        ),
-        isTrue,
-      );
-      expect(
-        tester.exists(text('[log] patch: selected lib/framework.dart')),
-        isTrue,
-      );
-    } finally {
-      Clipboard.instance = originalClipboard;
-    }
+    expect(tester.clipboard.readInProcess(), contains('@@ -1,4 +1,5 @@'));
+    expect(
+      tester.clipboard.readInProcess(),
+      contains('+  final mode = \'reactive\';'),
+    );
+    expect(tester.clipboard.readInProcess(), isNot(contains('token')));
+    expect(tester.clipboard.readInProcess(), isNot(contains('\x1b]52')));
+
+    final deletedLine = await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.diffLine,
+      label: '-  final mode = \'legacy\';',
+    );
+    expect(deletedLine.completed, isTrue);
+    tester.render(size: const CellSize(90, 26));
+
+    final selectedDeletion = tester.semantics().single(
+      role: SemanticRole.diffLine,
+      label: '-  final mode = \'legacy\';',
+      selected: true,
+      action: SemanticAction.copy,
+    );
+    expect(selectedDeletion.state['oldLine'], 2);
+
+    final updatedDiff = tester.semantics().single(
+      role: SemanticRole.diff,
+      label: 'Framework patch review diff',
+    );
+    expect(updatedDiff.state['selectedDiffKind'], 'deletion');
+    expect(updatedDiff.state['selectedOldLine'], 2);
+
+    final selectPatch = await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.patchFile,
+      label: 'lib/framework.dart',
+    );
+    expect(selectPatch.completed, isTrue);
+
+    await _invoke(tester, demoCommandGoTranscript);
+    tester.render(size: const CellSize(90, 26));
+    expect(
+      tester.exists(text('[log] changes: copied lib/framework.dart addition')),
+      isTrue,
+    );
+    expect(
+      tester.exists(text('[log] patch: selected lib/framework.dart')),
+      isTrue,
+    );
   });
 
   testWidgets('source screen proves CodeView semantics and safe source copy', (
     tester,
   ) async {
-    final originalClipboard = Clipboard.instance;
-    final clipboard = TestClipboard();
-    Clipboard.instance = clipboard;
-    try {
-      tester.pumpWidget(const DemoConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-      final nav = await _invoke(tester, demoCommandGoSource);
-      expect(nav.status, CommandInvocationStatus.completed);
-      expect(_demoApp(tester).state.activeScreenId, 'source');
-      expect(tester.exists(text('Source')), isTrue);
+    final nav = await _invoke(tester, demoCommandGoSource);
+    expect(nav.status, CommandInvocationStatus.completed);
+    expect(_demoApp(tester).state.activeScreenId, 'source');
+    expect(tester.exists(text('Source')), isTrue);
 
-      await _invoke(tester, demoCommandFocusSource);
-      final output = tester.renderToString(
-        size: const CellSize(90, 26),
-        emptyMark: ' ',
-      );
-      expect(output, contains("return const Text('safe"));
-      expect(output, isNot(contains('token')));
-      expect(output, isNot(contains('\x1b]52')));
+    await _invoke(tester, demoCommandFocusSource);
+    final output = tester.renderToString(
+      size: const CellSize(90, 26),
+      emptyMark: ' ',
+    );
+    expect(output, contains("return const Text('safe"));
+    expect(output, isNot(contains('token')));
+    expect(output, isNot(contains('\x1b]52')));
 
-      final code = tester.semantics().single(
-        role: SemanticRole.code,
-        label: 'Framework source',
-        action: SemanticAction.copy,
-      );
-      expect(code.focused, isTrue);
-      expect(code.state.collectionRowCount, 10);
-      expect(code.state['lineCount'], 10);
-      expect(code.state['nonEmptyLineCount'], 8);
-      expect(code.state['commentCount'], 0);
-      expect(code.state['blankCount'], 2);
-      expect(code.state['language'], 'dart');
-      expect(code.state['filePath'], 'lib/launch_shell.dart');
-      expect(code.state.selectedKey, 8);
-      expect(code.state['selectedCodeLineKind'], 'keyword');
-      expect(code.state.clipboardPolicy, 'inProcessOnly');
+    final code = tester.semantics().single(
+      role: SemanticRole.code,
+      label: 'Framework source',
+      action: SemanticAction.copy,
+    );
+    expect(code.focused, isTrue);
+    expect(code.state.collectionRowCount, 10);
+    expect(code.state['lineCount'], 10);
+    expect(code.state['nonEmptyLineCount'], 8);
+    expect(code.state['commentCount'], 0);
+    expect(code.state['blankCount'], 2);
+    expect(code.state['language'], 'dart');
+    expect(code.state['filePath'], 'lib/launch_shell.dart');
+    expect(code.state.selectedKey, 8);
+    expect(code.state['selectedCodeLineKind'], 'keyword');
+    expect(code.state.clipboardPolicy, 'inProcessOnly');
 
-      final unsafe = tester.semantics().single(
-        role: SemanticRole.codeLine,
-        selected: true,
-      );
-      expect(unsafe.label, contains("return const Text('safe"));
-      expect(unsafe.label, isNot(contains('token')));
-      expect(unsafe.state.outputSanitized, isTrue);
-      expect(unsafe.state['lineNumber'], 8);
+    final unsafe = tester.semantics().single(
+      role: SemanticRole.codeLine,
+      selected: true,
+    );
+    expect(unsafe.label, contains("return const Text('safe"));
+    expect(unsafe.label, isNot(contains('token')));
+    expect(unsafe.state.outputSanitized, isTrue);
+    expect(unsafe.state['lineNumber'], 8);
 
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
-      await _flushAsyncUi(tester);
+    tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    await _flushAsyncUi(tester);
 
-      expect(clipboard.lastWritten, contains("return const Text('safe"));
-      expect(clipboard.lastWritten, isNot(contains('token')));
-      expect(clipboard.lastWritten, isNot(contains('\x1b]52')));
+    expect(
+      tester.clipboard.readInProcess(),
+      contains("return const Text('safe"),
+    );
+    expect(tester.clipboard.readInProcess(), isNot(contains('token')));
+    expect(tester.clipboard.readInProcess(), isNot(contains('\x1b]52')));
 
-      final classLine = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.codeLine,
-        label: 'final class LaunchShell extends StatelessWidget {',
-      );
-      expect(classLine.completed, isTrue);
-      tester.render(size: const CellSize(90, 26));
+    final classLine = await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.codeLine,
+      label: 'final class LaunchShell extends StatelessWidget {',
+    );
+    expect(classLine.completed, isTrue);
+    tester.render(size: const CellSize(90, 26));
 
-      final selectedClassLine = tester.semantics().single(
-        role: SemanticRole.codeLine,
-        label: 'final class LaunchShell extends StatelessWidget {',
-        selected: true,
-        action: SemanticAction.copy,
-      );
-      expect(selectedClassLine.state['lineNumber'], 3);
+    final selectedClassLine = tester.semantics().single(
+      role: SemanticRole.codeLine,
+      label: 'final class LaunchShell extends StatelessWidget {',
+      selected: true,
+      action: SemanticAction.copy,
+    );
+    expect(selectedClassLine.state['lineNumber'], 3);
 
-      final updatedCode = tester.semantics().single(
-        role: SemanticRole.code,
-        label: 'Framework source',
-      );
-      expect(updatedCode.state.selectedKey, 3);
-      expect(updatedCode.state['selectedCodeLineKind'], 'declaration');
+    final updatedCode = tester.semantics().single(
+      role: SemanticRole.code,
+      label: 'Framework source',
+    );
+    expect(updatedCode.state.selectedKey, 3);
+    expect(updatedCode.state['selectedCodeLineKind'], 'declaration');
 
-      await _invoke(tester, demoCommandGoTranscript);
-      tester.render(size: const CellSize(90, 26));
-      expect(
-        tester.exists(text('[log] source: copied line 8 keyword')),
-        isTrue,
-      );
-    } finally {
-      Clipboard.instance = originalClipboard;
-    }
+    await _invoke(tester, demoCommandGoTranscript);
+    tester.render(size: const CellSize(90, 26));
+    expect(tester.exists(text('[log] source: copied line 8 keyword')), isTrue);
   });
 
   testWidgets('docs screen proves MarkdownView semantics and safe doc copy', (
     tester,
   ) async {
-    final originalClipboard = Clipboard.instance;
-    final clipboard = TestClipboard();
-    Clipboard.instance = clipboard;
-    try {
-      tester.pumpWidget(const DemoConsoleApp());
+    tester.pumpWidget(const DemoConsoleApp());
 
-      final nav = await _invoke(tester, demoCommandGoDocs);
-      expect(nav.status, CommandInvocationStatus.completed);
-      expect(_demoApp(tester).state.activeScreenId, 'docs');
-      expect(tester.exists(text('Docs')), isTrue);
+    final nav = await _invoke(tester, demoCommandGoDocs);
+    expect(nav.status, CommandInvocationStatus.completed);
+    expect(_demoApp(tester).state.activeScreenId, 'docs');
+    expect(tester.exists(text('Docs')), isTrue);
 
-      await _invoke(tester, demoCommandFocusDocs);
-      final output = tester.renderToString(
-        size: const CellSize(90, 26),
-        emptyMark: ' ',
-      );
-      expect(output, contains('Fleury Launch Notes'));
-      expect(output, contains('docs (https://fleury.dev)'));
-      expect(output, contains('• Semantic graph drives tests'));
-      expect(output, contains('│ unsafe safe'));
-      expect(output, isNot(contains('token')));
-      expect(output, isNot(contains('\x1b]52')));
-      expect(
-        _styleForRenderedText(tester, 'Fleury Launch Notes')?.foreground,
-        const AnsiColor(14),
-      );
+    await _invoke(tester, demoCommandFocusDocs);
+    final output = tester.renderToString(
+      size: const CellSize(90, 26),
+      emptyMark: ' ',
+    );
+    expect(output, contains('Fleury Launch Notes'));
+    expect(output, contains('docs (https://fleury.dev)'));
+    expect(output, contains('• Semantic graph drives tests'));
+    expect(output, contains('│ unsafe safe'));
+    expect(output, isNot(contains('token')));
+    expect(output, isNot(contains('\x1b]52')));
+    expect(
+      _styleForRenderedText(tester, 'Fleury Launch Notes')?.foreground,
+      const AnsiColor(14),
+    );
 
-      final markdown = tester.semantics().single(
-        role: SemanticRole.markdown,
-        label: 'Launch docs',
-        action: SemanticAction.copy,
-      );
-      expect(markdown.focused, isTrue);
-      expect(markdown.state.collectionRowCount, 7);
-      expect(markdown.state['blockCount'], 7);
-      expect(markdown.state['headingCount'], 1);
-      expect(markdown.state['listItemCount'], 2);
-      expect(markdown.state['linkCount'], 1);
-      expect(markdown.state['codeBlockCount'], 1);
-      expect(markdown.state['codeLineCount'], 1);
-      expect(markdown.state.selectedKey, 5);
-      expect(markdown.state['selectedMarkdownBlockKind'], 'blockquote');
-      expect(markdown.state.clipboardPolicy, 'inProcessOnly');
+    final markdown = tester.semantics().single(
+      role: SemanticRole.markdown,
+      label: 'Launch docs',
+      action: SemanticAction.copy,
+    );
+    expect(markdown.focused, isTrue);
+    expect(markdown.state.collectionRowCount, 7);
+    expect(markdown.state['blockCount'], 7);
+    expect(markdown.state['headingCount'], 1);
+    expect(markdown.state['listItemCount'], 2);
+    expect(markdown.state['linkCount'], 1);
+    expect(markdown.state['codeBlockCount'], 1);
+    expect(markdown.state['codeLineCount'], 1);
+    expect(markdown.state.selectedKey, 5);
+    expect(markdown.state['selectedMarkdownBlockKind'], 'blockquote');
+    expect(markdown.state.clipboardPolicy, 'inProcessOnly');
 
-      final link = tester.semantics().single(
-        role: SemanticRole.link,
-        label: 'docs',
-      );
-      expect(link.value, 'https://fleury.dev');
-      expect(link.state['markdownBlockIndex'], 2);
-      expect(link.state.capabilityResolution, 'disabledByPolicy');
-      expect(link.state.activeFallback, 'visible URL');
+    final link = tester.semantics().single(
+      role: SemanticRole.link,
+      label: 'docs',
+    );
+    expect(link.value, 'https://fleury.dev');
+    expect(link.state['markdownBlockIndex'], 2);
+    expect(link.state.capabilityResolution, 'disabledByPolicy');
+    expect(link.state.activeFallback, 'visible URL');
 
-      final unsafe = tester.semantics().single(
-        role: SemanticRole.markdownBlock,
-        selected: true,
-      );
-      expect(unsafe.label, contains('unsafe safe'));
-      expect(unsafe.label, isNot(contains('token')));
-      expect(unsafe.state.outputSanitized, isTrue);
-      expect(unsafe.state['markdownBlockKind'], 'blockquote');
+    final unsafe = tester.semantics().single(
+      role: SemanticRole.markdownBlock,
+      selected: true,
+    );
+    expect(unsafe.label, contains('unsafe safe'));
+    expect(unsafe.label, isNot(contains('token')));
+    expect(unsafe.state.outputSanitized, isTrue);
+    expect(unsafe.state['markdownBlockKind'], 'blockquote');
 
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
-      await _flushAsyncUi(tester);
+    tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    await _flushAsyncUi(tester);
 
-      expect(clipboard.lastWritten, contains('> unsafe safe'));
-      expect(clipboard.lastWritten, isNot(contains('token')));
-      expect(clipboard.lastWritten, isNot(contains('\x1b]52')));
+    expect(tester.clipboard.readInProcess(), contains('> unsafe safe'));
+    expect(tester.clipboard.readInProcess(), isNot(contains('token')));
+    expect(tester.clipboard.readInProcess(), isNot(contains('\x1b]52')));
 
-      final capabilityBlock = tester.semantics().single(
-        role: SemanticRole.markdownBlock,
-        label: 'Capability policy guards output',
-        action: SemanticAction.activate,
-      );
-      expect(capabilityBlock.selected, isFalse);
+    final capabilityBlock = tester.semantics().single(
+      role: SemanticRole.markdownBlock,
+      label: 'Capability policy guards output',
+      action: SemanticAction.activate,
+    );
+    expect(capabilityBlock.selected, isFalse);
 
-      final selectedBlock = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.markdownBlock,
-        label: 'Capability policy guards output',
-      );
-      expect(selectedBlock.completed, isTrue);
+    final selectedBlock = await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.markdownBlock,
+      label: 'Capability policy guards output',
+    );
+    expect(selectedBlock.completed, isTrue);
 
-      tester.render(size: const CellSize(90, 26));
-      final selectedDocBlock = tester.semantics().single(
-        role: SemanticRole.markdownBlock,
-        label: 'Capability policy guards output',
-        selected: true,
-        action: SemanticAction.copy,
-      );
-      expect(selectedDocBlock.state['rowIndex'], 4);
-      expect(selectedDocBlock.state['markdownBlockKind'], 'bullet');
+    tester.render(size: const CellSize(90, 26));
+    final selectedDocBlock = tester.semantics().single(
+      role: SemanticRole.markdownBlock,
+      label: 'Capability policy guards output',
+      selected: true,
+      action: SemanticAction.copy,
+    );
+    expect(selectedDocBlock.state['rowIndex'], 4);
+    expect(selectedDocBlock.state['markdownBlockKind'], 'bullet');
 
-      final selectedMarkdown = tester.semantics().single(
-        role: SemanticRole.markdown,
-        label: 'Launch docs',
-      );
-      expect(selectedMarkdown.focused, isTrue);
-      expect(selectedMarkdown.state.selectedKey, 4);
-      expect(selectedMarkdown.state['selectedIndex'], 4);
-      expect(selectedMarkdown.state['selectedMarkdownBlockKind'], 'bullet');
+    final selectedMarkdown = tester.semantics().single(
+      role: SemanticRole.markdown,
+      label: 'Launch docs',
+    );
+    expect(selectedMarkdown.focused, isTrue);
+    expect(selectedMarkdown.state.selectedKey, 4);
+    expect(selectedMarkdown.state['selectedIndex'], 4);
+    expect(selectedMarkdown.state['selectedMarkdownBlockKind'], 'bullet');
 
-      await _invoke(tester, demoCommandGoTranscript);
-      tester.render(size: const CellSize(90, 26));
-      expect(
-        tester.exists(text('[log] docs: copied block 6 blockquote')),
-        isTrue,
-      );
-    } finally {
-      Clipboard.instance = originalClipboard;
-    }
+    await _invoke(tester, demoCommandGoTranscript);
+    tester.render(size: const CellSize(90, 26));
+    expect(
+      tester.exists(text('[log] docs: copied block 6 blockquote')),
+      isTrue,
+    );
   });
 
   testWidgets('debug capture snapshot can seed a demo-app regression', (

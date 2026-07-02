@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 /// Semantic level of a toast, driving the color of its status dot. [info] is
 /// neutral (uncolored); the rest color the dot.
@@ -248,7 +248,10 @@ class _ToasterState extends State<Toaster> {
     final dot = Text(_severityDot, style: toast.style);
     final message = Text(' ${toast.message}');
     if (action == null) {
-      return Row(mainAxisSize: MainAxisSize.min, children: <Widget>[dot, message]);
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[dot, message],
+      );
     }
     final theme = Theme.of(context);
     return Row(

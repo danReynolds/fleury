@@ -1,4 +1,4 @@
-import '../terminal/events.dart';
+import '../input/events.dart';
 
 /// Semantic editing command resolved from a terminal [KeyEvent].
 ///

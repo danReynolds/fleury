@@ -1,4 +1,4 @@
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 /// A 2D grid of values, each rendered as a block character whose density
 /// represents the cell's intensity within the visible range.

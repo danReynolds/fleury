@@ -130,9 +130,7 @@ void main() {
     test(
       'Ctrl+C copies a focused text selection before falling back to exit',
       () async {
-        final originalClipboard = Clipboard.instance;
-        final clipboard = TestClipboard();
-        Clipboard.instance = clipboard;
+        final clipboard = InProcessClipboard();
         final controller = TextEditingController(text: 'copyme')
           ..textSelection = const TextSelection(baseOffset: 0, extentOffset: 4);
         final driver = FakeTerminalDriver();
@@ -140,6 +138,7 @@ void main() {
           final future = runApp(
             TextInput(controller: controller, autofocus: true),
             driver: driver,
+            clipboard: clipboard,
             enableHotReload: false,
           );
           await _settle();
@@ -151,7 +150,7 @@ void main() {
           await Future<void>.delayed(Duration.zero);
 
           expect(driver.isActive, isTrue);
-          expect(clipboard.lastWritten, 'copy');
+          expect(clipboard.readInProcess(), 'copy');
 
           driver.enqueue(const KeyEvent(keyCode: KeyCode.arrowRight));
           await Future<void>.delayed(Duration.zero);
@@ -162,7 +161,6 @@ void main() {
 
           expect(driver.isActive, isFalse);
         } finally {
-          Clipboard.instance = originalClipboard;
           await driver.dispose();
         }
       },
@@ -211,37 +209,120 @@ void main() {
       },
     );
 
-    test('an error during a scheduled frame restores the terminal and '
-        'surfaces the error', () async {
+    // DELIBERATE INVERSION (pipeline-program PR6): these two tests used to
+    // assert that a layout/paint crash tears the session down. Containment
+    // overturns that posture — the implicit route boundary renders the
+    // error presentation, the session survives, and Ctrl+C still exits
+    // with exactly one terminal restore.
+    test('a render crash is contained; the session survives', () async {
       final driver = FakeTerminalDriver();
       final future = runApp(
         const _BoomWidget(),
         driver: driver,
         enableHotReload: false,
       );
+      await _settle();
 
-      await expectLater(future, throwsA(isA<Error>()));
       expect(
         driver.isActive,
-        isFalse,
-        reason: 'a paint/layout crash must not leave the terminal wedged',
+        isTrue,
+        reason: 'the crash is contained per-boundary, not fatal',
       );
+      expect(
+        driver.output,
+        contains('layout-boom'),
+        reason: 'the error presentation (or banner) is on screen',
+      );
+
+      // The session is still interactive: Ctrl+C exits cleanly.
+      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      await future;
+      expect(driver.isActive, isFalse);
       expect(driver.restoreCallCount, 1);
       await driver.dispose();
     });
 
-    test('the terminal is restored exactly once', () async {
+    test('the terminal is restored exactly once after a contained crash '
+        'and exit', () async {
       final driver = FakeTerminalDriver();
       final future = runApp(
         const _BoomWidget(),
         driver: driver,
         enableHotReload: false,
       );
-      await expectLater(future, throwsA(isA<Error>()));
-      // Push more events after the crash — cleanup must not run again.
+      await _settle();
+      // Events after the contained crash still dispatch (the session is
+      // alive); then exit.
       driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
       await _settle();
+      expect(driver.isActive, isTrue);
+      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      await future;
       expect(driver.restoreCallCount, 1);
+      await driver.dispose();
+    });
+  });
+
+  group('runApp full-repaint recovery', () {
+    // A SIGCONT (`fg`) / terminal-handoff resume re-enters a blanked
+    // alt-screen and signals it with a SAME-SIZE ResizeEvent. The diff
+    // base must be reset so the next frame re-emits the whole screen;
+    // otherwise the diff sees "nothing changed" and the screen stays
+    // blank. (Regression: the FrameDriver's own size-change detection
+    // can't see a same-size resize.)
+    test('a same-size ResizeEvent forces a full repaint', () async {
+      final driver = FakeTerminalDriver();
+      final future = runApp(
+        const Text('SIGCONT-MARKER'),
+        driver: driver,
+        enableHotReload: false,
+      );
+      await _settle();
+      expect(driver.output, contains('SIGCONT-MARKER'));
+
+      // The terminal was blanked and re-entered at the same size.
+      driver.clearOutput();
+      driver.enqueue(ResizeEvent(driver.size));
+      await _settle();
+
+      expect(
+        driver.output,
+        contains('\x1B[2J'),
+        reason: 'a full repaint clears the screen first',
+      );
+      expect(
+        driver.output,
+        contains('SIGCONT-MARKER'),
+        reason: 'the whole screen is re-emitted, not diffed away as unchanged',
+      );
+
+      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      await future;
+      await driver.dispose();
+    });
+
+    test('a terminal handoff repaints on resume', () async {
+      final driver = FakeTerminalDriver();
+      final future = runApp(
+        const Text('HANDOFF-MARKER'),
+        driver: driver,
+        enableHotReload: false,
+      );
+      await _settle();
+      driver.clearOutput();
+
+      // The handoff hook restores the terminal, runs an operation, then
+      // re-enters and fires a same-size ResizeEvent (fake_driver does this
+      // in its finally) to force a repaint of the screen the operation
+      // scribbled over.
+      await driver.runWithTerminalHandoff(() async {});
+      await _settle();
+
+      expect(driver.output, contains('\x1B[2J'));
+      expect(driver.output, contains('HANDOFF-MARKER'));
+
+      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      await future;
       await driver.dispose();
     });
   });

@@ -11,8 +11,9 @@ import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
 import 'capabilities.dart';
-import 'events.dart';
+import '../input/events.dart';
 import 'input_parser.dart';
+import '../runtime/remote_surface_sink.dart';
 import 'terminal_driver.dart';
 import 'terminal_sequences.dart';
 
@@ -84,6 +85,9 @@ class WindowsTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
 
   @override
   bool get isInteractive => _stdoutIsTerminal;
+
+  @override
+  RemoteSurfaceSink? get surfaceSink => null; // byte presentation only
 
   @override
   Future<void> enter(TerminalMode mode) async {

@@ -241,8 +241,9 @@ class _CachedLbHost extends StatefulWidget {
 }
 
 class _CachedLbHostState extends State<_CachedLbHost> {
-  late final Widget _lb =
-      LayoutBuilder(builder: (ctx, c) => Text('tag=${_Tag.of(ctx)}'));
+  late final Widget _lb = LayoutBuilder(
+    builder: (ctx, c) => Text('tag=${_Tag.of(ctx)}'),
+  );
   bool first = true;
   void swap() => setState(() => first = !first);
   @override
@@ -250,8 +251,14 @@ class _CachedLbHostState extends State<_CachedLbHost> {
     final wrapper = Center(key: widget.wrapperKey, child: _lb);
     return Column(
       children: [
-        _Tag(label: 'A', child: Center(child: first ? wrapper : const Text('-'))),
-        _Tag(label: 'B', child: Center(child: first ? const Text('-') : wrapper)),
+        _Tag(
+          label: 'A',
+          child: Center(child: first ? wrapper : const Text('-')),
+        ),
+        _Tag(
+          label: 'B',
+          child: Center(child: first ? const Text('-') : wrapper),
+        ),
       ],
     );
   }
@@ -459,8 +466,11 @@ void main() {
     // re-reads _Tag. Pre-fix this stayed 'tag=A' (dep severed, never re-run).
     hostKey.currentState!.swap();
     tester.pump();
-    expect(_lines(tester), ['-', 'tag=B'],
-        reason: 'the skipped child re-resolved _Tag at its new position');
+    expect(
+      _lines(tester),
+      ['-', 'tag=B'],
+      reason: 'the skipped child re-resolved _Tag at its new position',
+    );
 
     // And back, to prove the old _Tag no longer drives it.
     hostKey.currentState!.swap();
@@ -484,11 +494,17 @@ void main() {
     // the next builder run updateChild() an element active elsewhere.
     hostKey.currentState!.moveOut();
     tester.pump();
-    expect(identical(probeKey.currentState, probe), isTrue,
-        reason: 'the probe moved (same State), was not recreated');
+    expect(
+      identical(probeKey.currentState, probe),
+      isTrue,
+      reason: 'the probe moved (same State), was not recreated',
+    );
     expect(probeKey.currentState!.count, 1, reason: 'state survived the move');
-    expect(_lines(tester), ['-', 'count=1'],
-        reason: 'LB shows its new child; probe renders in the sibling slot');
+    expect(
+      _lines(tester),
+      ['-', 'count=1'],
+      reason: 'LB shows its new child; probe renders in the sibling slot',
+    );
   });
 
   testWidgets('a reparent with a changed configuration fires didUpdateWidget', (

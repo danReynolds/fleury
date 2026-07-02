@@ -183,8 +183,9 @@ void main() {
     expect(selected?.key, 'search');
   });
 
-  testWidgets('semantic close collapses an expanded TreeTable branch',
-      (tester) async {
+  testWidgets('semantic close collapses an expanded TreeTable branch', (
+    tester,
+  ) async {
     final controller = TreeTableController();
     tester.pumpWidget(
       TreeTable<String>(
@@ -194,19 +195,27 @@ void main() {
       ),
     );
     tester.render(size: const CellSize(60, 8));
-    await tester.invokeSemanticAction(SemanticAction.open,
-        role: SemanticRole.treeItem, label: 'App');
+    await tester.invokeSemanticAction(
+      SemanticAction.open,
+      role: SemanticRole.treeItem,
+      label: 'App',
+    );
     expect(controller.expandedKeys, contains('app'));
     tester.render(size: const CellSize(60, 8));
 
     // Expanded ⇒ the row offers close, not open (the symmetric pair).
-    final expanded =
-        tester.semantics().single(role: SemanticRole.treeItem, label: 'App');
+    final expanded = tester.semantics().single(
+      role: SemanticRole.treeItem,
+      label: 'App',
+    );
     expect(expanded.actions, contains(SemanticAction.close));
     expect(expanded.actions, isNot(contains(SemanticAction.open)));
 
-    final result = await tester.invokeSemanticAction(SemanticAction.close,
-        role: SemanticRole.treeItem, label: 'App');
+    final result = await tester.invokeSemanticAction(
+      SemanticAction.close,
+      role: SemanticRole.treeItem,
+      label: 'App',
+    );
     expect(result.completed, isTrue);
     expect(controller.expandedKeys, isNot(contains('app')));
   });
@@ -551,19 +560,6 @@ void main() {
   });
 
   group('copy/export', () {
-    late Clipboard originalClipboard;
-    late TestClipboard clipboard;
-
-    setUp(() {
-      originalClipboard = Clipboard.instance;
-      clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
-    });
-
-    tearDown(() {
-      Clipboard.instance = originalClipboard;
-    });
-
     testWidgets('Ctrl+C copies the selected visible tree row', (tester) async {
       final controller = TreeTableController(
         selectedIndex: 1,
@@ -588,7 +584,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(
-        clipboard.lastWritten,
+        tester.clipboard.readInProcess(),
         'Name\tStatus\tOwner\n  Search\tpassed\ttooling',
       );
       expect(copied, isNotNull);
@@ -627,7 +623,7 @@ void main() {
 
       expect(result.completed, isTrue);
       expect(
-        clipboard.lastWritten,
+        tester.clipboard.readInProcess(),
         'Name\tStatus\tOwner\n  Search\tpassed\ttooling',
       );
       expect(copied?.rowKey, 'search');

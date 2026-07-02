@@ -2,11 +2,7 @@
 // active key bindings by walking the focus chain and renders them as
 // "hint description · hint description" along the available width.
 
-import '../rendering/cell.dart';
-import 'basic.dart';
-import 'focus.dart';
-import 'framework.dart';
-import 'key_bindings.dart';
+import 'package:fleury/fleury_core.dart';
 
 /// Walks the active focus chain and renders each visible binding as
 /// "[label]". Updates automatically when focus moves (because it

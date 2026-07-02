@@ -230,7 +230,6 @@ void main() {
 
       expect(capabilities.supportsTrueColor, isTrue);
       expect(capabilities.supportsSemanticLinks, isFalse);
-      expect(capabilities.inlineImages, InlineImageCapability.none);
       expect(capabilities.supportsGlyphOverlay, isFalse);
     });
   });

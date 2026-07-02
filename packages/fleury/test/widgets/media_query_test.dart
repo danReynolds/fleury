@@ -61,7 +61,10 @@ void main() {
     expect(
       const MediaQueryData(size: CellSize(5, 5)),
       isNot(
-        const MediaQueryData(size: CellSize(5, 5), glyphTier: GlyphTier.ascii),
+        const MediaQueryData(
+          size: CellSize(5, 5),
+          capabilities: SurfaceCapabilities(glyphTier: GlyphTier.ascii),
+        ),
       ),
     );
   });

@@ -98,9 +98,7 @@ void main() {
     testWidgets('showTokenShare appends each item percentage of the total', (
       tester,
     ) {
-      tester.pumpWidget(
-        ContextPanel(items: _items(), showTokenShare: true),
-      );
+      tester.pumpWidget(ContextPanel(items: _items(), showTokenShare: true));
       final out = tester.renderToString(
         size: const CellSize(90, 8),
         emptyMark: ' ',
@@ -290,9 +288,6 @@ void main() {
     testWidgets('semantic copy copies the selected context item', (
       tester,
     ) async {
-      final originalClipboard = Clipboard.instance;
-      final clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
       ContextPanelCopyResult? copied;
       try {
         tester.pumpWidget(
@@ -314,7 +309,7 @@ void main() {
 
         expect(result.completed, isTrue);
         expect(
-          clipboard.lastWritten,
+          tester.clipboard.readInProcess(),
           'Demo console source | file | high | pinned | 1200 tokens | '
           'packages/fleury_example_console/lib/fleury_example_console.dart | '
           'App shell and demo fixtures',
@@ -322,7 +317,7 @@ void main() {
         expect(copied?.itemIndex, 0);
         expect(copied?.report.policy.name, 'inProcessOnly');
       } finally {
-        Clipboard.instance = originalClipboard;
+        // clipboard is tester-scoped; nothing to restore
       }
     });
   });

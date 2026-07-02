@@ -3,6 +3,7 @@
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 
 /// A screen whose binding label toggles on setState — the reveal/hide pattern.
@@ -16,15 +17,15 @@ class _TogglingLabelState extends State<_TogglingLabel> {
   bool revealed = false;
   @override
   Widget build(BuildContext context) => KeyBindings(
-        bindings: [
-          KeyBinding(
-            KeyChord.char('r'),
-            label: revealed ? 'hide' : 'reveal',
-            onEvent: (_) => setState(() => revealed = !revealed),
-          ),
-        ],
-        child: const Focus(autofocus: true, child: Text('body')),
-      );
+    bindings: [
+      KeyBinding(
+        KeyChord.char('r'),
+        label: revealed ? 'hide' : 'reveal',
+        onEvent: (_) => setState(() => revealed = !revealed),
+      ),
+    ],
+    child: const Focus(autofocus: true, child: Text('body')),
+  );
 }
 
 void main() {
@@ -40,10 +41,16 @@ void main() {
             KeyBindings(
               bindings: [
                 KeyBinding(KeyChord.char('?'), label: 'help', onEvent: (_) {}),
-                KeyBinding(KeyChord.char('s', ctrl: true),
-                    label: 'save', onEvent: (_) {}),
-                KeyBinding(KeyChord.key(KeyCode.f1),
-                    label: 'manual', onEvent: (_) {}),
+                KeyBinding(
+                  KeyChord.char('s', ctrl: true),
+                  label: 'save',
+                  onEvent: (_) {},
+                ),
+                KeyBinding(
+                  KeyChord.key(KeyCode.f1),
+                  label: 'manual',
+                  onEvent: (_) {},
+                ),
               ],
               child: TextInput(autofocus: true),
             ),
@@ -52,14 +59,18 @@ void main() {
         ),
       );
       final out = bar(tester);
-      expect(out, isNot(contains('help')),
-          reason: 'bare ? is swallowed by the focused field — do not lie');
+      expect(
+        out,
+        isNot(contains('help')),
+        reason: 'bare ? is swallowed by the focused field — do not lie',
+      );
       expect(out, contains('save'), reason: 'Ctrl+S bypasses the claimant');
       expect(out, contains('manual'), reason: 'F1 bypasses the claimant');
     });
 
-    testWidgets('bare-printable hints reappear when focus leaves the field',
-        (tester) {
+    testWidgets('bare-printable hints reappear when focus leaves the field', (
+      tester,
+    ) {
       final field = FocusNode(debugLabel: 'field');
       final plain = FocusNode(debugLabel: 'plain');
       tester.pumpWidget(
@@ -84,8 +95,11 @@ void main() {
 
       plain.requestFocus();
       tester.pump();
-      expect(bar(tester), contains('help'),
-          reason: '? fires again once no text claimant holds focus');
+      expect(
+        bar(tester),
+        contains('help'),
+        reason: '? fires again once no text claimant holds focus',
+      );
     });
   });
 
@@ -110,11 +124,18 @@ void main() {
         ),
       );
       final out = bar(tester);
-      expect(out, contains('next'),
-          reason: 'the Down alias still fires — hiding the whole binding '
-              'would conceal live functionality exactly while typing');
-      expect(out, contains('[↓]'),
-          reason: 'advertise the alias that works, not the shadowed j');
+      expect(
+        out,
+        contains('next'),
+        reason:
+            'the Down alias still fires — hiding the whole binding '
+            'would conceal live functionality exactly while typing',
+      );
+      expect(
+        out,
+        contains('[↓]'),
+        reason: 'advertise the alias that works, not the shadowed j',
+      );
       expect(out, isNot(contains('[j]')));
     });
 
@@ -127,8 +148,11 @@ void main() {
           children: [
             KeyBindings(
               bindings: [
-                KeyBinding(KeyChord.key(KeyCode.arrowDown),
-                    label: 'scroll', onEvent: (_) {}),
+                KeyBinding(
+                  KeyChord.key(KeyCode.arrowDown),
+                  label: 'scroll',
+                  onEvent: (_) {},
+                ),
               ],
               child: KeyBindings(
                 bindings: [
@@ -146,9 +170,13 @@ void main() {
         ),
       );
       final out = bar(tester);
-      expect(out, contains('next'),
-          reason: 'j is free and firable — the shared Down alias (owned by '
-              'the deeper binding) must not hide the whole binding');
+      expect(
+        out,
+        contains('next'),
+        reason:
+            'j is free and firable — the shared Down alias (owned by '
+            'the deeper binding) must not hide the whole binding',
+      );
       expect(out, contains('[j]'));
     });
 
@@ -172,9 +200,13 @@ void main() {
           ],
         ),
       );
-      expect(bar(tester), contains('save-as'),
-          reason: 'a repeated alias within one binding must not mark it '
-              'already-claimed against itself');
+      expect(
+        bar(tester),
+        contains('save-as'),
+        reason:
+            'a repeated alias within one binding must not mark it '
+            'already-claimed against itself',
+      );
     });
 
     testWidgets('a disabled field with an app-provided node does not '
@@ -186,8 +218,11 @@ void main() {
           children: [
             KeyBindings(
               bindings: [
-                KeyBinding(KeyChord.char('?'),
-                    label: 'help', onEvent: (_) => fired++),
+                KeyBinding(
+                  KeyChord.char('?'),
+                  label: 'help',
+                  onEvent: (_) => fired++,
+                ),
               ],
               child: TextInput(focusNode: node, enabled: false),
             ),
@@ -197,9 +232,13 @@ void main() {
       );
       node.requestFocus();
       tester.pump();
-      expect(bar(tester), contains('help'),
-          reason: 'a disabled field declines text (no claimant), so ? '
-              'falls through to chord matching and must stay advertised');
+      expect(
+        bar(tester),
+        contains('help'),
+        reason:
+            'a disabled field declines text (no claimant), so ? '
+            'falls through to chord matching and must stay advertised',
+      );
       tester.type('?');
       expect(fired, 1, reason: 'and it really does fire');
     });
@@ -209,29 +248,33 @@ void main() {
     testWidgets('a label toggled by setState repaints the bar without a '
         'focus move', (tester) async {
       tester.pumpWidget(
-        Column(
-          children: const [_TogglingLabel(), KeyHintBar()],
-        ),
+        Column(children: const [_TogglingLabel(), KeyHintBar()]),
       );
       expect(bar(tester), contains('reveal'));
 
       tester.sendKey(const KeyEvent(char: 'r')); // toggles the label
       // The notify is microtask-deferred (didUpdateWidget runs mid-build).
       await tester.settle();
-      expect(bar(tester), contains('hide'),
-          reason: 'the bar tracks binding-content changes, not just focus');
+      expect(
+        bar(tester),
+        contains('hide'),
+        reason: 'the bar tracks binding-content changes, not just focus',
+      );
       expect(bar(tester), isNot(contains('reveal')));
     });
 
     testWidgets('a plain pump (no binding change) does not repaint the '
         'label', (tester) async {
-      tester.pumpWidget(const Column(
-        children: [_TogglingLabel(), KeyHintBar()],
-      ));
+      tester.pumpWidget(
+        const Column(children: [_TogglingLabel(), KeyHintBar()]),
+      );
       expect(bar(tester), contains('reveal'));
       tester.pump();
-      expect(bar(tester), contains('reveal'),
-          reason: 'no rebuild, no content change → label unchanged');
+      expect(
+        bar(tester),
+        contains('reveal'),
+        reason: 'no rebuild, no content change → label unchanged',
+      );
 
       tester.sendKey(const KeyEvent(char: 'r')); // real content change
       await tester.settle();

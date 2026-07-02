@@ -1,4 +1,4 @@
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 import 'approval_prompt.dart';
 import 'context_panel.dart';

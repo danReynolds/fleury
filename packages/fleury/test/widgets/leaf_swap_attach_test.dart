@@ -13,41 +13,50 @@ import 'package:test/test.dart';
 
 import '../support/reactive_helpers.dart';
 
-
 /// Rebuilds alone when [flag] fires — a leaf dependent, like the hint bar.
-
 
 void main() {
   testWidgets(
-      'a leaf-rebuilt EmptyBox -> Text swap under a Column attaches and paints',
-      (tester) {
-    final flag = Flag();
-    tester.pumpWidget(
-      Column(children: [
-        const Text('head'),
-        Reactive(
-          flag: flag,
-          builder: (on) => on ? const Text('shown') : const EmptyBox(),
+    'a leaf-rebuilt EmptyBox -> Text swap under a Column attaches and paints',
+    (tester) {
+      final flag = Flag();
+      tester.pumpWidget(
+        Column(
+          children: [
+            const Text('head'),
+            Reactive(
+              flag: flag,
+              builder: (on) => on ? const Text('shown') : const EmptyBox(),
+            ),
+            const Text('tail'),
+          ],
         ),
-        const Text('tail'),
-      ]),
-    );
-    String flat() =>
-        tester.renderToString(size: const CellSize(12, 4)).replaceAll('\n', '|');
-    expect(flat(), contains('head|tail'),
-        reason: 'EmptyBox contributes no cells initially');
+      );
+      String flat() => tester
+          .renderToString(size: const CellSize(12, 4))
+          .replaceAll('\n', '|');
+      expect(
+        flat(),
+        contains('head|tail'),
+        reason: 'EmptyBox contributes no cells initially',
+      );
 
-    // Only the leaf _Listen rebuilds — the Column element does not.
-    flag.set(true);
-    tester.pump();
-    expect(flat(), contains('head|shown|tail'),
-        reason: 'the new render object must be attached (and ordered) even '
-            'though the Column never rebuilt');
+      // Only the leaf _Listen rebuilds — the Column element does not.
+      flag.set(true);
+      tester.pump();
+      expect(
+        flat(),
+        contains('head|shown|tail'),
+        reason:
+            'the new render object must be attached (and ordered) even '
+            'though the Column never rebuilt',
+      );
 
-    // And back again: the removal path stays correct.
-    flag.set(false);
-    tester.pump();
-    expect(flat(), contains('head|tail'));
-    expect(flat(), isNot(contains('shown')));
-  });
+      // And back again: the removal path stays correct.
+      flag.set(false);
+      tester.pump();
+      expect(flat(), contains('head|tail'));
+      expect(flat(), isNot(contains('shown')));
+    },
+  );
 }

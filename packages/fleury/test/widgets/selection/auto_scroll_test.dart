@@ -198,9 +198,6 @@ void main() {
       // copyOnRelease. If the callback dispatched, the clipboard
       // text would lag behind the displayed selection. Generation
       // counter must invalidate the queued dispatch.
-      final clip = TestClipboard();
-      Clipboard.instance = clip;
-      addTearDown(() => Clipboard.instance = SystemClipboard());
 
       final controller = ScrollController();
       tester.pumpWidget(
@@ -230,7 +227,7 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 8));
       // Release BEFORE pumping post-frame callbacks.
       tester.sendMouse(_up(5, 2));
-      final clipboardAfterRelease = clip.lastWritten;
+      final clipboardAfterRelease = tester.clipboard.readInProcess();
 
       // Now pump — any queued post-frame callback would fire here.
       tester.render(size: const CellSize(20, 3));

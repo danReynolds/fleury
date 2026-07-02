@@ -16,8 +16,7 @@ String _rowContent(CellBuffer buffer, int row) {
       case CellRole.leading:
         buf.write(cell.grapheme);
       case CellRole.continuation:
-      case CellRole.protocolAnchor:
-      case CellRole.protocolCovered:
+      case CellRole.overlay:
         // Continuation cells contribute no character of their own; the
         // leading cell's grapheme already accounts for both columns.
         break;

@@ -1,5 +1,4 @@
-import 'package:fleury/fleury_host.dart';
-
+import 'package:fleury/fleury_core.dart';
 
 /// Which of the two handles a [RangeSlider] is editing.
 enum _ActiveHandle { low, high }
@@ -318,67 +317,67 @@ class _RangeSliderState extends State<RangeSlider> {
     return _decorate(
       context,
       Semantics(
-      role: SemanticRole.slider,
-      label: widget.label,
-      value: '$lo-$hi',
-      focused: _node.hasFocus,
-      actions: {
-        SemanticAction.focus,
-        if (canIncrement) SemanticAction.increment,
-        if (canDecrement) SemanticAction.decrement,
-        SemanticAction.setValue,
-      },
-      state: SemanticState({
-        'lowValue': lo,
-        'highValue': hi,
-        'min': widget.min,
-        'max': widget.max,
-        'step': widget.step,
-        'largeStep': widget.largeStep,
-        'activeHandle': _active.name,
-        'canIncrement': canIncrement,
-        'canDecrement': canDecrement,
-      }),
-      onAction: (action) {
-        switch (action) {
-          case SemanticAction.focus:
-            _node.requestFocus();
-            return;
-          case SemanticAction.increment:
-            _node.requestFocus();
-            if (canIncrement) _nudge(widget.step);
-            return;
-          case SemanticAction.decrement:
-            _node.requestFocus();
-            if (canDecrement) _nudge(-widget.step);
-            return;
-          case _:
-            return;
-        }
-      },
-      // Set the *active* handle to an exact value (clamped so the handles can't
-      // cross). Which handle is active is in `state['activeHandle']`; switch it
-      // with Left/Right (press_key) before setting the other one.
-      onSetValue: (payload) {
-        final next = coerceSemanticNum(payload);
-        if (next != null) _setHandle(_active, next);
-      },
-      child: Focus(
-        focusNode: _node,
-        autofocus: widget.autofocus,
-        onKey: _onKey,
-        // Click the track to move the nearest handle there; drag to slide it.
-        // The drag is captured, so the handle keeps following past the ends.
-        child: GestureDetector(
-          // A press grabs the nearest handle; the drag (always preceded by the
-          // press) then just slides that same grabbed handle.
-          onTapDown: (col, _) => _grabAt(col),
-          onDragStart: (col, _) => _dragTo(col),
-          onDragUpdate: (col, _) => _dragTo(col),
-          onDragEnd: () => _dragHandle = null,
-          child: slider,
+        role: SemanticRole.slider,
+        label: widget.label,
+        value: '$lo-$hi',
+        focused: _node.hasFocus,
+        actions: {
+          SemanticAction.focus,
+          if (canIncrement) SemanticAction.increment,
+          if (canDecrement) SemanticAction.decrement,
+          SemanticAction.setValue,
+        },
+        state: SemanticState({
+          'lowValue': lo,
+          'highValue': hi,
+          'min': widget.min,
+          'max': widget.max,
+          'step': widget.step,
+          'largeStep': widget.largeStep,
+          'activeHandle': _active.name,
+          'canIncrement': canIncrement,
+          'canDecrement': canDecrement,
+        }),
+        onAction: (action) {
+          switch (action) {
+            case SemanticAction.focus:
+              _node.requestFocus();
+              return;
+            case SemanticAction.increment:
+              _node.requestFocus();
+              if (canIncrement) _nudge(widget.step);
+              return;
+            case SemanticAction.decrement:
+              _node.requestFocus();
+              if (canDecrement) _nudge(-widget.step);
+              return;
+            case _:
+              return;
+          }
+        },
+        // Set the *active* handle to an exact value (clamped so the handles can't
+        // cross). Which handle is active is in `state['activeHandle']`; switch it
+        // with Left/Right (press_key) before setting the other one.
+        onSetValue: (payload) {
+          final next = coerceSemanticNum(payload);
+          if (next != null) _setHandle(_active, next);
+        },
+        child: Focus(
+          focusNode: _node,
+          autofocus: widget.autofocus,
+          onKey: _onKey,
+          // Click the track to move the nearest handle there; drag to slide it.
+          // The drag is captured, so the handle keeps following past the ends.
+          child: GestureDetector(
+            // A press grabs the nearest handle; the drag (always preceded by the
+            // press) then just slides that same grabbed handle.
+            onTapDown: (col, _) => _grabAt(col),
+            onDragStart: (col, _) => _dragTo(col),
+            onDragUpdate: (col, _) => _dragTo(col),
+            onDragEnd: () => _dragHandle = null,
+            child: slider,
+          ),
         ),
-      ),
       ),
     );
   }
@@ -389,10 +388,7 @@ class _RangeSliderState extends State<RangeSlider> {
     if (!widget.showValues) return interactive;
     final theme = Theme.of(context);
     final (lo, hi) = _normalized;
-    final active = CellStyle(
-      foreground: theme.colorScheme.primary,
-      bold: true,
-    );
+    final active = CellStyle(foreground: theme.colorScheme.primary, bold: true);
     final idle = theme.mutedStyle;
     final lowActive = _enabled && _active == _ActiveHandle.low;
     final highActive = _enabled && _active == _ActiveHandle.high;

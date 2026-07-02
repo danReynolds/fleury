@@ -5,7 +5,6 @@
 import 'dart:convert';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -184,9 +183,9 @@ void main() {
     });
   });
 
-  group('TestClipboard', () {
+  group('InProcessClipboard', () {
     test('captures writes without touching stdout or processes', () async {
-      final clip = TestClipboard();
+      final clip = InProcessClipboard();
       final result = await clip.write('hello');
       expect(result, ClipboardWriteResult.inProcessOnly);
       expect(clip.lastWritten, 'hello');
@@ -194,7 +193,7 @@ void main() {
     });
 
     test('writeWithReport marks the in-process fallback', () async {
-      final clip = TestClipboard();
+      final clip = InProcessClipboard();
       final report = await clip.writeWithReport('hello');
 
       expect(report.result, ClipboardWriteResult.inProcessOnly);
@@ -203,20 +202,5 @@ void main() {
       expect(report.resolution.fallbackLabel, 'in-process register');
       expect(report.toSemanticState().clipboardTransport, 'inProcessOnly');
     });
-
-    test(
-      'is installable as Clipboard.instance for app code under test',
-      () async {
-        final original = Clipboard.instance;
-        final tester = TestClipboard();
-        Clipboard.instance = tester;
-        try {
-          await Clipboard.instance.write('captured');
-          expect(tester.lastWritten, 'captured');
-        } finally {
-          Clipboard.instance = original;
-        }
-      },
-    );
   });
 }

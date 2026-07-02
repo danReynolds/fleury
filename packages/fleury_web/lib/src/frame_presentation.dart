@@ -32,21 +32,21 @@ abstract interface class FrameSurface {
 }
 
 /// Capabilities of a web visual surface.
+///
+/// Inline images are deliberately absent: the surface is text/grid only,
+/// and true-pixel image placements are rendered by the host-assembled
+/// `InlineImageOverlay` layer above it.
 final class WebSurfaceCapabilities {
   const WebSurfaceCapabilities({
     this.supportsTrueColor = true,
     this.supportsSemanticLinks = false,
-    this.inlineImages = InlineImageCapability.none,
     this.supportsGlyphOverlay = false,
   });
 
   final bool supportsTrueColor;
   final bool supportsSemanticLinks;
-  final InlineImageCapability inlineImages;
   final bool supportsGlyphOverlay;
 }
-
-enum InlineImageCapability { none, domImage }
 
 /// Count data reported by a visual [FrameSurface] after one presentation.
 final class FrameSurfacePresentationStats {

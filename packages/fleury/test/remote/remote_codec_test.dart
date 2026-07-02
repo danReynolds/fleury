@@ -8,7 +8,6 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/src/remote/remote_codec.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -59,41 +58,44 @@ void main() {
       expect(decoded.patches, isEmpty);
     });
 
-    test('build -> encode -> decode -> apply reproduces the frame (seeded)', () {
-      final rng = Random(0x5EED);
-      const alphabet = 'abcdefgh 0123#@世界';
-      for (var iter = 0; iter < 200; iter++) {
-        final cols = 4 + rng.nextInt(40);
-        final rows = 1 + rng.nextInt(12);
-        final prev = CellBuffer(CellSize(cols, rows));
-        final next = CellBuffer(CellSize(cols, rows));
-        // Seed prev with some content, then mutate into next.
-        for (var r = 0; r < rows; r++) {
-          final text = _randomText(rng, alphabet, cols);
-          prev.writeText(CellOffset(0, r), text, style: _randomStyle(rng));
+    test(
+      'build -> encode -> decode -> apply reproduces the frame (seeded)',
+      () {
+        final rng = Random(0x5EED);
+        const alphabet = 'abcdefgh 0123#@世界';
+        for (var iter = 0; iter < 200; iter++) {
+          final cols = 4 + rng.nextInt(40);
+          final rows = 1 + rng.nextInt(12);
+          final prev = CellBuffer(CellSize(cols, rows));
+          final next = CellBuffer(CellSize(cols, rows));
+          // Seed prev with some content, then mutate into next.
+          for (var r = 0; r < rows; r++) {
+            final text = _randomText(rng, alphabet, cols);
+            prev.writeText(CellOffset(0, r), text, style: _randomStyle(rng));
+          }
+          _copyBuffer(prev, next);
+          // Mutate a few rows.
+          for (var m = 0; m < rng.nextInt(rows + 1); m++) {
+            final r = rng.nextInt(rows);
+            final text = _randomText(rng, alphabet, cols);
+            next.writeText(CellOffset(0, r), text, style: _randomStyle(rng));
+          }
+          final full = rng.nextInt(5) == 0;
+          final plan = buildRemotePlan(prev, next, fullRepaint: full);
+          final decoded = decodeRemotePlan(encodeRemotePlan(plan));
+          // Apply to a mirror seeded with prev.
+          final mirror = CellBuffer(CellSize(cols, rows));
+          _copyBuffer(prev, mirror);
+          applyRemotePlanToBuffer(decoded, mirror);
+          // The mirror's rendered content must match next.
+          expect(
+            _renderAll(mirror),
+            _renderAll(next),
+            reason: 'iter $iter (full=$full)',
+          );
         }
-        _copyBuffer(prev, next);
-        // Mutate a few rows.
-        for (var m = 0; m < rng.nextInt(rows + 1); m++) {
-          final r = rng.nextInt(rows);
-          final text = _randomText(rng, alphabet, cols);
-          next.writeText(CellOffset(0, r), text, style: _randomStyle(rng));
-        }
-        final full = rng.nextInt(5) == 0;
-        final plan = buildRemotePlan(prev, next, fullRepaint: full);
-        final decoded = decodeRemotePlan(encodeRemotePlan(plan));
-        // Apply to a mirror seeded with prev.
-        final mirror = CellBuffer(CellSize(cols, rows));
-        _copyBuffer(prev, mirror);
-        applyRemotePlanToBuffer(decoded, mirror);
-        // The mirror's rendered content must match next.
-        expect(
-          _renderAll(mirror),
-          _renderAll(next),
-          reason: 'iter $iter (full=$full)',
-        );
-      }
-    });
+      },
+    );
   });
 
   group('INPUT_EVENT round-trip', () {
@@ -196,10 +198,15 @@ void main() {
       final prev = CellBuffer(const CellSize(30, 8));
       final next = CellBuffer(const CellSize(30, 8));
       for (var r = 0; r < 8; r++) {
-        next.writeText(CellOffset(0, r), 'row $r content here',
-            style: const CellStyle(bold: true));
+        next.writeText(
+          CellOffset(0, r),
+          'row $r content here',
+          style: const CellStyle(bold: true),
+        );
       }
-      final full = encodeRemotePlan(buildRemotePlan(prev, next, fullRepaint: true));
+      final full = encodeRemotePlan(
+        buildRemotePlan(prev, next, fullRepaint: true),
+      );
       for (var cut = 0; cut < full.length; cut++) {
         final truncated = Uint8List.sublistView(full, 0, cut);
         expect(
@@ -214,29 +221,23 @@ void main() {
       final rng = Random(0xFADE);
       for (var iter = 0; iter < 500; iter++) {
         final len = rng.nextInt(64);
-        final bytes = Uint8List.fromList(
-          [for (var i = 0; i < len; i++) rng.nextInt(256)],
-        );
-        expect(
-          () {
-            try {
-              decodeRemotePlan(bytes);
-            } on RemoteCodecException {
-              rethrow;
-            }
-          },
-          anyOf(returnsNormally, throwsA(isA<RemoteCodecException>())),
-        );
-        expect(
-          () {
-            try {
-              decodeInputEvent(bytes);
-            } on RemoteCodecException {
-              rethrow;
-            }
-          },
-          anyOf(returnsNormally, throwsA(isA<RemoteCodecException>())),
-        );
+        final bytes = Uint8List.fromList([
+          for (var i = 0; i < len; i++) rng.nextInt(256),
+        ]);
+        expect(() {
+          try {
+            decodeRemotePlan(bytes);
+          } on RemoteCodecException {
+            rethrow;
+          }
+        }, anyOf(returnsNormally, throwsA(isA<RemoteCodecException>())));
+        expect(() {
+          try {
+            decodeInputEvent(bytes);
+          } on RemoteCodecException {
+            rethrow;
+          }
+        }, anyOf(returnsNormally, throwsA(isA<RemoteCodecException>())));
       }
     });
 
@@ -289,8 +290,9 @@ String _renderAll(CellBuffer b) {
 
 String _randomText(Random rng, String alphabet, int maxLen) {
   final n = rng.nextInt(maxLen);
-  return [for (var i = 0; i < n; i++) alphabet[rng.nextInt(alphabet.length)]]
-      .join();
+  return [
+    for (var i = 0; i < n; i++) alphabet[rng.nextInt(alphabet.length)],
+  ].join();
 }
 
 CellStyle _randomStyle(Random rng) {
@@ -323,8 +325,9 @@ TuiEvent _randomEvent(Random rng) {
     case 0:
       final hasCode = rng.nextBool();
       return KeyEvent(
-        keyCode:
-            hasCode ? KeyCode.values[rng.nextInt(KeyCode.values.length)] : null,
+        keyCode: hasCode
+            ? KeyCode.values[rng.nextInt(KeyCode.values.length)]
+            : null,
         char: hasCode && rng.nextBool()
             ? null
             : String.fromCharCode(97 + rng.nextInt(26)),
@@ -337,8 +340,8 @@ TuiEvent _randomEvent(Random rng) {
       return switch (rng.nextInt(3)) {
         0 => TextCompositionEvent.update(_randomText(rng, 'ko', 4)),
         1 => TextCompositionEvent.commit(
-            rng.nextBool() ? _randomText(rng, 'ko', 4) : null,
-          ),
+          rng.nextBool() ? _randomText(rng, 'ko', 4) : null,
+        ),
         _ => const TextCompositionEvent.cancel(),
       };
     case 3:

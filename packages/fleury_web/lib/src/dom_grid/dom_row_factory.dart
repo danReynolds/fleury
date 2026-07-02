@@ -91,17 +91,6 @@ final class DomRowFactory {
         break;
       case CellRunKind.wideText:
         span.className = 'w2';
-      case CellRunKind.protocolPlaceholder:
-        span.className = 'proto';
-        span.setAttribute('title', protocolPlaceholderTitle);
-        span.setAttribute(
-          protocolPlaceholderKindAttribute,
-          protocolPlaceholderKind,
-        );
-        span.setAttribute(
-          protocolPlaceholderUnsupportedAttribute,
-          protocolPlaceholderUnsupported,
-        );
     }
 
     final css = _cssFor(run, stats, metrics);

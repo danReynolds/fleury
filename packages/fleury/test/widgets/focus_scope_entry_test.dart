@@ -39,24 +39,24 @@ class _TwoScopesState extends State<_TwoScopes> {
 
   @override
   Widget build(BuildContext context) => Column(
-        children: [
-          FocusScope(
-            child: Focus(
-              focusNode: widget.a,
-              autofocus: true,
-              child: const EmptyBox(),
-            ),
+    children: [
+      FocusScope(
+        child: Focus(
+          focusNode: widget.a,
+          autofocus: true,
+          child: const EmptyBox(),
+        ),
+      ),
+      if (widget.flag.value)
+        FocusScope(
+          child: Focus(
+            focusNode: widget.b,
+            autofocus: true,
+            child: const EmptyBox(),
           ),
-          if (widget.flag.value)
-            FocusScope(
-              child: Focus(
-                focusNode: widget.b,
-                autofocus: true,
-                child: const EmptyBox(),
-              ),
-            ),
-        ],
-      );
+        ),
+    ],
+  );
 }
 
 void main() {
@@ -66,18 +66,26 @@ void main() {
     final b = FocusNode(debugLabel: 'b');
     final flag = Flag();
     tester.pumpWidget(_TwoScopes(flag: flag, a: a, b: b));
-    expect(tester.focusManager.focusedNode, same(a),
-        reason: 'a autofocuses on first mount');
+    expect(
+      tester.focusManager.focusedNode,
+      same(a),
+      reason: 'a autofocuses on first mount',
+    );
 
     flag.enable(); // scope B mounts in a later frame, while A holds focus
     tester.pump();
-    expect(tester.focusManager.focusedNode, same(b),
-        reason: 'b autofocuses into its empty scope despite scope A holding '
-            'focus — the global gate would have skipped it');
+    expect(
+      tester.focusManager.focusedNode,
+      same(b),
+      reason:
+          'b autofocuses into its empty scope despite scope A holding '
+          'focus — the global gate would have skipped it',
+    );
   });
 
-  testWidgets('a FocusScope reconciles a swapped child (marker rebuild)',
-      (tester) {
+  testWidgets('a FocusScope reconciles a swapped child (marker rebuild)', (
+    tester,
+  ) {
     // Regression: _FocusScopeMarkerElement.update didn't rebuild its child, so
     // a structural change flowing THROUGH a FocusScope was silently dropped —
     // the old subtree stayed mounted forever.
@@ -88,12 +96,17 @@ void main() {
         builder: (on) => FocusScope(child: Text(on ? 'after' : 'before')),
       ),
     );
-    expect(tester.renderToString(size: const CellSize(8, 1)),
-        contains('before'));
+    expect(
+      tester.renderToString(size: const CellSize(8, 1)),
+      contains('before'),
+    );
     flag.enable();
     tester.pump();
-    expect(tester.renderToString(size: const CellSize(8, 1)), contains('after'),
-        reason: 'the swap must flow through the scope marker');
+    expect(
+      tester.renderToString(size: const CellSize(8, 1)),
+      contains('after'),
+      reason: 'the swap must flow through the scope marker',
+    );
   });
 
   testWidgets('autofocus lands after a view swap within one scope', (tester) {
@@ -127,13 +140,18 @@ void main() {
 
     flag.enable(); // a unmounts, b mounts — the drill-down swap
     tester.pump();
-    expect(tester.focusManager.focusedNode, same(b),
-        reason: "the new view's autofocus claims the vacated scope — the "
-            'Future.microtask(requestFocus) workaround replacement');
+    expect(
+      tester.focusManager.focusedNode,
+      same(b),
+      reason:
+          "the new view's autofocus claims the vacated scope — the "
+          'Future.microtask(requestFocus) workaround replacement',
+    );
   });
 
-  testWidgets('a still-focused sibling in the SAME scope is not stolen from',
-      (tester) {
+  testWidgets('a still-focused sibling in the SAME scope is not stolen from', (
+    tester,
+  ) {
     // The preserved contract (mirrors focus_test.dart): two autofocus nodes in
     // ONE scope — the first wins; the second must not steal.
     final first = FocusNode(debugLabel: 'first');
@@ -148,7 +166,10 @@ void main() {
         ),
       ),
     );
-    expect(tester.focusManager.focusedNode, same(first),
-        reason: 'one scope, one focused child — the first autofocus wins');
+    expect(
+      tester.focusManager.focusedNode,
+      same(first),
+      reason: 'one scope, one focused child — the first autofocus wins',
+    );
   });
 }

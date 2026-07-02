@@ -1,4 +1,4 @@
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 /// A grid of color swatches. The currently-selected swatch is bordered
 /// with the theme's focus style; arrow chords move between cells; Enter
@@ -63,7 +63,8 @@ class ColorPicker extends StatefulWidget {
   State<ColorPicker> createState() => _ColorPickerState();
 }
 
-class _ColorPickerState extends State<ColorPicker> implements TextInputClaimant {
+class _ColorPickerState extends State<ColorPicker>
+    implements TextInputClaimant {
   late FocusNode _node;
   bool _owns = false;
 

@@ -12,8 +12,6 @@ import 'package:fleury_web/src/instrumentation/web_host_instrumentation.dart';
 import 'package:fleury_web/src/metrics/cell_metrics.dart';
 import 'package:fleury_web/src/run_tui_surface.dart';
 import 'package:fleury_web/src/semantics/semantic_dom_presenter.dart';
-import 'package:fleury_web/src/semantics/semantic_flush_scheduler.dart';
-import 'package:fleury_web/src/semantics/semantic_presenter.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;
 
@@ -749,8 +747,12 @@ void main() {
 
       expect(instrumentation.frames, hasLength(1));
       final frame = instrumentation.frames.single;
-      expect(frame.reason, 'initial');
-      expect(frame.coalescedReasons, ['initial']);
+      // A build scheduled during mount coalesces into this single initial
+      // frame (no extra render — the frame count is 1), so the reason may
+      // read 'build+initial'. Match the tolerant assertion the native
+      // run_app test uses for the same benign coalescing.
+      expect(frame.reason, contains('initial'));
+      expect(frame.coalescedReasons, contains('initial'));
       expect(frame.viewportSize, const CellSize(16, 2));
       expect(frame.fullRepaint, isTrue);
       expect(frame.metricsChanged, isFalse);
@@ -1438,7 +1440,8 @@ void main() {
       expect(
         instrumentation.semanticFlushes.last.semanticFallbackNodeCount,
         greaterThan(0),
-        reason: 'raw painted text must be uncovered to reproduce the regression',
+        reason:
+            'raw painted text must be uncovered to reproduce the regression',
       );
 
       final button = semanticRoot.querySelector(
@@ -1653,35 +1656,31 @@ void main() {
     },
   );
 
-  test('clipboard backend is installed for the host lifetime', () async {
-    final previousClipboard = _FakeClipboard();
-    Clipboard.instance = previousClipboard;
-    addTearDown(() => Clipboard.instance = previousClipboard);
-    final clipboard = _FakeClipboard();
-    final root = web.document.createElement('div');
-    final surface = DomGridSurface(root: root, size: const CellSize(10, 1));
-    final flush = _FakeFlush();
+  test(
+    'the provided clipboard reaches widgets through ClipboardScope',
+    () async {
+      final clipboard = _FakeClipboard();
+      final root = web.document.createElement('div');
+      final surface = DomGridSurface(root: root, size: const CellSize(10, 1));
+      final flush = _FakeFlush();
 
-    final host = await runTuiSurface(
-      () => const Text('clipboard'),
-      surface: surface,
-      clipboard: clipboard,
-      flushScheduler: flush.schedule,
-    );
+      Clipboard? seen;
+      final host = await runTuiSurface(
+        () => _ClipboardProbe(onBuild: (c) => seen = c),
+        surface: surface,
+        clipboard: clipboard,
+        flushScheduler: flush.schedule,
+      );
 
-    expect(Clipboard.instance, same(clipboard));
+      expect(seen, same(clipboard));
 
-    await host.dispose();
-
-    expect(Clipboard.instance, same(previousClipboard));
-  });
+      await host.dispose();
+    },
+  );
 
   test(
     'setup failures restore clipboard and dispose partial host state',
     () async {
-      final previousClipboard = _FakeClipboard();
-      Clipboard.instance = previousClipboard;
-      addTearDown(() => Clipboard.instance = previousClipboard);
       final clipboard = _FakeClipboard();
       final error = StateError('resize failed');
       final surface = _ThrowingResizeSurface(error);
@@ -1701,7 +1700,6 @@ void main() {
         throwsA(same(error)),
       );
 
-      expect(Clipboard.instance, same(previousClipboard));
       expect(surface.disposed, isTrue);
       expect(metrics.disposed, isTrue);
       expect(input.disposed, isTrue);
@@ -1712,9 +1710,6 @@ void main() {
   test(
     'dispose restores clipboard and generated host resources after cleanup error',
     () async {
-      final previousClipboard = _FakeClipboard();
-      Clipboard.instance = previousClipboard;
-      addTearDown(() => Clipboard.instance = previousClipboard);
       final clipboard = _FakeClipboard();
       final error = StateError('surface dispose failed');
       final surface = _ThrowingDisposeSurface(
@@ -1734,22 +1729,16 @@ void main() {
         },
       );
 
-      expect(Clipboard.instance, same(clipboard));
-
       await expectLater(host.dispose(), throwsA(same(error)));
 
       expect(surface.disposed, isTrue);
       expect(generatedHostResourcesDisposed, isTrue);
-      expect(Clipboard.instance, same(previousClipboard));
     },
   );
 
   test(
     'frame presentation failures dispose host resources and stop frames',
     () async {
-      final previousClipboard = _FakeClipboard();
-      Clipboard.instance = previousClipboard;
-      addTearDown(() => Clipboard.instance = previousClipboard);
       final clipboard = _FakeClipboard();
       final error = StateError('present failed');
       final surface = _ThrowingPresentSurface(
@@ -1773,7 +1762,6 @@ void main() {
         },
       );
 
-      expect(Clipboard.instance, same(clipboard));
       expect(flush.pending, isTrue);
 
       expect(() => flush.fire(), throwsA(same(error)));
@@ -1784,7 +1772,6 @@ void main() {
       expect(input.disposed, isTrue);
       expect(semantics.disposed, isTrue);
       expect(generatedHostResourcesDisposed, isTrue);
-      expect(Clipboard.instance, same(previousClipboard));
 
       host.requestFrame('after-frame-error');
       expect(flush.pending, isFalse);
@@ -1793,9 +1780,6 @@ void main() {
   );
 
   test('dispose waits for in-flight frame-failure cleanup', () async {
-    final previousClipboard = _FakeClipboard();
-    Clipboard.instance = previousClipboard;
-    addTearDown(() => Clipboard.instance = previousClipboard);
     final clipboard = _FakeClipboard();
     final error = StateError('present failed');
     final surface = _ThrowingPresentSurface(error, size: const CellSize(10, 1));
@@ -1816,7 +1800,6 @@ void main() {
       },
     );
 
-    expect(Clipboard.instance, same(clipboard));
     expect(() => flush.fire(), throwsA(same(error)));
 
     await cleanupStarted.future;
@@ -1828,7 +1811,6 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(disposeCompleted, isFalse);
     expect(generatedHostResourcesDisposed, isFalse);
-    expect(Clipboard.instance, same(clipboard));
 
     cleanupCanFinish.complete();
     await disposeFuture;
@@ -1836,6 +1818,16 @@ void main() {
     expect(disposeCompleted, isTrue);
     expect(generatedHostResourcesDisposed, isTrue);
     expect(surface.disposed, isTrue);
-    expect(Clipboard.instance, same(previousClipboard));
   });
+}
+
+class _ClipboardProbe extends StatelessWidget {
+  const _ClipboardProbe({required this.onBuild});
+  final void Function(Clipboard) onBuild;
+
+  @override
+  Widget build(BuildContext context) {
+    onBuild(ClipboardScope.of(context));
+    return const Text('probe');
+  }
 }

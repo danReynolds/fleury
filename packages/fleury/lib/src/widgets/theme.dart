@@ -221,7 +221,6 @@ final class ThemeData {
   );
 }
 
-
 /// Shares a [ThemeData] with its subtree. Read it with `Theme.of(context)`
 /// (which falls back to [ThemeData.fallback] when absent, so widgets can
 /// always resolve a theme without a required ancestor).

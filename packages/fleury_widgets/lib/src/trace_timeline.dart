@@ -1,7 +1,7 @@
 import 'dart:async' show scheduleMicrotask, unawaited;
 
 import 'package:characters/characters.dart';
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 /// Protocol-neutral lifecycle state for a timeline event.
 enum TraceTimelineStatus {
@@ -527,10 +527,9 @@ class _TraceTimelineState extends State<TraceTimeline> {
     );
     final event = widget.events[selected];
     final text = exportTraceTimelineEntry(event, options: widget.copyOptions);
-    final report = await Clipboard.instance.writeWithReport(
-      text,
-      policy: widget.copyOptions.clipboardPolicy,
-    );
+    final report = await ClipboardScope.of(
+      context,
+    ).writeWithReport(text, policy: widget.copyOptions.clipboardPolicy);
     if (!mounted) return;
     widget.onCopy?.call(
       TraceTimelineCopyResult(

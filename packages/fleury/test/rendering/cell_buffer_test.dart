@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
@@ -276,24 +278,33 @@ void main() {
     });
   });
 
-  group('Protocol regions', () {
-    test('out-of-bounds protocol anchors are clipped', () {
+  group('Overlay regions', () {
+    test('an image whose top-left is out of bounds is dropped', () {
       final buf = CellBuffer(const CellSize(3, 1));
-      buf.writeProtocol(const CellOffset(-1, 0), 'bytes', width: 2, height: 1);
-      buf.writeProtocol(const CellOffset(0, -1), 'bytes', width: 2, height: 1);
-      buf.writeProtocol(const CellOffset(3, 0), 'bytes', width: 2, height: 1);
-      buf.writeProtocol(const CellOffset(0, 1), 'bytes', width: 2, height: 1);
+      final bytes = Uint8List.fromList([1]);
+      buf.writeImage(const CellOffset(-1, 0), bytes, width: 2, height: 1);
+      buf.writeImage(const CellOffset(0, -1), bytes, width: 2, height: 1);
+      buf.writeImage(const CellOffset(3, 0), bytes, width: 2, height: 1);
+      buf.writeImage(const CellOffset(0, 1), bytes, width: 2, height: 1);
 
       expect(buf.atColRow(0, 0), const Cell.empty());
       expect(buf.atColRow(2, 0), const Cell.empty());
+      expect(buf.imagePlacements, isEmpty);
+      expect(buf.images, isEmpty);
     });
 
-    test('in-bounds protocol anchors still cover their region', () {
+    test('an in-bounds image covers its region with overlay cells', () {
       final buf = CellBuffer(const CellSize(3, 1));
-      buf.writeProtocol(const CellOffset(1, 0), 'bytes', width: 2, height: 1);
+      buf.writeImage(
+        const CellOffset(1, 0),
+        Uint8List.fromList([1]),
+        width: 2,
+        height: 1,
+      );
 
-      expect(buf.atColRow(1, 0), const Cell.protocolAnchor(grapheme: 'bytes'));
-      expect(buf.atColRow(2, 0), const Cell.protocolCovered());
+      expect(buf.atColRow(0, 0), const Cell.empty());
+      expect(buf.atColRow(1, 0), const Cell.overlay());
+      expect(buf.atColRow(2, 0), const Cell.overlay());
     });
   });
 }

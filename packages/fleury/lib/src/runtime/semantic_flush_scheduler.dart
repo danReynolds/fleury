@@ -60,3 +60,29 @@ final class TimerSemanticFlushScheduler implements SemanticFlushScheduler {
     _pending = null;
   }
 }
+
+/// Same-task scheduler: the flush runs as a microtask, after the visual
+/// frame's synchronous work but within the same event-loop task. The wire
+/// presenter's default — semantics for a rendered frame reach the peer in
+/// the same task as its plan, so "semantics for the just-rendered frame"
+/// stays literally true for agents and MCP settle windows don't lengthen.
+final class MicrotaskSemanticFlushScheduler implements SemanticFlushScheduler {
+  var _pending = false;
+  var _disposed = false;
+
+  @override
+  void schedule(void Function() flush) {
+    if (_disposed || _pending) return;
+    _pending = true;
+    scheduleMicrotask(() {
+      _pending = false;
+      if (_disposed) return;
+      flush();
+    });
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+  }
+}

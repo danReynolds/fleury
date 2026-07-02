@@ -1,4 +1,4 @@
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 /// Shared glyph helpers for the drawing widgets, so each one picks Unicode or
 /// ASCII output from a single place rather than carrying its own ramp tables.

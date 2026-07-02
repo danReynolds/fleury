@@ -17,7 +17,7 @@ import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/scroll_detection.dart';
 import '../semantics/semantics.dart';
-import '../terminal/events.dart';
+import '../input/events.dart';
 
 /// A frame reduced to its changed cells for the wire: the grid size,
 /// repaint/scroll flags, a per-frame style table, and the changed
@@ -195,7 +195,10 @@ class _Reader {
   String str() {
     final len = u32();
     _need(len);
-    final s = utf8.decode(_data.sublist(_pos, _pos + len), allowMalformed: true);
+    final s = utf8.decode(
+      _data.sublist(_pos, _pos + len),
+      allowMalformed: true,
+    );
     _pos += len;
     return s;
   }
@@ -227,7 +230,10 @@ class _Reader {
   String vstr() {
     final len = varint();
     _need(len);
-    final s = utf8.decode(_data.sublist(_pos, _pos + len), allowMalformed: true);
+    final s = utf8.decode(
+      _data.sublist(_pos, _pos + len),
+      allowMalformed: true,
+    );
     _pos += len;
     return s;
   }
@@ -489,7 +495,11 @@ RemotePlan buildRemotePlan(
   // patches then compare against prev shifted up by `shift`.
   int? scrollUpRows;
   if (!full && rows >= 2) {
-    final shift = detectBeneficialScrollUp(prev, next, screenDiffStats(prev, next));
+    final shift = detectBeneficialScrollUp(
+      prev,
+      next,
+      screenDiffStats(prev, next),
+    );
     if (shift != null && shift > 0) scrollUpRows = shift;
   }
   final shift = scrollUpRows ?? 0;
@@ -563,22 +573,20 @@ List<RemoteRowPatch> _buildPatches(
           final cell = next.atColRow(col, row);
           // continuation cells contribute nothing (the leading cell's
           // grapheme already spans them); empty/blank render as a space.
+          // Overlay (inline-image) cells have no grapheme and blank the
+          // grid — the client overlays an <img> from the plan's
+          // placements, which come from a full scan rather than the diff
+          // so a static image isn't dropped on unchanged frames.
           if (cell.role != CellRole.continuation) {
-            final g = cell.grapheme;
-            // Browser inline image: blank the grid here — the client overlays
-            // an <img> (placement comes from a full scan, not the diff, so a
-            // static image isn't dropped on unchanged frames). Covered cells
-            // already render as spaces; a terminal-escape anchor still writes
-            // its grapheme.
-            final isImage = cell.role == CellRole.protocolAnchor &&
-                g != null &&
-                next.images.containsKey(g);
-            buffer.write(isImage ? ' ' : (g ?? ' '));
+            buffer.write(cell.grapheme ?? ' ');
           }
           col++;
         }
         runs.add(
-          RemotePatchRun(styleIndex: styleIndex(style), text: buffer.toString()),
+          RemotePatchRun(
+            styleIndex: styleIndex(style),
+            text: buffer.toString(),
+          ),
         );
       }
       patches.add(RemoteRowPatch(row: row, startCol: startCol, runs: runs));
@@ -762,9 +770,8 @@ Uint8List encodeSemanticAction(
 /// Decodes a semantic-action request. Throws [RemoteCodecException] on an
 /// unrecognized action name (e.g. a peer on a newer protocol) or a malformed
 /// payload so the caller rejects it rather than misinterpreting it.
-({SemanticNodeId id, SemanticAction action, Object? value}) decodeSemanticAction(
-  Uint8List bytes,
-) {
+({SemanticNodeId id, SemanticAction action, Object? value})
+decodeSemanticAction(Uint8List bytes) {
   final r = _Reader(bytes);
   final id = r.vstr();
   final actionName = r.vstr();
@@ -788,4 +795,47 @@ Uint8List encodeSemanticAction(
     }
   }
   throw RemoteCodecException('unknown semantic action "$actionName"');
+}
+
+/// Encodes the app's answer to a peer's semantic-action request: the node id
+/// and action echoed back, plus the invocation status. Status travels by name
+/// (like the action) so the encoding stays additive-tolerant rather than
+/// index-coupled.
+Uint8List encodeSemanticActionResult(
+  SemanticNodeId id,
+  SemanticAction action,
+  SemanticActionInvocationStatus status,
+) {
+  final w = _Writer();
+  w.vstr(id.value);
+  w.vstr(action.name);
+  w.vstr(status.name);
+  return w.take();
+}
+
+/// Decodes a semantic-action result. Throws [RemoteCodecException] on an
+/// unrecognized action or status name so the caller rejects it rather than
+/// misinterpreting it.
+({
+  SemanticNodeId id,
+  SemanticAction action,
+  SemanticActionInvocationStatus status,
+})
+decodeSemanticActionResult(Uint8List bytes) {
+  final r = _Reader(bytes);
+  final id = r.vstr();
+  final actionName = r.vstr();
+  final statusName = r.vstr();
+  r.expectEnd();
+  final action = SemanticAction.values.where((a) => a.name == actionName);
+  if (action.isEmpty) {
+    throw RemoteCodecException('unknown semantic action "$actionName"');
+  }
+  final status = SemanticActionInvocationStatus.values.where(
+    (s) => s.name == statusName,
+  );
+  if (status.isEmpty) {
+    throw RemoteCodecException('unknown action status "$statusName"');
+  }
+  return (id: SemanticNodeId(id), action: action.first, status: status.first);
 }

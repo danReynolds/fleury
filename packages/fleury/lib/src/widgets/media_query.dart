@@ -1,80 +1,55 @@
 import '../foundation/geometry.dart';
-import '../terminal/capabilities.dart';
+import '../rendering/surface_capabilities.dart';
 import 'framework.dart';
 
-/// Ambient information about the rendering surface — for a terminal, its
-/// [size] in cells and the [colorMode] it supports. Lean by design;
-/// more fields can join later behind aspect-specific accessors.
+/// Ambient information about the rendering surface: its [size] in cells
+/// and the backend-neutral [capabilities] it reports. A terminal, a DOM
+/// grid, and a served session all describe themselves through the same
+/// vocabulary — terminal-only concerns (escape protocols, multiplexer
+/// passthrough) are presenter concerns and never appear here.
 final class MediaQueryData {
   const MediaQueryData({
     required this.size,
-    this.colorMode = ColorMode.truecolor,
-    this.glyphTier = GlyphTier.unicode,
-    this.imageProtocol = ImageProtocol.halfBlock,
-    this.tmuxPassthrough = false,
+    this.capabilities = const SurfaceCapabilities(),
   });
 
-  /// The terminal viewport size in cells.
+  /// The surface viewport size in cells.
   final CellSize size;
 
-  /// The terminal's detected color fidelity. Widgets that pre-quantize
-  /// (image rendering with dithering, color-aware glyph picking) need
-  /// this; widgets that just emit `RgbColor` and trust the renderer
-  /// cascade can ignore it.
-  final ColorMode colorMode;
+  /// What the presenting surface can do.
+  final SurfaceCapabilities capabilities;
 
-  /// The terminal/font glyph repertoire. Widgets and primitives that draw
-  /// charts, borders, and ornaments use this to choose Unicode or ASCII
-  /// representations without changing semantic state.
-  final GlyphTier glyphTier;
+  /// The surface's color fidelity — convenience for the common read.
+  ColorMode get colorMode => capabilities.colorMode;
 
-  /// The richest image-rendering protocol the terminal supports.
-  /// Image widgets pick the highest-fidelity path available.
-  final ImageProtocol imageProtocol;
-
-  /// True when we're running under a multiplexer (tmux, GNU screen)
-  /// that swallows DCS/APC by default. Image widgets re-wrap their
-  /// protocol payloads in the multiplexer's passthrough envelope so
-  /// the host terminal still receives them.
-  final bool tmuxPassthrough;
+  /// The surface/font glyph repertoire — convenience for the common read.
+  GlyphTier get glyphTier => capabilities.glyphTier;
 
   MediaQueryData copyWith({
     CellSize? size,
-    ColorMode? colorMode,
-    GlyphTier? glyphTier,
-    ImageProtocol? imageProtocol,
-    bool? tmuxPassthrough,
+    SurfaceCapabilities? capabilities,
   }) => MediaQueryData(
     size: size ?? this.size,
-    colorMode: colorMode ?? this.colorMode,
-    glyphTier: glyphTier ?? this.glyphTier,
-    imageProtocol: imageProtocol ?? this.imageProtocol,
-    tmuxPassthrough: tmuxPassthrough ?? this.tmuxPassthrough,
+    capabilities: capabilities ?? this.capabilities,
   );
 
   @override
   bool operator ==(Object other) =>
       other is MediaQueryData &&
       other.size == size &&
-      other.colorMode == colorMode &&
-      other.glyphTier == glyphTier &&
-      other.imageProtocol == imageProtocol &&
-      other.tmuxPassthrough == tmuxPassthrough;
+      other.capabilities == capabilities;
 
   @override
-  int get hashCode =>
-      Object.hash(size, colorMode, glyphTier, imageProtocol, tmuxPassthrough);
+  int get hashCode => Object.hash(size, capabilities);
 
   @override
   String toString() =>
       'MediaQueryData(size: $size, colorMode: ${colorMode.name}, '
-      'glyphTier: ${glyphTier.name}, '
-      'imageProtocol: ${imageProtocol.name}, '
-      'tmuxPassthrough: $tmuxPassthrough)';
+      'glyphTier: ${glyphTier.name}, images: ${capabilities.images.name})';
 }
 
 /// Exposes the surface's [MediaQueryData] to its subtree, updated when the
-/// terminal resizes. Read it with `MediaQuery.sizeOf(context)` — the
+/// surface resizes. Read it with `MediaQuery.sizeOf(context)` — the
 /// preferred accessor: it stays correct if the data grows new fields
 /// (where reading the whole object would over-rebuild, Flutter's
 /// well-known `MediaQuery.of` footgun).
@@ -98,11 +73,16 @@ class MediaQuery extends InheritedWidget {
   static MediaQueryData? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<MediaQuery>()?.data;
 
-  /// The terminal size in scope — the common case. Prefer this over
+  /// The surface size in cells — the common case. Prefer this over
   /// [of] so a widget only depends on the size.
   static CellSize sizeOf(BuildContext context) => of(context).size;
 
   static CellSize? maybeSizeOf(BuildContext context) => maybeOf(context)?.size;
+
+  /// The surface's capability set. Returns the neutral defaults when
+  /// there is no MediaQuery in scope.
+  static SurfaceCapabilities capabilitiesOf(BuildContext context) =>
+      maybeOf(context)?.capabilities ?? const SurfaceCapabilities();
 
   /// The detected color fidelity. Returns [ColorMode.truecolor] when
   /// there is no MediaQuery in scope (the safe default for tests +
@@ -115,15 +95,11 @@ class MediaQuery extends InheritedWidget {
   static GlyphTier glyphTierOf(BuildContext context) =>
       maybeOf(context)?.glyphTier ?? GlyphTier.unicode;
 
-  /// The detected image protocol. Returns [ImageProtocol.halfBlock]
-  /// when there's no MediaQuery — the universal-fallback path.
-  static ImageProtocol imageProtocolOf(BuildContext context) =>
-      maybeOf(context)?.imageProtocol ?? ImageProtocol.halfBlock;
-
-  /// Whether protocol payloads need to be wrapped for a multiplexer.
-  /// Defaults to false (no MediaQuery in scope, e.g. tests).
-  static bool tmuxPassthroughOf(BuildContext context) =>
-      maybeOf(context)?.tmuxPassthrough ?? false;
+  /// How the surface renders inline raster images. Returns
+  /// [InlineImageSupport.none] when there's no MediaQuery — the
+  /// glyph-fallback path works everywhere.
+  static InlineImageSupport imagesOf(BuildContext context) =>
+      maybeOf(context)?.capabilities.images ?? InlineImageSupport.none;
 
   @override
   bool updateShouldNotify(MediaQuery oldWidget) => data != oldWidget.data;

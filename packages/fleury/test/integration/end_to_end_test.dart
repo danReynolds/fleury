@@ -21,8 +21,7 @@ String _flatten(CellBuffer buffer) {
         case CellRole.leading:
           out.write(c.grapheme);
         case CellRole.continuation:
-        case CellRole.protocolAnchor:
-        case CellRole.protocolCovered:
+        case CellRole.overlay:
           // Continuation cells contribute nothing.
           break;
       }

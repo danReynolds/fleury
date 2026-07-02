@@ -1,4 +1,4 @@
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_core.dart';
 
 /// One tab: a [label] for the strip and the [content] shown when active.
 class TabItem {
@@ -188,10 +188,7 @@ class _TabsState extends State<Tabs> {
       index: active,
       children: [
         for (var i = 0; i < widget.tabs.length; i++)
-          ExcludeFocus(
-            excluding: i != active,
-            child: widget.tabs[i].content,
-          ),
+          ExcludeFocus(excluding: i != active, child: widget.tabs[i].content),
       ],
     );
 

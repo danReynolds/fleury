@@ -45,14 +45,16 @@ import '../foundation/geometry.dart';
 import '../foundation/key.dart' show UniqueKey;
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
+import '../rendering/surface_capabilities.dart';
 import '../rendering/render_flex.dart' show RenderFlex;
 import '../runtime/input_dispatcher.dart';
 import '../semantics/accessibility.dart';
 import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
-import '../terminal/capabilities.dart';
-import '../terminal/events.dart';
+import '../input/events.dart';
 import '../widgets/basic.dart';
+import '../runtime/clipboard.dart';
+import '../widgets/clipboard_scope.dart';
 import '../widgets/focus.dart';
 import '../widgets/framework.dart';
 import '../widgets/media_query.dart';
@@ -72,9 +74,10 @@ class FleuryTester {
     this.viewportSize = const CellSize(80, 24),
     this.colorMode = ColorMode.truecolor,
     this.glyphTier = GlyphTier.unicode,
-    this.imageProtocol = ImageProtocol.halfBlock,
-    this.tmuxPassthrough = false,
-  }) : _clock = FakeClock(),
+    this.images = InlineImageSupport.none,
+    Clipboard? clipboard,
+  }) : clipboard = clipboard ?? InProcessClipboard(),
+       _clock = FakeClock(),
        _focusManager = FocusManager() {
     _scheduler = FakeTickerScheduler(clock: _clock);
     _binding = TuiBinding(
@@ -85,15 +88,27 @@ class FleuryTester {
       focusManager: _focusManager,
       pointerRouter: _pointerRouter,
     );
-    _owner = BuildOwner();
     // Match the runtime: render an error panel for a thrown build()
-    // rather than letting the exception escape the test harness.
-    Element.errorBuilder ??= (error, stack) =>
-        ErrorWidget.builder(error, stack);
+    // rather than letting the exception escape the test harness. Per-owner,
+    // so a test customizing hooks can't leak into the next test.
+    _owner = BuildOwner(
+      errorBuilder: (error, stack) => ErrorWidget.builder(error, stack),
+    );
+    // Containment inverts for tests: a layout/paint bug should FAIL the
+    // test loudly, not render a red panel behind passing assertions. A
+    // containment test opts back in per-boundary with
+    // `ErrorBoundary(rethrowContained: false)`.
+    _owner.rethrowContainedRenderErrors = true;
     // Off by default in tests so it doesn't perturb golden output; an
     // overflow-specific test opts back in.
     RenderFlex.debugShowOverflow = false;
   }
+
+  /// The clipboard the tester installs via `ClipboardScope`. Defaults to a
+  /// fresh [InProcessClipboard]; assert copies with
+  /// `(tester.clipboard as InProcessClipboard).lastWritten` or pass a
+  /// custom fake to the constructor.
+  final Clipboard clipboard;
 
   /// Default size used by [render] / [renderToString] when no
   /// explicit size is given. Mutable so tests can grow / shrink the
@@ -103,11 +118,12 @@ class FleuryTester {
   CellSize viewportSize;
 
   /// Capability profile installed in the ambient [MediaQuery]. Tests set
-  /// [glyphTier] to [GlyphTier.ascii] to exercise the ASCII drawing fallback.
+  /// [glyphTier] to [GlyphTier.ascii] to exercise the ASCII drawing fallback,
+  /// or [images] to [InlineImageSupport.placements] to exercise the
+  /// true-pixel image path.
   ColorMode colorMode;
   GlyphTier glyphTier;
-  ImageProtocol imageProtocol;
-  bool tmuxPassthrough;
+  InlineImageSupport images;
 
   final FakeClock _clock;
   late final FakeTickerScheduler _scheduler;
@@ -351,9 +367,11 @@ class FleuryTester {
     Duration timeout = const Duration(seconds: 10),
   }) {
     _assertNotDisposed('pumpAndSettle');
-    assert(step > Duration.zero,
-        'pumpAndSettle needs a positive step; a zero step never advances the '
-        'clock, so timeout is never reached.');
+    assert(
+      step > Duration.zero,
+      'pumpAndSettle needs a positive step; a zero step never advances the '
+      'clock, so timeout is never reached.',
+    );
     var elapsed = Duration.zero;
     var hasRendered = false;
     while (elapsed < timeout) {
@@ -397,9 +415,11 @@ class FleuryTester {
     int stableSteps = 4,
   }) async {
     _assertNotDisposed('settle');
-    assert(step > Duration.zero,
-        'settle needs a positive step; a zero step never advances the clock '
-        '(nor elapsed), so timeout is never reached and the loop spins.');
+    assert(
+      step > Duration.zero,
+      'settle needs a positive step; a zero step never advances the clock '
+      '(nor elapsed), so timeout is never reached and the loop spins.',
+    );
     var elapsed = Duration.zero;
     var steps = 0;
     var stable = 0;
@@ -531,12 +551,10 @@ class FleuryTester {
           case CellRole.leading:
             line.write(cell.grapheme);
           case CellRole.continuation:
-          case CellRole.protocolAnchor:
-          case CellRole.protocolCovered:
-            // Protocol cells render in the terminal via raw escape
-            // bytes that have no string representation in the cell
-            // grid; the snapshot is text-only so we treat them as
-            // emptyMark.
+          case CellRole.overlay:
+            // Overlay (inline-image) cells render as pixels via the
+            // presenter, not text; the snapshot is text-only so we
+            // treat them as emptyMark.
             break;
         }
       }
@@ -742,16 +760,20 @@ class FleuryTester {
       child: MediaQuery(
         data: MediaQueryData(
           size: viewportSize,
-          colorMode: colorMode,
-          glyphTier: glyphTier,
-          imageProtocol: imageProtocol,
-          tmuxPassthrough: tmuxPassthrough,
+          capabilities: SurfaceCapabilities(
+            colorMode: colorMode,
+            glyphTier: glyphTier,
+            images: images,
+          ),
         ),
         child: FocusManagerScope(
           manager: _focusManager,
           child: PointerRouterScope(
             router: _pointerRouter,
-            child: Overlay(initialEntries: [_userEntry]),
+            child: ClipboardScope(
+              clipboard: clipboard,
+              child: Overlay(initialEntries: [_userEntry]),
+            ),
           ),
         ),
       ),
@@ -863,7 +885,6 @@ class FleuryTester {
       return null;
     }
   }
-
 }
 
 final class _CommandResolution {
@@ -899,8 +920,7 @@ void testWidgets(
   CellSize viewportSize = const CellSize(80, 24),
   ColorMode colorMode = ColorMode.truecolor,
   GlyphTier glyphTier = GlyphTier.unicode,
-  ImageProtocol imageProtocol = ImageProtocol.halfBlock,
-  bool tmuxPassthrough = false,
+  InlineImageSupport images = InlineImageSupport.none,
   pkg_test.Timeout? timeout,
   Object? skip,
 }) {
@@ -912,8 +932,7 @@ void testWidgets(
         viewportSize: viewportSize,
         colorMode: colorMode,
         glyphTier: glyphTier,
-        imageProtocol: imageProtocol,
-        tmuxPassthrough: tmuxPassthrough,
+        images: images,
       );
       try {
         await body(tester);

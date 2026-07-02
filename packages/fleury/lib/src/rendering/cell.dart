@@ -350,19 +350,19 @@ enum CellRole {
   leading,
   continuation,
 
-  /// Anchor cell for a multi-cell terminal-protocol region (Kitty
-  /// graphics, Sixel, iTerm2 inline images). The cell's `grapheme`
-  /// holds the literal escape-sequence bytes to emit at this cursor
-  /// position; the renderer writes them verbatim instead of treating
-  /// them as displayable text. Subsequent cells in the region are
-  /// [protocolCovered].
-  protocolAnchor,
-
-  /// A cell whose display is owned by an adjacent [protocolAnchor].
-  /// The renderer emits NOTHING for these cells — no cursor move, no
-  /// content, no clear. The terminal already shows whatever the anchor
-  /// emitted.
-  protocolCovered,
+  /// A cell whose visual is owned by an out-of-band overlay — an inline
+  /// image placement recorded on the buffer ([CellBuffer.imagePlacements])
+  /// and rendered by the PRESENTER (a terminal graphics protocol, a DOM
+  /// `<img>`), never by cell content. Escape bytes never ride in a cell;
+  /// presenters read the placement list instead.
+  ///
+  /// The renderer paints no glyph for these cells, but it DOES clear the
+  /// cell to a blank when it transitions from content to overlay — so
+  /// stale text can't survive in an image's letterbox bars (which the
+  /// image encoder leaves unpainted). An overlay cell that was already
+  /// blank (or overlay) the previous frame emits nothing, so an unchanging
+  /// image costs zero bytes.
+  overlay,
 }
 
 /// One terminal cell: the smallest addressable unit in the cell grid.
@@ -382,27 +382,22 @@ final class Cell {
     : grapheme = null,
       role = CellRole.continuation;
 
-  /// Anchor for a terminal-protocol region. [grapheme] is the raw
-  /// escape-sequence bytes the renderer should emit at this position.
-  const Cell.protocolAnchor({required String this.grapheme})
-    : role = CellRole.protocolAnchor,
-      style = CellStyle.empty;
-
-  const Cell.protocolCovered()
+  /// A cell inside an inline-image placement's rectangle. Carries no
+  /// grapheme and no style — the overlay's pixels own the region.
+  const Cell.overlay()
     : grapheme = null,
-      role = CellRole.protocolCovered,
+      role = CellRole.overlay,
       style = CellStyle.empty;
 
   /// The grapheme owned by this cell. Always null on `empty`,
-  /// `continuation`, and `protocolCovered` cells. For
-  /// `protocolAnchor` cells this is the raw escape-sequence payload.
+  /// `continuation`, and `overlay` cells.
   final String? grapheme;
 
   /// This cell's role in its (possibly wide) grapheme.
   final CellRole role;
 
-  /// Visual style applied to the cell. Always empty for the protocol
-  /// roles — protocol bytes carry their own coloring.
+  /// Visual style applied to the cell. Always empty for `overlay`
+  /// cells — the overlay's pixels carry their own coloring.
   final CellStyle style;
 
   @override
@@ -424,10 +419,8 @@ final class Cell {
         return 'Cell.continuation';
       case CellRole.leading:
         return 'Cell.leading("$grapheme")';
-      case CellRole.protocolAnchor:
-        return 'Cell.protocolAnchor(${grapheme!.length} bytes)';
-      case CellRole.protocolCovered:
-        return 'Cell.protocolCovered';
+      case CellRole.overlay:
+        return 'Cell.overlay';
     }
   }
 }

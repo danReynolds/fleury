@@ -1,10 +1,12 @@
 // dart2js entrypoint for the structured serve client. `fleury serve`
 // embeds the compiled output and serves it in place of a terminal-emulator
-// page; it renders a remote session through the retained DOM surface.
+// page; it renders a remote session through the SAME browser presentation
+// host the embed path uses — one assembly (surface, metrics, input,
+// semantics mirror, focus, clipboard), with the wire as the frame source.
 
 import 'dart:async';
 
-import 'package:fleury_web/src/remote_client/remote_surface_client.dart';
+import 'package:fleury_web/fleury_web.dart';
 import 'package:web/web.dart' as web;
 
 void main() {
@@ -13,9 +15,9 @@ void main() {
 
 Future<void> _run() async {
   final host = _hostElement();
-  final url = _socketUrl();
-  final client = RemoteSurfaceClient(hostElement: host, url: url);
-  await client.start();
+  await BrowserPresentationHost(
+    into: host,
+  ).attach(WireFrameSource(url: _socketUrl()));
   web.document.body?.setAttribute('data-fleury-remote-client', 'connected');
 }
 
@@ -29,9 +31,15 @@ web.Element _hostElement() {
 }
 
 /// The serve page is served same-origin, so the WebSocket lives at the
-/// same host with the ws(s) scheme.
+/// same host with the ws(s) scheme. When the page was opened with a
+/// `?token=` (fleury serve --token=...), forward it so the upgrade
+/// passes the server's auth check.
 String _socketUrl() {
   final loc = web.window.location;
   final scheme = loc.protocol == 'https:' ? 'wss' : 'ws';
-  return '$scheme://${loc.host}/ws';
+  final token = Uri.parse(loc.href).queryParameters['token'];
+  final query = token == null || token.isEmpty
+      ? ''
+      : '?token=${Uri.encodeQueryComponent(token)}';
+  return '$scheme://${loc.host}/ws$query';
 }

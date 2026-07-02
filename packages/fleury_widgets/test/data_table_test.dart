@@ -139,73 +139,85 @@ void main() {
       expect(rowId, isNot(contains('row/a/b')));
     });
 
-    testWidgets('a table without a rowKeyBuilder marks its index-keyed rows ~',
-        (tester) {
-      tester.pumpWidget(runs(keyed: false));
-      tester.render(size: const CellSize(20, 6));
-      final rowId = tester
-          .semantics()
-          .byRole(SemanticRole.tableRow)
-          .firstWhere((n) => n.state['rowIndex'] == 0)
-          .id;
-      expect(
-        rowId.value,
-        contains('/table/row/~0'),
-        reason: 'an index-based row is positional / version-fragile',
+    testWidgets(
+      'a table without a rowKeyBuilder marks its index-keyed rows ~',
+      (tester) {
+        tester.pumpWidget(runs(keyed: false));
+        tester.render(size: const CellSize(20, 6));
+        final rowId = tester
+            .semantics()
+            .byRole(SemanticRole.tableRow)
+            .firstWhere((n) => n.state['rowIndex'] == 0)
+            .id;
+        expect(
+          rowId.value,
+          contains('/table/row/~0'),
+          reason: 'an index-based row is positional / version-fragile',
+        );
+      },
+    );
+  });
+
+  testWidgets(
+    'setValue(index) jumps the window to an off-screen row (R1 reach)',
+    (tester) async {
+      tester.pumpWidget(
+        DataTable(
+          label: 'Runs',
+          rowCount: 100000,
+          columns: _columns(),
+          rowKeyBuilder: (row) => 'RUN-$row',
+          cellBuilder: _cell,
+        ),
       );
-    });
-  });
+      tester.render(size: const CellSize(20, 6));
 
-  testWidgets('setValue(index) jumps the window to an off-screen row (R1 reach)',
-      (tester) async {
-    tester.pumpWidget(
-      DataTable(
-        label: 'Runs',
-        rowCount: 100000,
-        columns: _columns(),
-        rowKeyBuilder: (row) => 'RUN-$row',
-        cellBuilder: _cell,
-      ),
-    );
-    tester.render(size: const CellSize(20, 6));
+      final table = tester.semantics().single(role: SemanticRole.table);
+      expect(table.actions, contains(SemanticAction.setValue));
+      expect(table.state['collectionRowCount'], 100000);
+      // Row 5000 is far off-window — absent from the tree, unreachable by id.
+      expect(
+        tester
+            .semantics()
+            .byRole(SemanticRole.tableRow)
+            .where((n) => n.state['rowIndex'] == 5000),
+        isEmpty,
+      );
 
-    final table = tester.semantics().single(role: SemanticRole.table);
-    expect(table.actions, contains(SemanticAction.setValue));
-    expect(table.state['collectionRowCount'], 100000);
-    // Row 5000 is far off-window — absent from the tree, unreachable by id.
-    expect(
-      tester
-          .semantics()
-          .byRole(SemanticRole.tableRow)
-          .where((n) => n.state['rowIndex'] == 5000),
-      isEmpty,
-    );
+      await tester.invokeSemanticAction(
+        SemanticAction.setValue,
+        node: table,
+        payload: 5000,
+      );
+      tester.render(
+        size: const CellSize(20, 6),
+      ); // relayout windows row 5000 in
 
-    await tester.invokeSemanticAction(SemanticAction.setValue,
-        node: table, payload: 5000);
-    tester.render(size: const CellSize(20, 6)); // relayout windows row 5000 in
+      expect(
+        tester
+            .semantics()
+            .byRole(SemanticRole.tableRow)
+            .where((n) => n.state['rowIndex'] == 5000),
+        isNotEmpty,
+        reason: 'the window followed the selection to the requested index',
+      );
 
-    expect(
-      tester
-          .semantics()
-          .byRole(SemanticRole.tableRow)
-          .where((n) => n.state['rowIndex'] == 5000),
-      isNotEmpty,
-      reason: 'the window followed the selection to the requested index',
-    );
-
-    // Out-of-range index is clamped to the last row, not rejected.
-    await tester.invokeSemanticAction(SemanticAction.setValue,
-        role: SemanticRole.table, payload: 999999);
-    tester.render(size: const CellSize(20, 6));
-    expect(
-      tester
-          .semantics()
-          .byRole(SemanticRole.tableRow)
-          .where((n) => n.state['rowIndex'] == 99999),
-      isNotEmpty,
-    );
-  });
+      // Out-of-range index is clamped to the last row, not rejected.
+      await tester.invokeSemanticAction(
+        SemanticAction.setValue,
+        role: SemanticRole.table,
+        payload: 999999,
+      );
+      tester.render(size: const CellSize(20, 6));
+      expect(
+        tester
+            .semantics()
+            .byRole(SemanticRole.tableRow)
+            .where((n) => n.state['rowIndex'] == 99999),
+        isNotEmpty,
+      );
+    },
+  );
 
   testWidgets('setValue routes to the targeted table, not a sibling '
       '(no cross-fire, no per-widget ownership guard)', (tester) async {
@@ -250,8 +262,12 @@ void main() {
     tester.render(size: const CellSize(48, 8));
 
     // setValue on table B (resolved by role+label) → B moves, A is untouched.
-    await tester.invokeSemanticAction(SemanticAction.setValue,
-        role: SemanticRole.table, label: 'B', payload: 7);
+    await tester.invokeSemanticAction(
+      SemanticAction.setValue,
+      role: SemanticRole.table,
+      label: 'B',
+      payload: 7,
+    );
     tester.render(size: const CellSize(48, 8));
 
     expect(controllerB.selectedIndex, 7, reason: 'B (the target) moved');
@@ -702,19 +718,6 @@ void main() {
   });
 
   group('copy/export', () {
-    late Clipboard originalClipboard;
-    late TestClipboard clipboard;
-
-    setUp(() {
-      originalClipboard = Clipboard.instance;
-      clipboard = TestClipboard();
-      Clipboard.instance = clipboard;
-    });
-
-    tearDown(() {
-      Clipboard.instance = originalClipboard;
-    });
-
     testWidgets('Ctrl+C copies the selected row with clipboard semantics', (
       tester,
     ) async {
@@ -739,7 +742,7 @@ void main() {
       tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, 'Run\tStatus\nrun-1\tfailed');
+      expect(tester.clipboard.readInProcess(), 'Run\tStatus\nrun-1\tfailed');
       expect(copied, isNotNull);
       expect(copied!.rowIndex, 1);
       expect(copied!.rowKey, 'RUN-1');
@@ -792,7 +795,7 @@ void main() {
       );
 
       expect(result.completed, isTrue);
-      expect(clipboard.lastWritten, 'Run\tStatus\nrun-1\tfailed');
+      expect(tester.clipboard.readInProcess(), 'Run\tStatus\nrun-1\tfailed');
       expect(copied?.rowKey, 'RUN-1');
       expect(copied?.report.result, ClipboardWriteResult.inProcessOnly);
     });
@@ -845,7 +848,7 @@ void main() {
       tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, 'Status\nok\nfailed');
+      expect(tester.clipboard.readInProcess(), 'Status\nok\nfailed');
       expect(copied, isNotNull);
       expect(copied!.rowIndex, 1);
       expect(copied!.rowKey, 'RUN-1');
@@ -879,9 +882,9 @@ void main() {
       tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, 'Name\nabc long cell');
-      expect(clipboard.lastWritten, isNot(contains('\x1b')));
-      expect(clipboard.lastWritten, isNot(contains('[31m')));
+      expect(tester.clipboard.readInProcess(), 'Name\nabc long cell');
+      expect(tester.clipboard.readInProcess(), isNot(contains('\x1b')));
+      expect(tester.clipboard.readInProcess(), isNot(contains('[31m')));
       expect(requestedRows, {2});
     });
 
@@ -901,7 +904,7 @@ void main() {
       tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
       await Future<void>.delayed(Duration.zero);
 
-      expect(clipboard.lastWritten, isNull);
+      expect(tester.clipboard.readInProcess(), isNull);
       final table = tester.semantics().single(role: SemanticRole.table);
       expect(table.actions, isNot(contains(SemanticAction.copy)));
       expect(table.state['copyEnabled'], isNull);
