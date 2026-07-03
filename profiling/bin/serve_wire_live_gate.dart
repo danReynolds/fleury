@@ -13,8 +13,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-const _baselinePath = 'serve_wire_live_baseline.json';
-
 // Byte axes fail beyond this relative increase. Generous: a live socket + real
 // frame loop is noisier than the in-process wire gate.
 const _byteFailFraction = 0.20;
@@ -30,14 +28,23 @@ Future<void> main(List<String> args) async {
   var update = false;
   for (final arg in args) {
     if (arg.startsWith('--runs=')) {
-      runs = int.parse(arg.substring('--runs='.length));
+      final v = int.tryParse(arg.substring('--runs='.length));
+      if (v == null || v <= 0) {
+        stderr.writeln('invalid --runs (want a positive integer)');
+        exitCode = 64;
+        return;
+      }
+      runs = v;
     } else if (arg == '--update-baseline') {
       update = true;
     }
   }
 
-  final profiler = '${File(Platform.script.toFilePath()).parent.path}'
-      '/serve_wire_live_profile.dart';
+  final scriptDir = File(Platform.script.toFilePath()).parent; // profiling/bin
+  final profiler = '${scriptDir.path}/serve_wire_live_profile.dart';
+  // The committed baseline lives in profiling/, resolved from the script dir so
+  // it's read/written correctly regardless of the caller's CWD.
+  final baselinePath = '${scriptDir.parent.path}/serve_wire_live_baseline.json';
   final workDir = Directory.systemTemp.createTempSync('serve-wire-gate-');
   final results = <String, Map<String, Object?>>{};
   try {
@@ -65,16 +72,16 @@ Future<void> main(List<String> args) async {
     workDir.deleteSync(recursive: true);
   }
 
-  final baselineFile = File(_baselinePath);
+  final baselineFile = File(baselinePath);
   if (update) {
     baselineFile.writeAsStringSync(
       '${const JsonEncoder.withIndent('  ').convert(results)}\n',
     );
-    stdout.writeln('baseline written to $_baselinePath');
+    stdout.writeln('baseline written to $baselinePath');
     return;
   }
   if (!baselineFile.existsSync()) {
-    stderr.writeln('no baseline at $_baselinePath — run --update-baseline');
+    stderr.writeln('no baseline at $baselinePath — run --update-baseline');
     exitCode = 64;
     return;
   }
@@ -91,21 +98,24 @@ Future<void> main(List<String> args) async {
       continue;
     }
     // Gate the STABLE totals: raw + deflated bytes over the fixed scenario are
-    // deterministic (identical run-to-run). Per-frame splits are informational
-    // only — bytes/frame swings with coalescing/timing on a live socket, so
-    // gating it would be flaky. A semantics regression still trips the gate
-    // because semantics dominate the total (5–13× plan).
+    // stable within a small coalescing margin run-to-run (empirically ±0.3%, far
+    // under the tolerance). Per-frame splits are informational only — bytes/frame
+    // swings with coalescing/timing on a live socket, so gating it would be
+    // flaky. A semantics regression still trips the gate because semantics
+    // dominate the total (5–13× plan). A broken wire is caught upstream: the
+    // profiler exits non-zero when a run captures no frames.
     for (final axis in ['totalBytes', 'deflatedBytes']) {
-      failed |= _checkByte(axis, (cur[axis] as num).toDouble(),
-          (base[axis] as num).toDouble());
+      failed |= _checkByte(axis, _axis(cur, axis, s.id, 'result'),
+          _axis(base, axis, s.id, 'baseline'));
     }
-    _warn('planBytesPerFrame', (cur['planBytesPerFrame'] as num).toDouble(),
-        (base['planBytesPerFrame'] as num).toDouble());
-    _warn('semanticsBytesPerFrame',
-        (cur['semanticsBytesPerFrame'] as num).toDouble(),
-        (base['semanticsBytesPerFrame'] as num).toDouble());
-    _warn('cadenceP95Ms', (cur['cadenceP95Ms'] as num).toDouble(),
-        (base['cadenceP95Ms'] as num).toDouble());
+    for (final axis in [
+      'planBytesPerFrame',
+      'semanticsBytesPerFrame',
+      'cadenceP95Ms',
+    ]) {
+      _warn(axis, _axis(cur, axis, s.id, 'result'),
+          _axis(base, axis, s.id, 'baseline'));
+    }
   }
 
   if (failed) {
@@ -134,3 +144,15 @@ void _warn(String axis, double cur, double base) {
 
 String _pct(double d) =>
     '${d >= 0 ? '+' : ''}${(d * 100).toStringAsFixed(1)}%';
+
+/// Reads a numeric [key] from a result/baseline map with a clear error instead
+/// of a bare `Null is not a subtype of num` when a stale baseline lacks the key.
+double _axis(Map<String, Object?> m, String key, String scenario, String which) {
+  final v = m[key];
+  if (v is! num) {
+    stderr.writeln('$which JSON for "$scenario" is missing numeric axis "$key" '
+        '— rebaseline with --update-baseline.');
+    exit(65);
+  }
+  return v.toDouble();
+}

@@ -9,11 +9,17 @@
 // semantics stream that rides the same socket (invisible to the synthetic tool
 // but often the dominant wire cost on text-heavy UIs).
 //
-// The client connects with permessage-deflate OFF, so the bytes it receives are
-// the true pre-deflate on-wire frames; the post-deflate size is accounted
-// offline with whole-stream DEFLATE (the same proxy serve_wire_profile uses),
-// keeping the two comparable. (True on-wire compressed bytes under production
-// permessage-deflate is a v2 raw-socket refinement.)
+// Byte accounting is PER DECODED FRAME (each frame's size = encodeFrame(f).length,
+// bucketed by type), not per WS message — serve forwards raw socket chunks, so a
+// chunk can carry several frames or split one, and message-level bucketing would
+// mis-attribute the plan/semantics split. The client connects with permessage-
+// deflate OFF, so the bytes it receives are the true pre-deflate on-wire frames;
+// the post-deflate size is accounted offline with whole-stream DEFLATE. NOTE:
+// whole-stream DEFLATE is a proxy — production permessage-deflate compresses
+// per-message, so this over-states achievable compression (it's a stable,
+// comparable regression signal, matching serve_wire_profile.dart's method, not a
+// production-accurate figure). totalBytes/deflatedBytes are stable within a small
+// coalescing margin run-to-run; the gate keys on them, bytes/frame is noisier.
 //
 //   dart run bin/serve_wire_live_profile.dart \
 //     [--scenario=dashboard|log|counter] [--steps=N] [--interval-ms=M]
@@ -35,13 +41,17 @@ Future<void> main(List<String> args) async {
     if (arg.startsWith('--scenario=')) {
       scenario = arg.substring('--scenario='.length);
     } else if (arg.startsWith('--steps=')) {
-      steps = int.parse(arg.substring('--steps='.length));
+      steps = _intArg(arg, '--steps=');
     } else if (arg.startsWith('--interval-ms=')) {
-      intervalMs = int.parse(arg.substring('--interval-ms='.length));
+      intervalMs = _intArg(arg, '--interval-ms=');
     } else if (arg.startsWith('--runs=')) {
-      runs = int.parse(arg.substring('--runs='.length));
+      runs = _intArg(arg, '--runs=');
     } else if (arg.startsWith('--out=')) {
       outPath = arg.substring('--out='.length);
+    } else {
+      stderr.writeln('unknown argument: $arg');
+      exitCode = 64;
+      return;
     }
   }
 
@@ -57,6 +67,11 @@ Future<void> main(List<String> args) async {
   try {
     for (var run = 1; run <= runs; run++) {
       final m = await _captureOneRun(port, steps, intervalMs);
+      if (m == null) {
+        stderr.writeln('run $run/$runs: captured NO frames (serve up but no '
+            'wire) — treating as a failure.');
+        continue;
+      }
       samples.add(m);
       stdout.writeln(
         'run $run/$runs: plan ${m.planFrames}f '
@@ -65,18 +80,20 @@ Future<void> main(List<String> args) async {
         '${m.semanticsBytesPerFrame.toStringAsFixed(1)} B/f · '
         'total ${m.totalBytes} B raw / ${m.deflatedBytes} B deflated · '
         'cadence p50 ${m.cadenceP50Ms.toStringAsFixed(1)} '
-        'p95 ${m.cadenceP95Ms.toStringAsFixed(1)} ms',
+        'p95 ${m.cadenceP95Ms.toStringAsFixed(1)} ms'
+        '${m.timedOut ? '  (hit hard cap)' : ''}',
       );
     }
   } finally {
-    serve.kill(ProcessSignal.sigint);
-    await serve.exitCode.timeout(
-      const Duration(seconds: 5),
-      onTimeout: () {
-        serve.kill(ProcessSignal.sigkill);
-        return -9;
-      },
-    );
+    await _shutdown(serve);
+  }
+
+  if (samples.isEmpty) {
+    stderr.writeln('serve live-wire: FAILED — no run captured any frames. '
+        'Baseline NOT written. (serve booted but the wire produced nothing — '
+        'a broken INIT handshake or a crashed scenario app.)');
+    exitCode = 1;
+    return;
   }
 
   final result = _median(scenario, steps, intervalMs, samples);
@@ -96,8 +113,9 @@ Future<void> main(List<String> args) async {
 }
 
 /// One WS session: connect (deflate off), INIT, capture until the app stops
-/// producing frames, then classify bytes by frame type and compute metrics.
-Future<_RunMetrics> _captureOneRun(int port, int steps, int intervalMs) async {
+/// producing frames. Returns null if the session captured no frames at all
+/// (a failed capture the caller must not treat as a valid sample).
+Future<_RunMetrics?> _captureOneRun(int port, int steps, int intervalMs) async {
   final ws = await WebSocket.connect(
     'ws://127.0.0.1:$port/ws',
     headers: {'origin': 'http://127.0.0.1:$port'},
@@ -105,41 +123,36 @@ Future<_RunMetrics> _captureOneRun(int port, int steps, int intervalMs) async {
   );
   final decoder = FrameDecoder();
   final allBytes = <int>[];
-  // Raw WS-message size, bucketed by the message's dominant frame type. A
-  // message almost always carries one frame; when it carries several, plan
-  // wins over semantics wins over other (a conservative attribution).
+  // Per-decoded-frame wire size (encodeFrame(f).length), bucketed by type —
+  // coalescing- and split-immune, unlike bucketing whole-message lengths.
   final planBytes = <int>[];
   final semanticsBytes = <int>[];
   var otherBytes = 0;
   final planArrivalMs = <double>[];
   final sw = Stopwatch()..start();
   var lastFrameMs = 0.0;
+  var anyFrame = false;
+  var timedOut = false;
   final done = Completer<void>();
 
-  ws.listen(
+  final sub = ws.listen(
     (data) {
       if (data is! List<int>) return;
       allBytes.addAll(data);
       decoder.feed(data);
-      var hasPlan = false;
-      var hasSemantics = false;
       for (final frame in decoder.drain()) {
+        final bytes = encodeFrame(frame).length;
+        final now = sw.elapsedMicroseconds / 1000.0;
+        anyFrame = true;
+        lastFrameMs = now;
         if (frame is PlanFrame) {
-          hasPlan = true;
+          planBytes.add(bytes);
+          planArrivalMs.add(now);
         } else if (frame is SemanticsFrame) {
-          hasSemantics = true;
+          semanticsBytes.add(bytes);
+        } else {
+          otherBytes += bytes;
         }
-      }
-      final now = sw.elapsedMicroseconds / 1000.0;
-      if (hasPlan) {
-        planBytes.add(data.length);
-        planArrivalMs.add(now);
-        lastFrameMs = now;
-      } else if (hasSemantics) {
-        semanticsBytes.add(data.length);
-        lastFrameMs = now;
-      } else {
-        otherBytes += data.length;
       }
     },
     onDone: () {
@@ -158,23 +171,31 @@ Future<_RunMetrics> _captureOneRun(int port, int steps, int intervalMs) async {
     protocolVersion: remoteProtocolVersion,
   )));
 
-  // The app ticks `steps` times then idles; the run is done once frames go
-  // quiet for `quietMs` (after ≥1 PLAN), bounded by a hard cap.
-  const quietMs = 500;
+  // The app ticks `steps` times then idles. Complete once frames go quiet for
+  // `quietMs` — but only AFTER the nominal run length has elapsed, so a cold-JIT
+  // or GC stall early in the run can't truncate the capture. A generous quiet
+  // window (>> a typical GC pause) guards mid-run stalls; the hard cap is the
+  // backstop for a genuine hang.
+  const quietMs = 1500;
   final expectedMs = steps * intervalMs;
   final quietPoll = Timer.periodic(const Duration(milliseconds: 100), (t) {
     final now = sw.elapsedMicroseconds / 1000.0;
-    if (planArrivalMs.isNotEmpty && now - lastFrameMs > quietMs) {
+    if (anyFrame && now > expectedMs && now - lastFrameMs > quietMs) {
       if (!done.isCompleted) done.complete();
       t.cancel();
     }
   });
   await done.future.timeout(
-    Duration(milliseconds: expectedMs * 2 + 8000),
-    onTimeout: () {},
+    Duration(milliseconds: expectedMs * 2 + 10000),
+    onTimeout: () {
+      timedOut = true;
+    },
   );
   quietPoll.cancel();
+  await sub.cancel();
   await ws.close();
+
+  if (!anyFrame) return null; // captured nothing — a failed session.
 
   // Steady-state excludes the first frame of each kind (the initial full paint
   // / first semantic tree after INIT).
@@ -199,6 +220,7 @@ Future<_RunMetrics> _captureOneRun(int port, int steps, int intervalMs) async {
     otherBytes: otherBytes,
     cadenceP50Ms: _percentile(cadences, 0.50),
     cadenceP95Ms: _percentile(cadences, 0.95),
+    timedOut: timedOut,
   );
 }
 
@@ -228,21 +250,37 @@ Future<Process> _bootServe(
   );
   final ready = Completer<void>();
   final stderrLines = <String>[];
-  proc.stderr
+  final stderrSub = proc.stderr
       .transform(utf8.decoder)
       .transform(const LineSplitter())
       .listen((line) {
     stderrLines.add(line);
     if (line.contains('spawn mode') && !ready.isCompleted) ready.complete();
   });
-  proc.stdout.drain<void>();
-  await ready.future.timeout(
-    const Duration(seconds: 20),
-    onTimeout: () => throw StateError(
+  unawaited(proc.stdout.drain<void>().catchError((_) {}));
+  try {
+    await ready.future.timeout(const Duration(seconds: 20));
+  } on TimeoutException {
+    // Kill the orphaned serve (and its warm-standby scenario subprocess) rather
+    // than leaking them holding the port + CPU.
+    await stderrSub.cancel();
+    await _shutdown(proc);
+    throw StateError(
       'serve did not start within 20s. stderr:\n${stderrLines.join('\n')}',
-    ),
-  );
+    );
+  }
   return proc;
+}
+
+Future<void> _shutdown(Process proc) async {
+  proc.kill(ProcessSignal.sigint);
+  await proc.exitCode.timeout(
+    const Duration(seconds: 5),
+    onTimeout: () {
+      proc.kill(ProcessSignal.sigkill);
+      return -9;
+    },
+  );
 }
 
 Map<String, Object?> _median(
@@ -280,6 +318,16 @@ double _percentile(List<double> sorted, double p) {
   return sorted[(p * (sorted.length - 1)).round()];
 }
 
+int _intArg(String arg, String prefix) {
+  final raw = arg.substring(prefix.length);
+  final value = int.tryParse(raw);
+  if (value == null || value <= 0) {
+    stderr.writeln('invalid $prefix value: "$raw" (want a positive integer)');
+    exit(64);
+  }
+  return value;
+}
+
 final class _RunMetrics {
   _RunMetrics({
     required this.planFrames,
@@ -291,6 +339,7 @@ final class _RunMetrics {
     required this.otherBytes,
     required this.cadenceP50Ms,
     required this.cadenceP95Ms,
+    required this.timedOut,
   });
   final int planFrames;
   final int semanticsFrames;
@@ -301,6 +350,7 @@ final class _RunMetrics {
   final int otherBytes;
   final double cadenceP50Ms;
   final double cadenceP95Ms;
+  final bool timedOut;
 }
 
 final class _Paths {
@@ -315,11 +365,17 @@ _Paths _resolvePaths() {
   final bin = File(Platform.script.toFilePath()).parent;
   final profiling = bin.parent;
   final repo = profiling.parent;
-  return _Paths(
-    profiling.path,
-    '${repo.path}/packages/fleury/bin/fleury.dart',
-    '${bin.path}/serve_scenario_app.dart',
-  );
+  final fleuryCli = '${repo.path}/packages/fleury/bin/fleury.dart';
+  final scenarioApp = '${bin.path}/serve_scenario_app.dart';
+  for (final p in [fleuryCli, scenarioApp]) {
+    if (!File(p).existsSync()) {
+      stderr.writeln('cannot resolve harness paths from '
+          '${Platform.script} — missing $p. Run via `dart run` from the '
+          'profiling package (not a relocated snapshot).');
+      exit(70);
+    }
+  }
+  return _Paths(profiling.path, fleuryCli, scenarioApp);
 }
 
 Future<int> _unusedLoopbackPort() async {

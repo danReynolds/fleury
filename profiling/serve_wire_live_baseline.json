@@ -7,12 +7,12 @@
     "planFrames": 121.0,
     "semanticsFrames": 121.0,
     "planBytesPerFrame": 886.5,
-    "semanticsBytesPerFrame": 5307.1,
-    "totalBytes": 756448.0,
-    "deflatedBytes": 56859.0,
-    "otherBytes": 78.0,
-    "cadenceP50Ms": 16.0,
-    "cadenceP95Ms": 17.8
+    "semanticsBytesPerFrame": 5291.1,
+    "totalBytes": 754494.0,
+    "deflatedBytes": 56929.0,
+    "otherBytes": 92.0,
+    "cadenceP50Ms": 16.1,
+    "cadenceP95Ms": 17.2
   },
   "log": {
     "scenario": "log",
@@ -22,12 +22,12 @@
     "planFrames": 121.0,
     "semanticsFrames": 121.0,
     "planBytesPerFrame": 62.2,
-    "semanticsBytesPerFrame": 6949.4,
-    "totalBytes": 856433.0,
-    "deflatedBytes": 18343.0,
-    "otherBytes": 8270.0,
-    "cadenceP50Ms": 15.9,
-    "cadenceP95Ms": 17.0
+    "semanticsBytesPerFrame": 6973.4,
+    "totalBytes": 859365.0,
+    "deflatedBytes": 18333.0,
+    "otherBytes": 92.0,
+    "cadenceP50Ms": 16.0,
+    "cadenceP95Ms": 16.9
   },
   "counter": {
     "scenario": "counter",
@@ -35,13 +35,13 @@
     "intervalMs": 16,
     "runs": 3,
     "planFrames": 121.0,
-    "semanticsFrames": 119.0,
-    "planBytesPerFrame": 25.7,
-    "semanticsBytesPerFrame": 281.6,
+    "semanticsFrames": 121.0,
+    "planBytesPerFrame": 21.1,
+    "semanticsBytesPerFrame": 281.3,
     "totalBytes": 42855.0,
     "deflatedBytes": 1778.0,
-    "otherBytes": 78.0,
-    "cadenceP50Ms": 16.1,
-    "cadenceP95Ms": 17.9
+    "otherBytes": 92.0,
+    "cadenceP50Ms": 16.2,
+    "cadenceP95Ms": 17.2
   }
 }
