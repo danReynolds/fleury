@@ -22,8 +22,13 @@ import 'ansi_renderer.dart';
 ///                mouse modes (1000/1002/1003/1006), and Kitty keyboard
 ///                push/pop (`CSI > … u` / `CSI < u`). Paid once per
 ///                enter/suspend/restore, not per frame.
-///   - [other]:   any other escape sequence (e.g. an image/protocol anchor
-///                grapheme emitted verbatim, or an unrecognized CSI final).
+///   - [other]:   any other escape sequence (an unrecognized CSI final, or a
+///                non-image OSC like clipboard 52 / hyperlink 8).
+///   - [image]:   inline-image protocol payloads — Kitty graphics (APC
+///                `ESC _ G … ST`), Sixel (DCS `ESC P … ST`, also the tmux
+///                image-passthrough envelope), and iTerm2 (OSC `ESC ] 1337 ; …
+///                BEL/ST`). The dominant per-frame payload on image frames;
+///                counted as payload (like [content]), NOT tunable overhead.
 class AnsiByteBreakdown {
   const AnsiByteBreakdown({
     this.content = 0,
@@ -32,6 +37,7 @@ class AnsiByteBreakdown {
     this.sync = 0,
     this.session = 0,
     this.other = 0,
+    this.image = 0,
   });
 
   final int content;
@@ -40,8 +46,9 @@ class AnsiByteBreakdown {
   final int sync;
   final int session;
   final int other;
+  final int image;
 
-  int get total => content + sgr + cursor + sync + session + other;
+  int get total => content + sgr + cursor + sync + session + other + image;
 
   /// Bytes that carry information (content) vs. control/formatting overhead
   /// spent per frame (everything except content and [session]). A high
@@ -64,6 +71,7 @@ class AnsiByteBreakdown {
     sync: sync + o.sync,
     session: session + o.session,
     other: other + o.other,
+    image: image + o.image,
   );
 
   /// Categorizes a single emitted ANSI string by UTF-8 byte count.
@@ -79,6 +87,7 @@ class AnsiByteBreakdown {
     var sync = 0;
     var session = 0;
     var other = 0;
+    var image = 0;
 
     final contentRun = StringBuffer();
     void flushContent() {
@@ -113,6 +122,29 @@ class AnsiByteBreakdown {
       flushContent();
       final start = i;
       i++; // consume ESC
+      if (i < n) {
+        final intro = data.codeUnitAt(i);
+        // String escapes carry inline-image protocol payloads: APC (ESC _,
+        // Kitty graphics), DCS (ESC P, Sixel or a tmux image-passthrough
+        // envelope), OSC 1337 (ESC ], iTerm2). Consume through the string
+        // terminator (ST `ESC \` or BEL) as one run. Non-image OSC (clipboard
+        // 52, hyperlink 8) stays 'other'.
+        if (intro == 0x5F /* _ APC */ || intro == 0x50 /* P DCS */) {
+          i = _consumeStringEscape(data, i + 1, n);
+          image += i - start;
+          continue;
+        }
+        if (intro == 0x5D /* ] OSC */) {
+          final isImage = _oscIsImage(data, i + 1, n);
+          i = _consumeStringEscape(data, i + 1, n);
+          if (isImage) {
+            image += i - start;
+          } else {
+            other += i - start;
+          }
+          continue;
+        }
+      }
       if (i >= n || data.codeUnitAt(i) != csi) {
         // Not a CSI; count the ESC alone as overhead and continue.
         other += 1;
@@ -165,6 +197,7 @@ class AnsiByteBreakdown {
       sync: sync,
       session: session,
       other: other,
+      image: image,
     );
   }
 
@@ -176,13 +209,42 @@ class AnsiByteBreakdown {
     'sync': sync,
     'session': session,
     'other': other,
+    'image': image,
     'overheadFraction': overheadFraction,
   };
 
   @override
   String toString() =>
       'AnsiByteBreakdown(total: $total, content: $content, sgr: $sgr, '
-      'cursor: $cursor, sync: $sync, session: $session, other: $other)';
+      'cursor: $cursor, sync: $sync, session: $session, other: $other, '
+      'image: $image)';
+}
+
+/// Consumes a string escape's body starting at [from] (just past the intro
+/// byte, e.g. the `_`/`P`/`]`) through its terminator — ST (`ESC \`) or BEL
+/// (0x07) — and returns the index just past it. Runs to the end if unterminated.
+int _consumeStringEscape(String data, int from, int n) {
+  var i = from;
+  while (i < n) {
+    final c = data.codeUnitAt(i);
+    if (c == 0x07) return i + 1; // BEL
+    if (c == 0x1B && i + 1 < n && data.codeUnitAt(i + 1) == 0x5C) {
+      return i + 2; // ST: ESC \
+    }
+    i++;
+  }
+  return n;
+}
+
+/// True when an OSC starting at [from] (just past `ESC ]`) is an iTerm2 inline
+/// image (`1337`). Other OSC codes (8 hyperlink, 52 clipboard) are not images.
+bool _oscIsImage(String data, int from, int n) {
+  const marker = '1337';
+  if (from + marker.length > n) return false;
+  for (var i = 0; i < marker.length; i++) {
+    if (data.codeUnitAt(from + i) != marker.codeUnitAt(i)) return false;
+  }
+  return true;
 }
 
 /// True if the private-mode parameter list in `data[from..to)` is exactly

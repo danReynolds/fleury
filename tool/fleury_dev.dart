@@ -1059,6 +1059,9 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       case 'serve-semantics-gate':
         await benchmarkServeSemanticsGate(rest);
         return;
+      case 'image-bench':
+        await benchmarkImageBench(rest);
+        return;
       case 'scoreboard':
         await benchmarkScoreboard(rest);
         return;
@@ -1404,6 +1407,17 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       'run',
       'bin/serve_semantics_profile.dart',
       '--gate',
+      ...args,
+    ], workingDirectory: profiling);
+  }
+
+  /// Inline-image encoder bench — image bytes/frame + encode µs (protocols x
+  /// static/animated). Pass `--gate` to guard the dedup + zero-image-fast-path
+  /// invariants at the byte level. Fast + deterministic.
+  Future<void> benchmarkImageBench(List<String> args) async {
+    await _run('dart', [
+      'run',
+      'bin/image_bench.dart',
       ...args,
     ], workingDirectory: profiling);
   }

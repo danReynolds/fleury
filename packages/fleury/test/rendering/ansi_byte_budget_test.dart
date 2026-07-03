@@ -184,4 +184,53 @@ void main() {
       expect(sink.total.total, greaterThan(sink.total.content));
     });
   });
+
+  group('AnsiByteBreakdown image category', () {
+    test('Kitty graphics (APC ESC _ … ST) count as image, not content', () {
+      const seq = '\x1B_Ga=t,f=100,i=1;AAAABBBBCCCC\x1B\\';
+      final b = AnsiByteBreakdown.analyze(seq);
+      expect(b.image, seq.length);
+      expect(b.content, 0);
+      expect(b.other, 0);
+    });
+
+    test('iTerm2 inline image (OSC 1337, BEL-terminated) counts as image', () {
+      const seq = '\x1B]1337;File=inline=1;size=9:QUJDREVG\x07';
+      final b = AnsiByteBreakdown.analyze(seq);
+      expect(b.image, seq.length);
+      expect(b.content, 0);
+      expect(b.other, 0);
+    });
+
+    test('Sixel (DCS ESC P … ST) counts as image', () {
+      const seq = '\x1BPq#0;2;0;0;0#0~~~\x1B\\';
+      final b = AnsiByteBreakdown.analyze(seq);
+      expect(b.image, seq.length);
+      expect(b.content, 0);
+    });
+
+    test('non-image OSC (clipboard 52) stays other, NOT image', () {
+      const seq = '\x1B]52;c;U0VDUkVU\x07';
+      final b = AnsiByteBreakdown.analyze(seq);
+      expect(b.image, 0);
+      expect(b.other, seq.length);
+    });
+
+    test('image is payload, not tunable overhead', () {
+      const seq = '\x1B_Ga=t;AAAA\x1B\\';
+      final b = AnsiByteBreakdown.analyze(seq);
+      expect(b.image, greaterThan(0));
+      expect(b.overhead, 0, reason: 'image is payload like content');
+      expect(b.total, b.image);
+    });
+
+    test('image separates cleanly from surrounding content + cursor', () {
+      const img = '\x1B_Ga=t;AAAA\x1B\\';
+      const seq = 'ab${img}cd\x1B[2;1H';
+      final b = AnsiByteBreakdown.analyze(seq);
+      expect(b.image, img.length);
+      expect(b.content, 4, reason: 'ab + cd');
+      expect(b.cursor, '\x1B[2;1H'.length);
+    });
+  });
 }
