@@ -1062,6 +1062,9 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       case 'image-bench':
         await benchmarkImageBench(rest);
         return;
+      case 'bundle-size':
+        await benchmarkBundleSize(rest);
+        return;
       case 'scoreboard':
         await benchmarkScoreboard(rest);
         return;
@@ -1418,6 +1421,17 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
     await _run('dart', [
       'run',
       'bin/image_bench.dart',
+      ...args,
+    ], workingDirectory: profiling);
+  }
+
+  /// First-load bundle-size gate for the served-browser client
+  /// (remote_client.dart.js, served at GET /client) — raw + gzip of the shipped
+  /// bytes. Pass `--gate` to fail on a size regression. Fast — no recompile.
+  Future<void> benchmarkBundleSize(List<String> args) async {
+    await _run('dart', [
+      'run',
+      'bin/bundle_size_gate.dart',
       ...args,
     ], workingDirectory: profiling);
   }
