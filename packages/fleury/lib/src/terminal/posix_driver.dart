@@ -63,6 +63,10 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
   bool _probing = false;
   List<int> _probeBuffer = <int>[];
   ImageProtocol? _imageProtocolOverride;
+  // Set once the ambiguous-width probe measures how the terminal sizes
+  // ambiguous glyphs; a confirmed `narrow` lets the renderer drop the
+  // defensive per-cell repositioning [capabilities] otherwise assumes.
+  AmbiguousCharWidth? _ambiguousCharWidthOverride;
   bool _wroteEnterSequences = false;
   bool _changedStdin = false;
   bool? _originalLineMode;
@@ -112,7 +116,10 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
       Platform.environment,
     );
     final override = _imageProtocolOverride;
-    return override == null ? base : base.copyWith(imageProtocol: override);
+    final merged =
+        override == null ? base : base.copyWith(imageProtocol: override);
+    final width = _ambiguousCharWidthOverride;
+    return width == null ? merged : merged.copyWith(ambiguousCharWidth: width);
   }
 
   @override
@@ -178,6 +185,7 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
     // Runs before the app renders so the first frame already uses the right
     // protocol; falls back silently when nothing replies.
     await _maybeProbeImageProtocol();
+    await _maybeProbeAmbiguousWidth();
 
     _resizeSubscription = _watchSignal(ProcessSignal.sigwinch, (_) {
       _events.add(ResizeEvent(size));
@@ -223,6 +231,45 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
       if (detected != null) _imageProtocolOverride = detected;
     } on Object {
       // Probe failed (no terminal reply, write error, …): keep the fallback.
+    } finally {
+      _replayPostProbeInput();
+    }
+  }
+
+  /// Measures how the terminal sizes ambiguous-width glyphs so the renderer can
+  /// drop its defensive per-cell repositioning on terminals that draw them one
+  /// column wide (the common case). Same terminal guards as the image probe;
+  /// runs on the alternate screen and any failure leaves the safe `wide`
+  /// default in place.
+  Future<void> _maybeProbeAmbiguousWidth() async {
+    if (!_stdoutIsTerminal || !_changedStdin) return;
+    // Escape hatch: skip the probe and set the result directly.
+    //   FLEURY_AMBIGUOUS_WIDTH=narrow|wide — force this rendering.
+    //   FLEURY_AMBIGUOUS_WIDTH=0|off|false — skip; keep the conservative `wide`.
+    final flag = Platform.environment['FLEURY_AMBIGUOUS_WIDTH']
+        ?.toLowerCase()
+        .trim();
+    if (flag == 'narrow') {
+      _ambiguousCharWidthOverride = AmbiguousCharWidth.narrow;
+      return;
+    }
+    if (flag == 'wide') {
+      _ambiguousCharWidthOverride = AmbiguousCharWidth.wide;
+      return;
+    }
+    if (flag == '0' || flag == 'off' || flag == 'false') return;
+    // ASCII-only output emits no ambiguous glyphs, so nothing needs sizing —
+    // skip the round trip and the stray probe glyph.
+    if (detectGlyphTierFromEnvironment(Platform.environment) ==
+        GlyphTier.ascii) {
+      return;
+    }
+    try {
+      final detected = await probeAmbiguousWidth(_DriverProbeTransport(this));
+      if (detected != null) _ambiguousCharWidthOverride = detected;
+    } on Object {
+      // Probe failed (no terminal reply, write error, …): keep the `wide`
+      // default so ambiguous-wide terminals never garble.
     } finally {
       _replayPostProbeInput();
     }

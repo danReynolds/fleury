@@ -380,6 +380,57 @@ void main() {
       // No interior cursor moves — ASCII width is unambiguous.
       expect(sink.output, '\x1B[Habcde');
     });
+
+    test('the defensive path pins EVERY cell of an ambiguous run', () {
+      // Default (ambiguousCharsAreWide: true): a run of box-drawing glyphs costs
+      // one absolute CUP per cell — correct on a two-wide terminal, but the very
+      // overhead the narrow path below removes. Guards the SB.6 regression: this
+      // is what a whole sparkline/gauge fill looked like on every terminal.
+      final prev = CellBuffer(const CellSize(4, 1));
+      final next = CellBuffer(const CellSize(4, 1))
+        ..writeText(const CellOffset(0, 0), '───x');
+      final sink = StringAnsiSink();
+      const AnsiRenderer(
+        synchronizedOutput: false,
+      ).renderDiff(prev, next, sink);
+      expect(sink.output, '\x1B[H─\x1B[1;2H─\x1B[1;3H─\x1B[1;4Hx');
+    });
+
+    test(
+      'a confirmed-narrow terminal keeps an ambiguous run contiguous',
+      () {
+        // When the startup probe confirms the terminal renders ambiguous-width
+        // glyphs one column wide (the common case), the defensive per-cell
+        // repositioning is pure overhead. The same run must collapse to a single
+        // contiguous write with no interior cursor moves — this is the SB.6 fix.
+        final prev = CellBuffer(const CellSize(4, 1));
+        final next = CellBuffer(const CellSize(4, 1))
+          ..writeText(const CellOffset(0, 0), '───x');
+        final sink = StringAnsiSink();
+        const AnsiRenderer(
+          synchronizedOutput: false,
+          ambiguousCharsAreWide: false,
+        ).renderDiff(prev, next, sink);
+        expect(sink.output, '\x1B[H───x');
+      },
+    );
+
+    test('the last-column guard still fires on a narrow terminal', () {
+      // ambiguousCharsAreWide only gates the *width* invalidation; a write to
+      // the final column must still invalidate (pending-wrap terminals), so the
+      // next row repositions absolutely rather than riding an autowrap.
+      final prev = CellBuffer(const CellSize(2, 2));
+      final next = CellBuffer(const CellSize(2, 2))
+        ..writeText(const CellOffset(0, 0), 'ab')
+        ..writeText(const CellOffset(0, 1), 'cd');
+      final sink = StringAnsiSink();
+      const AnsiRenderer(
+        synchronizedOutput: false,
+        ambiguousCharsAreWide: false,
+      ).renderDiff(prev, next, sink);
+      // Row 0 fills to the last column; row 1 must start with an absolute CUP.
+      expect(sink.output, contains('ab\x1B[2Hcd'));
+    });
   });
 
   group('renderDiff — styles', () {

@@ -42,20 +42,34 @@ gate for the terminal path had been silently non-functional.** Fixed in PR #28.
 Follow-up: add an "all `bin/*_wire.dart` compile" smoke check so it can't rot
 silently again.
 
-### 1. SB.6 dashboard: real +60% byte regression (INVESTIGATE — top priority)
+### 1. SB.6 dashboard: real +60% byte regression (RESOLVED — root-caused and fixed)
 
 The moment the gate ran: **SB.6 total bytes 175,106 vs baseline 109,059
 (+60.6%), bytes/frame 1447 vs 901, control overhead 57% vs 31% (+26pt), frames
-unchanged.** Isolation: pre-merge `main@86b3581` shows the *identical* number
-(174,982) — so this **predates the PR1–PR9 pipeline work and the merge** (which
-added ~0.1%, confirmed inert: image-path changes are no-ops on image-free
-frames). It slipped in through the June→July app-feedback/Focus/LayoutBuilder
-work while the gate was dead. The +26pt control-byte overhead with unchanged
-frame count points at **more frames taking the whole-screen diff path** (a size
-change trips `_requiresFullDiff` → null-`dirtyBounds` full scan → more scattered
-cursor moves). Next: `git bisect` the June-11→main range with the restored gate
-to attribute the commit, then fix (if a real regression) or re-baseline in the
-same commit (if an intentional, measured output change).
+unchanged.** PTY-captured byte categorization located it precisely: **cursor
+moves tripled, 24.8k → 85.4k** (content and color essentially flat), i.e. the
+diff was emitting an absolute `CUP` *per cell* instead of one per contiguous run.
+
+Root cause: commit `97cd002` ("absolute reposition after ambiguous-width
+glyphs") invalidates the tracked cursor after **every non-ASCII, non-wide
+glyph** — which is the entire block-element / box-drawing vocabulary
+(`█ ▁ ▂ ─ │`) that gauges, sparklines, and bar charts are built from. It's a
+real fix for the "Warp garble" (terminals that render those glyphs two columns
+wide desync), but it paid the per-cell repositioning on **every** terminal,
+including the ~95% that render them one column wide. A 48-cell sparkline fill
+cost 48 cursor moves instead of one.
+
+Fixed by making the defensive repositioning **capability-gated**: a one-time
+startup Cursor-Position probe (the same `t_u7`/`ESC[6n` technique vim uses to
+auto-set `ambiwidth`) measures whether the terminal draws ambiguous glyphs one
+or two columns wide. Narrow terminals emit compact contiguous runs; wide or
+unprobed terminals keep the safe per-cell pinning, so the garble fix is intact.
+`AnsiRenderer.ambiguousCharsAreWide` defaults to the safe `wide`; the driver
+flips it to `narrow` only on a positive probe (env override
+`FLEURY_AMBIGUOUS_WIDTH=narrow|wide` in reserve). **Post-fix SB.6: +3.3% vs
+baseline (the intentional color legibility pass), gate green — no re-baseline
+needed.** Not a `_requiresFullDiff` issue (the earlier hypothesis) — the
+absolute-CUP encoding change from `05ce2d4` was measured inert (~0.6k).
 
 ### 2. The retained-tree tax (SB.6 / SB.7 / SB.12 — architectural, real but bounded)
 
@@ -124,7 +138,7 @@ build" is benign — mount routes through `rebuild()` which clears the dirty fla
 ## Suggested sequencing
 
 1. **Land PR #28** (gate restored) + add the fixtures-compile smoke check.
-2. **Bisect + resolve the SB.6 +60% regression** (fix or re-baseline) — the gate is red until this is closed.
+2. ~~Resolve the SB.6 +60% regression~~ **DONE** — capability-gated ambiguous-width repositioning (see §1); gate green, no re-baseline.
 3. **Encoder zero-image fast path + kitty key caching** — clear, self-contained wins on the terminal image path (do alongside G2 so the fix is measured).
 4. **G1 live-serve-wire harness** — unblocks measuring the whole serve surface (the biggest blind spot); then G4/G5 layer onto it.
 5. **G2 image bench + `AnsiByteBreakdown` image category** — makes the image pipeline gateable.
