@@ -1056,6 +1056,9 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       case 'serve-wire-live':
         await benchmarkServeWireLive(rest);
         return;
+      case 'serve-semantics-gate':
+        await benchmarkServeSemanticsGate(rest);
+        return;
       case 'scoreboard':
         await benchmarkScoreboard(rest);
         return;
@@ -1389,6 +1392,18 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
     await _run('dart', [
       'run',
       'bin/serve_wire_live_gate.dart',
+      ...args,
+    ], workingDirectory: profiling);
+  }
+
+  /// Guards the semantics wire's anti-cliff invariant: the `SemanticsWireEncoder`
+  /// diff must stay flat in tree size so a large served UI never falls off the
+  /// 32 KiB DEFLATE cliff (a ~57x per-frame blow-up). Fast + deterministic.
+  Future<void> benchmarkServeSemanticsGate(List<String> args) async {
+    await _run('dart', [
+      'run',
+      'bin/serve_semantics_profile.dart',
+      '--gate',
       ...args,
     ], workingDirectory: profiling);
   }

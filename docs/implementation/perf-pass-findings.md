@@ -113,8 +113,20 @@ semantics-flush path have zero coverage.** Ranked by impact:
   (`screenDiffStats` + `detectBeneficialScrollUp` + `_buildPatches`), ignoring
   the frame's `diffBounds` — the ANSI path already early-exits on bounded damage;
   the wire path lost that optimization.
-- **Serve rebuilds the full semantic tree** (`SemanticTree.fromElement` +
-  `owner.update` diff) on any visual-only dirty frame, once per microtask flush.
+- ~~**Serve rebuilds the full semantic tree** … on any visual-only dirty
+  frame~~ **INVESTIGATED (Tier 1, 2026-07-03) — not a delivered-wire problem.**
+  The tree IS rebuilt per changed frame (`SemanticTree.fromElement`, a redaction
+  walk), but the wire is already diffed by `SemanticsWireEncoder` to O(changed)
+  nodes and permessage-DEFLATE crushes the residual: **10–38 B/frame delivered,
+  flat in tree size** (`serve_semantics_profile`; a revert to full-resend cliffs
+  to ~2180 B at 244 nodes), CPU ≤552 µs at 244 nodes (~3% of a 60 fps budget).
+  The G1 "semantics dominate 5–13× plan" finding was **raw** bytes — deflated +
+  diffed it is a non-issue for realistic UIs (the all-changing G1 log scenario
+  was pathological; a real log scrolls ≈1 changed node/frame). No fix warranted;
+  instead the anti-cliff invariant is now **guarded** (`fleury benchmark
+  serve-semantics-gate`) so a regression toward full-resend can't slip in.
+  Node-level dirty tracking (skip the toJson walk for unchanged nodes) is the
+  only latent micro-opt, negligible at 60 fps.
 - **`InlineImageOverlay.apply`** (browser embed) has no empty early-exit — runs
   the reconcile every frame even with zero images.
 - Per-frame `Stopwatch` allocations not gated on `debugWatching`; `cell_buffer`
@@ -140,7 +152,7 @@ build" is benign — mount routes through `rebuild()` which clears the dirty fla
 1. **Land PR #28** (gate restored) + add the fixtures-compile smoke check.
 2. ~~Resolve the SB.6 +60% regression~~ **DONE** — capability-gated ambiguous-width repositioning (see §1); gate green, no re-baseline.
 3. **Encoder zero-image fast path + kitty key caching** — clear, self-contained wins on the terminal image path (do alongside G2 so the fix is measured).
-4. ~~G1 live-serve-wire harness~~ **DONE** — `serve_wire_live_*` (see G1). Surfaced that **semantics dominate the serve wire 5–13×** — the next serve-perf lever is trimming/coalescing the per-frame semantics stream (it's re-sent every visual-only frame). G4/G5 now layer onto this harness.
+4. ~~G1 live-serve-wire harness~~ **DONE** — `serve_wire_live_*` (see G1). Surfaced that semantics dominate the **raw** serve wire 5–13×, which on investigation (§3, Tier 1) is **not** a delivered-cost problem — the diff encoder + DEFLATE already keep it flat at 10–38 B/frame, now guarded by `serve-semantics-gate`. The next real serve/perf levers are the coverage tools (G2/G6), not semantics. G4/G5 layer onto this harness.
 5. **G2 image bench + `AnsiByteBreakdown` image category** — makes the image pipeline gateable.
 6. **Retained-tree-tax investigations** (`CellConstraints` pooling, paint-only bounded diff, resize diff-base preservation) — profile-guided (`fleury benchmark profile SB.6/SB.12`), bigger and lower-urgency.
 7. **G3 allocation gate, G6 bundle-size gate** — regression insurance once the above land.
