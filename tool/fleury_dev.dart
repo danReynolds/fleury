@@ -313,6 +313,7 @@ class _Runner {
       storybook,
       samples,
       mcp,
+      profiling,
       webExamples,
     ]) {
       await _run('dart', ['pub', 'get'], workingDirectory: dir);
@@ -367,6 +368,12 @@ class _Runner {
     await _run('dart', ['test'], workingDirectory: samples);
     await _run('dart', ['analyze'], workingDirectory: mcp);
     await _run('dart', ['test'], workingDirectory: mcp);
+    // Analyze the profiling package (wire-gate + the 12 SB wire fixtures) so a
+    // rename like `runTui`->`runApp` can't silently break the fixtures and
+    // leave the byte-regression gate compiled-out — which is exactly how it
+    // rotted undetected before. Analysis resolves every fixture's imports, so an
+    // undefined symbol fails the check the way a compile would.
+    await _run('dart', ['analyze'], workingDirectory: profiling);
     if (!quick) {
       // dart2js smoke: the doc-examples entrypoint pulls in fleury_core,
       // fleury_widgets_web, fleury_web, and the samples — the whole
