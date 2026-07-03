@@ -420,4 +420,42 @@ void main() {
       );
     });
   });
+
+  group('zero-image fast path', () {
+    const empty = CellSize(20, 10);
+
+    test('an image-free session stays inert across steady frames', () {
+      // The encoder exists whenever the terminal has a protocol, so an
+      // image-free app still calls encodeFrame every frame. The first
+      // (full-repaint) frame and every steady frame after it emit nothing.
+      final e = TerminalImageEncoder(protocol: ImageProtocol.kitty);
+      expect(e.encodeFrame(CellBuffer(empty), fullRepaint: true), isEmpty);
+      expect(e.encodeFrame(CellBuffer(empty), fullRepaint: false), isEmpty);
+      expect(e.encodeFrame(CellBuffer(empty), fullRepaint: false), isEmpty);
+    });
+
+    test('the fast path does not strand a later image', () {
+      // Skipping empty frames must not corrupt state: an image appearing
+      // after image-free frames still transmits and places normally.
+      final e = TerminalImageEncoder(protocol: ImageProtocol.kitty);
+      e.encodeFrame(CellBuffer(empty), fullRepaint: true);
+      e.encodeFrame(CellBuffer(empty), fullRepaint: false);
+      final out = e.encodeFrame(bufferWith(bytes: png), fullRepaint: false);
+      expect(out, contains('a=t,f=100,i=1'), reason: 'transmits the new image');
+      expect(out, contains('a=p,i=1,p=1'), reason: 'and places it');
+    });
+
+    test('iTerm2: empty frames after a placement go inert', () {
+      // Exercises the _emittedKeys arm of the guard: the first empty frame
+      // clears the emitted keys (the region is repainted by the text diff),
+      // and the next one takes the fast path.
+      final e = TerminalImageEncoder(protocol: ImageProtocol.iterm2);
+      expect(
+        e.encodeFrame(bufferWith(bytes: png), fullRepaint: true),
+        isNotEmpty,
+      );
+      e.encodeFrame(CellBuffer(empty), fullRepaint: false);
+      expect(e.encodeFrame(CellBuffer(empty), fullRepaint: false), isEmpty);
+    });
+  });
 }
