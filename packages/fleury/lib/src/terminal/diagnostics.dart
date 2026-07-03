@@ -136,6 +136,7 @@ final class TerminalCapabilityReport {
     required this.alternateScreen,
     required this.hideCursor,
     required this.tmuxPassthrough,
+    required this.ambiguousCharWidth,
     this.bracketedPaste = 'enabledByDefault',
     this.kittyKeyboard = 'attempted',
     this.mouse = 'availableOptIn',
@@ -151,6 +152,7 @@ final class TerminalCapabilityReport {
         alternateScreen: capabilities.supportsAlternateScreen,
         hideCursor: capabilities.supportsHidingCursor,
         tmuxPassthrough: capabilities.tmuxPassthrough,
+        ambiguousCharWidth: capabilities.ambiguousCharWidth,
       );
 
   final ColorMode colorMode;
@@ -164,6 +166,7 @@ final class TerminalCapabilityReport {
   final String osc52Clipboard;
   final String osc8Hyperlinks;
   final bool tmuxPassthrough;
+  final AmbiguousCharWidth ambiguousCharWidth;
 
   TerminalCapabilities toCapabilities() {
     return TerminalCapabilities(
@@ -173,12 +176,14 @@ final class TerminalCapabilityReport {
       supportsAlternateScreen: alternateScreen,
       supportsHidingCursor: hideCursor,
       tmuxPassthrough: tmuxPassthrough,
+      ambiguousCharWidth: ambiguousCharWidth,
     );
   }
 
   Map<String, Object?> toJson() => <String, Object?>{
     'colorMode': colorMode.name,
     'glyphTier': glyphTier.name,
+    'ambiguousCharWidth': ambiguousCharWidth.name,
     'imageProtocol': imageProtocol.name,
     'alternateScreen': alternateScreen,
     'hideCursor': hideCursor,

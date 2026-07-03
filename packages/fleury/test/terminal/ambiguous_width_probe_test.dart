@@ -51,6 +51,18 @@ void main() {
       expect(await probeAmbiguousWidth(_FakeTransport(reply)), isNull);
     });
 
+    test('finds a valid CPR even when an aborted CSI abuts it', () async {
+      // A malformed CSI whose parameter run is terminated by the NEXT escape
+      // (`ESC[9` then a real `ESC[1;2R`): the parser must not step over that
+      // second ESC. Guards the `_cursorReportColumn` `i = j - 1` resume fix —
+      // with the old `i = j` this returned null (→ conservative wide default).
+      final reply = '\x1B[9\x1B[1;2R\x1B[?62;4c'.codeUnits;
+      expect(
+        await probeAmbiguousWidth(_FakeTransport(reply)),
+        AmbiguousCharWidth.narrow,
+      );
+    });
+
     test('returns null on no reply (timeout)', () async {
       expect(
         await probeAmbiguousWidth(_FakeTransport(const <int>[])),
@@ -60,6 +72,36 @@ void main() {
 
     test('swallows a transport failure and reports null', () async {
       expect(await probeAmbiguousWidth(_ThrowingTransport()), isNull);
+    });
+  });
+
+  group('detectAmbiguousCharWidthFromEnvironment', () {
+    AmbiguousCharWidth? detect(String? value) =>
+        detectAmbiguousCharWidthFromEnvironment(
+          value == null ? const {} : {'FLEURY_AMBIGUOUS_WIDTH': value},
+        );
+
+    test('reads narrow|wide (case/space-insensitive), else null', () {
+      expect(detect('narrow'), AmbiguousCharWidth.narrow);
+      expect(detect('wide'), AmbiguousCharWidth.wide);
+      expect(detect(' WIDE '), AmbiguousCharWidth.wide);
+      expect(detect(null), isNull, reason: 'unset → probe/default decides');
+      expect(detect('0'), isNull, reason: 'probe-disable is not a value');
+      expect(detect('bogus'), isNull);
+    });
+
+    test('flows through detectTerminalCapabilitiesFromEnvironment', () {
+      expect(
+        detectTerminalCapabilitiesFromEnvironment(
+          const {'FLEURY_AMBIGUOUS_WIDTH': 'narrow'},
+        ).ambiguousCharWidth,
+        AmbiguousCharWidth.narrow,
+      );
+      expect(
+        detectTerminalCapabilitiesFromEnvironment(const {}).ambiguousCharWidth,
+        AmbiguousCharWidth.wide,
+        reason: 'safe default when unset',
+      );
     });
   });
 }

@@ -126,7 +126,29 @@ TerminalCapabilities detectTerminalCapabilitiesFromEnvironment(
     glyphTier: detectGlyphTierFromEnvironment(environment),
     imageProtocol: detectImageProtocolFromEnvironment(environment),
     tmuxPassthrough: detectTerminalMultiplexerFromEnvironment(environment),
+    ambiguousCharWidth:
+        detectAmbiguousCharWidthFromEnvironment(environment) ??
+        AmbiguousCharWidth.wide,
   );
+}
+
+/// Reads an explicit ambiguous-width override from the environment:
+/// `FLEURY_AMBIGUOUS_WIDTH=narrow|wide`. Returns null when unset, so the caller
+/// keeps the safe `wide` default until a startup probe measures the terminal.
+///
+/// Centralized here (like [detectGlyphTierFromEnvironment]) so every driver —
+/// not just the POSIX one that runs the probe — honors the override. The
+/// `0`/`off`/`false` value is deliberately NOT handled here: that disables the
+/// probe (a driver concern), and leaving it null keeps the `wide` default.
+AmbiguousCharWidth? detectAmbiguousCharWidthFromEnvironment(
+  Map<String, String> environment,
+) {
+  final value = environment['FLEURY_AMBIGUOUS_WIDTH']?.toLowerCase().trim();
+  return switch (value) {
+    'narrow' => AmbiguousCharWidth.narrow,
+    'wide' => AmbiguousCharWidth.wide,
+    _ => null,
+  };
 }
 
 /// Detects whether Unicode drawing glyphs are safe to use, or output should

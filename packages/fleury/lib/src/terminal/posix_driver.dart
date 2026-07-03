@@ -243,27 +243,17 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
   /// default in place.
   Future<void> _maybeProbeAmbiguousWidth() async {
     if (!_stdoutIsTerminal || !_changedStdin) return;
-    // Escape hatch: skip the probe and set the result directly.
-    //   FLEURY_AMBIGUOUS_WIDTH=narrow|wide — force this rendering.
-    //   FLEURY_AMBIGUOUS_WIDTH=0|off|false — skip; keep the conservative `wide`.
-    final flag = Platform.environment['FLEURY_AMBIGUOUS_WIDTH']
-        ?.toLowerCase()
-        .trim();
-    if (flag == 'narrow') {
-      _ambiguousCharWidthOverride = AmbiguousCharWidth.narrow;
-      return;
-    }
-    if (flag == 'wide') {
-      _ambiguousCharWidthOverride = AmbiguousCharWidth.wide;
-      return;
-    }
+    final env = Platform.environment;
+    // An explicit FLEURY_AMBIGUOUS_WIDTH=narrow|wide is already reflected in the
+    // env-derived base capabilities (detectAmbiguousCharWidthFromEnvironment),
+    // so there is nothing to measure. FLEURY_AMBIGUOUS_WIDTH=0|off|false
+    // disables the probe and keeps the conservative `wide` default.
+    if (detectAmbiguousCharWidthFromEnvironment(env) != null) return;
+    final flag = env['FLEURY_AMBIGUOUS_WIDTH']?.toLowerCase().trim();
     if (flag == '0' || flag == 'off' || flag == 'false') return;
     // ASCII-only output emits no ambiguous glyphs, so nothing needs sizing —
     // skip the round trip and the stray probe glyph.
-    if (detectGlyphTierFromEnvironment(Platform.environment) ==
-        GlyphTier.ascii) {
-      return;
-    }
+    if (detectGlyphTierFromEnvironment(env) == GlyphTier.ascii) return;
     try {
       final detected = await probeAmbiguousWidth(_DriverProbeTransport(this));
       if (detected != null) _ambiguousCharWidthOverride = detected;

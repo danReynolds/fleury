@@ -241,7 +241,12 @@ int? _cursorReportColumn(List<int> responseBytes) {
         if (col != null) return col;
       }
     }
-    i = j; // some other CSI final byte — keep scanning past it
+    // Resume from `j`: the for-loop's `i++` steps to `j`. If `j` is a real CSI
+    // final byte it's re-examined harmlessly (not an ESC, so skipped); if the
+    // parameter run instead ended because the NEXT escape sequence began (an
+    // aborted CSI abutting a real CPR), that ESC is not skipped and the CPR is
+    // still found. Using `i = j` here would step over that ESC and miss it.
+    i = j - 1;
   }
   return null;
 }

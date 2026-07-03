@@ -18,6 +18,18 @@ void main() {
       expect(capabilities.tmuxPassthrough, isTrue);
     });
 
+    test('the capability report round-trips ambiguousCharWidth', () {
+      // Every structured capability field survives fromCapabilities →
+      // toCapabilities; a probed narrow result must not silently revert to wide.
+      const caps = TerminalCapabilities(
+        ambiguousCharWidth: AmbiguousCharWidth.narrow,
+      );
+      final restored = TerminalCapabilityReport.fromCapabilities(
+        caps,
+      ).toCapabilities();
+      expect(restored.ambiguousCharWidth, AmbiguousCharWidth.narrow);
+    });
+
     test('detects ASCII glyph tier from explicit override and locale', () {
       expect(
         detectTerminalCapabilitiesFromEnvironment(const <String, String>{
