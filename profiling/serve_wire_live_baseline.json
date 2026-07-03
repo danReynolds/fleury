@@ -1,0 +1,47 @@
+{
+  "dashboard": {
+    "scenario": "dashboard",
+    "steps": 120,
+    "intervalMs": 16,
+    "runs": 3,
+    "planFrames": 121.0,
+    "semanticsFrames": 121.0,
+    "planBytesPerFrame": 886.5,
+    "semanticsBytesPerFrame": 5291.1,
+    "totalBytes": 754494.0,
+    "deflatedBytes": 56929.0,
+    "otherBytes": 92.0,
+    "cadenceP50Ms": 16.1,
+    "cadenceP95Ms": 17.2
+  },
+  "log": {
+    "scenario": "log",
+    "steps": 120,
+    "intervalMs": 16,
+    "runs": 3,
+    "planFrames": 121.0,
+    "semanticsFrames": 121.0,
+    "planBytesPerFrame": 62.2,
+    "semanticsBytesPerFrame": 6973.4,
+    "totalBytes": 859365.0,
+    "deflatedBytes": 18333.0,
+    "otherBytes": 92.0,
+    "cadenceP50Ms": 16.0,
+    "cadenceP95Ms": 16.9
+  },
+  "counter": {
+    "scenario": "counter",
+    "steps": 120,
+    "intervalMs": 16,
+    "runs": 3,
+    "planFrames": 121.0,
+    "semanticsFrames": 121.0,
+    "planBytesPerFrame": 21.1,
+    "semanticsBytesPerFrame": 281.3,
+    "totalBytes": 42855.0,
+    "deflatedBytes": 1778.0,
+    "otherBytes": 92.0,
+    "cadenceP50Ms": 16.2,
+    "cadenceP95Ms": 17.2
+  }
+}

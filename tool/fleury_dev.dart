@@ -1053,6 +1053,9 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       case 'wire-gate':
         await benchmarkWireGate(rest);
         return;
+      case 'serve-wire-live':
+        await benchmarkServeWireLive(rest);
+        return;
       case 'scoreboard':
         await benchmarkScoreboard(rest);
         return;
@@ -1375,6 +1378,17 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
     await _run('dart', [
       'run',
       'bin/fleury_wire_gate.dart',
+      ...args,
+    ], workingDirectory: profiling);
+  }
+
+  /// The live `fleury serve` wire regression gate — boots real serve processes
+  /// and measures the actual socket bytes (plan + semantics) a browser
+  /// receives. On-demand; pass `--update-baseline` to rebaseline.
+  Future<void> benchmarkServeWireLive(List<String> args) async {
+    await _run('dart', [
+      'run',
+      'bin/serve_wire_live_gate.dart',
       ...args,
     ], workingDirectory: profiling);
   }
