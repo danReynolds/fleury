@@ -95,6 +95,20 @@ final class TerminalImageEncoder {
   /// mirror the frame's damage plan: the screen was (or will be) cleared,
   /// so all placement state resets and everything visible re-emits.
   String encodeFrame(CellBuffer next, {required bool fullRepaint}) {
+    // Fast path: no images this frame and none left on screen from the last —
+    // the common case for an image-free app on an image-capable terminal (the
+    // encoder exists whenever the terminal has a protocol, so encodeFrame is
+    // called every frame regardless of whether the app uses images). There is
+    // nothing to place or delete, so skip the StringBuffer and the per-protocol
+    // reconciliation lists/sets entirely. A full repaint still runs the reset
+    // below; and if either live set is non-empty (images were on screen and are
+    // now gone) the normal path runs to emit the deletions.
+    if (!fullRepaint &&
+        next.imagePlacements.isEmpty &&
+        _kittyLive.isEmpty &&
+        _emittedKeys.isEmpty) {
+      return '';
+    }
     final out = StringBuffer();
     if (fullRepaint) _resetForRepaint(out);
     switch (protocol) {
@@ -407,7 +421,11 @@ final class _KittyPlacement {
 
   /// Identity for the frame-over-frame multiset match: same content at
   /// the same resolved geometry → the live placement survives untouched.
-  String get key =>
+  ///
+  /// Cached (`late final`) so the reconciliation — which compares each wanted
+  /// placement's key against the live pool (O(wanted × live)) — builds this
+  /// interpolated string once per placement instead of once per comparison.
+  late final String key =
       '$contentId|${placement.col},${placement.row}|'
       '${fit.col},${fit.row},${fit.cols},${fit.rows}|'
       '${fit.cropX},${fit.cropY},${fit.cropW},${fit.cropH}';
