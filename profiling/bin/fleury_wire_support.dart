@@ -24,7 +24,14 @@ final class WireTerminalDriver implements TerminalDriver {
 
   @override
   TerminalCapabilities get capabilities =>
-      detectTerminalCapabilitiesFromEnvironment(Platform.environment);
+      // Models a modern terminal: ambiguous-width glyphs (box drawing, block
+      // elements) render one column wide — what the startup probe confirms on
+      // iTerm2 / Kitty / WezTerm / Ghostty / Alacritty, and the condition under
+      // which the wire-gate baseline was captured. The renderer emits compact
+      // contiguous runs, not the defensive per-cell repositioning it falls back
+      // to when a terminal's ambiguous width is unknown.
+      detectTerminalCapabilitiesFromEnvironment(Platform.environment)
+          .copyWith(ambiguousCharWidth: AmbiguousCharWidth.narrow);
 
   @override
   Stream<TuiEvent> get events => _events.stream;

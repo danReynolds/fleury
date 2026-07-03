@@ -9,7 +9,7 @@ import 'fleury_wire_support.dart';
 Future<void> main(List<String> args) async {
   final options = _WireOptions.parse(args);
   final driver = WireTerminalDriver();
-  await runTui(
+  await runApp(
     _WireResizeStormApp(
       driver: driver,
       rows: options.rows,

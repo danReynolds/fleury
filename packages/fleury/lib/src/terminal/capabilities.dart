@@ -28,6 +28,20 @@ enum ImageProtocol {
   kitty,
 }
 
+/// How the terminal renders East-Asian *Ambiguous*-width glyphs — the box
+/// drawing, block elements, bullets, and arrows Fleury draws widgets with
+/// (`─ │ █ ▁ • →`, all UAX #11 "Ambiguous"). Some terminals/fonts render them
+/// one column wide, others two, and there is no universal default.
+///
+/// Fleury lays them out as one column. When a terminal renders them two columns
+/// wide, its cursor advances further than Fleury's model and rows desync (the
+/// "Warp garble"). Detected by an opt-in startup Cursor-Position probe
+/// ([probeAmbiguousWidth]); [wide] is the safe default when unknown, so the
+/// renderer defensively pins each ambiguous cell with an absolute reposition —
+/// correct on any terminal, at a per-cell cursor-byte cost. A confirmed [narrow]
+/// lets the renderer emit compact contiguous runs instead.
+enum AmbiguousCharWidth { narrow, wide }
+
 /// Static snapshot of what the terminal supports.
 @immutable
 final class TerminalCapabilities {
@@ -38,6 +52,7 @@ final class TerminalCapabilities {
     this.supportsAlternateScreen = true,
     this.supportsHidingCursor = true,
     this.tmuxPassthrough = false,
+    this.ambiguousCharWidth = AmbiguousCharWidth.wide,
   });
 
   /// Conservative default for unknown terminals: 16-color ANSI, alt
@@ -62,6 +77,10 @@ final class TerminalCapabilities {
   /// `allow-passthrough on` directly.
   final bool tmuxPassthrough;
 
+  /// How the terminal sizes ambiguous-width glyphs. Defaults to the safe
+  /// [AmbiguousCharWidth.wide] until a startup probe confirms otherwise.
+  final AmbiguousCharWidth ambiguousCharWidth;
+
   TerminalCapabilities copyWith({
     ColorMode? colorMode,
     GlyphTier? glyphTier,
@@ -69,6 +88,7 @@ final class TerminalCapabilities {
     bool? supportsAlternateScreen,
     bool? supportsHidingCursor,
     bool? tmuxPassthrough,
+    AmbiguousCharWidth? ambiguousCharWidth,
   }) => TerminalCapabilities(
     colorMode: colorMode ?? this.colorMode,
     glyphTier: glyphTier ?? this.glyphTier,
@@ -77,6 +97,7 @@ final class TerminalCapabilities {
         supportsAlternateScreen ?? this.supportsAlternateScreen,
     supportsHidingCursor: supportsHidingCursor ?? this.supportsHidingCursor,
     tmuxPassthrough: tmuxPassthrough ?? this.tmuxPassthrough,
+    ambiguousCharWidth: ambiguousCharWidth ?? this.ambiguousCharWidth,
   );
 
   @override
@@ -86,7 +107,8 @@ final class TerminalCapabilities {
         'imageProtocol=$imageProtocol, '
         'altScreen=$supportsAlternateScreen, '
         'hideCursor=$supportsHidingCursor, '
-        'tmuxPassthrough=$tmuxPassthrough)';
+        'tmuxPassthrough=$tmuxPassthrough, '
+        'ambiguousCharWidth=${ambiguousCharWidth.name})';
   }
 }
 
@@ -104,7 +126,29 @@ TerminalCapabilities detectTerminalCapabilitiesFromEnvironment(
     glyphTier: detectGlyphTierFromEnvironment(environment),
     imageProtocol: detectImageProtocolFromEnvironment(environment),
     tmuxPassthrough: detectTerminalMultiplexerFromEnvironment(environment),
+    ambiguousCharWidth:
+        detectAmbiguousCharWidthFromEnvironment(environment) ??
+        AmbiguousCharWidth.wide,
   );
+}
+
+/// Reads an explicit ambiguous-width override from the environment:
+/// `FLEURY_AMBIGUOUS_WIDTH=narrow|wide`. Returns null when unset, so the caller
+/// keeps the safe `wide` default until a startup probe measures the terminal.
+///
+/// Centralized here (like [detectGlyphTierFromEnvironment]) so every driver —
+/// not just the POSIX one that runs the probe — honors the override. The
+/// `0`/`off`/`false` value is deliberately NOT handled here: that disables the
+/// probe (a driver concern), and leaving it null keeps the `wide` default.
+AmbiguousCharWidth? detectAmbiguousCharWidthFromEnvironment(
+  Map<String, String> environment,
+) {
+  final value = environment['FLEURY_AMBIGUOUS_WIDTH']?.toLowerCase().trim();
+  return switch (value) {
+    'narrow' => AmbiguousCharWidth.narrow,
+    'wide' => AmbiguousCharWidth.wide,
+    _ => null,
+  };
 }
 
 /// Detects whether Unicode drawing glyphs are safe to use, or output should

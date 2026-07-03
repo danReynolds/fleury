@@ -187,6 +187,7 @@ export 'src/semantics/semantics.dart'
 // Terminal
 export 'src/terminal/capabilities.dart'
     show
+        AmbiguousCharWidth,
         ImageProtocol,
         TerminalCapabilities,
         TerminalSurfaceCapabilities,

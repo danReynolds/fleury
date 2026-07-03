@@ -9,7 +9,7 @@ import 'package:fleury_widgets/fleury_widgets.dart';
 Future<void> main(List<String> args) async {
   final options = _WireOptions.parse(args);
   final driver = _WireTerminalDriver();
-  await runTui(
+  await runApp(
     _WireMarkdownApp(
       driver: driver,
       rows: options.rows,
@@ -92,7 +92,10 @@ final class _WireTerminalDriver implements TerminalDriver {
 
   @override
   TerminalCapabilities get capabilities =>
-      detectTerminalCapabilitiesFromEnvironment(Platform.environment);
+      // Models a modern terminal (ambiguous glyphs one column wide), matching
+      // the shared WireTerminalDriver and the wire-gate baseline conditions.
+      detectTerminalCapabilitiesFromEnvironment(Platform.environment)
+          .copyWith(ambiguousCharWidth: AmbiguousCharWidth.narrow);
 
   @override
   Stream<TuiEvent> get events => _events.stream;

@@ -9,7 +9,6 @@
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/src/remote/remote_codec.dart';
 
 class _CountingSink implements AnsiSink {
   final List<int> raw = [];

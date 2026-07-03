@@ -526,7 +526,7 @@ String _dominantOverheadCell(Map<String, Object?>? split) {
 String _markerCell(Object? value) {
   if (value is! Map<String, Object?> || value.isEmpty) return '-';
   const order = <String>[
-    'runTui.entry',
+    'runApp.entry',
     'terminal.enter.start',
     'terminal.enter.end',
     'root.mounted',
@@ -555,14 +555,14 @@ String _markerDeltaCell(Object? value) {
   if (value is! Map<String, Object?> || value.isEmpty) return '-';
   double? marker(String label) => (value[label] as num?)?.toDouble();
 
-  final entry = marker('runTui.entry');
+  final entry = marker('runApp.entry');
   final firstOutput = marker('first.output.write');
   final firstRenderEnd = marker('first.render.end');
-  final cleanup = marker('runTui.cleanup.complete');
+  final cleanup = marker('runApp.cleanup.complete');
   final parts = <String>[];
 
   if (entry != null) {
-    parts.add('pre-runTui ${_fmtMs(entry)}');
+    parts.add('pre-runApp ${_fmtMs(entry)}');
   }
   if (entry != null && firstOutput != null) {
     parts.add('entry->first output ${_fmtMs(firstOutput - entry)}');

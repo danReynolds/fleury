@@ -596,6 +596,7 @@ void main() {
             alternateScreen: false,
             hideCursor: true,
             tmuxPassthrough: true,
+            ambiguousCharWidth: AmbiguousCharWidth.narrow,
           ),
           fallbacks: [
             TerminalDiagnosticMessage(

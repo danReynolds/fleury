@@ -8,7 +8,7 @@
 /// totals.
 ///
 /// The fixture must already be running with `--enable-vm-service=PORT
-/// --disable-service-auth-codes` (typically under capture_pty, since runTui
+/// --disable-service-auth-codes` (typically under capture_pty, since runApp
 /// needs a TTY); this probe only connects, samples, and exits.
 ///
 /// usage: dart run bin/fleury_heap_probe.dart --connect=ws://127.0.0.1:PORT/ws

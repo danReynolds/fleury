@@ -13,7 +13,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/src/remote/remote_semantics.dart';
 
 /// Builds a realistic agent-style semantic tree: a status line, a message
 /// list of [messages] items, and an input field. [tick] perturbs only a small

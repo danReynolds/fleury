@@ -67,13 +67,23 @@ final class AnsiRenderer {
   /// missing ESU can't lock the display. Set `false` only if you've
   /// seen flicker on a specific terminal that mis-implements the
   /// mode — the failure cost is low.
+  /// [ambiguousCharsAreWide] controls the defensive per-cell repositioning for
+  /// ambiguous-width glyphs (box drawing, block elements, arrows — UAX #11
+  /// "Ambiguous"). When `true` (the safe default), each such glyph is pinned
+  /// with an absolute reposition so the row can't desync on a terminal/font
+  /// that renders it two columns wide (the "Warp garble"). When a startup probe
+  /// confirms the terminal renders ambiguous glyphs one column wide — the common
+  /// case — the driver passes `false`, and the renderer emits compact contiguous
+  /// runs instead (no per-cell cursor moves). See [AmbiguousCharWidth].
   const AnsiRenderer({
     this.colorMode = ColorMode.truecolor,
     this.synchronizedOutput = true,
+    this.ambiguousCharsAreWide = true,
   });
 
   final ColorMode colorMode;
   final bool synchronizedOutput;
+  final bool ambiguousCharsAreWide;
 
   static const _beginSyncUpdate = '\x1B[?2026h';
   static const _endSyncUpdate = '\x1B[?2026l';
@@ -321,22 +331,26 @@ final class AnsiRenderer {
       //  * A write to the last column: terminals without the `xenl`/pending-wrap
       //    quirk (e.g. Warp) wrap to the next line immediately, so a following
       //    `\r\n`/relative move would over-advance and cascade-corrupt the rows
-      //    below.
-      //  * A grapheme whose DISPLAY WIDTH the terminal may disagree on. Every
-      //    non-ASCII glyph fleury emits for box drawing / bullets / arrows is
-      //    East-Asian "Ambiguous"; a terminal (or font) that renders those two
-      //    columns wide advances the cursor further than our one-column model,
-      //    so the row desyncs. An absolute reposition for each following cell
-      //    overwrites the overflow and pins every cell to its column regardless
-      //    of how the terminal sizes ambiguous-width characters. ASCII runs (the
-      //    common case — names, values) are unaffected and stay compact.
+      //    below. Always invalidated — the risk is independent of glyph width.
+      //  * A grapheme whose DISPLAY WIDTH the terminal may disagree on, but ONLY
+      //    when [ambiguousCharsAreWide]. Every non-ASCII glyph fleury emits for
+      //    box drawing / bullets / arrows is East-Asian "Ambiguous"; a terminal
+      //    (or font) that renders those two columns wide advances the cursor
+      //    further than our one-column model, so the row desyncs. An absolute
+      //    reposition for each following cell overwrites the overflow and pins
+      //    every cell to its column regardless of how the terminal sizes them.
+      //    On a terminal a startup probe confirmed renders them one column wide
+      //    (the common case), this pinning is pure waste — a 48-cell block-fill
+      //    run costs 48 cursor moves instead of one — so it's gated off and the
+      //    run stays a compact contiguous write. ASCII runs are always exact.
       final isAscii = grapheme.length == 1 && grapheme.codeUnitAt(0) < 0x80;
-      // Ambiguous-width: a non-ASCII glyph fleury lays out as one column and
-      // that isn't a known wide (CJK) char — a terminal/font may still render
-      // it two columns wide. Wide chars (`isWide`) are unambiguous (both sides
-      // agree on 2) and ASCII is unambiguous (1), so neither needs this.
-      final ambiguousWidth = !isWide && !isAscii;
-      if ((cursorCol != null && cursorCol! >= size.cols) || ambiguousWidth) {
+      // Ambiguous-width: a non-ASCII glyph fleury lays out as one column that
+      // isn't a known wide (CJK) char — a terminal/font may still render it two
+      // columns wide. Wide chars (`isWide`) are unambiguous (both sides agree on
+      // 2) and ASCII is unambiguous (1), so neither needs pinning; the rest do
+      // only when the terminal is (or is assumed) ambiguous-as-wide.
+      final needsWidthPin = ambiguousCharsAreWide && !isWide && !isAscii;
+      if ((cursorCol != null && cursorCol! >= size.cols) || needsWidthPin) {
         cursorRow = null;
         cursorCol = null;
       }

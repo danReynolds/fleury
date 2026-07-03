@@ -200,10 +200,11 @@ Future<void> runApp(
   // mis-applies updates under rapid frames (e.g. fast scrolling) can desync from
   // the renderer's model and show persistent stale cells; this is the escape
   // hatch to confirm/avoid that without touching the diff.
-  final renderer = AnsiRenderer(
-    colorMode: usedDriver.capabilities.colorMode,
-    synchronizedOutput: Platform.environment['FLEURY_SYNC_OUTPUT'] != '0',
-  );
+  // Built after enter() below, once the startup ambiguous-width probe has run —
+  // its result feeds `ambiguousCharsAreWide`. colorMode/synchronizedOutput are
+  // env-derived and stable; the renderer's only use is the presenter built after
+  // the handshake, so deferring construction costs nothing.
+  late final AnsiRenderer renderer;
   // A driver may negotiate structured presentation plans (the serve
   // path, rendering through the fleury web surface) rather than ANSI.
   // The driver owns that answer — TerminalDriver.surfaceSink — and it is
@@ -330,6 +331,17 @@ Future<void> runApp(
         runtimeMarkers?.mark('terminal.enter.start');
         await usedDriver.enter(mode);
         runtimeMarkers?.mark('terminal.enter.end');
+        // The ambiguous-width probe has now run (inside enter()); build the
+        // renderer with the confirmed width mode. A terminal that draws
+        // ambiguous glyphs one column wide drops the defensive per-cell
+        // repositioning; unknown/failed keeps the safe `wide` default.
+        renderer = AnsiRenderer(
+          colorMode: usedDriver.capabilities.colorMode,
+          synchronizedOutput: Platform.environment['FLEURY_SYNC_OUTPUT'] != '0',
+          ambiguousCharsAreWide:
+              usedDriver.capabilities.ambiguousCharWidth ==
+              AmbiguousCharWidth.wide,
+        );
         // The handshake has landed, so the driver now knows whether the
         // peer negotiated the structured (plan) path.
         final negotiatedSink = usedDriver.surfaceSink;

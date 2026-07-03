@@ -175,6 +175,82 @@ Future<ImageProtocol?> probeImageProtocol(
   return result.isConfirmed ? ImageProtocol.kitty : null;
 }
 
+/// Actively measures whether the terminal renders East-Asian *Ambiguous*-width
+/// glyphs as one column or two.
+///
+/// Writes a single ambiguous glyph at the home cell, then a Cursor Position
+/// Report query (`ESC [ 6 n`): the reported column tells us how far the cursor
+/// advanced — 2 (one column past home) means the terminal drew it narrow, 3
+/// means wide. The glyph is erased and a Device Attributes query appended so the
+/// transport stops as soon as the reply lands. Returns null when the terminal
+/// doesn't answer, so the caller keeps its safe (defensive) default. This is the
+/// same cursor-measurement trick vim's `t_u7` uses to auto-set `ambiwidth`.
+///
+/// Must run on the alternate screen (the probe writes to the home cell); the
+/// caller erases it and the first frame repaints over it regardless.
+Future<AmbiguousCharWidth?> probeAmbiguousWidth(
+  TerminalProbeTransport transport, {
+  Duration timeout = const Duration(milliseconds: 150),
+}) async {
+  final List<int> response;
+  try {
+    response = await transport.request(
+      _ambiguousWidthQuery,
+      timeout: timeout,
+    );
+  } on Object {
+    return null;
+  }
+  final column = _cursorReportColumn(response);
+  if (column == null) return null;
+  // The glyph occupied home (column 1). The cursor now rests at the next free
+  // column: 2 when the terminal advanced one cell (narrow), 3 when it advanced
+  // two (wide). Anything below 2 is anomalous (0-width) — treat as narrow.
+  return column >= 3 ? AmbiguousCharWidth.wide : AmbiguousCharWidth.narrow;
+}
+
+/// Home, one ambiguous glyph (box-drawing horizontal, UAX #11 Ambiguous),
+/// a Cursor Position Report request, then erase the glyph and re-home. The
+/// trailing Device Attributes query is the transport's stop sentinel.
+const _ambiguousWidthQuery =
+    '\x1B[H─\x1B[6n\x1B[H\x1B[K$_deviceAttributesQuery';
+
+/// The column from a Cursor Position Report (`ESC [ row ; col R`) in
+/// [responseBytes], or null if none is present. Scans past any other CSI reply
+/// (e.g. the trailing Device Attributes `c`) that shares the buffer.
+int? _cursorReportColumn(List<int> responseBytes) {
+  for (var i = 0; i + 1 < responseBytes.length; i++) {
+    if (responseBytes[i] != 0x1B || responseBytes[i + 1] != 0x5B) {
+      continue; // ESC [
+    }
+    var j = i + 2;
+    final start = j;
+    while (j < responseBytes.length &&
+        responseBytes[j] >= 0x30 &&
+        responseBytes[j] <= 0x3F) {
+      j++; // CSI parameter bytes (digits, ';')
+    }
+    if (j >= responseBytes.length) return null; // final byte not arrived
+    if (responseBytes[j] == 0x52) {
+      // 'R' → Cursor Position Report. Parameters are `row;col`.
+      final parts = String.fromCharCodes(
+        responseBytes.sublist(start, j),
+      ).split(';');
+      if (parts.length == 2) {
+        final col = int.tryParse(parts[1]);
+        if (col != null) return col;
+      }
+    }
+    // Resume from `j`: the for-loop's `i++` steps to `j`. If `j` is a real CSI
+    // final byte it's re-examined harmlessly (not an ESC, so skipped); if the
+    // parameter run instead ended because the NEXT escape sequence began (an
+    // aborted CSI abutting a real CPR), that ESC is not skipped and the CPR is
+    // still found. Using `i = j` here would step over that ESC and miss it.
+    i = j - 1;
+  }
+  return null;
+}
+
 typedef _ProbeParser =
     TerminalProbeResult Function(
       List<int> responseBytes, {
