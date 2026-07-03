@@ -60,7 +60,12 @@ SemanticTree _appTree({required int messages, required int tick}) {
 List<int> _snapshotBytes(SemanticTree tree) =>
     utf8.encode(jsonEncode(tree.toInspectionSnapshot().toJson()));
 
-void main() {
+void main(List<String> args) {
+  if (args.contains('--gate')) {
+    _gate();
+    return;
+  }
+
   final z = ZLibCodec(raw: true, level: 6);
   const frames = 100;
 
@@ -99,6 +104,54 @@ void main() {
   print('The diff is flat in tree size; full goes off the 32 KiB-window cliff.');
   print('');
   _cpu();
+}
+
+/// Regression gate for the semantics wire's headline invariant: the diff stays
+/// FLAT in tree size, so a large served UI never falls off the 32 KiB DEFLATE
+/// cliff. The `SemanticsWireEncoder` diff is the only thing standing between a
+/// realistic agent/screen-reader tree and a ~57x per-frame wire blow-up
+/// (measured at 244 nodes). A revert to full-resend, or a diff that stops being
+/// O(changed), would silently reopen the cliff — this fails the check instead.
+///
+///   dart run bin/serve_semantics_profile.dart --gate
+void _gate() {
+  final z = ZLibCodec(raw: true, level: 6);
+  const frames = 100;
+
+  double diffZPerFrame(int messages) {
+    final encoder = SemanticsWireEncoder();
+    final stream = <int>[];
+    for (var i = 0; i < frames; i++) {
+      final e = encoder.encode(
+        _appTree(messages: messages, tick: i).toInspectionSnapshot(),
+      );
+      if (e != null) stream.addAll(e);
+    }
+    return z.encode(stream).length / frames;
+  }
+
+  final small = diffZPerFrame(24); // ~12 B/frame today
+  final large = diffZPerFrame(240); // ~38 B/frame today (must stay flat)
+  final growth = small == 0 ? 0.0 : large / small;
+
+  // Generous vs today's 38 B; a revert to full-resend hits ~2180 B at 240 nodes
+  // (57x), and growth jumps from ~3x to ~64x — either trips this comfortably.
+  const maxLargeBytes = 120.0;
+  const maxGrowth = 6.0;
+  final ok = large < maxLargeBytes && growth < maxGrowth;
+
+  stdout.writeln('serve semantics gate: diff z/frame — 24-node ${small.round()} '
+      'B, 240-node ${large.round()} B (growth ${growth.toStringAsFixed(1)}x)');
+  if (ok) {
+    stdout.writeln('serve semantics gate: pass — the wire diff is flat in tree '
+        'size; the DEFLATE cliff is held off.');
+  } else {
+    stdout.writeln('serve semantics gate: FAIL — the semantics wire diff is no '
+        'longer flat in tree size (regressed toward full-resend → the 32 KiB '
+        'DEFLATE cliff). Want 240-node < ${maxLargeBytes.round()} B and growth < '
+        '${maxGrowth.toStringAsFixed(0)}x.');
+    exitCode = 1;
+  }
 }
 
 /// Server-side CPU per changed frame: build the redacted snapshot, then encode
