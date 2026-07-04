@@ -479,6 +479,7 @@ class TextInput extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
+    this.onChanged,
     this.onSubmit,
     this.onEscape,
     this.placeholder = '',
@@ -514,6 +515,13 @@ class TextInput extends StatefulWidget {
 
   /// Whether to request focus on first mount.
   final bool autofocus;
+
+  /// Called with the new text on every edit — typing, deletion, paste,
+  /// accepting a completion, or a programmatic [controller] change. Fires only
+  /// when the text actually changes, not when the cursor or selection moves
+  /// (mirrors Flutter's [TextField.onChanged]). For the value on Enter, use
+  /// [onSubmit]; for full read/write control, pass a [controller].
+  final void Function(String text)? onChanged;
 
   /// Called with the current text when the user presses Enter.
   final void Function(String text)? onSubmit;
@@ -624,6 +632,11 @@ class _TextInputState extends State<TextInput>
     implements TextInputClaimant, TextCompositionClaimant {
   late TextEditingController _controller;
   late FocusNode _focusNode;
+
+  /// The last text handed to [TextInput.onChanged]. Guards the callback so it
+  /// fires on text changes only, not cursor/selection moves (the controller
+  /// notifies on both).
+  late String _lastNotifiedText;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
   TextPasteSession? _pasteSession;
@@ -648,6 +661,7 @@ class _TextInputState extends State<TextInput>
     super.initState();
     _controller = widget.controller ?? TextEditingController();
     _ownsController = widget.controller == null;
+    _lastNotifiedText = _controller.text;
     _controller.addListener(_onControllerChange);
     widget.historyController?.addListener(_onHistoryChange);
     widget.completionController?.addListener(_onCompletionChange);
@@ -683,6 +697,7 @@ class _TextInputState extends State<TextInput>
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? TextEditingController();
       _ownsController = widget.controller == null;
+      _lastNotifiedText = _controller.text;
       _controller.addListener(_onControllerChange);
     }
     if (widget.historyController != oldWidget.historyController) {
@@ -797,6 +812,14 @@ class _TextInputState extends State<TextInput>
       // briefly stay invisible during typing, which feels broken.
       _blinkOn = true;
     });
+    // The controller notifies on both text and selection changes; fire
+    // onChanged only when the text itself changed. The diff also makes a
+    // `onChanged: (v) => controller.text = f(v)` pattern loop-safe.
+    final text = _controller.text;
+    if (text != _lastNotifiedText) {
+      _lastNotifiedText = text;
+      widget.onChanged?.call(text);
+    }
   }
 
   void _onHistoryChange() {

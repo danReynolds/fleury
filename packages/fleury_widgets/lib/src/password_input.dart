@@ -26,6 +26,7 @@ class PasswordInput extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
+    this.onChanged,
     this.onSubmit,
     this.onEscape,
     this.placeholder = '',
@@ -50,6 +51,10 @@ class PasswordInput extends StatefulWidget {
 
   /// Whether the field should request focus when mounted.
   final bool autofocus;
+
+  /// Called with the new unredacted text on every edit. See
+  /// [TextInput.onChanged].
+  final void Function(String text)? onChanged;
 
   /// Called with the unredacted text when the user submits.
   final void Function(String text)? onSubmit;
@@ -110,6 +115,7 @@ class _PasswordInputState extends State<PasswordInput> {
       controller: widget.controller,
       focusNode: widget.focusNode,
       autofocus: widget.autofocus,
+      onChanged: widget.onChanged,
       onSubmit: widget.onSubmit,
       onEscape: widget.onEscape,
       placeholder: widget.placeholder,

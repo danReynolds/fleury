@@ -960,6 +960,51 @@ void main() {
     });
   });
 
+  group('onChanged', () {
+    testWidgets('fires on each edit with the new text', (tester) {
+      final changes = <String>[];
+      tester.pumpWidget(TextInput(autofocus: true, onChanged: changes.add));
+
+      tester.type('h');
+      tester.type('i');
+      tester.sendKey(_code(KeyCode.backspace));
+
+      expect(changes, ['h', 'hi', 'h']);
+    });
+
+    testWidgets('does not fire on cursor-only moves', (tester) {
+      final changes = <String>[];
+      tester.pumpWidget(TextInput(autofocus: true, onChanged: changes.add));
+
+      tester.type('a');
+      tester.type('b');
+      changes.clear();
+
+      tester.sendKey(_code(KeyCode.arrowLeft));
+      tester.sendKey(_code(KeyCode.home));
+      tester.sendKey(_code(KeyCode.end));
+
+      expect(changes, isEmpty);
+    });
+
+    testWidgets('fires for a programmatic controller edit (loop-safe)', (
+      tester,
+    ) {
+      final changes = <String>[];
+      final controller = TextEditingController();
+      tester.pumpWidget(
+        TextInput(controller: controller, onChanged: changes.add),
+      );
+
+      controller.text = 'seed';
+      tester.pump();
+      controller.text = 'seed'; // same value must not re-fire
+      tester.pump();
+
+      expect(changes, ['seed']);
+    });
+  });
+
   group('placeholder', () {
     testWidgets('shows the placeholder while empty, dimmed', (tester) {
       tester.pumpWidget(const TextInput(placeholder: 'search…'));
