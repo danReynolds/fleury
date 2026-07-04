@@ -1065,6 +1065,12 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       case 'bundle-size':
         await benchmarkBundleSize(rest);
         return;
+      case 'alloc-gate':
+        await benchmarkAllocGate(rest);
+        return;
+      case 'gates':
+        await benchmarkGates(rest);
+        return;
       case 'scoreboard':
         await benchmarkScoreboard(rest);
         return;
@@ -1434,6 +1440,85 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       'bin/bundle_size_gate.dart',
       ...args,
     ], workingDirectory: profiling);
+  }
+
+  /// Per-frame allocation regression gate (G3). Drives a steady-state reactive
+  /// scenario through the real per-frame path (build → reconcile → layout →
+  /// paint → AnsiRenderer diff) against a reused double-buffer and measures
+  /// `package:fleury` allocation churn per frame via a self-connected VM
+  /// service — deterministic byte-for-byte. Pass `--gate` to fail on a
+  /// regression past tolerance, `--update-baseline` to rebaseline (after an
+  /// intentional change or an SDK bump). The VM-service flags are required so
+  /// the gate can self-connect for the allocation profile.
+  Future<void> benchmarkAllocGate(List<String> args) async {
+    await _run('dart', [
+      '--enable-vm-service=0',
+      '--disable-service-auth-codes',
+      'bin/alloc_gate.dart',
+      ...args,
+    ], workingDirectory: profiling);
+  }
+
+  /// Runs the fast, self-contained regression gates in sequence and prints a
+  /// pass/fail summary (does not stop on the first failure, so one command
+  /// reports the whole board). Exits non-zero if any gate failed. The heavier
+  /// PTY/subprocess gates (`wire-gate`, `serve-wire-live`) are listed but not
+  /// auto-run — invoke them explicitly. See docs/implementation/perf-gates.md.
+  Future<void> benchmarkGates(List<String> args) async {
+    const fast = <({String name, List<String> cmd})>[
+      (name: 'serve-semantics-gate', cmd: [
+        'run',
+        'bin/serve_semantics_profile.dart',
+        '--gate',
+      ]),
+      (name: 'image-bench', cmd: ['run', 'bin/image_bench.dart', '--gate']),
+      (name: 'bundle-size', cmd: ['run', 'bin/bundle_size_gate.dart', '--gate']),
+      (name: 'alloc-gate', cmd: [
+        '--enable-vm-service=0',
+        '--disable-service-auth-codes',
+        'bin/alloc_gate.dart',
+        '--gate',
+      ]),
+    ];
+    final results = <({String name, bool ok, int ms})>[];
+    for (final gate in fast) {
+      stdout.writeln('\n─── ${gate.name} ───');
+      if (dryRun) {
+        stdout.writeln('(${_relative(profiling)}) dart ${gate.cmd.join(' ')}');
+        results.add((name: gate.name, ok: true, ms: 0));
+        continue;
+      }
+      final sw = Stopwatch()..start();
+      final process = await Process.start(
+        'dart',
+        gate.cmd,
+        workingDirectory: profiling,
+        mode: ProcessStartMode.inheritStdio,
+      );
+      final code = await process.exitCode;
+      sw.stop();
+      results.add((
+        name: gate.name,
+        ok: code == 0,
+        ms: sw.elapsedMilliseconds,
+      ));
+    }
+
+    stdout.writeln('\n=== perf gate summary ===');
+    var allOk = true;
+    for (final r in results) {
+      stdout.writeln('  ${r.ok ? 'PASS' : 'FAIL'}  ${r.name.padRight(22)} '
+          '${(r.ms / 1000).toStringAsFixed(1)}s');
+      allOk = allOk && r.ok;
+    }
+    stdout.writeln('  (heavier PTY/subprocess gates not auto-run — invoke '
+        'explicitly: wire-gate, serve-wire-live)');
+    if (!allOk) {
+      stderr.writeln('\nperf gates: one or more gates FAILED — see output '
+          'above and docs/implementation/perf-gates.md.');
+      exit(1);
+    }
+    stdout.writeln('\nperf gates: all fast gates pass.');
   }
 
   Future<void> benchmarkScoreboard(List<String> args) async {
@@ -6366,6 +6451,31 @@ void _printBenchmarkUsage() {
   stdout.writeln(
     '  wire <scenario> [...]   Build/capture/analyze real PTY peer runs',
   );
+  stdout.writeln('');
+  stdout.writeln('Regression gates (pass --gate to fail on regression; see '
+      'docs/implementation/perf-gates.md):');
+  stdout.writeln(
+    '  gates                   Run the fast gate suite + pass/fail summary',
+  );
+  stdout.writeln(
+    '  wire-gate [...]         Terminal wire bytes (SB.1/6/9) vs baseline',
+  );
+  stdout.writeln(
+    '  serve-wire-live [...]   Live `fleury serve` socket bytes vs baseline',
+  );
+  stdout.writeln(
+    '  serve-semantics-gate    Semantics wire anti-cliff (DEFLATE) invariant',
+  );
+  stdout.writeln(
+    '  image-bench [--gate]    Inline-image encoder bytes/frame + dedup/zero',
+  );
+  stdout.writeln(
+    '  bundle-size [--gate]    Served-browser first-load client raw + gzip',
+  );
+  stdout.writeln(
+    '  alloc-gate [--gate]     Per-frame package:fleury allocation churn',
+  );
+  stdout.writeln('');
   stdout.writeln(
     '  scoreboard [options]    Build the generated benchmark scoreboard',
   );
