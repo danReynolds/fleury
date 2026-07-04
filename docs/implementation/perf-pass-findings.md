@@ -71,24 +71,68 @@ baseline (the intentional color legibility pass), gate green — no re-baseline
 needed.** Not a `_requiresFullDiff` issue (the earlier hypothesis) — the
 absolute-CUP encoding change from `05ce2d4` was measured inert (~0.6k).
 
-### 2. The retained-tree tax (SB.6 / SB.7 / SB.12 — architectural, real but bounded)
+### 2. The retained-tree tax (SB.6 / SB.7 / SB.12) — **INVESTIGATED (2026-07-03): lean and sublinear; one redundancy fixed**
 
 The catch-up rows vs flat-buffer peers (Ratatui/OpenTUI) share one root cause:
 Fleury pays retained widget/element/render bookkeeping that a peer recomputing a
-flat buffer does not. Byte output stays lean; **raw per-frame CPU trails.**
-Local numbers (Fleury-only harness): SB.6 ~170µs/update (45 layouts performed /
-29 skipped), SB.7 ~168µs/resize (every distinct size = full rebuild + full
-relayout + full repaint), SB.12 idle frame still ~148µs (tree walk + per-frame
-`CellConstraints` alloc + diff scan even when zero layouts run). Concrete
-optimization targets:
+flat buffer does not. Byte output stays lean; **raw per-frame CPU trails.** The
+open question was whether that retained bookkeeping hides a robust CPU win.
+Answer, after isolating the steady-state cost from one-time mount: **no — the
+machinery is already well-engineered, and the earlier speculative targets were
+mis-aimed.**
 
-- **`CellConstraints` pooling** — a fresh constraint object is allocated per node
-  per frame just to run the `_constraints == constraints` skip check.
-- **Paint-only frames keep a bounded `dirtyBounds`** instead of falling to a full
-  diff (the scoped-repaint path exists but SB.6 rarely hits it because value
-  changes alter size).
-- **`handleResize` could preserve the diff base for the overlapping region**
-  rather than diffing the new frame against an all-empty prev.
+**What the aggregate profiler said vs what's real.** A whole-scenario CPU profile
+of SB.12 shows `RenderFlex.replaceAllChildren` dominating project CPU 27× over
+the next symbol — which *looks* like a steady-state reconcile hot spot. It isn't:
+that sample mass is **mount** (every journey builds the 40-node tree fresh, ×25
+iterations), where `replaceAllChildren` does real `adoptChild` work. An isolated
+probe (mount once, then time N no-op re-pumps — a fresh widget tree of identical
+structure+content, so every element `update`s and every multi-child element
+re-reconciles, layout skipped) separates the two:
+
+| tree | idle render (med) | no-op rebuild (med) | reconcile **tax** | tax/node |
+| ---: | ---: | ---: | ---: | ---: |
+| 45 nodes | 34µs | 45µs | 11µs | 0.24 |
+| 169 nodes | 38µs | 56µs | 18µs | 0.11 |
+| 657 nodes | 103µs | 142µs | 40µs | 0.06 |
+| 1465 nodes | 213µs | 300µs | 85µs | 0.06 |
+
+Two conclusions: (a) the reconcile tax is **sublinear per node** (0.24 → 0.06
+µs/node — fixed overhead amortizes) and tiny in absolute terms (**85µs even at
+1465 nodes ≈ 0.5% of a 60 fps budget**); (b) the per-frame **paint** (idle floor)
+is the larger and node-scaling cost, not the reconcile — and it is *already*
+optimizable where it matters.
+
+The three big levers are all present and correct:
+- **Layout** already skips clean same-constraint subtrees (the SB.12 layout
+  dirtiness cache — 0 layouts performed on idle/paint-only frames).
+- **Paint** is memoized opt-in by `RenderRepaintBoundary` (`RepaintBoundary`
+  widget): a clean boundary blits a cached sub-buffer via `copyRectFrom` under
+  `withoutDamageTracking` (skips both the subtree walk *and* the wire diff for
+  that region) and tightens the blit to the non-empty bounding box. Deliberately
+  opt-in — neutral-to-negative for cheap subtrees.
+- **Reconcile** is lean and sublinear (table above).
+
+The earlier speculative targets were refuted: `CellConstraints` pooling is **not**
+the lever (idle/paint-only frames run **0** layouts, so the skip-check
+constraint isn't even allocated on them — the idle cost is paint, not layout
+bookkeeping); and paint-only frames already ride the layout-skip + repaint-
+boundary paths, not a forced full diff.
+
+**One real redundancy found and fixed** (framework.dart `_syncChildRenderObjects`):
+it pre-checked child order via `owner.children`, but the `children` getter is
+`List.unmodifiable(_children)` — an **O(children) copy** — and it duplicated the
+identical `hasSameRenderChildrenInOrder` guard that `replaceAllChildren` already
+runs against its internal list with no copy. So every multi-child element paid a
+redundant copy + duplicate scan on every rebuild. Calling `replaceAllChildren`
+directly (it no-ops unchanged order itself) removes the copy, the duplicate scan,
+and a dead helper. Behavior-identical (1042 widget+rendering tests green,
+including the "same ordered children are a layout no-op" / "reordered children
+still invalidate layout" guards); measured ~10% off the reconcile tax at
+mid-tree sizes, SB.12 `childListNoOpFrameUs` ≈223→182µs median (noisy, 20
+samples). A hygiene win, not a workload mover — booked because it is strictly
+better and zero-risk, and it confirms there is no larger reconcile lever behind
+it.
 
 (SB.11 is a **fixture-comparability caveat, not a gap** — Fleury builds a 100k
 retained TreeTable + search index while the peers compute visible rows; ~92% of

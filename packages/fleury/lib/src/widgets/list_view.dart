@@ -604,6 +604,14 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
 
   @override
   void replaceAllChildren(List<RenderObject> newChildren) {
+    // Same-order children are a no-op: skip the identity-set reconcile below.
+    // Mirrors every other RenderObjectWithChildren (the element-side reconciler
+    // in MultiChildRenderObjectElement no longer pre-checks order). This render
+    // object relayouts on every rebuild anyway — updateRenderObject marks
+    // needs-layout unconditionally to re-read mutable controller state — so the
+    // guard is inert for layout today; it's kept for parity with the other
+    // implementations and stays correct if that mark ever becomes conditional.
+    if (hasSameRenderChildrenInOrder(_children, newChildren)) return;
     final newSet = Set<RenderObject>.identity()..addAll(newChildren);
     for (final c in List<RenderObject>.from(_children)) {
       if (!newSet.contains(c)) {

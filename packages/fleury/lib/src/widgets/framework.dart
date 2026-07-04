@@ -1646,8 +1646,12 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
       if (r != null) desired.add(r);
     }
     final owner = renderObject as RenderObjectWithChildren;
-    final current = owner.children;
-    if (_sameRenderObjectOrder(current, desired)) return;
+    // `replaceAllChildren` already no-ops when the child order is unchanged —
+    // it runs `hasSameRenderChildrenInOrder` against its own internal list,
+    // with no copy. An element-level pre-check here would only duplicate that
+    // scan and, because the `children` getter returns `List.unmodifiable`
+    // (which copies the whole child list), pay an O(children) copy on every
+    // rebuild of every multi-child element. Call through directly instead.
     owner.replaceAllChildren(desired);
   }
 
@@ -1658,17 +1662,6 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
       found ??= _findFirstRenderObject(child);
     });
     return found;
-  }
-
-  static bool _sameRenderObjectOrder(
-    List<RenderObject> current,
-    List<RenderObject> desired,
-  ) {
-    if (current.length != desired.length) return false;
-    for (var i = 0; i < current.length; i++) {
-      if (!identical(current[i], desired[i])) return false;
-    }
-    return true;
   }
 
   @override
