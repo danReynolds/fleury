@@ -518,9 +518,17 @@ class TextInput extends StatefulWidget {
 
   /// Called with the new text on every edit — typing, deletion, paste,
   /// accepting a completion, or a programmatic [controller] change. Fires only
-  /// when the text actually changes, not when the cursor or selection moves
-  /// (mirrors Flutter's [TextField.onChanged]). For the value on Enter, use
-  /// [onSubmit]; for full read/write control, pass a [controller].
+  /// when the text actually changes, not when the cursor or selection moves.
+  ///
+  /// One deliberate difference from Flutter's `TextField.onChanged`: Flutter
+  /// does **not** fire for programmatic `controller.text` changes; fleury
+  /// does — every text mutation flows through one choke point, so agent-driven
+  /// semantic edits, history navigation, and your own controller writes all
+  /// report the same way. Writing back to the controller from the callback is
+  /// safe (a last-text diff stops the echo), but if you set `controller.text`
+  /// in response to model changes, remember the callback will run for those
+  /// too. For the value on Enter, use [onSubmit]; for full read/write control,
+  /// pass a [controller].
   final void Function(String text)? onChanged;
 
   /// Called with the current text when the user presses Enter.
