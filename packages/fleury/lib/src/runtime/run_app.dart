@@ -8,7 +8,15 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io'
-    show File, FileMode, IOOverrides, Platform, RandomAccessFile, stderr;
+    show
+        File,
+        FileMode,
+        IOOverrides,
+        Platform,
+        RandomAccessFile,
+        Stdout,
+        stderr,
+        stdout;
 
 import '../debug/debug_events.dart';
 import '../debug/debug_invalidation.dart';
@@ -25,7 +33,10 @@ import '../rendering/surface_capabilities.dart';
 import '../terminal/capabilities.dart';
 import '../terminal/diagnostics.dart';
 import '../input/events.dart';
+import 'package:stdio/stdio.dart' as fd;
+
 import '../terminal/native_driver.dart';
+import '../terminal/posix_driver.dart';
 import '../terminal/terminal_driver.dart';
 import '../widgets/focus.dart';
 import '../widgets/framework.dart';
@@ -125,7 +136,27 @@ Future<void> runApp(
 }) async {
   final runtimeMarkers = _RuntimeMarkerRecorder.fromEnvironment();
   runtimeMarkers?.mark('runApp.entry');
-  final usedDriver = driver ?? await _resolveDefaultDriver();
+  // fd-level stray-output guard. When the session resolves to the local
+  // native driver on POSIX, redirect fd 1/2 (dup2) BEFORE the driver binds
+  // its stdout, and hand the driver the saved real-terminal handle. This
+  // catches what zones and IOOverrides can't, in principle: native/FFI
+  // libraries (and inheritStdio children) writing straight to the
+  // descriptors — one stray printf would otherwise land mid-frame. Escape
+  // hatch: FLEURY_FD_CAPTURE=0 falls back to the zone/IOOverrides guard.
+  fd.StdioCapture? fdCapture;
+  Future<Stdout?> startFdCapture() async {
+    if (Platform.isWindows) return null;
+    if (Platform.environment['FLEURY_FD_CAPTURE'] == '0') return null;
+    try {
+      fdCapture = await fd.StdioCapture.start();
+    } on Object {
+      return null; // capture unavailable (e.g. another session) — fall back
+    }
+    return fdCapture!.terminalStdout;
+  }
+
+  final usedDriver =
+      driver ?? await _resolveDefaultDriver(nativeStdout: startFdCapture);
   // Long-lived shell-state holder. Survives setState / rebuilds; the
   // root is rebuilt whenever the viewport resizes, so a per-build
   // controller would lose mode + tab selection on every SIGWINCH.
@@ -253,6 +284,26 @@ Future<void> runApp(
     sanitizeForTerminal: true,
   );
 
+  // fd-capture wiring: assembled lines stream into the same consumer the
+  // legacy zone/IOOverrides path feeds (sanitize -> LogBuffer -> onStrayOutput
+  // -> replay-on-exit). During an editor/pager handoff the capture pauses so
+  // the child inherits the real descriptors.
+  StreamSubscription<fd.CapturedLine>? fdCaptureSub;
+  final activeFdCapture = fdCapture;
+  if (activeFdCapture != null) {
+    fdCaptureSub = activeFdCapture.output.listen(
+      (line) => capture.addLine(
+        line.text,
+        line.stream == fd.StdStream.err ? LogSource.stderr : LogSource.stdout,
+      ),
+    );
+    if (usedDriver is PosixTerminalDriver) {
+      usedDriver
+        ..onHandoffStart = activeFdCapture.pause
+        ..onHandoffEnd = activeFdCapture.resume;
+    }
+  }
+
   // Uncaught runtime errors (a throwing event handler, a failed async callback)
   // are reported and surfaced on screen rather than killing the session — see
   // the zone guard and the event-dispatch try/catch below. The listener
@@ -296,10 +347,30 @@ Future<void> runApp(
     // The terminal is back on the normal screen now. Unless the caller took
     // the lines live via onStrayOutput, replay everything captured during the
     // session so nothing a stray print() produced is lost.
-    capture.flushPartials();
-    if (onStrayOutput == null && !logBuffer.isEmpty) {
-      for (final line in logBuffer.lines) {
-        usedDriver.write('${line.text}\n');
+    final fdCap = fdCapture;
+    if (fdCap != null) {
+      // Drain + restore fd 1/2 (stop() delivers every in-flight line to our
+      // listener before closing the streams, and closes the driver's saved
+      // terminal handle) — then replay via the real, now-restored stdout.
+      try {
+        await fdCap.stop();
+      } catch (_) {}
+      await fdCaptureSub?.cancel();
+      capture.flushPartials();
+      if (onStrayOutput == null && !logBuffer.isEmpty) {
+        for (final line in logBuffer.lines) {
+          stdout.writeln(line.text);
+        }
+        try {
+          await stdout.flush();
+        } catch (_) {}
+      }
+    } else {
+      capture.flushPartials();
+      if (onStrayOutput == null && !logBuffer.isEmpty) {
+        for (final line in logBuffer.lines) {
+          usedDriver.write('${line.text}\n');
+        }
       }
     }
 
@@ -311,22 +382,27 @@ Future<void> runApp(
     runtimeMarkers?.write();
   }
 
-  // Intercept stray output so it can't corrupt the frame. `print()` is
-  // caught by the zone spec; direct stdout/stderr writes (loggers, libraries)
-  // by the IOOverrides below. The driver holds the real stdout, so the
-  // framework's own frames are never captured.
-  final captureSpec = ZoneSpecification(
-    print: (self, parent, zone, line) =>
-        capture.addLine(line, LogSource.stdout),
-  );
+  // Legacy stray-output guard — only when the fd-level capture is NOT
+  // active (custom driver, remote/serve session, Windows, or
+  // FLEURY_FD_CAPTURE=0). `print()` is caught by the zone spec; direct
+  // stdout/stderr writes (loggers, libraries) by the IOOverrides below. The
+  // driver holds the real stdout, so the framework's own frames are never
+  // captured. With fd capture active both layers are redundant: everything
+  // ends at the redirected descriptors, including what these can't see.
+  final captureSpec = activeFdCapture != null
+      ? null
+      : ZoneSpecification(
+          print: (self, parent, zone, line) =>
+              capture.addLine(line, LogSource.stdout),
+        );
 
   // runZonedGuarded is the safety net. A throw inside an async callback —
   // an event handler, a scheduled frame, a hot-reload hook — escapes the
   // try/finally below entirely and would otherwise leave the terminal in
   // alt-screen / raw mode. Routing every uncaught error (sync or async)
   // here lets us restore the terminal before surfacing the failure.
-  IOOverrides.runZoned(
-    () => runZonedGuarded(
+  void runGuarded() {
+    runZonedGuarded(
       () async {
         runtimeMarkers?.mark('terminal.enter.start');
         await usedDriver.enter(mode);
@@ -678,10 +754,20 @@ Future<void> runApp(
         }
       },
       zoneSpecification: captureSpec,
-    ),
-    stdout: () => capture.sinkFor(LogSource.stdout),
-    stderr: () => capture.sinkFor(LogSource.stderr),
-  );
+    );
+  }
+
+  if (activeFdCapture != null) {
+    // fd 1/2 are already redirected at the descriptor level — the zone and
+    // IOOverrides layers would be redundant.
+    runGuarded();
+  } else {
+    IOOverrides.runZoned(
+      runGuarded,
+      stdout: () => capture.sinkFor(LogSource.stdout),
+      stderr: () => capture.sinkFor(LogSource.stderr),
+    );
+  }
 
   return done.future;
 }
@@ -842,7 +928,9 @@ String _formatByteTelemetry(CountingAnsiSink sink) {
 /// the Posix driver with a one-line stderr warning rather than
 /// hanging — the shell may have crashed and the user's app shouldn't
 /// be held hostage.
-Future<TerminalDriver> _resolveDefaultDriver() async {
+Future<TerminalDriver> _resolveDefaultDriver({
+  Future<Stdout?> Function()? nativeStdout,
+}) async {
   // Per-session env var wins outright — when `fleury serve --spawn`
   // started us, the env var is *intentional* and a missing or stale
   // socket here is a real bug, not a fallback case.
@@ -861,9 +949,17 @@ Future<TerminalDriver> _resolveDefaultDriver() async {
   }
 
   final handle = _findHandleUpward();
-  if (handle == null) return createNativeTerminalDriver();
+  if (handle == null) {
+    return createNativeTerminalDriver(
+      stdoutOverride: await nativeStdout?.call(),
+    );
+  }
   final path = (await handle.readAsString()).trim();
-  if (path.isEmpty) return createNativeTerminalDriver();
+  if (path.isEmpty) {
+    return createNativeTerminalDriver(
+      stdoutOverride: await nativeStdout?.call(),
+    );
+  }
   try {
     final transport = await UnixSocketFrameTransport.connect(path);
     return RemoteTerminalDriver(transport);
@@ -873,7 +969,9 @@ Future<TerminalDriver> _resolveDefaultDriver() async {
       '[fleury] ${handle.path} present but socket unreachable ($e); '
       'falling back to local terminal.',
     );
-    return createNativeTerminalDriver();
+    return createNativeTerminalDriver(
+      stdoutOverride: await nativeStdout?.call(),
+    );
   }
 }
 

@@ -1,3 +1,17 @@
+// Consumer side of the stray-output guard: sanitizes lines, buffers them for
+// the in-app log surface, and powers the replay-on-exit. Fed by ONE of two
+// sources in runApp:
+//
+//   - fd-level capture (package:stdio, POSIX default): fd 1/2 are dup2-moved,
+//     so EVERY writer — Dart print, loggers, native/FFI libraries, inherited
+//     children — is caught at the descriptor. Lines stream in pre-assembled.
+//   - the legacy zone + IOOverrides layer (custom drivers, remote sessions,
+//     Windows, FLEURY_FD_CAPTURE=0): catches `print()` and Dart-level
+//     stdout/stderr writes via the sinks below. Cannot, in principle, see
+//     native writers or code running outside runApp's zone.
+//
+// Original header follows.
+//
 // Captures stray output — `print()` and direct stdout/stderr writes from
 // app or library code — while a TUI session owns the terminal, so it can't
 // interleave with the rendered frame and corrupt the display.

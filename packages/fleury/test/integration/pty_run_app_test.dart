@@ -65,6 +65,49 @@ void main() {
       skip: skipPty,
     );
 
+    test('stray print + raw native write(1) never corrupt the frame; '
+        'both replay after exit', () async {
+      final capture = await _capturePty(
+        tempDir,
+        'stray-output',
+        extraArgs: const [
+          '--cols',
+          '60',
+          '--rows',
+          '12',
+          '--resize-sequence',
+          '61x12',
+          '--resize-interval-ms',
+          '3000',
+        ],
+        fixtureArgs: const ['--stray-output'],
+      );
+      if (capture == null) return;
+
+      expect(capture.metadata['timedOut'], isFalse);
+      expect(capture.output, contains('PTY-STRAY-MODE'));
+
+      // The session region is everything up to the alt-screen pop; the
+      // replay region is what follows. The stray lines (a Dart print AND a
+      // raw native write(1) that zones/IOOverrides cannot see) must appear
+      // ONLY in the replay region — one mid-frame marker means fd capture
+      // failed and the frame was corrupted.
+      final pop = capture.output.lastIndexOf('\x1B[?1049l');
+      expect(pop, greaterThanOrEqualTo(0),
+          reason: 'alt-screen pop missing — terminal not restored');
+      final session = capture.output.substring(0, pop);
+      final replay = capture.output.substring(pop);
+      for (final marker in const [
+        'STRAY-PRINT-MARKER',
+        'STRAY-NATIVE-MARKER',
+      ]) {
+        expect(session, isNot(contains(marker)),
+            reason: '$marker leaked into the live frame region');
+        expect(replay, contains(marker),
+            reason: '$marker was not replayed after exit');
+      }
+    }, skip: skipPty);
+
     test('restores terminal modes when SIGTERM lands mid-session', () async {
       final capture = await _capturePty(
         tempDir,
