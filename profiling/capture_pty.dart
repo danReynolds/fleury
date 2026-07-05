@@ -232,6 +232,7 @@ void main(List<String> args) {
   var inputDelayMs = 50;
   int? interruptAfterMs;
   int? interruptAfterOutputMs;
+  int? inputAfterOutputMs;
   int? terminateAfterMs;
   int? terminateAfterOutputMs;
   int? suspendAfterMs;
@@ -277,6 +278,11 @@ void main(List<String> args) {
       interruptAfterMs = int.parse(args[++i]);
       if (interruptAfterMs <= 0) {
         _fail('--interrupt-after-ms must be a positive integer');
+      }
+    } else if (a == '--input-after-output-ms') {
+      inputAfterOutputMs = int.parse(args[++i]);
+      if (inputAfterOutputMs <= 0) {
+        _fail('--input-after-output-ms must be a positive integer');
       }
     } else if (a == '--interrupt-after-output-ms') {
       interruptAfterOutputMs = int.parse(args[++i]);
@@ -414,7 +420,14 @@ void main(List<String> args) {
 
     while (true) {
       final elapsedMs = sw.elapsedMicroseconds / 1000.0;
-      if (!inputSent && elapsedMs >= inputDelayMs) {
+      final outputAgeMs = ttfb == null ? null : elapsedMs - ttfb;
+      // --input-after-output-ms keys the input on the app's FIRST OUTPUT
+      // (i.e. after startup/JIT), where a fixed --input-delay-ms can land
+      // before raw mode is on and be eaten by the line discipline.
+      final sendInputNow = inputAfterOutputMs != null
+          ? (outputAgeMs != null && outputAgeMs >= inputAfterOutputMs)
+          : elapsedMs >= inputDelayMs;
+      if (!inputSent && sendInputNow) {
         final bytes = inputBytes!;
         final n = _write(masterFd, inputBuffer!, bytes.length);
         if (n != bytes.length) {
@@ -422,7 +435,6 @@ void main(List<String> args) {
         }
         inputSent = true;
       }
-      final outputAgeMs = ttfb == null ? null : elapsedMs - ttfb;
       if (!interruptSent &&
           ((interruptAfterMs != null && elapsedMs >= interruptAfterMs) ||
               (interruptAfterOutputMs != null &&

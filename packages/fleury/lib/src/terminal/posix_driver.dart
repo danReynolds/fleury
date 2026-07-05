@@ -331,6 +331,17 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
     Process.killPid(pid, ProcessSignal.sigtstp);
   }
 
+  /// Invoked inside [runWithTerminalHandoff] after the terminal is restored
+  /// and before the operation runs (start) / after it completes and before
+  /// the driver re-enters its mode (end). `runApp` wires these to pause and
+  /// resume the fd-level stray-output capture, so a child the operation
+  /// spawns with `ProcessStartMode.inheritStdio` (an `$EDITOR`, a pager)
+  /// inherits the *real* descriptors instead of the capture pipe. Failures
+  /// are swallowed — a handoff must proceed even if the capture is already
+  /// shutting down.
+  Future<void> Function()? onHandoffStart;
+  Future<void> Function()? onHandoffEnd;
+
   @override
   Future<T> runWithTerminalHandoff<T>(FutureOr<T> Function() operation) async {
     final mode = _mode;
@@ -342,10 +353,22 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
     try {
       await _stdout.flush();
     } catch (_) {}
+    final hs = onHandoffStart;
+    if (hs != null) {
+      try {
+        await hs();
+      } catch (_) {}
+    }
 
     try {
       return await operation();
     } finally {
+      final he = onHandoffEnd;
+      if (he != null) {
+        try {
+          await he();
+        } catch (_) {}
+      }
       if (_active && identical(_mode, mode)) {
         if (_changedStdin) _setRawMode();
         if (_wroteEnterSequences) _stdout.write(_enterSequences(mode));

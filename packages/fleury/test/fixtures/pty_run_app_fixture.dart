@@ -1,9 +1,49 @@
 import 'dart:async';
+import 'dart:ffi';
 import 'dart:io';
 
+import 'package:ffi/ffi.dart';
 import 'package:fleury/fleury.dart';
 
+typedef _WriteC = IntPtr Function(Int32 fd, Pointer<Uint8> buf, IntPtr count);
+typedef _WriteDart = int Function(int fd, Pointer<Uint8> buf, int count);
+final _write = DynamicLibrary.process().lookupFunction<_WriteC, _WriteDart>(
+  'write',
+);
+
+/// A raw POSIX write(1, ...) — exactly what a native/FFI library does,
+/// invisible to Dart zones and IOOverrides. Only the fd-level capture can
+/// keep this off the screen.
+void _nativeWrite(String s) {
+  final bytes = s.codeUnits;
+  final buf = malloc<Uint8>(bytes.length);
+  buf.asTypedList(bytes.length).setAll(0, bytes);
+  var off = 0;
+  while (off < bytes.length) {
+    final w = _write(1, buf + off, bytes.length - off);
+    if (w <= 0) break;
+    off += w;
+  }
+  malloc.free(buf);
+}
+
 Future<void> main(List<String> args) async {
+  if (args.contains('--stray-output')) {
+    Timer(const Duration(milliseconds: 300), () {
+      // Both classes of stray writer: Dart print (zone-visible) and a raw
+      // native descriptor write (zone-INvisible).
+      print('STRAY-PRINT-MARKER');
+      _nativeWrite('STRAY-NATIVE-MARKER\n');
+    });
+    return runApp(
+      const _PtySmokeApp(label: 'PTY-STRAY-MODE'),
+      enableHotReload: false,
+      // Exit cleanly on the harness's SIGWINCH — input-byte exits need a
+      // controlling terminal (job control) that sandboxes/CI lack, but
+      // SIGWINCH delivery works everywhere the resize smoke test does.
+      onEvent: (event) => event is ResizeEvent ? const ExitRequested() : null,
+    );
+  }
   if (args.contains('--layout-crash')) {
     return runApp(const _BoomWidget(), enableHotReload: false);
   }
