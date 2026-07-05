@@ -86,3 +86,21 @@ and a `ctrl` / `alt` / `shift` builder for combinations (`KeyChord.ctrl.s`).
 bind it — above, or in a `Focus` — be deliberate about which should win; to
 intercept the pop rather than race it, reach for a `PopScope` (see
 [Navigation](/guides/navigation/#guarding-back)).
+
+## Which tool? A quick decision
+
+Three tools handle keys; pick by *scope*:
+
+| Use | When | Scope |
+|---|---|---|
+| **`KeyBindings`** | App- or screen-wide shortcuts (`Ctrl+S`, `Ctrl+P`, quit) that should fire regardless of what's focused | Ambient — matches while its subtree is mounted |
+| **`Focus`** | A widget handles keys *only while it's focused* (a custom list navigator, a canvas) | Local — active on focus |
+| **`FocusNode`** | You need to *drive* or *read* focus imperatively — move it (`Tab` between panes), check `hasFocus`, or wire a `Panel`'s accent | A handle you hold and pass to a widget |
+
+Rules of thumb: reach for **`KeyBindings`** first — most shortcuts are ambient.
+Drop to **`Focus`** when a chord should only work while a specific widget has
+focus. Hold a **`FocusNode`** when the *arrangement* of focus is yours to manage
+(multi-pane apps that `Tab` between regions, or lighting up the active
+[`Panel`](/widgets/panel/)). They compose: a pane can hold a `FocusNode`, wrap
+its body in a `Focus` for while-focused keys, and still sit under an app-level
+`KeyBindings` for global shortcuts.

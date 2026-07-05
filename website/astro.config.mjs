@@ -64,6 +64,8 @@ export default defineConfig({
           items: [
             { label: 'Layout', slug: 'guides/layout' },
             { label: 'Lists & scrolling', slug: 'guides/lists-and-scrolling' },
+            { label: 'Forms & validation', slug: 'guides/forms' },
+            { label: 'State management', slug: 'guides/state-management' },
             { label: 'Navigation', slug: 'guides/navigation' },
             { label: 'Loading data', slug: 'guides/loading-data' },
             { label: 'Input & gestures', slug: 'guides/input-and-gestures' },
