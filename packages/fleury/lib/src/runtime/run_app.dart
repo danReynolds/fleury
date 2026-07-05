@@ -83,6 +83,58 @@ typedef TuiEventHandler = ExitRequested? Function(TuiEvent event);
 
 /// Runs an fleury application.
 ///
+/// This thin wrapper exists for one safety property: if ANYTHING escapes the
+/// implementation as a throw — including setup failures before the guarded
+/// zone (and its cleanup) are established — the fd-level stray-output capture
+/// is stopped so fd 1/2 point back at the real terminal. Without it, an
+/// embedding caller that catches the throw and keeps running would find its
+/// process's stdout/stderr silently swallowed. `stop()` is idempotent, so the
+/// normal cleanup path double-stopping is harmless.
+Future<void> runApp(
+  Widget root, {
+  TerminalDriver? driver,
+  TerminalMode mode = TerminalMode.interactive,
+  bool enableHotReload = true,
+  bool requireInteractiveTerminal = true,
+  void Function(LogLine line)? onStrayOutput,
+  TuiEventHandler? onEvent,
+  Clipboard? clipboard,
+  List<KeyBinding> globalBindings = const [],
+  Duration sequenceTimeout = const Duration(milliseconds: 500),
+  DebugConfig debug = const DebugConfig(),
+  Duration frameInterval = Duration.zero,
+}) async {
+  fd.StdioCapture? cap;
+  try {
+    return await _runAppImpl(
+      root,
+      driver: driver,
+      mode: mode,
+      enableHotReload: enableHotReload,
+      requireInteractiveTerminal: requireInteractiveTerminal,
+      onStrayOutput: onStrayOutput,
+      onEvent: onEvent,
+      clipboard: clipboard,
+      globalBindings: globalBindings,
+      sequenceTimeout: sequenceTimeout,
+      debug: debug,
+      frameInterval: frameInterval,
+      onFdCaptureStarted: (c) => cap = c,
+    );
+  } on Object {
+    final c = cap;
+    if (c != null && c.isActive) {
+      try {
+        await c.stop();
+      } catch (_) {}
+    }
+    rethrow;
+  }
+}
+
+/// Implementation of [runApp] — see the wrapper for the fd-capture safety
+/// contract.
+///
 /// Sequence:
 ///
 ///   1. Acquire a [TerminalDriver] (defaults to the native platform driver).
@@ -120,7 +172,7 @@ typedef TuiEventHandler = ExitRequested? Function(TuiEvent event);
 /// cursor-control sequences into the stream. Pass
 /// [requireInteractiveTerminal] = false to run anyway (screen control and
 /// raw input are skipped where there's no terminal).
-Future<void> runApp(
+Future<void> _runAppImpl(
   Widget root, {
   TerminalDriver? driver,
   TerminalMode mode = TerminalMode.interactive,
@@ -133,6 +185,7 @@ Future<void> runApp(
   Duration sequenceTimeout = const Duration(milliseconds: 500),
   DebugConfig debug = const DebugConfig(),
   Duration frameInterval = Duration.zero,
+  void Function(fd.StdioCapture capture)? onFdCaptureStarted,
 }) async {
   final runtimeMarkers = _RuntimeMarkerRecorder.fromEnvironment();
   runtimeMarkers?.mark('runApp.entry');
@@ -147,11 +200,18 @@ Future<void> runApp(
   Future<Stdout?> startFdCapture() async {
     if (Platform.isWindows) return null;
     if (Platform.environment['FLEURY_FD_CAPTURE'] == '0') return null;
+    // Only guard a real screen. On a piped/redirected stdout there are no
+    // frames to corrupt — and redirecting the descriptors there would swallow
+    // even the "needs an interactive terminal" error runApp is about to
+    // throw (stderr is fd 2). `stdout` is still the real descriptor here:
+    // this runs before any redirection.
+    if (!stdout.hasTerminal) return null;
     try {
       fdCapture = await fd.StdioCapture.start();
     } on Object {
       return null; // capture unavailable (e.g. another session) — fall back
     }
+    onFdCaptureStarted?.call(fdCapture!);
     return fdCapture!.terminalStdout;
   }
 
@@ -291,12 +351,15 @@ Future<void> runApp(
   StreamSubscription<fd.CapturedLine>? fdCaptureSub;
   final activeFdCapture = fdCapture;
   if (activeFdCapture != null) {
-    fdCaptureSub = activeFdCapture.output.listen(
-      (line) => capture.addLine(
-        line.text,
-        line.stream == fd.StdStream.err ? LogSource.stderr : LogSource.stdout,
-      ),
-    );
+    void consume(fd.CapturedLine line) => capture.addLine(
+          line.text,
+          line.stream == fd.StdStream.err ? LogSource.stderr : LogSource.stdout,
+        );
+    // Anything written between capture start and this subscription (driver
+    // construction runs in between) is retained in the capture's history —
+    // seed the consumer so those lines replay too.
+    activeFdCapture.history.forEach(consume);
+    fdCaptureSub = activeFdCapture.output.listen(consume);
     if (usedDriver is PosixTerminalDriver) {
       usedDriver
         ..onHandoffStart = activeFdCapture.pause
