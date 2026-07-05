@@ -301,7 +301,7 @@ class JsonView extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
-    this.label = 'JSON',
+    this.semanticLabel = 'JSON',
     this.initialExpandedDepth = 1,
     this.maxLineLength = 1000,
     this.copySelection = true,
@@ -317,7 +317,7 @@ class JsonView extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
-    this.label = 'JSON',
+    this.semanticLabel = 'JSON',
     this.initialExpandedDepth = 1,
     this.maxLineLength = 1000,
     this.copySelection = true,
@@ -332,7 +332,7 @@ class JsonView extends StatefulWidget {
     JsonViewController? controller,
     FocusNode? focusNode,
     bool autofocus = false,
-    String label = 'JSON',
+    String semanticLabel = 'JSON',
     int initialExpandedDepth = 1,
     int? maxLineLength = 1000,
     bool copySelection = true,
@@ -345,7 +345,7 @@ class JsonView extends StatefulWidget {
       controller: controller,
       focusNode: focusNode,
       autofocus: autofocus,
-      label: label,
+      semanticLabel: semanticLabel,
       initialExpandedDepth: initialExpandedDepth,
       maxLineLength: maxLineLength,
       copySelection: copySelection,
@@ -366,8 +366,8 @@ class JsonView extends StatefulWidget {
   /// Whether the viewer should request focus when mounted.
   final bool autofocus;
 
-  /// Semantic and visual label for the JSON viewer.
-  final String label;
+  /// Semantic label (the accessibility name; not rendered) for the JSON viewer.
+  final String semanticLabel;
 
   /// Depth expanded by default before user-controlled collapse state applies.
   final int initialExpandedDepth;
@@ -612,7 +612,7 @@ class _JsonViewState extends State<JsonView> {
       onFocusChange: _onFocusWithinChange,
       child: Semantics(
         role: SemanticRole.json,
-        label: widget.label,
+        label: widget.semanticLabel,
         focused: _focusedWithin || _focusNode.hasFocus,
         actions: {
           SemanticAction.focus,
@@ -654,7 +654,7 @@ class _JsonViewState extends State<JsonView> {
     final safeMessage = _sanitizeJsonLabel(error.message);
     return Semantics(
       role: SemanticRole.json,
-      label: widget.label,
+      label: widget.semanticLabel,
       validationError: safeMessage,
       state: SemanticState({
         'valid': false,

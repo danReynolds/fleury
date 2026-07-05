@@ -92,7 +92,7 @@ void main() {
     final controller = LogRegionController(followTail: false);
     tester.pumpWidget(
       LogRegion(
-        label: 'Runtime logs',
+        semanticLabel: 'Runtime logs',
         controller: controller,
         entries: const [
           LogEntry(id: 'boot', message: 'booted'),

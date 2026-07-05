@@ -36,7 +36,7 @@ class TerminalOutputRegion extends StatelessWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
-    this.label = 'Terminal output',
+    this.semanticLabel = 'Terminal output',
     this.showPrefix = true,
     this.maxLineLength = 1000,
     this.filter,
@@ -57,8 +57,8 @@ class TerminalOutputRegion extends StatelessWidget {
   /// Whether the rendered log region should request focus when mounted.
   final bool autofocus;
 
-  /// Semantic and visual label for the output region.
-  final String label;
+  /// Semantic label (the accessibility name; not rendered) for the output region.
+  final String semanticLabel;
 
   /// Whether rows render stdout/stderr prefixes.
   final bool showPrefix;
@@ -89,7 +89,7 @@ class TerminalOutputRegion extends StatelessWidget {
           controller: controller,
           focusNode: focusNode,
           autofocus: autofocus,
-          label: label,
+          semanticLabel: semanticLabel,
           showPrefix: showPrefix,
           maxLineLength: maxLineLength,
           filter: filter,

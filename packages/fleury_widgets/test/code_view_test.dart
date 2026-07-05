@@ -96,7 +96,7 @@ void main() {
     tester.pumpWidget(
       CodeView(
         source: _sampleCode,
-        label: 'Source fixture',
+        semanticLabel: 'Source fixture',
         language: 'dart',
         filePath: 'lib/demo.dart',
       ),
@@ -191,7 +191,7 @@ void main() {
       tester.pumpWidget(
         CodeView(
           source: _sampleCode,
-          label: 'Source fixture',
+          semanticLabel: 'Source fixture',
           controller: controller,
           copyOptions: const CodeViewCopyOptions(
             clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
@@ -232,7 +232,7 @@ void main() {
       tester.pumpWidget(
         CodeView(
           source: _sampleCode,
-          label: 'Source fixture',
+          semanticLabel: 'Source fixture',
           controller: controller,
           copyOptions: const CodeViewCopyOptions(
             clipboardPolicy: ClipboardWritePolicy.inProcessOnly,

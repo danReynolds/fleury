@@ -431,7 +431,7 @@ class RadioGroup<T> extends StatefulWidget {
     required this.options,
     this.axis = Axis.vertical,
     this.spacing = 2,
-    this.label = 'Radio group',
+    this.semanticLabel = 'Radio group',
     this.autofocus = false,
   });
 
@@ -451,7 +451,7 @@ class RadioGroup<T> extends StatefulWidget {
   /// Horizontal gap between options when [axis] is horizontal.
   final int spacing;
 
-  final String label;
+  final String semanticLabel;
   final bool autofocus;
 
   @override
@@ -554,7 +554,7 @@ class _RadioGroupState<T> extends State<RadioGroup<T>> {
     // directional traversal, so consuming the arrows here adds selection.
     return Semantics(
       role: SemanticRole.region,
-      label: widget.label,
+      label: widget.semanticLabel,
       child: Focus(canRequestFocus: false, onKey: _onKey, child: layout),
     );
   }

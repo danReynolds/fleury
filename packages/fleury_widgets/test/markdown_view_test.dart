@@ -89,7 +89,7 @@ void main() {
     'renders markdown rows with aggregate, block, and link semantics',
     (tester) {
       tester.pumpWidget(
-        MarkdownView(markdown: _sampleMarkdown, label: 'Launch notes'),
+        MarkdownView(markdown: _sampleMarkdown, semanticLabel: 'Launch notes'),
       );
 
       final output = tester.renderToString(
@@ -211,7 +211,7 @@ void main() {
       tester.pumpWidget(
         MarkdownView(
           markdown: _sampleMarkdown,
-          label: 'Launch notes',
+          semanticLabel: 'Launch notes',
           controller: controller,
           copyOptions: const MarkdownViewCopyOptions(
             clipboardPolicy: ClipboardWritePolicy.inProcessOnly,

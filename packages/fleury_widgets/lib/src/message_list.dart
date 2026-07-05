@@ -214,7 +214,7 @@ class MessageList extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
-    this.label = 'Messages',
+    this.semanticLabel = 'Messages',
     this.showPrefix = true,
     this.showTimestamp = false,
     this.maxLineLength = 1000,
@@ -235,8 +235,8 @@ class MessageList extends StatefulWidget {
   /// Whether the list should request focus when mounted.
   final bool autofocus;
 
-  /// Semantic and visual label for the message list.
-  final String label;
+  /// Semantic label (the accessibility name; not rendered) for the message list.
+  final String semanticLabel;
 
   /// Whether rows render role/status/author prefixes.
   final bool showPrefix;
@@ -499,7 +499,7 @@ class _MessageListState extends State<MessageList> {
       onFocusChange: _onFocusWithinChange,
       child: Semantics(
         role: SemanticRole.messageList,
-        label: widget.label,
+        label: widget.semanticLabel,
         focused: _focusedWithin || _focusNode.hasFocus,
         actions: {
           SemanticAction.focus,

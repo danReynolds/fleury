@@ -2168,7 +2168,7 @@ class _TreesStory extends StatelessWidget {
     return switch (selectedWidgetName) {
       'Tree' || 'TreeNode' => SizedBox(
         width: 28,
-        child: Tree<String>(roots: _treeRoots, label: 'Package tree'),
+        child: Tree<String>(roots: _treeRoots, semanticLabel: 'Package tree'),
       ),
       _ => TreeTable<String>(
         roots: _roots,
@@ -2803,7 +2803,7 @@ class _FilesStory extends StatelessWidget {
         initialDirectory: cwd,
         filter: FileBrowserFilterDescriptor(showHidden: showHidden),
         maxVisible: 10,
-        label: 'Repository files',
+        semanticLabel: 'Repository files',
       ),
     };
   }
@@ -2817,12 +2817,12 @@ class _DocumentStory extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return switch (document) {
-      'Diff' => DiffView(diff: _sampleDiff, label: 'Diff sample'),
+      'Diff' => DiffView(diff: _sampleDiff, semanticLabel: 'Diff sample'),
       'Patch' => PatchReview(diff: _sampleDiff, label: 'Patch review'),
-      'JSON' => JsonView.string(_sampleJson, label: 'Story metadata'),
+      'JSON' => JsonView.string(_sampleJson, semanticLabel: 'Story metadata'),
       'Markdown' => MarkdownView(
         markdown: _sampleMarkdown,
-        label: 'Markdown sample',
+        semanticLabel: 'Markdown sample',
       ),
       _ => CodeView(
         source: _sampleCode,
@@ -2857,10 +2857,10 @@ class _SearchLogStoryState extends State<_SearchLogStory> {
   @override
   Widget build(BuildContext context) {
     return switch (widget.view) {
-      'Logs' => LogRegion(entries: _sampleLogs, label: 'Scenario logs'),
+      'Logs' => LogRegion(entries: _sampleLogs, semanticLabel: 'Scenario logs'),
       'Terminal' => TerminalOutputRegion(
         buffer: _buffer,
-        label: 'Captured output',
+        semanticLabel: 'Captured output',
       ),
       _ => SearchPanel(
         width: 56,
@@ -2899,7 +2899,7 @@ class _AgentStory extends StatelessWidget {
     return switch (view) {
       'Messages' => MessageList(
         messages: _sampleMessages,
-        label: 'Conversation',
+        semanticLabel: 'Conversation',
       ),
       'Conversations' => ConversationNavigator(
         width: 56,
@@ -3052,7 +3052,7 @@ class _WorkflowStoryState extends State<_WorkflowStory> {
         label: 'dart test packages/storybook',
       ),
       'Summary' => _WorkflowSummaryStory(snapshot: _sampleSnapshot),
-      _ => TaskGraph(nodes: _sampleTasks, label: 'DX plan'),
+      _ => TaskGraph(nodes: _sampleTasks, semanticLabel: 'DX plan'),
     };
   }
 }

@@ -129,7 +129,7 @@ void main() {
       ConversationNavigatorSelectResult? selected;
       tester.pumpWidget(
         ConversationNavigator(
-          label: 'Threads',
+          semanticLabel: 'Threads',
           conversations: _entries(),
           autofocus: true,
           onSelect: (result) => selected = result,
@@ -187,7 +187,7 @@ void main() {
       ConversationNavigatorSelectResult? selected;
       tester.pumpWidget(
         ConversationNavigator(
-          label: 'Threads',
+          semanticLabel: 'Threads',
           conversations: _entries(),
           controller: controller,
           onSelect: (result) => selected = result,
@@ -251,7 +251,7 @@ void main() {
       final controller = ConversationNavigatorController(selectedIndex: 2);
       tester.pumpWidget(
         ConversationNavigator(
-          label: 'Threads',
+          semanticLabel: 'Threads',
           conversations: _entries(),
           controller: controller,
         ),
@@ -260,7 +260,7 @@ void main() {
 
       tester.pumpWidget(
         ConversationNavigator(
-          label: 'Threads',
+          semanticLabel: 'Threads',
           conversations: [
             _entries()[0],
             const ConversationEntry(

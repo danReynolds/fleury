@@ -51,7 +51,7 @@ class _FileManagerBodyState extends State<_FileManagerBody> {
                   title: 'Explorer',
                   focused: true,
                   child: Tree<_FsNode>(
-                    label: 'my-app',
+                    semanticLabel: 'my-app',
                     roots: _roots,
                     autofocus: true,
                     onSelect: (node) {
@@ -124,7 +124,7 @@ class _FileManagerBodyState extends State<_FileManagerBody> {
       source: node.content ?? '',
       language: node.language,
       filePath: node.path,
-      label: name,
+      semanticLabel: name,
     );
   }
 

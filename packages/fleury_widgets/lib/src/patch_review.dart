@@ -628,7 +628,7 @@ class _PatchReviewState extends State<PatchReview> {
           height: widget.diffHeight,
           child: DiffView.document(
             document: widget.document,
-            label: '${widget.label} diff',
+            semanticLabel: '${widget.label} diff',
             controller: _diffController,
             focusNode: widget.diffFocusNode,
             autofocus: widget.diffAutofocus,

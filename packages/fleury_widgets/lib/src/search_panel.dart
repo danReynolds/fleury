@@ -181,7 +181,7 @@ class SearchPanel extends StatefulWidget {
     this.queryController,
     this.controller,
     this.matcher,
-    this.label = 'Search',
+    this.semanticLabel = 'Search',
     this.placeholder = 'Search...',
     this.width = 60,
     this.maxVisible = 10,
@@ -209,8 +209,8 @@ class SearchPanel extends StatefulWidget {
   /// Optional app-owned matcher used instead of the default ranked search.
   final SearchResultMatcher? matcher;
 
-  /// Semantic and visual label for the search surface.
-  final String label;
+  /// Semantic label (the accessibility name; not rendered) for the search surface.
+  final String semanticLabel;
 
   /// Placeholder shown in the query input.
   final String placeholder;
@@ -631,7 +631,7 @@ class _SearchPanelState extends State<SearchPanel> {
       ],
       child: Semantics(
         role: SemanticRole.region,
-        label: widget.label,
+        label: widget.semanticLabel,
         value: _query.text,
         focused: _queryFocusNode.hasFocus || _resultsFocusNode.hasFocus,
         actions: {

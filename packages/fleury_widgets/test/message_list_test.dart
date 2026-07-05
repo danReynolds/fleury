@@ -43,7 +43,7 @@ void main() {
     );
     tester.pumpWidget(
       MessageList(
-        label: 'Conversation',
+        semanticLabel: 'Conversation',
         controller: controller,
         messages: const [
           MessageEntry(
@@ -128,7 +128,7 @@ void main() {
     );
     tester.pumpWidget(
       MessageList(
-        label: 'Conversation',
+        semanticLabel: 'Conversation',
         controller: controller,
         messages: const [
           MessageEntry(id: 'm1', role: MessageRole.user, text: 'question'),
@@ -178,7 +178,7 @@ void main() {
     );
     tester.pumpWidget(
       MessageList(
-        label: 'Conversation',
+        semanticLabel: 'Conversation',
         controller: controller,
         messages: const [
           MessageEntry(id: 'm1', role: MessageRole.user, text: 'question'),
@@ -250,7 +250,7 @@ void main() {
     );
     tester.pumpWidget(
       MessageList(
-        label: 'Conversation',
+        semanticLabel: 'Conversation',
         controller: controller,
         messages: const [
           MessageEntry(id: 'm1', role: MessageRole.user, text: 'question'),
@@ -263,7 +263,7 @@ void main() {
 
     tester.pumpWidget(
       MessageList(
-        label: 'Conversation',
+        semanticLabel: 'Conversation',
         controller: controller,
         messages: const [
           MessageEntry(id: 'm1', role: MessageRole.user, text: 'question'),
@@ -302,7 +302,7 @@ void main() {
     final controller = MessageListController(followTail: true);
     tester.pumpWidget(
       MessageList(
-        label: 'Conversation',
+        semanticLabel: 'Conversation',
         controller: controller,
         messages: const [
           MessageEntry(id: 'm1', role: MessageRole.user, text: 'question'),
@@ -315,7 +315,7 @@ void main() {
 
     tester.pumpWidget(
       MessageList(
-        label: 'Conversation',
+        semanticLabel: 'Conversation',
         controller: controller,
         messages: const [
           MessageEntry(id: 'm1', role: MessageRole.user, text: 'question'),

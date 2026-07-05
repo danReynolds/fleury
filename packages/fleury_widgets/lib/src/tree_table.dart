@@ -1034,7 +1034,7 @@ class TreeTable<T> extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
-    this.label = 'Tree table',
+    this.semanticLabel = 'Tree table',
     this.maxVisible = 12,
     this.filter,
     this.searchIndex,
@@ -1071,7 +1071,7 @@ class TreeTable<T> extends StatefulWidget {
   final bool autofocus;
 
   /// Semantic label for the table.
-  final String label;
+  final String semanticLabel;
 
   /// Maximum visible body rows before the list scrolls.
   final int maxVisible;
@@ -1403,7 +1403,7 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
       onFocusChange: _onFocusWithinChange,
       child: Semantics(
         role: SemanticRole.tree,
-        label: widget.label,
+        label: widget.semanticLabel,
         focused: _focusedWithin || _focusNode.hasFocus,
         actions: {
           SemanticAction.focus,

@@ -116,7 +116,7 @@ class Table extends StatefulWidget {
     this.selectedStyle,
     this.sortColumnIndex,
     this.sortAscending = true,
-    this.label = 'Table',
+    this.semanticLabel = 'Table',
   }) : columnCount =
            header?.length ?? (rows.isNotEmpty ? rows.first.length : 0);
 
@@ -171,7 +171,7 @@ class Table extends StatefulWidget {
   final CellStyle? selectedStyle;
 
   /// Label exposed through the semantic app graph.
-  final String? label;
+  final String? semanticLabel;
 
   /// Columns, inferred from the header or first row.
   final int columnCount;
@@ -325,7 +325,7 @@ class _TableState extends State<Table> {
     if (c == 0) {
       return Semantics(
         role: SemanticRole.table,
-        label: widget.label,
+        label: widget.semanticLabel,
         state: const SemanticState({
           'collectionRowCount': 0,
           'collectionColumnCount': 0,
@@ -395,7 +395,7 @@ class _TableState extends State<Table> {
 
     final table = Semantics(
       role: SemanticRole.table,
-      label: widget.label,
+      label: widget.semanticLabel,
       value: selectedIndex,
       focused: _focusNode?.hasFocus ?? false,
       actions: _interactive

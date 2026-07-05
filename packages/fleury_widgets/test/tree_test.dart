@@ -116,7 +116,7 @@ void main() {
   testWidgets('exposes semantic tree and tree-item state', (tester) {
     tester.pumpWidget(
       const Tree<String>(
-        label: 'Project tree',
+        semanticLabel: 'Project tree',
         autofocus: true,
         roots: [
           TreeNode<String>(
@@ -171,7 +171,7 @@ void main() {
     String? activated;
     tester.pumpWidget(
       Tree<String>(
-        label: 'Project tree',
+        semanticLabel: 'Project tree',
         roots: const [
           TreeNode<String>(
             'src',

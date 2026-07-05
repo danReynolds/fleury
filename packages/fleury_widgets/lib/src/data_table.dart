@@ -566,7 +566,7 @@ class DataTable extends StatefulWidget {
     this.sortDirection,
     this.onSort,
     this.filterText,
-    this.label = 'Data table',
+    this.semanticLabel = 'Data table',
   });
 
   /// Number of source rows available to the table.
@@ -633,7 +633,7 @@ class DataTable extends StatefulWidget {
   final String? filterText;
 
   /// Semantic label for the table.
-  final String? label;
+  final String? semanticLabel;
 
   @override
   State<DataTable> createState() => _DataTableState();
@@ -915,7 +915,7 @@ class _DataTableState extends State<DataTable> {
       rowCount: widget.rowCount < 0 ? 0 : widget.rowCount,
       columns: widget.columns,
       cellBuilder: widget.cellBuilder,
-      label: widget.label,
+      semanticLabel: widget.semanticLabel,
       rowKeyBuilder: widget.rowKeyBuilder,
       selectedRow: _controller.selectedIndex,
       selectedColumn: _controller.selectedColumnIndex,
@@ -1083,7 +1083,7 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
     required this.rowCount,
     required this.columns,
     required this.cellBuilder,
-    required this.label,
+    required this.semanticLabel,
     required this.rowKeyBuilder,
     required this.selectedRow,
     required this.selectedColumn,
@@ -1109,7 +1109,7 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
   final int rowCount;
   final List<DataTableColumn> columns;
   final DataTableCellBuilder cellBuilder;
-  final String? label;
+  final String? semanticLabel;
   final DataTableRowKeyBuilder? rowKeyBuilder;
   final int selectedRow;
   final int selectedColumn;
@@ -1224,7 +1224,7 @@ class _DataTableElement extends LeafRenderObjectElement
     return SemanticNode(
       id: SemanticNodeId('$scope/table'),
       role: SemanticRole.table,
-      label: widget.label,
+      label: widget.semanticLabel,
       value: selectedKey,
       focused: widget.focusNode.hasFocus,
       selected: widget.rowCount > 0,

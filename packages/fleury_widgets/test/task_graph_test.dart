@@ -81,7 +81,7 @@ void main() {
       final controller = TaskGraphController(selectedIndex: 1);
       tester.pumpWidget(
         TaskGraph(
-          label: 'Release plan',
+          semanticLabel: 'Release plan',
           controller: controller,
           nodes: _nodes(),
         ),
@@ -168,7 +168,7 @@ void main() {
       final controller = TaskGraphController(selectedIndex: 0);
       tester.pumpWidget(
         TaskGraph(
-          label: 'Release plan',
+          semanticLabel: 'Release plan',
           controller: controller,
           nodes: _nodes(),
         ),
@@ -228,7 +228,7 @@ void main() {
       final controller = TaskGraphController(selectedIndex: 0);
       tester.pumpWidget(
         TaskGraph(
-          label: 'Release plan',
+          semanticLabel: 'Release plan',
           controller: controller,
           nodes: _nodes(),
         ),
@@ -273,7 +273,7 @@ void main() {
       final controller = TaskGraphController(selectedIndex: 2);
       tester.pumpWidget(
         TaskGraph(
-          label: 'Release plan',
+          semanticLabel: 'Release plan',
           controller: controller,
           nodes: _nodes(),
         ),
@@ -282,7 +282,7 @@ void main() {
 
       tester.pumpWidget(
         TaskGraph(
-          label: 'Release plan',
+          semanticLabel: 'Release plan',
           controller: controller,
           nodes: const [
             TaskGraphNode(
@@ -347,7 +347,7 @@ void main() {
     });
 
     testWidgets('accessibility snapshot describes task graph state', (tester) {
-      tester.pumpWidget(TaskGraph(label: 'Release plan', nodes: _nodes()));
+      tester.pumpWidget(TaskGraph(semanticLabel: 'Release plan', nodes: _nodes()));
       tester.render(size: const CellSize(80, 6));
 
       final graph = tester.accessibilitySnapshot().single(

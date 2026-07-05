@@ -359,7 +359,7 @@ Tabs(
     interactive: true,
     builder: () => _framed(
       Tree<String>(
-        label: 'project',
+        semanticLabel: 'project',
         roots: <TreeNode<String>>[
           TreeNode<String>(
             'lib/',

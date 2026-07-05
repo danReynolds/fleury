@@ -869,7 +869,7 @@ final class _LogRegionHarness extends StatelessWidget {
       filter: filter,
       searchIndex: searchIndex,
       autofocus: true,
-      label: 'Scenario logs',
+      semanticLabel: 'Scenario logs',
       copyOptions: const LogRegionCopyOptions(
         clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
       ),
@@ -1309,7 +1309,7 @@ final class _MarkdownViewHarness extends StatelessWidget {
       document: document,
       controller: controller,
       autofocus: true,
-      label: 'Scenario markdown',
+      semanticLabel: 'Scenario markdown',
       copyOptions: const MarkdownViewCopyOptions(
         clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
       ),
@@ -2877,7 +2877,7 @@ final class _ResizeStormHarness extends StatelessWidget {
           child: LogRegion(
             entries: logEntries,
             controller: logController,
-            label: 'Resize logs',
+            semanticLabel: 'Resize logs',
             copyOptions: const LogRegionCopyOptions(
               clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
             ),
@@ -3438,7 +3438,7 @@ final class _SubprocessOutputHarness extends StatelessWidget {
           child: TerminalOutputRegion(
             buffer: terminalBuffer,
             controller: terminalOutputController,
-            label: 'Captured terminal output',
+            semanticLabel: 'Captured terminal output',
             copyOptions: const LogRegionCopyOptions(
               clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
             ),
@@ -3464,7 +3464,7 @@ final class _TerminalOutputHarness extends StatelessWidget {
       buffer: buffer,
       controller: controller,
       autofocus: true,
-      label: 'Streaming terminal output',
+      semanticLabel: 'Streaming terminal output',
       copyOptions: const LogRegionCopyOptions(
         clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
       ),
@@ -4121,7 +4121,7 @@ final class _TreeTableHarness extends StatelessWidget {
       searchIndex: searchIndex,
       filter: filter,
       autofocus: true,
-      label: 'Scenario tree table',
+      semanticLabel: 'Scenario tree table',
       maxVisible: 24,
       copyOptions: const TreeTableCopyOptions(
         clipboardPolicy: ClipboardWritePolicy.inProcessOnly,

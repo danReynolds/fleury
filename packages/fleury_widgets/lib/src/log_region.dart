@@ -261,7 +261,7 @@ class LogRegion extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
-    this.label = 'Logs',
+    this.semanticLabel = 'Logs',
     this.showPrefix = true,
     this.maxLineLength = 1000,
     this.filter,
@@ -283,8 +283,8 @@ class LogRegion extends StatefulWidget {
   /// Whether the region should request focus when mounted.
   final bool autofocus;
 
-  /// Semantic and visual label for the region.
-  final String label;
+  /// Semantic label (the accessibility name; not rendered) for the region.
+  final String semanticLabel;
 
   /// Whether rows render severity/source/timestamp prefixes.
   final bool showPrefix;
@@ -497,7 +497,7 @@ class _LogRegionState extends State<LogRegion> {
       onFocusChange: _onFocusWithinChange,
       child: Semantics(
         role: SemanticRole.log,
-        label: widget.label,
+        label: widget.semanticLabel,
         focused: _focusedWithin || _focusNode.hasFocus,
         actions: {
           SemanticAction.focus,

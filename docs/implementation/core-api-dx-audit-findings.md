@@ -57,7 +57,25 @@ a way a Flutter dev will trip on immediately.
   edit. Non-breaking (new optional param). Cascades to `PasswordInput` for free.
 - **Effort:** low. **Recommend: land pre-freeze.**
 
-### A2 — No consistent "field name" parameter *(decide)*
+### A2 — No consistent "field name" parameter — **LANDED 2026-07-04 (rename)**
+
+**Decision (ratified):** `label` = the visible text, everywhere; `semanticLabel`
+= the accessibility-name override, everywhere. On investigation the drift was
+much wider than Table/DataTable: a whole **region family** — 17 widgets (Table,
+DataTable, TreeTable, Tree, DiffView, CodeView, MarkdownText/View, JsonView,
+TaskGraph, FileBrowser, SearchPanel, TerminalOutputRegion, ConversationNavigator,
+FileMentionPicker, LogRegion, MessageList, RadioGroup) — used `label` as an
+a11y-only region name (defaults like `'Table'`, `'Diff'`, never rendered), while
+the controls family used `label` as visible text and the inputs already used
+`semanticLabel`. The rename unifies the region family with fleury's own input
+convention. Widgets whose `label` IS rendered (controls, Gauge, Spinner,
+RangeSlider, PatchReview, ProcessPanel) and model classes (MenuItem,
+SelectOption, TreeNode, Bar, …) keep `label`. Two proofs the old name was a trap:
+the website's own Tree example passed `label: 'project'` expecting a visible
+title (it never rendered), and 12 of the fields' doc comments claimed "Semantic
+and **visual** label" when nothing rendered them (docs fixed too).
+
+*(original finding follows)*
 
 `label` is overloaded:
 - **Visible text** on `Checkbox`/`Toggle`/`Switch`/`Radio`/`Button`

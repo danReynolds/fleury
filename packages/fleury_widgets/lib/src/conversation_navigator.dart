@@ -238,7 +238,7 @@ class ConversationNavigator extends StatefulWidget {
     this.queryController,
     this.controller,
     this.matcher,
-    this.label = 'Conversations',
+    this.semanticLabel = 'Conversations',
     this.placeholder = 'Search conversations...',
     this.width = 60,
     this.maxVisible = 6,
@@ -265,8 +265,8 @@ class ConversationNavigator extends StatefulWidget {
   /// Optional app-owned matcher used instead of default ranked search.
   final ConversationMatcher? matcher;
 
-  /// Semantic and visual label for the navigator.
-  final String label;
+  /// Semantic label (the accessibility name; not rendered) for the navigator.
+  final String semanticLabel;
 
   /// Placeholder shown in the query input.
   final String placeholder;
@@ -694,7 +694,7 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
       ],
       child: Semantics(
         role: SemanticRole.conversationNavigator,
-        label: widget.label,
+        label: widget.semanticLabel,
         value: _query.text,
         focused: _queryFocusNode.hasFocus || _listFocusNode.hasFocus,
         actions: {

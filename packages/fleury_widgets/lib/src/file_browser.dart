@@ -149,7 +149,7 @@ class FileBrowser extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
-    this.label = 'Files',
+    this.semanticLabel = 'Files',
     this.maxVisible = 12,
     this.filter = const FileBrowserFilterDescriptor(),
     this.entityFilter,
@@ -172,8 +172,8 @@ class FileBrowser extends StatefulWidget {
   /// Whether the browser should request focus when mounted.
   final bool autofocus;
 
-  /// Semantic and visual label for the browser.
-  final String label;
+  /// Semantic label (the accessibility name; not rendered) for the browser.
+  final String semanticLabel;
 
   /// Maximum visible rows before the list scrolls.
   final int maxVisible;
@@ -511,7 +511,7 @@ class _FileBrowserState extends State<FileBrowser> {
 
     return Semantics(
       role: SemanticRole.tree,
-      label: widget.label,
+      label: widget.semanticLabel,
       value: _sanitizeFileText(_currentDirectory),
       focused: _focusNode.hasFocus,
       actions: {

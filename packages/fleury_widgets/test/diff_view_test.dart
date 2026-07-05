@@ -73,7 +73,7 @@ void main() {
 
   testWidgets('renders an old/new line-number gutter by default', (tester) {
     tester.pumpWidget(
-      DiffView(diff: '@@ -1,2 +1,2 @@\n context\n-old\n+new\n', label: 'Patch'),
+      DiffView(diff: '@@ -1,2 +1,2 @@\n context\n-old\n+new\n', semanticLabel: 'Patch'),
     );
     final output = tester.renderToString(
       size: const CellSize(40, 8),
@@ -88,7 +88,7 @@ void main() {
   });
 
   testWidgets('renders diff rows with aggregate and row semantics', (tester) {
-    tester.pumpWidget(DiffView(diff: _sampleDiff, label: 'Patch'));
+    tester.pumpWidget(DiffView(diff: _sampleDiff, semanticLabel: 'Patch'));
 
     final output = tester.renderToString(
       size: const CellSize(80, 12),
@@ -202,7 +202,7 @@ void main() {
       tester.pumpWidget(
         DiffView(
           diff: _sampleDiff,
-          label: 'Patch',
+          semanticLabel: 'Patch',
           controller: controller,
           copyOptions: const DiffViewCopyOptions(
             mode: DiffViewCopyMode.hunk,

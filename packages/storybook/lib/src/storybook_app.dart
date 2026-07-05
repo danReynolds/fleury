@@ -766,7 +766,7 @@ class _WidgetSelectorState extends State<_WidgetSelector> {
         results: results,
         queryController: _queryController,
         controller: _listController,
-        label: 'Widget selector',
+        semanticLabel: 'Widget selector',
         placeholder: 'Search widgets...',
         width: (widget.width - 3).clamp(20, 31),
         fillHeight: true,
