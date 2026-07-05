@@ -95,9 +95,10 @@ That's the whole pattern: controllers for values, functions for validation,
 `setState` to connect them, and nullable `onPressed` to gate submit. It scales
 to as many fields as you need without a form-specific API.
 
-> **Terminal-only shortcut:** `fleury_widgets` also ships a higher-level
-> `FormPanel` driven by a list of `FormFieldSpec`s (text, number, date, path,
-> select…) with built-in validation. It depends on `dart:io` (for the path
-> field), so it runs in a terminal or a served session but not an embedded
-> browser bundle. Reach for it for quick native config forms; hand-build with
-> the pattern above when you want full control or web portability.
+> **Higher-level shortcut:** `fleury_widgets` also ships a `FormPanel` driven by
+> a list of `FormFieldSpec`s (text, number, date, path, select…) with built-in
+> validation. It runs on all three surfaces — terminal, served, and embedded
+> browser — the one platform-specific bit, a path field's `mustExist`
+> filesystem check, simply no-ops in the browser (which has no filesystem to
+> check). Reach for it for quick declarative forms; hand-build with the pattern
+> above when you want full control over layout and interleaved widgets.

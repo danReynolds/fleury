@@ -17,7 +17,6 @@ import 'package:test/test.dart';
 const nativeOnly = {
   'src/file_browser.dart',
   'src/file_picker.dart',
-  'src/form.dart',
   'src/image.dart',
   'src/log_region.dart',
   'src/process_panel.dart',
