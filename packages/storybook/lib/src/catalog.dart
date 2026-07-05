@@ -219,6 +219,36 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
         _PickerStory(only: 'Stepper', onAction: context.action),
   ),
   Story(
+    id: 'core.panel',
+    title: 'Panel',
+    category: 'Core',
+    description:
+        'Bordered, titled pane framing for dashboards and multi-pane screens; '
+        'the accent border marks the focused pane.',
+    widgets: const <String>['Panel'],
+    initialHeight: 10,
+    builder: (context) => Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Expanded(
+          child: Panel(
+            title: 'CPU',
+            trailing: const Text('42%'),
+            focused: true,
+            child: Sparkline(data: const <num>[3, 5, 4, 8, 6, 9, 7, 5, 8, 6]),
+          ),
+        ),
+        Expanded(
+          child: Panel(
+            title: 'MEM',
+            trailing: const Text('61%'),
+            child: Sparkline(data: const <num>[6, 6, 5, 7, 7, 8, 6, 7, 8, 8]),
+          ),
+        ),
+      ],
+    ),
+  ),
+  Story(
     id: 'visualization.progress-bar',
     title: 'ProgressBar',
     category: 'Visualization',
