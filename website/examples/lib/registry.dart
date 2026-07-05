@@ -282,6 +282,38 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     ),
   ),
   ExampleInfo(
+    id: 'panel.basic',
+    widget: 'Panel',
+    category: 'Layout',
+    blurb:
+        'A bordered, titled pane — the standard framing for dashboards and '
+        'multi-pane screens; the accent border marks the focused pane.',
+    cols: 44,
+    rows: 8,
+    builder: () => _framed(
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Expanded(
+            child: Panel(
+              title: 'CPU',
+              trailing: Text('42%'),
+              focused: true,
+              child: Sparkline(data: <num>[3, 5, 4, 8, 6, 9, 7, 5, 8, 6]),
+            ),
+          ),
+          Expanded(
+            child: Panel(
+              title: 'MEM',
+              trailing: Text('61%'),
+              child: Sparkline(data: <num>[6, 6, 5, 7, 7, 8, 6, 7, 8, 8]),
+            ),
+          ),
+        ],
+      ),
+    ),
+  ),
+  ExampleInfo(
     id: 'progressbar.basic',
     widget: 'ProgressBar',
     category: 'Charts & meters',
@@ -359,7 +391,7 @@ Tabs(
     interactive: true,
     builder: () => _framed(
       Tree<String>(
-        label: 'project',
+        semanticLabel: 'project',
         roots: <TreeNode<String>>[
           TreeNode<String>(
             'lib/',

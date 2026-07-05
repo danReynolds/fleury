@@ -91,7 +91,7 @@ void main() {
       FileMentionPickResult? picked;
       tester.pumpWidget(
         FileMentionPicker(
-          label: 'Composer mentions',
+          semanticLabel: 'Composer mentions',
           entries: _entries(),
           autofocus: true,
           onPick: (result) => picked = result,
@@ -148,7 +148,7 @@ void main() {
       FileMentionPickResult? picked;
       tester.pumpWidget(
         FileMentionPicker(
-          label: 'Composer mentions',
+          semanticLabel: 'Composer mentions',
           entries: _entries(),
           controller: controller,
           onPick: (result) => picked = result,
@@ -210,7 +210,7 @@ void main() {
       final controller = FileMentionPickerController(selectedIndex: 2);
       tester.pumpWidget(
         FileMentionPicker(
-          label: 'Composer mentions',
+          semanticLabel: 'Composer mentions',
           entries: _entries(),
           controller: controller,
         ),
@@ -219,7 +219,7 @@ void main() {
 
       tester.pumpWidget(
         FileMentionPicker(
-          label: 'Composer mentions',
+          semanticLabel: 'Composer mentions',
           entries: [
             _entries()[0],
             const FileMentionEntry(

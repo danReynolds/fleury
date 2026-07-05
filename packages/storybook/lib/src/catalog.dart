@@ -219,6 +219,36 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
         _PickerStory(only: 'Stepper', onAction: context.action),
   ),
   Story(
+    id: 'core.panel',
+    title: 'Panel',
+    category: 'Core',
+    description:
+        'Bordered, titled pane framing for dashboards and multi-pane screens; '
+        'the accent border marks the focused pane.',
+    widgets: const <String>['Panel'],
+    initialHeight: 10,
+    builder: (context) => Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Expanded(
+          child: Panel(
+            title: 'CPU',
+            trailing: const Text('42%'),
+            focused: true,
+            child: Sparkline(data: const <num>[3, 5, 4, 8, 6, 9, 7, 5, 8, 6]),
+          ),
+        ),
+        Expanded(
+          child: Panel(
+            title: 'MEM',
+            trailing: const Text('61%'),
+            child: Sparkline(data: const <num>[6, 6, 5, 7, 7, 8, 6, 7, 8, 8]),
+          ),
+        ),
+      ],
+    ),
+  ),
+  Story(
     id: 'visualization.progress-bar',
     title: 'ProgressBar',
     category: 'Visualization',
@@ -2168,7 +2198,7 @@ class _TreesStory extends StatelessWidget {
     return switch (selectedWidgetName) {
       'Tree' || 'TreeNode' => SizedBox(
         width: 28,
-        child: Tree<String>(roots: _treeRoots, label: 'Package tree'),
+        child: Tree<String>(roots: _treeRoots, semanticLabel: 'Package tree'),
       ),
       _ => TreeTable<String>(
         roots: _roots,
@@ -2803,7 +2833,7 @@ class _FilesStory extends StatelessWidget {
         initialDirectory: cwd,
         filter: FileBrowserFilterDescriptor(showHidden: showHidden),
         maxVisible: 10,
-        label: 'Repository files',
+        semanticLabel: 'Repository files',
       ),
     };
   }
@@ -2817,12 +2847,12 @@ class _DocumentStory extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return switch (document) {
-      'Diff' => DiffView(diff: _sampleDiff, label: 'Diff sample'),
+      'Diff' => DiffView(diff: _sampleDiff, semanticLabel: 'Diff sample'),
       'Patch' => PatchReview(diff: _sampleDiff, label: 'Patch review'),
-      'JSON' => JsonView.string(_sampleJson, label: 'Story metadata'),
+      'JSON' => JsonView.string(_sampleJson, semanticLabel: 'Story metadata'),
       'Markdown' => MarkdownView(
         markdown: _sampleMarkdown,
-        label: 'Markdown sample',
+        semanticLabel: 'Markdown sample',
       ),
       _ => CodeView(
         source: _sampleCode,
@@ -2857,10 +2887,10 @@ class _SearchLogStoryState extends State<_SearchLogStory> {
   @override
   Widget build(BuildContext context) {
     return switch (widget.view) {
-      'Logs' => LogRegion(entries: _sampleLogs, label: 'Scenario logs'),
+      'Logs' => LogRegion(entries: _sampleLogs, semanticLabel: 'Scenario logs'),
       'Terminal' => TerminalOutputRegion(
         buffer: _buffer,
-        label: 'Captured output',
+        semanticLabel: 'Captured output',
       ),
       _ => SearchPanel(
         width: 56,
@@ -2899,7 +2929,7 @@ class _AgentStory extends StatelessWidget {
     return switch (view) {
       'Messages' => MessageList(
         messages: _sampleMessages,
-        label: 'Conversation',
+        semanticLabel: 'Conversation',
       ),
       'Conversations' => ConversationNavigator(
         width: 56,
@@ -3052,7 +3082,7 @@ class _WorkflowStoryState extends State<_WorkflowStory> {
         label: 'dart test packages/storybook',
       ),
       'Summary' => _WorkflowSummaryStory(snapshot: _sampleSnapshot),
-      _ => TaskGraph(nodes: _sampleTasks, label: 'DX plan'),
+      _ => TaskGraph(nodes: _sampleTasks, semanticLabel: 'DX plan'),
     };
   }
 }

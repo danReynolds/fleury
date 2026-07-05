@@ -79,7 +79,7 @@ void main() {
   ) {
     tester.pumpWidget(
       const TreeTable<String>(
-        label: 'Work tree',
+        semanticLabel: 'Work tree',
         roots: _roots,
         columns: _columns,
         autofocus: true,

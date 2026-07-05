@@ -150,7 +150,7 @@ class TaskGraph extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
-    this.label = 'Task graph',
+    this.semanticLabel = 'Task graph',
     this.copySelection = true,
     this.copyOptions = const TaskGraphCopyOptions(),
     this.onCopy,
@@ -168,8 +168,8 @@ class TaskGraph extends StatefulWidget {
   /// Whether the graph should request focus when mounted.
   final bool autofocus;
 
-  /// Semantic and visual label for the task graph.
-  final String label;
+  /// Semantic label (the accessibility name; not rendered) for the task graph.
+  final String semanticLabel;
 
   /// Whether Ctrl+C and semantic copy export the selected task.
   final bool copySelection;
@@ -403,7 +403,7 @@ class _TaskGraphState extends State<TaskGraph> {
       onFocusChange: _onFocusWithinChange,
       child: Semantics(
         role: SemanticRole.taskGraph,
-        label: widget.label,
+        label: widget.semanticLabel,
         focused: _focusedWithin || _focusNode.hasFocus,
         actions: {
           SemanticAction.focus,

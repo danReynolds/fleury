@@ -1747,7 +1747,7 @@ class _OverviewScreen extends StatelessWidget {
           SizedBox(
             height: 4,
             child: TaskGraph(
-              label: 'Demo workflow plan',
+              semanticLabel: 'Demo workflow plan',
               nodes: _demoWorkflowPlan(task, debugCaptures),
             ),
           ),
@@ -2407,7 +2407,7 @@ class _SearchScreen extends StatelessWidget {
         const SizedBox(height: 1),
         Expanded(
           child: SearchPanel(
-            label: 'Global search',
+            semanticLabel: 'Global search',
             placeholder: 'Search screens, runs, docs, and transcript',
             queryController: query,
             queryFocusNode: queryFocus,
@@ -2474,7 +2474,7 @@ class _IndexedLogsScreen extends StatelessWidget {
         const SizedBox(height: 1),
         Expanded(
           child: LogRegion(
-            label: 'Indexed demo logs',
+            semanticLabel: 'Indexed demo logs',
             entries: entries,
             controller: controller,
             focusNode: logFocus,
@@ -2898,7 +2898,7 @@ class _TreeTableScreen extends StatelessWidget {
         const Text('Framework components', style: CellStyle(dim: true)),
         const SizedBox(height: 1),
         TreeTable<String>(
-          label: 'Framework component tree',
+          semanticLabel: 'Framework component tree',
           roots: nodes,
           columns: _frameworkTreeColumns,
           controller: controller,
@@ -2947,7 +2947,7 @@ class _PayloadScreen extends StatelessWidget {
         const SizedBox(height: 1),
         Expanded(
           child: JsonView(
-            label: 'Demo payload',
+            semanticLabel: 'Demo payload',
             value: _demoPayload,
             controller: controller,
             focusNode: focusNode,
@@ -3069,7 +3069,7 @@ class _SourceScreen extends StatelessWidget {
         const SizedBox(height: 1),
         Expanded(
           child: CodeView(
-            label: 'Framework source',
+            semanticLabel: 'Framework source',
             source: _demoSource,
             language: 'dart',
             filePath: 'lib/launch_shell.dart',
@@ -3119,7 +3119,7 @@ class _DocsScreen extends StatelessWidget {
         const SizedBox(height: 1),
         Expanded(
           child: MarkdownView(
-            label: 'Launch docs',
+            semanticLabel: 'Launch docs',
             markdown: _demoMarkdown,
             controller: controller,
             focusNode: focusNode,
@@ -3177,7 +3177,7 @@ class _TranscriptScreen extends StatelessWidget {
         SizedBox(
           height: 5,
           child: ConversationNavigator(
-            label: 'Demo conversations',
+            semanticLabel: 'Demo conversations',
             conversations: conversations,
             maxVisible: 3,
             placeholder: 'Search conversations...',
@@ -3198,7 +3198,7 @@ class _TranscriptScreen extends StatelessWidget {
         SizedBox(
           height: 5,
           child: FileMentionPicker(
-            label: 'Composer file mentions',
+            semanticLabel: 'Composer file mentions',
             entries: fileMentions,
             maxVisible: 3,
             placeholder: 'Search files...',
@@ -3277,7 +3277,7 @@ class _TranscriptLog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MessageList(
-      label: 'Transcript events',
+      semanticLabel: 'Transcript events',
       controller: controller,
       focusNode: focusNode,
       showPrefix: false,

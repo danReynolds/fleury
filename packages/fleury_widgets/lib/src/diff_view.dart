@@ -300,7 +300,7 @@ class DiffView extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
-    this.label = 'Diff',
+    this.semanticLabel = 'Diff',
     this.maxLineLength = 1000,
     this.showLineNumbers = true,
     this.copySelection = true,
@@ -315,7 +315,7 @@ class DiffView extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
-    this.label = 'Diff',
+    this.semanticLabel = 'Diff',
     this.maxLineLength = 1000,
     this.showLineNumbers = true,
     this.copySelection = true,
@@ -335,8 +335,8 @@ class DiffView extends StatefulWidget {
   /// Whether the viewer should request focus when mounted.
   final bool autofocus;
 
-  /// Semantic and visual label for the diff viewer.
-  final String label;
+  /// Semantic label (the accessibility name; not rendered) for the diff viewer.
+  final String semanticLabel;
 
   /// Maximum displayed line length.
   final int? maxLineLength;
@@ -517,7 +517,7 @@ class _DiffViewState extends State<DiffView> {
       onFocusChange: _onFocusWithinChange,
       child: Semantics(
         role: SemanticRole.diff,
-        label: widget.label,
+        label: widget.semanticLabel,
         focused: _focusedWithin || _focusNode.hasFocus,
         actions: {
           SemanticAction.focus,

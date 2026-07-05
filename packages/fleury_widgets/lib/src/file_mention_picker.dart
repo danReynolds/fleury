@@ -211,7 +211,7 @@ class FileMentionPicker extends StatefulWidget {
     this.queryController,
     this.controller,
     this.matcher,
-    this.label = 'File mentions',
+    this.semanticLabel = 'File mentions',
     this.placeholder = 'Mention file...',
     this.width = 60,
     this.maxVisible = 6,
@@ -237,8 +237,8 @@ class FileMentionPicker extends StatefulWidget {
   /// Optional app-owned matcher used instead of default ranked search.
   final FileMentionMatcher? matcher;
 
-  /// Semantic and visual label for the picker.
-  final String label;
+  /// Semantic label (the accessibility name; not rendered) for the picker.
+  final String semanticLabel;
 
   /// Placeholder shown in the query input.
   final String placeholder;
@@ -658,7 +658,7 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
       ],
       child: Semantics(
         role: SemanticRole.fileMentionPicker,
-        label: widget.label,
+        label: widget.semanticLabel,
         value: _query.text,
         focused: _queryFocusNode.hasFocus || _resultsFocusNode.hasFocus,
         actions: {

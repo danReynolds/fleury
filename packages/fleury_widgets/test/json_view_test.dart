@@ -53,7 +53,7 @@ void main() {
   testWidgets('renders collapsed JSON structure with path semantics', (tester) {
     tester.pumpWidget(
       JsonView(
-        label: 'Run payload',
+        semanticLabel: 'Run payload',
         value: const {
           'name': 'fleury',
           'meta': {'version': 1, 'status': 'active'},
@@ -353,7 +353,7 @@ void main() {
   });
 
   testWidgets('invalid JSON string exposes parse error semantics', (tester) {
-    tester.pumpWidget(JsonView.string('{bad', label: 'Broken payload'));
+    tester.pumpWidget(JsonView.string('{bad', semanticLabel: 'Broken payload'));
 
     final output = tester.renderToString(
       size: const CellSize(80, 2),

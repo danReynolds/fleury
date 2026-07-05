@@ -304,7 +304,7 @@ void main() {
     final query = TextEditingController(text: 'deploy');
     tester.pumpWidget(
       SearchPanel(
-        label: 'Global search',
+        semanticLabel: 'Global search',
         results: results(),
         queryController: query,
         autofocus: true,

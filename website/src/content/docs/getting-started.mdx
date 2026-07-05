@@ -40,6 +40,12 @@ dependencies:
 
 Then run `dart pub get`.
 
+Two packages, one line each: `fleury` is the framework plus its theme-free
+primitives (layout, `Text`, text editing, focus), and `fleury_widgets` is the
+theme-driven control library on top (buttons, selects, tables, charts). The
+[core and targets](/architecture/core-and-targets/) page explains the split;
+day to day you just import both.
+
 ## 2. Hello, cells
 
 A Fleury app is a widget tree handed to `runApp`. You build it with the familiar

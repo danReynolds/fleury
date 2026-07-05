@@ -39,7 +39,7 @@ class Tree<T> extends StatefulWidget {
   const Tree({
     super.key,
     required this.roots,
-    this.label = 'Tree',
+    this.semanticLabel = 'Tree',
     this.focusNode,
     this.autofocus = false,
     this.onSelect,
@@ -47,7 +47,7 @@ class Tree<T> extends StatefulWidget {
   });
 
   final List<TreeNode<T>> roots;
-  final String label;
+  final String semanticLabel;
   final FocusNode? focusNode;
   final bool autofocus;
 
@@ -229,7 +229,7 @@ class _TreeState<T> extends State<Tree<T>> {
     // matched KeyBinding is terminal even when it returns ignored.)
     return Semantics(
       role: SemanticRole.tree,
-      label: widget.label,
+      label: widget.semanticLabel,
       focused: _focusNode.hasFocus,
       actions: const {SemanticAction.focus, SemanticAction.navigate},
       onAction: _handleTreeAction,

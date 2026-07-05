@@ -81,7 +81,7 @@ void main() {
 
   group('semantic id stability (RFC A1/A2)', () {
     DataTable runs({bool keyed = true}) => DataTable(
-      label: 'Runs',
+      semanticLabel: 'Runs',
       rowCount: 100,
       columns: _columns(),
       rowKeyBuilder: keyed ? (row) => 'RUN-$row' : null,
@@ -119,7 +119,7 @@ void main() {
         'segment or collide', (tester) {
       tester.pumpWidget(
         DataTable(
-          label: 'Runs',
+          semanticLabel: 'Runs',
           rowCount: 10,
           columns: _columns(),
           rowKeyBuilder: (row) => 'a/b~$row',
@@ -163,7 +163,7 @@ void main() {
     (tester) async {
       tester.pumpWidget(
         DataTable(
-          label: 'Runs',
+          semanticLabel: 'Runs',
           rowCount: 100000,
           columns: _columns(),
           rowKeyBuilder: (row) => 'RUN-$row',
@@ -237,7 +237,7 @@ void main() {
           Expanded(
             child: DataTable(
               key: const ValueKey('table-a'),
-              label: 'A',
+              semanticLabel: 'A',
               rowCount: 50,
               columns: _columns(),
               rowKeyBuilder: (row) => 'A-$row',
@@ -248,7 +248,7 @@ void main() {
           Expanded(
             child: DataTable(
               key: const ValueKey('table-b'),
-              label: 'B',
+              semanticLabel: 'B',
               rowCount: 50,
               columns: _columns(),
               rowKeyBuilder: (row) => 'B-$row',
@@ -278,7 +278,7 @@ void main() {
       'the active direction', (tester) async {
     String? sorted;
     DataTable build({void Function(String)? onSort}) => DataTable(
-      label: 'Runs',
+      semanticLabel: 'Runs',
       rowCount: 10,
       columns: _columns(),
       rowKeyBuilder: (row) => 'RUN-$row',
@@ -327,7 +327,7 @@ void main() {
     final requestedRows = <int>{};
     tester.pumpWidget(
       DataTable(
-        label: 'Runs table',
+        semanticLabel: 'Runs table',
         rowCount: 100000,
         columns: _columns(),
         rowKeyBuilder: (row) => 'RUN-$row',

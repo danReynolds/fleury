@@ -461,7 +461,7 @@ void main() {
     testWidgets('exposes table shape and cell coordinates', (tester) {
       tester.pumpWidget(
         Table(
-          label: 'People table',
+          semanticLabel: 'People table',
           header: const [Text('Name'), Text('Age')],
           rows: const [
             [Text('Al'), Text('30')],

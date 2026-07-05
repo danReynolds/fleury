@@ -124,7 +124,7 @@ class ProcessPanel extends StatelessWidget {
             controller: outputController,
             focusNode: focusNode,
             autofocus: autofocus,
-            label: '$title output',
+            semanticLabel: '$title output',
             filter: outputFilter,
             copySelection: copyOutput,
             copyOptions: copyOptions,

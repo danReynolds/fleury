@@ -484,7 +484,7 @@ class MarkdownView extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
-    this.label = 'Markdown',
+    this.semanticLabel = 'Markdown',
     this.baseStyle,
     this.maxLineLength = 1000,
     this.tabSize = 2,
@@ -505,7 +505,7 @@ class MarkdownView extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
-    this.label = 'Markdown',
+    this.semanticLabel = 'Markdown',
     this.baseStyle,
     this.maxLineLength = 1000,
     this.tabSize = 2,
@@ -527,8 +527,8 @@ class MarkdownView extends StatefulWidget {
   /// Whether the viewer should request focus when mounted.
   final bool autofocus;
 
-  /// Semantic and visual label for the Markdown viewer.
-  final String label;
+  /// Semantic label (the accessibility name; not rendered) for the Markdown viewer.
+  final String semanticLabel;
 
   /// Base text style merged into rendered Markdown spans.
   final CellStyle? baseStyle;
@@ -714,7 +714,7 @@ class _MarkdownViewState extends State<MarkdownView> {
       onFocusChange: _onFocusWithinChange,
       child: Semantics(
         role: SemanticRole.markdown,
-        label: widget.label,
+        label: widget.semanticLabel,
         focused: _focusedWithin || _focusNode.hasFocus,
         actions: {
           SemanticAction.focus,

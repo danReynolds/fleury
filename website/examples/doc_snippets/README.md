@@ -22,6 +22,8 @@ changes underneath a doc, the build goes red instead of the docs going stale.
 | `filterable_list.dart` | [Tutorial: a filterable list](../../src/content/docs/tutorial.md) |
 | `core_widgets.dart` | Lists & scrolling, Loading data, Input & gestures, Theming (RichText) |
 | `navigation_demo.dart` | [Navigation](../../src/content/docs/guides/navigation.md) |
+| `forms.dart` | [Forms & validation](../../src/content/docs/guides/forms.md) |
+| `shared_state.dart` | [State management](../../src/content/docs/guides/state-management.md) |
 | `semantic_actions.dart` | [Built for agents](../../../docs/agents-and-semantics.md) |
 
 Keep each file a single, self-contained program (real imports, a `main`) so it

@@ -246,7 +246,7 @@ class CodeView extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
-    this.label = 'Code',
+    this.semanticLabel = 'Code',
     this.language,
     this.filePath,
     this.maxLineLength = 1000,
@@ -272,7 +272,7 @@ class CodeView extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
-    this.label = 'Code',
+    this.semanticLabel = 'Code',
     this.language,
     this.filePath,
     this.maxLineLength = 1000,
@@ -296,8 +296,8 @@ class CodeView extends StatefulWidget {
   /// Whether the viewer should request focus when mounted.
   final bool autofocus;
 
-  /// Semantic and visual label for the code viewer.
-  final String label;
+  /// Semantic label (the accessibility name; not rendered) for the code viewer.
+  final String semanticLabel;
 
   /// Optional language hint used for coarse line classification.
   final String? language;
@@ -487,7 +487,7 @@ class _CodeViewState extends State<CodeView> {
       onFocusChange: _onFocusWithinChange,
       child: Semantics(
         role: SemanticRole.code,
-        label: widget.label,
+        label: widget.semanticLabel,
         focused: _focusedWithin || _focusNode.hasFocus,
         actions: {
           SemanticAction.focus,
