@@ -151,7 +151,22 @@ but isn't in onboarding); and a **Focus vs KeyBindings vs FocusNode decision
 tree**. (These overlap the readiness doc's "state-management story needs a
 concise authored guide.")
 
-### B3 — `Form`/file/image/log are terminal-only *(later)*
+### B3 — web-safe `Form` — **LANDED 2026-07-04**
+
+`FormPanel` now compiles to JavaScript and runs on all three surfaces. It was
+excluded from the web barrel only because of a single `dart:io` call —
+`FileSystemEntity.typeSync` in the path field's `mustExist` validation — plus an
+import of the native `fleury.dart` umbrella (everything it uses is in
+`fleury_core`). Fixed by a conditional import (`form_path_probe.dart` /
+`_io.dart`) so the filesystem probe no-ops on the web (a browser has no
+filesystem to check) and runs natively otherwise, and by importing
+`fleury_core`. Removed from the web-barrel exclusion (8→7 native-only widgets);
+proven with a dart2js compile of a `FormPanel` + path-field entrypoint (99 KB
+JS). The remaining native-only widgets (file browser/picker, image, log,
+process, terminal-output) genuinely need the platform. *(original finding
+follows)*
+
+### B3 (orig) — `Form`/file/image/log are terminal-only *(later)*
 
 `fleury_widgets_web.dart` excludes `file_browser`, `file_picker`, **`form`**,
 `image`, `log_region`, `process_panel`, `terminal_output_region`,

@@ -1,7 +1,12 @@
 import 'dart:async' show FutureOr, unawaited;
-import 'dart:io' show FileSystemEntity, FileSystemEntityType;
 
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_core.dart';
+
+// The path-field `mustExist` check is the Form's only platform coupling. A
+// conditional import swaps in the native (dart:io) probe when available and the
+// web stub otherwise, so the whole FormPanel compiles to JavaScript.
+import 'form_path_probe.dart'
+    if (dart.library.io) 'form_path_probe_io.dart';
 
 import 'calendar_heatmap.dart' show CalendarWeekStart;
 import 'controls.dart' show Button, ButtonVariant, Checkbox;
@@ -931,18 +936,15 @@ class FormController extends ChangeNotifier {
         return '${field.label} must be an absolute path.';
       }
       if (field.mustExist) {
-        final type = FileSystemEntity.typeSync(path);
-        if (type == FileSystemEntityType.notFound) {
-          return '${field.label} must exist.';
-        }
-        if (field.pathKind == FormPathKind.file &&
-            type != FileSystemEntityType.file) {
-          return '${field.label} must be a file.';
-        }
-        if (field.pathKind == FormPathKind.directory &&
-            type != FileSystemEntityType.directory) {
-          return '${field.label} must be a directory.';
-        }
+        // Native probes the filesystem; on the web this is a no-op (a browser
+        // can't see the server's files), so `mustExist` is skipped there.
+        final error = probeFormPathExistence(
+          path: path,
+          requireFile: field.pathKind == FormPathKind.file,
+          requireDirectory: field.pathKind == FormPathKind.directory,
+          label: field.label,
+        );
+        if (error != null) return error;
       }
     }
     if (field.type == FormFieldType.multiSelect) {
