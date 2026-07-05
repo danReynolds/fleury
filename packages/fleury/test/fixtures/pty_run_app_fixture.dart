@@ -27,6 +27,15 @@ void _nativeWrite(String s) {
   malloc.free(buf);
 }
 
+/// The canonical consumer shape under app-owned shutdown: runApp resolves
+/// with WHY the app ended (after the terminal is restored), and the caller
+/// owns the process exit code — 128+n for signals, 0 otherwise.
+Never _exitWith(AppExit appExit) => exit(switch (appExit.signal) {
+  AppSignal.interrupt => 130,
+  AppSignal.terminate => 143,
+  null => 0,
+});
+
 Future<void> main(List<String> args) async {
   final hookArg = args.where((a) => a.startsWith('--stray-hook=')).firstOrNull;
   if (hookArg != null) {
@@ -35,7 +44,7 @@ Future<void> main(List<String> args) async {
       print('HOOKED-PRINT');
       _nativeWrite('HOOKED-NATIVE\n');
     });
-    return runApp(
+    _exitWith(await runApp(
       const _PtySmokeApp(label: 'PTY-HOOK-MODE'),
       enableHotReload: false,
       onStrayOutput: (line) => hookFile.writeAsStringSync(
@@ -43,7 +52,7 @@ Future<void> main(List<String> args) async {
         mode: FileMode.append,
       ),
       onEvent: (event) => event is ResizeEvent ? const ExitRequested() : null,
-    );
+    ));
   }
   if (args.contains('--stray-output')) {
     Timer(const Duration(milliseconds: 300), () {
@@ -54,17 +63,17 @@ Future<void> main(List<String> args) async {
       // Hostile terminal payload (OSC title set) — replay must be sanitized.
       print('STRAY-HOSTILE \x1B]0;pwned\x07END');
     });
-    return runApp(
+    _exitWith(await runApp(
       const _PtySmokeApp(label: 'PTY-STRAY-MODE'),
       enableHotReload: false,
       // Exit cleanly on the harness's SIGWINCH — input-byte exits need a
       // controlling terminal (job control) that sandboxes/CI lack, but
       // SIGWINCH delivery works everywhere the resize smoke test does.
       onEvent: (event) => event is ResizeEvent ? const ExitRequested() : null,
-    );
+    ));
   }
   if (args.contains('--layout-crash')) {
-    return runApp(const _BoomWidget(), enableHotReload: false);
+    _exitWith(await runApp(const _BoomWidget(), enableHotReload: false));
   }
   if (args.contains('--handoff')) {
     final driver = createNativeTerminalDriver();
@@ -75,13 +84,15 @@ Future<void> main(List<String> args) async {
         }),
       );
     });
-    return runApp(
-      const _PtySmokeApp(label: 'PTY-HANDOFF-MODE'),
-      driver: driver,
-      enableHotReload: false,
+    _exitWith(
+      await runApp(
+        const _PtySmokeApp(label: 'PTY-HANDOFF-MODE'),
+        driver: driver,
+        enableHotReload: false,
+      ),
     );
   }
-  return runApp(const _PtySmokeApp(), enableHotReload: false);
+  _exitWith(await runApp(const _PtySmokeApp(), enableHotReload: false));
 }
 
 class _PtySmokeApp extends StatelessWidget {

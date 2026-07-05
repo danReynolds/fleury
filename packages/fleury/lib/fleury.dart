@@ -39,7 +39,15 @@ export 'src/runtime/output_capture.dart' show LogBuffer, LogLine, LogSource;
 export 'src/runtime/system_clipboard.dart' show SystemClipboard;
 export 'src/debug/debug_state.dart'
     show DebugConfig, DebugMode, DebugPanelSide;
-export 'src/runtime/run_app.dart' show ExitRequested, TuiEventHandler, runApp;
+export 'src/runtime/run_app.dart'
+    show
+        AppExit,
+        EventHandled,
+        EventResponse,
+        ExitRequested,
+        TuiEventHandler,
+        requestExit,
+        runApp;
 export 'src/terminal/native_driver.dart' show createNativeTerminalDriver;
 export 'src/terminal/posix_driver.dart' show PosixTerminalDriver;
 export 'src/terminal/windows_driver.dart' show WindowsTerminalDriver;

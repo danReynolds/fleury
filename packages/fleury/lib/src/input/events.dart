@@ -276,6 +276,42 @@ final class ResizeEvent extends TuiEvent {
   String toString() => 'ResizeEvent($size)';
 }
 
+/// A termination request delivered to the app, in platform-neutral terms.
+///
+/// On POSIX these map from SIGINT / SIGTERM; a remote host may synthesize
+/// them (e.g. a server shutting a session down). Kept free of `dart:io`
+/// types so non-POSIX drivers can emit them too.
+enum AppSignal {
+  /// Interactive interrupt — SIGINT (`kill -INT`). Note the in-terminal
+  /// Ctrl+C keypress arrives as a [KeyEvent] in raw mode, not as a signal.
+  interrupt,
+
+  /// Termination request — SIGTERM (supervisors, `kill`, service managers).
+  terminate,
+}
+
+/// The process received a termination request ([AppSignal]).
+///
+/// Delivered through the normal event stream so the app can run its own
+/// shutdown: `runApp`'s `onEvent` sees it first — returning `EventHandled`
+/// claims the signal (the app then finishes via `requestExit()`); any
+/// unclaimed [SignalEvent] keeps its POSIX meaning and terminates the app
+/// (`runApp` resolves with `AppExit.signal`). The driver arms a grace
+/// deadline at delivery, so a hung app still dies.
+@immutable
+final class SignalEvent extends TuiEvent {
+  const SignalEvent(this.signal);
+  final AppSignal signal;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SignalEvent && other.signal == signal;
+  @override
+  int get hashCode => Object.hash(SignalEvent, signal);
+  @override
+  String toString() => 'SignalEvent(${signal.name})';
+}
+
 // ---- helpers ---------------------------------------------------------------
 
 bool _setEquals(Set<KeyModifier> a, Set<KeyModifier> b) {
