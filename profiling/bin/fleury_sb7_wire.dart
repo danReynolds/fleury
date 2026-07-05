@@ -170,7 +170,7 @@ final class _WireResizeStormAppState extends State<_WireResizeStormApp> {
             child: LogRegion(
               entries: _logs,
               controller: _logController,
-              label: 'Resize logs',
+              semanticLabel: 'Resize logs',
               copyOptions: const LogRegionCopyOptions(
                 clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
               ),

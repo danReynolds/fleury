@@ -234,7 +234,7 @@ final class _WireMarkdownAppState extends State<_WireMarkdownApp> {
       document: _document,
       controller: _controller,
       autofocus: true,
-      label: 'Scenario markdown',
+      semanticLabel: 'Scenario markdown',
       copyOptions: const MarkdownViewCopyOptions(
         clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
       ),

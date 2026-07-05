@@ -13,7 +13,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dart-lang/setup-dart@v1
         with:
-          sdk: stable
+          # Pinned, not `stable`: the embedded serve-client asset is a dart2js
+          # build checked for freshness by recompiling and comparing, so a
+          # floating SDK silently re-breaks that test on every release. Bump
+          # deliberately and regenerate the asset in the same commit:
+          #   dart tool/fleury_dev.dart build-remote-client
+          sdk: 3.12.2
       - name: Bootstrap (pub get across packages)
         run: dart tool/fleury_dev.dart bootstrap
       - name: Check (analyze + test + dart2js smoke, all packages)
