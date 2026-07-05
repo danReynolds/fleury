@@ -8,4 +8,4 @@ library;
 export 'src/agent_tui.dart' show AgentApp;
 export 'src/dashboard.dart' show DashboardApp;
 export 'src/file_manager.dart' show FileManagerApp;
-export 'src/scaffold.dart' show Panel, SampleScaffold, fleurySampleTheme;
+export 'src/scaffold.dart' show SampleScaffold, fleurySampleTheme;

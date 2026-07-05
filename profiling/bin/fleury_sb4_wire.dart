@@ -236,7 +236,7 @@ final class _WireLogRegionAppState extends State<_WireLogRegionApp> {
       autofocus: true,
       showPrefix: false,
       copySelection: false,
-      label: 'SB.4 wire logs',
+      semanticLabel: 'SB.4 wire logs',
     );
   }
 }

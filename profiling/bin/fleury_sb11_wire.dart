@@ -227,7 +227,7 @@ final class _WireTreeTableAppState extends State<_WireTreeTableApp> {
               cellBuilder: _cell,
               searchIndex: _searchIndex,
               filter: _filter,
-              label: 'SB.11 tree table',
+              semanticLabel: 'SB.11 tree table',
               maxVisible: 24,
               copyOptions: const TreeTableCopyOptions(
                 clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
