@@ -57,15 +57,25 @@ paints absolute coordinates and full-clears (`2J`) on entry, so inline mode
 would stomp the user's visible screen rather than render an Ink-style bounded
 live region at the prompt (anchored, scrollback-preserving, persisting on
 exit). The "CLI tool with a live status region" use-case — build tools, test
-runners, installers, the segment that made Ink popular — is fleury's biggest
-*product* gap; today fleury only truly supports full-screen apps.
+runners, installers, wizards, the segment that made Ink popular — is fleury's
+biggest *product* gap; today fleury only truly supports full-screen apps.
 
-Options: (a) **build real inline mode** (anchor row, height = content height,
-relative repositioning, no `2J`, persist-on-exit) — a meaningful feature, not
-a weekend; (b) **delete the constant before API freeze** so the surface
-doesn't imply support, and note inline as post-launch roadmap. Doing neither
-ships a public flag that misbehaves. Recommend (b) now, (a) as a headline
-post-launch feature.
+This finding was subsequently explored in depth and **challenged against the
+agent showcase** — full analysis, peer landscape (inline is unanimous across
+Ink/Bubble Tea/Ratatui/Textual), design sketch, effort estimate (~2–3 weeks),
+and decision triggers now live in **[RFC 0016: Inline Mode](../rfcs/0016-inline-mode.md)**.
+Two refinements from that challenge: (1) the full-screen agent showcase is a
+*legitimate deliberate shape* (the Crush/OpenCode shape — app-owned history is
+mutable, resize-perfect, height-unbounded), so inline is **market coverage,
+not a correction**; (2) a cheap adjacent win exists regardless of inline —
+**exit persistence** for alt-screen apps (print the transcript/summary into
+the normal buffer on quit), closing full-screen's biggest practical loss for
+~a day of work.
+
+Recommendation stands: **delete the constant before API freeze** (a public
+flag that misbehaves), keep real inline as a headline post-launch feature
+gated on RFC 0016's triggers (notably: whether `dune_cli` turns out to be
+inline-shaped).
 
 ### 3. OSC niceties: window title + hyperlinks — **small, decide-and-do**
 
