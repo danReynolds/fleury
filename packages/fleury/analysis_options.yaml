@@ -1,6 +1,13 @@
 include: package:lints/recommended.yaml
 
 analyzer:
+  errors:
+    # stdio is a git dependency until it's published to pub.dev (tracked in
+    # its pubspec: `publish_to: none # flip to publish`). Publishing fleury
+    # itself will require flipping stdio to a hosted dep first — pub.dev
+    # enforces that at publish time, so suppressing the pre-publish warning
+    # here loses no safety.
+    invalid_dependency: ignore
   language:
     strict-casts: true
     strict-inference: true
