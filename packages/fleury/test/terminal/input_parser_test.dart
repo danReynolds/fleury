@@ -178,6 +178,22 @@ void main() {
     });
   });
 
+  group('back-tab (CSI Z)', () {
+    test('ESC [ Z decodes as Shift+Tab', () {
+      final events = _parse([0x1B, 0x5B, 0x5A]);
+      final key = events.single as KeyEvent;
+      expect(key.keyCode, KeyCode.tab);
+      expect(key.modifiers, {KeyModifier.shift});
+    });
+
+    test('ESC [ 1;5 Z merges ctrl with the implied shift', () {
+      final events = _parse([0x1B, 0x5B, 0x31, 0x3B, 0x35, 0x5A]);
+      final key = events.single as KeyEvent;
+      expect(key.keyCode, KeyCode.tab);
+      expect(key.modifiers, containsAll({KeyModifier.shift, KeyModifier.ctrl}));
+    });
+  });
+
   group('CSI tilde-finalised chords', () {
     test('CSI 5~ is pageUp, 6~ is pageDown', () {
       expect(_parse([0x1B, 0x5B, 0x35, 0x7E]), [
