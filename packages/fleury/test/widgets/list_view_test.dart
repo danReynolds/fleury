@@ -538,9 +538,10 @@ void main() {
       tester.render();
       expect(
         controller.selectedIndex,
-        0,
-        reason: 'initial selection is 0, pinToBottom only acts on growth',
+        2,
+        reason: 'following starts on the tail (following implies at-bottom)',
       );
+      expect(controller.atBottom, isTrue);
 
       // Simulate a new message arriving.
       tester.pumpWidget(
@@ -607,6 +608,112 @@ void main() {
         ),
       );
       expect(controller.selectedIndex, 1);
+    });
+  });
+
+  group('tail-follow (F2)', () {
+    testWidgets('scrolling off the tail unpins and counts arrivals; '
+        'jumpToBottom catches up', (tester) {
+      final controller = ListController(pinToBottom: true);
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 5,
+          itemBuilder: _itemBuilder,
+        ),
+      );
+      tester.render();
+      expect(controller.selectedIndex, 4);
+      expect(controller.pinToBottom, isTrue);
+      expect(controller.atBottom, isTrue);
+
+      // User scrolls up to read history — moving off the tail stops following.
+      controller.selectedIndex = 1;
+      expect(controller.pinToBottom, isFalse);
+      expect(controller.atBottom, isFalse);
+
+      // New items arrive while unfollowed: the cursor stays put (no yank) and
+      // the arrivals are counted.
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 8,
+          itemBuilder: _itemBuilder,
+        ),
+      );
+      expect(controller.selectedIndex, 1, reason: 'no yank while reading');
+      expect(controller.unseenCount, 3);
+      expect(controller.pinToBottom, isFalse);
+
+      // Catch up.
+      controller.jumpToBottom();
+      expect(controller.selectedIndex, 7);
+      expect(controller.pinToBottom, isTrue);
+      expect(controller.unseenCount, 0);
+      expect(controller.atBottom, isTrue);
+    });
+
+    testWidgets('returning the cursor to the tail re-pins and clears unseen', (
+      tester,
+    ) {
+      final controller = ListController(pinToBottom: true);
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 5,
+          itemBuilder: _itemBuilder,
+        ),
+      );
+      tester.render();
+
+      controller.selectedIndex = 2; // scroll up → unpin
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 7,
+          itemBuilder: _itemBuilder,
+        ),
+      );
+      expect(controller.unseenCount, 2);
+      expect(controller.pinToBottom, isFalse);
+
+      // Cursor back to the last item → re-pin, unseen cleared.
+      controller.selectedIndex = 6;
+      expect(controller.pinToBottom, isTrue);
+      expect(controller.unseenCount, 0);
+      expect(controller.atBottom, isTrue);
+
+      // Subsequent appends follow again.
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 9,
+          itemBuilder: _itemBuilder,
+        ),
+      );
+      expect(controller.selectedIndex, 8);
+      expect(controller.unseenCount, 0);
+    });
+
+    testWidgets('unseenCount stays zero while following', (tester) {
+      final controller = ListController(pinToBottom: true);
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 3,
+          itemBuilder: _itemBuilder,
+        ),
+      );
+      tester.render();
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 6,
+          itemBuilder: _itemBuilder,
+        ),
+      );
+      expect(controller.selectedIndex, 5);
+      expect(controller.unseenCount, 0, reason: 'following → nothing unseen');
     });
   });
 
