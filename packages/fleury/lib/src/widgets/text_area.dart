@@ -736,15 +736,22 @@ class RenderTextArea extends RenderObject {
       if (w > widest) widest = w;
     }
     final cols = constraints.hasBoundedWidth ? constraints.maxCols! : widest;
-    final int rows;
+    int rows;
     if (_maxLines != null) {
-      // Auto-grow: height tracks the content between minLines and maxLines; a
-      // bounded parent caps it further via constrain() at the end of layout.
+      // Auto-grow: height tracks the content between minLines and maxLines.
       rows = lines.length.clamp(_minLines, _maxLines!);
     } else if (constraints.hasBoundedHeight) {
       rows = constraints.maxRows!;
     } else {
       rows = lines.length < _minLines ? _minLines : lines.length;
+    }
+    // Cap to a bounded parent BEFORE the scroll math below. That math and the
+    // paint loop both use `rows`, so it must equal the final viewport height —
+    // otherwise constrain() would shrink the painted size afterwards, desyncing
+    // the two and scrolling the cursor line off-screen under a parent tighter
+    // than maxLines.
+    if (constraints.hasBoundedHeight && rows > constraints.maxRows!) {
+      rows = constraints.maxRows!;
     }
 
     // Scroll so the cursor's line stays visible.

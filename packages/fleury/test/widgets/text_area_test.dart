@@ -601,5 +601,30 @@ void main() {
         3,
       );
     });
+
+    testWidgets('auto-grow under a parent tighter than maxLines keeps the '
+        'cursor line visible', (tester) {
+      // maxLines (4) exceeds the 2-row slot the parent gives; the cursor is on
+      // the last line, so the capped viewport must scroll to it — the pre-fix
+      // scroll math ran against the un-capped height and froze on l0/l1,
+      // dropping the caret off-screen.
+      final ctl = TextEditingController(text: 'l0\nl1\nl2\nl3\nl4')
+        ..selection = 14; // end of the text, on line l4
+      tester.pumpWidget(
+        Column(
+          children: [
+            const Text('HEAD'),
+            SizedBox(
+              height: 2,
+              child: TextArea(controller: ctl, minLines: 1, maxLines: 4),
+            ),
+          ],
+        ),
+      );
+      final lines = _lines(tester, cols: 6, rows: 6);
+      expect(lines[0], 'HEAD');
+      // The 2-row area shows the tail around the cursor (l3, l4), not l0/l1.
+      expect(lines.sublist(1, 3), ['l3', 'l4']);
+    });
   });
 }
