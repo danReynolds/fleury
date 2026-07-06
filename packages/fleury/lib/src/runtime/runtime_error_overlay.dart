@@ -43,6 +43,8 @@ class RuntimeErrorReporter with ChangeNotifier {
   final Duration autoDismiss;
 
   final List<DateTime> _window = <DateTime>[];
+  final List<RuntimeErrorRecord> _history = <RuntimeErrorRecord>[];
+  static const _historyCap = 50;
   RuntimeErrorRecord? _current;
   int _shownCount = 0;
   Timer? _dismissTimer;
@@ -52,6 +54,12 @@ class RuntimeErrorReporter with ChangeNotifier {
 
   /// How many errors have stacked up behind the current banner.
   int get shownCount => _shownCount;
+
+  /// The most recent errors, oldest first, bounded to the last
+  /// [_historyCap]. Powers the debug shell's Errors tab; unlike [current]
+  /// it survives banner dismissal.
+  List<RuntimeErrorRecord> get history =>
+      List<RuntimeErrorRecord>.unmodifiable(_history);
 
   /// True when errors arrive faster than the app can recover — the runtime
   /// treats this as fatal rather than looping forever.
@@ -64,6 +72,8 @@ class RuntimeErrorReporter with ChangeNotifier {
     _window.removeWhere((t) => now.difference(t) > const Duration(seconds: 3));
     _shownCount = _current == null ? 1 : _shownCount + 1;
     _current = RuntimeErrorRecord(error, stackTrace, now);
+    _history.add(_current!);
+    if (_history.length > _historyCap) _history.removeAt(0);
     _dismissTimer?.cancel();
     if (autoDismiss > Duration.zero) {
       _dismissTimer = Timer(autoDismiss, dismiss);

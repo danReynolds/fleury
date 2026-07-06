@@ -357,6 +357,20 @@ class InputParser {
       return;
     }
 
+    if (finalByte == 0x5A) {
+      // 'Z' — back-tab: how legacy (non-kitty) terminals send Shift+Tab.
+      // The shift is implied by the final byte itself; merge it with any
+      // explicit modifier param (xterm sends `CSI 1;5Z` for Ctrl+Shift+Tab).
+      sink.add(
+        KeyEvent(
+          keyCode: KeyCode.tab,
+          modifiers: {...modifiers, KeyModifier.shift},
+          type: type,
+        ),
+      );
+      return;
+    }
+
     // Letter finals.
     final kc = switch (finalByte) {
       0x41 => KeyCode.arrowUp,

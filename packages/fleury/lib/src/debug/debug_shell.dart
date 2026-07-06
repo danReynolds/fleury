@@ -143,6 +143,7 @@ class _DebugShellState extends State<DebugShell> {
 /// Bindings:
 ///   Ctrl+G              toggle off ↔ last-used open mode
 ///   F11                 docked ↔ fullscreen (only while open)
+///   Tab / Shift+Tab     next / previous panel tab (only while open)
 ///   Esc                 fullscreen → docked (only when fullscreen)
 ///   F12                 show/hide Logs tab (open if off, close if
 ///                       already on Logs, switch tab otherwise)
@@ -178,6 +179,15 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
     } else {
       controller.selectTab(DebugTab.logs);
     }
+    return true;
+  }
+  if (controller.mode != DebugMode.off &&
+      event.keyCode == KeyCode.tab &&
+      !event.hasCtrl &&
+      !event.hasAlt) {
+    // While the shell is open, plain keys are shell-first (precedent: 'p'
+    // toggles paint flash). Tab / Shift+Tab cycle the panel tabs.
+    controller.nextTab(event.hasShift ? -1 : 1);
     return true;
   }
   if (event.char == 'p' && !event.hasCtrl && !event.hasAlt) {

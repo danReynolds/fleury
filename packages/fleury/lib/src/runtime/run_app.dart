@@ -383,6 +383,7 @@ Future<void> _runAppImpl(
   // while the boundary renders the in-place presentation.
   owner.onContainedRenderError = (contained) =>
       errorReporter.report(contained.error, contained.stack);
+  debugController.setErrorHistoryProvider(() => errorReporter.history);
 
   // Single idempotent teardown, driven by either the normal exit path
   // (the finally below) or the zone's uncaught-error handler.
