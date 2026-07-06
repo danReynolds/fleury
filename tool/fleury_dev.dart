@@ -321,7 +321,32 @@ class _Runner {
   }
 
   Future<void> check({required bool quick}) async {
-    await _run('dart', ['analyze'], workingDirectory: fleury);
+    // Analyze EVERY package first, before any test suite runs. `_run` aborts
+    // the whole check on the first failure, so an interleaved analyze/test
+    // order lets a red test mask every analyze after it — which is how a DT1
+    // change that broke `fleury_web`'s compile shipped green (the chronic
+    // asset-freshness test red aborted `check` before the web analyze ran).
+    // A compile break is the silent killer; front-loading analysis guarantees
+    // it surfaces even when a downstream test is red. (Profiling is analyzed
+    // too so a rename can't silently compile-out the wire-gate fixtures.)
+    for (final dir in [
+      fleury,
+      widgets,
+      git,
+      demo,
+      storybook,
+      web,
+      samples,
+      mcp,
+      profiling,
+    ]) {
+      await _run('dart', ['analyze'], workingDirectory: dir);
+    }
+
+    // Then the unit suites. The fleury INTEGRATION batch runs LAST (below),
+    // not here: it's the slowest and currently carries the chronic
+    // asset-freshness red, so keeping it out of the middle stops that one red
+    // from masking every package test after it too.
     if (quick) {
       await _run('dart', [
         'test',
@@ -333,29 +358,18 @@ class _Runner {
         '-x',
         'integration',
       ], workingDirectory: fleury);
-      await _run('dart', [
-        'test',
-        '-t',
-        'integration',
-        '--concurrency=1',
-      ], workingDirectory: fleury);
     }
-    await _run('dart', ['analyze'], workingDirectory: widgets);
     await _run(
       'dart',
       quick ? ['test', 'test/dashboard_demo_test.dart'] : ['test'],
       workingDirectory: widgets,
     );
-    await _run('dart', ['analyze'], workingDirectory: git);
     await _run('dart', ['test'], workingDirectory: git);
-    await _run('dart', ['analyze'], workingDirectory: demo);
     await _run('dart', [
       'test',
       'test/demo_console_test.dart',
     ], workingDirectory: demo);
-    await _run('dart', ['analyze'], workingDirectory: storybook);
     await _run('dart', ['test'], workingDirectory: storybook);
-    await _run('dart', ['analyze'], workingDirectory: web);
     // Explicit platforms: fleury_web splits VM-safe suites from
     // @TestOn('browser') ones, and a bare `dart test` silently skips the
     // browser set.
@@ -364,16 +378,8 @@ class _Runner {
       '-p',
       'vm,chrome',
     ], workingDirectory: web);
-    await _run('dart', ['analyze'], workingDirectory: samples);
     await _run('dart', ['test'], workingDirectory: samples);
-    await _run('dart', ['analyze'], workingDirectory: mcp);
     await _run('dart', ['test'], workingDirectory: mcp);
-    // Analyze the profiling package (wire-gate + the 12 SB wire fixtures) so a
-    // rename like `runTui`->`runApp` can't silently break the fixtures and
-    // leave the byte-regression gate compiled-out — which is exactly how it
-    // rotted undetected before. Analysis resolves every fixture's imports, so an
-    // undefined symbol fails the check the way a compile would.
-    await _run('dart', ['analyze'], workingDirectory: profiling);
     if (!quick) {
       // dart2js smoke: the doc-examples entrypoint pulls in fleury_core,
       // fleury_widgets_web, fleury_web, and the samples — the whole
@@ -386,6 +392,16 @@ class _Runner {
         '${Directory.systemTemp.path}/fleury-check-examples.js',
         '-O1',
       ], workingDirectory: webExamples);
+
+      // The fleury integration batch runs LAST: it's the slowest and carries
+      // the chronic asset-freshness red, so every other package's analyze +
+      // tests have already reported by the time it can abort the run.
+      await _run('dart', [
+        'test',
+        '-t',
+        'integration',
+        '--concurrency=1',
+      ], workingDirectory: fleury);
     }
   }
 
