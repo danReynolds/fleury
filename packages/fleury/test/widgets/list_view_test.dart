@@ -821,6 +821,219 @@ void main() {
       expect(lastSelected[1], isTrue);
     });
   });
+
+  group('ListView.separated (F3)', () {
+    // Single-line 'item{i}' rows and 'sep{i}' separators, so viewport row
+    // math is easy to reason about in the assertions below.
+    Widget itemB(BuildContext c, int i, bool sel) => Text('item$i');
+    Widget? sepB(BuildContext c, int i) => Text('sep$i');
+
+    List<String> nonEmptyRows(FleuryTester tester, CellSize size) => tester
+        .renderToString(size: size)
+        .split('\n')
+        .where((l) => l.isNotEmpty)
+        .toList();
+
+    testWidgets('separators render beneath each item, none after the last', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        ListView.separated(
+          itemCount: 3,
+          itemBuilder: itemB,
+          separatorBuilder: sepB,
+        ),
+      );
+      expect(nonEmptyRows(tester, const CellSize(8, 6)), [
+        'item0',
+        'sep0',
+        'item1',
+        'sep1',
+        'item2',
+      ]);
+    });
+
+    testWidgets('separatorBuilder is called per gap (0..count-2), never after '
+        'the last item', (tester) {
+      final gaps = <int>[];
+      tester.pumpWidget(
+        ListView.separated(
+          itemCount: 3,
+          itemBuilder: itemB,
+          separatorBuilder: (c, i) {
+            gaps.add(i);
+            return Text('sep$i');
+          },
+        ),
+      );
+      tester.render(size: const CellSize(8, 10)); // all three items fit
+      expect(gaps.toSet(), {0, 1});
+      expect(gaps, isNot(contains(2)));
+    });
+
+    testWidgets('separators consume viewport rows, so fewer items fit', (
+      tester,
+    ) {
+      final controller = ListController();
+      tester.pumpWidget(
+        ListView.separated(
+          controller: controller,
+          itemCount: 20,
+          itemBuilder: itemB,
+          separatorBuilder: sepB,
+        ),
+      );
+      // 5 rows: item0/sep0/item1/sep1/item2 — three items, last visible = 2.
+      // (Plain .builder would show 0..4 in the same 5 rows.)
+      tester.render(size: const CellSize(8, 5));
+      expect(controller.visibleRange, (first: 0, last: 2));
+    });
+
+    testWidgets('a null separator is omitted for that gap', (tester) {
+      tester.pumpWidget(
+        ListView.separated(
+          itemCount: 3,
+          itemBuilder: itemB,
+          // Separator only after item 0; the item1|item2 gap is null.
+          separatorBuilder: (c, i) => i == 0 ? Text('sep$i') : null,
+        ),
+      );
+      expect(nonEmptyRows(tester, const CellSize(8, 6)), [
+        'item0',
+        'sep0',
+        'item1',
+        'item2',
+      ]);
+    });
+
+    testWidgets('arrow nav walks items only — separators never take the '
+        'cursor', (tester) {
+      final selections = <int>[];
+      final controller = ListController();
+      tester.pumpWidget(
+        ListView.separated(
+          controller: controller,
+          itemCount: 4,
+          itemBuilder: itemB,
+          separatorBuilder: sepB,
+          autofocus: true,
+          onSelect: selections.add,
+        ),
+      );
+      tester.render(size: const CellSize(8, 12)); // 4 items + 3 seps = 7 rows
+      expect(controller.selectedIndex, 0);
+      // Each Down lands on the next item index — no half-step onto a separator.
+      for (final expected in [1, 2, 3]) {
+        tester.sendKey(_code(KeyCode.arrowDown));
+        tester.render(size: const CellSize(8, 12));
+        expect(controller.selectedIndex, expected);
+      }
+      // At the last item, Down is an edge — no phantom trailing-separator row.
+      tester.sendKey(_code(KeyCode.arrowDown));
+      tester.render(size: const CellSize(8, 12));
+      expect(controller.selectedIndex, 3);
+      // Enter reports the item index, not a separator position.
+      tester.sendKey(_code(KeyCode.enter));
+      expect(selections, [3]);
+    });
+
+    testWidgets('clicking a separator is inert; clicking an item selects and '
+        'fires onSelect', (tester) {
+      // A non-empty list defaults the cursor to 0 at mount, so we prove the
+      // separator is not a tap target via onSelect (which only _handleItemTap
+      // fires) rather than the selection value.
+      final activated = <int>[];
+      final controller = ListController(selectedIndex: 0);
+      tester.pumpWidget(
+        SizedBox(
+          width: 12,
+          height: 6,
+          child: ListView.separated(
+            controller: controller,
+            itemCount: 3,
+            onSelect: activated.add,
+            itemBuilder: (c, i, sel) =>
+                SizedBox(width: 12, height: 1, child: Text('item$i')),
+            separatorBuilder: (c, i) =>
+                SizedBox(width: 12, height: 1, child: Text('sep$i')),
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(12, 6));
+      // Rows: 0 item0, 1 sep0, 2 item1, 3 sep1, 4 item2.
+      // The separator on row 1 is not a gesture target — nothing fires and the
+      // selection is untouched.
+      tester.sendMouse(_mouse(MouseEventKind.down, 1, 1));
+      tester.sendMouse(_mouse(MouseEventKind.up, 1, 1));
+      expect(activated, isEmpty, reason: 'a separator is not a tap target');
+      expect(controller.selectedIndex, 0);
+      // The item on row 2 selects and fires onSelect(1) as usual.
+      tester.sendMouse(_mouse(MouseEventKind.down, 1, 2));
+      tester.sendMouse(_mouse(MouseEventKind.up, 1, 2));
+      expect(controller.selectedIndex, 1);
+      expect(activated, [1]);
+    });
+  });
+
+  group('ListView.builder at chat scale (F3 tall-row verification)', () {
+    testWidgets('10k items: only the viewport window is built', (tester) {
+      final built = <int>{};
+      final controller = ListController();
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 10000,
+          itemBuilder: (c, i, sel) {
+            built.add(i);
+            return Text('i$i');
+          },
+        ),
+      );
+      tester.render(size: const CellSize(8, 5));
+      // Jump deep into the list; measure only what the jump mounts. (A jump
+      // re-runs the outgoing window's builders once before layout moves on,
+      // so `built` holds ~two windows — never all 10k.)
+      built.clear();
+      controller.jumpToIndex(9000);
+      tester.render(size: const CellSize(8, 5));
+      expect(
+        built.length,
+        lessThan(30),
+        reason: 'lazy build must not visit all 10k items, saw ${built.length}',
+      );
+      expect(built, containsAll([9000, 9001, 9002, 9003, 9004]));
+      // The mounted viewport moved to the target — index 0 is well out of view.
+      expect(controller.visibleRange, (first: 9000, last: 9004));
+    });
+
+    testWidgets('a selected item taller than the viewport is shown from its '
+        'top without wedging the auto-scroll math', (tester) {
+      final controller = ListController();
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 10000,
+          itemBuilder: (c, i, sel) => SizedBox(
+            width: 8,
+            height: i == 5000 ? 8 : 1, // item 5000 is taller than the 5 rows
+            child: Text('i$i'),
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(8, 5));
+      expect(controller.visibleRange, (first: 0, last: 4));
+
+      // Jump the selection onto the oversized item, far below the fold.
+      controller.selectedIndex = 5000;
+      tester.render(size: const CellSize(8, 5));
+
+      // Graceful: the tall item anchors to the top and fills the viewport —
+      // the "does the selection fit?" math resolves to a single-item window
+      // instead of throwing or looping on an item bigger than the viewport.
+      expect(controller.selectedIndex, 5000);
+      expect(controller.visibleRange, (first: 5000, last: 5000));
+    });
+  });
 }
 
 /// Tracks mount/unmount per index for lazy-list lifecycle assertions.
