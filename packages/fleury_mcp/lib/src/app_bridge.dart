@@ -275,7 +275,10 @@ final class FleuryAppBridge {
   /// "not available" instead of hanging.
   Future<List<Object?>?> queryDebug(String kind, {int limit = 50}) {
     if (!isRunning) return Future<List<Object?>?>.value(null);
-    final seq = _debugSeq++;
+    // Wrap within the 32-bit range the wire seq round-trips (the response
+    // echoes it back through a 4-byte field); collisions only matter among the
+    // handful of concurrently-pending queries, which this never reaches.
+    final seq = _debugSeq = (_debugSeq + 1) & 0x7FFFFFFF;
     final completer = Completer<List<Object?>?>();
     _pendingDebug[seq] = completer;
     _send(DebugRequestFrame(seq, kind, limit: limit));

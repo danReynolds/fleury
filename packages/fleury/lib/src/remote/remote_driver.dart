@@ -238,7 +238,6 @@ final class RemoteTerminalDriver
   }
 
   @override
-  @override
   set onDebugRequest(RemoteDebugRequestHandler? handler) {
     _onDebugRequest = handler;
   }
