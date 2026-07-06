@@ -357,6 +357,11 @@ final class WireFrameSource implements BrowserFrameSource {
       case InputEventFrame _:
       case SemanticActionFrame _:
       case ClipboardResultFrame _:
+      // The agent-devtools debug channel (DT1) is a peer↔app concern; the
+      // browser client neither queries nor answers it (that's DT4's job),
+      // so both frames are outside its server→client contract.
+      case DebugRequestFrame _:
+      case DebugResponseFrame _:
         // Not part of the server→client contract; ignore.
         break;
     }
