@@ -6,6 +6,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:io';
 
 // The host SPI re-exports fleury_core plus the remote-render wire types
@@ -1681,6 +1682,102 @@ void main() {
     );
     await input.close();
   });
+
+  group('agent devtools (DT1) read_* tools', () {
+    // Caller must have pushed an initial tree + awaited bridge.ready.
+    Future<Map<String, Object?>> callRead(
+      int id,
+      String name, {
+      Object? respondJson,
+      String kind = 'frames',
+    }) async {
+      final pending = server.handleLine(
+        _rpc(id, 'tools/call', <String, Object?>{
+          'name': name,
+          'arguments': <String, Object?>{'limit': 5},
+        }),
+      );
+      // Let the tool dispatch and the bridge send its DebugRequestFrame.
+      await Future<void>.delayed(Duration.zero);
+      if (respondJson != null) {
+        final req = transport.sent.whereType<DebugRequestFrame>().last;
+        transport.addIncoming(
+          DebugResponseFrame(
+            req.seq,
+            kind,
+            Uint8List.fromList(utf8.encode(jsonEncode(respondJson))),
+          ),
+        );
+      }
+      await pending;
+      return toolJson(lastResult());
+    }
+
+    test('read_frames sends a request with the clamped limit and returns '
+        'the records', () async {
+      pushCount(0);
+      await bridge.ready;
+      final result = await callRead(
+        70,
+        'read_frames',
+        respondJson: <Object?>[
+          <String, Object?>{'frame': 3, 'buildUs': 42},
+        ],
+      );
+      final req = transport.sent.whereType<DebugRequestFrame>().single;
+      expect(req.kind, 'frames');
+      expect(req.limit, 5);
+      expect(result['available'], isTrue);
+      expect(result['kind'], 'frames');
+      expect((result['records'] as List).single, <String, Object?>{
+        'frame': 3,
+        'buildUs': 42,
+      });
+    });
+
+    test('read_logs and read_errors request their own kinds', () async {
+      pushCount(0);
+      await bridge.ready;
+      await callRead(71, 'read_logs', respondJson: const <Object?>[],
+          kind: 'logs');
+      expect(transport.sent.whereType<DebugRequestFrame>().last.kind, 'logs');
+      await callRead(72, 'read_errors', respondJson: const <Object?>[],
+          kind: 'errors');
+      expect(transport.sent.whereType<DebugRequestFrame>().last.kind, 'errors');
+    });
+
+    test('reports available:false when the app never answers (drain on exit)',
+        () async {
+      pushCount(0);
+      await bridge.ready;
+      final pending = server.handleLine(
+        _rpc(73, 'tools/call', <String, Object?>{
+          'name': 'read_frames',
+          'arguments': <String, Object?>{},
+        }),
+      );
+      await Future<void>.delayed(Duration.zero);
+      await transport.dropPeer(); // app exits → queryDebug drains to null
+      await pending;
+      // handleLine after exit: either the tool ran and returned unavailable,
+      // or the appExited guard fired — both are the "no data" contract.
+      final result = lastResult();
+      if (result['isError'] == true) {
+        expect(toolError(result), contains('exited'));
+      } else {
+        expect(toolJson(result)['available'], isFalse);
+      }
+    });
+
+    test('the three read tools are advertised in tools/list', () async {
+      await server.handleLine(_rpc(74, 'tools/list'));
+      final tools = (lastResult()['tools'] as List)
+          .map((t) => (t as Map)['name'])
+          .toSet();
+      expect(tools, containsAll(<String>['read_frames', 'read_logs', 'read_errors']));
+    });
+  });
+
 }
 
 String _rpc(int id, String method, [Map<String, Object?>? params]) {

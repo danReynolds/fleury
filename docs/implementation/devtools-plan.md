@@ -36,7 +36,7 @@ Rebuilds were keyboard-unreachable); CSI Z back-tab parsing (Shift+Tab was a
 dead key on legacy terminals); tab strip wraps at narrow widths; the
 [Debugging guide](../../website/src/content/docs/guides/debugging.md).
 
-## DT1 — Agent devtools via `fleury mcp` · **do first** · ~3–5 d
+## DT1 — Agent devtools via `fleury mcp` · **✅ LANDED** · ~3–5 d
 
 Expose the debug channel to agents alongside the semantic graph the MCP
 server already serves, in `packages/fleury_mcp`:
@@ -45,7 +45,7 @@ server already serves, in `packages/fleury_mcp`:
 - `debug_logs` — the `LogBuffer` tail (fd-captured stray output included),
 - `debug_errors` — the bounded `RuntimeErrorReporter` history.
 
-An agent driving a fleury app can then *read the devtools while it works* —
+**Landed** as the `read_frames` / `read_logs` / `read_errors` MCP tools (pull-style `debugRequest`/`debugResponse` wire frames → a runtime `DebugFrameLog` + query assembler → the bridge → MCP). An agent driving a fleury app can then *read the devtools while it works* —
 "your AI can use your debugger" is the sharpest one-line differentiator
 fleury's positioning can ship. It's mostly plumbing: the DT0 providers are the
 data source, and the MCP server already has the resource/tool patterns.

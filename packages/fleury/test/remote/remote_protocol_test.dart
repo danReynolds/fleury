@@ -254,6 +254,39 @@ void main() {
       );
     });
   });
+
+  group('debug frame pair (DT1)', () {
+    test('DEBUG_REQUEST round-trips seq, kind, limit', () {
+      final wire = encodeFrame(const DebugRequestFrame(7, 'frames', limit: 20));
+      final out = (FrameDecoder()..feed(wire)).drain().toList();
+      final f = out.single as DebugRequestFrame;
+      expect(f.seq, 7);
+      expect(f.kind, 'frames');
+      expect(f.limit, 20);
+    });
+
+    test('DEBUG_RESPONSE round-trips seq, kind, and the raw JSON payload', () {
+      final json = Uint8List.fromList(
+        '[{"frame":1,"buildUs":42}]'.codeUnits,
+      );
+      final wire = encodeFrame(DebugResponseFrame(9, 'frames', json));
+      final out = (FrameDecoder()..feed(wire)).drain().toList();
+      final f = out.single as DebugResponseFrame;
+      expect(f.seq, 9);
+      expect(f.kind, 'frames');
+      expect(f.json, json);
+    });
+
+    test('DEBUG_RESPONSE handles a high seq (>16-bit) and empty payload', () {
+      final wire = encodeFrame(
+        DebugResponseFrame(0x00ABCDEF, 'errors', Uint8List(0)),
+      );
+      final f = (FrameDecoder()..feed(wire)).drain().single
+          as DebugResponseFrame;
+      expect(f.seq, 0x00ABCDEF);
+      expect(f.json, isEmpty);
+    });
+  });
 }
 
 Uint8List _rawFrame(FrameType type, List<int> payload) {

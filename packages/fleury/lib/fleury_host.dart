@@ -90,6 +90,8 @@ export 'src/remote/remote_protocol.dart'
         CaretFrame,
         ClipboardResultFrame,
         ClipboardWriteFrame,
+        DebugRequestFrame,
+        DebugResponseFrame,
         FrameDecoder,
         FrameType,
         InitFrame,

@@ -768,7 +768,46 @@ final class McpServer {
         },
       },
     },
+    <String, Object?>{
+      'name': 'read_frames',
+      'description':
+          "Read the app's recent render-frame stats (agent devtools): per "
+          'frame the number, what triggered it, and build/layout/paint/diff '
+          'microseconds. Use it to diagnose why the UI is slow or repainting. '
+          'Needs the app to have debug tooling enabled (the default in dev '
+          'runs); returns available:false otherwise.',
+      'inputSchema': _debugToolSchema,
+    },
+    <String, Object?>{
+      'name': 'read_logs',
+      'description':
+          "Read the app's captured stdout/stderr — including native/library "
+          "output that Fleury captures at the file descriptor so it can't "
+          'corrupt the frame. Source-tagged, newest last. The agent equivalent '
+          "of tailing the app's console. Needs debug tooling enabled.",
+      'inputSchema': _debugToolSchema,
+    },
+    <String, Object?>{
+      'name': 'read_errors',
+      'description':
+          "Read the app's recent uncaught runtime errors (a throwing handler, "
+          'a failed async callback), each with its full stack trace and '
+          'timestamp, newest last. Use it after an action to see whether it '
+          'threw. Needs debug tooling enabled.',
+      'inputSchema': _debugToolSchema,
+    },
   ];
+
+  /// Shared input schema for the read_* debug tools: an optional record cap.
+  static const Map<String, Object?> _debugToolSchema = <String, Object?>{
+    'type': 'object',
+    'properties': <String, Object?>{
+      'limit': <String, Object?>{
+        'type': 'integer',
+        'description': 'Max records, newest kept (default 50, clamped 1–500).',
+      },
+    },
+  };
 
   static String get _actionNames =>
       SemanticAction.values.map((a) => a.name).join(', ');
@@ -811,6 +850,12 @@ final class McpServer {
           return await _serializeMutation(() => _toolResize(args));
         case 'wait_for_change':
           return await _toolWaitForChange(args, cancel: cancel);
+        case 'read_frames':
+          return await _toolReadDebug('frames', args);
+        case 'read_logs':
+          return await _toolReadDebug('logs', args);
+        case 'read_errors':
+          return await _toolReadDebug('errors', args);
         default:
           return _toolError('Unknown tool: $name', code: _ErrorCode.unknownTool);
       }
@@ -867,6 +912,31 @@ final class McpServer {
     // label/value.
     ui['untrustedContent'] = _untrustedContentNote;
     return ui;
+  }
+
+  Future<Map<String, Object?>> _toolReadDebug(
+    String kind,
+    Map<String, Object?> args,
+  ) async {
+    final raw = _optInt(args['limit']) ?? 50;
+    final limit = raw.clamp(1, 500);
+    final records = await bridge.queryDebug(kind, limit: limit);
+    if (records == null) {
+      return _toolJson(<String, Object?>{
+        'kind': kind,
+        'available': false,
+        'reason':
+            'The app did not answer the debug query — it may be built without '
+            'the debug channel, or running with debug tooling disabled '
+            '(release builds default off).',
+        'records': const <Object?>[],
+      });
+    }
+    return _toolJson(<String, Object?>{
+      'kind': kind,
+      'available': true,
+      'records': records,
+    });
   }
 
   Future<Map<String, Object?>> _toolGetUi() async {
