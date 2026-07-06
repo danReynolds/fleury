@@ -124,7 +124,9 @@ enum FrameType {
   clipboardWrite(0x17),
   clipboardResult(0x18),
   caret(0x19),
-  semanticActionResult(0x1A);
+  semanticActionResult(0x1A),
+  debugRequest(0x1B),
+  debugResponse(0x1C);
 
   const FrameType(this.code);
   final int code;
@@ -288,6 +290,32 @@ final class SemanticActionResultFrame extends RemoteFrame {
   final SemanticActionInvocationStatus status;
 }
 
+/// A pull-style debug query from the peer (agent bridge, future browser
+/// DevTools): "send me your recent [kind] records". Peer → app. [seq]
+/// correlates the [DebugResponseFrame]; [limit] bounds how many records the
+/// app returns (newest last). Kinds are strings so the set can grow without
+/// a protocol change; unknown kinds get an empty response, and apps older
+/// than this frame type skip it entirely (unknown-type frames are dropped
+/// by design) — peers must treat a missing response as "unsupported".
+final class DebugRequestFrame extends RemoteFrame {
+  const DebugRequestFrame(this.seq, this.kind, {this.limit = 50});
+  final int seq;
+  final String kind;
+  final int limit;
+}
+
+/// The app's answer to a [DebugRequestFrame]: the [seq] and [kind] echoed
+/// back with a JSON document of records (shape is per-kind; see
+/// `DebugFrameLog.toJson` / runApp's error serialization). App → peer.
+final class DebugResponseFrame extends RemoteFrame {
+  const DebugResponseFrame(this.seq, this.kind, this.json);
+  final int seq;
+  final String kind;
+
+  /// UTF-8 JSON document bytes (a list of records).
+  final Uint8List json;
+}
+
 /// Either side signals a clean shutdown. Empty payload.
 final class ByeFrame extends RemoteFrame {
   const ByeFrame();
@@ -324,6 +352,14 @@ Uint8List encodeFrame(RemoteFrame frame) {
       _encodeClipboardResult(f),
     ),
     CaretFrame f => (FrameType.caret, _encodeCaret(f)),
+    DebugRequestFrame f => (
+      FrameType.debugRequest,
+      utf8.encode(jsonEncode({'seq': f.seq, 'kind': f.kind, 'limit': f.limit})),
+    ),
+    DebugResponseFrame f => (
+      FrameType.debugResponse,
+      _encodeDebugResponse(f),
+    ),
     ByeFrame() => (FrameType.bye, const <int>[]),
   };
   final out = BytesBuilder(copy: false);
@@ -551,6 +587,23 @@ final class FrameDecoder {
             'SEMANTIC_ACTION_RESULT frame: ${e.message}.',
           );
         }
+      case FrameType.debugRequest:
+        try {
+          final map = jsonDecode(utf8.decode(payload)) as Map<String, Object?>;
+          return DebugRequestFrame(
+            map['seq'] as int,
+            map['kind'] as String,
+            limit: (map['limit'] as int?) ?? 50,
+          );
+        } on Object catch (e) {
+          throw RemoteProtocolException('DEBUG_REQUEST frame: $e.');
+        }
+      case FrameType.debugResponse:
+        try {
+          return _decodeDebugResponse(payload);
+        } on Object catch (e) {
+          throw RemoteProtocolException('DEBUG_RESPONSE frame: $e.');
+        }
       case FrameType.inlineImage:
         return _decodeInlineImage(payload);
       case FrameType.clipboardWrite:
@@ -633,4 +686,40 @@ Map<String, String> _parseParams(String body) {
     out[pair.substring(0, eq)] = pair.substring(eq + 1);
   }
   return out;
+}
+
+// Debug response payload: 4-byte LE seq, 1-byte kind length, kind bytes,
+// then the raw JSON document — avoids JSON-escaping the (potentially large)
+// document into an envelope.
+Uint8List _encodeDebugResponse(DebugResponseFrame f) {
+  final kind = utf8.encode(f.kind);
+  final out = BytesBuilder(copy: false)
+    ..addByte(f.seq & 0xFF)
+    ..addByte((f.seq >> 8) & 0xFF)
+    ..addByte((f.seq >> 16) & 0xFF)
+    ..addByte((f.seq >> 24) & 0xFF)
+    ..addByte(kind.length)
+    ..add(kind)
+    ..add(f.json);
+  return out.toBytes();
+}
+
+DebugResponseFrame _decodeDebugResponse(Uint8List payload) {
+  if (payload.length < 5) {
+    throw const RemoteProtocolException('DEBUG_RESPONSE: short payload.');
+  }
+  final seq = payload[0] |
+      (payload[1] << 8) |
+      (payload[2] << 16) |
+      (payload[3] << 24);
+  final kindLen = payload[4];
+  if (payload.length < 5 + kindLen) {
+    throw const RemoteProtocolException('DEBUG_RESPONSE: truncated kind.');
+  }
+  final kind = utf8.decode(payload.sublist(5, 5 + kindLen));
+  return DebugResponseFrame(
+    seq,
+    kind,
+    Uint8List.sublistView(payload, 5 + kindLen),
+  );
 }

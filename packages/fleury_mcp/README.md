@@ -200,6 +200,16 @@ as text JSON (the model-facing channel) and as MCP `structuredContent`.
 | `press_key` | A named key (enter, tab, arrows, f1–f12) or a chord (ctrl/alt/shift). Prefer `invoke_action` when a semantic action exists. |
 | `resize` | Resize the viewport to reflow the layout and surface more rows of a windowed widget. |
 | `wait_for_change` | Block until the UI updates on its own (a ticking dashboard, a streaming response) instead of polling. |
+| `read_frames` | **Agent devtools:** recent render-frame stats (number, trigger, build/layout/paint/diff µs) — diagnose slowness or excess repaints. |
+| `read_logs` | **Agent devtools:** the app's captured stdout/stderr, including native/library output Fleury captures at the file descriptor. Source-tagged, newest last. |
+| `read_errors` | **Agent devtools:** recent uncaught runtime errors with full stack traces and timestamps — check whether an action threw. |
+
+> The three `read_*` tools are the agent side of Fleury's debug shell (the same
+> frame stats, captured logs, and error history a developer sees under F12) —
+> so an agent driving the app can *read its devtools while it works*, not just
+> the UI. They need the app to have debug tooling enabled (the default in
+> development runs; release builds default off), and return `available:false`
+> otherwise.
 
 ### Options
 

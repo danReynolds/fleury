@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../foundation/geometry.dart';
 import '../remote/remote_protocol.dart' show RemoteClipboardStatus;
 import '../rendering/cell_buffer.dart';
@@ -10,6 +12,16 @@ import 'frame_presentation.dart';
 /// payload carried by [SemanticAction.setValue]; null for every other action.
 typedef RemoteSemanticActionHandler =
     void Function(SemanticNodeId id, SemanticAction action, Object? value);
+
+/// Handles an inbound debug query from the peer (an agent bridge or a future
+/// browser DevTools panel asking for recent frame stats / error records).
+/// Implementations answer via [RemoteSurfaceSink.presentDebugResponse] with
+/// the same [seq].
+typedef RemoteDebugRequestHandler = void Function(
+  int seq,
+  String kind,
+  int limit,
+);
 
 /// A driver that wants structured frames instead of ANSI bytes.
 ///
@@ -73,4 +85,15 @@ abstract interface class RemoteSurfaceSink {
   /// action against the live tree. Set to null to clear. Completes the round
   /// trip that [presentSemantics] starts.
   set onSemanticAction(RemoteSemanticActionHandler? handler);
+
+  /// Registers a handler for the peer's pull-style debug queries ("send me
+  /// your recent frame stats / errors"). `runApp` wires this to its debug
+  /// providers when debug tooling is enabled; null (the default) leaves
+  /// requests unanswered and the peer's timeout reports the app as not
+  /// debuggable.
+  set onDebugRequest(RemoteDebugRequestHandler? handler);
+
+  /// Answers a debug query: [seq] echoes the request, [kind] names the
+  /// record type, [json] is the UTF-8 JSON document of records.
+  void presentDebugResponse(int seq, String kind, Uint8List json);
 }

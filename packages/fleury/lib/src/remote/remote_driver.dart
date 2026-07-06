@@ -64,6 +64,7 @@ final class RemoteTerminalDriver
   final _RemoteParserSink _sink = _RemoteParserSink();
   final SemanticsWireEncoder _semanticsEncoder = SemanticsWireEncoder();
   RemoteSemanticActionHandler? _onSemanticAction;
+  RemoteDebugRequestHandler? _onDebugRequest;
   void Function(int seq, RemoteClipboardStatus status)? _onClipboardResult;
 
   StreamSubscription<RemoteFrame>? _frameSub;
@@ -237,6 +238,16 @@ final class RemoteTerminalDriver
   }
 
   @override
+  set onDebugRequest(RemoteDebugRequestHandler? handler) {
+    _onDebugRequest = handler;
+  }
+
+  @override
+  void presentDebugResponse(int seq, String kind, Uint8List json) {
+    _transport.send(DebugResponseFrame(seq, kind, json));
+  }
+
+  @override
   set onSemanticAction(RemoteSemanticActionHandler? handler) {
     _onSemanticAction = handler;
   }
@@ -315,6 +326,7 @@ final class RemoteTerminalDriver
       case SemanticsFrame _:
       case InlineImageFrame _:
       case SemanticActionResultFrame _:
+      case DebugResponseFrame _:
       case CaretFrame _:
       case ClipboardWriteFrame _:
         // App→peer render frames; an app never receives them. Ignore so a
@@ -328,6 +340,8 @@ final class RemoteTerminalDriver
         if (_active && wantsPresentationPlans) {
           _onSemanticAction?.call(f.id, f.action, f.value);
         }
+      case DebugRequestFrame f:
+        if (_active) _onDebugRequest?.call(f.seq, f.kind, f.limit);
       case InputEventFrame f:
         // Structured input from a v2 peer: surface the event directly
         // instead of parsing ANSI. A resize event also updates the cached

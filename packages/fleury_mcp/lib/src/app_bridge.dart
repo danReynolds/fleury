@@ -13,6 +13,7 @@
 // `fleury serve --spawn` uses), and wires the two together.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 // The host SPI: semantics + the remote-render wire (frame protocol, codec,
@@ -262,6 +263,34 @@ final class FleuryAppBridge {
     );
   }
 
+  int _debugSeq = 0;
+  final Map<int, Completer<List<Object?>?>> _pendingDebug =
+      <int, Completer<List<Object?>?>>{};
+
+  /// Pulls a bounded, newest-last list of debug records of [kind]
+  /// (`frames` / `logs` / `errors`) from the running app — the DT1 agent
+  /// devtools channel. Returns the decoded JSON records, or null when the app
+  /// doesn't answer within the timeout (an app built before this protocol
+  /// frame, or one with debug tooling disabled), so a tool call degrades to
+  /// "not available" instead of hanging.
+  Future<List<Object?>?> queryDebug(String kind, {int limit = 50}) {
+    if (!isRunning) return Future<List<Object?>?>.value(null);
+    // Wrap within the 32-bit range the wire seq round-trips (the response
+    // echoes it back through a 4-byte field); collisions only matter among the
+    // handful of concurrently-pending queries, which this never reaches.
+    final seq = _debugSeq = (_debugSeq + 1) & 0x7FFFFFFF;
+    final completer = Completer<List<Object?>?>();
+    _pendingDebug[seq] = completer;
+    _send(DebugRequestFrame(seq, kind, limit: limit));
+    return completer.future.timeout(
+      const Duration(seconds: 2),
+      onTimeout: () {
+        _pendingDebug.remove(seq);
+        return null;
+      },
+    );
+  }
+
   /// Types [text] into the focused widget (a structured text-input event, the
   /// same one a keypress would produce on the serve path).
   void typeText(String text) {
@@ -401,7 +430,19 @@ final class FleuryAppBridge {
       case SemanticActionFrame _:
       case CaretFrame _:
       case ClipboardResultFrame _:
+      case DebugRequestFrame _:
         break;
+      case DebugResponseFrame f:
+        final pending = _pendingDebug.remove(f.seq);
+        if (pending != null && !pending.isCompleted) {
+          try {
+            pending.complete(
+              jsonDecode(utf8.decode(f.json)) as List<Object?>,
+            );
+          } catch (_) {
+            pending.complete(null); // malformed payload — treat as unavailable
+          }
+        }
       case ClipboardWriteFrame f:
         // The app copied. An MCP bridge has no user clipboard; answer
         // immediately so the app's report degrades to its in-process
@@ -433,6 +474,10 @@ final class FleuryAppBridge {
   }
 
   void _markExited() {
+    for (final c in _pendingDebug.values) {
+      if (!c.isCompleted) c.complete(null);
+    }
+    _pendingDebug.clear();
     _renderWatchdog?.cancel();
     if (!_exited.isCompleted) _exited.complete();
     // Unblock `ready` rather than erroring it — an app that exits before its

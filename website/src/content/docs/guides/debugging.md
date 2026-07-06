@@ -70,6 +70,14 @@ builds (`dart compile exe`), keyed off `dart.vm.product` — a shipped binary
 has no debug hotkeys or event collection unless you opt back in with
 `enabled: true`.
 
+## Agents can read the shell too
+
+The same frame stats, captured logs, and error history are exposed to agents
+through [`fleury_mcp`](https://github.com/danReynolds/fleury/tree/main/packages/fleury_mcp)
+as the `read_frames`, `read_logs`, and `read_errors` tools — so an AI driving
+your app over MCP can *read its devtools while it works*, not just the UI tree.
+They need debug tooling enabled (the default in development runs).
+
 ## Extras
 
 - **Stray-output hook** — take captured lines live instead of the

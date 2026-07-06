@@ -60,6 +60,8 @@ import 'hot_reload.dart';
 import 'semantic_flush_scheduler.dart';
 import 'system_clipboard.dart';
 import 'input_dispatcher.dart';
+import '../debug/debug_frame_log.dart';
+import 'debug_query.dart';
 import 'output_capture.dart';
 import 'remote_surface_sink.dart';
 import 'tui_frame_loop.dart';
@@ -342,6 +344,11 @@ Future<void> _runAppImpl(
   // Captures stray output (see below). The buffer powers replay-on-exit; the
   // optional hook lets the caller route lines live (e.g. to a file).
   final logBuffer = LogBuffer();
+  // Headless frame log for a remote debug consumer (agent bridge / browser
+  // DevTools). Created only when a served session has debug enabled; its
+  // subscription is what turns on per-frame timing capture, so it stays off
+  // otherwise. Disposed in cleanup.
+  DebugFrameLog? debugFrameLog;
   final capture = OutputCapture(
     buffer: logBuffer,
     onLine: onStrayOutput,
@@ -404,6 +411,7 @@ Future<void> _runAppImpl(
     hotReload = null;
     debugController.setSemanticTreeProvider(null);
     debugController.setTerminalDiagnosisProvider(null);
+    debugFrameLog?.dispose();
     DebugInvalidations.reset();
     dispatcher.dispose();
     errorReporter.dispose();
@@ -506,6 +514,27 @@ Future<void> _runAppImpl(
             }());
             scheduleFrame('semantic-action:${action.name}');
           };
+
+          // Agent devtools (DT1): the peer pulls recent frame stats / logs /
+          // errors. Only when the app opted into debug tooling — otherwise a
+          // served production session exposes nothing and the peer's timeout
+          // reports it as not debuggable.
+          if (debugController.config.enabled) {
+            debugFrameLog = DebugFrameLog();
+            negotiatedSink.onDebugRequest = (seq, kind, limit) {
+              negotiatedSink.presentDebugResponse(
+                seq,
+                kind,
+                buildDebugResponseJson(
+                  kind,
+                  limit: limit,
+                  frameLog: debugFrameLog,
+                  logBuffer: logBuffer,
+                  errorReporter: errorReporter,
+                ),
+              );
+            };
+          }
         }
         try {
           // Wrap the app in:
