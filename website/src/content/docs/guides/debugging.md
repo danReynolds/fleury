@@ -1,0 +1,83 @@
+---
+title: Debugging
+description: The built-in debug shell — a toggleable sidebar with live frame stats, the semantic tree, rebuild diagnostics, captured logs, and runtime errors.
+---
+
+Every fleury app ships with a **debug shell**: a dockable sidebar you can
+toggle at any time during development, with no setup, no separate process, and
+full support over SSH (it renders in the same terminal). It is on by default
+in development runs and off by default in release builds.
+
+## Toggling it
+
+| Key | Action |
+| --- | --- |
+| `Ctrl+G` | Open / close the shell (docked to the right by default) |
+| `F11` | Docked ↔ fullscreen (while open) |
+| `F12` | Jump straight to the **Logs** tab (opens the shell if closed; pressed again on Logs, closes it) |
+| `Tab` / `Shift+Tab` | Next / previous tab (while open) |
+| `p` | Toggle **paint flash** — repainted regions flash so you can *see* what each frame touched (while open) |
+| `Esc` | Fullscreen → back to docked |
+
+The shell's hotkeys are routed *before* the app's input dispatcher, so they
+work everywhere — including inside modal routes. While the shell is open,
+these keys belong to the shell; close it (`Ctrl+G`) to give `Tab` and `p`
+back to the app.
+
+## The tabs
+
+- **Live** — frame number, slow-frame count (>16ms), approximate FPS, and
+  per-phase timings (build / layout / paint) with recent history.
+- **Tree** — the live **semantic tree** (the same agent-legible tree your
+  tests and `fleury mcp` consume), plus the terminal diagnosis: detected
+  capabilities, color mode, image protocol, session type. Arrow keys move the
+  node cursor; `Home` resets it.
+- **Rebuilds** — what dirtied each frame: invalidation sources, last phase
+  costs, and a recent-frames table. Pair with paint flash (`p`) to hunt
+  unnecessary repaints.
+- **Logs** — everything the stray-output capture caught: `print`s, logger
+  writes, and even **native/FFI library output** (fleury captures at the file
+  descriptor, so a C library's `printf` can't corrupt your frames — it lands
+  here instead, and replays to the terminal after exit). On `fleury serve`
+  sessions stray output goes to the server's console instead, so this tab is
+  primarily a local-terminal tool.
+- **Errors** — recent uncaught runtime errors (a throwing event handler, a
+  failed async callback), newest first with timestamps. The banner overlay
+  shows the current error; this tab keeps the last 50 so an error you
+  dismissed isn't gone.
+
+## Configuring it
+
+`DebugConfig` is public API on `runApp`:
+
+```dart
+import 'package:fleury/fleury.dart';
+
+await runApp(
+  const MyApp(),
+  debug: const DebugConfig(
+    startMode: DebugMode.docked,      // open on launch for dev sessions
+    side: DebugPanelSide.bottom,      // or .right (default)
+    panelWidth: 44,                   // cells, when docked right
+    panelHeight: 14,                  // cells, when docked bottom
+  ),
+);
+```
+
+**Release builds are clean by default.** `DebugConfig.enabled` defaults to
+`true` under the JIT (`dart run`, tests, hot reload) and `false` in product
+builds (`dart compile exe`), keyed off `dart.vm.product` — a shipped binary
+has no debug hotkeys or event collection unless you opt back in with
+`enabled: true`.
+
+## Extras
+
+- **Stray-output hook** — take captured lines live instead of the
+  replay-on-exit: `runApp(onStrayOutput: (line) => myLogFile.write(...))`.
+- **Byte telemetry** — `FLEURY_BYTE_TELEMETRY=1` prints a per-frame byte
+  budget summary (content vs overhead) on exit.
+- **ANSI capture** — `FLEURY_ANSI_CAPTURE=/path` tees every emitted byte to a
+  file for offline analysis.
+- **Escape hatch** — `FLEURY_FD_CAPTURE=0` disables the descriptor-level
+  stray-output capture entirely (raw behavior; stray writes go straight to
+  the terminal).

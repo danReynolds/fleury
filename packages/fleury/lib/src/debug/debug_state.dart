@@ -3,6 +3,7 @@
 // `ChangeNotifier` so the shell rebuilds on mode flips.
 
 import '../foundation/change_notifier.dart';
+import '../runtime/runtime_error_overlay.dart' show RuntimeErrorRecord;
 import '../semantics/semantics.dart';
 import '../terminal/diagnostics.dart';
 
@@ -20,21 +21,28 @@ enum DebugPanelSide { right, bottom }
 
 /// Which tab in the panel is selected. Only `live` ships in P0;
 /// `tree`, `rebuilds`, `logs` are stubs that promote in P1.
-enum DebugTab { live, tree, rebuilds, logs }
+enum DebugTab { live, tree, rebuilds, logs, errors }
 
 /// Top-level config the app declares once via `runApp(debug: ...)`.
 class DebugConfig {
   const DebugConfig({
-    this.enabled = true,
+    this.enabled = _defaultEnabled,
     this.startMode = DebugMode.off,
     this.side = DebugPanelSide.right,
     this.panelWidth = 32,
     this.panelHeight = 12,
   });
 
+  /// Debug tooling is on for development runs (JIT: `dart run`, tests, hot
+  /// reload) and OFF by default in release builds (`dart compile exe` sets
+  /// `dart.vm.product`) — a shipped binary gets no debug hotkeys or event
+  /// collection unless the app opts back in with `enabled: true`.
+  static const bool _defaultEnabled = !bool.fromEnvironment('dart.vm.product');
+
   /// When false, the shell becomes a no-op — `DebugShell` returns
-  /// `child` verbatim and no events flow. Use for prod builds where
-  /// you want the framework stripped of debug behaviour.
+  /// `child` verbatim and no events flow. Defaults to on for development
+  /// (JIT) runs and OFF in product (AOT release) builds; see
+  /// [_defaultEnabled]. Set explicitly to force either way.
   final bool enabled;
 
   /// What state to open in. Default `off` keeps cold-start clean;
@@ -91,6 +99,20 @@ class DebugController extends ChangeNotifier {
   /// Supplies the current terminal profile/capability diagnosis to the
   /// inspector. Evaluated on demand so resize and driver capability changes
   /// are reflected without per-frame capture.
+  List<RuntimeErrorRecord> Function()? _errorHistoryProvider;
+
+  /// Wired by the runtime to expose the [RuntimeErrorReporter]'s bounded
+  /// history to the Errors tab.
+  void setErrorHistoryProvider(List<RuntimeErrorRecord> Function()? provider) {
+    _checkNotDisposed();
+    _errorHistoryProvider = provider;
+  }
+
+  /// Recent uncaught runtime errors, newest last; empty when none or no
+  /// provider is wired.
+  List<RuntimeErrorRecord> errorHistory() =>
+      _errorHistoryProvider?.call() ?? const <RuntimeErrorRecord>[];
+
   void setTerminalDiagnosisProvider(TerminalDiagnosis? Function()? provider) {
     _checkNotDisposed();
     _terminalDiagnosisProvider = provider;
@@ -135,6 +157,15 @@ class DebugController extends ChangeNotifier {
     _checkNotDisposed();
     if (_tab == tab) return;
     _tab = tab;
+    notifyListeners();
+  }
+
+  /// Cycle to the next/previous tab (Tab / Shift+Tab while the shell is
+  /// open).
+  void nextTab([int delta = 1]) {
+    _checkNotDisposed();
+    final values = DebugTab.values;
+    _tab = values[(values.indexOf(_tab) + delta) % values.length];
     notifyListeners();
   }
 

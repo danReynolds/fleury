@@ -118,7 +118,43 @@ class _DebugPanelState extends State<DebugPanel> {
         // Captured stdout/stderr lives in the ambient LogBufferScope
         // installed by runApp; OutputCaptureView wires itself to it.
         return const [Expanded(child: OutputCaptureView())];
+      case DebugTab.errors:
+        return _errorsBody();
     }
+  }
+
+  List<Widget> _errorsBody() {
+    final errors = widget.controller.errorHistory();
+    if (errors.isEmpty) {
+      return const [
+        Text('no runtime errors', style: CellStyle(dim: true)),
+        Text(''),
+        Text(
+          'Uncaught errors from event handlers and async',
+          style: CellStyle(dim: true),
+        ),
+        Text('callbacks collect here (newest last).', style: CellStyle(dim: true)),
+      ];
+    }
+    final rows = <Widget>[
+      _row('Errors', '${errors.length} (last 50 kept)'),
+      const Text(''),
+    ];
+    // Newest first; one summary line + timestamp each. The Text widget
+    // sanitizes terminal-bound content, so hostile error strings are inert.
+    for (final record in errors.reversed.take(12)) {
+      final at = record.when.toIso8601String().substring(11, 19);
+      final summary = record.error.toString().split('\n').first;
+      rows
+        ..add(Text('$at  $summary'))
+        ..add(
+          Text(
+            '        ${record.stackTrace.toString().split('\n').first}',
+            style: const CellStyle(dim: true),
+          ),
+        );
+    }
+    return rows;
   }
 
   List<Widget> _liveBody() {
@@ -1030,7 +1066,10 @@ class _TabStrip extends StatelessWidget {
         ),
       );
     }
-    return Row(mainAxisSize: MainAxisSize.min, children: cells);
+    // Wrap, not Row: five tabs no longer fit the default 32-cell panel on
+    // one line; narrow panels flow the strip onto a second row instead of
+    // truncating the trailing tabs.
+    return Wrap(children: cells);
   }
 
   String _label(DebugTab tab) {
@@ -1043,6 +1082,8 @@ class _TabStrip extends StatelessWidget {
         return 'Rebuilds';
       case DebugTab.logs:
         return 'Logs';
+      case DebugTab.errors:
+        return 'Errors';
     }
   }
 }
