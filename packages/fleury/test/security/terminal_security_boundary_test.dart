@@ -9,8 +9,6 @@ import 'package:test/test.dart';
 const _hostileTerminalText =
     'HOSTILE \x1b]52;c;SECRET_CLIPBOARD\x07 after \x1b[2J end';
 
-Future<void> _settle() => Future<void>.delayed(const Duration(milliseconds: 5));
-
 Future<File> _script(Directory dir, String name, String source) async {
   final file = File('${dir.path}/$name.dart');
   await file.writeAsString(source);
@@ -63,52 +61,6 @@ void main() {
       expect(buffered, live);
       expect(buffered, contains(replacementCharacter));
       _expectNoHostileTerminalPayload(buffered);
-    });
-
-    test('runApp stray output hook receives sanitized lines', () async {
-      final driver = FakeTerminalDriver();
-      final captured = <LogLine>[];
-      final future = runApp(
-        const Text('ui'),
-        driver: driver,
-        enableHotReload: false,
-        onStrayOutput: captured.add,
-        onEvent: (_) {
-          print(_hostileTerminalText);
-          return const ExitRequested();
-        },
-      );
-      await _settle();
-      driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
-      await future;
-
-      final line = captured.single.text;
-      expect(line, contains(replacementCharacter));
-      _expectNoHostileTerminalPayload(line);
-      await driver.dispose();
-    });
-
-    test('runApp replay emits sanitized stray output after restore', () async {
-      final driver = FakeTerminalDriver();
-      final future = runApp(
-        const Text('ui'),
-        driver: driver,
-        enableHotReload: false,
-        onEvent: (_) {
-          print(_hostileTerminalText);
-          return const ExitRequested();
-        },
-      );
-      await _settle();
-      driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
-      await future;
-
-      expect(driver.output, contains('HOSTILE $replacementCharacter'));
-      final replayed = driver.output.substring(
-        driver.output.indexOf('HOSTILE'),
-      );
-      _expectNoHostileTerminalPayload(replayed);
-      await driver.dispose();
     });
 
     test('ProcessTaskController stores sanitized subprocess output', () async {

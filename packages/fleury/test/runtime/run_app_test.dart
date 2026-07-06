@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
@@ -360,104 +359,27 @@ void main() {
     });
   });
 
-  group('runApp stray-output capture', () {
-    test('a stray print is captured and replayed once the terminal is '
-        'restored', () async {
-      final driver = FakeTerminalDriver();
-      final future = runApp(
-        const Text('ui'),
-        driver: driver,
-        enableHotReload: false,
-        onEvent: (_) {
-          print('STRAY-LINE');
-          return const ExitRequested();
-        },
-      );
-      await _settle();
-      driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
-      await future;
-
-      // The line reaches the screen only as the post-session replay; it never
-      // interleaved with the live frame.
-      expect(driver.output.contains('STRAY-LINE'), isTrue);
-      await driver.dispose();
-    });
-
-    test(
-      'stray output is routed live to onStrayOutput and not replayed',
-      () async {
-        final driver = FakeTerminalDriver();
-        final captured = <LogLine>[];
-        final future = runApp(
-          const Text('ui'),
-          driver: driver,
-          enableHotReload: false,
-          onStrayOutput: captured.add,
-          onEvent: (_) {
-            print('HOOKED');
-            return const ExitRequested();
-          },
-        );
-        await _settle();
-        driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
-        await future;
-
-        expect(captured.map((l) => l.text), contains('HOOKED'));
-        expect(
-          driver.output.contains('HOOKED'),
-          isFalse,
-          reason: 'a hook takes ownership of disposition — no replay',
-        );
-        await driver.dispose();
-      },
-    );
-
-    test('direct stderr writes are captured and tagged as stderr', () async {
-      final driver = FakeTerminalDriver();
-      final captured = <LogLine>[];
-      final future = runApp(
-        const Text('ui'),
-        driver: driver,
-        enableHotReload: false,
-        onStrayOutput: captured.add,
-        onEvent: (_) {
-          stderr.writeln('ERR-LINE');
-          return const ExitRequested();
-        },
-      );
-      await _settle();
-      driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
-      await future;
-
-      final line = captured.firstWhere((l) => l.text == 'ERR-LINE');
-      expect(line.source, LogSource.stderr);
-      await driver.dispose();
-    });
-
-    test('F12 opens debug-shell Logs tab showing captured output', () async {
-      final driver = FakeTerminalDriver(size: const CellSize(30, 12));
+  group('runApp debug shell and frame diagnostics', () {
+    test('F12 opens the debug-shell Logs tab', () async {
+      // Content of the Logs tab is covered by output_capture_view_test (the
+      // view) and the PTY stray-output integration test (the real capture);
+      // stray output only exists with the fd-level capture, which needs a
+      // real TTY — a FakeTerminalDriver session has no capture source.
+      final driver = FakeTerminalDriver(size: const CellSize(40, 12));
       final future = runApp(
         const Text('app'),
         driver: driver,
         enableHotReload: false,
-        onEvent: (e) {
-          if (e is KeyEvent && e.keyCode == KeyCode.enter) print('CONSOLE-LOG');
-          return null;
-        },
       );
-      await _settle();
-
-      // Produce a captured line (lands in the buffer, not the live frame).
-      driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
       await _settle();
 
       driver.clearOutput();
       driver.enqueue(const KeyEvent(keyCode: KeyCode.f12)); // open Logs
       await _settle();
       expect(
-        driver.output.contains('CONSOLE-LOG'),
+        driver.output.contains('Logs'),
         isTrue,
-        reason: 'debug shell Logs tab renders the captured line',
+        reason: 'debug shell opens on its Logs tab',
       );
 
       driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
@@ -700,25 +622,19 @@ void main() {
       // from firing. The debug-shell hotkeys are escape-hatches routed
       // through runApp BEFORE the dispatcher, so they bypass the modal
       // scope — this test locks that contract.
-      final driver = FakeTerminalDriver(size: const CellSize(30, 12));
+      final driver = FakeTerminalDriver(size: const CellSize(40, 12));
       final future = runApp(
         const _ModalApp(),
         driver: driver,
         enableHotReload: false,
-        onEvent: (e) {
-          if (e is KeyEvent && e.keyCode == KeyCode.enter) print('OVER-MODAL');
-          return null;
-        },
       );
       await _settle();
 
-      driver.enqueue(const KeyEvent(keyCode: KeyCode.enter)); // capture a line
-      await _settle();
       driver.clearOutput();
       driver.enqueue(const KeyEvent(keyCode: KeyCode.f12)); // open Logs
       await _settle();
       expect(
-        driver.output.contains('OVER-MODAL'),
+        driver.output.contains('Logs'),
         isTrue,
         reason: 'F12 must fire even inside a modal route — escape hatch',
       );
@@ -728,26 +644,5 @@ void main() {
       await driver.dispose();
     });
 
-    test('partial writes are assembled into whole lines', () async {
-      final driver = FakeTerminalDriver();
-      final captured = <LogLine>[];
-      final future = runApp(
-        const Text('ui'),
-        driver: driver,
-        enableHotReload: false,
-        onStrayOutput: captured.add,
-        onEvent: (_) {
-          stdout.write('par');
-          stdout.write('tial\n');
-          return const ExitRequested();
-        },
-      );
-      await _settle();
-      driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
-      await future;
-
-      expect(captured.map((l) => l.text), contains('partial'));
-      await driver.dispose();
-    });
   });
 }
