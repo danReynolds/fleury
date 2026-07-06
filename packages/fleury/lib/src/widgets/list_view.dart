@@ -63,22 +63,62 @@ class ListController extends ChangeNotifier {
   ({int first, int last})? _visibleRange;
   int? _pendingJumpIndex;
   bool _pinToBottom;
+  int _unseenCount = 0;
   bool _disposed = false;
 
-  /// When `true`, the selection sticks to the last item — whenever
-  /// `itemCount` grows between rebuilds (typically because new items
-  /// were appended), the controller advances [selectedIndex] to the
-  /// new last item so the viewport follows along.
+  /// Whether the list is *following the tail* (`less +F` / chat behaviour).
   ///
-  /// Typical chat / tailed-log pattern is to keep this enabled by
-  /// default and toggle it off when the user scrolls upward to
-  /// browse history (so newly arriving messages don't yank the
-  /// viewport back). Re-enable when they scroll back to the bottom.
+  /// While following, appended items advance the viewport — and the selection,
+  /// when there is one — to stay on the newest item. Following engages and
+  /// disengages **automatically with the cursor**: moving the selection off the
+  /// last item (scrolling up to read history) stops following, so new arrivals
+  /// no longer yank you down; returning to the last item resumes it. Setting
+  /// this manually snaps to the tail (`true`) or freezes in place (`false`);
+  /// [jumpToBottom] is the explicit "catch up" action.
+  ///
+  /// For a scroll-only list (no selection) following advances the viewport to
+  /// the last item on each append.
   bool get pinToBottom => _pinToBottom;
   set pinToBottom(bool value) {
     _checkNotDisposed();
     if (_pinToBottom == value) return;
     _pinToBottom = value;
+    if (value) {
+      _unseenCount = 0;
+      if (_itemCount > 0) {
+        if (_selectedIndex != null) _selectedIndex = _itemCount - 1;
+        _pendingJumpIndex = _itemCount - 1;
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Whether the tail is currently in view: the selection is on the last item
+  /// (selection lists), the last item is visible (scroll-only lists), or the
+  /// list is empty. When true, following is engaged.
+  bool get atBottom {
+    if (_itemCount == 0) return true;
+    if (_selectedIndex != null) return _selectedIndex == _itemCount - 1;
+    final last = _visibleRange?.last;
+    return last == null || last >= _itemCount - 1;
+  }
+
+  /// Items appended while *not* following (unpinned) — the count behind a
+  /// "N new ↓" affordance. Cleared when following re-engages or on
+  /// [jumpToBottom].
+  int get unseenCount => _unseenCount;
+
+  /// Catches up to the newest item and resumes following, clearing
+  /// [unseenCount]. The explicit action behind a "jump to latest" key or the
+  /// "N new ↓" chip.
+  void jumpToBottom() {
+    _checkNotDisposed();
+    _pinToBottom = true;
+    _unseenCount = 0;
+    if (_itemCount > 0) {
+      if (_selectedIndex != null) _selectedIndex = _itemCount - 1;
+      _pendingJumpIndex = _itemCount - 1;
+    }
     notifyListeners();
   }
 
@@ -97,9 +137,23 @@ class ListController extends ChangeNotifier {
   set selectedIndex(int? value) {
     _checkNotDisposed();
     final clamped = _clampSelection(value);
-    if (_selectedIndex == clamped) return;
+    var changed = _selectedIndex != clamped;
     _selectedIndex = clamped;
-    notifyListeners();
+    // Follow-mode couples to cursor movement: landing on the last item follows
+    // the tail, moving off it stops. (Scroll-only lists keep pin explicit —
+    // internal re-clamps go through [_clampSelection] directly, not here.)
+    if (clamped != null && _itemCount > 0) {
+      final onTail = clamped == _itemCount - 1;
+      if (_pinToBottom != onTail) {
+        _pinToBottom = onTail;
+        changed = true;
+      }
+      if (onTail && _unseenCount != 0) {
+        _unseenCount = 0;
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
   }
 
   /// Scrolls the viewport so [index] is at the top. Selection is not
@@ -108,6 +162,28 @@ class ListController extends ChangeNotifier {
     _checkNotDisposed();
     final clamped = _itemCount == 0 ? 0 : index.clamp(0, _itemCount - 1);
     _pendingJumpIndex = clamped;
+    notifyListeners();
+  }
+
+  /// Applies a new [itemCount] pushed by the [ListView] on rebuild, running the
+  /// follow-mode state machine: while following, appends advance to the tail
+  /// and clear [unseenCount]; while not following, appends only accumulate
+  /// [unseenCount] (no viewport/selection movement). Non-growth changes just
+  /// re-clamp. Internal — the widget owns the count.
+  void _handleCountChange(int newCount) {
+    final oldCount = _itemCount;
+    _itemCount = newCount;
+    final grew = newCount > oldCount && newCount > 0;
+    if (_pinToBottom && grew) {
+      if (_selectedIndex != null) _selectedIndex = newCount - 1;
+      _pendingJumpIndex = newCount - 1;
+      _unseenCount = 0;
+    } else if (grew) {
+      _unseenCount += newCount - oldCount;
+      _selectedIndex = _clampSelection(_selectedIndex);
+    } else {
+      _selectedIndex = _clampSelection(_selectedIndex);
+    }
     notifyListeners();
   }
 
@@ -267,15 +343,18 @@ class _ListViewState extends State<ListView> {
     _controller = widget.controller ?? ListController();
     _ownsController = widget.controller == null;
     _controller._itemCount = count;
-    // Default the cursor to 0 when items exist but the controller
-    // doesn't have one — keyboard nav requires a starting point.
-    // Write directly so we don't notify before any listener is attached.
+    // Default the cursor when items exist but the controller doesn't have one —
+    // keyboard nav requires a starting point. Follow-mode starts on the tail;
+    // otherwise the top. Write directly so we don't notify before any listener
+    // is attached (and so we don't flip follow-mode at construction).
     if (_controller._selectedIndex == null && count > 0) {
-      _controller._selectedIndex = 0;
+      _controller._selectedIndex = _controller._pinToBottom ? count - 1 : 0;
     } else {
-      // An externally-supplied selectedIndex may be out of range for
-      // itemCount; clamp it through the setter (no-op when in range).
-      _controller.selectedIndex = _controller._selectedIndex;
+      // An externally-supplied selectedIndex may be out of range; clamp it
+      // directly (not through the follow-coupling setter).
+      _controller._selectedIndex = _controller._clampSelection(
+        _controller._selectedIndex,
+      );
     }
     _controller.addListener(_onControllerChange);
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'ListView');
@@ -302,18 +381,10 @@ class _ListViewState extends State<ListView> {
       _ownsFocusNode = widget.focusNode == null;
     }
     final newCount = widget.effectiveItemCount;
-    final oldCount = oldWidget.effectiveItemCount;
-    if (newCount != oldCount) {
-      _controller._itemCount = newCount;
-      if (_controller.pinToBottom && newCount > oldCount && newCount > 0) {
-        // New items appended; advance the selection to the new last
-        // item so the viewport scrolls forward.
-        _controller.selectedIndex = newCount - 1;
-      } else {
-        // Re-clamp through the setter so listeners see any selection
-        // change caused by the new bound.
-        _controller.selectedIndex = _controller.selectedIndex;
-      }
+    if (newCount != oldWidget.effectiveItemCount) {
+      // Runs the follow-mode state machine (advance-to-tail while following,
+      // accumulate unseenCount otherwise) and re-clamps the selection.
+      _controller._handleCountChange(newCount);
     }
   }
 
