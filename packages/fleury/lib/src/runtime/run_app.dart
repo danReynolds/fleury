@@ -17,6 +17,8 @@ import 'dart:io'
         stderr,
         stdout;
 
+import 'package:meta/meta.dart';
+
 import '../debug/debug_events.dart';
 import '../debug/debug_invalidation.dart';
 import '../debug/debug_shell.dart';
@@ -67,20 +69,75 @@ import 'remote_surface_sink.dart';
 import 'tui_frame_loop.dart';
 import 'tui_runtime.dart';
 
-/// A signal returned by an event handler in [runApp] to ask the loop to
-/// exit cleanly.
-class ExitRequested {
+/// What a [TuiEventHandler] can tell the runtime about an event.
+sealed class EventResponse {
+  const EventResponse();
+}
+
+/// Returned by an event handler in [runApp] to ask the loop to exit
+/// cleanly ([runApp] resolves with [AppExit.requested]).
+final class ExitRequested extends EventResponse {
   const ExitRequested();
+}
+
+/// Returned by an event handler to claim an event whose *unhandled*
+/// default would act — today that's [SignalEvent], whose unclaimed
+/// default is "terminate" ([AppExit.signal]). Claiming hands the
+/// shutdown to the app, which finishes by calling [requestExit] once
+/// its cleanup is done. Mind the driver's grace deadline: shutdown
+/// must complete within it or the process is force-terminated.
+final class EventHandled extends EventResponse {
+  const EventHandled();
+}
+
+/// Why [runApp] ended — so the caller owns process exit semantics
+/// (map [signal] to `128 + n` exit codes, run cleanup in `finally`,
+/// then `exit()` yourself).
+@immutable
+final class AppExit {
+  /// An orderly exit: [requestExit], an [ExitRequested] response, the
+  /// unhandled-Ctrl+C escape hatch, or the input stream ending (stdin
+  /// EOF / remote disconnect).
+  const AppExit.requested() : signal = null;
+
+  /// An unclaimed [SignalEvent] ended the app; [signal] says which.
+  const AppExit.signal(AppSignal this.signal);
+
+  final AppSignal? signal;
+
+  @override
+  String toString() =>
+      signal == null ? 'AppExit.requested' : 'AppExit.signal(${signal!.name})';
 }
 
 /// Optional handler called for every input event before the framework
 /// re-renders.
 ///
 /// Returning [ExitRequested] terminates the loop (and triggers cleanup).
-/// Returning null lets the event through to the rest of the app
-/// (typically widgets that subscribed to the driver's event stream
-/// directly).
-typedef TuiEventHandler = ExitRequested? Function(TuiEvent event);
+/// Returning [EventHandled] claims the event, suppressing its unhandled
+/// default (see [SignalEvent]). Returning null lets the event through to
+/// the rest of the app (typically widgets that subscribed to the driver's
+/// event stream directly).
+typedef TuiEventHandler = EventResponse? Function(TuiEvent event);
+
+/// The exit completer of the currently running [runApp], if any — the
+/// seam behind [requestExit].
+Completer<AppExit>? _activeExitCompleter;
+
+/// Asks the running app to exit cleanly, exactly like an unhandled
+/// Ctrl+C: the event loop stops, cleanup runs (terminal restored), and
+/// [runApp]'s future resolves with [AppExit.requested].
+///
+/// This is the programmatic quit for `q` keys, palette "Quit" commands,
+/// and app-owned signal shutdown (claim the [SignalEvent] with
+/// [EventHandled], run your teardown, then call this). Returns false
+/// when no app is running or an exit is already in flight.
+bool requestExit() {
+  final completer = _activeExitCompleter;
+  if (completer == null || completer.isCompleted) return false;
+  completer.complete(const AppExit.requested());
+  return true;
+}
 
 /// Runs an fleury application.
 ///
@@ -91,7 +148,34 @@ typedef TuiEventHandler = ExitRequested? Function(TuiEvent event);
 /// embedding caller that catches the throw and keeps running would find its
 /// process's stdout/stderr silently swallowed. `stop()` is idempotent, so the
 /// normal cleanup path double-stopping is harmless.
-Future<void> runApp(
+///
+/// ## Own your shutdown
+///
+/// Resolves with an [AppExit] saying why the app ended, AFTER the terminal is
+/// restored — so the caller owns process-exit semantics:
+///
+/// ```dart
+/// final exit = await runApp(app, onEvent: (event) {
+///   if (event is SignalEvent) {
+///     beginShutdown(event.signal);        // async teardown → requestExit()
+///     return const EventHandled();        // claim it: don't die yet
+///   }
+///   return null;
+/// });
+/// await host.shutdown();                  // your cleanup, terminal already sane
+/// io.exit(switch (exit.signal) {          // POSIX-conventional codes
+///   AppSignal.interrupt => 130,
+///   AppSignal.terminate => 143,
+///   null => 0,
+/// });
+/// ```
+///
+/// SIGINT/SIGTERM arrive as [SignalEvent]s (never `exit()` inside the driver);
+/// an unclaimed one terminates with [AppExit.signal]. The POSIX driver arms a
+/// grace deadline at delivery ([PosixTerminalDriver.signalGrace], default 5s)
+/// and force-terminates a hung app — a second same-signal forces immediately —
+/// so claiming a signal obliges finishing within the grace.
+Future<AppExit> runApp(
   Widget root, {
   TerminalDriver? driver,
   TerminalMode mode = TerminalMode.interactive,
@@ -146,8 +230,10 @@ Future<void> runApp(
 ///      + VM-service `IsolateReload` listener) unless [enableHotReload]
 ///      is false.
 ///   5. Listen to driver events; on each event, optionally consult
-///      [onEvent]; if it returns [ExitRequested], or the event is
-///      Ctrl+C, exit the loop.
+///      [onEvent]; if it returns [ExitRequested], or the event is an
+///      unhandled Ctrl+C, or it is a [SignalEvent] the handler did not
+///      claim with [EventHandled], exit the loop. [requestExit] exits
+///      programmatically from anywhere in the app.
 ///   6. Schedule a render frame after every event and after every
 ///      `setState` (via [BuildOwner.onScheduleBuild]).
 ///   7. On exit (normal or exceptional): cancel subscriptions, dispose
@@ -173,7 +259,7 @@ Future<void> runApp(
 /// cursor-control sequences into the stream. Pass
 /// [requireInteractiveTerminal] = false to run anyway (screen control and
 /// raw input are skipped where there's no terminal).
-Future<void> _runAppImpl(
+Future<AppExit> _runAppImpl(
   Widget root, {
   TerminalDriver? driver,
   TerminalMode mode = TerminalMode.interactive,
@@ -336,9 +422,12 @@ Future<void> _runAppImpl(
 
   HotReloadController? hotReload;
   StreamSubscription<TuiEvent>? eventSub;
-  final exit = Completer<void>();
+  final exit = Completer<AppExit>();
+  // Expose this run's exit to [requestExit]. Last-started run wins; the
+  // framework assumes one interactive app per isolate.
+  _activeExitCompleter = exit;
 
-  final done = Completer<void>();
+  final done = Completer<AppExit>();
   var cleanedUp = false;
 
   // Captures stray output (see below). The buffer powers replay-on-exit; the
@@ -405,6 +494,7 @@ Future<void> _runAppImpl(
     frameDriver?.dispose();
     semanticsPipeline?.dispose();
     remoteClipboard?.dispose();
+    if (identical(_activeExitCompleter, exit)) _activeExitCompleter = null;
     await eventSub?.cancel();
     eventSub = null;
     await hotReload?.dispose();
@@ -458,6 +548,10 @@ Future<void> _runAppImpl(
   void runGuarded() {
     runZonedGuarded(
       () async {
+        // Why the app ended; overwritten by the exit completer's value on
+        // the normal path (the fatal-error path bypasses it entirely and
+        // completes `done` with the error instead).
+        var appExit = const AppExit.requested();
         runtimeMarkers?.mark('terminal.enter.start');
         await usedDriver.enter(mode);
         runtimeMarkers?.mark('terminal.enter.end');
@@ -769,16 +863,32 @@ Future<void> _runAppImpl(
                     event.hasCtrl &&
                     dispatchResult != KeyEventResult.handled &&
                     surfaceSink == null) {
-                  if (!exit.isCompleted) exit.complete();
+                  if (!exit.isCompleted) {
+                    exit.complete(const AppExit.requested());
+                  }
                   return;
                 }
 
+                EventResponse? response;
                 if (onEvent != null) {
-                  final result = onEvent(event);
-                  if (result is ExitRequested) {
-                    if (!exit.isCompleted) exit.complete();
+                  response = onEvent(event);
+                  if (response is ExitRequested) {
+                    if (!exit.isCompleted) {
+                      exit.complete(const AppExit.requested());
+                    }
                     return;
                   }
+                }
+
+                // A signal the app did not claim keeps its POSIX meaning:
+                // terminate. Claiming it (EventHandled) hands shutdown to
+                // the app, which finishes via requestExit() — inside the
+                // driver's grace deadline.
+                if (event is SignalEvent && response is! EventHandled) {
+                  if (!exit.isCompleted) {
+                    exit.complete(AppExit.signal(event.signal));
+                  }
+                  return;
                 }
 
                 scheduleFrame(_frameReasonForEvent(event));
@@ -794,15 +904,15 @@ Future<void> _runAppImpl(
               // remote peer (`fleury shell` / `fleury serve`) disconnected.
               // Exit cleanly instead of stranding the app waiting for an
               // input source that will never arrive.
-              if (!exit.isCompleted) exit.complete();
+              if (!exit.isCompleted) exit.complete(const AppExit.requested());
             },
           );
 
-          await exit.future;
+          appExit = await exit.future;
         } finally {
           await cleanup();
         }
-        if (!done.isCompleted) done.complete();
+        if (!done.isCompleted) done.complete(appExit);
       },
       (error, stack) {
         // Report and keep running (Flutter's posture): an uncaught handler or
@@ -845,6 +955,10 @@ String _frameReasonForEvent(TuiEvent event) {
     TextCompositionEvent(:final kind) => 'text-composition:${kind.name}',
     PasteEvent() => 'paste',
     MouseEvent() => 'mouse',
+    // Reached only for a CLAIMED signal (unclaimed ones exit before
+    // scheduling): the app's shutdown likely set state worth painting
+    // ("disconnecting…").
+    SignalEvent(:final signal) => 'signal:${signal.name}',
   };
 }
 

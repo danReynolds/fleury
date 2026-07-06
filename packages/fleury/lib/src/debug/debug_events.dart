@@ -206,6 +206,10 @@ final class InputDebugEvent extends DebugEvent {
           kind: 'mouse',
           summary: '${kind.name}:${button.name}@$col,$row',
         ),
+      SignalEvent(:final signal) => InputDebugEvent(
+        kind: 'signal',
+        summary: signal.name,
+      ),
     };
   }
 

@@ -230,6 +230,7 @@ export 'src/terminal/terminal_probe.dart'
         runTerminalProbeSuite;
 export 'src/input/events.dart'
     show
+        AppSignal,
         KeyCode,
         KeyEvent,
         KeyEventType,
@@ -239,6 +240,7 @@ export 'src/input/events.dart'
         MouseEventKind,
         PasteEvent,
         ResizeEvent,
+        SignalEvent,
         TextCompositionEvent,
         TextCompositionEventKind,
         TextInputEvent,

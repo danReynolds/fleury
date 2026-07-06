@@ -633,6 +633,7 @@ String _frameReasonForEvent(TuiEvent event) {
     TextCompositionEvent(:final kind) => 'text-composition:${kind.name}',
     PasteEvent() => 'paste',
     MouseEvent() => 'mouse',
+    SignalEvent(:final signal) => 'signal:${signal.name}',
   };
 }
 

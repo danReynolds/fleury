@@ -634,6 +634,7 @@ const int _evComposition = 3;
 const int _evMouse = 4;
 const int _evPaste = 5;
 const int _evResize = 6;
+const int _evSignal = 7;
 
 void _writeModifiers(_Writer w, Set<KeyModifier> mods) {
   var mask = 0;
@@ -689,6 +690,11 @@ Uint8List encodeInputEvent(TuiEvent event) {
       w
         ..u16(e.size.cols)
         ..u16(e.size.rows);
+    case SignalEvent e:
+      // A host relaying a termination request (e.g. the serve process was
+      // asked to shut the session down) forwards it like any other event.
+      w.u8(_evSignal);
+      w.u8(e.signal.index);
   }
   return w.take();
 }
@@ -744,6 +750,8 @@ TuiEvent decodeInputEvent(Uint8List bytes) {
       event = PasteEvent(r.str());
     case _evResize:
       event = ResizeEvent(CellSize(r.u16(), r.u16()));
+    case _evSignal:
+      event = SignalEvent(r.enumValue(AppSignal.values));
     default:
       throw RemoteCodecException('unknown input-event tag $tag');
   }

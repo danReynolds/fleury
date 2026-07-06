@@ -1,7 +1,8 @@
 // POSIX terminal driver: wires the framework's I/O contract to
 // `dart:io` stdin/stdout. Owns raw-mode lifecycle, the input byte
-// parser, resize detection via SIGWINCH, and emergency cleanup on
-// SIGINT / SIGTERM.
+// parser, resize detection via SIGWINCH, and signal delivery: SIGINT /
+// SIGTERM become [SignalEvent]s so the app owns its shutdown, backed by
+// a grace deadline that force-terminates a hung app (restore → exit).
 //
 // Status: ships, but lacks test coverage by design — driver tests need
 // a real (or simulated) PTY, and that lives one slice further out.
@@ -15,6 +16,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:meta/meta.dart';
+
 import '../foundation/geometry.dart';
 import 'capabilities.dart';
 import '../input/events.dart';
@@ -25,12 +28,27 @@ import 'terminal_probe.dart';
 import 'terminal_sequences.dart';
 
 class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
-  PosixTerminalDriver({Stdin? stdinOverride, Stdout? stdoutOverride})
-    : _stdin = stdinOverride ?? stdin,
-      _stdout = stdoutOverride ?? stdout;
+  PosixTerminalDriver({
+    Stdin? stdinOverride,
+    Stdout? stdoutOverride,
+    this.signalGrace = const Duration(seconds: 5),
+    @visibleForTesting void Function(int exitCode)? forceExitOverride,
+  }) : _stdin = stdinOverride ?? stdin,
+       _stdout = stdoutOverride ?? stdout,
+       _forceExitOverride = forceExitOverride;
 
   final Stdin _stdin;
   final Stdout _stdout;
+
+  /// How long a delivered [SignalEvent] may remain unresolved before the
+  /// driver force-terminates (restore → `exit(128+n)`). The ceiling on
+  /// app-owned shutdown: a supervisor's SIGTERM must always end the
+  /// process even when the app hangs mid-teardown.
+  final Duration signalGrace;
+
+  /// Test seam: replaces the `exit()` call in the force path so grace
+  /// behavior is assertable without killing the test process.
+  final void Function(int exitCode)? _forceExitOverride;
 
   // Snapshotted once: whether each standard stream is a real TTY. Output
   // governs whether we may emit screen-control sequences; input governs
@@ -50,6 +68,8 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
   StreamSubscription<ProcessSignal>? _tstpSubscription;
   StreamSubscription<ProcessSignal>? _contSubscription;
   Timer? _flushTimer;
+  Timer? _graceTimer;
+  AppSignal? _pendingSignal;
 
   bool _active = false;
   bool _handoffActive = false;
@@ -108,6 +128,51 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
     } on UnsupportedError {
       return null;
     }
+  }
+
+  /// 128 + signal number (SIGINT=2, SIGTERM=15): the conventional
+  /// death-by-signal exit codes.
+  static int _signalExitCode(AppSignal signal) => switch (signal) {
+    AppSignal.interrupt => 130,
+    AppSignal.terminate => 143,
+  };
+
+  /// Last resort: restore the terminal and end the process with the
+  /// conventional code. Used when the app ignores a signal past
+  /// [signalGrace] or the user sends the same signal twice.
+  void _forceExit(AppSignal signal) {
+    final code = _signalExitCode(signal);
+    final force = _forceExitOverride;
+    unawaited(
+      restore().whenComplete(() {
+        if (force != null) {
+          force(code);
+        } else {
+          exit(code);
+        }
+      }),
+    );
+  }
+
+  /// Delivers [signal] to the app as a [SignalEvent] and arms the grace
+  /// deadline: an app that neither exits nor finishes its claimed
+  /// shutdown within [signalGrace] is force-terminated (restore →
+  /// `exit(128+n)`), so a supervisor's SIGTERM always ends the process.
+  /// A second delivery of the SAME pending signal forces immediately —
+  /// the second Ctrl+C / `kill` is the user overruling a slow shutdown.
+  ///
+  /// On the orderly path the app exits, `runApp`'s cleanup calls
+  /// [restore], and [restore] disarms the deadline.
+  @visibleForTesting
+  void deliverSignal(AppSignal signal) {
+    if (_pendingSignal == signal) {
+      _forceExit(signal);
+      return;
+    }
+    _pendingSignal = signal;
+    _events.add(SignalEvent(signal));
+    _graceTimer?.cancel();
+    _graceTimer = Timer(signalGrace, () => _forceExit(signal));
   }
 
   @override
@@ -191,14 +256,14 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
       _events.add(ResizeEvent(size));
     });
 
-    _intSubscription = _watchSignal(ProcessSignal.sigint, (_) async {
-      await restore();
-      exit(130); // 128 + SIGINT
-    });
-    _termSubscription = _watchSignal(ProcessSignal.sigterm, (_) async {
-      await restore();
-      exit(143); // 128 + SIGTERM
-    });
+    _intSubscription = _watchSignal(
+      ProcessSignal.sigint,
+      (_) => deliverSignal(AppSignal.interrupt),
+    );
+    _termSubscription = _watchSignal(
+      ProcessSignal.sigterm,
+      (_) => deliverSignal(AppSignal.terminate),
+    );
 
     // Job control: on Ctrl+Z, hand the terminal back to the shell before
     // stopping; on `fg`, re-enter and repaint. SIGCONT is watched for the
@@ -399,6 +464,12 @@ class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
 
   @override
   Future<void> restore() async {
+    // Disarm the signal-grace deadline unconditionally (even when there's
+    // nothing else to restore): an orderly shutdown that reaches restore()
+    // must never be shot down by a stale timer afterwards.
+    _graceTimer?.cancel();
+    _graceTimer = null;
+    _pendingSignal = null;
     if (!_active && !_wroteEnterSequences && !_changedStdin) return;
 
     _handoffActive = false;
