@@ -97,26 +97,92 @@ class _ScrollbarState extends State<Scrollbar> {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(child: widget.child),
-        GestureDetector(
-          onTapDown: (col, row) => _jumpToRow(row),
-          onDragStart: (col, row) => _jumpToRow(row),
-          onDragUpdate: (col, row) => _jumpToRow(row),
-          child: SizedBox(
-            width: widget.thickness,
-            child: _BarView(
-              metrics: widget._metrics,
-              geometry: _geom,
-              trackStyle: widget.trackStyle,
-              thumbStyle: widget.thumbStyle,
+    // The gutter lives at the right edge of a bounded region, and the
+    // Expanded below fills the rest. Under an unbounded width the Row would
+    // give Expanded zero columns and the content would silently vanish — the
+    // guard turns that into a clear, actionable error instead.
+    return _RequireBoundedWidth(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: widget.child),
+          GestureDetector(
+            onTapDown: (col, row) => _jumpToRow(row),
+            onDragStart: (col, row) => _jumpToRow(row),
+            onDragUpdate: (col, row) => _jumpToRow(row),
+            child: SizedBox(
+              width: widget.thickness,
+              child: _BarView(
+                metrics: widget._metrics,
+                geometry: _geom,
+                trackStyle: widget.trackStyle,
+                thumbStyle: widget.thumbStyle,
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
+  }
+}
+
+/// Fails loudly if given an unbounded width instead of letting the
+/// [Scrollbar]'s `Row`/`Expanded` collapse the content to zero columns — a
+/// right-edge gutter has nothing to anchor to without a bounded width. Mirrors
+/// how [LayoutBuilder] rejects an unbounded main axis. Transparent otherwise
+/// (same size, same paint offset, so the gutter's pointer region is intact).
+class _RequireBoundedWidth extends SingleChildRenderObjectWidget {
+  const _RequireBoundedWidth({required super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderRequireBoundedWidth();
+
+  @override
+  void updateRenderObject(BuildContext context, RenderObject renderObject) {}
+}
+
+class _RenderRequireBoundedWidth extends RenderObject
+    implements RenderObjectWithSingleChild {
+  RenderObject? _child;
+
+  @override
+  RenderObject? get child => _child;
+
+  @override
+  set child(RenderObject? value) {
+    if (identical(_child, value)) return;
+    if (_child != null) dropChild(_child!);
+    _child = value;
+    if (value != null) adoptChild(value);
+  }
+
+  @override
+  CellSize performLayout(CellConstraints constraints) {
+    if (!constraints.hasBoundedWidth) {
+      throw StateError(
+        'Scrollbar needs a bounded width to anchor its gutter, but was given '
+        'an unbounded width (e.g. a non-Expanded child of a Row gets an '
+        'unbounded main axis). Give it a bounded width — wrap it in Expanded '
+        'or a SizedBox(width: ...).',
+      );
+    }
+    final c = _child;
+    if (c == null) return constraints.constrain(CellSize.zero);
+    return c.layout(constraints);
+  }
+
+  @override
+  void paint(
+    CellBuffer buffer,
+    CellOffset offset, {
+    CellOffset? screenOffset,
+    CellRect? clipRect,
+  }) {
+    final c = _child;
+    if (c != null) {
+      c.paint(buffer, offset, screenOffset: screenOffset, clipRect: clipRect);
+    }
   }
 }
 

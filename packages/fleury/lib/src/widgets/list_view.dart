@@ -358,6 +358,10 @@ class ListView extends StatefulWidget {
   /// visible item range and lets the mouse drag/click to scroll. A one-line
   /// opt-in: the bar shares this list's controller, so there is nothing extra
   /// to wire. See [Scrollbar.list].
+  ///
+  /// Needs a bounded width to anchor the right-edge gutter — under an unbounded
+  /// width (e.g. a non-Expanded child of a Row) it throws a clear error rather
+  /// than collapsing the list; wrap the list in an Expanded or a SizedBox.
   final bool scrollbar;
 
   /// Called with the current selected index when the user presses
@@ -624,8 +628,10 @@ class _ListViewState extends State<ListView> {
       ),
     );
     if (!widget.scrollbar) return content;
-    // Share the list's own controller: the gutter reflects the visible item
-    // range, and dragging/clicking it scrolls by item.
+    // Shares the list's own controller: the gutter reflects the visible item
+    // range, and dragging/clicking it scrolls by item. (Needs a bounded width
+    // to anchor the right-edge gutter — Scrollbar throws a clear error under
+    // unbounded width rather than collapsing the list.)
     return Scrollbar.list(controller: _controller, child: content);
   }
 }

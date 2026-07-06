@@ -204,5 +204,36 @@ void main() {
       final buf = tester.render(size: const CellSize(6, 4));
       expect(_col(buf, 5), '██││', reason: 'thumb (2 of 4) at top over 10 rows');
     });
+
+    testWidgets('scrollbar: true under unbounded width fails loudly, not '
+        'silently blank', (tester) {
+      // A non-Expanded ListView beside a fixed sidebar gets an unbounded width.
+      // Rather than silently collapse the list to zero columns inside the
+      // Scrollbar's Row/Expanded (the review-found regression), the guard
+      // throws a clear, actionable error.
+      tester.pumpWidget(
+        Row(
+          children: [
+            const SizedBox(width: 5, child: Text('MENU')),
+            ListView.builder(
+              scrollbar: true,
+              itemCount: 3,
+              itemBuilder: (c, i, sel) => Text('item$i'),
+            ),
+          ],
+        ),
+      );
+      expect(
+        () => tester.render(size: const CellSize(20, 3)),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('bounded width'),
+          ),
+        ),
+        reason: 'a right-edge scrollbar needs a bounded width to anchor to',
+      );
+    });
   });
 }

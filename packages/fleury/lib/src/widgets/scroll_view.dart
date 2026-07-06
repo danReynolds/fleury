@@ -167,6 +167,10 @@ class ScrollView extends StatefulWidget {
   /// When true, wrap the viewport in a [Scrollbar] gutter that reflects the
   /// scroll position and lets the mouse drag/click to scroll. A one-line
   /// opt-in sharing this view's own controller.
+  ///
+  /// Needs a bounded width to anchor the right-edge gutter — under an unbounded
+  /// width it throws a clear error rather than collapsing the content; wrap the
+  /// view in an Expanded or a SizedBox.
   final bool scrollbar;
 
   @override
@@ -280,6 +284,8 @@ class _ScrollViewState extends State<ScrollView> {
       ),
     );
     if (!widget.scrollbar) return content;
+    // Needs a bounded width to anchor the right-edge gutter — Scrollbar throws
+    // a clear error under unbounded width rather than collapsing the content.
     return Scrollbar(controller: _controller, child: content);
   }
 }
