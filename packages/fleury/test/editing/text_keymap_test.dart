@@ -61,6 +61,33 @@ void main() {
       );
     });
 
+    test('chat map submits on Enter, newlines on Alt/Shift+Enter', () {
+      const keymap = TextEditingKeymap.chat;
+
+      // Plain Enter submits; the modifier chords insert a newline.
+      expect(keymap.resolve(_code(KeyCode.enter)), TextEditingKeyAction.submit);
+      expect(
+        keymap.resolve(_code(KeyCode.enter, const {KeyModifier.alt})),
+        TextEditingKeyAction.insertNewline,
+      );
+      expect(
+        keymap.resolve(_code(KeyCode.enter, const {KeyModifier.shift})),
+        TextEditingKeyAction.insertNewline,
+      );
+      // An unbound Enter chord (e.g. Ctrl+Enter) resolves to nothing rather
+      // than falling through to the inherited plain-Enter newline.
+      expect(
+        keymap.resolve(_code(KeyCode.enter, const {KeyModifier.ctrl})),
+        isNull,
+      );
+      // Everything else is the standard multiline map.
+      expect(keymap.resolve(_code(KeyCode.arrowUp)), TextEditingKeyAction.moveUp);
+      expect(
+        keymap.resolve(_code(KeyCode.home)),
+        TextEditingKeyAction.moveLineStart,
+      );
+    });
+
     test(
       'Emacs presets add Ctrl-based movement without replacing defaults',
       () {
