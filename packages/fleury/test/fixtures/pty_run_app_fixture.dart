@@ -28,12 +28,31 @@ void _nativeWrite(String s) {
 }
 
 Future<void> main(List<String> args) async {
+  final hookArg = args.where((a) => a.startsWith('--stray-hook=')).firstOrNull;
+  if (hookArg != null) {
+    final hookFile = File(hookArg.substring('--stray-hook='.length));
+    Timer(const Duration(milliseconds: 300), () {
+      print('HOOKED-PRINT');
+      _nativeWrite('HOOKED-NATIVE\n');
+    });
+    return runApp(
+      const _PtySmokeApp(label: 'PTY-HOOK-MODE'),
+      enableHotReload: false,
+      onStrayOutput: (line) => hookFile.writeAsStringSync(
+        '${line.source.name}:${line.text}\n',
+        mode: FileMode.append,
+      ),
+      onEvent: (event) => event is ResizeEvent ? const ExitRequested() : null,
+    );
+  }
   if (args.contains('--stray-output')) {
     Timer(const Duration(milliseconds: 300), () {
       // Both classes of stray writer: Dart print (zone-visible) and a raw
       // native descriptor write (zone-INvisible).
       print('STRAY-PRINT-MARKER');
       _nativeWrite('STRAY-NATIVE-MARKER\n');
+      // Hostile terminal payload (OSC title set) — replay must be sanitized.
+      print('STRAY-HOSTILE \x1B]0;pwned\x07END');
     });
     return runApp(
       const _PtySmokeApp(label: 'PTY-STRAY-MODE'),

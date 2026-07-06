@@ -106,6 +106,44 @@ void main() {
         expect(replay, contains(marker),
             reason: '$marker was not replayed after exit');
       }
+
+      // The replay is SANITIZED terminal-bound text: the hostile OSC
+      // payload a stray line carried must not survive to the real
+      // terminal (runApp constructs OutputCapture with
+      // sanitizeForTerminal: true — this pins that wiring end-to-end).
+      expect(replay, contains('STRAY-HOSTILE'));
+      expect(replay, isNot(contains('\x1B]0;pwned')),
+          reason: 'hostile OSC must be neutralized in the replay');
+    }, skip: skipPty);
+
+    test('onStrayOutput takes ownership: lines reach the hook tagged, '
+        'nothing replays', () async {
+      final hookFile = File('${tempDir.path}/stray_hook.txt');
+      final capture = await _capturePty(
+        tempDir,
+        'stray-hook',
+        extraArgs: const [
+          '--cols',
+          '60',
+          '--rows',
+          '12',
+          '--resize-sequence',
+          '61x12',
+          '--resize-interval-ms',
+          '3000',
+        ],
+        fixtureArgs: ['--stray-hook=${hookFile.path}'],
+      );
+      if (capture == null) return;
+
+      expect(capture.metadata['timedOut'], isFalse);
+      expect(capture.output, contains('PTY-HOOK-MODE'));
+      final hooked = hookFile.existsSync() ? hookFile.readAsStringSync() : '';
+      expect(hooked, contains('stdout:HOOKED-PRINT'));
+      expect(hooked, contains('stdout:HOOKED-NATIVE'));
+      // A hook takes ownership of disposition — nothing replays on exit.
+      expect(capture.output, isNot(contains('HOOKED-PRINT')));
+      expect(capture.output, isNot(contains('HOOKED-NATIVE')));
     }, skip: skipPty);
 
     test('restores terminal modes when SIGTERM lands mid-session', () async {

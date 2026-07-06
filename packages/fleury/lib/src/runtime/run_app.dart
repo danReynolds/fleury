@@ -11,7 +11,6 @@ import 'dart:io'
     show
         File,
         FileMode,
-        IOOverrides,
         Platform,
         RandomAccessFile,
         Stdout,
@@ -189,13 +188,18 @@ Future<void> _runAppImpl(
 }) async {
   final runtimeMarkers = _RuntimeMarkerRecorder.fromEnvironment();
   runtimeMarkers?.mark('runApp.entry');
-  // fd-level stray-output guard. When the session resolves to the local
-  // native driver on POSIX, redirect fd 1/2 (dup2) BEFORE the driver binds
-  // its stdout, and hand the driver the saved real-terminal handle. This
-  // catches what zones and IOOverrides can't, in principle: native/FFI
-  // libraries (and inheritStdio children) writing straight to the
-  // descriptors — one stray printf would otherwise land mid-frame. Escape
-  // hatch: FLEURY_FD_CAPTURE=0 falls back to the zone/IOOverrides guard.
+  // The stray-output guard. When the session resolves to the local native
+  // driver on POSIX with a real-TTY stdout, redirect fd 1/2 (dup2, via
+  // package:stdio) BEFORE the driver binds its stdout, and hand the driver
+  // the saved real-terminal handle. Descriptor-level capture catches EVERY
+  // writer in the process — Dart print, loggers, native/FFI libraries,
+  // inheritStdio children, code outside runApp's zone — which is why it is
+  // the only mechanism: zone/IOOverrides layers were removed as redundant
+  // where this engages and misleadingly partial where it can't. Where the
+  // guard does not engage (remote/serve sessions — frames aren't on fd 1;
+  // custom drivers — they own output policy; Windows — pending stdio
+  // support; FLEURY_FD_CAPTURE=0), stray output flows wherever fd 1/2
+  // point, conventionally.
   fd.StdioCapture? fdCapture;
   Future<Stdout?> startFdCapture() async {
     if (Platform.isWindows) return null;
@@ -344,10 +348,10 @@ Future<void> _runAppImpl(
     sanitizeForTerminal: true,
   );
 
-  // fd-capture wiring: assembled lines stream into the same consumer the
-  // legacy zone/IOOverrides path feeds (sanitize -> LogBuffer -> onStrayOutput
-  // -> replay-on-exit). During an editor/pager handoff the capture pauses so
-  // the child inherits the real descriptors.
+  // fd-capture wiring: assembled lines stream into the consumer pipeline
+  // (sanitize -> LogBuffer -> onStrayOutput -> replay-on-exit). During an
+  // editor/pager handoff the capture pauses so the child inherits the real
+  // descriptors.
   StreamSubscription<fd.CapturedLine>? fdCaptureSub;
   final activeFdCapture = fdCapture;
   if (activeFdCapture != null) {
@@ -419,7 +423,6 @@ Future<void> _runAppImpl(
         await fdCap.stop();
       } catch (_) {}
       await fdCaptureSub?.cancel();
-      capture.flushPartials();
       if (onStrayOutput == null && !logBuffer.isEmpty) {
         for (final line in logBuffer.lines) {
           stdout.writeln(line.text);
@@ -427,13 +430,6 @@ Future<void> _runAppImpl(
         try {
           await stdout.flush();
         } catch (_) {}
-      }
-    } else {
-      capture.flushPartials();
-      if (onStrayOutput == null && !logBuffer.isEmpty) {
-        for (final line in logBuffer.lines) {
-          usedDriver.write('${line.text}\n');
-        }
       }
     }
 
@@ -444,20 +440,6 @@ Future<void> _runAppImpl(
     runtimeMarkers?.mark('runApp.cleanup.complete');
     runtimeMarkers?.write();
   }
-
-  // Legacy stray-output guard — only when the fd-level capture is NOT
-  // active (custom driver, remote/serve session, Windows, or
-  // FLEURY_FD_CAPTURE=0). `print()` is caught by the zone spec; direct
-  // stdout/stderr writes (loggers, libraries) by the IOOverrides below. The
-  // driver holds the real stdout, so the framework's own frames are never
-  // captured. With fd capture active both layers are redundant: everything
-  // ends at the redirected descriptors, including what these can't see.
-  final captureSpec = activeFdCapture != null
-      ? null
-      : ZoneSpecification(
-          print: (self, parent, zone, line) =>
-              capture.addLine(line, LogSource.stdout),
-        );
 
   // runZonedGuarded is the safety net. A throw inside an async callback —
   // an event handler, a scheduled frame, a hot-reload hook — escapes the
@@ -816,21 +798,10 @@ Future<void> _runAppImpl(
           });
         }
       },
-      zoneSpecification: captureSpec,
     );
   }
 
-  if (activeFdCapture != null) {
-    // fd 1/2 are already redirected at the descriptor level — the zone and
-    // IOOverrides layers would be redundant.
-    runGuarded();
-  } else {
-    IOOverrides.runZoned(
-      runGuarded,
-      stdout: () => capture.sinkFor(LogSource.stdout),
-      stderr: () => capture.sinkFor(LogSource.stderr),
-    );
-  }
+  runGuarded();
 
   return done.future;
 }

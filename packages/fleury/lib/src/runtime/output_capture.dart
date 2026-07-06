@@ -1,29 +1,20 @@
-// Consumer side of the stray-output guard: sanitizes lines, buffers them for
-// the in-app log surface, and powers the replay-on-exit. Fed by ONE of two
-// sources in runApp:
+// Consumer side of stray-output handling: sanitizes lines, buffers them for
+// the in-app log surface ([LogBuffer] -> OutputCaptureView), routes them to a
+// caller hook, and powers runApp's replay-on-exit. It does NOT capture
+// anything itself — its feeders are:
 //
-//   - fd-level capture (package:stdio, POSIX default): fd 1/2 are dup2-moved,
-//     so EVERY writer — Dart print, loggers, native/FFI libraries, inherited
-//     children — is caught at the descriptor. Lines stream in pre-assembled.
-//   - the legacy zone + IOOverrides layer (custom drivers, remote sessions,
-//     Windows, FLEURY_FD_CAPTURE=0): catches `print()` and Dart-level
-//     stdout/stderr writes via the sinks below. Cannot, in principle, see
-//     native writers or code running outside runApp's zone.
+//   - runApp's fd-level capture (package:stdio): fd 1/2 are dup2-moved before
+//     the driver binds stdout, so EVERY writer — Dart print, loggers,
+//     native/FFI libraries, inheritStdio children, code outside any zone — is
+//     caught at the descriptor and streamed here as assembled lines. The
+//     driver renders through the saved real-terminal handle, so frames are
+//     never captured.
+//   - process tasks ([ProcessTaskController]): child-process pipe chunks feed
+//     [addChunk], which assembles them into lines.
 //
-// Original header follows.
-//
-// Captures stray output — `print()` and direct stdout/stderr writes from
-// app or library code — while a TUI session owns the terminal, so it can't
-// interleave with the rendered frame and corrupt the display.
-//
-// The driver holds the *real* stdout (resolved before these overrides take
-// effect), so framework frames bypass capture entirely; only foreign writes
-// inside the run zone are intercepted and buffered. `runApp` replays the
-// buffer once the terminal is restored (or hands each line to a caller hook).
-
-import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
+// Where the fd capture doesn't engage (remote/serve sessions, custom drivers,
+// Windows, FLEURY_FD_CAPTURE=0) stray output flows wherever fd 1/2 point —
+// there is deliberately no weaker in-process fallback.
 
 import '../foundation/change_notifier.dart';
 import '../rendering/text_sanitizer.dart';
@@ -132,75 +123,4 @@ class OutputCapture {
     }
   }
 
-  /// A [Stdout] stand-in that funnels everything written to it into this
-  /// capture, tagged with [source]. Used via `IOOverrides`.
-  Stdout sinkFor(LogSource source) => _CaptureSink(this, source);
-}
-
-/// A [Stdout] that captures instead of writing to a real terminal. Reports
-/// itself as a non-terminal (no ANSI, no size) so well-behaved callers route
-/// plain text through it; the size getters still return sane defaults rather
-/// than throwing, so a logger probing them can't crash the session.
-class _CaptureSink implements Stdout {
-  _CaptureSink(this._capture, this._source);
-
-  final OutputCapture _capture;
-  final LogSource _source;
-
-  void _text(String s) => _capture.addChunk(s, _source);
-
-  @override
-  Encoding encoding = utf8;
-
-  @override
-  void write(Object? object) => _text('$object');
-
-  @override
-  void writeln([Object? object = '']) => _text('$object\n');
-
-  @override
-  void writeAll(Iterable<dynamic> objects, [String separator = '']) =>
-      _text(objects.join(separator));
-
-  @override
-  void writeCharCode(int charCode) => _text(String.fromCharCode(charCode));
-
-  @override
-  void add(List<int> data) => _text(utf8.decode(data, allowMalformed: true));
-
-  @override
-  void addError(Object error, [StackTrace? stackTrace]) {}
-
-  @override
-  Future<void> addStream(Stream<List<int>> stream) => stream.forEach(add);
-
-  @override
-  Future<void> flush() async {}
-
-  @override
-  Future<void> close() async {}
-
-  @override
-  Future<void> get done => Future<void>.value();
-
-  @override
-  bool get hasTerminal => false;
-
-  @override
-  bool get supportsAnsiEscapes => false;
-
-  @override
-  int get terminalColumns => 80;
-
-  @override
-  int get terminalLines => 24;
-
-  @override
-  IOSink get nonBlocking => this;
-
-  @override
-  String get lineTerminator => '\n';
-
-  @override
-  set lineTerminator(String value) {}
 }
