@@ -143,4 +143,66 @@ void main() {
     buf = tester.render(size: const CellSize(8, 4));
     expect(_col(buf, 7).endsWith('█'), isTrue, reason: 'thumb at bottom');
   });
+
+  group('scrollbar: true opt-in (F6)', () {
+    testWidgets('ListView(scrollbar: true) pairs a gutter with no manual '
+        'wiring', (tester) {
+      // No explicit controller, no Scrollbar wrapper — just the flag.
+      tester.pumpWidget(
+        ListView.builder(
+          scrollbar: true,
+          itemCount: 20,
+          itemBuilder: (c, i, sel) => Text('r$i'),
+        ),
+      );
+      // 8 wide → 7 content + 1 gutter; 4-row viewport over 20 items.
+      final buf = tester.render(size: const CellSize(8, 4));
+      // 4 of 20 visible → thumb round(4*4/20)=1 row, pinned to the top.
+      expect(_col(buf, 7), '█│││', reason: 'thumb (1 of 4) at top over 20');
+    });
+
+    testWidgets('the opt-in gutter follows keyboard scrolling', (tester) {
+      tester.pumpWidget(
+        ListView.builder(
+          scrollbar: true,
+          autofocus: true,
+          itemCount: 20,
+          itemBuilder: (c, i, sel) => Text('r$i'),
+        ),
+      );
+      tester.render(size: const CellSize(8, 4));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.end)); // → last item
+      final buf = tester.render(size: const CellSize(8, 4));
+      expect(
+        _col(buf, 7).endsWith('█'),
+        isTrue,
+        reason: 'thumb reaches the bottom when scrolled to the last item',
+      );
+    });
+
+    testWidgets('no gutter by default (backward compatible)', (tester) {
+      tester.pumpWidget(
+        ListView.builder(
+          itemCount: 20,
+          itemBuilder: (c, i, sel) => Text('r$i'),
+        ),
+      );
+      final lastCol = _col(tester.render(size: const CellSize(8, 4)), 7);
+      expect(lastCol.contains('│'), isFalse);
+      expect(lastCol.contains('█'), isFalse);
+    });
+
+    testWidgets('ScrollView(scrollbar: true) pairs a gutter with no manual '
+        'wiring', (tester) {
+      tester.pumpWidget(
+        ScrollView(
+          scrollbar: true,
+          child: Column(children: [for (var i = 0; i < 10; i++) Text('row$i')]),
+        ),
+      );
+      // 10 rows content, 4-row viewport → thumb round(4*4/10)=2 at the top.
+      final buf = tester.render(size: const CellSize(6, 4));
+      expect(_col(buf, 5), '██││', reason: 'thumb (2 of 4) at top over 10 rows');
+    });
+  });
 }

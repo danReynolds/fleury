@@ -34,6 +34,7 @@ import 'focus.dart';
 import 'framework.dart';
 import 'list_view.dart' show EdgeBehavior;
 import 'pointer.dart';
+import 'scrollbar.dart';
 
 /// Mutable scroll state for a [ScrollView]: the current offset plus
 /// read-only metrics the render object writes back after each layout.
@@ -146,6 +147,7 @@ class ScrollView extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.edgeBehavior = EdgeBehavior.bubble,
+    this.scrollbar = false,
   });
 
   final Widget child;
@@ -161,6 +163,11 @@ class ScrollView extends StatefulWidget {
 
   /// What to do with up/down at the top/bottom edge.
   final EdgeBehavior edgeBehavior;
+
+  /// When true, wrap the viewport in a [Scrollbar] gutter that reflects the
+  /// scroll position and lets the mouse drag/click to scroll. A one-line
+  /// opt-in sharing this view's own controller.
+  final bool scrollbar;
 
   @override
   State<ScrollView> createState() => _ScrollViewState();
@@ -261,7 +268,7 @@ class _ScrollViewState extends State<ScrollView> {
 
   @override
   Widget build(BuildContext context) {
-    return PointerScrollListener(
+    final Widget content = PointerScrollListener(
       router: PointerRouterScope.maybeOf(context),
       onScrollUp: () => _controller.scrollBy(-3),
       onScrollDown: () => _controller.scrollBy(3),
@@ -272,6 +279,8 @@ class _ScrollViewState extends State<ScrollView> {
         child: _ScrollViewport(controller: _controller, child: widget.child),
       ),
     );
+    if (!widget.scrollbar) return content;
+    return Scrollbar(controller: _controller, child: content);
   }
 }
 
