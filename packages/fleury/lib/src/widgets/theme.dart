@@ -29,7 +29,7 @@ final class ColorScheme {
     this.background,
     this.surface,
     this.primary = Colors.mint,
-    this.focus = Colors.brightCyan,
+    this.focus = Colors.azure,
     this.success = const AnsiColor(2),
     this.warning = const AnsiColor(3),
     this.error = const AnsiColor(1),
