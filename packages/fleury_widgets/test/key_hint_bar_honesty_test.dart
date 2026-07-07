@@ -141,24 +141,24 @@ void main() {
 
     testWidgets('a binding stays visible when only a NON-advertised alias '
         'is claimed by a deeper binding', (tester) {
-      // Deep binding claims Down; shallow [j, Down] advertises j (free) and
-      // must NOT be suppressed just because it also aliases Down.
+      // The DEEPER binding claims Down; the shallower [j, Down] must NOT be
+      // suppressed (j is free), and its combined label drops the claimed Down.
       tester.pumpWidget(
         Column(
           children: [
             KeyBindings(
               bindings: [
-                KeyBinding(
-                  KeyChord.key(KeyCode.arrowDown),
-                  label: 'scroll',
+                KeyBinding.list(
+                  [KeyChord.char('j'), KeyChord.key(KeyCode.arrowDown)],
+                  label: 'next',
                   onEvent: (_) {},
                 ),
               ],
               child: KeyBindings(
                 bindings: [
-                  KeyBinding.list(
-                    [KeyChord.char('j'), KeyChord.key(KeyCode.arrowDown)],
-                    label: 'next',
+                  KeyBinding(
+                    KeyChord.key(KeyCode.arrowDown),
+                    label: 'scroll',
                     onEvent: (_) {},
                   ),
                 ],
@@ -170,14 +170,15 @@ void main() {
         ),
       );
       final out = bar(tester);
+      // j is free, so `next` stays visible; Down is owned by the deeper
+      // `scroll`, so it drops from `next`'s combined label — `[j]`, not `[j↓]`.
       expect(
         out,
-        contains('next'),
-        reason:
-            'j is free and firable — the shared Down alias (owned by '
-            'the deeper binding) must not hide the whole binding',
+        contains('[j] next'),
+        reason: 'the free alias keeps the binding visible without its claimed '
+            'alias',
       );
-      expect(out, contains('[j]'));
+      expect(out, contains('scroll'), reason: 'the deeper binding owns Down');
     });
 
     testWidgets('a binding with a self-colliding alias list does not '
@@ -200,12 +201,56 @@ void main() {
           ],
         ),
       );
+      final out = bar(tester);
       expect(
-        bar(tester),
+        out,
         contains('save-as'),
         reason:
             'a repeated alias within one binding must not mark it '
             'already-claimed against itself',
+      );
+      // The two aliases canonicalize to the same chord, so the combined label
+      // shows one — not a doubled `[Shift+SS]`.
+      expect(out, isNot(contains('SS')));
+    });
+
+    testWidgets('a shallower binding whose key a deeper binding owns — under a '
+        'different spelling — is suppressed (no lie)', (tester) {
+      // Deeper [S] deepSave owns Shift+S; the shallower [Shift+S] shallowSave
+      // fires the same event and can never win dispatch, so it must be hidden
+      // even though its chord is spelled differently.
+      tester.pumpWidget(
+        Column(
+          children: [
+            KeyBindings(
+              bindings: [
+                KeyBinding(
+                  KeyChord.char('s', shift: true),
+                  label: 'shallowSave',
+                  onEvent: (_) {},
+                ),
+              ],
+              child: KeyBindings(
+                bindings: [
+                  KeyBinding(
+                    KeyChord.char('S'),
+                    label: 'deepSave',
+                    onEvent: (_) {},
+                  ),
+                ],
+                child: const Focus(autofocus: true, child: Text('x')),
+              ),
+            ),
+            const KeyHintBar(),
+          ],
+        ),
+      );
+      final out = bar(tester);
+      expect(out, contains('deepSave'), reason: 'the deeper binding owns the key');
+      expect(
+        out,
+        isNot(contains('shallowSave')),
+        reason: 'same key, spelled differently — cannot fire, must not show',
       );
     });
 
