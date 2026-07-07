@@ -715,6 +715,68 @@ void main() {
       expect(controller.selectedIndex, 5);
       expect(controller.unseenCount, 0, reason: 'following → nothing unseen');
     });
+
+    testWidgets('a non-following list is NOT dragged into follow by selecting '
+        'its last item', (tester) {
+      // A plain selection list (a JSON tree, a file picker, a chat with follow
+      // turned off) constructs a controller with no pinToBottom. Landing the
+      // cursor on the last item must not silently engage follow — otherwise
+      // appends would start yanking the cursor to the tail. Regression guard:
+      // the F2 cursor↔follow coupling must stay scoped to follow-capable lists.
+      final controller = ListController(selectedIndex: 0);
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 5,
+          itemBuilder: _itemBuilder,
+        ),
+      );
+      tester.render();
+      expect(controller.pinToBottom, isFalse);
+
+      controller.selectedIndex = 4; // onto the last item
+      expect(
+        controller.pinToBottom,
+        isFalse,
+        reason: 'selecting the tail must not engage follow on a plain list',
+      );
+
+      // An append does not yank the cursor down either.
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 7,
+          itemBuilder: _itemBuilder,
+        ),
+      );
+      expect(controller.selectedIndex, 4, reason: 'no yank on a plain list');
+    });
+
+    testWidgets('enabling pinToBottom makes a plain list follow-capable so the '
+        'cursor coupling then engages', (tester) {
+      // Turning following on later (via the setter) latches follow-capability:
+      // from then on the cursor couples the way a constructed-following list
+      // does — off the tail unpins, back to the tail re-pins.
+      final controller = ListController(selectedIndex: 0);
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 5,
+          itemBuilder: _itemBuilder,
+        ),
+      );
+      tester.render();
+
+      controller.pinToBottom = true; // explicit enable → snaps to tail
+      expect(controller.selectedIndex, 4);
+      expect(controller.pinToBottom, isTrue);
+
+      controller.selectedIndex = 1; // scroll up now unpins
+      expect(controller.pinToBottom, isFalse);
+
+      controller.selectedIndex = 4; // back to the tail re-pins
+      expect(controller.pinToBottom, isTrue);
+    });
   });
 
   group('lazy ListView.builder', () {

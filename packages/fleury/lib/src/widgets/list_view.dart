@@ -56,13 +56,24 @@ enum EdgeBehavior {
 class ListController extends ChangeNotifier {
   ListController({int? selectedIndex, bool pinToBottom = false})
     : _selectedIndex = selectedIndex,
-      _pinToBottom = pinToBottom;
+      _pinToBottom = pinToBottom,
+      _followsCursor = pinToBottom;
 
   int? _selectedIndex;
   int _itemCount = 0;
   ({int first, int last})? _visibleRange;
   int? _pendingJumpIndex;
   bool _pinToBottom;
+  // Whether this list *follows its cursor* to the tail (`less +F` / chat).
+  // Latched true only by an explicit follow-enable — construction with
+  // `pinToBottom: true`, the [pinToBottom] setter, or [jumpToBottom] — and
+  // never cleared: disengaging (scrolling up) is temporary, so returning to
+  // the tail can resume. It gates the selection→follow coupling in
+  // [selectedIndex] so scroll-only and selection-only lists (a JSON tree, a
+  // file picker, a chat with follow turned off) aren't dragged into follow
+  // mode just by selecting their last row. The coupling's own pin writes do
+  // NOT latch it, so a non-following list stays non-following.
+  bool _followsCursor;
   int _unseenCount = 0;
   bool _disposed = false;
 
@@ -84,6 +95,7 @@ class ListController extends ChangeNotifier {
     if (_pinToBottom == value) return;
     _pinToBottom = value;
     if (value) {
+      _followsCursor = true;
       _unseenCount = 0;
       if (_itemCount > 0) {
         if (_selectedIndex != null) _selectedIndex = _itemCount - 1;
@@ -114,6 +126,7 @@ class ListController extends ChangeNotifier {
   void jumpToBottom() {
     _checkNotDisposed();
     _pinToBottom = true;
+    _followsCursor = true;
     _unseenCount = 0;
     if (_itemCount > 0) {
       if (_selectedIndex != null) _selectedIndex = _itemCount - 1;
@@ -139,10 +152,13 @@ class ListController extends ChangeNotifier {
     final clamped = _clampSelection(value);
     var changed = _selectedIndex != clamped;
     _selectedIndex = clamped;
-    // Follow-mode couples to cursor movement: landing on the last item follows
-    // the tail, moving off it stops. (Scroll-only lists keep pin explicit —
-    // internal re-clamps go through [_clampSelection] directly, not here.)
-    if (clamped != null && _itemCount > 0) {
+    // On a follow-capable list, follow-mode couples to cursor movement: landing
+    // on the last item follows the tail, moving off it stops. Gated on
+    // [_followsCursor] so a plain selection list (a JSON tree, a file picker, a
+    // chat with follow turned off) isn't dragged into follow mode just by
+    // selecting its last row. (Scroll-only lists keep pin explicit — internal
+    // re-clamps go through [_clampSelection] directly, not here.)
+    if (_followsCursor && clamped != null && _itemCount > 0) {
       final onTail = clamped == _itemCount - 1;
       if (_pinToBottom != onTail) {
         _pinToBottom = onTail;
