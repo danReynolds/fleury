@@ -80,12 +80,19 @@ class ListController extends ChangeNotifier {
   /// Whether the list is *following the tail* (`less +F` / chat behaviour).
   ///
   /// While following, appended items advance the viewport — and the selection,
-  /// when there is one — to stay on the newest item. Following engages and
-  /// disengages **automatically with the cursor**: moving the selection off the
-  /// last item (scrolling up to read history) stops following, so new arrivals
-  /// no longer yank you down; returning to the last item resumes it. Setting
-  /// this manually snaps to the tail (`true`) or freezes in place (`false`);
-  /// [jumpToBottom] is the explicit "catch up" action.
+  /// when there is one — to stay on the newest item.
+  ///
+  /// On a **follow-capable** list, following engages and disengages
+  /// **automatically with the cursor**: moving the selection off the last item
+  /// (scrolling up to read history) stops following, so new arrivals no longer
+  /// yank you down; returning to the last item resumes it. A list is
+  /// follow-capable once following has been *explicitly* enabled — constructed
+  /// with `pinToBottom: true`, or turned on later via this setter or
+  /// [jumpToBottom]. A plain selection list (never follow-enabled) is **not**
+  /// dragged into follow mode just by selecting its last row, so use
+  /// `pinToBottom: true` (or the setter) to opt a chat/log into the coupling.
+  /// Setting this manually snaps to the tail (`true`) or freezes in place
+  /// (`false`); [jumpToBottom] is the explicit "catch up" action.
   ///
   /// For a scroll-only list (no selection) following advances the viewport to
   /// the last item on each append.
