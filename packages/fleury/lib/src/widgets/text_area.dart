@@ -43,6 +43,7 @@ class TextArea extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.onEscape,
+    this.onSubmit,
     this.placeholder = '',
     this.placeholderStyle = const CellStyle(dim: true),
     this.style = CellStyle.empty,
@@ -53,7 +54,13 @@ class TextArea extends StatefulWidget {
     this.clipboardPolicy = TextClipboardPolicy.allowed,
     this.keymap = TextEditingKeymap.defaultMultiline,
     this.pastePolicy = const TextPastePolicy(),
-  });
+    this.minLines = 1,
+    this.maxLines,
+  }) : assert(minLines >= 1, 'minLines must be at least 1'),
+       assert(
+         maxLines == null || maxLines >= minLines,
+         'maxLines must be >= minLines',
+       );
 
   final TextEditingController? controller;
   final FocusNode? focusNode;
@@ -61,6 +68,12 @@ class TextArea extends StatefulWidget {
 
   /// Called when the user presses Escape; bubbles if null.
   final void Function()? onEscape;
+
+  /// Called with the current text when the keymap resolves a submit action
+  /// (e.g. Enter under [TextEditingKeymap.chat]); bubbles if null. The default
+  /// [TextEditingKeymap.defaultMultiline] never emits submit, so this only
+  /// fires under a submit-oriented keymap.
+  final void Function(String value)? onSubmit;
 
   /// Hint text shown while the area is empty. May contain newlines.
   final String placeholder;
@@ -82,6 +95,15 @@ class TextArea extends StatefulWidget {
 
   /// Policy for chunking large bracketed paste payloads.
   final TextPastePolicy pastePolicy;
+
+  /// Auto-grow floor: the area is at least this many rows tall. Default 1.
+  final int minLines;
+
+  /// Auto-grow cap. When non-null, the area's height tracks its content
+  /// between [minLines] and [maxLines] rows — a composer that grows with the
+  /// draft — and a bounded parent caps it further. When null (default), height
+  /// is unchanged: it fills a bounded parent, otherwise sizes to its content.
+  final int? maxLines;
 
   @override
   State<TextArea> createState() => _TextAreaState();
@@ -429,10 +451,15 @@ class _TextAreaState extends State<TextArea>
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
+      case TextEditingKeyAction.submit:
+        if (widget.onSubmit != null) {
+          widget.onSubmit!(_controller.text);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
       case TextEditingKeyAction.previousVertical:
       case TextEditingKeyAction.nextVertical:
       case TextEditingKeyAction.acceptCompletion:
-      case TextEditingKeyAction.submit:
         return KeyEventResult.ignored;
     }
   }
@@ -506,6 +533,8 @@ class _TextAreaState extends State<TextArea>
               : widget.style.merge(const CellStyle(dim: true)),
           cursorStyle: widget.cursorStyle,
           cursorVisible: focused,
+          minLines: widget.minLines,
+          maxLines: widget.maxLines,
         ),
       ),
     );
@@ -522,6 +551,8 @@ class _TextAreaDisplay extends LeafRenderObjectWidget {
     required this.style,
     required this.cursorStyle,
     required this.cursorVisible,
+    required this.minLines,
+    required this.maxLines,
   });
 
   final FocusNode focusNode;
@@ -532,6 +563,8 @@ class _TextAreaDisplay extends LeafRenderObjectWidget {
   final CellStyle style;
   final CellStyle cursorStyle;
   final bool cursorVisible;
+  final int minLines;
+  final int? maxLines;
 
   @override
   RenderObject createRenderObject(BuildContext context) => RenderTextArea(
@@ -543,6 +576,8 @@ class _TextAreaDisplay extends LeafRenderObjectWidget {
     style: style,
     cursorStyle: cursorStyle,
     cursorVisible: cursorVisible,
+    minLines: minLines,
+    maxLines: maxLines,
   );
 
   @override
@@ -558,7 +593,9 @@ class _TextAreaDisplay extends LeafRenderObjectWidget {
       ..placeholderStyle = placeholderStyle
       ..style = style
       ..cursorStyle = cursorStyle
-      ..cursorVisible = cursorVisible;
+      ..cursorVisible = cursorVisible
+      ..minLines = minLines
+      ..maxLines = maxLines;
   }
 }
 
@@ -574,6 +611,8 @@ class RenderTextArea extends RenderObject {
     CellStyle style = CellStyle.empty,
     CellStyle cursorStyle = const CellStyle(inverse: true),
     bool cursorVisible = true,
+    int minLines = 1,
+    int? maxLines,
     WidthResolver widthResolver = const DefaultWidthResolver(),
     TerminalProfile profile = TerminalProfile.standard,
   }) : _focusNode = focusNode,
@@ -584,6 +623,8 @@ class RenderTextArea extends RenderObject {
        _style = style,
        _cursorStyle = cursorStyle,
        _cursorVisible = cursorVisible,
+       _minLines = minLines,
+       _maxLines = maxLines,
        _widthResolver = widthResolver,
        _profile = profile;
 
@@ -598,6 +639,8 @@ class RenderTextArea extends RenderObject {
   CellStyle _style;
   CellStyle _cursorStyle;
   bool _cursorVisible;
+  int _minLines;
+  int? _maxLines;
   final WidthResolver _widthResolver;
   final TerminalProfile _profile;
   int _scrollTop = 0;
@@ -656,6 +699,18 @@ class RenderTextArea extends RenderObject {
     markNeedsPaintOnly();
   }
 
+  set minLines(int value) {
+    if (_minLines == value) return;
+    _minLines = value;
+    markNeedsLayout();
+  }
+
+  set maxLines(int? value) {
+    if (_maxLines == value) return;
+    _maxLines = value;
+    markNeedsLayout();
+  }
+
   bool get _showPlaceholder => _text.isEmpty && _placeholder.isNotEmpty;
 
   List<String> get _lines => _text.split('\n');
@@ -681,9 +736,23 @@ class RenderTextArea extends RenderObject {
       if (w > widest) widest = w;
     }
     final cols = constraints.hasBoundedWidth ? constraints.maxCols! : widest;
-    final rows = constraints.hasBoundedHeight
-        ? constraints.maxRows!
-        : lines.length;
+    int rows;
+    if (_maxLines != null) {
+      // Auto-grow: height tracks the content between minLines and maxLines.
+      rows = lines.length.clamp(_minLines, _maxLines!);
+    } else if (constraints.hasBoundedHeight) {
+      rows = constraints.maxRows!;
+    } else {
+      rows = lines.length < _minLines ? _minLines : lines.length;
+    }
+    // Cap to a bounded parent BEFORE the scroll math below. That math and the
+    // paint loop both use `rows`, so it must equal the final viewport height —
+    // otherwise constrain() would shrink the painted size afterwards, desyncing
+    // the two and scrolling the cursor line off-screen under a parent tighter
+    // than maxLines.
+    if (constraints.hasBoundedHeight && rows > constraints.maxRows!) {
+      rows = constraints.maxRows!;
+    }
 
     // Scroll so the cursor's line stays visible.
     final cursorLine = _cursorLineCol(lines).$1;
