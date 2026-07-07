@@ -111,7 +111,9 @@ String _remoteClientSourceFingerprint(File depsFile, String repoRoot) {
     final uri = line.trim();
     if (!uri.startsWith('file://')) continue;
     final path = Uri.parse(uri).toFilePath();
-    if (!path.startsWith(repoRoot)) continue; // drop SDK + pub-cache inputs
+    // Trailing separator so a sibling dir sharing the prefix (repo `…/fleury`
+    // vs `…/fleury-notes`) can't sneak in; drops SDK + pub-cache inputs.
+    if (!path.startsWith('$repoRoot/')) continue;
     hashes.add(_fnv1a64Hex(File(path).readAsBytesSync()));
   }
   hashes.sort();
