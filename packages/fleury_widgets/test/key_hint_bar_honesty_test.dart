@@ -141,24 +141,24 @@ void main() {
 
     testWidgets('a binding stays visible when only a NON-advertised alias '
         'is claimed by a deeper binding', (tester) {
-      // Deep binding claims Down; shallow [j, Down] advertises j (free) and
-      // must NOT be suppressed just because it also aliases Down.
+      // The DEEPER binding claims Down; the shallower [j, Down] must NOT be
+      // suppressed (j is free), and its combined label drops the claimed Down.
       tester.pumpWidget(
         Column(
           children: [
             KeyBindings(
               bindings: [
-                KeyBinding(
-                  KeyChord.key(KeyCode.arrowDown),
-                  label: 'scroll',
+                KeyBinding.list(
+                  [KeyChord.char('j'), KeyChord.key(KeyCode.arrowDown)],
+                  label: 'next',
                   onEvent: (_) {},
                 ),
               ],
               child: KeyBindings(
                 bindings: [
-                  KeyBinding.list(
-                    [KeyChord.char('j'), KeyChord.key(KeyCode.arrowDown)],
-                    label: 'next',
+                  KeyBinding(
+                    KeyChord.key(KeyCode.arrowDown),
+                    label: 'scroll',
                     onEvent: (_) {},
                   ),
                 ],
@@ -170,14 +170,15 @@ void main() {
         ),
       );
       final out = bar(tester);
+      // j is free, so `next` stays visible; Down is owned by the deeper
+      // `scroll`, so it drops from `next`'s combined label — `[j]`, not `[j↓]`.
       expect(
         out,
-        contains('next'),
-        reason:
-            'j is free and firable — the shared Down alias (owned by '
-            'the deeper binding) must not hide the whole binding',
+        contains('[j] next'),
+        reason: 'the free alias keeps the binding visible without its claimed '
+            'alias',
       );
-      expect(out, contains('[j]'));
+      expect(out, contains('scroll'), reason: 'the deeper binding owns Down');
     });
 
     testWidgets('a binding with a self-colliding alias list does not '
