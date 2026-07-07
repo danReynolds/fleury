@@ -767,6 +767,17 @@ void main() {
       );
       tester.render();
 
+      // Precondition: not yet follow-capable — selecting the tail must NOT pin.
+      // (Without the _followsCursor gate this would wrongly engage follow, so
+      // this step makes the test a real guard for the latch, not just a
+      // happy-path characterization of the already-following coupling.)
+      controller.selectedIndex = 4;
+      expect(
+        controller.pinToBottom,
+        isFalse,
+        reason: 'a not-yet-follow-capable list does not pin on tail selection',
+      );
+
       controller.pinToBottom = true; // explicit enable → snaps to tail
       expect(controller.selectedIndex, 4);
       expect(controller.pinToBottom, isTrue);
@@ -815,6 +826,44 @@ void main() {
         reason: 'the last screenful is visible with the tail at the bottom',
       );
       expect(controller.atBottom, isTrue);
+    });
+
+    testWidgets('jumpToBottom bottom-anchors the tail after scrolling up', (
+      tester,
+    ) {
+      // Locks the explicit catch-up path (the setter / jumpToBottom snap-to-
+      // tail), not just the append path exercised above: after scrolling up to
+      // read history, catching up must show the newest screenful with the tail
+      // at the bottom — a pending jump here would top-anchor it and blank the
+      // rows above.
+      final controller = ListController(pinToBottom: true);
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 20,
+          itemBuilder: _itemBuilder,
+          autofocus: true,
+        ),
+      );
+      tester.render(size: const CellSize(10, 5));
+      expect(controller.visibleRange, (first: 15, last: 19));
+
+      // Scroll up to read history — moving off the tail unpins.
+      controller.selectedIndex = 2;
+      tester.render(size: const CellSize(10, 5));
+      expect(controller.pinToBottom, isFalse);
+      expect(controller.visibleRange, (first: 2, last: 6));
+
+      // Catch up.
+      controller.jumpToBottom();
+      tester.render(size: const CellSize(10, 5));
+      expect(controller.selectedIndex, 19);
+      expect(controller.pinToBottom, isTrue);
+      expect(
+        controller.visibleRange,
+        (first: 15, last: 19),
+        reason: 'jumpToBottom shows the last screenful, tail at the bottom',
+      );
     });
   });
 
