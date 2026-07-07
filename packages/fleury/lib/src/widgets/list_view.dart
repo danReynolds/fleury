@@ -38,6 +38,7 @@ import 'basic.dart';
 import 'focus.dart';
 import 'framework.dart';
 import 'pointer.dart';
+import 'scrollbar.dart';
 
 /// How a [ListView] handles up/down at the first/last item.
 enum EdgeBehavior {
@@ -269,6 +270,7 @@ class ListView extends StatefulWidget {
     this.edgeBehavior = EdgeBehavior.bubble,
     this.onSelect,
     this.selectionActive,
+    this.scrollbar = false,
   }) : itemCount = null,
        itemBuilder = null,
        separatorBuilder = null;
@@ -286,6 +288,7 @@ class ListView extends StatefulWidget {
     this.edgeBehavior = EdgeBehavior.bubble,
     this.onSelect,
     this.selectionActive,
+    this.scrollbar = false,
   }) : assert(itemCount >= 0, 'itemCount must be non-negative'),
        separatorBuilder = null,
        children = null;
@@ -313,6 +316,7 @@ class ListView extends StatefulWidget {
     this.edgeBehavior = EdgeBehavior.bubble,
     this.onSelect,
     this.selectionActive,
+    this.scrollbar = false,
   }) : assert(itemCount >= 0, 'itemCount must be non-negative'),
        children = null;
 
@@ -349,6 +353,16 @@ class ListView extends StatefulWidget {
   /// What to do with up/down at the boundary of the list. See
   /// [EdgeBehavior].
   final EdgeBehavior edgeBehavior;
+
+  /// When true, wrap the list in a [Scrollbar] gutter that reflects the
+  /// visible item range and lets the mouse drag/click to scroll. A one-line
+  /// opt-in: the bar shares this list's controller, so there is nothing extra
+  /// to wire. See [Scrollbar.list].
+  ///
+  /// Needs a bounded width to anchor the right-edge gutter — under an unbounded
+  /// width (e.g. a non-Expanded child of a Row) it throws a clear error rather
+  /// than collapsing the list; wrap the list in an Expanded or a SizedBox.
+  final bool scrollbar;
 
   /// Called with the current selected index when the user presses
   /// Enter. Not invoked when the list is empty or there's no
@@ -542,7 +556,7 @@ class _ListViewState extends State<ListView> {
   @override
   Widget build(BuildContext context) {
     final selected = _controller.selectedIndex;
-    return PointerScrollListener(
+    final Widget content = PointerScrollListener(
       router: PointerRouterScope.maybeOf(context),
       onScrollUp: () => _scrollBy(-1),
       onScrollDown: () => _scrollBy(1),
@@ -613,6 +627,12 @@ class _ListViewState extends State<ListView> {
         ),
       ),
     );
+    if (!widget.scrollbar) return content;
+    // Shares the list's own controller: the gutter reflects the visible item
+    // range, and dragging/clicking it scrolls by item. (Needs a bounded width
+    // to anchor the right-edge gutter — Scrollbar throws a clear error under
+    // unbounded width rather than collapsing the list.)
+    return Scrollbar.list(controller: _controller, child: content);
   }
 }
 
