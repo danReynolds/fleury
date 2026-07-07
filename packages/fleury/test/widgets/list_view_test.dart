@@ -937,11 +937,11 @@ void main() {
       expect(selections, [3]);
     });
 
-    testWidgets('clicking a separator is inert; clicking an item selects and '
-        'fires onSelect', (tester) {
-      // A non-empty list defaults the cursor to 0 at mount, so we prove the
-      // separator is not a tap target via onSelect (which only _handleItemTap
-      // fires) rather than the selection value.
+    testWidgets('clicking a separator selects the item it trails; clicking an '
+        'item selects and fires onSelect', (tester) {
+      // A separator is composed into the block of the item it trails, and the
+      // block is one tap target — so a click on the separator row selects that
+      // item (it holds no index of its own).
       final activated = <int>[];
       final controller = ListController(selectedIndex: 0);
       tester.pumpWidget(
@@ -961,17 +961,56 @@ void main() {
       );
       tester.render(size: const CellSize(12, 6));
       // Rows: 0 item0, 1 sep0, 2 item1, 3 sep1, 4 item2.
-      // The separator on row 1 is not a gesture target — nothing fires and the
-      // selection is untouched.
+      // sep0 (row 1) trails item0, so clicking it selects item0.
       tester.sendMouse(_mouse(MouseEventKind.down, 1, 1));
       tester.sendMouse(_mouse(MouseEventKind.up, 1, 1));
-      expect(activated, isEmpty, reason: 'a separator is not a tap target');
       expect(controller.selectedIndex, 0);
+      expect(activated, [0], reason: 'a separator click selects its item');
       // The item on row 2 selects and fires onSelect(1) as usual.
       tester.sendMouse(_mouse(MouseEventKind.down, 1, 2));
       tester.sendMouse(_mouse(MouseEventKind.up, 1, 2));
       expect(controller.selectedIndex, 1);
-      expect(activated, [1]);
+      expect(activated, [0, 1]);
+    });
+
+    testWidgets('an item in an overflowing separator block stays clickable at '
+        'its real row', (tester) {
+      // A tall separator after item 1 makes item1's composed block overflow the
+      // viewport, so the block paints through RenderFlex's clip path. The item
+      // must still register its tap region at its true screen row (regression:
+      // the clip path dropped screenOffset, leaving item1 unclickable and its
+      // phantom region stealing item0's clicks at the scratch origin).
+      final activated = <int>[];
+      final controller = ListController(selectedIndex: 0);
+      tester.pumpWidget(
+        SizedBox(
+          width: 8,
+          height: 6,
+          child: ListView.separated(
+            controller: controller,
+            itemCount: 4,
+            onSelect: activated.add,
+            itemBuilder: (c, i, sel) =>
+                SizedBox(width: 8, height: 1, child: Text('i$i')),
+            // Only item 1 gets a (tall) trailing separator, so its block
+            // overflows; the others have none.
+            separatorBuilder: (c, i) => i == 1
+                ? const SizedBox(width: 8, height: 10, child: Text('sep'))
+                : null,
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(8, 6));
+      // Layout: row 0 = i0, row 1 = i1, then sep1 overflows below.
+      // Clicking item0's row selects item0 (no phantom steal from i1's block).
+      tester.sendMouse(_mouse(MouseEventKind.down, 0, 0));
+      tester.sendMouse(_mouse(MouseEventKind.up, 0, 0));
+      expect(controller.selectedIndex, 0);
+      // Clicking item1's row selects item1 (clickable despite its overflow).
+      tester.sendMouse(_mouse(MouseEventKind.down, 0, 1));
+      tester.sendMouse(_mouse(MouseEventKind.up, 0, 1));
+      expect(controller.selectedIndex, 1);
+      expect(activated, [0, 1]);
     });
   });
 

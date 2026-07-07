@@ -296,11 +296,12 @@ class ListView extends StatefulWidget {
   /// itemCount - 2` — and may return `null` to omit that gap's separator
   /// (e.g. a day divider shown only when the day actually changes).
   ///
-  /// Separators are visual only: they never take the cursor, are not
-  /// selectable, and are excluded from all selection / index math — the
-  /// list still addresses exactly [itemCount] logical items. Each is
-  /// composed into the row block beneath its item, so the (well-tested)
-  /// item-index machinery of [ListView.builder] is reused unchanged.
+  /// Separators never take the cursor and hold no index of their own — the
+  /// list still addresses exactly [itemCount] items, and arrow / Home / End
+  /// navigation walks items only. Each is composed into the row block beneath
+  /// its item (reusing [ListView.builder]'s well-tested item-index machinery),
+  /// and the block is one tap target, so a mouse click on a separator selects
+  /// the item it trails.
   const ListView.separated({
     super.key,
     this.controller,
@@ -580,20 +581,29 @@ class _ListViewState extends State<ListView> {
               controller: _controller,
               itemCount: itemCount,
               itemBuilder: (context, index, itemActive) {
-                final item = GestureDetector(
+                final built = widget.itemBuilder!(context, index, itemActive);
+                // No separator after the last item, when none was requested, or
+                // when the builder returns null for this gap.
+                final separator =
+                    separatorBuilder == null || index >= itemCount - 1
+                    ? null
+                    : separatorBuilder(context, index);
+                final content = separator == null
+                    ? built
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [built, separator],
+                      );
+                // The GestureDetector wraps the WHOLE block (not the item
+                // alone) so it is the block's render root: the lazy list threads
+                // screenOffset to item roots, so the tap region lands at the
+                // item's true screen row even when a tall block overflows the
+                // viewport and its inner Column paints through the clip path
+                // (which drops screenOffset for its own children). A tap on a
+                // separator row therefore selects the item it trails.
+                return GestureDetector(
                   onTapDown: (_, _) => _handleItemTap(index),
-                  child: widget.itemBuilder!(context, index, itemActive),
-                );
-                // No separator after the last item, when none was requested,
-                // or when the builder returns null for this gap.
-                if (separatorBuilder == null || index >= itemCount - 1) {
-                  return item;
-                }
-                final separator = separatorBuilder(context, index);
-                if (separator == null) return item;
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [item, separator],
+                  child: content,
                 );
               },
               selectedIndex: selected,
