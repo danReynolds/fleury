@@ -102,7 +102,24 @@ void main() {
       expect(out, contains('Throw in a handler'));
       expect(out, contains('Emit a log burst'));
       expect(out, contains('What just happened'));
-      expect(out, contains('press F12'));
+      expect(out, contains('press Ctrl+G')); // Ctrl+G is the reliable toggle
+    });
+
+    testWidgets('arrow keys traverse the scenario buttons (the '
+        'FocusTraversalGroup wiring)', (tester) {
+      tester.pumpWidget(const DebugPlaygroundApp());
+      tester.render(size: _size); // autofocus lands on the first button
+      expect(
+        tester.semantics().single(role: SemanticRole.button, focused: true).label,
+        'Spike a slow frame',
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      tester.render(size: _size);
+      expect(
+        tester.semantics().single(role: SemanticRole.button, focused: true).label,
+        'Throw in a handler',
+        reason: '↓ moves focus to the next button inside the traversal group',
+      );
     });
 
     testWidgets('activating a scenario via its semantic action updates the '

@@ -6,8 +6,10 @@ import 'scaffold.dart';
 /// A hands-on tour of Fleury's built-in debug shell. Each scenario button
 /// *simulates* a situation the shell was built to diagnose — a janky frame, an
 /// uncaught error, a burst of logs, a continuously-repainting region — so you
-/// can trigger one and watch the matching tab light up. Press **F12** to open
-/// the shell (docked debug panel), then activate a scenario.
+/// can trigger one and watch the matching tab light up. Press **Ctrl+G** to
+/// open the shell (docked debug panel), then activate a scenario. (F12 is a
+/// Logs-tab shortcut, but macOS reserves the function keys, so Ctrl+G is the
+/// reliable toggle.)
 ///
 /// Every trigger is a plain [Button], so its role/label reach the semantic tree
 /// — which makes this app the agent-devtools dogfood too. Point `fleury mcp` at
@@ -16,7 +18,7 @@ import 'scaffold.dart';
 /// debugger while it drives the app.
 ///
 /// Browser-safe (no `dart:io`), so it runs in a terminal or over `fleury serve`
-/// — though the in-terminal shell (F12) is where the payoff shows today.
+/// — though the in-terminal shell (Ctrl+G) is where the payoff shows today.
 class DebugPlaygroundApp extends StatelessWidget {
   const DebugPlaygroundApp({super.key});
 
@@ -117,7 +119,8 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
     for (var i = 1; i <= 40; i++) {
       print('[playground] log burst #$_logBursts line $i/40');
     }
-    _lastAction = 'emitted 40 log lines → see the Logs tab '
+    _lastAction =
+        'emitted 40 log lines → see the Logs tab '
         '(fleury also fd-captures native/library output)';
   });
 
@@ -184,7 +187,7 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
         ),
         const Expanded(child: SizedBox.shrink()),
         Text(
-          'press F12 to open the debug shell',
+          'press Ctrl+G to open the debug shell',
           style: CellStyle(foreground: theme.colorScheme.info),
         ),
         Text('   ', style: theme.mutedStyle),
@@ -193,54 +196,60 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
   }
 
   Widget _scenarioPanel(ThemeData theme) {
+    // A FocusTraversalGroup makes ↑/↓ move between the buttons. Tab/Shift+Tab
+    // already traverse framework-wide; arrows are opt-in per container so a
+    // list or text field can own its own arrows without a global hijack.
     return Panel(
       title: 'Scenarios',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          _scenario(
-            theme,
-            Button(
-              label: 'Spike a slow frame',
-              variant: ButtonVariant.warning,
-              autofocus: true,
-              onPressed: _spikeSlowFrame,
+      trailing: Text('↑↓ / Tab · Enter', style: theme.mutedStyle),
+      child: FocusTraversalGroup(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            _scenario(
+              theme,
+              Button(
+                label: 'Spike a slow frame',
+                variant: ButtonVariant.warning,
+                autofocus: true,
+                onPressed: _spikeSlowFrame,
+              ),
+              '→ Live (build µs spike)',
             ),
-            '→ Live (build µs spike)',
-          ),
-          _scenario(
-            theme,
-            Button(
-              label: 'Throw in a handler',
-              variant: ButtonVariant.error,
-              onPressed: _throwInHandler,
+            _scenario(
+              theme,
+              Button(
+                label: 'Throw in a handler',
+                variant: ButtonVariant.error,
+                onPressed: _throwInHandler,
+              ),
+              '→ Errors (caught, non-fatal)',
             ),
-            '→ Errors (caught, non-fatal)',
-          ),
-          _scenario(
-            theme,
-            Button(label: 'Emit a log burst', onPressed: _emitLogBurst),
-            '→ Logs (40 stdout lines)',
-          ),
-          _scenario(
-            theme,
-            Button(
-              label: _streaming ? 'Stop live stream' : 'Toggle live stream',
-              variant: ButtonVariant.success,
-              onPressed: _toggleStream,
+            _scenario(
+              theme,
+              Button(label: 'Emit a log burst', onPressed: _emitLogBurst),
+              '→ Logs (40 stdout lines)',
             ),
-            '→ Live cadence + paint-flash',
-          ),
-          _scenario(
-            theme,
-            Button(
-              label: 'Rebuild storm',
-              variant: ButtonVariant.primary,
-              onPressed: _rebuildStorm,
+            _scenario(
+              theme,
+              Button(
+                label: _streaming ? 'Stop live stream' : 'Toggle live stream',
+                variant: ButtonVariant.success,
+                onPressed: _toggleStream,
+              ),
+              '→ Live cadence + paint-flash',
             ),
-            '→ Rebuilds (120 forced)',
-          ),
-        ],
+            _scenario(
+              theme,
+              Button(
+                label: 'Rebuild storm',
+                variant: ButtonVariant.primary,
+                onPressed: _rebuildStorm,
+              ),
+              '→ Rebuilds (120 forced)',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -261,14 +270,19 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
   Widget _readoutPanel(ThemeData theme) {
     final stream = _streaming
         ? '◐ streaming (tick $_streamTick)'
-        : (_stormRemaining > 0 ? '● rebuilding ($_stormRemaining left)' : 'idle');
+        : (_stormRemaining > 0
+              ? '● rebuilding ($_stormRemaining left)'
+              : 'idle');
     return Panel(
       title: 'What just happened',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Text('Last action', style: theme.mutedStyle),
-          Text(_lastAction, style: CellStyle(foreground: theme.colorScheme.info)),
+          Text(
+            _lastAction,
+            style: CellStyle(foreground: theme.colorScheme.info),
+          ),
           const SizedBox(height: 1),
           _stat(theme, 'errors thrown', _errors),
           _stat(theme, 'log bursts', _logBursts),
@@ -278,10 +292,11 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
           const SizedBox(height: 1),
           Text('Where to look', style: theme.mutedStyle),
           Text(
-            'F12 opens the shell — Tab cycles Live · Rebuilds · Logs · '
-            'Errors · Tree. The Tree tab is the semantic view an agent '
-            'reads over fleury mcp; it can invoke these same buttons, then '
-            'read_errors / read_frames / read_logs to see what it caused.',
+            'Ctrl+G opens the shell (F12 jumps to Logs, when macOS lets it '
+            'through) — Tab cycles Live · Rebuilds · Logs · Errors · Tree. '
+            'The Tree tab is the semantic view an agent reads over fleury '
+            'mcp; it can invoke these same buttons, then read_errors / '
+            'read_frames / read_logs to see what it caused.',
             style: theme.mutedStyle,
           ),
         ],
@@ -303,8 +318,8 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
 
   Widget _footer(ThemeData theme) {
     return Text(
-      ' F12 debug shell   Tab switch tabs   q quit   ·   drive me: '
-      'fleury mcp -> invoke_action',
+      ' Ctrl+G debug shell · ↑↓/Tab move · Enter run · q quit · '
+      'drive me: fleury mcp -> invoke_action',
       style: theme.mutedStyle,
     );
   }
