@@ -153,6 +153,61 @@ void main() {
       );
     });
   });
+
+  group('F9: focus role + degradation convention', () {
+    test('scheme exposes a themeable focus role, distinct and copyable', () {
+      // A distinct blue hue: it downsamples to blue on 16-color, clear of the
+      // cyan cluster that primary/info collapse into there.
+      expect(ColorScheme.standard.focus, Colors.azure);
+      final custom = ColorScheme.standard.copyWith(focus: Colors.brightMagenta);
+      expect(custom.focus, Colors.brightMagenta);
+      expect(custom == ColorScheme.standard, isFalse);
+      // Only focus changed — the rest of the role set is untouched.
+      expect(custom.primary, ColorScheme.standard.primary);
+    });
+
+    test('the focus color drops under NO_COLOR but downsamples on 16-color, so '
+        'the paved path pairs it with the bold focusedStyle attribute', () {
+      final focus = ColorScheme.standard.focus;
+      // A color role alone is gone under NO_COLOR...
+      expect(quantizeColor(focus, ColorMode.none), isNull);
+      // ...but present (quantized) on a 16-color terminal.
+      expect(quantizeColor(focus, ColorMode.ansi16), isNotNull);
+      // The attribute half (bold) is what remains when color is stripped, so a
+      // `colors.focus` + `focusedStyle` cue never fully vanishes under NO_COLOR.
+      expect(ThemeData.fallback.focusedStyle.bold, isTrue);
+      expect(ThemeData.fallback.mutedStyle.dim, isTrue);
+    });
+
+    test('the renderer drops the focus color under NO_COLOR yet still emits the '
+        'focusedStyle bold — so the cue survives end to end, not just in '
+        'quantizeColor', () {
+      // Paint one cell the paved focus way: colors.focus + focusedStyle (bold).
+      final cell = CellStyle(
+        foreground: ColorScheme.standard.focus,
+        bold: ThemeData.fallback.focusedStyle.bold,
+      );
+      String renderAt(ColorMode mode) {
+        final buffer = CellBuffer(const CellSize(1, 1))
+          ..writeGrapheme(const CellOffset(0, 0), 'x', style: cell);
+        final sink = StringAnsiSink();
+        AnsiRenderer(colorMode: mode).renderFull(buffer, sink);
+        return sink.output;
+      }
+
+      // Truecolor: both halves of the cue reach the wire — azure fg and bold.
+      final full = renderAt(ColorMode.truecolor);
+      expect(full, contains('38;2;70;130;220')); // azure foreground SGR
+      expect(full, contains('1m')); // bold attribute
+
+      // NO_COLOR: the color introducer is gone, but bold still lands. This is
+      // the guarantee — a refactor that early-outs the SGR when color drops
+      // would fail here, where the quantizeColor-only assertion above wouldn't.
+      final plain = renderAt(ColorMode.none);
+      expect(plain, isNot(contains('38;'))); // no foreground color set
+      expect(plain, contains('1m')); // bold survives the color strip
+    });
+  });
 }
 
 class _Brand {
