@@ -65,25 +65,43 @@ enum EdgeBehavior {
 class ListController extends ChangeNotifier {
   ListController({int? selectedIndex, bool pinToBottom = false})
     : _selectedIndex = selectedIndex,
-      _pinToBottom = pinToBottom;
+      _pinToBottom = pinToBottom,
+      _followsCursor = pinToBottom;
 
   int? _selectedIndex;
   int _itemCount = 0;
   ({int first, int last})? _visibleRange;
   int? _pendingJumpIndex;
   bool _pinToBottom;
+  // Whether this list *follows its cursor* to the tail (`less +F` / chat).
+  // Latched true only by an explicit follow-enable — construction with
+  // `pinToBottom: true`, the [pinToBottom] setter, or [jumpToBottom] — and
+  // never cleared: disengaging (scrolling up) is temporary, so returning to
+  // the tail can resume. It gates the selection→follow coupling in
+  // [selectedIndex] so scroll-only and selection-only lists (a JSON tree, a
+  // file picker, a chat with follow turned off) aren't dragged into follow
+  // mode just by selecting their last row. The coupling's own pin writes do
+  // NOT latch it, so a non-following list stays non-following.
+  bool _followsCursor;
   int _unseenCount = 0;
   bool _disposed = false;
 
   /// Whether the list is *following the tail* (`less +F` / chat behaviour).
   ///
   /// While following, appended items advance the viewport — and the selection,
-  /// when there is one — to stay on the newest item. Following engages and
-  /// disengages **automatically with the cursor**: moving the selection off the
-  /// last item (scrolling up to read history) stops following, so new arrivals
-  /// no longer yank you down; returning to the last item resumes it. Setting
-  /// this manually snaps to the tail (`true`) or freezes in place (`false`);
-  /// [jumpToBottom] is the explicit "catch up" action.
+  /// when there is one — to stay on the newest item.
+  ///
+  /// On a **follow-capable** list, following engages and disengages
+  /// **automatically with the cursor**: moving the selection off the last item
+  /// (scrolling up to read history) stops following, so new arrivals no longer
+  /// yank you down; returning to the last item resumes it. A list is
+  /// follow-capable once following has been *explicitly* enabled — constructed
+  /// with `pinToBottom: true`, or turned on later via this setter or
+  /// [jumpToBottom]. A plain selection list (never follow-enabled) is **not**
+  /// dragged into follow mode just by selecting its last row, so use
+  /// `pinToBottom: true` (or the setter) to opt a chat/log into the coupling.
+  /// Setting this manually snaps to the tail (`true`) or freezes in place
+  /// (`false`); [jumpToBottom] is the explicit "catch up" action.
   ///
   /// For a scroll-only list (no selection) following advances the viewport to
   /// the last item on each append.
@@ -93,11 +111,9 @@ class ListController extends ChangeNotifier {
     if (_pinToBottom == value) return;
     _pinToBottom = value;
     if (value) {
+      _followsCursor = true;
       _unseenCount = 0;
-      if (_itemCount > 0) {
-        if (_selectedIndex != null) _selectedIndex = _itemCount - 1;
-        _pendingJumpIndex = _itemCount - 1;
-      }
+      _snapToTail();
     }
     notifyListeners();
   }
@@ -123,11 +139,9 @@ class ListController extends ChangeNotifier {
   void jumpToBottom() {
     _checkNotDisposed();
     _pinToBottom = true;
+    _followsCursor = true;
     _unseenCount = 0;
-    if (_itemCount > 0) {
-      if (_selectedIndex != null) _selectedIndex = _itemCount - 1;
-      _pendingJumpIndex = _itemCount - 1;
-    }
+    _snapToTail();
     notifyListeners();
   }
 
@@ -148,10 +162,13 @@ class ListController extends ChangeNotifier {
     final clamped = _clampSelection(value);
     var changed = _selectedIndex != clamped;
     _selectedIndex = clamped;
-    // Follow-mode couples to cursor movement: landing on the last item follows
-    // the tail, moving off it stops. (Scroll-only lists keep pin explicit —
-    // internal re-clamps go through [_clampSelection] directly, not here.)
-    if (clamped != null && _itemCount > 0) {
+    // On a follow-capable list, follow-mode couples to cursor movement: landing
+    // on the last item follows the tail, moving off it stops. Gated on
+    // [_followsCursor] so a plain selection list (a JSON tree, a file picker, a
+    // chat with follow turned off) isn't dragged into follow mode just by
+    // selecting its last row. (Scroll-only lists keep pin explicit — internal
+    // re-clamps go through [_clampSelection] directly, not here.)
+    if (_followsCursor && clamped != null && _itemCount > 0) {
       final onTail = clamped == _itemCount - 1;
       if (_pinToBottom != onTail) {
         _pinToBottom = onTail;
@@ -184,8 +201,7 @@ class ListController extends ChangeNotifier {
     _itemCount = newCount;
     final grew = newCount > oldCount && newCount > 0;
     if (_pinToBottom && grew) {
-      if (_selectedIndex != null) _selectedIndex = newCount - 1;
-      _pendingJumpIndex = newCount - 1;
+      _snapToTail();
       _unseenCount = 0;
     } else if (grew) {
       _unseenCount += newCount - oldCount;
@@ -194,6 +210,24 @@ class ListController extends ChangeNotifier {
       _selectedIndex = _clampSelection(_selectedIndex);
     }
     notifyListeners();
+  }
+
+  /// Moves the follow target to the newest item. When the list has a
+  /// selection, advancing it is enough — the layout's selection-visibility
+  /// pass then anchors the tail at the *bottom* of the viewport (the newest
+  /// screenful). Only a scroll-only list (no selection) needs an explicit
+  /// pending jump. Issuing a pending jump when there IS a selection would
+  /// instead anchor the newest item at the *top* of the viewport and hide the
+  /// screenful above it — a following chat/log would show only its last line.
+  /// Callers own the follow flags and [unseenCount]; this only moves the
+  /// target, and is a no-op on an empty list.
+  void _snapToTail() {
+    if (_itemCount == 0) return;
+    if (_selectedIndex != null) {
+      _selectedIndex = _itemCount - 1;
+    } else {
+      _pendingJumpIndex = _itemCount - 1;
+    }
   }
 
   int? _clampSelection(int? value) {

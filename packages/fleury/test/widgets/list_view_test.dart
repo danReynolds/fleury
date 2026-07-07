@@ -715,6 +715,156 @@ void main() {
       expect(controller.selectedIndex, 5);
       expect(controller.unseenCount, 0, reason: 'following → nothing unseen');
     });
+
+    testWidgets('a non-following list is NOT dragged into follow by selecting '
+        'its last item', (tester) {
+      // A plain selection list (a JSON tree, a file picker, a chat with follow
+      // turned off) constructs a controller with no pinToBottom. Landing the
+      // cursor on the last item must not silently engage follow — otherwise
+      // appends would start yanking the cursor to the tail. Regression guard:
+      // the F2 cursor↔follow coupling must stay scoped to follow-capable lists.
+      final controller = ListController(selectedIndex: 0);
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 5,
+          itemBuilder: _itemBuilder,
+        ),
+      );
+      tester.render();
+      expect(controller.pinToBottom, isFalse);
+
+      controller.selectedIndex = 4; // onto the last item
+      expect(
+        controller.pinToBottom,
+        isFalse,
+        reason: 'selecting the tail must not engage follow on a plain list',
+      );
+
+      // An append does not yank the cursor down either.
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 7,
+          itemBuilder: _itemBuilder,
+        ),
+      );
+      expect(controller.selectedIndex, 4, reason: 'no yank on a plain list');
+    });
+
+    testWidgets('enabling pinToBottom makes a plain list follow-capable so the '
+        'cursor coupling then engages', (tester) {
+      // Turning following on later (via the setter) latches follow-capability:
+      // from then on the cursor couples the way a constructed-following list
+      // does — off the tail unpins, back to the tail re-pins.
+      final controller = ListController(selectedIndex: 0);
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 5,
+          itemBuilder: _itemBuilder,
+        ),
+      );
+      tester.render();
+
+      // Precondition: not yet follow-capable — selecting the tail must NOT pin.
+      // (Without the _followsCursor gate this would wrongly engage follow, so
+      // this step makes the test a real guard for the latch, not just a
+      // happy-path characterization of the already-following coupling.)
+      controller.selectedIndex = 4;
+      expect(
+        controller.pinToBottom,
+        isFalse,
+        reason: 'a not-yet-follow-capable list does not pin on tail selection',
+      );
+
+      controller.pinToBottom = true; // explicit enable → snaps to tail
+      expect(controller.selectedIndex, 4);
+      expect(controller.pinToBottom, isTrue);
+
+      controller.selectedIndex = 1; // scroll up now unpins
+      expect(controller.pinToBottom, isFalse);
+
+      controller.selectedIndex = 4; // back to the tail re-pins
+      expect(controller.pinToBottom, isTrue);
+    });
+
+    testWidgets('following a growing list anchors the tail at the BOTTOM of '
+        'the viewport, not the top', (tester) {
+      // Regression: a following list must show the newest *screenful* — the
+      // tail at the bottom — not collapse to just the last item at row 0 with
+      // a blank viewport below. Advancing the selection is what pulls the
+      // viewport; a pending jump on every append would top-anchor the newest
+      // item and hide everything above it (a chat that only shows its last
+      // message).
+      final controller = ListController(pinToBottom: true);
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 3,
+          itemBuilder: _itemBuilder,
+          autofocus: true,
+        ),
+      );
+      tester.render(size: const CellSize(10, 5));
+
+      // Grow well past the viewport while following.
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 20,
+          itemBuilder: _itemBuilder,
+          autofocus: true,
+        ),
+      );
+      tester.render(size: const CellSize(10, 5));
+
+      expect(controller.selectedIndex, 19, reason: 'follow advanced to tail');
+      expect(
+        controller.visibleRange,
+        (first: 15, last: 19),
+        reason: 'the last screenful is visible with the tail at the bottom',
+      );
+      expect(controller.atBottom, isTrue);
+    });
+
+    testWidgets('jumpToBottom bottom-anchors the tail after scrolling up', (
+      tester,
+    ) {
+      // Locks the explicit catch-up path (the setter / jumpToBottom snap-to-
+      // tail), not just the append path exercised above: after scrolling up to
+      // read history, catching up must show the newest screenful with the tail
+      // at the bottom — a pending jump here would top-anchor it and blank the
+      // rows above.
+      final controller = ListController(pinToBottom: true);
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 20,
+          itemBuilder: _itemBuilder,
+          autofocus: true,
+        ),
+      );
+      tester.render(size: const CellSize(10, 5));
+      expect(controller.visibleRange, (first: 15, last: 19));
+
+      // Scroll up to read history — moving off the tail unpins.
+      controller.selectedIndex = 2;
+      tester.render(size: const CellSize(10, 5));
+      expect(controller.pinToBottom, isFalse);
+      expect(controller.visibleRange, (first: 2, last: 6));
+
+      // Catch up.
+      controller.jumpToBottom();
+      tester.render(size: const CellSize(10, 5));
+      expect(controller.selectedIndex, 19);
+      expect(controller.pinToBottom, isTrue);
+      expect(
+        controller.visibleRange,
+        (first: 15, last: 19),
+        reason: 'jumpToBottom shows the last screenful, tail at the bottom',
+      );
+    });
   });
 
   group('lazy ListView.builder', () {
