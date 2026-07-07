@@ -777,6 +777,45 @@ void main() {
       controller.selectedIndex = 4; // back to the tail re-pins
       expect(controller.pinToBottom, isTrue);
     });
+
+    testWidgets('following a growing list anchors the tail at the BOTTOM of '
+        'the viewport, not the top', (tester) {
+      // Regression: a following list must show the newest *screenful* — the
+      // tail at the bottom — not collapse to just the last item at row 0 with
+      // a blank viewport below. Advancing the selection is what pulls the
+      // viewport; a pending jump on every append would top-anchor the newest
+      // item and hide everything above it (a chat that only shows its last
+      // message).
+      final controller = ListController(pinToBottom: true);
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 3,
+          itemBuilder: _itemBuilder,
+          autofocus: true,
+        ),
+      );
+      tester.render(size: const CellSize(10, 5));
+
+      // Grow well past the viewport while following.
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 20,
+          itemBuilder: _itemBuilder,
+          autofocus: true,
+        ),
+      );
+      tester.render(size: const CellSize(10, 5));
+
+      expect(controller.selectedIndex, 19, reason: 'follow advanced to tail');
+      expect(
+        controller.visibleRange,
+        (first: 15, last: 19),
+        reason: 'the last screenful is visible with the tail at the bottom',
+      );
+      expect(controller.atBottom, isTrue);
+    });
   });
 
   group('lazy ListView.builder', () {

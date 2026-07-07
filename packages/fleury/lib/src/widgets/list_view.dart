@@ -97,10 +97,7 @@ class ListController extends ChangeNotifier {
     if (value) {
       _followsCursor = true;
       _unseenCount = 0;
-      if (_itemCount > 0) {
-        if (_selectedIndex != null) _selectedIndex = _itemCount - 1;
-        _pendingJumpIndex = _itemCount - 1;
-      }
+      _snapToTail();
     }
     notifyListeners();
   }
@@ -128,10 +125,7 @@ class ListController extends ChangeNotifier {
     _pinToBottom = true;
     _followsCursor = true;
     _unseenCount = 0;
-    if (_itemCount > 0) {
-      if (_selectedIndex != null) _selectedIndex = _itemCount - 1;
-      _pendingJumpIndex = _itemCount - 1;
-    }
+    _snapToTail();
     notifyListeners();
   }
 
@@ -191,8 +185,7 @@ class ListController extends ChangeNotifier {
     _itemCount = newCount;
     final grew = newCount > oldCount && newCount > 0;
     if (_pinToBottom && grew) {
-      if (_selectedIndex != null) _selectedIndex = newCount - 1;
-      _pendingJumpIndex = newCount - 1;
+      _snapToTail();
       _unseenCount = 0;
     } else if (grew) {
       _unseenCount += newCount - oldCount;
@@ -201,6 +194,24 @@ class ListController extends ChangeNotifier {
       _selectedIndex = _clampSelection(_selectedIndex);
     }
     notifyListeners();
+  }
+
+  /// Moves the follow target to the newest item. When the list has a
+  /// selection, advancing it is enough — the layout's selection-visibility
+  /// pass then anchors the tail at the *bottom* of the viewport (the newest
+  /// screenful). Only a scroll-only list (no selection) needs an explicit
+  /// pending jump. Issuing a pending jump when there IS a selection would
+  /// instead anchor the newest item at the *top* of the viewport and hide the
+  /// screenful above it — a following chat/log would show only its last line.
+  /// Callers own the follow flags and [unseenCount]; this only moves the
+  /// target, and is a no-op on an empty list.
+  void _snapToTail() {
+    if (_itemCount == 0) return;
+    if (_selectedIndex != null) {
+      _selectedIndex = _itemCount - 1;
+    } else {
+      _pendingJumpIndex = _itemCount - 1;
+    }
   }
 
   int? _clampSelection(int? value) {
