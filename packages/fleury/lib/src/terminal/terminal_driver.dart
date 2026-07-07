@@ -178,3 +178,99 @@ Future<T> withTerminalHandoff<T>(
   }
   return Future<T>.sync(operation);
 }
+
+/// Optional terminal-citizenship hook: set the window / tab title and raise
+/// user attention. A driver mixes this in when its channel carries escape
+/// sequences (local terminals do; a structured remote target may not), so the
+/// driver's *presence* of this interface is the capability gate — callers go
+/// through [setTerminalTitle] / [ringTerminalBell] / [notifyTerminal], which
+/// no-op when the driver does not implement it.
+///
+/// The title (OSC 0/2) and bell (BEL) sequences are safe on every terminal (an
+/// unsupported one ignores them); OSC 9 desktop notifications show only where
+/// the terminal implements them, so [notify] is best-effort — pair it with
+/// [ringBell] for a cue that always lands.
+abstract interface class TerminalAttentionDriver {
+  /// Sets the terminal window / tab title (OSC 0 *and* OSC 2, so both
+  /// icon-name and window-title conventions are covered).
+  void setTitle(String title);
+
+  /// Rings the terminal bell (BEL) — a universal, always-delivered attention
+  /// cue.
+  void ringBell();
+
+  /// Posts an OSC 9 desktop notification carrying [message] — best-effort and
+  /// terminal-specific: iTerm2 (among others) shows it; terminals that don't
+  /// implement OSC 9 ignore it. Note ConEmu / Windows Terminal treat part of
+  /// the `OSC 9;` family as a progress/control channel, so a [message] starting
+  /// with a digit-and-semicolon could be interpreted there rather than shown —
+  /// pass human-readable text, and pair with [ringBell] for a cue that always
+  /// lands.
+  void notify(String message);
+}
+
+/// Default OSC/BEL implementation of [TerminalAttentionDriver] for any driver
+/// with a byte [write] channel. The payload is sanitized so a stray control
+/// character (a BEL or ESC) can't terminate the escape sequence early and
+/// corrupt the stream.
+mixin TerminalAttentionSequences implements TerminalAttentionDriver {
+  /// The driver's raw output path — satisfied by [TerminalDriver.write].
+  void write(String data);
+
+  /// Whether output is a real terminal — satisfied by
+  /// [TerminalDriver.isInteractive]. Attention sequences are suppressed when it
+  /// is false, so raw OSC/BEL bytes never land in a redirected (piped / file)
+  /// stdout — the same reason the enter/exit mode sequences are gated there.
+  bool get isInteractive;
+
+  @override
+  void setTitle(String title) {
+    if (!isInteractive) return;
+    final s = sanitizeTerminalString(title);
+    write('\x1B]0;$s\x07\x1B]2;$s\x07');
+  }
+
+  @override
+  void ringBell() {
+    if (!isInteractive) return;
+    write('\x07');
+  }
+
+  @override
+  void notify(String message) {
+    if (!isInteractive) return;
+    write('\x1B]9;${sanitizeTerminalString(message)}\x07');
+  }
+}
+
+/// Replaces C0 controls, DEL, and C1 controls (`0x00-0x1F`, `0x7F-0x9F` —
+/// including 7-bit BEL/ESC and 8-bit ST) with spaces, so a string is safe to
+/// embed inside an OSC escape sequence. Multi-byte content (emoji, CJK,
+/// surrogate halves) is all above `0x9F`, so it passes through intact.
+String sanitizeTerminalString(String s) => String.fromCharCodes(
+  s.codeUnits.map((c) => (c < 0x20 || (c >= 0x7F && c <= 0x9F)) ? 0x20 : c),
+);
+
+/// Sets the terminal title through [driver] when it supports it; no-op
+/// otherwise.
+void setTerminalTitle(TerminalDriver driver, String title) {
+  if (driver is TerminalAttentionDriver) {
+    (driver as TerminalAttentionDriver).setTitle(title);
+  }
+}
+
+/// Rings the terminal bell through [driver] when it supports it; no-op
+/// otherwise.
+void ringTerminalBell(TerminalDriver driver) {
+  if (driver is TerminalAttentionDriver) {
+    (driver as TerminalAttentionDriver).ringBell();
+  }
+}
+
+/// Posts an OSC 9 notification through [driver] when it supports it; no-op
+/// otherwise.
+void notifyTerminal(TerminalDriver driver, String message) {
+  if (driver is TerminalAttentionDriver) {
+    (driver as TerminalAttentionDriver).notify(message);
+  }
+}
