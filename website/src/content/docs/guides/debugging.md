@@ -8,6 +8,21 @@ toggle at any time during development, with no setup, no separate process, and
 full support over SSH (it renders in the same terminal). It is on by default
 in development runs and off by default in release builds.
 
+## Try it hands-on
+
+The **debug playground** sample simulates the situations the shell is built to
+diagnose — a janky frame, an uncaught error, a log burst, a continuously
+repainting region — and lets you trigger each and watch the matching tab react:
+
+```sh
+dart run packages/samples/bin/samples.dart debug   # then press F12
+```
+
+Each trigger is a semantic button, so the same app is the agent-devtools demo:
+point `fleury mcp` at it and an agent can invoke a scenario, then `read_errors`
+/ `read_frames` / `read_logs` to see what it just caused — your AI reading your
+debugger while it drives the app.
+
 ## Toggling it
 
 | Key | Action |

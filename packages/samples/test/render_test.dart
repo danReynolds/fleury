@@ -91,4 +91,34 @@ void main() {
       expect(tester.renderToString(size: tall), contains('All tests passed!'));
     });
   });
+
+  group('debug playground', () {
+    testWidgets('renders the scenario menu and readout', (tester) {
+      tester.pumpWidget(const DebugPlaygroundApp());
+      final out = tester.renderToString(size: _size);
+      expect(out, contains('Fleury Debug Playground'));
+      expect(out, contains('Scenarios'));
+      expect(out, contains('Spike a slow frame'));
+      expect(out, contains('Throw in a handler'));
+      expect(out, contains('Emit a log burst'));
+      expect(out, contains('What just happened'));
+      expect(out, contains('press F12'));
+    });
+
+    testWidgets('activating a scenario via its semantic action updates the '
+        'readout — the same path an agent drives over fleury mcp', (
+      tester,
+    ) async {
+      tester.pumpWidget(const DebugPlaygroundApp());
+      tester.render(size: _size); // mount + focus
+      await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        role: SemanticRole.button,
+        label: 'Emit a log burst',
+      );
+      final out = tester.renderToString(size: _size);
+      expect(out, contains('emitted 40 log lines'));
+      expect(out, contains('log bursts')); // the tally row is present
+    });
+  });
 }
