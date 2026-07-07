@@ -95,6 +95,63 @@ String _repoRoot() {
   return script.parent.parent.path;
 }
 
+/// Stable content hash of the remote client's SOURCE closure, read from the
+/// dart2js `<output>.deps` file. Hashes only committed `.dart` source *under
+/// the repo* ([repoRoot]). Three exclusions make it deterministic across
+/// machines, SDKs, and pub resolutions:
+///   - SDK libraries (the `org-dartlang-sdk:` scheme) — bytes vary by SDK
+///     version, the drift the old byte-compare gate tripped on;
+///   - pub-cache dependencies — versions float (`pubspec.lock` is gitignored);
+///   - generated tooling artifacts such as `.dart_tool/package_config.json` —
+///     which live under the repo but embed machine-specific absolute paths, so
+///     the `.dart`-only filter keeps them out.
+/// What remains is exactly the committed Dart source that feeds the bundle.
+/// Content-only and order-independent (per-file hashes are sorted): a moved
+/// file is still caught via the importer whose text changed.
+String _remoteClientSourceFingerprint(File depsFile, String repoRoot) {
+  final hashes = <String>[];
+  for (final line in depsFile.readAsLinesSync()) {
+    final uri = line.trim();
+    if (!uri.startsWith('file://')) continue;
+    final path = Uri.parse(uri).toFilePath();
+    // Trailing separator so a sibling dir sharing the prefix (repo `…/fleury`
+    // vs `…/fleury-notes`) can't sneak in; drops SDK + pub-cache inputs.
+    if (!path.startsWith('$repoRoot/')) continue;
+    // `.dart` only: skip generated, machine-specific artifacts under the repo
+    // (e.g. `.dart_tool/package_config.json`, whose absolute paths differ per
+    // checkout) — hashing those would reintroduce cross-machine drift.
+    if (!path.endsWith('.dart')) continue;
+    hashes.add(_fnv1a64Hex(File(path).readAsBytesSync()));
+  }
+  hashes.sort();
+  return _fnv1a64Hex(utf8.encode(hashes.join('\n')));
+}
+
+/// FNV-1a 64-bit hash as a zero-padded 16-char hex string. Not cryptographic —
+/// this is change detection — but, unlike `Object.hashCode`, it is stable
+/// across runs, isolates, and machines. Native-VM ints are fixed 64-bit and
+/// wrap on overflow, which is the modular arithmetic FNV needs.
+String _fnv1a64Hex(List<int> bytes) {
+  var hash = 0xcbf29ce484222325; // FNV-1a 64-bit offset basis
+  for (final b in bytes) {
+    hash = (hash ^ b) * 0x100000001b3; // xor byte, multiply by the FNV prime
+  }
+  final hi = ((hash >> 32) & 0xffffffff).toRadixString(16).padLeft(8, '0');
+  final lo = (hash & 0xffffffff).toRadixString(16).padLeft(8, '0');
+  return '$hi$lo';
+}
+
+/// The `remoteClientSourceFingerprint` currently committed in the generated
+/// asset, or '' if absent. Parsed textually because this standalone tool has no
+/// package resolution to import the asset library.
+String _readCommittedFingerprint(File assetFile) {
+  if (!assetFile.existsSync()) return '';
+  final match = RegExp(
+    r"remoteClientSourceFingerprint = '([0-9a-f]+)'",
+  ).firstMatch(assetFile.readAsStringSync());
+  return match?.group(1) ?? '';
+}
+
 String _requiredName(List<String> args, String command) {
   if (args.isEmpty || args.first.startsWith('-')) {
     stderr.writeln(
@@ -411,8 +468,12 @@ class _Runner {
   /// freshness test fails if this is stale; run it after touching the
   /// remote-client source.
   Future<void> buildRemoteClient(List<String> args) async {
+    final check = args.contains('--check');
     final tmp = '$root/.dart_tool/remote_client.js';
-    stdout.writeln('compiling web/remote_client.dart -> JS (-O2)…');
+    final depsPath = '$tmp.deps';
+    if (!check) {
+      stdout.writeln('compiling web/remote_client.dart -> JS (-O2)…');
+    }
     await _run('dart', [
       'compile',
       'js',
@@ -422,10 +483,42 @@ class _Runner {
       '-O2',
       // No source maps: production doesn't need them, and the
       // sourceMappingURL comment names the output file, which would make
-      // the embedded bytes non-deterministic and break the freshness gate.
+      // the embedded bytes non-deterministic.
       '--no-source-maps',
     ], workingDirectory: web);
     final js = File(tmp).readAsBytesSync();
+    // Fingerprint the client's SOURCE closure (the dart2js `.deps` inputs), not
+    // the compiled bytes: dart2js output is not stable across SDK versions, so
+    // byte-comparing it drifts red on any SDK skew between whoever ran
+    // build-remote-client and CI. The fingerprint tracks whether the source
+    // changed — the only thing a "did you forget to rebuild" gate should catch.
+    final fingerprint = _remoteClientSourceFingerprint(File(depsPath), root);
+    File(tmp).deleteSync();
+    final depsFile = File(depsPath);
+    if (depsFile.existsSync()) depsFile.deleteSync();
+
+    final assetFile = File(
+      '$fleury/lib/src/remote/remote_client_asset.dart',
+    );
+
+    // --check: verify freshness without rewriting the asset (the freshness
+    // gate). The compile above doubles as a "still compiles" check.
+    if (check) {
+      final committed = _readCommittedFingerprint(assetFile);
+      if (committed != fingerprint) {
+        stderr.writeln(
+          'remote client asset is STALE: committed source fingerprint '
+          '"$committed" != current "$fingerprint".\n'
+          'Run: dart run tool/fleury_dev.dart build-remote-client',
+        );
+        exit(1);
+      }
+      stdout.writeln(
+        'remote client asset in sync (source fingerprint $fingerprint).',
+      );
+      return;
+    }
+
     final b64 = base64.encode(js);
     final lines = <String>[];
     for (var i = 0; i < b64.length; i += 100) {
@@ -442,8 +535,10 @@ class _Runner {
 //
 //     dart run tool/fleury_dev.dart build-remote-client
 //
-// The freshness test (remote_client_asset_test) recompiles the client and
-// fails if this asset is stale.
+// The freshness gate (remote_client_asset_test) recompiles the client and
+// compares [remoteClientSourceFingerprint] — a hash of the client's SOURCE
+// closure — so it fails when the source changed without a rebuild, but does
+// NOT drift on dart2js codegen differences between SDK versions.
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -452,16 +547,18 @@ import 'dart:typed_data';
 const String _remoteClientJsBase64 =
 ${lines.join('\n')};
 
+/// SDK-independent fingerprint of the client's source closure at build time.
+/// The freshness gate compares this instead of the compiled bytes (which vary
+/// by SDK). Regenerated with the bundle.
+const String remoteClientSourceFingerprint = '$fingerprint';
+
 /// The compiled client JavaScript bytes.
 Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
 ''';
-    File('$fleury/lib/src/remote/remote_client_asset.dart')
-        .writeAsStringSync(out);
-    File(tmp).deleteSync();
-    final depsFile = File('$tmp.deps');
-    if (depsFile.existsSync()) depsFile.deleteSync();
+    assetFile.writeAsStringSync(out);
     stdout.writeln(
-      'wrote remote_client_asset.dart (${js.length} JS bytes)',
+      'wrote remote_client_asset.dart '
+      '(${js.length} JS bytes, source fingerprint $fingerprint)',
     );
   }
 
