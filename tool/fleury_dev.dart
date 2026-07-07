@@ -96,15 +96,18 @@ String _repoRoot() {
 }
 
 /// Stable content hash of the remote client's SOURCE closure, read from the
-/// dart2js `<output>.deps` file. Only inputs *under the repo* ([repoRoot]) are
-/// hashed — which excludes both the SDK's own libraries (whose bytes change
-/// between SDK versions, the drift the old byte-compare gate tripped on) and
-/// pub-cache dependencies (whose versions can float, since `pubspec.lock` is
-/// gitignored here). What remains is exactly the committed source that feeds
-/// the bundle, so the fingerprint depends only on the repo — deterministic
-/// across machines, SDKs, and pub resolutions. Content-only and order-
-/// independent (per-file hashes are sorted): a moved file is still caught via
-/// the importer whose text changed.
+/// dart2js `<output>.deps` file. Hashes only committed `.dart` source *under
+/// the repo* ([repoRoot]). Three exclusions make it deterministic across
+/// machines, SDKs, and pub resolutions:
+///   - SDK libraries (the `org-dartlang-sdk:` scheme) — bytes vary by SDK
+///     version, the drift the old byte-compare gate tripped on;
+///   - pub-cache dependencies — versions float (`pubspec.lock` is gitignored);
+///   - generated tooling artifacts such as `.dart_tool/package_config.json` —
+///     which live under the repo but embed machine-specific absolute paths, so
+///     the `.dart`-only filter keeps them out.
+/// What remains is exactly the committed Dart source that feeds the bundle.
+/// Content-only and order-independent (per-file hashes are sorted): a moved
+/// file is still caught via the importer whose text changed.
 String _remoteClientSourceFingerprint(File depsFile, String repoRoot) {
   final hashes = <String>[];
   for (final line in depsFile.readAsLinesSync()) {
@@ -114,6 +117,10 @@ String _remoteClientSourceFingerprint(File depsFile, String repoRoot) {
     // Trailing separator so a sibling dir sharing the prefix (repo `…/fleury`
     // vs `…/fleury-notes`) can't sneak in; drops SDK + pub-cache inputs.
     if (!path.startsWith('$repoRoot/')) continue;
+    // `.dart` only: skip generated, machine-specific artifacts under the repo
+    // (e.g. `.dart_tool/package_config.json`, whose absolute paths differ per
+    // checkout) — hashing those would reintroduce cross-machine drift.
+    if (!path.endsWith('.dart')) continue;
     hashes.add(_fnv1a64Hex(File(path).readAsBytesSync()));
   }
   hashes.sort();
