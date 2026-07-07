@@ -11,13 +11,19 @@
 //     fit in the viewport starting from a scroll anchor, paints them,
 //     and writes the resulting visible range back to the controller.
 //
+// Building modes:
+//   - Eager — `ListView(children:)` builds every child up front; the
+//     layout/paint pass still visits only the visible window.
+//   - Lazy — `ListView.builder` / `ListView.separated` mount only the
+//     items in the viewport, on demand during layout, so they scale to
+//     tens of thousands of variable-height rows.
+//
+// Item heights are whatever the child reports at layout: multi-line
+// rows are honored, and an item taller than the whole viewport is shown
+// from its top (there is no intra-item scrolling — its lower rows stay
+// clipped while it is the selection anchor).
+//
 // What's intentionally not here yet:
-//   - Lazy item building. itemBuilder is called for every index on
-//     every rebuild; fine for hundreds of items, not for tens of
-//     thousands. Lazy mounting lands in a follow-up.
-//   - Variable per-item heights other than what the child reports
-//     during layout. The widget honors taller items, but the auto-
-//     scroll math assumes the selected item fits in the viewport.
 //   - Horizontal scrolling. Items are constrained to the viewport
 //     width.
 
@@ -25,8 +31,10 @@ import '../foundation/change_notifier.dart';
 import '../foundation/geometry.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
+import '../rendering/render_flex.dart';
 import '../rendering/render_object.dart';
 import '../input/events.dart';
+import 'basic.dart';
 import 'focus.dart';
 import 'framework.dart';
 import 'pointer.dart';
@@ -262,7 +270,8 @@ class ListView extends StatefulWidget {
     this.onSelect,
     this.selectionActive,
   }) : itemCount = null,
-       itemBuilder = null;
+       itemBuilder = null,
+       separatorBuilder = null;
 
   /// Lazy constructor: build items on demand by index, mount only the
   /// visible ones. Each item builder invocation receives a `selected`
@@ -273,6 +282,33 @@ class ListView extends StatefulWidget {
     this.focusNode,
     required int this.itemCount,
     required Widget Function(BuildContext, int, bool) this.itemBuilder,
+    this.autofocus = false,
+    this.edgeBehavior = EdgeBehavior.bubble,
+    this.onSelect,
+    this.selectionActive,
+  }) : assert(itemCount >= 0, 'itemCount must be non-negative'),
+       separatorBuilder = null,
+       children = null;
+
+  /// Lazy constructor with separators — the TUI analogue of Flutter's
+  /// [ListView.separated]. [separatorBuilder] is called for each gap `i`
+  /// — the space between item `i` and item `i + 1`, so `0 <= i <=
+  /// itemCount - 2` — and may return `null` to omit that gap's separator
+  /// (e.g. a day divider shown only when the day actually changes).
+  ///
+  /// Separators never take the cursor and hold no index of their own — the
+  /// list still addresses exactly [itemCount] items, and arrow / Home / End
+  /// navigation walks items only. Each is composed into the row block beneath
+  /// its item (reusing [ListView.builder]'s well-tested item-index machinery),
+  /// and the block is one tap target, so a mouse click on a separator selects
+  /// the item it trails.
+  const ListView.separated({
+    super.key,
+    this.controller,
+    this.focusNode,
+    required int this.itemCount,
+    required Widget Function(BuildContext, int, bool) this.itemBuilder,
+    required Widget? Function(BuildContext, int) this.separatorBuilder,
     this.autofocus = false,
     this.edgeBehavior = EdgeBehavior.bubble,
     this.onSelect,
@@ -300,6 +336,12 @@ class ListView extends StatefulWidget {
   /// [children]. Invoked with `(context, index, selected)`.
   final Widget Function(BuildContext context, int index, bool selected)?
   itemBuilder;
+
+  /// Per-gap separator builder ([ListView.separated] form). Called with
+  /// `(context, i)` for the gap between item `i` and item `i + 1`; may
+  /// return `null` to omit that separator. Null for the eager and
+  /// [ListView.builder] forms.
+  final Widget? Function(BuildContext context, int index)? separatorBuilder;
 
   /// Whether to request focus on first mount.
   final bool autofocus;
@@ -529,13 +571,41 @@ class _ListViewState extends State<ListView> {
 
             // Lazy: builder + count. Item subtrees are mounted on demand by
             // the render object during layout; wrap each so a press selects it.
+            // `.separated` composes a non-selectable separator into the row
+            // block below its item — the press target stays the item only (a
+            // click on the separator does nothing), and separators never enter
+            // the index math because they are sub-parts of an item's block.
+            final separatorBuilder = widget.separatorBuilder;
+            final itemCount = widget.itemCount!;
             return _LazyListBody(
               controller: _controller,
-              itemCount: widget.itemCount!,
-              itemBuilder: (context, index, itemActive) => GestureDetector(
-                onTapDown: (_, _) => _handleItemTap(index),
-                child: widget.itemBuilder!(context, index, itemActive),
-              ),
+              itemCount: itemCount,
+              itemBuilder: (context, index, itemActive) {
+                final built = widget.itemBuilder!(context, index, itemActive);
+                // No separator after the last item, when none was requested, or
+                // when the builder returns null for this gap.
+                final separator =
+                    separatorBuilder == null || index >= itemCount - 1
+                    ? null
+                    : separatorBuilder(context, index);
+                final content = separator == null
+                    ? built
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [built, separator],
+                      );
+                // The GestureDetector wraps the WHOLE block (not the item
+                // alone) so it is the block's render root: the lazy list threads
+                // screenOffset to item roots, so the tap region lands at the
+                // item's true screen row even when a tall block overflows the
+                // viewport and its inner Column paints through the clip path
+                // (which drops screenOffset for its own children). A tap on a
+                // separator row therefore selects the item it trails.
+                return GestureDetector(
+                  onTapDown: (_, _) => _handleItemTap(index),
+                  child: content,
+                );
+              },
               selectedIndex: selected,
               selectionActive: active,
             );
