@@ -14,12 +14,22 @@ enum Brightness { dark, light }
 /// actually reaches for. [foreground]/[background] default to null, which
 /// means "use the terminal's own default" — the right baseline for a TUI,
 /// since the user's color scheme should show through unless overridden.
+///
+/// **Reach for roles, not palette indexes.** Draw from these named roles
+/// (or [Colors] constants) rather than raw `AnsiColor(14)`/`AnsiColor(8)`:
+/// roles are themeable and downsample cleanly on 256/16-color terminals. And
+/// because a *color* alone is dropped entirely under `NO_COLOR`, a cue that
+/// must survive there pairs its color role with an **attribute** — the theme's
+/// [ThemeData.focusedStyle] (bold) for [focus], [ThemeData.mutedStyle] (dim)
+/// for de-emphasis. The color enriches on capable terminals; the attribute is
+/// what remains when color is gone, so the cue never fully vanishes.
 final class ColorScheme {
   const ColorScheme({
     this.foreground,
     this.background,
     this.surface,
     this.primary = Colors.mint,
+    this.focus = Colors.brightCyan,
     this.success = const AnsiColor(2),
     this.warning = const AnsiColor(3),
     this.error = const AnsiColor(1),
@@ -40,6 +50,11 @@ final class ColorScheme {
 
   /// Accent for interactive/active affordances.
   final Color primary;
+
+  /// Accent for the focused pane / control. A themeable role to use in place
+  /// of a raw palette index — pair it with [ThemeData.focusedStyle] (bold) so
+  /// the focus cue survives `NO_COLOR`: the color drops, the bold remains.
+  final Color focus;
 
   /// Status roles.
   final Color success;
@@ -64,6 +79,7 @@ final class ColorScheme {
     Color? background,
     Color? surface,
     Color? primary,
+    Color? focus,
     Color? success,
     Color? warning,
     Color? error,
@@ -73,6 +89,7 @@ final class ColorScheme {
     background: background ?? this.background,
     surface: surface ?? this.surface,
     primary: primary ?? this.primary,
+    focus: focus ?? this.focus,
     success: success ?? this.success,
     warning: warning ?? this.warning,
     error: error ?? this.error,
@@ -86,6 +103,7 @@ final class ColorScheme {
       other.background == background &&
       other.surface == surface &&
       other.primary == primary &&
+      other.focus == focus &&
       other.success == success &&
       other.warning == warning &&
       other.error == error &&
@@ -97,6 +115,7 @@ final class ColorScheme {
     background,
     surface,
     primary,
+    focus,
     success,
     warning,
     error,
@@ -148,13 +167,17 @@ final class ThemeData {
   /// Base style cascaded onto [Text] via [DefaultTextStyle] at the root.
   final CellStyle textStyle;
 
-  /// De-emphasized text (separators, hints, disabled rows).
+  /// Attribute cue for de-emphasized text (dim) — separators, hints, disabled
+  /// rows. Survives `NO_COLOR`, so prefer it (optionally with a muted color) to
+  /// a raw gray palette index.
   final CellStyle mutedStyle;
 
   /// Highlight for the selected/active row or item.
   final CellStyle selectionStyle;
 
-  /// Cue for a focused control.
+  /// Attribute cue for a focused control (bold). Pair with [ColorScheme.focus]
+  /// for a colored focus that still reads under `NO_COLOR` — the color drops,
+  /// this attribute remains.
   final CellStyle focusedStyle;
 
   /// Default box-drawing style for framed surfaces.

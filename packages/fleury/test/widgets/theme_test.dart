@@ -153,6 +153,30 @@ void main() {
       );
     });
   });
+
+  group('F9: focus role + degradation convention', () {
+    test('scheme exposes a themeable focus role, distinct and copyable', () {
+      expect(ColorScheme.standard.focus, Colors.brightCyan);
+      final custom = ColorScheme.standard.copyWith(focus: Colors.azure);
+      expect(custom.focus, Colors.azure);
+      expect(custom == ColorScheme.standard, isFalse);
+      // Only focus changed — the rest of the role set is untouched.
+      expect(custom.primary, ColorScheme.standard.primary);
+    });
+
+    test('the focus color drops under NO_COLOR but downsamples on 16-color, so '
+        'the paved path pairs it with the bold focusedStyle attribute', () {
+      final focus = ColorScheme.standard.focus;
+      // A color role alone is gone under NO_COLOR...
+      expect(quantizeColor(focus, ColorMode.none), isNull);
+      // ...but present (quantized) on a 16-color terminal.
+      expect(quantizeColor(focus, ColorMode.ansi16), isNotNull);
+      // The attribute half (bold) is what remains when color is stripped, so a
+      // `colors.focus` + `focusedStyle` cue never fully vanishes under NO_COLOR.
+      expect(ThemeData.fallback.focusedStyle.bold, isTrue);
+      expect(ThemeData.fallback.mutedStyle.dim, isTrue);
+    });
+  });
 }
 
 class _Brand {
