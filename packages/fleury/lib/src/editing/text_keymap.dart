@@ -84,6 +84,15 @@ final class TextEditingKeymap {
 
   static const defaultSingleLine = TextEditingKeymap(_defaultSingleLine);
   static const defaultMultiline = TextEditingKeymap(_defaultMultiline);
+
+  /// Submit-oriented multiline preset for chat composers / REPL prompts:
+  /// Enter submits, Alt+Enter (and Shift+Enter where the terminal reports the
+  /// modifier) inserts a newline. Editing is otherwise identical to
+  /// [defaultMultiline]. Pair with `TextArea.onSubmit` to receive the submit.
+  static const chat = TextEditingKeymap(<TextEditingKeyBinding>[
+    ..._chatEnter,
+    ..._defaultMultiline,
+  ]);
   static const emacsSingleLine = TextEditingKeymap(<TextEditingKeyBinding>[
     ..._emacsSingleLine,
     ..._defaultSingleLine,
@@ -308,6 +317,28 @@ const _defaultMultiline = <TextEditingKeyBinding>[
   TextEditingKeyBinding(
     action: TextEditingKeyAction.escape,
     keyCode: KeyCode.escape,
+  ),
+];
+
+// The chat preset's Enter chords, spread before _defaultMultiline so they win
+// over that map's plain Enter=insertNewline: Enter submits, and the explicit
+// Alt/Shift+Enter chords insert a newline. (Shift+Enter fires only where the
+// terminal actually reports the shift modifier on Enter; Alt+Enter is the
+// reliably-detectable newline chord.)
+const _chatEnter = <TextEditingKeyBinding>[
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.insertNewline,
+    keyCode: KeyCode.enter,
+    modifiers: {KeyModifier.alt},
+  ),
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.insertNewline,
+    keyCode: KeyCode.enter,
+    modifiers: {KeyModifier.shift},
+  ),
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.submit,
+    keyCode: KeyCode.enter,
   ),
 ];
 

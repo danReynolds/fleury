@@ -502,4 +502,129 @@ void main() {
       );
     });
   });
+
+  group('F5: chat keymap + auto-grow', () {
+    testWidgets('chat keymap submits on Enter with the current text', (
+      tester,
+    ) {
+      final submitted = <String>[];
+      final ctl = TextEditingController(text: 'hello');
+      tester.pumpWidget(
+        TextArea(
+          controller: ctl,
+          autofocus: true,
+          keymap: TextEditingKeymap.chat,
+          onSubmit: submitted.add,
+        ),
+      );
+      tester.render(size: const CellSize(12, 4));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      expect(submitted, ['hello']);
+      // Enter submitted — it did not also insert a newline into the draft.
+      expect(ctl.text, 'hello');
+    });
+
+    testWidgets('chat keymap inserts a newline on Alt+Enter, no submit', (
+      tester,
+    ) {
+      final submitted = <String>[];
+      final ctl = TextEditingController(text: 'a');
+      tester.pumpWidget(
+        TextArea(
+          controller: ctl,
+          autofocus: true,
+          keymap: TextEditingKeymap.chat,
+          onSubmit: submitted.add,
+        ),
+      );
+      tester.render(size: const CellSize(12, 4));
+      tester.sendKey(
+        const KeyEvent(keyCode: KeyCode.enter, modifiers: {KeyModifier.alt}),
+      );
+      tester.type('b');
+      expect(submitted, isEmpty);
+      expect(ctl.text, 'a\nb');
+    });
+
+    testWidgets('submit with no onSubmit neither submits nor edits', (tester) {
+      final ctl = TextEditingController(text: 'x');
+      tester.pumpWidget(
+        TextArea(
+          controller: ctl,
+          autofocus: true,
+          keymap: TextEditingKeymap.chat,
+        ),
+      );
+      tester.render(size: const CellSize(12, 4));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      expect(ctl.text, 'x');
+    });
+
+    testWidgets('auto-grow height tracks content between minLines and '
+        'maxLines', (tester) {
+      final ctl = TextEditingController();
+      tester.pumpWidget(
+        Column(
+          children: [
+            TextArea(controller: ctl, minLines: 1, maxLines: 4),
+            const Text('END'),
+          ],
+        ),
+      );
+
+      int endRow() =>
+          _lines(tester, cols: 12, rows: 10).indexWhere((l) => l == 'END');
+
+      // Empty draft -> one row tall, so END sits on row 1.
+      expect(endRow(), 1);
+      // Grows with the content.
+      ctl.text = 'a\nb\nc';
+      expect(endRow(), 3);
+      // Capped at maxLines (4) even with more content.
+      ctl.text = 'a\nb\nc\nd\ne\nf';
+      expect(endRow(), 4);
+    });
+
+    testWidgets('minLines floors the height for a short draft', (tester) {
+      final ctl = TextEditingController(text: 'one line');
+      tester.pumpWidget(
+        Column(
+          children: [
+            TextArea(controller: ctl, minLines: 3, maxLines: 6),
+            const Text('END'),
+          ],
+        ),
+      );
+      // One content line, but minLines:3 reserves three rows above END.
+      expect(
+        _lines(tester, cols: 20, rows: 10).indexWhere((l) => l == 'END'),
+        3,
+      );
+    });
+
+    testWidgets('auto-grow under a parent tighter than maxLines keeps the '
+        'cursor line visible', (tester) {
+      // maxLines (4) exceeds the 2-row slot the parent gives; the cursor is on
+      // the last line, so the capped viewport must scroll to it — the pre-fix
+      // scroll math ran against the un-capped height and froze on l0/l1,
+      // dropping the caret off-screen.
+      final ctl = TextEditingController(text: 'l0\nl1\nl2\nl3\nl4')
+        ..selection = 14; // end of the text, on line l4
+      tester.pumpWidget(
+        Column(
+          children: [
+            const Text('HEAD'),
+            SizedBox(
+              height: 2,
+              child: TextArea(controller: ctl, minLines: 1, maxLines: 4),
+            ),
+          ],
+        ),
+      );
+      final lines = _lines(tester, cols: 6, rows: 6);
+      expect(lines[0], 'HEAD');
+      // The 2-row area shows the tail around the cursor (l3, l4), not l0/l1.
+      expect(lines.sublist(1, 3), ['l3', 'l4']);
+    });
+  });
 }
