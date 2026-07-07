@@ -17,7 +17,9 @@ import '../runtime/remote_surface_sink.dart';
 import 'terminal_driver.dart';
 import 'terminal_sequences.dart';
 
-class WindowsTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
+class WindowsTerminalDriver
+    with TerminalAttentionSequences
+    implements TerminalDriver, TerminalHandoffDriver {
   WindowsTerminalDriver({
     Stdin? stdinOverride,
     Stdout? stdoutOverride,

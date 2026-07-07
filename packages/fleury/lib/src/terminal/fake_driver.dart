@@ -10,6 +10,7 @@ import 'terminal_driver.dart';
 /// the driver buffers everything written, exposes the buffer for
 /// assertions, and lets the test push events into the event stream.
 final class FakeTerminalDriver
+    with TerminalAttentionSequences
     implements TerminalDriver, TerminalHandoffDriver {
   FakeTerminalDriver({
     CellSize size = const CellSize(80, 24),

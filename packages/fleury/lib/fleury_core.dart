@@ -252,9 +252,13 @@ export 'src/runtime/remote_surface_sink.dart'
 export 'src/terminal/terminal_driver.dart'
     show
         OutputFlowControl,
+        TerminalAttentionDriver,
         TerminalDriver,
         TerminalHandoffDriver,
         TerminalMode,
+        notifyTerminal,
+        ringTerminalBell,
+        setTerminalTitle,
         withTerminalHandoff;
 
 // Widgets

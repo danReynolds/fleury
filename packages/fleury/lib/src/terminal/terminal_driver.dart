@@ -178,3 +178,80 @@ Future<T> withTerminalHandoff<T>(
   }
   return Future<T>.sync(operation);
 }
+
+/// Optional terminal-citizenship hook: set the window / tab title and raise
+/// user attention. A driver mixes this in when its channel carries escape
+/// sequences (local terminals do; a structured remote target may not), so the
+/// driver's *presence* of this interface is the capability gate — callers go
+/// through [setTerminalTitle] / [ringTerminalBell] / [notifyTerminal], which
+/// no-op when the driver does not implement it.
+///
+/// The title (OSC 0/2) and bell (BEL) sequences are safe on every terminal (an
+/// unsupported one ignores them); OSC 9 desktop notifications show only where
+/// the terminal implements them, so [notify] is best-effort — pair it with
+/// [ringBell] for a cue that always lands.
+abstract interface class TerminalAttentionDriver {
+  /// Sets the terminal window / tab title (OSC 0 *and* OSC 2, so both
+  /// icon-name and window-title conventions are covered).
+  void setTitle(String title);
+
+  /// Rings the terminal bell (BEL) — a universal, always-delivered attention
+  /// cue.
+  void ringBell();
+
+  /// Posts an OSC 9 desktop notification carrying [message] where the terminal
+  /// supports it; silently ignored otherwise.
+  void notify(String message);
+}
+
+/// Default OSC/BEL implementation of [TerminalAttentionDriver] for any driver
+/// with a byte [write] channel. The payload is sanitized so a stray control
+/// character (a BEL or ESC) can't terminate the escape sequence early and
+/// corrupt the stream.
+mixin TerminalAttentionSequences implements TerminalAttentionDriver {
+  /// The driver's raw output path — satisfied by [TerminalDriver.write].
+  void write(String data);
+
+  @override
+  void setTitle(String title) {
+    final s = sanitizeTerminalString(title);
+    write('\x1B]0;$s\x07\x1B]2;$s\x07');
+  }
+
+  @override
+  void ringBell() => write('\x07');
+
+  @override
+  void notify(String message) =>
+      write('\x1B]9;${sanitizeTerminalString(message)}\x07');
+}
+
+/// Replaces C0 control characters and DEL (including BEL and ESC) with spaces,
+/// so a string is safe to embed inside an OSC escape sequence.
+String sanitizeTerminalString(String s) => String.fromCharCodes(
+  s.codeUnits.map((c) => (c < 0x20 || c == 0x7F) ? 0x20 : c),
+);
+
+/// Sets the terminal title through [driver] when it supports it; no-op
+/// otherwise.
+void setTerminalTitle(TerminalDriver driver, String title) {
+  if (driver is TerminalAttentionDriver) {
+    (driver as TerminalAttentionDriver).setTitle(title);
+  }
+}
+
+/// Rings the terminal bell through [driver] when it supports it; no-op
+/// otherwise.
+void ringTerminalBell(TerminalDriver driver) {
+  if (driver is TerminalAttentionDriver) {
+    (driver as TerminalAttentionDriver).ringBell();
+  }
+}
+
+/// Posts an OSC 9 notification through [driver] when it supports it; no-op
+/// otherwise.
+void notifyTerminal(TerminalDriver driver, String message) {
+  if (driver is TerminalAttentionDriver) {
+    (driver as TerminalAttentionDriver).notify(message);
+  }
+}

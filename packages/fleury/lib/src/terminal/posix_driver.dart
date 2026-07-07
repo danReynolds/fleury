@@ -27,7 +27,9 @@ import 'terminal_driver.dart';
 import 'terminal_probe.dart';
 import 'terminal_sequences.dart';
 
-class PosixTerminalDriver implements TerminalDriver, TerminalHandoffDriver {
+class PosixTerminalDriver
+    with TerminalAttentionSequences
+    implements TerminalDriver, TerminalHandoffDriver {
   PosixTerminalDriver({
     Stdin? stdinOverride,
     Stdout? stdoutOverride,
