@@ -201,12 +201,56 @@ void main() {
           ],
         ),
       );
+      final out = bar(tester);
       expect(
-        bar(tester),
+        out,
         contains('save-as'),
         reason:
             'a repeated alias within one binding must not mark it '
             'already-claimed against itself',
+      );
+      // The two aliases canonicalize to the same chord, so the combined label
+      // shows one — not a doubled `[Shift+SS]`.
+      expect(out, isNot(contains('SS')));
+    });
+
+    testWidgets('a shallower binding whose key a deeper binding owns — under a '
+        'different spelling — is suppressed (no lie)', (tester) {
+      // Deeper [S] deepSave owns Shift+S; the shallower [Shift+S] shallowSave
+      // fires the same event and can never win dispatch, so it must be hidden
+      // even though its chord is spelled differently.
+      tester.pumpWidget(
+        Column(
+          children: [
+            KeyBindings(
+              bindings: [
+                KeyBinding(
+                  KeyChord.char('s', shift: true),
+                  label: 'shallowSave',
+                  onEvent: (_) {},
+                ),
+              ],
+              child: KeyBindings(
+                bindings: [
+                  KeyBinding(
+                    KeyChord.char('S'),
+                    label: 'deepSave',
+                    onEvent: (_) {},
+                  ),
+                ],
+                child: const Focus(autofocus: true, child: Text('x')),
+              ),
+            ),
+            const KeyHintBar(),
+          ],
+        ),
+      );
+      final out = bar(tester);
+      expect(out, contains('deepSave'), reason: 'the deeper binding owns the key');
+      expect(
+        out,
+        isNot(contains('shallowSave')),
+        reason: 'same key, spelled differently — cannot fire, must not show',
       );
     });
 

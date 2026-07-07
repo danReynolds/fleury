@@ -9,11 +9,16 @@ import 'package:fleury/fleury_core.dart';
 /// depends on the [FocusManager] via [Focus.of]).
 ///
 /// Under width pressure it degrades **honestly**: it fits as many whole
-/// bindings as the width allows (highest-priority first) and collapses the
-/// rest into a trailing `+N`, rather than clipping a label mid-word or
-/// silently dropping the trailing hints. A binding bound to several aliases
-/// (`KeyBinding.list([↑, ↓], …)`) renders a **combined** label — `[↑↓] move`,
-/// not just `[↑] move`.
+/// bindings as the width allows and collapses the rest into a trailing `+N`,
+/// rather than clipping a label mid-word or silently dropping the trailing
+/// hints. Priority is chain order — the deepest / most local bindings are kept
+/// first, and [globalBindings] (appended last) collapse into the `+N` first;
+/// the marker is the affordance that a narrow terminal is hiding more (the
+/// missing "no affordance" the plain-`Text` bar lacked). Pinning ubiquitous
+/// globals like quit/help ahead of locals is a deliberate non-goal for now —
+/// it would break the contiguous prefix + single trailing marker. A binding
+/// bound to several aliases (`KeyBinding.list([↑, ↓], …)`) renders a
+/// **combined** label — `[↑↓] move`, not just `[↑] move`.
 ///
 /// Filtering rules:
 ///   1. Bindings with `label == null` are hidden (the chord's
@@ -55,7 +60,10 @@ class KeyHintBar extends StatelessWidget {
     final hints = _collectVisibleHints(manager);
     if (hints.isEmpty) return const EmptyBox();
     // Highest-priority (deepest / most local) bindings come first; the hard
-    // [maxBindings] cap bounds the candidate set before width fitting.
+    // [maxBindings] cap bounds the candidate set before width fitting. `total`
+    // (every visible hint, cap included) drives the "+N" count so bindings the
+    // cap dropped are never silently lost.
+    final total = hints.length;
     final segments = [
       for (final h in hints.take(maxBindings))
         '[${_chordLabel(h)}] ${h.binding.displayLabel}',
@@ -66,7 +74,7 @@ class KeyHintBar extends StatelessWidget {
     // content, so LayoutBuilder doesn't collapse.
     return LayoutBuilder(
       builder: (context, constraints) => Text(
-        _fit(segments, constraints.maxCols),
+        _fit(segments, total, constraints.maxCols),
         style: style,
         softWrap: false,
       ),
@@ -77,29 +85,42 @@ class KeyHintBar extends StatelessWidget {
   /// (`KeyBinding.list([↑, ↓], …)`), a single label otherwise.
   String _chordLabel(_Hint h) => h.chords.map((c) => c.hintLabel).join();
 
-  /// Joins [segments] to fit [maxCols]: shows the largest prefix of whole
-  /// bindings (they arrive highest-priority first) plus a trailing `+N` for
-  /// the rest, and never clips a label mid-word. Shows everything when
-  /// [maxCols] is null (unbounded width).
-  String _fit(List<String> segments, int? maxCols) {
-    if (segments.isEmpty) return '';
-    final all = segments.join(separator);
-    if (maxCols == null) return all;
+  /// Renders the largest prefix of whole bindings (highest-priority first) that
+  /// fits [maxCols], plus a trailing `+N` for every binding not shown — [total]
+  /// counts ALL visible hints, so bindings the [maxBindings] cap dropped are
+  /// counted too. Never clips a label mid-word. Under an unbounded width
+  /// ([maxCols] null) it shows everything, with a `+N` only if the cap dropped
+  /// some.
+  String _fit(List<String> segments, int total, int? maxCols) {
+    if (total == 0) return '';
     const resolver = DefaultWidthResolver();
     int width(String s) => resolver.widthOfText(s, TerminalProfile.standard);
-    if (width(all) <= maxCols) return all;
-    for (var k = segments.length - 1; k >= 1; k--) {
-      final shown =
-          '${segments.take(k).join(separator)}$separator+${segments.length - k}';
-      if (width(shown) <= maxCols) return shown;
+    String withMarker(int k) {
+      final hidden = total - k;
+      final shown = segments.take(k).join(separator);
+      return hidden == 0 ? shown : '$shown$separator+$hidden';
     }
-    // Not even one binding plus the "+N" marker fits — show just the count.
-    return '+${segments.length}';
+
+    if (maxCols == null) return withMarker(segments.length);
+    for (var k = segments.length; k >= 1; k--) {
+      final s = withMarker(k);
+      if (width(s) <= maxCols) return s;
+    }
+    // Not even one binding fits: the widest count marker that fits, then a bare
+    // "+" (there is more), else nothing — never a wrong number clipped to fit.
+    final marker = '+$total';
+    if (width(marker) <= maxCols) return marker;
+    return maxCols >= 1 ? '+' : '';
   }
 
   List<_Hint> _collectVisibleHints(FocusManager manager) {
     final result = <_Hint>[];
-    final seenChords = <String>{};
+    // Keyed on KeyChord identity — canonical, so `char('S')` and
+    // `char('s', shift: true)` (the same firing event) compare equal — NOT on
+    // the display label, which spells them differently. Keying on the label
+    // would let a differently-spelled alias escape suppression (advertising a
+    // key that can't fire) or double up in a combined label (`[Shift+SS]`).
+    final seenChords = <KeyChord>{};
     // Honesty filter: while a text field holds focus, bare-printable chords —
     // chain and global alike — are swallowed as typed text and can never
     // fire. Shadowing is a PER-CHORD property: a binding with several aliases
@@ -130,17 +151,14 @@ class KeyHintBar extends StatelessWidget {
       // this binding's own earlier aliases — a repeated alias must not
       // self-suppress.) The bar combines the owned chords into one label.
       final owned = <KeyChord>[];
-      final ownedLabels = <String>{};
       for (final c in firable) {
-        if (seenChords.contains(c.hintLabel)) continue;
-        if (ownedLabels.add(c.hintLabel)) owned.add(c);
+        if (seenChords.contains(c)) continue; // claimed by a deeper binding
+        if (!owned.contains(c)) owned.add(c); // dedupe within this binding
       }
       if (owned.isEmpty) return; // every firable alias is claimed deeper
       // Now claim ALL of this binding's firable keys: it wins them for
       // dispatch, so a shallower binding bound to any of them is dead.
-      for (final c in firable) {
-        seenChords.add(c.hintLabel);
-      }
+      seenChords.addAll(firable);
       result.add(_Hint(binding, owned));
     }
 

@@ -186,5 +186,31 @@ void main() {
       expect(out, contains('act3'), reason: 'all bindings show, none dropped');
       expect(out, isNot(contains('+')), reason: 'nothing dropped, no +N');
     });
+
+    testWidgets('the +N count includes bindings the maxBindings cap dropped', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [
+            for (var i = 0; i < 20; i++)
+              KeyBinding(
+                KeyChord.char(String.fromCharCode(97 + i)),
+                label: 'a$i',
+                onEvent: (_) {},
+              ),
+          ],
+          child: const Column(
+            children: [
+              Expanded(child: Focus(autofocus: true, child: Text('Body'))),
+              KeyHintBar(),
+            ],
+          ),
+        ),
+      );
+      // 20 bindings, cap 12 — even at a very wide width the 8 beyond the cap
+      // show as "+8" rather than silently vanishing.
+      expect(_render(tester, cols: 200), contains('+8'));
+    });
   });
 }
