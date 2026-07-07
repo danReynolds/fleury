@@ -62,6 +62,27 @@ void main() {
       d.setTitle('a\x07b\x1Bc');
       expect(d.output, '\x1B]0;a b c\x07\x1B]2;a b c\x07');
     });
+
+    test('sanitizeTerminalString strips C0, DEL and C1 controls, keeps '
+        'multi-byte text', () {
+      expect(sanitizeTerminalString('a\x07b\x1Bc'), 'a b c');
+      // 8-bit ST (C1, U+009C) would also terminate an OSC early.
+      expect(sanitizeTerminalString('x\x9Cy'), 'x y');
+      // Emoji + CJK are all above 0x9F, so they survive intact.
+      expect(sanitizeTerminalString('日本語 🎉'), '日本語 🎉');
+    });
+
+    test('sequences are suppressed when the output is not a terminal', () {
+      final d = FakeTerminalDriver(isInteractive: false);
+      d.setTitle('T');
+      d.ringBell();
+      d.notify('N');
+      expect(
+        d.output,
+        isEmpty,
+        reason: 'no raw OSC/BEL bytes into a redirected (non-TTY) stdout',
+      );
+    });
   });
 
   group('helpers route to a capable driver, no-op otherwise', () {

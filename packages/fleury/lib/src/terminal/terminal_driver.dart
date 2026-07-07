@@ -199,8 +199,13 @@ abstract interface class TerminalAttentionDriver {
   /// cue.
   void ringBell();
 
-  /// Posts an OSC 9 desktop notification carrying [message] where the terminal
-  /// supports it; silently ignored otherwise.
+  /// Posts an OSC 9 desktop notification carrying [message] — best-effort and
+  /// terminal-specific: iTerm2 (among others) shows it; terminals that don't
+  /// implement OSC 9 ignore it. Note ConEmu / Windows Terminal treat part of
+  /// the `OSC 9;` family as a progress/control channel, so a [message] starting
+  /// with a digit-and-semicolon could be interpreted there rather than shown —
+  /// pass human-readable text, and pair with [ringBell] for a cue that always
+  /// lands.
   void notify(String message);
 }
 
@@ -212,24 +217,38 @@ mixin TerminalAttentionSequences implements TerminalAttentionDriver {
   /// The driver's raw output path — satisfied by [TerminalDriver.write].
   void write(String data);
 
+  /// Whether output is a real terminal — satisfied by
+  /// [TerminalDriver.isInteractive]. Attention sequences are suppressed when it
+  /// is false, so raw OSC/BEL bytes never land in a redirected (piped / file)
+  /// stdout — the same reason the enter/exit mode sequences are gated there.
+  bool get isInteractive;
+
   @override
   void setTitle(String title) {
+    if (!isInteractive) return;
     final s = sanitizeTerminalString(title);
     write('\x1B]0;$s\x07\x1B]2;$s\x07');
   }
 
   @override
-  void ringBell() => write('\x07');
+  void ringBell() {
+    if (!isInteractive) return;
+    write('\x07');
+  }
 
   @override
-  void notify(String message) =>
-      write('\x1B]9;${sanitizeTerminalString(message)}\x07');
+  void notify(String message) {
+    if (!isInteractive) return;
+    write('\x1B]9;${sanitizeTerminalString(message)}\x07');
+  }
 }
 
-/// Replaces C0 control characters and DEL (including BEL and ESC) with spaces,
-/// so a string is safe to embed inside an OSC escape sequence.
+/// Replaces C0 controls, DEL, and C1 controls (`0x00-0x1F`, `0x7F-0x9F` —
+/// including 7-bit BEL/ESC and 8-bit ST) with spaces, so a string is safe to
+/// embed inside an OSC escape sequence. Multi-byte content (emoji, CJK,
+/// surrogate halves) is all above `0x9F`, so it passes through intact.
 String sanitizeTerminalString(String s) => String.fromCharCodes(
-  s.codeUnits.map((c) => (c < 0x20 || c == 0x7F) ? 0x20 : c),
+  s.codeUnits.map((c) => (c < 0x20 || (c >= 0x7F && c <= 0x9F)) ? 0x20 : c),
 );
 
 /// Sets the terminal title through [driver] when it supports it; no-op

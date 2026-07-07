@@ -258,6 +258,7 @@ export 'src/terminal/terminal_driver.dart'
         TerminalMode,
         notifyTerminal,
         ringTerminalBell,
+        sanitizeTerminalString,
         setTerminalTitle,
         withTerminalHandoff;
 
