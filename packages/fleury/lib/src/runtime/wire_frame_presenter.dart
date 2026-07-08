@@ -2,6 +2,7 @@
 // rendered frame's buffers and damage plan to the RemoteSurfaceSink,
 // which encodes only the changed cells for the peer's mirror.
 
+import '../debug/debug_events.dart';
 import '../debug/debug_invalidation.dart';
 import '../foundation/geometry.dart';
 import 'frame_driver.dart';
@@ -17,6 +18,7 @@ final class WireFramePresenter implements FramePresenter {
   final CellRect? Function()? _readCaret;
   CellRect? _lastCaret;
   var _sentCaret = false;
+  int _frameCounter = 0;
 
   @override
   bool get wantsPresentationPlan => true;
@@ -39,6 +41,41 @@ final class WireFramePresenter implements FramePresenter {
 
   @override
   void onFrameCommitted(TuiRenderedFrame frame, FramePresentInfo info) {
-    DebugInvalidations.reset();
+    if (!info.debugWatching) {
+      DebugInvalidations.reset();
+      return;
+    }
+    // A debug consumer is watching (the panel, or an agent pulling read_frames
+    // over the wire): emit the same per-frame telemetry the ANSI presenter does
+    // so the debug channel carries real frame stats over the serve / agent path
+    // too — not just in a local terminal. Gated on debugWatching, so a release
+    // serve (debug off) pays nothing.
+    _frameCounter++;
+    final plan = info.plan;
+    final bounds = plan?.damage.dirtyBounds;
+    DebugEvents.emitFrame(
+      FrameEvent(
+        frameNumber: _frameCounter,
+        reason: info.reason,
+        build: info.phaseBuild,
+        layout: info.phaseLayout,
+        paint: info.phasePaint,
+        // On the wire the "diff" phase is building the change plan: the row
+        // diff plus span construction.
+        diff:
+            (plan?.dirtyRowDiffTime ?? Duration.zero) +
+            (plan?.spanBuildTime ?? Duration.zero),
+        // The wire path works in rows/spans, not a per-cell tally, so this is
+        // the dirty bounding-box area rather than an exact changed-cell count.
+        dirtyCells: bounds == null
+            ? frame.next.size.cols * frame.next.size.rows
+            : bounds.size.cols * bounds.size.rows,
+        dirtyBounds: bounds,
+        dirtySources: DebugInvalidations.drain(),
+        layoutStats: info.layoutStats,
+        repaintBoundaries: info.repaintBoundaryStats,
+        bufferSize: frame.next.size,
+      ),
+    );
   }
 }
