@@ -14,6 +14,7 @@ const Map<String, (String, Widget Function())> _apps =
       'dashboard': ('htop-style live system monitor', DashboardApp.new),
       'files': ('two-pane keyboard file manager', FileManagerApp.new),
       'agent': ('Claude-Code-style coding-agent TUI', AgentApp.new),
+      'debug': ('debug-shell + agent-devtools playground', DebugPlaygroundApp.new),
     };
 
 Future<void> main(List<String> args) async {
