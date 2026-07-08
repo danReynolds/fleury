@@ -140,17 +140,17 @@ class _DebugShellState extends State<DebugShell> {
 /// hotkeys fire even inside a modal route's `suppressGlobals: true`
 /// scope.
 ///
-/// Bindings:
+/// Key-code bindings. The printable shortcuts — `p`, `/`, `s`, and the typed
+/// Logs-search query — arrive as text, not key codes, and are handled by the
+/// companion [tryConsumeDebugText].
 ///   Ctrl+G              toggle off ↔ last-used open mode
 ///   F11                 docked ↔ fullscreen (only while open)
 ///   Tab / Shift+Tab     next / previous panel tab (only while open)
 ///   Esc                 clear a Logs search, else fullscreen → docked
 ///   F12                 show/hide Logs tab (open if off, close if
 ///                       already on Logs, switch tab otherwise)
-///   p                   toggle paint-flash (only when shell is open)
+///   Enter / Backspace   commit / edit the Logs search (while searching)
 ///   ↑/↓/Home            move semantic cursor while Tree tab is active
-///   / · s               Logs tab: open search · cycle source filter; while
-///                       searching, type to filter, Enter keeps it, Esc clears
 bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
   if (!controller.config.enabled) return false;
 
@@ -191,9 +191,9 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
     }
     return true;
   }
-  // Logs tab with the search field open: typed input edits the query. Placed
-  // before the Tab / 'p' shortcuts so printable keys (including 's' and 'p')
-  // land in the query instead of triggering panel actions. Esc is handled above.
+  // Logs search field: Enter commits, Backspace edits. These are keyCode
+  // events so they arrive here; the typed query characters are printable text,
+  // handled by [tryConsumeDebugText].
   if (controller.mode != DebugMode.off &&
       controller.tab == DebugTab.logs &&
       controller.logSearching) {
@@ -205,45 +205,14 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
       controller.backspaceLogQuery();
       return true;
     }
-    final ch = event.char;
-    if (ch != null &&
-        ch.isNotEmpty &&
-        !event.hasCtrl &&
-        !event.hasAlt &&
-        ch.runes.first >= 0x20) {
-      controller.appendLogQuery(ch);
-      return true;
-    }
   }
   if (controller.mode != DebugMode.off &&
       event.keyCode == KeyCode.tab &&
       !event.hasCtrl &&
       !event.hasAlt) {
-    // While the shell is open, plain keys are shell-first (precedent: 'p'
-    // toggles paint flash). Tab / Shift+Tab cycle the panel tabs.
+    // While the shell is open, Tab / Shift+Tab cycle the panel tabs.
     controller.nextTab(event.hasShift ? -1 : 1);
     return true;
-  }
-  if (event.char == 'p' && !event.hasCtrl && !event.hasAlt) {
-    if (controller.mode != DebugMode.off) {
-      controller.togglePaintFlash();
-      return true;
-    }
-    return false;
-  }
-  if (controller.mode != DebugMode.off &&
-      controller.tab == DebugTab.logs &&
-      !controller.logSearching &&
-      !event.hasCtrl &&
-      !event.hasAlt) {
-    if (event.char == '/') {
-      controller.startLogSearch();
-      return true;
-    }
-    if (event.char == 's') {
-      controller.cycleLogSource();
-      return true;
-    }
   }
   if (controller.mode != DebugMode.off && controller.tab == DebugTab.tree) {
     if (event.keyCode == KeyCode.arrowDown) {
@@ -256,6 +225,45 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
     }
     if (event.keyCode == KeyCode.home) {
       controller.resetSemanticCursor();
+      return true;
+    }
+  }
+  return false;
+}
+
+/// Consumes a printable [TextInputEvent] as a debug-shell shortcut — the
+/// companion to [tryConsumeDebugKey] for keys the terminal delivers as *text*
+/// rather than key codes. Fleury's input parser emits `TextInputEvent` for
+/// printable ASCII (a plain `p`, `/`, `s`, or a typed query character), so
+/// these bindings can't live in the `KeyEvent`-only path. Returns true when the
+/// shell handled it, so the caller skips the normal input dispatcher.
+///
+/// Bindings (only while the shell is open):
+///   p           toggle paint-flash
+///   / · s       Logs tab: open search · cycle source filter
+///   `text`      while the Logs search field is open, append to the query — and
+///               capture it so typed characters don't leak into the app beneath
+bool tryConsumeDebugText(DebugController controller, TextInputEvent event) {
+  if (!controller.config.enabled || controller.mode == DebugMode.off) {
+    return false;
+  }
+  // While the search field is open, all typed text edits the query and is
+  // captured (so it can't fall through to the app under the shell).
+  if (controller.tab == DebugTab.logs && controller.logSearching) {
+    controller.appendLogQuery(event.text);
+    return true;
+  }
+  if (event.text == 'p') {
+    controller.togglePaintFlash();
+    return true;
+  }
+  if (controller.tab == DebugTab.logs) {
+    if (event.text == '/') {
+      controller.startLogSearch();
+      return true;
+    }
+    if (event.text == 's') {
+      controller.cycleLogSource();
       return true;
     }
   }

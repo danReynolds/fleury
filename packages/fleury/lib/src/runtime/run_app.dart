@@ -816,12 +816,19 @@ Future<AppExit> _runAppImpl(
                   DebugEvents.emitTerminalDiagnosis(currentTerminalDiagnosis());
                 }
 
-                // Debug-shell hotkeys (Ctrl+G, F11, Esc-in-fullscreen, F12,
-                // 'p' when open): bypass the dispatcher so they fire inside
-                // an active modal route's `suppressGlobals: true` scope.
-                // Same escape-hatch tier as Ctrl+C.
+                // Debug-shell hotkeys bypass the dispatcher so they fire inside
+                // an active modal route's `suppressGlobals: true` scope (same
+                // escape-hatch tier as Ctrl+C). Two arms: key-code chords
+                // (Ctrl+G, F11/F12, Esc, Tab, arrows, Enter/Backspace) and the
+                // printable shortcuts the parser delivers as text (`p`, `/`,
+                // `s`, and the typed Logs-search query).
                 if (event is KeyEvent &&
                     tryConsumeDebugKey(debugController, event)) {
+                  scheduleFrame('debug-key');
+                  return;
+                }
+                if (event is TextInputEvent &&
+                    tryConsumeDebugText(debugController, event)) {
                   scheduleFrame('debug-key');
                   return;
                 }
