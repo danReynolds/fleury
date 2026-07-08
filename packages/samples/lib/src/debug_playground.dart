@@ -126,6 +126,10 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
 
   void _toggleStream() => setState(() {
     _streaming = !_streaming;
+    // Reset the cadence clock: Ticker.start() zeroes `elapsed`, so a stale
+    // _lastStreamMs from a previous run would freeze the stream until elapsed
+    // climbed back past it (seconds of dead air after a stop/restart).
+    if (_streaming) _lastStreamMs = 0;
     _lastAction = _streaming
         ? 'streaming on → Live tab shows steady cadence; paint-flash marks it'
         : 'streaming off';

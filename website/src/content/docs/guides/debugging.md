@@ -15,7 +15,7 @@ diagnose — a janky frame, an uncaught error, a log burst, a continuously
 repainting region — and lets you trigger each and watch the matching tab react:
 
 ```sh
-dart run packages/samples/bin/samples.dart debug   # then press F12
+dart run packages/samples/bin/samples.dart debug   # then press Ctrl+G
 ```
 
 Each trigger is a semantic button, so the same app is the agent-devtools demo:
