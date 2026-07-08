@@ -1393,7 +1393,7 @@ final class McpServer {
       throw _ToolFailure(
         bridge.renderTimedOut
             ? 'The app connected but never rendered a UI (no semantic frame '
-                  'within the first-frame timeout). Does it call runTui(...)?'
+                  'within the first-frame timeout). Does it call runApp(...)?'
             : 'The app has not rendered a UI yet (no semantic frame received).',
         code: _ErrorCode.notReady,
       );

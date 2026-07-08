@@ -105,18 +105,27 @@ void main() {
       expect(out, contains('press Ctrl+G')); // Ctrl+G is the reliable toggle
     });
 
-    testWidgets('arrow keys traverse the scenario buttons (the '
-        'FocusTraversalGroup wiring)', (tester) {
-      tester.pumpWidget(const DebugPlaygroundApp());
+    testWidgets('arrow keys traverse the scenario buttons via the root '
+        'traversal group', (tester) {
+      // In production runApp wraps the app in a root FocusTraversalGroup, so the
+      // sample itself adds none. The test harness pumps the widget directly, so
+      // reproduce that ambient root group here.
+      tester.pumpWidget(const FocusTraversalGroup(child: DebugPlaygroundApp()));
       tester.render(size: _size); // autofocus lands on the first button
       expect(
-        tester.semantics().single(role: SemanticRole.button, focused: true).label,
+        tester
+            .semantics()
+            .single(role: SemanticRole.button, focused: true)
+            .label,
         'Spike a slow frame',
       );
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
       tester.render(size: _size);
       expect(
-        tester.semantics().single(role: SemanticRole.button, focused: true).label,
+        tester
+            .semantics()
+            .single(role: SemanticRole.button, focused: true)
+            .label,
         'Throw in a handler',
         reason: '↓ moves focus to the next button inside the traversal group',
       );

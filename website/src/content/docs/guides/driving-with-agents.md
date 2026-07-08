@@ -15,17 +15,17 @@ over the semantic tree your app already produces — see
 
 ## Your app needs no MCP code
 
-Pointing `fleury_mcp` at a normal `runTui` app is all it takes — no dependency to
+Pointing `fleury_mcp` at a normal `runApp` app is all it takes — no dependency to
 add, no server code to write, nothing to register. Every widget already
 contributes its semantics (role, label, value, the actions it supports), and
-`runTui` already speaks the remote wire a host connects over, so the app is
+`runApp` already speaks the remote wire a host connects over, so the app is
 drivable the moment it runs. Pinning a stable `id:` on the nodes that matter is
 the only thing worth adding.
 
 ```dart
 import 'package:fleury/fleury.dart';
 
-void main() => runTui(const CounterApp());
+void main() => runApp(const CounterApp());
 
 class CounterApp extends StatefulWidget {
   const CounterApp({super.key});
