@@ -51,11 +51,12 @@ enum TraversalDirection { left, right, up, down }
 /// Catches arrow chords that bubble out of the focused widget and
 /// moves focus to the spatially nearest focusable in that direction.
 ///
-/// [runApp] installs one at the app root automatically, so arrow keys move
-/// focus between an app's focusable widgets out of the box — no app shell or
-/// manual group required. Add explicit groups only to *scope* traversal: a
-/// modal or pane that should trap focus, an embedded surface, or a
-/// framework-level test that mounts a widget without going through [runApp].
+/// The [Navigator] installs one around every route — the home screen, a pushed
+/// page, and a presented modal — so a [runApp] app and every route it navigates
+/// to get arrow/Tab traversal out of the box, with no app shell or manual group
+/// required. Add explicit groups only to *scope* traversal: a pane that should
+/// traverse on its own, an embedded surface, or a framework-level test that
+/// mounts a widget with no [Navigator] above it.
 class FocusTraversalGroup extends StatelessWidget {
   const FocusTraversalGroup({super.key, required this.child});
 

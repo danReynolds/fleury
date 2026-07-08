@@ -33,7 +33,6 @@ import '../terminal/native_driver.dart';
 import '../terminal/posix_driver.dart';
 import '../terminal/terminal_driver.dart';
 import '../widgets/focus.dart';
-import '../widgets/focus_traversal.dart';
 import '../widgets/framework.dart';
 import '../widgets/key_bindings.dart';
 import '../widgets/output_capture_view.dart';
@@ -638,17 +637,10 @@ Future<AppExit> _runAppImpl(
           // The root entry is created once; rebuilding `buildRoot` only swaps
           // the ambient MediaQuery data when the terminal resizes, preserving
           // the Overlay/Navigator subtree (and all its state).
-          // Root focus-traversal group so arrow keys move focus between the
-          // app's focusable widgets out of the box — every app gets directional
-          // traversal without wrapping anything itself (an app shell like
-          // FleuryApp, or a bare widget passed straight to runApp, alike). It
-          // wraps the app's home content, not the debug/error overlays, so the
-          // global-hotkey debug shell stays outside the app's focus order. Apps
-          // still add nested FocusTraversalGroups to *scope* traversal (a modal,
-          // a pane that should trap focus); those compose with this root.
-          final rootEntry = OverlayEntry(
-            builder: (_) => Navigator(home: FocusTraversalGroup(child: root)),
-          );
+          // The Navigator gives every route (home, pushed, presented modal) its
+          // own root FocusTraversalGroup, so arrow/Tab focus traversal works out
+          // of the box without the app wrapping anything — see [Navigator].
+          final rootEntry = OverlayEntry(builder: (_) => Navigator(home: root));
           // A full-screen layer above the app that shows the uncaught-error
           // banner (and nothing otherwise). As its own entry it never touches
           // the app's layout — the app keeps rendering full-screen underneath.
