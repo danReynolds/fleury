@@ -133,7 +133,10 @@ class _DebugPanelState extends State<DebugPanel> {
           'Uncaught errors from event handlers and async',
           style: CellStyle(dim: true),
         ),
-        Text('callbacks collect here (newest last).', style: CellStyle(dim: true)),
+        Text(
+          'callbacks collect here (newest last).',
+          style: CellStyle(dim: true),
+        ),
       ];
     }
     final rows = <Widget>[
@@ -993,10 +996,20 @@ class _DebugPanelState extends State<DebugPanel> {
   /// One phase line: `Label  3.2ms ▁▂▃▄▅▆▇█` — color the value red
   /// when over budget (~4ms is a reasonable per-phase ceiling at 60fps
   /// since the four phases share a 16ms total).
+  /// Sparkline sample count that fits the panel's column. The box border (2) +
+  /// horizontal padding (2) + the "label 0000.0ms " prefix (~15) consume
+  /// `panelWidth - 19` columns, so capping here keeps each graph on one line
+  /// instead of overflowing and wrapping into the next phase row.
+  int get _sparkWidth =>
+      (widget.controller.config.panelWidth - 19).clamp(6, 40);
+
   Widget _phaseRow(String label, Duration latest, Iterable<Duration> series) {
     final ms = latest.inMicroseconds / 1000;
     final overBudget = ms > 4.0;
-    final spark = _sparkline(series.map((d) => d.inMicroseconds).toList());
+    final spark = _sparkline(
+      series.map((d) => d.inMicroseconds).toList(),
+      _sparkWidth,
+    );
     return Text(
       '$label ${_us(latest).padLeft(7)} $spark',
       style: overBudget
@@ -1011,13 +1024,17 @@ class _DebugPanelState extends State<DebugPanel> {
   }
 
   /// 8-level braille-style sparkline. Empty when series is empty.
-  static String _sparkline(List<int> values) {
+  static String _sparkline(List<int> values, [int maxLen = 60]) {
     if (values.isEmpty) return '';
+    // Keep only the most recent [maxLen] samples so the graph fits its column.
+    final window = values.length > maxLen
+        ? values.sublist(values.length - maxLen)
+        : values;
     const blocks = ' ▁▂▃▄▅▆▇█';
-    final maxV = values.reduce((a, b) => a > b ? a : b);
-    if (maxV == 0) return blocks[0] * values.length;
+    final maxV = window.reduce((a, b) => a > b ? a : b);
+    if (maxV == 0) return blocks[0] * window.length;
     final buf = StringBuffer();
-    for (final v in values) {
+    for (final v in window) {
       final idx = ((v / maxV) * (blocks.length - 1)).round();
       buf.write(blocks[idx]);
     }
