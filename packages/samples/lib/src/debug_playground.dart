@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury_widgets/fleury_widgets_web.dart';
 
@@ -57,6 +59,16 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
   Ticker? _ticker;
   int _lastStreamMs = 0;
 
+  // Visible manifestations so a running scenario shows a CAUSE in the pane, not
+  // just an effect in the shell's tabs: a scrolling signal for the stream, a
+  // filling bar + spinner for the storm.
+  static const _waveWidth = 18;
+  static const _blocks = <String>[' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+  static const _spinner = <String>['◐', '◓', '◑', '◒'];
+  final List<int> _wave = <int>[];
+  double _wavePhase = 0;
+  int _spin = 0;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -77,15 +89,20 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
     var changed = false;
     if (_stormRemaining > 0) {
       _stormRemaining--; // one forced rebuild per frame → a visible burst
+      _spin = (_spin + 1) % _spinner.length;
       changed = true;
     }
     if (_streaming) {
+      // A new signal sample every tick (~30/s) → a smooth scrolling waveform.
+      _wavePhase += 0.6;
+      _wave.add((((math.sin(_wavePhase) + 1) / 2) * 8).round());
+      while (_wave.length > _waveWidth) _wave.removeAt(0);
       final ms = elapsed.inMilliseconds;
       if (ms - _lastStreamMs >= 100) {
         _lastStreamMs = ms;
-        _streamTick++;
-        changed = true;
+        _streamTick++; // the semantic "update" count (~10/s)
       }
+      changed = true;
     }
     if (changed) setState(() {});
     if (!_streaming && _stormRemaining == 0) _ticker?.stop();
@@ -126,12 +143,16 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
 
   void _toggleStream() => setState(() {
     _streaming = !_streaming;
-    // Reset the cadence clock: Ticker.start() zeroes `elapsed`, so a stale
-    // _lastStreamMs from a previous run would freeze the stream until elapsed
-    // climbed back past it (seconds of dead air after a stop/restart).
-    if (_streaming) _lastStreamMs = 0;
+    if (_streaming) {
+      // Reset the cadence clock: Ticker.start() zeroes `elapsed`, so a stale
+      // _lastStreamMs from a previous run would freeze the stream until elapsed
+      // climbed back past it (seconds of dead air after a stop/restart).
+      _lastStreamMs = 0;
+    } else {
+      _wave.clear();
+    }
     _lastAction = _streaming
-        ? 'streaming on → Live tab shows steady cadence; paint-flash marks it'
+        ? 'streaming ~10 updates/s → watch Live: FPS climbs off 0, cadence holds'
         : 'streaming off';
     _ensureTicking();
   });
@@ -218,7 +239,7 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
               autofocus: true,
               onPressed: _spikeSlowFrame,
             ),
-            '→ Live (build µs spike)',
+            'burns ~120ms in build → Live: build µs spikes',
           ),
           _scenario(
             theme,
@@ -227,12 +248,12 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
               variant: ButtonVariant.error,
               onPressed: _throwInHandler,
             ),
-            '→ Errors (caught, non-fatal)',
+            'throws (caught) → Errors: logged, app keeps running',
           ),
           _scenario(
             theme,
             Button(label: 'Emit a log burst', onPressed: _emitLogBurst),
-            '→ Logs (40 stdout lines)',
+            'prints 40 lines → Logs: press / to search',
           ),
           _scenario(
             theme,
@@ -241,7 +262,7 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
               variant: ButtonVariant.success,
               onPressed: _toggleStream,
             ),
-            '→ Live cadence + paint-flash',
+            '~10 updates/s → Live: FPS climbs off 0',
           ),
           _scenario(
             theme,
@@ -250,7 +271,7 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
               variant: ButtonVariant.primary,
               onPressed: _rebuildStorm,
             ),
-            '→ Rebuilds (120 forced)',
+            '120 forced rebuilds → Rebuilds: invalidation count',
           ),
         ],
       ),
@@ -271,11 +292,6 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
   }
 
   Widget _readoutPanel(ThemeData theme) {
-    final stream = _streaming
-        ? '◐ streaming (tick $_streamTick)'
-        : (_stormRemaining > 0
-              ? '● rebuilding ($_stormRemaining left)'
-              : 'idle');
     return Panel(
       title: 'What just happened',
       child: Column(
@@ -287,11 +303,16 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
             style: CellStyle(foreground: theme.colorScheme.info),
           ),
           const SizedBox(height: 1),
+          Text(
+            'Live activity  (the cause — watch the shell for the effect)',
+            style: theme.mutedStyle,
+          ),
+          _activityStrip(theme),
+          const SizedBox(height: 1),
           _stat(theme, 'errors thrown', _errors),
           _stat(theme, 'log bursts', _logBursts),
           _stat(theme, 'slow frames', _janks),
           _stat(theme, 'rebuild storms', _rebuildStorms),
-          _statText(theme, 'live', stream),
           const SizedBox(height: 1),
           Text('Where to look', style: theme.mutedStyle),
           Text(
@@ -305,6 +326,39 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
         ],
       ),
     );
+  }
+
+  // The continuous scenarios made visible: a scrolling signal while streaming,
+  // a filling bar + spinner while the storm churns, quiet when idle. Pair this
+  // (the cause) with the shell's Live / Rebuilds tabs (the effect).
+  Widget _activityStrip(ThemeData theme) {
+    if (_streaming) {
+      final signal = [for (final h in _wave) _blocks[h.clamp(0, 8)]].join();
+      return Row(
+        children: <Widget>[
+          Text(
+            signal.padRight(_waveWidth),
+            style: CellStyle(foreground: theme.colorScheme.success),
+          ),
+          Text('  ◐ streaming · tick $_streamTick', style: theme.mutedStyle),
+        ],
+      );
+    }
+    if (_stormRemaining > 0) {
+      final done = 120 - _stormRemaining;
+      final filled = (done / 120 * _waveWidth).round().clamp(0, _waveWidth);
+      final bar = '█' * filled + '░' * (_waveWidth - filled);
+      return Row(
+        children: <Widget>[
+          Text(bar, style: CellStyle(foreground: theme.colorScheme.primary)),
+          Text(
+            '  ${_spinner[_spin]} rebuilding · $done/120',
+            style: theme.mutedStyle,
+          ),
+        ],
+      );
+    }
+    return Text('· idle · trigger a scenario', style: theme.mutedStyle);
   }
 
   Widget _stat(ThemeData theme, String label, int value) =>
