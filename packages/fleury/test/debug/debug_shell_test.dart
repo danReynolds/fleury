@@ -113,7 +113,7 @@ void main() {
       );
     });
 
-    testWidgets('docked reflows the app into the remaining cells', (tester) {
+    testWidgets('docked floats the panel over the app\'s edge', (tester) {
       final controller = DebugController(
         const DebugConfig(startMode: DebugMode.docked, panelWidth: 10),
       );
@@ -135,6 +135,35 @@ void main() {
         panelHasContent,
         isTrue,
         reason: 'docked panel must paint into its allocated region',
+      );
+    });
+
+    testWidgets('the floating docked panel is opaque (no app bleed-through)', (
+      tester,
+    ) {
+      final controller = DebugController(
+        const DebugConfig(startMode: DebugMode.docked, panelWidth: 12),
+      );
+      // A full-width app line runs under where the panel floats.
+      tester.pumpWidget(
+        DebugShell(
+          controller: controller,
+          child: const Text('app content behind the panel'),
+        ),
+      );
+      final buf = tester.render(size: const CellSize(30, 6));
+      // The panel floats over cols [18, 30). EVERY covered cell must carry a
+      // background (the opaque Surface fill) so nothing behind bleeds through.
+      var bleedCells = 0;
+      for (var c = 18; c < 30; c++) {
+        for (var r = 0; r < 6; r++) {
+          if (buf.atColRow(c, r).style.background == null) bleedCells++;
+        }
+      }
+      expect(
+        bleedCells,
+        0,
+        reason: 'a floating panel must paint every cell it covers',
       );
     });
 
@@ -848,6 +877,19 @@ void main() {
       expect(tryConsumeDebugKey(c, _ctrl('p')), isFalse);
     });
 
+    test('Left / Right arrows cycle the panel tabs while open', () {
+      final c = DebugController(const DebugConfig(startMode: DebugMode.docked));
+      expect(c.tab, DebugTab.live);
+      expect(tryConsumeDebugKey(c, _key(KeyCode.arrowRight)), isTrue);
+      expect(c.tab, DebugTab.tree);
+      expect(tryConsumeDebugKey(c, _key(KeyCode.arrowLeft)), isTrue);
+      expect(c.tab, DebugTab.live);
+      // Closed → arrows pass through to the app.
+      c.toggleOnOff();
+      expect(c.mode, DebugMode.off);
+      expect(tryConsumeDebugKey(c, _key(KeyCode.arrowRight)), isFalse);
+    });
+
     test('tree cursor keys are scoped to an open Tree tab', () {
       final c = DebugController(
         const DebugConfig(startMode: DebugMode.fullscreen),
@@ -869,6 +911,24 @@ void main() {
       c.toggleOnOff();
       expect(c.mode, DebugMode.off);
       expect(tryConsumeDebugKey(c, _key(KeyCode.arrowDown)), isFalse);
+    });
+
+    test('left/right arrows cycle tabs while the shell is open', () {
+      final c = DebugController(const DebugConfig(startMode: DebugMode.docked));
+      expect(c.tab, DebugTab.live);
+      expect(tryConsumeDebugKey(c, _key(KeyCode.arrowRight)), isTrue);
+      expect(c.tab, DebugTab.tree, reason: 'right advances');
+      expect(tryConsumeDebugKey(c, _key(KeyCode.arrowLeft)), isTrue);
+      expect(c.tab, DebugTab.live, reason: 'left goes back');
+      // Inert while a Logs search owns the arrows, and when the shell is off.
+      c
+        ..selectTab(DebugTab.logs)
+        ..startLogSearch();
+      expect(tryConsumeDebugKey(c, _key(KeyCode.arrowRight)), isFalse);
+      c.cancelLogSearch();
+      c.toggleOnOff();
+      expect(c.mode, DebugMode.off);
+      expect(tryConsumeDebugKey(c, _key(KeyCode.arrowLeft)), isFalse);
     });
 
     test('disabled controller consumes nothing', () {

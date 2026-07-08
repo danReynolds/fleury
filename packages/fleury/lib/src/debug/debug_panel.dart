@@ -23,6 +23,7 @@ import '../widgets/basic.dart';
 import '../widgets/framework.dart';
 import '../widgets/layout_builder.dart';
 import '../widgets/output_capture_view.dart';
+import '../widgets/pointer.dart';
 import '../widgets/rich_text.dart';
 import '../widgets/theme.dart';
 import 'debug_events.dart';
@@ -51,6 +52,10 @@ class _DebugPanelState extends State<DebugPanel> {
   // still captures every frame.
   static const _rebuildIntervalMs = 100;
   final List<FrameEvent> _history = <FrameEvent>[];
+  // Wallclock receipt times (ms) of frames in the last second — the basis for a
+  // REAL fps (frames actually rendered per second). Distinct from 1/avg-frame-
+  // time, which is per-frame headroom and reads ~200 even on an idle app.
+  final List<int> _frameStamps = <int>[];
   StreamSubscription<DebugEvent>? _sub;
   int _lastRebuildMs = 0;
   // The panel's content width (box minus border + padding), captured from the
@@ -65,6 +70,11 @@ class _DebugPanelState extends State<DebugPanel> {
       if (event is! FrameDebugEvent) return;
       _history.add(event.frame);
       if (_history.length > _historySize) _history.removeAt(0);
+      final now = DateTime.now().millisecondsSinceEpoch;
+      _frameStamps.add(now);
+      while (_frameStamps.isNotEmpty && _frameStamps.first < now - 1000) {
+        _frameStamps.removeAt(0);
+      }
       _maybeThrottledRebuild();
     });
     widget.controller.addListener(_rebuild);
@@ -104,21 +114,28 @@ class _DebugPanelState extends State<DebugPanel> {
         // padding (2); sparklines size off it so they can't overflow and wrap.
         _contentWidth =
             (constraints.maxCols ?? widget.controller.config.panelWidth) - 4;
-        return Container(
-          border: const BoxBorder(
-            style: BorderStyle.single,
-            cellStyle: CellStyle(foreground: RgbColor(120, 130, 150)),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 1),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.max,
-            children: [
-              _Header(controller: widget.controller),
-              _TabStrip(controller: widget.controller),
-              const Text(''),
-              ..._tabBody(),
-            ],
+        // Opaque surface: the panel now Positioned-floats over the app, so
+        // every cell it covers must be painted or the app bleeds through the
+        // gaps (border ring + unfilled interior). Surface fills the whole slot;
+        // the border and content paint on top.
+        return Surface(
+          color: const RgbColor(20, 22, 28),
+          child: Container(
+            border: const BoxBorder(
+              style: BorderStyle.single,
+              cellStyle: CellStyle(foreground: RgbColor(120, 130, 150)),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 1),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.max,
+              children: [
+                _Header(controller: widget.controller),
+                _TabStrip(controller: widget.controller),
+                const Text(''),
+                ..._tabBody(),
+              ],
+            ),
           ),
         );
       },
@@ -188,9 +205,10 @@ class _DebugPanelState extends State<DebugPanel> {
     }
     final latest = _history.last;
     // FPS = frames over last 1 second of wallclock-equivalent — but
-    // since FrameEvent doesn't carry wallclock, approximate from
-    // history length and total recent frame time.
-    final fps = _approxFps();
+    // FPS is the real wallclock render rate (frames in the last second); `Avg`
+    // is the per-frame cost. Idle reads FPS 0 — an event-driven app renders
+    // nothing at rest.
+    final fps = _fps();
     final avg = _avgTotal();
     final slow = _slowCount();
 
@@ -198,7 +216,7 @@ class _DebugPanelState extends State<DebugPanel> {
       _row('Frame', '#${latest.frameNumber}'),
       _row('Reason', latest.reason),
       _row('Size', '${latest.bufferSize.cols}×${latest.bufferSize.rows}'),
-      _row('FPS', fps.toStringAsFixed(0)),
+      _row('FPS', '$fps'),
       _row('Avg', _us(avg)),
       _row('Slow', '$slow/${_history.length} >16ms'),
       const Text(''),
@@ -978,15 +996,18 @@ class _DebugPanelState extends State<DebugPanel> {
     }
   }
 
-  double _approxFps() {
-    if (_history.length < 2) return 0;
-    final totalMicros = _history.fold<int>(
-      0,
-      (s, f) => s + f.total.inMicroseconds,
-    );
-    if (totalMicros == 0) return 0;
-    final avgMicros = totalMicros / _history.length;
-    return 1e6 / avgMicros;
+  // Real frames-per-second: frames actually rendered in the last wallclock
+  // second. An idle, event-driven app reads 0 — it renders nothing when nothing
+  // changes, which is the honest number (and one of Fleury's better traits).
+  // The old metric was 1e6/avg-frame-time, i.e. per-frame headroom, which read
+  // ~200 even at rest; per-frame cost is already shown separately as `Avg`.
+  int _fps() {
+    final cutoff = DateTime.now().millisecondsSinceEpoch - 1000;
+    var n = 0;
+    for (final t in _frameStamps) {
+      if (t >= cutoff) n++;
+    }
+    return n;
   }
 
   Duration _avgTotal() {
@@ -1068,8 +1089,8 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hint = controller.mode == DebugMode.fullscreen
-        ? 'Esc: dock | Ctrl+G: close'
-        : 'F11: expand | Ctrl+G: close';
+        ? '←→ tabs · Esc dock · Ctrl+G close'
+        : '←→ tabs · F11 expand · Ctrl+G close';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1090,15 +1111,21 @@ class _TabStrip extends StatelessWidget {
     for (final tab in DebugTab.values) {
       final selected = tab == controller.tab;
       cells.add(
-        Text(
-          ' ${_label(tab)} ',
-          style: selected
-              ? const CellStyle(
-                  foreground: RgbColor(0, 0, 0),
-                  background: RgbColor(120, 200, 255),
-                  bold: true,
-                )
-              : const CellStyle(dim: true),
+        // Clickable: a mouse tap selects the tab (arrows / Tab also cycle via
+        // the shell's key handler). The chips read as buttons — now they act
+        // like them.
+        GestureDetector(
+          onTap: () => controller.selectTab(tab),
+          child: Text(
+            ' ${_label(tab)} ',
+            style: selected
+                ? const CellStyle(
+                    foreground: RgbColor(0, 0, 0),
+                    background: RgbColor(120, 200, 255),
+                    bold: true,
+                  )
+                : const CellStyle(dim: true),
+          ),
         ),
       );
     }
