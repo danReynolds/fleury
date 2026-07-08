@@ -175,7 +175,7 @@ final class FleuryAppBridge {
   bool get isRunning => !_exited.isCompleted;
 
   /// True once the app connected but did not render a first frame within
-  /// [firstFrameTimeout] (e.g. it never called runTui). Lets tools fail fast
+  /// [firstFrameTimeout] (e.g. it never called runApp). Lets tools fail fast
   /// with a clear message instead of each waiting out its own timeout.
   bool get renderTimedOut => _renderTimedOut;
 

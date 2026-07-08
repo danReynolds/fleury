@@ -51,9 +51,11 @@ enum TraversalDirection { left, right, up, down }
 /// Catches arrow chords that bubble out of the focused widget and
 /// moves focus to the spatially nearest focusable in that direction.
 ///
-/// [FleuryApp] installs a root traversal group automatically. Add explicit
-/// groups when a pane, modal, embedded surface, or framework-level test needs
-/// its own traversal scope without an app shell.
+/// [runApp] installs one at the app root automatically, so arrow keys move
+/// focus between an app's focusable widgets out of the box — no app shell or
+/// manual group required. Add explicit groups only to *scope* traversal: a
+/// modal or pane that should trap focus, an embedded surface, or a
+/// framework-level test that mounts a widget without going through [runApp].
 class FocusTraversalGroup extends StatelessWidget {
   const FocusTraversalGroup({super.key, required this.child});
 

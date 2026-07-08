@@ -262,6 +262,57 @@ void main() {
     });
   });
 
+  group('runApp root focus traversal', () {
+    test(
+      'installs a root traversal group so arrows move focus with no app shell '
+      'or manual FocusTraversalGroup',
+      () async {
+        final driver = FakeTerminalDriver();
+        final nodeA = FocusNode();
+        final nodeB = FocusNode();
+        try {
+          // A bare two-widget column — no FleuryApp, no FocusTraversalGroup.
+          final future = runApp(
+            Column(
+              children: [
+                Focus(
+                  focusNode: nodeA,
+                  autofocus: true,
+                  child: const Text('A'),
+                ),
+                Focus(focusNode: nodeB, child: const Text('B')),
+              ],
+            ),
+            driver: driver,
+            enableHotReload: false,
+          );
+          await _settle();
+          expect(nodeA.hasFocus, isTrue, reason: 'autofocus lands on A');
+
+          driver.enqueue(const KeyEvent(keyCode: KeyCode.arrowDown));
+          await _settle();
+          expect(
+            nodeB.hasFocus,
+            isTrue,
+            reason:
+                'arrowDown moves focus A→B via the traversal group runApp '
+                'installs at the root; without it a bare app would not '
+                'traverse at all',
+          );
+
+          driver.enqueue(
+            const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          );
+          await future;
+        } finally {
+          nodeA.dispose();
+          nodeB.dispose();
+          await driver.dispose();
+        }
+      },
+    );
+  });
+
   group('runApp full-repaint recovery', () {
     // A SIGCONT (`fg`) / terminal-handoff resume re-enters a blanked
     // alt-screen and signals it with a SAME-SIZE ResizeEvent. The diff
@@ -643,6 +694,5 @@ void main() {
       await future;
       await driver.dispose();
     });
-
   });
 }

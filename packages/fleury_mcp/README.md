@@ -12,7 +12,7 @@ Fleury already exposes to the browser and to its testing API.
 ```
 ┌─────────────┐   JSON-RPC / stdio   ┌────────────┐   semantic wire   ┌──────────┐
 │  MCP host   │ ◀─────────────────▶  │ fleury_mcp │ ◀──────────────▶  │ your app │
-│ (the agent) │   get_ui, actions…   │  (server)  │   SEMANTICS /     │ (runTui) │
+│ (the agent) │   get_ui, actions…   │  (server)  │   SEMANTICS /     │ (runApp) │
 └─────────────┘                      └────────────┘   INPUT frames    └──────────┘
 ```
 
@@ -25,7 +25,7 @@ API; `fleury_mcp` is a third consumer of it.
 
 The connection reuses the wire `fleury serve` already speaks:
 
-1. **`runTui` auto-detects `FLEURY_HANDLE`.** When a host sets that env var,
+1. **`runApp` auto-detects `FLEURY_HANDLE`.** When a host sets that env var,
    the app runs in *remote mode* — instead of drawing to a terminal it streams
    `SEMANTICS` frames over a private Unix socket and accepts `INPUT_EVENT` /
    `SEMANTIC_ACTION` frames back. This is built in; the app opts into nothing.
@@ -55,12 +55,12 @@ browser** (`fleury serve`). There is no separate "CLI" vs "web" integration.
 
 Drivability is a property of the framework, not something you wire up. You add no
 dependency, write no server code, and call no `enableMcp()`. You write a normal
-`runTui` app:
+`runApp` app:
 
 ```dart
 import 'package:fleury/fleury.dart';
 
-void main() => runTui(const CounterApp());
+void main() => runApp(const CounterApp());
 
 class CounterApp extends StatefulWidget {
   const CounterApp({super.key});
@@ -106,7 +106,7 @@ Two things to notice:
   stable handle (see *Make your app drive well* below).
 
 Want a real app to try right now? Every app in `packages/samples`
-(`dashboard` · `files` · `agent`) is an unmodified `runTui` app and drives over
+(`dashboard` · `files` · `agent`) is an unmodified `runApp` app and drives over
 MCP as-is.
 
 ## Drive it

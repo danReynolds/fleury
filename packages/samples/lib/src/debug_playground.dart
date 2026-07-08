@@ -200,60 +200,59 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
   }
 
   Widget _scenarioPanel(ThemeData theme) {
-    // A FocusTraversalGroup makes ↑/↓ move between the buttons. Tab/Shift+Tab
-    // already traverse framework-wide; arrows are opt-in per container so a
-    // list or text field can own its own arrows without a global hijack.
+    // Arrows move focus between these buttons via the root FocusTraversalGroup
+    // that runApp installs — no per-container group needed here. Tab/Shift+Tab
+    // traverse too; a list or text field still owns its own arrows (they bubble
+    // to traversal only when the focused widget doesn't consume them).
     return Panel(
       title: 'Scenarios',
       trailing: Text('↑↓ / Tab · Enter', style: theme.mutedStyle),
-      child: FocusTraversalGroup(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            _scenario(
-              theme,
-              Button(
-                label: 'Spike a slow frame',
-                variant: ButtonVariant.warning,
-                autofocus: true,
-                onPressed: _spikeSlowFrame,
-              ),
-              '→ Live (build µs spike)',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          _scenario(
+            theme,
+            Button(
+              label: 'Spike a slow frame',
+              variant: ButtonVariant.warning,
+              autofocus: true,
+              onPressed: _spikeSlowFrame,
             ),
-            _scenario(
-              theme,
-              Button(
-                label: 'Throw in a handler',
-                variant: ButtonVariant.error,
-                onPressed: _throwInHandler,
-              ),
-              '→ Errors (caught, non-fatal)',
+            '→ Live (build µs spike)',
+          ),
+          _scenario(
+            theme,
+            Button(
+              label: 'Throw in a handler',
+              variant: ButtonVariant.error,
+              onPressed: _throwInHandler,
             ),
-            _scenario(
-              theme,
-              Button(label: 'Emit a log burst', onPressed: _emitLogBurst),
-              '→ Logs (40 stdout lines)',
+            '→ Errors (caught, non-fatal)',
+          ),
+          _scenario(
+            theme,
+            Button(label: 'Emit a log burst', onPressed: _emitLogBurst),
+            '→ Logs (40 stdout lines)',
+          ),
+          _scenario(
+            theme,
+            Button(
+              label: _streaming ? 'Stop live stream' : 'Toggle live stream',
+              variant: ButtonVariant.success,
+              onPressed: _toggleStream,
             ),
-            _scenario(
-              theme,
-              Button(
-                label: _streaming ? 'Stop live stream' : 'Toggle live stream',
-                variant: ButtonVariant.success,
-                onPressed: _toggleStream,
-              ),
-              '→ Live cadence + paint-flash',
+            '→ Live cadence + paint-flash',
+          ),
+          _scenario(
+            theme,
+            Button(
+              label: 'Rebuild storm',
+              variant: ButtonVariant.primary,
+              onPressed: _rebuildStorm,
             ),
-            _scenario(
-              theme,
-              Button(
-                label: 'Rebuild storm',
-                variant: ButtonVariant.primary,
-                onPressed: _rebuildStorm,
-              ),
-              '→ Rebuilds (120 forced)',
-            ),
-          ],
-        ),
+            '→ Rebuilds (120 forced)',
+          ),
+        ],
       ),
     );
   }
