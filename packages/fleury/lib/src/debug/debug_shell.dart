@@ -144,11 +144,13 @@ class _DebugShellState extends State<DebugShell> {
 ///   Ctrl+G              toggle off ↔ last-used open mode
 ///   F11                 docked ↔ fullscreen (only while open)
 ///   Tab / Shift+Tab     next / previous panel tab (only while open)
-///   Esc                 fullscreen → docked (only when fullscreen)
+///   Esc                 clear a Logs search, else fullscreen → docked
 ///   F12                 show/hide Logs tab (open if off, close if
 ///                       already on Logs, switch tab otherwise)
 ///   p                   toggle paint-flash (only when shell is open)
 ///   ↑/↓/Home            move semantic cursor while Tree tab is active
+///   / · s               Logs tab: open search · cycle source filter; while
+///                       searching, type to filter, Enter keeps it, Esc clears
 bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
   if (!controller.config.enabled) return false;
 
@@ -164,6 +166,14 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
     return false;
   }
   if (event.keyCode == KeyCode.escape) {
+    // In the Logs tab, Esc first backs out of search — cancel an open field or
+    // clear a committed query — before it collapses fullscreen.
+    if (controller.mode != DebugMode.off &&
+        controller.tab == DebugTab.logs &&
+        (controller.logSearching || controller.logQuery.isNotEmpty)) {
+      controller.cancelLogSearch();
+      return true;
+    }
     if (controller.mode == DebugMode.fullscreen) {
       controller.collapseFromFullscreen();
       return true;
@@ -181,6 +191,30 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
     }
     return true;
   }
+  // Logs tab with the search field open: typed input edits the query. Placed
+  // before the Tab / 'p' shortcuts so printable keys (including 's' and 'p')
+  // land in the query instead of triggering panel actions. Esc is handled above.
+  if (controller.mode != DebugMode.off &&
+      controller.tab == DebugTab.logs &&
+      controller.logSearching) {
+    if (event.keyCode == KeyCode.enter) {
+      controller.commitLogSearch();
+      return true;
+    }
+    if (event.keyCode == KeyCode.backspace) {
+      controller.backspaceLogQuery();
+      return true;
+    }
+    final ch = event.char;
+    if (ch != null &&
+        ch.isNotEmpty &&
+        !event.hasCtrl &&
+        !event.hasAlt &&
+        ch.runes.first >= 0x20) {
+      controller.appendLogQuery(ch);
+      return true;
+    }
+  }
   if (controller.mode != DebugMode.off &&
       event.keyCode == KeyCode.tab &&
       !event.hasCtrl &&
@@ -196,6 +230,20 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
       return true;
     }
     return false;
+  }
+  if (controller.mode != DebugMode.off &&
+      controller.tab == DebugTab.logs &&
+      !controller.logSearching &&
+      !event.hasCtrl &&
+      !event.hasAlt) {
+    if (event.char == '/') {
+      controller.startLogSearch();
+      return true;
+    }
+    if (event.char == 's') {
+      controller.cycleLogSource();
+      return true;
+    }
   }
   if (controller.mode != DebugMode.off && controller.tab == DebugTab.tree) {
     if (event.keyCode == KeyCode.arrowDown) {

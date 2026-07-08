@@ -32,7 +32,8 @@ debugger while it drives the app.
 | `F12` | Jump straight to the **Logs** tab (opens the shell if closed; pressed again on Logs, closes it) |
 | `Tab` / `Shift+Tab` | Next / previous tab (while open) |
 | `p` | Toggle **paint flash** — repainted regions flash so you can *see* what each frame touched (while open) |
-| `Esc` | Fullscreen → back to docked |
+| `/` · `s` | In the **Logs** tab: open search (type to filter, `Enter` keeps it) · cycle the source filter (all / stdout / stderr) |
+| `Esc` | Clear a Logs search, else fullscreen → back to docked |
 
 The shell's hotkeys are routed *before* the app's input dispatcher, so they
 work everywhere — including inside modal routes. While the shell is open,
@@ -53,7 +54,9 @@ back to the app.
 - **Logs** — everything the stray-output capture caught: `print`s, logger
   writes, and even **native/FFI library output** (fleury captures at the file
   descriptor, so a C library's `printf` can't corrupt your frames — it lands
-  here instead, and replays to the terminal after exit). On `fleury serve`
+  here instead, and replays to the terminal after exit). Press `/` to search
+  (matches highlight in place; `Enter` keeps the filter, `Esc` clears it) and
+  `s` to cycle the source filter (all / stdout / stderr). On `fleury serve`
   sessions stray output goes to the server's console instead, so this tab is
   primarily a local-terminal tool.
 - **Errors** — recent uncaught runtime errors (a throwing event handler, a
