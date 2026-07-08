@@ -56,6 +56,7 @@ import 'align.dart' show Align, Alignment;
 import 'basic.dart' show Container, Surface;
 import 'effects.dart';
 import 'focus.dart';
+import 'focus_traversal.dart';
 import 'error_boundary.dart';
 import 'framework.dart';
 import 'key_bindings.dart';
@@ -726,7 +727,13 @@ class _RouteHost extends StatelessWidget {
           excluding: !active,
           child: _RouteScope(
             route: route,
-            child: ErrorBoundary(child: screen),
+            // Per-route traversal: every route — the home page, a pushed page,
+            // or a presented modal — gets arrow + Tab focus traversal for free.
+            // It sits inside the route's FocusScope, so a modal's traversal is
+            // trapped within it (an explicit inner group can still sub-scope a
+            // pane). This is where a runApp app and every navigated route pick
+            // up traversal, so no screen has to wrap one itself.
+            child: FocusTraversalGroup(child: ErrorBoundary(child: screen)),
           ),
         ),
       ),

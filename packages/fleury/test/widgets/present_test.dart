@@ -70,6 +70,47 @@ void main() {
     expect(pageInput.text, 'a', reason: 'page no longer receives input');
   });
 
+  testWidgets('a presented modal traverses focus between its focusables with '
+      'no group of its own', (tester) {
+    // The Navigator gives every route (incl. a presented modal) its own
+    // FocusTraversalGroup, so arrows move focus within the modal out of the box
+    // — and, because the modal FocusScope traps, they can't escape to the page.
+    final inA = FocusNode(debugLabel: 'inA');
+    final inB = FocusNode(debugLabel: 'inB');
+    tester.pumpWidget(
+      Navigator(home: const Focus(autofocus: true, child: Text('page'))),
+    );
+    final nav = tester.binding.rootNavigator!;
+
+    nav.present<void>(
+      Column(
+        children: [
+          Focus(focusNode: inA, autofocus: true, child: const Text('A')),
+          Focus(focusNode: inB, child: const Text('B')),
+        ],
+      ),
+    );
+    tester.pump(const Duration(milliseconds: 300));
+    tester.render(size: const CellSize(20, 5));
+    expect(inA.hasFocus, isTrue, reason: 'modal autofocuses its first field');
+
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.render(size: const CellSize(20, 5));
+    expect(
+      inB.hasFocus,
+      isTrue,
+      reason: 'arrowDown traverses within the modal via its per-route group',
+    );
+
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.render(size: const CellSize(20, 5));
+    expect(
+      inB.hasFocus,
+      isTrue,
+      reason: 'nothing below B and the modal traps focus — it stays on B',
+    );
+  });
+
   testWidgets('a sheet anchors to the bottom edge', (tester) async {
     tester.pumpWidget(Navigator(home: const Text('page')));
     final nav = tester.binding.rootNavigator!;
