@@ -85,9 +85,11 @@ events by default.
 The daily-driver ergonomics, individually small — ship as one polish PR or
 opportunistically:
 
-- **Log filtering + search** in the Logs tab (`/` to search, source filter
-  stdout/stderr, level filter once structured levels exist), plus
-  **follow/pause** (tui-logger parity, table stakes for long sessions).
+- **Log filtering + search** in the Logs tab — **✅ landed**: `/` opens an
+  incremental search (matches highlight in place, `Enter` keeps / `Esc` clears),
+  `s` cycles the source filter (all / stdout / stderr). Still open: a level
+  filter once structured levels exist, and **follow/pause** + scroll-through-
+  history (tui-logger parity for long sessions).
 - **Bytes/frame in Live** — surface the existing `FLEURY_BYTE_TELEMETRY`
   numbers whenever the shell is open, no env var needed.
 - **Self-observation filter** — tag shell-caused frames so Live/Rebuilds

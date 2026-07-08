@@ -20,6 +20,7 @@ import 'package:test/test.dart';
 KeyEvent _ctrl(String c) =>
     KeyEvent(char: c, modifiers: const {KeyModifier.ctrl});
 KeyEvent _key(KeyCode k) => KeyEvent(keyCode: k);
+TextInputEvent _text(String s) => TextInputEvent(s);
 
 Matcher _stateError(String message) {
   return throwsA(
@@ -829,19 +830,21 @@ void main() {
     });
 
     test('p toggles paint-flash only while open, otherwise passes through', () {
+      // 'p' is printable, so it arrives as text (TextInputEvent) and is handled
+      // by tryConsumeDebugText — NOT the KeyEvent path.
       final c = DebugController(const DebugConfig());
       expect(
-        tryConsumeDebugKey(c, const KeyEvent(char: 'p')),
+        tryConsumeDebugText(c, _text('p')),
         isFalse,
         reason: 'p must pass through when shell is off',
       );
       c.toggleOnOff(); // → docked
-      expect(tryConsumeDebugKey(c, const KeyEvent(char: 'p')), isTrue);
+      expect(tryConsumeDebugText(c, _text('p')), isTrue);
       expect(c.paintFlash, isTrue);
-      expect(tryConsumeDebugKey(c, const KeyEvent(char: 'p')), isTrue);
+      expect(tryConsumeDebugText(c, _text('p')), isTrue);
       expect(c.paintFlash, isFalse);
-      // Ctrl+P / Alt+P are NOT debug bindings — must pass through even
-      // when shell is open (user app may use them).
+      // Ctrl+P is a key chord (not text) and is NOT a debug binding — it must
+      // pass through even when the shell is open (the app may use it).
       expect(tryConsumeDebugKey(c, _ctrl('p')), isFalse);
     });
 
@@ -873,6 +876,134 @@ void main() {
       expect(tryConsumeDebugKey(c, _ctrl('g')), isFalse);
       expect(tryConsumeDebugKey(c, _key(KeyCode.f12)), isFalse);
       expect(c.mode, DebugMode.off);
+    });
+  });
+
+  group('Logs tab — search & filter (DT3)', () {
+    DebugController open() =>
+        DebugController(const DebugConfig(startMode: DebugMode.docked))
+          ..selectTab(DebugTab.logs);
+
+    test(
+      '/ opens search; typing edits the query; Enter commits; Esc clears',
+      () {
+        final c = open();
+        // Printables (incl. '/') arrive as TextInputEvent, not KeyEvent — the
+        // parser emits text for printable ASCII. So they route through the text
+        // consumer, while Enter/Backspace/Esc are key codes.
+        expect(tryConsumeDebugText(c, _text('/')), isTrue);
+        expect(c.logSearching, isTrue);
+        expect(c.logQuery, isEmpty);
+
+        // Typed characters — including 's' and 'p', which are shortcuts OUTSIDE
+        // search — land in the query while the field is open, not the panel.
+        for (final ch in ['s', 'p', 'a', 'm']) {
+          expect(tryConsumeDebugText(c, _text(ch)), isTrue);
+        }
+        expect(c.logQuery, 'spam');
+        expect(c.paintFlash, isFalse, reason: "'p' typed a char, not a toggle");
+
+        expect(tryConsumeDebugKey(c, _key(KeyCode.backspace)), isTrue);
+        expect(c.logQuery, 'spa');
+
+        // Enter leaves input mode but keeps the query as the active filter.
+        expect(tryConsumeDebugKey(c, _key(KeyCode.enter)), isTrue);
+        expect(c.logSearching, isFalse);
+        expect(c.logQuery, 'spa');
+
+        // Esc (a key code) clears the committed query.
+        expect(tryConsumeDebugKey(c, _key(KeyCode.escape)), isTrue);
+        expect(c.logQuery, isEmpty);
+      },
+    );
+
+    test('Esc while searching cancels and clears', () {
+      final c = open();
+      tryConsumeDebugText(c, _text('/'));
+      tryConsumeDebugText(c, _text('x'));
+      expect(c.logQuery, 'x');
+      expect(tryConsumeDebugKey(c, _key(KeyCode.escape)), isTrue);
+      expect(c.logSearching, isFalse);
+      expect(c.logQuery, isEmpty);
+    });
+
+    test('s cycles the source filter all → stdout → stderr → all', () {
+      final c = open();
+      expect(c.logSourceFilter, LogSourceFilter.all);
+      expect(tryConsumeDebugText(c, _text('s')), isTrue);
+      expect(c.logSourceFilter, LogSourceFilter.stdout);
+      tryConsumeDebugText(c, _text('s'));
+      expect(c.logSourceFilter, LogSourceFilter.stderr);
+      tryConsumeDebugText(c, _text('s'));
+      expect(c.logSourceFilter, LogSourceFilter.all);
+    });
+
+    test('p toggles paint-flash via the text path on any open tab', () {
+      final c = open()..selectTab(DebugTab.live);
+      expect(c.paintFlash, isFalse);
+      expect(tryConsumeDebugText(c, _text('p')), isTrue);
+      expect(c.paintFlash, isTrue);
+    });
+
+    test('/ and s are inert outside the Logs tab', () {
+      final c = DebugController(const DebugConfig(startMode: DebugMode.docked))
+        ..selectTab(DebugTab.live);
+      expect(tryConsumeDebugText(c, _text('/')), isFalse);
+      expect(c.logSearching, isFalse);
+      expect(tryConsumeDebugText(c, _text('s')), isFalse);
+      expect(c.logSourceFilter, LogSourceFilter.all);
+    });
+
+    test('while searching, Tab (a key code) still cycles tabs', () {
+      final c = open();
+      tryConsumeDebugText(c, _text('/'));
+      expect(tryConsumeDebugKey(c, _key(KeyCode.tab)), isTrue);
+      expect(c.tab, DebugTab.errors, reason: 'logs → errors is the next tab');
+    });
+
+    test('shortcuts are inert when the shell is closed', () {
+      final c = DebugController(const DebugConfig())..selectTab(DebugTab.logs);
+      expect(c.mode, DebugMode.off);
+      expect(tryConsumeDebugText(c, _text('/')), isFalse);
+      expect(tryConsumeDebugText(c, _text('p')), isFalse);
+      expect(c.logSearching, isFalse);
+    });
+
+    testWidgets('the Logs tab renders the query and source filters', (tester) {
+      final buf = LogBuffer()
+        ..add(const LogLine('starting up', LogSource.stdout))
+        ..add(const LogLine('boom failure', LogSource.stderr))
+        ..add(const LogLine('all good', LogSource.stdout));
+      final controller = DebugController(
+        const DebugConfig(startMode: DebugMode.docked),
+      )..selectTab(DebugTab.logs);
+      tester.pumpWidget(
+        LogBufferScope(
+          buffer: buf,
+          child: DebugShell(controller: controller, child: const Text('app')),
+        ),
+      );
+      String out() => tester.renderToString(size: const CellSize(64, 12));
+
+      // Unfiltered: every captured line shows.
+      expect(out(), contains('starting up'));
+      expect(out(), contains('boom failure'));
+      expect(out(), contains('all good'));
+
+      // A search narrows to matching lines.
+      controller
+        ..startLogSearch()
+        ..appendLogQuery('boom');
+      final searched = out();
+      expect(searched, contains('boom failure'));
+      expect(searched, isNot(contains('starting up')));
+
+      // Source filter to stdout hides the stderr line.
+      controller.cancelLogSearch();
+      controller.cycleLogSource(); // all → stdout
+      final stdoutOnly = out();
+      expect(stdoutOnly, contains('starting up'));
+      expect(stdoutOnly, isNot(contains('boom failure')));
     });
   });
 }

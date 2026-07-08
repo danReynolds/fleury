@@ -12,8 +12,10 @@ import '../rendering/cell.dart';
 import '../rendering/edge_insets.dart';
 import '../rendering/render_flex.dart' show CrossAxisAlignment, MainAxisSize;
 import '../rendering/render_layout_stats.dart';
+import '../rendering/render_objects.dart' show TextOverflow;
 import '../rendering/render_repaint_boundary.dart';
 import '../rendering/text_sanitizer.dart';
+import '../runtime/output_capture.dart';
 import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
 import '../terminal/diagnostics.dart';
@@ -21,6 +23,8 @@ import '../widgets/basic.dart';
 import '../widgets/framework.dart';
 import '../widgets/layout_builder.dart';
 import '../widgets/output_capture_view.dart';
+import '../widgets/rich_text.dart';
+import '../widgets/theme.dart';
 import 'debug_events.dart';
 import 'debug_monitors.dart';
 import 'debug_state.dart';
@@ -130,9 +134,10 @@ class _DebugPanelState extends State<DebugPanel> {
       case DebugTab.rebuilds:
         return _rebuildsBody();
       case DebugTab.logs:
-        // Captured stdout/stderr lives in the ambient LogBufferScope
-        // installed by runApp; OutputCaptureView wires itself to it.
-        return const [Expanded(child: OutputCaptureView())];
+        // Captured stdout/stderr lives in the ambient LogBufferScope installed
+        // by runApp; _LogsView adds search (`/`) and a source filter (`s`) on
+        // top, driven by the controller.
+        return [Expanded(child: _LogsView(controller: widget.controller))];
       case DebugTab.errors:
         return _errorsBody();
     }
@@ -1124,4 +1129,163 @@ final class _SemanticOutlineEntry {
 
   final SemanticNode node;
   final int depth;
+}
+
+/// The Logs tab: fd-captured stdout/stderr with an incremental search field
+/// (`/`) and a source filter (`s`), both driven from [DebugController]. Tails
+/// like a console (newest at the bottom) and reads the buffer from the ambient
+/// [LogBufferScope] runApp installs. Search matches are highlighted in place;
+/// only the visible tail is styled, so a long buffer stays cheap.
+class _LogsView extends StatelessWidget {
+  const _LogsView({required this.controller});
+
+  final DebugController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final all = LogBufferScope.maybeOf(context)?.lines ?? const <LogLine>[];
+    final source = controller.logSourceFilter;
+    final lowerQuery = controller.logQuery.toLowerCase();
+    final filtered = <LogLine>[
+      for (final line in all)
+        if (_matches(line, source, lowerQuery)) line,
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.max,
+      children: [
+        _statusBar(theme, matches: filtered.length, total: all.length),
+        Expanded(child: _list(theme, filtered, controller.logQuery)),
+      ],
+    );
+  }
+
+  bool _matches(LogLine line, LogSourceFilter source, String lowerQuery) {
+    if (source == LogSourceFilter.stdout && line.source != LogSource.stdout) {
+      return false;
+    }
+    if (source == LogSourceFilter.stderr && line.source != LogSource.stderr) {
+      return false;
+    }
+    return lowerQuery.isEmpty || line.text.toLowerCase().contains(lowerQuery);
+  }
+
+  // The live search field (while typing) or a one-line status:
+  // source · "query" · matches/total.
+  Widget _statusBar(
+    ThemeData theme, {
+    required int matches,
+    required int total,
+  }) {
+    if (controller.logSearching) {
+      return Text(
+        '/${controller.logQuery}▏',
+        maxLines: 1,
+        overflow: TextOverflow.clip,
+        style: CellStyle(foreground: theme.colorScheme.primary, bold: true),
+      );
+    }
+    final parts = <String>[controller.logSourceFilter.label];
+    if (controller.logQuery.isNotEmpty) {
+      parts
+        ..add('"${controller.logQuery}"')
+        ..add('$matches/$total');
+    } else {
+      parts.add('$total ${total == 1 ? 'line' : 'lines'}');
+    }
+    return Text(
+      parts.join('  ·  '),
+      maxLines: 1,
+      overflow: TextOverflow.clip,
+      style: const CellStyle(dim: true),
+    );
+  }
+
+  Widget _list(ThemeData theme, List<LogLine> lines, String query) {
+    final normalStyle = theme.textStyle;
+    final stderrStyle = CellStyle(foreground: theme.colorScheme.error);
+    final hitStyle = CellStyle(
+      foreground: theme.colorScheme.background,
+      background: theme.colorScheme.warning,
+      bold: true,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (lines.isEmpty) {
+          return Text(
+            query.isEmpty
+                ? 'no output captured yet'
+                : 'no lines match "$query"',
+            style: const CellStyle(dim: true),
+          );
+        }
+        // Tail: show the most recent lines that fit, newest at the bottom.
+        final maxRows = constraints.maxRows;
+        final visible = (maxRows != null && lines.length > maxRows)
+            ? lines.sublist(lines.length - maxRows)
+            : lines;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final line in visible)
+              _row(
+                line,
+                query,
+                base: line.source == LogSource.stderr
+                    ? stderrStyle
+                    : normalStyle,
+                hit: hitStyle,
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _row(
+    LogLine line,
+    String query, {
+    required CellStyle base,
+    required CellStyle hit,
+  }) {
+    if (query.isEmpty) {
+      return Text(
+        line.text,
+        maxLines: 1,
+        overflow: TextOverflow.clip,
+        style: base,
+      );
+    }
+    return RichText(
+      maxLines: 1,
+      overflow: TextOverflow.clip,
+      text: TextSpan(style: base, children: _spans(line.text, query, hit)),
+    );
+  }
+
+  // Splits [text] into styled spans, highlighting each case-insensitive [query]
+  // occurrence with [hit]. [query] is non-empty here.
+  List<TextSpan> _spans(String text, String query, CellStyle hit) {
+    final spans = <TextSpan>[];
+    final haystack = text.toLowerCase();
+    final needle = query.toLowerCase();
+    var start = 0;
+    while (true) {
+      final idx = haystack.indexOf(needle, start);
+      if (idx < 0) {
+        if (start < text.length) {
+          spans.add(TextSpan(text: text.substring(start)));
+        }
+        break;
+      }
+      if (idx > start) spans.add(TextSpan(text: text.substring(start, idx)));
+      spans.add(
+        TextSpan(text: text.substring(idx, idx + needle.length), style: hit),
+      );
+      start = idx + needle.length;
+    }
+    return spans;
+  }
 }

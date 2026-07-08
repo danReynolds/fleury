@@ -23,6 +23,18 @@ enum DebugPanelSide { right, bottom }
 /// `tree`, `rebuilds`, `logs` are stubs that promote in P1.
 enum DebugTab { live, tree, rebuilds, logs, errors }
 
+/// Which sources the Logs tab shows, cycled with `s`.
+enum LogSourceFilter {
+  all('all'),
+  stdout('stdout'),
+  stderr('stderr');
+
+  const LogSourceFilter(this.label);
+
+  /// Short label for the status line.
+  final String label;
+}
+
 /// Top-level config the app declares once via `runApp(debug: ...)`.
 class DebugConfig {
   const DebugConfig({
@@ -73,6 +85,9 @@ class DebugController extends ChangeNotifier {
   DebugTab _tab = DebugTab.live;
   bool _paintFlash = false;
   int _semanticCursorIndex = 0;
+  String _logQuery = '';
+  bool _logSearching = false;
+  LogSourceFilter _logSourceFilter = LogSourceFilter.all;
   SemanticTree? Function()? _semanticTreeProvider;
   TerminalDiagnosis? Function()? _terminalDiagnosisProvider;
   bool _disposed = false;
@@ -82,6 +97,15 @@ class DebugController extends ChangeNotifier {
   DebugTab get tab => _tab;
   bool get paintFlash => _paintFlash;
   int get semanticCursorIndex => _semanticCursorIndex;
+
+  /// The Logs-tab case-insensitive substring filter; empty when inactive.
+  String get logQuery => _logQuery;
+
+  /// Whether the Logs-tab search field is capturing typed input.
+  bool get logSearching => _logSearching;
+
+  /// Which sources the Logs tab shows.
+  LogSourceFilter get logSourceFilter => _logSourceFilter;
 
   /// Supplies the current semantic tree to the debug panel's Tree tab.
   ///
@@ -188,6 +212,59 @@ class DebugController extends ChangeNotifier {
     _checkNotDisposed();
     if (_semanticCursorIndex == 0) return;
     _semanticCursorIndex = 0;
+    notifyListeners();
+  }
+
+  /// Opens the Logs-tab search field (`/`), capturing typed characters into
+  /// [logQuery] until [commitLogSearch] (Enter) or [cancelLogSearch] (Esc).
+  void startLogSearch() {
+    _checkNotDisposed();
+    if (_logSearching) return;
+    _logSearching = true;
+    notifyListeners();
+  }
+
+  /// Appends typed [text] to the search query while [logSearching].
+  void appendLogQuery(String text) {
+    _checkNotDisposed();
+    if (!_logSearching || text.isEmpty) return;
+    _logQuery += text;
+    notifyListeners();
+  }
+
+  /// Deletes the last character of the search query (Backspace).
+  void backspaceLogQuery() {
+    _checkNotDisposed();
+    if (!_logSearching || _logQuery.isEmpty) return;
+    _logQuery = _logQuery.substring(0, _logQuery.length - 1);
+    notifyListeners();
+  }
+
+  /// Leaves search-input mode but keeps [logQuery] as the active filter
+  /// (Enter). `/` re-enters to edit it.
+  void commitLogSearch() {
+    _checkNotDisposed();
+    if (!_logSearching) return;
+    _logSearching = false;
+    notifyListeners();
+  }
+
+  /// Clears the search query and closes the field (Esc) — the full log shows
+  /// again, subject to [logSourceFilter]. No-op when nothing is active.
+  void cancelLogSearch() {
+    _checkNotDisposed();
+    if (!_logSearching && _logQuery.isEmpty) return;
+    _logSearching = false;
+    _logQuery = '';
+    notifyListeners();
+  }
+
+  /// Cycles the Logs-tab source filter all → stdout → stderr → all (`s`).
+  void cycleLogSource() {
+    _checkNotDisposed();
+    final values = LogSourceFilter.values;
+    _logSourceFilter =
+        values[(values.indexOf(_logSourceFilter) + 1) % values.length];
     notifyListeners();
   }
 
