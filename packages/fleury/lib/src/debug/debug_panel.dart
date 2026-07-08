@@ -19,6 +19,7 @@ import '../semantics/semantics.dart';
 import '../terminal/diagnostics.dart';
 import '../widgets/basic.dart';
 import '../widgets/framework.dart';
+import '../widgets/layout_builder.dart';
 import '../widgets/output_capture_view.dart';
 import 'debug_events.dart';
 import 'debug_monitors.dart';
@@ -48,6 +49,10 @@ class _DebugPanelState extends State<DebugPanel> {
   final List<FrameEvent> _history = <FrameEvent>[];
   StreamSubscription<DebugEvent>? _sub;
   int _lastRebuildMs = 0;
+  // The panel's content width (box minus border + padding), captured from the
+  // real layout constraints each build so sparklines size to what actually
+  // fits — see [_sparkWidth]. Overwritten before any row reads it.
+  int _contentWidth = 28;
 
   @override
   void initState() {
@@ -87,22 +92,32 @@ class _DebugPanelState extends State<DebugPanel> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      border: const BoxBorder(
-        style: BorderStyle.single,
-        cellStyle: CellStyle(foreground: RgbColor(120, 130, 150)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 1),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.max,
-        children: [
-          _Header(controller: widget.controller),
-          _TabStrip(controller: widget.controller),
-          const Text(''),
-          ..._tabBody(),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // maxCols is the REAL panel width — the docking SizedBox sizes this box,
+        // clamped to the terminal — unlike config.panelWidth, which can exceed a
+        // narrow terminal. Content width = box minus border (2) and horizontal
+        // padding (2); sparklines size off it so they can't overflow and wrap.
+        _contentWidth =
+            (constraints.maxCols ?? widget.controller.config.panelWidth) - 4;
+        return Container(
+          border: const BoxBorder(
+            style: BorderStyle.single,
+            cellStyle: CellStyle(foreground: RgbColor(120, 130, 150)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 1),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.max,
+            children: [
+              _Header(controller: widget.controller),
+              _TabStrip(controller: widget.controller),
+              const Text(''),
+              ..._tabBody(),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -133,7 +148,10 @@ class _DebugPanelState extends State<DebugPanel> {
           'Uncaught errors from event handlers and async',
           style: CellStyle(dim: true),
         ),
-        Text('callbacks collect here (newest last).', style: CellStyle(dim: true)),
+        Text(
+          'callbacks collect here (newest last).',
+          style: CellStyle(dim: true),
+        ),
       ];
     }
     final rows = <Widget>[
@@ -993,10 +1011,19 @@ class _DebugPanelState extends State<DebugPanel> {
   /// One phase line: `Label  3.2ms ▁▂▃▄▅▆▇█` — color the value red
   /// when over budget (~4ms is a reasonable per-phase ceiling at 60fps
   /// since the four phases share a 16ms total).
+  /// Sparkline sample count that fits the phase row: [_contentWidth] (the real
+  /// laid-out content width) minus the "label 0000.0ms " prefix (15 cols), so
+  /// each graph stays on one line instead of overflowing and wrapping into the
+  /// next row — at any dock side, in fullscreen, or on a narrow terminal.
+  int get _sparkWidth => (_contentWidth - 15).clamp(6, 40);
+
   Widget _phaseRow(String label, Duration latest, Iterable<Duration> series) {
     final ms = latest.inMicroseconds / 1000;
     final overBudget = ms > 4.0;
-    final spark = _sparkline(series.map((d) => d.inMicroseconds).toList());
+    final spark = _sparkline(
+      series.map((d) => d.inMicroseconds).toList(),
+      _sparkWidth,
+    );
     return Text(
       '$label ${_us(latest).padLeft(7)} $spark',
       style: overBudget
@@ -1011,13 +1038,17 @@ class _DebugPanelState extends State<DebugPanel> {
   }
 
   /// 8-level braille-style sparkline. Empty when series is empty.
-  static String _sparkline(List<int> values) {
+  static String _sparkline(List<int> values, [int maxLen = 60]) {
     if (values.isEmpty) return '';
+    // Keep only the most recent [maxLen] samples so the graph fits its column.
+    final window = values.length > maxLen
+        ? values.sublist(values.length - maxLen)
+        : values;
     const blocks = ' ▁▂▃▄▅▆▇█';
-    final maxV = values.reduce((a, b) => a > b ? a : b);
-    if (maxV == 0) return blocks[0] * values.length;
+    final maxV = window.reduce((a, b) => a > b ? a : b);
+    if (maxV == 0) return blocks[0] * window.length;
     final buf = StringBuffer();
-    for (final v in values) {
+    for (final v in window) {
       final idx = ((v / maxV) * (blocks.length - 1)).round();
       buf.write(blocks[idx]);
     }
