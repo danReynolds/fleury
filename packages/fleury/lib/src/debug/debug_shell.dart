@@ -17,6 +17,7 @@
 // KeyBindings would correctly land inside the modal scope filter and
 // stop firing the moment the user opened a route — bad.
 
+import '../animation/clock.dart';
 import '../input/events.dart';
 import '../widgets/basic.dart';
 import '../widgets/framework.dart';
@@ -29,7 +30,15 @@ import 'debug_state.dart';
 /// controller; if `controller.config.enabled == false`, this is a
 /// no-op shell that just returns [child].
 class DebugShell extends StatefulWidget {
-  const DebugShell({super.key, required this.controller, required this.child});
+  const DebugShell({
+    super.key,
+    required this.controller,
+    required this.child,
+    this.clock = const SystemClock(),
+  });
+
+  /// Passed through to [DebugPanel] — see [DebugPanel.clock].
+  final Clock clock;
 
   final DebugController controller;
   final Widget child;
@@ -63,7 +72,7 @@ class _DebugShellState extends State<DebugShell> {
       return Stack(
         children: [
           widget.child,
-          DebugPanel(controller: widget.controller),
+          DebugPanel(controller: widget.controller, clock: widget.clock),
         ],
       );
     }
@@ -94,7 +103,10 @@ class _DebugShellState extends State<DebugShell> {
                 left: totalCols - panelW,
                 width: panelW,
                 height: totalRows,
-                child: DebugPanel(controller: widget.controller),
+                child: DebugPanel(
+                  controller: widget.controller,
+                  clock: widget.clock,
+                ),
               ),
             ],
           );
@@ -107,7 +119,10 @@ class _DebugShellState extends State<DebugShell> {
               top: totalRows - panelH,
               width: totalCols,
               height: panelH,
-              child: DebugPanel(controller: widget.controller),
+              child: DebugPanel(
+                controller: widget.controller,
+                clock: widget.clock,
+              ),
             ),
           ],
         );
