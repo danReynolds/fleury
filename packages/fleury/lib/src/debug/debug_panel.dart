@@ -6,6 +6,7 @@
 
 import 'dart:async';
 
+import '../animation/clock.dart';
 import '../foundation/geometry.dart';
 import '../rendering/border.dart';
 import '../rendering/cell.dart';
@@ -32,8 +33,19 @@ import 'debug_state.dart';
 
 /// The debug panel content. Caller wraps in SizedBox / docking layout.
 class DebugPanel extends StatefulWidget {
-  const DebugPanel({super.key, required this.controller});
+  const DebugPanel({
+    super.key,
+    required this.controller,
+    this.clock = const SystemClock(),
+  });
+
   final DebugController controller;
+
+  /// Time source for the FPS window, rebuild throttle, and frame stamps.
+  /// Injectable so the wallclock-derived metrics are deterministically
+  /// testable (a FakeClock pins "frames in the last second" exactly);
+  /// production uses the monotonic [SystemClock].
+  final Clock clock;
 
   @override
   State<DebugPanel> createState() => _DebugPanelState();
@@ -65,7 +77,10 @@ class _DebugPanelState extends State<DebugPanel> {
   Timer? _fpsDecayTimer;
   bool _decayRebuild = false;
   StreamSubscription<DebugEvent>? _sub;
-  int _lastRebuildMs = 0;
+  // Null = never rebuilt: the first frame event must always repaint (the
+  // monotonic SystemClock can read ~0 early in a process, so a zero sentinel
+  // would wrongly throttle it).
+  int? _lastRebuildMs;
   // The panel's content width (box minus border + padding), captured from the
   // real layout constraints each build so sparklines size to what actually
   // fits — see [_sparkWidth]. Overwritten before any row reads it.
@@ -78,7 +93,7 @@ class _DebugPanelState extends State<DebugPanel> {
       if (event is! FrameDebugEvent) return;
       _history.add(event.frame);
       if (_history.length > _historySize) _history.removeAt(0);
-      final now = DateTime.now().millisecondsSinceEpoch;
+      final now = widget.clock.now.inMilliseconds;
       _frameStamps.add(now);
       while (_frameStamps.isNotEmpty && _frameStamps.first < now - 1000) {
         _frameStamps.removeAt(0);
@@ -105,8 +120,9 @@ class _DebugPanelState extends State<DebugPanel> {
   /// rebuild immediately via [_rebuild] — those are user-initiated
   /// and infrequent.
   void _maybeThrottledRebuild() {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    if (now - _lastRebuildMs < _rebuildIntervalMs) return;
+    final now = widget.clock.now.inMilliseconds;
+    final last = _lastRebuildMs;
+    if (last != null && now - last < _rebuildIntervalMs) return;
     _lastRebuildMs = now;
     _rebuild();
   }
@@ -1032,7 +1048,7 @@ class _DebugPanelState extends State<DebugPanel> {
   // The old metric was 1e6/avg-frame-time, i.e. per-frame headroom, which read
   // ~200 even at rest; per-frame cost is already shown separately as `Avg`.
   int _fps() {
-    final cutoff = DateTime.now().millisecondsSinceEpoch - 1000;
+    final cutoff = widget.clock.now.inMilliseconds - 1000;
     var n = 0;
     for (final t in _frameStamps) {
       if (t >= cutoff) n++;

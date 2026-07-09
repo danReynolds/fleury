@@ -361,6 +361,62 @@ void main() {
       );
     });
 
+    testWidgets('FPS is the exact wallclock frame rate (fake clock)', (
+      tester,
+    ) async {
+      // The deterministic half of the debug-accuracy net: with the panel's
+      // clock injected, "frames in the last second" is pinned exactly — no
+      // real time, no flake. 30 stamped frames inside the window read FPS 30;
+      // aging every stamp out reads the honest 0.
+      final clock = FakeClock(const Duration(hours: 1));
+      final controller = DebugController(
+        const DebugConfig(startMode: DebugMode.docked, panelWidth: 30),
+      );
+      tester.pumpWidget(
+        DebugShell(
+          controller: controller,
+          clock: clock,
+          child: const Text('app'),
+        ),
+      );
+      tester.render(size: const CellSize(70, 20)); // panel mounts + subscribes
+
+      FrameEvent frame(int n) => FrameEvent(
+        frameNumber: n,
+        reason: 'test',
+        build: const Duration(milliseconds: 2),
+        layout: Duration.zero,
+        paint: const Duration(milliseconds: 1),
+        diff: Duration.zero,
+        dirtyCells: 10,
+        bufferSize: const CellSize(70, 20),
+      );
+      // 30 frames spread across the trailing second (33ms apart = 990ms).
+      for (var i = 1; i <= 30; i++) {
+        clock.advance(const Duration(milliseconds: 33));
+        DebugEvents.emitFrame(frame(i));
+      }
+      // Broadcast-stream delivery is async; drain the microtask queue.
+      for (var i = 0; i < 4; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(
+        tester.renderToString(size: const CellSize(70, 20)),
+        matches(RegExp(r'FPS\s+30')),
+        reason: '30 frames stamped within the last fake-clock second',
+      );
+
+      // 2s of idle fake time ages every stamp out. (Repaint via a controller
+      // nudge — the immediate, unthrottled rebuild path.)
+      clock.advance(const Duration(seconds: 2));
+      controller.togglePaintFlash();
+      expect(
+        tester.renderToString(size: const CellSize(70, 20)),
+        matches(RegExp(r'FPS\s+0')),
+        reason: 'no frames in the trailing second — honest zero at idle',
+      );
+    });
+
     testWidgets('the floating docked panel is opaque (no app bleed-through)', (
       tester,
     ) {
