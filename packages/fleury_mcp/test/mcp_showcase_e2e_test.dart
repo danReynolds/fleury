@@ -195,6 +195,15 @@ void main() {
           return (res['records'] as List).cast<Map<String, Object?>>();
         }
 
+        // Poll-loop variant: a single slow wire response (the bridge's 2s
+        // debug-query timeout) reads as available:false — retryable inside a
+        // loop; only the read whose records are consumed asserts availability.
+        Future<List<Map<String, Object?>>?> tryRecords(String tool) async {
+          final res = await dbg.tool(tool, <String, Object?>{'limit': 100});
+          if (res['available'] != true) return null;
+          return (res['records'] as List).cast<Map<String, Object?>>();
+        }
+
         Future<void> activate(String label) async {
           await dbg.tool('invoke_action', <String, Object?>{
             'id': await buttonId(label),
@@ -226,13 +235,18 @@ void main() {
           '${errors.last['error']}',
           contains('simulated handler failure'),
         );
-        expect('${errors.last['stack']}', isNotEmpty);
+        expect(errors.last['stack'], isA<String>());
+        expect(
+          errors.last['stack'] as String,
+          contains('.dart'),
+          reason: 'a real stack frame — not an absent field stringified',
+        );
 
         // 3. Emit a log burst → read_logs has the whole burst, source-tagged.
         await activate('Emit a log burst');
         var logs = <Map<String, Object?>>[];
         for (var i = 0; i < 40; i++) {
-          logs = await records('read_logs');
+          logs = await tryRecords('read_logs') ?? logs;
           if (logs.any((l) => '${l['text']}'.contains('line 40/40'))) break;
           await Future<void>.delayed(const Duration(milliseconds: 50));
         }
@@ -261,7 +275,10 @@ void main() {
         var latest = base;
         for (var i = 0; i < 40 && latest < base + 5; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 100));
-          latest = (await records('read_frames')).last['frame'] as int;
+          final recs = await tryRecords('read_frames');
+          if (recs != null && recs.isNotEmpty) {
+            latest = recs.last['frame'] as int;
+          }
         }
         expect(
           latest,
@@ -269,6 +286,9 @@ void main() {
           reason: 'streaming renders continuously — frames grow while it runs',
         );
         await activate('Stop live stream');
+        // The toggle relabels back — semantic proof the stream actually
+        // stopped, guarding the toggle in both directions.
+        await buttonId('Toggle live stream');
       });
     },
     skip: skip,
