@@ -77,7 +77,10 @@ class _DebugPanelState extends State<DebugPanel> {
   Timer? _fpsDecayTimer;
   bool _decayRebuild = false;
   StreamSubscription<DebugEvent>? _sub;
-  int _lastRebuildMs = 0;
+  // Null = never rebuilt: the first frame event must always repaint (the
+  // monotonic SystemClock can read ~0 early in a process, so a zero sentinel
+  // would wrongly throttle it).
+  int? _lastRebuildMs;
   // The panel's content width (box minus border + padding), captured from the
   // real layout constraints each build so sparklines size to what actually
   // fits — see [_sparkWidth]. Overwritten before any row reads it.
@@ -118,7 +121,8 @@ class _DebugPanelState extends State<DebugPanel> {
   /// and infrequent.
   void _maybeThrottledRebuild() {
     final now = widget.clock.now.inMilliseconds;
-    if (now - _lastRebuildMs < _rebuildIntervalMs) return;
+    final last = _lastRebuildMs;
+    if (last != null && now - last < _rebuildIntervalMs) return;
     _lastRebuildMs = now;
     _rebuild();
   }
