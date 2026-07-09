@@ -138,6 +138,71 @@ void main() {
       );
     });
 
+    testWidgets('the floating panel absorbs clicks (no tap-through)', (tester) {
+      // Pointer regions resolve topmost-by-paint-order PER HANDLER KIND, so a
+      // panel body with no tap region would let a click fall through to an app
+      // button invisibly underneath — impossible under the old split dock,
+      // real under float. The panel-wide absorber closes it.
+      var appTaps = 0;
+      final controller = DebugController(
+        const DebugConfig(startMode: DebugMode.docked, panelWidth: 12),
+      );
+      tester.pumpWidget(
+        DebugShell(
+          controller: controller,
+          // Full-width tappable row: spans under the floating panel too.
+          child: GestureDetector(
+            onTap: () => appTaps++,
+            child: const Text('tap target spanning the full app width'),
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(30, 6));
+
+      // Click the app OUTSIDE the panel (col 2) — proves the target works.
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.down,
+          button: MouseButton.left,
+          col: 2,
+          row: 0,
+        ),
+      );
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.up,
+          button: MouseButton.left,
+          col: 2,
+          row: 0,
+        ),
+      );
+      expect(appTaps, 1, reason: 'the uncovered app region is tappable');
+
+      // Click the panel BODY (col 25 — inside the float, not a tab chip):
+      // absorbed, the hidden app target must not fire.
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.down,
+          button: MouseButton.left,
+          col: 25,
+          row: 0,
+        ),
+      );
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.up,
+          button: MouseButton.left,
+          col: 25,
+          row: 0,
+        ),
+      );
+      expect(
+        appTaps,
+        1,
+        reason: 'a click on the floating panel must not reach the app under it',
+      );
+    });
+
     testWidgets('the floating docked panel is opaque (no app bleed-through)', (
       tester,
     ) {

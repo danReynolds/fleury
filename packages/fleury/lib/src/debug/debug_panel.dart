@@ -118,23 +118,35 @@ class _DebugPanelState extends State<DebugPanel> {
         // every cell it covers must be painted or the app bleeds through the
         // gaps (border ring + unfilled interior). Surface fills the whole slot;
         // the border and content paint on top.
-        return Surface(
-          color: const RgbColor(20, 22, 28),
-          child: Container(
-            border: const BoxBorder(
-              style: BorderStyle.single,
-              cellStyle: CellStyle(foreground: RgbColor(120, 130, 150)),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 1),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.max,
-              children: [
-                _Header(controller: widget.controller),
-                _TabStrip(controller: widget.controller),
-                const Text(''),
-                ..._tabBody(),
-              ],
+        //
+        // The GestureDetector is the INPUT counterpart of that opacity: pointer
+        // regions resolve topmost-by-paint-order *per handler kind*, so without
+        // a tap/drag region spanning the panel, a click on its body would fall
+        // through to whatever app button sits invisibly underneath. The no-op
+        // handlers absorb; the tab chips' own detectors paint later (deeper),
+        // so they stay on top of this absorber and keep working.
+        return GestureDetector(
+          onTap: () {},
+          onSecondaryTap: () {},
+          onDragStart: (_, _) {},
+          child: Surface(
+            color: const RgbColor(20, 22, 28),
+            child: Container(
+              border: const BoxBorder(
+                style: BorderStyle.single,
+                cellStyle: CellStyle(foreground: RgbColor(120, 130, 150)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.max,
+                children: [
+                  _Header(controller: widget.controller),
+                  _TabStrip(controller: widget.controller),
+                  const Text(''),
+                  ..._tabBody(),
+                ],
+              ),
             ),
           ),
         );
