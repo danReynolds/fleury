@@ -104,6 +104,13 @@ class InputDispatcher {
     if (event.kind != MouseEventKind.down || event.button != MouseButton.left) {
       return KeyEventResult.ignored;
     }
+    // An AbsorbPointer overlay (e.g. the floating debug panel) covering the
+    // click blocks click-to-focus: focus rects carry no z-order against
+    // overlays, so without this a click on the overlay would move focus to
+    // whatever focusable is painted invisibly underneath it.
+    if (pointerRouter?.focusAbsorbedAt(event.col, event.row) ?? false) {
+      return KeyEventResult.handled;
+    }
     FocusNode? best;
     var bestArea = 1 << 62;
     for (final node in focusManager.attachedNodes) {

@@ -197,10 +197,15 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
     return true;
   }
   // Left / Right also cycle tabs — the strip reads like a row of chips, so
-  // arrows are the intuitive move across it. (Gated off while a Logs search is
-  // open, where they belong to the field.)
+  // arrows are the intuitive move across it. Plain arrows only: chorded
+  // arrows (Ctrl/Alt — word-jump and friends) stay with the app, like the
+  // Tab branch above. The Logs-search exemption is scoped to the Logs tab
+  // being VISIBLE — a search left open and tabbed away from must not keep
+  // eating arrows shell-wide.
   if (controller.mode != DebugMode.off &&
-      !controller.logSearching &&
+      !event.hasCtrl &&
+      !event.hasAlt &&
+      !(controller.tab == DebugTab.logs && controller.logSearching) &&
       (event.keyCode == KeyCode.arrowLeft ||
           event.keyCode == KeyCode.arrowRight)) {
     controller.nextTab(event.keyCode == KeyCode.arrowLeft ? -1 : 1);

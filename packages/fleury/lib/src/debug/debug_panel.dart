@@ -56,6 +56,14 @@ class _DebugPanelState extends State<DebugPanel> {
   // REAL fps (frames actually rendered per second). Distinct from 1/avg-frame-
   // time, which is per-frame headroom and reads ~200 even on an idle app.
   final List<int> _frameStamps = <int>[];
+  // Trailing decay: the panel only rebuilds on frame events, so after the app
+  // goes idle the FPS row would freeze at its last value. One trailing rebuild
+  // ~1.2s after the last frame repaints it at 0. The flag marks that decay
+  // rebuild's OWN frame so its event doesn't re-arm the timer — the panel
+  // quiesces instead of heartbeating forever (and the event lands inside the
+  // 100ms rebuild throttle, so the momentary count of 1 is never displayed).
+  Timer? _fpsDecayTimer;
+  bool _decayRebuild = false;
   StreamSubscription<DebugEvent>? _sub;
   int _lastRebuildMs = 0;
   // The panel's content width (box minus border + padding), captured from the
@@ -74,6 +82,17 @@ class _DebugPanelState extends State<DebugPanel> {
       _frameStamps.add(now);
       while (_frameStamps.isNotEmpty && _frameStamps.first < now - 1000) {
         _frameStamps.removeAt(0);
+      }
+      if (_decayRebuild) {
+        // This frame is the decay rebuild's own render — don't re-arm, or
+        // the panel would heartbeat forever while idle.
+        _decayRebuild = false;
+      } else {
+        _fpsDecayTimer?.cancel();
+        _fpsDecayTimer = Timer(const Duration(milliseconds: 1200), () {
+          _decayRebuild = true;
+          _rebuild();
+        });
       }
       _maybeThrottledRebuild();
     });
@@ -96,6 +115,7 @@ class _DebugPanelState extends State<DebugPanel> {
   void dispose() {
     widget.controller.removeListener(_rebuild);
     FleuryDebug.instance.removeListener(_rebuild);
+    _fpsDecayTimer?.cancel();
     _sub?.cancel();
     super.dispose();
   }
@@ -119,16 +139,14 @@ class _DebugPanelState extends State<DebugPanel> {
         // gaps (border ring + unfilled interior). Surface fills the whole slot;
         // the border and content paint on top.
         //
-        // The GestureDetector is the INPUT counterpart of that opacity: pointer
-        // regions resolve topmost-by-paint-order *per handler kind*, so without
-        // a tap/drag region spanning the panel, a click on its body would fall
-        // through to whatever app button sits invisibly underneath. The no-op
-        // handlers absorb; the tab chips' own detectors paint later (deeper),
-        // so they stay on top of this absorber and keep working.
-        return GestureDetector(
-          onTap: () {},
-          onSecondaryTap: () {},
-          onDragStart: (_, _) {},
+        // AbsorbPointer is the INPUT counterpart of that opacity: pointer
+        // regions resolve topmost-by-paint-order *per handler kind*, so a
+        // panel with no regions would let taps, scrolls, hover, and
+        // click-to-focus fall through to whatever app widget sits invisibly
+        // underneath. The boundary absorbs all of them; the tab chips'
+        // detectors paint later (deeper), so they stay on top and keep
+        // working.
+        return AbsorbPointer(
           child: Surface(
             color: const RgbColor(20, 22, 28),
             child: Container(
