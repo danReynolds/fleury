@@ -38,6 +38,17 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
       onDone: _incoming.close,
       cancelOnError: false,
     );
+    // [_incoming] is a broadcast controller: frames added while nobody
+    // listens are DROPPED. The peer may speak the moment the socket opens
+    // (the agent bridge sends INIT on accept), while the app side doesn't
+    // subscribe until the driver's enter() — and any await between connect
+    // and enter() (fd-capture startup, a future async setup step) opens a
+    // window where the peer's first frames would vanish and the handshake
+    // would hang forever. Park the socket until the first listener
+    // attaches: bytes wait in the kernel buffer / paused subscription,
+    // nothing is decoded-and-dropped.
+    _socketSub!.pause();
+    _incoming.onListen = _socketSub!.resume;
   }
 
   /// Opens the Unix socket at [path] and wraps it as a transport.
