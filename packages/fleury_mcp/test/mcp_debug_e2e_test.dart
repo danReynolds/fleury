@@ -5,14 +5,14 @@
 // tests can't be: real app → real measurement → real wire → the bridge an agent
 // drives.
 //
-// It immediately earned its keep: when first written, read_frames and read_logs
-// both came back EMPTY over the agent path (collection was wired to the
-// *terminal* path only). Frames are fixed — WireFramePresenter now emits the
-// same telemetry as the ANSI presenter, and the frames test below locks it in.
-// Logs remain a known gap: the fd-capture that feeds the LogBuffer is gated on
-// `stdout.hasTerminal` (run_app.dart), false for a piped/served/agent app — the
-// skipped spec at the bottom is the fix's target; remove the `skip` when the
-// remote log path is wired.
+// It earned its keep twice: when first written, read_frames and read_logs both
+// came back EMPTY over the agent path (collection was wired to the *terminal*
+// path only). Both are fixed and locked in below — WireFramePresenter emits the
+// frame telemetry, and remote sessions fd-capture with a tee back through the
+// saved descriptors (read_logs fills while the parent keeps receiving output).
+// Wiring the logs fix also flushed out a latent transport race (frames sent
+// before incoming had a listener were dropped), locked in by
+// fleury's unix_socket_prelisten_test.
 //
 // Tagged `integration` (spawns `dart run`, takes seconds): `dart test -x
 // integration` skips it; it runs by default.
@@ -114,22 +114,58 @@ void main() {
     );
   });
 
-  test(
-    'read_logs returns the stdout an agent caused',
-    () async {
-      final bridge = await spawn();
-      await _activate(bridge, 'log');
-      final logs = await bridge.queryDebug('logs', limit: 100);
-      expect(logs, isNotNull);
-      final text = logs!.map((l) => (l! as Map)['text']).join('\n');
-      expect(text, contains('debug-app: log line 1'));
-      expect(text, contains('debug-app: log line 3'));
-    },
-    skip:
-        'GAP: fd-capture feeding the LogBuffer is gated on stdout.hasTerminal '
-        '(run_app.dart), false for a piped / served / agent app — so read_logs is '
-        'empty over the agent path.',
-  );
+  test('read_logs returns the stdout an agent caused — and the parent still '
+      'receives it (the tee)', () async {
+    // Two assertions closing one loop: the app's fd-capture feeds the
+    // LogBuffer (read_logs works over the agent path), AND the captured lines
+    // are teed back through the saved descriptors so the parent's own log
+    // forwarding — what fleury_mcp turns into [app out] lines / WS-6
+    // notifications — keeps working. Capture without the tee would blind the
+    // parent; the tee without capture leaves read_logs empty.
+    final parentSaw = <String>[];
+    final bridge = await FleuryAppBridge.spawn(
+      command: <String>['dart', 'run', fixture],
+      viewport: const CellSize(80, 24),
+      log: parentSaw.add,
+    );
+    addTearDown(bridge.close);
+    await bridge.ready;
+    expect(bridge.isRunning, isTrue, reason: 'fixture rendered and stayed up');
+
+    await _activate(bridge, 'log');
+
+    // The log lines flow two ways from one print(): capture → LogBuffer
+    // (below) and tee → parent pipe (poll briefly; pipe delivery is async).
+    List<Object?>? logs;
+    var text = '';
+    for (var i = 0; i < 40 && !text.contains('debug-app: log line 3'); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      logs = await bridge.queryDebug('logs', limit: 100);
+      text = (logs ?? const []).map((l) => (l! as Map)['text']).join('\n');
+    }
+    expect(logs, isNotNull);
+    expect(text, contains('debug-app: log line 1'));
+    expect(text, contains('debug-app: log line 3'));
+    final line1 = logs!
+        .map((l) => l! as Map)
+        .firstWhere((m) => (m['text'] as String).contains('log line 1'));
+    expect(line1['source'], 'stdout', reason: 'source tag preserved');
+
+    // Tee: the parent's log callback received the same lines despite the
+    // app-side fd capture being active.
+    for (
+      var i = 0;
+      i < 40 && !parentSaw.any((l) => l.contains('debug-app: log line 3'));
+      i++
+    ) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    expect(
+      parentSaw.any((l) => l.contains('debug-app: log line 1')),
+      isTrue,
+      reason: 'the tee keeps the parent’s pipe fed (WS-6 forwarding intact)',
+    );
+  });
 }
 
 Future<void> _activate(FleuryAppBridge bridge, String id) async {

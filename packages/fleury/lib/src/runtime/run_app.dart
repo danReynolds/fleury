@@ -300,8 +300,41 @@ Future<AppExit> _runAppImpl(
     return fdCapture!.terminalStdout;
   }
 
+  // Remote sessions (fleury mcp / serve --spawn / a shell handle) skip the
+  // terminal fd guard above — frames go over the socket, not fd 1, so there's
+  // nothing to protect. But that also left the LogBuffer unfed, so an agent's
+  // read_logs came back empty. When debug tooling is on, capture on the real
+  // remote paths too — and because fd 1 carries no frames in this mode, TEE
+  // each captured line straight back out through the saved descriptors, so
+  // the parent's own log forwarding (fleury_mcp's [app out/err], serve's
+  // sanitized relay) keeps working, split-intact. `remoteFdTee` also
+  // suppresses the replay-on-exit below: the parent already received every
+  // line live. Invoked by the RESOLVER on its remote branches — the one place
+  // that knows this is a real handle-connected session — so a test handing in
+  // a RemoteTerminalDriver over a fake transport never has its runner's
+  // descriptors captured.
+  var remoteFdTee = false;
+  Future<void> startRemoteFdCapture() async {
+    if (fdCapture != null) return;
+    if (!debug.enabled) return;
+    if (Platform.isWindows) return;
+    if (Platform.environment['FLEURY_FD_CAPTURE'] == '0') return;
+    try {
+      fdCapture = await fd.StdioCapture.start();
+      remoteFdTee = true;
+      onFdCaptureStarted?.call(fdCapture!);
+    } on Object {
+      // Capture unavailable (nested session, unsupported platform build):
+      // read_logs stays empty, everything else works.
+    }
+  }
+
   final usedDriver =
-      driver ?? await _resolveDefaultDriver(nativeStdout: startFdCapture);
+      driver ??
+      await _resolveDefaultDriver(
+        nativeStdout: startFdCapture,
+        remoteCapture: startRemoteFdCapture,
+      );
   // Long-lived shell-state holder. Survives setState / rebuilds; the
   // root is rebuilt whenever the viewport resizes, so a per-build
   // controller would lose mode + tab selection on every SIGWINCH.
@@ -444,10 +477,29 @@ Future<AppExit> _runAppImpl(
   StreamSubscription<fd.CapturedLine>? fdCaptureSub;
   final activeFdCapture = fdCapture;
   if (activeFdCapture != null) {
-    void consume(fd.CapturedLine line) => capture.addLine(
-      line.text,
-      line.stream == fd.StdStream.err ? LogSource.stderr : LogSource.stdout,
-    );
+    void consume(fd.CapturedLine line) {
+      capture.addLine(
+        line.text,
+        line.stream == fd.StdStream.err ? LogSource.stderr : LogSource.stdout,
+      );
+      // Remote sessions tee each line back out through the saved descriptors
+      // (split-intact) so the parent process keeps receiving the app's
+      // output live — capture here exists to FEED read_logs, not to divert.
+      // Safe only because remote frames travel the socket, never fd 1; the
+      // native-terminal path defers to replay-on-exit instead.
+      if (remoteFdTee) {
+        try {
+          (line.stream == fd.StdStream.err
+                  ? activeFdCapture.terminalStderr
+                  : activeFdCapture.terminalStdout)
+              .writeln(line.text);
+        } catch (_) {
+          // The parent closed its end; keep the session alive — the line is
+          // still in the LogBuffer for read_logs.
+        }
+      }
+    }
+
     // Anything written between capture start and this subscription (driver
     // construction runs in between) is retained in the capture's history —
     // seed the consumer so those lines replay too.
@@ -515,7 +567,9 @@ Future<AppExit> _runAppImpl(
         await fdCap.stop();
       } catch (_) {}
       await fdCaptureSub?.cancel();
-      if (onStrayOutput == null && !logBuffer.isEmpty) {
+      // The remote tee already delivered every line to the parent live;
+      // replaying here would duplicate them all on the pipe.
+      if (onStrayOutput == null && !remoteFdTee && !logBuffer.isEmpty) {
         for (final line in logBuffer.lines) {
           stdout.writeln(line.text);
         }
@@ -1111,6 +1165,7 @@ String _formatByteTelemetry(CountingAnsiSink sink) {
 /// be held hostage.
 Future<TerminalDriver> _resolveDefaultDriver({
   Future<Stdout?> Function()? nativeStdout,
+  Future<void> Function()? remoteCapture,
 }) async {
   // Per-session env var wins outright — when `fleury serve --spawn`
   // started us, the env var is *intentional* and a missing or stale
@@ -1119,6 +1174,7 @@ Future<TerminalDriver> _resolveDefaultDriver({
   if (envHandle != null && envHandle.isNotEmpty) {
     try {
       final transport = await UnixSocketFrameTransport.connect(envHandle);
+      await remoteCapture?.call();
       return RemoteTerminalDriver(transport);
     } on Object catch (e) {
       throw StateError(
@@ -1143,6 +1199,7 @@ Future<TerminalDriver> _resolveDefaultDriver({
   }
   try {
     final transport = await UnixSocketFrameTransport.connect(path);
+    await remoteCapture?.call();
     return RemoteTerminalDriver(transport);
   } on Object catch (e) {
     // ignore: avoid_print
