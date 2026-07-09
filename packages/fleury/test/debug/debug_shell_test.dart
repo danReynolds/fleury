@@ -28,6 +28,22 @@ Matcher _stateError(String message) {
   );
 }
 
+/// A full-width scroll region for the scroll-through test — counts wheel
+/// events the app receives.
+class _ScrollProbe extends StatelessWidget {
+  const _ScrollProbe({required this.onScroll});
+
+  final void Function() onScroll;
+
+  @override
+  Widget build(BuildContext context) => PointerScrollListener(
+    router: PointerRouterScope.maybeOf(context),
+    onScrollUp: onScroll,
+    onScrollDown: onScroll,
+    child: const Text('scrollable spanning the full app width'),
+  );
+}
+
 void main() {
   group('DebugController lifecycle', () {
     test('dispose is idempotent and keeps final readable state', () {
@@ -113,7 +129,7 @@ void main() {
       );
     });
 
-    testWidgets('docked reflows the app into the remaining cells', (tester) {
+    testWidgets('docked floats the panel over the app\'s edge', (tester) {
       final controller = DebugController(
         const DebugConfig(startMode: DebugMode.docked, panelWidth: 10),
       );
@@ -135,6 +151,242 @@ void main() {
         panelHasContent,
         isTrue,
         reason: 'docked panel must paint into its allocated region',
+      );
+    });
+
+    testWidgets('the floating panel absorbs clicks (no tap-through)', (tester) {
+      // Pointer regions resolve topmost-by-paint-order PER HANDLER KIND, so a
+      // panel body with no tap region would let a click fall through to an app
+      // button invisibly underneath — impossible under the old split dock,
+      // real under float. The panel-wide absorber closes it.
+      var appTaps = 0;
+      final controller = DebugController(
+        const DebugConfig(startMode: DebugMode.docked, panelWidth: 12),
+      );
+      tester.pumpWidget(
+        DebugShell(
+          controller: controller,
+          // Full-width tappable row: spans under the floating panel too.
+          child: GestureDetector(
+            onTap: () => appTaps++,
+            child: const Text('tap target spanning the full app width'),
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(30, 6));
+
+      // Click the app OUTSIDE the panel (col 2) — proves the target works.
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.down,
+          button: MouseButton.left,
+          col: 2,
+          row: 0,
+        ),
+      );
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.up,
+          button: MouseButton.left,
+          col: 2,
+          row: 0,
+        ),
+      );
+      expect(appTaps, 1, reason: 'the uncovered app region is tappable');
+
+      // Click the panel BODY (col 25 — inside the float, not a tab chip):
+      // absorbed, the hidden app target must not fire.
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.down,
+          button: MouseButton.left,
+          col: 25,
+          row: 0,
+        ),
+      );
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.up,
+          button: MouseButton.left,
+          col: 25,
+          row: 0,
+        ),
+      );
+      expect(
+        appTaps,
+        1,
+        reason: 'a click on the floating panel must not reach the app under it',
+      );
+    });
+
+    testWidgets('the floating panel absorbs wheel scroll (no scroll-through)', (
+      tester,
+    ) {
+      // Scroll resolves per-handler-kind: without the panel's AbsorbPointer,
+      // a wheel over the panel would scroll the app's scrollable underneath.
+      var appScrolls = 0;
+      final controller = DebugController(
+        const DebugConfig(startMode: DebugMode.docked, panelWidth: 12),
+      );
+      tester.pumpWidget(
+        DebugShell(
+          controller: controller,
+          child: _ScrollProbe(onScroll: () => appScrolls++),
+        ),
+      );
+      tester.render(size: const CellSize(30, 6));
+
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.scrollDown,
+          button: MouseButton.none,
+          col: 2,
+          row: 0,
+        ),
+      );
+      expect(appScrolls, 1, reason: 'uncovered app region scrolls');
+
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.scrollDown,
+          button: MouseButton.none,
+          col: 25,
+          row: 0,
+        ),
+      );
+      expect(
+        appScrolls,
+        1,
+        reason: 'a wheel over the floating panel must not scroll the app',
+      );
+    });
+
+    testWidgets('the floating panel blocks click-to-focus (no focus steal)', (
+      tester,
+    ) {
+      // Click-to-focus is a dispatcher pass independent of pointer regions:
+      // it walks focus rects with no z-order, so without the absorbsFocus
+      // check a click on the panel would silently focus the hidden app
+      // widget underneath.
+      final node = FocusNode(debugLabel: 'hidden-under-panel');
+      addTearDown(node.dispose);
+      final controller = DebugController(
+        const DebugConfig(startMode: DebugMode.docked, panelWidth: 12),
+      );
+      tester.pumpWidget(
+        DebugShell(
+          controller: controller,
+          child: Focus(
+            focusNode: node,
+            child: const Text('focusable spanning the full app width'),
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(30, 6));
+      expect(node.hasFocus, isFalse);
+
+      // Click the panel body over the focusable: focus must NOT move.
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.down,
+          button: MouseButton.left,
+          col: 25,
+          row: 0,
+        ),
+      );
+      expect(
+        node.hasFocus,
+        isFalse,
+        reason: 'a click on the floating panel must not focus the app under it',
+      );
+
+      // Control: clicking the uncovered part of the same widget focuses it.
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.down,
+          button: MouseButton.left,
+          col: 2,
+          row: 0,
+        ),
+      );
+      expect(node.hasFocus, isTrue, reason: 'click-to-focus works off-panel');
+    });
+
+    testWidgets('tab chips stay clickable on top of the absorber', (tester) {
+      // Descendant regions paint later than the panel-wide AbsorbPointer, so
+      // they register on top of it — the boundary must not eat its own tabs.
+      final controller = DebugController(
+        const DebugConfig(startMode: DebugMode.docked, panelWidth: 24),
+      );
+      tester.pumpWidget(
+        DebugShell(controller: controller, child: const Text('app')),
+      );
+      final buf = tester.render(size: const CellSize(60, 10));
+      expect(controller.tab, DebugTab.live);
+
+      // Find the 'Tree' chip in the rendered buffer and click it.
+      (int, int)? treeAt;
+      for (var r = 0; r < 10 && treeAt == null; r++) {
+        for (var c = 0; c < 57; c++) {
+          if (buf.atColRow(c, r).grapheme == 'T' &&
+              buf.atColRow(c + 1, r).grapheme == 'r' &&
+              buf.atColRow(c + 2, r).grapheme == 'e' &&
+              buf.atColRow(c + 3, r).grapheme == 'e') {
+            treeAt = (c, r);
+            break;
+          }
+        }
+      }
+      expect(treeAt, isNotNull, reason: 'Tree chip rendered somewhere');
+      tester.sendMouse(
+        MouseEvent(
+          kind: MouseEventKind.down,
+          button: MouseButton.left,
+          col: treeAt!.$1,
+          row: treeAt.$2,
+        ),
+      );
+      tester.sendMouse(
+        MouseEvent(
+          kind: MouseEventKind.up,
+          button: MouseButton.left,
+          col: treeAt.$1,
+          row: treeAt.$2,
+        ),
+      );
+      expect(
+        controller.tab,
+        DebugTab.tree,
+        reason: 'the chip’s own detector wins over the panel absorber',
+      );
+    });
+
+    testWidgets('the floating docked panel is opaque (no app bleed-through)', (
+      tester,
+    ) {
+      final controller = DebugController(
+        const DebugConfig(startMode: DebugMode.docked, panelWidth: 12),
+      );
+      // A full-width app line runs under where the panel floats.
+      tester.pumpWidget(
+        DebugShell(
+          controller: controller,
+          child: const Text('app content behind the panel'),
+        ),
+      );
+      final buf = tester.render(size: const CellSize(30, 6));
+      // The panel floats over cols [18, 30). EVERY covered cell must carry a
+      // background (the opaque Surface fill) so nothing behind bleeds through.
+      var bleedCells = 0;
+      for (var c = 18; c < 30; c++) {
+        for (var r = 0; r < 6; r++) {
+          if (buf.atColRow(c, r).style.background == null) bleedCells++;
+        }
+      }
+      expect(
+        bleedCells,
+        0,
+        reason: 'a floating panel must paint every cell it covers',
       );
     });
 
@@ -869,6 +1121,56 @@ void main() {
       c.toggleOnOff();
       expect(c.mode, DebugMode.off);
       expect(tryConsumeDebugKey(c, _key(KeyCode.arrowDown)), isFalse);
+    });
+
+    test('left/right arrows cycle tabs while the shell is open', () {
+      final c = DebugController(const DebugConfig(startMode: DebugMode.docked));
+      expect(c.tab, DebugTab.live);
+      expect(tryConsumeDebugKey(c, _key(KeyCode.arrowRight)), isTrue);
+      expect(c.tab, DebugTab.tree, reason: 'right advances');
+      expect(tryConsumeDebugKey(c, _key(KeyCode.arrowLeft)), isTrue);
+      expect(c.tab, DebugTab.live, reason: 'left goes back');
+      // Chorded arrows (word-jump, selection) stay with the app.
+      expect(
+        tryConsumeDebugKey(
+          c,
+          const KeyEvent(
+            keyCode: KeyCode.arrowLeft,
+            modifiers: {KeyModifier.ctrl},
+          ),
+        ),
+        isFalse,
+        reason: 'Ctrl+Left is an app chord, not a tab cycle',
+      );
+      expect(
+        tryConsumeDebugKey(
+          c,
+          const KeyEvent(
+            keyCode: KeyCode.arrowRight,
+            modifiers: {KeyModifier.alt},
+          ),
+        ),
+        isFalse,
+        reason: 'Alt+Right is an app chord, not a tab cycle',
+      );
+      // Inert while a Logs search owns the arrows — but ONLY while the Logs
+      // tab is visible: a search left open and tabbed away from must not eat
+      // arrows shell-wide.
+      c
+        ..selectTab(DebugTab.logs)
+        ..startLogSearch();
+      expect(tryConsumeDebugKey(c, _key(KeyCode.arrowRight)), isFalse);
+      c.selectTab(DebugTab.errors); // search still open, tab not visible
+      expect(
+        tryConsumeDebugKey(c, _key(KeyCode.arrowRight)),
+        isTrue,
+        reason: 'an off-screen Logs search must not disable tab arrows',
+      );
+      c.selectTab(DebugTab.logs);
+      c.cancelLogSearch();
+      c.toggleOnOff();
+      expect(c.mode, DebugMode.off);
+      expect(tryConsumeDebugKey(c, _key(KeyCode.arrowLeft)), isFalse);
     });
 
     test('disabled controller consumes nothing', () {

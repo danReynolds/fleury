@@ -17,14 +17,11 @@
 // KeyBindings would correctly land inside the modal scope filter and
 // stop firing the moment the user opened a route — bad.
 
-import '../foundation/geometry.dart';
-import '../rendering/render_flex.dart' show CrossAxisAlignment;
 import '../input/events.dart';
 import '../widgets/basic.dart';
 import '../widgets/framework.dart';
 import '../widgets/layout_builder.dart';
 import '../widgets/listenable_builder.dart';
-import '../widgets/media_query.dart';
 import 'debug_panel.dart';
 import 'debug_state.dart';
 
@@ -71,32 +68,30 @@ class _DebugShellState extends State<DebugShell> {
       );
     }
 
-    // Docked. Use LayoutBuilder so we size off real incoming
-    // constraints rather than the ambient MediaQuery — the shell isn't
-    // always the root (tests, embedded uses), and the two can differ.
+    // Docked. The panel FLOATS over one edge of the full-size app — a Stack
+    // with the panel Positioned on top — instead of reflowing the app into
+    // fewer cells. The app keeps its full viewport and is simply covered where
+    // the panel sits, like a real docked devtools pane.
     final config = widget.controller.config;
     return LayoutBuilder(
       builder: (context, constraints) {
         final totalCols = constraints.maxCols ?? config.panelWidth + 1;
         final totalRows = constraints.maxRows ?? config.panelHeight + 1;
-        final media = MediaQuery.maybeOf(context);
-
+        // Pin the app to the full viewport so the Stack is full-size and the
+        // Positioned panel lands at the real edge — a Stack otherwise shrinks
+        // to its largest non-positioned child.
+        final app = SizedBox(
+          width: totalCols,
+          height: totalRows,
+          child: widget.child,
+        );
         if (config.side == DebugPanelSide.right) {
-          final panelW = config.panelWidth.clamp(1, totalCols - 1);
-          final appW = (totalCols - panelW).clamp(1, totalCols);
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          final panelW = config.panelWidth.clamp(1, totalCols);
+          return Stack(
             children: [
-              SizedBox(
-                width: appW,
-                height: totalRows,
-                child: _withMedia(
-                  media,
-                  CellSize(appW, totalRows),
-                  widget.child,
-                ),
-              ),
-              SizedBox(
+              app,
+              Positioned(
+                left: totalCols - panelW,
                 width: panelW,
                 height: totalRows,
                 child: DebugPanel(controller: widget.controller),
@@ -104,17 +99,12 @@ class _DebugShellState extends State<DebugShell> {
             ],
           );
         }
-        final panelH = config.panelHeight.clamp(1, totalRows - 1);
-        final appH = (totalRows - panelH).clamp(1, totalRows);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        final panelH = config.panelHeight.clamp(1, totalRows);
+        return Stack(
           children: [
-            SizedBox(
-              width: totalCols,
-              height: appH,
-              child: _withMedia(media, CellSize(totalCols, appH), widget.child),
-            ),
-            SizedBox(
+            app,
+            Positioned(
+              top: totalRows - panelH,
               width: totalCols,
               height: panelH,
               child: DebugPanel(controller: widget.controller),
@@ -122,14 +112,6 @@ class _DebugShellState extends State<DebugShell> {
           ],
         );
       },
-    );
-  }
-
-  Widget _withMedia(MediaQueryData? media, CellSize size, Widget child) {
-    if (media == null) return child;
-    return MediaQuery(
-      data: media.copyWith(size: size),
-      child: child,
     );
   }
 }
@@ -212,6 +194,21 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
       !event.hasAlt) {
     // While the shell is open, Tab / Shift+Tab cycle the panel tabs.
     controller.nextTab(event.hasShift ? -1 : 1);
+    return true;
+  }
+  // Left / Right also cycle tabs — the strip reads like a row of chips, so
+  // arrows are the intuitive move across it. Plain arrows only: chorded
+  // arrows (Ctrl/Alt — word-jump and friends) stay with the app, like the
+  // Tab branch above. The Logs-search exemption is scoped to the Logs tab
+  // being VISIBLE — a search left open and tabbed away from must not keep
+  // eating arrows shell-wide.
+  if (controller.mode != DebugMode.off &&
+      !event.hasCtrl &&
+      !event.hasAlt &&
+      !(controller.tab == DebugTab.logs && controller.logSearching) &&
+      (event.keyCode == KeyCode.arrowLeft ||
+          event.keyCode == KeyCode.arrowRight)) {
+    controller.nextTab(event.keyCode == KeyCode.arrowLeft ? -1 : 1);
     return true;
   }
   if (controller.mode != DebugMode.off && controller.tab == DebugTab.tree) {

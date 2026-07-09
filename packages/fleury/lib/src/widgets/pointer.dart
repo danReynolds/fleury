@@ -78,8 +78,16 @@ class PointerRouter {
     return null;
   }
 
+  /// Whether the topmost region at ([col], [row]) absorbs click-to-focus —
+  /// an [AbsorbPointer] overlay covering that cell. The dispatcher checks
+  /// this before its click-to-focus pass so a click on an overlay can't move
+  /// app focus to a focusable painted invisibly underneath.
+  bool focusAbsorbedAt(int col, int row) =>
+      _topmost(col, row, (_) => true)?.absorbsFocus ?? false;
+
   /// Routes [event] to the matching region(s). Returns whether any
-  /// handler fired (the dispatcher still runs click-to-focus regardless).
+  /// handler fired (the dispatcher runs click-to-focus afterwards unless
+  /// [focusAbsorbedAt] blocks it).
   bool route(MouseEvent event) {
     _updateHover(event);
     switch (event.kind) {
@@ -374,6 +382,49 @@ class PointerScrollListener extends SingleChildRenderObjectWidget {
   }
 }
 
+/// A complete pointer boundary: the cells this widget covers consume every
+/// pointer interaction — taps, secondary taps, drags, wheel scroll, hover —
+/// and block the dispatcher's click-to-focus, so nothing painted underneath
+/// can be invisibly activated, scrolled, hovered, or focused.
+///
+/// This is the input counterpart of painting an opaque overlay: an overlay
+/// that covers cells visually must also cover them for input, or clicks fall
+/// through to hidden widgets (pointer regions resolve topmost-by-paint-order
+/// *per handler kind*, so covering one kind does not cover the others). The
+/// debug shell's floating panel is the canonical user. Descendant regions
+/// (e.g. buttons inside the overlay) paint later, register on top of this
+/// boundary, and keep working.
+class AbsorbPointer extends SingleChildRenderObjectWidget {
+  const AbsorbPointer({super.key, required Widget super.child});
+
+  static void _noop() {}
+  static void _noopAt(int col, int row) {}
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      RenderPointerListener()
+        ..router = PointerRouterScope.maybeOf(context)
+        ..onTap = _noop
+        ..onSecondaryTap = _noop
+        ..onDragStart = _noopAt
+        ..onDragUpdate = _noopAt
+        ..onDragEnd = _noop
+        ..onEnter = _noop
+        ..onExit = _noop
+        ..onHover = _noopAt
+        ..onScrollUp = _noop
+        ..onScrollDown = _noop
+        ..absorbsFocus = true;
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant RenderPointerListener renderObject,
+  ) {
+    renderObject.router = PointerRouterScope.maybeOf(context);
+  }
+}
+
 class RenderPointerListener extends RenderObject
     implements RenderObjectWithSingleChild {
   PointerRouter? _router;
@@ -397,6 +448,12 @@ class RenderPointerListener extends RenderObject
   PointerPositionCallback? onHover;
   PointerTapCallback? onScrollUp;
   PointerTapCallback? onScrollDown;
+
+  /// When true, cells this region covers also block the dispatcher's
+  /// click-to-focus pass — a click here must not move app focus to a
+  /// focusable painted underneath. Set by [AbsorbPointer]; plain listeners
+  /// leave it false. See [PointerRouter.focusAbsorbedAt].
+  bool absorbsFocus = false;
 
   CellRect? _rect;
 

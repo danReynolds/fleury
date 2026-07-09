@@ -304,6 +304,7 @@ export 'src/widgets/repaint_boundary.dart' show RepaintBoundary;
 export 'src/widgets/rich_text.dart' show RichText, TextSpan;
 export 'src/widgets/pointer.dart'
     show
+        AbsorbPointer,
         GestureDetector,
         MouseRegion,
         PointerRouter,
