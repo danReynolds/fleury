@@ -54,6 +54,21 @@ later milestone (focus data, filtered logs) extends what agents can see for
 free.
 **Tests:** extend the existing `mcp_server_test` resource coverage.
 
+**Closed-loop hardening (post-landing):** a spawn-real-app e2e
+(`fleury_mcp/test/mcp_debug_e2e_test.dart`) that drives scenarios and reads
+the debug channel back found that **two of the three tools returned nothing
+over the very path they were built for** — the fake-bridge unit tests fed
+canned JSON and couldn't see it. Fixed: `WireFramePresenter` now emits frame
+telemetry (`read_frames`), and remote sessions fd-capture with a live tee
+through the saved descriptors (`read_logs` fills while the parent's log
+forwarding keeps working). The tee work also flushed out a latent transport
+race (frames sent before `incoming` had a listener were dropped — any await
+between connect and `enter()` hung the handshake), fixed in
+`unix_socket_transport` and locked by `unix_socket_prelisten_test`.
+**DT4 note:** `fleury_web`'s `_SurfaceFramePresenter` (browser/embed) still
+does not emit frame telemetry — the browser panel milestone should hoist the
+emission into `FrameDriver` (or mirror it) rather than add a third copy.
+
 ## DT2 — Focus inspector + input trace · ~1 wk
 
 A new **Focus** tab answering "what is focusable, who has focus, and why did
