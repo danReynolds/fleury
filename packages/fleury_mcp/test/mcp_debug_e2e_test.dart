@@ -126,7 +126,12 @@ void main() {
     final bridge = await FleuryAppBridge.spawn(
       command: <String>['dart', 'run', fixture],
       viewport: const CellSize(80, 24),
-      log: parentSaw.add,
+      // Collect for the tee assertion AND surface on failure — a broken
+      // fixture should show its stack, like the sibling tests.
+      log: (line) {
+        parentSaw.add(line);
+        printOnFailure(line);
+      },
     );
     addTearDown(bridge.close);
     await bridge.ready;

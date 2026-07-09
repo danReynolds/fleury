@@ -304,24 +304,27 @@ Future<AppExit> _runAppImpl(
   // terminal fd guard above — frames go over the socket, not fd 1, so there's
   // nothing to protect. But that also left the LogBuffer unfed, so an agent's
   // read_logs came back empty. When debug tooling is on, capture on the real
-  // remote paths too — and because fd 1 carries no frames in this mode, TEE
-  // each captured line straight back out through the saved descriptors, so
-  // the parent's own log forwarding (fleury_mcp's [app out/err], serve's
-  // sanitized relay) keeps working, split-intact. `remoteFdTee` also
-  // suppresses the replay-on-exit below: the parent already received every
-  // line live. Invoked by the RESOLVER on its remote branches — the one place
-  // that knows this is a real handle-connected session — so a test handing in
-  // a RemoteTerminalDriver over a fake transport never has its runner's
+  // remote paths too — with `mirrorToSavedFds`: stdio's reader isolate mirrors
+  // every raw captured chunk back through the saved descriptors,
+  // byte-transparent and split-intact, so the parent's own log forwarding
+  // (fleury_mcp's [app out/err], serve's sanitized relay) keeps working
+  // exactly as before capture. Mirroring lives OFF the main isolate and never
+  // blocks it: a parent that stops draining costs a bounded backlog, then
+  // mirror loss — never a frozen app. `remoteFdMirror` also suppresses the
+  // replay-on-exit below: the parent already received everything live.
+  // Invoked by the RESOLVER on its remote branches — the one place that knows
+  // this is a real handle-connected session — so a test handing in a
+  // RemoteTerminalDriver over a fake transport never has its runner's
   // descriptors captured.
-  var remoteFdTee = false;
+  var remoteFdMirror = false;
   Future<void> startRemoteFdCapture() async {
     if (fdCapture != null) return;
     if (!debug.enabled) return;
     if (Platform.isWindows) return;
     if (Platform.environment['FLEURY_FD_CAPTURE'] == '0') return;
     try {
-      fdCapture = await fd.StdioCapture.start();
-      remoteFdTee = true;
+      fdCapture = await fd.StdioCapture.start(mirrorToSavedFds: true);
+      remoteFdMirror = true;
       onFdCaptureStarted?.call(fdCapture!);
     } on Object {
       // Capture unavailable (nested session, unsupported platform build):
@@ -477,28 +480,13 @@ Future<AppExit> _runAppImpl(
   StreamSubscription<fd.CapturedLine>? fdCaptureSub;
   final activeFdCapture = fdCapture;
   if (activeFdCapture != null) {
-    void consume(fd.CapturedLine line) {
-      capture.addLine(
-        line.text,
-        line.stream == fd.StdStream.err ? LogSource.stderr : LogSource.stdout,
-      );
-      // Remote sessions tee each line back out through the saved descriptors
-      // (split-intact) so the parent process keeps receiving the app's
-      // output live — capture here exists to FEED read_logs, not to divert.
-      // Safe only because remote frames travel the socket, never fd 1; the
-      // native-terminal path defers to replay-on-exit instead.
-      if (remoteFdTee) {
-        try {
-          (line.stream == fd.StdStream.err
-                  ? activeFdCapture.terminalStderr
-                  : activeFdCapture.terminalStdout)
-              .writeln(line.text);
-        } catch (_) {
-          // The parent closed its end; keep the session alive — the line is
-          // still in the LogBuffer for read_logs.
-        }
-      }
-    }
+    // (Remote sessions ALSO mirror raw bytes to the parent — but that happens
+    // on stdio's reader isolate via mirrorToSavedFds, not here; this consumer
+    // only feeds the in-app LogBuffer.)
+    void consume(fd.CapturedLine line) => capture.addLine(
+      line.text,
+      line.stream == fd.StdStream.err ? LogSource.stderr : LogSource.stdout,
+    );
 
     // Anything written between capture start and this subscription (driver
     // construction runs in between) is retained in the capture's history —
@@ -567,9 +555,9 @@ Future<AppExit> _runAppImpl(
         await fdCap.stop();
       } catch (_) {}
       await fdCaptureSub?.cancel();
-      // The remote tee already delivered every line to the parent live;
-      // replaying here would duplicate them all on the pipe.
-      if (onStrayOutput == null && !remoteFdTee && !logBuffer.isEmpty) {
+      // The remote mirror already delivered everything to the parent live;
+      // replaying here would duplicate it all on the pipe.
+      if (onStrayOutput == null && !remoteFdMirror && !logBuffer.isEmpty) {
         for (final line in logBuffer.lines) {
           stdout.writeln(line.text);
         }
