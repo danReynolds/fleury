@@ -95,17 +95,28 @@ void main() {
           final beforeRows = before['matchCount'] as int;
           expect(beforeRows, greaterThan(0));
 
-          // A taller viewport windows in more of the (24-row) table.
+          // A taller viewport windows in more of the (24-row) table. The
+          // resize tool settles on a fixed 2s budget; on a loaded CI runner
+          // the app's relayout can land just after it, so poll briefly for
+          // the growth instead of trusting one post-settle read (observed:
+          // matchCount stayed 6 on a doubly-loaded runner; green locally).
           await dashboard.tool('resize', <String, Object?>{
             'cols': 100,
             'rows': 60,
           });
 
-          final after = await dashboard.tool('find_nodes', <String, Object?>{
-            'role': 'tableRow',
-          });
+          var afterRows = beforeRows;
+          for (var i = 0; i < 40 && afterRows <= beforeRows; i++) {
+            final after = await dashboard.tool('find_nodes', <String, Object?>{
+              'role': 'tableRow',
+            });
+            afterRows = after['matchCount'] as int;
+            if (afterRows <= beforeRows) {
+              await Future<void>.delayed(const Duration(milliseconds: 100));
+            }
+          }
           expect(
-            after['matchCount'] as int,
+            afterRows,
             greaterThan(beforeRows),
             reason: 'a taller grid should window in more rows',
           );
