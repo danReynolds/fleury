@@ -737,11 +737,19 @@ Future<AppExit> _runAppImpl(
           // remote session copies to the PEER's clipboard over the wire
           // (the user's machine — a SystemClipboard here would hit the
           // server's); everything else gets the platform clipboard.
+          //
+          // OSC 52 must go through the DRIVER's write path, not the process
+          // stdout: under fd-capture (the POSIX TTY default) fd 1 is
+          // redirected into the stray-output pipe, so a bare stdout.write
+          // would swallow the escape as a "stray log line" (sanitized on
+          // replay) and the copy silently never reaches the terminal — the
+          // only clipboard path that works over SSH. The driver holds the
+          // saved real-terminal handle.
           effectiveClipboard =
               clipboard ??
               (activeSurfaceSink != null
                   ? (remoteClipboard = RemoteClipboard(activeSurfaceSink))
-                  : SystemClipboard());
+                  : SystemClipboard(stdoutWrite: usedDriver.write));
           if (activeSurfaceSink != null) {
             semanticsPipeline = FrameSemanticsPipeline(
               presenter: WireSemanticFramePresenter(activeSurfaceSink),
