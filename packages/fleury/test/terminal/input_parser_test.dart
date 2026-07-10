@@ -70,6 +70,21 @@ void main() {
       expect(sink.events, [const KeyEvent(keyCode: KeyCode.enter)]);
     });
 
+    test('a flush ends the CR window — a later lone LF is not swallowed', () {
+      // A lone CR is the normal raw-mode Enter; the driver flushes on idle.
+      // A LF arriving in a LATER burst (e.g. Ctrl+J) must still be Enter, not
+      // eaten as the paired half of a long-gone CR.
+      final parser = InputParser();
+      final sink = _ListSink();
+      parser.feed([0x0D], sink); // Enter
+      parser.flush(sink); // idle — ends the pairing window
+      parser.feed([0x0A], sink); // a fresh, unrelated LF
+      expect(sink.events, [
+        const KeyEvent(keyCode: KeyCode.enter),
+        const KeyEvent(keyCode: KeyCode.enter),
+      ]);
+    });
+
     test('LFCR and CR-x-LF do NOT swallow (only an immediate paired LF)', () {
       // `\n\r` is two Enters (LF first, then CR).
       expect(_parse([0x0A, 0x0D]), [

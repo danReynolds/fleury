@@ -105,6 +105,12 @@ class InputParser {
   /// sequence: if state is still [_State.afterEsc] when this is
   /// called, the ESC is emitted as a standalone keypress.
   void flush(TuiEventSink sink) {
+    // An idle flush ends the "immediately after CR" window: a lone CR is the
+    // normal raw-mode Enter byte, and the driver flushes on a ~30ms idle
+    // debounce, so without this a much-later unrelated raw LF (Ctrl+J) would
+    // be wrongly swallowed. A genuine CRLF arrives contiguous within one read,
+    // far under the debounce, so no flush intervenes between its CR and LF.
+    _swallowNextLf = false;
     switch (_state) {
       case _State.afterEsc:
         sink.add(const KeyEvent(keyCode: KeyCode.escape));

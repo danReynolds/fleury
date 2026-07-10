@@ -163,11 +163,11 @@ class TextEditingController extends ChangeNotifier {
     _checkNotDisposed();
     // A paste can arrive mid-composition (serve/browser IME + bracketed
     // paste). Resolve the composition FIRST — otherwise _applyEdit nulls
-    // _compositionBase while the stale composing range and interim preedit
-    // survive in the value, so the peer IME keeps composing (its later
-    // commit lands a duplicate) and undo restores a half-composed value.
-    // Cancel the abandoned composition (restore the pre-composition value),
-    // then insert against that clean value.
+    // _compositionBase while the interim preedit text stays committed in the
+    // value (and the peer IME keeps composing, so its later commit lands a
+    // duplicate; undo restores a half-composed value). Cancel the abandoned
+    // composition (restore the pre-composition value), then insert against
+    // that clean value.
     if (_compositionBase != null) cancelComposing();
     _applyEdit(
       TextEditingModel.insert(_value, s, singleLine: singleLine),
