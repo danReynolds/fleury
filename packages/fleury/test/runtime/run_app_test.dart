@@ -695,4 +695,67 @@ void main() {
       await driver.dispose();
     });
   });
+
+  group('runApp clipboard wiring', () {
+    test('OSC 52 rides the DRIVER write path, not process stdout', () async {
+      // Under fd-capture (the POSIX TTY default) process stdout is redirected
+      // into the stray-output pipe — an OSC 52 written there is swallowed as a
+      // "log line" and the copy silently never reaches the terminal (the only
+      // clipboard path that works over SSH). runApp must construct the
+      // clipboard against the driver's terminal handle; this locks that
+      // wiring: the escape lands in the driver's output.
+      final driver = FakeTerminalDriver(size: const CellSize(40, 6));
+      final future = runApp(
+        const _ClipboardCopyApp(),
+        driver: driver,
+        enableHotReload: false,
+      );
+      await _settle();
+
+      driver.clearOutput();
+      driver.enqueue(const KeyEvent(char: 'y', modifiers: {KeyModifier.ctrl}));
+      await _settle();
+      await _settle();
+      expect(
+        driver.output,
+        contains(']52;c;'),
+        reason:
+            'OSC 52 must go through driver.write — a bare stdout.write is '
+            'captured as stray output under fd-capture and never reaches the '
+            'terminal',
+      );
+
+      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      await future;
+      await driver.dispose();
+    });
+  });
+}
+
+/// Ctrl+Y copies through the ambient ClipboardScope — the seam under test is
+/// runApp's SystemClipboard construction, so the policy skips platform tools
+/// to force the OSC 52 path deterministically.
+class _ClipboardCopyApp extends StatelessWidget {
+  const _ClipboardCopyApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return KeyBindings(
+      bindings: [
+        KeyBinding(
+          KeyChord.ctrl.y,
+          label: 'copy',
+          onEvent: (_) {
+            unawaited(
+              ClipboardScope.of(context).writeWithReport(
+                'clip-me',
+                policy: const ClipboardWritePolicy(allowPlatformTool: false),
+              ),
+            );
+          },
+        ),
+      ],
+      child: const Text('clipboard app'),
+    );
+  }
 }

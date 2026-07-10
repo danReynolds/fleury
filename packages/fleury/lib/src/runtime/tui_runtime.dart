@@ -126,6 +126,9 @@ final class TuiRuntime {
     _disposed = true;
     _rootElement?.unmount();
     _rootElement = null;
+    // Subtrees deactivated but not yet finalized (a layout-time swap with no
+    // frame after it) must still see State.dispose.
+    owner.drainInactiveElements();
     focusManager.dispose();
     binding.dispose();
   }

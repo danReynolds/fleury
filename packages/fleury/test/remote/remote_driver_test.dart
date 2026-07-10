@@ -226,6 +226,31 @@ void main() {
       await expectLater(entering, throwsA(isA<RemoteProtocolException>()));
     });
 
+    test('a silent peer (no INIT) fails enter() at the deadline', () async {
+      // A peer that connects and never speaks must not hang the app forever —
+      // under serve --spawn that is a process leak an attacker can multiply
+      // (open sockets, send nothing). Disconnects already failed the
+      // handshake; silence must too.
+      final saved = RemoteTerminalDriver.initTimeout;
+      RemoteTerminalDriver.initTimeout = const Duration(milliseconds: 120);
+      addTearDown(() => RemoteTerminalDriver.initTimeout = saved);
+
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(transport);
+
+      // No frames, no error, no disconnect — pure silence.
+      await expectLater(
+        driver.enter(TerminalMode.interactive),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('sent no INIT'),
+          ),
+        ),
+      );
+    });
+
     test('restore() sends BYE and tears down', () async {
       final transport = _FakeTransport();
       final driver = RemoteTerminalDriver(transport);

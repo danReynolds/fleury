@@ -750,6 +750,10 @@ class FleuryTester {
       root.unmount();
     }
     _root = null;
+    // A layout-time swap in the final pump can leave deactivated subtrees
+    // unfinalized; drain so their State.dispose runs and cannot leak
+    // timers/subscriptions into the next test.
+    _owner.drainInactiveElements();
     _binding.dispose();
     _focusManager.dispose();
   }
