@@ -1158,6 +1158,14 @@ class BuildOwner {
                 .take(8)
                 .map((e) => e.widget.runtimeType.toString())
                 .join(', ');
+        // Heal the invariant before failing: an active element left with
+        // _dirty==true while off the queue can never re-enqueue
+        // (markNeedsBuild short-circuits on _dirty), permanently freezing
+        // its subtree in a session the frame backstop keeps alive. Clearing
+        // the flags drops this storm's work; any future setState re-queues.
+        for (final element in _dirtyElements) {
+          element._dirty = false;
+        }
         _dirtyElements.clear();
         throw FleuryError(
           summary: 'flushBuild did not converge after $_maxBuildPasses passes.',
@@ -1177,8 +1185,29 @@ class BuildOwner {
       if (snapshot.length > maxDirtyElementCount) {
         maxDirtyElementCount = snapshot.length;
       }
-      for (final element in snapshot) {
-        element.rebuild();
+      var processed = 0;
+      try {
+        for (final element in snapshot) {
+          processed += 1;
+          element.rebuild();
+        }
+      } finally {
+        // A rebuild can throw past the per-element containment (initState,
+        // didUpdateWidget, updateShouldNotify have no errorBuilder catch).
+        // The snapshot was already drained from the queue, so the untouched
+        // remainder would be stranded dirty-but-unqueued — markNeedsBuild
+        // would short-circuit on them forever. Re-enqueue so the next flush
+        // retries. (The thrower itself cleared its own flag at rebuild()
+        // start and is intentionally not re-queued.)
+        if (processed < snapshot.length) {
+          for (var i = processed; i < snapshot.length; i++) {
+            final element = snapshot[i];
+            if (element._lifecycle == _ElementLifecycle.active &&
+                element._dirty) {
+              _dirtyElements.add(element);
+            }
+          }
+        }
       }
     }
     _finalizeInactiveElements();
@@ -1189,6 +1218,12 @@ class BuildOwner {
       maxDirtyElementCount: maxDirtyElementCount,
     );
   }
+
+  /// Host teardown: permanently unmounts any deactivated-but-unfinalized
+  /// subtrees (a layout-time deactivation with no rendered frame after it,
+  /// or a flush abort). Runtime/tester dispose call this so every
+  /// once-mounted State sees dispose even when the session ends idle.
+  void drainInactiveElements() => _finalizeInactiveElements();
 
   /// Permanently unmounts every subtree that was deactivated during the
   /// build pass and not reclaimed by a new parent. Reclaimed elements were
@@ -1297,6 +1332,11 @@ class BuildOwner {
     sw?.reset();
     rootRender.layout(CellConstraints.loose(buffer.size));
     final layoutElapsed = sw?.elapsed ?? Duration.zero;
+    // Layout can rebuild (LayoutBuilder) and deactivate subtrees AFTER this
+    // frame's flushBuild already finalized — without this, their
+    // State.dispose would wait for the next non-idle frame, indefinitely in
+    // an idle TUI. Finalize again so a layout-time swap disposes this frame.
+    _finalizeInactiveElements();
 
     sw?.reset();
     // Root paint: buffer IS the screen, so screenOffset == offset.
@@ -1544,6 +1584,20 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
     for (final old in oldChildren) {
       final k = old.widget.key;
       if (k != null) {
+        final shadowed = keyedOlds[k];
+        if (shadowed != null) {
+          // Duplicate local keys among siblings: the map overwrite would
+          // silently orphan the first element ACTIVE (its State never
+          // disposed, its dependency edges still live — a monotonic leak on
+          // every rebuild). Fail loudly in debug, like Flutter; in release,
+          // deactivate the shadowed element so nothing leaks.
+          assert(
+            false,
+            'Duplicate key $k among the children of $widget. Each child of a '
+            'multi-child widget must have a unique key.',
+          );
+          _deactivateChild(shadowed);
+        }
         keyedOlds[k] = old;
       } else {
         unkeyedOlds.add(old);
