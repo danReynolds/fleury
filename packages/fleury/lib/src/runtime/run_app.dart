@@ -648,7 +648,14 @@ Future<AppExit> _runAppImpl(
           // errors. Only when the app opted into debug tooling — otherwise a
           // served production session exposes nothing and the peer's timeout
           // reports it as not debuggable.
-          if (debugController.config.enabled) {
+          //
+          // FLEURY_DEBUG_WIRE=0 is the host's kill switch for THIS wire
+          // surface specifically: `fleury serve --spawn` sets it unless the
+          // operator passed --debug, so a shared URL can't pull captured
+          // logs / frame stats / error stacks out of a JIT demo by default.
+          // The in-app debug shell (Ctrl+G) is unaffected.
+          if (debugController.config.enabled &&
+              Platform.environment['FLEURY_DEBUG_WIRE'] != '0') {
             debugFrameLog = DebugFrameLog();
             negotiatedSink.onDebugRequest = (seq, kind, limit) {
               negotiatedSink.presentDebugResponse(
