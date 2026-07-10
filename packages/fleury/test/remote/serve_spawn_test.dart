@@ -427,6 +427,55 @@ void main() {
         await ws1.close();
       });
 
+      test(
+        'a concurrent burst cannot slip past --max-sessions (TOCTOU)',
+        () async {
+          // The cap must reserve its slot SYNCHRONOUSLY: a burst of connects
+          // fired together (before any of them attaches) must not all be
+          // admitted. Fire six at once against a cap of 1 — exactly one may
+          // survive; the rest get 503 → WebSocketException.
+          final pkgRoot = Directory.current.path;
+          final childCwd = Directory.systemTemp.createTempSync('fleury_burst_');
+          addTearDown(() => childCwd.deleteSync(recursive: true));
+          final (port, _) = await startServe(
+            ['--max-sessions=1'],
+            [
+              Platform.resolvedExecutable,
+              'run',
+              '$pkgRoot/test/fixtures/spawn_app.dart',
+              'burst-app',
+              childCwd.path,
+            ],
+          );
+
+          final attempts = List.generate(
+            6,
+            (_) => WebSocket.connect('ws://127.0.0.1:$port/ws'),
+          );
+          final results = await Future.wait(
+            attempts.map(
+              (f) => f.then<WebSocket?>((ws) => ws).catchError((_) => null),
+            ),
+          );
+          final admittedSockets = results.whereType<WebSocket>().toList();
+          addTearDown(() async {
+            for (final ws in admittedSockets) {
+              try {
+                await ws.close();
+              } catch (_) {}
+            }
+          });
+
+          expect(
+            admittedSockets,
+            hasLength(1),
+            reason:
+                'the synchronous reservation admits exactly one of a '
+                'concurrent burst — a TOCTOU check would admit all six',
+          );
+        },
+      );
+
       test('the debug wire is OFF for spawned apps unless serve gets --debug '
           '(F15)', () async {
         final pkgRoot = Directory.current.path;
