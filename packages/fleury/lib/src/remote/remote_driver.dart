@@ -144,9 +144,30 @@ final class RemoteTerminalDriver
     // are correct before the first paint. Without this, `runApp` would
     // race the handshake and allocate the buffer pool at the default
     // 80×24, then immediately resize on the first frame.
-    await _handshake!.future;
+    //
+    // BOUNDED: a peer that connects and then never speaks must not hang
+    // the app forever — under `serve --spawn` that is a process leak an
+    // attacker can multiply (open sockets, send nothing). A disconnect
+    // already fails the handshake; silence now does too. The deadline is
+    // generous for real peers (the bridge / serve client sends INIT
+    // immediately on accept) while bounding the leak window.
+    try {
+      await _handshake!.future.timeout(initTimeout);
+    } on TimeoutException {
+      await _frameSub?.cancel();
+      _frameSub = null;
+      unawaited(_transport.close());
+      throw StateError(
+        'RemoteTerminalDriver.enter: the peer connected but sent no INIT '
+        'within ${initTimeout.inSeconds}s — closing the session.',
+      );
+    }
     _active = true;
   }
+
+  /// How long [enter] waits for the peer's INIT before failing closed.
+  /// Overridable for tests.
+  static Duration initTimeout = const Duration(seconds: 10);
 
   @override
   Future<void> restore() async {
