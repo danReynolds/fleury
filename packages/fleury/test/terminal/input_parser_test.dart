@@ -52,9 +52,36 @@ void main() {
   });
 
   group('Special chords', () {
-    test('CR and LF both become KeyCode.enter', () {
+    test('lone CR and lone LF each become one Enter', () {
       expect(_parse([0x0D]), [const KeyEvent(keyCode: KeyCode.enter)]);
       expect(_parse([0x0A]), [const KeyEvent(keyCode: KeyCode.enter)]);
+    });
+
+    test('CRLF collapses to a single Enter (no double-submit)', () {
+      // Piped/scripted input, LNM terminals, and Windows/serial PTYs deliver
+      // `\r\n`; it must be ONE Enter, not two.
+      expect(_parse([0x0D, 0x0A]), [const KeyEvent(keyCode: KeyCode.enter)]);
+      // Split across two feeds (fragmented reads) collapses the same way —
+      // the latch persists across feed() boundaries.
+      final parser = InputParser();
+      final sink = _ListSink();
+      parser.feed([0x0D], sink);
+      parser.feed([0x0A], sink);
+      expect(sink.events, [const KeyEvent(keyCode: KeyCode.enter)]);
+    });
+
+    test('LFCR and CR-x-LF do NOT swallow (only an immediate paired LF)', () {
+      // `\n\r` is two Enters (LF first, then CR).
+      expect(_parse([0x0A, 0x0D]), [
+        const KeyEvent(keyCode: KeyCode.enter),
+        const KeyEvent(keyCode: KeyCode.enter),
+      ]);
+      // CR, an intervening key, then LF → two Enters (the latch cleared on 'a').
+      expect(_parse([0x0D, 0x61, 0x0A]), [
+        const KeyEvent(keyCode: KeyCode.enter),
+        const TextInputEvent('a'),
+        const KeyEvent(keyCode: KeyCode.enter),
+      ]);
     });
 
     test('Tab byte becomes KeyCode.tab', () {

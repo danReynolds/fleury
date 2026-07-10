@@ -432,6 +432,29 @@ void main() {
       expect(c.canUndo, isFalse);
     });
 
+    test('paste during composition cancels the preedit, then inserts (F22)', () {
+      // A bracketed paste arriving while the IME is composing must resolve the
+      // composition — not leave a stale composing range + orphaned base (which
+      // desyncs the peer IME and corrupts undo).
+      final c = TextEditingController(text: 'git ');
+      c.updateComposingText('che', singleLine: true);
+      expect(c.hasComposingRange, isTrue);
+
+      c.paste('log', singleLine: true);
+
+      // The abandoned 'che' preedit is gone; the paste landed on the clean
+      // pre-composition value; no composing range survives.
+      expect(c.text, 'git log');
+      expect(c.composing, TextRange.empty);
+      expect(c.hasComposingRange, isFalse);
+
+      // Undo is a single, consistent step back to the pre-paste value — not a
+      // half-composed 'git che'.
+      c.undo();
+      expect(c.text, 'git ');
+      expect(c.composing, TextRange.empty);
+    });
+
     test('undo cancels an active uncommitted composition', () {
       final c = TextEditingController(text: 'run ');
 
