@@ -7,12 +7,12 @@
     "planFrames": 121.0,
     "semanticsFrames": 121.0,
     "planBytesPerFrame": 886.5,
-    "semanticsBytesPerFrame": 5291.1,
-    "totalBytes": 754494.0,
-    "deflatedBytes": 56929.0,
+    "semanticsBytesPerFrame": 5483.1,
+    "totalBytes": 777918.0,
+    "deflatedBytes": 56514.0,
     "otherBytes": 92.0,
-    "cadenceP50Ms": 16.1,
-    "cadenceP95Ms": 17.2
+    "cadenceP50Ms": 16.0,
+    "cadenceP95Ms": 18.8
   },
   "log": {
     "scenario": "log",
@@ -22,12 +22,12 @@
     "planFrames": 121.0,
     "semanticsFrames": 121.0,
     "planBytesPerFrame": 62.2,
-    "semanticsBytesPerFrame": 6973.4,
-    "totalBytes": 859365.0,
-    "deflatedBytes": 18333.0,
+    "semanticsBytesPerFrame": 7261.4,
+    "totalBytes": 894501.0,
+    "deflatedBytes": 24493.0,
     "otherBytes": 92.0,
     "cadenceP50Ms": 16.0,
-    "cadenceP95Ms": 16.9
+    "cadenceP95Ms": 21.9
   },
   "counter": {
     "scenario": "counter",
@@ -37,11 +37,11 @@
     "planFrames": 121.0,
     "semanticsFrames": 121.0,
     "planBytesPerFrame": 21.1,
-    "semanticsBytesPerFrame": 281.3,
-    "totalBytes": 42855.0,
-    "deflatedBytes": 1778.0,
+    "semanticsBytesPerFrame": 294.8,
+    "totalBytes": 44523.0,
+    "deflatedBytes": 1794.0,
     "otherBytes": 92.0,
     "cadenceP50Ms": 16.2,
-    "cadenceP95Ms": 17.2
+    "cadenceP95Ms": 20.7
   }
 }
