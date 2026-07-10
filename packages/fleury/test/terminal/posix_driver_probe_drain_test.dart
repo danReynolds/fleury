@@ -119,6 +119,36 @@ void main() {
       );
     });
 
+    test(
+      'a DA reply split across the timeout reassembles and is swallowed',
+      () async {
+        // The real failure the fix targets: the reply STARTED arriving before
+        // the probe timed out (partial `ESC [ ? 6 2` buffered), and its final
+        // `c` — plus a trailing keystroke — arrive after. The drain must
+        // reassemble across the boundary, swallow the whole reply, and replay
+        // only the real input.
+        driver.debugBeginLateProbeDrain([
+          0x1B,
+          0x5B,
+          0x3F,
+          0x36,
+          0x32,
+        ]); // no 'c'
+        expect(driver.debugDrainingLateProbe, isTrue);
+
+        input.push([0x63, 0x6F, 0x6B]); // 'c' (terminator) + 'o' 'k'
+        await _pump();
+
+        expect(driver.debugDrainingLateProbe, isFalse);
+        expect(
+          events.whereType<TextInputEvent>().map((e) => e.text).join(),
+          'ok',
+          reason: 'the DA reassembled across the boundary; only "ok" is input',
+        );
+        expect(events.whereType<KeyEvent>(), isEmpty);
+      },
+    );
+
     test('grace expiry discards the buffer, then input flows', () async {
       driver.debugBeginLateProbeDrain();
       // A reply with no DA terminator (a partial / non-answering terminal).

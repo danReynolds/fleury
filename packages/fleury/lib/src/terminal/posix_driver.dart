@@ -107,6 +107,10 @@ class PosixTerminalDriver
   Timer? _lateProbeTimer;
   @visibleForTesting
   static Duration lateProbeGrace = const Duration(milliseconds: 250);
+  // A real probe reply is a few bytes; cap the drain buffer so a terminal
+  // spraying without a DA terminator can't grow it (and the per-batch rescan)
+  // for the whole grace — give up early instead.
+  static const _maxProbeBufferBytes = 4096;
   ImageProtocol? _imageProtocolOverride;
   // Set once the ambiguous-width probe measures how the terminal sizes
   // ambiguous glyphs; a confirmed `narrow` lets the renderer drop the
@@ -267,7 +271,15 @@ class PosixTerminalDriver
           // until the DA terminator lands (then replay real input after it),
           // rather than parsing the reply as keystrokes.
           _probeBuffer.addAll(bytes);
-          if (_daReplyEnd(_probeBuffer) >= 0) _finishLateProbeDrain();
+          if (_daReplyEnd(_probeBuffer) >= 0) {
+            _finishLateProbeDrain();
+          } else if (_probeBuffer.length > _maxProbeBufferBytes) {
+            // A terminal spraying without a DA terminator: a real reply is
+            // tiny, so give up now rather than grow the buffer (and rescan it)
+            // for the full grace. Nothing real is lost — a genuine reply would
+            // have terminated far under this bound.
+            _giveUpLateProbeDrain();
+          }
           return;
         }
         _parser.feed(bytes, _sink);
@@ -430,10 +442,13 @@ class PosixTerminalDriver
   @visibleForTesting
   bool get debugDrainingLateProbe => _drainingLateProbe;
 
-  /// Test seam: enter the late-drain state (as a timed-out probe would).
+  /// Test seam: enter the late-drain state as a timed-out probe would, with an
+  /// optional [partial] already in the buffer — modelling a reply that began
+  /// arriving before the timeout (e.g. `ESC [ ? 6 2` with the `c` still in
+  /// flight), so the post-timeout tail must reassemble across the boundary.
   @visibleForTesting
-  void debugBeginLateProbeDrain() {
-    _probeBuffer = <int>[];
+  void debugBeginLateProbeDrain([List<int> partial = const <int>[]]) {
+    _probeBuffer = List<int>.of(partial);
     _replayPostProbeInput();
   }
 
@@ -619,11 +634,13 @@ class PosixTerminalDriver
     _graceTimer?.cancel();
     _graceTimer = null;
     _pendingSignal = null;
+    // Before the early-return: a late-probe drain timer must never outlive
+    // restore(), even on the nothing-else-to-restore path.
+    _cancelLateProbeDrain();
     if (!_active && !_wroteEnterSequences && !_changedStdin) return;
 
     _handoffActive = false;
     _suspended = false;
-    _cancelLateProbeDrain();
     _flushTimer?.cancel();
     _flushTimer = null;
 
