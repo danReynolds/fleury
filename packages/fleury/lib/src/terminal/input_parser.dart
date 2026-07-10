@@ -65,6 +65,14 @@ class InputParser {
   _State _state = _State.ground;
   final List<int> _pendingUtf8 = <int>[];
 
+  // CRLF collapse: a CR (0x0D) emits Enter and arms this so the LF (0x0A)
+  // half of a `\r\n` pair — as delivered by piped/scripted input, LNM-mode
+  // terminals, and Windows/serial PTYs — is swallowed instead of firing a
+  // SECOND Enter (double form-submit). Set by CR, consumed by an immediately
+  // following LF, cleared by any other byte. Only meaningful in the ground
+  // state (CR doesn't change state), so it's read/reset solely there.
+  bool _swallowNextLf = false;
+
   // CSI parameters, modelled as semicolon-separated groups, each holding
   // one or more colon-separated sub-parameters. The classic forms use a
   // single sub-param per group (`CSI 1 ; 5 A`); the Kitty protocol adds
@@ -97,6 +105,12 @@ class InputParser {
   /// sequence: if state is still [_State.afterEsc] when this is
   /// called, the ESC is emitted as a standalone keypress.
   void flush(TuiEventSink sink) {
+    // An idle flush ends the "immediately after CR" window: a lone CR is the
+    // normal raw-mode Enter byte, and the driver flushes on a ~30ms idle
+    // debounce, so without this a much-later unrelated raw LF (Ctrl+J) would
+    // be wrongly swallowed. A genuine CRLF arrives contiguous within one read,
+    // far under the debounce, so no flush intervenes between its CR and LF.
+    _swallowNextLf = false;
     switch (_state) {
       case _State.afterEsc:
         sink.add(const KeyEvent(keyCode: KeyCode.escape));
@@ -138,11 +152,21 @@ class InputParser {
   }
 
   void _consumeGround(int byte, TuiEventSink sink) {
+    // Capture-and-clear the CRLF latch up front: only an LF *immediately*
+    // after a CR is the pair's second half.
+    final swallowLf = _swallowNextLf;
+    _swallowNextLf = false;
     if (byte == 0x1B) {
       _state = _State.afterEsc;
       return;
     }
-    if (byte == 0x0D || byte == 0x0A) {
+    if (byte == 0x0D) {
+      sink.add(const KeyEvent(keyCode: KeyCode.enter));
+      _swallowNextLf = true; // swallow a paired LF
+      return;
+    }
+    if (byte == 0x0A) {
+      if (swallowLf) return; // the LF half of a CRLF — already emitted Enter
       sink.add(const KeyEvent(keyCode: KeyCode.enter));
       return;
     }
