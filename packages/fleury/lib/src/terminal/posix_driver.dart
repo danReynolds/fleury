@@ -97,6 +97,16 @@ class PosixTerminalDriver
   // graphics under Warp), upgrades [capabilities].
   bool _probing = false;
   List<int> _probeBuffer = <int>[];
+  // Late-reply drain: a probe that timed out may still get its reply on a slow
+  // link (SSH). While draining, stdin keeps diverting into [_probeBuffer] —
+  // instead of being parsed as keystrokes — until the DA terminator lands
+  // (then real input after it replays) or [lateProbeGrace] expires. Without
+  // this, a Kitty/DA reply arriving after the probe window types garbage
+  // (`Gi=31,...`) into the focused widget.
+  bool _drainingLateProbe = false;
+  Timer? _lateProbeTimer;
+  @visibleForTesting
+  static Duration lateProbeGrace = const Duration(milliseconds: 250);
   ImageProtocol? _imageProtocolOverride;
   // Set once the ambiguous-width probe measures how the terminal sizes
   // ambiguous glyphs; a confirmed `narrow` lets the renderer drop the
@@ -252,6 +262,14 @@ class PosixTerminalDriver
           _probeBuffer.addAll(bytes);
           return;
         }
+        if (_drainingLateProbe) {
+          // A probe timed out; its reply may still be arriving. Keep diverting
+          // until the DA terminator lands (then replay real input after it),
+          // rather than parsing the reply as keystrokes.
+          _probeBuffer.addAll(bytes);
+          if (_daReplyEnd(_probeBuffer) >= 0) _finishLateProbeDrain();
+          return;
+        }
         _parser.feed(bytes, _sink);
         _scheduleFlush();
       },
@@ -353,13 +371,70 @@ class PosixTerminalDriver
   /// terminal's own response and stay consumed; if no DA reply landed (timeout)
   /// nothing is replayed, since the buffer may hold a partial response.
   void _replayPostProbeInput() {
+    final tailStart = _daReplyEnd(_probeBuffer);
+    if (tailStart >= 0) {
+      // The DA reply already landed within the probe window — everything after
+      // it is real input; feed that tail to the parser.
+      final buf = _probeBuffer;
+      _probeBuffer = <int>[];
+      if (tailStart < buf.length) {
+        _parser.feed(buf.sublist(tailStart), _sink);
+        _scheduleFlush();
+      }
+      return;
+    }
+    // No DA terminator yet. On a slow link the reply may still be en route;
+    // parsing it as keystrokes would type garbage into the app. Keep diverting
+    // stdin (the listener routes to the drain) until the DA lands or a short
+    // grace expires. On a terminal that already replied the DA was found
+    // above; on a no-reply terminal the grace simply elapses and the buffer is
+    // discarded.
+    _drainingLateProbe = true;
+    _lateProbeTimer = Timer(lateProbeGrace, _giveUpLateProbeDrain);
+  }
+
+  /// The late DA terminator arrived while draining: stop diverting, discard the
+  /// reply, and replay any real input that trailed it.
+  void _finishLateProbeDrain() {
+    _lateProbeTimer?.cancel();
+    _lateProbeTimer = null;
+    _drainingLateProbe = false;
     final buf = _probeBuffer;
     _probeBuffer = <int>[];
-    if (buf.isEmpty) return;
     final tailStart = _daReplyEnd(buf);
-    if (tailStart < 0 || tailStart >= buf.length) return;
-    _parser.feed(buf.sublist(tailStart), _sink);
-    _scheduleFlush();
+    if (tailStart >= 0 && tailStart < buf.length) {
+      _parser.feed(buf.sublist(tailStart), _sink);
+      _scheduleFlush();
+    }
+  }
+
+  /// The grace elapsed with no DA terminator (a terminal that doesn't answer
+  /// DA, or a malformed reply): discard the buffer rather than parse it as
+  /// keystrokes. Real input typed during the grace is dropped too, but the
+  /// window is bounded and only opens after a probe already timed out.
+  void _giveUpLateProbeDrain() {
+    _lateProbeTimer = null;
+    _drainingLateProbe = false;
+    _probeBuffer = <int>[];
+  }
+
+  /// A fresh probe supersedes any pending late-drain (its own diversion takes
+  /// over); called when a probe request begins.
+  void _cancelLateProbeDrain() {
+    _lateProbeTimer?.cancel();
+    _lateProbeTimer = null;
+    _drainingLateProbe = false;
+  }
+
+  /// Test seam: whether stdin is currently diverting a late probe reply.
+  @visibleForTesting
+  bool get debugDrainingLateProbe => _drainingLateProbe;
+
+  /// Test seam: enter the late-drain state (as a timed-out probe would).
+  @visibleForTesting
+  void debugBeginLateProbeDrain() {
+    _probeBuffer = <int>[];
+    _replayPostProbeInput();
   }
 
   /// Builds the mode-entry escape sequence (alt screen, hide cursor,
@@ -548,6 +623,7 @@ class PosixTerminalDriver
 
     _handoffActive = false;
     _suspended = false;
+    _cancelLateProbeDrain();
     _flushTimer?.cancel();
     _flushTimer = null;
 
@@ -636,6 +712,7 @@ class _DriverProbeTransport implements TerminalProbeTransport {
 
   @override
   Future<List<int>> request(String bytes, {required Duration timeout}) async {
+    _driver._cancelLateProbeDrain(); // a new probe supersedes any pending drain
     _driver._probing = true;
     _driver._probeBuffer = <int>[];
     try {
