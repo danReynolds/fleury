@@ -35,9 +35,11 @@ class PosixTerminalDriver
     Stdout? stdoutOverride,
     this.signalGrace = const Duration(seconds: 5),
     @visibleForTesting void Function(int exitCode)? forceExitOverride,
+    @visibleForTesting void Function()? selfStopOverride,
   }) : _stdin = stdinOverride ?? stdin,
        _stdout = stdoutOverride ?? stdout,
-       _forceExitOverride = forceExitOverride;
+       _forceExitOverride = forceExitOverride,
+       _selfStopOverride = selfStopOverride;
 
   final Stdin _stdin;
   final Stdout _stdout;
@@ -51,6 +53,11 @@ class PosixTerminalDriver
   /// Test seam: replaces the `exit()` call in the force path so grace
   /// behavior is assertable without killing the test process.
   final void Function(int exitCode)? _forceExitOverride;
+
+  /// Test seam: replaces the SIGTSTP self-stop (`Process.killPid`) so
+  /// [_suspend]'s gating/single-flight is assertable without actually
+  /// stopping the test process.
+  final void Function()? _selfStopOverride;
 
   // Snapshotted once: whether each standard stream is a real TTY. Output
   // governs whether we may emit screen-control sequences; input governs
@@ -75,6 +82,11 @@ class PosixTerminalDriver
 
   bool _active = false;
   bool _handoffActive = false;
+  // True from the moment SIGTSTP restore begins until SIGCONT re-enters our
+  // mode. Like [_handoffActive], it gates frame [write]s: while the terminal
+  // is restored for the shell (or the process is stopped), a frame flush must
+  // not spray ANSI onto the user's screen. Also single-flights [_suspend].
+  bool _suspended = false;
   TerminalMode? _mode;
 
   // Image-protocol probe state. While [_probing] is true the stdin listener
@@ -183,8 +195,9 @@ class PosixTerminalDriver
       Platform.environment,
     );
     final override = _imageProtocolOverride;
-    final merged =
-        override == null ? base : base.copyWith(imageProtocol: override);
+    final merged = override == null
+        ? base
+        : base.copyWith(imageProtocol: override);
     final width = _ambiguousCharWidthOverride;
     return width == null ? merged : merged.copyWith(ambiguousCharWidth: width);
   }
@@ -388,15 +401,44 @@ class PosixTerminalDriver
   Future<void> _suspend() async {
     final mode = _mode;
     if (mode == null) return;
-    if (_wroteEnterSequences) _stdout.write(_exitSequences(mode));
-    if (_changedStdin) _restoreCookedMode();
-    try {
-      await _stdout.flush();
-    } catch (_) {}
+    // Single-flight: a rapid second Ctrl+Z (or one queued while the awaits
+    // below run) must not re-write exit sequences or re-raise the stop.
+    if (_suspended) return;
+    // Gate frame writes BEFORE the first await: without this, a frame flush
+    // scheduled on a microtask / the ~30Hz ticker Timer runs during the
+    // flush/cancel awaits and sprays a full frame onto the restored shell
+    // screen — the classic "my terminal is garbled after Ctrl+Z".
+    _suspended = true;
+    // If a handoff already restored the terminal (an editor is up and the
+    // user Ctrl+Z'd it), don't re-write exit sequences — just stop.
+    if (!_handoffActive) {
+      if (_wroteEnterSequences) _stdout.write(_exitSequences(mode));
+      if (_changedStdin) _restoreCookedMode();
+      try {
+        await _stdout.flush();
+      } catch (_) {}
+    }
     await _tstpSubscription?.cancel();
     _tstpSubscription = null;
-    Process.killPid(pid, ProcessSignal.sigtstp);
+    final selfStop = _selfStopOverride;
+    if (selfStop != null) {
+      selfStop();
+    } else {
+      Process.killPid(pid, ProcessSignal.sigtstp);
+    }
   }
+
+  /// Test seam: drive [_suspend] without a real job-control terminal.
+  @visibleForTesting
+  Future<void> debugSuspend() => _suspend();
+
+  /// Test seam: drive [_resume] (`fg`) without a real SIGCONT.
+  @visibleForTesting
+  void debugResume() => _resume();
+
+  /// Test seam: whether frame writes are currently gated by a Ctrl+Z suspend.
+  @visibleForTesting
+  bool get debugSuspended => _suspended;
 
   /// Invoked inside [runWithTerminalHandoff] after the terminal is restored
   /// and before the operation runs (start) / after it completes and before
@@ -455,12 +497,20 @@ class PosixTerminalDriver
   void _resume() {
     final mode = _mode;
     if (mode == null || !_active) return;
-    if (_changedStdin) _setRawMode();
-    if (_wroteEnterSequences) _stdout.write(_enterSequences(mode));
+    // Clear the write gate BEFORE re-entering so the repaint below can paint.
+    _suspended = false;
+    // Re-arm SIGTSTP regardless — [_suspend] cancelled it.
     _tstpSubscription ??= _watchSignal(
       ProcessSignal.sigtstp,
       (_) => _suspend(),
     );
+    // A SIGCONT delivered while an editor handoff is active (the child and we
+    // share the process group, so we both get `fg`'d) must NOT re-enter our
+    // mode — the child owns the screen. The handoff's own `finally` re-enters
+    // when the operation completes.
+    if (_handoffActive) return;
+    if (_changedStdin) _setRawMode();
+    if (_wroteEnterSequences) _stdout.write(_enterSequences(mode));
     _events.add(ResizeEvent(size));
   }
 
@@ -475,6 +525,7 @@ class PosixTerminalDriver
     if (!_active && !_wroteEnterSequences && !_changedStdin) return;
 
     _handoffActive = false;
+    _suspended = false;
     _flushTimer?.cancel();
     _flushTimer = null;
 
@@ -524,7 +575,10 @@ class PosixTerminalDriver
 
   @override
   void write(String data) {
-    if (_handoffActive) return;
+    // Drop frames while the terminal is handed to a child ([_handoffActive])
+    // or restored for the shell across a Ctrl+Z ([_suspended]) — writing them
+    // would interleave ANSI with an editor's screen or the bare shell prompt.
+    if (_handoffActive || _suspended) return;
     _stdout.write(data);
   }
 
