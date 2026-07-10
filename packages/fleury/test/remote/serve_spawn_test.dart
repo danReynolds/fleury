@@ -310,10 +310,195 @@ void main() {
       await ws.close();
     });
   }, tags: ['integration']);
+
+  group(
+    'fleury serve --spawn hardening (integration)',
+    () {
+      /// Starts a fresh `fleury serve --spawn` with [serveArgs] and [appCmd],
+      /// returning its port + stderr lines. Teardown is registered here.
+      Future<(int, List<String>)> startServe(
+        List<String> serveArgs,
+        List<String> appCmd,
+      ) async {
+        final tempDir = Directory.systemTemp.createTempSync(
+          'fleury_spawn_hard_',
+        );
+        final port = await _unusedLoopbackPort();
+        final pkgRoot = Directory.current.path;
+        final stderrLines = <String>[];
+        final process = await Process.start(Platform.resolvedExecutable, [
+          'run',
+          '$pkgRoot/bin/fleury.dart',
+          'serve',
+          '--port=$port',
+          ...serveArgs,
+          '--spawn',
+          ...appCmd,
+        ], workingDirectory: tempDir.path);
+        final ready = Completer<void>();
+        final sub = process.stderr
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())
+            .listen((line) {
+              stderrLines.add(line);
+              if (line.contains('spawn mode') && !ready.isCompleted) {
+                ready.complete();
+              }
+            });
+        addTearDown(() async {
+          process.kill(ProcessSignal.sigint);
+          await process.exitCode.timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              process.kill(ProcessSignal.sigkill);
+              return process.exitCode;
+            },
+          );
+          await sub.cancel();
+          try {
+            tempDir.deleteSync(recursive: true);
+          } catch (_) {}
+        });
+        await ready.future.timeout(
+          const Duration(seconds: 10),
+          onTimeout: () => throw StateError(
+            'serve did not start within 10s. stderr:\n${stderrLines.join('\n')}',
+          ),
+        );
+        return (port, stderrLines);
+      }
+
+      void sendInit(WebSocket ws) {
+        ws.add(
+          encodeFrame(
+            const InitFrame(
+              size: CellSize(80, 24),
+              colorMode: ColorMode.truecolor,
+              imageProtocol: ImageProtocol.halfBlock,
+              tmuxPassthrough: false,
+              protocolVersion: 1,
+            ),
+          ),
+        );
+      }
+
+      test('connections beyond --max-sessions are rejected (F8)', () async {
+        final pkgRoot = Directory.current.path;
+        final childCwd = Directory.systemTemp.createTempSync('fleury_cap_cwd_');
+        addTearDown(() => childCwd.deleteSync(recursive: true));
+        final (port, stderrLines) = await startServe(
+          ['--max-sessions=1'],
+          [
+            Platform.resolvedExecutable,
+            'run',
+            '$pkgRoot/test/fixtures/spawn_app.dart',
+            'cap-app',
+            childCwd.path,
+          ],
+        );
+
+        // First browser attaches (fills the cap).
+        final ws1 = await WebSocket.connect('ws://127.0.0.1:$port/ws');
+        final inbound = BytesBuilder();
+        final sub = ws1.listen((data) {
+          if (data is List<int>) inbound.add(data);
+        });
+        sendInit(ws1);
+        await _waitFor(
+          () => _hasHelloFrame(inbound.toBytes(), 'cap-app'),
+          timeout: const Duration(seconds: 8),
+          what: 'first session attached',
+        );
+
+        // Second browser must be turned away — each session is a whole Dart VM,
+        // and the cap is what keeps an open reconnect loop from fork-bombing.
+        await expectLater(
+          WebSocket.connect('ws://127.0.0.1:$port/ws'),
+          throwsA(isA<WebSocketException>()),
+          reason: 'the upgrade is refused with 503 at the cap',
+        );
+        await _waitFor(
+          () => stderrLines.any((l) => l.contains('session limit reached')),
+          timeout: const Duration(seconds: 4),
+          what: 'rejection logged',
+        );
+
+        await sub.cancel();
+        await ws1.close();
+      });
+
+      test('the debug wire is OFF for spawned apps unless serve gets --debug '
+          '(F15)', () async {
+        final pkgRoot = Directory.current.path;
+        Future<(WebSocket, BytesBuilder)> connectAndInit(int port) async {
+          final ws = await WebSocket.connect('ws://127.0.0.1:$port/ws');
+          final inbound = BytesBuilder();
+          ws.listen((data) {
+            if (data is List<int>) inbound.add(data);
+          });
+          // v2 = the STRUCTURED (presentation-plan) path — the only path
+          // where runApp wires onDebugRequest at all. A v1 init would make
+          // the OFF assertion vacuous (no negotiatedSink → never answered).
+          ws.add(
+            encodeFrame(
+              const InitFrame(
+                size: CellSize(80, 24),
+                colorMode: ColorMode.truecolor,
+                imageProtocol: ImageProtocol.halfBlock,
+                tmuxPassthrough: false,
+                protocolVersion: 2,
+              ),
+            ),
+          );
+          // Wait for the app's first structured frame so the session is
+          // fully up before we query the debug channel.
+          await _waitFor(
+            () => _frameCount(inbound.toBytes()) > 0,
+            timeout: const Duration(seconds: 10),
+            what: 'fixture first structured frame',
+          );
+          return (ws, inbound);
+        }
+
+        final appCmd = [
+          Platform.resolvedExecutable,
+          'run',
+          '$pkgRoot/test/fixtures/serve_debug_fixture.dart',
+        ];
+
+        // Default: no --debug. The JIT app has debug tooling on, but the WIRE
+        // must stay silent — a shared URL must not pull logs/stacks by default.
+        final (portOff, _) = await startServe(const [], appCmd);
+        final (wsOff, inboundOff) = await connectAndInit(portOff);
+        wsOff.add(encodeFrame(const DebugRequestFrame(7, 'errors', limit: 5)));
+        await Future<void>.delayed(const Duration(milliseconds: 1500));
+        expect(
+          _hasDebugResponse(inboundOff.toBytes()),
+          isFalse,
+          reason: 'without --debug the app must not answer debugRequest frames',
+        );
+        await wsOff.close();
+
+        // Opt-in: --debug re-enables the wire (the local-dev loop).
+        final (portOn, _) = await startServe(const ['--debug'], appCmd);
+        final (wsOn, inboundOn) = await connectAndInit(portOn);
+        wsOn.add(encodeFrame(const DebugRequestFrame(7, 'errors', limit: 5)));
+        await _waitFor(
+          () => _hasDebugResponse(inboundOn.toBytes()),
+          timeout: const Duration(seconds: 5),
+          what: 'debugResponse with --debug',
+        );
+        await wsOn.close();
+      });
+    },
+    tags: ['integration'],
+    timeout: const Timeout(Duration(seconds: 90)),
+  );
 }
 
 /// Polls [check] every 50ms until it returns true or [timeout] elapses.
 /// Throws with [what] in the message if the deadline passes.
+
 Future<void> _waitFor(
   bool Function() check, {
   required Duration timeout,
@@ -329,6 +514,20 @@ Future<void> _waitFor(
 
 /// Decodes [bytes] as a frame stream and returns true if any OUTPUT
 /// frame contains `HELLO_FROM_<tag>`.
+
+/// How many complete frames [bytes] (cumulative WS inbound) decode to.
+int _frameCount(Uint8List bytes) {
+  final decoder = FrameDecoder()..feed(bytes);
+  return decoder.drain().length;
+}
+
+/// Whether [bytes] (cumulative WS inbound) contain a decoded
+/// [DebugResponseFrame].
+bool _hasDebugResponse(Uint8List bytes) {
+  final decoder = FrameDecoder()..feed(bytes);
+  return decoder.drain().any((frame) => frame is DebugResponseFrame);
+}
+
 bool _hasHelloFrame(Uint8List bytes, String tag) {
   final decoder = FrameDecoder()..feed(bytes);
   final needle = 'HELLO_FROM_$tag';

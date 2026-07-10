@@ -398,6 +398,13 @@ Future<int> _runServe(List<String> args) async {
   var originPolicy = const _ServeOriginPolicy.sameOrigin();
   String? token;
   List<String>? spawnCmd;
+  // The debug wire (read_frames / read_logs / read_errors with full stacks)
+  // is opt-in for served apps: a shared URL must not exfiltrate diagnostics
+  // by default. `--debug` re-enables it (the local-dev loop).
+  var debugWire = false;
+  // Every browser session is a full app subprocess; cap them so an open
+  // port (or a reconnect loop) can't fork-bomb the host.
+  var maxSessions = 8;
   // `--spawn` is greedy: everything after it (in argv order) becomes
   // the subprocess command. So `--port=N` and `--host=...` must come
   // BEFORE `--spawn`, which is the natural shell ordering anyway.
@@ -424,6 +431,16 @@ Future<int> _runServe(List<String> args) async {
         stderr.writeln('--token requires a non-empty secret.');
         return 2;
       }
+    } else if (arg == '--debug') {
+      debugWire = true;
+    } else if (arg.startsWith('--max-sessions=')) {
+      final raw = arg.substring('--max-sessions='.length);
+      final parsed = int.tryParse(raw);
+      if (parsed == null || parsed < 1) {
+        stderr.writeln('--max-sessions requires a positive integer.');
+        return 2;
+      }
+      maxSessions = parsed;
     } else if (arg == '--spawn') {
       spawnCmd = args.sublist(i + 1);
       if (spawnCmd.isEmpty) {
@@ -437,7 +454,8 @@ Future<int> _runServe(List<String> args) async {
     } else if (arg == '-h' || arg == '--help') {
       stderr.writeln(
         'fleury serve [--port=<n>] [--host=<addr>] '
-        '[--allow-origin=<origin>] [--token=<secret>] [--spawn <cmd> ...]',
+        '[--allow-origin=<origin>] [--token=<secret>] [--debug] '
+        '[--max-sessions=<n>] [--spawn <cmd> ...]',
       );
       return 0;
     } else {
@@ -470,6 +488,8 @@ Future<int> _runServe(List<String> args) async {
           originPolicy: originPolicy,
           token: token,
           command: spawnCmd,
+          debugWire: debugWire,
+          maxSessions: maxSessions,
         )
       : _runServeBridge(
           host: host,
@@ -901,8 +921,20 @@ Future<int> _runServeSpawn({
   required int port,
   required _ServeOriginPolicy originPolicy,
   required List<String> command,
+  required bool debugWire,
+  required int maxSessions,
   String? token,
 }) async {
+  // Spawned apps get the debug wire only when the operator asked for it:
+  // without --debug, FLEURY_DEBUG_WIRE=0 tells runApp not to answer
+  // debugRequest frames (logs / frame stats / error stacks stay private).
+  // The in-app debug shell is unaffected.
+  // NOTE: spawnFleuryApp's `environment` is a full replacement env, so
+  // merge over the parent's — passing just the flag would strip PATH/HOME
+  // and break `dart run` package resolution in the child.
+  final spawnEnv = debugWire
+      ? null
+      : {...Platform.environment, 'FLEURY_DEBUG_WIRE': '0'};
   final handleDir = _createSpawnHandleDir();
   final httpServer = await HttpServer.bind(host, port);
   stderr.writeln('fleury serve ready (spawn mode)');
@@ -933,6 +965,7 @@ Future<int> _runServeSpawn({
       command: command,
       handleDir: handleDir.path,
       tag: 's$id',
+      environment: spawnEnv,
     );
     unawaited(
       s.done.then((_) {
@@ -969,6 +1002,21 @@ Future<int> _runServeSpawn({
       await _rejectUnauthorizedWebSocket(req);
       return;
     }
+    // Admission cap: each browser session is a full app subprocess, so an
+    // open reconnect loop (or anything hostile that reached the port) must
+    // not be able to fork-bomb the host. The warm standby isn't attached
+    // and doesn't count against the cap.
+    final attached = sessions.where((s) => s.isAttached).length;
+    if (attached >= maxSessions) {
+      stderr.writeln(
+        '[serve] rejecting connection: session limit reached '
+        '($attached/$maxSessions; raise with --max-sessions=<n>).',
+      );
+      req.response.statusCode = HttpStatus.serviceUnavailable;
+      req.response.write('session limit reached');
+      await req.response.close();
+      return;
+    }
     final ws = await WebSocketTransformer.upgrade(req);
 
     // Claim the warm standby and immediately prepare the next one.
@@ -1000,6 +1048,7 @@ Future<int> _runServeSpawn({
       handleDir: handleDir.path,
       browser: ws,
       tag: 's$id',
+      environment: spawnEnv,
     );
     if (!ok) {
       try {
@@ -1075,6 +1124,9 @@ class _SpawnSession {
   /// brought up ahead of a browser), so [attach] can pair instantly.
   bool get isReady => _app != null && !_shuttingDown;
 
+  /// Whether a browser is paired with this session (the warm standby is not).
+  bool get isAttached => _browser != null;
+
   /// Marks this session dead — so a stray [isReady] reads false — and completes
   /// [done] so the warm pool drops it. Used on every terminal path.
   void _markDead() {
@@ -1094,12 +1146,14 @@ class _SpawnSession {
     required List<String> command,
     required String handleDir,
     required String tag,
+    Map<String, String>? environment,
   }) async {
     try {
       _app = await spawnFleuryApp(
         command: command,
         socketPath: _socketPathFor(handleDir),
         connectTimeout: _spawnConnectTimeout,
+        environment: environment,
         onLog: (stream, line) => stderr.writeln('[$tag $stream] $line'),
       );
     } on ProcessException catch (e) {
@@ -1151,6 +1205,7 @@ class _SpawnSession {
     required String handleDir,
     required WebSocket browser,
     required String tag,
+    Map<String, String>? environment,
   }) async {
     _browser = browser;
     // The browser sends INIT immediately after the WebSocket opens, before the
@@ -1163,6 +1218,7 @@ class _SpawnSession {
         command: command,
         socketPath: _socketPathFor(handleDir),
         connectTimeout: _spawnConnectTimeout,
+        environment: environment,
         abort: browserInput.closed,
         onLog: (stream, line) => stderr.writeln('[$tag $stream] $line'),
       );
