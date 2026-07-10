@@ -78,16 +78,21 @@ void main() {
     late _RecordingStdout out;
     late _FakeStdin input;
     late int selfStops;
+    late bool stopTakes;
     late PosixTerminalDriver driver;
 
     setUp(() async {
       out = _RecordingStdout();
       input = _FakeStdin();
       selfStops = 0;
+      stopTakes = true;
       driver = PosixTerminalDriver(
         stdinOverride: input,
         stdoutOverride: out,
-        selfStopOverride: () => selfStops++,
+        selfStopOverride: () {
+          selfStops++;
+          return stopTakes;
+        },
       );
       await driver.enter(TerminalMode.interactive);
     });
@@ -144,5 +149,21 @@ void main() {
         );
       },
     );
+
+    test('a stop that does not take un-gates instead of freezing', () async {
+      // If the self-stop fails (killPid returns false), we're still running —
+      // the gate must NOT latch, or write() would no-op forever waiting for a
+      // resume that never comes (a frozen screen — worse than the garble the
+      // gate prevents).
+      stopTakes = false;
+      await driver.debugSuspend();
+      expect(
+        driver.debugSuspended,
+        isFalse,
+        reason: 'a failed stop leaves us running, so frames must still flow',
+      );
+      driver.write('STILL-ALIVE');
+      expect(out.written.toString(), contains('STILL-ALIVE'));
+    });
   });
 }

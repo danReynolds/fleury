@@ -35,7 +35,7 @@ class PosixTerminalDriver
     Stdout? stdoutOverride,
     this.signalGrace = const Duration(seconds: 5),
     @visibleForTesting void Function(int exitCode)? forceExitOverride,
-    @visibleForTesting void Function()? selfStopOverride,
+    @visibleForTesting bool Function()? selfStopOverride,
   }) : _stdin = stdinOverride ?? stdin,
        _stdout = stdoutOverride ?? stdout,
        _forceExitOverride = forceExitOverride,
@@ -56,8 +56,9 @@ class PosixTerminalDriver
 
   /// Test seam: replaces the SIGTSTP self-stop (`Process.killPid`) so
   /// [_suspend]'s gating/single-flight is assertable without actually
-  /// stopping the test process.
-  final void Function()? _selfStopOverride;
+  /// stopping the test process. Returns whether the stop "took" — a test can
+  /// return false to exercise the failed-stop un-gate path.
+  final bool Function()? _selfStopOverride;
 
   // Snapshotted once: whether each standard stream is a real TTY. Output
   // governs whether we may emit screen-control sequences; input governs
@@ -404,27 +405,48 @@ class PosixTerminalDriver
     // Single-flight: a rapid second Ctrl+Z (or one queued while the awaits
     // below run) must not re-write exit sequences or re-raise the stop.
     if (_suspended) return;
-    // Gate frame writes BEFORE the first await: without this, a frame flush
-    // scheduled on a microtask / the ~30Hz ticker Timer runs during the
-    // flush/cancel awaits and sprays a full frame onto the restored shell
-    // screen — the classic "my terminal is garbled after Ctrl+Z".
-    _suspended = true;
-    // If a handoff already restored the terminal (an editor is up and the
-    // user Ctrl+Z'd it), don't re-write exit sequences — just stop.
+    // Latch the frame-write gate only if a resume can actually clear it — a
+    // watched SIGCONT in production, or a test driving debugResume (which
+    // supplies selfStopOverride). Without an observable resume, gating would
+    // risk a permanently FROZEN screen if `fg` delivers a SIGCONT nobody
+    // handles; the ungated fall-through matches the pre-gate behavior
+    // (visible, if briefly garbled) — strictly the safer failure. Set BEFORE
+    // the first await so a scheduled frame flush can't spray onto the shell
+    // during the flush/cancel below.
+    final canResume = _contSubscription != null || _selfStopOverride != null;
+    _suspended = canResume;
+    // Restore the terminal for the shell. Guarded so a failing write/flush
+    // still reaches the stop below: a half-suspend that never stops (and so
+    // is never resumed) would otherwise wedge the gate forever. If a handoff
+    // already restored the terminal (an editor is up and the user Ctrl+Z'd
+    // it), skip the re-write.
     if (!_handoffActive) {
-      if (_wroteEnterSequences) _stdout.write(_exitSequences(mode));
-      if (_changedStdin) _restoreCookedMode();
       try {
+        if (_wroteEnterSequences) _stdout.write(_exitSequences(mode));
+        if (_changedStdin) _restoreCookedMode();
         await _stdout.flush();
       } catch (_) {}
     }
-    await _tstpSubscription?.cancel();
+    try {
+      await _tstpSubscription?.cancel();
+    } catch (_) {}
     _tstpSubscription = null;
     final selfStop = _selfStopOverride;
+    final bool stopped;
     if (selfStop != null) {
-      selfStop();
+      stopped = selfStop();
     } else {
-      Process.killPid(pid, ProcessSignal.sigtstp);
+      stopped = Process.killPid(pid, ProcessSignal.sigtstp);
+    }
+    if (!stopped) {
+      // The stop didn't take (e.g. killPid failed) — we're still running, so
+      // un-gate and re-arm SIGTSTP rather than freeze waiting for a resume
+      // that will never come.
+      _suspended = false;
+      _tstpSubscription ??= _watchSignal(
+        ProcessSignal.sigtstp,
+        (_) => _suspend(),
+      );
     }
   }
 
