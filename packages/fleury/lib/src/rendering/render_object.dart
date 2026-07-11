@@ -134,6 +134,76 @@ final class SemanticPaintBoundsCapture {
   }
 }
 
+/// Re-registers a pointer region at [screenRect] — the replay counterpart of
+/// [RenderPointerListener]'s in-paint registration.
+typedef PointerRegionRegister = void Function(CellRect screenRect);
+
+/// A pointer region registered during a paint that a [RenderRepaintBoundary]
+/// cached. Pointer hit-testing in Fleury is fed by *paint-order registration*
+/// (regions re-register every frame as they paint), so a cached boundary that
+/// skips the subtree walk would drop every region inside it — the item, or a
+/// button within it, silently stops responding on cache-hit frames. This is
+/// the exact problem [SemanticPaintBoundsRecord] solves for semantics; pointer
+/// regions get the same capture-and-replay treatment so the boundary stays
+/// transparent to input.
+final class PointerRegionRecord {
+  const PointerRegionRecord({
+    required this.register,
+    required this.localBounds,
+  });
+
+  final PointerRegionRegister register;
+  final CellRect localBounds;
+
+  void publishToActiveCapture(CellOffset paintOffset) {
+    PointerRegionCapture.record(register, _translate(localBounds, paintOffset));
+  }
+
+  void replay({
+    required CellOffset paintOffset,
+    required CellOffset screenOffset,
+  }) {
+    // Re-record into an enclosing boundary's capture (nested boundaries), then
+    // re-register at the current screen position. Unlike semantic bounds the
+    // pointer path does not intersect clipRect — the live registration
+    // (RenderPointerListener.paint) doesn't either, so replay stays faithful.
+    publishToActiveCapture(paintOffset);
+    register(_translate(localBounds, screenOffset));
+  }
+
+  static CellRect _translate(CellRect rect, CellOffset offset) {
+    return CellRect(offset: offset + rect.offset, size: rect.size);
+  }
+}
+
+/// Stack-scoped collector for pointer regions registered during paint — the
+/// pointer counterpart of [SemanticPaintBoundsCapture].
+final class PointerRegionCapture {
+  PointerRegionCapture._();
+
+  static final List<List<PointerRegionRecord>> _stack =
+      <List<PointerRegionRecord>>[];
+
+  static void collect(
+    List<PointerRegionRecord> records,
+    void Function() paint,
+  ) {
+    _stack.add(records);
+    try {
+      paint();
+    } finally {
+      _stack.removeLast();
+    }
+  }
+
+  static void record(PointerRegionRegister register, CellRect localBounds) {
+    if (_stack.isEmpty) return;
+    _stack.last.add(
+      PointerRegionRecord(register: register, localBounds: localBounds),
+    );
+  }
+}
+
 /// Parent-attached layout metadata.
 ///
 /// Multi-child render objects (Flex, Stack) keep per-child layout state

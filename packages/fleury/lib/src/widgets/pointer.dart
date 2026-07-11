@@ -483,13 +483,17 @@ class RenderPointerListener extends RenderObject
     // coordinates, and inside a composited subtree (an effect's scratch
     // buffer) the local offset is scratch-relative — hit-testing against it
     // targets phantom positions.
-    _rect = CellRect(offset: screenOffset ?? offset, size: size);
+    final screen = screenOffset ?? offset;
+    _rect = CellRect(offset: screen, size: size);
     _router?._register(this);
-    _child?.paint(
-      buffer,
-      offset,
-      screenOffset: screenOffset ?? offset,
-      clipRect: clipRect,
-    );
+    // Record for a possible enclosing RepaintBoundary: on a cache-hit frame it
+    // skips this paint, so it must replay the registration or the region goes
+    // dead. localBounds is in paint-local coords (like the semantic record),
+    // re-translated to the current screen offset at replay.
+    PointerRegionCapture.record((screenRect) {
+      _rect = screenRect;
+      _router?._register(this);
+    }, CellRect(offset: offset, size: size));
+    _child?.paint(buffer, offset, screenOffset: screen, clipRect: clipRect);
   }
 }

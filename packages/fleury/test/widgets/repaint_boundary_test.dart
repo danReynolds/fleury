@@ -84,5 +84,65 @@ void main() {
         expect(out.contains('count=1'), isTrue);
       },
     );
+
+    testWidgets(
+      'a GestureDetector inside a cached boundary still fires on cache-hit',
+      (tester) {
+        // Pointer hit-testing is fed by paint-order registration, and a
+        // cache-hit skips the subtree paint — so without the boundary
+        // replaying its captured pointer regions, an interactive widget
+        // inside a cached item (a button in a list row) would silently go
+        // dead the moment the boundary stops repainting.
+        var taps = 0;
+        final sibling = GlobalKey<_CounterState>();
+        tester.pumpWidget(
+          Column(
+            children: [
+              RepaintBoundary(
+                child: GestureDetector(
+                  onTap: () => taps++,
+                  child: const Text('tap me'),
+                ),
+              ),
+              _Counter(key: sibling),
+            ],
+          ),
+        );
+        const size = CellSize(20, 2);
+        tester.render(size: size); // frame 1: paints + registers the region
+
+        // A sibling changes; the boundary's own content does not, so the next
+        // frame is a cache-hit — the frame that drops the region without the
+        // replay fix.
+        sibling.currentState!.bump();
+        tester.render(size: size);
+
+        // Click the region that now exists only because the boundary replayed
+        // it. down + up over the same cell = a tap.
+        tester.sendMouse(
+          const MouseEvent(
+            kind: MouseEventKind.down,
+            button: MouseButton.left,
+            col: 2,
+            row: 0,
+          ),
+        );
+        tester.sendMouse(
+          const MouseEvent(
+            kind: MouseEventKind.up,
+            button: MouseButton.left,
+            col: 2,
+            row: 0,
+          ),
+        );
+        expect(
+          taps,
+          1,
+          reason:
+              'the boundary must replay pointer regions on cache-hit — '
+              'without it the GestureDetector is dead once cached',
+        );
+      },
+    );
   });
 }

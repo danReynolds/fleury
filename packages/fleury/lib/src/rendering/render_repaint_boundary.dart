@@ -119,6 +119,7 @@ class RenderRepaintBoundary extends RenderObject
   CellRect? _cacheBounds;
   List<SemanticPaintBoundsRecord> _semanticBounds =
       const <SemanticPaintBoundsRecord>[];
+  List<PointerRegionRecord> _pointerRegions = const <PointerRegionRecord>[];
 
   @override
   bool get isRepaintBoundary => true;
@@ -165,19 +166,25 @@ class RenderRepaintBoundary extends RenderObject
     if (needsPaint) {
       final targetCache = cache;
       final capturedSemanticBounds = <SemanticPaintBoundsRecord>[];
+      final capturedPointerRegions = <PointerRegionRecord>[];
       cache.withoutDamageTracking(() {
         targetCache.clear();
         SemanticPaintBoundsCapture.collect(capturedSemanticBounds, () {
-          c.paint(
-            targetCache,
-            CellOffset.zero,
-            screenOffset: screenOffset ?? offset,
-            clipRect: clipRect,
-          );
+          PointerRegionCapture.collect(capturedPointerRegions, () {
+            c.paint(
+              targetCache,
+              CellOffset.zero,
+              screenOffset: screenOffset ?? offset,
+              clipRect: clipRect,
+            );
+          });
         });
       });
       _semanticBounds = List<SemanticPaintBoundsRecord>.unmodifiable(
         capturedSemanticBounds,
+      );
+      _pointerRegions = List<PointerRegionRecord>.unmodifiable(
+        capturedPointerRegions,
       );
       // Tighten the next blit to just the non-empty cells. For dense
       // subtrees that's the full size (no penalty); for sparse subtrees
@@ -191,6 +198,10 @@ class RenderRepaintBoundary extends RenderObject
         screenOffset: screenOffset ?? offset,
         clipRect: clipRect,
       );
+      _replayPointerRegions(
+        paintOffset: offset,
+        screenOffset: screenOffset ?? offset,
+      );
     }
 
     final bounds = _cacheBounds;
@@ -200,6 +211,7 @@ class RenderRepaintBoundary extends RenderObject
     );
     if (repainted) {
       _publishSemanticBounds(paintOffset: offset);
+      _publishPointerRegions(paintOffset: offset);
     }
     if (bounds == null) return; // entirely empty cache — nothing to draw
     final cacheForCopy = cache;
@@ -233,6 +245,21 @@ class RenderRepaintBoundary extends RenderObject
         screenOffset: screenOffset,
         clipRect: clipRect,
       );
+    }
+  }
+
+  void _publishPointerRegions({required CellOffset paintOffset}) {
+    for (final record in _pointerRegions) {
+      record.publishToActiveCapture(paintOffset);
+    }
+  }
+
+  void _replayPointerRegions({
+    required CellOffset paintOffset,
+    required CellOffset screenOffset,
+  }) {
+    for (final record in _pointerRegions) {
+      record.replay(paintOffset: paintOffset, screenOffset: screenOffset);
     }
   }
 }
