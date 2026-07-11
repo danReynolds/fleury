@@ -667,15 +667,25 @@ class _ListViewState extends State<ListView> {
                         children: [built, separator],
                       );
                 // The GestureDetector wraps the WHOLE block (not the item
-                // alone) so it is the block's render root: the lazy list threads
-                // screenOffset to item roots, so the tap region lands at the
-                // item's true screen row even when a tall block overflows the
-                // viewport and its inner Column paints through the clip path
-                // (which drops screenOffset for its own children). A tap on a
-                // separator row therefore selects the item it trails.
-                return GestureDetector(
-                  onTapDown: (_, _) => _handleItemTap(index),
-                  child: content,
+                // alone): the lazy list threads screenOffset to item roots, so
+                // the tap region lands at the item's true screen row even when
+                // a tall block overflows the viewport and its inner Column
+                // paints through the clip path (which drops screenOffset for its
+                // own children). A tap on a separator row therefore selects the
+                // item it trails.
+                //
+                // With the RepaintBoundary outermost, the boundary becomes the
+                // block's render root — it passes the threaded screenOffset
+                // through on repaint and replays the tap region at that same
+                // screenOffset on cache-hit, so a scrolled-but-unchanged item
+                // blits its cached cells at the new row AND its tap region
+                // follows. Caching a lazy row across scroll is the bigger win
+                // here; the eager path only saved localized in-place updates.
+                return _maybeBoundary(
+                  GestureDetector(
+                    onTapDown: (_, _) => _handleItemTap(index),
+                    child: content,
+                  ),
                 );
               },
               selectedIndex: selected,
