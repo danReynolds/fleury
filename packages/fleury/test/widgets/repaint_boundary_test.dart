@@ -144,5 +144,93 @@ void main() {
         );
       },
     );
+
+    testWidgets('a change under an INNER boundary refreshes the OUTER cache', (
+      tester,
+    ) {
+      // An outer boundary's cached blit embeds the inner boundary's painted
+      // cells, so a change under the inner must dirty the outer too — else the
+      // outer cache-hits and blits stale content (and, with pointer/semantic
+      // replay, re-registers regions from a subtree that has since changed).
+      final inner = GlobalKey<_CounterState>();
+      tester.pumpWidget(
+        RepaintBoundary(
+          child: RepaintBoundary(child: _Counter(key: inner)),
+        ),
+      );
+      const size = CellSize(12, 1);
+      expect(tester.renderToString(size: size).trim(), 'count=0');
+
+      inner.currentState!.bump();
+      tester.pump();
+      expect(
+        tester.renderToString(size: size).trim(),
+        'count=1',
+        reason:
+            'the inner change must reach the screen through the outer '
+            'boundary — marking only the nearest boundary leaves it stale',
+      );
+    });
+
+    testWidgets('a removed inner region does not keep firing via the outer', (
+      tester,
+    ) {
+      // The input counterpart of the staleness bug: without dirtying the outer,
+      // a GestureDetector removed inside an inner boundary would keep firing
+      // its captured onTap when the outer replays its stale regions.
+      var taps = 0;
+      final toggle = GlobalKey<_ToggleState>();
+      tester.pumpWidget(
+        RepaintBoundary(
+          child: RepaintBoundary(
+            child: _Toggle(key: toggle, onTap: () => taps++),
+          ),
+        ),
+      );
+      const size = CellSize(12, 1);
+      tester.render(size: size); // region present + captured
+
+      toggle.currentState!.hide(); // remove the GestureDetector
+      tester.render(size: size); // outer must refresh, dropping the region
+
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.down,
+          button: MouseButton.left,
+          col: 1,
+          row: 0,
+        ),
+      );
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.up,
+          button: MouseButton.left,
+          col: 1,
+          row: 0,
+        ),
+      );
+      expect(
+        taps,
+        0,
+        reason:
+            'a removed region must not keep firing through a stale outer cache',
+      );
+    });
   });
+}
+
+class _Toggle extends StatefulWidget {
+  const _Toggle({super.key, required this.onTap});
+  final void Function() onTap;
+  @override
+  State<_Toggle> createState() => _ToggleState();
+}
+
+class _ToggleState extends State<_Toggle> {
+  bool _shown = true;
+  void hide() => setState(() => _shown = false);
+  @override
+  Widget build(BuildContext context) => _shown
+      ? GestureDetector(onTap: widget.onTap, child: const Text('hit'))
+      : const Text('gone');
 }

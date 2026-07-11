@@ -184,6 +184,11 @@ final class PointerRegionCapture {
   static final List<List<PointerRegionRecord>> _stack =
       <List<PointerRegionRecord>>[];
 
+  /// Whether a boundary is currently capturing. Regions check this before
+  /// building their record so an unenclosed region — the common case — does
+  /// no per-paint allocation at all.
+  static bool get isActive => _stack.isNotEmpty;
+
   static void collect(
     List<PointerRegionRecord> records,
     void Function() paint,
@@ -310,7 +315,7 @@ abstract class RenderObject {
   void markNeedsLayout() {
     DebugInvalidations.recordLayout(runtimeType.toString());
     _markNeedsLayoutUp();
-    _markNearestRepaintBoundaryDirty();
+    _markEnclosingRepaintBoundariesDirty();
   }
 
   void _markNeedsLayoutUp() {
@@ -335,7 +340,7 @@ abstract class RenderObject {
   void markNeedsPaint() {
     DebugInvalidations.recordPaint(runtimeType.toString());
     _markNeedsLayoutUp();
-    _markNearestRepaintBoundaryDirty();
+    _markEnclosingRepaintBoundariesDirty();
   }
 
   /// Marks only the nearest enclosing repaint boundary as visually stale.
@@ -348,15 +353,24 @@ abstract class RenderObject {
   void markNeedsPaintOnly() {
     DebugInvalidations.recordPaint(runtimeType.toString());
     _rootFrameDamage?.recordVisualChange();
-    _markNearestRepaintBoundaryDirty();
+    _markEnclosingRepaintBoundariesDirty();
   }
 
-  void _markNearestRepaintBoundaryDirty() {
+  // Marks EVERY enclosing repaint boundary dirty, not just the nearest — an
+  // outer boundary's cached blit embeds the inner boundary's painted cells, so
+  // a change under the inner boundary makes the outer's cache stale too. Marking
+  // only the nearest leaves the outer to cache-hit and blit stale cells (and,
+  // with pointer/semantic replay, re-register regions from a subtree that has
+  // since changed). An already-dirty boundary short-circuits: it was marked by
+  // an earlier walk this frame that already continued to the root, so its
+  // ancestors are dirty too. (Named for the audited paint-only path; also used
+  // by the conservative markNeedsPaint. Layout dirtiness is handled separately.)
+  void _markEnclosingRepaintBoundariesDirty() {
     if (isRepaintBoundary) {
+      if (_needsPaint) return;
       _needsPaint = true;
-      return;
     }
-    _parent?._markNearestRepaintBoundaryDirty();
+    _parent?._markEnclosingRepaintBoundariesDirty();
   }
 
   /// The constraints from the most recent layout pass.
@@ -464,7 +478,7 @@ abstract class RenderObject {
     RenderLayoutDebugStats.recordPerformed();
     if (previousSize != null && previousSize != result) {
       _rootFrameDamage?.recordLayoutOrConservativePaint();
-      _markNearestRepaintBoundaryDirty();
+      _markEnclosingRepaintBoundariesDirty();
     }
     return result;
   }

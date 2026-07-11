@@ -27,19 +27,28 @@ class _RowModel extends ChangeNotifier {
   }
 }
 
-// A full-width, styled row — real per-cell paint work (color + ~100 graphemes),
-// so skipping its repaint is a measurable saving.
+// A row whose per-cell paint cost the caller picks: `cheap` is a short plain
+// Text (the neutral-subtree case the RepaintBoundary docs warn about); the
+// default is a full-width styled row (color + ~100 graphemes), where skipping
+// the repaint is a real saving.
 class _Row extends StatelessWidget {
-  const _Row({required this.index, required this.model, required this.boundary});
+  const _Row({
+    required this.index,
+    required this.model,
+    required this.boundary,
+    required this.cheap,
+  });
   final int index;
   final _RowModel model;
   final bool boundary;
+  final bool cheap;
 
   @override
   Widget build(BuildContext context) {
     final row = ListenableBuilder(
       listenable: model,
       builder: (context, _) {
+        if (cheap) return Text('row $index tick=${model.v}');
         final label = 'row $index  tick=${model.v}  ';
         final filled = label.padRight(_cols, '·');
         return Text(
@@ -55,11 +64,11 @@ class _Row extends StatelessWidget {
   }
 }
 
-Widget _scene(List<_RowModel> models, bool boundary) => Column(
+Widget _scene(List<_RowModel> models, bool boundary, bool cheap) => Column(
   crossAxisAlignment: CrossAxisAlignment.start,
   children: [
     for (var i = 0; i < models.length; i++)
-      _Row(index: i, model: models[i], boundary: boundary),
+      _Row(index: i, model: models[i], boundary: boundary, cheap: cheap),
   ],
 );
 
@@ -76,13 +85,14 @@ double _run({
   required int frames,
   required int warmup,
   required bool boundary,
+  required bool cheap,
 }) {
   final size = CellSize(_cols, rows);
   const renderer = AnsiRenderer();
   const sink = _NullAnsiSink();
   final owner = BuildOwner();
   final models = [for (var i = 0; i < rows; i++) _RowModel()];
-  final root = owner.mountRoot(_scene(models, boundary));
+  final root = owner.mountRoot(_scene(models, boundary, cheap));
   var front = CellBuffer(size);
   var back = CellBuffer(size);
 
@@ -116,18 +126,24 @@ void main(List<String> args) {
   var rows = 40;
   var frames = 2000;
   var warmup = 400;
+  var cheap = false;
   for (final a in args) {
     if (a.startsWith('--rows=')) rows = int.parse(a.substring(7));
     if (a.startsWith('--frames=')) frames = int.parse(a.substring(9));
     if (a.startsWith('--warmup=')) warmup = int.parse(a.substring(9));
+    if (a == '--cheap') cheap = true;
   }
 
   // Interleave a few reps to average out JIT/GC noise between the two modes.
   var baseUs = 0.0, boundUs = 0.0;
   const reps = 3;
   for (var r = 0; r < reps; r++) {
-    baseUs += _run(rows: rows, frames: frames, warmup: warmup, boundary: false);
-    boundUs += _run(rows: rows, frames: frames, warmup: warmup, boundary: true);
+    baseUs += _run(
+      rows: rows, frames: frames, warmup: warmup, boundary: false, cheap: cheap,
+    );
+    boundUs += _run(
+      rows: rows, frames: frames, warmup: warmup, boundary: true, cheap: cheap,
+    );
   }
   baseUs /= reps;
   boundUs /= reps;

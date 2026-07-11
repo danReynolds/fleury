@@ -99,15 +99,21 @@ final class RepaintBoundaryDebugStats {
 ///
 /// This is a CPU paint-memoization, NOT Flutter's GPU compositing layer —
 /// there is no layer tree here, and it does not isolate the subtree from
-/// repaint the way a GPU layer does. Two important limits: layout still
+/// repaint the way a GPU layer does. Two limits to keep in mind: layout still
 /// runs for the whole tree every frame (this caches paint only), and the
 /// `AnsiRenderer` still diffs every cell every frame (the blit just
-/// repopulates the cells the diff then re-examines). So the win is real
-/// only for subtrees whose *paint* is genuinely expensive and rarely
-/// changes (e.g. a syntax-highlighted log pane); layout dirtiness is tracked
-/// separately and can skip same-constraint subtrees even when no boundary is
-/// present. For cheap subtrees repaint boundaries are at best neutral, so
-/// reach for them deliberately, not by default.
+/// repopulates the cells the diff then re-examines).
+///
+/// The win is the skipped paint *walk*: on a localized update, a boundary'd
+/// subtree blits its cache instead of re-running its paint chain. Measured on
+/// the paint-walk probe this is ~3x even for trivially cheap rows and 6-16x for
+/// styled ones — the walk over N siblings costs more than blitting N-1 caches
+/// regardless of per-row cost, so the historical "neutral for cheap subtrees"
+/// guidance held only for a SINGLE boundary in isolation, not for the
+/// one-of-many-changes shape [ListView] auto-wraps. The cost is one reused
+/// cache buffer per boundary (bounded by what's on screen). Reach for a direct
+/// boundary when a subtree's neighbour churns and it doesn't; the list case is
+/// handled for you.
 ///
 /// The boundary is opaque to its caller: parents call `paint(buffer, offset)`
 /// as usual; the cache discipline is internal. Use the [RepaintBoundary]

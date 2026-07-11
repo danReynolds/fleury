@@ -489,11 +489,25 @@ class RenderPointerListener extends RenderObject
     // Record for a possible enclosing RepaintBoundary: on a cache-hit frame it
     // skips this paint, so it must replay the registration or the region goes
     // dead. localBounds is in paint-local coords (like the semantic record),
-    // re-translated to the current screen offset at replay.
-    PointerRegionCapture.record((screenRect) {
-      _rect = screenRect;
-      _router?._register(this);
-    }, CellRect(offset: offset, size: size));
+    // re-translated to the current screen offset at replay. Guarded on an
+    // active capture and using a reused closure field, so an unenclosed region
+    // allocates nothing on this hot path.
+    if (PointerRegionCapture.isActive) {
+      PointerRegionCapture.record(
+        _replayRegister,
+        CellRect(offset: offset, size: size),
+      );
+    }
     _child?.paint(buffer, offset, screenOffset: screen, clipRect: clipRect);
   }
+
+  // Re-registration closure for RepaintBoundary replay, allocated once per
+  // render object (not per paint). A field (not a method) on purpose: a method
+  // tear-off would allocate a fresh bound closure on every pass, defeating the
+  // point — this mirrors the semantic record's stable field.
+  // ignore: prefer_function_declarations_over_variables
+  late final PointerRegionRegister _replayRegister = (screenRect) {
+    _rect = screenRect;
+    _router?._register(this);
+  };
 }
