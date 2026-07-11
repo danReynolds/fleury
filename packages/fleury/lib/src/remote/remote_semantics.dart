@@ -57,6 +57,19 @@ final class SemanticsWireEncoder {
   /// Encodes [snapshot] for the wire, or returns null when the exposed
   /// semantics are unchanged since the last send (so a dirty frame that didn't
   /// actually alter the accessible tree costs zero bytes).
+  ///
+  /// Why re-flatten and structurally compare the WHOLE tree every frame instead
+  /// of trusting `SemanticsOwner`'s `updated` id-set to re-serialize only the
+  /// changed nodes: the serialized form includes each node's screen `bounds`,
+  /// and bounds change independently of the semantic MODEL. In a `Column[A, B]`
+  /// where A grows taller, A rebuilds (and lands in `updated`) but B is merely
+  /// pushed down — B's bounds change with no rebuild, so it is NOT in `updated`.
+  /// Skipping B would ship its stale position to the accessible DOM. The full
+  /// per-frame compare against `_sent` is the ground truth that catches those
+  /// layout-induced bounds shifts; a changed-id fast path would need a separate
+  /// bounds-delta signal (which does not exist — bounds are re-derived at paint
+  /// each frame) before it could be correct. Flattening is O(n) own-fields
+  /// (see [_flatten]); the compare early-exits per unchanged node.
   Uint8List? encode(SemanticInspectionSnapshot snapshot) {
     final flat = _flatten(snapshot.root);
 
