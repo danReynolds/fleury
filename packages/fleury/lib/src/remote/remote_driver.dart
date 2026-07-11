@@ -241,9 +241,12 @@ final class RemoteTerminalDriver
   /// ships only what changed (a full frame once, patches after). No-op on the
   /// ANSI path, and a no-op send when the exposed semantics are unchanged.
   @override
-  void presentSemantics(SemanticInspectionSnapshot snapshot) {
+  void presentSemantics(
+    SemanticInspectionSnapshot snapshot, {
+    SemanticWireDelta? delta,
+  }) {
     if (!_active || !wantsPresentationPlans) return;
-    final bytes = _semanticsEncoder.encode(snapshot);
+    final bytes = _semanticsEncoder.encode(snapshot, delta: delta);
     if (bytes == null) return;
     _transport.send(SemanticsFrame(bytes));
   }

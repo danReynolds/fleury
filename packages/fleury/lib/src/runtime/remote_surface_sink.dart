@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import '../foundation/geometry.dart';
 import '../remote/remote_protocol.dart' show RemoteClipboardStatus;
+import '../remote/remote_semantics.dart' show SemanticWireDelta;
 import '../rendering/cell_buffer.dart';
 import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
@@ -17,11 +18,8 @@ typedef RemoteSemanticActionHandler =
 /// browser DevTools panel asking for recent frame stats / error records).
 /// Implementations answer via [RemoteSurfaceSink.presentDebugResponse] with
 /// the same [seq].
-typedef RemoteDebugRequestHandler = void Function(
-  int seq,
-  String kind,
-  int limit,
-);
+typedef RemoteDebugRequestHandler =
+    void Function(int seq, String kind, int limit);
 
 /// A driver that wants structured frames instead of ANSI bytes.
 ///
@@ -51,8 +49,14 @@ abstract interface class RemoteSurfaceSink {
   /// stays agent-drivable and accessible. The sink diffs it against the last
   /// sent snapshot and ships only what changed — a full frame once per peer,
   /// patches after — because a full resend stops compressing past DEFLATE's
-  /// 32 KiB window. Called when the semantic tree changed.
-  void presentSemantics(SemanticInspectionSnapshot snapshot);
+  /// 32 KiB window. Called when the semantic tree changed. [delta] optionally
+  /// names the nodes whose wire form may have changed (from `SemanticsOwner`'s
+  /// per-frame diff), letting the encoder re-serialize only those; a null delta
+  /// falls back to a full flatten + structural compare.
+  void presentSemantics(
+    SemanticInspectionSnapshot snapshot, {
+    SemanticWireDelta? delta,
+  });
 
   /// Ships the focused editable's caret rect (or its absence) so the peer
   /// can position its hidden IME capture element at the caret. Callers
