@@ -964,8 +964,12 @@ String _renderSemanticKeySegment(Key key) {
 
 String? semanticAnchorOf(Element element) {
   final scope = <String>[]; // keyed segments, leaf→root
-  final tail =
-      <String>[]; // positional segments below the nearest key, leaf→root
+  // Elements below the nearest key (leaf→root). We only need their POSITIONAL
+  // indices, but `_childIndexOf` is O(siblings), and a fully-unkeyed subtree
+  // discards the tail entirely (`return null`). So defer the index computation
+  // until we know a key exists — otherwise a wide unkeyed parent makes the whole
+  // build O(nodes × siblings) computing indices it then throws away.
+  final tailElements = <Element>[];
   var sawKey = false;
   Element? e = element;
   while (e != null) {
@@ -974,11 +978,12 @@ String? semanticAnchorOf(Element element) {
       scope.add(escapeSemanticIdSegment(_renderSemanticKeySegment(key)));
       sawKey = true;
     } else if (!sawKey) {
-      tail.add('~${_childIndexOf(e)}');
+      tailElements.add(e);
     }
     e = e.elementParent;
   }
-  if (!sawKey) return null;
+  if (!sawKey) return null; // no `_childIndexOf` computed for the unkeyed case
+  final tail = <String>[for (final t in tailElements) '~${_childIndexOf(t)}'];
   return 'auto:${[...scope.reversed, ...tail.reversed].join('/')}';
 }
 
