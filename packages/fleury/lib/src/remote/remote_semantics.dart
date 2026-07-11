@@ -135,7 +135,11 @@ bool _jsonEquals(Object? a, Object? b) {
 Map<String, Map<String, Object?>> _flatten(SemanticInspectionNode root) {
   final out = <String, Map<String, Object?>>{};
   void visit(SemanticInspectionNode node) {
-    final json = Map<String, Object?>.of(node.toJson())..remove('children');
+    // toScalarJson is this node's OWN fields, O(1). The old
+    // `toJson()..remove('children')` built the entire recursive subtree JSON
+    // first and threw the children away — at every level, so each subtree was
+    // re-serialized once per ancestor (O(n·depth), all discarded).
+    final json = node.toScalarJson(includeBounds: true);
     if (node.children.isNotEmpty) {
       json['childIds'] = <String>[for (final c in node.children) c.id];
     }
