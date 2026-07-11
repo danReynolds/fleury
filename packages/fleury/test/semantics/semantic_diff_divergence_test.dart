@@ -171,5 +171,64 @@ void main() {
         'compound',
       );
     });
+
+    test('duplicate ids: delta path stays byte-identical to the full path', () {
+      // Duplicate ids are an out-of-contract degraded state, but the O(changed)
+      // delta path must still agree with the full flatten — `_flatten` and
+      // `nodeById` both pick the FIRST node for an id, so the two paths ship
+      // the same body and the encoder's `_sent` never drifts. (Regression for
+      // the first-vs-last selection mismatch: nodeById returns first, `_flatten`
+      // must too.)
+      SemanticTree dup(String firstLabel) => SemanticTree(
+        root: SemanticNode(
+          id: const SemanticNodeId('root'),
+          role: SemanticRole.app,
+          children: [
+            SemanticNode(
+              id: const SemanticNodeId('dup'),
+              role: SemanticRole.text,
+              label: firstLabel,
+              bounds: CellRect.fromLTWH(0, 0, 4, 1),
+            ),
+            SemanticNode(
+              id: const SemanticNodeId('dup'),
+              role: SemanticRole.text,
+              label: 'second',
+              bounds: CellRect.fromLTWH(0, 1, 4, 1),
+            ),
+          ],
+        ),
+      );
+
+      // Mutate the FIRST dup (the one first-wins keeps) so both paths emit a
+      // real, non-empty patch to compare byte-for-byte.
+      final prev = dup('first');
+      final next = dup('FIRST');
+      final prevSnap = SemanticInspectionSnapshot.fromTree(prev);
+      final nextSnap = SemanticInspectionSnapshot.fromTree(next);
+
+      final full = SemanticsWireEncoder()..encode(prevSnap);
+      final fullPatch = full.encode(nextSnap);
+
+      final ownerDiff = SemanticsOwner()..update(prev);
+      final update = ownerDiff.update(next);
+      final delta = SemanticWireDelta(
+        changed: {
+          for (final id in update.added) id.value,
+          for (final id in update.updated) id.value,
+        },
+        removed: {for (final id in update.removed) id.value},
+      );
+      final fast = SemanticsWireEncoder()..encode(prevSnap);
+      final fastPatch = fast.encode(nextSnap, delta: delta);
+
+      expect(
+        fastPatch,
+        fullPatch,
+        reason:
+            'delta and full must pick the same duplicate (first-wins) — '
+            'no oracle fire, no _sent drift',
+      );
+    });
   });
 }

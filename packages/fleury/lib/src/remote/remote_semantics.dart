@@ -210,10 +210,17 @@ bool _jsonEquals(Object? a, Object? b) {
 /// is its `toJson()` with `children` replaced by `childIds`, so the structure
 /// is reconstructable from the flat set alone. Insertion order is a stable
 /// pre-order, which keeps the full-frame `nodes` list deterministic.
+///
+/// FIRST-wins on a duplicate id (`putIfAbsent`): ids are supposed to be unique,
+/// but the framework tolerates duplicates as a degraded state. The full path,
+/// the O(changed) delta path (via [SemanticInspectionSnapshot.nodeById], which
+/// also returns the first), and the debug oracle must all pick the SAME node
+/// for a given id, or they disagree on which duplicate's body to ship and
+/// [_sent] drifts. First-wins is that single rule.
 Map<String, Map<String, Object?>> _flatten(SemanticInspectionNode root) {
   final out = <String, Map<String, Object?>>{};
   void visit(SemanticInspectionNode node) {
-    out[node.id] = _flattenNode(node);
+    out.putIfAbsent(node.id, () => _flattenNode(node));
     for (final child in node.children) {
       visit(child);
     }
