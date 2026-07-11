@@ -134,6 +134,81 @@ final class SemanticPaintBoundsCapture {
   }
 }
 
+/// Re-registers a pointer region at [screenRect] — the replay counterpart of
+/// [RenderPointerListener]'s in-paint registration.
+typedef PointerRegionRegister = void Function(CellRect screenRect);
+
+/// A pointer region registered during a paint that a [RenderRepaintBoundary]
+/// cached. Pointer hit-testing in Fleury is fed by *paint-order registration*
+/// (regions re-register every frame as they paint), so a cached boundary that
+/// skips the subtree walk would drop every region inside it — the item, or a
+/// button within it, silently stops responding on cache-hit frames. This is
+/// the exact problem [SemanticPaintBoundsRecord] solves for semantics; pointer
+/// regions get the same capture-and-replay treatment so the boundary stays
+/// transparent to input.
+final class PointerRegionRecord {
+  const PointerRegionRecord({
+    required this.register,
+    required this.localBounds,
+  });
+
+  final PointerRegionRegister register;
+  final CellRect localBounds;
+
+  void publishToActiveCapture(CellOffset paintOffset) {
+    PointerRegionCapture.record(register, _translate(localBounds, paintOffset));
+  }
+
+  void replay({
+    required CellOffset paintOffset,
+    required CellOffset screenOffset,
+  }) {
+    // Re-record into an enclosing boundary's capture (nested boundaries), then
+    // re-register at the current screen position. Unlike semantic bounds the
+    // pointer path does not intersect clipRect — the live registration
+    // (RenderPointerListener.paint) doesn't either, so replay stays faithful.
+    publishToActiveCapture(paintOffset);
+    register(_translate(localBounds, screenOffset));
+  }
+
+  static CellRect _translate(CellRect rect, CellOffset offset) {
+    return CellRect(offset: offset + rect.offset, size: rect.size);
+  }
+}
+
+/// Stack-scoped collector for pointer regions registered during paint — the
+/// pointer counterpart of [SemanticPaintBoundsCapture].
+final class PointerRegionCapture {
+  PointerRegionCapture._();
+
+  static final List<List<PointerRegionRecord>> _stack =
+      <List<PointerRegionRecord>>[];
+
+  /// Whether a boundary is currently capturing. Regions check this before
+  /// building their record so an unenclosed region — the common case — does
+  /// no per-paint allocation at all.
+  static bool get isActive => _stack.isNotEmpty;
+
+  static void collect(
+    List<PointerRegionRecord> records,
+    void Function() paint,
+  ) {
+    _stack.add(records);
+    try {
+      paint();
+    } finally {
+      _stack.removeLast();
+    }
+  }
+
+  static void record(PointerRegionRegister register, CellRect localBounds) {
+    if (_stack.isEmpty) return;
+    _stack.last.add(
+      PointerRegionRecord(register: register, localBounds: localBounds),
+    );
+  }
+}
+
 /// Parent-attached layout metadata.
 ///
 /// Multi-child render objects (Flex, Stack) keep per-child layout state
@@ -240,7 +315,7 @@ abstract class RenderObject {
   void markNeedsLayout() {
     DebugInvalidations.recordLayout(runtimeType.toString());
     _markNeedsLayoutUp();
-    _markNearestRepaintBoundaryDirty();
+    _markEnclosingRepaintBoundariesDirty();
   }
 
   void _markNeedsLayoutUp() {
@@ -265,7 +340,7 @@ abstract class RenderObject {
   void markNeedsPaint() {
     DebugInvalidations.recordPaint(runtimeType.toString());
     _markNeedsLayoutUp();
-    _markNearestRepaintBoundaryDirty();
+    _markEnclosingRepaintBoundariesDirty();
   }
 
   /// Marks only the nearest enclosing repaint boundary as visually stale.
@@ -278,15 +353,24 @@ abstract class RenderObject {
   void markNeedsPaintOnly() {
     DebugInvalidations.recordPaint(runtimeType.toString());
     _rootFrameDamage?.recordVisualChange();
-    _markNearestRepaintBoundaryDirty();
+    _markEnclosingRepaintBoundariesDirty();
   }
 
-  void _markNearestRepaintBoundaryDirty() {
+  // Marks EVERY enclosing repaint boundary dirty, not just the nearest — an
+  // outer boundary's cached blit embeds the inner boundary's painted cells, so
+  // a change under the inner boundary makes the outer's cache stale too. Marking
+  // only the nearest leaves the outer to cache-hit and blit stale cells (and,
+  // with pointer/semantic replay, re-register regions from a subtree that has
+  // since changed). An already-dirty boundary short-circuits: it was marked by
+  // an earlier walk this frame that already continued to the root, so its
+  // ancestors are dirty too. (Named for the audited paint-only path; also used
+  // by the conservative markNeedsPaint. Layout dirtiness is handled separately.)
+  void _markEnclosingRepaintBoundariesDirty() {
     if (isRepaintBoundary) {
+      if (_needsPaint) return;
       _needsPaint = true;
-      return;
     }
-    _parent?._markNearestRepaintBoundaryDirty();
+    _parent?._markEnclosingRepaintBoundariesDirty();
   }
 
   /// The constraints from the most recent layout pass.
@@ -394,7 +478,7 @@ abstract class RenderObject {
     RenderLayoutDebugStats.recordPerformed();
     if (previousSize != null && previousSize != result) {
       _rootFrameDamage?.recordLayoutOrConservativePaint();
-      _markNearestRepaintBoundaryDirty();
+      _markEnclosingRepaintBoundariesDirty();
     }
     return result;
   }

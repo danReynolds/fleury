@@ -8,25 +8,34 @@ import 'framework.dart';
 /// walking the subtree's paint methods — a single bulk copy instead of a
 /// recursive paint chain.
 ///
-/// Wrap subtrees that are expensive to paint and change rarely (a sidebar,
-/// a static header, a backdrop). It's opt-in, just like Flutter's
-/// `RepaintBoundary` — the framework doesn't insert these automatically.
+/// Wrap a subtree whose paint you want isolated from a neighbour's churn (a
+/// sidebar beside a live log, a static header above an animating body). Direct
+/// use is opt-in, like Flutter's `RepaintBoundary`.
+///
+/// One place inserts them automatically: [ListView] wraps each item (its
+/// `addRepaintBoundaries` flag, on by default), because a list is the canonical
+/// "one row changes, the rest don't" shape. Measured on the paint-walk probe, a
+/// localized update in an N-row list is ~3x faster even for trivially cheap
+/// rows and 6-16x for styled full-width rows — the paint *walk* over N rows
+/// costs more than blitting N-1 cached rows regardless of per-row cost. The
+/// trade is one reused cache buffer per visible item (bounded by the viewport),
+/// which for a TUI is a small, fixed memory cost for a large CPU win.
 ///
 /// The boundary's child paints into the cache the first time, and again
 /// whenever a `RenderObjectElement` inside it is reconciled or any render
 /// object's child list changes. Stable subtrees (`const` widgets, or
 /// instances kept identical across builds) stay cached across many frames.
+/// A list row that merely SCROLLS keeps its content and only changes offset, so
+/// it cache-hits and blits at the new row — the pruning survives scrolling.
 ///
-/// Do NOT combine boundaries with keys to "recycle" rows of moving
-/// content (the keyed-list pattern from DOM frameworks). When content
-/// scrolls or shifts, keyed boundaries make every moved row a reconciled
-/// subtree — each one invalidates its cache, so the framework pays the
-/// boundary bookkeeping AND the repaint. Measured on the scroll
-/// benchmarks, that is about 2x slower than letting positional rebuild
-/// repaint the rows, and it also defeats scroll detection (which turns
-/// shifted rows into a single buffer move). Boundaries are for content
-/// that is expensive and STAYS PUT; moving content is exactly what the
-/// damage tracker and scroll reuse already handle.
+/// The one anti-pattern: do NOT combine boundaries with KEYS to "recycle" rows
+/// of *changing* content (the keyed-list pattern from DOM frameworks). Keyed
+/// boundaries make every moved-and-mutated row a reconciled subtree — each
+/// invalidates its cache, so you pay the boundary bookkeeping AND the repaint
+/// (measured ~2x slower), and it defeats scroll detection (which turns shifted
+/// rows into a single buffer move). ListView's per-item boundaries are
+/// deliberately POSITIONAL (unkeyed), which is exactly why they cache-hit on
+/// scroll instead of thrashing.
 class RepaintBoundary extends SingleChildRenderObjectWidget
     implements WidgetUpdatePruner {
   const RepaintBoundary({super.key, super.child});

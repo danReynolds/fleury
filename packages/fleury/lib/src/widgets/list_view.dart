@@ -35,6 +35,7 @@ import '../rendering/render_flex.dart';
 import '../rendering/render_object.dart';
 import '../input/events.dart';
 import 'basic.dart';
+import 'repaint_boundary.dart';
 import 'focus.dart';
 import 'framework.dart';
 import 'pointer.dart';
@@ -305,6 +306,7 @@ class ListView extends StatefulWidget {
     this.onSelect,
     this.selectionActive,
     this.scrollbar = false,
+    this.addRepaintBoundaries = true,
   }) : itemCount = null,
        itemBuilder = null,
        separatorBuilder = null;
@@ -323,6 +325,7 @@ class ListView extends StatefulWidget {
     this.onSelect,
     this.selectionActive,
     this.scrollbar = false,
+    this.addRepaintBoundaries = true,
   }) : assert(itemCount >= 0, 'itemCount must be non-negative'),
        separatorBuilder = null,
        children = null;
@@ -351,6 +354,7 @@ class ListView extends StatefulWidget {
     this.onSelect,
     this.selectionActive,
     this.scrollbar = false,
+    this.addRepaintBoundaries = true,
   }) : assert(itemCount >= 0, 'itemCount must be non-negative'),
        children = null;
 
@@ -380,6 +384,15 @@ class ListView extends StatefulWidget {
   /// return `null` to omit that separator. Null for the eager and
   /// [ListView.builder] forms.
   final Widget? Function(BuildContext context, int index)? separatorBuilder;
+
+  /// Wrap each item in a [RepaintBoundary] (default true, Flutter-parity) so a
+  /// localized update — one row's setState, a streaming-token line — repaints
+  /// only that row instead of re-walking every item's paint. Paint CPU scales
+  /// with the change, not the list size; the boundary replays its pointer and
+  /// semantic regions on cache-hit so items stay interactive and accessible.
+  /// Turn off only for a list of trivially-cheap items where the per-item
+  /// boundary bookkeeping would outweigh the saved paint.
+  final bool addRepaintBoundaries;
 
   /// Whether to request focus on first mount.
   final bool autofocus;
@@ -587,6 +600,12 @@ class _ListViewState extends State<ListView> {
     widget.onSelect?.call(index);
   }
 
+  /// Wraps an item in a [RepaintBoundary] when [ListView.addRepaintBoundaries]
+  /// is on (the default). Kept as one seam so the eager and lazy item paths
+  /// wrap identically.
+  Widget _maybeBoundary(Widget item) =>
+      widget.addRepaintBoundaries ? RepaintBoundary(child: item) : item;
+
   @override
   Widget build(BuildContext context) {
     final selected = _controller.selectedIndex;
@@ -604,14 +623,19 @@ class _ListViewState extends State<ListView> {
           builder: (context, active) {
             if (widget.children != null) {
               // Eager: build all children upfront, render object picks the
-              // visible window. Each is made tappable for pointer selection.
+              // visible window. Each is made tappable for pointer selection,
+              // then wrapped in a RepaintBoundary so one item's change repaints
+              // only that item (boundary outermost = Flutter parity; it replays
+              // the item's pointer + semantic regions on cache-hit).
               return _ListViewBody(
                 controller: _controller,
                 children: <Widget>[
                   for (var i = 0; i < widget.children!.length; i++)
-                    GestureDetector(
-                      onTapDown: (_, _) => _handleItemTap(i),
-                      child: widget.children![i],
+                    _maybeBoundary(
+                      GestureDetector(
+                        onTapDown: (_, _) => _handleItemTap(i),
+                        child: widget.children![i],
+                      ),
                     ),
                 ],
               );
@@ -643,15 +667,25 @@ class _ListViewState extends State<ListView> {
                         children: [built, separator],
                       );
                 // The GestureDetector wraps the WHOLE block (not the item
-                // alone) so it is the block's render root: the lazy list threads
-                // screenOffset to item roots, so the tap region lands at the
-                // item's true screen row even when a tall block overflows the
-                // viewport and its inner Column paints through the clip path
-                // (which drops screenOffset for its own children). A tap on a
-                // separator row therefore selects the item it trails.
-                return GestureDetector(
-                  onTapDown: (_, _) => _handleItemTap(index),
-                  child: content,
+                // alone): the lazy list threads screenOffset to item roots, so
+                // the tap region lands at the item's true screen row even when
+                // a tall block overflows the viewport and its inner Column
+                // paints through the clip path (which drops screenOffset for its
+                // own children). A tap on a separator row therefore selects the
+                // item it trails.
+                //
+                // With the RepaintBoundary outermost, the boundary becomes the
+                // block's render root — it passes the threaded screenOffset
+                // through on repaint and replays the tap region at that same
+                // screenOffset on cache-hit, so a scrolled-but-unchanged item
+                // blits its cached cells at the new row AND its tap region
+                // follows. Caching a lazy row across scroll is the bigger win
+                // here; the eager path only saved localized in-place updates.
+                return _maybeBoundary(
+                  GestureDetector(
+                    onTapDown: (_, _) => _handleItemTap(index),
+                    child: content,
+                  ),
                 );
               },
               selectedIndex: selected,

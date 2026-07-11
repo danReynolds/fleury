@@ -3,6 +3,7 @@
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
+import 'package:fleury/src/rendering/render_repaint_boundary.dart';
 import 'package:test/test.dart';
 
 KeyEvent _code(KeyCode kc) => KeyEvent(keyCode: kc);
@@ -285,6 +286,59 @@ void main() {
       tester.render(size: const CellSize(10, 5));
       expect(controller.selectedIndex, 6);
       expect(controller.visibleRange, (first: 2, last: 6));
+    });
+
+    testWidgets('a scrolled, cached lazy item stays tappable at its new row', (
+      tester,
+    ) {
+      // The lazy path wraps each item in a RepaintBoundary. When the list
+      // scrolls, an unchanged item's boundary cache-hits and blits at the new
+      // row — it must ALSO replay its tap region at the threaded screenOffset,
+      // or the row goes dead / hits a stale index. This is the lazy-specific
+      // guard the eager path can't provide.
+      final controller = ListController();
+      final activated = <int>[];
+      tester.pumpWidget(
+        SizedBox(
+          width: 10,
+          height: 5,
+          child: ListView.builder(
+            controller: controller,
+            itemCount: 20,
+            onSelect: activated.add,
+            autofocus: true,
+            itemBuilder: (context, index, selected) =>
+                SizedBox(width: 10, height: 1, child: Text('item $index')),
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(10, 5)); // item 2 painted at row 2
+      expect(controller.visibleRange, (first: 0, last: 4));
+
+      // Scroll: item 2 moves to row 0. Its content is unchanged, so its
+      // boundary cache-hits on this frame — assert that explicitly, or the tap
+      // below would pass even if item 2 repainted (live registration) and the
+      // replay path this test exists for were broken.
+      controller.selectedIndex = 6;
+      RepaintBoundaryDebugStats.beginFrame(enabled: true);
+      tester.render(size: const CellSize(10, 5));
+      final stats = RepaintBoundaryDebugStats.takeFrameStats();
+      RepaintBoundaryDebugStats.beginFrame(enabled: false);
+      expect(controller.visibleRange, (first: 2, last: 6));
+      expect(
+        stats.cachedCount,
+        greaterThan(0),
+        reason:
+            'retained rows (incl. item 2) cache-hit on scroll — so the '
+            'tap below goes through the region replay, not a live repaint',
+      );
+
+      // Tap row 0 — now item 2. The region only lands here because the cached
+      // boundary replayed it at the new screen row, mapped to the right index.
+      tester.sendMouse(_mouse(MouseEventKind.down, 1, 0));
+      tester.sendMouse(_mouse(MouseEventKind.up, 1, 0));
+      expect(controller.selectedIndex, 2);
+      expect(activated, [2]);
     });
 
     testWidgets('selection moving above the top scrolls back up', (tester) {
@@ -1223,6 +1277,117 @@ void main() {
       expect(controller.visibleRange, (first: 5000, last: 5000));
     });
   });
+
+  group('auto repaint boundaries', () {
+    // beginFrame flips a process-global; make sure it never leaks recording
+    // into a later test in the same run.
+    tearDown(() => RepaintBoundaryDebugStats.beginFrame(enabled: false));
+
+    // Deterministic structural lock for the paint-walk win (no timing): with
+    // per-item boundaries on by default, a localized update repaints exactly
+    // the changed item and blits the rest from cache.
+    testWidgets('a localized update repaints only the changed item', (tester) {
+      final rows = [for (var i = 0; i < 6; i++) _Bump()];
+      addTearDown(() {
+        for (final n in rows) {
+          n.dispose();
+        }
+      });
+      tester.pumpWidget(
+        ListView(
+          children: [
+            for (var i = 0; i < 6; i++)
+              ListenableBuilder(
+                listenable: rows[i],
+                builder: (context, _) => Text('row $i = ${rows[i].value}'),
+              ),
+          ],
+        ),
+      );
+      tester.render(size: const CellSize(20, 6)); // warm every item's cache
+
+      rows[2].bump(); // one row changes
+      tester.pump();
+      RepaintBoundaryDebugStats.beginFrame(enabled: true);
+      tester.render(size: const CellSize(20, 6));
+      final stats = RepaintBoundaryDebugStats.takeFrameStats();
+
+      expect(stats.boundaryCount, 6, reason: 'each item is auto-wrapped');
+      expect(
+        stats.repaintedCount,
+        1,
+        reason: 'only the changed row repaints — the paint-walk win',
+      );
+      expect(stats.cachedCount, 5, reason: 'the rest blit from cache');
+    });
+
+    testWidgets('addRepaintBoundaries: false wraps nothing', (tester) {
+      tester.pumpWidget(
+        const ListView(
+          addRepaintBoundaries: false,
+          children: [Text('a'), Text('b'), Text('c')],
+        ),
+      );
+      RepaintBoundaryDebugStats.beginFrame(enabled: true);
+      tester.render(size: const CellSize(10, 3));
+      final stats = RepaintBoundaryDebugStats.takeFrameStats();
+      expect(
+        stats.boundaryCount,
+        0,
+        reason: 'the escape hatch inserts no boundaries',
+      );
+    });
+
+    testWidgets('a selection move repaints only the two affected rows', (
+      tester,
+    ) {
+      // Selection is the primary per-frame driver for keyboard-navigated
+      // lists. Moving it re-invokes itemBuilder with a new `selected` flag for
+      // exactly the old and new rows, so only those two boundaries repaint —
+      // the rest of the visible window blits from cache.
+      final controller = ListController(selectedIndex: 0);
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 20,
+          autofocus: true,
+          selectionActive: true,
+          itemBuilder: (context, index, selected) => SizedBox(
+            width: 10,
+            height: 1,
+            child: Text(selected ? '>item $index' : ' item $index'),
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(10, 6)); // warm the visible caches
+
+      controller.selectedIndex = 3; // 0 deselects, 3 selects — two rows change
+      RepaintBoundaryDebugStats.beginFrame(enabled: true);
+      tester.render(size: const CellSize(10, 6));
+      final stats = RepaintBoundaryDebugStats.takeFrameStats();
+
+      expect(
+        stats.repaintedCount,
+        2,
+        reason: 'only the deselected + selected rows repaint',
+      );
+      expect(
+        stats.cachedCount,
+        greaterThan(0),
+        reason: 'the untouched visible rows blit from cache',
+      );
+    });
+  });
+}
+
+/// A minimal ChangeNotifier for driving a per-row rebuild (ValueNotifier is
+/// not exported).
+class _Bump extends ChangeNotifier {
+  int value = 0;
+  void bump() {
+    value++;
+    notifyListeners();
+  }
 }
 
 /// Tracks mount/unmount per index for lazy-list lifecycle assertions.
