@@ -14,7 +14,6 @@
 import 'dart:async' show scheduleMicrotask, unawaited;
 
 import 'package:characters/characters.dart';
-import 'package:meta/meta.dart' show visibleForTesting;
 
 import '../editing/text_editing.dart';
 import '../editing/text_keymap.dart';
@@ -600,6 +599,49 @@ class _TextAreaDisplay extends LeafRenderObjectWidget {
   }
 }
 
+/// Line-split activity observed in [RenderTextArea] over one stats window.
+final class TextAreaFrameStats {
+  const TextAreaFrameStats({required this.lineSplitCount});
+
+  static const empty = TextAreaFrameStats(lineSplitCount: 0);
+
+  /// Document/placeholder line splits performed while the window was open —
+  /// i.e. misses of the memoized split. A window over frames whose text did
+  /// not change records 0.
+  final int lineSplitCount;
+}
+
+/// Debug-only collector for [RenderTextArea]'s memoized line split.
+///
+/// Mirrors the RenderLayoutDebugStats / RepaintBoundaryDebugStats collectors:
+/// opt-in per window, so production frames pay only a branch at the memo's
+/// recompute site; tests enable it around the frames they want to inspect and
+/// read the result with [takeFrameStats].
+final class TextAreaDebugStats {
+  TextAreaDebugStats._();
+
+  static bool _enabled = false;
+  static int _lineSplitCount = 0;
+
+  static void beginFrame({required bool enabled}) {
+    _enabled = enabled;
+    _lineSplitCount = 0;
+  }
+
+  static TextAreaFrameStats takeFrameStats() {
+    if (!_enabled) return TextAreaFrameStats.empty;
+    final stats = TextAreaFrameStats(lineSplitCount: _lineSplitCount);
+    _enabled = false;
+    _lineSplitCount = 0;
+    return stats;
+  }
+
+  static void recordLineSplit() {
+    if (!_enabled) return;
+    _lineSplitCount += 1;
+  }
+}
+
 /// Lays out text as rows and scrolls vertically to keep the cursor line
 /// visible; paints a one-cell cursor at the selection.
 class RenderTextArea extends RenderObject {
@@ -714,13 +756,6 @@ class RenderTextArea extends RenderObject {
 
   bool get _showPlaceholder => _text.isEmpty && _placeholder.isNotEmpty;
 
-  /// Test-only count of line splits performed by [_linesOf] across all
-  /// [RenderTextArea] instances. Lets tests assert that layout/paint passes
-  /// over an unchanged document perform zero new splits and that edits
-  /// invalidate exactly once, without timing heuristics.
-  @visibleForTesting
-  static int debugLineSplitCount = 0;
-
   // Memoized line split. [_text] and [_placeholder] are immutable strings
   // that are only ever reassigned (the setters produce a fresh instance via
   // [_sanitize] whenever the value changes), so identity of the source
@@ -730,18 +765,19 @@ class RenderTextArea extends RenderObject {
   // cursor moves that change no text. Only one source is consulted per
   // frame (placeholder when the document is empty, the text otherwise), so
   // a single entry suffices.
-  String? _linesCacheSource;
-  List<String> _linesCache = const [];
+  String? _cachedLinesSource;
+  List<String> _cachedLines = const [];
 
   /// Lines of [source], memoized by string identity. Treat the returned
-  /// list as immutable: it is shared across layout/paint passes.
+  /// list as immutable: it is shared across layout/paint passes. Recomputes
+  /// are reported to [TextAreaDebugStats] when a stats window is open.
   List<String> _linesOf(String source) {
-    if (!identical(_linesCacheSource, source)) {
-      _linesCacheSource = source;
-      _linesCache = source.split('\n');
-      debugLineSplitCount++;
+    if (!identical(_cachedLinesSource, source)) {
+      _cachedLinesSource = source;
+      _cachedLines = source.split('\n');
+      TextAreaDebugStats.recordLineSplit();
     }
-    return _linesCache;
+    return _cachedLines;
   }
 
   List<String> get _lines => _linesOf(_text);

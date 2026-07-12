@@ -1191,30 +1191,30 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
   // is invalidated by comparing every input of [buildTreeTableRows]: the
   // widget fields by identity, the resolved tree column by value, and the
   // controller's expansion state by its structural revision.
-  List<TreeTableRow<T>>? _rowsCache;
-  List<TreeTableNode<T>>? _rowsCacheRoots;
-  List<DataTableColumn>? _rowsCacheColumns;
-  TreeTableCellBuilder<T>? _rowsCacheCellBuilder;
-  TreeTableFilterDescriptor? _rowsCacheFilter;
-  TreeTableSearchIndex<T>? _rowsCacheSearchIndex;
-  String? _rowsCacheTreeColumnId;
-  TreeTableController? _rowsCacheController;
-  int _rowsCacheExpansionRevision = -1;
+  List<TreeTableRow<T>>? _cachedRows;
+  List<TreeTableNode<T>>? _cachedRowsRoots;
+  List<DataTableColumn>? _cachedRowsColumns;
+  TreeTableCellBuilder<T>? _cachedRowsCellBuilder;
+  TreeTableFilterDescriptor? _cachedRowsFilter;
+  TreeTableSearchIndex<T>? _cachedRowsSearchIndex;
+  String? _cachedRowsTreeColumnId;
+  TreeTableController? _cachedRowsController;
+  int _cachedRowsExpansionRevision = -1;
 
   List<TreeTableRow<T>> get _rows => _ensureRows();
 
   List<TreeTableRow<T>> _ensureRows() {
     final treeColumnId = _treeColumnId;
-    final cached = _rowsCache;
+    final cached = _cachedRows;
     if (cached != null &&
-        identical(_rowsCacheRoots, widget.roots) &&
-        identical(_rowsCacheColumns, widget.columns) &&
-        identical(_rowsCacheCellBuilder, widget.cellBuilder) &&
-        identical(_rowsCacheFilter, widget.filter) &&
-        identical(_rowsCacheSearchIndex, widget.searchIndex) &&
-        _rowsCacheTreeColumnId == treeColumnId &&
-        identical(_rowsCacheController, _controller) &&
-        _rowsCacheExpansionRevision == _controller._expansionRevision) {
+        identical(_cachedRowsRoots, widget.roots) &&
+        identical(_cachedRowsColumns, widget.columns) &&
+        identical(_cachedRowsCellBuilder, widget.cellBuilder) &&
+        identical(_cachedRowsFilter, widget.filter) &&
+        identical(_cachedRowsSearchIndex, widget.searchIndex) &&
+        _cachedRowsTreeColumnId == treeColumnId &&
+        identical(_cachedRowsController, _controller) &&
+        _cachedRowsExpansionRevision == _controller._expansionRevision) {
       return cached;
     }
     final rows = buildTreeTableRows<T>(
@@ -1226,15 +1226,15 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
       filter: widget.filter,
       searchIndex: widget.searchIndex,
     );
-    _rowsCache = rows;
-    _rowsCacheRoots = widget.roots;
-    _rowsCacheColumns = widget.columns;
-    _rowsCacheCellBuilder = widget.cellBuilder;
-    _rowsCacheFilter = widget.filter;
-    _rowsCacheSearchIndex = widget.searchIndex;
-    _rowsCacheTreeColumnId = treeColumnId;
-    _rowsCacheController = _controller;
-    _rowsCacheExpansionRevision = _controller._expansionRevision;
+    _cachedRows = rows;
+    _cachedRowsRoots = widget.roots;
+    _cachedRowsColumns = widget.columns;
+    _cachedRowsCellBuilder = widget.cellBuilder;
+    _cachedRowsFilter = widget.filter;
+    _cachedRowsSearchIndex = widget.searchIndex;
+    _cachedRowsTreeColumnId = treeColumnId;
+    _cachedRowsController = _controller;
+    _cachedRowsExpansionRevision = _controller._expansionRevision;
     return rows;
   }
 
