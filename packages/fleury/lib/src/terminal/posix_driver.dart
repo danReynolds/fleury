@@ -296,7 +296,7 @@ class PosixTerminalDriver
     // Runs before the app renders so the first frame already uses the right
     // protocol; falls back silently when nothing replies.
     await _maybeProbeImageProtocol();
-    await _maybeProbeAmbiguousWidth();
+    await _maybeProbeAmbiguousWidth(mode.alternateScreen);
 
     _resizeSubscription = _watchSignal(ProcessSignal.sigwinch, (_) {
       _events.add(ResizeEvent(size));
@@ -349,11 +349,16 @@ class PosixTerminalDriver
 
   /// Measures how the terminal sizes ambiguous-width glyphs so the renderer can
   /// drop its defensive per-cell repositioning on terminals that draw them one
-  /// column wide (the common case). Same terminal guards as the image probe;
-  /// runs on the alternate screen and any failure leaves the safe `wide`
-  /// default in place.
-  Future<void> _maybeProbeAmbiguousWidth() async {
+  /// column wide (the common case). Same terminal guards as the image probe,
+  /// plus an alternate-screen gate: the probe paints a scratch glyph at the home
+  /// cell (then erases it) — invisible on the alt buffer, but under an
+  /// `alternateScreen: false` mode it would land on the user's real screen and
+  /// scrollback. So it runs only when [onAlternateScreen] is true; the safety is
+  /// now enforced by this gate rather than being a consequence of call ordering.
+  /// Any failure leaves the safe `wide` default in place.
+  Future<void> _maybeProbeAmbiguousWidth(bool onAlternateScreen) async {
     if (!_stdoutIsTerminal || !_changedStdin) return;
+    if (!onAlternateScreen) return;
     final env = Platform.environment;
     // An explicit FLEURY_AMBIGUOUS_WIDTH=narrow|wide is already reflected in the
     // env-derived base capabilities (detectAmbiguousCharWidthFromEnvironment),

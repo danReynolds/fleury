@@ -34,6 +34,10 @@
 //                            host emits PLAN/SEMANTICS instead)
 //     0x12 PLAN     payload = binary presentation plan (see remote_codec)
 //     0x13 SEMANTICS payload = UTF-8 JSON semantic snapshot
+//     0x16 INLINE_IMAGE payload = [u16 idLen][utf8 id][image bytes] — one
+//                   inline image (browser surface), keyed by content-hash id;
+//                   sent once before the first PLAN that places it, then
+//                   referenced by id so the bytes ride the wire only once
 //     0x17 CLIPBOARD_WRITE payload = [u32 seq][utf8 text] — place text on
 //                   the PEER's clipboard (the user's machine); answered by
 //                   CLIPBOARD_RESULT
@@ -45,6 +49,9 @@
 //                   of guessing from tree diffs. The app also echoes INIT
 //                   (v3+) after receiving the peer's, carrying its protocol
 //                   version so the client can detect skew.
+//     0x1C DEBUG_RESPONSE payload = [u32 seq][u8 kindLen][kind][json] — the
+//                   app's answer to a DEBUG_REQUEST: the recent records for the
+//                   requested kind (shape is per-kind)
 //
 //   Peer (serve / shell) → App, structured input
 //     0x14 INPUT_EVENT payload = binary TuiEvent (see remote_codec)
@@ -54,6 +61,10 @@
 //                   the peer activating a node in its accessible DOM, so a
 //                   served session is operable through the a11y tree, not just
 //                   the visual grid
+//     0x1B DEBUG_REQUEST payload = JSON `{seq,kind,limit}` — a pull-style debug
+//                   query ("send me your recent <kind> records"); answered by
+//                   DEBUG_RESPONSE, or silently dropped by apps predating this
+//                   frame type (unknown discriminators are skipped)
 //
 //   Either direction
 //     0x11 BYE      payload = empty, signals a clean shutdown
@@ -76,6 +87,14 @@
 // and the app-side INIT echo — both additive: a v2 peer skips the
 // result frame and ignores the echo; a v3 client merely can't show
 // action results or detect version skew against a v2 app.
+//
+// The normative statement of this protocol — the version, the frame table
+// above, the additive-vs-version-gated rule, and the launch-relevant caveat
+// that the wire is NOT a public/stable integration surface (same-build peers
+// only; no third-party compat guarantee) — lives in
+// docs/implementation/wire-protocol.md. Keep the two in sync: this comment and
+// the FrameType enum below are the source of truth for frame codes; that doc is
+// the source of truth for the policy.
 
 import 'dart:convert';
 import 'dart:typed_data';

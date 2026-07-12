@@ -797,13 +797,46 @@ bool _isAllowedWebSocketOrigin(
   if (requestHost == null || requestHost.isEmpty) return false;
 
   final normalizedOrigin = _ServeOriginPolicy._normalizeOrigin(origin);
+  // Synthesize the same-origin from the request's OWN scheme, not a hardcoded
+  // http://. Behind a TLS-terminating proxy the browser's Origin is
+  // `https://host`; a hardcoded `http://host` never matches it, so a genuine
+  // same-origin upgrade would be wrongly rejected (and fall through to the
+  // empty-by-default allow-list). See [_sameOriginScheme].
   final sameOrigin = _ServeOriginPolicy._normalizeOrigin(
-    'http://${requestHost.trim()}',
+    '${_sameOriginScheme(req)}://${requestHost.trim()}',
   );
   if (normalizedOrigin != null && normalizedOrigin == sameOrigin) {
     return true;
   }
   return originPolicy.allows(origin);
+}
+
+/// The scheme the browser actually used to reach this server, for the
+/// same-origin comparison.
+///
+/// A TLS-terminating proxy forwards the browser's original scheme in
+/// `X-Forwarded-Proto` (a proxy chain may comma-join them — the first token is
+/// the client-facing one). Absent that header, we fall back to the scheme of
+/// this very connection: `https` on a direct TLS bind, `http` otherwise.
+///
+/// Never throws: `HttpRequest.requestedUri` raises a `FormatException` on a
+/// multi-valued / malformed forwarded scheme, and an exception escaping the
+/// origin check would abort the upgrade handler. A value we can't parse degrades
+/// to the empty scheme, which yields no same-origin match — the explicit
+/// allow-list stays the only path, i.e. it fails closed, never open. (Reading
+/// `X-Forwarded-Proto` here is safe: browsers can't set it on a WebSocket
+/// handshake, and it can only ever change the scheme compared against the SAME
+/// host — never widen the check to a different origin.)
+String _sameOriginScheme(HttpRequest req) {
+  final forwarded = req.headers.value('x-forwarded-proto');
+  if (forwarded != null && forwarded.trim().isNotEmpty) {
+    return forwarded.split(',').first.trim().toLowerCase();
+  }
+  try {
+    return req.requestedUri.scheme;
+  } on FormatException {
+    return '';
+  }
 }
 
 Future<void> _rejectForbiddenWebSocketOrigin(HttpRequest req) async {

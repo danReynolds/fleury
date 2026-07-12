@@ -1,7 +1,8 @@
 # RFC 0016: Inline Mode
 
 **Status:** Exploration — not scheduled; revisit post-launch (or sooner if a
-decision trigger below fires)
+decision trigger below fires). The pre-freeze disposition of the
+`TerminalMode.inline` constant is DONE — it was removed (2026-07-12; see §5).
 **Date:** 2026-07-05
 **Decision point for:** whether/when to build a real inline rendering mode,
 and what to do with the exported-but-unimplemented `TerminalMode.inline`
@@ -69,7 +70,7 @@ Mechanically, inline differs from alt-screen in kind, not degree:
 | **prompt_toolkit** (Python) | Inline-first (powers IPython); full-screen is the opt-in. |
 | **termui** (Dart, small) | Inline via `ESC[nF` cursor-up repositioning. |
 | **Nocterm** (Dart, near peer) | No documented inline mode. |
-| **fleury** | ❌ — an unwired constant (see §5). |
+| **fleury** | ❌ — deferred; the unwired constant has been removed (see §5). |
 
 **Table-stakes verdict:** for general-purpose TUI frameworks, effectively yes
 — unanimous at the top of the field. For *fleury's launch*, no: the launch
@@ -149,16 +150,18 @@ a correction of anything we ship.
 
 ## 5. Current state in fleury — and the pre-freeze action
 
-`TerminalMode.inline` exists (`terminal_driver.dart`) and is **exported public
-API**, but it only skips the alt-screen switch and cursor-hide. The render
-path underneath still paints a terminal-sized buffer at **absolute**
-coordinates and full-clears (`2J`) on entry — in the normal buffer that would
-stomp the user's visible screen and scrollback: worst of both modes. It has
+`TerminalMode.inline` used to exist (`terminal_driver.dart`) and was **exported
+public API**, but it only skipped the alt-screen switch and cursor-hide. The
+render path underneath still painted a terminal-sized buffer at **absolute**
+coordinates and full-cleared (`2J`) on entry — in the normal buffer that would
+stomp the user's visible screen and scrollback: worst of both modes. It had
 zero references, tests, docs, or examples.
 
-**Pre-freeze action: remove the constant** (or explicitly mark it
-experimental/unsupported) so the frozen surface doesn't imply a capability
-that misbehaves. Track the real feature via this RFC.
+**Pre-freeze action — DONE (2026-07-12):** the constant was removed from
+`terminal_driver.dart`, so the frozen surface no longer advertises a capability
+that misbehaves. The `TerminalMode` type, its `interactive` constant, and the
+individual `alternateScreen`/`hideCursor` bools are untouched. The real feature
+is tracked by this RFC.
 
 ## 6. Design sketch (grounded in the current architecture)
 
