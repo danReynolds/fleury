@@ -17,9 +17,12 @@
 // wire (5–13× plan bytes) and is invisible to the in-process tool.
 //
 // `input-latency` is the G4 closed-loop input→paint probe riding this harness.
-// Its structural invariant — every injected key answered by a PLAN within the
-// per-key timeout, exactly one plan per key — is enforced inside the profiler,
-// which exits non-zero on a violation and fails this gate. Its numeric axes
+// Its structural invariant — every injected key answered by exactly one PLAN
+// within the per-key timeout — is enforced inside the profiler: a violated
+// run (missed plan, unsolicited plan, dropped socket) is DISCARDED and the
+// next run tried, and the profiler exits non-zero — failing this gate — only
+// when every run fails, with the message separating an input-path break that
+// reproduces across runs from repeated socket/infra drops. Its numeric axes
 // (latency percentiles AND, for now, its byte axes) are all WARN-ONLY: timing
 // on a live socket is machine-sensitive (cadence precedent), and the byte axes
 // stay warn-only until their run-to-run variance is characterized — promotion
@@ -27,6 +30,8 @@
 
 import 'dart:convert';
 import 'dart:io';
+
+import 'gate_support.dart';
 
 // Byte axes fail beyond this relative increase. Generous: a live socket + real
 // frame loop is noisier than the in-process wire gate.
@@ -46,13 +51,7 @@ Future<void> main(List<String> args) async {
   var update = false;
   String? only;
   for (final arg in args) {
-    if (arg.startsWith('--runs=')) {
-      final v = int.tryParse(arg.substring('--runs='.length));
-      if (v == null || v <= 0) {
-        stderr.writeln('invalid --runs (want a positive integer)');
-        exitCode = 64;
-        return;
-      }
+    if (parsePositiveIntFlag(arg, 'runs') case final v?) {
       runs = v;
     } else if (arg.startsWith('--scenario=')) {
       only = arg.substring('--scenario='.length);
@@ -102,30 +101,24 @@ Future<void> main(List<String> args) async {
     workDir.deleteSync(recursive: true);
   }
 
-  final baselineFile = File(baselinePath);
   if (update) {
     // A filtered update merges into the existing baseline so the entries this
     // run didn't touch stay byte-identical; a full update replaces the file
-    // (which also drops entries for scenarios that no longer exist).
-    final merged = only != null && baselineFile.existsSync()
-        ? ((jsonDecode(baselineFile.readAsStringSync())
-              as Map<String, Object?>)
-            ..addAll(results))
-        : results;
-    baselineFile.writeAsStringSync(
-      '${const JsonEncoder.withIndent('  ').convert(merged)}\n',
-    );
+    // (which also drops entries for scenarios that no longer exist). Baseline
+    // IO goes through gate_support so the canonical format lives in one place.
+    final existing = only != null && File(baselinePath).existsSync()
+        ? readBaselineOrNull(baselinePath, gateName: 'serve wire gate')!
+        : const <String, Object?>{};
+    writeBaselineJson(baselinePath, <String, Object?>{...existing, ...results});
     stdout.writeln('baseline written to $baselinePath');
     return;
   }
-  if (!baselineFile.existsSync()) {
-    stderr.writeln('no baseline at $baselinePath — run --update-baseline');
+
+  final baseline = readBaselineOrNull(baselinePath, gateName: 'serve wire gate');
+  if (baseline == null) {
     exitCode = 64;
     return;
   }
-
-  final baseline =
-      jsonDecode(baselineFile.readAsStringSync()) as Map<String, Object?>;
   var failed = false;
   for (final s in selected) {
     final cur = results[s.id]!;
