@@ -4,40 +4,68 @@
 // is warn-only (it's timing-sensitive on a live socket). On-demand, not CI —
 // each scenario boots a real serve process.
 //
-//   dart run bin/serve_wire_live_gate.dart [--runs=R] [--update-baseline]
+//   dart run bin/serve_wire_live_gate.dart [--runs=R] [--scenario=ID]
+//     [--update-baseline]
+//
+// `--scenario=ID` restricts the run to one scenario; with --update-baseline it
+// MERGES that scenario's entry into the existing baseline, leaving the other
+// entries byte-identical — how a new scenario is added without re-rolling
+// numbers the change didn't touch.
 //
 // Unlike the synthetic serve_wire_profile, this catches regressions in the
 // WHOLE served surface — including the semantics stream, which dominates the
 // wire (5–13× plan bytes) and is invisible to the in-process tool.
+//
+// `input-latency` is the G4 closed-loop input→paint probe riding this harness.
+// Its structural invariant — every injected key answered by exactly one PLAN
+// within the per-key timeout — is enforced inside the profiler: a violated
+// run (missed plan, unsolicited plan, dropped socket) is DISCARDED and the
+// next run tried, and the profiler exits non-zero — failing this gate — only
+// when every run fails, with the message separating an input-path break that
+// reproduces across runs from repeated socket/infra drops. Its numeric axes
+// (latency percentiles AND, for now, its byte axes) are all WARN-ONLY: timing
+// on a live socket is machine-sensitive (cadence precedent), and the byte axes
+// stay warn-only until their run-to-run variance is characterized — promotion
+// to gated is the recorded follow-up (see docs/implementation/perf-gates.md).
 
 import 'dart:convert';
 import 'dart:io';
+
+import 'gate_support.dart';
 
 // Byte axes fail beyond this relative increase. Generous: a live socket + real
 // frame loop is noisier than the in-process wire gate.
 const _byteFailFraction = 0.20;
 
-const _scenarios = <({String id, int steps, int intervalMs})>[
-  (id: 'dashboard', steps: 120, intervalMs: 16),
-  (id: 'log', steps: 120, intervalMs: 16),
-  (id: 'counter', steps: 120, intervalMs: 16),
+// For latency: `samples` is the closed-loop key count (steps/intervalMs are
+// passed to the app but ignored — the scenario never self-ticks).
+const _scenarios = <({String id, int steps, int intervalMs, int? samples})>[
+  (id: 'dashboard', steps: 120, intervalMs: 16, samples: null),
+  (id: 'log', steps: 120, intervalMs: 16, samples: null),
+  (id: 'counter', steps: 120, intervalMs: 16, samples: null),
+  (id: 'input-latency', steps: 120, intervalMs: 16, samples: 50),
 ];
 
 Future<void> main(List<String> args) async {
   var runs = 3;
   var update = false;
+  String? only;
   for (final arg in args) {
-    if (arg.startsWith('--runs=')) {
-      final v = int.tryParse(arg.substring('--runs='.length));
-      if (v == null || v <= 0) {
-        stderr.writeln('invalid --runs (want a positive integer)');
-        exitCode = 64;
-        return;
-      }
+    if (parsePositiveIntFlag(arg, 'runs') case final v?) {
       runs = v;
+    } else if (arg.startsWith('--scenario=')) {
+      only = arg.substring('--scenario='.length);
     } else if (arg == '--update-baseline') {
       update = true;
     }
+  }
+  final selected =
+      _scenarios.where((s) => only == null || s.id == only).toList();
+  if (selected.isEmpty) {
+    stderr.writeln('unknown --scenario "$only" — one of: '
+        '${_scenarios.map((s) => s.id).join(', ')}');
+    exitCode = 64;
+    return;
   }
 
   final scriptDir = File(Platform.script.toFilePath()).parent; // profiling/bin
@@ -48,7 +76,7 @@ Future<void> main(List<String> args) async {
   final workDir = Directory.systemTemp.createTempSync('serve-wire-gate-');
   final results = <String, Map<String, Object?>>{};
   try {
-    for (final s in _scenarios) {
+    for (final s in selected) {
       stdout.writeln('gate: ${s.id}');
       final out = '${workDir.path}/${s.id}.json';
       final r = await Process.run(Platform.resolvedExecutable, [
@@ -57,6 +85,7 @@ Future<void> main(List<String> args) async {
         '--scenario=${s.id}',
         '--steps=${s.steps}',
         '--interval-ms=${s.intervalMs}',
+        if (s.samples != null) '--samples=${s.samples}',
         '--runs=$runs',
         '--out=$out',
       ]);
@@ -72,29 +101,49 @@ Future<void> main(List<String> args) async {
     workDir.deleteSync(recursive: true);
   }
 
-  final baselineFile = File(baselinePath);
   if (update) {
-    baselineFile.writeAsStringSync(
-      '${const JsonEncoder.withIndent('  ').convert(results)}\n',
-    );
+    // A filtered update merges into the existing baseline so the entries this
+    // run didn't touch stay byte-identical; a full update replaces the file
+    // (which also drops entries for scenarios that no longer exist). Baseline
+    // IO goes through gate_support so the canonical format lives in one place.
+    final existing = only != null && File(baselinePath).existsSync()
+        ? readBaselineOrNull(baselinePath, gateName: 'serve wire gate')!
+        : const <String, Object?>{};
+    writeBaselineJson(baselinePath, <String, Object?>{...existing, ...results});
     stdout.writeln('baseline written to $baselinePath');
     return;
   }
-  if (!baselineFile.existsSync()) {
-    stderr.writeln('no baseline at $baselinePath — run --update-baseline');
+
+  final baseline = readBaselineOrNull(baselinePath, gateName: 'serve wire gate');
+  if (baseline == null) {
     exitCode = 64;
     return;
   }
-
-  final baseline =
-      jsonDecode(baselineFile.readAsStringSync()) as Map<String, Object?>;
   var failed = false;
-  for (final s in _scenarios) {
+  for (final s in selected) {
     final cur = results[s.id]!;
     final base = baseline[s.id] as Map<String, Object?>?;
     stdout.writeln('\n${s.id}:');
     if (base == null) {
       stdout.writeln('  (no baseline entry — skipped)');
+      continue;
+    }
+    if (s.samples != null) {
+      // input-latency: the pass/fail axis is STRUCTURAL and already enforced
+      // (profiler exit code). Every numeric axis is warn-only for now — the
+      // latency percentiles permanently (live-socket timing), the byte axes
+      // until run-to-run variance is characterized and they are promoted.
+      for (final axis in [
+        'totalBytes',
+        'deflatedBytes',
+        'planBytesPerFrame',
+        'semanticsBytesPerFrame',
+        'latencyP50Ms',
+        'latencyP95Ms',
+      ]) {
+        _warn(axis, _axis(cur, axis, s.id, 'result'),
+            _axis(base, axis, s.id, 'baseline'));
+      }
       continue;
     }
     // Gate the STABLE totals: raw + deflated bytes over the fixed scenario are

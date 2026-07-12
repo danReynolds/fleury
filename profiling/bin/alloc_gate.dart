@@ -18,8 +18,14 @@
 // scenario; regenerate with --update-baseline after an intentional change or an
 // SDK bump, exactly like the wire gate.
 //
-// MUST be launched with the VM service enabled so it can self-connect:
-//   dart --enable-vm-service=0 --disable-service-auth-codes \
+// MUST be launched with the VM service enabled so it can self-connect, AND
+// with --deterministic: without it, the background JIT can land an
+// allocation-sinking tier mid-window at a nondeterministic frame, collapsing
+// the measured churn by ~25× on some runs (observed at --frames=800; the
+// default window happened to be stable, but that's machine luck, not a
+// guarantee). --deterministic pins compilation order and does not change the
+// default-window number.
+//   dart --deterministic --enable-vm-service=0 --disable-service-auth-codes \
 //     bin/alloc_gate.dart [--gate] [--update-baseline] [--frames=N] [--top=N]
 //
 // Exit codes: 0 pass, 1 regression, 64 usage/setup error.
@@ -53,6 +59,17 @@ class _Model extends ChangeNotifier {
 /// Dashboard-shaped tree: a static header + a watched block whose three
 /// metric lines rebuild + repaint every frame. Exercises build, reconcile,
 /// layout (widths shift as values grow), and paint — the churn-producing path.
+///
+/// The watched block also carries explicit app-authored [Semantics]: one node
+/// whose label/value change every frame (the leaf-update path) and a small
+/// value-stable subtree (the equal-values update path). Semantics /
+/// _SemanticBounds / SemanticNodeId are a known per-frame allocation class;
+/// without these the gate only sees the Texts' implicit nodes and an
+/// app-semantics regression sits outside the window. The semantic strings are
+/// bounded-modulo AND zero-padded, so their width is fixed for ANY
+/// --warmup/--frames window (not just the default one, where warmup happens
+/// to push `v` to 3 digits) — layout, and therefore allocation, cannot drift
+/// as the tick grows.
 Widget _scenario(_Model m) {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -67,6 +84,23 @@ Widget _scenario(_Model m) {
             Text('requests : ${m.v}'),
             Text('errors   : ${m.v % 97}'),
             Text('rate/s   : ${(m.v * 7) % 1000}'),
+            Semantics(
+              role: SemanticRole.region,
+              label: 'metrics ${(m.v % 1000).toString().padLeft(3, '0')}',
+              value: 'r${(m.v % 97).toString().padLeft(2, '0')}',
+              child: Text(
+                'sem live : ${(m.v % 1000).toString().padLeft(3, '0')}',
+              ),
+            ),
+            Semantics(
+              role: SemanticRole.region,
+              label: 'alloc gate static region',
+              child: Semantics(
+                role: SemanticRole.text,
+                label: 'static leaf',
+                child: const Text('sem static: ok'),
+              ),
+            ),
           ],
         ),
       ),

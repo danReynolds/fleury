@@ -40,6 +40,19 @@ int? parseIntFlag(String arg, String name) {
   return value;
 }
 
+/// [parseIntFlag] for flags where zero/negative is meaningless (counts,
+/// intervals, timeouts): additionally rejects `<= 0` as a usage error
+/// (exit 64). Same contract otherwise — null when [arg] isn't this flag,
+/// parse-time only.
+int? parsePositiveIntFlag(String arg, String name) {
+  final value = parseIntFlag(arg, name);
+  if (value != null && value <= 0) {
+    stderr.writeln('invalid --$name: expected a positive integer, got $value');
+    exit(64);
+  }
+  return value;
+}
+
 /// Reads a gate baseline JSON map. When the file is missing, prints the
 /// standard "run with --update-baseline first" hint (prefixed with
 /// [gateName]) and returns null — the caller sets exitCode 64 and returns,
