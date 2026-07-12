@@ -3,12 +3,12 @@
 // and the per-entry repaint boundaries (adaptive engagement, replay,
 // containment).
 
-import 'dart:typed_data';
-
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
 import 'package:fleury/src/rendering/render_repaint_boundary.dart';
 import 'package:test/test.dart';
+
+import '../support/render_fixtures.dart';
 
 Matcher _stateError(String message) => throwsA(
   isA<StateError>().having((error) => error.message, 'message', message),
@@ -96,83 +96,10 @@ class _BumpCounterState extends State<_BumpCounter> {
 
 /// A floating-entry body offset down [rows] so it never overlaps the base
 /// entry's cells.
-Widget _floatAt(int rows, Widget child) =>
-    Padding(padding: EdgeInsets.only(top: rows), child: child);
-
-/// A 4×2 leaf that records an inline-image placement (the true-pixel path)
-/// rather than painting glyphs — so a test can assert the placement is
-/// carried through the boundary's cached blit.
-class _ImageLeaf extends LeafRenderObjectWidget {
-  const _ImageLeaf();
-  @override
-  RenderObject createRenderObject(BuildContext context) => _ImageLeafRender();
-}
-
-class _ImageLeafRender extends RenderObject {
-  @override
-  CellSize performLayout(CellConstraints constraints) =>
-      constraints.constrain(const CellSize(4, 2));
-  @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    buffer.writeImage(
-      offset,
-      Uint8List.fromList([1, 2, 3, 4]),
-      width: 4,
-      height: 2,
-    );
-  }
-}
-
-/// A leaf whose paint throws until healed — the throw happens INSIDE the
-/// entry boundary's cached paint (under the damage-suppression and
-/// capture-collector scopes), which is exactly the path the entry's
-/// implicit ErrorBoundary must contain without corrupting them.
-class _Boom extends LeafRenderObjectWidget {
-  const _Boom({required this.healthy});
-  final bool healthy;
-
-  @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _RenderBoom(healthy);
-
-  @override
-  void updateRenderObject(BuildContext context, RenderObject renderObject) {
-    (renderObject as _RenderBoom).healthy = healthy;
-  }
-}
-
-class _RenderBoom extends RenderObject {
-  _RenderBoom(this._healthy);
-
-  bool _healthy;
-  set healthy(bool value) {
-    if (value == _healthy) return;
-    _healthy = value;
-    markNeedsLayout();
-  }
-
-  @override
-  CellSize performLayout(CellConstraints constraints) =>
-      // Tall enough that a paint-phase failure gets the text panel (≥3×3)
-      // with room for the error message line, not the small-region badge.
-      constraints.constrain(const CellSize(14, 5));
-
-  @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    if (!_healthy) throw StateError('paint-boom');
-    buffer.writeText(offset, 'healthy###', style: CellStyle.empty);
-  }
-}
+Widget _floatAt(int rows, Widget child) => Padding(
+  padding: EdgeInsets.only(top: rows),
+  child: child,
+);
 
 void main() {
   group('Overlay', () {
@@ -587,9 +514,7 @@ void main() {
       expect(out, isNot(contains('under')));
     });
 
-    testWidgets('a GestureDetector in a cache-hit entry still fires', (
-      tester,
-    ) {
+    testWidgets('a GestureDetector in a cache-hit entry still fires', (tester) {
       // Pointer hit-testing is fed by paint-order registration; a cache-hit
       // frame must replay the base entry's regions or its buttons go dead
       // the moment a sibling entry churns.
@@ -694,7 +619,7 @@ void main() {
       tester.pumpWidget(
         Overlay(
           initialEntries: [
-            OverlayEntry(builder: (_) => const _ImageLeaf()),
+            OverlayEntry(builder: (_) => const ImageLeaf()),
             OverlayEntry(
               builder: (_) =>
                   _floatAt(3, _BumpCounter(key: float, label: 'float')),
@@ -730,7 +655,11 @@ void main() {
       tester.owner.rethrowContainedRenderErrors = false;
       final contained = <FrameContainmentError>[];
       tester.owner.onContainedRenderError = contained.add;
-      var healthy = false;
+      // The throw happens INSIDE the entry boundary's cached paint (under
+      // the damage-suppression and capture-collector scopes) — exactly the
+      // path the entry's implicit ErrorBoundary must contain cleanly. 14×5
+      // so the message line fits inside the panel.
+      var mode = BoomMode.paint;
       late final OverlayEntry boomEntry;
       tester.pumpWidget(
         Overlay(
@@ -739,7 +668,9 @@ void main() {
             // crashing ENTRY's cells (rows 0-4 here), so the sibling sits
             // below them to show it is untouched.
             OverlayEntry(builder: (_) => _floatAt(6, const Text('base stays'))),
-            boomEntry = OverlayEntry(builder: (_) => _Boom(healthy: healthy)),
+            boomEntry = OverlayEntry(
+              builder: (_) => Boom(mode: mode, size: const CellSize(14, 5)),
+            ),
           ],
         ),
       );
@@ -753,7 +684,7 @@ void main() {
       // Heal the entry: the throw ran mid-cached-paint under the boundary,
       // so a clean recovery also proves the damage-suppression and
       // capture-collector scopes were restored.
-      healthy = true;
+      mode = BoomMode.healthy;
       boomEntry.markNeedsBuild();
       tester.pump();
       final healed = tester.renderToString(size: size);
@@ -766,9 +697,7 @@ void main() {
       tester,
     ) {
       final counter = GlobalKey<_BumpCounterState>();
-      final top = OverlayEntry(
-        builder: (_) => _floatAt(2, const Text('top')),
-      );
+      final top = OverlayEntry(builder: (_) => _floatAt(2, const Text('top')));
       tester.pumpWidget(
         Overlay(
           initialEntries: [

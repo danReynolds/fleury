@@ -26,64 +26,18 @@ import 'package:fleury/src/remote/remote_driver.dart';
 import 'package:test/test.dart';
 
 import '../remote/remote_test_support.dart';
-
-class _Boom extends LeafRenderObjectWidget {
-  const _Boom({this.mode = _BoomMode.layout});
-  final _BoomMode mode;
-
-  @override
-  RenderObject createRenderObject(BuildContext context) => _RenderBoom(mode);
-
-  @override
-  void updateRenderObject(BuildContext context, RenderObject renderObject) {
-    (renderObject as _RenderBoom).mode = mode;
-  }
-}
-
-enum _BoomMode { layout, paint, healthy }
-
-class _RenderBoom extends RenderObject {
-  _RenderBoom(this._mode);
-
-  _BoomMode _mode;
-  set mode(_BoomMode value) {
-    if (value == _mode) return;
-    _mode = value;
-    markNeedsLayout();
-  }
-
-  @override
-  CellSize performLayout(CellConstraints constraints) {
-    if (_mode == _BoomMode.layout) throw StateError('layout-boom');
-    // Tall enough that a paint-phase failure gets the text panel (≥3×3),
-    // not the small-region badge.
-    return constraints.constrain(const CellSize(14, 3));
-  }
-
-  @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    // Partial write BEFORE the throw: atomicity must bury it.
-    buffer.writeText(offset, 'part', style: CellStyle.empty);
-    if (_mode == _BoomMode.paint) throw StateError('paint-boom');
-    buffer.writeText(offset, 'healthy###', style: CellStyle.empty);
-  }
-}
+import '../support/render_fixtures.dart';
 
 class _Host extends StatefulWidget {
   const _Host({required this.initial});
-  final _BoomMode initial;
+  final BoomMode initial;
 
   @override
   State<_Host> createState() => _HostState();
 }
 
 class _HostState extends State<_Host> {
-  late _BoomMode mode = widget.initial;
+  late BoomMode mode = widget.initial;
 
   @override
   Widget build(BuildContext context) {
@@ -91,7 +45,7 @@ class _HostState extends State<_Host> {
       bindings: [
         KeyBinding(
           KeyChord.char('f'),
-          onEvent: (_) => setState(() => mode = _BoomMode.healthy),
+          onEvent: (_) => setState(() => mode = BoomMode.healthy),
         ),
       ],
       child: Focus(
@@ -103,7 +57,7 @@ class _HostState extends State<_Host> {
               height: 5,
               child: ErrorBoundary(
                 rethrowContained: false,
-                child: _Boom(mode: mode),
+                child: Boom(mode: mode),
               ),
             ),
           ],
@@ -120,7 +74,7 @@ void main() {
     testWidgets('(a) contains a layout throw; sibling intact', (tester) {
       final contained = <FrameContainmentError>[];
       tester.owner.onContainedRenderError = contained.add;
-      tester.pumpWidget(const _Host(initial: _BoomMode.layout));
+      tester.pumpWidget(const _Host(initial: BoomMode.layout));
       final out = tester.renderToString(size: const CellSize(30, 6));
 
       expect(out, contains('sibling stays'));
@@ -137,7 +91,7 @@ void main() {
     });
 
     testWidgets('(b) recovers when the subtree is fixed', (tester) {
-      tester.pumpWidget(const _Host(initial: _BoomMode.layout));
+      tester.pumpWidget(const _Host(initial: BoomMode.layout));
       expect(
         tester.renderToString(size: const CellSize(30, 6)),
         contains('layout-boom'),
@@ -151,7 +105,7 @@ void main() {
     });
 
     testWidgets('(c) a mid-paint throw is atomic', (tester) {
-      tester.pumpWidget(const _Host(initial: _BoomMode.paint));
+      tester.pumpWidget(const _Host(initial: BoomMode.paint));
       final out = tester.renderToString(size: const CellSize(30, 6));
       expect(out, contains('paint-boom'));
       expect(
@@ -173,7 +127,7 @@ void main() {
             role: SemanticRole.button,
             label: 'press me',
             actions: const {SemanticAction.activate},
-            child: const _Boom(),
+            child: const Boom(),
           ),
         ),
       );
@@ -203,7 +157,7 @@ void main() {
     });
 
     testWidgets('(g) the tester default rethrows contained errors', (tester) {
-      tester.pumpWidget(const ErrorBoundary(child: _Boom()));
+      tester.pumpWidget(const ErrorBoundary(child: Boom()));
       expect(
         () => tester.render(size: const CellSize(30, 6)),
         throwsA(isA<StateError>()),
@@ -219,7 +173,7 @@ void main() {
           child: const Column(
             children: [
               Text('above'),
-              ErrorBoundary(rethrowContained: false, child: _Boom()),
+              ErrorBoundary(rethrowContained: false, child: Boom()),
               Text('below'),
             ],
           ),
@@ -280,7 +234,7 @@ void _secondaryTests() {
     testWidgets('(e) a crashing route contains in production mode', (tester) {
       // Production posture: contain instead of the tester's rethrow.
       tester.owner.rethrowContainedRenderErrors = false;
-      tester.pumpWidget(Navigator(home: const _Boom()));
+      tester.pumpWidget(Navigator(home: const Boom()));
       final out = tester.renderToString(size: const CellSize(30, 8));
       expect(out, contains('layout-boom'), reason: 'route slot shows panel');
       expect(out, contains('⚠'));
@@ -303,7 +257,7 @@ void _secondaryTests() {
       );
       // No Navigator/Overlay/ErrorBoundary anywhere: the throw escapes
       // every boundary and hits the driver.
-      driver.mountRoot(() => const _Boom());
+      driver.mountRoot(() => const Boom());
 
       driver.renderNow('test');
       expect(backstopped, hasLength(1));
@@ -329,7 +283,7 @@ void _secondaryTests() {
         presenter: presenter,
         backstopStormLimit: 3,
       );
-      driver.mountRoot(() => const _Boom());
+      driver.mountRoot(() => const Boom());
 
       driver.renderNow('1');
       // The error frame committed; force fresh attempts by re-dirtying.
@@ -380,7 +334,7 @@ void _coherenceOracle() {
     );
 
     final done = runApp(
-      const _Host(initial: _BoomMode.layout),
+      const _Host(initial: BoomMode.layout),
       driver: driver,
       enableHotReload: false,
       requireInteractiveTerminal: false,

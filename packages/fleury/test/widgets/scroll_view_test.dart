@@ -1,40 +1,11 @@
 // ScrollView: windowed viewport onto a tall child — scroll chords,
 // clamping, clipping, and edge bubbling.
 
-import 'dart:typed_data';
-
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
-/// A 4×2 leaf that records an inline-image placement (the true-pixel path)
-/// rather than painting glyphs — so a test can assert the placement
-/// survives the ScrollView's scratch-buffer composite.
-class _ImageLeaf extends LeafRenderObjectWidget {
-  const _ImageLeaf();
-  @override
-  RenderObject createRenderObject(BuildContext context) => _ImageLeafRender();
-}
-
-class _ImageLeafRender extends RenderObject {
-  @override
-  CellSize performLayout(CellConstraints constraints) =>
-      constraints.constrain(const CellSize(4, 2));
-  @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    buffer.writeImage(
-      offset,
-      Uint8List.fromList([1, 2, 3, 4]),
-      width: 4,
-      height: 2,
-    );
-  }
-}
+import '../support/render_fixtures.dart';
 
 Matcher _stateError(String message) {
   return throwsA(
@@ -150,7 +121,7 @@ void main() {
     tester.pumpWidget(
       ScrollView(
         controller: ctl,
-        child: Column(children: [const _ImageLeaf(), _rows(20)]),
+        child: Column(children: [const ImageLeaf(), _rows(20)]),
       ),
     );
     final buf = tester.render(size: const CellSize(6, 5));
