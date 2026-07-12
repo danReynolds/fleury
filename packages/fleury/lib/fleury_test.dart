@@ -18,6 +18,11 @@ library;
 
 export 'src/animation/clock.dart' show FakeClock;
 export 'src/animation/ticker_scheduler.dart' show FakeTickerScheduler;
+// Repaint-boundary paint diagnostics: lets downstream widget packages assert
+// cache engagement (e.g. a lazily-mounted overlay layer staying pass-through
+// while idle) without reaching into src/.
+export 'src/rendering/render_repaint_boundary.dart'
+    show RepaintBoundaryDebugStats, RepaintBoundaryFrameStats;
 export 'src/testing/fleury_tester.dart' show FleuryTester, testWidgets;
 export 'src/testing/finders.dart'
     show Finder, byKey, byPredicate, byType, descendantOf, text;

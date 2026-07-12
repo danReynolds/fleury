@@ -299,7 +299,8 @@ export 'src/widgets/navigator.dart'
 export 'src/widgets/layout_builder.dart'
     show LayoutBuilder, LayoutWidgetBuilder;
 export 'src/widgets/media_query.dart' show MediaQuery, MediaQueryData;
-export 'src/widgets/overlay.dart' show Overlay, OverlayEntry, OverlayState;
+export 'src/widgets/overlay.dart'
+    show Overlay, OverlayEntry, OverlayEntryMountSync, OverlayState;
 export 'src/widgets/repaint_boundary.dart' show RepaintBoundary;
 export 'src/widgets/rich_text.dart' show RichText, TextSpan;
 export 'src/widgets/pointer.dart'

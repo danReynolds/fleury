@@ -776,7 +776,15 @@ class FleuryTester {
             router: _pointerRouter,
             child: ClipboardScope(
               clipboard: clipboard,
-              child: Overlay(initialEntries: [_userEntry]),
+              // Opt out of entry repaint boundaries. The harness overlay is
+              // usually single-entry (pass-through anyway under adaptive
+              // engagement), but a test that floats extra entries — a menu,
+              // a toast — would otherwise engage harness-owned boundaries
+              // and skew the boundary stats and paint counts under test.
+              child: Overlay(
+                initialEntries: [_userEntry],
+                addRepaintBoundaries: false,
+              ),
             ),
           ),
         ),

@@ -222,6 +222,74 @@ void main() {
     fail('did not find the toast text');
   });
 
+  group('lazy overlay entry', () {
+    // beginFrame flips a process-global; never leak recording across tests.
+    tearDown(() => RepaintBoundaryDebugStats.beginFrame(enabled: false));
+
+    testWidgets('mounts the layer entry only while toasts exist', (tester) {
+      // App-shaped fixture: an explicit Overlay hosts the Toaster'd app as
+      // its base entry, so the Toaster's layer lands in an overlay whose
+      // adaptive per-entry boundaries are observable (the tester's own
+      // harness overlay opts out of boundaries).
+      final overlayKey = GlobalKey<OverlayState>();
+      late BuildContext ctx;
+      tester.pumpWidget(
+        Overlay(
+          key: overlayKey,
+          initialEntries: [
+            OverlayEntry(
+              builder: (_) => Toaster(
+                duration: const Duration(seconds: 2),
+                child: _Capture((c) => ctx = c),
+              ),
+            ),
+          ],
+        ),
+      );
+      const size = CellSize(20, 8);
+      RepaintBoundaryDebugStats.beginFrame(enabled: true);
+      tester.render(size: size);
+      var stats = RepaintBoundaryDebugStats.takeFrameStats();
+      expect(
+        overlayKey.currentState!.entries,
+        hasLength(1),
+        reason: 'no toasts → the layer entry is not mounted',
+      );
+      expect(
+        stats.boundaryCount,
+        0,
+        reason: 'single visible entry → boundaries stay pass-through: an '
+            'idle Toaster must not tax app frames',
+      );
+
+      // Enqueue: the entry mounts on the same turn and boundaries engage.
+      Toaster.show(ctx, 'Saved');
+      tester.pump();
+      expect(overlayKey.currentState!.entries, hasLength(2));
+      RepaintBoundaryDebugStats.beginFrame(enabled: true);
+      expect(_screen(tester).contains('Saved'), isTrue);
+      stats = RepaintBoundaryDebugStats.takeFrameStats();
+      expect(
+        stats.boundaryCount,
+        2,
+        reason: 'two visible entries → both boundaries engaged',
+      );
+
+      // Auto-dismiss empties the toasts: the entry unmounts and the
+      // overlay returns to single-entry pass-through.
+      tester.pump(const Duration(seconds: 2));
+      expect(
+        overlayKey.currentState!.entries,
+        hasLength(1),
+        reason: 'last toast expired → the layer entry unmounts',
+      );
+      RepaintBoundaryDebugStats.beginFrame(enabled: true);
+      expect(_screen(tester).contains('Saved'), isFalse);
+      stats = RepaintBoundaryDebugStats.takeFrameStats();
+      expect(stats.boundaryCount, 0, reason: 'idle again: pass-through');
+    });
+  });
+
   group('semantics', () {
     testWidgets('exposes toasts as notification nodes with safe state', (
       tester,

@@ -336,6 +336,55 @@ final class CellBuffer {
     );
   }
 
+  /// [boundingBoxOfNonEmpty] restricted to [within], which the caller
+  /// guarantees contains every non-empty cell (e.g. this buffer's damage
+  /// bounds over a paint into a cleared buffer — a conservative superset,
+  /// since grapheme writes pad damage by the wide-cell guard columns).
+  ///
+  /// Trims [within]'s all-empty edge rows/columns and returns the tight
+  /// bounds, or null if the region is entirely empty. Same result as the
+  /// full-grid scan, but the cost is bounded by the hint: typically the
+  /// hint's perimeter, not the whole buffer.
+  CellRect? boundingBoxOfNonEmptyWithin(CellRect within) {
+    var top = within.offset.row;
+    var left = within.offset.col;
+    var bottom = top + within.size.rows - 1; // inclusive
+    var right = left + within.size.cols - 1; // inclusive
+    // Damage rects are already grid-clamped; clamp again defensively so a
+    // hand-built hint cannot walk out of the cell array.
+    if (top < 0) top = 0;
+    if (left < 0) left = 0;
+    if (bottom >= _size.rows) bottom = _size.rows - 1;
+    if (right >= _size.cols) right = _size.cols - 1;
+    if (top > bottom || left > right) return null;
+
+    bool rowEmpty(int row) {
+      final base = row * _size.cols;
+      for (var c = left; c <= right; c++) {
+        if (_cells[base + c].role != CellRole.empty) return false;
+      }
+      return true;
+    }
+
+    bool colEmpty(int col) {
+      for (var r = top; r <= bottom; r++) {
+        if (_cells[r * _size.cols + col].role != CellRole.empty) return false;
+      }
+      return true;
+    }
+
+    while (top <= bottom && rowEmpty(top)) top++;
+    if (top > bottom) return null;
+    while (bottom > top && rowEmpty(bottom)) bottom--;
+    // A non-empty cell exists in [top..bottom], so both trims terminate.
+    while (colEmpty(left)) left++;
+    while (colEmpty(right)) right--;
+    return CellRect(
+      offset: CellOffset(left, top),
+      size: CellSize(right - left + 1, bottom - top + 1),
+    );
+  }
+
   /// Writes a single grapheme cluster at [position] using [style].
   ///
   /// [grapheme] must be a single Unicode grapheme cluster (per UAX #29);

@@ -124,20 +124,26 @@ class _Toast {
 class _ToasterState extends State<Toaster> {
   final List<_Toast> _toasts = <_Toast>[];
   TuiBinding? _binding;
-  OverlayEntry? _entry;
   var _nextToastId = 0;
+
+  // Created once (layer state survives), mounted lazily: the entry is only
+  // inserted while toasts exist. An idle Toaster must not keep the host
+  // overlay multi-entry — that would keep the overlay's adaptive repaint
+  // boundaries engaged and tax every app-dirty frame with a full-screen
+  // cache write + blit for an empty layer.
+  late final OverlayEntry _entry = OverlayEntry(builder: (_) => _buildLayer());
+  late final OverlayEntryMountSync _entrySync = OverlayEntryMountSync(
+    entry: _entry,
+    // Guard mounted: after unmount the context is defunct, and the ancestor
+    // walk would throw rather than return null.
+    resolveOverlay: () => mounted ? Overlay.maybeOf(context) : null,
+    shouldMount: () => mounted && _toasts.isNotEmpty,
+  );
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _binding ??= TuiBinding.maybeOf(context);
-    if (_entry == null) {
-      final overlay = Overlay.maybeOf(context);
-      if (overlay != null) {
-        _entry = OverlayEntry(builder: (_) => _buildLayer());
-        overlay.insert(_entry!);
-      }
-    }
   }
 
   void _enqueue(
@@ -156,6 +162,10 @@ class _ToasterState extends State<Toaster> {
       action: action,
     );
     _toasts.add(toast);
+    // Synchronous (not the microtask path): show() runs from event/timer
+    // contexts where setState is already legal, and the toast should be on
+    // screen by the very next pump.
+    _entrySync.syncNow();
     _refresh();
     final binding = _binding;
     if (binding == null) return;
@@ -174,13 +184,14 @@ class _ToasterState extends State<Toaster> {
     final ticker = toast.timer;
     toast.timer = null;
     scheduleMicrotask(() => ticker?.dispose());
+    _entrySync.syncNow(); // last toast gone → the layer entry unmounts
     _refresh();
   }
 
   /// Rebuilds both the floating layer (an Overlay entry) and this widget's
   /// own subtree, where the action hotkeys live as `KeyBindings`.
   void _refresh() {
-    _entry?.markNeedsBuild();
+    _entry.markNeedsBuild(); // no-op notify while the entry is unmounted
     if (mounted) setState(() {});
   }
 
@@ -279,7 +290,7 @@ class _ToasterState extends State<Toaster> {
 
   @override
   void dispose() {
-    _entry?.remove();
+    _entrySync.dispose(); // removes the entry if currently mounted
     for (final toast in _toasts) {
       toast.timer?.dispose();
     }

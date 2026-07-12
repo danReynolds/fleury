@@ -54,7 +54,11 @@ Widget buildTuiRoot({
   required DebugController? debugController,
 }) {
   // The Overlay is the innermost shared layer; the app's Navigator and any
-  // floating host entries live inside it.
+  // floating host entries live inside it. Entry repaint boundaries stay on
+  // (the default): every floating widget — toast, menu, palette — inserts
+  // into THIS overlay via Overlay.of, so it is exactly where sibling-churn
+  // pruning pays. Engagement is adaptive (see Overlay.addRepaintBoundaries):
+  // frames where only one entry is visible pay no cache-write/blit tax.
   Widget tree = Overlay(key: overlayKey, initialEntries: overlayEntries);
   // DebugShell wraps the Overlay so docking the panel shares cells with the
   // app (off-mode is a pure pass-through, no layout cost).

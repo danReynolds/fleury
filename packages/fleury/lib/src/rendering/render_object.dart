@@ -373,6 +373,21 @@ abstract class RenderObject {
     _parent?._markEnclosingRepaintBoundariesDirty();
   }
 
+  /// Marks every repaint boundary STRICTLY ABOVE this node as needing paint.
+  ///
+  /// For a node that gains caching authority at runtime ([isRepaintBoundary]
+  /// flipping true — `RenderRepaintBoundary.cachingEnabled`): setting its own
+  /// [needsPaint] is not enough, because enclosing boundary caches embed this
+  /// subtree's painted cells, and every later invalidation from inside the
+  /// subtree short-circuits at this now-dirty boundary — the ancestors would
+  /// never be told. Deliberately starts at the parent: the self-inclusive
+  /// walk ([_markEnclosingRepaintBoundariesDirty]) would see this boundary
+  /// already dirty and stop before reaching any ancestor.
+  @protected
+  void markAncestorRepaintBoundariesDirty() {
+    _parent?._markEnclosingRepaintBoundariesDirty();
+  }
+
   /// The constraints from the most recent layout pass.
   CellConstraints get constraints {
     final c = _constraints;
