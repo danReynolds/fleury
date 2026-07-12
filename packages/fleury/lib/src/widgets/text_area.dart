@@ -14,6 +14,7 @@
 import 'dart:async' show scheduleMicrotask, unawaited;
 
 import 'package:characters/characters.dart';
+import 'package:meta/meta.dart' show visibleForTesting;
 
 import '../editing/text_editing.dart';
 import '../editing/text_keymap.dart';
@@ -713,7 +714,37 @@ class RenderTextArea extends RenderObject {
 
   bool get _showPlaceholder => _text.isEmpty && _placeholder.isNotEmpty;
 
-  List<String> get _lines => _text.split('\n');
+  /// Test-only count of line splits performed by [_linesOf] across all
+  /// [RenderTextArea] instances. Lets tests assert that layout/paint passes
+  /// over an unchanged document perform zero new splits and that edits
+  /// invalidate exactly once, without timing heuristics.
+  @visibleForTesting
+  static int debugLineSplitCount = 0;
+
+  // Memoized line split. [_text] and [_placeholder] are immutable strings
+  // that are only ever reassigned (the setters produce a fresh instance via
+  // [_sanitize] whenever the value changes), so identity of the source
+  // string is a sound O(1) cache key. Layout, paint, and caret derivation
+  // each need the same split every frame; without the memo each pass
+  // re-split the whole document — O(doc) work per frame at editor scale for
+  // cursor moves that change no text. Only one source is consulted per
+  // frame (placeholder when the document is empty, the text otherwise), so
+  // a single entry suffices.
+  String? _linesCacheSource;
+  List<String> _linesCache = const [];
+
+  /// Lines of [source], memoized by string identity. Treat the returned
+  /// list as immutable: it is shared across layout/paint passes.
+  List<String> _linesOf(String source) {
+    if (!identical(_linesCacheSource, source)) {
+      _linesCacheSource = source;
+      _linesCache = source.split('\n');
+      debugLineSplitCount++;
+    }
+    return _linesCache;
+  }
+
+  List<String> get _lines => _linesOf(_text);
 
   /// (line, column) of the cursor within [_lines].
   (int, int) _cursorLineCol(List<String> lines) {
@@ -729,7 +760,7 @@ class RenderTextArea extends RenderObject {
 
   @override
   CellSize performLayout(CellConstraints constraints) {
-    final lines = _showPlaceholder ? _placeholder.split('\n') : _lines;
+    final lines = _showPlaceholder ? _linesOf(_placeholder) : _lines;
     var widest = 0;
     for (final line in lines) {
       final w = _widthResolver.widthOfText(line, _profile);
@@ -838,7 +869,7 @@ class RenderTextArea extends RenderObject {
     // Empty: paint the (possibly multi-line) placeholder, with the
     // cursor over the very first cell when visible.
     if (_showPlaceholder) {
-      final phLines = _placeholder.split('\n');
+      final phLines = _linesOf(_placeholder);
       final maxCol = offset.col + size.cols;
       for (var r = 0; r < size.rows && r < phLines.length; r++) {
         final row = offset.row + r;
@@ -935,7 +966,7 @@ class RenderTextArea extends RenderObject {
   }
 
   CellRect? _caretRect(CellOffset paintOffset, CellRect? clipRect) {
-    final lines = _showPlaceholder ? _placeholder.split('\n') : _lines;
+    final lines = _showPlaceholder ? _linesOf(_placeholder) : _lines;
     if (lines.isEmpty) return null;
     final (cursorLine, cursorCol) = _cursorLineCol(lines);
     if (cursorLine < _scrollTop || cursorLine >= _scrollTop + size.rows) {
