@@ -16,6 +16,7 @@ import '../foundation/geometry.dart';
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/scroll_detection.dart';
+import '../runtime/tui_frame_loop.dart';
 import '../semantics/semantics.dart';
 import '../input/events.dart';
 
@@ -477,13 +478,45 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
 /// cover only the residual rows — the client shifts its mirror up by that
 /// amount before applying them, so a scrolling log ships one row instead
 /// of the whole screen.
+///
+/// [dirtyRows], when provided, must cover every cell that can differ
+/// between [prev] and [next] — the same soundness contract as
+/// `AnsiRenderer.renderDiff`'s `dirtyBounds`. The plan is byte-identical
+/// to the unbounded build; the hint only skips work that provably cannot
+/// change it. On a plain diff the builder scans only the dirty rows (rows
+/// outside sound damage are equal by definition). Scroll detection stays
+/// exact: its whole-screen scans are skipped only when no shift could
+/// pass the detector's entry guards, and a detected scroll falls back to
+/// the unbounded residual walk, because the mirror shift redistributes
+/// damage across rows the frame diff never touched (a clean static row
+/// still needs re-patching once the mirror under it moves). Null means
+/// "no damage hint": every row is scanned, exactly the prior behavior.
+///
+/// A debug oracle re-runs the unbounded build under `assert` and fails
+/// loudly if a hint ever under-covers, so a broken damage producer is
+/// caught in dev/CI instead of desyncing a live peer's mirror.
 RemotePlan buildRemotePlan(
   CellBuffer prev,
   CellBuffer next, {
   required bool fullRepaint,
+  TuiDirtyRows? dirtyRows,
 }) {
   final full = fullRepaint || prev.size != next.size;
   final rows = next.size.rows;
+  // First-line defense for a hint built against the wrong row count: an
+  // isFull hint whose single range stops short of next's rows would
+  // silently skip the tail while claiming full coverage. Unreachable from
+  // the runtime planner, which builds damage against frame.next.size.
+  assert(
+    dirtyRows == null ||
+        !dirtyRows.isFull ||
+        (dirtyRows.ranges.length == 1 &&
+            dirtyRows.ranges.single.startRow == 0 &&
+            dirtyRows.ranges.single.endRow >= rows),
+    'buildRemotePlan: an isFull dirtyRows hint does not cover every row of '
+    'next ($rows rows) — the damage was built against a different row '
+    'count.',
+  );
   final styleIndices = <CellStyle, int>{};
   final styleTable = <CellStyle>[];
   int styleIndex(CellStyle s) => styleIndices.putIfAbsent(s, () {
@@ -491,10 +524,25 @@ RemotePlan buildRemotePlan(
     return styleTable.length - 1;
   });
 
+  // An empty (non-full) hint asserts zero dirty cells: no patch and no
+  // beneficial scroll is possible, so skip detection outright.
+  final emptyDamage = dirtyRows != null && dirtyRows.isEmpty;
+
   // Detect a beneficial upward scroll on steady-state frames. The residual
-  // patches then compare against prev shifted up by `shift`.
+  // patches then compare against prev shifted up by `shift`. Under bounded
+  // damage, the whole-screen stats scan is skipped when the cheap
+  // candidate prefilter proves the detector could not fire — most
+  // steady-state frames. (A scroll can be beneficial under sound partial
+  // damage: rows a scrolling log leaves untouched — blank tails, repeated
+  // chrome — are often shift-invariant, so the detector's outcome must not
+  // depend on the hint.)
   int? scrollUpRows;
-  if (!full && rows >= 2) {
+  if (!full &&
+      rows >= 2 &&
+      !emptyDamage &&
+      (dirtyRows == null ||
+          dirtyRows.isFull ||
+          _scrollCandidateExists(prev, next))) {
     final shift = detectBeneficialScrollUp(
       prev,
       next,
@@ -511,9 +559,20 @@ RemotePlan buildRemotePlan(
     return source < rows ? prev.atColRow(col, source) : const Cell.empty();
   }
 
-  final patches = _buildPatches(next, prevRef, full, styleIndex);
+  final patches = _buildPatches(
+    next,
+    prevRef,
+    full,
+    styleIndex,
+    // Full frames must emit every row regardless of the hint, and a
+    // detected scroll compares residually against the SHIFTED prev — the
+    // shift moves damage onto rows the frame diff never marked (a clean
+    // row over new mirror content still needs its patch), so only a plain
+    // steady-state diff may ride the damage bound.
+    rowRanges: full || scrollUpRows != null ? null : dirtyRows?.ranges,
+  );
 
-  return RemotePlan(
+  final plan = RemotePlan(
     size: next.size,
     fullRepaint: full,
     scrollUpRows: scrollUpRows,
@@ -521,6 +580,46 @@ RemotePlan buildRemotePlan(
     patches: patches,
     placements: _imagePlacements(next),
   );
+  // Full frames ignore the hint entirely, so only steady-state bounded
+  // builds are oracle-checked.
+  assert(
+    full ||
+        dirtyRows == null ||
+        _boundedPlanOracleHolds(
+          prev,
+          next,
+          fullRepaint: fullRepaint,
+          bounded: plan,
+        ),
+    'buildRemotePlan: the damage-bounded plan diverges from an unbounded '
+    'rebuild — the dirtyRows hint under-covers the true diff (soundness '
+    'contract violated). Shipping it would desync the peer\'s mirror until '
+    'the next full repaint.',
+  );
+  return plan;
+}
+
+/// Debug ground-truth check for the `dirtyRows` hint: the bounded plan must
+/// be byte-identical on the wire to a from-scratch unbounded rebuild. If it
+/// is not, the caller's damage under-covered the true diff — caught here in
+/// tests/CI (dev asserts), never shipped as a silently desynced peer
+/// mirror. Stripped from release builds (runs only under `assert`), the
+/// same debug-oracle shape the semantics encoder uses for its delta path.
+bool _boundedPlanOracleHolds(
+  CellBuffer prev,
+  CellBuffer next, {
+  required bool fullRepaint,
+  required RemotePlan bounded,
+}) {
+  final truth = encodeRemotePlan(
+    buildRemotePlan(prev, next, fullRepaint: fullRepaint),
+  );
+  final got = encodeRemotePlan(bounded);
+  if (got.length != truth.length) return false;
+  for (var i = 0; i < got.length; i++) {
+    if (got[i] != truth[i]) return false;
+  }
+  return true;
 }
 
 /// The inline-image placements for [next], read straight from the buffer's
@@ -544,18 +643,34 @@ List<ImagePlacement> _imagePlacements(CellBuffer next) {
   ];
 }
 
+/// Whether any shift could pass [detectBeneficialScrollUp]'s entry guards —
+/// the detector's own [scrollShiftPassesEntryGuards] predicate, so "no
+/// candidate implies the detector returns null" holds structurally rather
+/// than by mirroring its guards. When no shift passes, the detector's
+/// whole-screen diff-stats scan can be skipped without changing the plan.
+/// Typically O(rows) fail-fast cell compares on a non-scrolling frame,
+/// against the O(rows x cols) scan it avoids.
+bool _scrollCandidateExists(CellBuffer prev, CellBuffer next) {
+  final rows = prev.size.rows;
+  for (var shift = 1; shift < rows; shift++) {
+    if (scrollShiftPassesEntryGuards(prev, next, shift)) return true;
+  }
+  return false;
+}
+
 List<RemoteRowPatch> _buildPatches(
   CellBuffer next,
   Cell Function(int col, int row) prevRef,
   bool full,
-  int Function(CellStyle) styleIndex,
-) {
+  int Function(CellStyle) styleIndex, {
+  List<TuiDirtyRowRange>? rowRanges,
+}) {
   final cols = next.size.cols;
   final rows = next.size.rows;
   final patches = <RemoteRowPatch>[];
   bool unchanged(int col, int row) =>
       !full && prevRef(col, row) == next.atColRow(col, row);
-  for (var row = 0; row < rows; row++) {
+  void scanRow(int row) {
     var col = 0;
     while (col < cols) {
       if (unchanged(col, row)) {
@@ -590,6 +705,21 @@ List<RemoteRowPatch> _buildPatches(
         );
       }
       patches.add(RemoteRowPatch(row: row, startCol: startCol, runs: runs));
+    }
+  }
+
+  if (rowRanges == null) {
+    for (var row = 0; row < rows; row++) {
+      scanRow(row);
+    }
+  } else {
+    // Ranges are sorted and disjoint by construction, so patches come out
+    // in the same ascending row order the unbounded walk produces.
+    for (final range in rowRanges) {
+      final endRow = range.endRow < rows ? range.endRow : rows;
+      for (var row = range.startRow; row < endRow; row++) {
+        scanRow(row);
+      }
     }
   }
   return patches;
