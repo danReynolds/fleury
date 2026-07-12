@@ -224,36 +224,33 @@ Future<MountedApp> runTuiSurface(
   final rootEntry = OverlayEntry(
     builder: (_) => Navigator(home: rootFactory()),
   );
+  final overlayKey = GlobalKey<OverlayState>();
 
-  Widget buildRoot() => TuiBindingScope(
+  // The shared scope stack (see buildTuiRoot). The browser embed has neither a
+  // captured-output log buffer nor a debug shell yet, so it passes those layers
+  // as null explicitly — the omission is visible here, not a silent gap.
+  Widget buildRoot() => buildTuiRoot(
     binding: binding,
-    child: MediaQuery(
-      data: MediaQueryData(
-        size: surface.size,
-        // First-class browser capabilities — no terminal cosplay. Inline
-        // images render as true pixels when the host assembled the <img>
-        // overlay layer; a bare surface (no overlay) gets glyph art.
-        capabilities: SurfaceCapabilities(
-          colorMode: ColorMode.truecolor,
-          glyphTier: GlyphTier.unicode,
-          images: imageOverlay == null
-              ? InlineImageSupport.none
-              : InlineImageSupport.placements,
-          hyperlinks: true,
-          pointer: PointerPrecision.subCell,
-        ),
-      ),
-      child: FocusManagerScope(
-        manager: focusManager,
-        child: PointerRouterScope(
-          router: pointerRouter,
-          child: ClipboardScope(
-            clipboard: effectiveClipboard,
-            child: Overlay(initialEntries: [rootEntry]),
-          ),
-        ),
-      ),
+    size: surface.size,
+    // First-class browser capabilities — no terminal cosplay. Inline images
+    // render as true pixels when the host assembled the <img> overlay layer; a
+    // bare surface (no overlay) gets glyph art.
+    capabilities: SurfaceCapabilities(
+      colorMode: ColorMode.truecolor,
+      glyphTier: GlyphTier.unicode,
+      images: imageOverlay == null
+          ? InlineImageSupport.none
+          : InlineImageSupport.placements,
+      hyperlinks: true,
+      pointer: PointerPrecision.subCell,
     ),
+    focusManager: focusManager,
+    pointerRouter: pointerRouter,
+    clipboard: effectiveClipboard,
+    overlayKey: overlayKey,
+    overlayEntries: [rootEntry],
+    logBuffer: null,
+    debugController: null,
   );
 
   if (semanticPresenter != null) {

@@ -35,13 +35,8 @@ import '../terminal/terminal_driver.dart';
 import '../widgets/focus.dart';
 import '../widgets/framework.dart';
 import '../widgets/key_bindings.dart';
-import '../widgets/output_capture_view.dart';
-import '../widgets/media_query.dart';
 import '../widgets/navigator.dart';
 import '../widgets/overlay.dart';
-import '../widgets/pointer.dart';
-import '../widgets/tui_binding.dart';
-import '../widgets/clipboard_scope.dart';
 import 'clipboard.dart';
 import '../terminal/ansi_frame_presenter.dart';
 import '../terminal/terminal_image_encoder.dart';
@@ -60,6 +55,7 @@ import 'debug_query.dart';
 import 'output_capture.dart';
 import 'remote_surface_sink.dart';
 import 'tui_frame_loop.dart';
+import 'tui_root.dart';
 import 'tui_runtime.dart';
 
 /// What a [TuiEventHandler] can tell the runtime about an event.
@@ -696,47 +692,26 @@ Future<AppExit> _runAppImpl(
           final errorEntry = OverlayEntry(
             builder: (_) => RuntimeErrorOverlay(reporter: errorReporter),
           );
-          Widget buildRoot() => TuiBindingScope(
+          // The shared scope stack (see buildTuiRoot). The native host supplies
+          // every layer — captured-output buffer and the debug shell included.
+          Widget buildRoot() => buildTuiRoot(
             binding: binding,
-            child: MediaQuery(
-              data: MediaQueryData(
-                size: usedDriver.size,
-                // The widget-facing capability vocabulary is backend-
-                // neutral; the terminal snapshot is one projection of it.
-                // A structured remote driver reports what its PEER
-                // declared (a browser: placements, sub-cell pointer).
-                capabilities: usedDriver is SurfaceCapabilitiesProvider
-                    ? (usedDriver as SurfaceCapabilitiesProvider)
-                          .surfaceCapabilities
-                    : usedDriver.capabilities.toSurfaceCapabilities(),
-              ),
-              child: FocusManagerScope(
-                manager: focusManager,
-                child: PointerRouterScope(
-                  router: pointerRouter,
-                  // Host services sit above the Overlay so both the app
-                  // and the floating console can reach them.
-                  child: ClipboardScope(
-                    clipboard: effectiveClipboard,
-                    child: LogBufferScope(
-                      buffer: logBuffer,
-                      // DebugShell wraps the Overlay so docking it shrinks
-                      // the user's app AND the floating console region —
-                      // they share the available cells. When the shell's
-                      // mode is off the shell is a pure pass-through and
-                      // pays no layout cost.
-                      child: DebugShell(
-                        controller: debugController,
-                        child: Overlay(
-                          key: overlayKey,
-                          initialEntries: [rootEntry, errorEntry],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            size: usedDriver.size,
+            // The widget-facing capability vocabulary is backend-neutral; the
+            // terminal snapshot is one projection of it. A structured remote
+            // driver reports what its PEER declared (a browser: placements,
+            // sub-cell pointer).
+            capabilities: usedDriver is SurfaceCapabilitiesProvider
+                ? (usedDriver as SurfaceCapabilitiesProvider)
+                      .surfaceCapabilities
+                : usedDriver.capabilities.toSurfaceCapabilities(),
+            focusManager: focusManager,
+            pointerRouter: pointerRouter,
+            clipboard: effectiveClipboard,
+            overlayKey: overlayKey,
+            overlayEntries: [rootEntry, errorEntry],
+            logBuffer: logBuffer,
+            debugController: debugController,
           );
           final activeSurfaceSink = surfaceSink;
           // The clipboard is a host service shared via ClipboardScope in
