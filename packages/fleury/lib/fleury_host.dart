@@ -58,6 +58,7 @@ export 'src/runtime/semantic_flush_scheduler.dart'
         MicrotaskSemanticFlushScheduler,
         SemanticFlushScheduler,
         TimerSemanticFlushScheduler;
+export 'src/runtime/tui_root.dart' show buildTuiRoot;
 export 'src/runtime/tui_runtime.dart' show TuiRuntime;
 export 'src/runtime/wire_frame_presenter.dart' show WireFramePresenter;
 export 'src/remote/wire_semantic_frame_presenter.dart'
