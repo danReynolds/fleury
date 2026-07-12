@@ -29,14 +29,6 @@ final class TerminalMode {
   /// The standard interactive TUI mode.
   static const TerminalMode interactive = TerminalMode();
 
-  /// Inline mode: no alternate screen, cursor visible, raw input still
-  /// on. Useful for in-place output that should remain in the user's
-  /// scrollback after exit.
-  static const TerminalMode inline = TerminalMode(
-    alternateScreen: false,
-    hideCursor: false,
-  );
-
   final bool rawInput;
   final bool alternateScreen;
   final bool hideCursor;
