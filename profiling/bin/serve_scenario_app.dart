@@ -8,8 +8,14 @@
 // profiler controls the session lifetime and tears serve down when it has
 // captured the run.
 //
+// `input-latency` is the exception: it never ticks on its own. It idles until
+// a key arrives over the wire, and every keystroke deterministically changes
+// visible content (a fixed-width fill line plus a zero-padded key counter),
+// so one INPUT_EVENT produces exactly one PLAN frame — the closed-loop
+// input→paint latency probe (G4) depends on that 1:1 mapping.
+//
 //   serve_scenario_app.dart <scenario> [--steps=N] [--interval-ms=M]
-//     scenario: dashboard | log | counter
+//     scenario: dashboard | log | counter | input-latency
 
 import 'dart:async';
 
@@ -56,12 +62,17 @@ final class _ScenarioApp extends StatefulWidget {
 class _ScenarioAppState extends State<_ScenarioApp> {
   Timer? _timer;
   var _tick = 0;
+  var _keys = 0;
   late List<num> _history;
 
   @override
   void initState() {
     super.initState();
     _history = List<num>.generate(48, (i) => 40 + i % 17);
+    // input-latency is input-driven, never time-driven: any self-ticking
+    // would produce PLAN frames a keystroke didn't cause and break the
+    // probe's one-key ⟹ one-plan accounting.
+    if (widget.scenario == 'input-latency') return;
     _timer = Timer.periodic(widget.interval, (_) {
       if (_tick >= widget.steps) {
         _timer?.cancel();
@@ -85,6 +96,7 @@ class _ScenarioAppState extends State<_ScenarioApp> {
   Widget build(BuildContext context) => switch (widget.scenario) {
     'log' => _buildLog(),
     'counter' => _buildCounter(),
+    'input-latency' => _buildInputLatency(),
     _ => _buildDashboard(),
   };
 
@@ -171,6 +183,37 @@ class _ScenarioAppState extends State<_ScenarioApp> {
             overflow: TextOverflow.ellipsis,
           ),
       ],
+    );
+  }
+
+  // Idle until a key arrives; each keystroke changes exactly one frame's
+  // worth of content, deterministically. The fill line is FIXED-WIDTH (64
+  // cells, one glyph appended per key, wrapping) and the counter is
+  // zero-padded, so layout never shifts and the frame a key produces is a
+  // pure function of how many keys came before it — the byte axes stay
+  // comparable run to run. Every key is handled (and repaints), so a missing
+  // PLAN response means the input path itself broke, not the scenario.
+  Widget _buildInputLatency() {
+    const width = 64;
+    final filled = _keys % width;
+    return Focus(
+      autofocus: true,
+      onKey: (event) {
+        setState(() => _keys++);
+        return KeyEventResult.handled;
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(1),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('input-latency probe'),
+            const SizedBox(height: 1),
+            Text('keys=${_keys.toString().padLeft(6, '0')}'),
+            Text(('#' * filled).padRight(width, '.'), softWrap: false),
+          ],
+        ),
+      ),
     );
   }
 

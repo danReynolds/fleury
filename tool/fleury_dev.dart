@@ -1515,7 +1515,10 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
 
   /// The live `fleury serve` wire regression gate — boots real serve processes
   /// and measures the actual socket bytes (plan + semantics) a browser
-  /// receives. On-demand; pass `--update-baseline` to rebaseline.
+  /// receives, plus the closed-loop input→paint latency probe (G4, the
+  /// `input-latency` scenario; latency axes warn-only, one-key⟹one-plan
+  /// structural). On-demand; pass `--update-baseline` to rebaseline
+  /// (`--scenario=ID --update-baseline` re-baselines one scenario, merging).
   Future<void> benchmarkServeWireLive(List<String> args) async {
     await _run('dart', [
       'run',
@@ -6594,7 +6597,7 @@ void _printBenchmarkUsage() {
     '  wire-gate [...]         Terminal wire bytes (SB.1/6/9) vs baseline',
   );
   stdout.writeln(
-    '  serve-wire-live [...]   Live `fleury serve` socket bytes vs baseline',
+    '  serve-wire-live [...]   Live serve socket bytes + input latency vs baseline',
   );
   stdout.writeln(
     '  serve-semantics-gate    Semantics wire anti-cliff (DEFLATE) invariant',

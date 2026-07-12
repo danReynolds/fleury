@@ -38,7 +38,7 @@ The heavier PTY/subprocess gates (`wire-gate`, `serve-wire-live`) are not in the
 | `paint-gate` | Paint-walk pruning as **exact repaint-boundary counters**: the real `ListView.builder`'s auto-boundaries prune a localized update to one repaint; Overlay entry boundaries engage adaptively (dashboard+floater fixtures — real leaf widgets in bespoke two-entry scaffolding); the **lazy-layer convention** (the real `Toaster` with zero toasts idles pure pass-through: `boundaryCount == 0`); full-invalidate staleness (`cached == 0` when everything is dirty). Paint-phase µs is recorded warn-only (measured with debug stats on — not a clean paint time) and never fails | `lib/src/rendering/**` (esp. `render_repaint_boundary.dart`, cell paint), `lib/src/widgets/overlay.dart`, `lib/src/widgets/list_view.dart`, any widget that mounts overlay entries (toasts, banners, dropdowns) | ~4s (dart-run startup dominates; the measurement is <0.5s) | `profiling/paint_gate_baseline.json` (counters exact, tolerance 0; structural invariants also enforced in-code, even under `--update-baseline`) |
 | `image-bench` | Inline-image encoder: **dedup** (0 B/frame static) + **zero-image fast path** (0 B) | `lib/src/terminal/terminal_image_encoder.dart`, `ansi_byte_budget.dart` image category | ~5s | structural (in code) |
 | `serve-semantics-gate` | Semantics wire **anti-cliff**: diff stays flat in tree size (never falls off the 32 KiB DEFLATE cliff) | `lib/src/remote/remote_semantics.dart`, `SemanticsWireEncoder` | ~5s | structural (in code) |
-| `serve-wire-live` | Live `fleury serve` **socket bytes** (plan + semantics), real serve subprocess + WS client | `lib/src/remote/**`, `lib/src/serve/**`, plan/wire codec | ~30s (boots serve) | `profiling/serve_wire_live_baseline.json` |
+| `serve-wire-live` | Live `fleury serve` **socket bytes** (plan + semantics) **+ input→paint latency** (G4): the `input-latency` scenario injects keys closed-loop and enforces the structural invariant *every key answered by exactly one PLAN within 2s* (a broken input path fails the gate); its latency p50/p95 axes are **warn-only** (live-socket wall-clock), and its byte axes start warn-only too — promote them to gated once run-to-run variance is characterized | `lib/src/remote/**`, `lib/src/serve/**`, plan/wire codec, input dispatch on the served path | ~40s (boots serve) | `profiling/serve_wire_live_baseline.json` |
 | `bundle-size` | Served-browser **first-load client** weight (`remote_client.dart.js`, raw + gzip) | `web/remote_client.dart` and its imports | ~2s (no recompile) | generous fixed threshold (512 / 160 KiB) |
 
 Trigger paths are a guide, not a lockout — if a change plausibly moves a number,
@@ -58,6 +58,9 @@ changes underneath a baseline:
 The **output-byte** gates (`wire-gate`, `serve-wire-live`) and the
 **structural** gates (`image-bench`, `serve-semantics-gate`) are SDK-independent
 — they measure terminal/socket bytes or invariant ratios, not heap.
+(`serve-wire-live`'s input→paint latency axes are machine-dependent wall-clock
+and warn-only by design, like `paint-gate`'s µs axes — they never fail the
+gate; the structural one-key⟹one-plan invariant is what gates.)
 **`paint-gate`'s counter axes are SDK- and machine-independent** (exact widget
 fixture → exact per-frame integers); its paint-µs axes are machine-dependent
 but warn-only, so they never flake the gate.

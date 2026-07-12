@@ -43,5 +43,24 @@
     "otherBytes": 92.0,
     "cadenceP50Ms": 16.2,
     "cadenceP95Ms": 20.7
+  },
+  "input-latency": {
+    "scenario": "input-latency",
+    "steps": 120,
+    "intervalMs": 16,
+    "runs": 3,
+    "planFrames": 56.0,
+    "semanticsFrames": 56.0,
+    "planBytesPerFrame": 27.1,
+    "semanticsBytesPerFrame": 649.0,
+    "totalBytes": 44332.0,
+    "deflatedBytes": 1836.0,
+    "otherBytes": 92.0,
+    "cadenceP50Ms": 14.7,
+    "cadenceP95Ms": 15.1,
+    "latencySamples": 50.0,
+    "latencyP50Ms": 1.4,
+    "latencyP95Ms": 1.6,
+    "latencyMaxMs": 1.8
   }
 }

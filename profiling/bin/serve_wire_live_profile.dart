@@ -21,9 +21,21 @@
 // production-accurate figure). totalBytes/deflatedBytes are stable within a small
 // coalescing margin run-to-run; the gate keys on them, bytes/frame is noisier.
 //
+// The `input-latency` scenario is the G4 input→paint latency probe and runs a
+// different, CLOSED-LOOP session: the app idles until a key arrives, and the
+// client injects one key at a time — arm, timestamp, send INPUT_EVENT (0x14),
+// wait for the PLAN (0x12) frame that keystroke provokes, record the elapsed
+// time, then send the next. One key ⟹ exactly one plan (the scenario app
+// changes fixed-width content on every keystroke and never self-ticks), so
+// coalescing can't merge samples and an unsolicited plan is detectable — both
+// are STRUCTURAL failures (exit 1), as is any key whose plan doesn't arrive
+// within a generous per-key timeout. The latency numbers themselves are
+// machine-sensitive live-socket timing → recorded as warn-only axes, exactly
+// like cadence.
+//
 //   dart run bin/serve_wire_live_profile.dart \
-//     [--scenario=dashboard|log|counter] [--steps=N] [--interval-ms=M]
-//     [--runs=R] [--out=path.json]
+//     [--scenario=dashboard|log|counter|input-latency] [--steps=N]
+//     [--interval-ms=M] [--samples=N] [--runs=R] [--out=path.json]
 
 import 'dart:async';
 import 'dart:convert';
@@ -35,6 +47,7 @@ Future<void> main(List<String> args) async {
   var scenario = 'dashboard';
   var steps = 120;
   var intervalMs = 16;
+  var latencySamples = 50;
   var runs = 3;
   String? outPath;
   for (final arg in args) {
@@ -44,6 +57,8 @@ Future<void> main(List<String> args) async {
       steps = _intArg(arg, '--steps=');
     } else if (arg.startsWith('--interval-ms=')) {
       intervalMs = _intArg(arg, '--interval-ms=');
+    } else if (arg.startsWith('--samples=')) {
+      latencySamples = _intArg(arg, '--samples=');
     } else if (arg.startsWith('--runs=')) {
       runs = _intArg(arg, '--runs=');
     } else if (arg.startsWith('--out=')) {
@@ -54,33 +69,53 @@ Future<void> main(List<String> args) async {
       return;
     }
   }
+  final latencyMode = scenario == 'input-latency';
 
   final paths = _resolvePaths();
   final port = await _unusedLoopbackPort();
   stdout.writeln(
-    'serve live-wire: scenario=$scenario steps=$steps interval=${intervalMs}ms '
-    'runs=$runs port=$port',
+    latencyMode
+        ? 'serve live-wire: scenario=$scenario samples=$latencySamples '
+              'runs=$runs port=$port'
+        : 'serve live-wire: scenario=$scenario steps=$steps '
+              'interval=${intervalMs}ms runs=$runs port=$port',
   );
 
   final serve = await _bootServe(paths, port, scenario, steps, intervalMs);
   final samples = <_RunMetrics>[];
   try {
     for (var run = 1; run <= runs; run++) {
-      final m = await _captureOneRun(port, steps, intervalMs);
+      final m = latencyMode
+          ? await _captureLatencyRun(port, samples: latencySamples)
+          : await _captureOneRun(port, steps, intervalMs);
       if (m == null) {
+        if (latencyMode) {
+          // A key that got no PLAN (or an unsolicited one) is a broken
+          // input→paint path — structural, never retried into passing.
+          stderr.writeln('run $run/$runs: input-latency closed loop FAILED '
+              'structurally (see above) — aborting.');
+          exitCode = 1;
+          return;
+        }
         stderr.writeln('run $run/$runs: captured NO frames (serve up but no '
             'wire) — treating as a failure.');
         continue;
       }
       samples.add(m);
+      final timing = m.latencyP50Ms != null
+          ? 'input→paint p50 ${m.latencyP50Ms!.toStringAsFixed(1)} '
+                'p95 ${m.latencyP95Ms!.toStringAsFixed(1)} '
+                'max ${m.latencyMaxMs!.toStringAsFixed(1)} ms '
+                '(${m.latencySamples} keys)'
+          : 'cadence p50 ${m.cadenceP50Ms.toStringAsFixed(1)} '
+                'p95 ${m.cadenceP95Ms.toStringAsFixed(1)} ms';
       stdout.writeln(
         'run $run/$runs: plan ${m.planFrames}f '
         '${m.planBytesPerFrame.toStringAsFixed(1)} B/f · '
         'semantics ${m.semanticsFrames}f '
         '${m.semanticsBytesPerFrame.toStringAsFixed(1)} B/f · '
         'total ${m.totalBytes} B raw / ${m.deflatedBytes} B deflated · '
-        'cadence p50 ${m.cadenceP50Ms.toStringAsFixed(1)} '
-        'p95 ${m.cadenceP95Ms.toStringAsFixed(1)} ms'
+        '$timing'
         '${m.timedOut ? '  (hit hard cap)' : ''}',
       );
     }
@@ -99,10 +134,15 @@ Future<void> main(List<String> args) async {
   final result = _median(scenario, steps, intervalMs, samples);
   stdout.writeln('');
   stdout.writeln(
-    'median: plan ${result['planBytesPerFrame']} B/f · '
-    'semantics ${result['semanticsBytesPerFrame']} B/f · '
-    'total ${result['totalBytes']} B raw / ${result['deflatedBytes']} B '
-    'deflated · p95 cadence ${result['cadenceP95Ms']} ms',
+    latencyMode
+        ? 'median: input→paint p50 ${result['latencyP50Ms']} ms · '
+              'p95 ${result['latencyP95Ms']} ms · '
+              'total ${result['totalBytes']} B raw / '
+              '${result['deflatedBytes']} B deflated'
+        : 'median: plan ${result['planBytesPerFrame']} B/f · '
+              'semantics ${result['semanticsBytesPerFrame']} B/f · '
+              'total ${result['totalBytes']} B raw / ${result['deflatedBytes']} B '
+              'deflated · p95 cadence ${result['cadenceP95Ms']} ms',
   );
   if (outPath != null) {
     File(outPath).writeAsStringSync(
@@ -224,6 +264,172 @@ Future<_RunMetrics?> _captureOneRun(int port, int steps, int intervalMs) async {
   );
 }
 
+/// One closed-loop G4 latency session against the `input-latency` scenario:
+/// connect (deflate off), INIT, wait for the initial paint, then inject keys
+/// one at a time — arm a waiter, timestamp, send the INPUT_EVENT, await the
+/// PLAN it provokes, record elapsed. The next key is only sent after the
+/// previous plan (plus a short drain pause), so the app can never coalesce
+/// two keystrokes into one frame and every sample attributes cleanly.
+///
+/// Structural guarantees (returns null = FAIL, caller aborts):
+///   - every injected key gets a PLAN within [_keyTimeout];
+///   - no unsolicited PLAN arrives during the loop (one key ⟹ one plan —
+///     an extra plan means the scenario self-ticked or attribution broke).
+///
+/// The first [_warmupKeys] keys warm the input path's JIT and are not
+/// recorded. Latency numbers are wall-clock over a live socket — reported and
+/// baselined as warn-only axes, never gated.
+Future<_RunMetrics?> _captureLatencyRun(int port, {required int samples}) async {
+  const warmupKeys = 5;
+  const keyTimeout = Duration(seconds: 2);
+  // A fresh session may cold-start the scenario-app subprocess (`dart run`
+  // JIT) — the initial paint gets a far larger budget than a keystroke.
+  const firstPaintTimeout = Duration(seconds: 30);
+  // Post-plan pause before the next key: lets the same-task SEMANTICS frame
+  // (and any wrongly unsolicited PLAN) drain so per-key accounting is exact.
+  const drainPause = Duration(milliseconds: 10);
+
+  final ws = await WebSocket.connect(
+    'ws://127.0.0.1:$port/ws',
+    headers: {'origin': 'http://127.0.0.1:$port'},
+    compression: CompressionOptions.compressionOff,
+  );
+  final decoder = FrameDecoder();
+  final allBytes = <int>[];
+  final planBytes = <int>[];
+  final semanticsBytes = <int>[];
+  var otherBytes = 0;
+  final planArrivalMs = <double>[];
+  final sw = Stopwatch()..start();
+  Completer<double>? planWaiter;
+
+  final sub = ws.listen(
+    (data) {
+      if (data is! List<int>) return;
+      allBytes.addAll(data);
+      decoder.feed(data);
+      for (final frame in decoder.drain()) {
+        final bytes = encodeFrame(frame).length;
+        final now = sw.elapsedMicroseconds / 1000.0;
+        if (frame is PlanFrame) {
+          planBytes.add(bytes);
+          planArrivalMs.add(now);
+          if (planWaiter case final w? when !w.isCompleted) w.complete(now);
+        } else if (frame is SemanticsFrame) {
+          semanticsBytes.add(bytes);
+        } else {
+          otherBytes += bytes;
+        }
+      }
+    },
+    onDone: () {
+      if (planWaiter case final w? when !w.isCompleted) {
+        w.completeError(StateError('socket closed'));
+      }
+    },
+    onError: (Object e) {
+      if (planWaiter case final w? when !w.isCompleted) {
+        w.completeError(StateError('socket error: $e'));
+      }
+    },
+  );
+
+  // Arms a fresh waiter; the caller sends AFTER arming so the responding
+  // plan cannot slip through before the completer exists.
+  Future<double?> awaitPlan(Duration timeout) async {
+    try {
+      return await planWaiter!.future.timeout(timeout);
+    } on TimeoutException {
+      return null;
+    } on StateError catch (e) {
+      stderr.writeln('input-latency: $e while waiting for a PLAN frame.');
+      return null;
+    } finally {
+      planWaiter = null;
+    }
+  }
+
+  Future<void> cleanup() async {
+    await sub.cancel();
+    await ws.close();
+  }
+
+  planWaiter = Completer<double>();
+  ws.add(encodeFrame(const InitFrame(
+    size: CellSize(120, 40),
+    colorMode: ColorMode.truecolor,
+    imageProtocol: ImageProtocol.halfBlock,
+    tmuxPassthrough: false,
+    protocolVersion: remoteProtocolVersion,
+  )));
+  if (await awaitPlan(firstPaintTimeout) == null) {
+    stderr.writeln('input-latency: no initial PLAN within '
+        '${firstPaintTimeout.inSeconds}s of INIT — session never painted.');
+    await cleanup();
+    return null;
+  }
+  // Let the initial burst (first semantics tree, any follow-up paint from
+  // autofocus) fully drain before the loop starts attributing plans to keys.
+  await Future<void>.delayed(const Duration(milliseconds: 500));
+
+  final latencies = <double>[];
+  var extraPlans = 0;
+  for (var i = 0; i < warmupKeys + samples; i++) {
+    final plansBefore = planBytes.length;
+    planWaiter = Completer<double>();
+    final sentAt = sw.elapsedMicroseconds / 1000.0;
+    ws.add(encodeFrame(const InputEventFrame(KeyEvent(char: 'k'))));
+    final arrival = await awaitPlan(keyTimeout);
+    if (arrival == null) {
+      stderr.writeln('input-latency: key ${i + 1}/${warmupKeys + samples} got '
+          'no PLAN within ${keyTimeout.inSeconds}s — the input→paint path is '
+          'broken (or catastrophically slow).');
+      await cleanup();
+      return null;
+    }
+    if (i >= warmupKeys) latencies.add(arrival - sentAt);
+    await Future<void>.delayed(drainPause);
+    extraPlans += planBytes.length - plansBefore - 1;
+  }
+  await cleanup();
+
+  if (extraPlans != 0) {
+    stderr.writeln('input-latency: $extraPlans unsolicited PLAN frame(s) '
+        'during the closed loop — one-key⟹one-plan attribution is broken '
+        '(did the scenario start self-ticking?).');
+    return null;
+  }
+
+  int steadySum(List<int> xs) =>
+      xs.length > 1 ? xs.sublist(1).fold<int>(0, (a, b) => a + b) : 0;
+  int steadyN(List<int> xs) => xs.length > 1 ? xs.length - 1 : 0;
+  final cadences = <double>[
+    for (var i = 1; i < planArrivalMs.length; i++)
+      planArrivalMs[i] - planArrivalMs[i - 1],
+  ]..sort();
+  final sorted = [...latencies]..sort();
+
+  return _RunMetrics(
+    planFrames: planBytes.length,
+    semanticsFrames: semanticsBytes.length,
+    totalBytes: allBytes.length,
+    deflatedBytes: ZLibCodec(raw: true, level: 6).encode(allBytes).length,
+    planBytesPerFrame:
+        steadyN(planBytes) == 0 ? 0 : steadySum(planBytes) / steadyN(planBytes),
+    semanticsBytesPerFrame: steadyN(semanticsBytes) == 0
+        ? 0
+        : steadySum(semanticsBytes) / steadyN(semanticsBytes),
+    otherBytes: otherBytes,
+    cadenceP50Ms: _percentile(cadences, 0.50),
+    cadenceP95Ms: _percentile(cadences, 0.95),
+    timedOut: false,
+    latencyP50Ms: _percentile(sorted, 0.50),
+    latencyP95Ms: _percentile(sorted, 0.95),
+    latencyMaxMs: sorted.isEmpty ? 0 : sorted.last,
+    latencySamples: sorted.length,
+  );
+}
+
 Future<Process> _bootServe(
   _Paths paths,
   int port,
@@ -310,6 +516,14 @@ Map<String, Object?> _median(
     'otherBytes': med(samples.map((s) => s.otherBytes)),
     'cadenceP50Ms': med1(samples.map((s) => s.cadenceP50Ms)),
     'cadenceP95Ms': med1(samples.map((s) => s.cadenceP95Ms)),
+    // Closed-loop input→paint axes (input-latency scenario only). Warn-only
+    // downstream: wall-clock timing over a live socket is machine-sensitive.
+    if (samples.every((s) => s.latencyP50Ms != null)) ...{
+      'latencySamples': med(samples.map((s) => s.latencySamples!)),
+      'latencyP50Ms': med1(samples.map((s) => s.latencyP50Ms!)),
+      'latencyP95Ms': med1(samples.map((s) => s.latencyP95Ms!)),
+      'latencyMaxMs': med1(samples.map((s) => s.latencyMaxMs!)),
+    },
   };
 }
 
@@ -340,6 +554,10 @@ final class _RunMetrics {
     required this.cadenceP50Ms,
     required this.cadenceP95Ms,
     required this.timedOut,
+    this.latencyP50Ms,
+    this.latencyP95Ms,
+    this.latencyMaxMs,
+    this.latencySamples,
   });
   final int planFrames;
   final int semanticsFrames;
@@ -351,6 +569,13 @@ final class _RunMetrics {
   final double cadenceP50Ms;
   final double cadenceP95Ms;
   final bool timedOut;
+
+  /// Closed-loop input→paint numbers — non-null only for the `input-latency`
+  /// scenario ([_captureLatencyRun]).
+  final double? latencyP50Ms;
+  final double? latencyP95Ms;
+  final double? latencyMaxMs;
+  final int? latencySamples;
 }
 
 final class _Paths {
