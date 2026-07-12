@@ -140,7 +140,6 @@ final class AnsiFramePresenter implements FramePresenter {
   }
 
   @override
-  @override
   FrameDiffStats frameDiffStats(TuiRenderedFrame frame, FramePresentInfo info) {
     // The ANSI diff runs internally in presentFrame; report its measured cell
     // change set. The driver owns the rest of the FrameEvent.
