@@ -24,13 +24,14 @@
 //
 // Exit codes: 0 pass, 1 regression, 64 usage/setup error.
 
-import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
+
+import 'gate_support.dart';
 
 const _defaultFrames = 400;
 const _defaultWarmup = 300;
@@ -71,17 +72,6 @@ Widget _scenario(_Model m) {
       ),
     ],
   );
-}
-
-/// Discards output — the runtime's real sink writes to dart:io (excluded from
-/// the package:fleury filter), so a null sink keeps the measurement to the
-/// renderer's own churn and nothing else.
-final class _NullAnsiSink implements AnsiSink {
-  const _NullAnsiSink();
-  @override
-  void write(String data) {}
-  @override
-  Future<void> flush() async {}
 }
 
 /// Sums `package:fleury` accumulated allocation bytes over [work], and returns
@@ -125,12 +115,12 @@ Future<void> main(List<String> args) async {
       gate = true;
     } else if (arg == '--update-baseline') {
       update = true;
-    } else if (arg.startsWith('--frames=')) {
-      frames = int.parse(arg.substring('--frames='.length));
-    } else if (arg.startsWith('--warmup=')) {
-      warmup = int.parse(arg.substring('--warmup='.length));
-    } else if (arg.startsWith('--top=')) {
-      top = int.parse(arg.substring('--top='.length));
+    } else if (parseIntFlag(arg, 'frames') case final v?) {
+      frames = v;
+    } else if (parseIntFlag(arg, 'warmup') case final v?) {
+      warmup = v;
+    } else if (parseIntFlag(arg, 'top') case final v?) {
+      top = v;
     } else if (arg.startsWith('--baseline=')) {
       baselinePath = arg.substring('--baseline='.length);
     } else {
@@ -167,7 +157,7 @@ Future<void> main(List<String> args) async {
     // runtime. paint into `back`, diff against `front`, swap.
     const size = CellSize(80, 24);
     const renderer = AnsiRenderer();
-    const sink = _NullAnsiSink();
+    const sink = NullAnsiSink();
     final owner = BuildOwner();
     final model = _Model();
     final root = owner.mountRoot(_scenario(model));
@@ -200,12 +190,11 @@ Future<void> main(List<String> args) async {
     final perFrame = result.totalBytes / frames;
 
     if (update) {
-      final json = const JsonEncoder.withIndent('  ').convert({
+      writeBaselineJson(baselinePath, {
         'bytesPerFrame': perFrame,
         'totalBytes': result.totalBytes,
         'frames': frames,
       });
-      File(baselinePath).writeAsStringSync('$json\n');
       stdout.writeln('alloc gate: wrote baseline $baselinePath '
           '(${perFrame.toStringAsFixed(1)} B/frame over $frames frames).');
       return;
@@ -222,14 +211,11 @@ Future<void> main(List<String> args) async {
 
     if (!gate) return;
 
-    final file = File(baselinePath);
-    if (!file.existsSync()) {
-      stderr.writeln('alloc gate: no baseline at $baselinePath — run with '
-          '--update-baseline first.');
+    final base = readBaselineOrNull(baselinePath, gateName: 'alloc gate');
+    if (base == null) {
       exitCode = 64;
       return;
     }
-    final base = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
     final basePerFrame = (base['bytesPerFrame'] as num).toDouble();
     final limit = basePerFrame * (1 + _failFraction);
     final delta = (perFrame - basePerFrame) / basePerFrame * 100;

@@ -19,20 +19,15 @@
 
 import 'package:fleury/fleury.dart';
 
-const _cols = 100;
+import 'gate_support.dart';
 
-class _RowModel extends ChangeNotifier {
-  int v = 0;
-  void bump() {
-    v++;
-    notifyListeners();
-  }
-}
+const _cols = 100;
 
 // A row whose per-cell paint cost the caller picks: `cheap` is a short plain
 // Text (the neutral-subtree case the RepaintBoundary docs warn about); the
-// default is a full-width styled row (color + ~100 graphemes), where skipping
-// the repaint is a real saving.
+// default is the shared full-width styled row from gate_support.dart (color +
+// ~100 graphemes, where skipping the repaint is a real saving) — the same row
+// shape the paint gate drives, so probe and gate provably measure one thing.
 class _Row extends StatelessWidget {
   const _Row({
     required this.index,
@@ -41,46 +36,29 @@ class _Row extends StatelessWidget {
     required this.cheap,
   });
   final int index;
-  final _RowModel model;
+  final RowModel model;
   final bool boundary;
   final bool cheap;
 
   @override
   Widget build(BuildContext context) {
-    final row = ListenableBuilder(
-      listenable: model,
-      builder: (context, _) {
-        if (cheap) return Text('row $index tick=${model.v}');
-        final label = 'row $index  tick=${model.v}  ';
-        final filled = label.padRight(_cols, '·');
-        return Text(
-          filled,
-          style: CellStyle(
-            foreground: RgbColor(120 + (index % 8) * 12, 200, 160),
-            bold: index.isEven,
-          ),
-        );
-      },
-    );
+    final row = cheap
+        ? ListenableBuilder(
+            listenable: model,
+            builder: (context, _) => Text('row $index tick=${model.v}'),
+          )
+        : liveRow(index: index, model: model, cols: _cols);
     return boundary ? RepaintBoundary(child: row) : row;
   }
 }
 
-Widget _scene(List<_RowModel> models, bool boundary, bool cheap) => Column(
+Widget _scene(List<RowModel> models, bool boundary, bool cheap) => Column(
   crossAxisAlignment: CrossAxisAlignment.start,
   children: [
     for (var i = 0; i < models.length; i++)
       _Row(index: i, model: models[i], boundary: boundary, cheap: cheap),
   ],
 );
-
-final class _NullAnsiSink implements AnsiSink {
-  const _NullAnsiSink();
-  @override
-  void write(String data) {}
-  @override
-  Future<void> flush() async {}
-}
 
 double _run({
   required int rows,
@@ -91,9 +69,9 @@ double _run({
 }) {
   final size = CellSize(_cols, rows);
   const renderer = AnsiRenderer();
-  const sink = _NullAnsiSink();
+  const sink = NullAnsiSink();
   final owner = BuildOwner();
-  final models = [for (var i = 0; i < rows; i++) _RowModel()];
+  final models = [for (var i = 0; i < rows; i++) RowModel()];
   final root = owner.mountRoot(_scene(models, boundary, cheap));
   var front = CellBuffer(size);
   var back = CellBuffer(size);
@@ -130,9 +108,9 @@ void main(List<String> args) {
   var warmup = 400;
   var cheap = false;
   for (final a in args) {
-    if (a.startsWith('--rows=')) rows = int.parse(a.substring(7));
-    if (a.startsWith('--frames=')) frames = int.parse(a.substring(9));
-    if (a.startsWith('--warmup=')) warmup = int.parse(a.substring(9));
+    if (parseIntFlag(a, 'rows') case final v?) rows = v;
+    if (parseIntFlag(a, 'frames') case final v?) frames = v;
+    if (parseIntFlag(a, 'warmup') case final v?) warmup = v;
     if (a == '--cheap') cheap = true;
   }
 
