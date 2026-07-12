@@ -1568,9 +1568,15 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
   /// service — deterministic byte-for-byte. Pass `--gate` to fail on a
   /// regression past tolerance, `--update-baseline` to rebaseline (after an
   /// intentional change or an SDK bump). The VM-service flags are required so
-  /// the gate can self-connect for the allocation profile.
+  /// the gate can self-connect for the allocation profile; `--deterministic`
+  /// keeps background-JIT allocation sinking from nondeterministically
+  /// deflating a window.
   Future<void> benchmarkAllocGate(List<String> args) async {
     await _run('dart', [
+      // --deterministic pins JIT compilation order: otherwise a background
+      // allocation-sinking tier can land mid-window at a nondeterministic
+      // frame and collapse the measured churn (see bin/alloc_gate.dart).
+      '--deterministic',
       '--enable-vm-service=0',
       '--disable-service-auth-codes',
       'bin/alloc_gate.dart',
@@ -1609,6 +1615,7 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       (name: 'image-bench', cmd: ['run', 'bin/image_bench.dart', '--gate']),
       (name: 'bundle-size', cmd: ['run', 'bin/bundle_size_gate.dart', '--gate']),
       (name: 'alloc-gate', cmd: [
+        '--deterministic',
         '--enable-vm-service=0',
         '--disable-service-auth-codes',
         'bin/alloc_gate.dart',

@@ -51,7 +51,11 @@ committed. Two of the axes are **SDK-sensitive** and will drift if the Dart SDK
 changes underneath a baseline:
 
 - **`alloc-gate`** measures heap allocation, which shifts with VM object layout
-  and list growth. Re-baseline (`--update-baseline`) after an SDK bump.
+  and list growth. Re-baseline (`--update-baseline`) after an SDK bump. It runs
+  under `--deterministic` (the dev tool passes it): without that flag the
+  background JIT can land an allocation-sinking tier mid-window at a
+  nondeterministic frame and collapse the number — re-running it by hand
+  without the flag can flake where the gate does not.
 - **`bundle-size`** measures dart2js output, which drifts a few % per SDK — its
   threshold is deliberately generous to absorb that without flaking.
 
