@@ -741,6 +741,24 @@ final class _SurfaceFramePresenter implements FramePresenter {
   }
 
   @override
+  FrameDiffStats frameDiffStats(TuiRenderedFrame frame, FramePresentInfo info) {
+    // The browser embed renders a full DOM surface each frame; report the
+    // plan's row-granular diff so the shared DebugEvents FrameEvent (assembled
+    // by the driver) carries real stats here too, not just on terminal/wire.
+    // This is the DT4 gap closing for free — the embed previously emitted
+    // nothing to DebugEvents.
+    final plan = info.plan!;
+    final bounds = plan.damage.dirtyBounds;
+    return FrameDiffStats(
+      diff: plan.dirtyRowDiffTime + plan.spanBuildTime,
+      dirtyCells: bounds != null
+          ? bounds.size.cols * bounds.size.rows
+          : plan.damage.dirtyRows.dirtyRowCount * frame.next.size.cols,
+      dirtyBounds: bounds,
+    );
+  }
+
+  @override
   void onFrameCommitted(TuiRenderedFrame frame, FramePresentInfo info) {
     final semanticsOwner = readSemanticsOwner();
     final pipeline = readPipeline();

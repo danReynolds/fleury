@@ -2,8 +2,6 @@
 // rendered frame's buffers and damage plan to the RemoteSurfaceSink,
 // which encodes only the changed cells for the peer's mirror.
 
-import '../debug/debug_events.dart';
-import '../debug/debug_invalidation.dart';
 import '../foundation/geometry.dart';
 import 'frame_driver.dart';
 import 'remote_surface_sink.dart';
@@ -18,7 +16,6 @@ final class WireFramePresenter implements FramePresenter {
   final CellRect? Function()? _readCaret;
   CellRect? _lastCaret;
   var _sentCaret = false;
-  int _frameCounter = 0;
 
   @override
   bool get wantsPresentationPlan => true;
@@ -40,17 +37,7 @@ final class WireFramePresenter implements FramePresenter {
   }
 
   @override
-  void onFrameCommitted(TuiRenderedFrame frame, FramePresentInfo info) {
-    if (!info.debugWatching) {
-      DebugInvalidations.reset();
-      return;
-    }
-    // A debug consumer is watching (the panel, or an agent pulling read_frames
-    // over the wire): emit the same per-frame telemetry the ANSI presenter does
-    // so the debug channel carries real frame stats over the serve / agent path
-    // too — not just in a local terminal. Gated on debugWatching, so a release
-    // serve (debug off) pays nothing.
-    _frameCounter++;
+  FrameDiffStats frameDiffStats(TuiRenderedFrame frame, FramePresentInfo info) {
     // The plan is always built for this presenter (wantsPresentationPlan).
     final plan = info.plan!;
     final bounds = plan.damage.dirtyBounds;
@@ -63,23 +50,15 @@ final class WireFramePresenter implements FramePresenter {
     final dirtyCells = bounds != null
         ? bounds.size.cols * bounds.size.rows
         : plan.damage.dirtyRows.dirtyRowCount * frame.next.size.cols;
-    DebugEvents.emitFrame(
-      FrameEvent(
-        frameNumber: _frameCounter,
-        reason: info.reason,
-        build: info.phaseBuild,
-        layout: info.phaseLayout,
-        paint: info.phasePaint,
-        // On the wire the "diff" phase is building the change plan: the row
-        // diff plus span construction.
-        diff: plan.dirtyRowDiffTime + plan.spanBuildTime,
-        dirtyCells: dirtyCells,
-        dirtyBounds: bounds,
-        dirtySources: DebugInvalidations.drain(),
-        layoutStats: info.layoutStats,
-        repaintBoundaries: info.repaintBoundaryStats,
-        bufferSize: frame.next.size,
-      ),
+    // On the wire the "diff" phase is building the change plan: the row diff
+    // plus span construction. The driver owns the rest of the FrameEvent.
+    return FrameDiffStats(
+      diff: plan.dirtyRowDiffTime + plan.spanBuildTime,
+      dirtyCells: dirtyCells,
+      dirtyBounds: bounds,
     );
   }
+
+  @override
+  void onFrameCommitted(TuiRenderedFrame frame, FramePresentInfo info) {}
 }

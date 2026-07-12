@@ -5,7 +5,6 @@
 // (ansi_byte_parity_test) pins the output byte-for-byte.
 
 import '../debug/debug_events.dart';
-import '../debug/debug_invalidation.dart';
 import '../debug/debug_state.dart';
 import '../foundation/geometry.dart';
 import '../rendering/ansi_renderer.dart';
@@ -35,7 +34,6 @@ final class AnsiFramePresenter implements FramePresenter {
   /// or null when the terminal has none (glyph art needs no encoder).
   final TerminalImageEncoder? _imageEncoder;
 
-  var _frameCounter = 0;
   // Cells we tinted green in the previous frame's paint-flash pass.
   // Empty when paint-flash is off; populated each frame the flash is
   // active. Kept as flat indices (row * cols + col) to avoid per-cell
@@ -142,34 +140,22 @@ final class AnsiFramePresenter implements FramePresenter {
   }
 
   @override
-  void onFrameCommitted(TuiRenderedFrame frame, FramePresentInfo info) {
-    if (info.debugWatching) {
-      _frameCounter++;
-      final dirtySources = DebugInvalidations.drain();
-      DebugEvents.emitFrame(
-        FrameEvent(
-          frameNumber: _frameCounter,
-          reason: info.reason,
-          build: info.phaseBuild,
-          layout: info.phaseLayout,
-          paint: info.phasePaint,
-          diff: _phaseDiff,
-          dirtyCells: _dirtyCellCount,
-          dirtyBounds: _dirtyBounds,
-          dirtySpans: DirtySpanFrameStats.fromFlatCells(
-            _currentDirty,
-            columns: frame.next.size.cols,
-          ),
-          dirtySources: dirtySources,
-          layoutStats: info.layoutStats,
-          repaintBoundaries: info.repaintBoundaryStats,
-          bufferSize: frame.next.size,
-        ),
-      );
-    } else {
-      DebugInvalidations.reset();
-    }
+  FrameDiffStats frameDiffStats(TuiRenderedFrame frame, FramePresentInfo info) {
+    // The ANSI diff runs internally in presentFrame; report its measured cell
+    // change set. The driver owns the rest of the FrameEvent.
+    return FrameDiffStats(
+      diff: _phaseDiff,
+      dirtyCells: _dirtyCellCount,
+      dirtyBounds: _dirtyBounds,
+      dirtySpans: DirtySpanFrameStats.fromFlatCells(
+        _currentDirty,
+        columns: frame.next.size.cols,
+      ),
+    );
   }
+
+  @override
+  void onFrameCommitted(TuiRenderedFrame frame, FramePresentInfo info) {}
 }
 
 /// Emits the paint-flash overlay bytes: un-tints last frame's flashed
