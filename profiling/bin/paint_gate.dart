@@ -15,39 +15,52 @@
 // RepaintBoundaryDebugStats.beginFrame / takeFrameStats around each
 // renderFrame. On a fixed widget fixture the per-frame signature is exact —
 // machine- and SDK-independent, zero tolerance — so the gate fails on ANY
-// counter drift. Paint-phase µs (onPhaseTiming) is recorded and baselined
-// WARN-ONLY (the wire gate's precedent for timing axes): it prints drift,
-// never fails on it.
+// counter drift. The counters are pure functions of fixture state, so the
+// windows are short: every measured frame must repeat the window's
+// signature (the stability assert is the safety net, not frame count).
 //
-// Scenarios (steady-state: warm-up frames, then every measured frame must
-// repeat the same signature — in-run stability is itself asserted):
+// Paint-phase µs is recorded and baselined WARN-ONLY (the wire gate's
+// precedent for timing axes) — and it is measured with the boundary debug
+// stats ENABLED, so it is debug-inflated non-uniformly with boundaryCount:
+// useful for spotting gross drift, NEVER to be promoted to a gating axis
+// as-is (baseline key: paintUsDebugStats).
 //
-//   S1 list-localized     ListView.builder rows — the REAL widget, so its
+// The frame loop is renderFrame into one reused, cleared buffer — no ANSI
+// diff: the counters are collected inside renderFrame's paint pass, and the
+// diff contributes nothing to any gated or reported axis (the probe keeps
+// the full diff loop; it measures the paint phase in situ).
+//
+// Fixture honesty: S1/S4 drive the REAL ListView.builder; S3 genuinely
+// mounts the real fleury_widgets Toaster inside an app-like overlay; S2/S5
+// are real leaf widgets in bespoke scaffolding (a hand-built two-entry
+// Overlay), shaped like a dashboard + floater rather than taken from an app.
+//
+// Scenarios:
+//
+//   S1 list-localized     ListView.builder rows — the real widget, so its
 //                         per-item auto-boundaries are what's measured. ONE
 //                         row's own model bumps per frame: exactly one
-//                         repaint, every other visible row cache-blits.
-//   S2 overlay-churn      Explicit Overlay: static full-screen base entry +
-//                         churning non-opaque floater. The floater repaints;
-//                         the base blits from cache instead of re-walking.
+//                         repaint, every other visible row cache-blits. The
+//                         bump cycle covers the OBSERVED mounted window
+//                         (read from the mount frame's boundary count), so
+//                         the driver never bumps an unmounted row.
+//   S2 overlay-churn      Two-entry Overlay: static full-screen base +
+//                         churning non-opaque floater. The floater
+//                         repaints; the base blits from cache instead of
+//                         re-walking its paint.
 //   S3 overlay-idle-lazy  THE GUARDRAIL for the lazy-layer convention: an
-//                         app-shaped fixture (Overlay whose only mounted
-//                         entry is the app, wrapped in a real Toaster with
-//                         zero toasts) must be PURE PASS-THROUGH while idle —
-//                         boundaryCount == 0 on every frame. A widget that
-//                         permanently mounts an empty overlay entry keeps
-//                         the host overlay multi-entry, which keeps the
-//                         per-entry boundaries engaged and taxes every
-//                         app-dirty frame with a full-screen cache write +
-//                         blit (the regression PR #84's review caught in
-//                         Toaster itself) — that flips this scenario red.
-//                         Mid-run a toast is enqueued (engagement must
-//                         appear: boundaryCount 2) and auto-dismissed via
-//                         the fake scheduler (pass-through must return):
-//                         the full adaptive cycle in one scenario.
-//   S4 full-invalidate    Every row changes every frame: cachedCount must
+//                         Overlay whose only mounted entry is the app
+//                         (wrapped in a real Toaster with zero toasts) must
+//                         be PURE PASS-THROUGH while idle — boundaryCount
+//                         == 0 on every frame. Mid-run a toast is enqueued
+//                         (engagement must appear: boundaryCount 2) and
+//                         auto-dismissed (pass-through must return): the
+//                         full adaptive cycle in one scenario.
+//   S4 full-invalidate    Every row changes every frame (same mounted
+//                         fixture as S1, driver swapped): cachedCount must
 //                         be 0 and repaintedCount == boundaryCount. A
 //                         boundary that cache-hits while everything under
-//                         it is dirty is serving STALE cells — this is the
+//                         it is dirty is serving STALE cells — the
 //                         staleness detector.
 //   S5 dropdown-typing    INFORMATIONAL (warn-only, no counter gate): base
 //                         and floater BOTH dirty every frame — the
@@ -64,7 +77,6 @@
 //
 // Exit codes: 0 pass, 1 regression / invariant failure, 64 usage error.
 
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
@@ -80,71 +92,62 @@ import 'package:fleury/fleury_test.dart'
         RepaintBoundaryFrameStats;
 import 'package:fleury_widgets/fleury_widgets.dart' show Toaster;
 
+import 'gate_support.dart';
+
 const _cols = 80;
 const _rows = 24;
 const _size = CellSize(_cols, _rows);
+const _viewportLabel = '${_cols}x$_rows';
 const _listItemCount = 40; // more items than the viewport: pins lazy mount
 
-const _defaultFrames = 300; // measured frames per steady-state window
-const _defaultWarmup = 60;
+/// Counters are pure functions of fixture state and every measured frame is
+/// asserted identical, so a window needs only one full driver period (the
+/// S1 bump cycle: the mounted-row count) plus margin — not statistics.
+const _defaultFrames = 40;
+const _defaultWarmup = 8;
+
+/// S3's return-to-idle window: the disengage transition is proven by the
+/// first post-dismiss frame (included in the window); a longer window would
+/// just re-prove a constant.
+const _idleAfterFrames = 10;
+
+/// S4 re-warm after swapping S1's driver on the shared fixture: the all-dirty
+/// signature holds from the first bumpAll frame; this is margin only.
+const _fullInvalidateRewarm = 4;
 
 /// Timing axes warn beyond this relative change, never fail (paint µs is
-/// machine-dependent; the counters are the gate).
+/// machine-dependent and debug-stats-inflated; the counters are the gate).
 const _timingWarnFraction = 0.5;
 
 // ---------------------------------------------------------------------------
-// Fixture widgets
+// Fixture widgets (row shape shared with the probe via gate_support.dart)
 // ---------------------------------------------------------------------------
 
-class _Model extends ChangeNotifier {
-  int v = 0;
-  void bump() {
-    v++;
-    notifyListeners();
-  }
-}
-
-/// Full-width styled row (the paint-walk probe's row): wide enough that a
-/// skipped repaint is a real saving, padded to a fixed width so damage
-/// bounds — and therefore copiedCellCount — cannot wobble as ticks grow.
-Widget _rowText(int index, int tick) {
-  final label = 'row $index  tick=$tick  ';
-  return Text(
-    label.padRight(_cols, '·'),
-    style: CellStyle(
-      foreground: RgbColor(120 + (index % 8) * 12, 200, 160),
-      bold: index.isEven,
-    ),
-  );
-}
-
-/// One list row listening to its OWN model — the streaming-token / live-row
-/// shape from the probe.
-Widget _listRow(int index, _Model model) => ListenableBuilder(
-  listenable: model,
-  builder: (context, _) => _rowText(index, model.v),
-);
-
-/// A static full-screen dashboard: [rows] full-width styled rows that never
-/// rebuild. The overlay base entry for S2/S5.
+/// A static full-screen dashboard: full-width styled rows that never
+/// rebuild. The overlay base entry for S2.
 Widget _staticDashboard() => Column(
   crossAxisAlignment: CrossAxisAlignment.start,
-  children: [for (var i = 0; i < _rows; i++) _rowText(i, 0)],
+  children: [
+    for (var i = 0; i < _rows; i++) styledRow(index: i, tick: 0, cols: _cols),
+  ],
 );
 
 /// A dashboard whose EVERY row carries the model's tick — one bump dirties
 /// the whole subtree (the app-dirty frame S3's convention protects).
-Widget _churningDashboard(_Model model) => ListenableBuilder(
+Widget _churningDashboard(RowModel model) => ListenableBuilder(
   listenable: model,
   builder: (context, _) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
-    children: [for (var i = 0; i < _rows; i++) _rowText(i, model.v)],
+    children: [
+      for (var i = 0; i < _rows; i++)
+        styledRow(index: i, tick: model.v, cols: _cols),
+    ],
   ),
 );
 
 /// A small churning floater box, bottom-right — a toast/dropdown stand-in
 /// with a fixed footprint (3 rows × 24 cols) so its damage bounds are exact.
-Widget _floaterBox(_Model model) => Align(
+Widget _floaterBox(RowModel model) => Align(
   alignment: Alignment.bottomRight,
   child: ListenableBuilder(
     listenable: model,
@@ -174,37 +177,24 @@ class _ContextProbe extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Host: ambient scopes + probe-style frame loop
+// Host: ambient scopes + frame loop
 // ---------------------------------------------------------------------------
 
-final class _NullAnsiSink implements AnsiSink {
-  const _NullAnsiSink();
-  @override
-  void write(String data) {}
-  @override
-  Future<void> flush() async {}
-}
-
-/// Mounts a scene under the ambient scopes the widget tests install
-/// (FleuryTester's wrap: binding + media query + focus + pointer scopes), so
-/// real widgets — ListView, Overlay, Toaster — run app-shaped. Frames are
-/// probe-style: renderFrame into a reused double buffer + AnsiRenderer diff
-/// into a null sink, with the boundary debug stats armed around each frame.
+/// Mounts a scene under the ambient scopes the widget tests install (see
+/// [wrapWithAmbientScopes]) and drives frames: renderFrame into one reused
+/// cleared buffer, with the boundary debug stats armed around each frame.
 /// Time is a FakeClock: it moves only when a scenario advances it, so
 /// ticker-driven behavior (the toast auto-dismiss) lands on an exact frame.
 final class _Host {
   _Host(Widget scene) {
     binding = TuiBinding(tickerScheduler: scheduler);
     root = owner.mountRoot(
-      TuiBindingScope(
+      wrapWithAmbientScopes(
+        scene: scene,
         binding: binding,
-        child: MediaQuery(
-          data: const MediaQueryData(size: _size),
-          child: FocusManagerScope(
-            manager: focusManager,
-            child: PointerRouterScope(router: pointerRouter, child: scene),
-          ),
-        ),
+        focusManager: focusManager,
+        pointerRouter: pointerRouter,
+        size: _size,
       ),
     );
   }
@@ -217,29 +207,20 @@ final class _Host {
   final BuildOwner owner = BuildOwner();
   late final Element root;
 
-  static const _renderer = AnsiRenderer();
-  static const _sink = _NullAnsiSink();
+  final CellBuffer _buffer = CellBuffer(_size);
 
-  CellBuffer _front = CellBuffer(_size);
-  CellBuffer _back = CellBuffer(_size);
-
-  /// Paint-phase µs of the most recent [frame].
-  int lastPaintUs = 0;
-
-  RepaintBoundaryFrameStats frame() {
+  /// Renders one frame and returns its boundary stats + paint-phase µs.
+  /// The µs is measured with the debug stats enabled (see file header):
+  /// warn-only material, never a gating axis.
+  (RepaintBoundaryFrameStats, int) frame() {
     RepaintBoundaryDebugStats.beginFrame(enabled: true);
     pointerRouter.beginFrame();
-    _back.withoutDamageTracking(_back.clear);
+    _buffer.withoutDamageTracking(_buffer.clear);
     var paint = Duration.zero;
-    owner.renderFrame(root, _back, onPhaseTiming: (b, l, p) => paint = p);
-    _renderer.renderDiff(_front, _back, _sink);
+    owner.renderFrame(root, _buffer, onPhaseTiming: (b, l, p) => paint = p);
     final stats = RepaintBoundaryDebugStats.takeFrameStats();
-    lastPaintUs = paint.inMicroseconds;
     binding.flushPostFrameCallbacks(clock.now);
-    final tmp = _front;
-    _front = _back;
-    _back = tmp;
-    return stats;
+    return (stats, paint.inMicroseconds);
   }
 
   void dispose() {
@@ -281,29 +262,31 @@ String _fmt(_Signature s) =>
     'boundaries=${s.boundaries} repainted=${s.repainted} cached=${s.cached} '
     'empty=${s.empty} copiedCells=${s.copiedCells}';
 
-/// One gated (or informational) measurement: a scenario phase whose every
-/// frame produced [signature].
+/// One measurement: a scenario phase (id `scenario/phase`) whose every
+/// measured frame produced [signature] over a [frames]-frame window.
 final class _Check {
   _Check({
-    required this.scenario,
-    required this.phase,
+    required this.id,
     required this.signature,
-    required this.paintUsMean,
+    required this.paintUsDebugStats,
     required this.frames,
     this.gated = true,
   });
 
-  final String scenario;
-  final String phase;
+  final String id;
   final _Signature signature;
-  final double paintUsMean;
+
+  /// Mean paint-phase µs over the window, measured with the boundary debug
+  /// stats enabled — debug-inflated, warn-only, never a gating axis.
+  final double paintUsDebugStats;
+
+  /// The measured window size (1 for a transition frame).
   final int frames;
 
   /// False for informational checks (S5): counters are reported and
-  /// baselined but drift warns instead of failing.
+  /// baselined but drift warns instead of failing. Lives in code, not the
+  /// baseline schema — a baseline edit cannot change a check's gating mode.
   final bool gated;
-
-  String get id => '$scenario/$phase';
 }
 
 final class _GateFailure implements Exception {
@@ -316,24 +299,36 @@ final class _GateFailure implements Exception {
 /// locked in.
 void _require(String id, bool condition, String expectation) {
   if (condition) return;
-  throw _GateFailure('paint gate: [$id] invariant violated — $expectation');
+  throw _GateFailure(
+    'paint gate: [$id] invariant violated — $expectation\n'
+    '  Two possible causes: the gate fixture changed shape, or framework '
+    'repaint behavior changed. Identify which; invariants cannot be '
+    're-baselined away.',
+  );
 }
 
-/// Runs [count] frames, calling [perFrame] before each, and requires every
-/// frame to produce the SAME counter signature — steady-state is asserted,
-/// not assumed. Returns the signature and the mean paint-phase µs.
+/// Runs [warmup] unmeasured frames, then [frames] measured frames — calling
+/// [drive] before each — and requires every measured frame to produce the
+/// SAME counter signature: steady-state is asserted, not assumed. Returns
+/// the signature and the mean paint-phase µs.
 (_Signature, double) _measureWindow(
-  _Host host,
-  int count,
-  void Function(int frame) perFrame, {
+  _Host host, {
   required String id,
+  required int warmup,
+  required int frames,
+  required void Function(int frame) drive,
 }) {
+  for (var i = 0; i < warmup; i++) {
+    drive(i);
+    host.frame();
+  }
   _Signature? sig;
   var usTotal = 0;
-  for (var i = 0; i < count; i++) {
-    perFrame(i);
-    final s = _sig(host.frame());
-    usTotal += host.lastPaintUs;
+  for (var i = 0; i < frames; i++) {
+    drive(i);
+    final (stats, us) = host.frame();
+    final s = _sig(stats);
+    usTotal += us;
     if (sig == null) {
       sig = s;
     } else if (s != sig) {
@@ -345,63 +340,112 @@ void _require(String id, bool condition, String expectation) {
       );
     }
   }
-  return (sig!, usTotal / count);
+  return (sig!, usTotal / frames);
 }
 
 // ---------------------------------------------------------------------------
 // Scenarios
 // ---------------------------------------------------------------------------
 
-/// S1: one visible row's model bumps per frame; the REAL ListView's per-item
+/// S1 + S4 on one mounted fixture (identical tree; only the driver differs,
+/// and copiedCells is tick-invariant by the row padding design).
+///
+/// S1: one visible row's model bumps per frame; the real ListView's per-item
 /// auto-boundaries must prune the paint walk to exactly that row.
-List<_Check> _runListLocalized(int frames, int warmup) {
-  final models = [for (var i = 0; i < _listItemCount; i++) _Model()];
+/// S4: every row bumps every frame; every boundary must repaint — a cache
+/// hit here means stale cells.
+List<_Check> _runListScenarios(int frames, int warmup) {
+  const idLocalized = 'list-localized/steady';
+  const idFullInvalidate = 'full-invalidate/steady';
+  final models = [for (var i = 0; i < _listItemCount; i++) RowModel()];
   final host = _Host(
     ListView.builder(
       itemCount: models.length,
-      itemBuilder: (context, index, selected) => _listRow(index, models[index]),
+      itemBuilder: (context, index, selected) =>
+          liveRow(index: index, model: models[index], cols: _cols),
     ),
   );
   try {
-    // Cycle bumps across the MOUNTED window only: the lazy list mounts
-    // exactly the viewport's rows (anchor 0, one-line items), and bumping an
-    // unmounted row's notifier reaches no listener — that frame would show
-    // repainted=0 and (deliberately) trip the stability assert.
+    // Mount frame: everything paints once. OBSERVE how many item boundaries
+    // the lazy list actually mounted and cycle the localized driver across
+    // exactly that window — the driver must never bump an unmounted row
+    // (no listener → a repainted=0 frame → the stability assert trips).
+    // The baseline still pins the exact count: a real overscan/mount-window
+    // change shows up there, visibly, rather than being silently absorbed.
+    final (mountStats, _) = host.frame();
+    final window = mountStats.boundaryCount;
+    _require(
+      idLocalized,
+      window > 1,
+      'expected the lazy ListView to mount multiple per-item boundaries on '
+      'the mount frame (relation: boundaryCount > 1), got $window',
+    );
+
     var next = 0;
     void bumpOne(int _) {
       models[next].bump();
-      next = (next + 1) % _rows;
+      next = (next + 1) % window;
     }
 
-    for (var i = 0; i < warmup; i++) {
-      bumpOne(i);
-      host.frame();
-    }
-    final (sig, us) = _measureWindow(
+    final (localizedSig, localizedUs) = _measureWindow(
       host,
-      frames,
-      bumpOne,
-      id: 'list-localized/steady',
+      id: idLocalized,
+      warmup: warmup,
+      frames: frames,
+      drive: bumpOne,
     );
     _require(
-      'list-localized/steady',
-      sig.boundaries == _rows,
-      'the lazy list should mount one boundary per visible row '
-      '($_rows), got ${sig.boundaries} — auto-boundaries missing or the '
-      'mount window changed',
+      idLocalized,
+      localizedSig.boundaries == window,
+      'steady-state boundary count should equal the mounted window observed '
+      'at mount (relation: boundaries == $window), got '
+      '${localizedSig.boundaries}',
     );
     _require(
-      'list-localized/steady',
-      sig.repainted == 1 && sig.cached == sig.boundaries - 1,
-      'a localized update must repaint exactly 1 boundary and cache-blit '
-      'the rest, got ${_fmt(sig)}',
+      idLocalized,
+      localizedSig.repainted == 1 &&
+          localizedSig.cached == localizedSig.boundaries - 1,
+      'a localized update must repaint exactly one boundary and cache-blit '
+      'the rest (relation: repainted == 1 && cached == boundaries − 1), got '
+      '${_fmt(localizedSig)}',
     );
+
+    // S4 on the same fixture: swap the driver, short re-warm, everything
+    // dirty every frame.
+    void bumpAll(int _) {
+      for (final m in models) {
+        m.bump();
+      }
+    }
+
+    final (fullSig, fullUs) = _measureWindow(
+      host,
+      id: idFullInvalidate,
+      warmup: _fullInvalidateRewarm,
+      frames: frames,
+      drive: bumpAll,
+    );
+    _require(
+      idFullInvalidate,
+      fullSig.boundaries > 1 &&
+          fullSig.cached == 0 &&
+          fullSig.repainted == fullSig.boundaries,
+      'when every row is dirty, every boundary must repaint (relation: '
+      'cached == 0 && repainted == boundaries) — a cache hit here means '
+      'stale cells are being served. Got ${_fmt(fullSig)}',
+    );
+
     return [
       _Check(
-        scenario: 'list-localized',
-        phase: 'steady',
-        signature: sig,
-        paintUsMean: us,
+        id: idLocalized,
+        signature: localizedSig,
+        paintUsDebugStats: localizedUs,
+        frames: frames,
+      ),
+      _Check(
+        id: idFullInvalidate,
+        signature: fullSig,
+        paintUsDebugStats: fullUs,
         frames: frames,
       ),
     ];
@@ -413,7 +457,8 @@ List<_Check> _runListLocalized(int frames, int warmup) {
 /// S2: two-entry overlay, only the floater churns; the static base entry
 /// must blit from cache instead of re-walking its paint.
 List<_Check> _runOverlayChurn(int frames, int warmup) {
-  final floater = _Model();
+  const id = 'overlay-churn/steady';
+  final floater = RowModel();
   final host = _Host(
     Overlay(
       initialEntries: [
@@ -423,43 +468,45 @@ List<_Check> _runOverlayChurn(int frames, int warmup) {
     ),
   );
   try {
-    void bump(int _) => floater.bump();
-    for (var i = 0; i < warmup; i++) {
-      bump(i);
-      host.frame();
-    }
     final (sig, us) = _measureWindow(
       host,
-      frames,
-      bump,
-      id: 'overlay-churn/steady',
+      id: id,
+      warmup: warmup,
+      frames: frames,
+      drive: (_) => floater.bump(),
     );
     _require(
-      'overlay-churn/steady',
+      id,
       sig.boundaries == 2 && sig.repainted == 1 && sig.cached == 1,
       'with two visible entries and only the floater dirty, the floater '
-      'repaints and the base blits (2/1/1), got ${_fmt(sig)}',
+      'repaints and the base blits (relation: boundaries == 2 && repainted '
+      '== 1 && cached == 1), got ${_fmt(sig)}',
     );
     return [
-      _Check(
-        scenario: 'overlay-churn',
-        phase: 'steady',
-        signature: sig,
-        paintUsMean: us,
-        frames: frames,
-      ),
+      _Check(id: id, signature: sig, paintUsDebugStats: us, frames: frames),
     ];
   } finally {
     host.dispose();
   }
 }
 
-/// S3: the lazy-layer guardrail. Idle app (Toaster mounted, zero toasts)
-/// must be pure pass-through; a toast engages the boundaries; auto-dismiss
-/// returns to pass-through.
+/// S3: the lazy-layer guardrail. Idle app (real Toaster mounted, zero
+/// toasts) must be pure pass-through; a toast engages the boundaries;
+/// auto-dismiss returns to pass-through.
+///
+/// CONTRACT: if a Toaster refactor makes it mount its layer entry eagerly,
+/// this scenario turning red is the guardrail WORKING — the lazy-layer
+/// convention is the thing under test, not an incidental fixture detail.
+/// The auto-dismiss is driven through the binding's tickerScheduler (a
+/// FakeTickerScheduler advanced past the toast duration); if Toaster's
+/// dismiss clock source ever changes, this drive must change with it.
 Future<List<_Check>> _runOverlayIdleLazy(int frames, int warmup) async {
+  const idIdle = 'overlay-idle-lazy/idle';
+  const idEngage = 'overlay-idle-lazy/engage';
+  const idEngaged = 'overlay-idle-lazy/engaged';
+  const idIdleAfter = 'overlay-idle-lazy/idle-after';
   const toastDuration = Duration(seconds: 2);
-  final app = _Model();
+  final app = RowModel();
   late BuildContext appContext;
   final host = _Host(
     Overlay(
@@ -478,28 +525,25 @@ Future<List<_Check>> _runOverlayIdleLazy(int frames, int warmup) async {
   );
   try {
     void bump(int _) => app.bump();
-    for (var i = 0; i < warmup; i++) {
-      bump(i);
-      host.frame();
-    }
 
     // Idle: the app is dirty EVERY frame, and with a single visible entry
     // the overlay's boundaries must stay disengaged — no cache write, no
     // blit, no boundary at all.
     final (idleSig, idleUs) = _measureWindow(
       host,
-      frames,
-      bump,
-      id: 'overlay-idle-lazy/idle',
+      id: idIdle,
+      warmup: warmup,
+      frames: frames,
+      drive: bump,
     );
     _require(
-      'overlay-idle-lazy/idle',
+      idIdle,
       idleSig == _zeroSignature,
-      'an idle app must be PURE PASS-THROUGH (all counters 0 every frame). '
-      'A permanently-mounted empty overlay entry (e.g. an eager toast/error '
-      'layer) keeps the overlay multi-entry and re-engages per-entry '
-      'boundaries, taxing every app-dirty frame with a full-screen cache '
-      'write + blit. Got ${_fmt(idleSig)}',
+      'an idle app must be PURE PASS-THROUGH (relation: every counter == 0 '
+      'on every frame). A permanently-mounted empty overlay entry (e.g. an '
+      'eager toast/error layer) keeps the overlay multi-entry and re-engages '
+      'per-entry boundaries, taxing every app-dirty frame with a full-screen '
+      'cache write + blit. Got ${_fmt(idleSig)}',
     );
 
     // Enqueue a toast: the Toaster's lazily-mounted layer entry appears and
@@ -508,31 +552,35 @@ Future<List<_Check>> _runOverlayIdleLazy(int frames, int warmup) async {
     // cannot trust a cache it never wrote).
     Toaster.show(appContext, 'Saved — paint gate', duration: toastDuration);
     bump(0);
-    final engageSig = _sig(host.frame());
-    final engageUs = host.lastPaintUs.toDouble();
+    final (engageStats, engageUs) = host.frame();
+    final engageSig = _sig(engageStats);
     _require(
-      'overlay-idle-lazy/engage',
+      idEngage,
       engageSig.boundaries == 2 &&
           engageSig.repainted == 2 &&
           engageSig.cached == 0,
       'the engagement frame must arm both entry boundaries and repaint both '
-      '(2/2/0), got ${_fmt(engageSig)}',
+      '(relation: boundaries == 2 && repainted == 2 && cached == 0), got '
+      '${_fmt(engageSig)}',
     );
 
     // Engaged steady state: the app churns (repaints); the toast blits.
+    // No extra warm-up: the engage frame above IS the boundary warm-up.
     final (engagedSig, engagedUs) = _measureWindow(
       host,
-      frames,
-      bump,
-      id: 'overlay-idle-lazy/engaged',
+      id: idEngaged,
+      warmup: 0,
+      frames: frames,
+      drive: bump,
     );
     _require(
-      'overlay-idle-lazy/engaged',
+      idEngaged,
       engagedSig.boundaries == 2 &&
           engagedSig.repainted == 1 &&
           engagedSig.cached == 1,
       'while a toast shows, the dirty app repaints and the toast blits '
-      '(2/1/1), got ${_fmt(engagedSig)}',
+      '(relation: boundaries == 2 && repainted == 1 && cached == 1), got '
+      '${_fmt(engagedSig)}',
     );
 
     // Auto-dismiss: advance the fake scheduler past the toast duration; the
@@ -542,98 +590,48 @@ Future<List<_Check>> _runOverlayIdleLazy(int frames, int warmup) async {
     host.scheduler.advance(toastDuration + host.scheduler.frameInterval);
     await Future<void>.delayed(Duration.zero);
 
-    // Idle again: the overlay must return to pass-through immediately.
-    final (idle2Sig, idle2Us) = _measureWindow(
+    // Idle again. The window's FIRST frame is the disengage transition
+    // itself — pass-through must return immediately, so the whole short
+    // window (transition included) asserts all-zero.
+    final (idleAfterSig, idleAfterUs) = _measureWindow(
       host,
-      frames,
-      bump,
-      id: 'overlay-idle-lazy/idle-after',
+      id: idIdleAfter,
+      warmup: 0,
+      frames: _idleAfterFrames,
+      drive: bump,
     );
     _require(
-      'overlay-idle-lazy/idle-after',
-      idle2Sig == _zeroSignature,
+      idIdleAfter,
+      idleAfterSig == _zeroSignature,
       'after the last toast dismisses, the layer entry must unmount and the '
-      'overlay return to pass-through (all counters 0). Got ${_fmt(idle2Sig)}',
+      'overlay return to pass-through from the very next frame (relation: '
+      'every counter == 0). Got ${_fmt(idleAfterSig)}',
     );
 
     return [
       _Check(
-        scenario: 'overlay-idle-lazy',
-        phase: 'idle',
+        id: idIdle,
         signature: idleSig,
-        paintUsMean: idleUs,
+        paintUsDebugStats: idleUs,
         frames: frames,
       ),
       _Check(
-        scenario: 'overlay-idle-lazy',
-        phase: 'engage',
+        id: idEngage,
         signature: engageSig,
-        paintUsMean: engageUs,
+        paintUsDebugStats: engageUs.toDouble(),
         frames: 1,
       ),
       _Check(
-        scenario: 'overlay-idle-lazy',
-        phase: 'engaged',
+        id: idEngaged,
         signature: engagedSig,
-        paintUsMean: engagedUs,
+        paintUsDebugStats: engagedUs,
         frames: frames,
       ),
       _Check(
-        scenario: 'overlay-idle-lazy',
-        phase: 'idle-after',
-        signature: idle2Sig,
-        paintUsMean: idle2Us,
-        frames: frames,
-      ),
-    ];
-  } finally {
-    host.dispose();
-  }
-}
-
-/// S4: everything is dirty every frame — the staleness detector. A boundary
-/// that cache-hits here is serving stale cells.
-List<_Check> _runFullInvalidate(int frames, int warmup) {
-  final models = [for (var i = 0; i < _listItemCount; i++) _Model()];
-  final host = _Host(
-    ListView.builder(
-      itemCount: models.length,
-      itemBuilder: (context, index, selected) => _listRow(index, models[index]),
-    ),
-  );
-  try {
-    void bumpAll(int _) {
-      for (final m in models) {
-        m.bump();
-      }
-    }
-
-    for (var i = 0; i < warmup; i++) {
-      bumpAll(i);
-      host.frame();
-    }
-    final (sig, us) = _measureWindow(
-      host,
-      frames,
-      bumpAll,
-      id: 'full-invalidate/steady',
-    );
-    _require(
-      'full-invalidate/steady',
-      sig.boundaries > 1 &&
-          sig.cached == 0 &&
-          sig.repainted == sig.boundaries,
-      'when every row is dirty, every boundary must repaint '
-      '(cached==0, repainted==boundaries) — a cache hit here means stale '
-      'cells are being served. Got ${_fmt(sig)}',
-    );
-    return [
-      _Check(
-        scenario: 'full-invalidate',
-        phase: 'steady',
-        signature: sig,
-        paintUsMean: us,
-        frames: frames,
+        id: idIdleAfter,
+        signature: idleAfterSig,
+        paintUsDebugStats: idleAfterUs,
+        frames: _idleAfterFrames,
       ),
     ];
   } finally {
@@ -645,8 +643,9 @@ List<_Check> _runFullInvalidate(int frames, int warmup) {
 /// autocomplete-while-typing shape. Both boundaries pay cache write + blit
 /// on top of their paint; recorded so the known tax stays visible.
 List<_Check> _runDropdownTyping(int frames, int warmup) {
-  final base = _Model();
-  final floater = _Model();
+  const id = 'dropdown-typing/steady';
+  final base = RowModel();
+  final floater = RowModel();
   final host = _Host(
     Overlay(
       initialEntries: [
@@ -656,27 +655,21 @@ List<_Check> _runDropdownTyping(int frames, int warmup) {
     ),
   );
   try {
-    void bumpBoth(int _) {
-      base.bump();
-      floater.bump();
-    }
-
-    for (var i = 0; i < warmup; i++) {
-      bumpBoth(i);
-      host.frame();
-    }
     final (sig, us) = _measureWindow(
       host,
-      frames,
-      bumpBoth,
-      id: 'dropdown-typing/steady',
+      id: id,
+      warmup: warmup,
+      frames: frames,
+      drive: (_) {
+        base.bump();
+        floater.bump();
+      },
     );
     return [
       _Check(
-        scenario: 'dropdown-typing',
-        phase: 'steady',
+        id: id,
         signature: sig,
-        paintUsMean: us,
+        paintUsDebugStats: us,
         frames: frames,
         gated: false,
       ),
@@ -690,14 +683,17 @@ List<_Check> _runDropdownTyping(int frames, int warmup) {
 // Baseline + gate
 // ---------------------------------------------------------------------------
 
+// Baseline schema note: counters + paintUsDebugStats + the window size per
+// check. A check's gating mode (exact vs informational) deliberately lives
+// in code, NOT here — editing the baseline cannot change what gates.
 Map<String, Object?> _checkToJson(_Check c) => {
   'boundaries': c.signature.boundaries,
   'repainted': c.signature.repainted,
   'cached': c.signature.cached,
   'empty': c.signature.empty,
   'copiedCells': c.signature.copiedCells,
-  'paintUsMean': double.parse(c.paintUsMean.toStringAsFixed(1)),
-  'gated': c.gated,
+  'paintUsDebugStats': double.parse(c.paintUsDebugStats.toStringAsFixed(1)),
+  'frames': c.frames,
 };
 
 _Signature _signatureFromJson(Map<String, Object?> json) => (
@@ -719,10 +715,10 @@ Future<void> main(List<String> args) async {
       gate = true;
     } else if (arg == '--update-baseline') {
       update = true;
-    } else if (arg.startsWith('--frames=')) {
-      frames = int.parse(arg.substring('--frames='.length));
-    } else if (arg.startsWith('--warmup=')) {
-      warmup = int.parse(arg.substring('--warmup='.length));
+    } else if (parseIntFlag(arg, 'frames') case final v?) {
+      frames = v;
+    } else if (parseIntFlag(arg, 'warmup') case final v?) {
+      warmup = v;
     } else if (arg.startsWith('--baseline=')) {
       baselinePath = arg.substring('--baseline='.length);
     } else {
@@ -735,10 +731,9 @@ Future<void> main(List<String> args) async {
   final List<_Check> checks;
   try {
     checks = [
-      ..._runListLocalized(frames, warmup),
+      ..._runListScenarios(frames, warmup),
       ..._runOverlayChurn(frames, warmup),
       ...await _runOverlayIdleLazy(frames, warmup),
-      ..._runFullInvalidate(frames, warmup),
       ..._runDropdownTyping(frames, warmup),
     ];
   } on _GateFailure catch (failure) {
@@ -749,27 +744,30 @@ Future<void> main(List<String> args) async {
 
   stdout.writeln(
     'paint gate — repaint-boundary counter signatures '
-    '(${_cols}x$_rows, $frames frames/window, warmup $warmup)',
+    '($_viewportLabel, $frames frames/window, warmup $warmup)',
   );
   for (final c in checks) {
     final tag = c.gated ? '' : '   (informational)';
     stdout.writeln('  ${c.id.padRight(28)} ${_fmt(c.signature)}$tag');
   }
-  stdout.writeln('timings (paint µs/frame, warn-only):');
+  stdout.writeln(
+    'timings (paint-phase µs/frame, warn-only; measured with debug stats '
+    'ENABLED — inflated with boundaryCount, never a gating axis):',
+  );
   for (final c in checks) {
     stdout.writeln(
-      '  ${c.id.padRight(28)} ${c.paintUsMean.toStringAsFixed(1)}',
+      '  ${c.id.padRight(28)} '
+      '${c.paintUsDebugStats.toStringAsFixed(1)}  (n=${c.frames})',
     );
   }
 
   if (update) {
-    final json = const JsonEncoder.withIndent('  ').convert({
-      'viewport': '${_cols}x$_rows',
+    writeBaselineJson(baselinePath, {
+      'viewport': _viewportLabel,
       'frames': frames,
       'warmup': warmup,
       'checks': {for (final c in checks) c.id: _checkToJson(c)},
     });
-    File(baselinePath).writeAsStringSync('$json\n');
     stdout.writeln(
       'paint gate: wrote baseline $baselinePath (${checks.length} checks).',
     );
@@ -778,19 +776,38 @@ Future<void> main(List<String> args) async {
 
   if (!gate) return;
 
-  final file = File(baselinePath);
-  if (!file.existsSync()) {
-    stderr.writeln(
-      'paint gate: no baseline at $baselinePath — run with '
-      '--update-baseline first.',
-    );
+  final base = readBaselineOrNull(baselinePath, gateName: 'paint gate');
+  if (base == null) {
     exitCode = 64;
     return;
   }
-  final base = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
-  final baseChecks = (base['checks']! as Map).cast<String, Object?>();
 
   var failed = false;
+
+  // Metadata: the counters are functions of the fixture geometry, so a
+  // viewport mismatch makes every comparison meaningless — fail. Window
+  // sizes only affect µs comparability — warn.
+  final baseViewport = base['viewport'] as String?;
+  if (baseViewport != _viewportLabel) {
+    stderr.writeln(
+      'paint gate: baseline viewport $baseViewport != current '
+      '$_viewportLabel — counters are not comparable across fixture '
+      'geometry. Re-baseline with --update-baseline.',
+    );
+    failed = true;
+  }
+  final baseFrames = base['frames'] as int?;
+  final baseWarmup = base['warmup'] as int?;
+  if (baseFrames != frames || baseWarmup != warmup) {
+    stdout.writeln(
+      'paint gate: window mismatch vs baseline (frames $frames vs '
+      '$baseFrames, warmup $warmup vs $baseWarmup) — counters are '
+      'window-invariant so the gate still applies; µs comparability is '
+      'reduced (warn only).',
+    );
+  }
+
+  final baseChecks = (base['checks']! as Map).cast<String, Object?>();
   final currentIds = {for (final c in checks) c.id};
   for (final id in baseChecks.keys) {
     if (!currentIds.contains(id)) {
@@ -814,7 +831,7 @@ Future<void> main(List<String> args) async {
     }
     final baseline = (entry as Map).cast<String, Object?>();
     final baseSig = _signatureFromJson(baseline);
-    final baseUs = (baseline['paintUsMean']! as num).toDouble();
+    final baseUs = (baseline['paintUsDebugStats']! as num).toDouble();
 
     if (c.signature != baseSig) {
       final line =
@@ -831,11 +848,14 @@ Future<void> main(List<String> args) async {
       }
     }
 
-    final usDelta = baseUs == 0 ? 0.0 : (c.paintUsMean - baseUs) / baseUs;
+    final usDelta = baseUs == 0
+        ? 0.0
+        : (c.paintUsDebugStats - baseUs) / baseUs;
     if (usDelta.abs() > _timingWarnFraction) {
       stdout.writeln(
-        'paint gate: [${c.id}] paint µs ${c.paintUsMean.toStringAsFixed(1)} '
-        'vs baseline ${baseUs.toStringAsFixed(1)} '
+        'paint gate: [${c.id}] paint µs (debug-stats) '
+        '${c.paintUsDebugStats.toStringAsFixed(1)} vs baseline '
+        '${baseUs.toStringAsFixed(1)} '
         '(${usDelta >= 0 ? '+' : ''}${(usDelta * 100).toStringAsFixed(0)}% '
         '— warn only, timings never fail this gate)',
       );

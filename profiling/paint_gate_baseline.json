@@ -1,7 +1,7 @@
 {
   "viewport": "80x24",
-  "frames": 300,
-  "warmup": 60,
+  "frames": 40,
+  "warmup": 8,
   "checks": {
     "list-localized/steady": {
       "boundaries": 24,
@@ -9,53 +9,8 @@
       "cached": 23,
       "empty": 0,
       "copiedCells": 1920,
-      "paintUsMean": 41.6,
-      "gated": true
-    },
-    "overlay-churn/steady": {
-      "boundaries": 2,
-      "repainted": 1,
-      "cached": 1,
-      "empty": 0,
-      "copiedCells": 1992,
-      "paintUsMean": 30.8,
-      "gated": true
-    },
-    "overlay-idle-lazy/idle": {
-      "boundaries": 0,
-      "repainted": 0,
-      "cached": 0,
-      "empty": 0,
-      "copiedCells": 0,
-      "paintUsMean": 190.7,
-      "gated": true
-    },
-    "overlay-idle-lazy/engage": {
-      "boundaries": 2,
-      "repainted": 2,
-      "cached": 0,
-      "empty": 0,
-      "copiedCells": 1992,
-      "paintUsMean": 800.0,
-      "gated": true
-    },
-    "overlay-idle-lazy/engaged": {
-      "boundaries": 2,
-      "repainted": 1,
-      "cached": 1,
-      "empty": 0,
-      "copiedCells": 1992,
-      "paintUsMean": 271.5,
-      "gated": true
-    },
-    "overlay-idle-lazy/idle-after": {
-      "boundaries": 0,
-      "repainted": 0,
-      "cached": 0,
-      "empty": 0,
-      "copiedCells": 0,
-      "paintUsMean": 187.4,
-      "gated": true
+      "paintUsDebugStats": 143.4,
+      "frames": 40
     },
     "full-invalidate/steady": {
       "boundaries": 24,
@@ -63,8 +18,53 @@
       "cached": 0,
       "empty": 0,
       "copiedCells": 1920,
-      "paintUsMean": 268.3,
-      "gated": true
+      "paintUsDebugStats": 447.0,
+      "frames": 40
+    },
+    "overlay-churn/steady": {
+      "boundaries": 2,
+      "repainted": 1,
+      "cached": 1,
+      "empty": 0,
+      "copiedCells": 1992,
+      "paintUsDebugStats": 69.3,
+      "frames": 40
+    },
+    "overlay-idle-lazy/idle": {
+      "boundaries": 0,
+      "repainted": 0,
+      "cached": 0,
+      "empty": 0,
+      "copiedCells": 0,
+      "paintUsDebugStats": 310.1,
+      "frames": 40
+    },
+    "overlay-idle-lazy/engage": {
+      "boundaries": 2,
+      "repainted": 2,
+      "cached": 0,
+      "empty": 0,
+      "copiedCells": 1992,
+      "paintUsDebugStats": 1222.0,
+      "frames": 1
+    },
+    "overlay-idle-lazy/engaged": {
+      "boundaries": 2,
+      "repainted": 1,
+      "cached": 1,
+      "empty": 0,
+      "copiedCells": 1992,
+      "paintUsDebugStats": 346.9,
+      "frames": 40
+    },
+    "overlay-idle-lazy/idle-after": {
+      "boundaries": 0,
+      "repainted": 0,
+      "cached": 0,
+      "empty": 0,
+      "copiedCells": 0,
+      "paintUsDebugStats": 229.9,
+      "frames": 10
     },
     "dropdown-typing/steady": {
       "boundaries": 2,
@@ -72,8 +72,8 @@
       "cached": 0,
       "empty": 0,
       "copiedCells": 1992,
-      "paintUsMean": 263.9,
-      "gated": false
+      "paintUsDebugStats": 330.6,
+      "frames": 40
     }
   }
 }
