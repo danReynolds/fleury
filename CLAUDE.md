@@ -9,7 +9,7 @@ everything.
 
 ```sh
 dart tool/fleury_dev.dart bootstrap   # pub get across packages
-dart tool/fleury_dev.dart check       # analyze + test + dart2js smoke (what CI runs)
+dart tool/fleury_dev.dart check       # analyze + test + dart2js smoke (CI runs this + benchmark gates)
 ```
 
 Run `dart tool/fleury_dev.dart --help` and `... benchmark --help` for the rest.
@@ -32,7 +32,8 @@ tolerance to clear red.
 
 All via `dart tool/fleury_dev.dart benchmark <gate> --gate`; each exits non-zero
 on regression. Run the whole fast suite at once with
-`dart tool/fleury_dev.dart benchmark gates` (~10s, pass/fail summary);
+`dart tool/fleury_dev.dart benchmark gates` (~11s, pass/fail summary; CI runs
+this suite too);
 `benchmark --help` lists every gate. Full manifest — what each protects, speed,
 baseline & SDK caveats:
 **[docs/implementation/perf-gates.md](docs/implementation/perf-gates.md)**.
