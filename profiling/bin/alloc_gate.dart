@@ -53,6 +53,16 @@ class _Model extends ChangeNotifier {
 /// Dashboard-shaped tree: a static header + a watched block whose three
 /// metric lines rebuild + repaint every frame. Exercises build, reconcile,
 /// layout (widths shift as values grow), and paint — the churn-producing path.
+///
+/// The watched block also carries explicit app-authored [Semantics]: one node
+/// whose label/value change every frame (the leaf-update path) and a small
+/// value-stable subtree (the equal-values update path). Semantics /
+/// _SemanticBounds / SemanticNodeId are a known per-frame allocation class;
+/// without these the gate only sees the Texts' implicit nodes and an
+/// app-semantics regression sits outside the window. Semantic strings stay
+/// fixed-width in the measured window (warmup pushes `v` to 3 digits;
+/// modulos are padded) so layout — and therefore allocation — cannot drift
+/// as the tick grows.
 Widget _scenario(_Model m) {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -67,6 +77,21 @@ Widget _scenario(_Model m) {
             Text('requests : ${m.v}'),
             Text('errors   : ${m.v % 97}'),
             Text('rate/s   : ${(m.v * 7) % 1000}'),
+            Semantics(
+              role: SemanticRole.region,
+              label: 'metrics ${m.v}',
+              value: 'r${(m.v % 97).toString().padLeft(2, '0')}',
+              child: Text('sem live : ${m.v}'),
+            ),
+            Semantics(
+              role: SemanticRole.region,
+              label: 'alloc gate static region',
+              child: Semantics(
+                role: SemanticRole.text,
+                label: 'static leaf',
+                child: const Text('sem static: ok'),
+              ),
+            ),
           ],
         ),
       ),
