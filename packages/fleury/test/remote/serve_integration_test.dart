@@ -127,6 +127,26 @@ void main() {
       });
 
       test(
+        'accepts an https Origin when X-Forwarded-Proto reports https (F14)',
+        () async {
+          // Behind a TLS-terminating proxy the browser's Origin is
+          // https://host while this hop is plain http; the proxy sets
+          // X-Forwarded-Proto: https. The same-origin scheme is derived from
+          // that header, so this GENUINE same-origin upgrade must be accepted —
+          // where a hardcoded http:// same-origin (the F14 bug) rejected it.
+          final ws = await WebSocket.connect(
+            'ws://127.0.0.1:$port/ws',
+            headers: {
+              'origin': 'https://127.0.0.1:$port',
+              'x-forwarded-proto': 'https',
+            },
+          );
+          expect(ws.readyState, WebSocket.open);
+          await ws.close();
+        },
+      );
+
+      test(
         'browser-first app pair buffers input and bytes flow both ways',
         () async {
           // Open both ends in parallel — the pairing logic shouldn't care
