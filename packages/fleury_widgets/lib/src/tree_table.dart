@@ -813,6 +813,13 @@ class TreeTableController extends ChangeNotifier {
 
   final ListController _list;
   final Set<Object> _expandedKeys;
+
+  /// Monotonic revision of the expansion state. Bumped by every effective
+  /// structural mutation ([expand], [collapse], [toggle], [collapseAll]) and
+  /// never by selection or viewport changes, so [_TreeTableState] can tell
+  /// "the flattened row model is stale" apart from "only the cursor moved"
+  /// in O(1) instead of snapshotting and comparing [_expandedKeys].
+  int _expansionRevision = 0;
   bool _disposed = false;
 
   ListController get _listController => _list;
@@ -832,12 +839,14 @@ class TreeTableController extends ChangeNotifier {
   void expand(Object key) {
     _checkNotDisposed();
     if (!_expandedKeys.add(key)) return;
+    _expansionRevision++;
     notifyListeners();
   }
 
   void collapse(Object key) {
     _checkNotDisposed();
     if (!_expandedKeys.remove(key)) return;
+    _expansionRevision++;
     notifyListeners();
   }
 
@@ -846,6 +855,7 @@ class TreeTableController extends ChangeNotifier {
     if (!_expandedKeys.remove(key)) {
       _expandedKeys.add(key);
     }
+    _expansionRevision++;
     notifyListeners();
   }
 
@@ -853,6 +863,7 @@ class TreeTableController extends ChangeNotifier {
     _checkNotDisposed();
     if (_expandedKeys.isEmpty) return;
     _expandedKeys.clear();
+    _expansionRevision++;
     notifyListeners();
   }
 
@@ -1024,6 +1035,15 @@ TreeTableExportResult exportTreeTableRows<T>({
 }
 
 /// Hierarchical data table with expandable rows and semantic tree items.
+///
+/// The flattened row model is cached across rebuilds and recomputed only when
+/// a structural input changes: [roots], [columns], [cellBuilder], [filter],
+/// and [searchIndex] compare by identity, the resolved tree column by value,
+/// and the controller's expansion state by revision. Selection moves reuse the
+/// cached model, so navigation cost tracks the visible window instead of the
+/// dataset. Prefer stable instances for the identity-compared fields: a parent
+/// that recreates the list, filter, or cell-builder closure on every rebuild
+/// pays a full re-flatten each time.
 class TreeTable<T> extends StatefulWidget {
   const TreeTable({
     super.key,
@@ -1164,15 +1184,59 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
   String get _treeColumnId =>
       widget.treeColumnId ?? _firstColumnId(widget.columns);
 
-  List<TreeTableRow<T>> get _rows => buildTreeTableRows<T>(
-    roots: widget.roots,
-    columns: widget.columns,
-    expandedKeys: _controller.expandedKeys,
-    treeColumnId: _treeColumnId,
-    cellBuilder: widget.cellBuilder,
-    filter: widget.filter,
-    searchIndex: widget.searchIndex,
-  );
+  // Flattened row model, cached across rebuilds. `_onControllerChange` fires a
+  // rebuild for EVERY controller change — including pure selection moves — so
+  // without the cache each arrow key re-materialized the whole flattened list
+  // (O(visible tree) per keystroke; ~100k rows in the SB.11 shape). The cache
+  // is invalidated by comparing every input of [buildTreeTableRows]: the
+  // widget fields by identity, the resolved tree column by value, and the
+  // controller's expansion state by its structural revision.
+  List<TreeTableRow<T>>? _rowsCache;
+  List<TreeTableNode<T>>? _rowsCacheRoots;
+  List<DataTableColumn>? _rowsCacheColumns;
+  TreeTableCellBuilder<T>? _rowsCacheCellBuilder;
+  TreeTableFilterDescriptor? _rowsCacheFilter;
+  TreeTableSearchIndex<T>? _rowsCacheSearchIndex;
+  String? _rowsCacheTreeColumnId;
+  TreeTableController? _rowsCacheController;
+  int _rowsCacheExpansionRevision = -1;
+
+  List<TreeTableRow<T>> get _rows => _ensureRows();
+
+  List<TreeTableRow<T>> _ensureRows() {
+    final treeColumnId = _treeColumnId;
+    final cached = _rowsCache;
+    if (cached != null &&
+        identical(_rowsCacheRoots, widget.roots) &&
+        identical(_rowsCacheColumns, widget.columns) &&
+        identical(_rowsCacheCellBuilder, widget.cellBuilder) &&
+        identical(_rowsCacheFilter, widget.filter) &&
+        identical(_rowsCacheSearchIndex, widget.searchIndex) &&
+        _rowsCacheTreeColumnId == treeColumnId &&
+        identical(_rowsCacheController, _controller) &&
+        _rowsCacheExpansionRevision == _controller._expansionRevision) {
+      return cached;
+    }
+    final rows = buildTreeTableRows<T>(
+      roots: widget.roots,
+      columns: widget.columns,
+      expandedKeys: _controller.expandedKeys,
+      treeColumnId: treeColumnId,
+      cellBuilder: widget.cellBuilder,
+      filter: widget.filter,
+      searchIndex: widget.searchIndex,
+    );
+    _rowsCache = rows;
+    _rowsCacheRoots = widget.roots;
+    _rowsCacheColumns = widget.columns;
+    _rowsCacheCellBuilder = widget.cellBuilder;
+    _rowsCacheFilter = widget.filter;
+    _rowsCacheSearchIndex = widget.searchIndex;
+    _rowsCacheTreeColumnId = treeColumnId;
+    _rowsCacheController = _controller;
+    _rowsCacheExpansionRevision = _controller._expansionRevision;
+    return rows;
+  }
 
   TreeTableRow<T>? _selectedRow(List<TreeTableRow<T>> rows) {
     if (rows.isEmpty) return null;

@@ -657,6 +657,263 @@ void main() {
     });
   });
 
+  group('flattened row-model cache', () {
+    // Rebuild cost is observed through cellBuilder: with an active filter and
+    // no search index, buildTreeTableRows invokes cellBuilder once (for the
+    // non-tree column) per visited node, so a full re-flatten adds at least
+    // [nodeCount] invocations. Cell paint also calls cellBuilder, but only
+    // for the mounted window (maxVisible rows), which stays far below
+    // [nodeCount].
+    const nodeCount = 200;
+    const maxVisible = 4;
+    const cacheColumns = [
+      DataTableColumn(id: 'name', title: 'Name', width: FixedColumnWidth(18)),
+      DataTableColumn(
+        id: 'status',
+        title: 'Status',
+        width: FixedColumnWidth(12),
+      ),
+    ];
+    final cacheRoots = List<TreeTableNode<String>>.unmodifiable([
+      const TreeTableNode<String>(
+        key: 'row-0',
+        label: 'row-0',
+        cells: {'status': 'status-0'},
+        children: [
+          TreeTableNode<String>(
+            key: 'row-0-child',
+            label: 'row-0-child',
+            cells: {'status': 'status-child'},
+          ),
+        ],
+      ),
+      for (var i = 1; i < nodeCount; i++)
+        TreeTableNode<String>(
+          key: 'row-$i',
+          label: 'row-$i',
+          cells: {'status': 'status-$i'},
+        ),
+    ]);
+
+    testWidgets('selection moves reuse the cached model; expansion and '
+        'identity changes re-flatten', (tester) {
+      var cellBuilderCalls = 0;
+      String cellBuilder(TreeTableNode<String> node, String columnId) {
+        cellBuilderCalls += 1;
+        return node.cells[columnId] ?? '';
+      }
+
+      final controller = TreeTableController();
+      addTearDown(controller.dispose);
+      // Matches every node, so each flatten visits (and cell-builds) all of
+      // them. Deliberately non-const: identity is the cache key.
+      final stableFilter = TreeTableFilterDescriptor(query: 'row');
+      TreeTable<String> buildTable({
+        List<TreeTableNode<String>>? roots,
+        TreeTableFilterDescriptor? filter,
+      }) => TreeTable<String>(
+        roots: roots ?? cacheRoots,
+        columns: cacheColumns,
+        controller: controller,
+        autofocus: true,
+        maxVisible: maxVisible,
+        cellBuilder: cellBuilder,
+        filter: filter ?? stableFilter,
+      );
+
+      tester.pumpWidget(buildTable());
+      tester.render(size: const CellSize(60, 10));
+      expect(
+        cellBuilderCalls,
+        greaterThanOrEqualTo(nodeCount),
+        reason: 'the first build must flatten the full model',
+      );
+
+      // Arrow-key selection move: no re-flatten, only the mounted window
+      // rebuilds.
+      cellBuilderCalls = 0;
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      tester.render(size: const CellSize(60, 10));
+      expect(controller.selectedIndex, 1);
+      expect(
+        cellBuilderCalls,
+        lessThan(nodeCount),
+        reason: 'a selection move must not re-flatten the row model',
+      );
+
+      // Re-pumping a new widget instance whose inputs are identical reuses
+      // the cache.
+      cellBuilderCalls = 0;
+      tester.pumpWidget(buildTable());
+      tester.render(size: const CellSize(60, 10));
+      expect(
+        cellBuilderCalls,
+        lessThan(nodeCount),
+        reason: 'identical inputs must not re-flatten on rebuild',
+      );
+
+      // Expansion state is structural: toggling re-flattens.
+      cellBuilderCalls = 0;
+      controller.expand('row-0');
+      tester.pump();
+      tester.render(size: const CellSize(60, 10));
+      expect(
+        cellBuilderCalls,
+        greaterThanOrEqualTo(nodeCount),
+        reason: 'an expansion change must rebuild the row model',
+      );
+      cellBuilderCalls = 0;
+      controller.collapse('row-0');
+      tester.pump();
+      tester.render(size: const CellSize(60, 10));
+      expect(
+        cellBuilderCalls,
+        greaterThanOrEqualTo(nodeCount),
+        reason: 'a collapse must rebuild the row model',
+      );
+
+      // A fresh roots list (same contents, new identity) re-flattens.
+      cellBuilderCalls = 0;
+      tester.pumpWidget(buildTable(roots: List.of(cacheRoots)));
+      tester.render(size: const CellSize(60, 10));
+      expect(
+        cellBuilderCalls,
+        greaterThanOrEqualTo(nodeCount),
+        reason: 'a new roots identity must rebuild the row model',
+      );
+
+      // A fresh filter instance (equal by value, new identity) re-flattens.
+      cellBuilderCalls = 0;
+      tester.pumpWidget(
+        buildTable(filter: TreeTableFilterDescriptor(query: 'row')),
+      );
+      tester.render(size: const CellSize(60, 10));
+      expect(
+        cellBuilderCalls,
+        greaterThanOrEqualTo(nodeCount),
+        reason: 'a new filter identity must rebuild the row model',
+      );
+    });
+
+    testWidgets('a new searchIndex instance invalidates the cached model', (
+      tester,
+    ) {
+      // The second index covers only the first two nodes; a stale cached
+      // model would keep every row visible.
+      final controller = TreeTableController();
+      addTearDown(controller.dispose);
+      final filter = TreeTableFilterDescriptor(query: 'row');
+      final fullIndex = TreeTableSearchIndex<String>.build(
+        roots: cacheRoots,
+        columns: cacheColumns,
+      );
+      final subsetIndex = TreeTableSearchIndex<String>.build(
+        roots: cacheRoots.sublist(0, 2),
+        columns: cacheColumns,
+      );
+      TreeTable<String> buildTable(TreeTableSearchIndex<String> index) =>
+          TreeTable<String>(
+            roots: cacheRoots,
+            columns: cacheColumns,
+            controller: controller,
+            maxVisible: maxVisible,
+            filter: filter,
+            searchIndex: index,
+          );
+
+      tester.pumpWidget(buildTable(fullIndex));
+      tester.render(size: const CellSize(60, 10));
+      expect(
+        tester.semantics().single(role: SemanticRole.tree).state
+            .collectionRowCount,
+        nodeCount + 1,
+      );
+
+      tester.pumpWidget(buildTable(subsetIndex));
+      tester.render(size: const CellSize(60, 10));
+      expect(
+        tester.semantics().single(role: SemanticRole.tree).state
+            .collectionRowCount,
+        3,
+        reason: 'the swapped-in index must be consulted, not the stale cache',
+      );
+    });
+
+    testWidgets('post-expansion cached model matches a from-scratch flatten', (
+      tester,
+    ) {
+      final controller = TreeTableController();
+      addTearDown(controller.dispose);
+      tester.pumpWidget(
+        TreeTable<String>(
+          roots: _roots,
+          columns: _columns,
+          controller: controller,
+          autofocus: true,
+        ),
+      );
+      tester.render(size: const CellSize(60, 8));
+
+      controller.expand('app');
+      tester.pump();
+      tester.render(size: const CellSize(60, 8));
+
+      List<Object?> visibleRowKeys() {
+        final items = tester.semantics().byRole(SemanticRole.treeItem).toList()
+          ..sort(
+            (a, b) =>
+                (a.state['rowIndex']! as int) - (b.state['rowIndex']! as int),
+          );
+        return [for (final item in items) item.state['rowKey']];
+      }
+
+      final expected = buildTreeTableRows<String>(
+        roots: _roots,
+        columns: _columns,
+        expandedKeys: controller.expandedKeys,
+      );
+      expect(visibleRowKeys(), [for (final row in expected) row.key]);
+      expect(visibleRowKeys(), ['app', 'search', 'logs', 'docs']);
+
+      controller.collapse('app');
+      tester.pump();
+      tester.render(size: const CellSize(60, 8));
+      expect(visibleRowKeys(), ['app', 'docs']);
+    });
+
+    testWidgets('selection clamps against the cached model after collapse', (
+      tester,
+    ) {
+      final controller = TreeTableController(
+        selectedIndex: 3,
+        expandedKeys: const {'app'},
+      );
+      addTearDown(controller.dispose);
+      tester.pumpWidget(
+        TreeTable<String>(
+          roots: _roots,
+          columns: _columns,
+          controller: controller,
+          autofocus: true,
+        ),
+      );
+      tester.render(size: const CellSize(60, 8));
+      expect(
+        tester.semantics().single(role: SemanticRole.tree).state.selectedKey,
+        'docs',
+      );
+
+      controller.collapseAll();
+      tester.pump();
+      tester.render(size: const CellSize(60, 8));
+
+      final tree = tester.semantics().single(role: SemanticRole.tree);
+      expect(tree.state.collectionRowCount, 2);
+      expect(tree.state['selectedIndex'], 1);
+      expect(tree.state.selectedKey, 'docs');
+    });
+  });
+
   testWidgets(
     'sanitizes unsafe labels and cells for display/search/semantics',
     (tester) {
