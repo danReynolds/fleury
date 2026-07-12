@@ -158,50 +158,71 @@ void _gate() {
 /// the wire diff. The encoder re-serializes every node each frame to detect
 /// what changed (O(tree) work for an O(changed) wire), so this is where the
 /// "is the diff cheap to compute?" assumption gets tested.
+SemanticWireDelta _delta(SemanticsOwner owner, SemanticTree tree) {
+  final update = owner.update(tree);
+  return SemanticWireDelta(
+    changed: {
+      for (final id in update.added) id.value,
+      for (final id in update.updated) id.value,
+    },
+    removed: {for (final id in update.removed) id.value},
+  );
+}
+
 void _cpu() {
   print('Server CPU per changed frame (steady-state patch), µs:');
-  print('${'tree'.padRight(16)}  nodes  snapshot µs  encode µs  total µs');
-  print('-' * 56);
+  print('${'tree'.padRight(16)}  nodes  full-encode µs  delta-encode µs  win');
+  print('-' * 60);
   for (final messages in [24, 80, 240]) {
     final nodeCount =
         _appTree(messages: messages, tick: 0).toInspectionSnapshot().nodeCount;
-    final encoder = SemanticsWireEncoder()
+
+    // Full path: encode with no delta (re-flatten + full compare every frame).
+    // Delta path: a parallel owner yields the changed-set the encoder trusts.
+    final fullEnc = SemanticsWireEncoder()
       ..encode(_appTree(messages: messages, tick: 0).toInspectionSnapshot());
+    final deltaEnc = SemanticsWireEncoder()
+      ..encode(_appTree(messages: messages, tick: 0).toInspectionSnapshot());
+    final owner = SemanticsOwner()..update(_appTree(messages: messages, tick: 0));
 
     const iters = 2000;
-    // Warm up the JIT.
     for (var i = 0; i < 200; i++) {
-      final s = _appTree(messages: messages, tick: i).toInspectionSnapshot();
-      encoder.encode(s);
+      final tree = _appTree(messages: messages, tick: i);
+      final s = tree.toInspectionSnapshot();
+      fullEnc.encode(s);
+      deltaEnc.encode(s, delta: _delta(owner, tree));
     }
 
-    var snapNs = 0;
-    var encNs = 0;
+    var fullNs = 0;
+    var deltaNs = 0;
     final sw = Stopwatch();
     for (var i = 0; i < iters; i++) {
       final tree = _appTree(messages: messages, tick: 1000 + i);
-      sw
-        ..reset()
-        ..start();
       final snapshot = tree.toInspectionSnapshot();
-      sw.stop();
-      snapNs += sw.elapsedMicroseconds;
+      final delta = _delta(owner, tree);
       sw
         ..reset()
         ..start();
-      encoder.encode(snapshot);
+      fullEnc.encode(snapshot);
       sw.stop();
-      encNs += sw.elapsedMicroseconds;
+      fullNs += sw.elapsedMicroseconds;
+      sw
+        ..reset()
+        ..start();
+      deltaEnc.encode(snapshot, delta: delta);
+      sw.stop();
+      deltaNs += sw.elapsedMicroseconds;
     }
-    final snapUs = snapNs / iters;
-    final encUs = encNs / iters;
+    final fullUs = fullNs / iters;
+    final deltaUs = deltaNs / iters;
     print('${'list of $messages'.padRight(16)}  '
         '${nodeCount.toString().padLeft(5)}  '
-        '${snapUs.toStringAsFixed(1).padLeft(11)}  '
-        '${encUs.toStringAsFixed(1).padLeft(9)}  '
-        '${(snapUs + encUs).toStringAsFixed(1).padLeft(8)}');
+        '${fullUs.toStringAsFixed(1).padLeft(14)}  '
+        '${deltaUs.toStringAsFixed(1).padLeft(15)}  '
+        '${(fullUs / deltaUs).toStringAsFixed(1).padLeft(4)}x');
   }
   print('');
-  print('At 60 fps one frame is 16667 µs; semantics is a tiny slice even at');
-  print('the top size. snapshot = redaction walk; encode = flatten+diff.');
+  print('full-encode = re-flatten whole tree + structural compare (O(tree)).');
+  print('delta-encode = re-serialize only the owner\'s changed nodes '
+      '(O(changed)).');
 }

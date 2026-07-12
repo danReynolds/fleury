@@ -127,6 +127,7 @@ export 'src/remote/remote_codec.dart'
         encodeSemanticAction;
 export 'src/remote/remote_semantics.dart'
     show
+        SemanticWireDelta,
         SemanticsWireDecoder,
         SemanticsWireEncoder,
         maxSemanticTreeDepth,
