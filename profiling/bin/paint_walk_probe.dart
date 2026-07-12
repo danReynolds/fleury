@@ -12,8 +12,10 @@
 //
 //   dart run bin/paint_walk_probe.dart [--rows=N] [--frames=N] [--warmup=N]
 //
-// Not a gate — an investigation harness. If the delta justifies it, the win
-// ships as ListView/scrollable auto-boundaries + a paint-cost gate.
+// Not a gate — an investigation harness. The delta justified it: the win
+// shipped as ListView/scrollable auto-boundaries + Overlay adaptive entry
+// boundaries, and the paint-cost gate is bin/paint_gate.dart
+// (`fleury benchmark paint-gate`).
 
 import 'package:fleury/fleury.dart';
 

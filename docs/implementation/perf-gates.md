@@ -19,7 +19,7 @@ dart tool/fleury_dev.dart benchmark <gate> [--gate] [--update-baseline]
 
 **Take inventory:** `dart tool/fleury_dev.dart benchmark --help` lists every
 gate. **Run the whole fast suite in one shot** (serve-semantics, image-bench,
-bundle-size, alloc-gate — ~10s, with a pass/fail summary):
+bundle-size, alloc-gate, paint-gate — ~10s, with a pass/fail summary):
 
 ```sh
 dart tool/fleury_dev.dart benchmark gates
@@ -34,6 +34,7 @@ The heavier PTY/subprocess gates (`wire-gate`, `serve-wire-live`) are not in the
 | --- | --- | --- | --- | --- |
 | `wire-gate` | Terminal ANSI **output bytes** (SB.1/6/9: startup, dashboard steady-state, untrusted-output encoding) | `lib/src/rendering/ansi_renderer.dart`, cell paint, any diff/cursor/SGR change | ~30s (PTY) | `profiling/wire_gate_baseline.json` |
 | `alloc-gate` | Per-frame **`package:fleury` allocation churn** (build → reconcile → layout → paint → diff) | `lib/src/widgets/framework.dart`, `lib/src/rendering/**`, anything on the per-frame path | ~10s (VM service) | `profiling/alloc_gate_baseline.json` |
+| `paint-gate` | Paint-walk pruning as **exact repaint-boundary counters**: ListView auto-boundaries prune a localized update to one repaint; Overlay entry boundaries engage adaptively; the **lazy-layer convention** (an idle app — Toaster mounted, zero toasts — is pure pass-through: `boundaryCount == 0`); full-invalidate staleness (`cached == 0` when everything is dirty). Paint-phase µs is recorded warn-only, never fails | `lib/src/rendering/**` (esp. `render_repaint_boundary.dart`, cell paint), `lib/src/widgets/overlay.dart`, `lib/src/widgets/list_view.dart`, any widget that mounts overlay entries (toasts, banners, dropdowns) | ~5s | `profiling/paint_gate_baseline.json` (counters exact, tolerance 0; structural invariants also enforced in-code, even under `--update-baseline`) |
 | `image-bench` | Inline-image encoder: **dedup** (0 B/frame static) + **zero-image fast path** (0 B) | `lib/src/terminal/terminal_image_encoder.dart`, `ansi_byte_budget.dart` image category | ~5s | structural (in code) |
 | `serve-semantics-gate` | Semantics wire **anti-cliff**: diff stays flat in tree size (never falls off the 32 KiB DEFLATE cliff) | `lib/src/remote/remote_semantics.dart`, `SemanticsWireEncoder` | ~5s | structural (in code) |
 | `serve-wire-live` | Live `fleury serve` **socket bytes** (plan + semantics), real serve subprocess + WS client | `lib/src/remote/**`, `lib/src/serve/**`, plan/wire codec | ~30s (boots serve) | `profiling/serve_wire_live_baseline.json` |
@@ -56,6 +57,9 @@ changes underneath a baseline:
 The **output-byte** gates (`wire-gate`, `serve-wire-live`) and the
 **structural** gates (`image-bench`, `serve-semantics-gate`) are SDK-independent
 — they measure terminal/socket bytes or invariant ratios, not heap.
+**`paint-gate`'s counter axes are SDK- and machine-independent** (exact widget
+fixture → exact per-frame integers); its paint-µs axes are machine-dependent
+but warn-only, so they never flake the gate.
 
 Regenerate a baseline only as a deliberate, reviewed step:
 
@@ -74,6 +78,8 @@ Wiring gates into CI is tracked separately; the blocker is that CI pins
 `sdk: stable` (floating), so an SDK bump would flake the SDK-sensitive gates
 (and already flakes `remote_client_asset_test`). The intended sequence: pin the
 CI SDK → add a `perf-gates` job running the fast/deterministic gates
-(`serve-semantics-gate`, `image-bench --gate`, `bundle-size --gate`, then
-`alloc-gate --gate` once the SDK is pinned) → keep the heavier PTY/subprocess
-gates (`wire-gate`, `serve-wire-live`) on a pre-release or nightly cadence.
+(`serve-semantics-gate`, `image-bench --gate`, `bundle-size --gate`,
+`paint-gate --gate` — SDK-safe already, its gated axes are exact counters —
+then `alloc-gate --gate` once the SDK is pinned) → keep the heavier
+PTY/subprocess gates (`wire-gate`, `serve-wire-live`) on a pre-release or
+nightly cadence.
