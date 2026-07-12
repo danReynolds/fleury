@@ -208,6 +208,42 @@ void main() {
       },
     );
 
+    test('a burst of reports in one frame mounts the banner entry '
+        'once', () async {
+      final driver = FakeTerminalDriver(size: const CellSize(40, 6));
+      final future = runApp(
+        const Text('app body'),
+        driver: driver,
+        enableHotReload: false,
+        onEvent: (event) {
+          if (event is KeyEvent && event.keyCode == KeyCode.enter) {
+            // Three uncaught async failures land as three reports in the
+            // same microtask window — all before the banner entry's lazy
+            // insert microtask runs. The insert must be idempotent.
+            scheduleMicrotask(() => throw StateError('storm-a'));
+            scheduleMicrotask(() => throw StateError('storm-b'));
+            scheduleMicrotask(() => throw StateError('storm-c'));
+          }
+          return null;
+        },
+      );
+      await _settle();
+
+      driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
+      await _settle();
+
+      // A double insert would trip OverlayState.insert's already-inserted
+      // assert, which would surface as a FOURTH report; instead the banner
+      // stacks all three behind one mounted entry.
+      expect(driver.isActive, isTrue);
+      expect(driver.output, contains('3 errors'));
+      expect(driver.output, isNot(contains('4 errors')));
+
+      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      await future;
+      await driver.dispose();
+    });
+
     // DELIBERATE INVERSION (pipeline-program PR6): these two tests used to
     // assert that a layout/paint crash tears the session down. Containment
     // overturns that posture — the implicit route boundary renders the
@@ -500,21 +536,20 @@ void main() {
         final firstFrame = frames.first;
         expect(firstFrame.layoutStats.performedCount, greaterThan(0));
         expect(firstFrame.layoutStats.skippedCount, 0);
-        // Two boundaries: the explicit one around 'cached' plus the root
-        // overlay's app-entry boundary, engaged because the error-banner
-        // entry co-exists (that entry's own boundary is zero-size while
-        // idle, so it never records). See Overlay.addRepaintBoundaries.
+        // Exactly the ONE explicit boundary around 'cached': the error
+        // banner entry mounts lazily, so an idle app's root overlay is
+        // single-entry and its adaptive per-entry boundary stays
+        // pass-through — it must not show up in the stats.
         final firstBoundaries = firstFrame.repaintBoundaries;
-        expect(firstBoundaries.boundaryCount, 2);
-        expect(firstBoundaries.repaintedCount, 2);
+        expect(firstBoundaries.boundaryCount, 1);
+        expect(firstBoundaries.repaintedCount, 1);
         expect(firstBoundaries.cachedCount, 0);
         expect(firstBoundaries.copiedCellCount, greaterThan(0));
 
         frames.clear();
         // Dirty a sibling OUTSIDE the boundary: the frame must render (a
         // clean frame is now skipped entirely) and the boundary replays
-        // its cache instead of repainting. The app-entry boundary contains
-        // the change, so it is the one that repaints.
+        // its cache instead of repainting.
         counterKey.currentState!.increment();
         await _settle();
 
@@ -522,10 +557,79 @@ void main() {
         final secondFrame = frames.last;
         expect(secondFrame.layoutStats.skippedCount, greaterThan(0));
         final secondBoundaries = secondFrame.repaintBoundaries;
-        expect(secondBoundaries.boundaryCount, 2);
-        expect(secondBoundaries.repaintedCount, 1);
+        expect(secondBoundaries.boundaryCount, 1);
+        expect(secondBoundaries.repaintedCount, 0);
         expect(secondBoundaries.cachedCount, 1);
         expect(secondBoundaries.copiedCellCount, greaterThan(0));
+
+        driver.enqueue(
+          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+        );
+        await future;
+      } finally {
+        await sub.cancel();
+        await driver.dispose();
+      }
+    });
+
+    test('the error banner entry mounts on report and unmounts on '
+        'dismiss', () async {
+      final frames = <FrameEvent>[];
+      final sub = DebugEvents.stream.listen((event) {
+        if (event is FrameDebugEvent) frames.add(event.frame);
+      });
+      final driver = FakeTerminalDriver(size: const CellSize(40, 6));
+      try {
+        final future = runApp(
+          const Text('app body'),
+          driver: driver,
+          enableHotReload: false,
+          onEvent: (event) {
+            if (event is KeyEvent && event.keyCode == KeyCode.enter) {
+              throw StateError('banner-boom');
+            }
+            return null;
+          },
+        );
+        await _settle();
+
+        // Idle: the banner entry is not mounted, so the root overlay is
+        // single-entry and its adaptive boundary stays pass-through.
+        expect(frames, isNotEmpty);
+        expect(frames.last.repaintBoundaries.boundaryCount, 0);
+
+        driver.clearOutput();
+        driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
+        await _settle();
+
+        // The report mounted the banner entry (a microtask later): two
+        // visible entries, so both entry boundaries engage — the app entry
+        // is now the protected sibling under banner churn.
+        expect(driver.output, contains('banner-boom'));
+        expect(frames.last.repaintBoundaries.boundaryCount, 2);
+
+        // Dismiss by clicking the banner (bottom-center of the viewport):
+        // the reporter empties and the entry unmounts symmetrically —
+        // an idle-again session returns to single-entry pass-through.
+        driver.enqueue(
+          const MouseEvent(
+            kind: MouseEventKind.down,
+            button: MouseButton.left,
+            col: 20,
+            row: 4,
+          ),
+        );
+        driver.enqueue(
+          const MouseEvent(
+            kind: MouseEventKind.up,
+            button: MouseButton.left,
+            col: 20,
+            row: 4,
+          ),
+        );
+        await _settle();
+        expect(frames.last.repaintBoundaries.boundaryCount, 0);
+        expect(driver.isActive, isTrue);
 
         driver.enqueue(
           const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
