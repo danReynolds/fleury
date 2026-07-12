@@ -1181,6 +1181,9 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       case 'alloc-gate':
         await benchmarkAllocGate(rest);
         return;
+      case 'paint-gate':
+        await benchmarkPaintGate(rest);
+        return;
       case 'gates':
         await benchmarkGates(rest);
         return;
@@ -1572,6 +1575,22 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
     ], workingDirectory: profiling);
   }
 
+  /// Paint-cost regression gate. Drives real-widget steady-state scenarios
+  /// (ListView auto-boundaries, Overlay adaptive entry boundaries, the lazy
+  /// toast layer) and gates on exact per-frame repaint-boundary counters —
+  /// deterministic and machine-independent, zero tolerance. Paint-phase µs is
+  /// recorded warn-only. Pass `--gate` to fail on counter drift,
+  /// `--update-baseline` to rebaseline after an intentional change
+  /// (structural invariants — e.g. "an idle app is pure pass-through" — are
+  /// enforced even then, so a broken shape cannot be baselined away).
+  Future<void> benchmarkPaintGate(List<String> args) async {
+    await _run('dart', [
+      'run',
+      'bin/paint_gate.dart',
+      ...args,
+    ], workingDirectory: profiling);
+  }
+
   /// Runs the fast, self-contained regression gates in sequence and prints a
   /// pass/fail summary (does not stop on the first failure, so one command
   /// reports the whole board). Exits non-zero if any gate failed. The heavier
@@ -1592,6 +1611,7 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
         'bin/alloc_gate.dart',
         '--gate',
       ]),
+      (name: 'paint-gate', cmd: ['run', 'bin/paint_gate.dart', '--gate']),
     ];
     final results = <({String name, bool ok, int ms})>[];
     for (final gate in fast) {
@@ -6587,6 +6607,9 @@ void _printBenchmarkUsage() {
   );
   stdout.writeln(
     '  alloc-gate [--gate]     Per-frame package:fleury allocation churn',
+  );
+  stdout.writeln(
+    '  paint-gate [--gate]     Repaint-boundary counters (paint-walk pruning)',
   );
   stdout.writeln('');
   stdout.writeln(

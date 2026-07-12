@@ -9,7 +9,7 @@ everything.
 
 ```sh
 dart tool/fleury_dev.dart bootstrap   # pub get across packages
-dart tool/fleury_dev.dart check       # analyze + test + dart2js smoke (what CI runs)
+dart tool/fleury_dev.dart check       # analyze + test + dart2js smoke (CI runs this + benchmark gates)
 ```
 
 Run `dart tool/fleury_dev.dart --help` and `... benchmark --help` for the rest.
@@ -24,15 +24,16 @@ tolerance to clear red.
 
 | Touched | Run |
 | --- | --- |
-| `lib/src/rendering/**`, `ansi_renderer.dart`, cell paint | `benchmark wire-gate` **and** `benchmark alloc-gate --gate` |
-| `lib/src/widgets/framework.dart`, reconcile/build/layout, per-frame path | `benchmark alloc-gate --gate` |
+| `lib/src/rendering/**`, `ansi_renderer.dart`, cell paint | `benchmark wire-gate` **and** `benchmark alloc-gate --gate` **and** `benchmark paint-gate --gate` |
+| `lib/src/widgets/framework.dart`, reconcile/build/layout, per-frame path (incl. `overlay.dart`, `list_view.dart`, repaint boundaries) | `benchmark alloc-gate --gate` **and** `benchmark paint-gate --gate` |
 | `lib/src/terminal/terminal_image_encoder.dart` | `benchmark image-bench --gate` |
 | `lib/src/remote/**`, `lib/src/serve/**`, plan/semantics wire | `benchmark serve-wire-live` **and** `benchmark serve-semantics-gate` |
 | `web/remote_client.dart` and its imports | `benchmark bundle-size --gate` |
 
 All via `dart tool/fleury_dev.dart benchmark <gate> --gate`; each exits non-zero
 on regression. Run the whole fast suite at once with
-`dart tool/fleury_dev.dart benchmark gates` (~10s, pass/fail summary);
+`dart tool/fleury_dev.dart benchmark gates` (~11s, pass/fail summary; CI runs
+this suite too);
 `benchmark --help` lists every gate. Full manifest — what each protects, speed,
 baseline & SDK caveats:
 **[docs/implementation/perf-gates.md](docs/implementation/perf-gates.md)**.

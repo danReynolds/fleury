@@ -23,3 +23,13 @@ jobs:
         run: dart tool/fleury_dev.dart bootstrap
       - name: Check (analyze + test + dart2js smoke, all packages)
         run: dart tool/fleury_dev.dart check
+      # The fast perf-gate suite: deterministic counters + structural
+      # invariants (serve-semantics, image-bench, bundle-size, alloc-gate,
+      # paint-gate; ~11s). paint-gate's gated axes are exact counters
+      # (machine-independent); alloc-gate is SDK-sensitive but the SDK above
+      # is pinned — on a deliberate SDK bump, re-baseline in the bump commit
+      # (never loosen a tolerance). Heavier PTY gates (wire-gate,
+      # serve-wire-live) stay on-demand; see
+      # docs/implementation/perf-gates.md.
+      - name: Perf gates (fast suite)
+        run: dart tool/fleury_dev.dart benchmark gates
