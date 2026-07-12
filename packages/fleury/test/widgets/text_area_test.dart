@@ -3,6 +3,10 @@
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
+// The debug collector is deliberately not exported by the production barrels;
+// the split-memo assertions reach it through the src import, like other
+// render-internal tests.
+import 'package:fleury/src/widgets/text_area.dart' show TextAreaDebugStats;
 import 'package:test/test.dart';
 
 KeyEvent _shiftCode(KeyCode keyCode) =>
@@ -625,6 +629,104 @@ void main() {
       expect(lines[0], 'HEAD');
       // The 2-row area shows the tail around the cursor (l3, l4), not l0/l1.
       expect(lines.sublist(1, 3), ['l3', 'l4']);
+    });
+  });
+
+  group('line split memoization', () {
+    // Each assertion opens its own collector window (beginFrame) and reads
+    // the delta with takeFrameStats — the same opt-in idiom as
+    // RenderLayoutDebugStats, so nothing is counted outside a window and
+    // tests cannot flake on each other's order.
+    int splitsDuring(void Function() body) {
+      TextAreaDebugStats.beginFrame(enabled: true);
+      body();
+      return TextAreaDebugStats.takeFrameStats().lineSplitCount;
+    }
+
+    testWidgets('layout/paint passes reuse one split until the text changes', (
+      tester,
+    ) {
+      final ctl = TextEditingController(text: 'one\ntwo\nthree')
+        ..selection = 13; // end of the document
+      tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
+
+      expect(
+        splitsDuring(() => tester.render(size: const CellSize(10, 4))),
+        1,
+        reason: 'one frame is one split, shared by layout, caret, and paint',
+      );
+
+      // An unchanged frame performs zero new splits.
+      expect(
+        splitsDuring(() => tester.render(size: const CellSize(10, 4))),
+        0,
+      );
+
+      // Cursor movement re-lays-out and repaints, but the text is unchanged
+      // — still no new split.
+      expect(
+        splitsDuring(() {
+          tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+          tester.render(size: const CellSize(10, 4));
+        }),
+        0,
+      );
+      expect(ctl.selection, 7, reason: 'column clamps to the end of "two"');
+
+      // An edit reassigns the text: exactly one new split, and the memoized
+      // lines reflect the new document.
+      expect(
+        splitsDuring(() {
+          tester.type('X');
+          tester.render(size: const CellSize(10, 4));
+        }),
+        1,
+      );
+      expect(ctl.text, 'one\ntwoX\nthree');
+      expect(
+        splitsDuring(
+          () => expect(_lines(tester, rows: 4), ['one', 'twoX', 'three', '']),
+        ),
+        0,
+        reason: 'rendering the edited document again reuses the new split',
+      );
+    });
+
+    testWidgets('placeholder lines share the memo and rebuild on swap', (
+      tester,
+    ) {
+      final ctl = TextEditingController();
+      tester.pumpWidget(
+        TextArea(controller: ctl, autofocus: true, placeholder: 'type\nhere'),
+      );
+
+      expect(
+        splitsDuring(() => tester.render(size: const CellSize(10, 2))),
+        1,
+      );
+      expect(
+        splitsDuring(() => expect(_lines(tester, rows: 2), ['type', 'here'])),
+        0,
+      );
+
+      // Typing swaps the split source to the document; clearing swaps back
+      // to the placeholder. Each swap re-splits exactly once.
+      expect(
+        splitsDuring(() {
+          tester.type('x');
+          tester.render(size: const CellSize(10, 2));
+          expect(_lines(tester, rows: 1).first, 'x');
+        }),
+        1,
+      );
+      expect(
+        splitsDuring(() {
+          tester.sendKey(const KeyEvent(keyCode: KeyCode.backspace));
+          tester.render(size: const CellSize(10, 2));
+          expect(_lines(tester, rows: 2), ['type', 'here']);
+        }),
+        1,
+      );
     });
   });
 }

@@ -599,6 +599,49 @@ class _TextAreaDisplay extends LeafRenderObjectWidget {
   }
 }
 
+/// Line-split activity observed in [RenderTextArea] over one stats window.
+final class TextAreaFrameStats {
+  const TextAreaFrameStats({required this.lineSplitCount});
+
+  static const empty = TextAreaFrameStats(lineSplitCount: 0);
+
+  /// Document/placeholder line splits performed while the window was open —
+  /// i.e. misses of the memoized split. A window over frames whose text did
+  /// not change records 0.
+  final int lineSplitCount;
+}
+
+/// Debug-only collector for [RenderTextArea]'s memoized line split.
+///
+/// Mirrors the RenderLayoutDebugStats / RepaintBoundaryDebugStats collectors:
+/// opt-in per window, so production frames pay only a branch at the memo's
+/// recompute site; tests enable it around the frames they want to inspect and
+/// read the result with [takeFrameStats].
+final class TextAreaDebugStats {
+  TextAreaDebugStats._();
+
+  static bool _enabled = false;
+  static int _lineSplitCount = 0;
+
+  static void beginFrame({required bool enabled}) {
+    _enabled = enabled;
+    _lineSplitCount = 0;
+  }
+
+  static TextAreaFrameStats takeFrameStats() {
+    if (!_enabled) return TextAreaFrameStats.empty;
+    final stats = TextAreaFrameStats(lineSplitCount: _lineSplitCount);
+    _enabled = false;
+    _lineSplitCount = 0;
+    return stats;
+  }
+
+  static void recordLineSplit() {
+    if (!_enabled) return;
+    _lineSplitCount += 1;
+  }
+}
+
 /// Lays out text as rows and scrolls vertically to keep the cursor line
 /// visible; paints a one-cell cursor at the selection.
 class RenderTextArea extends RenderObject {
@@ -713,7 +756,31 @@ class RenderTextArea extends RenderObject {
 
   bool get _showPlaceholder => _text.isEmpty && _placeholder.isNotEmpty;
 
-  List<String> get _lines => _text.split('\n');
+  // Memoized line split. [_text] and [_placeholder] are immutable strings
+  // that are only ever reassigned (the setters produce a fresh instance via
+  // [_sanitize] whenever the value changes), so identity of the source
+  // string is a sound O(1) cache key. Layout, paint, and caret derivation
+  // each need the same split every frame; without the memo each pass
+  // re-split the whole document — O(doc) work per frame at editor scale for
+  // cursor moves that change no text. Only one source is consulted per
+  // frame (placeholder when the document is empty, the text otherwise), so
+  // a single entry suffices.
+  String? _cachedLinesSource;
+  List<String> _cachedLines = const [];
+
+  /// Lines of [source], memoized by string identity. Treat the returned
+  /// list as immutable: it is shared across layout/paint passes. Recomputes
+  /// are reported to [TextAreaDebugStats] when a stats window is open.
+  List<String> _linesOf(String source) {
+    if (!identical(_cachedLinesSource, source)) {
+      _cachedLinesSource = source;
+      _cachedLines = source.split('\n');
+      TextAreaDebugStats.recordLineSplit();
+    }
+    return _cachedLines;
+  }
+
+  List<String> get _lines => _linesOf(_text);
 
   /// (line, column) of the cursor within [_lines].
   (int, int) _cursorLineCol(List<String> lines) {
@@ -729,7 +796,7 @@ class RenderTextArea extends RenderObject {
 
   @override
   CellSize performLayout(CellConstraints constraints) {
-    final lines = _showPlaceholder ? _placeholder.split('\n') : _lines;
+    final lines = _showPlaceholder ? _linesOf(_placeholder) : _lines;
     var widest = 0;
     for (final line in lines) {
       final w = _widthResolver.widthOfText(line, _profile);
@@ -838,7 +905,7 @@ class RenderTextArea extends RenderObject {
     // Empty: paint the (possibly multi-line) placeholder, with the
     // cursor over the very first cell when visible.
     if (_showPlaceholder) {
-      final phLines = _placeholder.split('\n');
+      final phLines = _linesOf(_placeholder);
       final maxCol = offset.col + size.cols;
       for (var r = 0; r < size.rows && r < phLines.length; r++) {
         final row = offset.row + r;
@@ -935,7 +1002,7 @@ class RenderTextArea extends RenderObject {
   }
 
   CellRect? _caretRect(CellOffset paintOffset, CellRect? clipRect) {
-    final lines = _showPlaceholder ? _placeholder.split('\n') : _lines;
+    final lines = _showPlaceholder ? _linesOf(_placeholder) : _lines;
     if (lines.isEmpty) return null;
     final (cursorLine, cursorCol) = _cursorLineCol(lines);
     if (cursorLine < _scrollTop || cursorLine >= _scrollTop + size.rows) {
