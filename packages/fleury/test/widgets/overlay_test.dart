@@ -510,7 +510,7 @@ void main() {
       expect(
         stats.boundaryCount,
         0,
-        reason: 'a single entry again: pass-through, cache released',
+        reason: 'a single entry again: pass-through, no boundary stats',
       );
       expect(out, isNot(contains('float')));
 
@@ -522,6 +522,45 @@ void main() {
       stats = RepaintBoundaryDebugStats.takeFrameStats();
       expect(stats.boundaryCount, 0);
       expect(out, contains('base=1'));
+    });
+
+    testWidgets('a cached blit copies only content cells, not the damage '
+        'halo', (tester) {
+      // Grapheme writes record ±1 col of damage (wide-cell eviction guards),
+      // and the blit is a raw rect copy stamped ON TOP of the entries
+      // beneath. The blit rect must therefore be the tight non-empty
+      // bounds: a raw damage rect would blit its empty halo columns over
+      // the base entry's adjacent content.
+      final base = GlobalKey<_BumpCounterState>();
+      tester.pumpWidget(
+        Overlay(
+          initialEntries: [
+            OverlayEntry(
+              builder: (_) => _BumpCounter(key: base, label: 'basebase'),
+            ),
+            OverlayEntry(
+              builder: (_) => const Padding(
+                padding: EdgeInsets.only(left: 4),
+                child: Text('XY'),
+              ),
+            ),
+          ],
+        ),
+      );
+      const size = CellSize(14, 2);
+      tester.render(size: size); // warm both caches
+
+      base.currentState!.bump(); // float cache-hits, blits over fresh base
+      tester.pump();
+      RepaintBoundaryDebugStats.beginFrame(enabled: true);
+      final out = tester.renderToString(size: size);
+      final stats = RepaintBoundaryDebugStats.takeFrameStats();
+      expect(stats.cachedCount, 1, reason: 'the float entry blit from cache');
+      expect(
+        out,
+        contains('baseXYse=1'),
+        reason: 'base cells beside the float content survive its blit',
+      );
     });
 
     testWidgets('an opaque top entry above an occluded stack stays '

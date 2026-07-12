@@ -1,6 +1,22 @@
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
+import 'package:fleury/src/rendering/render_repaint_boundary.dart';
 import 'package:test/test.dart';
+
+/// All [RenderRepaintBoundary]s in the tree, in visit (outer-first) order.
+List<RenderRepaintBoundary> _boundaries(FleuryTester tester) {
+  final found = <RenderRepaintBoundary>[];
+  void visit(Element e) {
+    if (e is RenderObjectElement) {
+      final render = e.renderObject;
+      if (render is RenderRepaintBoundary) found.add(render);
+    }
+    e.visitChildren(visit);
+  }
+
+  visit(tester.root!);
+  return found;
+}
 
 class _Counter extends StatefulWidget {
   const _Counter({super.key});
@@ -214,6 +230,34 @@ void main() {
         0,
         reason:
             'a removed region must not keep firing through a stale outer cache',
+      );
+    });
+
+    testWidgets('re-engaging an inner boundary dirties the outer cache', (
+      tester,
+    ) {
+      // A disengaged (pass-through) inner boundary is invisible to the
+      // invalidation walk. When it re-engages, its own needsPaint is set —
+      // but from then on every change inside it short-circuits at the
+      // (already dirty) inner boundary, so the OUTER cache would keep
+      // blitting stale cells unless the enable itself dirtied the ancestors
+      // (markAncestorRepaintBoundariesDirty).
+      final key = GlobalKey<_CounterState>();
+      tester.pumpWidget(
+        RepaintBoundary(child: RepaintBoundary(child: _Counter(key: key))),
+      );
+      const size = CellSize(12, 1);
+      final inner = _boundaries(tester).last;
+      inner.cachingEnabled = false;
+      tester.render(size: size); // outer caches THROUGH the pass-through inner
+
+      inner.cachingEnabled = true; // setter alone; no other invalidation
+      key.currentState!.bump(); // walk short-circuits at the dirty inner
+      tester.pump();
+      expect(
+        tester.renderToString(size: size).trim(),
+        'count=1',
+        reason: 'the outer boundary must repaint, not blit its stale cache',
       );
     });
   });

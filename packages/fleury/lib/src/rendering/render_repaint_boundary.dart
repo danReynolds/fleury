@@ -126,24 +126,28 @@ class RenderRepaintBoundary extends RenderObject
   RenderObject? _child;
   CellBuffer? _cache;
   CellRect? _cacheBounds;
-  List<SemanticPaintBoundsRecord> _semanticBounds =
-      const <SemanticPaintBoundsRecord>[];
-  List<PointerRegionRecord> _pointerRegions = const <PointerRegionRecord>[];
+  // Reused across repaints (cleared, not reallocated): a boundary repaint is
+  // the steady-state hot path, and fresh capture lists per repaint were pure
+  // per-frame churn. Private and only read internally, so sharing the
+  // mutable instances is safe.
+  final List<SemanticPaintBoundsRecord> _semanticBounds =
+      <SemanticPaintBoundsRecord>[];
+  final List<PointerRegionRecord> _pointerRegions = <PointerRegionRecord>[];
 
   /// Whether this boundary currently caches its subtree's paint.
   ///
   /// While false the node is a plain pass-through: [isRepaintBoundary]
-  /// reports false so the invalidation walk ignores it, [paint] delegates
-  /// straight to the child, and no cache is held. This lets an owner keep
-  /// the boundary in the tree unconditionally (element-stable — flipping
-  /// never reparents the subtree) and engage caching only while it can pay;
-  /// [Overlay] does this per entry, engaging only while more than one entry
-  /// is visible.
+  /// reports false so the invalidation walk ignores it, and [paint]
+  /// delegates straight to the child. This lets an owner keep the boundary
+  /// in the tree unconditionally (element-stable — flipping never reparents
+  /// the subtree) and engage caching only while it can pay; [Overlay] does
+  /// this per entry, engaging only while more than one entry is visible.
   ///
   /// Flipping mid-life is safe because nothing snapshots
   /// [isRepaintBoundary]: the invalidation walk reads it live, and enabling
   /// marks [needsPaint] — invalidations that happened while pass-through
-  /// never marked this node, so the (absent) cache must not be trusted.
+  /// never marked this node, so the retained cache must not be trusted —
+  /// and dirties every enclosing boundary (see the setter).
   bool get cachingEnabled => _cachingEnabled;
   bool _cachingEnabled;
   set cachingEnabled(bool value) {
@@ -151,13 +155,18 @@ class RenderRepaintBoundary extends RenderObject
     _cachingEnabled = value;
     if (value) {
       needsPaint = true;
-    } else {
-      // Free the screen-sized cache; pass-through paint holds none.
-      _cache = null;
-      _cacheBounds = null;
-      _semanticBounds = const <SemanticPaintBoundsRecord>[];
-      _pointerRegions = const <PointerRegionRecord>[];
+      // Restore "dirty boundary ⟹ dirty ancestors" locally: an enclosing
+      // boundary's cache embeds this subtree's cells, and every LATER
+      // invalidation from inside this subtree will short-circuit at this
+      // (now dirty) boundary — ancestors would never hear about it and
+      // would keep blitting stale cells.
+      markAncestorRepaintBoundariesDirty();
     }
+    // Disengaging keeps the cache buffer: engagement flaps with structure
+    // (an overlay entry appearing and vanishing), and freeing would cost a
+    // screen-sized realloc plus warm-up repaint on every re-engage. The
+    // memory is bounded by live boundaries and reclaimed with the render
+    // object.
   }
 
   @override
@@ -215,31 +224,33 @@ class RenderRepaintBoundary extends RenderObject
     var repainted = false;
     if (needsPaint) {
       final targetCache = cache;
-      final capturedSemanticBounds = <SemanticPaintBoundsRecord>[];
-      final capturedPointerRegions = <PointerRegionRecord>[];
-      cache.withoutDamageTracking(() {
-        targetCache.clear();
-        SemanticPaintBoundsCapture.collect(capturedSemanticBounds, () {
-          PointerRegionCapture.collect(capturedPointerRegions, () {
-            c.paint(
-              targetCache,
-              CellOffset.zero,
-              screenOffset: screenOffset ?? offset,
-              clipRect: clipRect,
-            );
-          });
+      // Clear untracked, then arm the cache's own damage tracking around the
+      // child's paint: the damage rect falls out of the writes themselves —
+      // no post-paint full-grid scan.
+      cache.withoutDamageTracking(targetCache.clear);
+      cache.resetDamageTracking();
+      _semanticBounds.clear();
+      _pointerRegions.clear();
+      SemanticPaintBoundsCapture.collect(_semanticBounds, () {
+        PointerRegionCapture.collect(_pointerRegions, () {
+          c.paint(
+            targetCache,
+            CellOffset.zero,
+            screenOffset: screenOffset ?? offset,
+            clipRect: clipRect,
+          );
         });
       });
-      _semanticBounds = List<SemanticPaintBoundsRecord>.unmodifiable(
-        capturedSemanticBounds,
-      );
-      _pointerRegions = List<PointerRegionRecord>.unmodifiable(
-        capturedPointerRegions,
-      );
-      // Tighten the next blit to just the non-empty cells. For dense
-      // subtrees that's the full size (no penalty); for sparse subtrees
-      // this avoids copying a buffer of mostly-empty cells.
-      _cacheBounds = cache.boundingBoxOfNonEmpty();
+      // Tighten the blit to just the non-empty cells, using the damage rect
+      // as the scan window. Damage is a conservative superset (grapheme
+      // writes pad the wide-cell guard columns), and tightness matters: the
+      // blit is a raw rect copy painted OVER whatever sits beneath this
+      // boundary (a floating entry above the app), so a padded rect would
+      // stamp its empty halo columns onto that content.
+      final damage = cache.takeDamageBounds();
+      _cacheBounds = damage == null
+          ? null
+          : cache.boundingBoxOfNonEmptyWithin(damage);
       needsPaint = false;
       repainted = true;
     } else {

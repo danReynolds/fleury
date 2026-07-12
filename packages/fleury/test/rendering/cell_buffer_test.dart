@@ -278,6 +278,47 @@ void main() {
     });
   });
 
+  group('boundingBoxOfNonEmptyWithin', () {
+    test('trims a padded damage hint to the tight non-empty bounds', () {
+      // The repaint-boundary use: damage over a cleared buffer is a
+      // conservative superset (grapheme writes pad the wide-cell guard
+      // columns); the trim must converge on the same rect as the full scan.
+      final buf = CellBuffer(const CellSize(10, 3));
+      buf.resetDamageTracking();
+      buf.writeText(const CellOffset(3, 1), 'ab');
+
+      final damage = buf.takeDamageBounds();
+      expect(damage, CellRect.fromLTWH(2, 1, 4, 1), reason: 'padded ±1 col');
+      expect(
+        buf.boundingBoxOfNonEmptyWithin(damage!),
+        CellRect.fromLTWH(3, 1, 2, 1),
+      );
+      expect(
+        buf.boundingBoxOfNonEmptyWithin(damage),
+        buf.boundingBoxOfNonEmpty(),
+        reason: 'same result as the full-grid scan',
+      );
+    });
+
+    test('returns null for an all-empty hint region', () {
+      final buf = CellBuffer(const CellSize(4, 2));
+      buf.writeGrapheme(const CellOffset(3, 1), 'X');
+      expect(
+        buf.boundingBoxOfNonEmptyWithin(CellRect.fromLTWH(0, 0, 2, 2)),
+        isNull,
+      );
+    });
+
+    test('clamps an out-of-bounds hint to the grid', () {
+      final buf = CellBuffer(const CellSize(4, 2));
+      buf.writeGrapheme(const CellOffset(0, 0), 'X');
+      expect(
+        buf.boundingBoxOfNonEmptyWithin(CellRect.fromLTWH(-2, -2, 20, 20)),
+        CellRect.fromLTWH(0, 0, 1, 1),
+      );
+    });
+  });
+
   group('Overlay regions', () {
     test('an image whose top-left is out of bounds is dropped', () {
       final buf = CellBuffer(const CellSize(3, 1));
