@@ -22,6 +22,8 @@
 
 import 'dart:async' show unawaited;
 
+import '../debug/debug_events.dart';
+import '../debug/debug_invalidation.dart';
 import '../foundation/geometry.dart';
 import '../rendering/error_presentation.dart';
 import '../rendering/render_layout_stats.dart';
@@ -60,9 +62,48 @@ abstract interface class FramePresenter {
   /// Presents one rendered frame.
   void presentFrame(TuiRenderedFrame frame, FramePresentInfo info);
 
-  /// Called after the presented frame was committed — the point where
-  /// debug/telemetry emission belongs (the frame is now the diff base).
+  /// This surface's per-frame diff stats for the just-committed frame, or null
+  /// if it measures none (the driver then defaults the cell count to the full
+  /// viewport). Called only when a debug consumer is watching.
+  ///
+  /// The driver owns the rest of the [FrameEvent] — frame number, phase
+  /// timings, invalidation sources, buffer size — and assembles it once, in one
+  /// place. A presenter can only vary the diff stats here; it cannot forget to
+  /// emit, so telemetry can't silently go missing on a surface that didn't wire
+  /// it up (the bug that shipped `read_frames` empty over the wire, and the DT4
+  /// gap where the browser embed emits nothing).
+  FrameDiffStats? frameDiffStats(
+    TuiRenderedFrame frame,
+    FramePresentInfo info,
+  ) => null;
+
+  /// Surface-specific post-commit side effects (e.g. the browser embed's own
+  /// performance instrumentation) — distinct from the cross-surface debug
+  /// [FrameEvent] the driver emits. Runs on every committed frame, not gated on
+  /// a debug consumer. Default no-op; the terminal/wire presenters need none.
   void onFrameCommitted(TuiRenderedFrame frame, FramePresentInfo info) {}
+}
+
+/// The surface-specific slice of a [FrameEvent]: how a presenter measured this
+/// frame's diff. Everything else in the event is surface-neutral and owned by
+/// the [FrameDriver].
+final class FrameDiffStats {
+  const FrameDiffStats({
+    this.diff = Duration.zero,
+    this.dirtyCells,
+    this.dirtyBounds,
+    this.dirtySpans,
+  });
+
+  /// Time computing this surface's change set (ANSI cell diff; wire row diff +
+  /// span build).
+  final Duration diff;
+
+  /// Changed-cell count, or null if the surface can't cheaply tally it — the
+  /// driver then reports the full viewport.
+  final int? dirtyCells;
+  final CellRect? dirtyBounds;
+  final DirtySpanFrameStats? dirtySpans;
 }
 
 /// Per-frame context handed to the presenter: the trigger, the plan (when
@@ -174,6 +215,11 @@ final class FrameDriver {
   final void Function(Duration, Duration, Duration)? _onPhaseTiming;
   final void Function(String marker)? _markOnce;
   late final FrameScheduler _scheduler;
+
+  /// Monotonic committed-frame counter for debug telemetry — one per driver
+  /// (there is one presenter per driver), owned here so the number is the
+  /// same across surfaces and never diverges between presenters.
+  int _frameCounter = 0;
 
   Element? _rootElement;
   Widget Function()? _rootBuilder;
@@ -400,6 +446,7 @@ final class FrameDriver {
     _onFramePresented?.call(frame, info.plan);
     _markOnce?.call('first.render.end');
     _frameLoop.commit(frame);
+    _emitFrameTelemetry(frame, info);
     _presenter.onFrameCommitted(frame, info);
 
     // Drain post-frame callbacks AFTER output is out: callers can now
@@ -408,6 +455,38 @@ final class FrameDriver {
     // through requestFrame; the scheduler already cleared its pending flag
     // before invoking us, so the new request schedules a fresh flush.
     runtime.flushPostFrameCallbacks();
+  }
+
+  /// Assembles and emits the committed frame's [FrameEvent] — the one place
+  /// that owns the envelope, so every surface reports identical telemetry and a
+  /// presenter can only supply the diff stats, never forget to emit. Gated on a
+  /// watching consumer; otherwise it just drains the invalidation log so the
+  /// next watched frame starts clean.
+  void _emitFrameTelemetry(TuiRenderedFrame frame, FramePresentInfo info) {
+    if (!info.debugWatching) {
+      DebugInvalidations.reset();
+      return;
+    }
+    _frameCounter++;
+    final stats = _presenter.frameDiffStats(frame, info);
+    final size = frame.next.size;
+    DebugEvents.emitFrame(
+      FrameEvent(
+        frameNumber: _frameCounter,
+        reason: info.reason,
+        build: info.phaseBuild,
+        layout: info.phaseLayout,
+        paint: info.phasePaint,
+        diff: stats?.diff ?? Duration.zero,
+        dirtyCells: stats?.dirtyCells ?? size.cols * size.rows,
+        dirtyBounds: stats?.dirtyBounds,
+        dirtySpans: stats?.dirtySpans ?? DirtySpanFrameStats.empty,
+        dirtySources: DebugInvalidations.drain(),
+        layoutStats: info.layoutStats,
+        repaintBoundaries: info.repaintBoundaryStats,
+        bufferSize: size,
+      ),
+    );
   }
 
   /// Stops scheduling. Late scheduler fires drain callbacks only.

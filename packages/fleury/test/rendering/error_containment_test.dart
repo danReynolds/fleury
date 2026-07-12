@@ -267,6 +267,12 @@ class _ProbePresenter implements FramePresenter {
 
   @override
   void onFrameCommitted(TuiRenderedFrame frame, FramePresentInfo info) {}
+
+  @override
+  FrameDiffStats? frameDiffStats(
+    TuiRenderedFrame frame,
+    FramePresentInfo info,
+  ) => null;
 }
 
 void _secondaryTests() {
