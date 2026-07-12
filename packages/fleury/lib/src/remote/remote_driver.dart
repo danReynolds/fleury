@@ -203,6 +203,10 @@ final class RemoteTerminalDriver
       prev,
       next,
       fullRepaint: plan.fullRepaint,
+      // The planner's damage covers every changed cell (the invariant the
+      // ANSI renderer's bounded diff already rides), so the plan builder
+      // skips provably-clean rows instead of re-diffing the whole screen.
+      dirtyRows: plan.damage.dirtyRows,
     );
     // Ship the bytes for each image the peer does not yet hold, before the
     // plan that references it. An id ships at most once per frame even if

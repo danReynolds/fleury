@@ -153,6 +153,77 @@ void main() {
       await driver.restore();
     });
 
+    test('presentFrame threads the planner damage; plan bytes are byte-'
+        'identical to the unbounded build', () async {
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(transport);
+      final entered = driver.enter(TerminalMode.interactive);
+      transport.emit(_init);
+      await entered;
+      transport.sent.clear();
+      final prev = CellBuffer(const CellSize(8, 3));
+      final next = CellBuffer(const CellSize(8, 3));
+      next.writeText(
+        const CellOffset(0, 1),
+        'hi',
+        style: const CellStyle(bold: true),
+      );
+      driver.presentFrame(
+        prev,
+        next,
+        _steadyStatePlan(
+          const CellSize(8, 3),
+          TuiDirtyRows.fromRows(const [1], rowCount: 3),
+        ),
+      );
+      final emitted = encodeRemotePlan(
+        transport.sent.whereType<PlanFrame>().single.plan,
+      );
+      // Sound damage must not change the wire: the emitted plan matches the
+      // unbounded build byte for byte...
+      expect(
+        emitted,
+        encodeRemotePlan(buildRemotePlan(prev, next, fullRepaint: false)),
+      );
+      // ...and the exact bytes the pre-damage-hint driver emitted for this
+      // frame (captured as a fixture before buildRemotePlan learned
+      // dirtyRows). A codec wire change legitimately updates this pin.
+      expect(emitted, [
+        0, 8, 3, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 2, 104, 105, 0, //
+      ]);
+      await driver.restore();
+    });
+
+    test(
+      'presentFrame trusts the damage: rows outside it are not scanned',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final entered = driver.enter(TerminalMode.interactive);
+        transport.emit(_init);
+        await entered;
+        transport.sent.clear();
+        final prev = CellBuffer(const CellSize(8, 3));
+        final next = CellBuffer(const CellSize(8, 3));
+        next.writeText(const CellOffset(0, 1), 'hi');
+        // Deliberately UNSOUND damage (misses the changed row 1). The changed
+        // row must not ship — observable proof the driver hands the planner's
+        // damage to buildRemotePlan rather than re-diffing the whole screen.
+        // Real callers uphold the soundness contract; this documents the trust.
+        driver.presentFrame(
+          prev,
+          next,
+          _steadyStatePlan(
+            const CellSize(8, 3),
+            TuiDirtyRows.fromRows(const [2], rowCount: 3),
+          ),
+        );
+        final plan = transport.sent.whereType<PlanFrame>().single.plan;
+        expect(plan.patches, isEmpty);
+        await driver.restore();
+      },
+    );
+
     test(
       'a second INIT mid-session does not re-negotiate the protocol',
       () async {
@@ -547,3 +618,23 @@ void main() {
     );
   });
 }
+
+/// A steady-state (non-repaint) presentation plan whose damage carries
+/// [dirtyRows] — the shape the runtime planner hands presentFrame.
+FramePresentationPlan _steadyStatePlan(CellSize size, TuiDirtyRows dirtyRows) =>
+    FramePresentationPlan(
+      reason: 'test',
+      fullRepaint: false,
+      size: size,
+      damage: FramePresentationDamage(
+        fullRepaint: false,
+        requiresFullDiff: false,
+        dirtyBounds: null,
+        dirtyRows: dirtyRows,
+        source: FrameDamageSource.paintDamage,
+      ),
+      dirtyRowModels: const [],
+      metricsChanged: false,
+      dirtyRowDiffTime: Duration.zero,
+      spanBuildTime: Duration.zero,
+    );

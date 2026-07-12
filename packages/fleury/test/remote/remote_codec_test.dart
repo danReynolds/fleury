@@ -98,6 +98,359 @@ void main() {
     );
   });
 
+  group('bounded plan build (dirtyRows damage hint)', () {
+    // The contract under test: given SOUND damage (dirtyRows covers every
+    // cell that differs between prev and next — the invariant the planner's
+    // FramePresentationDamage carries and AnsiRenderer.renderDiff already
+    // trusts), the bounded build must produce byte-identical encoded plans
+    // to the unbounded build. Rows outside sound damage are equal, so
+    // skipping them can drop no patch from a plain diff. Scroll detection
+    // must stay exact under ANY sound damage: the rows a scrolling frame
+    // leaves untouched (blank tails, static chrome) are often
+    // shift-invariant, so beneficial scrolls DO fire under partial damage —
+    // and a detected scroll must patch residually across every row, since
+    // the mirror shift moves damage onto rows the frame diff never marked.
+    Uint8List bytesFor(
+      CellBuffer prev,
+      CellBuffer next, {
+      bool fullRepaint = false,
+      TuiDirtyRows? dirtyRows,
+    }) => encodeRemotePlan(
+      buildRemotePlan(
+        prev,
+        next,
+        fullRepaint: fullRepaint,
+        dirtyRows: dirtyRows,
+      ),
+    );
+
+    test('sound damage yields byte-identical plans (seeded property)', () {
+      final rng = Random(0xB07DED);
+      const alphabet = 'abcdefgh 0123#@世界';
+      for (var iter = 0; iter < 300; iter++) {
+        final cols = 4 + rng.nextInt(40);
+        final rows = 1 + rng.nextInt(14);
+        final prev = CellBuffer(CellSize(cols, rows));
+        final next = CellBuffer(CellSize(cols, rows));
+        for (var r = 0; r < rows; r++) {
+          prev.writeText(
+            CellOffset(0, r),
+            _randomText(rng, alphabet, cols),
+            style: _randomStyle(rng),
+          );
+        }
+        _copyBuffer(prev, next);
+        // 0..3 random styled edits at random offsets (0 edits: empty diff).
+        for (var m = 0; m < rng.nextInt(4); m++) {
+          final r = rng.nextInt(rows);
+          final c = rng.nextInt(cols);
+          next.writeText(
+            CellOffset(c, r),
+            _randomText(rng, alphabet, cols - c),
+            style: _randomStyle(rng),
+          );
+        }
+        final truth = _trueDirtyRows(prev, next);
+        final expected = bytesFor(prev, next);
+
+        // Sound damage variants: the exact changed-row set, the same set
+        // padded with extra clean rows, and full damage.
+        final padded = {...truth, rng.nextInt(rows), rng.nextInt(rows)};
+        final variants = <String, TuiDirtyRows>{
+          'exact': TuiDirtyRows.fromRows(truth, rowCount: rows),
+          'padded': TuiDirtyRows.fromRows(padded, rowCount: rows),
+          'full': TuiDirtyRows.full(rows),
+        };
+        variants.forEach((name, damage) {
+          expect(
+            bytesFor(prev, next, dirtyRows: damage),
+            expected,
+            reason: 'iter $iter, $name damage (true dirty rows: $truth)',
+          );
+        });
+      }
+    });
+
+    test('single-row edit under exact single-range damage', () {
+      final prev = CellBuffer(const CellSize(20, 6));
+      final next = CellBuffer(const CellSize(20, 6));
+      for (var r = 0; r < 6; r++) {
+        prev.writeText(CellOffset(0, r), 'row $r content');
+      }
+      _copyBuffer(prev, next);
+      next.writeText(
+        const CellOffset(4, 3),
+        'edited',
+        style: const CellStyle(bold: true),
+      );
+      final expected = bytesFor(prev, next);
+      final damage = TuiDirtyRows.range(3, 4, rowCount: 6);
+      expect(bytesFor(prev, next, dirtyRows: damage), expected);
+      final decoded = decodeRemotePlan(bytesFor(prev, next, dirtyRows: damage));
+      expect(decoded.patches.map((p) => p.row).toList(), [3]);
+    });
+
+    test('multi-range damage with edits on the range borders', () {
+      final prev = CellBuffer(const CellSize(16, 12));
+      final next = CellBuffer(const CellSize(16, 12));
+      for (var r = 0; r < 12; r++) {
+        prev.writeText(CellOffset(0, r), 'line $r ........');
+      }
+      _copyBuffer(prev, next);
+      // Edits at the buffer borders (rows 0, 11) and an adjacent pair
+      // (rows 5, 6) that collapses into one range.
+      for (final r in const [0, 5, 6, 11]) {
+        next.writeText(
+          CellOffset(0, r),
+          'CHANGED $r',
+          style: const CellStyle(italic: true),
+        );
+      }
+      final damage = TuiDirtyRows.fromRows(const [0, 5, 6, 11], rowCount: 12);
+      expect(
+        damage.ranges.length,
+        3,
+        reason: 'fromRows collapses adjacent rows into multi-range damage',
+      );
+      final expected = bytesFor(prev, next);
+      expect(bytesFor(prev, next, dirtyRows: damage), expected);
+      // Padded with extra clean rows around each range border.
+      final paddedDamage = TuiDirtyRows.fromRows(const [
+        0,
+        1,
+        4,
+        5,
+        6,
+        7,
+        10,
+        11,
+      ], rowCount: 12);
+      expect(bytesFor(prev, next, dirtyRows: paddedDamage), expected);
+    });
+
+    test('empty diff builds an empty plan under any sound damage', () {
+      final prev = CellBuffer(const CellSize(10, 5));
+      final next = CellBuffer(const CellSize(10, 5));
+      for (var r = 0; r < 5; r++) {
+        prev.writeText(CellOffset(0, r), 'same $r');
+      }
+      _copyBuffer(prev, next);
+      final expected = bytesFor(prev, next);
+      // No cell changed, so ANY damage is sound — including none and rows
+      // that are actually clean.
+      for (final damage in [
+        const TuiDirtyRows.none(),
+        TuiDirtyRows.fromRows(const [2], rowCount: 5),
+        TuiDirtyRows.full(5),
+      ]) {
+        expect(bytesFor(prev, next, dirtyRows: damage), expected);
+      }
+      expect(decodeRemotePlan(expected).patches, isEmpty);
+    });
+
+    test('fullRepaint and size-change frames ignore the hint', () {
+      final prev = CellBuffer(const CellSize(10, 4));
+      final next = CellBuffer(const CellSize(10, 4));
+      next.writeText(const CellOffset(0, 1), 'repainted');
+      final partial = TuiDirtyRows.fromRows(const [1], rowCount: 4);
+      // Full repaint: every row ships regardless of the hint.
+      expect(
+        bytesFor(prev, next, fullRepaint: true, dirtyRows: partial),
+        bytesFor(prev, next, fullRepaint: true),
+      );
+      expect(
+        decodeRemotePlan(
+          bytesFor(prev, next, fullRepaint: true, dirtyRows: partial),
+        ).patches.map((p) => p.row),
+        [0, 1, 2, 3],
+      );
+      // Size change implies full: the hint is ignored the same way.
+      final grown = CellBuffer(const CellSize(12, 5));
+      grown.writeText(const CellOffset(0, 1), 'resized');
+      expect(
+        bytesFor(
+          prev,
+          grown,
+          dirtyRows: TuiDirtyRows.fromRows(const [1], rowCount: 5),
+        ),
+        bytesFor(prev, grown),
+      );
+      expect(
+        decodeRemotePlan(bytesFor(prev, grown)).fullRepaint,
+        isTrue,
+        reason: 'a size change is a full repaint on the wire',
+      );
+    });
+
+    test('a full-screen scroll under full damage still detects the shift', () {
+      const cols = 20;
+      const rows = 8;
+      final prev = CellBuffer(const CellSize(cols, rows));
+      final next = CellBuffer(const CellSize(cols, rows));
+      String rowText(int i) =>
+          String.fromCharCode('a'.codeUnitAt(0) + i) * cols;
+      for (var r = 0; r < rows; r++) {
+        prev.writeText(CellOffset(0, r), rowText(r));
+      }
+      // next is prev scrolled up one row, with a new line entering at the
+      // bottom — every row changes, so sound damage IS full damage.
+      for (var r = 0; r < rows; r++) {
+        next.writeText(CellOffset(0, r), rowText(r + 1));
+      }
+      expect(_trueDirtyRows(prev, next), {for (var r = 0; r < rows; r++) r});
+      final expected = bytesFor(prev, next);
+      final bounded = bytesFor(prev, next, dirtyRows: TuiDirtyRows.full(rows));
+      expect(bounded, expected);
+      final decoded = decodeRemotePlan(bounded);
+      expect(
+        decoded.scrollUpRows,
+        1,
+        reason: 'full damage keeps scroll detection running',
+      );
+      expect(
+        decoded.patches.map((p) => p.row).toSet(),
+        {rows - 1},
+        reason: 'residual patches cover only the entering row',
+      );
+    });
+
+    test('a scroll under sound PARTIAL damage keeps detection and patches '
+        'the clean rows the mirror shift disturbs', () {
+      // The serve-wire-live regression shape: a scrolling log whose blank
+      // tail and static footer do not change, so sound damage is partial —
+      // yet the scroll is beneficial (the untouched rows are exactly the
+      // shift-invariant ones). Detection must still fire, and the residual
+      // walk must cover rows OUTSIDE the damage: after the mirror shifts,
+      // the clean footer sits over moved content and needs re-patching.
+      const cols = 12;
+      const rows = 10;
+      final prev = CellBuffer(const CellSize(cols, rows));
+      final next = CellBuffer(const CellSize(cols, rows));
+      String line(int i) => String.fromCharCode('a'.codeUnitAt(0) + i) * cols;
+      // prev: log lines 0..7 at rows 0..7, row 8 blank, footer at row 9.
+      for (var r = 0; r < 8; r++) {
+        prev.writeText(CellOffset(0, r), line(r));
+      }
+      prev.writeText(const CellOffset(0, 9), 'FOOT');
+      // next: the log scrolled up one line; blank row and footer unchanged.
+      for (var r = 0; r < 8; r++) {
+        next.writeText(CellOffset(0, r), line(r + 1));
+      }
+      next.writeText(const CellOffset(0, 9), 'FOOT');
+      expect(
+        _trueDirtyRows(prev, next),
+        {0, 1, 2, 3, 4, 5, 6, 7},
+        reason: 'the blank tail and footer are clean: damage is partial',
+      );
+      final damage = TuiDirtyRows.range(0, 8, rowCount: rows);
+      expect(damage.isFull, isFalse);
+      final expected = bytesFor(prev, next);
+      final bounded = bytesFor(prev, next, dirtyRows: damage);
+      expect(bounded, expected);
+      final decoded = decodeRemotePlan(bounded);
+      expect(
+        decoded.scrollUpRows,
+        1,
+        reason: 'partial sound damage must not lose the beneficial scroll',
+      );
+      expect(
+        decoded.patches.map((p) => p.row).toSet(),
+        containsAll(<int>{8, 9}),
+        reason:
+            'the shift moved content under the clean rows; they must be '
+            're-patched even though the frame diff never touched them',
+      );
+      // Applying the plan to a prev-seeded mirror reproduces the frame.
+      final mirror = CellBuffer(const CellSize(cols, rows));
+      _copyBuffer(prev, mirror);
+      applyRemotePlanToBuffer(decoded, mirror);
+      expect(_renderAll(mirror), _renderAll(next));
+    });
+
+    test(
+      'scrolling frames under sound damage stay byte-identical (seeded)',
+      () {
+        final rng = Random(0x5C2011);
+        const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+        for (var iter = 0; iter < 150; iter++) {
+          final cols = 6 + rng.nextInt(30);
+          final rows = 4 + rng.nextInt(12);
+          // A virtual line stream: line i is full-width and distinct from
+          // its neighbors, like a scrolling log.
+          String line(int i) =>
+              '$i ${alphabet[i % alphabet.length] * (cols - 2 - '$i'.length)}';
+          final hasHeader = rng.nextInt(4) == 0;
+          final hasFooter = rng.nextBool();
+          final top = hasHeader ? 1 : 0;
+          final maxLog = rows - top - (hasFooter ? 1 : 0);
+          final fill = 2 + rng.nextInt(maxLog - 1); // log rows, maybe < region
+          final shift = 1 + rng.nextInt(fill - 1); // scroll amount < fill
+          final prev = CellBuffer(CellSize(cols, rows));
+          final next = CellBuffer(CellSize(cols, rows));
+          for (final (buffer, base) in [(prev, 0), (next, shift)]) {
+            if (hasHeader) buffer.writeText(const CellOffset(0, 0), 'HEADER');
+            for (var r = 0; r < fill; r++) {
+              buffer.writeText(CellOffset(0, top + r), line(base + r));
+            }
+            if (hasFooter) {
+              buffer.writeText(CellOffset(0, rows - 1), 'footer bar');
+            }
+          }
+          final truth = _trueDirtyRows(prev, next);
+          final expected = bytesFor(prev, next);
+          final exact = TuiDirtyRows.fromRows(truth, rowCount: rows);
+          final padded = TuiDirtyRows.fromRows({
+            ...truth,
+            rng.nextInt(rows),
+          }, rowCount: rows);
+          for (final (name, damage) in [('exact', exact), ('padded', padded)]) {
+            final bounded = bytesFor(prev, next, dirtyRows: damage);
+            expect(
+              bounded,
+              expected,
+              reason:
+                  'iter $iter, $name damage (header=$hasHeader, '
+                  'footer=$hasFooter, fill=$fill, shift=$shift, rows=$rows)',
+            );
+          }
+          // Whatever the plan decided, it must reproduce the frame.
+          final decoded = decodeRemotePlan(
+            bytesFor(prev, next, dirtyRows: exact),
+          );
+          final mirror = CellBuffer(CellSize(cols, rows));
+          _copyBuffer(prev, mirror);
+          applyRemotePlanToBuffer(decoded, mirror);
+          expect(
+            _renderAll(mirror),
+            _renderAll(next),
+            reason: 'iter $iter: bounded plan must reproduce the frame',
+          );
+        }
+      },
+    );
+
+    test('a static image placement survives a bounded steady-state frame', () {
+      final imageBytes = Uint8List.fromList([9, 9, 9, 9]);
+      final prev = CellBuffer(const CellSize(12, 6))
+        ..writeImage(const CellOffset(1, 1), imageBytes, width: 2, height: 2);
+      final next = CellBuffer(const CellSize(12, 6))
+        ..writeImage(const CellOffset(1, 1), imageBytes, width: 2, height: 2);
+      for (var r = 0; r < 6; r++) {
+        prev.writeText(CellOffset(6, r), 'txt $r');
+        next.writeText(CellOffset(6, r), 'txt $r');
+      }
+      next.writeText(const CellOffset(6, 4), 'TXT 4');
+      // Only the text row changed; the unchanged image rows sit outside
+      // the damage. Placements are read from the full per-frame list, not
+      // the diff, so the bounded plan must still carry the placement.
+      final damage = TuiDirtyRows.fromRows(const [4], rowCount: 6);
+      final expected = bytesFor(prev, next);
+      final bounded = bytesFor(prev, next, dirtyRows: damage);
+      expect(bounded, expected);
+      expect(decodeRemotePlan(bounded).placements, hasLength(1));
+    });
+  });
+
   group('INPUT_EVENT round-trip', () {
     test('key event with code, char, modifiers, type', () {
       const event = KeyEvent(
@@ -265,6 +618,21 @@ void main() {
 }
 
 // ---- helpers ---------------------------------------------------------------
+
+/// The exact set of rows containing at least one cell that differs between
+/// [prev] and [next] — the ground truth sound damage must cover.
+Set<int> _trueDirtyRows(CellBuffer prev, CellBuffer next) {
+  final dirty = <int>{};
+  for (var r = 0; r < next.size.rows; r++) {
+    for (var c = 0; c < next.size.cols; c++) {
+      if (prev.atColRow(c, r) != next.atColRow(c, r)) {
+        dirty.add(r);
+        break;
+      }
+    }
+  }
+  return dirty;
+}
 
 void _copyBuffer(CellBuffer from, CellBuffer to) {
   for (var r = 0; r < from.size.rows; r++) {
