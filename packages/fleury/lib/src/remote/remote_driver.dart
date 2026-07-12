@@ -206,6 +206,10 @@ final class RemoteTerminalDriver
       // The planner's damage covers every changed cell (the invariant the
       // ANSI renderer's bounded diff already rides), so the plan builder
       // skips provably-clean rows instead of re-diffing the whole screen.
+      // This makes the damage a wire-correctness boundary: under-covering
+      // damage ships an incomplete plan and desyncs the peer's mirror until
+      // the next full repaint. buildRemotePlan's debug oracle makes that
+      // loud in dev/CI; release trusts the planner.
       dirtyRows: plan.damage.dirtyRows,
     );
     // Ship the bytes for each image the peer does not yet hold, before the

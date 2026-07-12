@@ -51,9 +51,7 @@ int? detectBeneficialScrollUp(
   var bestShift = 0;
   var bestDirty = normalDirty;
   for (var shift = 1; shift < size.rows; shift++) {
-    final retainedNonEmpty = rowHasNonEmptyCells(previous, shift);
-    if (!retainedNonEmpty) continue;
-    if (!rowsEqual(previous, shift, next, 0)) continue;
+    if (!scrollShiftPassesEntryGuards(previous, next, shift)) continue;
     var shiftedDirty = 0;
     var abandoned = false;
     for (var row = 1; row < size.rows - shift; row++) {
@@ -90,6 +88,21 @@ int? detectBeneficialScrollUp(
   }
   return bestShift == 0 ? null : bestShift;
 }
+
+/// Whether [shift] passes [detectBeneficialScrollUp]'s entry guards: the
+/// retained `previous` row is non-empty and equals `next`'s first row.
+///
+/// This is the detector's OWN per-shift admission test — a shift failing it
+/// can never be selected. Callers that prefilter (the remote plan builder
+/// skips the detector's whole-screen stats scan when no shift passes) share
+/// this predicate so "no candidate ⟹ detector returns null" holds
+/// structurally: a future guard change lands in both places by construction.
+bool scrollShiftPassesEntryGuards(
+  CellBuffer previous,
+  CellBuffer next,
+  int shift,
+) =>
+    rowHasNonEmptyCells(previous, shift) && rowsEqual(previous, shift, next, 0);
 
 /// Whether row [previousRow] of [previous] equals row [nextRow] of [next].
 bool rowsEqual(

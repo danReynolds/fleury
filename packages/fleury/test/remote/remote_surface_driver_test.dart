@@ -195,7 +195,7 @@ void main() {
     });
 
     test(
-      'presentFrame trusts the damage: rows outside it are not scanned',
+      'presentFrame surfaces under-covering damage via the debug oracle',
       () async {
         final transport = _FakeTransport();
         final driver = RemoteTerminalDriver(transport);
@@ -206,20 +206,30 @@ void main() {
         final prev = CellBuffer(const CellSize(8, 3));
         final next = CellBuffer(const CellSize(8, 3));
         next.writeText(const CellOffset(0, 1), 'hi');
-        // Deliberately UNSOUND damage (misses the changed row 1). The changed
-        // row must not ship — observable proof the driver hands the planner's
-        // damage to buildRemotePlan rather than re-diffing the whole screen.
-        // Real callers uphold the soundness contract; this documents the trust.
-        driver.presentFrame(
-          prev,
-          next,
-          _steadyStatePlan(
-            const CellSize(8, 3),
-            TuiDirtyRows.fromRows(const [2], rowCount: 3),
+        // Deliberately UNSOUND damage (misses the changed row 1). The driver
+        // hands the planner's damage straight to buildRemotePlan — a
+        // wire-correctness boundary — so in debug the oracle must trip
+        // BEFORE an incomplete plan can desync the peer's mirror. This both
+        // proves the thread-through (a dropped hint would diff fully and
+        // never diverge) and pins the loud failure mode for a broken
+        // damage producer.
+        expect(
+          () => driver.presentFrame(
+            prev,
+            next,
+            _steadyStatePlan(
+              const CellSize(8, 3),
+              TuiDirtyRows.fromRows(const [2], rowCount: 3),
+            ),
+          ),
+          throwsA(
+            isA<AssertionError>().having(
+              (e) => e.message,
+              'message',
+              contains('under-covers'),
+            ),
           ),
         );
-        final plan = transport.sent.whereType<PlanFrame>().single.plan;
-        expect(plan.patches, isEmpty);
         await driver.restore();
       },
     );

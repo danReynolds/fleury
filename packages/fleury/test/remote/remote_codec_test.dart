@@ -449,6 +449,96 @@ void main() {
       expect(bounded, expected);
       expect(decodeRemotePlan(bounded).placements, hasLength(1));
     });
+
+    test('an empty hint on a clean frame skips detection but stays '
+        'byte-identical, even with scroll-candidate content', () {
+      // Every row identical: the scroll prefilter WOULD find candidates,
+      // but an empty (non-full) hint asserts zero dirty cells, so the
+      // early-out skips detection entirely. The unbounded build runs the
+      // detector and finds nothing beneficial (zero dirty cells to beat),
+      // so the plans must still match byte for byte.
+      final prev = CellBuffer(const CellSize(10, 5));
+      final next = CellBuffer(const CellSize(10, 5));
+      for (var r = 0; r < 5; r++) {
+        prev.writeText(CellOffset(0, r), 'same line');
+        next.writeText(CellOffset(0, r), 'same line');
+      }
+      final bounded = bytesFor(
+        prev,
+        next,
+        dirtyRows: const TuiDirtyRows.none(),
+      );
+      expect(bounded, bytesFor(prev, next));
+      expect(decodeRemotePlan(bounded).patches, isEmpty);
+      expect(decodeRemotePlan(bounded).scrollUpRows, isNull);
+    });
+
+    group('debug contract (asserts enabled under dart test)', () {
+      test('the oracle trips on damage that under-covers the diff', () {
+        final prev = CellBuffer(const CellSize(8, 3));
+        final next = CellBuffer(const CellSize(8, 3));
+        next.writeText(const CellOffset(0, 1), 'hi');
+        // Damage claims only row 2 changed; the truth is row 1. The bounded
+        // build would silently drop the row-1 patch and desync the peer's
+        // mirror — the debug oracle (an unbounded rebuild compared byte for
+        // byte, the same shape as the semantics encoder's oracle) must make
+        // that loud instead.
+        expect(
+          () => buildRemotePlan(
+            prev,
+            next,
+            fullRepaint: false,
+            dirtyRows: TuiDirtyRows.fromRows(const [2], rowCount: 3),
+          ),
+          throwsA(
+            isA<AssertionError>().having(
+              (e) => e.message,
+              'message',
+              contains('under-covers'),
+            ),
+          ),
+        );
+      });
+
+      test('an isFull hint built against a smaller row count is rejected', () {
+        final prev = CellBuffer(const CellSize(8, 3));
+        final next = CellBuffer(const CellSize(8, 3));
+        next.writeText(const CellOffset(0, 2), 'tail');
+        // full(2) claims full coverage but its single range stops short of
+        // next's 3 rows — the tail row would be silently skipped while
+        // isFull suppresses the scroll prefilter. Unreachable from the
+        // runtime planner (it builds damage against frame.next.size); the
+        // consistency assert is the first-line defense for other producers.
+        expect(
+          () => buildRemotePlan(
+            prev,
+            next,
+            fullRepaint: false,
+            dirtyRows: TuiDirtyRows.full(2),
+          ),
+          throwsA(
+            isA<AssertionError>().having(
+              (e) => e.message,
+              'message',
+              contains('does not cover every row'),
+            ),
+          ),
+        );
+      });
+
+      test('sound damage never trips the oracle (spot check)', () {
+        final prev = CellBuffer(const CellSize(8, 3));
+        final next = CellBuffer(const CellSize(8, 3));
+        next.writeText(const CellOffset(0, 1), 'hi');
+        final plan = buildRemotePlan(
+          prev,
+          next,
+          fullRepaint: false,
+          dirtyRows: TuiDirtyRows.fromRows(const [1], rowCount: 3),
+        );
+        expect(plan.patches.map((p) => p.row).toList(), [1]);
+      });
+    });
   });
 
   group('INPUT_EVENT round-trip', () {
