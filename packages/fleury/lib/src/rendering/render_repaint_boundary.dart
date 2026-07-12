@@ -120,6 +120,9 @@ final class RepaintBoundaryDebugStats {
 /// widget to wrap subtrees that are expensive to paint and change rarely.
 class RenderRepaintBoundary extends RenderObject
     implements RenderObjectWithSingleChild {
+  RenderRepaintBoundary({bool cachingEnabled = true})
+    : _cachingEnabled = cachingEnabled;
+
   RenderObject? _child;
   CellBuffer? _cache;
   CellRect? _cacheBounds;
@@ -127,8 +130,38 @@ class RenderRepaintBoundary extends RenderObject
       const <SemanticPaintBoundsRecord>[];
   List<PointerRegionRecord> _pointerRegions = const <PointerRegionRecord>[];
 
+  /// Whether this boundary currently caches its subtree's paint.
+  ///
+  /// While false the node is a plain pass-through: [isRepaintBoundary]
+  /// reports false so the invalidation walk ignores it, [paint] delegates
+  /// straight to the child, and no cache is held. This lets an owner keep
+  /// the boundary in the tree unconditionally (element-stable — flipping
+  /// never reparents the subtree) and engage caching only while it can pay;
+  /// [Overlay] does this per entry, engaging only while more than one entry
+  /// is visible.
+  ///
+  /// Flipping mid-life is safe because nothing snapshots
+  /// [isRepaintBoundary]: the invalidation walk reads it live, and enabling
+  /// marks [needsPaint] — invalidations that happened while pass-through
+  /// never marked this node, so the (absent) cache must not be trusted.
+  bool get cachingEnabled => _cachingEnabled;
+  bool _cachingEnabled;
+  set cachingEnabled(bool value) {
+    if (_cachingEnabled == value) return;
+    _cachingEnabled = value;
+    if (value) {
+      needsPaint = true;
+    } else {
+      // Free the screen-sized cache; pass-through paint holds none.
+      _cache = null;
+      _cacheBounds = null;
+      _semanticBounds = const <SemanticPaintBoundsRecord>[];
+      _pointerRegions = const <PointerRegionRecord>[];
+    }
+  }
+
   @override
-  bool get isRepaintBoundary => true;
+  bool get isRepaintBoundary => _cachingEnabled;
 
   @override
   RenderObject? get child => _child;
@@ -158,6 +191,17 @@ class RenderRepaintBoundary extends RenderObject
   }) {
     final c = _child;
     if (c == null) return;
+    if (!_cachingEnabled) {
+      // Pass-through: no cache, no blit, no stats — indistinguishable from
+      // the child painting bare.
+      c.paint(
+        buffer,
+        offset,
+        screenOffset: screenOffset ?? offset,
+        clipRect: clipRect,
+      );
+      return;
+    }
     final s = size;
     if (s.cols == 0 || s.rows == 0) return;
 

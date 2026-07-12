@@ -500,16 +500,21 @@ void main() {
         final firstFrame = frames.first;
         expect(firstFrame.layoutStats.performedCount, greaterThan(0));
         expect(firstFrame.layoutStats.skippedCount, 0);
+        // Two boundaries: the explicit one around 'cached' plus the root
+        // overlay's app-entry boundary, engaged because the error-banner
+        // entry co-exists (that entry's own boundary is zero-size while
+        // idle, so it never records). See Overlay.addRepaintBoundaries.
         final firstBoundaries = firstFrame.repaintBoundaries;
-        expect(firstBoundaries.boundaryCount, 1);
-        expect(firstBoundaries.repaintedCount, 1);
+        expect(firstBoundaries.boundaryCount, 2);
+        expect(firstBoundaries.repaintedCount, 2);
         expect(firstBoundaries.cachedCount, 0);
         expect(firstBoundaries.copiedCellCount, greaterThan(0));
 
         frames.clear();
         // Dirty a sibling OUTSIDE the boundary: the frame must render (a
         // clean frame is now skipped entirely) and the boundary replays
-        // its cache instead of repainting.
+        // its cache instead of repainting. The app-entry boundary contains
+        // the change, so it is the one that repaints.
         counterKey.currentState!.increment();
         await _settle();
 
@@ -517,8 +522,8 @@ void main() {
         final secondFrame = frames.last;
         expect(secondFrame.layoutStats.skippedCount, greaterThan(0));
         final secondBoundaries = secondFrame.repaintBoundaries;
-        expect(secondBoundaries.boundaryCount, 1);
-        expect(secondBoundaries.repaintedCount, 0);
+        expect(secondBoundaries.boundaryCount, 2);
+        expect(secondBoundaries.repaintedCount, 1);
         expect(secondBoundaries.cachedCount, 1);
         expect(secondBoundaries.copiedCellCount, greaterThan(0));
 
