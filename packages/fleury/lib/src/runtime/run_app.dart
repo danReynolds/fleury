@@ -689,46 +689,23 @@ Future<AppExit> _runAppImpl(
           // A full-screen layer above the app that shows the uncaught-error
           // banner. As its own entry it never touches the app's layout — the
           // app keeps rendering full-screen underneath. Created once so its
-          // subtree state survives resize rebuilds, but mounted LAZILY:
-          // banner entry mounted ⟺ errors to show. A permanently-mounted
-          // empty entry would keep the root overlay's adaptive repaint
-          // boundaries engaged in every native app — a full-screen cache
-          // write + bounds scan + blit and capture-list allocations per
-          // app-dirty frame, for a banner that is almost never showing.
+          // subtree state survives resize rebuilds, but mounted lazily:
+          // inserted while an error is showing, removed when the reporter
+          // empties — each converging a microtask after report/dismiss (the
+          // banner's idle SizedBox branch covers the dismiss→unmount gap). A
+          // permanently-mounted empty entry would keep the root overlay's
+          // adaptive repaint boundaries engaged in every native app — a
+          // full-screen cache write + blit per app-dirty frame, for a banner
+          // that is almost never showing. The listener is dropped with the
+          // reporter's other listeners in cleanup().
           final errorEntry = OverlayEntry(
             builder: (_) => RuntimeErrorOverlay(reporter: errorReporter),
           );
-          var errorEntryMounted = false;
-          var errorEntrySyncPending = false;
-          void syncErrorEntryMount() {
-            if (disposed) return;
-            if (errorEntrySyncPending) return;
-            if ((errorReporter.current != null) == errorEntryMounted) return;
-            errorEntrySyncPending = true;
-            // The frame body is fully synchronous (build/layout/paint, no
-            // awaits), so a microtask scheduled from a mid-frame report runs
-            // strictly after the frame — never a setState-during-build. The
-            // microtask re-reads the reporter so a report+dismiss burst
-            // converges on the final state, and the insert itself schedules
-            // the next frame (owner.onScheduleBuild).
-            scheduleMicrotask(() {
-              errorEntrySyncPending = false;
-              if (disposed) return;
-              final overlay = overlayKey.currentState;
-              if (overlay == null) return; // teardown race
-              final shouldMount = errorReporter.current != null;
-              if (shouldMount == errorEntryMounted) return;
-              if (shouldMount) {
-                overlay.insert(errorEntry);
-              } else {
-                errorEntry.remove();
-              }
-              errorEntryMounted = shouldMount;
-            });
-          }
-
-          // Dropped with the reporter's other listeners in cleanup().
-          errorReporter.addListener(syncErrorEntryMount);
+          OverlayEntryMountSync(
+            entry: errorEntry,
+            resolveOverlay: () => overlayKey.currentState,
+            shouldMount: () => errorReporter.current != null,
+          ).attachTo(errorReporter);
           // The shared scope stack (see buildTuiRoot). The native host supplies
           // every layer — captured-output buffer and the debug shell included.
           Widget buildRoot() => buildTuiRoot(

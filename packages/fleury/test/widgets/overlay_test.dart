@@ -808,4 +808,126 @@ void main() {
       );
     });
   });
+
+  group('OverlayEntryMountSync', () {
+    testWidgets('a burst of syncs converges in one pass', (tester) async {
+      final overlayKey = GlobalKey<OverlayState>();
+      tester.pumpWidget(
+        Overlay(
+          key: overlayKey,
+          initialEntries: [OverlayEntry(builder: (_) => const Text('base'))],
+        ),
+      );
+      var wanted = true;
+      final sync = OverlayEntryMountSync(
+        entry: OverlayEntry(builder: (_) => const Text('layer')),
+        resolveOverlay: () => overlayKey.currentState,
+        shouldMount: () => wanted,
+      );
+      sync
+        ..sync()
+        ..sync()
+        ..sync();
+      expect(
+        overlayKey.currentState!.entries,
+        hasLength(1),
+        reason: 'convergence is deferred to a microtask',
+      );
+      await Future<void>.delayed(Duration.zero);
+      tester.pump();
+      // A non-coalesced burst would have tripped insert()'s
+      // already-inserted assert; one pass mounts the entry once.
+      expect(overlayKey.currentState!.entries, hasLength(2));
+
+      // The pass re-reads the predicate: a mount request immediately
+      // retracted converges on the final (unmounted) state.
+      wanted = false;
+      sync.sync();
+      wanted = true;
+      sync.sync(); // coalesced with the pending pass
+      await Future<void>.delayed(Duration.zero);
+      expect(overlayKey.currentState!.entries, hasLength(2));
+    });
+
+    testWidgets('a pass that finds no overlay is retried by a later sync', (
+      tester,
+    ) async {
+      final overlayKey = GlobalKey<OverlayState>();
+      tester.pumpWidget(
+        Overlay(
+          key: overlayKey,
+          initialEntries: [OverlayEntry(builder: (_) => const Text('base'))],
+        ),
+      );
+      var resolvable = false;
+      final sync = OverlayEntryMountSync(
+        entry: OverlayEntry(builder: (_) => const Text('layer')),
+        resolveOverlay: () => resolvable ? overlayKey.currentState : null,
+        shouldMount: () => true,
+      );
+      sync.sync();
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        overlayKey.currentState!.entries,
+        hasLength(1),
+        reason: 'the pass was dropped — no overlay to converge against',
+      );
+
+      // Self-healing: mountedness is derived from the entry's attachment,
+      // not stored, so nothing desynced — the next sync simply converges.
+      resolvable = true;
+      sync.sync();
+      await Future<void>.delayed(Duration.zero);
+      expect(overlayKey.currentState!.entries, hasLength(2));
+    });
+
+    testWidgets('syncNow converges immediately; dispose unmounts', (
+      tester,
+    ) async {
+      final overlayKey = GlobalKey<OverlayState>();
+      tester.pumpWidget(
+        Overlay(
+          key: overlayKey,
+          initialEntries: [OverlayEntry(builder: (_) => const Text('base'))],
+        ),
+      );
+      var wanted = true;
+      final notifier = _TestNotifier();
+      final sync = OverlayEntryMountSync(
+        entry: OverlayEntry(builder: (_) => const Text('layer')),
+        resolveOverlay: () => overlayKey.currentState,
+        shouldMount: () => wanted,
+      )..attachTo(notifier);
+
+      sync.syncNow();
+      expect(
+        overlayKey.currentState!.entries,
+        hasLength(2),
+        reason: 'syncNow mounts on the same turn (no microtask)',
+      );
+
+      wanted = false;
+      notifier.fire(); // listener path: converges a microtask later
+      await Future<void>.delayed(Duration.zero);
+      expect(overlayKey.currentState!.entries, hasLength(1));
+
+      wanted = true;
+      sync.syncNow();
+      expect(overlayKey.currentState!.entries, hasLength(2));
+
+      sync.dispose();
+      expect(
+        overlayKey.currentState!.entries,
+        hasLength(1),
+        reason: 'dispose removes the mounted entry',
+      );
+      notifier.fire(); // detached: must not schedule anything
+      await Future<void>.delayed(Duration.zero);
+      expect(overlayKey.currentState!.entries, hasLength(1));
+    });
+  });
+}
+
+class _TestNotifier extends ChangeNotifier {
+  void fire() => notifyListeners();
 }
