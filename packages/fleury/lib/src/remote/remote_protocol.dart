@@ -120,9 +120,21 @@ const int defaultMaxRemoteFramePayloadLength = 64 * 1024 * 1024;
 
 /// A malformed frame or payload was received from a remote peer.
 final class RemoteProtocolException implements Exception {
-  const RemoteProtocolException(this.message);
+  const RemoteProtocolException(this.message, {this.recoverable = true});
 
   final String message;
+
+  /// Whether the decoder can keep parsing the byte stream after this error.
+  ///
+  /// True (the default) for a single malformed frame whose 4-byte length
+  /// header was valid: [FrameDecoder.drain] consumed exactly that frame and
+  /// the stream stays framed, so a peer can repair from its mirror and carry
+  /// on. False only when stream framing itself was lost — an oversized length
+  /// prefix forces the buffer to be cleared with no known next-frame boundary,
+  /// so every subsequent feed mis-parses and the session can never
+  /// re-synchronize. A peer that sees an unrecoverable error must reconnect
+  /// rather than resync (see fleury_web's WireFrameSource).
+  final bool recoverable;
 
   @override
   String toString() => 'RemoteProtocolException: $message';
@@ -536,9 +548,19 @@ final class FrameDecoder {
       }
       final length = ByteData.sublistView(bytes, 1, 5).getUint32(0);
       if (length > maxPayloadLength) {
+        // Clearing the buffer discards the current framing position with no
+        // known next-frame boundary, so the stream can no longer be
+        // resynchronized: mark this unrecoverable so a peer tears down and
+        // reconnects instead of resyncing forever against a mirror that will
+        // never advance (the "frozen, no banner" hang). A single frame whose
+        // length was VALID but whose payload is malformed throws a recoverable
+        // exception from _decode below (framing intact), so the two cases are
+        // distinguishable at the catch site.
         _buffer.clear();
         throw RemoteProtocolException(
-          'Frame payload length $length exceeds limit $maxPayloadLength.',
+          'Frame payload length $length exceeds limit $maxPayloadLength; '
+          'stream framing lost.',
+          recoverable: false,
         );
       }
       final total = 5 + length;
