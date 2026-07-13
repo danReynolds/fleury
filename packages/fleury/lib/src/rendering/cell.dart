@@ -372,15 +372,11 @@ final class CellStyle {
   /// Whether every *visual* attribute is unset (so the style emits no SGR),
   /// IGNORING [linkUri]. For a link-free style this matches `== CellStyle.empty`;
   /// a link-only style is visually empty (it emits an OSC 8 link but no SGR).
-  bool get isVisuallyEmpty =>
-      foreground == null &&
-      background == null &&
-      _bold == null &&
-      _dim == null &&
-      _italic == null &&
-      _underline == null &&
-      _inverse == null &&
-      _strikethrough == null;
+  ///
+  /// Defined in terms of [sameVisualStyleAs] against the const [empty] singleton
+  /// (no per-call allocation) so the visual field list lives in exactly one
+  /// place — a future visual attribute can't be forgotten here.
+  bool get isVisuallyEmpty => sameVisualStyleAs(empty);
 
   @override
   String toString() {

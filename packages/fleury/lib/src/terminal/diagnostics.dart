@@ -144,28 +144,28 @@ final class TerminalCapabilityReport {
     this.osc8Hyperlinks = 'policyGated',
   });
 
-  TerminalCapabilityReport.fromCapabilities(TerminalCapabilities capabilities)
-    : this(
-        colorMode: capabilities.colorMode,
-        glyphTier: capabilities.glyphTier,
-        imageProtocol: capabilities.imageProtocol,
-        alternateScreen: capabilities.supportsAlternateScreen,
-        hideCursor: capabilities.supportsHidingCursor,
-        tmuxPassthrough: capabilities.tmuxPassthrough,
-        ambiguousCharWidth: capabilities.ambiguousCharWidth,
-        osc8Hyperlinks: _osc8HyperlinksState(capabilities),
-      );
-
-  /// Derives the diagnose OSC 8 state from real detection: 'supported' when
-  /// detected (including a `FLEURY_HYPERLINKS=1` force), 'suppressed-under-tmux'
-  /// when a multiplexer blocked an otherwise-capable terminal, else
-  /// 'unsupported'. RFC 0013's producer-level policy gating ('policyGated' — the
-  /// raw-constructor default) lands with the OutputSecurityPolicy in Stage 2.
-  static String _osc8HyperlinksState(TerminalCapabilities capabilities) {
-    if (capabilities.hyperlinks) return 'supported';
-    if (capabilities.tmuxPassthrough) return 'suppressed-under-tmux';
-    return 'unsupported';
-  }
+  /// Builds a report from a capability snapshot. [osc8Hyperlinks] is the
+  /// accurate diagnose state — supported / suppressed-under-tmux /
+  /// disabled-by-override / unsupported — which ONLY the full environment
+  /// picture can determine (see [detectHyperlinkSupportFromEnvironment]);
+  /// deriving it from the snapshot's `(hyperlinks, tmuxPassthrough)` bools
+  /// mislabels a non-capable terminal under tmux and an explicit
+  /// `FLEURY_HYPERLINKS=0`. `diagnoseTerminal` passes it; callers without the
+  /// env keep the neutral 'policyGated' default (RFC 0013's producer-level
+  /// policy gating lands with the OutputSecurityPolicy in Stage 2).
+  TerminalCapabilityReport.fromCapabilities(
+    TerminalCapabilities capabilities, {
+    String osc8Hyperlinks = 'policyGated',
+  }) : this(
+         colorMode: capabilities.colorMode,
+         glyphTier: capabilities.glyphTier,
+         imageProtocol: capabilities.imageProtocol,
+         alternateScreen: capabilities.supportsAlternateScreen,
+         hideCursor: capabilities.supportsHidingCursor,
+         tmuxPassthrough: capabilities.tmuxPassthrough,
+         ambiguousCharWidth: capabilities.ambiguousCharWidth,
+         osc8Hyperlinks: osc8Hyperlinks,
+       );
 
   final ColorMode colorMode;
   final GlyphTier glyphTier;
@@ -505,6 +505,11 @@ TerminalDiagnosis diagnoseTerminal(
   );
   final capabilityReport = TerminalCapabilityReport.fromCapabilities(
     capabilities,
+    // Compute the OSC 8 state from the FULL env picture at this (detection)
+    // altitude — the four states aren't reconstructable from the capability
+    // snapshot's (hyperlinks, tmuxPassthrough) bools alone.
+    osc8Hyperlinks:
+        detectHyperlinkSupportFromEnvironment(environment).diagnoseLabel,
   );
   final fallbacks = _buildFallbacks(capabilities, terminal, envReport);
   final warnings = _buildWarnings(terminal, envReport);

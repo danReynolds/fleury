@@ -310,6 +310,18 @@ Color? _readColor(_Reader r) {
 // CellStyle bool? attributes pack into two bytes: a "set" mask and a
 // "value" mask, so the tri-state (null / true / false) round-trips exactly.
 void _writeStyle(_Writer w, CellStyle s) {
+  // Stage-1 staging guard: CellStyle.== / hashCode are link-aware and the wire
+  // style-table dedupe keys on them, but this codec does NOT serialize linkUri
+  // yet. That is correct ONLY while no producer sets a link. This assert fails
+  // loud in dev/test if a premature/experimental producer sends a linked style
+  // to the wire — which would silently drop the link AND bloat the style table
+  // with link-differing duplicates. Stage 2 removes it when the v4 spare-set-
+  // mask-bit encoding lands (RFC 0017 §5).
+  assert(
+    s.linkUri == null,
+    'CellStyle.linkUri reaches the wire only with the Stage 2 v4 codec '
+    '(RFC 0017); it is unserialized in Stage 1.',
+  );
   var setMask = 0;
   var valMask = 0;
   void bit(int i, bool? v) {

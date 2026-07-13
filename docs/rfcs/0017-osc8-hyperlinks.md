@@ -171,6 +171,16 @@ Nothing on the wire changes in Stage 1. The `linkUri` field is not serialized;
 the serve/shell path stays byte-identical because no producer sets a link yet
 and the structured presenter does not read the field.
 
+Because `CellStyle.==`/`hashCode` are now link-aware and the wire style-table
+dedupe keys on them, a Stage-1 **staging guard** protects the boundary: the
+cell-style encoder (`_writeStyle`) asserts `linkUri == null`. A premature or
+experimental producer that set a link before the codec understood it would
+otherwise silently drop the link on the wire *and* bloat the per-frame style
+table with link-differing duplicates; the assert turns that into a loud dev/test
+failure. It is stripped in AOT/`-O2` (so it is absent from the shipped browser
+bundle and adds no wire bytes) and is **removed in Stage 2** when the encoding
+below lands.
+
 Stage 2 adds link carriage under a **version bump to v4** (per the
 wire-protocol compatibility rule, a cell/enum *encoding* change inside an
 existing frame is version-gated, not additive). The cell-style encoding packs
@@ -225,13 +235,29 @@ emitter, consistent with RFC 0013's "trust is local to the content source."
   part and is unreliable in the wild, so detection returns `false` whenever a
   multiplexer is detected, regardless of the outer terminal, unless the user
   forces it with `FLEURY_HYPERLINKS=1`.
-- **Detection is env-derived, allow-list-based, default-deny.** An explicit
-  `FLEURY_HYPERLINKS=0|1` wins outright. Otherwise a known-supporting terminal
-  (via `TERM_PROGRAM` ∈ {iTerm.app, WezTerm, ghostty}, `VTE_VERSION` present,
-  Kitty via `KITTY_WINDOW_ID`/`TERM=xterm-kitty`, Windows Terminal via
-  `WT_SESSION`) enables it; anything unknown defaults to `false`. tmux
-  suppression (above) is applied on top. This mirrors the existing
+- **Detection is env-derived, allow-list-based, default-deny — with version
+  thresholds where the env exposes one.** An explicit `FLEURY_HYPERLINKS=0|1`
+  wins outright (parsed via the shared `parseEnvFlag`, one source of truth for
+  the `1/true/yes/on ↔ 0/false/no/off` vocabulary). Otherwise a known-supporting
+  terminal enables it: version-gated where a version is available —
+  `VTE_VERSION >= 5000` (OSC 8 landed in VTE 0.50; `VTE_VERSION` is `MMmmpp`) and
+  iTerm via `TERM_PROGRAM_VERSION >= 3.1` (iTerm2 3.1) — so a pre-OSC-8 build
+  isn't fed `\x1b]8;;` to render as literal garbage; and presence-based where no
+  version is exposed (WezTerm/ghostty via `TERM_PROGRAM`, Kitty via
+  `KITTY_WINDOW_ID`/`TERM=xterm-kitty`, Windows Terminal via `WT_SESSION`).
+  Anything unknown defaults to `false`; tmux suppression (above) is applied on
+  top. An active DA/OSC probe — which would also cover the version-less
+  terminals — is the Stage 3 robustness upgrade. This mirrors the existing
   glyph-tier/ambiguous-width detectors.
+- **`fleury diagnose` reports the accurate four-state reason.** Detection
+  computes not just the emission bool but *why*
+  (`detectHyperlinkSupportFromEnvironment` → `HyperlinkSupport`): `supported`,
+  `suppressed-under-tmux` (**only** when the outer terminal is genuinely capable
+  — escaping tmux would help), `disabled-by-override` (explicit
+  `FLEURY_HYPERLINKS=0`), or `unsupported`. diagnose reads this at detection
+  altitude rather than re-deriving from the lossy `(hyperlinks, tmuxPassthrough)`
+  snapshot, which would mislabel a non-capable terminal under tmux as
+  tmux-suppressed and an explicit opt-out as unsupported.
 
 ## References
 
