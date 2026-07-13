@@ -199,7 +199,7 @@ void main() {
   group('MarkdownText — hyperlinks (OSC 8)', () {
     testWidgets(
       'supporting surface + safe scheme: link run carries linkUri, url suffix '
-      'kept, osc8Policy active',
+      'kept, osc8Policy supported',
       (tester) {
         tester.pumpWidget(
           _surface(
@@ -232,7 +232,44 @@ void main() {
         );
         expect(link.value, 'https://fleury.dev');
         expect(link.state.values['safeLinkScheme'], isTrue);
-        expect(link.state.values['osc8Policy'], 'active');
+        expect(link.state.values['osc8Policy'], 'supported');
+      },
+    );
+
+    testWidgets(
+      'a multi-word link carries linkUri across its internal spaces',
+      (tester) {
+        // Regression: the link label's spaces used to render unlinked, so a
+        // multi-word link split into one anchor per word. The whole phrase —
+        // words AND the spaces between them — must carry the link.
+        tester.pumpWidget(
+          _surface(
+            const MarkdownText(
+              '[open an issue](https://x)',
+              inlineLinkUrls: false, // drop the (url) suffix; only the label paints
+            ),
+            hyperlinks: true,
+          ),
+        );
+        final buf = tester.render(size: const CellSize(40, 1));
+        expect(
+          _anyCellMatches(
+            buf,
+            {'o', 'p', 'e', 'n', 'a', 'i', 's', 'u'},
+            (s) => s.linkUri == 'https://x' && s.underline,
+          ),
+          isTrue,
+          reason: 'the label words are linked',
+        );
+        expect(
+          _anyCellMatches(
+            buf,
+            {' '},
+            (s) => s.linkUri == 'https://x' && s.underline,
+          ),
+          isTrue,
+          reason: 'the spaces INSIDE the link are linked too (contiguous run)',
+        );
       },
     );
 

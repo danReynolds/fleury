@@ -186,7 +186,10 @@ wire-protocol compatibility rule, a cell/enum *encoding* change inside an
 existing frame is version-gated, not additive). The cell-style encoding packs
 the tri-state bool attributes into a "set" mask byte using bits 0–5; **bits 6–7
 are spare**. Stage 2 claims one spare set-mask bit as "has link" and, when set,
-writes a length-prefixed UTF-8 URI after the style's colors. When `linkUri` is
+writes a length-prefixed UTF-8 URI after the two mask bytes, before the colors —
+a fixed position the reader mirrors exactly (matching
+[`wire-protocol.md`](../implementation/wire-protocol.md) and the `_writeStyle`/
+`_readStyle` codec). When `linkUri` is
 null the bit stays clear and no string is written, so **a link-free frame is
 byte-identical to today's v3 encoding** — the added cost is paid only by frames
 that actually carry links. The browser mirror reads the bit and renders an

@@ -42,18 +42,34 @@ void main() {
       expect(anchor.textContent, 'docs');
     });
 
-    test('mailto and file schemes are allow-listed too', () {
-      for (final uri in const ['mailto:a@b.com', 'file:///etc/hosts']) {
-        final root = _render(
-          20,
-          (b) => b.writeText(
-            const CellOffset(0, 0),
-            'x',
-            style: CellStyle(linkUri: uri),
-          ),
-        );
-        expect(root.querySelector('a')?.getAttribute('href'), uri);
-      }
+    test('a mailto scheme is allow-listed too', () {
+      final root = _render(
+        20,
+        (b) => b.writeText(
+          const CellOffset(0, 0),
+          'x',
+          style: const CellStyle(linkUri: 'mailto:a@b.com'),
+        ),
+      );
+      expect(root.querySelector('a')?.getAttribute('href'), 'mailto:a@b.com');
+    });
+
+    test('a file: scheme is NOT in the default allow-list — plain span', () {
+      // RFC 0013 gates file: behind an explicit opt-in the framework does not
+      // enable by default, so the canonical isSafeLinkScheme drops it (matching
+      // the producer and semantic-DOM surfaces). It renders as plain text.
+      final root = _render(
+        20,
+        (b) => b.writeText(
+          const CellOffset(0, 0),
+          'x',
+          style: const CellStyle(linkUri: 'file:///etc/hosts'),
+        ),
+      );
+      expect(root.querySelector('a'), isNull);
+      final span = root.querySelector('span');
+      expect(span, isNotNull);
+      expect(span!.getAttribute('href'), isNull);
     });
 
     test('a javascript: URI is dropped — plain span, no anchor, no href', () {
@@ -73,6 +89,45 @@ void main() {
       expect(span!.getAttribute('href'), isNull);
       // The label is still shown, just not navigable.
       expect(root.textContent, contains('click'));
+    });
+
+    test('a link with no explicit fg gets the default foreground, not UA blue', () {
+      // The <a> would otherwise fall to the UA link color (#0000EE). Pin it to
+      // the grid default foreground so a link reads as default-fg + underline.
+      final root = _render(
+        20,
+        (b) => b.writeText(
+          const CellOffset(0, 0),
+          'docs',
+          style: const CellStyle(underline: true, linkUri: 'https://example.com'),
+        ),
+      );
+      final style = root.querySelector('a')!.getAttribute('style') ?? '';
+      expect(style, contains('color:rgb(208, 208, 208)'));
+    });
+
+    test('a link-free run with no fg emits no color (byte-identical)', () {
+      final root = _render(
+        20,
+        (b) => b.writeText(const CellOffset(0, 0), 'plain'),
+      );
+      final style = root.querySelector('span')!.getAttribute('style') ?? '';
+      expect(style, isNot(contains('color:')));
+    });
+
+    test('a multi-word link is ONE contiguous anchor (spaces included)', () {
+      // The link style rides the internal spaces (RenderRichText fix), so the
+      // whole phrase is one run → one <a>, not one anchor per word.
+      final root = _render(
+        30,
+        (b) => b.writeText(
+          const CellOffset(0, 0),
+          'open an issue',
+          style: const CellStyle(underline: true, linkUri: 'https://x'),
+        ),
+      );
+      expect(root.querySelectorAll('a').length, 1);
+      expect(root.querySelector('a')!.textContent, 'open an issue');
     });
 
     test('a link-free run renders as a <span> with no anchor', () {

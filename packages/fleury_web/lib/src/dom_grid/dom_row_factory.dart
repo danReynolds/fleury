@@ -104,8 +104,8 @@ final class DomRowFactory {
   }
 
   /// A fresh `<a>` for [style]'s OSC 8 link, or null when the run carries no
-  /// link — or its scheme is not allow-listed (see [isAllowedLinkScheme]), in
-  /// which case the link is dropped and the caller renders a plain span.
+  /// link — or its scheme is not safe (see [isSafeLinkScheme]), in which case
+  /// the link is dropped and the caller renders a plain span.
   ///
   /// The destination and link rel/target are set as DOM *attributes* through
   /// `setAttribute`, never interpolated into markup, so a hostile URI cannot
@@ -114,7 +114,7 @@ final class DomRowFactory {
   /// `javascript:` / `data:` / `vbscript:` target never reaches an `href`.
   web.Element? _anchorForLink(CellStyle style) {
     final uri = style.linkUri;
-    if (uri == null || !isAllowedLinkScheme(uri)) return null;
+    if (uri == null || !isSafeLinkScheme(uri)) return null;
     final anchor = _document.createElement('a');
     anchor.setAttribute('href', uri);
     anchor.setAttribute('rel', 'noopener noreferrer');

@@ -38,6 +38,13 @@ import 'package:fleury/fleury_core.dart';
 
 import 'component_theme.dart';
 
+/// Accent colour for Markdown links — a mint green that reads on dark
+/// backgrounds (unlike a browser's default link blue) and matches Fleury's
+/// default styling. Applies to safe-scheme links on every surface (terminal
+/// OSC 8 text, browser `<a>`), since the browser anchor inherits the cell's
+/// foreground.
+const Color _kMarkdownLinkColor = RgbColor(126, 217, 149);
+
 /// A widget that renders a [data] string of light Markdown as styled
 /// terminal cells.
 ///
@@ -142,7 +149,7 @@ final class MarkdownLink {
   final String url;
 
   String? get scheme => _urlScheme(url);
-  bool get safeScheme => _safeUrlScheme(scheme);
+  bool get safeScheme => isSafeLinkScheme(url);
 }
 
 /// Parsed Markdown rendered by [MarkdownView].
@@ -892,16 +899,18 @@ CellStyle _styleForMarkdownBlock(
 }
 
 /// The OSC 8 outcome for [link] under the surface's [hyperlinks] capability,
-/// mirroring the producer gate in [_inline]: `active` when the surface supports
-/// hyperlinks AND the scheme is allow-listed (the run carries a real linkUri),
-/// `disabledByPolicy` when an un-allow-listed scheme blocks it, `unsupported`
-/// when the surface has no link concept. The vocabulary tracks the existing
-/// capability-resolution / hyperlink-support enums (CapabilityResolutionState
-/// .disabledByPolicy, HyperlinkSupport.unsupported).
+/// mirroring the producer gate in [_inline]: `supported` when the surface
+/// supports hyperlinks AND the scheme is allow-listed (the run carries a real
+/// linkUri), `disabledByPolicy` when an un-allow-listed scheme blocks it,
+/// `unsupported` when the surface has no link concept. Every value is a real
+/// enum name so the field can't drift from the vocabulary it reports:
+/// `supported`/`unsupported` are `HyperlinkSupport` states (the same
+/// `fleury diagnose` labels for OSC 8), and `disabledByPolicy` is a
+/// `CapabilityResolutionState`.
 String _osc8PolicyFor(MarkdownLink link, {required bool hyperlinks}) {
   if (!hyperlinks) return 'unsupported';
   if (!link.safeScheme) return 'disabledByPolicy';
-  return 'active';
+  return 'supported';
 }
 
 /// Builds the (invisible) semantics node for a markdown [link]. The URL stays
@@ -948,19 +957,13 @@ Widget _linkSemantics(
   );
 }
 
+/// The link's scheme name (lowercased substring before the first `:`), or null
+/// for a scheme-less URL. Reported as the `linkScheme` diagnostic; the
+/// safe/unsafe verdict itself is the shared [isSafeLinkScheme] (RFC 0017 §6).
 String? _urlScheme(String url) {
   final index = url.indexOf(':');
   if (index <= 0) return null;
   return url.substring(0, index).toLowerCase();
-}
-
-/// Default OSC 8 scheme allow-list (RFC 0017 §6): only `https`, `http`, and
-/// `mailto` become live links; everything else (including `file` and custom
-/// schemes) falls back to plain visible text. This is deliberately the minimal
-/// allow-list check — the full RFC 0013 `OutputSecurityPolicy` (with `file`/
-/// custom-scheme opt-in) is a future param, not built here.
-bool _safeUrlScheme(String? scheme) {
-  return scheme == 'https' || scheme == 'http' || scheme == 'mailto';
 }
 
 // ---- Block-level pass -----------------------------------------------------
@@ -1246,13 +1249,24 @@ TextSpan _inline(
               url: url,
             ),
           );
-          // The producer gate: both halves must hold to emit a live link.
-          final live = hyperlinks && _safeUrlScheme(_urlScheme(url));
+          // A safe-scheme link renders in the link accent colour + underline
+          // (readable on dark, unlike a browser's default blue), whether or not
+          // it's clickable here; the producer gate (capability + safe scheme)
+          // additionally attaches `linkUri` to make it live. An unsafe scheme is
+          // refused — plain underlined text, never the link colour.
+          final safe = isSafeLinkScheme(url);
+          final live = hyperlinks && safe;
           children.add(
             TextSpan(
               text: text,
-              style: live
-                  ? base.merge(CellStyle(underline: true, linkUri: url))
+              style: safe
+                  ? base.merge(
+                      CellStyle(
+                        foreground: _kMarkdownLinkColor,
+                        underline: true,
+                        linkUri: live ? url : null,
+                      ),
+                    )
                   : base.merge(const CellStyle(underline: true)),
             ),
           );

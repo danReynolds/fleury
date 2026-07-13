@@ -322,12 +322,18 @@ class RenderRichText extends RenderObject
       out.add(const <_Glyph>[]);
       return;
     }
-    // Split into words on single spaces (empty words = consecutive spaces).
+    // Split into words on single spaces (empty words = consecutive spaces),
+    // remembering the ACTUAL space glyph that separated each pair so a LINK's
+    // internal spaces can keep the link. Without this, the whitespace inside a
+    // multi-word link is re-emitted unstyled and the link fractures into one
+    // `<a>` (and one underline segment) per word.
     final words = <List<_Glyph>>[];
+    final separators = <_Glyph>[];
     var word = <_Glyph>[];
     for (final g in para) {
       if (g.grapheme == ' ') {
         words.add(word);
+        separators.add(g);
         word = <_Glyph>[];
       } else {
         word.add(g);
@@ -345,12 +351,23 @@ class RenderRichText extends RenderObject
       return w;
     }
 
-    for (final w in words) {
+    const emptySpace = _Glyph(' ', 1, CellStyle.empty);
+    for (var i = 0; i < words.length; i++) {
+      final w = words[i];
+      // The space preceding this word. Re-emit the ORIGINAL space glyph (with
+      // its style) only when it carries a link, so a multi-word link stays ONE
+      // contiguous run — one `<a>`, one unbroken underline — rather than
+      // splitting at every space. A non-link separator stays a bare unstyled
+      // space, so every non-link run is byte-identical to before (no wire or
+      // paint drift). Whitespace at a wrap boundary is still dropped.
+      final separator = i > 0 && separators[i - 1].style.linkUri != null
+          ? separators[i - 1]
+          : emptySpace;
       final isFirst = lineWidth == 0;
       if (w.isEmpty) {
         if (!isFirst &&
             (!_softWrap || maxCols == null || lineWidth + 1 <= maxCols)) {
-          line.add(const _Glyph(' ', 1, CellStyle.empty));
+          line.add(separator);
           lineWidth += 1;
         }
         continue;
@@ -359,7 +376,7 @@ class RenderRichText extends RenderObject
       final needed = isFirst ? ww : 1 + ww;
       if (!_softWrap || maxCols == null || lineWidth + needed <= maxCols) {
         if (!isFirst) {
-          line.add(const _Glyph(' ', 1, CellStyle.empty));
+          line.add(separator);
           lineWidth += 1;
         }
         line.addAll(w);

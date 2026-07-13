@@ -107,3 +107,40 @@ They need debug tooling enabled (the default in development runs).
 - **Escape hatch** — `FLEURY_FD_CAPTURE=0` disables the descriptor-level
   stray-output capture entirely (raw behavior; stray writes go straight to
   the terminal).
+- **Hyperlinks override** — `FLEURY_HYPERLINKS=1` forces real terminal
+  hyperlinks on (even under tmux); `FLEURY_HYPERLINKS=0` forces them off. See
+  [Terminal hyperlinks](#terminal-hyperlinks-osc-8) below.
+
+## Terminal hyperlinks (OSC 8)
+
+Widgets like `MarkdownText` emit **real clickable links** (the OSC 8 escape) on
+terminals that support them, and fall back to plain underlined text with the
+URL shown inline everywhere else — so a destination is never hidden behind a
+link that doesn't work. The browser surface (`fleury serve`) always renders
+links as anchors; on the terminal, support is **detected from the environment**.
+
+**Detected terminals** (auto-enabled, default-deny for anything unlisted):
+
+| Terminal | Detected via |
+| --- | --- |
+| iTerm2 (≥ 3.1) | `TERM_PROGRAM=iTerm.app` + `TERM_PROGRAM_VERSION` |
+| WezTerm, Ghostty | `TERM_PROGRAM` |
+| GNOME Terminal / VTE (≥ 0.50) | `VTE_VERSION ≥ 5000` |
+| kitty | `KITTY_WINDOW_ID` or `TERM=xterm-kitty` |
+| Windows Terminal | `WT_SESSION` |
+
+**tmux (and other multiplexers) are suppressed by default.** OSC 8 through a
+multiplexer needs an explicit `terminal-features` opt-in in your tmux config and
+is unreliable without it, so detection reports links as unavailable under tmux
+regardless of the outer terminal. Escape tmux, or force it with
+`FLEURY_HYPERLINKS=1`.
+
+**Override.** `FLEURY_HYPERLINKS` wins outright over detection: `1`/`true`/`yes`/
+`on` forces links on (even under tmux, and on terminals Fleury can't confirm);
+`0`/`false`/`no`/`off` forces them off. Leave it unset to use detection.
+
+**Check what was detected.** `fleury diagnose` reports the exact state —
+`supported`, `suppressed-under-tmux` (the outer terminal is capable but a
+multiplexer is in the way), `disabled-by-override` (`FLEURY_HYPERLINKS=0`), or
+`unsupported` — and the debug shell's **Tree** tab shows it alongside the other
+detected capabilities.

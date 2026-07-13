@@ -17,7 +17,15 @@ String cellStyleToCss(CellStyle style) {
   }
 
   final parts = <String>[];
-  if (fg != null) parts.add('color:${rgbCss(fg)}');
+  if (fg != null) {
+    parts.add('color:${rgbCss(fg)}');
+  } else if (style.linkUri != null && isSafeLinkScheme(style.linkUri!)) {
+    // A safe link renders as an <a>, whose UA color (#0000EE blue) would
+    // otherwise win over the row's inherited foreground. Pin it to the default
+    // foreground so a link reads as default-fg + underline, never browser blue.
+    // Link-free runs (and links with an explicit fg) are unaffected.
+    parts.add('color:${rgbCss(kDefaultForeground)}');
+  }
   if (bg != null) parts.add('background-color:${rgbCss(bg)}');
   if (style.bold) parts.add('font-weight:700');
   if (style.dim) parts.add('opacity:.6');
@@ -35,29 +43,6 @@ String cellStyleToCss(CellStyle style) {
 String rgbCss(Color color) {
   final c = color.toRgb();
   return 'rgb(${c.r}, ${c.g}, ${c.b})';
-}
-
-/// OSC 8 link schemes the browser DOM will turn into a real `<a href>`.
-///
-/// Belt-and-suspenders allowlist: the producer (terminal ANSI renderer / serve
-/// output sanitizer) already restricts which schemes reach a cell, but the DOM
-/// layer refuses anything outside this set *independently* of upstream. A
-/// `javascript:`, `data:`, or `vbscript:` URI therefore can never become a
-/// navigable link no matter what the producer does — it renders as plain text.
-/// Default-deny: any scheme not listed here (including a scheme-less relative
-/// URI) is dropped.
-const Set<String> kAllowedLinkSchemes = {'http', 'https', 'mailto', 'file'};
-
-/// Whether [uri]'s scheme — the substring before the first `:`, compared
-/// case-insensitively — is in [kAllowedLinkSchemes].
-///
-/// Both DOM paths (the live `DomRowFactory` and the static HTML string builder)
-/// gate link rendering on this: a run whose `style.linkUri` passes becomes an
-/// `<a href>`; anything else stays a plain span.
-bool isAllowedLinkScheme(String uri) {
-  final colon = uri.indexOf(':');
-  if (colon <= 0) return false; // no scheme, or an empty scheme (":x") → drop
-  return kAllowedLinkSchemes.contains(uri.substring(0, colon).toLowerCase());
 }
 
 /// Inline CSS that paints a box-drawing glyph as crisp gradient lines instead

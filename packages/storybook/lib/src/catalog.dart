@@ -566,6 +566,17 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
     builder: (context) => _DocumentStory(document: context.option('document')),
   ),
   Story(
+    id: 'content.markdown-hyperlinks',
+    title: 'Markdown Hyperlinks',
+    category: 'Content',
+    description:
+        'MarkdownText turns https and mailto links into real OSC 8 / anchor '
+        'links on supporting surfaces, and drops unsafe schemes to plain text.',
+    widgets: const <String>['MarkdownText'],
+    initialHeight: 14,
+    builder: (context) => const _MarkdownHyperlinksStory(),
+  ),
+  Story(
     id: 'logs.search',
     title: 'Search, Logs, and Terminal Output',
     category: 'Output',
@@ -2863,6 +2874,34 @@ class _DocumentStory extends StatelessWidget {
   }
 }
 
+class _MarkdownHyperlinksStory extends StatelessWidget {
+  const _MarkdownHyperlinksStory();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // A live OSC 8 / anchor link is only emitted where the surface reports the
+    // hyperlinks capability (the browser embed always; a detected terminal). On
+    // any surface the safe links stay underlined with a visible URL, and the
+    // javascript: link is dropped to plain text — a destination is never hidden
+    // behind a link that doesn't work.
+    final hyperlinks = MediaQuery.capabilitiesOf(context).hyperlinks;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          hyperlinks
+              ? 'This surface supports hyperlinks: safe links are clickable.'
+              : 'This surface has no link concept: links show their URL inline.',
+          style: theme.mutedStyle,
+        ),
+        const SizedBox(height: 1),
+        const MarkdownText(_hyperlinksMarkdown),
+      ],
+    );
+  }
+}
+
 class _SearchLogStory extends StatefulWidget {
   const _SearchLogStory({required this.view});
 
@@ -3160,6 +3199,19 @@ const _sampleMarkdown = '''
 ```dart
 dart tool/fleury_dev.dart storybook
 ```
+''';
+
+const _hyperlinksMarkdown = '''
+# Markdown links
+
+Safe schemes become **real links** where the surface supports them:
+
+- [Fleury docs](https://fleury.dev) — an `https` link
+- [Email the team](mailto:hi@fleury.dev) — a `mailto` link
+
+An unsafe scheme is **never** made clickable — it falls back to plain text:
+
+- [Do not run](javascript:alert(1)) — dropped, shown as its URL
 ''';
 
 const _sampleLogs = <LogEntry>[

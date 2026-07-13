@@ -1087,6 +1087,76 @@ void main() {
     expect(textArea.getAttribute('data-fleury-caret-css-left'), isNull);
     expect(textArea.getAttribute('data-fleury-caret-css-top'), isNull);
   });
+
+  test('DomInputSource lets a cell-grid link click navigate natively', () {
+    final events = <TuiEvent>[];
+    final host = web.document.createElement('div');
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    // A retained-grid link anchor lives under the grid root (.fleury-screen).
+    final screen = web.document.createElement('div')
+      ..className = 'fleury-screen';
+    final anchor = web.document.createElement('a')
+      ..setAttribute('href', 'https://fleury.dev')
+      ..textContent = 'docs';
+    screen.appendChild(anchor);
+    host.appendChild(screen);
+    web.document.body!.appendChild(host);
+    final source = DomInputSource(
+      hostElement: host,
+      textArea: textArea,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          cssCanvasLeft: 10,
+          cssCanvasTop: 20,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.parentNode?.removeChild(host);
+    });
+
+    source.start(events.add);
+
+    // A click ON the link anchor: the browser must be free to navigate, so the
+    // input source neither preventDefaults it nor routes it as an app tap.
+    final linkClick = web.MouseEvent(
+      'click',
+      web.MouseEventInit(
+        clientX: 25,
+        clientY: 65,
+        button: 0,
+        bubbles: true,
+        cancelable: true,
+      ),
+    );
+    anchor.dispatchEvent(linkClick);
+    expect(linkClick.defaultPrevented, isFalse, reason: 'navigation allowed');
+    expect(events, isEmpty, reason: 'link click is not an app pointer event');
+
+    // A click on a normal cell (not a link) still preventDefaults + routes.
+    final cellClick = web.MouseEvent(
+      'click',
+      web.MouseEventInit(
+        clientX: 25,
+        clientY: 65,
+        button: 0,
+        bubbles: true,
+        cancelable: true,
+      ),
+    );
+    host.dispatchEvent(cellClick);
+    expect(cellClick.defaultPrevented, isTrue, reason: 'app captures the click');
+    expect(events, isNotEmpty, reason: 'normal cell click routes as input');
+  });
 }
 
 final class _FakeClipboard extends Clipboard {
