@@ -892,16 +892,18 @@ CellStyle _styleForMarkdownBlock(
 }
 
 /// The OSC 8 outcome for [link] under the surface's [hyperlinks] capability,
-/// mirroring the producer gate in [_inline]: `active` when the surface supports
-/// hyperlinks AND the scheme is allow-listed (the run carries a real linkUri),
-/// `disabledByPolicy` when an un-allow-listed scheme blocks it, `unsupported`
-/// when the surface has no link concept. The vocabulary tracks the existing
-/// capability-resolution / hyperlink-support enums (CapabilityResolutionState
-/// .disabledByPolicy, HyperlinkSupport.unsupported).
+/// mirroring the producer gate in [_inline]: `supported` when the surface
+/// supports hyperlinks AND the scheme is allow-listed (the run carries a real
+/// linkUri), `disabledByPolicy` when an un-allow-listed scheme blocks it,
+/// `unsupported` when the surface has no link concept. Every value is a real
+/// enum name so the field can't drift from the vocabulary it reports:
+/// `supported`/`unsupported` are `HyperlinkSupport` states (the same
+/// `fleury diagnose` labels for OSC 8), and `disabledByPolicy` is a
+/// `CapabilityResolutionState`.
 String _osc8PolicyFor(MarkdownLink link, {required bool hyperlinks}) {
   if (!hyperlinks) return 'unsupported';
   if (!link.safeScheme) return 'disabledByPolicy';
-  return 'active';
+  return 'supported';
 }
 
 /// Builds the (invisible) semantics node for a markdown [link]. The URL stays

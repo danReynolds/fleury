@@ -199,7 +199,7 @@ void main() {
   group('MarkdownText — hyperlinks (OSC 8)', () {
     testWidgets(
       'supporting surface + safe scheme: link run carries linkUri, url suffix '
-      'kept, osc8Policy active',
+      'kept, osc8Policy supported',
       (tester) {
         tester.pumpWidget(
           _surface(
@@ -232,7 +232,7 @@ void main() {
         );
         expect(link.value, 'https://fleury.dev');
         expect(link.state.values['safeLinkScheme'], isTrue);
-        expect(link.state.values['osc8Policy'], 'active');
+        expect(link.state.values['osc8Policy'], 'supported');
       },
     );
 
