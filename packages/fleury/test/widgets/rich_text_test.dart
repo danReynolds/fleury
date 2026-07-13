@@ -76,6 +76,40 @@ void main() {
     expect(_row(buf, 1), 'b');
   });
 
+  testWidgets(
+    'a multi-word styled span rides its internal spaces (contiguous run)',
+    (tester) {
+      // The word-wrap must re-emit the ORIGINAL space glyph (with its style),
+      // not a bare unstyled space — otherwise a link/underline/background
+      // fractures at every space. Here the whole phrase is one link: every
+      // cell, letters AND spaces, must carry linkUri + underline so it stays a
+      // single contiguous run (one <a>, one OSC 8 open/close, one underline).
+      tester.pumpWidget(
+        const RichText(
+          text: TextSpan(
+            text: 'open an issue',
+            style: CellStyle(underline: true, linkUri: 'https://x'),
+          ),
+        ),
+      );
+      final buf = tester.render(size: const CellSize(20, 1));
+      const phrase = 'open an issue';
+      for (var c = 0; c < phrase.length; c++) {
+        final cell = buf.atColRow(c, 0);
+        expect(
+          cell.style.linkUri,
+          'https://x',
+          reason: 'cell $c ("${cell.grapheme}") must carry the link',
+        );
+        expect(
+          cell.style.underline,
+          isTrue,
+          reason: 'cell $c ("${cell.grapheme}") must stay underlined',
+        );
+      }
+    },
+  );
+
   testWidgets('maxLines + ellipsis truncates', (tester) {
     tester.pumpWidget(
       const RichText(

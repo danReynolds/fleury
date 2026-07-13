@@ -237,6 +237,43 @@ void main() {
     );
 
     testWidgets(
+      'a multi-word link carries linkUri across its internal spaces',
+      (tester) {
+        // Regression: the link label's spaces used to render unlinked, so a
+        // multi-word link split into one anchor per word. The whole phrase —
+        // words AND the spaces between them — must carry the link.
+        tester.pumpWidget(
+          _surface(
+            const MarkdownText(
+              '[open an issue](https://x)',
+              inlineLinkUrls: false, // drop the (url) suffix; only the label paints
+            ),
+            hyperlinks: true,
+          ),
+        );
+        final buf = tester.render(size: const CellSize(40, 1));
+        expect(
+          _anyCellMatches(
+            buf,
+            {'o', 'p', 'e', 'n', 'a', 'i', 's', 'u'},
+            (s) => s.linkUri == 'https://x' && s.underline,
+          ),
+          isTrue,
+          reason: 'the label words are linked',
+        );
+        expect(
+          _anyCellMatches(
+            buf,
+            {' '},
+            (s) => s.linkUri == 'https://x' && s.underline,
+          ),
+          isTrue,
+          reason: 'the spaces INSIDE the link are linked too (contiguous run)',
+        );
+      },
+    );
+
+    testWidgets(
       'inlineLinkUrls:false drops the suffix for a live link (url is redundant)',
       (tester) {
         tester.pumpWidget(
