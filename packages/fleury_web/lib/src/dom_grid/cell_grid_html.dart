@@ -83,9 +83,10 @@ void _writeTextSpan(CellSpanRun run, StringBuffer out) => _writeRun(run, out);
 void _writeRun(CellSpanRun run, StringBuffer out, {String? className}) {
   final css = cellStyleToCss(run.style);
   final linkUri = run.style.linkUri;
-  // Belt-and-suspenders: only allow-listed schemes become a navigable link;
-  // anything else (javascript:/data:/… or a scheme-less URI) stays a span.
-  final linked = linkUri != null && isAllowedLinkScheme(linkUri);
+  // Belt-and-suspenders: only safe schemes become a navigable link; anything
+  // else (javascript:/data:/… or a scheme-less URI) stays a span. Gated on the
+  // shared isSafeLinkScheme so the cell-DOM, semantic-DOM, and producer agree.
+  final linked = linkUri != null && isSafeLinkScheme(linkUri);
   final tag = linked ? 'a' : 'span';
 
   out

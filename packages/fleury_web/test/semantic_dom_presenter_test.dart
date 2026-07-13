@@ -167,6 +167,42 @@ void main() {
       expect(link.getAttribute('data-fleury-link-url'), 'myapp://open/project');
     });
 
+    test('a node asserting safeLinkScheme:true cannot smuggle an unsafe href', () {
+      // The presenter validates the scheme itself against the shared predicate;
+      // it must NOT trust a producer-set safeLinkScheme boolean. A hostile node
+      // claiming a javascript: URI is "safe" still gets no href.
+      final root = web.document.createElement('div');
+      final presenter = SemanticDomPresenter(root: root);
+
+      presenter.present(
+        const SemanticTree(
+          root: SemanticNode(
+            id: SemanticNodeId('root'),
+            role: SemanticRole.app,
+            children: [
+              SemanticNode(
+                id: SemanticNodeId('spoof'),
+                role: SemanticRole.link,
+                label: 'trust me',
+                value: 'javascript:alert(1)',
+                state: SemanticState({
+                  'linkUrl': 'javascript:alert(1)',
+                  'safeLinkScheme': true,
+                }),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final link = root.querySelector('[data-fleury-semantic-id="spoof"]')!;
+      expect(link.localName, 'a');
+      expect(link.getAttribute('href'), isNull);
+      expect(link.getAttribute('target'), isNull);
+      expect(link.getAttribute('rel'), isNull);
+      expect(link.getAttribute('data-fleury-link-url'), 'javascript:alert(1)');
+    });
+
     test('keeps disabled safe semantic links non-navigating', () {
       final root = web.document.createElement('div');
       final presenter = SemanticDomPresenter(root: root);

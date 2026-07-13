@@ -596,7 +596,12 @@ void _addLinkAttributes(Map<String, String> attributes, SemanticNode node) {
   if (url == null || url.isEmpty) return;
   attributes['data-fleury-link-url'] = url;
   if (!node.enabled) return;
-  if (!_isSafeLinkForBrowser(node, url)) return;
+  // Validate the scheme HERE against the shared predicate rather than trusting a
+  // producer-set `state['safeLinkScheme']` boolean: an untrusted or buggy node
+  // asserting safeLinkScheme:true must not be able to smuggle a javascript:/
+  // data: href past this surface. The URL still stays legible as data
+  // (data-fleury-link-url above) — it just never becomes navigable.
+  if (!isSafeLinkScheme(url)) return;
   attributes['href'] = url;
   attributes['target'] = '_blank';
   attributes['rel'] = 'noopener noreferrer';
@@ -608,14 +613,6 @@ String? _linkUrlFor(SemanticNode node) {
   final value = node.value;
   if (value is String && value.isNotEmpty) return value;
   return null;
-}
-
-bool _isSafeLinkForBrowser(SemanticNode node, String url) {
-  final explicit = node.state['safeLinkScheme'];
-  if (explicit is bool) return explicit;
-  final uri = Uri.tryParse(url);
-  final scheme = uri?.scheme.toLowerCase();
-  return scheme == 'https' || scheme == 'http' || scheme == 'mailto';
 }
 
 SemanticAction _primaryActionFor(Set<SemanticAction> actions) {

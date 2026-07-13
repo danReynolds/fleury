@@ -142,7 +142,7 @@ final class MarkdownLink {
   final String url;
 
   String? get scheme => _urlScheme(url);
-  bool get safeScheme => _safeUrlScheme(scheme);
+  bool get safeScheme => isSafeLinkScheme(url);
 }
 
 /// Parsed Markdown rendered by [MarkdownView].
@@ -950,19 +950,13 @@ Widget _linkSemantics(
   );
 }
 
+/// The link's scheme name (lowercased substring before the first `:`), or null
+/// for a scheme-less URL. Reported as the `linkScheme` diagnostic; the
+/// safe/unsafe verdict itself is the shared [isSafeLinkScheme] (RFC 0017 §6).
 String? _urlScheme(String url) {
   final index = url.indexOf(':');
   if (index <= 0) return null;
   return url.substring(0, index).toLowerCase();
-}
-
-/// Default OSC 8 scheme allow-list (RFC 0017 §6): only `https`, `http`, and
-/// `mailto` become live links; everything else (including `file` and custom
-/// schemes) falls back to plain visible text. This is deliberately the minimal
-/// allow-list check — the full RFC 0013 `OutputSecurityPolicy` (with `file`/
-/// custom-scheme opt-in) is a future param, not built here.
-bool _safeUrlScheme(String? scheme) {
-  return scheme == 'https' || scheme == 'http' || scheme == 'mailto';
 }
 
 // ---- Block-level pass -----------------------------------------------------
@@ -1249,7 +1243,7 @@ TextSpan _inline(
             ),
           );
           // The producer gate: both halves must hold to emit a live link.
-          final live = hyperlinks && _safeUrlScheme(_urlScheme(url));
+          final live = hyperlinks && isSafeLinkScheme(url);
           children.add(
             TextSpan(
               text: text,

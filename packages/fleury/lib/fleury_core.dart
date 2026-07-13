@@ -109,6 +109,8 @@ export 'src/rendering/cell_buffer.dart'
         resolveInlineImageFit;
 export 'src/rendering/edge_insets.dart' show EdgeInsets;
 export 'src/rendering/layout.dart' show CellConstraints;
+export 'src/rendering/link_scheme.dart'
+    show isSafeLinkScheme, kSafeLinkSchemes;
 export 'src/rendering/render_flex.dart'
     show
         Axis,

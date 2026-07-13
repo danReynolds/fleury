@@ -42,18 +42,34 @@ void main() {
       expect(anchor.textContent, 'docs');
     });
 
-    test('mailto and file schemes are allow-listed too', () {
-      for (final uri in const ['mailto:a@b.com', 'file:///etc/hosts']) {
-        final root = _render(
-          20,
-          (b) => b.writeText(
-            const CellOffset(0, 0),
-            'x',
-            style: CellStyle(linkUri: uri),
-          ),
-        );
-        expect(root.querySelector('a')?.getAttribute('href'), uri);
-      }
+    test('a mailto scheme is allow-listed too', () {
+      final root = _render(
+        20,
+        (b) => b.writeText(
+          const CellOffset(0, 0),
+          'x',
+          style: const CellStyle(linkUri: 'mailto:a@b.com'),
+        ),
+      );
+      expect(root.querySelector('a')?.getAttribute('href'), 'mailto:a@b.com');
+    });
+
+    test('a file: scheme is NOT in the default allow-list — plain span', () {
+      // RFC 0013 gates file: behind an explicit opt-in the framework does not
+      // enable by default, so the canonical isSafeLinkScheme drops it (matching
+      // the producer and semantic-DOM surfaces). It renders as plain text.
+      final root = _render(
+        20,
+        (b) => b.writeText(
+          const CellOffset(0, 0),
+          'x',
+          style: const CellStyle(linkUri: 'file:///etc/hosts'),
+        ),
+      );
+      expect(root.querySelector('a'), isNull);
+      final span = root.querySelector('span');
+      expect(span, isNotNull);
+      expect(span!.getAttribute('href'), isNull);
     });
 
     test('a javascript: URI is dropped — plain span, no anchor, no href', () {
