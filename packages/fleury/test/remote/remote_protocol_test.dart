@@ -224,33 +224,57 @@ void main() {
       },
     );
 
-    test('oversized frame payloads fail with a protocol error', () {
+    test('oversized frame payloads fail UNRECOVERABLY (framing lost)', () {
       final wire = encodeFrame(InputFrame(Uint8List.fromList([1, 2, 3, 4, 5])));
       final decoder = FrameDecoder(maxPayloadLength: 4)..feed(wire);
 
+      // The buffer is cleared with no known next-frame boundary, so the stream
+      // can never resync — flagged recoverable:false so a peer tears down (and
+      // shows a reload banner) rather than resyncing forever. See F19.
       expect(
         () => decoder.drain().toList(),
-        throwsA(isA<RemoteProtocolException>()),
+        throwsA(
+          isA<RemoteProtocolException>().having(
+            (e) => e.recoverable,
+            'recoverable',
+            isFalse,
+          ),
+        ),
       );
     });
 
-    test('malformed RESIZE payloads fail with a protocol error', () {
+    test('malformed RESIZE payloads fail RECOVERABLY (framing intact)', () {
       final wire = _rawFrame(FrameType.resize, 'rows=24'.codeUnits);
       final decoder = FrameDecoder()..feed(wire);
 
+      // A valid length header was consumed, so exactly this frame is skipped
+      // and the stream stays framed — recoverable:true (a peer resyncs and
+      // carries on rather than tearing down). See F19.
       expect(
         () => decoder.drain().toList(),
-        throwsA(isA<RemoteProtocolException>()),
+        throwsA(
+          isA<RemoteProtocolException>().having(
+            (e) => e.recoverable,
+            'recoverable',
+            isTrue,
+          ),
+        ),
       );
     });
 
-    test('invalid UTF-8 control payloads fail with a protocol error', () {
+    test('invalid UTF-8 control payloads fail RECOVERABLY (framing intact)', () {
       final wire = _rawFrame(FrameType.init, const [0xFF]);
       final decoder = FrameDecoder()..feed(wire);
 
       expect(
         () => decoder.drain().toList(),
-        throwsA(isA<RemoteProtocolException>()),
+        throwsA(
+          isA<RemoteProtocolException>().having(
+            (e) => e.recoverable,
+            'recoverable',
+            isTrue,
+          ),
+        ),
       );
     });
   });

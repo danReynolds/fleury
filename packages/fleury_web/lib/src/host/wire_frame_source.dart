@@ -203,15 +203,43 @@ final class WireFrameSource implements BrowserFrameSource {
     _resizeObserver = observer;
   }
 
+  /// Consecutive frame-apply failures tolerated before a persistently failing
+  /// stream is treated as hung and torn down (with the reload banner) rather
+  /// than resynced yet again. Reset on any successful apply.
+  ///
+  /// This apply-path counter is the ONLY escalation backstop needed. The
+  /// decode path is self-bounding: [FrameDecoder.drain] advances the buffer
+  /// past each frame BEFORE decoding its payload, so a recoverable decode
+  /// error can never recur on the same bytes (see remote_protocol.dart) — it
+  /// therefore does NOT feed this counter. A run of APPLY failures, by
+  /// contrast, is a real mirror divergence (later patches are relative to the
+  /// diverged mirror), which resync alone cannot recover — so only apply
+  /// failures escalate.
+  static const int _maxConsecutiveApplyFailures = 3;
+  int _consecutiveApplyFailures = 0;
+
   void _onMessage(web.MessageEvent event) {
+    // A message still queued at the socket when we tore down must not repaint
+    // over the reload banner on a dead session.
+    if (_closed) return;
     final data = event.data;
     if (data == null) return;
     final buffer = (data as JSArrayBuffer).toDart;
-    _decoder.feed(buffer.asUint8List());
+    _ingest(buffer.asUint8List());
+  }
+
+  /// Feeds raw transport bytes through the decoder and applies each frame,
+  /// classifying a failure as recoverable (repair locally, keep the socket
+  /// open) or unrecoverable (surface the reload banner and close).
+  void _ingest(Uint8List bytes) {
+    // Never touch a torn-down session (also covers feedBytesForTest): a late
+    // or post-close feed would otherwise resync over the reload banner.
+    if (_closed) return;
+    _decoder.feed(bytes);
     // This runs at the JS onmessage boundary, where an uncaught throw
     // silently stops processing — a single malformed frame would wedge the
     // session blank with no recovery. Decode and apply each frame
-    // defensively: log the failure and repair the screen from the mirror.
+    // defensively.
     //
     // drain() is a lazy generator that removes each frame from the decoder
     // buffer AS it yields, so it must be iterated directly — collecting to
@@ -220,17 +248,59 @@ final class WireFrameSource implements BrowserFrameSource {
     // mirror diverged from what the server thinks the peer holds.
     try {
       for (final frame in _decoder.drain()) {
+        // A teardown mid-batch — a ByeFrame, or the escalation below — closes
+        // the session; stop applying the rest of this drained batch so nothing
+        // repaints over the banner.
+        if (_closed) return;
         try {
+          if (_shouldFailApplyForTest?.call(frame) ?? false) {
+            throw StateError('injected apply failure (test)');
+          }
           _handleFrame(frame);
+          // A clean apply ends any run of failures — only a *persistent* apply
+          // failure (nothing succeeding in between) escalates below.
+          _consecutiveApplyFailures = 0;
         } catch (error) {
           web.console.error('fleury: remote frame apply failed: $error'.toJS);
+          _consecutiveApplyFailures++;
+          if (_consecutiveApplyFailures >= _maxConsecutiveApplyFailures) {
+            // A frame that keeps failing to apply is effectively hung too:
+            // stop resyncing and surface the same reload banner. _teardown
+            // closes the socket, so bail out of the drain.
+            _teardown(
+              'The session desynchronized — reload to reconnect.',
+              banner: true,
+            );
+            return;
+          }
+          // A single bad frame with intact stream framing is recoverable:
+          // repair the screen from the mirror and keep going.
           _resyncFromMirror();
         }
       }
+    } on RemoteProtocolException catch (error) {
+      // A decode-level protocol error surfaced from drain(). If the decoder
+      // lost stream framing (an oversized length prefix cleared the buffer),
+      // the byte stream can never re-synchronize and the mirror will never
+      // advance — the "frozen screen, no banner" hang. Surface it: close the
+      // now-untrustworthy socket and show the reload banner the user can
+      // click, instead of silently resyncing forever.
+      if (!error.recoverable) {
+        _teardown(
+          'The session desynchronized — reload to reconnect.',
+          banner: true,
+        );
+        return;
+      }
+      // A single malformed frame whose length header was valid: drain()
+      // skipped exactly it and framing stayed intact, so this is recoverable.
+      // The frames decoded before it were already applied above; repair the
+      // screen from the (now-current) mirror.
+      web.console.error('fleury: remote frame decode failed: $error'.toJS);
+      _resyncFromMirror();
     } catch (error) {
-      // A malformed frame mid-stream: the frames decoded before it were
-      // already applied above; repair the screen from the (now-current)
-      // mirror.
+      // A non-protocol decode fault (defensive; shouldn't normally reach here):
+      // treat as recoverable and repair from the mirror.
       web.console.error('fleury: remote frame decode failed: $error'.toJS);
       _resyncFromMirror();
     }
@@ -315,7 +385,11 @@ final class WireFrameSource implements BrowserFrameSource {
           _send(encodeFrame(ClipboardResultFrame(f.seq, status)));
         }());
       case ByeFrame():
+        // A clean end-of-session: tear down through the existing path (banner
+        // + socket close) and return immediately — the drained batch's
+        // _closed guard then stops any trailing frame from repainting over it.
         _teardown('The fleury session ended.');
+        return;
       case InitFrame f:
         // v3 apps echo INIT with their protocol version after receiving
         // ours, so a stale cached client bundle is detectable instead of
@@ -400,6 +474,23 @@ final class WireFrameSource implements BrowserFrameSource {
   /// Drives the frame handler directly — test-only (production frames
   /// arrive through the socket's onmessage).
   void handleFrameForTest(RemoteFrame frame) => _handleFrame(frame);
+
+  /// Feeds raw bytes through the same decode + apply + failure-classification
+  /// pipeline production uses from onmessage — test-only.
+  void feedBytesForTest(Uint8List bytes) => _ingest(bytes);
+
+  /// When set, an apply is forced to throw for any frame the predicate accepts,
+  /// exercising the resync / escalation path without crafting an unapplyable
+  /// frame — test-only.
+  bool Function(RemoteFrame frame)? _shouldFailApplyForTest;
+  set failApplyForTest(bool Function(RemoteFrame frame)? predicate) =>
+      _shouldFailApplyForTest = predicate;
+
+  /// Whether the session has been torn down (socket closed) — test-only.
+  bool get isClosedForTest => _closed;
+
+  /// Whether the reconnect banner is currently showing — test-only.
+  bool get bannerShownForTest => _disconnectBanner != null;
 
   /// Attaches [components] without a socket — test-only.
   void attachComponentsForTest(BrowserHostComponents components) {

@@ -908,6 +908,10 @@ final class _BufferedBrowserInput {
               _controller.addError(
                 const RemoteProtocolException(
                   'pending browser input exceeded remote frame payload limit',
+                  // Force-closes the socket (1009) below: genuinely
+                  // unrecoverable, matching FrameDecoder's oversized-length
+                  // classification so the field's contract holds end to end.
+                  recoverable: false,
                 ),
               );
             }

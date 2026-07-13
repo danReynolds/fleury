@@ -602,41 +602,100 @@ Future<AppExit> _runAppImpl(
         final negotiatedSink = usedDriver.surfaceSink;
         if (negotiatedSink != null) {
           surfaceSink = negotiatedSink;
+          // Report a link fault WITHOUT ever throwing back into the serialize
+          // link. errorReporter.report → notifyListeners() can throw (a
+          // throwing listener); if that escaped the link it would reject the
+          // tail future and skip every later queued action — the exact wedge
+          // the per-link catch exists to prevent. Degrade to a no-op instead:
+          // keeping the queue alive wins over this one log line.
+          void reportSemanticActionFault(Object error, StackTrace stack) {
+            try {
+              errorReporter.report(error, stack);
+            } catch (_) {
+              // The reporter itself faulted; swallow so the tail still resolves.
+            }
+          }
+
+          // Per-connection serialize queue for inbound semantic actions.
+          // Deliberately DIVERGES from fleury_mcp's `_serializeMutation` (do
+          // NOT converge them): that path carries revision/settle bookkeeping,
+          // rate limiting, a synchronous idle fast-path, and returns T to the
+          // caller; this raw-wire path is fire-and-forget void with no result
+          // plumbing. Both must stay serialized, but under different contracts
+          // — a change to one shouldn't silently retrofit the other. One
+          // session per runApp, so this local is per-connection and a fresh
+          // runApp starts with an empty tail; it lives beside the sink /
+          // errorReporter the chained link uses.
+          var semanticActionTail = Future<void>.value();
           // The peer can activate a node in its accessible DOM; invoke the
           // action against the live tree and re-render, completing the
           // semantics round trip (presentSemantics ships the tree out, this
           // brings activations back). Mirrors the in-browser host.
           negotiatedSink.onSemanticAction = (id, action, value) {
-            final root = frameDriver?.rootElement;
-            if (root == null) return;
-            // Flush pending semantics first so the peer's view is current
-            // when the action's result lands — the embed contract, now on
-            // both paths.
-            semanticsPipeline?.flushPendingNow('semantic-action');
-            unawaited(() async {
-              final result = await invokeSemanticActionFromElement(
-                tree: SemanticTree.fromElement(root),
-                id: id,
-                action: action,
-                value: value,
-              );
-              // Ship the outcome back so the peer (agent bridge, AT
-              // mirror) gets a real status instead of guessing from
-              // tree diffs — and surface a throwing onAction handler
-              // like any other app error rather than swallowing it.
-              negotiatedSink.presentSemanticActionResult(
-                id,
-                action,
-                result.status,
-              );
-              if (result.status == SemanticActionInvocationStatus.failed) {
-                errorReporter.report(
-                  result.error ??
-                      StateError('semantic action ${action.name} failed'),
-                  result.stackTrace ?? StackTrace.current,
+            // Serialize on a per-connection tail: an agent that sends
+            // setValue(field) then activate(submit) back-to-back needs the
+            // activate to snapshot the tree the setValue mutated, and the two
+            // RESULT frames to return in submission order. The old
+            // fire-and-forget path let action N+1 snapshot the pre-mutation
+            // tree while N's async invocation was still in flight (the MCP
+            // path already serializes via its own mutation tail). Chaining
+            // each action onto the tail runs N+1's snapshot + invocation only
+            // after N's body completes. The closure still returns immediately
+            // after appending — it never awaits the tail — so frame dispatch
+            // is not blocked and there is no deadlock.
+            semanticActionTail = semanticActionTail.then((_) async {
+              try {
+                // Read the LIVE root HERE, not at arrival: the link runs
+                // arbitrarily later — behind prior queued actions and across
+                // their awaits — by which point a rebuild may have replaced
+                // the root Element (updateRoot's unmount+mount branch) or the
+                // session may be tearing down. An arrival-captured root would
+                // snapshot a detached tree. Mirrors the semantics pipeline's
+                // `readRoot: () => frameDriver?.rootElement`.
+                final root = frameDriver?.rootElement;
+                // No live root (torn down, or an action that raced ahead of
+                // mount): skip rather than invoke against an absent/detached
+                // tree. A dead session can't honor the action.
+                if (root == null) return;
+                // Flush pending semantics first so the peer's view is current
+                // when the action's result lands — the embed contract, now on
+                // both paths. Deferred into the link (not fired at arrival) so
+                // it reflects the tree AFTER the prior action mutated it.
+                semanticsPipeline?.flushPendingNow('semantic-action');
+                final result = await invokeSemanticActionFromElement(
+                  tree: SemanticTree.fromElement(root),
+                  id: id,
+                  action: action,
+                  value: value,
                 );
+                // Ship the outcome back so the peer (agent bridge, AT
+                // mirror) gets a real status instead of guessing from
+                // tree diffs — and surface a throwing onAction handler
+                // like any other app error rather than swallowing it.
+                negotiatedSink.presentSemanticActionResult(
+                  id,
+                  action,
+                  result.status,
+                );
+                if (result.status == SemanticActionInvocationStatus.failed) {
+                  reportSemanticActionFault(
+                    result.error ??
+                        StateError('semantic action ${action.name} failed'),
+                    result.stackTrace ?? StackTrace.current,
+                  );
+                }
+              } catch (error, stackTrace) {
+                // Catch INSIDE the link so a fault never rejects the tail — a
+                // rejected tail future would skip every later action's
+                // callback and wedge the queue for the rest of the session.
+                // invokeSemanticActionFromElement already turns a throwing
+                // handler into a failed RESULT (reported above), so reaching
+                // here is an unexpected fault in the flush/snapshot/result
+                // path (e.g. a throwing sink). reportSemanticActionFault can
+                // NOT throw, so the link's future always RESOLVES.
+                reportSemanticActionFault(error, stackTrace);
               }
-            }());
+            });
             scheduleFrame('semantic-action:${action.name}');
           };
 
