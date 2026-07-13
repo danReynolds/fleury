@@ -38,6 +38,13 @@ import 'package:fleury/fleury_core.dart';
 
 import 'component_theme.dart';
 
+/// Accent colour for Markdown links — a mint green that reads on dark
+/// backgrounds (unlike a browser's default link blue) and matches Fleury's
+/// default styling. Applies to safe-scheme links on every surface (terminal
+/// OSC 8 text, browser `<a>`), since the browser anchor inherits the cell's
+/// foreground.
+const Color _kMarkdownLinkColor = RgbColor(126, 217, 149);
+
 /// A widget that renders a [data] string of light Markdown as styled
 /// terminal cells.
 ///
@@ -1242,13 +1249,24 @@ TextSpan _inline(
               url: url,
             ),
           );
-          // The producer gate: both halves must hold to emit a live link.
-          final live = hyperlinks && isSafeLinkScheme(url);
+          // A safe-scheme link renders in the link accent colour + underline
+          // (readable on dark, unlike a browser's default blue), whether or not
+          // it's clickable here; the producer gate (capability + safe scheme)
+          // additionally attaches `linkUri` to make it live. An unsafe scheme is
+          // refused — plain underlined text, never the link colour.
+          final safe = isSafeLinkScheme(url);
+          final live = hyperlinks && safe;
           children.add(
             TextSpan(
               text: text,
-              style: live
-                  ? base.merge(CellStyle(underline: true, linkUri: url))
+              style: safe
+                  ? base.merge(
+                      CellStyle(
+                        foreground: _kMarkdownLinkColor,
+                        underline: true,
+                        linkUri: live ? url : null,
+                      ),
+                    )
                   : base.merge(const CellStyle(underline: true)),
             ),
           );
