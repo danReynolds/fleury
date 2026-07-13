@@ -98,6 +98,14 @@
 // so a stale v3 client — whose decoder would misalign on the unexpected
 // URI — never receives the extra bytes (RFC 0017 §5).
 //
+// The INIT `hyperlinks=<0|1>` param is the OTHER half and is purely ADDITIVE
+// (like `images=`): a peer that can RENDER links sets it so the server-side
+// producer gate emits a link in the first place. Absent ⇒ false, so v3/older
+// peers (and the version-skew INIT echo) are unaffected and stay byte-flat.
+// The two are independent: `hyperlinks=` decides whether a link is PRODUCED;
+// v>=4 decides whether the wire SERIALIZES it. Both must hold for a browser to
+// receive a clickable cell-grid anchor.
+//
 // The normative statement of this protocol — the version, the frame table
 // above, the additive-vs-version-gated rule, and the launch-relevant caveat
 // that the wire is NOT a public/stable integration surface (same-build peers
@@ -201,6 +209,7 @@ final class InitFrame extends RemoteFrame {
     required this.imageProtocol,
     required this.tmuxPassthrough,
     this.images,
+    this.hyperlinks = false,
     this.protocolVersion = remoteProtocolVersion,
   });
 
@@ -216,6 +225,16 @@ final class InitFrame extends RemoteFrame {
   /// The peer's neutral image capability (v3 `images=` param). Null from
   /// older peers — the app projects [imageProtocol] instead.
   final InlineImageSupport? images;
+
+  /// Whether the peer's surface can render real hyperlinks (OSC 8 on a
+  /// terminal, `<a>` anchors in the browser). Optional additive `hyperlinks=`
+  /// INIT param: absent from older peers, decoded as false. Threaded into the
+  /// app-side [SurfaceCapabilities.hyperlinks] so the server-side producer gate
+  /// (e.g. `MarkdownText`) only emits a `linkUri` when the peer can actually
+  /// show it. Distinct from [protocolVersion]/[RemoteTerminalDriver.wantsHyperlinks],
+  /// which gates whether the wire *serializes* a link at all (v>=4); this gates
+  /// whether one is ever *produced*.
+  final bool hyperlinks;
 
   /// Negotiated protocol version. A peer omitting `v` in INIT is read as
   /// v1 (the legacy ANSI host).
@@ -423,6 +442,10 @@ String _encodeInit(InitFrame f) =>
     'image=${f.imageProtocol.name},'
     'tmux=${f.tmuxPassthrough ? 1 : 0},'
     '${f.images == null ? '' : 'images=${f.images!.name},'}'
+    // Optional additive param (like `images=`): emitted only when true, so a
+    // link-free INIT stays byte-identical to a peer that never learned the
+    // field. Absent ⇒ decoded as false.
+    '${f.hyperlinks ? 'hyperlinks=1,' : ''}'
     'v=${f.protocolVersion}';
 
 /// Wire layout: [u16 id length][id utf-8][image bytes...].
@@ -715,6 +738,7 @@ InitFrame _decodeInit(String body) {
       'placements' => InlineImageSupport.placements,
       _ => null,
     },
+    hyperlinks: params['hyperlinks'] == '1',
     protocolVersion: int.tryParse(params['v'] ?? '') ?? 1,
   );
 }

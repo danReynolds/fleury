@@ -157,6 +157,11 @@ final class WireFrameSource implements BrowserFrameSource {
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
           images: InlineImageSupport.placements,
+          // The DOM grid renders real <a> anchors (dom_row_factory), so tell
+          // the server-side app its surface supports links: this is what makes
+          // its MarkdownText gate produce a linkUri that the v4 wire then
+          // carries. Without it links render underlined-but-not-clickable.
+          hyperlinks: true,
           protocolVersion: remoteProtocolVersion,
         ),
       ),

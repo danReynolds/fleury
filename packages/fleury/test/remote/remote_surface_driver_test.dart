@@ -432,6 +432,189 @@ void main() {
     });
   });
 
+  // Regression guard for the serve OSC 8 bug: the browser's `hyperlinks`
+  // capability was never propagated through INIT, so a served MarkdownText read
+  // MediaQuery.capabilitiesOf(context).hyperlinks == false and produced links
+  // that rendered underlined-but-not-clickable. The previous full-loop coverage
+  // FAKED a hyperlinks:true MediaQuery, so nothing exercised the peer's INIT
+  // capability actually reaching the app. These do.
+  group('hyperlinks capability propagation (OSC 8 over serve)', () {
+    test(
+      'an INIT declaring hyperlinks lights up surfaceCapabilities '
+      '(browser-style peer with images=placements)',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final entered = driver.enter(TerminalMode.interactive);
+        // images != null → the peer-surface-capabilities branch.
+        transport.emit(
+          const InitFrame(
+            size: CellSize(40, 10),
+            colorMode: ColorMode.truecolor,
+            imageProtocol: ImageProtocol.halfBlock,
+            tmuxPassthrough: false,
+            images: InlineImageSupport.placements,
+            hyperlinks: true,
+          ),
+        );
+        await entered;
+        expect(driver.surfaceCapabilities.hyperlinks, isTrue);
+        await driver.restore();
+      },
+    );
+
+    test(
+      'an INIT declaring hyperlinks lights up surfaceCapabilities through the '
+      'terminal projection too (no images= param)',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final entered = driver.enter(TerminalMode.interactive);
+        // images == null → surfaceCapabilities falls back to
+        // _capabilities.toSurfaceCapabilities(); the field is threaded into
+        // BOTH objects, so this branch reflects it as well.
+        transport.emit(
+          const InitFrame(
+            size: CellSize(40, 10),
+            colorMode: ColorMode.truecolor,
+            imageProtocol: ImageProtocol.halfBlock,
+            tmuxPassthrough: false,
+            hyperlinks: true,
+          ),
+        );
+        await entered;
+        expect(driver.surfaceCapabilities.hyperlinks, isTrue);
+        await driver.restore();
+      },
+    );
+
+    test(
+      'hyperlinks:false and an absent field both leave the capability false',
+      () async {
+        const inits = [
+          InitFrame(
+            size: CellSize(40, 10),
+            colorMode: ColorMode.truecolor,
+            imageProtocol: ImageProtocol.halfBlock,
+            tmuxPassthrough: false,
+            images: InlineImageSupport.placements,
+            hyperlinks: false,
+          ),
+          // An older peer that never learned the field.
+          InitFrame(
+            size: CellSize(40, 10),
+            colorMode: ColorMode.truecolor,
+            imageProtocol: ImageProtocol.halfBlock,
+            tmuxPassthrough: false,
+            images: InlineImageSupport.placements,
+          ),
+        ];
+        for (final init in inits) {
+          final transport = _FakeTransport();
+          final driver = RemoteTerminalDriver(transport);
+          final entered = driver.enter(TerminalMode.interactive);
+          transport.emit(init);
+          await entered;
+          expect(driver.surfaceCapabilities.hyperlinks, isFalse);
+          await driver.restore();
+        }
+      },
+    );
+
+    // The TRUE end-to-end guard: a real server-side producer reading the
+    // propagated capability through MediaQuery must set a linkUri that then
+    // rides the v4 wire. Exercises the WHOLE chain — peer INIT → driver caps →
+    // runApp MediaQuery → producer gate → PLAN bytes — with NO faked capability.
+    // _LinkProbe stands in for MarkdownText (which lives in fleury_widgets and
+    // can't be imported here without an implementation_imports violation); it
+    // mirrors MarkdownText's exact gate.
+    test(
+      'a peer declaring hyperlinks makes the producer emit a linkUri that rides '
+      'the v4 wire',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        scheduleMicrotask(
+          () => transport.emit(
+            const InitFrame(
+              size: CellSize(40, 10),
+              colorMode: ColorMode.truecolor,
+              imageProtocol: ImageProtocol.halfBlock,
+              tmuxPassthrough: false,
+              images: InlineImageSupport.placements,
+              hyperlinks: true,
+              // protocolVersion defaults to v4 → wantsHyperlinks → the plan
+              // serializes the link.
+            ),
+          ),
+        );
+        final done = runApp(
+          const _LinkProbe('https://example.com'),
+          driver: driver,
+          requireInteractiveTerminal: false,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+
+        final plan = transport.sent.whereType<PlanFrame>().first.plan;
+        expect(
+          plan.styleTable.any((s) => s.linkUri == 'https://example.com'),
+          isTrue,
+          reason: 'the producer read hyperlinks==true and attached the URI',
+        );
+        // And the bytes actually rode the wire (v4 serialization), not just the
+        // in-memory plan: round-trip through the codec and confirm it survives.
+        final roundTripped = decodeRemotePlan(encodeRemotePlan(plan));
+        expect(
+          roundTripped.styleTable.any(
+            (s) => s.linkUri == 'https://example.com',
+          ),
+          isTrue,
+          reason: 'the linkUri serialized onto the wire',
+        );
+
+        await transport.disconnect();
+        await done;
+      },
+    );
+
+    test(
+      'a peer that does NOT declare hyperlinks makes the same producer emit no '
+      'linkUri (the capability gates production — not a fake)',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        scheduleMicrotask(
+          () => transport.emit(
+            const InitFrame(
+              size: CellSize(40, 10),
+              colorMode: ColorMode.truecolor,
+              imageProtocol: ImageProtocol.halfBlock,
+              tmuxPassthrough: false,
+              images: InlineImageSupport.placements,
+              // hyperlinks omitted → false, the pre-fix serve default.
+            ),
+          ),
+        );
+        final done = runApp(
+          const _LinkProbe('https://example.com'),
+          driver: driver,
+          requireInteractiveTerminal: false,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+
+        final plan = transport.sent.whereType<PlanFrame>().first.plan;
+        expect(
+          plan.styleTable.any((s) => s.linkUri != null),
+          isFalse,
+          reason: 'no capability → the producer never attaches a URI',
+        );
+
+        await transport.disconnect();
+        await done;
+      },
+    );
+  });
+
   group('hardening', () {
     test('clamps a hostile INIT grid size to the safe maximum', () async {
       final transport = _FakeTransport();
@@ -975,6 +1158,28 @@ void main() {
       await done;
     });
   });
+}
+
+/// A minimal server-side producer that mirrors MarkdownText's OSC 8 gate
+/// (markdown_text.dart): it attaches a real [CellStyle.linkUri] ONLY when the
+/// surface reports it can render links. Used to exercise capability propagation
+/// end-to-end through a real runApp + driver + MediaQuery, without reaching
+/// across the package boundary into fleury_widgets.
+final class _LinkProbe extends StatelessWidget {
+  const _LinkProbe(this.url);
+
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    final hyperlinks = MediaQuery.capabilitiesOf(context).hyperlinks;
+    return Text(
+      'link',
+      style: hyperlinks
+          ? CellStyle(underline: true, linkUri: url)
+          : CellStyle.empty,
+    );
+  }
 }
 
 /// A steady-state (non-repaint) presentation plan whose damage carries

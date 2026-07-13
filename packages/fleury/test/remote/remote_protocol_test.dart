@@ -30,6 +30,52 @@ void main() {
       },
     );
 
+    test('INIT round-trips the optional hyperlinks capability', () {
+      final withLinks = const InitFrame(
+        size: CellSize(80, 24),
+        colorMode: ColorMode.truecolor,
+        imageProtocol: ImageProtocol.halfBlock,
+        tmuxPassthrough: false,
+        images: InlineImageSupport.placements,
+        hyperlinks: true,
+      );
+      final decodedOn =
+          (FrameDecoder()..feed(encodeFrame(withLinks))).drain().single
+              as InitFrame;
+      expect(decodedOn.hyperlinks, isTrue);
+    });
+
+    test(
+      'a hyperlinks-false INIT is byte-identical to a peer that never sent the '
+      'field, and both decode to false (additive/backward-compatible)',
+      () {
+        const base = InitFrame(
+          size: CellSize(80, 24),
+          colorMode: ColorMode.truecolor,
+          imageProtocol: ImageProtocol.halfBlock,
+          tmuxPassthrough: false,
+        );
+        const explicitFalse = InitFrame(
+          size: CellSize(80, 24),
+          colorMode: ColorMode.truecolor,
+          imageProtocol: ImageProtocol.halfBlock,
+          tmuxPassthrough: false,
+          hyperlinks: false,
+        );
+        // No `hyperlinks=` param is emitted when false, so an older peer's wire
+        // and a new peer's link-free wire are the same bytes.
+        expect(encodeFrame(explicitFalse), encodeFrame(base));
+        final decoded =
+            (FrameDecoder()..feed(encodeFrame(base))).drain().single
+                as InitFrame;
+        expect(
+          decoded.hyperlinks,
+          isFalse,
+          reason: 'an absent hyperlinks param decodes to false',
+        );
+      },
+    );
+
     test('INPUT preserves arbitrary binary including 0x1B and 0x00', () {
       final bytes = Uint8List.fromList([
         0x1B, 0x5B, 0x41, // ESC [ A — arrow up
