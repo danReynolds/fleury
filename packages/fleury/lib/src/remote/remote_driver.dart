@@ -102,6 +102,14 @@ final class RemoteTerminalDriver
   @override
   bool get wantsPresentationPlans => _protocolVersion >= 2;
 
+  /// Whether the negotiated peer can decode OSC 8 links in the PLAN cell-style
+  /// entry (protocol v4, RFC 0017 §5). Frozen from the peer's INIT alongside
+  /// [_protocolVersion]. A pre-v4 peer (including a stale cached v3 browser
+  /// client) reports false, so [presentFrame] builds a plan that omits the
+  /// link bytes and stays byte-identical to v3 — the crux that keeps an older
+  /// client's decoder from misaligning on an unexpected URI.
+  bool get wantsHyperlinks => _protocolVersion >= 4;
+
   @override
   CellSize get size => _size;
 
@@ -211,6 +219,11 @@ final class RemoteTerminalDriver
       // the next full repaint. buildRemotePlan's debug oracle makes that
       // loud in dev/CI; release trusts the planner.
       dirtyRows: plan.damage.dirtyRows,
+      // Serialize OSC 8 links only when the peer negotiated v>=4 (RFC 0017
+      // §5). A pre-v4 peer gets bit-6-clear, byte-identical-to-v3 output even
+      // if a cell carries a link, so a stale client can't misalign on a URI it
+      // doesn't expect.
+      includeLinks: wantsHyperlinks,
     );
     // Ship the bytes for each image the peer does not yet hold, before the
     // plan that references it. An id ships at most once per frame even if

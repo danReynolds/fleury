@@ -33,6 +33,7 @@ final class RemotePlan {
     required this.patches,
     this.scrollUpRows,
     this.placements = const <ImagePlacement>[],
+    this.includeLinks = false,
   });
 
   final CellSize size;
@@ -41,6 +42,17 @@ final class RemotePlan {
 
   /// Distinct styles used by the patches, referenced by index from runs.
   final List<CellStyle> styleTable;
+
+  /// Whether [encodeRemotePlan] serializes `CellStyle.linkUri` for this plan's
+  /// styles — the v4 spare-set-mask-bit encoding (RFC 0017 §5). It is an
+  /// ENCODE-time policy set by [buildRemotePlan] from the negotiated peer
+  /// version: true only for a peer that speaks v>=4, so a stale v3 client never
+  /// receives the extra link bytes its decoder can't align on. When false the
+  /// wire is byte-identical to v3 even if styles carry links (bit 6 stays clear,
+  /// no URI is written). [decodeRemotePlan] leaves it at its default — a decoded
+  /// mirror plan is applied, never re-encoded to a downstream peer — while the
+  /// link itself still round-trips through the styles' `linkUri`.
+  final bool includeLinks;
 
   /// Changed column-range patches.
   final List<RemoteRowPatch> patches;
@@ -309,19 +321,14 @@ Color? _readColor(_Reader r) {
 
 // CellStyle bool? attributes pack into two bytes: a "set" mask and a
 // "value" mask, so the tri-state (null / true / false) round-trips exactly.
-void _writeStyle(_Writer w, CellStyle s) {
-  // Stage-1 staging guard: CellStyle.== / hashCode are link-aware and the wire
-  // style-table dedupe keys on them, but this codec does NOT serialize linkUri
-  // yet. That is correct ONLY while no producer sets a link. This assert fails
-  // loud in dev/test if a premature/experimental producer sends a linked style
-  // to the wire — which would silently drop the link AND bloat the style table
-  // with link-differing duplicates. Stage 2 removes it when the v4 spare-set-
-  // mask-bit encoding lands (RFC 0017 §5).
-  assert(
-    s.linkUri == null,
-    'CellStyle.linkUri reaches the wire only with the Stage 2 v4 codec '
-    '(RFC 0017); it is unserialized in Stage 1.',
-  );
+// The set mask uses bits 0–5 for attributes; bits 6–7 are spare. v4 claims
+// bit 6 as "has link" (RFC 0017 §5): when [includeLinks] and the style carries
+// a URI, bit 6 is set and a varint-prefixed UTF-8 URI is written at a FIXED
+// position — immediately after the two mask bytes and before the colors — so
+// the reader knows exactly where to find it. When [includeLinks] is false (a
+// pre-v4 peer) or the style has no link, bit 6 stays clear and no URI is
+// written, leaving the bytes IDENTICAL to v3.
+void _writeStyle(_Writer w, CellStyle s, {required bool includeLinks}) {
   var setMask = 0;
   var valMask = 0;
   void bit(int i, bool? v) {
@@ -336,9 +343,12 @@ void _writeStyle(_Writer w, CellStyle s) {
   bit(3, s.underlineOrNull);
   bit(4, s.inverseOrNull);
   bit(5, s.strikethroughOrNull);
+  final hasLink = includeLinks && s.linkUri != null;
+  if (hasLink) setMask |= 1 << 6;
   w
     ..u8(setMask)
     ..u8(valMask);
+  if (hasLink) w.vstr(s.linkUri!);
   _writeColor(w, s.foreground);
   _writeColor(w, s.background);
 }
@@ -348,6 +358,11 @@ CellStyle _readStyle(_Reader r) {
   final valMask = r.u8();
   bool? bit(int i) =>
       (setMask & (1 << i)) == 0 ? null : (valMask & (1 << i)) != 0;
+  // Mirror the writer exactly: the optional link URI sits right after the two
+  // mask bytes and before the colors. `vstr` reuses the reader's varint range
+  // guard and `_need` truncation guard, so a malformed/oversized length is
+  // rejected as a RemoteCodecException rather than crashing or over-reading.
+  final linkUri = (setMask & (1 << 6)) != 0 ? r.vstr() : null;
   final fg = _readColor(r);
   final bg = _readColor(r);
   return CellStyle(
@@ -359,6 +374,7 @@ CellStyle _readStyle(_Reader r) {
     underline: bit(3),
     inverse: bit(4),
     strikethrough: bit(5),
+    linkUri: linkUri,
   );
 }
 
@@ -384,7 +400,7 @@ Uint8List encodeRemotePlan(RemotePlan plan) {
   if (plan.scrollUpRows != null) w.varint(plan.scrollUpRows!);
   w.varint(plan.styleTable.length);
   for (final style in plan.styleTable) {
-    _writeStyle(w, style);
+    _writeStyle(w, style, includeLinks: plan.includeLinks);
   }
   w.varint(plan.patches.length);
   for (final patch in plan.patches) {
@@ -507,11 +523,20 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
 /// A debug oracle re-runs the unbounded build under `assert` and fails
 /// loudly if a hint ever under-covers, so a broken damage producer is
 /// caught in dev/CI instead of desyncing a live peer's mirror.
+///
+/// [includeLinks] is the negotiated-peer gate (RFC 0017 §5): when true (a
+/// v>=4 peer) the returned plan serializes `CellStyle.linkUri` on the wire;
+/// when false (the default, and every pre-v4 peer) the encoding is
+/// byte-identical to v3 regardless of whether cells carry links. It only
+/// affects encoding — the style table is built link-aware either way (two
+/// runs differing only by link stay distinct entries), so this parameter
+/// never changes which rows or runs the plan contains.
 RemotePlan buildRemotePlan(
   CellBuffer prev,
   CellBuffer next, {
   required bool fullRepaint,
   TuiDirtyRows? dirtyRows,
+  bool includeLinks = false,
 }) {
   final full = fullRepaint || prev.size != next.size;
   final rows = next.size.rows;
@@ -591,6 +616,7 @@ RemotePlan buildRemotePlan(
     styleTable: styleTable,
     patches: patches,
     placements: _imagePlacements(next),
+    includeLinks: includeLinks,
   );
   // Full frames ignore the hint entirely, so only steady-state bounded
   // builds are oracle-checked.
@@ -623,8 +649,17 @@ bool _boundedPlanOracleHolds(
   required bool fullRepaint,
   required RemotePlan bounded,
 }) {
+  // Encode the unbounded truth with the SAME link policy as the bounded plan:
+  // the oracle checks damage-bounding (which rows/runs ship), which is
+  // link-independent, so both sides must serialize links the same way or a
+  // linked frame would diverge on the link bytes alone and trip a false alarm.
   final truth = encodeRemotePlan(
-    buildRemotePlan(prev, next, fullRepaint: fullRepaint),
+    buildRemotePlan(
+      prev,
+      next,
+      fullRepaint: fullRepaint,
+      includeLinks: bounded.includeLinks,
+    ),
   );
   final got = encodeRemotePlan(bounded);
   if (got.length != truth.length) return false;
