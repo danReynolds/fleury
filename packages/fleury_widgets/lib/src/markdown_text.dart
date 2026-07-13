@@ -13,7 +13,9 @@
 //   *italic*  _it_    italic
 //   ~~strike~~        strikethrough
 //   `code`            monospace + dim background tone
-//   [text](url)       underlined; url is shown in dim text afterwards
+//   [text](url)       underlined; a real OSC 8 / anchor link when the
+//                     surface supports it and the scheme is allow-listed,
+//                     with an inspectable " (url)" suffix (opt-out)
 //
 // Supported block syntax:
 //   # H1, ## H2, ### H3   bold headings (sized by underline density)
@@ -42,10 +44,26 @@ import 'component_theme.dart';
 /// Use [baseStyle] to set the default cell style for the block
 /// (e.g. dim for help text). Inline overrides cascade on top.
 class MarkdownText extends StatelessWidget {
-  const MarkdownText(this.data, {super.key, this.baseStyle});
+  const MarkdownText(
+    this.data, {
+    super.key,
+    this.baseStyle,
+    this.inlineLinkUrls = true,
+  });
 
   final String data;
   final CellStyle? baseStyle;
+
+  /// Whether a link keeps its inspectable ` (url)` suffix after the text.
+  ///
+  /// Default true (RFC 0017): the destination stays visible on terminals that
+  /// don't honor OSC 8 and auditable everywhere. Set false for the clean-link
+  /// look — but the suffix is only dropped when the link is actually *live*
+  /// (a real OSC 8 / anchor target was emitted, which makes the visible url
+  /// redundant). A link that fell back to plain text — unsupported surface or
+  /// un-allow-listed scheme — always keeps its url, so a destination is never
+  /// hidden behind a link that doesn't work.
+  final bool inlineLinkUrls;
 
   @override
   Widget build(BuildContext context) {
@@ -57,16 +75,29 @@ class MarkdownText extends StatelessWidget {
       2 => cs.info,
       _ => null,
     };
+    // PRODUCER-SIDE GATE (RFC 0017 §2): only emit a real OSC 8 / anchor link
+    // when the presenting surface reports it can render one. A non-supporting
+    // terminal reports false, so `linkUri` stays null — the renderer emits
+    // nothing and there is no wasted re-emit; the browser surface reports true,
+    // so served/embedded peers get anchors. Scheme allow-listing (`_inline`,
+    // §6) is the second half of the gate.
+    final hyperlinks = MediaQuery.capabilitiesOf(context).hyperlinks;
     final result = _renderBlocks(
       data,
       baseStyle ?? CellStyle.empty,
       headingColor: headingColor,
+      hyperlinks: hyperlinks,
+      inlineLinkUrls: inlineLinkUrls,
     );
     if (result.lines.isEmpty && result.links.isEmpty) return const EmptyBox();
     final children = <Widget>[
       ...result.lines,
       for (var i = 0; i < result.links.length; i++)
-        _linkSemantics(result.links[i], i),
+        _linkSemantics(
+          result.links[i],
+          i,
+          osc8Policy: _osc8PolicyFor(result.links[i], hyperlinks: hyperlinks),
+        ),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -860,7 +891,34 @@ CellStyle _styleForMarkdownBlock(
   };
 }
 
-Widget _linkSemantics(MarkdownLink link, int index) {
+/// The OSC 8 outcome for [link] under the surface's [hyperlinks] capability,
+/// mirroring the producer gate in [_inline]: `active` when the surface supports
+/// hyperlinks AND the scheme is allow-listed (the run carries a real linkUri),
+/// `disabledByPolicy` when an un-allow-listed scheme blocks it, `unsupported`
+/// when the surface has no link concept. The vocabulary tracks the existing
+/// capability-resolution / hyperlink-support enums (CapabilityResolutionState
+/// .disabledByPolicy, HyperlinkSupport.unsupported).
+String _osc8PolicyFor(MarkdownLink link, {required bool hyperlinks}) {
+  if (!hyperlinks) return 'unsupported';
+  if (!link.safeScheme) return 'disabledByPolicy';
+  return 'active';
+}
+
+/// Builds the (invisible) semantics node for a markdown [link]. The URL stays
+/// agent/AT-legible via [Semantics.value] regardless of whether a live link was
+/// emitted. [osc8Policy] records what actually happened at the producer (see
+/// [_osc8PolicyFor]); it defaults to `disabledByDefault` for callers that render
+/// links as visible text only (e.g. [MarkdownView]).
+Widget _linkSemantics(
+  MarkdownLink link,
+  int index, {
+  String osc8Policy = 'disabledByDefault',
+}) {
+  // The generic capability-resolution contract (terminalCapability /
+  // capabilityRequirement / activeFallback): MarkdownText always keeps a
+  // visible-URL fallback available, so this documents the prohibited-by-default
+  // OSC 8 stance and the fallback label. The live per-surface outcome rides on
+  // `osc8Policy` below, which the producer derived from the actual capability.
   final resolution = resolveCapabilityRequirement(
     const CapabilityRequirement(
       feature: TerminalFeature.osc8Hyperlinks,
@@ -879,7 +937,7 @@ Widget _linkSemantics(MarkdownLink link, int index) {
     'linkUrl': link.url,
     'linkScheme': link.scheme,
     'safeLinkScheme': link.safeScheme,
-    'osc8Policy': 'disabledByDefault',
+    'osc8Policy': osc8Policy,
   });
   return Semantics(
     role: SemanticRole.link,
@@ -896,6 +954,11 @@ String? _urlScheme(String url) {
   return url.substring(0, index).toLowerCase();
 }
 
+/// Default OSC 8 scheme allow-list (RFC 0017 §6): only `https`, `http`, and
+/// `mailto` become live links; everything else (including `file` and custom
+/// schemes) falls back to plain visible text. This is deliberately the minimal
+/// allow-list check — the full RFC 0013 `OutputSecurityPolicy` (with `file`/
+/// custom-scheme opt-in) is a future param, not built here.
 bool _safeUrlScheme(String? scheme) {
   return scheme == 'https' || scheme == 'http' || scheme == 'mailto';
 }
@@ -906,6 +969,8 @@ bool _safeUrlScheme(String? scheme) {
   String data,
   CellStyle base, {
   Color? Function(int level)? headingColor,
+  bool hyperlinks = false,
+  bool inlineLinkUrls = true,
 }) {
   final out = <Widget>[];
   final links = <MarkdownLink>[];
@@ -960,7 +1025,17 @@ bool _safeUrlScheme(String? scheme) {
           foreground: headingColor?.call(level),
         ),
       );
-      out.add(RichText(text: _inline(body, hStyle, links: links)));
+      out.add(
+        RichText(
+          text: _inline(
+            body,
+            hStyle,
+            links: links,
+            hyperlinks: hyperlinks,
+            inlineLinkUrls: inlineLinkUrls,
+          ),
+        ),
+      );
       i++;
       continue;
     }
@@ -974,7 +1049,13 @@ bool _safeUrlScheme(String? scheme) {
             style: qStyle,
             children: [
               const TextSpan(text: '│ '),
-              _inline(body, qStyle, links: links),
+              _inline(
+                body,
+                qStyle,
+                links: links,
+                hyperlinks: hyperlinks,
+                inlineLinkUrls: inlineLinkUrls,
+              ),
             ],
           ),
         ),
@@ -993,7 +1074,13 @@ bool _safeUrlScheme(String? scheme) {
             style: base,
             children: [
               TextSpan(text: '$indent• '),
-              _inline(body, base, links: links),
+              _inline(
+                body,
+                base,
+                links: links,
+                hyperlinks: hyperlinks,
+                inlineLinkUrls: inlineLinkUrls,
+              ),
             ],
           ),
         ),
@@ -1013,7 +1100,13 @@ bool _safeUrlScheme(String? scheme) {
             style: base,
             children: [
               TextSpan(text: '$indent$num. '),
-              _inline(body, base, links: links),
+              _inline(
+                body,
+                base,
+                links: links,
+                hyperlinks: hyperlinks,
+                inlineLinkUrls: inlineLinkUrls,
+              ),
             ],
           ),
         ),
@@ -1022,7 +1115,17 @@ bool _safeUrlScheme(String? scheme) {
       continue;
     }
     // Plain paragraph line.
-    out.add(RichText(text: _inline(line, base, links: links)));
+    out.add(
+      RichText(
+        text: _inline(
+          line,
+          base,
+          links: links,
+          hyperlinks: hyperlinks,
+          inlineLinkUrls: inlineLinkUrls,
+        ),
+      ),
+    );
     i++;
   }
   return (lines: out, links: links);
@@ -1039,6 +1142,8 @@ TextSpan _inline(
   CellStyle base, {
   List<MarkdownLink>? links,
   int blockIndex = -1,
+  bool hyperlinks = false,
+  bool inlineLinkUrls = true,
 }) {
   final children = <TextSpan>[];
   var i = 0;
@@ -1116,7 +1221,9 @@ TextSpan _inline(
         continue;
       }
     }
-    // Link: [text](url) — render text underlined, then "(url)" dim.
+    // Link: [text](url) — underline the label; attach a real OSC 8 / anchor
+    // target (linkUri) only when the surface supports links AND the scheme is
+    // allow-listed, else fall back to plain underline + the visible url.
     if (ch == '[') {
       final closeBracket = src.indexOf(']', i + 1);
       if (closeBracket > i &&
@@ -1139,18 +1246,27 @@ TextSpan _inline(
               url: url,
             ),
           );
+          // The producer gate: both halves must hold to emit a live link.
+          final live = hyperlinks && _safeUrlScheme(_urlScheme(url));
           children.add(
             TextSpan(
               text: text,
-              style: base.merge(const CellStyle(underline: true)),
+              style: live
+                  ? base.merge(CellStyle(underline: true, linkUri: url))
+                  : base.merge(const CellStyle(underline: true)),
             ),
           );
-          children.add(
-            TextSpan(
-              text: ' ($url)',
-              style: base.merge(const CellStyle(dim: true)),
-            ),
-          );
+          // Keep the inspectable ` (url)` suffix (RFC 0017 §8) unless the
+          // caller opted out AND the link is live — a clickable link makes the
+          // url redundant, but a dead fallback must never hide its destination.
+          if (inlineLinkUrls || !live) {
+            children.add(
+              TextSpan(
+                text: ' ($url)',
+                style: base.merge(const CellStyle(dim: true)),
+              ),
+            );
+          }
           i = closeParen + 1;
           continue;
         }
@@ -1161,7 +1277,13 @@ TextSpan _inline(
   }
   flushText();
   if (children.length == 1) {
-    return TextSpan(text: children.first.text, style: base);
+    // Collapse a single child into one styled leaf. Preserve the child's own
+    // style when it has one (a lone `code`, **bold**, or a suffix-less live
+    // link) — its style already has `base` merged in, and dropping it would
+    // silently lose the styling, including a link's linkUri. A plain-text child
+    // (from flushText) has no style and falls back to base.
+    final only = children.first;
+    return TextSpan(text: only.text, style: only.style ?? base);
   }
   return TextSpan(style: base, children: children);
 }

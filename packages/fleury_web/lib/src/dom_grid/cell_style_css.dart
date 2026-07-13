@@ -37,6 +37,29 @@ String rgbCss(Color color) {
   return 'rgb(${c.r}, ${c.g}, ${c.b})';
 }
 
+/// OSC 8 link schemes the browser DOM will turn into a real `<a href>`.
+///
+/// Belt-and-suspenders allowlist: the producer (terminal ANSI renderer / serve
+/// output sanitizer) already restricts which schemes reach a cell, but the DOM
+/// layer refuses anything outside this set *independently* of upstream. A
+/// `javascript:`, `data:`, or `vbscript:` URI therefore can never become a
+/// navigable link no matter what the producer does — it renders as plain text.
+/// Default-deny: any scheme not listed here (including a scheme-less relative
+/// URI) is dropped.
+const Set<String> kAllowedLinkSchemes = {'http', 'https', 'mailto', 'file'};
+
+/// Whether [uri]'s scheme — the substring before the first `:`, compared
+/// case-insensitively — is in [kAllowedLinkSchemes].
+///
+/// Both DOM paths (the live `DomRowFactory` and the static HTML string builder)
+/// gate link rendering on this: a run whose `style.linkUri` passes becomes an
+/// `<a href>`; anything else stays a plain span.
+bool isAllowedLinkScheme(String uri) {
+  final colon = uri.indexOf(':');
+  if (colon <= 0) return false; // no scheme, or an empty scheme (":x") → drop
+  return kAllowedLinkSchemes.contains(uri.substring(0, colon).toLowerCase());
+}
+
 /// Inline CSS that paints a box-drawing glyph as crisp gradient lines instead
 /// of relying on the font glyph (which does not tile vertically in a browser).
 /// [mask] is a [boxDrawingMask] result; the span's text should be spaces so no

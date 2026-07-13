@@ -98,6 +98,189 @@ void main() {
     );
   });
 
+  group('OSC 8 link carriage (v4 spare-set-mask-bit)', () {
+    test('a linked style round-trips losslessly under includeLinks', () {
+      final plan = RemotePlan(
+        size: const CellSize(6, 1),
+        fullRepaint: true,
+        includeLinks: true,
+        styleTable: const [
+          CellStyle(
+            foreground: RgbColor(1, 2, 3),
+            underline: true,
+            linkUri: 'https://example.com/a?b=c',
+          ),
+        ],
+        patches: const [
+          RemoteRowPatch(
+            row: 0,
+            startCol: 0,
+            runs: [RemotePatchRun(styleIndex: 0, text: 'link!')],
+          ),
+        ],
+      );
+      final decoded = decodeRemotePlan(encodeRemotePlan(plan));
+      final style = decoded.styleTable.single;
+      expect(style.linkUri, 'https://example.com/a?b=c');
+      // The link rides beside the visual style, which is preserved intact.
+      expect(style.foreground, const RgbColor(1, 2, 3));
+      expect(style.underline, isTrue);
+      // Client mirror round-trip: applyRemotePlanToBuffer writes the decoded
+      // style straight into the mirror, so linkUri reaches it with no extra
+      // plumbing (RFC 0017 §5, the browser mirror source).
+      final mirror = CellBuffer(const CellSize(6, 1));
+      applyRemotePlanToBuffer(decoded, mirror);
+      expect(mirror.atColRow(0, 0).style.linkUri, 'https://example.com/a?b=c');
+    });
+
+    test('a link-free plan encodes to the exact v3 golden bytes', () {
+      // Pins the v3 cell-style layout: [setMask][valMask][fg][bg] with no link
+      // bytes. A link-free frame under v4 must reproduce this byte for byte
+      // (the spare bit stays clear, no URI is appended).
+      final plan = RemotePlan(
+        size: const CellSize(4, 1),
+        fullRepaint: true,
+        styleTable: const [CellStyle(bold: true)],
+        patches: const [
+          RemoteRowPatch(
+            row: 0,
+            startCol: 0,
+            runs: [RemotePatchRun(styleIndex: 0, text: 'hi')],
+          ),
+        ],
+      );
+      expect(encodeRemotePlan(plan), [
+        1, // flags: fullRepaint
+        4, // cols
+        1, // rows
+        1, // styleCount
+        1, // setMask: bit 0 (bold) — bit 6 (link) CLEAR
+        1, // valMask: bold = true
+        0, // fg: null
+        0, // bg: null
+        1, // patchCount
+        0, // patch row
+        0, // patch startCol
+        1, // runCount
+        0, // run styleIndex
+        2, // run text length (varint)
+        104, 105, // 'hi'
+        0, // placementCount
+      ]);
+    });
+
+    test('includeLinks:false is byte-identical to the same plan link-stripped',
+        () {
+      // The version-gate invariant at the codec level: a plan carrying links,
+      // encoded for a pre-v4 peer, is byte-for-byte identical to the same plan
+      // (same table cardinality, same runs) with the links removed. Two styles
+      // that differ only by linkUri stay DISTINCT table entries (Stage 1 made
+      // == link-aware) but encode to identical bytes when links are off — mild
+      // waste, never corruption.
+      RemotePlan planWith(List<CellStyle> styles) => RemotePlan(
+        size: const CellSize(8, 1),
+        fullRepaint: true,
+        includeLinks: false,
+        styleTable: styles,
+        patches: const [
+          RemoteRowPatch(
+            row: 0,
+            startCol: 0,
+            runs: [
+              RemotePatchRun(styleIndex: 0, text: 'aa'),
+              RemotePatchRun(styleIndex: 1, text: 'bb'),
+            ],
+          ),
+        ],
+      );
+      final linked = planWith(const [
+        CellStyle(bold: true, linkUri: 'https://a'),
+        CellStyle(italic: true, linkUri: 'https://b'),
+      ]);
+      final stripped = planWith(const [
+        CellStyle(bold: true),
+        CellStyle(italic: true),
+      ]);
+      expect(encodeRemotePlan(linked), encodeRemotePlan(stripped));
+    });
+
+    test('a plan built for a v3 peer emits no link bytes (the crux)', () {
+      // buildRemotePlan(includeLinks: false) is what presentFrame hands a
+      // pre-v4 peer. Even when a cell carries a link, the encoded plan must be
+      // byte-identical to the link-free build — otherwise a stale v3 decoder
+      // misaligns on the unexpected URI and loses stream framing. The bold
+      // attribute makes the linked and stripped buffers split into the same
+      // runs, so any byte difference is the link bytes alone.
+      final prev = CellBuffer(const CellSize(2, 1));
+      final nextLinked = CellBuffer(const CellSize(2, 1))
+        ..writeText(
+          const CellOffset(0, 0),
+          'hi',
+          style: const CellStyle(bold: true, linkUri: 'https://x'),
+        );
+      final nextStripped = CellBuffer(const CellSize(2, 1))
+        ..writeText(
+          const CellOffset(0, 0),
+          'hi',
+          style: const CellStyle(bold: true),
+        );
+
+      final v3 = encodeRemotePlan(
+        buildRemotePlan(prev, nextLinked, fullRepaint: true),
+      );
+      final linkless = encodeRemotePlan(
+        buildRemotePlan(prev, nextStripped, fullRepaint: true),
+      );
+      expect(
+        v3,
+        linkless,
+        reason: 'includeLinks defaults false: a v3 peer sees no link bytes',
+      );
+
+      // And a v4 peer DOES carry the link, so the bytes must differ — proving
+      // the gate is what suppresses them, not that the link never encodes.
+      final v4 = encodeRemotePlan(
+        buildRemotePlan(prev, nextLinked, fullRepaint: true, includeLinks: true),
+      );
+      expect(v4, isNot(linkless));
+      final mirror = CellBuffer(const CellSize(2, 1));
+      applyRemotePlanToBuffer(decodeRemotePlan(v4), mirror);
+      expect(mirror.atColRow(0, 0).style.linkUri, 'https://x');
+    });
+
+    test('a malformed/oversized link length is rejected, never crashes', () {
+      // bit 6 set but the URI varint length overruns the payload: the reader's
+      // _need guard turns it into a RemoteCodecException, the same clean
+      // rejection every other truncated field gets.
+      final truncated = Uint8List.fromList([
+        0, // flags
+        1, // cols
+        1, // rows
+        1, // styleCount
+        0x40, // setMask: bit 6 (has link)
+        0, // valMask
+        5, // link length = 5, but only one byte follows
+        0x68, // 'h'
+      ]);
+      expect(
+        () => decodeRemotePlan(truncated),
+        throwsA(isA<RemoteCodecException>()),
+      );
+
+      // A link length varint that would exceed the signed-31-bit bound is
+      // caught by the varint range guard before any read is attempted.
+      final oversized = Uint8List.fromList([
+        0, 1, 1, 1, // flags, cols, rows, styleCount
+        0x40, 0, // setMask bit 6, valMask
+        0xFF, 0xFF, 0xFF, 0xFF, 0x0F, // link length varint out of range
+      ]);
+      expect(
+        () => decodeRemotePlan(oversized),
+        throwsA(isA<RemoteCodecException>()),
+      );
+    });
+  });
+
   group('bounded plan build (dirtyRows damage hint)', () {
     // The contract under test: given SOUND damage (dirtyRows covers every
     // cell that differs between prev and next — the invariant the planner's

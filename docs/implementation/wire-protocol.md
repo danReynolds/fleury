@@ -41,7 +41,7 @@ cleanly beside the input byte stream instead of being smuggled inside ANSI.
 
 ## Protocol version
 
-Current version: **3** (`remoteProtocolVersion`). It is carried in the INIT
+Current version: **4** (`remoteProtocolVersion`). It is carried in the INIT
 handshake as `v=<n>`; a peer that omits `v` is treated as **v1** (the legacy
 ANSI host).
 
@@ -50,6 +50,7 @@ ANSI host).
 | v1 | Baseline ANSI host: INIT / INPUT / RESIZE / OUTPUT / BYE. |
 | v2 | Structured host: PLAN, SEMANTICS, INPUT_EVENT (and the frames that support them). |
 | v3 | SEMANTIC_ACTION_RESULT, and the app-side INIT echo (app → peer) so the client can detect version skew. |
+| v4 | Optional OSC 8 link in the PLAN cell-style entry: spare set-mask bit 6 flags "has link" and, when set, a varint-prefixed UTF-8 URI rides after the two mask bytes (before the colors). Version-gated — a link-free style leaves bit 6 clear and writes no URI, so link-free frames stay byte-identical to v3, and the app emits links only to a peer that negotiated v>=4. |
 
 ## Frame types
 
@@ -101,3 +102,9 @@ Worked examples:
 - DEBUG_REQUEST / DEBUG_RESPONSE (`0x1B` / `0x1C`) are new frame types: an app
   predating them drops the request (unknown discriminator), and the peer treats
   a missing response as "unsupported".
+- v4's optional OSC 8 link in the PLAN cell-style entry is a version-gated
+  *encoding* change (a spare set-mask bit + a URI inside an existing frame), so
+  it took a version bump rather than riding as an additive field. The app
+  serializes links only to a peer that negotiated v>=4; a stale v3 client — whose
+  decoder would misalign on the unexpected URI and lose stream framing — never
+  receives them, and a link-free frame is byte-identical to v3 either way.

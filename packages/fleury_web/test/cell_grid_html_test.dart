@@ -250,4 +250,92 @@ void main() {
       expect(html, isNot(contains('<a&b>')));
     });
   });
+
+  group('hyperlinks (OSC 8)', () {
+    test('an allow-listed scheme renders the run as an <a href>', () {
+      final html = renderFrameHtml(
+        frame(
+          20,
+          1,
+          (b) => b.writeText(
+            const CellOffset(0, 0),
+            'docs',
+            style: const CellStyle(linkUri: 'https://example.com/a'),
+          ),
+        ),
+      );
+      expect(
+        html,
+        contains(
+          '<a href="https://example.com/a" '
+          'rel="noopener noreferrer" target="_blank">docs</a>',
+        ),
+      );
+    });
+
+    test('a javascript: URI is dropped — plain text, no anchor', () {
+      final html = renderFrameHtml(
+        frame(
+          20,
+          1,
+          (b) => b.writeText(
+            const CellOffset(0, 0),
+            'click',
+            style: const CellStyle(linkUri: 'javascript:alert(1)'),
+          ),
+        ),
+      );
+      // Belt-and-suspenders scheme refusal: no anchor, no href at all.
+      expect(html, isNot(contains('<a')));
+      expect(html, isNot(contains('href')));
+      // The visible text still renders (as a span).
+      expect(html, contains('click'));
+    });
+
+    test('the href is attribute-escaped so a URI cannot break out', () {
+      final html = renderFrameHtml(
+        frame(
+          24,
+          1,
+          (b) => b.writeText(
+            const CellOffset(0, 0),
+            'q',
+            style: const CellStyle(linkUri: 'https://e.com/?a=1&b="x"'),
+          ),
+        ),
+      );
+      // " and & are escaped; the raw quote never reaches the markup, so it
+      // cannot close href="..." and inject further attributes.
+      expect(html, contains('href="https://e.com/?a=1&amp;b=&quot;x&quot;"'));
+      expect(html, isNot(contains('b="x"')));
+    });
+
+    test('a wide (CJK) link renders as an <a class="w2"> — parity', () {
+      final html = renderFrameHtml(
+        frame(
+          6,
+          1,
+          (b) => b.writeText(
+            const CellOffset(0, 0),
+            '状',
+            style: const CellStyle(linkUri: 'https://example.com'),
+          ),
+        ),
+      );
+      expect(
+        RegExp('<a class="w2"[^>]*href="https://example.com"').hasMatch(html),
+        isTrue,
+      );
+      expect(html, contains('>状</a>'));
+    });
+
+    test('a link-free run is byte-identical <span> markup, no anchor', () {
+      // Frame sized to the text so there are no trailing spaces to coalesce.
+      final html = renderFrameHtml(
+        frame(2, 1, (b) => b.writeText(const CellOffset(0, 0), 'hi')),
+      );
+      expect(html, contains('<span>hi</span>'));
+      expect(html, isNot(contains('<a')));
+    });
+  });
 }

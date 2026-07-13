@@ -88,6 +88,16 @@
 // result frame and ignores the echo; a v3 client merely can't show
 // action results or detect version skew against a v2 app.
 //
+// v4 is a version-GATED encoding change (not additive): the PLAN frame's
+// cell-style entry gains an OPTIONAL OSC 8 link. The style's spare
+// set-mask bit 6 flags "has link" and, when set, a varint-length-prefixed
+// UTF-8 URI rides immediately AFTER the two mask bytes and BEFORE the
+// colors. A link-free style leaves bit 6 clear and writes no URI, so a
+// link-free frame is byte-identical to v3. The app serializes links only
+// to a peer that negotiated v>=4 (RemoteTerminalDriver.wantsHyperlinks),
+// so a stale v3 client — whose decoder would misalign on the unexpected
+// URI — never receives the extra bytes (RFC 0017 §5).
+//
 // The normative statement of this protocol — the version, the frame table
 // above, the additive-vs-version-gated rule, and the launch-relevant caveat
 // that the wire is NOT a public/stable integration surface (same-build peers
@@ -109,7 +119,11 @@ import 'remote_codec.dart';
 /// Current serve/shell protocol version. Bumped when frame semantics
 /// change incompatibly; carried in the INIT handshake (and, since v3,
 /// echoed app → peer so the client can detect version skew).
-const int remoteProtocolVersion = 3;
+///
+/// v4 version-gates the optional OSC 8 link in the PLAN cell-style entry
+/// (RFC 0017 §5): a link-free frame stays byte-identical to v3, and links
+/// are emitted only to a peer that negotiated v>=4.
+const int remoteProtocolVersion = 4;
 
 /// Default remote frame payload cap.
 ///
