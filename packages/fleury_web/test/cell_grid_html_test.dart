@@ -268,7 +268,8 @@ void main() {
         html,
         contains(
           '<a href="https://example.com/a" '
-          'rel="noopener noreferrer" target="_blank">docs</a>',
+          'rel="noopener noreferrer" target="_blank" '
+          'style="color:rgb(208, 208, 208)">docs</a>',
         ),
       );
     });
