@@ -27,6 +27,30 @@ bool _anyCellMatches(
   return false;
 }
 
+/// True if any painted cell carries a [CellStyle.linkUri] (optionally equal to
+/// [uri]). Position-independent, so link assertions don't hinge on where the
+/// label lands.
+bool _anyLinkedCell(CellBuffer buf, [String? uri]) {
+  for (var r = 0; r < buf.size.rows; r++) {
+    for (var c = 0; c < buf.size.cols; c++) {
+      final link = buf.atColRow(c, r).style.linkUri;
+      if (link != null && (uri == null || link == uri)) return true;
+    }
+  }
+  return false;
+}
+
+/// Wraps [child] in a MediaQuery whose surface reports [hyperlinks] — a
+/// supporting surface (browser anchors / an OSC-8 terminal) vs. a plain one —
+/// so the producer gate in MarkdownText sees the capability under test.
+Widget _surface(Widget child, {required bool hyperlinks}) => MediaQuery(
+  data: MediaQueryData(
+    size: const CellSize(80, 24),
+    capabilities: SurfaceCapabilities(hyperlinks: hyperlinks),
+  ),
+  child: child,
+);
+
 void main() {
   group('MarkdownText — inline', () {
     testWidgets('**bold** renders the inner text with bold style', (tester) {
@@ -90,27 +114,46 @@ void main() {
       );
     });
 
-    testWidgets('link semantics expose safe visible-url fallback policy', (
-      tester,
-    ) {
-      tester.pumpWidget(
-        const MarkdownText('see [docs](https://fleury.dev) here'),
-      );
+    testWidgets(
+      'non-supporting surface: no linkUri, visible-url fallback, osc8Policy '
+      'unsupported',
+      (tester) {
+        tester.pumpWidget(
+          _surface(
+            const MarkdownText('see [docs](https://fleury.dev) here'),
+            hyperlinks: false,
+          ),
+        );
+        final buf = tester.render(size: const CellSize(60, 1));
 
-      final link = tester.semantics().single(
-        role: SemanticRole.link,
-        label: 'docs',
-      );
+        // Producer gate: the surface can't render a link, so no cell is linked
+        // even though the scheme is safe — it stays plain underline + the url.
+        expect(_anyLinkedCell(buf), isFalse);
+        expect(
+          _anyCellMatches(buf, {'d', 'o', 'c', 's'}, (s) => s.underline),
+          isTrue,
+        );
+        expect(
+          _anyCellMatches(buf, {'h', 't', 'p', 's'}, (s) => s.dim),
+          isTrue,
+          reason: 'inspectable (url) suffix is always shown for a dead link',
+        );
 
-      expect(link.value, 'https://fleury.dev');
-      expect(link.state.terminalCapability, 'osc8Hyperlinks');
-      expect(link.state.capabilityRequirement, 'prohibited');
-      expect(link.state.capabilityResolution, 'disabledByPolicy');
-      expect(link.state.activeFallback, 'visible URL');
-      expect(link.state.values['linkScheme'], 'https');
-      expect(link.state.values['safeLinkScheme'], isTrue);
-      expect(link.state.values['osc8Policy'], 'disabledByDefault');
-    });
+        final link = tester.semantics().single(
+          role: SemanticRole.link,
+          label: 'docs',
+        );
+        // The URL stays agent/AT-legible via value regardless of surface.
+        expect(link.value, 'https://fleury.dev');
+        expect(link.state.terminalCapability, 'osc8Hyperlinks');
+        expect(link.state.capabilityRequirement, 'prohibited');
+        expect(link.state.capabilityResolution, 'disabledByPolicy');
+        expect(link.state.activeFallback, 'visible URL');
+        expect(link.state.values['linkScheme'], 'https');
+        expect(link.state.values['safeLinkScheme'], isTrue);
+        expect(link.state.values['osc8Policy'], 'unsupported');
+      },
+    );
 
     testWidgets('link semantics flag custom schemes as not safe for OSC 8', (
       tester,
@@ -151,6 +194,180 @@ void main() {
         reason: 'unmatched delimiter falls through as literal',
       );
     });
+  });
+
+  group('MarkdownText — hyperlinks (OSC 8)', () {
+    testWidgets(
+      'supporting surface + safe scheme: link run carries linkUri, url suffix '
+      'kept, osc8Policy active',
+      (tester) {
+        tester.pumpWidget(
+          _surface(
+            const MarkdownText('see [fleury](https://fleury.dev) here'),
+            hyperlinks: true,
+          ),
+        );
+        final buf = tester.render(size: const CellSize(60, 1));
+
+        // The link label cells carry the OSC 8 target AND stay underlined.
+        expect(
+          _anyCellMatches(
+            buf,
+            {'f', 'l', 'e', 'u', 'r', 'y'},
+            (s) => s.linkUri == 'https://fleury.dev' && s.underline,
+          ),
+          isTrue,
+          reason: 'label run is a live link',
+        );
+        // Default keeps the inspectable url suffix (dim, and NOT itself linked).
+        expect(
+          _anyCellMatches(buf, {'.', 'd', 'e', 'v'}, (s) => s.dim),
+          isTrue,
+          reason: 'the ( url ) suffix is shown by default',
+        );
+
+        final link = tester.semantics().single(
+          role: SemanticRole.link,
+          label: 'fleury',
+        );
+        expect(link.value, 'https://fleury.dev');
+        expect(link.state.values['safeLinkScheme'], isTrue);
+        expect(link.state.values['osc8Policy'], 'active');
+      },
+    );
+
+    testWidgets(
+      'inlineLinkUrls:false drops the suffix for a live link (url is redundant)',
+      (tester) {
+        tester.pumpWidget(
+          _surface(
+            const MarkdownText(
+              'see [fleury](https://fleury.dev) here',
+              inlineLinkUrls: false,
+            ),
+            hyperlinks: true,
+          ),
+        );
+        final buf = tester.render(size: const CellSize(60, 1));
+
+        expect(_anyLinkedCell(buf, 'https://fleury.dev'), isTrue);
+        // With the suffix gone the url's '/' never paints: text is "see fleury
+        // here". (The label 'fleury' has no slash.)
+        expect(
+          _anyCellMatches(buf, {'/'}, (_) => true),
+          isFalse,
+          reason: 'no ( url ) suffix, so the scheme slashes are absent',
+        );
+      },
+    );
+
+    testWidgets(
+      'a lone suffix-less live link keeps its linkUri (single-child collapse)',
+      (tester) {
+        // The whole inline is one span, exercising the children.length == 1
+        // path — which must not drop the link style.
+        tester.pumpWidget(
+          _surface(
+            const MarkdownText(
+              '[fleury](https://fleury.dev)',
+              inlineLinkUrls: false,
+            ),
+            hyperlinks: true,
+          ),
+        );
+        final buf = tester.render(size: const CellSize(20, 1));
+        expect(
+          _anyCellMatches(
+            buf,
+            {'f', 'l', 'e', 'u', 'r', 'y'},
+            (s) => s.linkUri == 'https://fleury.dev' && s.underline,
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    testWidgets(
+      'supporting surface still refuses an un-allow-listed scheme '
+      '(osc8Policy disabledByPolicy)',
+      (tester) {
+        tester.pumpWidget(
+          _surface(
+            const MarkdownText('grab [file](ftp://host.example/x) now'),
+            hyperlinks: true,
+          ),
+        );
+        final buf = tester.render(size: const CellSize(60, 1));
+
+        // Scheme blocked at the producer: nothing gets a linkUri, but the
+        // fallback (underline label + visible url) is intact.
+        expect(_anyLinkedCell(buf), isFalse);
+        expect(
+          _anyCellMatches(buf, {'f', 'i', 'l', 'e'}, (s) => s.underline),
+          isTrue,
+        );
+
+        final link = tester.semantics().single(
+          role: SemanticRole.link,
+          label: 'file',
+        );
+        expect(link.value, 'ftp://host.example/x');
+        expect(link.state.values['linkScheme'], 'ftp');
+        expect(link.state.values['safeLinkScheme'], isFalse);
+        expect(link.state.values['osc8Policy'], 'disabledByPolicy');
+      },
+    );
+
+    testWidgets(
+      'FULL LOOP: one MarkdownText link reaches the terminal (OSC 8) and the '
+      'wire mirror',
+      (tester) {
+        const size = CellSize(40, 1);
+        tester.pumpWidget(
+          _surface(
+            const MarkdownText('[fleury](https://fleury.dev)'),
+            hyperlinks: true,
+          ),
+        );
+        final next = tester.render(size: size);
+
+        // (1) PRODUCER — the painted link cell carries the OSC 8 target.
+        expect(
+          _anyLinkedCell(next, 'https://fleury.dev'),
+          isTrue,
+          reason: 'MarkdownText set linkUri on the link run',
+        );
+
+        // (2) TERMINAL — AnsiRenderer(hyperlinks: true) emits the OSC 8 open.
+        final sink = StringAnsiSink();
+        AnsiRenderer(hyperlinks: true).renderDiff(CellBuffer(size), next, sink);
+        expect(
+          sink.output,
+          contains('\x1B]8;;https://fleury.dev\x1B\\'),
+          reason: 'the diff opens a real OSC 8 hyperlink for the run',
+        );
+
+        // (3) WIRE — build a v4 plan, round-trip the bytes, apply to a client
+        // mirror; the decoded mirror cell carries the link (the browser <a>
+        // rendering of it is covered in fleury_web).
+        final plan = buildRemotePlan(
+          CellBuffer(size),
+          next,
+          fullRepaint: true,
+          includeLinks: true,
+        );
+        final mirror = CellBuffer(size);
+        applyRemotePlanToBuffer(
+          decodeRemotePlan(encodeRemotePlan(plan)),
+          mirror,
+        );
+        expect(
+          _anyLinkedCell(mirror, 'https://fleury.dev'),
+          isTrue,
+          reason: 'the decoded client mirror carries the link across the wire',
+        );
+      },
+    );
   });
 
   group('MarkdownText — blocks', () {
