@@ -75,21 +75,48 @@ void renderRowHtml(RowSpanModel row, StringBuffer out) {
   }
 }
 
-void _writeTextSpan(CellSpanRun run, StringBuffer out) {
+void _writeTextSpan(CellSpanRun run, StringBuffer out) => _writeRun(run, out);
+
+/// Emits one run as a `<span>` — or, when the run carries a safe OSC 8 link, as
+/// an `<a href>` (same visible text and per-run styling, plus rel/target). A
+/// link-free run produces byte-for-byte the same `<span>` markup as before.
+void _writeRun(CellSpanRun run, StringBuffer out, {String? className}) {
   final css = cellStyleToCss(run.style);
-  if (css.isEmpty) {
+  final linkUri = run.style.linkUri;
+  // Belt-and-suspenders: only allow-listed schemes become a navigable link;
+  // anything else (javascript:/data:/… or a scheme-less URI) stays a span.
+  final linked = linkUri != null && isAllowedLinkScheme(linkUri);
+  final tag = linked ? 'a' : 'span';
+
+  out
+    ..write('<')
+    ..write(tag);
+  if (className != null) {
     out
-      ..write('<span>')
-      ..write(_escape(run.text))
-      ..write('</span>');
-  } else {
-    out
-      ..write('<span style="')
-      ..write(css)
-      ..write('">')
-      ..write(_escape(run.text))
-      ..write('</span>');
+      ..write(' class="')
+      ..write(className)
+      ..write('"');
   }
+  if (linked) {
+    // This path builds markup as a *string*, so the URI MUST be
+    // attribute-escaped (& < > " ') or it could break out of the quoted href.
+    out
+      ..write(' href="')
+      ..write(_escapeAttribute(linkUri))
+      ..write('" rel="noopener noreferrer" target="_blank"');
+  }
+  if (css.isNotEmpty) {
+    out
+      ..write(' style="')
+      ..write(css)
+      ..write('"');
+  }
+  out
+    ..write('>')
+    ..write(_escape(run.text))
+    ..write('</')
+    ..write(tag)
+    ..write('>');
 }
 
 void _writeBoxDrawingSpan(CellSpanRun run, StringBuffer out) {
@@ -108,20 +135,8 @@ void _writeBoxDrawingSpan(CellSpanRun run, StringBuffer out) {
     ..write('</span>');
 }
 
-void _writeWideSpan(CellSpanRun run, StringBuffer out) {
-  final css = cellStyleToCss(run.style);
-  out.write('<span class="w2"');
-  if (css.isNotEmpty) {
-    out
-      ..write(' style="')
-      ..write(css)
-      ..write('"');
-  }
-  out
-    ..write('>')
-    ..write(_escape(run.text))
-    ..write('</span>');
-}
+void _writeWideSpan(CellSpanRun run, StringBuffer out) =>
+    _writeRun(run, out, className: 'w2');
 
 String _escape(String s) {
   if (!s.contains('&') && !s.contains('<') && !s.contains('>')) return s;
@@ -130,3 +145,14 @@ String _escape(String s) {
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;');
 }
+
+/// Escapes [s] for use inside a double-quoted HTML attribute value. Unlike
+/// [_escape] (element text) this also neutralizes `"` and `'`, so a URI can
+/// never break out of `href="..."`. `&` is replaced first so the entities it
+/// introduces are not themselves re-escaped.
+String _escapeAttribute(String s) => s
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');

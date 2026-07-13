@@ -82,7 +82,12 @@ final class DomRowFactory {
       return span;
     }
 
-    span.textContent = run.text;
+    // A run carrying a safe OSC 8 link renders as a clickable <a href> in place
+    // of the plain <span>; link-free (or unsafe-scheme) runs use the span above
+    // and are byte-for-byte unchanged.
+    final element = _anchorForLink(run.style) ?? span;
+
+    element.textContent = run.text;
 
     switch (run.kind) {
       case CellRunKind.text:
@@ -90,12 +95,31 @@ final class DomRowFactory {
       case CellRunKind.boxDrawing:
         break;
       case CellRunKind.wideText:
-        span.className = 'w2';
+        element.className = 'w2';
     }
 
     final css = _cssFor(run, stats, metrics);
-    if (css.isNotEmpty) span.setAttribute('style', css);
-    return span;
+    if (css.isNotEmpty) element.setAttribute('style', css);
+    return element;
+  }
+
+  /// A fresh `<a>` for [style]'s OSC 8 link, or null when the run carries no
+  /// link — or its scheme is not allow-listed (see [isAllowedLinkScheme]), in
+  /// which case the link is dropped and the caller renders a plain span.
+  ///
+  /// The destination and link rel/target are set as DOM *attributes* through
+  /// `setAttribute`, never interpolated into markup, so a hostile URI cannot
+  /// break out: `setAttribute` stores the value verbatim. The scheme gate is
+  /// belt-and-suspenders — the producer already allow-lists — so a
+  /// `javascript:` / `data:` / `vbscript:` target never reaches an `href`.
+  web.Element? _anchorForLink(CellStyle style) {
+    final uri = style.linkUri;
+    if (uri == null || !isAllowedLinkScheme(uri)) return null;
+    final anchor = _document.createElement('a');
+    anchor.setAttribute('href', uri);
+    anchor.setAttribute('rel', 'noopener noreferrer');
+    anchor.setAttribute('target', '_blank');
+    return anchor;
   }
 
   String _cssFor(
