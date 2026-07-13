@@ -53,6 +53,7 @@ final class TerminalCapabilities {
     this.supportsHidingCursor = true,
     this.tmuxPassthrough = false,
     this.ambiguousCharWidth = AmbiguousCharWidth.wide,
+    this.hyperlinks = false,
   });
 
   /// Conservative default for unknown terminals: 16-color ANSI, alt
@@ -81,6 +82,13 @@ final class TerminalCapabilities {
   /// [AmbiguousCharWidth.wide] until a startup probe confirms otherwise.
   final AmbiguousCharWidth ambiguousCharWidth;
 
+  /// Whether OSC 8 hyperlinks are supported and safe to emit here. Detected
+  /// from the environment and SUPPRESSED under tmux (see
+  /// [detectHyperlinksFromEnvironment]); default false for unknown terminals.
+  /// Projected into [SurfaceCapabilities.hyperlinks] and gates the ANSI
+  /// renderer's OSC 8 emission.
+  final bool hyperlinks;
+
   TerminalCapabilities copyWith({
     ColorMode? colorMode,
     GlyphTier? glyphTier,
@@ -89,6 +97,7 @@ final class TerminalCapabilities {
     bool? supportsHidingCursor,
     bool? tmuxPassthrough,
     AmbiguousCharWidth? ambiguousCharWidth,
+    bool? hyperlinks,
   }) => TerminalCapabilities(
     colorMode: colorMode ?? this.colorMode,
     glyphTier: glyphTier ?? this.glyphTier,
@@ -98,6 +107,7 @@ final class TerminalCapabilities {
     supportsHidingCursor: supportsHidingCursor ?? this.supportsHidingCursor,
     tmuxPassthrough: tmuxPassthrough ?? this.tmuxPassthrough,
     ambiguousCharWidth: ambiguousCharWidth ?? this.ambiguousCharWidth,
+    hyperlinks: hyperlinks ?? this.hyperlinks,
   );
 
   @override
@@ -108,7 +118,8 @@ final class TerminalCapabilities {
         'altScreen=$supportsAlternateScreen, '
         'hideCursor=$supportsHidingCursor, '
         'tmuxPassthrough=$tmuxPassthrough, '
-        'ambiguousCharWidth=${ambiguousCharWidth.name})';
+        'ambiguousCharWidth=${ambiguousCharWidth.name}, '
+        'hyperlinks=$hyperlinks)';
   }
 }
 
@@ -129,7 +140,58 @@ TerminalCapabilities detectTerminalCapabilitiesFromEnvironment(
     ambiguousCharWidth:
         detectAmbiguousCharWidthFromEnvironment(environment) ??
         AmbiguousCharWidth.wide,
+    hyperlinks: detectHyperlinksFromEnvironment(environment),
   );
+}
+
+/// Detects whether OSC 8 hyperlinks are supported and safe to emit here.
+///
+/// Order:
+///   1. An explicit `FLEURY_HYPERLINKS=1` (or `true`/`yes`/`on`) forces links
+///      ON — even under tmux — and `0` (or `false`/`no`/`off`) forces them OFF.
+///      The override wins outright.
+///   2. Otherwise SUPPRESS under any detected multiplexer (tmux/screen),
+///      REGARDLESS of the outer terminal: OSC 8 in tmux needs an explicit
+///      `terminal-features` opt-in and is unreliable in the wild, so
+///      default-deny is safer than emitting links a passthrough may mangle.
+///   3. Otherwise enable for a known-supporting outer terminal:
+///      `TERM_PROGRAM` ∈ {iterm.app, wezterm, ghostty}, a present `VTE_VERSION`
+///      (GNOME/VTE terminals), Kitty (`KITTY_WINDOW_ID` or `TERM=xterm-kitty`),
+///      or Windows Terminal (`WT_SESSION`).
+///   4. Default false when unknown.
+///
+/// Centralized here (like [detectGlyphTierFromEnvironment]) so every driver
+/// honors the same allow-list and the same tmux suppression. Passive/env-only
+/// for now; an active probe is a later refinement (RFC 0017, Stage 3).
+bool detectHyperlinksFromEnvironment(Map<String, String> environment) {
+  final override = environment['FLEURY_HYPERLINKS']?.toLowerCase().trim();
+  if (override == '1' ||
+      override == 'true' ||
+      override == 'yes' ||
+      override == 'on') {
+    return true; // explicit force-on wins, even under tmux
+  }
+  if (override == '0' ||
+      override == 'false' ||
+      override == 'no' ||
+      override == 'off') {
+    return false;
+  }
+
+  // Suppress under a multiplexer regardless of the outer terminal.
+  if (detectTerminalMultiplexerFromEnvironment(environment)) return false;
+
+  final program = environment['TERM_PROGRAM']?.toLowerCase().trim() ?? '';
+  if (program == 'iterm.app' || program == 'wezterm' || program == 'ghostty') {
+    return true;
+  }
+  if ((environment['VTE_VERSION'] ?? '').trim().isNotEmpty) return true;
+  if ((environment['KITTY_WINDOW_ID'] ?? '').trim().isNotEmpty) return true;
+  if ((environment['TERM']?.toLowerCase().trim() ?? '') == 'xterm-kitty') {
+    return true;
+  }
+  if ((environment['WT_SESSION'] ?? '').trim().isNotEmpty) return true;
+  return false;
 }
 
 /// Reads an explicit ambiguous-width override from the environment:
@@ -247,7 +309,7 @@ extension TerminalSurfaceCapabilities on TerminalCapabilities {
       images: imageProtocol == ImageProtocol.halfBlock
           ? InlineImageSupport.none
           : InlineImageSupport.placements,
-      hyperlinks: false,
+      hyperlinks: hyperlinks,
       pointer: PointerPrecision.cell,
     );
   }

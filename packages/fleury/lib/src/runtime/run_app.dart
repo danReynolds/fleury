@@ -596,6 +596,11 @@ Future<AppExit> _runAppImpl(
           ambiguousCharsAreWide:
               usedDriver.capabilities.ambiguousCharWidth ==
               AmbiguousCharWidth.wide,
+          // OSC 8 emission only on a detected, non-tmux, OSC-8-capable local
+          // terminal; false (unchanged bytes) otherwise. A remote/serve session
+          // uses the wire presenter, not this renderer — links ride the wire in
+          // Stage 2 — so a remote driver's default-false capability is moot.
+          hyperlinks: usedDriver.capabilities.hyperlinks,
         );
         // The handshake has landed, so the driver now knows whether the
         // peer negotiated the structured (plan) path.

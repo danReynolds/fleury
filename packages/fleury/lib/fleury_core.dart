@@ -193,6 +193,7 @@ export 'src/terminal/capabilities.dart'
         TerminalSurfaceCapabilities,
         detectColorModeFromEnvironment,
         detectGlyphTierFromEnvironment,
+        detectHyperlinksFromEnvironment,
         detectImageProtocolFromEnvironment,
         detectTerminalCapabilitiesFromEnvironment,
         detectTerminalMultiplexerFromEnvironment;

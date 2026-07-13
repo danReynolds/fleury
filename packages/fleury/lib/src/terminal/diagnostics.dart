@@ -153,7 +153,19 @@ final class TerminalCapabilityReport {
         hideCursor: capabilities.supportsHidingCursor,
         tmuxPassthrough: capabilities.tmuxPassthrough,
         ambiguousCharWidth: capabilities.ambiguousCharWidth,
+        osc8Hyperlinks: _osc8HyperlinksState(capabilities),
       );
+
+  /// Derives the diagnose OSC 8 state from real detection: 'supported' when
+  /// detected (including a `FLEURY_HYPERLINKS=1` force), 'suppressed-under-tmux'
+  /// when a multiplexer blocked an otherwise-capable terminal, else
+  /// 'unsupported'. RFC 0013's producer-level policy gating ('policyGated' — the
+  /// raw-constructor default) lands with the OutputSecurityPolicy in Stage 2.
+  static String _osc8HyperlinksState(TerminalCapabilities capabilities) {
+    if (capabilities.hyperlinks) return 'supported';
+    if (capabilities.tmuxPassthrough) return 'suppressed-under-tmux';
+    return 'unsupported';
+  }
 
   final ColorMode colorMode;
   final GlyphTier glyphTier;
