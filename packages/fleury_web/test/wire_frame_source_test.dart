@@ -55,6 +55,22 @@ List<RemoteFrame> _decodeAll(List<Uint8List> wire) {
   return decoder.drain().toList();
 }
 
+/// Hand-builds one wire frame: `[typeByte][4-byte big-endian length][payload]`.
+/// Used to synthesize a framed-but-malformed frame — a VALID length header the
+/// decoder consumes, followed by a payload `_decode` rejects (a RECOVERABLE
+/// decode error, framing intact).
+Uint8List _framedRaw(int typeByte, List<int> payload) {
+  final len = payload.length;
+  return Uint8List.fromList([
+    typeByte,
+    (len >> 24) & 0xFF,
+    (len >> 16) & 0xFF,
+    (len >> 8) & 0xFF,
+    len & 0xFF,
+    ...payload,
+  ]);
+}
+
 void main() {
   late web.HTMLElement into;
   late _RecordingClipboard clipboard;
@@ -191,6 +207,62 @@ void main() {
 
       expect(source.isClosedForTest, isTrue);
       expect(source.bannerShownForTest, isTrue, reason: 'normal end-of-session');
+    });
+
+    test('a frame arriving after teardown is dropped before apply (no repaint '
+        'over the banner)', () {
+      // Tear down via a normal ByeFrame.
+      source.feedBytesForTest(encodeFrame(const ByeFrame()));
+      expect(source.isClosedForTest, isTrue);
+
+      // Probe: the apply loop calls this predicate for every frame it reaches.
+      var applyReached = false;
+      source.failApplyForTest = (_) {
+        applyReached = true;
+        return false;
+      };
+      source.feedBytesForTest(benign);
+
+      expect(
+        applyReached,
+        isFalse,
+        reason: 'a post-teardown feed is dropped before the drain/apply loop',
+      );
+    });
+
+    test('recoverable decode errors make forward progress (no infinite spin) '
+        'and a later valid frame still applies', () {
+      // Count clean applies via the same seam (never forcing a failure here).
+      var appliesReached = 0;
+      source.failApplyForTest = (_) {
+        appliesReached++;
+        return false;
+      };
+
+      // Feed several DISTINCT malformed-but-framed frames: a RESIZE payload
+      // (type 0x03) with a valid length header but missing `cols`, so drain()
+      // consumes the frame and then _decode throws a RECOVERABLE error.
+      for (var i = 0; i < 5; i++) {
+        source.feedBytesForTest(_framedRaw(0x03, 'rows=$i'.codeUnits));
+      }
+      expect(
+        source.isClosedForTest,
+        isFalse,
+        reason: 'recoverable decode errors never tear down',
+      );
+      expect(source.bannerShownForTest, isFalse, reason: 'no banner');
+      expect(
+        appliesReached,
+        0,
+        reason: 'each malformed frame threw during DECODE, before any apply',
+      );
+
+      // A subsequent VALID frame decodes and applies cleanly — proving the
+      // buffer drained past every malformed frame (no stuck bytes, no spin).
+      source.feedBytesForTest(benign);
+      expect(appliesReached, 1, reason: 'the valid frame reached apply');
+      expect(source.isClosedForTest, isFalse);
+      expect(source.bannerShownForTest, isFalse);
     });
   });
 }

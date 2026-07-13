@@ -582,6 +582,16 @@ final class FrameDecoder {
         // type space without breaking older apps.
         continue;
       }
+      // Framing has advanced past this frame (the buffer now holds only the
+      // trailing bytes), so a RECOVERABLE _decode throw below cannot recur on
+      // these same bytes when the peer feeds again — the F19 non-loop
+      // invariant a recoverable classification rests on.
+      assert(
+        _buffer.length < bytes.length,
+        'drain() must consume a frame from the buffer before decoding its '
+        'payload, so a recoverable decode error cannot re-parse the same '
+        'bytes forever (F19 non-loop invariant).',
+      );
       yield _decode(type, payload);
     }
   }

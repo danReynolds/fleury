@@ -40,6 +40,20 @@ class _FakeTransport
   }
 }
 
+/// A transport whose RESULT-frame delivery FAILS — the sink faults inside the
+/// serialize link, exercising that a fault in the result-delivery path can't
+/// wedge the queue. Every other frame (PLAN/SEMANTICS/BYE) is sent normally so
+/// rendering is undisturbed.
+class _ResultSendFailsTransport extends _FakeTransport {
+  @override
+  void send(RemoteFrame frame) {
+    if (frame is SemanticActionResultFrame) {
+      throw StateError('result delivery failed');
+    }
+    super.send(frame);
+  }
+}
+
 const _init = InitFrame(
   size: CellSize(40, 10),
   colorMode: ColorMode.truecolor,
@@ -827,6 +841,135 @@ void main() {
           .map((r) => r.id.value)
           .toList();
       expect(ids, ['a', 'b'], reason: 'RESULT frames ship in submission order');
+
+      await transport.disconnect();
+      await done;
+    });
+
+    test('a queued action resolves against the LIVE tree after an intervening '
+        'resize/rebuild', () async {
+      // The link reads frameDriver.rootElement at EXECUTION time, not at action
+      // arrival — so a rebuild (handleResize -> updateRoot) between a queued
+      // action's arrival and its turn can't strand it on a stale root. (The
+      // root wrapper is reused across a same-widget resize, so this is a
+      // non-regression guard for the queue<->rebuild interaction; the rarer
+      // root-Element REPLACEMENT branch that would distinguish old-vs-new isn't
+      // reachable through runApp's public surface, so the live-root read is
+      // additionally covered by construction + parity with the semantics
+      // pipeline's `readRoot: () => rootElement`.)
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(transport);
+      final gate = Completer<void>();
+      var targetRan = 0;
+      scheduleMicrotask(() => transport.emit(_init));
+      final done = runApp(
+        Column(
+          children: [
+            Semantics(
+              id: const SemanticNodeId('slow'),
+              role: SemanticRole.button,
+              actions: const {SemanticAction.activate},
+              onAction: (act) async {
+                await gate.future;
+              },
+              child: const Text('slow'),
+            ),
+            Semantics(
+              id: const SemanticNodeId('target'),
+              role: SemanticRole.button,
+              actions: const {SemanticAction.activate},
+              onAction: (act) async {
+                targetRan++;
+              },
+              child: const Text('target'),
+            ),
+          ],
+        ),
+        driver: driver,
+        requireInteractiveTerminal: false,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      // 'slow' parks the queue; 'target' chains behind it.
+      transport.emit(
+        const SemanticActionFrame(
+          SemanticNodeId('slow'),
+          SemanticAction.activate,
+        ),
+      );
+      transport.emit(
+        const SemanticActionFrame(
+          SemanticNodeId('target'),
+          SemanticAction.activate,
+        ),
+      );
+      // A rebuild lands while the queue is parked.
+      transport.emit(const ResizeFrame(CellSize(50, 20)));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      gate.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(
+        targetRan,
+        1,
+        reason: 'the queued action ran against the live post-rebuild tree',
+      );
+
+      await transport.disconnect();
+      await done;
+    });
+
+    test('a fault delivering a RESULT does not wedge the queue', () async {
+      // The RESULT send throws inside the link; the link must still RESOLVE
+      // (its fault-safe catch routes the error to the reporter without
+      // rethrowing) so the next queued action still runs.
+      final transport = _ResultSendFailsTransport();
+      final driver = RemoteTerminalDriver(transport);
+      var ranA = 0;
+      var ranB = 0;
+      scheduleMicrotask(() => transport.emit(_init));
+      final done = runApp(
+        Column(
+          children: [
+            Semantics(
+              id: const SemanticNodeId('a'),
+              role: SemanticRole.button,
+              actions: const {SemanticAction.activate},
+              onAction: (act) async {
+                ranA++;
+              },
+              child: const Text('a'),
+            ),
+            Semantics(
+              id: const SemanticNodeId('b'),
+              role: SemanticRole.button,
+              actions: const {SemanticAction.activate},
+              onAction: (act) async {
+                ranB++;
+              },
+              child: const Text('b'),
+            ),
+          ],
+        ),
+        driver: driver,
+        requireInteractiveTerminal: false,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      transport.emit(
+        const SemanticActionFrame(SemanticNodeId('a'), SemanticAction.activate),
+      );
+      transport.emit(
+        const SemanticActionFrame(SemanticNodeId('b'), SemanticAction.activate),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(ranA, 1, reason: 'first action ran');
+      expect(
+        ranB,
+        1,
+        reason: 'the RESULT-delivery fault did not wedge the queue',
+      );
 
       await transport.disconnect();
       await done;

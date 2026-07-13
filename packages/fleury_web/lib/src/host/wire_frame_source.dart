@@ -206,10 +206,22 @@ final class WireFrameSource implements BrowserFrameSource {
   /// Consecutive frame-apply failures tolerated before a persistently failing
   /// stream is treated as hung and torn down (with the reload banner) rather
   /// than resynced yet again. Reset on any successful apply.
+  ///
+  /// This apply-path counter is the ONLY escalation backstop needed. The
+  /// decode path is self-bounding: [FrameDecoder.drain] advances the buffer
+  /// past each frame BEFORE decoding its payload, so a recoverable decode
+  /// error can never recur on the same bytes (see remote_protocol.dart) — it
+  /// therefore does NOT feed this counter. A run of APPLY failures, by
+  /// contrast, is a real mirror divergence (later patches are relative to the
+  /// diverged mirror), which resync alone cannot recover — so only apply
+  /// failures escalate.
   static const int _maxConsecutiveApplyFailures = 3;
   int _consecutiveApplyFailures = 0;
 
   void _onMessage(web.MessageEvent event) {
+    // A message still queued at the socket when we tore down must not repaint
+    // over the reload banner on a dead session.
+    if (_closed) return;
     final data = event.data;
     if (data == null) return;
     final buffer = (data as JSArrayBuffer).toDart;
@@ -220,6 +232,9 @@ final class WireFrameSource implements BrowserFrameSource {
   /// classifying a failure as recoverable (repair locally, keep the socket
   /// open) or unrecoverable (surface the reload banner and close).
   void _ingest(Uint8List bytes) {
+    // Never touch a torn-down session (also covers feedBytesForTest): a late
+    // or post-close feed would otherwise resync over the reload banner.
+    if (_closed) return;
     _decoder.feed(bytes);
     // This runs at the JS onmessage boundary, where an uncaught throw
     // silently stops processing — a single malformed frame would wedge the
@@ -233,6 +248,10 @@ final class WireFrameSource implements BrowserFrameSource {
     // mirror diverged from what the server thinks the peer holds.
     try {
       for (final frame in _decoder.drain()) {
+        // A teardown mid-batch — a ByeFrame, or the escalation below — closes
+        // the session; stop applying the rest of this drained batch so nothing
+        // repaints over the banner.
+        if (_closed) return;
         try {
           if (_shouldFailApplyForTest?.call(frame) ?? false) {
             throw StateError('injected apply failure (test)');
@@ -366,7 +385,11 @@ final class WireFrameSource implements BrowserFrameSource {
           _send(encodeFrame(ClipboardResultFrame(f.seq, status)));
         }());
       case ByeFrame():
+        // A clean end-of-session: tear down through the existing path (banner
+        // + socket close) and return immediately — the drained batch's
+        // _closed guard then stops any trailing frame from repainting over it.
         _teardown('The fleury session ended.');
+        return;
       case InitFrame f:
         // v3 apps echo INIT with their protocol version after receiving
         // ours, so a stale cached client bundle is detectable instead of
