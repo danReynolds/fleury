@@ -17,7 +17,15 @@ String cellStyleToCss(CellStyle style) {
   }
 
   final parts = <String>[];
-  if (fg != null) parts.add('color:${rgbCss(fg)}');
+  if (fg != null) {
+    parts.add('color:${rgbCss(fg)}');
+  } else if (style.linkUri != null && isSafeLinkScheme(style.linkUri!)) {
+    // A safe link renders as an <a>, whose UA color (#0000EE blue) would
+    // otherwise win over the row's inherited foreground. Pin it to the default
+    // foreground so a link reads as default-fg + underline, never browser blue.
+    // Link-free runs (and links with an explicit fg) are unaffected.
+    parts.add('color:${rgbCss(kDefaultForeground)}');
+  }
   if (bg != null) parts.add('background-color:${rgbCss(bg)}');
   if (style.bold) parts.add('font-weight:700');
   if (style.dim) parts.add('opacity:.6');

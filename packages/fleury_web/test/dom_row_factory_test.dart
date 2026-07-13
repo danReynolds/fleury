@@ -91,6 +91,45 @@ void main() {
       expect(root.textContent, contains('click'));
     });
 
+    test('a link with no explicit fg gets the default foreground, not UA blue', () {
+      // The <a> would otherwise fall to the UA link color (#0000EE). Pin it to
+      // the grid default foreground so a link reads as default-fg + underline.
+      final root = _render(
+        20,
+        (b) => b.writeText(
+          const CellOffset(0, 0),
+          'docs',
+          style: const CellStyle(underline: true, linkUri: 'https://example.com'),
+        ),
+      );
+      final style = root.querySelector('a')!.getAttribute('style') ?? '';
+      expect(style, contains('color:rgb(208, 208, 208)'));
+    });
+
+    test('a link-free run with no fg emits no color (byte-identical)', () {
+      final root = _render(
+        20,
+        (b) => b.writeText(const CellOffset(0, 0), 'plain'),
+      );
+      final style = root.querySelector('span')!.getAttribute('style') ?? '';
+      expect(style, isNot(contains('color:')));
+    });
+
+    test('a multi-word link is ONE contiguous anchor (spaces included)', () {
+      // The link style rides the internal spaces (RenderRichText fix), so the
+      // whole phrase is one run → one <a>, not one anchor per word.
+      final root = _render(
+        30,
+        (b) => b.writeText(
+          const CellOffset(0, 0),
+          'open an issue',
+          style: const CellStyle(underline: true, linkUri: 'https://x'),
+        ),
+      );
+      expect(root.querySelectorAll('a').length, 1);
+      expect(root.querySelector('a')!.textContent, 'open an issue');
+    });
+
     test('a link-free run renders as a <span> with no anchor', () {
       final root = _render(
         20,
