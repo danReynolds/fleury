@@ -225,6 +225,7 @@ final class CellStyle {
     bool? underline,
     bool? inverse,
     bool? strikethrough,
+    this.linkUri,
   }) : _bold = bold,
        _dim = dim,
        _italic = italic,
@@ -240,6 +241,21 @@ final class CellStyle {
   final bool? _underline;
   final bool? _inverse;
   final bool? _strikethrough;
+
+  /// OSC 8 hyperlink target for this run, or null. Emitted by the ANSI
+  /// renderer when the surface supports hyperlinks; carried on the wire for
+  /// the browser (Stage 2). Set only by trusted widget code — never from
+  /// untrusted output, which the sanitizer strips before it reaches a cell.
+  ///
+  /// Unlike the bool attributes this is a plain null-or-value field (there is
+  /// no "explicitly off"): absence is null, presence is the URI. It is a
+  /// *non-visual* attribute — the SGR encoders never read it and `ESC[0m` does
+  /// not close it — so the renderer reasons about it separately from
+  /// [sameVisualStyleAs] / [isVisuallyEmpty]. It still participates in
+  /// [operator ==] and [hashCode], which is REQUIRED: the diff renderer and the
+  /// wire style-dedupe key on style equality, and merging two cells that differ
+  /// only by their link would silently drop the link.
+  final String? linkUri;
 
   bool get bold => _bold ?? false;
   bool get dim => _dim ?? false;
@@ -270,6 +286,7 @@ final class CellStyle {
     bool? underline,
     bool? inverse,
     bool? strikethrough,
+    String? linkUri,
   }) {
     return CellStyle(
       foreground: foreground ?? this.foreground,
@@ -280,6 +297,7 @@ final class CellStyle {
       underline: underline ?? _underline,
       inverse: inverse ?? _inverse,
       strikethrough: strikethrough ?? _strikethrough,
+      linkUri: linkUri ?? this.linkUri,
     );
   }
 
@@ -297,20 +315,29 @@ final class CellStyle {
       underline: other._underline ?? _underline,
       inverse: other._inverse ?? _inverse,
       strikethrough: other._strikethrough ?? _strikethrough,
+      linkUri: other.linkUri ?? linkUri,
     );
   }
 
   @override
   bool operator ==(Object other) =>
+      // Fast-path the equal-style hot path: a run of linked cells shares one
+      // CellStyle instance, and the diff renderer / wire dedupe compare styles
+      // constantly. This resolves most in-run comparisons before any field is
+      // read, offsetting the extra `linkUri` compare below.
+      identical(this, other) ||
       other is CellStyle &&
-      other.foreground == foreground &&
-      other.background == background &&
-      other._bold == _bold &&
-      other._dim == _dim &&
-      other._italic == _italic &&
-      other._underline == _underline &&
-      other._inverse == _inverse &&
-      other._strikethrough == _strikethrough;
+          other.foreground == foreground &&
+          other.background == background &&
+          other._bold == _bold &&
+          other._dim == _dim &&
+          other._italic == _italic &&
+          other._underline == _underline &&
+          other._inverse == _inverse &&
+          other._strikethrough == _strikethrough &&
+          // Trailing: cheapest to reach only after the visual fields match, and
+          // REQUIRED so link-differing cells don't merge (see [linkUri]).
+          other.linkUri == linkUri;
 
   @override
   int get hashCode => Object.hash(
@@ -322,7 +349,38 @@ final class CellStyle {
     _underline,
     _inverse,
     _strikethrough,
+    linkUri,
   );
+
+  /// Whether this and [other] render identically, IGNORING [linkUri]. The link
+  /// is a non-visual OSC 8 concern the ANSI renderer emits separately (and
+  /// `ESC[0m` does not close), so the renderer compares visual style here to
+  /// drive SGR — a link-only change must not trigger a style reset, and with
+  /// hyperlinks disabled the link must not affect output at all. For a
+  /// link-free style this is exactly [operator ==].
+  bool sameVisualStyleAs(CellStyle other) =>
+      identical(this, other) ||
+      (foreground == other.foreground &&
+          background == other.background &&
+          _bold == other._bold &&
+          _dim == other._dim &&
+          _italic == other._italic &&
+          _underline == other._underline &&
+          _inverse == other._inverse &&
+          _strikethrough == other._strikethrough);
+
+  /// Whether every *visual* attribute is unset (so the style emits no SGR),
+  /// IGNORING [linkUri]. For a link-free style this matches `== CellStyle.empty`;
+  /// a link-only style is visually empty (it emits an OSC 8 link but no SGR).
+  bool get isVisuallyEmpty =>
+      foreground == null &&
+      background == null &&
+      _bold == null &&
+      _dim == null &&
+      _italic == null &&
+      _underline == null &&
+      _inverse == null &&
+      _strikethrough == null;
 
   @override
   String toString() {
@@ -336,7 +394,8 @@ final class CellStyle {
     ];
     return 'CellStyle('
         'fg=$foreground, bg=$background'
-        '${flags.isEmpty ? '' : ', ${flags.join(',')}'})';
+        '${flags.isEmpty ? '' : ', ${flags.join(',')}'}'
+        '${linkUri == null ? '' : ', link=$linkUri'})';
   }
 }
 

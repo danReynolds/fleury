@@ -74,6 +74,92 @@ void main() {
     });
   });
 
+  group('CellStyle.linkUri (OSC 8 carrier)', () {
+    test('defaults to null; empty and const singletons carry no link', () {
+      expect(const CellStyle().linkUri, isNull);
+      expect(CellStyle.empty.linkUri, isNull);
+    });
+
+    test('== distinguishes styles that differ only by link', () {
+      const a = CellStyle(foreground: AnsiColor(1), linkUri: 'https://a');
+      const b = CellStyle(foreground: AnsiColor(1), linkUri: 'https://b');
+      const c = CellStyle(foreground: AnsiColor(1));
+      expect(a == b, isFalse, reason: 'different link targets are not equal');
+      expect(a == c, isFalse, reason: 'link vs no-link are not equal');
+      expect(
+        a,
+        equals(const CellStyle(foreground: AnsiColor(1), linkUri: 'https://a')),
+        reason: 'same visual style + same link are equal',
+      );
+    });
+
+    test('hashCode differs for link-differing styles', () {
+      const a = CellStyle(linkUri: 'https://a');
+      const b = CellStyle(linkUri: 'https://b');
+      const none = CellStyle();
+      expect(a.hashCode, isNot(b.hashCode));
+      expect(a.hashCode, isNot(none.hashCode));
+    });
+
+    test('identical-instance fast-path short-circuits ==', () {
+      // A run of linked cells shares one CellStyle instance; identical
+      // instances must compare equal without reading fields.
+      const shared = CellStyle(bold: true, linkUri: 'https://x');
+      expect(identical(shared, shared), isTrue);
+      // ignore: prefer_const_declarations
+      final same = shared;
+      expect(shared == same, isTrue);
+    });
+
+    test('merge takes the other link when set, else keeps this one', () {
+      const base = CellStyle(linkUri: 'https://base');
+      const overrideSet = CellStyle(bold: true, linkUri: 'https://override');
+      const overrideUnset = CellStyle(bold: true);
+      expect(base.merge(overrideSet).linkUri, 'https://override');
+      expect(
+        base.merge(overrideUnset).linkUri,
+        'https://base',
+        reason: 'other leaves link unset -> inherit this',
+      );
+      expect(
+        const CellStyle().merge(overrideSet).linkUri,
+        'https://override',
+      );
+    });
+
+    test('copyWith preserves link when not overridden', () {
+      const base = CellStyle(bold: true, linkUri: 'https://keep');
+      expect(base.copyWith(bold: false).linkUri, 'https://keep');
+      expect(base.copyWith(linkUri: 'https://new').linkUri, 'https://new');
+    });
+
+    test('link is non-visual: sameVisualStyleAs ignores it', () {
+      const a = CellStyle(foreground: AnsiColor(2), linkUri: 'https://a');
+      const b = CellStyle(foreground: AnsiColor(2), linkUri: 'https://b');
+      const c = CellStyle(foreground: AnsiColor(2));
+      const d = CellStyle(foreground: AnsiColor(3));
+      expect(a.sameVisualStyleAs(b), isTrue, reason: 'only link differs');
+      expect(a.sameVisualStyleAs(c), isTrue, reason: 'link vs none, same fg');
+      expect(a.sameVisualStyleAs(d), isFalse, reason: 'foreground differs');
+    });
+
+    test('a link-only style is visually empty', () {
+      expect(const CellStyle(linkUri: 'https://x').isVisuallyEmpty, isTrue);
+      expect(CellStyle.empty.isVisuallyEmpty, isTrue);
+      expect(const CellStyle(bold: true).isVisuallyEmpty, isFalse);
+      // isVisuallyEmpty matches `== empty` for link-free styles.
+      expect(const CellStyle(bold: false).isVisuallyEmpty, isFalse);
+    });
+
+    test('toString surfaces the link', () {
+      expect(
+        const CellStyle(linkUri: 'https://x').toString(),
+        contains('link=https://x'),
+      );
+      expect(CellStyle.empty.toString(), isNot(contains('link=')));
+    });
+  });
+
   group('Cell', () {
     test('Cell.empty is a const singleton-shaped value', () {
       expect(const Cell.empty(), equals(const Cell.empty()));
