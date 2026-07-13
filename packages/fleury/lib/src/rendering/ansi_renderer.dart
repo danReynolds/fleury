@@ -75,18 +75,36 @@ final class AnsiRenderer {
   /// confirms the terminal renders ambiguous glyphs one column wide — the common
   /// case — the driver passes `false`, and the renderer emits compact contiguous
   /// runs instead (no per-cell cursor moves). See [AmbiguousCharWidth].
+  /// [hyperlinks] is the emission gate for OSC 8 links (default `false`,
+  /// matching the historically stubbed-off behavior). When `false`, the
+  /// renderer emits NOTHING link-related regardless of what a cell's
+  /// [CellStyle.linkUri] carries, so link-free output and unsupporting/tmux
+  /// terminals are byte-identical to before. The runtime passes `true` only
+  /// when the terminal was detected as OSC-8-capable (see
+  /// `detectHyperlinksFromEnvironment`). All OSC 8 logic below lives under
+  /// `if (hyperlinks)`; the SGR path reasons about *visual* style
+  /// (link-ignoring) so a link never perturbs the non-link byte stream.
   const AnsiRenderer({
     this.colorMode = ColorMode.truecolor,
     this.synchronizedOutput = true,
     this.ambiguousCharsAreWide = true,
+    this.hyperlinks = false,
   });
 
   final ColorMode colorMode;
   final bool synchronizedOutput;
   final bool ambiguousCharsAreWide;
+  final bool hyperlinks;
 
   static const _beginSyncUpdate = '\x1B[?2026h';
   static const _endSyncUpdate = '\x1B[?2026l';
+
+  /// OSC 8 close: empty URI ends the active link. A SEPARATE sequence from the
+  /// SGR reset — `ESC[0m` does not close a hyperlink.
+  static const _osc8Close = '\x1B]8;;\x1B\\';
+
+  /// OSC 8 open for [uri]. Params are empty for now (Stage 3 adds `id=`).
+  static String _osc8Open(String uri) => '\x1B]8;;$uri\x1B\\';
 
   /// Diffs at or below this many bytes skip the BSU/ESU wrapper.
   ///
@@ -211,6 +229,10 @@ final class AnsiRenderer {
     int? cursorRow;
     int? cursorCol;
     CellStyle? emittedStyle;
+    // The currently-open OSC 8 link URI, or null. Threaded beside emittedStyle
+    // but kept SEPARATE because a link is non-visual state that `ESC[0m` does
+    // not close. Only ever non-null when [hyperlinks] is true.
+    String? emittedLink;
     var styleResetRequired = false;
     var styleBytesEmitted = false;
     var anyDirty = false;
@@ -261,6 +283,7 @@ final class AnsiRenderer {
           fromCol,
           col,
           emittedStyle,
+          emittedLink,
         );
         if (gap != null) {
           final move = _cursorMove(cursorRow, cursorCol, row, col);
@@ -280,14 +303,21 @@ final class AnsiRenderer {
         cursorCol = col;
       }
 
-      // Style change. Emit a combined SGR delta where the terminal state
-      // is known; fall back to reset+set where it is not. Empty-style
-      // runs only emit a reset when transitioning out of a previously
-      // emitted non-empty style.
-      if (newCell.style != emittedStyle) {
-        if (newCell.style == CellStyle.empty) {
+      // Style change — VISUAL style only. linkUri is a non-visual OSC 8
+      // attribute the SGR encoders ignore and `ESC[0m` does not close, so it is
+      // handled separately below; comparing visual style here means a link-only
+      // change drives an OSC 8 transition and never a spurious SGR reset, and
+      // (with hyperlinks off) a link never perturbs the SGR byte stream at all.
+      // For link-free styles these visual comparisons are exactly `==` /
+      // `== CellStyle.empty`, so the non-link path is byte-for-byte unchanged.
+      // Emit a combined SGR delta where the terminal state is known; fall back
+      // to reset+set where it is not. Visually-empty runs only emit a reset when
+      // transitioning out of a previously emitted non-empty style.
+      if (emittedStyle == null ||
+          !emittedStyle!.sameVisualStyleAs(newCell.style)) {
+        if (newCell.style.isVisuallyEmpty) {
           if (styleResetRequired ||
-              (emittedStyle != null && emittedStyle != CellStyle.empty)) {
+              (emittedStyle != null && !emittedStyle!.isVisuallyEmpty)) {
             buf.write('\x1B[0m');
             styleBytesEmitted = true;
             styleResetRequired = false;
@@ -305,6 +335,24 @@ final class AnsiRenderer {
           styleResetRequired = false;
         }
         emittedStyle = newCell.style;
+      }
+
+      // OSC 8 hyperlink transition. Independent of SGR (ESC[0m does not close a
+      // link), emitted after any SGR change and BEFORE the grapheme so exactly
+      // the written cell carries the link. On a change from the currently-open
+      // link: close the old (if any) then open the new (if non-null). A
+      // non-adjacent cell reached by a cursor jump re-evaluates here, and
+      // intervening SKIPPED cells are never written — so an open link cannot
+      // leak onto them. The one path that writes skipped cells (the gap
+      // rewrite) bails on a link mismatch (see _gapRewrite), so this per-cell
+      // re-evaluation is sufficient; no close-on-cursor-move is needed.
+      if (hyperlinks) {
+        final newLink = newCell.style.linkUri;
+        if (newLink != emittedLink) {
+          if (emittedLink != null) buf.write(_osc8Close);
+          if (newLink != null) buf.write(_osc8Open(newLink));
+          emittedLink = newLink;
+        }
       }
 
       // Emit the cell's content. Empty and overlay cells both render as a
@@ -362,12 +410,24 @@ final class AnsiRenderer {
       }
     }
 
-    // If we ever changed style, leave the terminal in a known state.
+    // If we ever changed style, leave the terminal in a known state. Compared
+    // visually: a trailing link-only style has nothing to reset via SGR (its
+    // close is the separate obligation below).
     if (anyDirty &&
         styleBytesEmitted &&
         emittedStyle != null &&
-        emittedStyle != CellStyle.empty) {
+        !emittedStyle!.isVisuallyEmpty) {
       buf.write('\x1B[0m');
+    }
+
+    // Close obligation (critical): a link still open after the last written
+    // cell MUST be closed, or it bleeds onto everything the terminal prints
+    // next — including the shell prompt after the app exits. This is a SEPARATE
+    // close from the SGR reset above (ESC[0m does not close OSC 8). emittedLink
+    // is only ever non-null when [hyperlinks] is true.
+    if (emittedLink != null) {
+      buf.write(_osc8Close);
+      emittedLink = null;
     }
 
     // ESU only when we actually emitted dirty cells; an empty frame
@@ -467,6 +527,7 @@ final class AnsiRenderer {
     int fromCol,
     int toCol,
     CellStyle? emittedStyle,
+    String? emittedLink,
   ) {
     if (fromCol >= toCol) return null;
     var currentStyle = emittedStyle ?? CellStyle.empty;
@@ -475,12 +536,22 @@ final class AnsiRenderer {
     for (var col = fromCol; col < toCol; col++) {
       final cell = next.atColRow(col, row);
       if (previous.atColRow(col, row) != cell) return null;
+      // Link safety (critical): a gap rewrite is the ONE path that writes
+      // otherwise-skipped cells as literal text, so it writes them under
+      // whatever OSC 8 link is currently open. That is only correct when every
+      // gap cell carries EXACTLY the open link — otherwise the open link would
+      // leak onto a cell that shouldn't have it (or the wrong one). Bail to a
+      // cursor move (always link-safe) on any mismatch. Gated on [hyperlinks]:
+      // with links off, emittedLink is always null and links are ignored, so
+      // this is a no-op and the gap path stays byte-identical.
+      if (hyperlinks && cell.style.linkUri != emittedLink) return null;
       switch (cell.role) {
         case CellRole.empty:
-          // Rewriting an empty cell as a space is only exact when the
-          // current style's background/inverse matches the cell's (empty)
-          // style; require an exact style match like content cells.
-          if (cell.style != currentStyle) {
+          // Rewriting an empty cell as a space is only exact when the current
+          // (visual) style's background/inverse matches the cell's; require a
+          // visual-style match like content cells. linkUri is handled by the
+          // bail above, so compare visual style here.
+          if (!cell.style.sameVisualStyleAs(currentStyle)) {
             final encoded = _styleDelta(currentStyle, cell.style);
             if (encoded == null) return null;
             out.write(encoded);
@@ -495,7 +566,7 @@ final class AnsiRenderer {
               col + 1 < next.size.cols &&
               next.atColRow(col + 1, row).role == CellRole.continuation;
           if (isWide) return null;
-          if (cell.style != currentStyle) {
+          if (!cell.style.sameVisualStyleAs(currentStyle)) {
             final encoded = _styleDelta(currentStyle, cell.style);
             if (encoded == null) return null;
             out.write(encoded);
@@ -515,12 +586,13 @@ final class AnsiRenderer {
     );
   }
 
-  /// SGR delta from [from] to [to] without a reset, or null when [to] is the
-  /// empty style and a reset would be required (resets inside a gap rewrite
-  /// would interact with [_appendCellDiff]'s reset bookkeeping).
+  /// SGR delta from [from] to [to] without a reset, or null when [to] is
+  /// visually empty and a reset would be required (resets inside a gap rewrite
+  /// would interact with [_appendCellDiff]'s reset bookkeeping). Compares
+  /// VISUAL style — linkUri is not an SGR concern.
   String? _styleDelta(CellStyle from, CellStyle to) {
-    if (to == CellStyle.empty) {
-      if (from == CellStyle.empty) return '';
+    if (to.isVisuallyEmpty) {
+      if (from.isVisuallyEmpty) return '';
       // Transitioning to empty needs a reset; keep gap rewrites reset-free.
       return null;
     }
