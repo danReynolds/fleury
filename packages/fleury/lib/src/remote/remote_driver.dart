@@ -333,6 +333,10 @@ final class RemoteTerminalDriver
           glyphTier: f.glyphTier,
           imageProtocol: f.imageProtocol,
           tmuxPassthrough: f.tmuxPassthrough,
+          // Thread the peer's link capability into BOTH capability objects so
+          // surfaceCapabilities.hyperlinks reflects the peer whether or not it
+          // sent `images=` (the projection fallback below reads this field).
+          hyperlinks: f.hyperlinks,
         );
         final peerImages = f.images;
         _peerSurfaceCapabilities = peerImages == null
@@ -341,6 +345,11 @@ final class RemoteTerminalDriver
                 colorMode: f.colorMode,
                 glyphTier: f.glyphTier,
                 images: peerImages,
+                // A browser peer that renders <a> anchors declares this in
+                // INIT; without it the server-side MarkdownText gate reads
+                // MediaQuery.capabilitiesOf(context).hyperlinks == false and
+                // never produces a linkUri (underlined-but-not-clickable).
+                hyperlinks: f.hyperlinks,
                 pointer: f.protocolVersion >= 2
                     ? PointerPrecision.subCell
                     : PointerPrecision.cell,
@@ -357,6 +366,11 @@ final class RemoteTerminalDriver
               glyphTier: f.glyphTier,
               imageProtocol: f.imageProtocol,
               tmuxPassthrough: f.tmuxPassthrough,
+              // Restate the peer's own fields (only `v` carries new info). The
+              // client reads only `v` from the echo for skew detection, so this
+              // value drives no link decision; restating what the peer sent
+              // keeps a link-free echo byte-flat (false emits no `hyperlinks=`).
+              hyperlinks: f.hyperlinks,
             ),
           );
         }
