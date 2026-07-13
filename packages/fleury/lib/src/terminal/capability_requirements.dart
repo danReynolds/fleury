@@ -239,8 +239,13 @@ bool terminalFeatureAvailable(
     case TerminalFeature.clipboardWrite:
     case TerminalFeature.hyperlinks:
       return true;
-    case TerminalFeature.osc52Clipboard:
     case TerminalFeature.osc8Hyperlinks:
+      // Derived from real detection (env allow-list, tmux-suppressed) rather
+      // than a hardcoded constant. A supporting terminal reports
+      // capabilities.hyperlinks == true; a browser peer's projection sets it
+      // from the DOM surface. See detectHyperlinksFromEnvironment / RFC 0017.
+      return capabilities.hyperlinks;
+    case TerminalFeature.osc52Clipboard:
       return false;
     case TerminalFeature.inlineImages:
       return capabilities.imageProtocol != ImageProtocol.halfBlock;

@@ -188,14 +188,18 @@ export 'src/semantics/semantics.dart'
 export 'src/terminal/capabilities.dart'
     show
         AmbiguousCharWidth,
+        HyperlinkSupport,
         ImageProtocol,
         TerminalCapabilities,
         TerminalSurfaceCapabilities,
         detectColorModeFromEnvironment,
         detectGlyphTierFromEnvironment,
+        detectHyperlinkSupportFromEnvironment,
+        detectHyperlinksFromEnvironment,
         detectImageProtocolFromEnvironment,
         detectTerminalCapabilitiesFromEnvironment,
-        detectTerminalMultiplexerFromEnvironment;
+        detectTerminalMultiplexerFromEnvironment,
+        parseEnvFlag;
 export 'src/terminal/capability_requirements.dart'
     show
         CapabilityFallback,

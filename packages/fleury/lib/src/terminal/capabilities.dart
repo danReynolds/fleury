@@ -53,6 +53,7 @@ final class TerminalCapabilities {
     this.supportsHidingCursor = true,
     this.tmuxPassthrough = false,
     this.ambiguousCharWidth = AmbiguousCharWidth.wide,
+    this.hyperlinks = false,
   });
 
   /// Conservative default for unknown terminals: 16-color ANSI, alt
@@ -81,6 +82,13 @@ final class TerminalCapabilities {
   /// [AmbiguousCharWidth.wide] until a startup probe confirms otherwise.
   final AmbiguousCharWidth ambiguousCharWidth;
 
+  /// Whether OSC 8 hyperlinks are supported and safe to emit here. Detected
+  /// from the environment and SUPPRESSED under tmux (see
+  /// [detectHyperlinksFromEnvironment]); default false for unknown terminals.
+  /// Projected into [SurfaceCapabilities.hyperlinks] and gates the ANSI
+  /// renderer's OSC 8 emission.
+  final bool hyperlinks;
+
   TerminalCapabilities copyWith({
     ColorMode? colorMode,
     GlyphTier? glyphTier,
@@ -89,6 +97,7 @@ final class TerminalCapabilities {
     bool? supportsHidingCursor,
     bool? tmuxPassthrough,
     AmbiguousCharWidth? ambiguousCharWidth,
+    bool? hyperlinks,
   }) => TerminalCapabilities(
     colorMode: colorMode ?? this.colorMode,
     glyphTier: glyphTier ?? this.glyphTier,
@@ -98,6 +107,7 @@ final class TerminalCapabilities {
     supportsHidingCursor: supportsHidingCursor ?? this.supportsHidingCursor,
     tmuxPassthrough: tmuxPassthrough ?? this.tmuxPassthrough,
     ambiguousCharWidth: ambiguousCharWidth ?? this.ambiguousCharWidth,
+    hyperlinks: hyperlinks ?? this.hyperlinks,
   );
 
   @override
@@ -108,7 +118,8 @@ final class TerminalCapabilities {
         'altScreen=$supportsAlternateScreen, '
         'hideCursor=$supportsHidingCursor, '
         'tmuxPassthrough=$tmuxPassthrough, '
-        'ambiguousCharWidth=${ambiguousCharWidth.name})';
+        'ambiguousCharWidth=${ambiguousCharWidth.name}, '
+        'hyperlinks=$hyperlinks)';
   }
 }
 
@@ -129,7 +140,140 @@ TerminalCapabilities detectTerminalCapabilitiesFromEnvironment(
     ambiguousCharWidth:
         detectAmbiguousCharWidthFromEnvironment(environment) ??
         AmbiguousCharWidth.wide,
+    hyperlinks: detectHyperlinksFromEnvironment(environment),
   );
+}
+
+/// Why the terminal does or doesn't get OSC 8 hyperlinks — the reason behind
+/// [TerminalCapabilities.hyperlinks], surfaced by `fleury diagnose`. Computed
+/// from the FULL environment picture at detection time (see
+/// [detectHyperlinkSupportFromEnvironment]); the plain bool can't reconstruct
+/// these after the fact, which is why the reason must not be re-derived from a
+/// lossy `(hyperlinks, tmuxPassthrough)` snapshot downstream.
+enum HyperlinkSupport {
+  /// Allow-listed (and version-checked) and actively emitting OSC 8. Also the
+  /// state for an explicit `FLEURY_HYPERLINKS=1` force, even under a
+  /// multiplexer.
+  supported('supported'),
+
+  /// The outer terminal WOULD support OSC 8, but a multiplexer suppresses it
+  /// and no `FLEURY_HYPERLINKS=1` overrode that. Escaping tmux (or opting into
+  /// its `terminal-features`) would enable links — actionable advice, so it is
+  /// reported ONLY when the outer terminal is genuinely capable.
+  suppressedUnderTmux('suppressed-under-tmux'),
+
+  /// Explicitly disabled with `FLEURY_HYPERLINKS=0`, regardless of terminal.
+  disabledByOverride('disabled-by-override'),
+
+  /// Not a known-supporting terminal (whether or not under a multiplexer):
+  /// escaping tmux would NOT help, so this must never be mislabeled as
+  /// tmux-suppressed.
+  unsupported('unsupported');
+
+  const HyperlinkSupport(this.diagnoseLabel);
+
+  /// Stable machine-readable string for `fleury diagnose --json`
+  /// (`capabilities.osc8Hyperlinks`).
+  final String diagnoseLabel;
+}
+
+/// Detects OSC 8 support AND the reason from the environment. See
+/// [HyperlinkSupport] for the four outcomes.
+///
+/// Order:
+///   1. `FLEURY_HYPERLINKS` override wins outright: on → [HyperlinkSupport.supported]
+///      (even under a multiplexer); off → [HyperlinkSupport.disabledByOverride].
+///   2. Otherwise classify the OUTER terminal against the allow-list, applying a
+///      version threshold where the environment exposes one: `VTE_VERSION >=
+///      5000` (OSC 8 landed in VTE 0.50; `VTE_VERSION` is `MMmmpp`, so 5000 =
+///      0.50.0) and iTerm via `TERM_PROGRAM_VERSION >= 3.1` (OSC 8 shipped in
+///      iTerm2 3.1). Terminals that expose no version stay presence-based:
+///      Kitty (`KITTY_WINDOW_ID` / `TERM=xterm-kitty`), WezTerm and ghostty
+///      (`TERM_PROGRAM`), Windows Terminal (`WT_SESSION`).
+///   3. An allow-listed terminal is [HyperlinkSupport.suppressedUnderTmux] under
+///      a multiplexer, else [HyperlinkSupport.supported]; anything else is
+///      [HyperlinkSupport.unsupported].
+///
+/// Centralized here (like [detectGlyphTierFromEnvironment]) so every driver
+/// honors the same allow-list, version thresholds, and tmux suppression.
+/// Passive/env-only for now; an active DA/OSC probe (which would also cover the
+/// version-less terminals above) is a later refinement (RFC 0017, Stage 3).
+HyperlinkSupport detectHyperlinkSupportFromEnvironment(
+  Map<String, String> environment,
+) {
+  final override = parseEnvFlag(environment['FLEURY_HYPERLINKS']);
+  if (override == true) return HyperlinkSupport.supported; // force wins
+  if (override == false) return HyperlinkSupport.disabledByOverride;
+
+  if (!_terminalAllowsHyperlinks(environment)) {
+    return HyperlinkSupport.unsupported;
+  }
+  return detectTerminalMultiplexerFromEnvironment(environment)
+      ? HyperlinkSupport.suppressedUnderTmux
+      : HyperlinkSupport.supported;
+}
+
+/// Whether the OUTER terminal is a known OSC 8 emitter (ignoring multiplexers
+/// and overrides), applying a version threshold where the env exposes one.
+bool _terminalAllowsHyperlinks(Map<String, String> environment) {
+  final program = environment['TERM_PROGRAM']?.toLowerCase().trim() ?? '';
+  if (program == 'iterm.app') {
+    return _termProgramVersionAtLeast(environment, major: 3, minor: 1);
+  }
+  if (program == 'wezterm' || program == 'ghostty') return true;
+
+  // VTE terminals expose a numeric VTE_VERSION; a present-but-too-old one is a
+  // real answer (unsupported), not a fall-through to the presence checks below.
+  final vte = int.tryParse((environment['VTE_VERSION'] ?? '').trim());
+  if (vte != null) return vte >= 5000;
+
+  if ((environment['KITTY_WINDOW_ID'] ?? '').trim().isNotEmpty) return true;
+  if ((environment['TERM']?.toLowerCase().trim() ?? '') == 'xterm-kitty') {
+    return true;
+  }
+  if ((environment['WT_SESSION'] ?? '').trim().isNotEmpty) return true;
+  return false;
+}
+
+/// Whether `TERM_PROGRAM_VERSION` (e.g. `3.4.19`) is at least [major].[minor].
+/// Missing or unparseable → false (conservative: never emit a link we can't
+/// confirm the terminal renders, so a pre-OSC-8 build isn't fed `\x1b]8;;`).
+bool _termProgramVersionAtLeast(
+  Map<String, String> environment, {
+  required int major,
+  required int minor,
+}) {
+  final raw = (environment['TERM_PROGRAM_VERSION'] ?? '').trim();
+  if (raw.isEmpty) return false;
+  final parts = raw.split('.');
+  final gotMajor = int.tryParse(parts[0]);
+  if (gotMajor == null) return false;
+  if (gotMajor != major) return gotMajor > major;
+  final gotMinor = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+  return gotMinor >= minor;
+}
+
+/// Detects whether OSC 8 hyperlinks are supported and safe to emit here — the
+/// emission gate that the renderer/projection/feature read. The DIAGNOSE reason
+/// is [detectHyperlinkSupportFromEnvironment].
+bool detectHyperlinksFromEnvironment(Map<String, String> environment) =>
+    detectHyperlinkSupportFromEnvironment(environment) ==
+    HyperlinkSupport.supported;
+
+/// Parses a boolean environment flag: `1`/`true`/`yes`/`on` → true,
+/// `0`/`false`/`no`/`off` → false, and null for unset or any unrecognized value
+/// (so the caller keeps its default). Case- and whitespace-insensitive. The one
+/// source of truth for the accepted on/off vocabulary across `FLEURY_*` boolean
+/// flags.
+bool? parseEnvFlag(String? raw) {
+  switch (raw?.toLowerCase().trim()) {
+    case '1' || 'true' || 'yes' || 'on':
+      return true;
+    case '0' || 'false' || 'no' || 'off':
+      return false;
+    default:
+      return null;
+  }
 }
 
 /// Reads an explicit ambiguous-width override from the environment:
@@ -162,11 +306,7 @@ GlyphTier detectGlyphTierFromEnvironment(Map<String, String> environment) {
   if (override == 'ascii') return GlyphTier.ascii;
   if (override == 'unicode') return GlyphTier.unicode;
 
-  final asciiOverride = environment['FLEURY_ASCII']?.toLowerCase().trim();
-  if (asciiOverride == '1' ||
-      asciiOverride == 'true' ||
-      asciiOverride == 'yes' ||
-      asciiOverride == 'on') {
+  if (parseEnvFlag(environment['FLEURY_ASCII']) == true) {
     return GlyphTier.ascii;
   }
 
@@ -247,7 +387,7 @@ extension TerminalSurfaceCapabilities on TerminalCapabilities {
       images: imageProtocol == ImageProtocol.halfBlock
           ? InlineImageSupport.none
           : InlineImageSupport.placements,
-      hyperlinks: false,
+      hyperlinks: hyperlinks,
       pointer: PointerPrecision.cell,
     );
   }
