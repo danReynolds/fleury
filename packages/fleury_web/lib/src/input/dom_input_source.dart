@@ -334,6 +334,10 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   }
 
   void _handlePointerDown(web.Event raw) {
+    // A cell-grid link owns its whole gesture: let the browser navigate the
+    // href natively. Capturing the pointer here would retarget the click away
+    // from the anchor, and routing it as an app pointer event would consume it.
+    if (_cellGridLinkAnchor(raw) != null) return;
     ensureKeyboardCapture();
     final event = raw as web.PointerEvent;
     final button = _buttonFor(event.button);
@@ -361,6 +365,9 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   }
 
   void _handlePointerUp(web.Event raw) {
+    // Counterpart to the pointerdown exemption: a cell-grid link is the
+    // browser's to navigate, so don't preventDefault or route it.
+    if (_cellGridLinkAnchor(raw) != null) return;
     final event = raw as web.PointerEvent;
     var button = _buttonFor(event.button);
     if (button == MouseButton.none && _pressedButton != MouseButton.none) {
@@ -420,6 +427,10 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   }
 
   void _handleClick(web.Event raw) {
+    // The critical link fix: a click on a cell-grid link anchor must reach the
+    // browser's default action (navigation). preventDefault() below would cancel
+    // it, so bail before then — and don't route it as an app tap either.
+    if (_cellGridLinkAnchor(raw) != null) return;
     final event = raw as web.MouseEvent;
     if (event.button != 0) return;
     final cell = _cellForPointer(event);
@@ -686,6 +697,22 @@ Set<KeyModifier> _modifiers({
   if (alt) KeyModifier.alt,
   if (meta) KeyModifier.superKey,
 };
+
+/// The cell-grid link anchor (`<a href>` inside the retained grid root
+/// `.fleury-screen`) that [event] targets, or null.
+///
+/// A click on one of these must navigate **natively** — the browser opens the
+/// href — so the input source neither `preventDefault`s it nor routes it as an
+/// app pointer event. The semantic-overlay anchors (`a.fleury-semantic-node`,
+/// under `.fleury-semantics`) are deliberately excluded: they live off-screen
+/// and carry their own click handler, so they never reach here.
+web.Element? _cellGridLinkAnchor(web.Event event) {
+  final target = event.target;
+  if (target == null || !target.isA<web.Element>()) return null;
+  final anchor = (target as web.Element).closest('a[href]');
+  if (anchor == null) return null;
+  return anchor.closest('.fleury-screen') != null ? anchor : null;
+}
 
 final class _DomListener {
   const _DomListener(this.target, this.type, this.callback);
