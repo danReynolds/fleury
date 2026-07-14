@@ -516,28 +516,44 @@ Future<AppExit> _runAppImpl(
     if (cleanedUp) return;
     cleanedUp = true;
     disposed = true;
-    // Synchronously, before the first await: a frame microtask scheduled
-    // just before cleanup (e.g. by the error reporter's listener) must
-    // find the driver disposed, or it re-renders a crashing tree outside
-    // the guarded zone.
-    frameDriver?.dispose();
-    semanticsPipeline?.dispose();
-    remoteClipboard?.dispose();
-    if (identical(_activeExitCompleter, exit)) _activeExitCompleter = null;
-    await eventSub?.cancel();
-    eventSub = null;
-    await hotReload?.dispose();
-    hotReload = null;
-    debugController.setSemanticTreeProvider(null);
-    debugController.setTerminalDiagnosisProvider(null);
-    debugFrameLog?.dispose();
-    DebugInvalidations.reset();
-    dispatcher.dispose();
-    errorReporter.dispose();
-    runtime.dispose();
-    runtimeMarkers?.mark('terminal.restore.start');
-    await usedDriver.restore();
-    runtimeMarkers?.mark('terminal.restore.end');
+    // frameDriver.dispose() stays the first statement: synchronously, before
+    // the first await, a frame microtask scheduled just before cleanup (e.g. by
+    // the error reporter's listener) must find the driver disposed, or it
+    // re-renders a crashing tree outside the guarded zone.
+    //
+    // A faulty user State.dispose() (bubbling out of runtime.dispose()) must NOT
+    // abort teardown. If it escaped here it would BOTH skip the terminal restore
+    // below AND hang runApp: the normal path's `done.complete(appExit)` is
+    // skipped, and the zone handler treats the error as survivable so it never
+    // completes `done` either — the process wedges with the terminal still in
+    // raw/alt-screen. So capture it, let the finally restore the terminal, and
+    // surface it after fd 1/2 are back (below); the app then exits cleanly.
+    Object? teardownError;
+    StackTrace? teardownStack;
+    try {
+      frameDriver?.dispose();
+      semanticsPipeline?.dispose();
+      remoteClipboard?.dispose();
+      if (identical(_activeExitCompleter, exit)) _activeExitCompleter = null;
+      await eventSub?.cancel();
+      eventSub = null;
+      await hotReload?.dispose();
+      hotReload = null;
+      debugController.setSemanticTreeProvider(null);
+      debugController.setTerminalDiagnosisProvider(null);
+      debugFrameLog?.dispose();
+      DebugInvalidations.reset();
+      dispatcher.dispose();
+      errorReporter.dispose();
+      runtime.dispose();
+    } catch (error, stack) {
+      teardownError = error;
+      teardownStack = stack;
+    } finally {
+      runtimeMarkers?.mark('terminal.restore.start');
+      await usedDriver.restore();
+      runtimeMarkers?.mark('terminal.restore.end');
+    }
 
     // The terminal is back on the normal screen now. Unless the caller took
     // the lines live via onStrayOutput, replay everything captured during the
@@ -566,6 +582,16 @@ Future<AppExit> _runAppImpl(
     // Byte telemetry summary, after the terminal is restored.
     if (byteTelemetry != null) {
       stderr.write(_formatByteTelemetry(byteTelemetry));
+    }
+    // Surface a teardown-time dispose() fault now that the terminal is back and
+    // fd 1/2 are restored. The app still exits normally — a shutdown bug in one
+    // State shouldn't wedge the process or mask an otherwise clean exit.
+    if (teardownError != null) {
+      stderr.writeln(
+        'fleury: error during teardown (a State.dispose() threw): '
+        '$teardownError',
+      );
+      stderr.writeln(teardownStack);
     }
     runtimeMarkers?.mark('runApp.cleanup.complete');
     runtimeMarkers?.write();

@@ -101,6 +101,28 @@ class _ShrinkTextAppState extends State<_ShrinkTextApp> {
   Widget build(BuildContext context) => Text(_short ? 'hi' : 'hello');
 }
 
+/// A stateful widget whose [State.dispose] throws — stands in for a faulty
+/// user teardown. runtime.dispose() unmounts the tree and this throw bubbles
+/// out of the framework-disposal block; the terminal must still be restored.
+class _ThrowingDisposeApp extends StatefulWidget {
+  const _ThrowingDisposeApp();
+  @override
+  State<_ThrowingDisposeApp> createState() => _ThrowingDisposeState();
+}
+
+class _ThrowingDisposeState extends State<_ThrowingDisposeApp> {
+  @override
+  Widget build(BuildContext context) => const Text('x');
+  @override
+  void dispose() {
+    super.dispose();
+    // A faulty resource-release after the base dispose — models a user
+    // dispose() bug; the throw propagates out of runtime.dispose() during
+    // teardown.
+    throw StateError('dispose-boom');
+  }
+}
+
 /// Lets the run loop's async body reach the point where it's listening for
 /// events before the test pushes one (a broadcast stream drops events that
 /// arrive with no listener).
@@ -294,6 +316,33 @@ void main() {
       driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
       await future;
       expect(driver.restoreCallCount, 1);
+      await driver.dispose();
+    });
+
+    test('the terminal is restored and runApp still completes when a '
+        'State.dispose() throws during teardown', () async {
+      final driver = FakeTerminalDriver();
+      final future = runApp(
+        const _ThrowingDisposeApp(),
+        driver: driver,
+        enableHotReload: false,
+      );
+      await _settle();
+      expect(driver.isActive, isTrue);
+
+      // Exit: runtime.dispose() runs the throwing State.dispose(). Teardown must
+      // neither skip restore nor hang — the fault is captured and logged, the
+      // terminal restored, and runApp completes normally. Without the fix this
+      // future never completes (30s timeout) and restoreCallCount stays 0; the
+      // 5s timeout here makes a regression fail loudly instead of hanging.
+      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      await future.timeout(const Duration(seconds: 5));
+      expect(
+        driver.restoreCallCount,
+        1,
+        reason: 'restore ran despite the throwing State.dispose()',
+      );
+      expect(driver.isActive, isFalse);
       await driver.dispose();
     });
   });
