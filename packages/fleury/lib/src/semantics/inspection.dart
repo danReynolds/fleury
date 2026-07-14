@@ -293,14 +293,8 @@ final class SemanticInspectionSnapshot {
     return buffer.toString().trimRight();
   }
 
-  /// Alias for [debugTree] kept for call sites that prefer a string-conversion
-  /// name. Prefer [debugTree] in new tests and diagnostics.
-  String toDebugString({bool includeState = true}) {
-    return debugTree(includeState: includeState);
-  }
-
   @override
-  String toString() => toDebugString();
+  String toString() => debugTree();
 }
 
 /// Redacted, JSON-safe semantic node used by [SemanticInspectionSnapshot].

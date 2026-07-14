@@ -656,8 +656,10 @@ Future<int> _runServeBridge({
       try {
         ws = await WebSocketTransformer.upgrade(req);
       } catch (error) {
-        stderr.writeln('[serve] rejecting connection: websocket upgrade '
-            'failed ($error).');
+        stderr.writeln(
+          '[serve] rejecting connection: websocket upgrade '
+          'failed ($error).',
+        );
         try {
           req.response.statusCode = HttpStatus.badRequest;
           await req.response.close();
@@ -1126,8 +1128,10 @@ Future<int> _runServeSpawn({
       ws = await WebSocketTransformer.upgrade(req);
     } catch (error) {
       release();
-      stderr.writeln('[serve] rejecting connection: websocket upgrade '
-          'failed ($error).');
+      stderr.writeln(
+        '[serve] rejecting connection: websocket upgrade '
+        'failed ($error).',
+      );
       try {
         req.response.statusCode = HttpStatus.badRequest;
         await req.response.close();
@@ -1692,14 +1696,19 @@ Future<_HandleStatus> _checkExistingHandle(File handleFile) async {
   if (!handleFile.existsSync()) return _HandleStatus.absent;
   final path = (await handleFile.readAsString()).trim();
   if (path.isEmpty) return _HandleStatus.stale;
+  final connect = Socket.connect(
+    InternetAddress(path, type: InternetAddressType.unix),
+    0,
+  );
   try {
-    final probe = await Socket.connect(
-      InternetAddress(path, type: InternetAddressType.unix),
-      0,
-    ).timeout(const Duration(milliseconds: 500));
+    final probe = await connect.timeout(const Duration(milliseconds: 500));
     await probe.close();
     return _HandleStatus.live;
   } on Object {
+    // Future.timeout does NOT cancel the underlying connect: if it resolves
+    // after the deadline we still own that socket and must close it, or its fd
+    // leaks. Attach a late-close to the original future (no-op if it errored).
+    unawaited(connect.then((s) => s.close()).catchError((_) {}));
     return _HandleStatus.stale;
   }
 }

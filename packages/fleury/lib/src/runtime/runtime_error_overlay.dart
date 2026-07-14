@@ -48,6 +48,7 @@ class RuntimeErrorReporter with ChangeNotifier {
   RuntimeErrorRecord? _current;
   int _shownCount = 0;
   Timer? _dismissTimer;
+  bool _disposed = false;
 
   /// The error currently surfaced, or null when nothing is showing.
   RuntimeErrorRecord? get current => _current;
@@ -66,6 +67,11 @@ class RuntimeErrorReporter with ChangeNotifier {
   bool get isStorming => _window.length >= 24;
 
   void report(Object error, StackTrace stackTrace) {
+    // The zone's uncaught-error handler can call report() AFTER teardown has
+    // disposed this reporter. Without this guard it would arm a fresh,
+    // uncancellable auto-dismiss Timer (dispose only cancelled the prior one),
+    // keeping the isolate alive past app end, and mutate a disposed notifier.
+    if (_disposed) return;
     final now = DateTime.now();
     onLog?.call('Uncaught runtime error: $error\n$stackTrace');
     _window.add(now);
@@ -82,6 +88,7 @@ class RuntimeErrorReporter with ChangeNotifier {
   }
 
   void dismiss() {
+    if (_disposed) return;
     _dismissTimer?.cancel();
     if (_current == null) return;
     _current = null;
@@ -91,6 +98,7 @@ class RuntimeErrorReporter with ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _dismissTimer?.cancel();
     super.dispose();
   }

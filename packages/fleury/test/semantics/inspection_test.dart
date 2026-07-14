@@ -93,7 +93,7 @@ void main() {
       expect(debug, contains('actions:[copy, submit]'));
       expect(debug, contains('apiToken: "<redacted>"'));
       expect(debug, isNot(contains('secret-token')));
-      expect(snapshot.toDebugString(), debug);
+      expect(snapshot.debugTree(), debug);
       expect(snapshot.toString(), debug);
       expect(tree.debugTree(includeState: false), isNot(contains('state:')));
 
