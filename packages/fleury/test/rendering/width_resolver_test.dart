@@ -64,6 +64,22 @@ void main() {
       expect(resolver.widthOfGrapheme(family, standard), 2);
     });
 
+    test('regional-indicator flag emoji are width 2', () {
+      // A flag is a pair of regional indicators forming one grapheme; the base
+      // rune (0x1F1E6-0x1F1FF) must report emoji presentation, else the flag is
+      // modeled width-1 and every cell after it on the row shifts one left.
+      expect(resolver.widthOfGrapheme('\u{1F1FA}\u{1F1F8}', standard), 2); // 🇺🇸
+      expect(resolver.widthOfGrapheme('\u{1F1EF}\u{1F1F5}', standard), 2); // 🇯🇵
+      expect(
+        resolver.widthOfGrapheme(
+          '\u{1F1FA}\u{1F1F8}',
+          const TerminalProfile(emojiIsWide: false),
+        ),
+        1,
+        reason: 'emoji disabled falls back to base-char rules',
+      );
+    });
+
     test('emoji disabled by profile fall back to base-char rules', () {
       const noEmoji = TerminalProfile(emojiIsWide: false);
       // 🙂 (U+1F642) is outside our _isWide ranges (it's in U+1F300+ which
@@ -116,6 +132,25 @@ void main() {
 
     test('counts a wide emoji as 2', () {
       expect(resolver.widthOfText('go 🚀', standard), 5);
+    });
+
+    test('ASCII base + VS16 keycap is not double-counted (fast-path split)', () {
+      // '1' + VS16 + enclosing keycap is one grapheme. widthOfText's ASCII fast
+      // path peels the '1' and re-measures the tail as a fresh cluster whose
+      // base is VS16 (0xFE0F) — which must be zero-width, or the total exceeds
+      // the summed grapheme width by one (measured 2 before the fix).
+      const keycap = '1\u{FE0F}\u{20E3}'; // 1️⃣
+      expect(
+        resolver.widthOfText(keycap, standard),
+        resolver.widthOfGrapheme(keycap, standard),
+        reason: 'widthOfText must equal the summed grapheme width',
+      );
+      expect(resolver.widthOfText(keycap, standard), 1);
+    });
+
+    test('a flag emoji in mixed text counts as 2', () {
+      // 'go ' peels as the ASCII prefix, then the flag grapheme adds 2.
+      expect(resolver.widthOfText('go \u{1F1FA}\u{1F1F8}', standard), 5);
     });
   });
 }

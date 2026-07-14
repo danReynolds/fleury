@@ -138,6 +138,12 @@ final class DefaultWidthResolver implements WidthResolver {
     if (r >= 0x1AB0 && r <= 0x1AFF) return true; // Combining Diacriticals Ext.
     if (r >= 0x1DC0 && r <= 0x1DFF) return true; // Combining Diacriticals Sup.
     if (r >= 0x20D0 && r <= 0x20FF) return true; // Combining Marks for Symbols
+    // Variation selectors (VS1-VS16) are zero-width modifiers. VS16 (0xFE0F) is
+    // the one extend that can immediately follow an ASCII base and NOT already
+    // be covered above, so widthOfText's ASCII fast path — which peels the base
+    // and re-measures the tail as a fresh cluster — would otherwise count the
+    // VS16-based fragment as width 1 (e.g. '1️⃣' measured 2, paints 1).
+    if (r >= 0xFE00 && r <= 0xFE0F) return true; // Variation Selectors
     if (r >= 0xFE20 && r <= 0xFE2F) return true; // Combining Half Marks
     if (r == 0x200B || r == 0x200C || r == 0x200D) return true; // ZW{SP,NJ,J}
     if (r == 0xFEFF) return true; // BOM / ZWNBSP
@@ -176,6 +182,11 @@ final class DefaultWidthResolver implements WidthResolver {
 
   bool _isEmojiPresentation(int r) {
     // Common emoji ranges that render as 2-column glyphs by default.
+    // Regional indicators (0x1F1E6-0x1F1FF) form flag emoji as pairs; each
+    // renders 2 columns wide, and widthOfGrapheme keys the whole cluster off
+    // its base rune, so the base must report emoji presentation. Without this a
+    // flag was modeled width-1 and every cell after it on the row shifted left.
+    if (r >= 0x1F1E6 && r <= 0x1F1FF) return true; // Regional indicators (flags)
     if (r >= 0x1F300 && r <= 0x1F64F) return true; // Misc Symbols & Pictographs
     if (r >= 0x1F680 && r <= 0x1F6FF) return true; // Transport
     if (r >= 0x1F900 && r <= 0x1F9FF) return true; // Supplemental Pictographs
