@@ -246,7 +246,7 @@ const DOC_ONLY = [
   { slug: 'filebrowser', widget: 'FileBrowser', category: 'Inputs & controls', reason: 'native',
     code: "FileBrowser(\n  initialDirectory: Directory.current.path,\n  onActivate: (entry) => openFile(entry.path),\n)" },
   { slug: 'filepicker', widget: 'FilePicker', category: 'Inputs & controls', reason: 'native',
-    code: "FilePicker(\n  initialDirectory: Directory.current.path,\n  filter: (entity) => entity is Directory || entity.path.endsWith('.dart'),\n  onSelected: (file) => openFile(file.path),\n)" },
+    code: "FilePicker(\n  initialDirectory: Directory.current.path,\n  filter: (entity) => entity is Directory || entity.path.endsWith('.dart'),\n  onSelect: (file) => openFile(file.path),\n)" },
   { slug: 'form', widget: 'FormPanel', category: 'Inputs & controls', reason: 'native',
     code: "FormPanel(\n  definition: FormDefinition(\n    title: 'Project settings',\n    fields: const [\n      FormFieldSpec.text(id: 'name', label: 'Name', required: true),\n      FormFieldSpec.checkbox(id: 'private', label: 'Private'),\n    ],\n  ),\n  onSubmit: (result) => saveSettings(result.values),\n)" },
   { slug: 'image', widget: 'Image', category: 'Data & lists', reason: 'native',

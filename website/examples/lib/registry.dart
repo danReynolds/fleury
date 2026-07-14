@@ -754,9 +754,9 @@ Tabs(
       Menu(
         trigger: const Text('Actions ▾'),
         items: <MenuEntry>[
-          MenuItem(label: 'Rename', onSelected: () {}),
-          MenuItem(label: 'Duplicate', onSelected: () {}),
-          MenuItem(label: 'Delete', onSelected: () {}),
+          MenuItem(label: 'Rename', onSelect: () {}),
+          MenuItem(label: 'Duplicate', onSelect: () {}),
+          MenuItem(label: 'Delete', onSelect: () {}),
         ],
       ),
     ),

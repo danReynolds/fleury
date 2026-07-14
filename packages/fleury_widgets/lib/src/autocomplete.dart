@@ -9,10 +9,10 @@ import 'option_label.dart';
 /// the field — via the [Anchor]/[Follower] primitive, so it floats over
 /// content and stays on screen. The field keeps focus throughout: Up/Down
 /// move the highlight, Enter fills the field with the highlighted option
-/// (and calls [onSelected]), Esc closes the dropdown.
+/// (and calls [onSelect]), Esc closes the dropdown.
 ///
 /// Options can be any type [T]; [displayStringForOption] maps each to the
-/// text shown and matched against (defaults to `toString()`). `onSelected`
+/// text shown and matched against (defaults to `toString()`). `onSelect`
 /// hands back the chosen option itself, not just its string.
 class Autocomplete<T extends Object> extends StatefulWidget {
   const Autocomplete({
@@ -24,7 +24,7 @@ class Autocomplete<T extends Object> extends StatefulWidget {
     this.autofocus = false,
     this.placeholder = '',
     this.semanticLabel,
-    this.onSelected,
+    this.onSelect,
     this.maxVisible = 6,
   });
 
@@ -55,7 +55,7 @@ class Autocomplete<T extends Object> extends StatefulWidget {
   final String? semanticLabel;
 
   /// Called with the selected option when the user picks a suggestion.
-  final void Function(T value)? onSelected;
+  final void Function(T value)? onSelect;
 
   /// Maximum visible suggestion rows before the list scrolls.
   final int maxVisible;
@@ -166,7 +166,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
     _controller.text = text;
     _controller.selection = text.length;
     _close();
-    widget.onSelected?.call(option);
+    widget.onSelect?.call(option);
   }
 
   Widget _suggestions() {

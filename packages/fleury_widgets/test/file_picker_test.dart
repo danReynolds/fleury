@@ -62,7 +62,7 @@ void main() {
           initialDirectory: _bigDir(20),
           autofocus: true,
           maxVisible: 5,
-          onSelected: (_) {},
+          onSelect: (_) {},
         ),
       );
       // Height accommodates the wrapped cwd path, the clickable '..' parent
@@ -83,7 +83,7 @@ void main() {
         'climbs back out — both with the mouse alone', (tester) {
       final dir = _scratchDir();
       tester.pumpWidget(
-        FilePicker(initialDirectory: dir, autofocus: true, onSelected: (_) {}),
+        FilePicker(initialDirectory: dir, autofocus: true, onSelect: (_) {}),
       );
       // Layout at width 70: row0=path, row1='▴ ..', row2='▸ sub/', row3=a.txt.
       tester.render(size: const CellSize(70, 8));
@@ -110,7 +110,7 @@ void main() {
         FilePicker(
           initialDirectory: dir,
           autofocus: true,
-          onSelected: (f) => picked = f,
+          onSelect: (f) => picked = f,
         ),
       );
       // row0=path, row1='▴ ..', row2='▸ sub/', row3='a.txt'.
@@ -121,7 +121,7 @@ void main() {
 
     testWidgets('lists files and directories in the initial dir', (tester) {
       final dir = _scratchDir();
-      tester.pumpWidget(FilePicker(initialDirectory: dir, onSelected: (_) {}));
+      tester.pumpWidget(FilePicker(initialDirectory: dir, onSelect: (_) {}));
       final out = tester.renderToString(
         size: const CellSize(60, 6),
         emptyMark: ' ',
@@ -137,12 +137,12 @@ void main() {
 
     testWidgets('hides dotfiles unless showHidden is true', (tester) {
       final dir = _scratchDir();
-      tester.pumpWidget(FilePicker(initialDirectory: dir, onSelected: (_) {}));
+      tester.pumpWidget(FilePicker(initialDirectory: dir, onSelect: (_) {}));
       var out = tester.renderToString(size: const CellSize(60, 6));
       expect(out.contains('.hidden'), isFalse);
 
       tester.pumpWidget(
-        FilePicker(initialDirectory: dir, showHidden: true, onSelected: (_) {}),
+        FilePicker(initialDirectory: dir, showHidden: true, onSelect: (_) {}),
       );
       out = tester.renderToString(size: const CellSize(60, 6));
       expect(out.contains('.hidden'), isTrue);
@@ -154,7 +154,7 @@ void main() {
         FilePicker(
           initialDirectory: dir,
           filter: (e) => e is Directory || e.path.endsWith('.dart'),
-          onSelected: (_) {},
+          onSelect: (_) {},
         ),
       );
       final out = tester.renderToString(size: const CellSize(60, 6));
@@ -162,14 +162,14 @@ void main() {
       expect(out.contains('a.txt'), isFalse);
     });
 
-    testWidgets('Enter on a file calls onSelected with that File', (tester) {
+    testWidgets('Enter on a file calls onSelect with that File', (tester) {
       final dir = _scratchDir();
       File? picked;
       tester.pumpWidget(
         FilePicker(
           initialDirectory: dir,
           autofocus: true,
-          onSelected: (f) => picked = f,
+          onSelect: (f) => picked = f,
         ),
       );
       // Directory 'sub' sorts first; arrow down twice lands on a.txt
@@ -183,7 +183,7 @@ void main() {
     testWidgets('Enter on a directory navigates into it', (tester) {
       final dir = _scratchDir();
       tester.pumpWidget(
-        FilePicker(initialDirectory: dir, autofocus: true, onSelected: (_) {}),
+        FilePicker(initialDirectory: dir, autofocus: true, onSelect: (_) {}),
       );
       // Cursor starts at row 0 = the sub/ directory; Enter opens it.
       tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
@@ -201,7 +201,7 @@ void main() {
         FilePicker(
           initialDirectory: '$dir/sub',
           autofocus: true,
-          onSelected: (_) {},
+          onSelect: (_) {},
         ),
       );
       // inside.dart is visible at start.
@@ -220,7 +220,7 @@ void main() {
     testWidgets('arrow down + up cycle the cursor', (tester) {
       final dir = _scratchDir();
       tester.pumpWidget(
-        FilePicker(initialDirectory: dir, autofocus: true, onSelected: (_) {}),
+        FilePicker(initialDirectory: dir, autofocus: true, onSelect: (_) {}),
       );
       // We have 3 entries (sub/, a.txt, b.dart). Arrow Up at row 0 wraps
       // to the last; arrow Down then wraps back to the top.
@@ -234,7 +234,7 @@ void main() {
       final tmp = Directory.systemTemp.createTempSync('fleuryfp_empty_');
       addTearDown(() => tmp.deleteSync(recursive: true));
       tester.pumpWidget(
-        FilePicker(initialDirectory: tmp.path, onSelected: (_) {}),
+        FilePicker(initialDirectory: tmp.path, onSelect: (_) {}),
       );
       final out = tester.renderToString(size: const CellSize(40, 4));
       expect(out.contains('(empty)'), isTrue);
@@ -246,7 +246,7 @@ void main() {
         FilePicker(
           initialDirectory: dir,
           semanticLabel: 'Project files',
-          onSelected: (_) {},
+          onSelect: (_) {},
         ),
       );
       tester.render(size: const CellSize(40, 10)); // lay out the windowed list
@@ -289,7 +289,7 @@ void main() {
     ) async {
       final dir = _scratchDir();
       tester.pumpWidget(
-        FilePicker(initialDirectory: dir, autofocus: true, onSelected: (_) {}),
+        FilePicker(initialDirectory: dir, autofocus: true, onSelect: (_) {}),
       );
       tester.render(size: const CellSize(40, 10));
 
@@ -321,7 +321,7 @@ void main() {
         FilePicker(
           initialDirectory: dir,
           autofocus: true,
-          onSelected: (file) => picked = file,
+          onSelect: (file) => picked = file,
         ),
       );
       tester.render(size: const CellSize(40, 10));
@@ -346,7 +346,7 @@ void main() {
 
     testWidgets('semantic focus updates the focused tree node', (tester) async {
       final dir = _scratchDir();
-      tester.pumpWidget(FilePicker(initialDirectory: dir, onSelected: (_) {}));
+      tester.pumpWidget(FilePicker(initialDirectory: dir, onSelect: (_) {}));
 
       final result = await tester.invokeSemanticAction(
         SemanticAction.focus,

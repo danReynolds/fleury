@@ -10,7 +10,7 @@ import 'package:fleury/fleury.dart';
 /// FilePicker(
 ///   initialDirectory: '/home/user/projects',
 ///   filter: (entity) => entity is Directory || entity.path.endsWith('.dart'),
-///   onSelected: (file) => openInEditor(file.path),
+///   onSelect: (file) => openInEditor(file.path),
 /// )
 /// ```
 ///
@@ -20,7 +20,7 @@ class FilePicker extends StatefulWidget {
   const FilePicker({
     super.key,
     required this.initialDirectory,
-    required this.onSelected,
+    required this.onSelect,
     this.filter,
     this.showHidden = false,
     this.maxVisible = 12,
@@ -35,7 +35,7 @@ class FilePicker extends StatefulWidget {
 
   /// Called with the chosen [File] when Enter is pressed on a file row.
   /// Directories are opened in place — not passed to this callback.
-  final void Function(File file) onSelected;
+  final void Function(File file) onSelect;
 
   /// Optional predicate to hide entries. Receives every [Directory] /
   /// [File] before they're rendered; return `false` to skip. Use to
@@ -188,7 +188,7 @@ class _FilePickerState extends State<FilePicker> {
         _listEntries();
       });
     } else if (e is File) {
-      widget.onSelected(e);
+      widget.onSelect(e);
     }
   }
 
