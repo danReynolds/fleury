@@ -214,11 +214,8 @@ void main() {
           child: Menu(
             trigger: const Text('▾ menu'),
             items: [
-              MenuItem(
-                label: 'this-is-too-long-for-the-box',
-                onSelected: () {},
-              ),
-              MenuItem(label: 'another-long-entry-here', onSelected: () {}),
+              MenuItem(label: 'this-is-too-long-for-the-box', onSelect: () {}),
+              MenuItem(label: 'another-long-entry-here', onSelect: () {}),
             ],
           ),
         ),
@@ -235,7 +232,7 @@ void main() {
             if (rng.nextDouble() > 0.85)
               const MenuSeparator()
             else
-              MenuItem(label: _word(rng, min: 1, max: 14), onSelected: () {}),
+              MenuItem(label: _word(rng, min: 1, max: 14), onSelect: () {}),
         ];
         final ww = 4 + rng.nextInt(30);
         final hh = 1 + rng.nextInt(8);

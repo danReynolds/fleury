@@ -33,7 +33,7 @@ void main() {
         child: Menu(
           trigger: const Text('File'),
           autofocus: true,
-          items: [MenuItem(label: 'New', onSelected: () {})],
+          items: [MenuItem(label: 'New', onSelect: () {})],
         ),
       ),
     );

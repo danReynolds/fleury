@@ -34,7 +34,7 @@ void main() {
       Autocomplete(
         options: _fruits,
         autofocus: true,
-        onSelected: (v) => selected = v,
+        onSelect: (v) => selected = v,
       ),
     );
     tester.type('ap'); // apple, apricot
@@ -74,7 +74,7 @@ void main() {
           options: people,
           autofocus: true,
           displayStringForOption: (p) => p.name,
-          onSelected: (p) => picked = p,
+          onSelect: (p) => picked = p,
         ),
       );
       tester.type('al'); // matches Alice, Alan on name
@@ -147,7 +147,7 @@ void main() {
           autofocus: true,
           placeholder: 'Fruit',
           semanticLabel: 'Fruit suggestions',
-          onSelected: (value) => selected = value,
+          onSelect: (value) => selected = value,
         ),
       );
       tester.type('ap');

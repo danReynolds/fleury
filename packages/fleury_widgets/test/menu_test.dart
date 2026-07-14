@@ -29,9 +29,9 @@ void _clickAt(FleuryTester tester, {required int col, required int row}) {
 
 void main() {
   List<MenuItem> items(void Function(String) onRun) => [
-    MenuItem(label: 'Cut', onSelected: () => onRun('cut')),
-    MenuItem(label: 'Copy', onSelected: () => onRun('copy')),
-    MenuItem(label: 'Paste', onSelected: () => onRun('paste')),
+    MenuItem(label: 'Cut', onSelect: () => onRun('cut')),
+    MenuItem(label: 'Copy', onSelect: () => onRun('copy')),
+    MenuItem(label: 'Paste', onSelect: () => onRun('paste')),
   ];
 
   testWidgets('closed by default — only the trigger shows', (tester) {
@@ -115,7 +115,7 @@ void main() {
       Menu(
         trigger: const Text('Edit'),
         autofocus: true,
-        items: [MenuItem(label: 'Delete', onSelected: () => ran = true)],
+        items: [MenuItem(label: 'Delete', onSelect: () => ran = true)],
       ),
     );
     tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open
@@ -149,9 +149,9 @@ void main() {
           trigger: const Text('Edit'),
           autofocus: true,
           items: [
-            MenuItem(label: 'Cut', onSelected: () => ran = 'cut'),
+            MenuItem(label: 'Cut', onSelect: () => ran = 'cut'),
             const MenuSeparator(),
-            MenuItem(label: 'Paste', onSelected: () => ran = 'paste'),
+            MenuItem(label: 'Paste', onSelect: () => ran = 'paste'),
           ],
         ),
       );
@@ -170,13 +170,13 @@ void main() {
           trigger: const Text('Edit'),
           autofocus: true,
           items: [
-            MenuItem(label: 'Cut', onSelected: () => ran = 'cut'),
+            MenuItem(label: 'Cut', onSelect: () => ran = 'cut'),
             MenuItem(
               label: 'Copy',
               enabled: false,
-              onSelected: () => ran = 'copy',
+              onSelect: () => ran = 'copy',
             ),
-            MenuItem(label: 'Paste', onSelected: () => ran = 'paste'),
+            MenuItem(label: 'Paste', onSelect: () => ran = 'paste'),
           ],
         ),
       );
@@ -193,12 +193,8 @@ void main() {
           trigger: const Text('Edit'),
           autofocus: true,
           items: [
-            MenuItem(
-              label: 'Off',
-              enabled: false,
-              onSelected: () => ran = 'off',
-            ),
-            MenuItem(label: 'On', onSelected: () => ran = 'on'),
+            MenuItem(label: 'Off', enabled: false, onSelect: () => ran = 'off'),
+            MenuItem(label: 'On', onSelect: () => ran = 'on'),
           ],
         ),
       );
@@ -214,12 +210,12 @@ void main() {
       semanticLabel: 'File menu',
       autofocus: true,
       items: [
-        MenuItem(label: 'New', onSelected: () => onRun('new')),
+        MenuItem(label: 'New', onSelect: () => onRun('new')),
         SubMenu(
           label: 'Open',
           items: [
-            MenuItem(label: 'Recent', onSelected: () => onRun('recent')),
-            MenuItem(label: 'Browse', onSelected: () => onRun('browse')),
+            MenuItem(label: 'Recent', onSelect: () => onRun('recent')),
+            MenuItem(label: 'Browse', onSelect: () => onRun('browse')),
           ],
         ),
       ],
@@ -382,12 +378,12 @@ void main() {
           semanticLabel: 'File menu',
           autofocus: true,
           items: [
-            MenuItem(label: 'New', onSelected: () {}),
+            MenuItem(label: 'New', onSelect: () {}),
             SubMenu(
               label: 'Open',
               items: [
-                MenuItem(label: 'Recent', onSelected: () {}),
-                MenuItem(label: 'Browse', onSelected: () {}),
+                MenuItem(label: 'Recent', onSelect: () {}),
+                MenuItem(label: 'Browse', onSelect: () {}),
               ],
             ),
           ],
@@ -467,7 +463,7 @@ void main() {
         trigger: const Text('Edit'),
         autofocus: true,
         items: [
-          MenuItem(label: 'Cut\x1b]52;c;secret\x07here', onSelected: () {}),
+          MenuItem(label: 'Cut\x1b]52;c;secret\x07here', onSelect: () {}),
         ],
       ),
     );

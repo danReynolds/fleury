@@ -1665,7 +1665,7 @@ class _TextEntryStoryState extends State<_TextEntryStory> {
               'bubble tea',
             ],
             placeholder: 'Type f...',
-            onSelected: (value) {
+            onSelect: (value) {
               setState(() => _selected = value);
               widget.onAction('autocomplete.selected', <String, Object?>{
                 'value': value,
@@ -1808,7 +1808,7 @@ class _OverlayStory extends StatelessWidget {
           items: <MenuEntry>[
             MenuItem(
               label: 'Show toast',
-              onSelected: () => Toaster.show(
+              onSelect: () => Toaster.show(
                 context,
                 'Saved story state',
                 severity: ToastSeverity.success,
@@ -1818,8 +1818,8 @@ class _OverlayStory extends StatelessWidget {
             SubMenu(
               label: 'Theme',
               items: <MenuEntry>[
-                MenuItem(label: 'Dark', onSelected: () {}),
-                MenuItem(label: 'Light', onSelected: () {}),
+                MenuItem(label: 'Dark', onSelect: () {}),
+                MenuItem(label: 'Light', onSelect: () {}),
               ],
             ),
           ],
@@ -1841,8 +1841,10 @@ class _OverlayStory extends StatelessWidget {
             children: <Widget>[
               Focus(
                 autofocus: true,
-                child: Text('Focused surface — its active bindings render '
-                    'below (hidden/label-less ones stay out):'),
+                child: Text(
+                  'Focused surface — its active bindings render '
+                  'below (hidden/label-less ones stay out):',
+                ),
               ),
               SizedBox(height: 1),
               KeyHintBar(),
@@ -2817,7 +2819,7 @@ class _FilesStory extends StatelessWidget {
         child: FilePicker(
           initialDirectory: cwd,
           showHidden: showHidden,
-          onSelected: (_) {},
+          onSelect: (_) {},
           filter: (entity) =>
               entity is io.Directory || entity.path.endsWith('.dart'),
         ),

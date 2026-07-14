@@ -13,12 +13,12 @@ sealed class MenuEntry {
 final class MenuItem extends MenuEntry {
   const MenuItem({
     required this.label,
-    required this.onSelected,
+    required this.onSelect,
     this.enabled = true,
   });
 
   final String label;
-  final void Function() onSelected;
+  final void Function() onSelect;
   final bool enabled;
 }
 
@@ -329,7 +329,7 @@ class _MenuBodyState extends State<_MenuBody> {
     if (entry is SubMenu && entry.enabled) {
       _openSubmenu(entry);
     } else if (entry is MenuItem && entry.enabled) {
-      widget.onLeafSelected(entry.onSelected);
+      widget.onLeafSelected(entry.onSelect);
     }
   }
 

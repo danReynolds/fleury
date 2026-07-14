@@ -139,7 +139,7 @@ void main() {
           child: Menu(
             trigger: _Capture((c) => ctx = c, label: 'File'),
             autofocus: true,
-            items: [MenuItem(label: 'Quit', onSelected: () {})],
+            items: [MenuItem(label: 'Quit', onSelect: () {})],
           ),
         ),
       );
