@@ -861,12 +861,8 @@ bool _fileWasSanitized(PatchReviewFile file) {
 }
 
 String _sanitizePatchText(String text) {
-  return sanitizeForDisplay(
-    text.replaceAll(_patchLineBreakPattern, ' '),
-  ).replaceAll(RegExp(' +'), ' ').trim();
+  return sanitizeSingleLine(text).replaceAll(RegExp(' +'), ' ').trim();
 }
-
-final _patchLineBreakPattern = RegExp(r'[\r\n\t]');
 
 CellStyle _rowStyle(
   ThemeData theme, {

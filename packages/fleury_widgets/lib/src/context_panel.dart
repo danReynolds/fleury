@@ -736,12 +736,8 @@ bool _itemWasSanitized(ContextItem item) {
 }
 
 String _sanitizeContextText(String text) {
-  return sanitizeForDisplay(
-    text.replaceAll(_contextLineBreakPattern, ' '),
-  ).replaceAll(RegExp(' +'), ' ').trim();
+  return sanitizeSingleLine(text).replaceAll(RegExp(' +'), ' ').trim();
 }
-
-final _contextLineBreakPattern = RegExp(r'[\r\n\t]');
 
 CellStyle _rowStyle(
   ThemeData theme, {

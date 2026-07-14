@@ -109,8 +109,7 @@ export 'src/rendering/cell_buffer.dart'
         resolveInlineImageFit;
 export 'src/rendering/edge_insets.dart' show EdgeInsets;
 export 'src/rendering/layout.dart' show CellConstraints;
-export 'src/rendering/link_scheme.dart'
-    show isSafeLinkScheme, kSafeLinkSchemes;
+export 'src/rendering/link_scheme.dart' show isSafeLinkScheme, kSafeLinkSchemes;
 export 'src/rendering/render_flex.dart'
     show
         Axis,
@@ -147,7 +146,11 @@ export 'src/rendering/render_stack.dart'
     show RenderPositioned, RenderStack, RenderIndexedStack;
 export 'src/rendering/render_wrap.dart' show RenderWrap;
 export 'src/rendering/text_sanitizer.dart'
-    show isUnsafeRune, replacementCharacter, sanitizeForDisplay;
+    show
+        isUnsafeRune,
+        replacementCharacter,
+        sanitizeForDisplay,
+        sanitizeSingleLine;
 export 'src/rendering/width_resolver.dart'
     show DefaultWidthResolver, TerminalProfile, WidthResolver;
 

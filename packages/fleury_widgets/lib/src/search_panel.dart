@@ -882,10 +882,8 @@ String? _sanitizeOptionalSearchText(String? text) {
   return _sanitizeSearchText(text);
 }
 
-final _searchLineBreakPattern = RegExp(r'[\r\n\t]');
-
 String _sanitizeSearchText(String text) {
-  return sanitizeForDisplay(text.replaceAll(_searchLineBreakPattern, ' '));
+  return sanitizeSingleLine(text);
 }
 
 bool _resultWasSanitized(SearchResult result) {

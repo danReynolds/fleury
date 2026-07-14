@@ -686,10 +686,8 @@ String _basename(String path) {
   return i < 0 ? normalized : normalized.substring(i + 1);
 }
 
-final _fileLineBreakPattern = RegExp(r'[\r\n\t]');
-
 String _sanitizeFileText(String text) {
-  return sanitizeForDisplay(text.replaceAll(_fileLineBreakPattern, ' '));
+  return sanitizeSingleLine(text);
 }
 
 bool _entryWasSanitized(FileBrowserEntry entry) {

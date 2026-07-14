@@ -121,10 +121,6 @@ class _TooltipState extends State<Tooltip> {
   }
 
   String get _safeMessage {
-    return sanitizeForDisplay(
-      widget.message.replaceAll(_tooltipLineBreakPattern, ' '),
-    );
+    return sanitizeSingleLine(widget.message);
   }
 }
-
-final _tooltipLineBreakPattern = RegExp(r'[\r\n\t]');

@@ -1,7 +1,5 @@
 import 'package:fleury/fleury_core.dart';
 
-final _optionLabelLineBreakPattern = RegExp(r'[\r\n\t]');
-
 /// Sanitizes a provider/app-supplied option or menu label for single-line
 /// display and semantics.
 ///
@@ -12,5 +10,4 @@ final _optionLabelLineBreakPattern = RegExp(r'[\r\n\t]');
 /// (tables, logs, messages) already do. Values that get *inserted* (a
 /// picked option's replacement text) are intentionally left alone — they
 /// are application data, and the editing engine owns their display.
-String sanitizeOptionLabel(String text) =>
-    sanitizeForDisplay(text.replaceAll(_optionLabelLineBreakPattern, ' '));
+String sanitizeOptionLabel(String text) => sanitizeSingleLine(text);

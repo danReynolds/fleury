@@ -1329,9 +1329,11 @@ String _plainInlineText(String src) {
 
 String _sanitizeMarkdownText(String text, {int tabSize = 2}) {
   final expandedTabs = text.replaceAll('\t', ' ' * tabSize);
+  // Visible \r/\n BEFORE sanitizing — sanitizeForDisplay rewrites them to
+  // U+FFFD, so doing it after would leave these replaceAlls as dead no-ops.
   return sanitizeForDisplay(
-    expandedTabs,
-  ).replaceAll('\r', r'\r').replaceAll('\n', r'\n');
+    expandedTabs.replaceAll('\r', r'\r').replaceAll('\n', r'\n'),
+  );
 }
 
 String _stripTrailingCr(String text) {

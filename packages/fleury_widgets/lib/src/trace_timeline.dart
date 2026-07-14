@@ -845,12 +845,8 @@ bool _eventWasSanitized(TraceTimelineEntry event) {
 }
 
 String _sanitizeTraceText(String text) {
-  return sanitizeForDisplay(
-    text.replaceAll(_traceLineBreakPattern, ' '),
-  ).replaceAll(RegExp(' +'), ' ').trim();
+  return sanitizeSingleLine(text).replaceAll(RegExp(' +'), ' ').trim();
 }
-
-final _traceLineBreakPattern = RegExp(r'[\r\n\t]');
 
 CellStyle _rowStyle(
   ThemeData theme, {

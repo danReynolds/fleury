@@ -139,9 +139,7 @@ class _FilePickerState extends State<FilePicker> {
   }
 
   String _safeText(String text) {
-    return sanitizeForDisplay(
-      text.replaceAll(_filePickerLineBreakPattern, ' '),
-    );
+    return sanitizeSingleLine(text);
   }
 
   String _entryType(FileSystemEntity entry) {
@@ -383,5 +381,3 @@ class _FilePickerState extends State<FilePicker> {
     );
   }
 }
-
-final _filePickerLineBreakPattern = RegExp(r'[\r\n\t]');

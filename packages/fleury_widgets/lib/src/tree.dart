@@ -378,8 +378,6 @@ class _TreeRowWidget<T> extends StatelessWidget {
   }
 }
 
-final _treeLineBreakPattern = RegExp(r'[\r\n\t]');
-
 String _sanitizeTreeText(String text) {
-  return sanitizeForDisplay(text.replaceAll(_treeLineBreakPattern, ' '));
+  return sanitizeSingleLine(text);
 }

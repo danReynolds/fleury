@@ -662,11 +662,9 @@ _FormattedMessageLine _formatMessageLine(
   );
 }
 
-final _messageLineBreakPattern = RegExp(r'[\r\n\t]');
-
 String _sanitizeMessageText(String original) {
   if (!_needsMessageSanitization(original)) return original;
-  return sanitizeForDisplay(original).replaceAll(_messageLineBreakPattern, ' ');
+  return sanitizeSingleLine(original);
 }
 
 bool _needsMessageSanitization(String text) {

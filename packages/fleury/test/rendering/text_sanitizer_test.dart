@@ -137,4 +137,32 @@ void main() {
       expect(sanitizeForDisplay(input), input);
     });
   });
+
+  group('sanitizeSingleLine', () {
+    test('collapses newlines, CR, and tabs to a single space (not U+FFFD)', () {
+      // Regression: sanitizeForDisplay treats \r\n\t as C0 controls and rewrites
+      // them to U+FFFD, so a caller that sanitized THEN stripped breaks showed
+      // the replacement glyph where a space belonged. sanitizeSingleLine strips
+      // the breaks FIRST, so each becomes a real space.
+      expect(sanitizeSingleLine('a\tb\nc\rd'), 'a b c d');
+      expect(sanitizeSingleLine('line1\nline2'), 'line1 line2');
+      expect(
+        sanitizeSingleLine('has\ttab'),
+        isNot(contains(replacementCharacter)),
+        reason: 'a tab must become a space, not the replacement glyph',
+      );
+    });
+
+    test('still sanitizes other unsafe controls to U+FFFD', () {
+      // A break is spaced out, but a genuine escape sequence is still collapsed.
+      expect(
+        sanitizeSingleLine('a\nb\x1B[31mc'),
+        'a b${replacementCharacter}c',
+      );
+    });
+
+    test('leaves clean single-line text untouched', () {
+      expect(sanitizeSingleLine('already clean'), 'already clean');
+    });
+  });
 }

@@ -877,12 +877,8 @@ bool _entryWasSanitized(FileMentionEntry entry) {
 }
 
 String _sanitizeMentionText(String text) {
-  return sanitizeForDisplay(
-    text.replaceAll(_mentionLineBreakPattern, ' '),
-  ).replaceAll(RegExp(' +'), ' ').trim();
+  return sanitizeSingleLine(text).replaceAll(RegExp(' +'), ' ').trim();
 }
-
-final _mentionLineBreakPattern = RegExp(r'[\r\n\t]');
 
 CellStyle _rowStyle(
   ThemeData theme, {
