@@ -156,6 +156,25 @@ void main() {
         expect(detectHyperlinksFromEnvironment(env), isTrue, reason: '$env');
       }
     });
+
+    test('known non-OSC-8 terminals stay unsupported — no false link claim', () {
+      // Regression guard for two terminals that do NOT implement OSC 8 and must
+      // NOT be allow-listed — both merely sniff visible URLs out of the text
+      // (their own link detection), which is why the parenthetical URL looks
+      // clickable but an OSC 8 escape is silently ignored:
+      //   * Apple_Terminal — no OSC 8 support; URL auto-detection only.
+      //   * WarpTerminal   — OSC 8 is an OPEN feature request (warp #4194);
+      //     verified 2026-07-13 that a forced escape is not honored.
+      // Emitting to a silent-ignorer isn't corrupting, but it's a false
+      // `supported` claim in diagnose; the honest state is styled-but-unlinked.
+      for (final program in const ['Apple_Terminal', 'WarpTerminal']) {
+        expect(
+          detectHyperlinksFromEnvironment({'TERM_PROGRAM': program}),
+          isFalse,
+          reason: program,
+        );
+      }
+    });
   });
 
   group('detectHyperlinksFromEnvironment (emission-gate bool)', () {
