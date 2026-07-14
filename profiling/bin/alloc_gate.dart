@@ -201,7 +201,17 @@ Future<void> main(List<String> args) async {
     void frame() {
       model.bump();
       back.withoutDamageTracking(back.clear);
+      // Mirror TuiFrameLoop exactly: damage tracking is ON during the paint and
+      // the presenter consumes the bounds + rows every frame. Previously the
+      // gate painted with tracking OFF and never called resetDamageTracking, so
+      // _recordDamageRect early-returned — the whole damage-accumulation path
+      // sat outside the measured window, so a reintroduced per-write allocation
+      // of any package:fleury geometry class here would now be caught (dart:core
+      // churn like the takeDamageRows Set stays invisible to this gate).
+      back.resetDamageTracking();
       owner.renderFrame(root, back);
+      back.takeDamageBounds();
+      back.takeDamageRows();
       renderer.renderDiff(front, back, sink);
       final tmp = front;
       front = back;

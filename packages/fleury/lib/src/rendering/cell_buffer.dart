@@ -43,7 +43,15 @@ final class CellBuffer {
   // Per-placement geometry, one entry per [writeImage] call, in paint order.
   final List<InlineImagePlacement> _imagePlacements = <InlineImagePlacement>[];
   var _damageTrackingEnabled = false;
-  CellRect? _damageBounds;
+  // Damage bounds as raw ints (left/top inclusive, right/bottom exclusive),
+  // updated by min/max in [_recordDamageRect] so the paint hot path allocates
+  // no geometry per write. A CellRect is materialized only when the bounds are
+  // read, in [damageBounds] / [takeDamageBounds].
+  var _hasDamage = false;
+  int _dmgLeft = 0;
+  int _dmgTop = 0;
+  int _dmgRight = 0;
+  int _dmgBottom = 0;
   final Set<int> _damageRows = <int>{};
   var _damageSuppressionDepth = 0;
 
@@ -65,12 +73,19 @@ final class CellBuffer {
   /// This is a paint-to-presenter hint, not a correctness oracle. Callers can
   /// use it to bound a later diff only when they know every possible visual
   /// change went through this buffer while tracking was active.
-  CellRect? get damageBounds => _damageBounds;
+  CellRect? get damageBounds => _hasDamage
+      ? CellRect.fromLTWH(
+          _dmgLeft,
+          _dmgTop,
+          _dmgRight - _dmgLeft,
+          _dmgBottom - _dmgTop,
+        )
+      : null;
 
   /// Starts or resets damage tracking without changing cell contents.
   void resetDamageTracking() {
     _damageTrackingEnabled = true;
-    _damageBounds = null;
+    _hasDamage = false;
     _damageRows.clear();
   }
 
@@ -85,8 +100,14 @@ final class CellBuffer {
   }
 
   CellRect? takeDamageBounds() {
-    final result = _damageBounds;
-    _damageBounds = null;
+    if (!_hasDamage) return null;
+    final result = CellRect.fromLTWH(
+      _dmgLeft,
+      _dmgTop,
+      _dmgRight - _dmgLeft,
+      _dmgBottom - _dmgTop,
+    );
+    _hasDamage = false;
     return result;
   }
 
@@ -156,7 +177,7 @@ final class CellBuffer {
     );
     _images.clear();
     _imagePlacements.clear();
-    _damageBounds = null;
+    _hasDamage = false;
     _recordDamageRect(0, 0, newSize.cols, newSize.rows);
   }
 
@@ -672,9 +693,18 @@ final class CellBuffer {
     final right = col + cols > _size.cols ? _size.cols : col + cols;
     final bottom = row + rows > _size.rows ? _size.rows : row + rows;
     if (left >= right || top >= bottom) return;
-    final rect = CellRect.fromLTWH(left, top, right - left, bottom - top);
-    final current = _damageBounds;
-    _damageBounds = current == null ? rect : current.union(rect);
+    if (!_hasDamage) {
+      _hasDamage = true;
+      _dmgLeft = left;
+      _dmgTop = top;
+      _dmgRight = right;
+      _dmgBottom = bottom;
+    } else {
+      if (left < _dmgLeft) _dmgLeft = left;
+      if (top < _dmgTop) _dmgTop = top;
+      if (right > _dmgRight) _dmgRight = right;
+      if (bottom > _dmgBottom) _dmgBottom = bottom;
+    }
     for (var damagedRow = top; damagedRow < bottom; damagedRow++) {
       _damageRows.add(damagedRow);
     }
