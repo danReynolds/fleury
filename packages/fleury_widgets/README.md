@@ -81,9 +81,6 @@ Shared helpers: `Palettes` (prebuilt color palettes), `TickFormat`
 | --- | --- |
 | `Image` | Raster images in the terminal — auto-selects the Kitty, iTerm2, or Sixel graphics protocol, falling back to half-block / quarter-block / sextant / braille ANSI art with dithering. Animated GIF/APNG/WebP supported. |
 | `Canvas` | A retained drawing surface for lines, shapes, and points. |
-| `HalfBlockBuffer` | 1×2-pixel-per-cell drawing surface (Unicode block halves). |
-| `QuadrantBuffer` | 2×2-pixel-per-cell drawing surface (block quadrants). |
-| `BrailleBuffer` | 2×4-pixel-per-cell drawing surface (braille dots). |
 
 ## Testing
 
