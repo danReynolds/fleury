@@ -648,7 +648,24 @@ Future<int> _runServeBridge({
         await _rejectUnauthorizedWebSocket(req);
         return;
       }
-      final ws = await WebSocketTransformer.upgrade(req);
+      // Contain any upgrade-time error (client reset mid-handshake, I/O fault)
+      // so it can't escape as an unhandled async error from this root-zone
+      // listener. This bridge path has no admission counter, so nothing to
+      // release — just drop the connection.
+      final WebSocket ws;
+      try {
+        ws = await WebSocketTransformer.upgrade(req);
+      } catch (error) {
+        stderr.writeln('[serve] rejecting connection: websocket upgrade '
+            'failed ($error).');
+        try {
+          req.response.statusCode = HttpStatus.badRequest;
+          await req.response.close();
+        } catch (_) {
+          // The socket may already be hijacked/closed by the failed upgrade.
+        }
+        return;
+      }
       if (sessionInFlight || pendingBrowser != null) {
         ws.add(
           Uint8List.fromList(
@@ -1095,7 +1112,30 @@ Future<int> _runServeSpawn({
       admitted--;
     }
 
-    final ws = await WebSocketTransformer.upgrade(req);
+    // upgrade() can complete with an error — a client that resets mid-handshake,
+    // an I/O fault on the detached socket, a protocol edge case. This runs in a
+    // root-zone request listener with no runZonedGuarded, so an unhandled upgrade
+    // error both escapes as an unhandled async error AND leaks the admission slot
+    // reserved just above (release() would otherwise never run for this
+    // connection). Contain it: free the slot and drop only this connection.
+    // (Dart's upgrade() is robust to merely-malformed headers — a bad-handshake
+    // "process crash" was not reproducible — so this is defensive containment
+    // plus the concrete slot-leak fix.)
+    final WebSocket ws;
+    try {
+      ws = await WebSocketTransformer.upgrade(req);
+    } catch (error) {
+      release();
+      stderr.writeln('[serve] rejecting connection: websocket upgrade '
+          'failed ($error).');
+      try {
+        req.response.statusCode = HttpStatus.badRequest;
+        await req.response.close();
+      } catch (_) {
+        // The socket may already be hijacked/closed by the failed upgrade.
+      }
+      return;
+    }
 
     // Claim the warm standby and immediately prepare the next one.
     final claimed = warm;
