@@ -1172,6 +1172,9 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       case 'serve-semantics-gate':
         await benchmarkServeSemanticsGate(rest);
         return;
+      case 'serve-semantics-alloc':
+        await benchmarkServeSemanticsAlloc(rest);
+        return;
       case 'image-bench':
         await benchmarkImageBench(rest);
         return;
@@ -1539,6 +1542,24 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
     ], workingDirectory: profiling);
   }
 
+  /// Serve-semantics per-frame CPU/allocation gate. The wire diff is O(changed)
+  /// (serve-semantics-gate proves that); this guards the axis that diff hides —
+  /// the server allocation to PRODUCE the diff. It drives the real present path
+  /// (redacted snapshot build + encode) for a realistic large tree with a small
+  /// per-frame change and gates `package:fleury` bytes/frame via a self-connected
+  /// VM service, like alloc-gate. Catches a regression back to full-tree
+  /// redaction every frame. `--update-baseline` after an intentional change or
+  /// SDK bump; the VM-service flags let the gate self-connect.
+  Future<void> benchmarkServeSemanticsAlloc(List<String> args) async {
+    await _run('dart', [
+      '--deterministic',
+      '--enable-vm-service=0',
+      '--disable-service-auth-codes',
+      'bin/serve_semantics_alloc_gate.dart',
+      ...args,
+    ], workingDirectory: profiling);
+  }
+
   /// Inline-image encoder bench — image bytes/frame + encode µs (protocols x
   /// static/animated). Pass `--gate` to guard the dedup + zero-image-fast-path
   /// invariants at the byte level. Fast + deterministic.
@@ -1610,6 +1631,13 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       (name: 'serve-semantics-gate', cmd: [
         'run',
         'bin/serve_semantics_profile.dart',
+        '--gate',
+      ]),
+      (name: 'serve-semantics-alloc', cmd: [
+        '--deterministic',
+        '--enable-vm-service=0',
+        '--disable-service-auth-codes',
+        'bin/serve_semantics_alloc_gate.dart',
         '--gate',
       ]),
       (name: 'image-bench', cmd: ['run', 'bin/image_bench.dart', '--gate']),
@@ -6608,6 +6636,10 @@ void _printBenchmarkUsage() {
   );
   stdout.writeln(
     '  serve-semantics-gate    Semantics wire anti-cliff (DEFLATE) invariant',
+  );
+  stdout.writeln(
+    '  serve-semantics-alloc   Serve semantics per-frame CPU/alloc to produce '
+    'the diff',
   );
   stdout.writeln(
     '  image-bench [--gate]    Inline-image encoder bytes/frame + dedup/zero',
