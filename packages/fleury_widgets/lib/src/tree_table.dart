@@ -1906,8 +1906,6 @@ String _encodeField(String value, DataTableExportFormat format) {
   return needsQuote ? '"$escaped"' : escaped;
 }
 
-final _treeTableLineBreakPattern = RegExp(r'[\r\n\t]');
-
 String _sanitizeTreeTableText(String text) {
-  return sanitizeForDisplay(text.replaceAll(_treeTableLineBreakPattern, ' '));
+  return sanitizeSingleLine(text);
 }

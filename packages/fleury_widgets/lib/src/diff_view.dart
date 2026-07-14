@@ -703,9 +703,12 @@ _formatDiffLine(DiffLineKind kind, String raw, int? maxLineLength) {
 }
 
 String _sanitizeDiffText(String text) {
+  // Replace breaks/tabs with their visible forms BEFORE sanitizing —
+  // sanitizeForDisplay rewrites \r\n\t to U+FFFD, so doing it after would make
+  // these replaceAlls dead no-ops and render `�` for tab-indented / CRLF diffs.
   return sanitizeForDisplay(
-    text,
-  ).replaceAll('\r', r'\r').replaceAll('\n', r'\n').replaceAll('\t', '  ');
+    text.replaceAll('\r', r'\r').replaceAll('\n', r'\n').replaceAll('\t', '  '),
+  );
 }
 
 String _truncateGraphemes(String text, int? maxLength) {

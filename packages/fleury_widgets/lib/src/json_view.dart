@@ -836,8 +836,10 @@ String _truncateGraphemes(String text, int? maxLength) {
 }
 
 String _sanitizeJsonLabel(String text) => sanitizeForDisplay(
-  text,
-).replaceAll('\r', r'\r').replaceAll('\n', r'\n').replaceAll('\t', r'\t');
+  // Visible escapes BEFORE sanitizing — sanitizeForDisplay would otherwise turn
+  // \r\n\t into U+FFFD first and leave these replaceAlls as dead no-ops.
+  text.replaceAll('\r', r'\r').replaceAll('\n', r'\n').replaceAll('\t', r'\t'),
+);
 
 Object? _sanitizeJsonValue(Object? value) {
   if (value is String) return _sanitizeJsonLabel(value);

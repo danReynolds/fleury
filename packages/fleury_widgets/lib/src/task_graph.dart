@@ -556,10 +556,8 @@ String _progressText(TaskGraphNode node) {
 
 String _sanitizeTaskText(String original) {
   if (!_needsTaskSanitization(original)) return original;
-  return sanitizeForDisplay(original).replaceAll(_taskLineBreakPattern, ' ');
+  return sanitizeSingleLine(original);
 }
-
-final _taskLineBreakPattern = RegExp(r'[\r\n\t]');
 
 bool _needsTaskSanitization(String text) {
   for (final codeUnit in text.codeUnits) {

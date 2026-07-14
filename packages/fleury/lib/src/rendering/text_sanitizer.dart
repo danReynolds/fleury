@@ -88,6 +88,18 @@ String sanitizeForDisplay(String input) {
   return buffer.toString();
 }
 
+final _singleLineBreaks = RegExp(r'[\r\n\t]');
+
+/// [sanitizeForDisplay] for a ONE-LINE label: newlines, carriage returns, and
+/// tabs collapse to a single space FIRST, then the usual unsafe-rune sanitizing
+/// runs. Order matters — `sanitizeForDisplay` treats `\r\n\t` as C0 controls and
+/// rewrites them to [replacementCharacter], so a caller that sanitizes *then*
+/// strips breaks gets `�` where a space belonged (the break is already gone).
+/// Use this for single-line labels — table/tree rows, tool cards, log lines,
+/// menu options — instead of hand-rolling the order per widget.
+String sanitizeSingleLine(String input) =>
+    sanitizeForDisplay(input.replaceAll(_singleLineBreaks, ' '));
+
 const _esc = 0x1B;
 const _bel = 0x07;
 const _st = 0x9C;

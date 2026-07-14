@@ -321,7 +321,7 @@ String _formatExportField(String field, DataTableExportFormat format) {
 
 String _sanitizeExportField(String field) {
   final withoutAnsi = field.replaceAll(_ansiEscapePattern, '');
-  return sanitizeForDisplay(withoutAnsi.replaceAll(RegExp(r'[\r\n\t]'), ' '));
+  return sanitizeSingleLine(withoutAnsi);
 }
 
 String _quoteCsvField(String field) {
@@ -1748,8 +1748,10 @@ class RenderDataTable extends RenderObject {
 
   String _clipToWidth(String text, int width) {
     final sanitized = sanitizeForDisplay(
-      text,
-    ).replaceAll(RegExp(r'[\r\n]'), ' ');
+      // Collapse breaks to spaces BEFORE sanitizing — sanitizeForDisplay would
+      // otherwise turn \r\n into U+FFFD first, making this replace a no-op.
+      text.replaceAll(RegExp(r'[\r\n]'), ' '),
+    );
     var used = 0;
     final out = StringBuffer();
     for (final grapheme in sanitized.characters) {

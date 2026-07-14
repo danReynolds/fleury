@@ -940,9 +940,7 @@ bool _entryWasSanitized(ConversationEntry entry) {
 }
 
 String _sanitizeConversationText(String text) {
-  return sanitizeForDisplay(
-    text.replaceAll(_conversationLineBreakPattern, ' '),
-  ).replaceAll(RegExp(' +'), ' ').trim();
+  return sanitizeSingleLine(text).replaceAll(RegExp(' +'), ' ').trim();
 }
 
 String _truncateGraphemes(String text, int? maxLength) {
@@ -952,8 +950,6 @@ String _truncateGraphemes(String text, int? maxLength) {
   if (characters.length <= maxLength) return text;
   return characters.take(maxLength).toString();
 }
-
-final _conversationLineBreakPattern = RegExp(r'[\r\n\t]');
 
 CellStyle _rowStyle(
   ThemeData theme, {

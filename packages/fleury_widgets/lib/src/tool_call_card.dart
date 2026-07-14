@@ -321,10 +321,8 @@ String _formatArguments(Map<String, Object?> arguments) {
 
 String _sanitizeToolText(String original) {
   if (!_needsToolSanitization(original)) return original;
-  return sanitizeForDisplay(original).replaceAll(_toolLineBreakPattern, ' ');
+  return sanitizeSingleLine(original);
 }
-
-final _toolLineBreakPattern = RegExp(r'[\r\n\t]');
 
 bool _needsToolSanitization(String text) {
   for (final codeUnit in text.codeUnits) {

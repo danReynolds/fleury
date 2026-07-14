@@ -1045,11 +1045,9 @@ _FormattedLogLine _formatLogLine(
   );
 }
 
-final _logLineBreakPattern = RegExp(r'[\r\n\t]');
-
 String _sanitizeLogMessage(String original) {
   if (!_needsLogSanitization(original)) return original;
-  return sanitizeForDisplay(original).replaceAll(_logLineBreakPattern, ' ');
+  return sanitizeSingleLine(original);
 }
 
 bool _needsLogSanitization(String text) {
