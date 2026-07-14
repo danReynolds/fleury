@@ -52,7 +52,8 @@ tree with a diffing ANSI renderer. Ctrl+C always exits.
   `InheritedWidget`, keys + reconciliation, `MediaQuery`, layout
   constraints, the `RenderObject` tree, and a swappable
   `TerminalDriver` (POSIX today; `fleury_web` renders the same tree to a
-  browser canvas).
+  browser DOM cell grid — selectable text and a real accessibility tree,
+  not a canvas bitmap).
 - **Layout**: `Row` / `Column` / `Flex`, `Stack`, `Align` / `Center`,
   `Padding`, `SizedBox`, `Expanded` / `Flexible`, intrinsic sizing,
   `LayoutBuilder`.
@@ -60,8 +61,8 @@ tree with a diffing ANSI renderer. Ctrl+C always exits.
   modal focus scopes, mouse + pointer routing, paste handling.
 - **Navigation**: `Navigator` with routes + an `Overlay` for modals,
   menus, tooltips, and toasts.
-- **Animation**: `AnimationController` + `Tween` + `AnimatedBuilder`
-  (continuous) and `FrameBuilder` / `FrameTicker` (frame-indexed),
+- **Animation**: `AnimationBuilder` + `Animation` (spring-based,
+  value-driven) and `FrameBuilder` / `FrameTicker` (frame-indexed),
   sharing one per-runtime scheduler. See below.
 - **Hot reload**: state-preserving reload wired for VS Code — see
   [`doc/hot_reload.md`](doc/hot_reload.md).
@@ -97,11 +98,12 @@ Goldens write themselves on first run and update with
 
 ## Animation
 
-The animation system lives in two coordinated lanes — continuous
-tweens (Flutter-shaped: AnimationController + Tween + AnimatedBuilder)
-and discrete frame-indexed primitives (FrameTicker / FrameBuilder).
-Both share a single per-runtime `TickerScheduler` owned by the
-`TuiBinding` that `runApp` installs at the root; idle apps burn no
+The animation system lives in two coordinated lanes — value-driven
+springs (`AnimationBuilder` + `Animation`, which retarget from the live
+value AND velocity so an interruption mid-flight stays smooth instead of
+snapping) and discrete frame-indexed primitives (`FrameTicker` /
+`FrameBuilder`). Both share a single per-runtime `TickerScheduler` owned by
+the `TuiBinding` that `runApp` installs at the root; idle apps burn no
 scheduler CPU.
 
 See [`docs/rfcs/0010-animation-infrastructure.md`](../../docs/rfcs/0010-animation-infrastructure.md)
@@ -120,41 +122,51 @@ the scheduler with every other animation in the app.
 
 ### Custom animations
 
-For typed value interpolation use `AnimationController` + `Tween` +
-`AnimatedBuilder`, matching Flutter's idiom:
+Most animations are one widget. `AnimationBuilder<T>` owns an `Animation`,
+retargets whenever `value` changes, and disposes itself — no
+`StatefulWidget`, no `didUpdateWidget`, no `dispose`. The engine is a
+spring, so a retarget mid-flight continues from the live value and velocity
+instead of restarting:
 
 ```dart
-class _MyState extends State<MyWidget>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
+// A number that springs toward its target whenever `value` changes.
+AnimationBuilder<int>(value, builder: (context, v) => Text('$v'))
 
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    )..forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final fill = IntTween(begin: 0, end: 30).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
-    return AnimatedBuilder(
-      animation: fill,
-      builder: (ctx, _) => Text('█' * fill.value),
-    );
-  }
-}
+// A panel that springs open/closed — toggle rapidly and it stays smooth.
+AnimationBuilder<int>(
+  open ? 30 : 0,
+  spring: Spring.snappy,
+  builder: (context, width) => SizedBox(width: width, child: child),
+)
 ```
+
+For sequences, loops, or an animation you drive imperatively, hold an
+`Animation<T>` in your `State` and run steps against it:
+
+```dart
+final _x = Animation<int>(28);
+
+// A toast: slide in, hold, slide out. The returned future fires at the end.
+await _x.run([
+  AnimationStep.to(0, spring: Spring.snappy),
+  const AnimationStep.hold(Duration(seconds: 2)),
+  AnimationStep.to(28,
+      curve: Curves.easeIn, duration: const Duration(milliseconds: 200)),
+]);
+
+// A pulsing dot: ping-pong forever; settles to nothing when off-screen.
+final _c = Animation<RgbColor>(const RgbColor(120, 0, 0))
+  ..loop(
+    between: (const RgbColor(120, 0, 0), const RgbColor(255, 60, 60)),
+    period: const Duration(milliseconds: 700),
+    curve: Curves.easeInOut,
+  );
+```
+
+`example/animation_recipes.dart` is a runnable gallery of these patterns —
+counter, interruptible panel, toast, badge flash, selection highlight,
+health color — each mirrored by a widget test in
+`test/example/animation_recipes_test.dart`.
 
 For low-frequency frame-indexed animations (spinners, cursor blink,
 typing indicators), `FrameBuilder` is more direct:
@@ -176,8 +188,8 @@ FrameBuilder(
   state continues to advance so re-enabling resumes at the
   correct value; no replay of missed frames.
 - `AnimationPolicy.disabled` on the binding — globally suppress
-  decorative animations; AnimationController.forward / reverse
-  / repeat snap to their end state synchronously.
+  decorative animations; springs and `run` sequences settle to their
+  target instantly.
 
 ### Examples
 
@@ -186,9 +198,10 @@ FrameBuilder(
 - `example/chat_demo.dart` — a `Spinner` integrated into the
   message-pane header of the full chat layout.
 
-### Color tweens
+### Color
 
-`RgbColorTween` interpolates `RgbColor` channels linearly. Indexed
-ANSI colors aren't on a meaningful number line, so the type system
-rules out interpolating between them — for indexed colors use
-`DiscreteTween<Color>` (swap at the midpoint).
+`rgbColorLerp(a, b, t)` interpolates `RgbColor` channels linearly; feed the
+result to an `Animation<RgbColor>` (or read it inside an
+`AnimationBuilder<RgbColor>`) to glide a color toward a target. Indexed ANSI
+colors aren't on a meaningful number line, so animate the RGB value rather
+than interpolating palette indices.
