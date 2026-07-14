@@ -4,17 +4,18 @@
 // without telling you WHY it happens or HOW to fix it.
 //
 // Flutter solved this with FlutterError + ErrorSummary/Description/
-// Hint nodes. We need much less than that for now — just three
+// Hint nodes. We need much less than that for now — a few structured
 // fields and a formatted toString — but the API leaves room to
 // grow without forcing every site to migrate twice.
 
 /// A framework error with a brief summary, optional details, and an
 /// actionable hint for the developer.
 ///
-/// Thrown by fleury internals in place of bare `StateError`s. The
-/// debug overlay, error widget, and crash output format these so the
-/// summary stands out; running raw via `toString()` produces a
-/// readable multi-line block that pastes cleanly into a bug report.
+/// Thrown by fleury internals in place of bare `StateError`s. The debug
+/// overlay, error widget, and crash output all render it via `toString()`,
+/// which produces a readable multi-line block — summary first, then the
+/// optional details, hint, and docs URL — that pastes cleanly into a bug
+/// report.
 ///
 /// ```dart
 /// throw FleuryError(
