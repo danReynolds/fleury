@@ -814,6 +814,15 @@ abstract class Element implements BuildContext {
     if (parent != null) {
       parent.forgetChild(element);
       parent._deactivateChild(element);
+      // The old parent just lost a child it may not otherwise rebuild this
+      // pass — e.g. canSkipWidgetUpdate let its subtree be skipped, so it
+      // still describes `key` as its child yet never re-inflates it. Mark it
+      // dirty so it rebuilds and re-reaches its slot: a genuine reparent finds
+      // the child gone and fills the hole, while a genuine duplicate re-inflates
+      // `key` and trips _debugClaimGlobalKey (the claim map persists across the
+      // flush's passes) — a loud duplicate-key error instead of the silent
+      // blank left where the stolen element used to render.
+      parent.markNeedsBuild();
     }
     _owner?._inactiveElements.remove(element);
     return element;

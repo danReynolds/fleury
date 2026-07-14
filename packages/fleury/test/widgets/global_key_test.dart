@@ -132,4 +132,33 @@ void main() {
       throwsA(isA<StateError>()),
     );
   });
+
+  testWidgets(
+    'a key stolen from a skipped subtree surfaces the duplicate instead of '
+    'silently blanking',
+    (tester) {
+      final key = GlobalKey();
+      // Reused by identity across pumps, so canSkipWidgetUpdate skips it: this
+      // subtree keeps describing `key` as its child yet is never rebuilt to
+      // re-inflate it. Before the fix, a sibling stealing `key` left this
+      // holder's slot blank with no error — the skip hid the duplicate.
+      final pinned = Column(
+        children: [SizedBox(key: key, width: 1, height: 1)],
+      );
+
+      tester.pumpWidget(Column(children: [pinned]));
+
+      expect(
+        () => tester.pumpWidget(
+          Column(
+            children: [pinned, SizedBox(key: key, width: 1, height: 1)],
+          ),
+        ),
+        throwsA(isA<StateError>()),
+        reason:
+            'the skipped holder must be rebuilt to re-reach its slot, tripping '
+            'the duplicate-key check rather than losing its child silently',
+      );
+    },
+  );
 }
