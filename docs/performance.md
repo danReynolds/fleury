@@ -17,7 +17,7 @@ Fleury's performance model has five practical promises:
 | Dirty work stays local | `setState` marks one part of the retained tree dirty; unrelated widgets, layout, and paint are reused. |
 | Output is damage-based | The terminal target writes changed cells as ANSI. The browser target applies changed cell ranges or DOM patches. |
 | Large data is virtualized | Tables, trees, and lists bind the visible window instead of rebuilding the full dataset. |
-| Streaming output stays incremental | Logs, Markdown, and subprocess output append without forcing unrelated regions through the pipeline. |
+| Streaming work stays scoped | Logs and subprocess output append incrementally. Markdown currently reparses the accumulated document on each append, while retained updates and damage-based output keep unrelated regions out of the frame work. |
 | Idle is quiet | If nothing changed, Fleury should schedule no meaningful work and emit no frame output. |
 
 Those promises come from the same architecture described in
@@ -36,7 +36,7 @@ expensive:
 | Startup and first paint | How much runtime overhead every app pays before the UI gets interesting. |
 | Input latency | Whether text fields, paste, cursor movement, completions, and command entry stay responsive. |
 | Large data navigation | Whether tables and trees stay tied to the virtualized visible window instead of dataset size. |
-| Streaming text | Whether logs, Markdown, and subprocess output append without runaway parsing or repaint work. |
+| Streaming text | Whether logs and subprocess output append cheaply, and whether Markdown's current full-document parse-on-append remains inside its explicit workload budget without broad repaint work. |
 | Update cadence | Whether many independent widgets can tick without broad redraws. |
 | Layout and resize churn | Whether Fleury recomputes only affected layout regions and recovers cleanly from terminal resizes. |
 | App-shell churn | Whether overlays, command palettes, focus restoration, and transient UI creation stay cheap. |
@@ -86,3 +86,9 @@ For durable comparisons, keep the fixture shape, terminal, machine, framework
 versions, and repeated-run variance beside the result. That context makes the
 captures useful for regression review, fixture-shape review, runtime-floor
 analysis, and follow-up profiling.
+
+The checked-in evidence supports a narrower claim than "fastest TUI
+framework": Fleury keeps interactive work responsive and is competitive on
+many matched terminal-wire workloads. Native peers retain an inherent startup
+and RSS floor advantage, and a public cross-framework ranking requires fresh
+peer versions, bare-metal repeated runs, and equivalent fixture shapes.

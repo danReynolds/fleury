@@ -313,10 +313,10 @@ single layer, and it's why we'd expect the same architecture to pay off
 in any language that hosts it.
 
 **And the browser target held up.** The same damage pipeline drives the
-retained DOM backend, with browser-inclusive end-to-end latency under
-12 ms — measured through the real browser frame pipeline, not just our
-own timers. Browser-inclusive frame numbers are rare in this space;
-we'd like to help make them normal.
+retained DOM backend. The current browser gates measure Fleury's build,
+layout, paint, and DOM-apply phases and show useful frame-budget headroom.
+They do not yet measure compositor-visible input-to-paint latency, so we do
+not describe them as browser end-to-end numbers.
 
 ## Keeping ourselves honest
 

@@ -1,6 +1,5 @@
-// The README "Quick start" example, kept as a compiled, tested file so
-// the front-door docs can never silently rot. If you change this file,
-// update the snippet in README.md to match (and vice versa).
+// The compiled, tested counterpart to the README "Quick start". If you change
+// this file, update the snippet in README.md to match (and vice versa).
 //
 // Run it:
 //

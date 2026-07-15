@@ -62,6 +62,27 @@ abstract interface class TuiEventSink {
 /// rather than waiting forever for a CSI continuation that isn't
 /// coming.
 class InputParser {
+  InputParser({
+    this.maxCsiSequenceLength = 256,
+    this.maxPasteBytes = 1024 * 1024,
+  }) : assert(maxCsiSequenceLength > 0),
+       assert(maxPasteBytes > 0);
+
+  /// Maximum bytes accepted between `CSI` and its final byte.
+  ///
+  /// Real key/mouse reports are a few dozen bytes at most. The cap prevents a
+  /// malformed terminal or legacy remote peer from growing parameter lists and
+  /// arbitrary-precision integers forever without a final byte.
+  final int maxCsiSequenceLength;
+
+  /// Target bytes retained for one bracketed-paste segment.
+  ///
+  /// Larger pastes are emitted as multiple [PasteEvent]s, preserving all input
+  /// while bounding the parser's live buffer. A trailing incomplete UTF-8
+  /// scalar may carry over by at most three bytes rather than being split into
+  /// replacement characters.
+  final int maxPasteBytes;
+
   _State _state = _State.ground;
   final List<int> _pendingUtf8 = <int>[];
 
@@ -84,6 +105,7 @@ class InputParser {
   bool _csiMouseSgr = false; // saw the SGR-mouse private marker '<'
   int _csiCurrentParam = 0;
   bool _csiAccumulating = false;
+  int _csiSequenceLength = 0;
 
   // Bracketed-paste accumulation. `_pasteEnd` is the `ESC [ 2 0 1 ~`
   // terminator; `_pasteMatch` tracks how many of its bytes have matched
@@ -91,6 +113,7 @@ class InputParser {
   static const List<int> _pasteEnd = [0x1B, 0x5B, 0x32, 0x30, 0x31, 0x7E];
   final List<int> _pasteBytes = <int>[];
   int _pasteMatch = 0;
+  bool _pasteEmittedChunk = false;
 
   /// Feeds [bytes] to the parser and emits any complete events to
   /// [sink].
@@ -121,6 +144,7 @@ class InputParser {
         _pendingUtf8.clear();
         _state = _State.ground;
       case _State.csi:
+      case _State.csiDiscard:
       case _State.ss3:
         // Mid-sequence on flush — give up and reset.
         _resetCsi();
@@ -142,6 +166,8 @@ class InputParser {
         _consumeAfterEsc(byte, sink);
       case _State.csi:
         _consumeCsi(byte, sink);
+      case _State.csiDiscard:
+        _consumeDiscardedCsi(byte);
       case _State.ss3:
         _consumeSs3(byte, sink);
       case _State.utf8Continuation:
@@ -244,6 +270,16 @@ class InputParser {
   }
 
   void _consumeCsi(int byte, TuiEventSink sink) {
+    _csiSequenceLength++;
+    if (_csiSequenceLength > maxCsiSequenceLength) {
+      _resetCsi();
+      _state = _State.csiDiscard;
+      // This byte may itself be the final that closes the overlong sequence.
+      // Consume it in discard state so the following ordinary byte is not
+      // mistaken for that final and lost.
+      _consumeDiscardedCsi(byte);
+      return;
+    }
     if (byte >= 0x30 && byte <= 0x39) {
       // Digit: extend current param.
       _csiCurrentParam = _csiCurrentParam * 10 + (byte - 0x30);
@@ -309,6 +345,7 @@ class InputParser {
         _resetCsi();
         _pasteBytes.clear();
         _pasteMatch = 0;
+        _pasteEmittedChunk = false;
         _state = _State.paste;
         return;
       }
@@ -320,6 +357,19 @@ class InputParser {
     // Unknown intermediate byte — abort sequence.
     _resetCsi();
     _state = _State.ground;
+  }
+
+  /// Discards the tail of an overlong CSI without turning attacker-controlled
+  /// parameter bytes into a flood of ordinary text events. A final byte
+  /// restores ground state; a fresh ESC starts a new sequence.
+  void _consumeDiscardedCsi(int byte) {
+    if (byte == 0x1B) {
+      _state = _State.afterEsc;
+      return;
+    }
+    if (byte >= 0x40 && byte <= 0x7E) {
+      _state = _State.ground;
+    }
   }
 
   /// First sub-parameter of semicolon group [i], or null when absent.
@@ -584,28 +634,97 @@ class InputParser {
     // Watch for the `ESC [ 2 0 1 ~` terminator while buffering content.
     if (byte == _pasteEnd[_pasteMatch]) {
       _pasteMatch++;
-      if (_pasteMatch == _pasteEnd.length) _flushPaste(sink);
+      if (_pasteMatch == _pasteEnd.length) {
+        _pasteMatch = 0;
+        _flushPaste(sink);
+      }
       return;
     }
     // Mismatch: the bytes we tentatively matched were real content.
     if (_pasteMatch > 0) {
-      _pasteBytes.addAll(_pasteEnd.sublist(0, _pasteMatch));
+      for (var i = 0; i < _pasteMatch; i++) {
+        _appendPasteByte(_pasteEnd[i], sink);
+      }
       _pasteMatch = 0;
     }
     // The current byte might itself start a fresh terminator.
     if (byte == _pasteEnd[0]) {
       _pasteMatch = 1;
     } else {
-      _pasteBytes.add(byte);
+      _appendPasteByte(byte, sink);
     }
   }
 
-  void _flushPaste(TuiEventSink sink) {
-    final text = utf8.decode(_pasteBytes, allowMalformed: true);
-    _pasteBytes.clear();
-    _pasteMatch = 0;
-    _state = _State.ground;
+  void _appendPasteByte(int byte, TuiEventSink sink) {
+    _pasteBytes.add(byte);
+    if (_pasteBytes.length < maxPasteBytes) return;
+    _emitPasteChunk(sink, preserveIncompleteUtf8: true);
+  }
+
+  void _emitPasteChunk(
+    TuiEventSink sink, {
+    bool preserveIncompleteUtf8 = false,
+  }) {
+    if (_pasteBytes.isEmpty) return;
+    final emitLength = preserveIncompleteUtf8
+        ? _completeUtf8PrefixLength(_pasteBytes, maxPasteBytes)
+        : _pasteBytes.length;
+    if (emitLength == 0) return;
+    final text = utf8.decode(
+      _pasteBytes.sublist(0, emitLength),
+      allowMalformed: true,
+    );
+    _pasteBytes.removeRange(0, emitLength);
+    _pasteEmittedChunk = true;
     sink.add(PasteEvent(text));
+  }
+
+  /// Returns a prefix no larger than [limit] unless the scalar crossing that
+  /// boundary needs up to three continuation bytes to complete. Malformed
+  /// bytes still make progress and are handled by `allowMalformed` at decode.
+  int _completeUtf8PrefixLength(List<int> bytes, int limit) {
+    if (bytes.isEmpty) return 0;
+    final boundary = bytes.length < limit ? bytes.length : limit;
+    var first = boundary - 1;
+    while (first >= 0 && (bytes[first] & 0xC0) == 0x80) {
+      first--;
+    }
+    if (first < 0) return boundary; // malformed continuation-only prefix
+
+    final lead = bytes[first];
+    final expected = switch (lead) {
+      < 0x80 => 1,
+      >= 0xC2 && < 0xE0 => 2,
+      >= 0xE0 && < 0xF0 => 3,
+      >= 0xF0 && < 0xF5 => 4,
+      _ => 1,
+    };
+    final availableAtBoundary = boundary - first;
+    if (availableAtBoundary >= expected) return boundary;
+
+    // If the rest has already arrived, include it in this segment (at most
+    // limit+3). Otherwise retain the incomplete scalar for the next byte.
+    if (bytes.length - first >= expected) return first + expected;
+    return first;
+  }
+
+  void _flushPaste(TuiEventSink sink) {
+    // A flush can arrive after a partial terminator match. Those tentative
+    // bytes were content unless the full marker landed, so preserve them.
+    if (_pasteMatch > 0) {
+      final matched = _pasteMatch;
+      _pasteMatch = 0;
+      for (var i = 0; i < matched; i++) {
+        _appendPasteByte(_pasteEnd[i], sink);
+      }
+    }
+    if (_pasteBytes.isNotEmpty) {
+      _emitPasteChunk(sink);
+    } else if (!_pasteEmittedChunk) {
+      sink.add(const PasteEvent(''));
+    }
+    _pasteEmittedChunk = false;
+    _state = _State.ground;
   }
 
   void _consumeUtf8(int byte, TuiEventSink sink) {
@@ -644,7 +763,8 @@ class InputParser {
     _csiMouseSgr = false;
     _csiCurrentParam = 0;
     _csiAccumulating = false;
+    _csiSequenceLength = 0;
   }
 }
 
-enum _State { ground, afterEsc, csi, ss3, utf8Continuation, paste }
+enum _State { ground, afterEsc, csi, csiDiscard, ss3, utf8Continuation, paste }

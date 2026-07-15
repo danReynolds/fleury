@@ -259,7 +259,7 @@
       },
       "peerTargets": ["textual", "opentui", "bubbletea", "ink"],
       "contract": [
-        "stream markdown chunks incrementally",
+        "append markdown chunks one at a time and reparse the accumulated document",
         "include headings, lists, code fences, links, long paragraphs, partial chunks, and unsafe links/control payloads",
         "render after each append",
         "copy one selected block",
@@ -275,7 +275,7 @@
         "unsafeFrameCount"
       ],
       "claimGates": [
-        "incremental content remains coherent",
+        "streamed content remains coherent",
         "unsafe links have visible fallback",
         "unsafe frame count is zero"
       ],

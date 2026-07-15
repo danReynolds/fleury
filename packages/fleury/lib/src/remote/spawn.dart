@@ -7,7 +7,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import '../../fleury_core.dart' show sanitizeForDisplay;
+import '../runtime/output_capture.dart';
 
 /// A spawned Fleury app and its single live connection.
 final class SpawnedFleuryApp {
@@ -139,13 +139,28 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
   }
 
   // The app renders to the socket; its stdout/stderr is its own log output.
-  StreamSubscription<String> forward(String tag, Stream<List<int>> source) =>
-      source
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .listen((line) => onLog?.call(tag, sanitizeForDisplay(line)));
-  final outSub = forward('out', process.stdout);
-  final errSub = forward('err', process.stderr);
+  // OutputCapture bounds an unterminated line before it reaches the host log;
+  // LineSplitter would retain an attacker-controlled line until EOF/newline.
+  StreamSubscription<String> forward(
+    String tag,
+    LogSource sourceTag,
+    Stream<List<int>> source,
+  ) {
+    final capture = OutputCapture(
+      buffer: LogBuffer(capacity: 1),
+      sanitizeForTerminal: true,
+      onLine: (line) => onLog?.call(tag, line.text),
+    );
+    return source
+        .transform(utf8.decoder)
+        .listen(
+          (chunk) => capture.addChunk(chunk, sourceTag),
+          onDone: capture.flushPartials,
+        );
+  }
+
+  final outSub = forward('out', LogSource.stdout, process.stdout);
+  final errSub = forward('err', LogSource.stderr, process.stderr);
 
   Future<int> killProcess() {
     process.kill(ProcessSignal.sigterm);

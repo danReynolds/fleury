@@ -28,7 +28,7 @@ excellent frameworks; this is the particular combination Fleury is built for.
   </Card>
   <Card title="Fast, and measured" icon="rocket">
     Incremental down to the cell, data widgets virtualized past 100k rows, and
-    benchmarked against peers on real terminals — including the browser.
+    measured with repeatable local, real-terminal, and browser-pipeline scenarios.
   </Card>
 </CardGrid>
 
@@ -76,15 +76,15 @@ Tests assert on *meaning* — "row 3 is selected", "the CPU gauge reads 0.62" �
 survive a re-theme, a layout change, or a port to the browser. An AI agent reads
 the graph and drives the UI through those actions instead of scraping ANSI and
 guessing keystrokes. It's produced by the core, runs alongside the visual frame
-without adding terminal-paint work, and ships over the [`fleury serve`](/architecture/serving-and-embedding/)
-wire too — so a remote session is as inspectable as a local one. See
+without adding terminal-paint work, and crosses the [`fleury serve`](/architecture/serving-and-embedding/)
+wire too — so a served preview is as inspectable as a terminal session. See
 [Built for agents](/architecture/agents-and-semantics/).
 
 ### One app, terminal or browser
 
 The same widget tree runs three ways: natively in a real terminal, compiled into a
 web page client-side with dart2js (no backend — every demo on this page is exactly
-that), or streamed from a native process with [`fleury serve`](/architecture/serving-and-embedding/).
+that), or previewed from a native process with [`fleury serve`](/architecture/serving-and-embedding/).
 They aren't separate ports. A **parity oracle** asserts the terminal and the
 browser render the same tree, cell for cell, so the two surfaces can't quietly
 drift apart — and a `dart:io`-free core is what lets one definition span all three.
@@ -94,12 +94,14 @@ drift apart — and a `dart:io`-free core is what lets one definition span all t
 A `setState` marks one subtree dirty; only that path rebuilds, re-lays-out, and
 re-paints, and the target diffs down to the **cell** — an idle app emits nothing, a
 busy one pays only for what moved. A cursor move in a 10,000-character editor costs
-about **0.8 ms**, tracking the change rather than how much is on screen. Data
-widgets are virtualized, so a hundred-thousand-row table costs about a screenful. And
-it's [benchmarked against peers](/architecture/performance/) on real terminals —
-including **browser-inclusive latency under 12 ms**, measured through the real
-browser frame pipeline, not just our own timers. The dashboard below streams on a
-ticker and repaints only the cells that change:
+about **0.8 ms in the saved development fixture**, tracking the change rather
+than how much is on screen. Data widgets are virtualized, so a
+hundred-thousand-row table costs about a screenful. The
+[benchmark suite](/architecture/performance/) measures local pipeline work,
+real-terminal bytes and process cost, and the browser frame path. Current
+captures support a peer-competitive performance claim across many matched
+workloads, not a universal "fastest framework" ranking. The dashboard below
+streams on a ticker and repaints only the cells that change:
 
 <FleuryExample id="home.monitor" cols={34} rows={9} />
 

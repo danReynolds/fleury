@@ -67,6 +67,9 @@ Future<void> main(List<String> args) async {
     file.writeAsStringSync('$jsonText\n');
     stdout.writeln('saved ${file.path}');
   }
+  if (results.any((result) => !result.pass)) {
+    exitCode = 1;
+  }
 }
 
 final class _ScenarioOptions {
@@ -1971,7 +1974,7 @@ final class _OverlayCommandPaletteScenario implements _ScenarioBenchmark {
       pass: correct,
       notes: const <String>[
         'Candidate thresholds are informational until stable baselines exist.',
-        'Scenario opens CommandPalette through Navigator.present so it exercises overlay lifecycle and app command discovery.',
+        'Scenario opens CommandPalette through its public open API so it exercises overlay lifecycle and source-scoped app command discovery.',
         'Cycles alternate keyboard invocation, semantic submit, semantic activate, Escape dismissal, and semantic dismissal.',
         'A disabled command probe verifies visible-but-inert commands stay open and do not invoke stale actions.',
       ],
@@ -2049,9 +2052,7 @@ Future<_OverlayCommandPaletteJourneySample> _runOverlayCommandPaletteJourney(
 
       final cycleWatch = Stopwatch()..start();
       final open = Stopwatch()..start();
-      Navigator.of(
-        route,
-      ).present<void>(const CommandPalette(width: 64, maxVisible: 10));
+      unawaited(CommandPalette.open(route, width: 64, maxVisible: 10));
       tester.pump(const Duration(milliseconds: 300));
       final openFrame = tester.render(size: config.terminalSize);
       open.stop();
@@ -2304,9 +2305,7 @@ Future<_DisabledOverlayProbe> _runDisabledOverlayProbe(
     );
   }
 
-  Navigator.of(
-    route,
-  ).present<void>(const CommandPalette(width: 64, maxVisible: 10));
+  unawaited(CommandPalette.open(route, width: 64, maxVisible: 10));
   tester.pump(const Duration(milliseconds: 300));
   final openFrame = tester.render(size: terminalSize);
   final target = fixture.disabledTarget;

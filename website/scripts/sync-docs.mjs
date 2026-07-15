@@ -55,7 +55,7 @@ const DOCS = [
     src: 'serving-and-embedding.md',
     description:
       'Two ways to run Fleury in a browser — embed it client-side with ' +
-      'dart2js, or serve it from a native process — and when to choose each.',
+      'dart2js, or preview a native process through the local serve bridge.',
   },
   {
     src: 'agents-and-semantics.md',

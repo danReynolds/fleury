@@ -169,40 +169,42 @@ void main() {
       ]);
     });
 
-    test('includeLinks:false is byte-identical to the same plan link-stripped',
-        () {
-      // The version-gate invariant at the codec level: a plan carrying links,
-      // encoded for a pre-v4 peer, is byte-for-byte identical to the same plan
-      // (same table cardinality, same runs) with the links removed. Two styles
-      // that differ only by linkUri stay DISTINCT table entries (Stage 1 made
-      // == link-aware) but encode to identical bytes when links are off — mild
-      // waste, never corruption.
-      RemotePlan planWith(List<CellStyle> styles) => RemotePlan(
-        size: const CellSize(8, 1),
-        fullRepaint: true,
-        includeLinks: false,
-        styleTable: styles,
-        patches: const [
-          RemoteRowPatch(
-            row: 0,
-            startCol: 0,
-            runs: [
-              RemotePatchRun(styleIndex: 0, text: 'aa'),
-              RemotePatchRun(styleIndex: 1, text: 'bb'),
-            ],
-          ),
-        ],
-      );
-      final linked = planWith(const [
-        CellStyle(bold: true, linkUri: 'https://a'),
-        CellStyle(italic: true, linkUri: 'https://b'),
-      ]);
-      final stripped = planWith(const [
-        CellStyle(bold: true),
-        CellStyle(italic: true),
-      ]);
-      expect(encodeRemotePlan(linked), encodeRemotePlan(stripped));
-    });
+    test(
+      'includeLinks:false is byte-identical to the same plan link-stripped',
+      () {
+        // The version-gate invariant at the codec level: a plan carrying links,
+        // encoded for a pre-v4 peer, is byte-for-byte identical to the same plan
+        // (same table cardinality, same runs) with the links removed. Two styles
+        // that differ only by linkUri stay DISTINCT table entries (Stage 1 made
+        // == link-aware) but encode to identical bytes when links are off — mild
+        // waste, never corruption.
+        RemotePlan planWith(List<CellStyle> styles) => RemotePlan(
+          size: const CellSize(8, 1),
+          fullRepaint: true,
+          includeLinks: false,
+          styleTable: styles,
+          patches: const [
+            RemoteRowPatch(
+              row: 0,
+              startCol: 0,
+              runs: [
+                RemotePatchRun(styleIndex: 0, text: 'aa'),
+                RemotePatchRun(styleIndex: 1, text: 'bb'),
+              ],
+            ),
+          ],
+        );
+        final linked = planWith(const [
+          CellStyle(bold: true, linkUri: 'https://a'),
+          CellStyle(italic: true, linkUri: 'https://b'),
+        ]);
+        final stripped = planWith(const [
+          CellStyle(bold: true),
+          CellStyle(italic: true),
+        ]);
+        expect(encodeRemotePlan(linked), encodeRemotePlan(stripped));
+      },
+    );
 
     test('a plan built for a v3 peer emits no link bytes (the crux)', () {
       // buildRemotePlan(includeLinks: false) is what presentFrame hands a
@@ -240,7 +242,12 @@ void main() {
       // And a v4 peer DOES carry the link, so the bytes must differ — proving
       // the gate is what suppresses them, not that the link never encodes.
       final v4 = encodeRemotePlan(
-        buildRemotePlan(prev, nextLinked, fullRepaint: true, includeLinks: true),
+        buildRemotePlan(
+          prev,
+          nextLinked,
+          fullRepaint: true,
+          includeLinks: true,
+        ),
       );
       expect(v4, isNot(linkless));
       final mirror = CellBuffer(const CellSize(2, 1));
@@ -886,6 +893,88 @@ void main() {
         () => decodeRemotePlan(w.toBytes()),
         throwsA(isA<RemoteCodecException>()),
       );
+    });
+
+    test('a legal high-style producer plan survives the framed decoder', () {
+      const size = CellSize(129, 128);
+      final prev = CellBuffer(size);
+      final next = CellBuffer(size);
+      for (var index = 0; index < size.cols * size.rows; index++) {
+        next.writeText(
+          CellOffset(index % size.cols, index ~/ size.cols),
+          'x',
+          style: CellStyle(
+            foreground: RgbColor(
+              index & 0xff,
+              (index >> 8) & 0xff,
+              (index >> 16) & 0xff,
+            ),
+          ),
+        );
+      }
+
+      final plan = buildRemotePlan(prev, next, fullRepaint: true);
+      expect(plan.styleTable.length, greaterThan(16 * 1024));
+
+      final decoder = FrameDecoder()..feed(encodeFrame(PlanFrame(plan)));
+      final decoded = decoder.drain().single as PlanFrame;
+      expect(decoded.plan.styleTable.length, plan.styleTable.length);
+      expect(decoded.plan.patches.length, plan.patches.length);
+    });
+
+    test('plan grids above the shared allocation budget are rejected', () {
+      final oversized = RemotePlan(
+        size: const CellSize(2000, 1000),
+        fullRepaint: false,
+        styleTable: const [],
+        patches: const [],
+      );
+      final overArea = RemotePlan(
+        size: const CellSize(2000, 501),
+        fullRepaint: false,
+        styleTable: const [],
+        patches: const [],
+      );
+
+      // The first shape is over the area cap even though both independent
+      // dimensions are legal; the second makes that boundary explicit too.
+      for (final plan in [oversized, overArea]) {
+        expect(
+          () => decodeRemotePlan(encodeRemotePlan(plan)),
+          throwsA(isA<RemoteCodecException>()),
+        );
+      }
+    });
+
+    test('patch and image geometry outside structural bounds is rejected', () {
+      final outsidePatch = RemotePlan(
+        size: const CellSize(10, 4),
+        fullRepaint: false,
+        styleTable: const [CellStyle.empty],
+        patches: const [
+          RemoteRowPatch(
+            row: 4,
+            startCol: 0,
+            runs: [RemotePatchRun(styleIndex: 0, text: 'x')],
+          ),
+        ],
+      );
+      final oversizedPlacement = RemotePlan(
+        size: const CellSize(10, 4),
+        fullRepaint: false,
+        styleTable: const [],
+        patches: const [],
+        placements: const [
+          ImagePlacement(id: 'image', col: 2, row: 0, cols: 9, rows: 1),
+        ],
+      );
+
+      for (final plan in [outsidePatch, oversizedPlacement]) {
+        expect(
+          () => decodeRemotePlan(encodeRemotePlan(plan)),
+          throwsA(isA<RemoteCodecException>()),
+        );
+      }
     });
   });
 }

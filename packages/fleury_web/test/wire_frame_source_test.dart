@@ -74,13 +74,14 @@ Uint8List _framedRaw(int typeByte, List<int> payload) {
 void main() {
   late web.HTMLElement into;
   late _RecordingClipboard clipboard;
+  late BrowserHostComponents components;
   late WireFrameSource source;
 
   setUp(() {
     into = web.document.createElement('div') as web.HTMLElement;
     web.document.body!.appendChild(into);
     clipboard = _RecordingClipboard();
-    final components = BrowserPresentationHost(
+    components = BrowserPresentationHost(
       into: into,
       clipboard: clipboard,
     ).assemble();
@@ -129,6 +130,57 @@ void main() {
         SemanticAction.activate,
         SemanticActionInvocationStatus.failed,
       ),
+    );
+  });
+
+  test('a failed image plan does not lose sender-cached bytes', () {
+    const image = ImagePlacement(
+      id: 'image-b',
+      col: 1,
+      row: 1,
+      cols: 2,
+      rows: 1,
+    );
+    const imagePlan = RemotePlan(
+      size: CellSize(80, 24),
+      fullRepaint: false,
+      styleTable: [],
+      patches: [],
+      placements: [image],
+    );
+    const emptyPlan = RemotePlan(
+      size: CellSize(80, 24),
+      fullRepaint: false,
+      styleTable: [],
+      patches: [],
+    );
+
+    source.feedBytesForTest(
+      encodeFrame(InlineImageFrame('image-b', Uint8List.fromList([1, 2, 3]))),
+    );
+    var failFirstPlan = true;
+    source.failApplyForTest = (frame) {
+      if (frame is PlanFrame && failFirstPlan) {
+        failFirstPlan = false;
+        return true;
+      }
+      return false;
+    };
+
+    source.feedBytesForTest(encodeFrame(const PlanFrame(imagePlan)));
+    expect(source.isClosedForTest, isFalse);
+    expect(components.imageOverlay.pendingImageCount, 0);
+    expect(components.imageOverlay.cachedImageCount, 1);
+
+    source.failApplyForTest = null;
+    source.feedBytesForTest(encodeFrame(const PlanFrame(emptyPlan)));
+    source.feedBytesForTest(encodeFrame(const PlanFrame(imagePlan)));
+
+    expect(components.imageOverlay.cachedImageCount, 1);
+    expect(
+      components.imageOverlay.imageElementCount,
+      1,
+      reason: 'image-b returns without a second InlineImageFrame',
     );
   });
 
@@ -197,7 +249,11 @@ void main() {
 
       // The third consecutive failure crosses the threshold and escalates.
       source.feedBytesForTest(benign);
-      expect(source.isClosedForTest, isTrue, reason: 'escalated: socket closed');
+      expect(
+        source.isClosedForTest,
+        isTrue,
+        reason: 'escalated: socket closed',
+      );
       expect(source.bannerShownForTest, isTrue, reason: 'escalated: banner');
     });
 
@@ -206,7 +262,11 @@ void main() {
       source.feedBytesForTest(encodeFrame(const ByeFrame()));
 
       expect(source.isClosedForTest, isTrue);
-      expect(source.bannerShownForTest, isTrue, reason: 'normal end-of-session');
+      expect(
+        source.bannerShownForTest,
+        isTrue,
+        reason: 'normal end-of-session',
+      );
     });
 
     test('a frame arriving after teardown is dropped before apply (no repaint '

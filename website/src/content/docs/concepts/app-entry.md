@@ -6,7 +6,7 @@ description: runApp and mountApp — how a widget tree starts running in a termi
 A Fleury app is a widget tree handed to an entry function. Use `runApp` when the
 tree runs in a terminal, and `mountApp` when a dart2js bundle mounts the tree
 inside a browser element. (A third path, `fleury serve`, streams a native app to
-a browser — but it's a deployment mode, not an entry point.) Both entry
+a browser as a local preview/debug bridge; it is not an entry point.) Both entry
 functions share a model: mount the tree, paint the first frame, then re-render on
 every input and every `setState`.
 
@@ -20,12 +20,14 @@ import 'package:fleury/fleury.dart';
 void main() => runApp(const MyApp());
 ```
 
-It takes a **widget instance** and returns a `Future<void>` that completes when
-the app exits. On startup it acquires the terminal, switches it into interactive
-mode (raw input, the alternate screen, hidden cursor), mounts your tree, paints
-the first frame, and then renders again after every input event and every
-`setState`. On exit — `Ctrl-C`, or your handler asking to stop — it restores the
-terminal to exactly how it found it.
+It takes a **widget instance** and returns a `Future<AppExit>` that completes
+after the app exits and the terminal has been restored. `AppExit` distinguishes
+an orderly request from an unclaimed process signal so the caller can choose its
+own exit code. On startup `runApp` acquires the terminal and switches it into
+interactive mode (raw input, the alternate screen, hidden cursor), mounts your
+tree, paints the first frame, and then renders again after every input event and
+every `setState`. On exit — `Ctrl-C`, or your handler asking to stop — it restores
+the terminal to exactly how it found it.
 
 The options you'll actually reach for:
 
@@ -106,8 +108,8 @@ widget on this site is the real tree, compiled with `dart2js` and mounted with
 | Terminal, native | `runApp` | a widget instance |
 | Browser, embedded | `mountApp` | a widget factory and `into:` host element |
 
-To put an app in a browser *without* compiling it yourself, reach for
+To preview a native app in a browser *without* compiling it yourself, reach for
 `fleury serve` instead — it runs your native app and streams the frames to a thin
-client. That's a deployment choice, not an entry point;
+client. That's local development tooling, not an entry point;
 [Serving and embedding](/architecture/serving-and-embedding/) covers when to
 embed versus serve.

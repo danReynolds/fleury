@@ -256,8 +256,9 @@ the execution log, 2026-06-11 entries):
   eager node maps (recommendation recorded; fixtures are not slimmed to
   move their own scoreboard rows).
 
-Claims language for public use: "Fleury leads wire efficiency (bytes,
-bytes/frame, FPS) against every measured peer including the Rust and
-Zig ones, and leads startup against every managed-runtime peer; on
-memory and raw startup it is ballpark-of-systems-languages with a
-documented Dart-runtime floor and a 2.5ms framework-attributable share."
+What this capture supports: in the 2026-06-11 native batch, Fleury led wire
+efficiency on many matched rows and led startup against the measured
+managed-runtime peers. Systems-language peers retained a lower raw startup and
+RSS floor. Do not generalize this snapshot into universal peer leadership: a
+public cross-framework ranking needs fresh peer versions, equivalent fixture
+shapes, and repeated quiet-machine runs tied to the release candidate.

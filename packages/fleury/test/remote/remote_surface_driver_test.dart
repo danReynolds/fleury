@@ -439,29 +439,26 @@ void main() {
   // FAKED a hyperlinks:true MediaQuery, so nothing exercised the peer's INIT
   // capability actually reaching the app. These do.
   group('hyperlinks capability propagation (OSC 8 over serve)', () {
-    test(
-      'an INIT declaring hyperlinks lights up surfaceCapabilities '
-      '(browser-style peer with images=placements)',
-      () async {
-        final transport = _FakeTransport();
-        final driver = RemoteTerminalDriver(transport);
-        final entered = driver.enter(TerminalMode.interactive);
-        // images != null → the peer-surface-capabilities branch.
-        transport.emit(
-          const InitFrame(
-            size: CellSize(40, 10),
-            colorMode: ColorMode.truecolor,
-            imageProtocol: ImageProtocol.halfBlock,
-            tmuxPassthrough: false,
-            images: InlineImageSupport.placements,
-            hyperlinks: true,
-          ),
-        );
-        await entered;
-        expect(driver.surfaceCapabilities.hyperlinks, isTrue);
-        await driver.restore();
-      },
-    );
+    test('an INIT declaring hyperlinks lights up surfaceCapabilities '
+        '(browser-style peer with images=placements)', () async {
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(transport);
+      final entered = driver.enter(TerminalMode.interactive);
+      // images != null → the peer-surface-capabilities branch.
+      transport.emit(
+        const InitFrame(
+          size: CellSize(40, 10),
+          colorMode: ColorMode.truecolor,
+          imageProtocol: ImageProtocol.halfBlock,
+          tmuxPassthrough: false,
+          images: InlineImageSupport.placements,
+          hyperlinks: true,
+        ),
+      );
+      await entered;
+      expect(driver.surfaceCapabilities.hyperlinks, isTrue);
+      await driver.restore();
+    });
 
     test(
       'an INIT declaring hyperlinks lights up surfaceCapabilities through the '
@@ -785,6 +782,89 @@ void main() {
       await driver.restore();
     });
 
+    test('re-ships an id after byte-budget eviction', () async {
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(
+        transport,
+        imageCachePolicy: const InlineImageCachePolicy(
+          maxEntries: 512,
+          maxBytes: 8,
+        ),
+      );
+      final entered = driver.enter(TerminalMode.interactive);
+      transport.emit(_init);
+      await entered;
+      transport.sent.clear();
+      final size = const CellSize(40, 10);
+      final empty = CellBuffer(size);
+      final target = [1, 2, 3, 4, 5, 6];
+      final replacement = [7, 8, 9, 10, 11, 12];
+
+      driver.presentFrame(empty, withImage(target), fullPlan(size));
+      expect(transport.sent.whereType<InlineImageFrame>(), hasLength(1));
+      transport.sent.clear();
+
+      driver.presentFrame(withImage(target), empty, fullPlan(size));
+      driver.presentFrame(empty, withImage(replacement), fullPlan(size));
+      transport.sent.clear();
+
+      driver.presentFrame(empty, withImage(target), fullPlan(size));
+      expect(
+        transport.sent.whereType<InlineImageFrame>(),
+        hasLength(1),
+        reason: 'the oldest stale id exceeded the shared byte budget',
+      );
+
+      await driver.restore();
+    });
+
+    test(
+      'one plan drops image placements beyond the shared byte budget',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(
+          transport,
+          imageCachePolicy: const InlineImageCachePolicy(
+            maxEntries: 512,
+            maxBytes: 8,
+          ),
+        );
+        final entered = driver.enter(TerminalMode.interactive);
+        transport.emit(_init);
+        await entered;
+        transport.sent.clear();
+        const size = CellSize(40, 10);
+        final next = CellBuffer(size)
+          ..writeImage(
+            const CellOffset(0, 0),
+            Uint8List.fromList([1, 2, 3, 4, 5, 6]),
+            width: 2,
+            height: 2,
+          )
+          ..writeImage(
+            const CellOffset(10, 0),
+            Uint8List.fromList([7, 8, 9, 10, 11, 12]),
+            width: 2,
+            height: 2,
+          );
+
+        driver.presentFrame(CellBuffer(size), next, fullPlan(size));
+
+        final images = transport.sent.whereType<InlineImageFrame>().toList();
+        final plan = transport.sent.whereType<PlanFrame>().single.plan;
+        expect(images, hasLength(1));
+        expect(plan.placements, hasLength(1));
+        expect(plan.placements.single.id, images.single.id);
+        expect(
+          images.single.bytes.length,
+          lessThanOrEqualTo(8),
+          reason: 'the emitted working set remains within the cache ceiling',
+        );
+
+        await driver.restore();
+      },
+    );
+
     test(
       'the same bytes drawn twice ship once but yield two placements',
       () async {
@@ -831,40 +911,108 @@ void main() {
   // that sent setValue(field) then activate(submit) back-to-back could submit
   // the pre-mutation value and get its RESULT frames out of order.
   group('semantic action serialization (F16)', () {
+    test('a following activate observes the value a preceding setValue set '
+        '(not the pre-mutation tree)', () async {
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(transport);
+      // A real onSetValue mutates after an await; gate it so the race is
+      // deterministic. Under the old fire-and-forget path the submit would
+      // run while this handler is still parked here, reading the empty value.
+      final setValueGate = Completer<void>();
+      var fieldValue = '';
+      String? observedBySubmit;
+      scheduleMicrotask(() => transport.emit(_init));
+      final done = runApp(
+        Column(
+          children: [
+            Semantics(
+              id: const SemanticNodeId('field'),
+              role: SemanticRole.textField,
+              actions: const {SemanticAction.setValue},
+              onSetValue: (v) async {
+                await setValueGate.future;
+                fieldValue = (v ?? '') as String;
+              },
+              child: const Text('field'),
+            ),
+            Semantics(
+              id: const SemanticNodeId('submit'),
+              role: SemanticRole.button,
+              actions: const {SemanticAction.activate},
+              onAction: (a) async {
+                observedBySubmit = fieldValue;
+              },
+              child: const Text('submit'),
+            ),
+          ],
+        ),
+        driver: driver,
+        requireInteractiveTerminal: false,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      // Both actions arrive before the setValue handler is released.
+      transport.emit(
+        const SemanticActionFrame(
+          SemanticNodeId('field'),
+          SemanticAction.setValue,
+          value: 'hello',
+        ),
+      );
+      transport.emit(
+        const SemanticActionFrame(
+          SemanticNodeId('submit'),
+          SemanticAction.activate,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      // The submit is chained behind the still-parked setValue, so it has
+      // not run yet (fire-and-forget would already have read the empty value).
+      expect(
+        observedBySubmit,
+        isNull,
+        reason: 'the activate waits for the setValue link to complete',
+      );
+
+      setValueGate.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(
+        observedBySubmit,
+        'hello',
+        reason: 'the activate ran only after setValue mutated the value',
+      );
+
+      await transport.disconnect();
+      await done;
+    });
+
     test(
-      'a following activate observes the value a preceding setValue set '
-      '(not the pre-mutation tree)',
+      'a throwing action does not wedge the queue for the next action',
       () async {
         final transport = _FakeTransport();
         final driver = RemoteTerminalDriver(transport);
-        // A real onSetValue mutates after an await; gate it so the race is
-        // deterministic. Under the old fire-and-forget path the submit would
-        // run while this handler is still parked here, reading the empty value.
-        final setValueGate = Completer<void>();
-        var fieldValue = '';
-        String? observedBySubmit;
+        var okRan = 0;
         scheduleMicrotask(() => transport.emit(_init));
         final done = runApp(
           Column(
             children: [
               Semantics(
-                id: const SemanticNodeId('field'),
-                role: SemanticRole.textField,
-                actions: const {SemanticAction.setValue},
-                onSetValue: (v) async {
-                  await setValueGate.future;
-                  fieldValue = (v ?? '') as String;
-                },
-                child: const Text('field'),
-              ),
-              Semantics(
-                id: const SemanticNodeId('submit'),
+                id: const SemanticNodeId('boom'),
                 role: SemanticRole.button,
                 actions: const {SemanticAction.activate},
                 onAction: (a) async {
-                  observedBySubmit = fieldValue;
+                  throw StateError('boom');
                 },
-                child: const Text('submit'),
+                child: const Text('boom'),
+              ),
+              Semantics(
+                id: const SemanticNodeId('ok'),
+                role: SemanticRole.button,
+                actions: const {SemanticAction.activate},
+                onAction: (a) async {
+                  okRan++;
+                },
+                child: const Text('ok'),
               ),
             ],
           ),
@@ -873,161 +1021,108 @@ void main() {
         );
         await Future<void>.delayed(const Duration(milliseconds: 10));
 
-        // Both actions arrive before the setValue handler is released.
         transport.emit(
           const SemanticActionFrame(
-            SemanticNodeId('field'),
-            SemanticAction.setValue,
-            value: 'hello',
+            SemanticNodeId('boom'),
+            SemanticAction.activate,
           ),
         );
         transport.emit(
           const SemanticActionFrame(
-            SemanticNodeId('submit'),
+            SemanticNodeId('ok'),
             SemanticAction.activate,
           ),
         );
         await Future<void>.delayed(const Duration(milliseconds: 10));
-        // The submit is chained behind the still-parked setValue, so it has
-        // not run yet (fire-and-forget would already have read the empty value).
-        expect(
-          observedBySubmit,
-          isNull,
-          reason: 'the activate waits for the setValue link to complete',
-        );
 
-        setValueGate.complete();
-        await Future<void>.delayed(const Duration(milliseconds: 10));
         expect(
-          observedBySubmit,
-          'hello',
-          reason: 'the activate ran only after setValue mutated the value',
+          okRan,
+          1,
+          reason: 'the second action ran even though the first threw',
         );
+        // The first action fails LOUDLY (a failed RESULT), it is not swallowed —
+        // and the chain still delivered the second action's completed RESULT.
+        final results = transport.sent
+            .whereType<SemanticActionResultFrame>()
+            .toList();
+        expect(results.map((r) => r.id.value), ['boom', 'ok']);
+        expect(results.first.status, SemanticActionInvocationStatus.failed);
+        expect(results.last.status, SemanticActionInvocationStatus.completed);
 
         await transport.disconnect();
         await done;
       },
     );
 
-    test('a throwing action does not wedge the queue for the next action', () async {
-      final transport = _FakeTransport();
-      final driver = RemoteTerminalDriver(transport);
-      var okRan = 0;
-      scheduleMicrotask(() => transport.emit(_init));
-      final done = runApp(
-        Column(
-          children: [
-            Semantics(
-              id: const SemanticNodeId('boom'),
-              role: SemanticRole.button,
-              actions: const {SemanticAction.activate},
-              onAction: (a) async {
-                throw StateError('boom');
-              },
-              child: const Text('boom'),
-            ),
-            Semantics(
-              id: const SemanticNodeId('ok'),
-              role: SemanticRole.button,
-              actions: const {SemanticAction.activate},
-              onAction: (a) async {
-                okRan++;
-              },
-              child: const Text('ok'),
-            ),
-          ],
-        ),
-        driver: driver,
-        requireInteractiveTerminal: false,
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+    test(
+      'RESULT frames return in submission order when the first is slower',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final gateA = Completer<void>();
+        scheduleMicrotask(() => transport.emit(_init));
+        final done = runApp(
+          Column(
+            children: [
+              Semantics(
+                id: const SemanticNodeId('a'),
+                role: SemanticRole.button,
+                actions: const {SemanticAction.activate},
+                onAction: (act) async {
+                  await gateA.future; // slow
+                },
+                child: const Text('a'),
+              ),
+              Semantics(
+                id: const SemanticNodeId('b'),
+                role: SemanticRole.button,
+                actions: const {SemanticAction.activate},
+                onAction: (act) async {}, // fast
+                child: const Text('b'),
+              ),
+            ],
+          ),
+          driver: driver,
+          requireInteractiveTerminal: false,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      transport.emit(
-        const SemanticActionFrame(
-          SemanticNodeId('boom'),
-          SemanticAction.activate,
-        ),
-      );
-      transport.emit(
-        const SemanticActionFrame(SemanticNodeId('ok'), SemanticAction.activate),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+        transport.emit(
+          const SemanticActionFrame(
+            SemanticNodeId('a'),
+            SemanticAction.activate,
+          ),
+        );
+        transport.emit(
+          const SemanticActionFrame(
+            SemanticNodeId('b'),
+            SemanticAction.activate,
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        // B is chained behind the parked A, so nothing has completed — B does not
+        // race ahead and ship its RESULT first.
+        expect(
+          transport.sent.whereType<SemanticActionResultFrame>(),
+          isEmpty,
+          reason: 'B must not complete ahead of the still-running A',
+        );
 
-      expect(
-        okRan,
-        1,
-        reason: 'the second action ran even though the first threw',
-      );
-      // The first action fails LOUDLY (a failed RESULT), it is not swallowed —
-      // and the chain still delivered the second action's completed RESULT.
-      final results = transport.sent
-          .whereType<SemanticActionResultFrame>()
-          .toList();
-      expect(results.map((r) => r.id.value), ['boom', 'ok']);
-      expect(results.first.status, SemanticActionInvocationStatus.failed);
-      expect(results.last.status, SemanticActionInvocationStatus.completed);
+        gateA.complete();
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        final ids = transport.sent
+            .whereType<SemanticActionResultFrame>()
+            .map((r) => r.id.value)
+            .toList();
+        expect(ids, [
+          'a',
+          'b',
+        ], reason: 'RESULT frames ship in submission order');
 
-      await transport.disconnect();
-      await done;
-    });
-
-    test('RESULT frames return in submission order when the first is slower', () async {
-      final transport = _FakeTransport();
-      final driver = RemoteTerminalDriver(transport);
-      final gateA = Completer<void>();
-      scheduleMicrotask(() => transport.emit(_init));
-      final done = runApp(
-        Column(
-          children: [
-            Semantics(
-              id: const SemanticNodeId('a'),
-              role: SemanticRole.button,
-              actions: const {SemanticAction.activate},
-              onAction: (act) async {
-                await gateA.future; // slow
-              },
-              child: const Text('a'),
-            ),
-            Semantics(
-              id: const SemanticNodeId('b'),
-              role: SemanticRole.button,
-              actions: const {SemanticAction.activate},
-              onAction: (act) async {}, // fast
-              child: const Text('b'),
-            ),
-          ],
-        ),
-        driver: driver,
-        requireInteractiveTerminal: false,
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-
-      transport.emit(
-        const SemanticActionFrame(SemanticNodeId('a'), SemanticAction.activate),
-      );
-      transport.emit(
-        const SemanticActionFrame(SemanticNodeId('b'), SemanticAction.activate),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-      // B is chained behind the parked A, so nothing has completed — B does not
-      // race ahead and ship its RESULT first.
-      expect(
-        transport.sent.whereType<SemanticActionResultFrame>(),
-        isEmpty,
-        reason: 'B must not complete ahead of the still-running A',
-      );
-
-      gateA.complete();
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-      final ids = transport.sent
-          .whereType<SemanticActionResultFrame>()
-          .map((r) => r.id.value)
-          .toList();
-      expect(ids, ['a', 'b'], reason: 'RESULT frames ship in submission order');
-
-      await transport.disconnect();
-      await done;
-    });
+        await transport.disconnect();
+        await done;
+      },
+    );
 
     test('a queued action resolves against the LIVE tree after an intervening '
         'resize/rebuild', () async {

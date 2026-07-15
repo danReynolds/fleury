@@ -9,7 +9,8 @@ library;
 
 import 'dart:typed_data';
 
-import 'package:fleury/fleury_host.dart' show InlineImageFit;
+import 'package:fleury/fleury_host.dart'
+    show InlineImageCachePolicy, InlineImageFit;
 import 'package:fleury/src/remote/remote_codec.dart' show ImagePlacement;
 import 'package:fleury_web/src/metrics/cell_metrics.dart';
 import 'package:fleury_web/src/dom_grid/inline_image_overlay.dart';
@@ -68,7 +69,7 @@ void main() {
     final host = _makeHost();
     final overlay = InlineImageOverlay(host)
       ..cacheImage('a', Uint8List.fromList([1, 2, 3, 4]))
-      ..apply([
+      ..presentPlan([
         _place('a', 2, 1, 3, 2, InlineImageFit.cover),
       ], _box(cw: 10, ch: 20, ox: 5, oy: 7));
 
@@ -91,7 +92,7 @@ void main() {
     final host = _makeHost();
     final overlay = InlineImageOverlay(host)
       ..cacheImage('logo', Uint8List.fromList([9, 9, 9]))
-      ..apply([
+      ..presentPlan([
         _place('logo', 0, 0, 2, 1),
         _place('logo', 10, 0, 2, 1),
       ], _box());
@@ -112,10 +113,10 @@ void main() {
     final host = _makeHost();
     final overlay = InlineImageOverlay(host)
       ..cacheImage('a', Uint8List.fromList([1]))
-      ..apply([_place('a', 0, 0, 1, 1)], _box());
+      ..presentPlan([_place('a', 0, 0, 1, 1)], _box());
     expect(_imgs(host), hasLength(1));
 
-    overlay.apply(const [], _box()); // image gone this frame
+    overlay.presentPlan(const [], _box()); // image gone this frame
     expect(_imgs(host), isEmpty, reason: 'unplaced images are removed');
 
     overlay.dispose();
@@ -126,10 +127,10 @@ void main() {
     final host = _makeHost();
     final overlay = InlineImageOverlay(host)
       ..cacheImage('a', Uint8List.fromList([1]))
-      ..apply([_place('a', 0, 0, 2, 2)], _box(cw: 10, ch: 20));
+      ..presentPlan([_place('a', 0, 0, 2, 2)], _box(cw: 10, ch: 20));
     expect(_imgs(host).single.style.left, '0px');
 
-    overlay.apply([_place('a', 4, 0, 2, 2)], _box(cw: 10, ch: 20));
+    overlay.presentPlan([_place('a', 4, 0, 2, 2)], _box(cw: 10, ch: 20));
     final imgs = _imgs(host);
     expect(imgs, hasLength(1), reason: 'reused, not recreated');
     expect(imgs.single.style.left, '40px', reason: 'repositioned');
@@ -141,13 +142,100 @@ void main() {
   test('a placement whose bytes have not arrived renders nothing yet', () {
     final host = _makeHost();
     final overlay = InlineImageOverlay(host)
-      ..apply([_place('missing', 0, 0, 1, 1)], _box());
+      ..presentPlan([_place('missing', 0, 0, 1, 1)], _box());
     expect(_imgs(host), isEmpty, reason: 'waits for the InlineImageFrame');
 
     // Once cached, a later frame renders it.
     overlay
       ..cacheImage('missing', Uint8List.fromList([1]))
-      ..apply([_place('missing', 0, 0, 1, 1)], _box());
+      ..presentPlan([_place('missing', 0, 0, 1, 1)], _box());
+    expect(_imgs(host), hasLength(1));
+
+    overlay.dispose();
+    host.remove();
+  });
+
+  test('byte budget evicts the oldest stale blob deterministically', () {
+    final host = _makeHost();
+    final overlay = InlineImageOverlay(
+      host,
+      cachePolicy: const InlineImageCachePolicy(maxEntries: 512, maxBytes: 8),
+    );
+    overlay
+      ..cacheImage('oldest', Uint8List(6))
+      ..presentPlan([_place('oldest', 0, 0, 1, 1)], _box())
+      ..cacheImage('newer', Uint8List(2))
+      ..presentPlan([_place('newer', 0, 0, 1, 1)], _box())
+      ..cacheImage('placed', Uint8List(3))
+      ..presentPlan([_place('placed', 0, 0, 1, 1)], _box());
+
+    expect(overlay.cachedImageCount, 2);
+    expect(overlay.cachedImageBytes, 5);
+
+    overlay.presentPlan([_place('oldest', 0, 0, 1, 1)], _box());
+    expect(_imgs(host), isEmpty, reason: 'the oldest stale blob was evicted');
+
+    overlay.presentPlan([_place('newer', 0, 0, 1, 1)], _box());
+    expect(_imgs(host), hasLength(1), reason: 'newer stale blob was retained');
+
+    overlay.dispose();
+    host.remove();
+  });
+
+  test('an oversized pending image is rejected without retaining bytes', () {
+    final host = _makeHost();
+    final overlay = InlineImageOverlay(
+      host,
+      cachePolicy: const InlineImageCachePolicy(maxEntries: 512, maxBytes: 8),
+    );
+
+    expect(overlay.cacheImage('oversized', Uint8List(9)), isFalse);
+    expect(overlay.pendingImageCount, 0);
+    expect(overlay.pendingImageBytes, 0);
+    expect(overlay.cachedImageCount, 0);
+    expect(overlay.cachedImageBytes, 0);
+    overlay.presentPlan([_place('oversized', 0, 0, 1, 1)], _box());
+    expect(_imgs(host), isEmpty, reason: 'excess content degrades to blank');
+
+    overlay.dispose();
+    host.remove();
+  });
+
+  test('an image-only stream is bounded to one pending plan batch', () {
+    final host = _makeHost();
+    final overlay = InlineImageOverlay(
+      host,
+      cachePolicy: const InlineImageCachePolicy(maxEntries: 2, maxBytes: 8),
+    );
+
+    expect(overlay.cacheImage('a', Uint8List(6)), isTrue);
+    expect(overlay.cacheImage('b', Uint8List(2)), isTrue);
+    expect(overlay.cacheImage('c', Uint8List(1)), isFalse);
+    expect(overlay.pendingImageCount, 2);
+    expect(overlay.pendingImageBytes, 8);
+    expect(overlay.cachedImageCount, 0, reason: 'no plan has committed them');
+
+    overlay.presentPlan(const [], _box());
+    expect(overlay.pendingImageCount, 0, reason: 'the next plan clears batch');
+    expect(overlay.pendingImageBytes, 0);
+
+    overlay.dispose();
+    host.remove();
+  });
+
+  test('resize reapply does not consume the next plan image batch', () {
+    final host = _makeHost();
+    final overlay = InlineImageOverlay(host);
+
+    overlay.cacheImage('next', Uint8List.fromList([1, 2, 3]));
+    overlay.reapply(_box(cw: 12, ch: 24));
+
+    expect(overlay.pendingImageCount, 1);
+    expect(overlay.cachedImageCount, 0);
+
+    overlay.presentPlan([_place('next', 1, 1, 2, 1)], _box());
+    expect(overlay.pendingImageCount, 0);
+    expect(overlay.cachedImageCount, 1);
     expect(_imgs(host), hasLength(1));
 
     overlay.dispose();
@@ -158,7 +246,7 @@ void main() {
     final host = _makeHost();
     final overlay = InlineImageOverlay(host)
       ..cacheImage('a', Uint8List.fromList([1]))
-      ..apply([_place('a', 0, 0, 1, 1)], _box());
+      ..presentPlan([_place('a', 0, 0, 1, 1)], _box());
     expect(host.children.length, 1, reason: 'the overlay div');
 
     overlay.dispose();

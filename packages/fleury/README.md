@@ -27,8 +27,8 @@ class _CounterAppState extends State<CounterApp> {
 
   @override
   Widget build(BuildContext context) {
-    return KeyBindings.on(
-      {.space: () => setState(() => _count++)},
+    return KeyBindings(
+      bindings: [KeyBinding(.space, onEvent: (_) => setState(() => _count++))],
       child: Center(
         child: Text('count: $_count   (space to increment, Ctrl+C to quit)'),
       ),
@@ -37,14 +37,14 @@ class _CounterAppState extends State<CounterApp> {
 }
 ```
 
-This exact example lives at `example/counter_quickstart.dart` and is
-covered by `test/example/counter_quickstart_test.dart`, so the snippet
-can't silently rot.
+A runnable counterpart lives at `example/counter_quickstart.dart` and is
+covered by `test/example/counter_quickstart_test.dart`; the test mounts the app
+and exercises the space-to-increment behavior.
 
 `runApp` installs the binding, enters raw mode + the alternate screen,
 detects terminal capabilities (color depth, image protocol, multiplexer),
 wires input dispatch and the frame scheduler, and renders your widget
-tree with a diffing ANSI renderer. Ctrl+C always exits.
+tree with a diffing ANSI renderer. Unhandled Ctrl+C exits by default.
 
 ## What's in the box
 

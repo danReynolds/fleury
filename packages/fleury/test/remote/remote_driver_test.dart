@@ -105,6 +105,93 @@ void main() {
       await driver.restore();
     });
 
+    test(
+      'legacy raw INPUT flushes a lone ESC after the idle debounce',
+      () async {
+        final saved = RemoteTerminalDriver.inputFlushDelay;
+        RemoteTerminalDriver.inputFlushDelay = const Duration(milliseconds: 5);
+        addTearDown(() => RemoteTerminalDriver.inputFlushDelay = saved);
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final events = <TuiEvent>[];
+        final eventSub = driver.events.listen(events.add);
+
+        final entering = driver.enter(TerminalMode.interactive);
+        transport.emit(
+          const InitFrame(
+            size: CellSize(80, 24),
+            colorMode: ColorMode.truecolor,
+            imageProtocol: ImageProtocol.halfBlock,
+            tmuxPassthrough: false,
+            protocolVersion: 1,
+          ),
+        );
+        await entering;
+        transport.emit(InputFrame(Uint8List.fromList([0x1B])));
+
+        await Future<void>.delayed(const Duration(milliseconds: 15));
+        expect(events, [const KeyEvent(keyCode: KeyCode.escape)]);
+
+        await eventSub.cancel();
+        await driver.restore();
+      },
+    );
+
+    test(
+      'structured negotiation rejects the legacy raw INPUT channel',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final events = <TuiEvent>[];
+        final eventSub = driver.events.listen(events.add);
+
+        final entering = driver.enter(TerminalMode.interactive);
+        transport.emit(
+          const InitFrame(
+            size: CellSize(80, 24),
+            colorMode: ColorMode.truecolor,
+            imageProtocol: ImageProtocol.halfBlock,
+            tmuxPassthrough: false,
+            protocolVersion: remoteProtocolVersion,
+          ),
+        );
+        await entering;
+        transport.emit(InputFrame(Uint8List.fromList('q'.codeUnits)));
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+
+        expect(events, isEmpty);
+        await eventSub.cancel();
+        await driver.restore();
+      },
+    );
+
+    test(
+      'remote grid clamping enforces the total cell allocation budget',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final entering = driver.enter(TerminalMode.interactive);
+        transport.emit(
+          const InitFrame(
+            size: CellSize(2000, 1000),
+            colorMode: ColorMode.truecolor,
+            imageProtocol: ImageProtocol.halfBlock,
+            tmuxPassthrough: false,
+            protocolVersion: remoteProtocolVersion,
+          ),
+        );
+        await entering;
+
+        expect(driver.size.cols, lessThanOrEqualTo(maxRemoteGridCols));
+        expect(driver.size.rows, lessThanOrEqualTo(maxRemoteGridRows));
+        expect(
+          driver.size.cols * driver.size.rows,
+          lessThanOrEqualTo(maxRemoteGridCells),
+        );
+        await driver.restore();
+      },
+    );
+
     test('RESIZE frame surfaces as ResizeEvent and updates size', () async {
       final transport = _FakeTransport();
       final driver = RemoteTerminalDriver(transport);

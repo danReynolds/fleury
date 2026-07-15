@@ -1,8 +1,8 @@
 // A `TerminalDriver` whose I/O backs onto a `RemoteFrameTransport`
 // rather than `dart:io` stdin/stdout. Used by `fleury shell` (Unix
 // socket transport, app rendering into a separate shell terminal) and
-// `fleury serve` (websocket transport, app rendering into a browser
-// xterm.js client). Same widget tree, same renderer, same input
+// `fleury serve` (websocket transport, app rendering into the retained-DOM
+// browser client). Same widget tree, same renderer, same input
 // dispatch — only the boundary moves.
 
 import 'dart:async';
@@ -20,6 +20,7 @@ import '../terminal/capabilities.dart';
 import '../input/events.dart';
 import '../terminal/input_parser.dart';
 import '../terminal/terminal_driver.dart';
+import 'inline_image_cache.dart';
 import 'remote_codec.dart';
 import 'remote_protocol.dart';
 import 'remote_semantics.dart';
@@ -28,9 +29,12 @@ import 'remote_transport.dart';
 /// Maximum grid dimensions the server will honor from a remote peer.
 /// A real terminal/browser viewport is well within this; the bound exists
 /// only to cap the cell-buffer allocation against a hostile RESIZE/INIT.
-/// 4000×4000 = 16M cells, generous and bounded.
-const int maxRemoteGridCols = 4000;
-const int maxRemoteGridRows = 4000;
+/// The independent dimension caps accommodate extreme-wide display walls, and
+/// the area cap is the real allocation boundary: two retained 1M-cell buffers
+/// are already far beyond an ordinary TUI while remaining finite.
+const int maxRemoteGridCols = maxRemotePlanGridCols;
+const int maxRemoteGridRows = maxRemotePlanGridRows;
+const int maxRemoteGridCells = maxRemotePlanGridCells;
 
 /// The remote-rendering driver for `fleury shell` and `fleury serve`.
 ///
@@ -46,7 +50,10 @@ final class RemoteTerminalDriver
         RemoteSurfaceSink,
         SurfaceCapabilitiesProvider,
         OutputFlowControl {
-  RemoteTerminalDriver(this._transport);
+  RemoteTerminalDriver(
+    this._transport, {
+    InlineImageCachePolicy imageCachePolicy = defaultInlineImageCachePolicy,
+  }) : _shippedImages = InlineImageCacheLedger(imageCachePolicy);
 
   /// The transport's send backlog IS this driver's output backlog: the
   /// frame program defers production while the peer (or the serve bridge
@@ -68,6 +75,7 @@ final class RemoteTerminalDriver
   void Function(int seq, RemoteClipboardStatus status)? _onClipboardResult;
 
   StreamSubscription<RemoteFrame>? _frameSub;
+  Timer? _parserFlushTimer;
   CellSize _size = const CellSize(80, 24);
   TerminalCapabilities _capabilities = TerminalCapabilities.defaultCapabilities;
   SurfaceCapabilities? _peerSurfaceCapabilities;
@@ -80,20 +88,15 @@ final class RemoteTerminalDriver
   SurfaceCapabilities get surfaceCapabilities =>
       _peerSurfaceCapabilities ?? _capabilities.toSurfaceCapabilities();
 
-  // Content-hash ids of inline images the peer is believed to hold — an
+  // Content-hash ids and encoded byte lengths the peer is believed to hold — a
   // app-side mirror of the client's blob cache (InlineImageOverlay). Bytes
   // ship once per id and the id stays "held" until it falls out of this
-  // bounded, insertion-ordered set under the SAME policy the client uses
-  // (evict only ids not placed this frame, once over the cap). So a
+  // bounded, insertion-ordered ledger under the SAME shared policy the client
+  // uses (evict oldest ids not placed this frame once over count or bytes). A
   // re-appearing image — including every frame of an animation, which is a
   // fresh id per tick — re-ships bytes only when the client would actually
-  // have evicted them, not on every loop. (Dart Sets iterate in insertion
-  // order.)
-  final Set<String> _shippedImageIds = <String>{};
-
-  /// The peer's inline-image cache bound (mirrors
-  /// `InlineImageOverlay._maxCachedImages`).
-  static const int _maxShippedImageIds = 512;
+  // have evicted them, not on every loop.
+  final InlineImageCacheLedger _shippedImages;
   bool _active = false;
   bool _handshakeReceived = false;
   int _protocolVersion = 1;
@@ -177,10 +180,16 @@ final class RemoteTerminalDriver
   /// Overridable for tests.
   static Duration initTimeout = const Duration(seconds: 10);
 
+  /// Idle debounce used to disambiguate a lone ESC on the legacy raw-input
+  /// path. Overridable for focused tests.
+  static Duration inputFlushDelay = const Duration(milliseconds: 30);
+
   @override
   Future<void> restore() async {
     final wasActive = _active;
     _active = false;
+    _parserFlushTimer?.cancel();
+    _parserFlushTimer = null;
     if (wasActive) {
       try {
         _transport.send(const ByeFrame());
@@ -191,6 +200,7 @@ final class RemoteTerminalDriver
     await _frameSub?.cancel();
     _frameSub = null;
     await _transport.close();
+    _shippedImages.clear();
     if (!_events.isClosed) await _events.close();
   }
 
@@ -207,7 +217,7 @@ final class RemoteTerminalDriver
     FramePresentationPlan plan,
   ) {
     if (!_active) return;
-    final remotePlan = buildRemotePlan(
+    var remotePlan = buildRemotePlan(
       prev,
       next,
       fullRepaint: plan.fullRepaint,
@@ -225,37 +235,108 @@ final class RemoteTerminalDriver
       // doesn't expect.
       includeLinks: wantsHyperlinks,
     );
+    final boundedPlacements = _boundedImagePlacements(remotePlan, next);
+    if (boundedPlacements.length != remotePlan.placements.length) {
+      remotePlan = RemotePlan(
+        size: remotePlan.size,
+        fullRepaint: remotePlan.fullRepaint,
+        styleTable: remotePlan.styleTable,
+        patches: remotePlan.patches,
+        scrollUpRows: remotePlan.scrollUpRows,
+        placements: boundedPlacements,
+        includeLinks: remotePlan.includeLinks,
+      );
+    }
     // Ship the bytes for each image the peer does not yet hold, before the
     // plan that references it. An id ships at most once per frame even if
     // placed several times, and at most once while the peer keeps it cached
-    // (see [_shippedImageIds]) — so a static or animated image doesn't
+    // (see [_shippedImages]) — so a static or animated image doesn't
     // re-transmit bytes the client already has.
-    final placedIds = <String>{};
+    final placedIds = <String>{for (final p in remotePlan.placements) p.id};
+    var additionalEntries = 0;
+    var additionalBytes = 0;
+    for (final id in placedIds) {
+      if (_shippedImages.contains(id)) continue;
+      final image = next.images[id];
+      if (image == null) continue;
+      additionalEntries++;
+      additionalBytes += image.bytes.length;
+    }
+    // Make room against the *next* plan before sending its images. The browser
+    // stages those frames and performs this same projected-fit eviction when
+    // the PlanFrame arrives, keeping both insertion-ordered ledgers identical
+    // without either side temporarily accumulating stale + next-generation
+    // blobs in one committed cache.
+    _shippedImages.evictStaleToFit(
+      placedIds,
+      additionalEntries: additionalEntries,
+      additionalBytes: additionalBytes,
+    );
+    final handledIds = <String>{};
     for (final placement in remotePlan.placements) {
-      if (!placedIds.add(placement.id)) continue; // already handled this frame
-      if (_shippedImageIds.contains(placement.id)) continue; // peer holds it
+      if (!handledIds.add(placement.id)) continue; // already handled this frame
+      if (_shippedImages.contains(placement.id)) continue; // peer holds it
       final image = next.images[placement.id];
       if (image != null) {
         _transport.send(InlineImageFrame(placement.id, image.bytes));
-        _shippedImageIds.add(placement.id);
+        _shippedImages.add(placement.id, image.bytes.length);
       }
     }
     _evictShippedImageIds(placedIds);
     _transport.send(PlanFrame(remotePlan));
   }
 
-  /// Bounds [_shippedImageIds] to the peer's cache size, evicting only ids
-  /// NOT placed this frame, oldest first — the exact policy
-  /// `InlineImageOverlay._evictStale` runs against the same placements, so
-  /// the app's belief of what the peer holds stays in step with the peer's
-  /// actual cache.
-  void _evictShippedImageIds(Set<String> placedThisFrame) {
-    if (_shippedImageIds.length <= _maxShippedImageIds) return;
-    for (final id in _shippedImageIds.toList()) {
-      if (_shippedImageIds.length <= _maxShippedImageIds) break;
-      if (placedThisFrame.contains(id)) continue;
-      _shippedImageIds.remove(id);
+  /// Keeps one plan's visible image working set within the shared cache policy
+  /// and frame limits. Excess images degrade to blank overlay cells; the normal
+  /// case is unchanged and retains every placement. The deterministic paint-
+  /// order prefix is also what a skewed/malformed peer can reproduce safely.
+  List<ImagePlacement> _boundedImagePlacements(
+    RemotePlan plan,
+    CellBuffer next,
+  ) {
+    if (plan.placements.isEmpty) return plan.placements;
+    final policy = _shippedImages.policy;
+    final acceptedIds = <String>{};
+    final rejectedIds = <String>{};
+    final placements = <ImagePlacement>[];
+    var encodedBytes = 0;
+
+    for (final placement in plan.placements) {
+      if (placements.length >= maxRemotePlanPlacements) break;
+      if (rejectedIds.contains(placement.id)) continue;
+      if (acceptedIds.contains(placement.id)) {
+        placements.add(placement);
+        continue;
+      }
+
+      final image = next.images[placement.id];
+      final idBytes = utf8.encode(placement.id);
+      final imageBytes = image?.bytes.length ?? 0;
+      final validFrame =
+          image != null &&
+          idBytes.isNotEmpty &&
+          idBytes.length <= 256 &&
+          imageBytes + idBytes.length + 2 <= maxRemoteImageFramePayloadLength;
+      final fitsWorkingSet =
+          acceptedIds.length < policy.maxEntries &&
+          encodedBytes + imageBytes <= policy.maxBytes;
+      if (!validFrame || !fitsWorkingSet) {
+        rejectedIds.add(placement.id);
+        continue;
+      }
+      acceptedIds.add(placement.id);
+      encodedBytes += imageBytes;
+      placements.add(placement);
     }
+    return List<ImagePlacement>.unmodifiable(placements);
+  }
+
+  /// Applies the shared count-and-byte policy against the same placements the
+  /// browser receives, so the app's belief of what the peer holds stays in
+  /// step with its actual cache. [_boundedImagePlacements] guarantees the
+  /// placed working set itself already fits this policy.
+  void _evictShippedImageIds(Set<String> placedThisFrame) {
+    _shippedImages.evictStale(placedThisFrame);
   }
 
   /// Diffs the semantic [tree] against the last one sent to this peer and ships
@@ -377,7 +458,17 @@ final class RemoteTerminalDriver
         _size = _clampSize(f.size);
         if (_active) _events.add(ResizeEvent(_size));
       case InputFrame f:
+        // Raw ANSI input belongs exclusively to the negotiated v1 terminal
+        // path. A structured peer must use INPUT_EVENT; ignoring legacy bytes
+        // here prevents it from reaching the stateful escape/paste parser and
+        // removes an accidental second input channel after negotiation.
+        if (!_handshakeReceived || wantsPresentationPlans) break;
         _parser.feed(f.bytes, _sink);
+        _parserFlushTimer?.cancel();
+        _parserFlushTimer = Timer(inputFlushDelay, () {
+          _parserFlushTimer = null;
+          if (_active && !wantsPresentationPlans) _parser.flush(_sink);
+        });
       case OutputFrame _:
       case PlanFrame _:
       case SemanticsFrame _:
@@ -403,7 +494,7 @@ final class RemoteTerminalDriver
         // Structured input from a v2 peer: surface the event directly
         // instead of parsing ANSI. A resize event also updates the cached
         // size so the next plan is built at the new viewport.
-        if (_active) {
+        if (_active && wantsPresentationPlans) {
           var event = f.event;
           if (event is ResizeEvent) {
             event = ResizeEvent(_clampSize(event.size));
@@ -420,10 +511,21 @@ final class RemoteTerminalDriver
   /// buggy client cannot make the app allocate an enormous cell buffer
   /// (`RESIZE cols=100000,rows=100000` → ten billion cells). The bound is
   /// far above any real terminal/browser viewport.
-  CellSize _clampSize(CellSize size) => CellSize(
-    size.cols.clamp(1, maxRemoteGridCols),
-    size.rows.clamp(1, maxRemoteGridRows),
-  );
+  CellSize _clampSize(CellSize size) {
+    var cols = size.cols.clamp(1, maxRemoteGridCols);
+    var rows = size.rows.clamp(1, maxRemoteGridRows);
+    if (cols * rows > maxRemoteGridCells) {
+      // Preserve the smaller requested dimension and trim the larger one. This
+      // keeps common ultrawide/tall layouts closer to their requested shape
+      // than independently clamping both dimensions to a huge rectangle.
+      if (cols >= rows) {
+        cols = (maxRemoteGridCells ~/ rows).clamp(1, maxRemoteGridCols);
+      } else {
+        rows = (maxRemoteGridCells ~/ cols).clamp(1, maxRemoteGridRows);
+      }
+    }
+    return CellSize(cols, rows);
+  }
 
   void _onTransportError(Object error, StackTrace stackTrace) {
     if (!_active) {
@@ -436,6 +538,8 @@ final class RemoteTerminalDriver
   }
 
   void _onDisconnect() {
+    _parserFlushTimer?.cancel();
+    _parserFlushTimer = null;
     if (!_active) {
       // Handshake never landed — fail the enter() future so the caller
       // can fall back or report cleanly.

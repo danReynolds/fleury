@@ -77,15 +77,30 @@ class OutputCapture {
     required this.buffer,
     this.onLine,
     this.sanitizeForTerminal = false,
-  });
+    this.maxPendingLineLength = 64 * 1024,
+  }) : assert(maxPendingLineLength > 0);
 
   final LogBuffer buffer;
   final void Function(LogLine line)? onLine;
   final bool sanitizeForTerminal;
 
+  /// Target maximum UTF-16 code units retained for one unterminated line.
+  ///
+  /// Pipes and descriptor capture are byte streams, so a child that writes
+  /// forever without `\n` would otherwise grow [_pending] without bound even
+  /// though [LogBuffer] itself has a line-count cap. Long logical lines are
+  /// emitted in bounded segments; ordinary lines retain their original
+  /// one-entry behavior. A segment may use one extra code unit when the exact
+  /// boundary would otherwise split a UTF-16 surrogate pair.
+  final int maxPendingLineLength;
+
   final Map<LogSource, StringBuffer> _pending = {
     LogSource.stdout: StringBuffer(),
     LogSource.stderr: StringBuffer(),
+  };
+  final Map<LogSource, bool> _emittedSegment = {
+    LogSource.stdout: false,
+    LogSource.stderr: false,
   };
 
   void _emit(LogLine line) {
@@ -103,11 +118,63 @@ class OutputCapture {
   /// held until the rest of the line arrives (or [flushPartials]).
   void addChunk(String text, LogSource source) {
     final pending = _pending[source]!;
-    final parts = (pending.toString() + text).split('\n');
-    pending.clear();
-    pending.write(parts.removeLast()); // trailing partial (no newline yet)
-    for (final line in parts) {
-      _emit(LogLine(line, source));
+    var offset = 0;
+    while (offset < text.length) {
+      final newline = text.indexOf('\n', offset);
+      final end = newline < 0 ? text.length : newline;
+      _appendBounded(text, offset, end, source);
+      if (newline < 0) return;
+
+      // A segment emitted exactly at the cap already represents this logical
+      // line. Suppress the synthetic empty entry that its following newline
+      // would otherwise create; preserve real empty lines.
+      if (pending.isNotEmpty) {
+        _emit(LogLine(pending.toString(), source));
+        pending.clear();
+      } else if (!_emittedSegment[source]!) {
+        _emit(LogLine('', source));
+      }
+      _emittedSegment[source] = false;
+      offset = newline + 1;
+    }
+  }
+
+  void _appendBounded(String text, int start, int end, LogSource source) {
+    final pending = _pending[source]!;
+    var offset = start;
+    while (offset < end) {
+      final room = maxPendingLineLength - pending.length;
+      if (room == 0) {
+        // A prior chunk can end exactly at the cap with the high half of a
+        // surrogate pair. If this chunk starts with its low half, keep the pair
+        // together and allow this segment the documented one-unit overflow.
+        if (_endsWithHighSurrogate(pending) &&
+            _isLowSurrogate(text.codeUnitAt(offset))) {
+          pending.write(text.substring(offset, offset + 1));
+          offset++;
+        }
+        _emit(LogLine(pending.toString(), source));
+        pending.clear();
+        _emittedSegment[source] = true;
+        continue;
+      }
+      final remaining = end - offset;
+      var take = remaining < room ? remaining : room;
+      if (take < remaining &&
+          _isHighSurrogate(text.codeUnitAt(offset + take - 1)) &&
+          _isLowSurrogate(text.codeUnitAt(offset + take))) {
+        take++;
+      }
+      pending.write(text.substring(offset, offset + take));
+      offset += take;
+      // Hold a terminal high surrogate until the next chunk/newline/flush can
+      // establish whether it has a matching low half.
+      if (pending.length >= maxPendingLineLength &&
+          !_endsWithHighSurrogate(pending)) {
+        _emit(LogLine(pending.toString(), source));
+        pending.clear();
+        _emittedSegment[source] = true;
+      }
     }
   }
 
@@ -120,7 +187,16 @@ class OutputCapture {
         _emit(LogLine(pending.toString(), source));
         pending.clear();
       }
+      _emittedSegment[source] = false;
     }
   }
-
 }
+
+bool _endsWithHighSurrogate(StringBuffer buffer) {
+  if (buffer.isEmpty) return false;
+  return _isHighSurrogate(buffer.toString().codeUnitAt(buffer.length - 1));
+}
+
+bool _isHighSurrogate(int codeUnit) => codeUnit >= 0xD800 && codeUnit <= 0xDBFF;
+
+bool _isLowSurrogate(int codeUnit) => codeUnit >= 0xDC00 && codeUnit <= 0xDFFF;

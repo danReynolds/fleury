@@ -35,6 +35,7 @@ class PointerRouter {
   RenderPointerListener? _hovered;
   RenderPointerListener? _downTarget;
   MouseButton _downButton = MouseButton.none;
+  var _disposed = false;
 
   // Drag capture: once a drag begins over a region it keeps receiving the
   // motion until release, even when the pointer leaves its bounds.
@@ -42,16 +43,77 @@ class PointerRouter {
   bool _dragging = false;
 
   /// Clears the registry at the start of a paint pass.
-  void beginFrame() => _regions.clear();
+  void beginFrame() {
+    if (_disposed) return;
+    _regions.clear();
+  }
+
+  /// Reconciles captured targets against the regions painted this frame.
+  ///
+  /// A pointer render object can disappear while it owns hover, press, or drag
+  /// capture. Render objects register during paint, so anything absent after a
+  /// completed paint is no longer safe to call. Clear those references without
+  /// synthesizing callbacks into an already-unmounted widget subtree.
+  void endFrame() {
+    if (_disposed) return;
+    if (_hovered != null && !_regions.contains(_hovered)) {
+      _hovered = null;
+    }
+    if (_downTarget != null && !_regions.contains(_downTarget)) {
+      _downTarget = null;
+      _downButton = MouseButton.none;
+    }
+    if (_dragTarget != null && !_regions.contains(_dragTarget)) {
+      _dragTarget = null;
+      _dragging = false;
+    }
+  }
+
+  /// Discards every registration and capture from an unsuccessful frame.
+  ///
+  /// [beginFrame] replaces the previously presented registry as paint runs.
+  /// If paint then throws, the partial registry does not describe a frame the
+  /// host presented and must not remain interactive.
+  void abortFrame() {
+    if (_disposed) return;
+    _regions.clear();
+    _hovered = null;
+    _downTarget = null;
+    _downButton = MouseButton.none;
+    _dragTarget = null;
+    _dragging = false;
+  }
+
+  /// Permanently releases every painted region and captured pointer target.
+  ///
+  /// Teardown deliberately does not synthesize exit or drag-end callbacks:
+  /// those callbacks belong to an application tree that is already being
+  /// dismantled. Subsequent routing is inert. Idempotent.
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _regions.clear();
+    _hovered = null;
+    _downTarget = null;
+    _downButton = MouseButton.none;
+    _dragTarget = null;
+    _dragging = false;
+  }
 
   // Registers a region in paint order (later = on top). Called by the
   // region's render object during paint.
-  void _register(RenderPointerListener region) => _regions.add(region);
+  void _register(RenderPointerListener region) {
+    if (_disposed) return;
+    _regions.add(region);
+  }
 
   void _remove(RenderPointerListener region) {
     _regions.remove(region);
     if (identical(_hovered, region)) _hovered = null;
-    if (identical(_downTarget, region)) _downTarget = null;
+    if (identical(_downTarget, region)) {
+      _downTarget = null;
+      _downButton = MouseButton.none;
+    }
     if (identical(_dragTarget, region)) {
       _dragTarget = null;
       _dragging = false;
@@ -82,13 +144,16 @@ class PointerRouter {
   /// an [AbsorbPointer] overlay covering that cell. The dispatcher checks
   /// this before its click-to-focus pass so a click on an overlay can't move
   /// app focus to a focusable painted invisibly underneath.
-  bool focusAbsorbedAt(int col, int row) =>
-      _topmost(col, row, (_) => true)?.absorbsFocus ?? false;
+  bool focusAbsorbedAt(int col, int row) {
+    if (_disposed) return false;
+    return _topmost(col, row, (_) => true)?.absorbsFocus ?? false;
+  }
 
   /// Routes [event] to the matching region(s). Returns whether any
   /// handler fired (the dispatcher runs click-to-focus afterwards unless
   /// [focusAbsorbedAt] blocks it).
   bool route(MouseEvent event) {
+    if (_disposed) return false;
     _updateHover(event);
     switch (event.kind) {
       case MouseEventKind.scrollUp:
@@ -311,6 +376,10 @@ class _PointerListener extends SingleChildRenderObjectWidget {
   final PointerPositionCallback? onHover;
 
   @override
+  SingleChildRenderObjectElement createElement() =>
+      _PointerListenerElement(this);
+
+  @override
   RenderObject createRenderObject(BuildContext context) =>
       RenderPointerListener()
         ..router = router
@@ -364,6 +433,10 @@ class PointerScrollListener extends SingleChildRenderObjectWidget {
   final PointerTapCallback? onScrollDown;
 
   @override
+  SingleChildRenderObjectElement createElement() =>
+      _PointerListenerElement(this);
+
+  @override
   RenderObject createRenderObject(BuildContext context) =>
       RenderPointerListener()
         ..router = router
@@ -401,6 +474,10 @@ class AbsorbPointer extends SingleChildRenderObjectWidget {
   static void _noopAt(int col, int row) {}
 
   @override
+  SingleChildRenderObjectElement createElement() =>
+      _PointerListenerElement(this);
+
+  @override
   RenderObject createRenderObject(BuildContext context) =>
       RenderPointerListener()
         ..router = PointerRouterScope.maybeOf(context)
@@ -422,6 +499,35 @@ class AbsorbPointer extends SingleChildRenderObjectWidget {
     covariant RenderPointerListener renderObject,
   ) {
     renderObject.router = PointerRouterScope.maybeOf(context);
+  }
+}
+
+/// Releases router registrations as soon as an element leaves the active tree
+/// rather than waiting for the next paint pass. Hosts schedule frames
+/// asynchronously, and a failed update can leave a subtree inactive, so input
+/// must not reach it between reconciliation and the replacement frame.
+final class _PointerListenerElement extends SingleChildRenderObjectElement {
+  _PointerListenerElement(super.widget);
+
+  @override
+  void deactivate() {
+    (renderObject as RenderPointerListener).router = null;
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    // A GlobalKey move can reactivate this element without delivering a new
+    // widget, so update the existing render object explicitly to restore its
+    // router (and any callbacks) from the new tree position.
+    widget.updateRenderObject(this, renderObject);
+  }
+
+  @override
+  void unmount() {
+    (renderObject as RenderPointerListener).router = null;
+    super.unmount();
   }
 }
 
