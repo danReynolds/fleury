@@ -31,6 +31,10 @@ final class WireFrameSource implements BrowserFrameSource {
   BrowserHostComponents? _components;
   final FrameDecoder _decoder = FrameDecoder();
   final SemanticsWireDecoder _semanticsDecoder = SemanticsWireDecoder();
+  // Diffs consecutive decoded trees so the accessibility DOM can be patched
+  // incrementally (SemanticDomPresenter's O(changed) path) instead of being
+  // torn down and rebuilt from scratch every semantically-dirty frame.
+  final SemanticsOwner _semanticsOwner = SemanticsOwner();
   CellSize _size = const CellSize(80, 24);
   CellBuffer _mirror = CellBuffer(const CellSize(80, 24));
   bool _handshakeSent = false;
@@ -456,7 +460,11 @@ final class WireFrameSource implements BrowserFrameSource {
     if (semantics == null) return;
     final tree = _semanticsDecoder.apply(frame.json);
     if (tree == null) return;
-    semantics.present(tree);
+    // The owner advances only on a successful decode, so a swallowed frame
+    // leaves the diff anchored at the last good tree. A full (resync) frame
+    // diffs to a large added/removed set, so the presenter falls back to a full
+    // rebuild; a patch yields updated-only, taking the incremental path.
+    semantics.present(tree, update: _semanticsOwner.update(tree));
   }
 
   void _send(Uint8List bytes) {
