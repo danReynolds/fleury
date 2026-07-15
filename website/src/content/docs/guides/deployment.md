@@ -1,11 +1,11 @@
 ---
 title: Deployment & distribution
-description: Ship a Fleury app — as a terminal binary, an in-browser bundle, or a served web app.
+description: Ship a Fleury app as a terminal binary or in-browser bundle, and preview native apps with the local serve bridge.
 ---
 
-The same app can ship three ways: as a native terminal program, as a
-self-contained browser bundle, or served to browsers from a running process.
-This guide covers the commands for each; for *how* the browser paths work under
+The same app can ship as a native terminal program or a self-contained browser
+bundle. During development, `fleury serve` can also mirror a native process into
+a browser. This guide covers each path; for *how* the browser paths work under
 the hood, see [Serving and embedding](/architecture/serving-and-embedding/).
 
 ## Ship a terminal app
@@ -64,15 +64,15 @@ offline, and scale it like a normal web asset. The one constraint: a client-side
 bundle can only use **web-safe widgets**. The handful that need the platform
 (file pickers, the log and process panels, anything touching `dart:io`) won't
 compile to JS — import `package:fleury_widgets/fleury_widgets_web.dart` rather
-than the full barrel, and the compiler will hold you to it. For those, use serve
-instead.
+than the full barrel, and the compiler will hold you to it. To preview those
+widgets in a browser during development, use `serve` instead.
 
-## Serve it
+## Preview a native app with `serve`
 
 `fleury serve` runs your **native** app and streams its rendered frames to a
-browser over a WebSocket, painting into a DOM cell grid. The app keeps full
-`dart:io` access — every widget works, including the native-only ones — and the
-URL is shareable:
+browser over a WebSocket, painting into a DOM cell grid. It is primarily a local
+preview and debugging bridge. The app keeps full `dart:io` access, so every
+widget works, including the native-only ones:
 
 ```sh
 # Spawn a fresh app process for each browser session:
@@ -87,18 +87,19 @@ as the command to run):
 | `--port=<n>` | `5777` | Port to listen on |
 | `--host=<addr>` | `127.0.0.1` | Bind address (`0.0.0.0` to expose) |
 | `--allow-origin=<origin>` | same-origin | Allow an embedding origin, or `*` |
+| `--token=<secret>` | none | Require `?token=<secret>` on the WebSocket |
 | `--spawn <cmd …>` | bridge mode | Spawn an isolated process per connection |
 
 There are two models. **Bridge mode** (no `--spawn`) serves a single shared
 session — good for a local demo or IDE-driven debugging. **Spawn mode**
 (`--spawn dart run my_app.dart`) gives every browser connection its own isolated
-subprocess — "your TUI as a multi-user web app" — with a warm-standby pool so new
-sessions start fast. For production spawn mode, point it at an AOT binary
-(`--spawn ./my_app`) rather than `dart run` to cut per-session startup.
+subprocess, with a warm-standby pool so reconnects start quickly.
 
-```sh
-fleury serve --port=8080 --host=0.0.0.0 --allow-origin=https://example.com --spawn ./my_app
-```
+The default bind address is loopback. If you deliberately expose it on a trusted
+network, set `--token`, choose explicit origins, and prefer a trusted tunnel or
+authenticating reverse proxy. `serve` is not a hardened public hosting layer:
+any client that passes its gates can drive the app and read its redacted
+semantic tree.
 
 ## Embed or serve?
 
@@ -107,11 +108,12 @@ fleury serve --port=8080 --host=0.0.0.0 --allow-origin=https://example.com --spa
 | Where it runs | In the browser | A native process |
 | Backend needed | None — static asset | Yes — the running app |
 | Widgets | Web-safe only | All, incl. file/process/log |
-| Scaling | Static/CDN asset | One process per session |
-| Use when | It fits the browser sandbox | It needs the real machine |
+| Scaling | Static/CDN asset | A local process per session |
+| Use when | It fits the browser sandbox | Local preview needs the real machine |
 
-Rule of thumb: if it can run in the sandbox, embed it; reach for serve when the
-app needs the host — the filesystem, a process, real `dart:io`.
+Rule of thumb: ship an embed when it can run in the sandbox; use `serve` during
+development when the preview needs the host — the filesystem, a process, or real
+`dart:io`.
 
 ## Installing the `fleury` CLI
 

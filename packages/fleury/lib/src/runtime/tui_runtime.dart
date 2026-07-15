@@ -7,6 +7,33 @@ import '../widgets/framework.dart';
 import '../widgets/pointer.dart';
 import '../widgets/tui_binding.dart';
 
+final class _CapturedRuntimeDisposeError {
+  const _CapturedRuntimeDisposeError(this.error, this.stack);
+
+  final Object error;
+  final StackTrace stack;
+}
+
+final class _MultipleRuntimeDisposeErrors extends Error {
+  _MultipleRuntimeDisposeErrors(this.errors);
+
+  final List<_CapturedRuntimeDisposeError> errors;
+
+  @override
+  String toString() {
+    final out = StringBuffer(
+      'Multiple errors occurred while disposing TuiRuntime '
+      '(${errors.length}):',
+    );
+    for (var i = 0; i < errors.length; i++) {
+      out
+        ..writeln()
+        ..write('  ${i + 1}. ${errors[i].error}');
+    }
+    return out.toString();
+  }
+}
+
 /// Shared framework-service owner for Fleury hosts.
 ///
 /// Hosts still own platform concerns such as terminal setup, browser DOM
@@ -75,7 +102,13 @@ final class TuiRuntime {
     if (_rootElement != null) {
       throw StateError('TuiRuntime already has a mounted root.');
     }
-    return _rootElement = owner.mountRoot(root);
+    try {
+      return owner.mountRoot(root);
+    } finally {
+      // A failed initial mount rolls back through BuildOwner; mirror its
+      // authoritative result so the host can safely attempt a fresh mount.
+      _rootElement = owner.root;
+    }
   }
 
   /// Replaces the mounted root widget and returns the current root element.
@@ -85,7 +118,13 @@ final class TuiRuntime {
     if (current == null) {
       throw StateError('TuiRuntime has no mounted root.');
     }
-    return _rootElement = owner.updateRoot(current, root);
+    try {
+      return owner.updateRoot(current, root);
+    } finally {
+      // Keep the host-facing pointer exactly aligned with BuildOwner even when
+      // an incompatible old root throws from State.dispose during replacement.
+      _rootElement = owner.root;
+    }
   }
 
   /// Reassembles the mounted application after a hot reload.
@@ -124,13 +163,46 @@ final class TuiRuntime {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _rootElement?.unmount();
-    _rootElement = null;
+
+    final errors = <_CapturedRuntimeDisposeError>[];
+    void capture(void Function() action) {
+      try {
+        action();
+      } catch (error, stack) {
+        errors.add(_CapturedRuntimeDisposeError(error, stack));
+      }
+    }
+
+    final root = _rootElement;
+    try {
+      if (root != null) capture(root.unmount);
+    } finally {
+      _rootElement = null;
+    }
     // Subtrees deactivated but not yet finalized (a layout-time swap with no
     // frame after it) must still see State.dispose.
-    owner.drainInactiveElements();
-    focusManager.dispose();
-    binding.dispose();
+    capture(owner.drainInactiveElements);
+    capture(pointerRouter.dispose);
+    capture(focusManager.dispose);
+    capture(binding.dispose);
+
+    // Host callbacks commonly close over the session. A disposed runtime must
+    // not keep that session reachable through its owner after the tree is gone.
+    owner.onScheduleBuild = null;
+    owner.onBuildError = null;
+    owner.onContainedRenderError = null;
+
+    if (errors.isEmpty) return;
+    final first = errors.first;
+    if (errors.length == 1) {
+      Error.throwWithStackTrace(first.error, first.stack);
+    }
+    Error.throwWithStackTrace(
+      _MultipleRuntimeDisposeErrors(
+        List<_CapturedRuntimeDisposeError>.unmodifiable(errors),
+      ),
+      first.stack,
+    );
   }
 
   void _ensureNotDisposed() {

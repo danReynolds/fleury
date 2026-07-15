@@ -20,6 +20,17 @@ import '../runtime/tui_frame_loop.dart';
 import '../semantics/semantics.dart';
 import '../input/events.dart';
 
+/// Structural bounds for one structured presentation plan. These are shared by
+/// the decoder and the server-side remote driver so a decoded plan can never
+/// describe a grid the runtime itself would refuse to allocate.
+const int maxRemotePlanGridCols = 2000;
+const int maxRemotePlanGridRows = 1000;
+const int maxRemotePlanGridCells = 1000 * 1000;
+const int maxRemotePlanStyles = 16 * 1024;
+const int maxRemotePlanPatches = 100 * 1000;
+const int maxRemotePlanRuns = 250 * 1000;
+const int maxRemotePlanPlacements = 4096;
+
 /// A frame reduced to its changed cells for the wire: the grid size,
 /// repaint/scroll flags, a per-frame style table, and the changed
 /// column-range patches. The client applies the patches to a [CellBuffer]
@@ -433,24 +444,48 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
   final flags = r.u8();
   final cols = r.varint();
   final rows = r.varint();
+  _validatePlanGrid(cols, rows);
   final scrollUp = (flags & 2) != 0 ? r.varint() : null;
+  if (scrollUp != null && (scrollUp <= 0 || scrollUp >= rows)) {
+    throw RemoteCodecException(
+      'scroll row count $scrollUp is outside 1..${rows - 1}',
+    );
+  }
   final styleCount = r.varint();
+  _checkPlanCount('style', styleCount, maxRemotePlanStyles);
   final styleTable = <CellStyle>[
     for (var i = 0; i < styleCount; i++) _readStyle(r),
   ];
   final patchCount = r.varint();
+  _checkPlanCount('patch', patchCount, maxRemotePlanPatches);
   final patches = <RemoteRowPatch>[];
+  var totalRuns = 0;
   for (var i = 0; i < patchCount; i++) {
     final row = r.varint();
     final startCol = r.varint();
+    if (row >= rows || startCol >= cols) {
+      throw RemoteCodecException(
+        'patch $i starts outside ${cols}x$rows grid: col=$startCol,row=$row',
+      );
+    }
     final runCount = r.varint();
+    _checkPlanCount('patch run', runCount, cols);
+    if (runCount == 0) {
+      throw RemoteCodecException('patch $i has no runs');
+    }
+    totalRuns += runCount;
+    _checkPlanCount('total run', totalRuns, maxRemotePlanRuns);
     final runs = <RemotePatchRun>[];
     for (var j = 0; j < runCount; j++) {
       final styleIndex = r.varint();
       if (styleIndex >= styleTable.length) {
         throw RemoteCodecException('style index $styleIndex out of range');
       }
-      runs.add(RemotePatchRun(styleIndex: styleIndex, text: r.vstr()));
+      final text = r.vstr();
+      if (text.isEmpty) {
+        throw RemoteCodecException('patch $i run $j has empty text');
+      }
+      runs.add(RemotePatchRun(styleIndex: styleIndex, text: text));
     }
     patches.add(
       RemoteRowPatch(
@@ -461,6 +496,7 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
     );
   }
   final placementCount = r.varint();
+  _checkPlanCount('image placement', placementCount, maxRemotePlanPlacements);
   final placements = <ImagePlacement>[];
   for (var i = 0; i < placementCount; i++) {
     final id = r.vstr();
@@ -469,6 +505,23 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
     final pcols = r.varint();
     final prows = r.varint();
     final fitIndex = r.varint();
+    if (id.isEmpty || id.length > 256) {
+      throw RemoteCodecException(
+        'image placement $i id length is outside 1..256',
+      );
+    }
+    if (pcols <= 0 ||
+        prows <= 0 ||
+        pcols > maxRemotePlanGridCols ||
+        prows > maxRemotePlanGridRows ||
+        pcol >= cols ||
+        prow >= rows ||
+        pcol + pcols > cols ||
+        prow + prows > rows) {
+      throw RemoteCodecException(
+        'image placement $i is outside ${cols}x$rows grid',
+      );
+    }
     final fit = fitIndex < InlineImageFit.values.length
         ? InlineImageFit.values[fitIndex]
         : InlineImageFit.contain;
@@ -492,6 +545,26 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
     patches: List.unmodifiable(patches),
     placements: List.unmodifiable(placements),
   );
+}
+
+void _validatePlanGrid(int cols, int rows) {
+  if (cols <= 0 ||
+      rows <= 0 ||
+      cols > maxRemotePlanGridCols ||
+      rows > maxRemotePlanGridRows ||
+      cols * rows > maxRemotePlanGridCells) {
+    throw RemoteCodecException(
+      'plan grid ${cols}x$rows exceeds '
+      '${maxRemotePlanGridCols}x$maxRemotePlanGridRows / '
+      '$maxRemotePlanGridCells-cell limit',
+    );
+  }
+}
+
+void _checkPlanCount(String label, int count, int maximum) {
+  if (count > maximum) {
+    throw RemoteCodecException('$label count $count exceeds limit $maximum');
+  }
 }
 
 // ---- plan build / apply ----------------------------------------------------
@@ -683,8 +756,11 @@ List<ImagePlacement> _imagePlacements(CellBuffer next) {
         id: p.id,
         col: p.col,
         row: p.row,
-        cols: p.cols,
-        rows: p.rows,
+        // CellBuffer clips overlay writes at its edge. Keep the wire geometry
+        // inside that same declared grid so a partially visible image cannot
+        // produce an oversized DOM overlay or fail structural decoding.
+        cols: p.cols.clamp(1, next.size.cols - p.col),
+        rows: p.rows.clamp(1, next.size.rows - p.row),
         fit: p.fit,
       ),
   ];

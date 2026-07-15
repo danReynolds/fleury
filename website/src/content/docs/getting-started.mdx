@@ -29,16 +29,29 @@ cd my_app
 Add the framework and the widget library to `pubspec.yaml`:
 
 ```yaml
+publish_to: none
+
 dependencies:
   fleury:
-    git: https://github.com/danReynolds/fleury.git
+    git:
+      url: https://github.com/danReynolds/fleury.git
+      path: packages/fleury
   fleury_widgets:
     git:
       url: https://github.com/danReynolds/fleury.git
       path: packages/fleury_widgets
+
+# Until the packages are published together, keep fleury_widgets' framework
+# dependency on the same Git checkout as the app's direct dependency.
+dependency_overrides:
+  fleury:
+    git:
+      url: https://github.com/danReynolds/fleury.git
+      path: packages/fleury
 ```
 
-Then run `dart pub get`.
+Then run `dart pub get`. The temporary override is required only for the Git
+install; remove it once you switch both packages to hosted releases.
 
 Two packages, one line each: `fleury` is the framework plus its theme-free
 primitives (layout, `Text`, text editing, focus), and `fleury_widgets` is the
@@ -54,7 +67,6 @@ instead of pixels.
 
 ```dart title="bin/my_app.dart"
 import 'package:fleury/fleury.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 void main() => runApp(
       const Center(child: Text('Hello, cells!')),
@@ -162,8 +174,9 @@ lifecycle, composition: the same three moves, however rich the screen gets.
 ## 5. Run it in a browser
 
 The same code runs on the web. You can **embed** it client-side — compile to
-JavaScript with `dart2js`, no backend — or **serve** it from a native process
-and stream frames to a browser tab. Both modes, and when to choose each, are in
+JavaScript with `dart2js`, no backend — or use the local **serve** bridge while
+developing a native app and stream its frames to a browser tab. Both modes, and
+when to choose each, are in
 [Serving and embedding](/architecture/serving-and-embedding/).
 
 ## Where to next

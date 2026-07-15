@@ -8,8 +8,9 @@ actually executes**:
 
 - **Embed** — compile your app to JavaScript with **dart2js** and run the whole
   widget tree **in the browser**. No server.
-- **Serve** — run your app **on a server** (a normal native Dart process) and
-  stream the rendered frames to a thin browser client. `fleury serve`.
+- **Serve** — run your app as a **native Dart process** and stream the rendered
+  frames to a thin browser client. `fleury serve` is primarily a local preview
+  and debugging bridge.
 
 Both are targets behind the same host SPI; see
 [Core and targets](core-and-targets.md) for the layering.
@@ -17,7 +18,7 @@ Both are targets behind the same host SPI; see
 ```
  EMBED  (mountApp)                    SERVE  (fleury serve)
  ─────────────────────                ─────────────────────
- dart2js bundle:                      server (native Dart):
+ dart2js bundle:                      local native process:
    widget tree                          widget tree  ← runs here
    Fleury core                          Fleury core
    fleury_web DOM host                  remote driver → cell-diff frames
@@ -67,7 +68,8 @@ void main() {
 **Constraints**
 
 - **Web-safe widgets only.** Anything that reaches `dart:io` won't compile to JS
-  — that's the 8 native-only `fleury_widgets` (file I/O, log capture, process, and the widgets built on them).
+  — that's the 7 native-only `fleury_widgets` (file I/O, image, log capture,
+  process, and the widgets built on them).
   Import `package:fleury/fleury_core.dart`, not `fleury.dart` (see
   [Core and targets](core-and-targets.md#the-web-safety-boundary-practical-rule)).
 - **No host machine.** No filesystem, processes, or environment — the browser
@@ -79,7 +81,7 @@ offline apps, or anything that should deploy as a static asset.
 
 ---
 
-## Serve — `fleury serve` (remote)
+## Serve — `fleury serve` (local bridge)
 
 `fleury serve` runs your app as a normal **native** Dart process and proxies its
 rendering to the browser. The server holds the real widget tree; on each frame
@@ -91,12 +93,12 @@ sends input events back.
 # Run any fleury app and open it in a browser at http://127.0.0.1:5777
 fleury serve --spawn dart run my_app.dart
 
-# Exposed beyond localhost — set a token and share the URL with it
+# Advanced: exposed on a trusted network — set a token
 fleury serve --port=8080 --host=0.0.0.0 \
              --allow-origin=https://example.com \
              --token=$(openssl rand -hex 16) \
              --spawn dart run my_app.dart
-# → share http://<host>:8080/?token=<secret>
+# → open http://<host>:8080/?token=<secret>
 ```
 
 `--spawn` runs your app as a subprocess, isolated per browser connection.
@@ -121,31 +123,32 @@ gates and nothing else:
   host is not loopback. Prefer HTTPS/WSS termination in front (a reverse
   proxy) so the token and session aren't readable on the wire.
 
-For anything beyond a trusted network, put the port behind the access control
-you already trust — an SSH tunnel (`ssh -L 5777:localhost:5777 …`), a VPN, or
-an authenticating reverse proxy.
+`fleury serve` is not a hardened public hosting layer. For anything beyond a
+trusted network, keep it on loopback and put it behind access control you
+already trust — an SSH tunnel (`ssh -L 5777:localhost:5777 …`), a VPN, or an
+authenticating reverse proxy.
 
 **Properties**
 
 - **Full fidelity.** The app is the real native program, so *every* widget works
   — including the `dart:io`-backed ones (`FileBrowser`, `Image`, `ProcessPanel`,
   log/terminal regions). It has a filesystem, processes, and environment.
-- **Shareable.** A running terminal app becomes a URL — remote sessions, live
-  demos of the actual program, pairing.
+- **Browser-visible.** A running terminal app becomes a local URL for preview,
+  debugging, and trusted pairing.
 - The wire is tuned: cell-range patches with a style table and varints,
   DEFLATE-compressed, semantics diffed separately, with backpressure and
   resize/input DoS clamps.
 
 **Constraints**
 
-- **Needs a running server** — one native process per session. That means
-  hosting, capacity planning, and startup cost (mitigated by warm-standby
-  pre-spawning), not a free static asset.
+- **Needs a running native process** — one per session, with startup and memory
+  costs (warm-standby pre-spawning reduces reconnect latency).
 - **Network latency** sits between input and paint.
+- **Not public hosting.** Origin and token checks are useful local/trusted-network
+  safeguards, not a user-account or internet-service security boundary.
 
-**Use it for:** remote access to a real tool, demos of a full app (with file or
-process access), sharing a session, anything that genuinely needs the host
-machine.
+**Use it for:** local browser previews of a full app (including file or process
+access), debugging, and deliberately trusted remote pairing.
 
 ---
 
@@ -153,19 +156,19 @@ machine.
 
 | | **Embed** (`mountApp`) | **Serve** (`fleury serve`) |
 |---|---|---|
-| Widget tree runs… | in the browser (dart2js) | on a server (native Dart) |
-| Backend required | **none** — static asset | a running process per session |
-| Scaling | static/CDN asset | one process per user |
+| Widget tree runs… | in the browser (dart2js) | in a local native Dart process |
+| Backend required | **none** — static asset | a local native process per session |
+| Scaling | static/CDN asset | one process per session |
 | `dart:io` widgets (files/process/log) | ❌ no | ✅ yes |
 | Host machine access | ❌ sandbox only | ✅ full |
 | Latency | local | network round-trip |
 | Offline | ✅ | ❌ |
-| Best for | docs, demos, self-contained web apps | remote sessions, full-fidelity apps |
+| Best for | docs, demos, self-contained web apps | local preview and trusted full-fidelity sessions |
 
 Rule of thumb: **if it can run in the browser sandbox, embed it** — it deploys
-and scales like a static web asset. **Reach for serve when the app needs the real
-machine** (files, processes, the host environment) or when you want to expose an
-existing native session over a URL.
+and scales like a static web asset. **Reach for serve during development when a
+browser preview needs the real machine** (files, processes, the host environment)
+or for a deliberately trusted remote pairing session.
 
 Because both paths drive the same DOM cell-grid presenter, you can start by
 embedding and move to serve later (or offer both) without changing your app.

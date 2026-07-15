@@ -17,7 +17,8 @@ The standalone Fleury workspace is split into local Dart packages:
 - `packages/fleury_widgets` - higher-level widgets built on `fleury`.
 - `packages/fleury_git` - small Git integration package proving app-extension
   package seams.
-- `packages/fleury_web` - browser/xterm.js driver and demo surface.
+- `packages/fleury_web` - retained-DOM browser host, served client, and demo
+  surface.
 - `packages/fleury_example_console` - internal demo app for the current
   implementation cycle.
 - `packages/storybook` - interactive widget storybook for browsing and

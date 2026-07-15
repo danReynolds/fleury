@@ -114,8 +114,17 @@ export 'src/remote/remote_protocol.dart'
         SemanticActionResultFrame,
         SemanticsFrame,
         defaultMaxRemoteFramePayloadLength,
+        maxRemoteControlFramePayloadLength,
+        maxRemoteDocumentFramePayloadLength,
+        maxRemoteImageFramePayloadLength,
+        maxRemoteInputFramePayloadLength,
         encodeFrame,
         remoteProtocolVersion;
+export 'src/remote/inline_image_cache.dart'
+    show
+        InlineImageCacheLedger,
+        InlineImageCachePolicy,
+        defaultInlineImageCachePolicy;
 export 'src/remote/remote_codec.dart'
     show
         ImagePlacement,

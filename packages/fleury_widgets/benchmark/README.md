@@ -77,6 +77,10 @@ cost, combined chunk update cost, final render, selected-block copy, semantic
 query, ANSI bytes, markdown document counts, unsafe-link count, sanitized block
 count, unsafe frame count, copied byte count, and RSS delta.
 
+The current implementation reparses the accumulated document after every
+append. This scenario measures and bounds that full-document parse-on-append
+path; it does not claim that Markdown parsing itself is incremental.
+
 Saved Phase 2 baseline:
 
 - `benchmark/results/phase2-streaming-markdown-2026-06-01.json` —

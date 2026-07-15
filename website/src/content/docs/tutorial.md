@@ -184,7 +184,8 @@ bound through a controller, a derived list, and a layout that fills the screen.
 ## Where to go next
 
 - The same app runs in a **browser** unchanged — see [Deployment &
-  distribution](/guides/deployment/) to compile it with `dart2js` or serve it.
+  distribution](/guides/deployment/) to compile it with `dart2js` or preview it
+  locally with `fleury serve`.
 - Swap the plain `Column` of `Text` for a richer widget — a [`Tree`](/widgets/tree/),
   [`DataTable`](/widgets/datatable/), or [`Select`](/widgets/select/) — from the
   [widget reference](/widgets/). (Those live in `fleury_widgets`; add

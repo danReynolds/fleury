@@ -77,15 +77,29 @@ class OutputCapture {
     required this.buffer,
     this.onLine,
     this.sanitizeForTerminal = false,
-  });
+    this.maxPendingLineLength = 64 * 1024,
+  }) : assert(maxPendingLineLength > 0);
 
   final LogBuffer buffer;
   final void Function(LogLine line)? onLine;
   final bool sanitizeForTerminal;
 
+  /// Maximum UTF-16 code units retained for one unterminated line.
+  ///
+  /// Pipes and descriptor capture are byte streams, so a child that writes
+  /// forever without `\n` would otherwise grow [_pending] without bound even
+  /// though [LogBuffer] itself has a line-count cap. Long logical lines are
+  /// emitted in bounded segments; ordinary lines retain their original
+  /// one-entry behavior.
+  final int maxPendingLineLength;
+
   final Map<LogSource, StringBuffer> _pending = {
     LogSource.stdout: StringBuffer(),
     LogSource.stderr: StringBuffer(),
+  };
+  final Map<LogSource, bool> _emittedSegment = {
+    LogSource.stdout: false,
+    LogSource.stderr: false,
   };
 
   void _emit(LogLine line) {
@@ -103,11 +117,47 @@ class OutputCapture {
   /// held until the rest of the line arrives (or [flushPartials]).
   void addChunk(String text, LogSource source) {
     final pending = _pending[source]!;
-    final parts = (pending.toString() + text).split('\n');
-    pending.clear();
-    pending.write(parts.removeLast()); // trailing partial (no newline yet)
-    for (final line in parts) {
-      _emit(LogLine(line, source));
+    var offset = 0;
+    while (offset < text.length) {
+      final newline = text.indexOf('\n', offset);
+      final end = newline < 0 ? text.length : newline;
+      _appendBounded(text, offset, end, source);
+      if (newline < 0) return;
+
+      // A segment emitted exactly at the cap already represents this logical
+      // line. Suppress the synthetic empty entry that its following newline
+      // would otherwise create; preserve real empty lines.
+      if (pending.isNotEmpty) {
+        _emit(LogLine(pending.toString(), source));
+        pending.clear();
+      } else if (!_emittedSegment[source]!) {
+        _emit(LogLine('', source));
+      }
+      _emittedSegment[source] = false;
+      offset = newline + 1;
+    }
+  }
+
+  void _appendBounded(String text, int start, int end, LogSource source) {
+    final pending = _pending[source]!;
+    var offset = start;
+    while (offset < end) {
+      final room = maxPendingLineLength - pending.length;
+      if (room == 0) {
+        _emit(LogLine(pending.toString(), source));
+        pending.clear();
+        _emittedSegment[source] = true;
+        continue;
+      }
+      final remaining = end - offset;
+      final take = remaining < room ? remaining : room;
+      pending.write(text.substring(offset, offset + take));
+      offset += take;
+      if (pending.length == maxPendingLineLength) {
+        _emit(LogLine(pending.toString(), source));
+        pending.clear();
+        _emittedSegment[source] = true;
+      }
     }
   }
 
@@ -120,7 +170,7 @@ class OutputCapture {
         _emit(LogLine(pending.toString(), source));
         pending.clear();
       }
+      _emittedSegment[source] = false;
     }
   }
-
 }

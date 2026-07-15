@@ -401,6 +401,55 @@ void main() {
       expect(calls, ['reload']);
     });
 
+    testWidgets('open captures an unfocused caller command scope', (
+      tester,
+    ) async {
+      final calls = <String>[];
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          commands: [
+            AppCommand(
+              id: const CommandId('app.global'),
+              title: 'Global Command',
+              run: (_) {
+                calls.add('global');
+              },
+            ),
+          ],
+          child: Navigator(
+            home: CommandScope(
+              commands: [
+                AppCommand(
+                  id: const CommandId('screen.refresh'),
+                  title: 'Refresh Active Screen',
+                  run: (_) {
+                    calls.add('screen');
+                  },
+                ),
+              ],
+              child: _Capture((c) => ctx = c),
+            ),
+          ),
+        ),
+      );
+
+      _openRegistryPalette(tester, ctx);
+      tester.type('screen.refresh');
+      tester.pump();
+
+      final row = _paletteCommandRows(tester).single;
+      expect(row.label, 'Refresh Active Screen');
+      expect(row.state.commandId, 'screen.refresh');
+
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      await _settleClose(tester);
+
+      expect(calls, ['screen']);
+      expect(Navigator.of(ctx).depth, 1);
+      expect(tester.semantics().byRole(SemanticRole.commandPalette), isEmpty);
+    });
+
     testWidgets(
       'repeated registry palette cycles do not retain stale semantics',
       (tester) async {

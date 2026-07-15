@@ -1,7 +1,12 @@
 import 'dart:js_interop';
 import 'dart:typed_data';
 
-import 'package:fleury/fleury_host.dart' show ImagePlacement;
+import 'package:fleury/fleury_host.dart'
+    show
+        ImagePlacement,
+        InlineImageCacheLedger,
+        InlineImageCachePolicy,
+        defaultInlineImageCachePolicy;
 import 'package:web/web.dart' as web;
 
 import '../metrics/cell_metrics.dart';
@@ -13,7 +18,10 @@ import '../metrics/cell_metrics.dart';
 /// reconcile — occurrence keying, eviction, the canvas-offset placement — is
 /// unit-testable in a real browser, not just by manual inspection.
 class InlineImageOverlay {
-  InlineImageOverlay(this._host) {
+  InlineImageOverlay(
+    this._host, {
+    InlineImageCachePolicy cachePolicy = defaultInlineImageCachePolicy,
+  }) : _imageCache = InlineImageCacheLedger(cachePolicy) {
     // The grid replaceChildren's its own root, so the overlay must be a sibling
     // of it under the host; absolutely positioned over the grid, with
     // pointer-events:none so clicks fall through to the cells.
@@ -33,6 +41,7 @@ class InlineImageOverlay {
   }
 
   final web.HTMLElement _host;
+  final InlineImageCacheLedger _imageCache;
   web.HTMLElement? _overlay;
 
   // Blob URLs by content-hash id (so the same image at several spots shares one
@@ -44,23 +53,25 @@ class InlineImageOverlay {
   final Map<String, String> _rects = <String, String>{};
   List<ImagePlacement> _last = const <ImagePlacement>[];
 
-  // The host re-ships an image whenever it (re)appears, so the overlay may
-  // freely evict ids that are NOT currently placed once the cache grows past
-  // this bound — the on-screen working set is never dropped.
-  static const int _maxCachedImages = 512;
-
   /// Number of live `<img>` elements — for tests/diagnostics.
   int get imageElementCount => _els.length;
+
+  /// Number of blob URLs held by the encoded-image cache.
+  int get cachedImageCount => _imageCache.entryCount;
+
+  /// Total encoded bytes represented by the blob-URL cache.
+  int get cachedImageBytes => _imageCache.totalBytes;
 
   /// Caches one inline image's bytes as a blob URL, keyed by content-hash id.
   /// Idempotent: a re-send (after eviction) just refreshes the URL.
   void cacheImage(String id, Uint8List bytes) {
-    if (_blobUrls.containsKey(id)) return;
+    if (_imageCache.contains(id)) return;
     final blob = web.Blob(
       <JSAny>[bytes.toJS].toJS,
       web.BlobPropertyBag(type: 'image/png'),
     );
     _blobUrls[id] = web.URL.createObjectURL(blob);
+    _imageCache.add(id, bytes.length);
   }
 
   /// Re-applies the most recent placement set against [box] — used on resize so
@@ -136,13 +147,12 @@ class InlineImageOverlay {
     _evictStale(placedIds);
   }
 
-  /// Bounds the blob-URL cache, revoking only ids not currently placed once it
-  /// exceeds [_maxCachedImages]; the on-screen set is never dropped.
+  /// Bounds the blob-URL cache by count and encoded bytes, revoking the oldest
+  /// ids not currently placed. The on-screen set is never dropped; if it alone
+  /// exceeds the byte budget, all stale entries are still evicted and the
+  /// placed entries become eligible as soon as they leave the next frame.
   void _evictStale(Set<String> placed) {
-    if (_blobUrls.length <= _maxCachedImages) return;
-    for (final id in _blobUrls.keys.toList()) {
-      if (_blobUrls.length <= _maxCachedImages) break;
-      if (placed.contains(id)) continue;
+    for (final id in _imageCache.evictStale(placed)) {
       final url = _blobUrls.remove(id);
       if (url != null) web.URL.revokeObjectURL(url);
     }
@@ -154,6 +164,7 @@ class InlineImageOverlay {
       web.URL.revokeObjectURL(url);
     }
     _blobUrls.clear();
+    _imageCache.clear();
     _els.clear();
     _rects.clear();
     _last = const <ImagePlacement>[];

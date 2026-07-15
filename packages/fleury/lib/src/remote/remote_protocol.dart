@@ -135,10 +135,23 @@ const int remoteProtocolVersion = 4;
 
 /// Default remote frame payload cap.
 ///
-/// This is intentionally much larger than normal terminal diff frames, while
-/// still preventing a malformed peer from advertising a multi-gigabyte frame
-/// and keeping the decoder pinned forever waiting for it.
-const int defaultMaxRemoteFramePayloadLength = 64 * 1024 * 1024;
+/// Sixteen MiB leaves ample headroom for a large full repaint or inline image,
+/// while avoiding a 64 MiB allocation per frame/session. Known frame types have
+/// tighter limits below; this global cap also bounds additive unknown types.
+const int defaultMaxRemoteFramePayloadLength = 16 * 1024 * 1024;
+
+/// Small handshake/control frames should never carry document-sized payloads.
+const int maxRemoteControlFramePayloadLength = 64 * 1024;
+
+/// Text, paste, clipboard, and semantic-action input accepted in one event.
+const int maxRemoteInputFramePayloadLength = 1024 * 1024;
+
+/// Structured plans, semantic snapshots, debug records, and legacy output.
+const int maxRemoteDocumentFramePayloadLength = 8 * 1024 * 1024;
+
+/// One encoded inline image. Images remain the only frame allowed up to the
+/// global cap.
+const int maxRemoteImageFramePayloadLength = defaultMaxRemoteFramePayloadLength;
 
 /// A malformed frame or payload was received from a remote peer.
 final class RemoteProtocolException implements Exception {
@@ -463,6 +476,11 @@ InlineImageFrame _decodeInlineImage(Uint8List payload) {
     throw RemoteProtocolException('INLINE_IMAGE frame: truncated header.');
   }
   final idLen = ByteData.sublistView(payload, 0, 2).getUint16(0);
+  if (idLen == 0 || idLen > 256) {
+    throw RemoteProtocolException(
+      'INLINE_IMAGE frame: id length $idLen is outside 1..256.',
+    );
+  }
   if (2 + idLen > payload.length) {
     throw RemoteProtocolException('INLINE_IMAGE frame: id overruns payload.');
   }
@@ -504,9 +522,9 @@ Uint8List _encodeClipboardResult(ClipboardResultFrame f) {
 }
 
 ClipboardResultFrame _decodeClipboardResult(Uint8List payload) {
-  if (payload.length < 5) {
+  if (payload.length != 5) {
     throw const RemoteProtocolException(
-      'CLIPBOARD_RESULT frame: truncated payload.',
+      'CLIPBOARD_RESULT frame: payload must be exactly 5 bytes.',
     );
   }
   final data = ByteData.sublistView(payload);
@@ -537,13 +555,17 @@ Uint8List _encodeCaret(CaretFrame f) {
 }
 
 CaretFrame _decodeCaret(Uint8List payload) {
-  if (payload.isEmpty) {
-    throw const RemoteProtocolException('CARET frame: empty payload.');
+  if (payload.length != 9) {
+    throw const RemoteProtocolException(
+      'CARET frame: payload must be exactly 9 bytes.',
+    );
+  }
+  if (payload[0] > 1) {
+    throw RemoteProtocolException(
+      'CARET frame: invalid presence flag ${payload[0]}.',
+    );
   }
   if (payload[0] == 0) return const CaretFrame(null);
-  if (payload.length < 9) {
-    throw const RemoteProtocolException('CARET frame: truncated payload.');
-  }
   final data = ByteData.sublistView(payload);
   return CaretFrame(
     CellRect.fromLTWH(
@@ -564,27 +586,59 @@ final class FrameDecoder {
     : assert(maxPayloadLength > 0, 'maxPayloadLength must be positive');
 
   final int maxPayloadLength;
-  final BytesBuilder _buffer = BytesBuilder(copy: false);
+  Uint8List _buffer = Uint8List(0);
+  int _start = 0;
+  int _end = 0;
+  RemoteProtocolException? _pendingFatalError;
+
+  int get _bufferedLength => _end - _start;
 
   /// Add raw bytes from the transport.
   void feed(List<int> bytes) {
-    _buffer.add(bytes);
+    if (bytes.isEmpty) return;
+    if (_pendingFatalError != null) return;
+    // Avoid copying a caller-supplied giant chunk merely to discover from its
+    // already-present header that the first frame is invalid. Socket reads are
+    // normally small and WebSocket messages are capped at the bridge, but this
+    // also keeps the decoder API itself bounded for a single hostile feed.
+    if (_bufferedLength == 0 && bytes.length >= 5) {
+      final type = FrameType.fromCode(bytes[0]);
+      final length =
+          bytes[1] * 0x1000000 +
+          bytes[2] * 0x10000 +
+          bytes[3] * 0x100 +
+          bytes[4];
+      final limit = _effectivePayloadLimit(type);
+      if (length > limit) {
+        _pendingFatalError = _oversizedFrame(type, length, limit);
+        return;
+      }
+    }
+    _ensureWritable(bytes.length);
+    _buffer.setRange(_end, _end + bytes.length, bytes);
+    _end += bytes.length;
   }
 
   /// Pull out every complete frame currently in the buffer. Partial
   /// frames stay buffered until the next [feed].
   Iterable<RemoteFrame> drain() sync* {
+    final pendingFatalError = _pendingFatalError;
+    if (pendingFatalError != null) {
+      _pendingFatalError = null;
+      _clearBuffer();
+      throw pendingFatalError;
+    }
     while (true) {
-      final bytes = _buffer.toBytes();
-      if (bytes.length < 5) {
-        // Need at least the type byte + 4-byte length header. Restore
-        // what we read so [feed] can append on top.
-        _buffer.clear();
-        _buffer.add(bytes);
-        return;
-      }
-      final length = ByteData.sublistView(bytes, 1, 5).getUint32(0);
-      if (length > maxPayloadLength) {
+      if (_bufferedLength < 5) return;
+      final frameStart = _start;
+      final type = FrameType.fromCode(_buffer[frameStart]);
+      final length = ByteData.sublistView(
+        _buffer,
+        frameStart + 1,
+        frameStart + 5,
+      ).getUint32(0);
+      final effectiveLimit = _effectivePayloadLimit(type);
+      if (length > effectiveLimit) {
         // Clearing the buffer discards the current framing position with no
         // known next-frame boundary, so the stream can no longer be
         // resynchronized: mark this unrecoverable so a peer tears down and
@@ -593,38 +647,35 @@ final class FrameDecoder {
         // length was VALID but whose payload is malformed throws a recoverable
         // exception from _decode below (framing intact), so the two cases are
         // distinguishable at the catch site.
-        _buffer.clear();
-        throw RemoteProtocolException(
-          'Frame payload length $length exceeds limit $maxPayloadLength; '
-          'stream framing lost.',
-          recoverable: false,
-        );
+        _clearBuffer();
+        throw _oversizedFrame(type, length, effectiveLimit);
       }
       final total = 5 + length;
-      if (bytes.length < total) {
-        _buffer.clear();
-        _buffer.add(bytes);
-        return;
-      }
-      final type = FrameType.fromCode(bytes[0]);
-      final payload = bytes.sublist(5, total);
-      // Anything past the frame is the next frame's bytes; re-buffer.
-      _buffer.clear();
-      if (bytes.length > total) {
-        _buffer.add(bytes.sublist(total));
-      }
+      if (_bufferedLength < total) return;
+      final before = _bufferedLength;
+      final payloadStart = frameStart + 5;
+      final payloadEnd = frameStart + total;
+      _start = payloadEnd;
       if (type == null) {
         // Unknown discriminator — skip silently rather than crash the
         // session. A peer running a newer protocol can extend the
         // type space without breaking older apps.
+        _releaseBufferIfEmpty();
         continue;
       }
+      // Copy exactly one completed payload. Partial feeds are retained in the
+      // amortized byte buffer above instead of repeatedly materializing and
+      // restoring the entire prefix (the old fragmented-frame O(n²) path).
+      final payload = Uint8List.fromList(
+        Uint8List.sublistView(_buffer, payloadStart, payloadEnd),
+      );
+      _releaseBufferIfEmpty();
       // Framing has advanced past this frame (the buffer now holds only the
       // trailing bytes), so a RECOVERABLE _decode throw below cannot recur on
       // these same bytes when the peer feeds again — the F19 non-loop
       // invariant a recoverable classification rests on.
       assert(
-        _buffer.length < bytes.length,
+        _bufferedLength < before,
         'drain() must consume a frame from the buffer before decoding its '
         'payload, so a recoverable decode error cannot re-parse the same '
         'bytes forever (F19 non-loop invariant).',
@@ -632,6 +683,85 @@ final class FrameDecoder {
       yield _decode(type, payload);
     }
   }
+
+  void _ensureWritable(int additional) {
+    if (_buffer.length - _end >= additional) return;
+    final unread = _bufferedLength;
+    final needed = unread + additional;
+    if (_start > 0 && _buffer.length >= needed) {
+      // Reclaim a consumed prefix in place before considering growth. setRange
+      // handles overlapping ranges and avoids replacing a large backing store
+      // merely because its free space is on the wrong side of unread bytes.
+      _buffer.setRange(0, unread, _buffer, _start);
+      _start = 0;
+      _end = unread;
+      return;
+    }
+    var capacity = _buffer.isEmpty ? 256 : _buffer.length;
+    while (capacity < needed) {
+      final doubled = capacity * 2;
+      capacity = doubled > needed ? doubled : needed;
+    }
+    final next = Uint8List(capacity);
+    if (unread > 0) {
+      next.setRange(0, unread, _buffer, _start);
+    }
+    _buffer = next;
+    _start = 0;
+    _end = unread;
+  }
+
+  void _clearBuffer() {
+    _buffer = Uint8List(0);
+    _start = 0;
+    _end = 0;
+  }
+
+  void _releaseBufferIfEmpty() {
+    if (_start != _end) return;
+    // Keep a small allocation for ordinary frames, but do not pin a multi-MiB
+    // backing store for the lifetime of a session after one large frame.
+    if (_buffer.length > 1024 * 1024) {
+      _buffer = Uint8List(0);
+    }
+    _start = 0;
+    _end = 0;
+  }
+
+  int _payloadLimit(FrameType? type) => switch (type) {
+    FrameType.init ||
+    FrameType.resize ||
+    FrameType.clipboardResult ||
+    FrameType.caret ||
+    FrameType.semanticActionResult ||
+    FrameType.debugRequest ||
+    FrameType.bye => maxRemoteControlFramePayloadLength,
+    FrameType.input ||
+    FrameType.inputEvent ||
+    FrameType.semanticAction ||
+    FrameType.clipboardWrite => maxRemoteInputFramePayloadLength,
+    FrameType.output ||
+    FrameType.plan ||
+    FrameType.semantics ||
+    FrameType.debugResponse => maxRemoteDocumentFramePayloadLength,
+    FrameType.inlineImage => maxRemoteImageFramePayloadLength,
+    null => defaultMaxRemoteFramePayloadLength,
+  };
+
+  int _effectivePayloadLimit(FrameType? type) {
+    final typeLimit = _payloadLimit(type);
+    return typeLimit < maxPayloadLength ? typeLimit : maxPayloadLength;
+  }
+
+  RemoteProtocolException _oversizedFrame(
+    FrameType? type,
+    int length,
+    int limit,
+  ) => RemoteProtocolException(
+    '${type?.name ?? 'unknown'} frame payload length $length exceeds '
+    'limit $limit; stream framing lost.',
+    recoverable: false,
+  );
 
   RemoteFrame _decode(FrameType type, Uint8List payload) {
     switch (type) {
@@ -701,6 +831,11 @@ final class FrameDecoder {
       case FrameType.caret:
         return _decodeCaret(payload);
       case FrameType.bye:
+        if (payload.isNotEmpty) {
+          throw const RemoteProtocolException(
+            'BYE frame payload must be empty.',
+          );
+        }
         return const ByeFrame();
     }
   }

@@ -289,6 +289,84 @@ void main() {
       );
     });
 
+    test('known input frames use the tighter per-type payload cap', () {
+      final header = Uint8List(5);
+      header[0] = FrameType.input.code;
+      ByteData.sublistView(
+        header,
+        1,
+      ).setUint32(0, maxRemoteInputFramePayloadLength + 1);
+      final decoder = FrameDecoder()..feed(header);
+
+      expect(
+        () => decoder.drain().toList(),
+        throwsA(
+          isA<RemoteProtocolException>()
+              .having((error) => error.recoverable, 'recoverable', isFalse)
+              .having(
+                (error) => error.message,
+                'message',
+                contains('$maxRemoteInputFramePayloadLength'),
+              ),
+        ),
+      );
+    });
+
+    test('thousands of one-byte feeds preserve one fragmented frame', () {
+      final payload = Uint8List.fromList(List<int>.generate(8192, (i) => i));
+      final wire = encodeFrame(InputFrame(payload));
+      final decoder = FrameDecoder();
+
+      for (var i = 0; i < wire.length - 1; i++) {
+        decoder.feed([wire[i]]);
+        expect(decoder.drain(), isEmpty);
+      }
+      decoder.feed([wire.last]);
+      final decoded = decoder.drain().single as InputFrame;
+      expect(decoded.bytes, payload);
+    });
+
+    test('fixed-shape control frames reject trailing payload bytes', () {
+      final bye = _rawFrame(FrameType.bye, const [1]);
+      final shortNullCaret = _rawFrame(FrameType.caret, const [0]);
+      final invalidCaretFlag = _rawFrame(FrameType.caret, const [
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+      ]);
+      final clipboard = _rawFrame(FrameType.clipboardResult, const [
+        0,
+        0,
+        0,
+        1,
+        0,
+        99,
+      ]);
+
+      expect(
+        () => (FrameDecoder()..feed(bye)).drain().toList(),
+        throwsA(isA<RemoteProtocolException>()),
+      );
+      expect(
+        () => (FrameDecoder()..feed(clipboard)).drain().toList(),
+        throwsA(isA<RemoteProtocolException>()),
+      );
+      expect(
+        () => (FrameDecoder()..feed(shortNullCaret)).drain().toList(),
+        throwsA(isA<RemoteProtocolException>()),
+      );
+      expect(
+        () => (FrameDecoder()..feed(invalidCaretFlag)).drain().toList(),
+        throwsA(isA<RemoteProtocolException>()),
+      );
+    });
+
     test('malformed RESIZE payloads fail RECOVERABLY (framing intact)', () {
       final wire = _rawFrame(FrameType.resize, 'rows=24'.codeUnits);
       final decoder = FrameDecoder()..feed(wire);

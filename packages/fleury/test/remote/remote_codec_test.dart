@@ -887,6 +887,61 @@ void main() {
         throwsA(isA<RemoteCodecException>()),
       );
     });
+
+    test('plan grids above the shared allocation budget are rejected', () {
+      final oversized = RemotePlan(
+        size: const CellSize(2000, 1000),
+        fullRepaint: false,
+        styleTable: const [],
+        patches: const [],
+      );
+      final overArea = RemotePlan(
+        size: const CellSize(2000, 501),
+        fullRepaint: false,
+        styleTable: const [],
+        patches: const [],
+      );
+
+      // The first shape is over the area cap even though both independent
+      // dimensions are legal; the second makes that boundary explicit too.
+      for (final plan in [oversized, overArea]) {
+        expect(
+          () => decodeRemotePlan(encodeRemotePlan(plan)),
+          throwsA(isA<RemoteCodecException>()),
+        );
+      }
+    });
+
+    test('patch and image geometry outside structural bounds is rejected', () {
+      final outsidePatch = RemotePlan(
+        size: const CellSize(10, 4),
+        fullRepaint: false,
+        styleTable: const [CellStyle.empty],
+        patches: const [
+          RemoteRowPatch(
+            row: 4,
+            startCol: 0,
+            runs: [RemotePatchRun(styleIndex: 0, text: 'x')],
+          ),
+        ],
+      );
+      final oversizedPlacement = RemotePlan(
+        size: const CellSize(10, 4),
+        fullRepaint: false,
+        styleTable: const [],
+        patches: const [],
+        placements: const [
+          ImagePlacement(id: 'image', col: 2, row: 0, cols: 9, rows: 1),
+        ],
+      );
+
+      for (final plan in [outsidePatch, oversizedPlacement]) {
+        expect(
+          () => decodeRemotePlan(encodeRemotePlan(plan)),
+          throwsA(isA<RemoteCodecException>()),
+        );
+      }
+    });
   });
 }
 

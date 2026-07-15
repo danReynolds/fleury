@@ -270,6 +270,36 @@ void main() {
       controller.dispose();
     });
 
+    test('bounds subprocess output that never writes a newline', () async {
+      final script = await _script(tempDir, 'unterminated', '''
+import 'dart:io';
+
+void main() {
+  stdout.write('x' * 70000);
+}
+''');
+      final controller = ProcessTaskController(
+        id: 'process',
+        maxOutputLineLength: 8,
+      );
+
+      final result = await controller.startProcess(_dartScript(script));
+
+      expect(result.succeeded, isTrue);
+      expect(controller.output, hasLength(2));
+      expect(
+        controller.output.every((entry) => entry.text == 'xxxxxxxx'),
+        isTrue,
+      );
+      expect(controller.output.every((entry) => entry.truncated), isTrue);
+      expect(controller.output.map((entry) => entry.originalLength), [
+        64 * 1024,
+        70000 - 64 * 1024,
+      ]);
+
+      controller.dispose();
+    });
+
     test('cancels the subprocess and settles the task promptly', () async {
       final script = await _script(tempDir, 'slow', '''
 import 'dart:async';

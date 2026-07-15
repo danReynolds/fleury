@@ -820,7 +820,7 @@ across commits and peer runs.
 - Fixture: Incrementally append markdown chunks containing headings, lists,
   tables, code fences, links, inline code, partial blocks, long paragraphs,
   and unsafe link/output payloads.
-- Target metrics: incremental parse/update latency, frame timing, wrap cost,
+- Target metrics: per-append full-document parse/update latency, frame timing, wrap cost,
   memory growth, sanitized link events, semantic heading/link/code nodes, copy
   correctness.
 - Peer targets: OpenTUI markdown parse/incremental/style benchmarks, Textual

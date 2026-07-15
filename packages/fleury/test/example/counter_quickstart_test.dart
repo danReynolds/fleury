@@ -1,6 +1,6 @@
-// Locks the README "Quick start" snippet: the example compiles, mounts,
-// and the space-to-increment binding actually fires. If this breaks, the
-// front-door docs are wrong — fix the example and the README together.
+// Exercises the compiled counterpart to the README "Quick start": the example
+// mounts and its space-to-increment binding fires. Keep the example and README
+// snippet aligned when either changes.
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';

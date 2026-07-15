@@ -9,7 +9,8 @@ library;
 
 import 'dart:typed_data';
 
-import 'package:fleury/fleury_host.dart' show InlineImageFit;
+import 'package:fleury/fleury_host.dart'
+    show InlineImageCachePolicy, InlineImageFit;
 import 'package:fleury/src/remote/remote_codec.dart' show ImagePlacement;
 import 'package:fleury_web/src/metrics/cell_metrics.dart';
 import 'package:fleury_web/src/dom_grid/inline_image_overlay.dart';
@@ -149,6 +150,64 @@ void main() {
       ..cacheImage('missing', Uint8List.fromList([1]))
       ..apply([_place('missing', 0, 0, 1, 1)], _box());
     expect(_imgs(host), hasLength(1));
+
+    overlay.dispose();
+    host.remove();
+  });
+
+  test('byte budget evicts the oldest stale blob deterministically', () {
+    final host = _makeHost();
+    final overlay =
+        InlineImageOverlay(
+            host,
+            cachePolicy: const InlineImageCachePolicy(
+              maxEntries: 512,
+              maxBytes: 8,
+            ),
+          )
+          ..cacheImage('oldest', Uint8List(6))
+          ..cacheImage('newer', Uint8List(2))
+          ..cacheImage('placed', Uint8List(3))
+          ..apply([_place('placed', 0, 0, 1, 1)], _box());
+
+    expect(overlay.cachedImageCount, 2);
+    expect(overlay.cachedImageBytes, 5);
+
+    overlay.apply([_place('oldest', 0, 0, 1, 1)], _box());
+    expect(_imgs(host), isEmpty, reason: 'the oldest stale blob was evicted');
+
+    overlay.apply([_place('newer', 0, 0, 1, 1)], _box());
+    expect(_imgs(host), hasLength(1), reason: 'newer stale blob was retained');
+
+    overlay.dispose();
+    host.remove();
+  });
+
+  test('oversized placed image survives while every stale blob is evicted', () {
+    final host = _makeHost();
+    final overlay =
+        InlineImageOverlay(
+            host,
+            cachePolicy: const InlineImageCachePolicy(
+              maxEntries: 512,
+              maxBytes: 8,
+            ),
+          )
+          ..cacheImage('stale', Uint8List(4))
+          ..cacheImage('oversized', Uint8List(9))
+          ..apply([_place('oversized', 0, 0, 1, 1)], _box());
+
+    expect(_imgs(host), hasLength(1), reason: 'on-screen image is preserved');
+    expect(overlay.cachedImageCount, 1, reason: 'stale cache was drained');
+    expect(
+      overlay.cachedImageBytes,
+      9,
+      reason: 'placed image may exceed budget',
+    );
+
+    overlay.apply(const [], _box());
+    expect(overlay.cachedImageCount, 0);
+    expect(overlay.cachedImageBytes, 0);
 
     overlay.dispose();
     host.remove();

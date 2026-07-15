@@ -31,6 +31,74 @@ import '../rendering/render_object.dart';
 /// Signature for `setState` and similar one-shot mutators.
 typedef VoidCallback = void Function();
 
+final class _CapturedTeardownError {
+  const _CapturedTeardownError(this.error, this.stack);
+
+  final Object error;
+  final StackTrace stack;
+}
+
+/// Carries every failure produced while permanently dismantling one subtree.
+///
+/// A single failure is rethrown as the original object (with its original
+/// stack). This wrapper is reserved for the genuinely exceptional case where
+/// two or more independent cleanup hooks throw; retaining them all keeps a
+/// later failure from hiding the first one that caused teardown to start
+/// unwinding.
+final class _MultipleTeardownErrors extends Error {
+  _MultipleTeardownErrors(this.errors);
+
+  final List<_CapturedTeardownError> errors;
+
+  @override
+  String toString() {
+    final out = StringBuffer(
+      'Multiple errors occurred while tearing down the element tree '
+      '(${errors.length}):',
+    );
+    for (var i = 0; i < errors.length; i++) {
+      out
+        ..writeln()
+        ..write('  ${i + 1}. ${errors[i].error}');
+    }
+    return out.toString();
+  }
+}
+
+final class _TeardownErrors {
+  final List<_CapturedTeardownError> _errors = <_CapturedTeardownError>[];
+
+  void capture(void Function() action) {
+    try {
+      action();
+    } catch (error, stack) {
+      add(error, stack);
+    }
+  }
+
+  void add(Object error, StackTrace stack) {
+    if (error is _MultipleTeardownErrors) {
+      _errors.addAll(error.errors);
+    } else {
+      _errors.add(_CapturedTeardownError(error, stack));
+    }
+  }
+
+  void throwIfAny() {
+    if (_errors.isEmpty) return;
+    final first = _errors.first;
+    if (_errors.length == 1) {
+      Error.throwWithStackTrace(first.error, first.stack);
+    }
+    Error.throwWithStackTrace(
+      _MultipleTeardownErrors(
+        List<_CapturedTeardownError>.unmodifiable(_errors),
+      ),
+      first.stack,
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Widget hierarchy
 // ---------------------------------------------------------------------------
@@ -133,11 +201,19 @@ class GlobalKey<T extends State<StatefulWidget>> extends Key {
   }
 
   void _register(Element element) {
-    assert(() {
-      final existing = _registry[this];
-      if (existing != null &&
-          !identical(existing, element) &&
-          existing._lifecycle == _ElementLifecycle.active) {
+    final existing = _registry[this];
+    if (existing != null && !identical(existing, element)) {
+      final sameOwner = identical(existing._owner, element._owner);
+      if (!sameOwner && existing._lifecycle != _ElementLifecycle.defunct) {
+        throw StateError(
+          'GlobalKey cannot cross BuildOwner boundaries: the same '
+          '$runtimeType is already attached to '
+          '${existing.toStringShallow()} in another widget tree. A GlobalKey '
+          'may move within one runtime, but it cannot transfer an Element or '
+          'State between runtimes. Give the second tree its own key.',
+        );
+      }
+      if (existing._lifecycle == _ElementLifecycle.active) {
         throw StateError(
           'Duplicate GlobalKey detected: the same $runtimeType is attached to '
           'two simultaneously-mounted widgets '
@@ -145,8 +221,7 @@ class GlobalKey<T extends State<StatefulWidget>> extends Key {
           'Each GlobalKey instance may identify at most one widget at a time.',
         );
       }
-      return true;
-    }());
+    }
     _registry[this] = element;
   }
 
@@ -459,13 +534,26 @@ abstract class Element implements BuildContext {
   /// Removes this element from the tree permanently.
   @mustCallSuper
   void unmount() {
+    final errors = _TeardownErrors();
     final key = _widget.key;
     if (key is GlobalKey) key._deregister(this);
-    visitChildren(_unmountRecursively);
-    _detachDependencies();
+
+    final children = <Element>[];
+    errors.capture(() => visitChildren(children.add));
+    for (final child in children) {
+      errors.capture(child.unmount);
+    }
+    errors.capture(_detachDependencies);
+
+    final oldOwner = _owner;
     _lifecycle = _ElementLifecycle.defunct;
-    _owner?._dirtyElements.remove(this);
+    _dirty = false;
+    oldOwner?._dirtyElements.remove(this);
+    oldOwner?._inactiveElements.remove(this);
+    if (identical(oldOwner?._root, this)) oldOwner!._root = null;
     _parent = null;
+
+    errors.throwIfAny();
   }
 
   /// Drops every dependency edge this element holds — both inherited
@@ -477,10 +565,14 @@ abstract class Element implements BuildContext {
       ancestor._dependents.remove(this);
     }
     _inheritedDependencies.clear();
-    for (final dep in _externalDependencies) {
-      dep.removeDependent(this);
-    }
+
+    final dependencies = _externalDependencies.toList();
     _externalDependencies.clear();
+    final errors = _TeardownErrors();
+    for (final dep in dependencies) {
+      errors.capture(() => dep.removeDependent(this));
+    }
+    errors.throwIfAny();
   }
 
   /// Detaches this element from its current parent without destroying it,
@@ -663,10 +755,6 @@ abstract class Element implements BuildContext {
     return null;
   }
 
-  static void _unmountRecursively(Element child) {
-    child.unmount();
-  }
-
   /// Replaces the widget configuration backing this element.
   ///
   /// Only called by the framework after [Widget.canUpdate] returned true.
@@ -792,8 +880,21 @@ abstract class Element implements BuildContext {
     }
     final newChild = newWidget.createElement();
     newChild._owner = _owner;
-    newChild.mount(this);
-    return newChild;
+    try {
+      newChild.mount(this);
+      return newChild;
+    } catch (error, stack) {
+      // mount() may have registered a GlobalKey, initialized State, attached
+      // render objects, and mounted descendants before a later hook throws.
+      // The parent cannot retain this child because inflateWidget never
+      // returned it, so roll it back here while it is still reachable.
+      final errors = _TeardownErrors()..add(error, stack);
+      if (newChild._lifecycle != _ElementLifecycle.defunct) {
+        errors.capture(newChild.unmount);
+      }
+      errors.throwIfAny();
+      Error.throwWithStackTrace(error, stack); // Unreachable.
+    }
   }
 
   void _activateChild(Element child, Widget newWidget) {
@@ -809,6 +910,14 @@ abstract class Element implements BuildContext {
   Element? _retakeInactiveElement(GlobalKey key, Widget newWidget) {
     final element = key._element;
     if (element == null) return null;
+    if (!identical(element._owner, _owner)) {
+      throw StateError(
+        'GlobalKey cannot cross BuildOwner boundaries: $key is already '
+        'attached to ${element.toStringShallow()} in another widget tree. A '
+        'GlobalKey may reparent state within one runtime, but each concurrent '
+        'runtime needs its own key instance.',
+      );
+    }
     if (!Widget.canUpdate(element._widget, newWidget)) return null;
     final parent = element._parent;
     if (parent != null) {
@@ -979,10 +1088,16 @@ class StatefulElement extends ComponentElement {
 
   @override
   void unmount() {
-    super.unmount();
-    _state.dispose();
-    _state._element = null;
-    _state._widget = null;
+    final errors = _TeardownErrors();
+    try {
+      errors.capture(super.unmount);
+      errors.capture(_state.dispose);
+    } finally {
+      // mounted/setState must become false even when user cleanup throws.
+      _state._element = null;
+      _state._widget = null;
+    }
+    errors.throwIfAny();
   }
 }
 
@@ -1105,10 +1220,28 @@ class BuildOwner {
   Element mountRoot(Widget widget) {
     final element = widget.createElement();
     element._owner = this;
-    element.mount(null);
-    _root = element;
-    flushBuild();
-    return element;
+    try {
+      element.mount(null);
+      _root = element;
+      flushBuild();
+      return element;
+    } catch (error, stack) {
+      final errors = _TeardownErrors()..add(error, stack);
+      try {
+        if (element._lifecycle != _ElementLifecycle.defunct) {
+          errors.capture(element.unmount);
+        }
+        errors.capture(_finalizeInactiveElements);
+      } finally {
+        _root = null;
+        _globalKeyClaims.clear();
+        _dirtyElements.removeWhere(
+          (element) => element._lifecycle != _ElementLifecycle.active,
+        );
+      }
+      errors.throwIfAny();
+      Error.throwWithStackTrace(error, stack); // Unreachable.
+    }
   }
 
   /// Replaces the root widget while preserving the [Element] subtree when
@@ -1127,8 +1260,13 @@ class BuildOwner {
       flushBuild();
       return root;
     }
-    root.unmount();
-    _root = null;
+    try {
+      root.unmount();
+    } finally {
+      // A faulty State.dispose must not leave this owner advertising a
+      // defunct root when the incompatible replacement could not proceed.
+      _root = null;
+    }
     return mountRoot(newRoot);
   }
 
@@ -1246,9 +1384,11 @@ class BuildOwner {
     if (_inactiveElements.isEmpty) return;
     final toUnmount = _inactiveElements.toList();
     _inactiveElements.clear();
+    final errors = _TeardownErrors();
     for (final element in toUnmount) {
-      element.unmount();
+      errors.capture(element.unmount);
     }
+    errors.throwIfAny();
   }
 
   /// Reassembles the entire element tree, calling [State.reassemble] on
@@ -1465,9 +1605,16 @@ abstract class RenderObjectElement extends Element {
 
   @override
   void unmount() {
-    _detachRenderObjectFromAncestor();
-    super.unmount();
-    _renderObject = null;
+    final errors = _TeardownErrors();
+    try {
+      if (_renderObject != null) {
+        errors.capture(_detachRenderObjectFromAncestor);
+      }
+      errors.capture(super.unmount);
+    } finally {
+      _renderObject = null;
+    }
+    errors.throwIfAny();
   }
 
   // A render object element's render object is the boundary of a movable
@@ -1618,48 +1765,63 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
     }
 
     var unkeyedIndex = 0;
-    for (var i = 0; i < newWidgets.length; i++) {
-      final newWidget = newWidgets[i];
-      final newKey = newWidget.key;
-      Element? matched;
+    try {
+      for (var i = 0; i < newWidgets.length; i++) {
+        final newWidget = newWidgets[i];
+        final newKey = newWidget.key;
+        Element? matched;
 
-      if (newKey != null) {
-        final candidate = keyedOlds.remove(newKey);
-        if (candidate != null) {
-          if (Widget.canUpdate(candidate.widget, newWidget)) {
-            matched = candidate;
-          } else {
-            _deactivateChild(candidate);
+        if (newKey != null) {
+          final candidate = keyedOlds.remove(newKey);
+          if (candidate != null) {
+            if (Widget.canUpdate(candidate.widget, newWidget)) {
+              matched = candidate;
+            } else {
+              _deactivateChild(candidate);
+            }
+          }
+        } else {
+          // Walk the unkeyed queue until we find a compatible old.
+          while (unkeyedIndex < unkeyedOlds.length) {
+            final candidate = unkeyedOlds[unkeyedIndex];
+            unkeyedIndex += 1;
+            if (Widget.canUpdate(candidate.widget, newWidget)) {
+              matched = candidate;
+              break;
+            } else {
+              _deactivateChild(candidate);
+            }
           }
         }
-      } else {
-        // Walk the unkeyed queue until we find a compatible old.
-        while (unkeyedIndex < unkeyedOlds.length) {
-          final candidate = unkeyedOlds[unkeyedIndex];
-          unkeyedIndex += 1;
-          if (Widget.canUpdate(candidate.widget, newWidget)) {
-            matched = candidate;
-            break;
-          } else {
-            _deactivateChild(candidate);
-          }
-        }
-      }
 
-      if (matched != null) {
-        // Same identical-instance skip updateChild and the stable-unkeyed
-        // fast path apply: without it, a keyed child whose widget instance
-        // didn't change deep-rebuilds anyway — and its State receives a
-        // didUpdateWidget where oldWidget is IDENTICAL to widget (a contract
-        // violation) — on every pass that reaches this path (e.g. the
-        // re-reconcile scheduled by insertChildRenderObject after a mount).
-        if (!canSkipWidgetUpdate(matched.widget, newWidget)) {
-          matched.update(newWidget);
+        if (matched != null) {
+          // Same identical-instance skip updateChild and the stable-unkeyed
+          // fast path apply: without it, a keyed child whose widget instance
+          // didn't change deep-rebuilds anyway — and its State receives a
+          // didUpdateWidget where oldWidget is IDENTICAL to widget (a contract
+          // violation) — on every pass that reaches this path (e.g. the
+          // re-reconcile scheduled by insertChildRenderObject after a mount).
+          if (!canSkipWidgetUpdate(matched.widget, newWidget)) {
+            matched.update(newWidget);
+          }
+          result[i] = matched;
+        } else {
+          result[i] = inflateWidget(newWidget);
         }
-        result[i] = matched;
-      } else {
-        result[i] = inflateWidget(newWidget);
       }
+    } catch (error, stack) {
+      if (oldChildren.isNotEmpty) rethrow;
+
+      // During an initial multi-child mount, `_children = ...` is assigned
+      // only after this method returns. If child N throws, children 0..N-1
+      // otherwise become unreachable while still mounted. Roll those earlier
+      // siblings back before propagating the original mount failure.
+      final errors = _TeardownErrors()..add(error, stack);
+      for (final child in result) {
+        if (child != null) errors.capture(child.unmount);
+      }
+      errors.throwIfAny();
+      Error.throwWithStackTrace(error, stack); // Unreachable.
     }
 
     // Deactivate leftover olds (finalized at the end of the build pass

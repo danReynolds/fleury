@@ -35,6 +35,7 @@ class PointerRouter {
   RenderPointerListener? _hovered;
   RenderPointerListener? _downTarget;
   MouseButton _downButton = MouseButton.none;
+  var _disposed = false;
 
   // Drag capture: once a drag begins over a region it keeps receiving the
   // motion until release, even when the pointer leaves its bounds.
@@ -42,11 +43,33 @@ class PointerRouter {
   bool _dragging = false;
 
   /// Clears the registry at the start of a paint pass.
-  void beginFrame() => _regions.clear();
+  void beginFrame() {
+    if (_disposed) return;
+    _regions.clear();
+  }
+
+  /// Permanently releases every painted region and captured pointer target.
+  ///
+  /// Teardown deliberately does not synthesize exit or drag-end callbacks:
+  /// those callbacks belong to an application tree that is already being
+  /// dismantled. Subsequent routing is inert. Idempotent.
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _regions.clear();
+    _hovered = null;
+    _downTarget = null;
+    _downButton = MouseButton.none;
+    _dragTarget = null;
+    _dragging = false;
+  }
 
   // Registers a region in paint order (later = on top). Called by the
   // region's render object during paint.
-  void _register(RenderPointerListener region) => _regions.add(region);
+  void _register(RenderPointerListener region) {
+    if (_disposed) return;
+    _regions.add(region);
+  }
 
   void _remove(RenderPointerListener region) {
     _regions.remove(region);
@@ -82,13 +105,16 @@ class PointerRouter {
   /// an [AbsorbPointer] overlay covering that cell. The dispatcher checks
   /// this before its click-to-focus pass so a click on an overlay can't move
   /// app focus to a focusable painted invisibly underneath.
-  bool focusAbsorbedAt(int col, int row) =>
-      _topmost(col, row, (_) => true)?.absorbsFocus ?? false;
+  bool focusAbsorbedAt(int col, int row) {
+    if (_disposed) return false;
+    return _topmost(col, row, (_) => true)?.absorbsFocus ?? false;
+  }
 
   /// Routes [event] to the matching region(s). Returns whether any
   /// handler fired (the dispatcher runs click-to-focus afterwards unless
   /// [focusAbsorbedAt] blocks it).
   bool route(MouseEvent event) {
+    if (_disposed) return false;
     _updateHover(event);
     switch (event.kind) {
       case MouseEventKind.scrollUp:

@@ -1,6 +1,6 @@
 // Spawns the real `fleury serve` process and verifies end-to-end:
 //
-//   1. HTTP GET / serves the xterm.js page
+//   1. HTTP GET / serves the retained-DOM Fleury renderer page
 //   2. The Unix socket binds at `.fleury/shell.sock`
 //   3. Bytes round-trip both ways: bytes sent from a "browser"
 //      WebSocket reach the "app" Unix socket and vice versa
@@ -116,6 +116,33 @@ void main() {
         client.close();
       });
 
+      test('rejects a forged same-origin Host on the loopback bind', () async {
+        // DNS rebinding reaches 127.0.0.1 with an attacker-controlled Host.
+        // Host and Origin then appear same-origin unless the implicit local
+        // path also verifies that the request hostname is itself loopback.
+        final socket = await Socket.connect('127.0.0.1', port);
+        addTearDown(socket.destroy);
+        socket.write(
+          'GET /ws HTTP/1.1\r\n'
+          'Host: rebound.example:$port\r\n'
+          'Origin: http://rebound.example:$port\r\n'
+          'Connection: Upgrade\r\n'
+          'Upgrade: websocket\r\n'
+          'Sec-WebSocket-Version: 13\r\n'
+          'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n'
+          '\r\n',
+        );
+        await socket.flush();
+
+        final statusLine = await socket
+            .cast<List<int>>()
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())
+            .first
+            .timeout(const Duration(seconds: 2));
+        expect(statusLine, contains(' 403 '));
+      });
+
       test('rejects scheme-mismatched same-authority origins', () async {
         await expectLater(
           WebSocket.connect(
@@ -157,8 +184,8 @@ void main() {
             headers: {'origin': 'http://127.0.0.1:$port'},
           );
 
-          // Browser → app, before the app has connected. Real xterm.js clients
-          // send INIT in this window; bridge mode must preserve early frames.
+          // Browser → app, before the app has connected. The bundled client
+          // sends INIT in this window; bridge mode must preserve early frames.
           final fromBrowser = Uint8List.fromList([0xAA, 0xBB, 0xCC, 0xDD]);
           ws.add(fromBrowser);
           await Future<void>.delayed(const Duration(milliseconds: 50));

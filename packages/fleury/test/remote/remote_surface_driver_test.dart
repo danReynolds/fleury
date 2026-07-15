@@ -785,6 +785,42 @@ void main() {
       await driver.restore();
     });
 
+    test('re-ships an id after byte-budget eviction', () async {
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(
+        transport,
+        imageCachePolicy: const InlineImageCachePolicy(
+          maxEntries: 512,
+          maxBytes: 8,
+        ),
+      );
+      final entered = driver.enter(TerminalMode.interactive);
+      transport.emit(_init);
+      await entered;
+      transport.sent.clear();
+      final size = const CellSize(40, 10);
+      final empty = CellBuffer(size);
+      final target = [1, 2, 3, 4, 5, 6];
+      final replacement = [7, 8, 9, 10, 11, 12];
+
+      driver.presentFrame(empty, withImage(target), fullPlan(size));
+      expect(transport.sent.whereType<InlineImageFrame>(), hasLength(1));
+      transport.sent.clear();
+
+      driver.presentFrame(withImage(target), empty, fullPlan(size));
+      driver.presentFrame(empty, withImage(replacement), fullPlan(size));
+      transport.sent.clear();
+
+      driver.presentFrame(empty, withImage(target), fullPlan(size));
+      expect(
+        transport.sent.whereType<InlineImageFrame>(),
+        hasLength(1),
+        reason: 'the oldest stale id exceeded the shared byte budget',
+      );
+
+      await driver.restore();
+    });
+
     test(
       'the same bytes drawn twice ship once but yield two placements',
       () async {

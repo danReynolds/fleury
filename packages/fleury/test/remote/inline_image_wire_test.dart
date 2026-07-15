@@ -33,6 +33,25 @@ void main() {
       );
     });
 
+    test('wire placement geometry is clipped to the declared grid', () {
+      final prev = CellBuffer(const CellSize(4, 3));
+      final next = CellBuffer(const CellSize(4, 3))
+        ..writeImage(
+          const CellOffset(3, 2),
+          Uint8List.fromList([1, 2, 3]),
+          width: 20,
+          height: 20,
+        );
+
+      final plan = buildRemotePlan(prev, next, fullRepaint: true);
+      final placement = plan.placements.single;
+      expect(
+        [placement.col, placement.row, placement.cols, placement.rows],
+        [3, 2, 1, 1],
+      );
+      expect(() => decodeRemotePlan(encodeRemotePlan(plan)), returnsNormally);
+    });
+
     test('two distinct images on one frame yield two placements', () {
       final next = CellBuffer(const CellSize(12, 4))
         ..writeImage(

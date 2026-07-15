@@ -640,7 +640,7 @@ Future<int> _runServeBridge({
         await req.response.close();
         return;
       }
-      if (!_isAllowedWebSocketOrigin(req, originPolicy)) {
+      if (!_isAllowedWebSocketOrigin(req, originPolicy, boundHost: host)) {
         await _rejectForbiddenWebSocketOrigin(req);
         return;
       }
@@ -804,8 +804,9 @@ Future<void> _serveStaticAsset(HttpRequest req) async {
 
 bool _isAllowedWebSocketOrigin(
   HttpRequest req,
-  _ServeOriginPolicy originPolicy,
-) {
+  _ServeOriginPolicy originPolicy, {
+  required String boundHost,
+}) {
   final origin = req.headers.value('origin');
   if (origin == null || origin.isEmpty) return true;
 
@@ -824,10 +825,27 @@ bool _isAllowedWebSocketOrigin(
   final sameOrigin = _ServeOriginPolicy._normalizeOrigin(
     '${_sameOriginScheme(req)}://${requestHost.trim()}',
   );
-  if (normalizedOrigin != null && normalizedOrigin == sameOrigin) {
+  if (normalizedOrigin != null &&
+      normalizedOrigin == sameOrigin &&
+      _isAllowedSameOriginHost(requestHost, boundHost)) {
     return true;
   }
   return originPolicy.allows(origin);
+}
+
+/// Whether the request Host is eligible for the implicit same-origin path.
+///
+/// When `serve` is bound to loopback, trusting an arbitrary Host header turns
+/// the normal same-origin comparison into a DNS-rebinding bypass: a hostile
+/// hostname can resolve to 127.0.0.1 and send matching Host + Origin headers.
+/// Keep the zero-config local path limited to loopback hostnames. An operator
+/// who deliberately uses a custom local hostname can still opt it in with
+/// `--allow-origin`, and non-loopback binds retain their explicit, warned-about
+/// trusted-network behavior.
+bool _isAllowedSameOriginHost(String requestHost, String boundHost) {
+  if (!_isLoopbackHost(boundHost)) return true;
+  final uri = Uri.tryParse('http://${requestHost.trim()}');
+  return uri != null && uri.host.isNotEmpty && _isLoopbackHost(uri.host);
 }
 
 /// The scheme the browser actually used to reach this server, for the
@@ -919,22 +937,21 @@ final class _BufferedBrowserInput {
   _BufferedBrowserInput(this.webSocket) {
     _subscription = webSocket.listen(
       (data) {
-        if (data is! List<int>) return;
+        if (data is! List<int> || _rejected) return;
+        // The WebSocket implementation has already materialized this message,
+        // but reject it before copying/queueing it into the app-socket pump.
+        // The bundled client sends one framed message at a time, so header +
+        // the global frame maximum is the largest legitimate message.
+        if (data.length > defaultMaxRemoteFramePayloadLength + 5) {
+          _reject('browser message exceeded remote frame payload limit');
+          return;
+        }
         if (!_paired) {
           _pendingBytes += data.length;
           if (_pendingBytes > defaultMaxRemoteFramePayloadLength) {
-            if (!_controller.isClosed) {
-              _controller.addError(
-                const RemoteProtocolException(
-                  'pending browser input exceeded remote frame payload limit',
-                  // Force-closes the socket (1009) below: genuinely
-                  // unrecoverable, matching FrameDecoder's oversized-length
-                  // classification so the field's contract holds end to end.
-                  recoverable: false,
-                ),
-              );
-            }
-            unawaited(webSocket.close(1009, 'pending input too large'));
+            _reject(
+              'pending browser input exceeded remote frame payload limit',
+            );
             return;
           }
         }
@@ -962,6 +979,7 @@ final class _BufferedBrowserInput {
 
   late final StreamSubscription<dynamic> _subscription;
   var _paired = false;
+  var _rejected = false;
   var _pendingBytes = 0;
 
   Stream<List<int>> get stream => _controller.stream;
@@ -969,6 +987,22 @@ final class _BufferedBrowserInput {
 
   void markPaired() {
     _paired = true;
+  }
+
+  void _reject(String reason) {
+    if (_rejected) return;
+    _rejected = true;
+    if (!_controller.isClosed) {
+      _controller.addError(
+        RemoteProtocolException(
+          reason,
+          // Force-closes the socket (1009) below: genuinely unrecoverable,
+          // matching FrameDecoder's oversized-length classification.
+          recoverable: false,
+        ),
+      );
+    }
+    unawaited(webSocket.close(1009, 'input too large'));
   }
 
   Future<void> dispose() async {
@@ -1078,7 +1112,7 @@ Future<int> _runServeSpawn({
       await req.response.close();
       return;
     }
-    if (!_isAllowedWebSocketOrigin(req, originPolicy)) {
+    if (!_isAllowedWebSocketOrigin(req, originPolicy, boundHost: host)) {
       await _rejectForbiddenWebSocketOrigin(req);
       return;
     }

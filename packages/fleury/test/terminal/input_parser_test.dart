@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:fleury/fleury.dart';
@@ -589,6 +590,60 @@ void main() {
       expect(sink.events, hasLength(1));
       expect(sink.events.single, isA<PasteEvent>());
       expect((sink.events.single as PasteEvent).text.length, 4096);
+    });
+
+    test('oversized paste is emitted in bounded segments', () {
+      final parser = InputParser(maxPasteBytes: 4);
+      final sink = _ListSink();
+
+      parser.feed([
+        ...'\x1B[200~'.codeUnits,
+        ...'abcdefghij'.codeUnits,
+        ...'\x1B[201~'.codeUnits,
+      ], sink);
+
+      expect(sink.events.whereType<PasteEvent>().map((event) => event.text), [
+        'abcd',
+        'efgh',
+        'ij',
+      ]);
+    });
+
+    test('paste segmentation never splits a UTF-8 scalar', () {
+      final parser = InputParser(maxPasteBytes: 4);
+      final sink = _ListSink();
+      const text = 'abcé🙂tail';
+
+      parser.feed([
+        ...'\x1B[200~'.codeUnits,
+        ...utf8.encode(text),
+        ...'\x1B[201~'.codeUnits,
+      ], sink);
+
+      final segments = sink.events
+          .whereType<PasteEvent>()
+          .map((event) => event.text)
+          .toList();
+      expect(segments.join(), text);
+      expect(segments.join(), isNot(contains(replacementCharacter)));
+    });
+  });
+
+  group('resource bounds', () {
+    test('overlong CSI is discarded through its final byte', () {
+      final parser = InputParser(maxCsiSequenceLength: 4);
+      final sink = _ListSink();
+
+      // The first byte over the cap is itself the final `A`; `q` must be
+      // processed from ground rather than swallowed as the discard final.
+      parser.feed('\x1B[1234Aq'.codeUnits, sink);
+
+      expect(
+        sink.events.whereType<TextInputEvent>().map((event) => event.text),
+        ['q'],
+        reason: 'discarded CSI parameters must not become text events',
+      );
+      expect(sink.events.whereType<KeyEvent>(), isEmpty);
     });
   });
 }
