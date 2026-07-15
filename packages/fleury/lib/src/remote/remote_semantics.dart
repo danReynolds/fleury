@@ -27,8 +27,10 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../rendering/text_sanitizer.dart' show sanitizeForDisplay;
 import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
+import '../semantics/semantics_owner.dart' show SemanticTreeUpdate;
 
 /// Wire envelope schema version. Bumped only on a breaking shape change; the
 /// decoder rejects an unknown version rather than misreading it.
@@ -56,32 +58,155 @@ final class SemanticWireDelta {
   final Set<String> removed;
 }
 
-/// Server side: turns a sequence of [SemanticInspectionSnapshot]s into compact
-/// wire payloads, emitting a full frame once per connection and patches
-/// thereafter. One instance per served session (it holds the last-sent state).
+/// Server side: turns semantic frames into compact wire payloads, emitting a
+/// full frame once per connection and patches thereafter. One instance per
+/// served session (it holds the last-sent state). Two entry points share that
+/// state: [encodeTree] (the serve render loop's path — redacts only the changed
+/// nodes on demand, O(changed)) and [encode] (for consumers that already hold a
+/// pre-redacted [SemanticInspectionSnapshot], e.g. inspection/agent bridges).
 final class SemanticsWireEncoder {
-  /// id -> the node's flat form (own fields + childIds) as last sent to the
-  /// peer, maintained incrementally: a patch re-serializes only the nodes the
-  /// [SemanticWireDelta] names and applies them here, so the per-frame CPU is
-  /// O(changed) rather than O(tree). Without a delta (first frame, or a caller
-  /// that doesn't supply one) the encoder falls back to flattening the whole
-  /// tree and comparing structurally against this map.
+  /// id -> the node's flat wire form (own fields + childIds) as last sent to the
+  /// peer, maintained incrementally: a patch re-serializes only the changed
+  /// nodes (named by a [SemanticTreeUpdate] or [SemanticWireDelta]) and applies
+  /// them here, so the per-frame CPU is O(changed) rather than O(tree). Without
+  /// a change-set (first frame, or a caller that doesn't supply one) the encoder
+  /// falls back to flattening the whole frame and comparing against this map.
   Map<String, Map<String, Object?>> _sent = const {};
   bool _sentFull = false;
+  int _lastFlattenedNodes = 0;
 
-  /// Encodes [snapshot] for the wire, or returns null when the exposed
-  /// semantics are unchanged since the last send (so a dirty frame that didn't
-  /// actually alter the accessible tree costs zero bytes).
+  /// How many nodes the most recent [encodeTree] redacted and flattened. On a
+  /// steady-state patch this is O(changed) — the very count a regression back to
+  /// full-tree redaction blows up to O(tree); the first (full) frame flattens
+  /// the whole tree. Drives the serve-semantics redaction-cost gate.
+  int get lastFlattenedNodeCount => _lastFlattenedNodes;
+
+  /// Encodes [tree] for the wire, or returns null when the exposed semantics are
+  /// unchanged since the last send (so a dirty frame that didn't actually alter
+  /// the accessible tree costs zero bytes).
   ///
-  /// [delta] names the nodes whose wire form may have changed (see
-  /// [SemanticWireDelta]); when supplied on a patch frame the encoder
-  /// re-serializes only those nodes instead of flattening the whole tree. The
-  /// `updated` set the delta is built from compares exactly the fields the wire
-  /// carries — including `bounds` and child order — so a node pushed to a new
-  /// position (bounds shift, no model rebuild) still lands in `changed`. A
-  /// debug-only oracle re-runs the full flatten every frame and asserts the
-  /// incrementally-maintained `_sent` still equals the ground truth, so any
-  /// gap between the delta and the wire form fails loudly in tests.
+  /// [update] names the nodes whose wire form may have changed AND carries the
+  /// live nodes themselves (`nextNodesById`); on a patch frame the encoder
+  /// redacts and re-serializes ONLY those, straight from the live tree — never
+  /// building a full [SemanticInspectionSnapshot]. The owner's node equality
+  /// compares exactly the fields the wire carries — including `bounds` and child
+  /// order — so a node pushed to a new position (bounds shift, no model rebuild)
+  /// still lands in the update. A debug-only oracle re-runs the full flatten
+  /// every frame and asserts the incrementally-maintained `_sent` still equals
+  /// the ground truth, so any gap between the update and the wire form fails
+  /// loudly in tests.
+  Uint8List? encodeTree(SemanticTree tree, {SemanticTreeUpdate? update}) {
+    if (!_sentFull) {
+      final flat = _flattenTree(tree);
+      _sentFull = true;
+      _sent = flat;
+      _lastFlattenedNodes = flat.length;
+      return _bytes(<String, Object?>{
+        'v': semanticsWireVersion,
+        'mode': 'full',
+        'root': sanitizeForDisplay(tree.root.id.value),
+        'nodes': flat.values.toList(growable: false),
+      });
+    }
+
+    final set = <Map<String, Object?>>[];
+    final removed = <String>[];
+    if (update == null) {
+      // No update: fall back to the full flatten + structural compare.
+      final flat = _flattenTree(tree);
+      for (final entry in flat.entries) {
+        final prior = _sent[entry.key];
+        if (prior == null || !_jsonEquals(prior, entry.value)) {
+          set.add(entry.value);
+        }
+      }
+      for (final id in _sent.keys) {
+        if (!flat.containsKey(id)) removed.add(id);
+      }
+      _sent = flat;
+      _lastFlattenedNodes = flat.length;
+    } else {
+      // O(changed): redact + serialize only the nodes the update names, taking
+      // each live node straight from `nextNodesById`, compare against the sent
+      // form (so a redaction-equal node still ships nothing), and drop the
+      // removed ids. [_sent] is mutated in place — it's always a fresh mutable
+      // map from the last [_flattenTree] (full frame or no-update patch), so
+      // there's nothing to preserve; copying it would reintroduce the O(n)
+      // per-frame cost this path exists to remove.
+      var flattened = 0;
+      final touched = <String>{};
+      for (final id in update.added.followedBy(update.updated)) {
+        final node = update.nextNodesById[id];
+        if (node == null) continue; // named-changed but gone from the tree.
+        flattened++;
+        final json = SemanticInspectionNode.flattenLiveNode(node);
+        final wireId = json['id']! as String;
+        touched.add(wireId);
+        final prior = _sent[wireId];
+        if (prior == null || !_jsonEquals(prior, json)) {
+          set.add(json);
+          _sent[wireId] = json;
+        }
+      }
+      for (final id in update.removed) {
+        final wireId = sanitizeForDisplay(id.value);
+        // A changed node may carry this same wire id — a duplicate, or two raw
+        // ids that sanitize alike — in which case it is LIVE and was just
+        // (re)written above. Don't drop it, or it would land in both `set` and
+        // `removed` and the client would delete a present node.
+        if (touched.contains(wireId)) continue;
+        if (_sent.remove(wireId) != null) removed.add(wireId);
+      }
+      _lastFlattenedNodes = flattened;
+      assert(
+        _oracleHoldsForTree(tree),
+        'On-demand redaction diverged from a full flatten — a changed node was '
+        'missing from the update. This is a correctness bug in the changed-set '
+        'plumbing, not the encoder.',
+      );
+    }
+
+    if (set.isEmpty && removed.isEmpty) return null;
+    // Canonical order by id: the client applies patch nodes by id (order is
+    // immaterial to it), but a stable order makes the full and patch paths
+    // byte-identical and keeps a given mutation's bytes deterministic
+    // frame-to-frame (the full path emits in tree pre-order, the patch path in
+    // changed-set order — sorting reconciles them).
+    set.sort((a, b) => (a['id']! as String).compareTo(b['id']! as String));
+    removed.sort();
+    return _bytes(<String, Object?>{
+      'v': semanticsWireVersion,
+      'mode': 'patch',
+      'root': sanitizeForDisplay(tree.root.id.value),
+      if (set.isNotEmpty) 'set': set,
+      if (removed.isNotEmpty) 'removed': removed,
+    });
+  }
+
+  /// Debug ground-truth check for [encodeTree]: the incrementally-maintained
+  /// [_sent] must equal a from-scratch flatten of the current tree. If it
+  /// doesn't, the update missed a node whose wire form changed — caught here in
+  /// tests/CI, never shipped. Stripped from release builds (runs under
+  /// `assert`).
+  bool _oracleHoldsForTree(SemanticTree tree) {
+    final truth = _flattenTree(tree);
+    if (truth.length != _sent.length) return false;
+    for (final entry in truth.entries) {
+      final have = _sent[entry.key];
+      if (have == null || !_jsonEquals(have, entry.value)) return false;
+    }
+    return true;
+  }
+
+  /// Encodes a pre-redacted [snapshot] for the wire — the snapshot-based path for
+  /// inspection/agent consumers that already hold a [SemanticInspectionSnapshot]
+  /// (the serve render loop instead uses [encodeTree], which redacts on demand).
+  /// Returns null when the exposed semantics are unchanged since the last send.
+  ///
+  /// [delta] names the changed nodes (in wire-id space); on a patch frame the
+  /// encoder re-serializes only those instead of flattening the whole snapshot.
+  /// A debug-only oracle asserts the incrementally-maintained `_sent` still
+  /// equals a full flatten, so any gap fails loudly in tests.
   Uint8List? encode(
     SemanticInspectionSnapshot snapshot, {
     SemanticWireDelta? delta,
@@ -90,6 +215,7 @@ final class SemanticsWireEncoder {
       final flat = _flatten(snapshot.root);
       _sentFull = true;
       _sent = flat;
+      _lastFlattenedNodes = flat.length;
       return _bytes(<String, Object?>{
         'v': semanticsWireVersion,
         'mode': 'full',
@@ -113,16 +239,15 @@ final class SemanticsWireEncoder {
         if (!flat.containsKey(id)) removed.add(id);
       }
       _sent = flat;
+      _lastFlattenedNodes = flat.length;
     } else {
       // O(changed): serialize only the named nodes, compare each against the
-      // sent form (so a redaction-equal node still ships nothing), and drop
-      // the removed ids. [_sent] is mutated in place — it's always a fresh
-      // mutable map from the last [_flatten] (full frame or no-delta patch),
-      // so there's nothing to preserve; copying it would reintroduce the O(n)
-      // per-frame cost this path exists to remove.
+      // sent form, and drop the removed ids. [_sent] is mutated in place.
+      var flattened = 0;
       for (final id in delta.changed) {
         final node = snapshot.nodeById(id);
-        if (node == null) continue; // named-changed but not in the tree: skip.
+        if (node == null) continue; // named-changed but not in the tree.
+        flattened++;
         final json = _flattenNode(node);
         final prior = _sent[id];
         if (prior == null || !_jsonEquals(prior, json)) {
@@ -133,6 +258,7 @@ final class SemanticsWireEncoder {
       for (final id in delta.removed) {
         if (_sent.remove(id) != null) removed.add(id);
       }
+      _lastFlattenedNodes = flattened;
       assert(
         _oracleHolds(snapshot),
         'SemanticWireDelta diverged from a full flatten — a changed node was '
@@ -142,11 +268,6 @@ final class SemanticsWireEncoder {
     }
 
     if (set.isEmpty && removed.isEmpty) return null;
-    // Canonical order by id: the client applies patch nodes by id (order is
-    // immaterial to it), but a stable order makes the full and delta paths
-    // byte-identical and keeps a given mutation's bytes deterministic
-    // frame-to-frame (the full path emits in tree pre-order, the delta path in
-    // changed-set order — sorting reconciles them).
     set.sort((a, b) => (a['id']! as String).compareTo(b['id']! as String));
     removed.sort();
     return _bytes(<String, Object?>{
@@ -158,10 +279,9 @@ final class SemanticsWireEncoder {
     });
   }
 
-  /// Debug ground-truth check: the incrementally-maintained [_sent] must equal
-  /// a from-scratch flatten of the current snapshot. If it doesn't, the delta
-  /// missed a node whose wire form changed — caught here in tests/CI, never
-  /// shipped. Stripped from release builds (runs only under `assert`).
+  /// Debug ground-truth check for [encode]: [_sent] must equal a from-scratch
+  /// flatten of the current snapshot. Stripped from release (runs under
+  /// `assert`).
   bool _oracleHolds(SemanticInspectionSnapshot snapshot) {
     final truth = _flatten(snapshot.root);
     if (truth.length != _sent.length) return false;
@@ -172,11 +292,12 @@ final class SemanticsWireEncoder {
     return true;
   }
 
-  /// Forgets the peer's state so the next [encode] re-sends a full frame.
+  /// Forgets the peer's state so the next encode re-sends a full frame.
   /// Call when a new peer connects on a reused encoder.
   void reset() {
     _sent = const {};
     _sentFull = false;
+    _lastFlattenedNodes = 0;
   }
 
   static Uint8List _bytes(Map<String, Object?> payload) =>
@@ -206,17 +327,38 @@ bool _jsonEquals(Object? a, Object? b) {
   return a == b;
 }
 
-/// Flattens a redacted inspection tree to an ordered id->node map. Each node
-/// is its `toJson()` with `children` replaced by `childIds`, so the structure
-/// is reconstructable from the flat set alone. Insertion order is a stable
-/// pre-order, which keeps the full-frame `nodes` list deterministic.
+/// Flattens a live semantic tree to an id->wire-node map, redacting each node on
+/// the way down via [SemanticInspectionNode.flattenLiveNode]. Each entry is a
+/// node's own scalar fields plus `childIds` (not nested children), so the
+/// structure is reconstructable from the flat set alone. Insertion order is a
+/// stable pre-order, which keeps the full-frame `nodes` list deterministic.
 ///
-/// FIRST-wins on a duplicate id (`putIfAbsent`): ids are supposed to be unique,
-/// but the framework tolerates duplicates as a degraded state. The full path,
-/// the O(changed) delta path (via [SemanticInspectionSnapshot.nodeById], which
-/// also returns the first), and the debug oracle must all pick the SAME node
-/// for a given id, or they disagree on which duplicate's body to ship and
-/// [_sent] drifts. First-wins is that single rule.
+/// LAST-wins on a duplicate wire id: ids are supposed to be unique, but the
+/// framework tolerates duplicates (or two raw ids that sanitize alike) as a
+/// degraded state, and some node must win. Last-wins matches the two other
+/// maps this must agree with: the owner's `nextNodesById` that the O(changed)
+/// patch path reads from, and the client decoder's flat map (`_put` overwrites)
+/// — so the full frame, the patch, the debug oracle, and the client all resolve
+/// a duplicate to the SAME (last, pre-order) node, rather than the full path
+/// disagreeing with the incremental one.
+Map<String, Map<String, Object?>> _flattenTree(SemanticTree tree) {
+  final out = <String, Map<String, Object?>>{};
+  void visit(SemanticNode node) {
+    final json = SemanticInspectionNode.flattenLiveNode(node);
+    out[json['id']! as String] = json;
+    for (final child in node.children) {
+      visit(child);
+    }
+  }
+
+  visit(tree.root);
+  return out;
+}
+
+/// Flattens a pre-redacted inspection tree to an ordered id->node map — the
+/// snapshot-based counterpart of [_flattenTree], used by [SemanticsWireEncoder.
+/// encode]. Same shape and first-wins pre-order rule; produces byte-identical
+/// output to flattening the equivalent live tree.
 Map<String, Map<String, Object?>> _flatten(SemanticInspectionNode root) {
   final out = <String, Map<String, Object?>>{};
   void visit(SemanticInspectionNode node) {
@@ -230,14 +372,11 @@ Map<String, Map<String, Object?>> _flatten(SemanticInspectionNode root) {
   return out;
 }
 
-/// One node's flat wire form: its own fields plus `childIds` (not the nested
-/// children). Shared by the full [_flatten] and the O(changed) fast path so the
-/// two produce byte-identical JSON for the same node.
+/// One inspection node's flat wire form: its own scalar fields plus `childIds`
+/// (not the nested children). Byte-identical to
+/// [SemanticInspectionNode.flattenLiveNode] for the same node, so the snapshot
+/// and live-tree paths agree on the wire.
 Map<String, Object?> _flattenNode(SemanticInspectionNode node) {
-  // toScalarJson is this node's OWN fields, O(1). The old
-  // `toJson()..remove('children')` built the entire recursive subtree JSON
-  // first and threw the children away — at every level, so each subtree was
-  // re-serialized once per ancestor (O(n·depth), all discarded).
   final json = node.toScalarJson(includeBounds: true);
   if (node.children.isNotEmpty) {
     json['childIds'] = <String>[for (final c in node.children) c.id];
