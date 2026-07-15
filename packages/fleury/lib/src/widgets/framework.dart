@@ -783,7 +783,7 @@ abstract class Element implements BuildContext {
   Element inflateWidget(Widget newWidget) {
     final key = newWidget.key;
     if (key is GlobalKey) {
-      assert(_owner?._debugClaimGlobalKey(key, this) ?? true);
+      _owner?._claimGlobalKey(key, this);
       final retaken = _retakeInactiveElement(key, newWidget);
       if (retaken != null) {
         _activateChild(retaken, newWidget);
@@ -814,6 +814,18 @@ abstract class Element implements BuildContext {
     if (parent != null) {
       parent.forgetChild(element);
       parent._deactivateChild(element);
+      // The old parent still lists `key` as an active child yet may not rebuild
+      // this pass — e.g. canSkipWidgetUpdate skipped its subtree, so it never
+      // re-inflates the slot the steal just emptied. Mark it dirty. On a genuine
+      // reparent it was already going to rebuild (its widget changed to drop the
+      // child), so this is absorbed — no extra pass — and the hole fills
+      // normally. When it is load-bearing (the parent wasn't rebuilding) the
+      // parent still describes `key`, so re-inflating that slot re-claims a key
+      // another parent now holds: _claimGlobalKey throws a clear duplicate-key
+      // error — in release too, not only under asserts — instead of the silent
+      // blank this used to leave, or a pass-after-pass steal-back until
+      // flushBuild bails out with an unrelated non-convergence error.
+      parent.markNeedsBuild();
     }
     _owner?._inactiveElements.remove(element);
     return element;
@@ -1053,14 +1065,19 @@ class BuildOwner {
   /// unmounted by [_finalizeInactiveElements] once the pass settles.
   final Set<Element> _inactiveElements = <Element>{};
 
-  /// Debug-only: the parent that first inflated each [GlobalKey] during the
-  /// current build pass, used to detect a key reused on two widgets at once.
-  /// Reset at the start of every [flushBuild]; populated solely from asserts,
-  /// so it stays empty in release builds.
-  final Map<GlobalKey, Element> _debugGlobalKeyClaims = <GlobalKey, Element>{};
+  /// The parent that first inflated each [GlobalKey] during the current build
+  /// (across all of a [flushBuild]'s passes; reset at its start). Detects a key
+  /// reused on two widgets at once — the second [Element.inflateWidget] to claim
+  /// a key another parent still holds throws.
+  ///
+  /// Enforced in release, not just under `assert`: a GlobalKey stolen from a
+  /// parent that then re-inflates it (see [Element._retakeInactiveElement]) must
+  /// fail loudly and cheaply here, rather than steal back and forth every pass
+  /// until [flushBuild] gives up with an unrelated "did not converge" error.
+  final Map<GlobalKey, Element> _globalKeyClaims = <GlobalKey, Element>{};
 
-  bool _debugClaimGlobalKey(GlobalKey key, Element parent) {
-    final existing = _debugGlobalKeyClaims[key];
+  void _claimGlobalKey(GlobalKey key, Element parent) {
+    final existing = _globalKeyClaims[key];
     if (existing != null) {
       throw StateError(
         'Duplicate GlobalKey detected in the widget tree.\n'
@@ -1070,8 +1087,7 @@ class BuildOwner {
         'most one widget at a time; give the second widget its own key.',
       );
     }
-    _debugGlobalKeyClaims[key] = parent;
-    return true;
+    _globalKeyClaims[key] = parent;
   }
 
   Element? _root;
@@ -1139,10 +1155,7 @@ class BuildOwner {
   ///
   /// See RFC 0009 §5.6 H6.
   BuildFlushStats flushBuild() {
-    assert(() {
-      _debugGlobalKeyClaims.clear();
-      return true;
-    }());
+    _globalKeyClaims.clear();
     var passCount = 0;
     var rebuiltElementCount = 0;
     var maxDirtyElementCount = 0;
