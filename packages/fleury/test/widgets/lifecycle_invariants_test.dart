@@ -145,7 +145,7 @@ void main() {
     );
   });
 
-  testWidgets('duplicate sibling keys fail loudly in debug', (tester) {
+  testWidgets('duplicate sibling keys fail loudly before mutation', (tester) {
     // F3: silently overwriting the key map orphans the shadowed element with a
     // live State that never disposes — a monotonic leak on every rebuild.
     // The collision is detected on the reconcile that partitions old children
@@ -162,10 +162,10 @@ void main() {
         );
         tester.render(size: const CellSize(20, 3));
       },
-      throwsA(isA<AssertionError>()),
+      throwsA(isA<StateError>()),
       reason:
-          'duplicate local keys must be a loud app-author error, not a '
-          'silent orphan',
+          'duplicate local keys must be a release-mode app-author error, not '
+          'a debug-only assertion or silent orphan',
     );
   });
 }
