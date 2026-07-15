@@ -134,12 +134,14 @@ final class SemanticsWireEncoder {
       // there's nothing to preserve; copying it would reintroduce the O(n)
       // per-frame cost this path exists to remove.
       var flattened = 0;
+      final touched = <String>{};
       for (final id in update.added.followedBy(update.updated)) {
         final node = update.nextNodesById[id];
         if (node == null) continue; // named-changed but gone from the tree.
         flattened++;
         final json = SemanticInspectionNode.flattenLiveNode(node);
         final wireId = json['id']! as String;
+        touched.add(wireId);
         final prior = _sent[wireId];
         if (prior == null || !_jsonEquals(prior, json)) {
           set.add(json);
@@ -148,6 +150,11 @@ final class SemanticsWireEncoder {
       }
       for (final id in update.removed) {
         final wireId = sanitizeForDisplay(id.value);
+        // A changed node may carry this same wire id — a duplicate, or two raw
+        // ids that sanitize alike — in which case it is LIVE and was just
+        // (re)written above. Don't drop it, or it would land in both `set` and
+        // `removed` and the client would delete a present node.
+        if (touched.contains(wireId)) continue;
         if (_sent.remove(wireId) != null) removed.add(wireId);
       }
       _lastFlattenedNodes = flattened;
@@ -290,6 +297,7 @@ final class SemanticsWireEncoder {
   void reset() {
     _sent = const {};
     _sentFull = false;
+    _lastFlattenedNodes = 0;
   }
 
   static Uint8List _bytes(Map<String, Object?> payload) =>
@@ -319,23 +327,25 @@ bool _jsonEquals(Object? a, Object? b) {
   return a == b;
 }
 
-/// Flattens a live semantic tree to an ordered id->wire-node map, redacting each
-/// node on the way down via [SemanticInspectionNode.flattenLiveNode]. Each entry
-/// is a node's own scalar fields plus `childIds` (not nested children), so the
+/// Flattens a live semantic tree to an id->wire-node map, redacting each node on
+/// the way down via [SemanticInspectionNode.flattenLiveNode]. Each entry is a
+/// node's own scalar fields plus `childIds` (not nested children), so the
 /// structure is reconstructable from the flat set alone. Insertion order is a
 /// stable pre-order, which keeps the full-frame `nodes` list deterministic.
 ///
-/// FIRST-wins on a duplicate wire id (`putIfAbsent`): ids are supposed to be
-/// unique, but the framework tolerates duplicates as a degraded state. This full
-/// path and the debug oracle both walk pre-order and take the first, so they
-/// agree on which duplicate's body to ship. (The O(changed) patch path can only
-/// diverge here on a sanitization collision between two changed nodes — the
-/// oracle catches exactly that in tests.)
+/// LAST-wins on a duplicate wire id: ids are supposed to be unique, but the
+/// framework tolerates duplicates (or two raw ids that sanitize alike) as a
+/// degraded state, and some node must win. Last-wins matches the two other
+/// maps this must agree with: the owner's `nextNodesById` that the O(changed)
+/// patch path reads from, and the client decoder's flat map (`_put` overwrites)
+/// — so the full frame, the patch, the debug oracle, and the client all resolve
+/// a duplicate to the SAME (last, pre-order) node, rather than the full path
+/// disagreeing with the incremental one.
 Map<String, Map<String, Object?>> _flattenTree(SemanticTree tree) {
   final out = <String, Map<String, Object?>>{};
   void visit(SemanticNode node) {
     final json = SemanticInspectionNode.flattenLiveNode(node);
-    out.putIfAbsent(json['id']! as String, () => json);
+    out[json['id']! as String] = json;
     for (final child in node.children) {
       visit(child);
     }

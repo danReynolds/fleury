@@ -108,4 +108,52 @@ void main() {
       );
     }
   });
+
+  test('duplicate node ids stay self-consistent (the debug oracle holds)', () {
+    SemanticTree dupTree({required int tick, required bool bothPresent}) {
+      return SemanticTree(
+        root: SemanticNode(
+          id: const SemanticNodeId('root'),
+          role: SemanticRole.app,
+          children: [
+            SemanticNode(
+              id: const SemanticNodeId('dup'),
+              role: SemanticRole.status,
+              label: 'A$tick',
+            ),
+            if (bothPresent)
+              SemanticNode(
+                id: const SemanticNodeId('dup'),
+                role: SemanticRole.status,
+                label: 'B$tick',
+              ),
+            SemanticNode(
+              id: const SemanticNodeId('tail'),
+              role: SemanticRole.text,
+              label: 'tail',
+            ),
+          ],
+        ),
+      );
+    }
+
+    final encoder = SemanticsWireEncoder();
+    final owner = SemanticsOwner();
+    // A duplicate `dup` id is a degraded state, but the on-demand patch path
+    // must still resolve it the way the full flatten and the debug oracle do
+    // (last-wins). Each encodeTree runs its oracle — a full re-flatten compared
+    // to `_sent` — and THROWS if the patch diverged. Drive full → label churn →
+    // drop one of the duplicates. (Fails the pre-fix first-wins full path, whose
+    // oracle would fire the moment the last `dup` node changes.)
+    const frames = [(0, true), (1, true), (2, true), (3, false)];
+    for (final frame in frames) {
+      final t = dupTree(tick: frame.$1, bothPresent: frame.$2);
+      expect(
+        () => encoder.encodeTree(t, update: owner.update(t)),
+        returnsNormally,
+        reason: 'the O(changed) patch diverged from the full flatten on a '
+            'duplicate id (the oracle fired)',
+      );
+    }
+  });
 }
