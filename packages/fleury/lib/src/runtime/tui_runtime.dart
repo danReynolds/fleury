@@ -146,12 +146,20 @@ final class TuiRuntime {
       throw StateError('TuiRuntime has no mounted root.');
     }
     pointerRouter.beginFrame();
-    owner.renderFrame(
-      root,
-      buffer,
-      onPhaseTiming: onPhaseTiming,
-      onBuildStats: onBuildStats,
-    );
+    try {
+      owner.renderFrame(
+        root,
+        buffer,
+        onPhaseTiming: onPhaseTiming,
+        onBuildStats: onBuildStats,
+      );
+      pointerRouter.endFrame();
+    } catch (_) {
+      // A partial paint was never presented. Drop all regions and captures so
+      // input cannot activate a target from that unsuccessful frame.
+      pointerRouter.abortFrame();
+      rethrow;
+    }
   }
 
   /// Drains post-frame callbacks at the runtime clock's current time.
@@ -163,6 +171,15 @@ final class TuiRuntime {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+
+    // Sever host callbacks before user teardown runs. A State.dispose hook may
+    // still mutate a not-yet-unmounted sibling or enqueue a post-frame callback;
+    // neither is allowed to schedule host work once runtime disposal starts.
+    // These closures commonly retain the whole host session/frame driver.
+    owner.onScheduleBuild = null;
+    owner.onBuildError = null;
+    owner.onContainedRenderError = null;
+    binding.onPostFrameCallback = null;
 
     final errors = <_CapturedRuntimeDisposeError>[];
     void capture(void Function() action) {
@@ -185,12 +202,6 @@ final class TuiRuntime {
     capture(pointerRouter.dispose);
     capture(focusManager.dispose);
     capture(binding.dispose);
-
-    // Host callbacks commonly close over the session. A disposed runtime must
-    // not keep that session reachable through its owner after the tree is gone.
-    owner.onScheduleBuild = null;
-    owner.onBuildError = null;
-    owner.onContainedRenderError = null;
 
     if (errors.isEmpty) return;
     final first = errors.first;

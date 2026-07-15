@@ -48,6 +48,8 @@ class InlineImageOverlay {
   // decode); <img> elements and last-applied geometry by 'id#occurrence' so
   // repeated placements of one image each get a distinct element.
   final Map<String, String> _blobUrls = <String, String>{};
+  final Map<String, Uint8List> _pendingImages = <String, Uint8List>{};
+  int _pendingImageBytes = 0;
   final Map<String, web.HTMLImageElement> _els =
       <String, web.HTMLImageElement>{};
   final Map<String, String> _rects = <String, String>{};
@@ -62,28 +64,60 @@ class InlineImageOverlay {
   /// Total encoded bytes represented by the blob-URL cache.
   int get cachedImageBytes => _imageCache.totalBytes;
 
-  /// Caches one inline image's bytes as a blob URL, keyed by content-hash id.
-  /// Idempotent: a re-send (after eviction) just refreshes the URL.
-  void cacheImage(String id, Uint8List bytes) {
-    if (_imageCache.contains(id)) return;
-    final blob = web.Blob(
-      <JSAny>[bytes.toJS].toJS,
-      web.BlobPropertyBag(type: 'image/png'),
-    );
-    _blobUrls[id] = web.URL.createObjectURL(blob);
-    _imageCache.add(id, bytes.length);
+  /// Images received since the last presentation plan. Kept separately so a
+  /// sender that never completes its plan cannot grow the blob cache forever.
+  int get pendingImageCount => _pendingImages.length;
+  int get pendingImageBytes => _pendingImageBytes;
+
+  /// Stages one inline image until the presentation plan that references it.
+  ///
+  /// Returns false without retaining [bytes] when the pending one-plan batch
+  /// would exceed the cache policy. Normal Fleury senders enforce the same
+  /// per-plan working-set bound, so false identifies a malformed or skewed
+  /// stream. Staging keeps the committed cache and the in-flight generation
+  /// independently bounded while preserving the wire's images-before-plan
+  /// ordering.
+  bool cacheImage(String id, Uint8List bytes) {
+    if (_overlay == null) return false;
+    if (_imageCache.contains(id) || _pendingImages.containsKey(id)) return true;
+    if (bytes.length > _imageCache.policy.maxBytes ||
+        _pendingImages.length >= _imageCache.policy.maxEntries ||
+        _pendingImageBytes + bytes.length > _imageCache.policy.maxBytes) {
+      return false;
+    }
+    _pendingImages[id] = bytes;
+    _pendingImageBytes += bytes.length;
+    return true;
   }
 
   /// Re-applies the most recent placement set against [box] — used on resize so
   /// images track the new cell pitch even without a fresh frame.
   void reapply(MeasuredCellBox box) => apply(_last, box);
 
+  /// Commits the staged image batch for an actual presentation plan.
+  ///
+  /// Wire clients call this as soon as a plan is decoded, before the fallible
+  /// grid apply. A later resize only calls [reapply], so it cannot consume
+  /// bytes that belong to a not-yet-arrived plan.
+  void commitPendingForPlan(List<ImagePlacement> placements) {
+    _commitPending(<String>{for (final placement in placements) placement.id});
+  }
+
+  /// Commits and reconciles one locally-produced plan in a single call.
+  /// Remote hosts split these phases with [commitPendingForPlan] and [apply].
+  void presentPlan(List<ImagePlacement> placements, MeasuredCellBox box) {
+    commitPendingForPlan(placements);
+    apply(placements, box);
+  }
+
   /// Reconciles the `<img>` overlay against this frame's [placements] (the full
-  /// current set) measured against [box].
+  /// current set) measured against [box]. Pending bytes must already have been
+  /// committed at the real plan boundary.
   void apply(List<ImagePlacement> placements, MeasuredCellBox box) {
     _last = placements;
     final overlay = _overlay;
     if (overlay == null) return;
+    final placedIds = <String>{for (final p in placements) p.id};
     final cw = box.cssCellWidth;
     final ch = box.cssCellHeight;
     // Match the grid's origin convention (see DomInputSource caret math): the
@@ -91,10 +125,8 @@ class InlineImageOverlay {
     final ox = box.cssCanvasLeft;
     final oy = box.cssCanvasTop;
     final seen = <String>{};
-    final placedIds = <String>{};
     final occurrence = <String, int>{};
     for (final p in placements) {
-      placedIds.add(p.id);
       final occ = occurrence[p.id] = (occurrence[p.id] ?? 0) + 1;
       final key = '${p.id}#$occ';
       seen.add(key);
@@ -147,12 +179,59 @@ class InlineImageOverlay {
     _evictStale(placedIds);
   }
 
+  /// Commits only pending images referenced by the next plan. Existing stale
+  /// blobs are evicted *before* the new generation is materialized, using the
+  /// same projected-fit policy as the app-side sender. This preserves their
+  /// cache ledgers exactly without ever holding an unbounded image-only stream.
+  void _commitPending(Set<String> placedIds) {
+    if (_pendingImages.isEmpty) return;
+    final additions = <MapEntry<String, Uint8List>>[
+      for (final entry in _pendingImages.entries)
+        if (placedIds.contains(entry.key) && !_imageCache.contains(entry.key))
+          entry,
+    ];
+    final additionalBytes = additions.fold<int>(
+      0,
+      (total, entry) => total + entry.value.length,
+    );
+    _revoke(
+      _imageCache.evictStaleToFit(
+        placedIds,
+        additionalEntries: additions.length,
+        additionalBytes: additionalBytes,
+      ),
+    );
+
+    for (final entry in additions) {
+      // A malformed plan may declare a placed working set larger than the
+      // policy. Keep the cache hard-bounded and degrade excess images to blank;
+      // a conforming sender is filtered to the same policy before transmission.
+      if (!_imageCache.canFit(
+        additionalEntries: 1,
+        additionalBytes: entry.value.length,
+      )) {
+        continue;
+      }
+      final blob = web.Blob(
+        <JSAny>[entry.value.toJS].toJS,
+        web.BlobPropertyBag(type: 'image/png'),
+      );
+      _blobUrls[entry.key] = web.URL.createObjectURL(blob);
+      _imageCache.add(entry.key, entry.value.length);
+    }
+    _pendingImages.clear();
+    _pendingImageBytes = 0;
+  }
+
   /// Bounds the blob-URL cache by count and encoded bytes, revoking the oldest
-  /// ids not currently placed. The on-screen set is never dropped; if it alone
-  /// exceeds the byte budget, all stale entries are still evicted and the
-  /// placed entries become eligible as soon as they leave the next frame.
+  /// ids not currently placed. The producer bounds a conforming on-screen set;
+  /// [_commitPending] drops excess additions from a malformed plan.
   void _evictStale(Set<String> placed) {
-    for (final id in _imageCache.evictStale(placed)) {
+    _revoke(_imageCache.evictStale(placed));
+  }
+
+  void _revoke(Iterable<String> ids) {
+    for (final id in ids) {
       final url = _blobUrls.remove(id);
       if (url != null) web.URL.revokeObjectURL(url);
     }
@@ -164,6 +243,8 @@ class InlineImageOverlay {
       web.URL.revokeObjectURL(url);
     }
     _blobUrls.clear();
+    _pendingImages.clear();
+    _pendingImageBytes = 0;
     _imageCache.clear();
     _els.clear();
     _rects.clear();

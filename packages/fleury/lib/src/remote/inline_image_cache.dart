@@ -17,10 +17,8 @@ final class InlineImageCachePolicy {
 
   /// Maximum total encoded bytes for stale and placed images combined.
   ///
-  /// Currently placed images are never evicted, so an on-screen working set
-  /// may temporarily exceed this budget. In that case every stale entry is
-  /// still removed, and the oversized entry becomes evictable as soon as it
-  /// is no longer placed.
+  /// Producers must bound each plan's placed working set to this limit;
+  /// consumers drop excess or malformed additions rather than exceeding it.
   final int maxBytes;
 }
 
@@ -30,8 +28,7 @@ const defaultInlineImageCachePolicy = InlineImageCachePolicy();
 /// Insertion-ordered inline-image cache accounting.
 ///
 /// This tracks encoded byte lengths, not decoded pixels. [evictStale] removes
-/// the oldest unplaced entries until both policy bounds are met, or until only
-/// currently placed entries remain.
+/// the oldest unplaced entries until both policy bounds are met.
 final class InlineImageCacheLedger {
   InlineImageCacheLedger([this.policy = defaultInlineImageCachePolicy]);
 
@@ -59,13 +56,40 @@ final class InlineImageCacheLedger {
     return true;
   }
 
-  /// Evicts the oldest ids not in [placed], returning them in eviction order.
-  List<String> evictStale(Set<String> placed) {
-    if (!_isOverBudget) return const <String>[];
+  /// Whether the current cache plus a prospective addition fits the policy.
+  bool canFit({int additionalEntries = 0, int additionalBytes = 0}) {
+    if (additionalEntries < 0 || additionalBytes < 0) {
+      throw ArgumentError('prospective cache additions must be non-negative');
+    }
+    return entryCount + additionalEntries <= policy.maxEntries &&
+        _totalBytes + additionalBytes <= policy.maxBytes;
+  }
+
+  /// Evicts the oldest ids not in [placed] until a prospective addition fits.
+  ///
+  /// The returned ids are in eviction order. If [placed] itself plus the
+  /// prospective addition exceeds the policy, every stale entry is removed and
+  /// [canFit] remains false; callers can then drop the excess new content.
+  List<String> evictStaleToFit(
+    Set<String> placed, {
+    int additionalEntries = 0,
+    int additionalBytes = 0,
+  }) {
+    if (canFit(
+      additionalEntries: additionalEntries,
+      additionalBytes: additionalBytes,
+    )) {
+      return const <String>[];
+    }
 
     final evicted = <String>[];
     for (final entry in _byteLengths.entries.toList(growable: false)) {
-      if (!_isOverBudget) break;
+      if (canFit(
+        additionalEntries: additionalEntries,
+        additionalBytes: additionalBytes,
+      )) {
+        break;
+      }
       if (placed.contains(entry.key)) continue;
       _byteLengths.remove(entry.key);
       _totalBytes -= entry.value;
@@ -74,11 +98,11 @@ final class InlineImageCacheLedger {
     return evicted;
   }
 
+  /// Evicts the oldest ids not in [placed], returning them in eviction order.
+  List<String> evictStale(Set<String> placed) => evictStaleToFit(placed);
+
   void clear() {
     _byteLengths.clear();
     _totalBytes = 0;
   }
-
-  bool get _isOverBudget =>
-      entryCount > policy.maxEntries || _totalBytes > policy.maxBytes;
 }

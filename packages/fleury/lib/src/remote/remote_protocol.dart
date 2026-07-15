@@ -429,14 +429,8 @@ Uint8List encodeFrame(RemoteFrame frame) {
       _encodeClipboardResult(f),
     ),
     CaretFrame f => (FrameType.caret, _encodeCaret(f)),
-    DebugRequestFrame f => (
-      FrameType.debugRequest,
-      utf8.encode(jsonEncode({'seq': f.seq, 'kind': f.kind, 'limit': f.limit})),
-    ),
-    DebugResponseFrame f => (
-      FrameType.debugResponse,
-      _encodeDebugResponse(f),
-    ),
+    DebugRequestFrame f => (FrameType.debugRequest, _encodeDebugRequest(f)),
+    DebugResponseFrame f => (FrameType.debugResponse, _encodeDebugResponse(f)),
     ByeFrame() => (FrameType.bye, const <int>[]),
   };
   final out = BytesBuilder(copy: false);
@@ -597,26 +591,42 @@ final class FrameDecoder {
   void feed(List<int> bytes) {
     if (bytes.isEmpty) return;
     if (_pendingFatalError != null) return;
-    // Avoid copying a caller-supplied giant chunk merely to discover from its
-    // already-present header that the first frame is invalid. Socket reads are
-    // normally small and WebSocket messages are capped at the bridge, but this
-    // also keeps the decoder API itself bounded for a single hostile feed.
-    if (_bufferedLength == 0 && bytes.length >= 5) {
-      final type = FrameType.fromCode(bytes[0]);
-      final length =
-          bytes[1] * 0x1000000 +
-          bytes[2] * 0x10000 +
-          bytes[3] * 0x100 +
-          bytes[4];
-      final limit = _effectivePayloadLimit(type);
-      if (length > limit) {
-        _pendingFatalError = _oversizedFrame(type, length, limit);
-        return;
-      }
+    // Avoid copying a caller-supplied giant chunk merely to discover from an
+    // already-present header that a frame is invalid. Scan complete virtual
+    // frame boundaries across buffered + incoming bytes, including a split
+    // leading header and later frames after a valid prefix. Without this
+    // preflight, either shape could make `_ensureWritable` copy the hostile
+    // chunk before `drain` rejected its declared length.
+    final preflightError = _preflightPayloadLengths(bytes);
+    if (preflightError != null) {
+      _pendingFatalError = preflightError;
+      return;
     }
     _ensureWritable(bytes.length);
     _buffer.setRange(_end, _end + bytes.length, bytes);
     _end += bytes.length;
+  }
+
+  RemoteProtocolException? _preflightPayloadLengths(List<int> incoming) {
+    final buffered = _bufferedLength;
+    final totalLength = buffered + incoming.length;
+    int byteAt(int index) =>
+        index < buffered ? _buffer[_start + index] : incoming[index - buffered];
+    var offset = 0;
+    while (totalLength - offset >= 5) {
+      final type = FrameType.fromCode(byteAt(offset));
+      final length =
+          byteAt(offset + 1) * 0x1000000 +
+          byteAt(offset + 2) * 0x10000 +
+          byteAt(offset + 3) * 0x100 +
+          byteAt(offset + 4);
+      final limit = _effectivePayloadLimit(type);
+      if (length > limit) return _oversizedFrame(type, length, limit);
+      final nextOffset = offset + 5 + length;
+      if (nextOffset > totalLength) return null;
+      offset = nextOffset;
+    }
+    return null;
   }
 
   /// Pull out every complete frame currently in the buffer. Partial
@@ -808,9 +818,11 @@ final class FrameDecoder {
       case FrameType.debugRequest:
         try {
           final map = jsonDecode(utf8.decode(payload)) as Map<String, Object?>;
+          final kind = map['kind'] as String;
+          _encodeDebugKind(kind);
           return DebugRequestFrame(
             map['seq'] as int,
-            map['kind'] as String,
+            kind,
             limit: (map['limit'] as int?) ?? 50,
           );
         } on Object catch (e) {
@@ -915,8 +927,27 @@ Map<String, String> _parseParams(String body) {
 // Debug response payload: 4-byte LE seq, 1-byte kind length, kind bytes,
 // then the raw JSON document — avoids JSON-escaping the (potentially large)
 // document into an envelope.
+Uint8List _encodeDebugRequest(DebugRequestFrame f) {
+  _encodeDebugKind(f.kind);
+  return Uint8List.fromList(
+    utf8.encode(jsonEncode({'seq': f.seq, 'kind': f.kind, 'limit': f.limit})),
+  );
+}
+
+List<int> _encodeDebugKind(String kind) {
+  final bytes = utf8.encode(kind);
+  if (bytes.length > 0xFF) {
+    throw ArgumentError.value(
+      kind,
+      'kind',
+      'UTF-8 encoding must fit the protocol u8 length (at most 255 bytes)',
+    );
+  }
+  return bytes;
+}
+
 Uint8List _encodeDebugResponse(DebugResponseFrame f) {
-  final kind = utf8.encode(f.kind);
+  final kind = _encodeDebugKind(f.kind);
   final out = BytesBuilder(copy: false)
     ..addByte(f.seq & 0xFF)
     ..addByte((f.seq >> 8) & 0xFF)
@@ -932,10 +963,8 @@ DebugResponseFrame _decodeDebugResponse(Uint8List payload) {
   if (payload.length < 5) {
     throw const RemoteProtocolException('DEBUG_RESPONSE: short payload.');
   }
-  final seq = payload[0] |
-      (payload[1] << 8) |
-      (payload[2] << 16) |
-      (payload[3] << 24);
+  final seq =
+      payload[0] | (payload[1] << 8) | (payload[2] << 16) | (payload[3] << 24);
   final kindLen = payload[4];
   if (payload.length < 5 + kindLen) {
     throw const RemoteProtocolException('DEBUG_RESPONSE: truncated kind.');

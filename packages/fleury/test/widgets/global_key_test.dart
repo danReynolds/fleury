@@ -134,6 +134,36 @@ void main() {
     );
   });
 
+  testWidgets('adding a duplicate of an existing keyed child fails cleanly', (
+    tester,
+  ) {
+    final key = GlobalKey<_CounterState>();
+    tester.pumpWidget(Column(children: [_Counter(key: key)]));
+    final state = key.currentState!;
+    state.bump();
+    tester.pump();
+
+    expect(
+      () => tester.pumpWidget(
+        Column(
+          children: [
+            _Counter(key: key),
+            _Counter(key: key),
+          ],
+        ),
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(key.currentState, same(state));
+
+    tester.pumpWidget(Column(children: [_Counter(key: key)]));
+    expect(key.currentState, same(state));
+    expect(
+      tester.renderToString(size: const CellSize(10, 1)).trim(),
+      'count=1',
+    );
+  });
+
   testWidgets('reusing one key on two different-type widgets at once throws', (
     tester,
   ) {
@@ -169,7 +199,10 @@ void main() {
       expect(
         () => tester.pumpWidget(
           Column(
-            children: [pinned, SizedBox(key: key, width: 1, height: 1)],
+            children: [
+              pinned,
+              SizedBox(key: key, width: 1, height: 1),
+            ],
           ),
         ),
         throwsA(isA<StateError>()),
@@ -194,7 +227,12 @@ void main() {
 
       expect(
         () => tester.pumpWidget(
-          Column(children: [pinned, SizedBox(key: key, width: 1, height: 1)]),
+          Column(
+            children: [
+              pinned,
+              SizedBox(key: key, width: 1, height: 1),
+            ],
+          ),
         ),
         throwsA(isA<StateError>()),
         reason: 'the single-child retake path must surface the duplicate too',
@@ -230,7 +268,8 @@ void main() {
       expect(
         p1,
         1,
-        reason: 'losing parent rebuilds once; the steal mark folds into that '
+        reason:
+            'losing parent rebuilds once; the steal mark folds into that '
             'rebuild rather than forcing an extra pass',
       );
       expect(p0, 1, reason: 'gaining parent rebuilds once');

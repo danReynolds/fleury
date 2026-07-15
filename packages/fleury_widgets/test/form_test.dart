@@ -954,11 +954,15 @@ void main() {
 
   testWidgets('wizard requires every field to appear exactly once', (tester) {
     final definition = _connectionForm();
+    final controller = FormController(definition);
+    final wizardController = FormWizardController();
 
     expect(
       () => tester.pumpWidget(
         FormWizard(
           definition: definition,
+          controller: controller,
+          wizardController: wizardController,
           steps: const [
             FormWizardStep(
               id: 'partial',
@@ -976,6 +980,8 @@ void main() {
         ),
       ),
     );
+    expect(controller.hasListeners, isFalse);
+    expect(wizardController.hasListeners, isFalse);
   });
 
   testWidgets('semantic focus moves focus to the requested form field', (

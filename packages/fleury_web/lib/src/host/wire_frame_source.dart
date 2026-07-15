@@ -262,9 +262,6 @@ final class WireFrameSource implements BrowserFrameSource {
         // repaints over the banner.
         if (_closed) return;
         try {
-          if (_shouldFailApplyForTest?.call(frame) ?? false) {
-            throw StateError('injected apply failure (test)');
-          }
           _handleFrame(frame);
           // A clean apply ends any run of failures — only a *persistent* apply
           // failure (nothing succeeding in between) escalates below.
@@ -356,6 +353,16 @@ final class WireFrameSource implements BrowserFrameSource {
 
   void _handleFrame(RemoteFrame frame) {
     final components = _components!;
+    // Image bytes precede their plan on the wire. Commit the staged generation
+    // at that decoded boundary, before grid mutation/presentation can throw.
+    // The sender can then keep treating the id as cached even if this visual
+    // apply is recovered locally and the image returns in a later plan.
+    if (frame case PlanFrame(:final plan)) {
+      _imageOverlay?.commitPendingForPlan(plan.placements);
+    }
+    if (_shouldFailApplyForTest?.call(frame) ?? false) {
+      throw StateError('injected apply failure (test)');
+    }
     switch (frame) {
       case PlanFrame f:
         if (f.plan.size != _mirror.size) {
@@ -369,7 +376,14 @@ final class WireFrameSource implements BrowserFrameSource {
         components.surface.present(_mirror, _mirror, plan);
         _applyPlacements(f.plan.placements);
       case InlineImageFrame f:
-        _imageOverlay?.cacheImage(f.id, f.bytes);
+        final overlay = _imageOverlay;
+        if (overlay != null && !overlay.cacheImage(f.id, f.bytes)) {
+          _teardown(
+            'The session sent too much pending image data — reload to reconnect.',
+            banner: true,
+          );
+          return;
+        }
       case SemanticsFrame f:
         _presentSemantics(f);
       case CaretFrame f:

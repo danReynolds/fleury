@@ -1,5 +1,7 @@
 // Wire-format round-trip tests for the remote-rendering protocol.
 
+import 'dart:collection';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
@@ -312,6 +314,56 @@ void main() {
       );
     });
 
+    test('a split oversized header is rejected before copying its payload', () {
+      final declared = maxRemoteInputFramePayloadLength + 1;
+      final header = _header(FrameType.input, declared);
+      final decoder = FrameDecoder()..feed(header.sublist(0, 2));
+
+      expect(
+        () => decoder.feed(_PrefixOnlyList(header.sublist(2), declared + 3)),
+        returnsNormally,
+        reason: 'the decoder must inspect only the remaining header bytes',
+      );
+      expect(
+        () => decoder.drain().toList(),
+        throwsA(
+          isA<RemoteProtocolException>().having(
+            (error) => error.recoverable,
+            'recoverable',
+            isFalse,
+          ),
+        ),
+      );
+    });
+
+    test(
+      'an oversized frame after a valid prefix is rejected before copying',
+      () {
+        final declared = maxRemoteInputFramePayloadLength + 1;
+        final prefix = <int>[
+          ..._header(FrameType.bye, 0),
+          ..._header(FrameType.input, declared),
+        ];
+        final decoder = FrameDecoder();
+
+        expect(
+          () => decoder.feed(_PrefixOnlyList(prefix, prefix.length + declared)),
+          returnsNormally,
+          reason: 'preflight must cross complete earlier frame boundaries',
+        );
+        expect(
+          () => decoder.drain().toList(),
+          throwsA(
+            isA<RemoteProtocolException>().having(
+              (error) => error.recoverable,
+              'recoverable',
+              isFalse,
+            ),
+          ),
+        );
+      },
+    );
+
     test('thousands of one-byte feeds preserve one fragmented frame', () {
       final payload = Uint8List.fromList(List<int>.generate(8192, (i) => i));
       final wire = encodeFrame(InputFrame(payload));
@@ -386,21 +438,24 @@ void main() {
       );
     });
 
-    test('invalid UTF-8 control payloads fail RECOVERABLY (framing intact)', () {
-      final wire = _rawFrame(FrameType.init, const [0xFF]);
-      final decoder = FrameDecoder()..feed(wire);
+    test(
+      'invalid UTF-8 control payloads fail RECOVERABLY (framing intact)',
+      () {
+        final wire = _rawFrame(FrameType.init, const [0xFF]);
+        final decoder = FrameDecoder()..feed(wire);
 
-      expect(
-        () => decoder.drain().toList(),
-        throwsA(
-          isA<RemoteProtocolException>().having(
-            (e) => e.recoverable,
-            'recoverable',
-            isTrue,
+        expect(
+          () => decoder.drain().toList(),
+          throwsA(
+            isA<RemoteProtocolException>().having(
+              (e) => e.recoverable,
+              'recoverable',
+              isTrue,
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   });
 
   group('debug frame pair (DT1)', () {
@@ -414,9 +469,7 @@ void main() {
     });
 
     test('DEBUG_RESPONSE round-trips seq, kind, and the raw JSON payload', () {
-      final json = Uint8List.fromList(
-        '[{"frame":1,"buildUs":42}]'.codeUnits,
-      );
+      final json = Uint8List.fromList('[{"frame":1,"buildUs":42}]'.codeUnits);
       final wire = encodeFrame(DebugResponseFrame(9, 'frames', json));
       final out = (FrameDecoder()..feed(wire)).drain().toList();
       final f = out.single as DebugResponseFrame;
@@ -429,12 +482,50 @@ void main() {
       final wire = encodeFrame(
         DebugResponseFrame(0x00ABCDEF, 'errors', Uint8List(0)),
       );
-      final f = (FrameDecoder()..feed(wire)).drain().single
-          as DebugResponseFrame;
+      final f =
+          (FrameDecoder()..feed(wire)).drain().single as DebugResponseFrame;
       expect(f.seq, 0x00ABCDEF);
       expect(f.json, isEmpty);
     });
+
+    test('DEBUG_RESPONSE uses the UTF-8 byte length for a Unicode kind', () {
+      final json = Uint8List.fromList('[]'.codeUnits);
+      final wire = encodeFrame(DebugResponseFrame(11, 'résumé', json));
+      final frame =
+          (FrameDecoder()..feed(wire)).drain().single as DebugResponseFrame;
+
+      expect(frame.kind, 'résumé');
+      expect(frame.json, json);
+    });
+
+    test('debug kinds longer than the u8 wire field are rejected', () {
+      final oversizedKind = List<String>.filled(256, 'x').join();
+      expect(
+        () => encodeFrame(DebugResponseFrame(1, oversizedKind, Uint8List(0))),
+        throwsArgumentError,
+      );
+      expect(
+        () => encodeFrame(DebugRequestFrame(1, oversizedKind)),
+        throwsArgumentError,
+      );
+
+      final payload = utf8.encode(
+        jsonEncode({'seq': 1, 'kind': oversizedKind, 'limit': 1}),
+      );
+      final decoder = FrameDecoder()
+        ..feed(_rawFrame(FrameType.debugRequest, payload));
+      expect(
+        () => decoder.drain().toList(),
+        throwsA(isA<RemoteProtocolException>()),
+      );
+    });
   });
+}
+
+Uint8List _header(FrameType type, int payloadLength) {
+  final header = Uint8List(5)..[0] = type.code;
+  ByteData.sublistView(header, 1).setUint32(0, payloadLength);
+  return header;
 }
 
 Uint8List _rawFrame(FrameType type, List<int> payload) {
@@ -445,4 +536,31 @@ Uint8List _rawFrame(FrameType type, List<int> payload) {
     ..add(length)
     ..add(payload);
   return builder.toBytes();
+}
+
+/// Presents a large logical list while making any payload read fail. Decoder
+/// preflight tests use it to prove rejection happens before a giant input is
+/// copied or traversed beyond the supplied frame headers.
+final class _PrefixOnlyList extends ListBase<int> {
+  _PrefixOnlyList(this._prefix, this._length);
+
+  final List<int> _prefix;
+  final int _length;
+
+  @override
+  int get length => _length;
+
+  @override
+  set length(int value) => throw UnsupportedError('fixed length');
+
+  @override
+  int operator [](int index) {
+    RangeError.checkValidIndex(index, this);
+    if (index < _prefix.length) return _prefix[index];
+    throw StateError('payload must not be read');
+  }
+
+  @override
+  void operator []=(int index, int value) =>
+      throw UnsupportedError('read only');
 }

@@ -5,8 +5,7 @@ import 'package:fleury/fleury_core.dart';
 // The path-field `mustExist` check is the Form's only platform coupling. A
 // conditional import swaps in the native (dart:io) probe when available and the
 // web stub otherwise, so the whole FormPanel compiles to JavaScript.
-import 'form_path_probe.dart'
-    if (dart.library.io) 'form_path_probe_io.dart';
+import 'form_path_probe.dart' if (dart.library.io) 'form_path_probe_io.dart';
 
 import 'calendar_heatmap.dart' show CalendarWeekStart;
 import 'controls.dart' show Button, ButtonVariant, Checkbox;
@@ -1736,11 +1735,19 @@ class _FormWizardState extends State<FormWizard> {
   @override
   void initState() {
     super.initState();
-    _validateSteps();
-    _attachController(widget.controller ?? FormController(widget.definition));
+    // Initialize both late fields before any listener registration or
+    // validation can throw. The framework disposes a partially mounted State,
+    // so every field read by dispose must already be safe at that boundary.
+    _controller = widget.controller ?? FormController(widget.definition);
     _ownsController = widget.controller == null;
-    _attachWizardController(widget.wizardController ?? FormWizardController());
+    _wizard = widget.wizardController ?? FormWizardController();
     _ownsWizard = widget.wizardController == null;
+    _controller.addListener(_onStateChange);
+    _wizard.addListener(_onStateChange);
+    // Validate only after every teardown dependency is initialized. Failed
+    // mounts are rolled back and disposed by the framework; keeping dispose
+    // safe preserves the original error and releases the listeners above.
+    _validateSteps();
     _clampWizardIndex();
   }
 

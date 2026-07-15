@@ -217,7 +217,7 @@ final class RemoteTerminalDriver
     FramePresentationPlan plan,
   ) {
     if (!_active) return;
-    final remotePlan = buildRemotePlan(
+    var remotePlan = buildRemotePlan(
       prev,
       next,
       fullRepaint: plan.fullRepaint,
@@ -235,14 +235,46 @@ final class RemoteTerminalDriver
       // doesn't expect.
       includeLinks: wantsHyperlinks,
     );
+    final boundedPlacements = _boundedImagePlacements(remotePlan, next);
+    if (boundedPlacements.length != remotePlan.placements.length) {
+      remotePlan = RemotePlan(
+        size: remotePlan.size,
+        fullRepaint: remotePlan.fullRepaint,
+        styleTable: remotePlan.styleTable,
+        patches: remotePlan.patches,
+        scrollUpRows: remotePlan.scrollUpRows,
+        placements: boundedPlacements,
+        includeLinks: remotePlan.includeLinks,
+      );
+    }
     // Ship the bytes for each image the peer does not yet hold, before the
     // plan that references it. An id ships at most once per frame even if
     // placed several times, and at most once while the peer keeps it cached
     // (see [_shippedImages]) — so a static or animated image doesn't
     // re-transmit bytes the client already has.
-    final placedIds = <String>{};
+    final placedIds = <String>{for (final p in remotePlan.placements) p.id};
+    var additionalEntries = 0;
+    var additionalBytes = 0;
+    for (final id in placedIds) {
+      if (_shippedImages.contains(id)) continue;
+      final image = next.images[id];
+      if (image == null) continue;
+      additionalEntries++;
+      additionalBytes += image.bytes.length;
+    }
+    // Make room against the *next* plan before sending its images. The browser
+    // stages those frames and performs this same projected-fit eviction when
+    // the PlanFrame arrives, keeping both insertion-ordered ledgers identical
+    // without either side temporarily accumulating stale + next-generation
+    // blobs in one committed cache.
+    _shippedImages.evictStaleToFit(
+      placedIds,
+      additionalEntries: additionalEntries,
+      additionalBytes: additionalBytes,
+    );
+    final handledIds = <String>{};
     for (final placement in remotePlan.placements) {
-      if (!placedIds.add(placement.id)) continue; // already handled this frame
+      if (!handledIds.add(placement.id)) continue; // already handled this frame
       if (_shippedImages.contains(placement.id)) continue; // peer holds it
       final image = next.images[placement.id];
       if (image != null) {
@@ -254,10 +286,55 @@ final class RemoteTerminalDriver
     _transport.send(PlanFrame(remotePlan));
   }
 
+  /// Keeps one plan's visible image working set within the shared cache policy
+  /// and frame limits. Excess images degrade to blank overlay cells; the normal
+  /// case is unchanged and retains every placement. The deterministic paint-
+  /// order prefix is also what a skewed/malformed peer can reproduce safely.
+  List<ImagePlacement> _boundedImagePlacements(
+    RemotePlan plan,
+    CellBuffer next,
+  ) {
+    if (plan.placements.isEmpty) return plan.placements;
+    final policy = _shippedImages.policy;
+    final acceptedIds = <String>{};
+    final rejectedIds = <String>{};
+    final placements = <ImagePlacement>[];
+    var encodedBytes = 0;
+
+    for (final placement in plan.placements) {
+      if (placements.length >= maxRemotePlanPlacements) break;
+      if (rejectedIds.contains(placement.id)) continue;
+      if (acceptedIds.contains(placement.id)) {
+        placements.add(placement);
+        continue;
+      }
+
+      final image = next.images[placement.id];
+      final idBytes = utf8.encode(placement.id);
+      final imageBytes = image?.bytes.length ?? 0;
+      final validFrame =
+          image != null &&
+          idBytes.isNotEmpty &&
+          idBytes.length <= 256 &&
+          imageBytes + idBytes.length + 2 <= maxRemoteImageFramePayloadLength;
+      final fitsWorkingSet =
+          acceptedIds.length < policy.maxEntries &&
+          encodedBytes + imageBytes <= policy.maxBytes;
+      if (!validFrame || !fitsWorkingSet) {
+        rejectedIds.add(placement.id);
+        continue;
+      }
+      acceptedIds.add(placement.id);
+      encodedBytes += imageBytes;
+      placements.add(placement);
+    }
+    return List<ImagePlacement>.unmodifiable(placements);
+  }
+
   /// Applies the shared count-and-byte policy against the same placements the
   /// browser receives, so the app's belief of what the peer holds stays in
-  /// step with its actual cache. An over-budget on-screen working set is kept;
-  /// every stale entry is still removed.
+  /// step with its actual cache. [_boundedImagePlacements] guarantees the
+  /// placed working set itself already fits this policy.
   void _evictShippedImageIds(Set<String> placedThisFrame) {
     _shippedImages.evictStale(placedThisFrame);
   }

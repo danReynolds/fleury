@@ -26,9 +26,12 @@ import '../input/events.dart';
 const int maxRemotePlanGridCols = 2000;
 const int maxRemotePlanGridRows = 1000;
 const int maxRemotePlanGridCells = 1000 * 1000;
-const int maxRemotePlanStyles = 16 * 1024;
-const int maxRemotePlanPatches = 100 * 1000;
-const int maxRemotePlanRuns = 250 * 1000;
+// A legal producer can emit one distinct style, patch, or run per cell. Keep
+// decoder structure bounds aligned with that producer maximum; the 8 MiB PLAN
+// frame cap remains the tighter byte/allocation boundary for real wire input.
+const int maxRemotePlanStyles = maxRemotePlanGridCells;
+const int maxRemotePlanPatches = maxRemotePlanGridCells;
+const int maxRemotePlanRuns = maxRemotePlanGridCells;
 const int maxRemotePlanPlacements = 4096;
 
 /// A frame reduced to its changed cells for the wire: the grid size,

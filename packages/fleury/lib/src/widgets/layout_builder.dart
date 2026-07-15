@@ -101,7 +101,16 @@ class _LayoutBuilderElement extends RenderObjectElement {
     // and the memo would freeze it. Restored before updateChild so children
     // attribute their own reads.
     final built = runWithBuildTarget(() => widget.builder(this, constraints));
-    _child = updateChild(_child, built);
+    try {
+      _child = updateChild(_child, built);
+    } catch (_) {
+      final child = _child;
+      if (child != null &&
+          (!child.mounted || !identical(child.elementParent, this))) {
+        _child = null;
+      }
+      rethrow;
+    }
   }
 
   @override
