@@ -14,8 +14,8 @@ import '../rendering/cell_buffer.dart';
 import '../rendering/surface_capabilities.dart';
 import '../runtime/frame_presentation.dart';
 import '../runtime/remote_surface_sink.dart';
-import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
+import '../semantics/semantics_owner.dart' show SemanticTreeUpdate;
 import '../terminal/capabilities.dart';
 import '../input/events.dart';
 import '../terminal/input_parser.dart';
@@ -258,16 +258,14 @@ final class RemoteTerminalDriver
     }
   }
 
-  /// Diffs the semantic [snapshot] against the last one sent to this peer and
-  /// ships only what changed (a full frame once, patches after). No-op on the
-  /// ANSI path, and a no-op send when the exposed semantics are unchanged.
+  /// Diffs the semantic [tree] against the last one sent to this peer and ships
+  /// only what changed (a full frame once, patches after), redacting just the
+  /// nodes [update] names. No-op on the ANSI path, and a no-op send when the
+  /// exposed semantics are unchanged.
   @override
-  void presentSemantics(
-    SemanticInspectionSnapshot snapshot, {
-    SemanticWireDelta? delta,
-  }) {
+  void presentSemantics(SemanticTree tree, {SemanticTreeUpdate? update}) {
     if (!_active || !wantsPresentationPlans) return;
-    final bytes = _semanticsEncoder.encode(snapshot, delta: delta);
+    final bytes = _semanticsEncoder.encodeTree(tree, update: update);
     if (bytes == null) return;
     _transport.send(SemanticsFrame(bytes));
   }

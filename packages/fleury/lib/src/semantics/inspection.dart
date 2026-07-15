@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart';
+
 import '../foundation/geometry.dart';
 import '../rendering/text_sanitizer.dart';
 import 'semantics.dart';
@@ -347,7 +349,26 @@ final class SemanticInspectionNode {
        state = Map<String, Object?>.unmodifiable(state),
        children = List<SemanticInspectionNode>.unmodifiable(children);
 
-  factory SemanticInspectionNode._fromSemanticNode(SemanticNode node) {
+  factory SemanticInspectionNode._fromSemanticNode(SemanticNode node) =>
+      SemanticInspectionNode._redact(node, <SemanticInspectionNode>[
+        for (final child in node.children)
+          SemanticInspectionNode._fromSemanticNode(child),
+      ]);
+
+  /// Redacts one node's own fields WITHOUT recursing into children. The wire's
+  /// O(changed) path needs a node's scalar form and its direct child ids, never
+  /// the child subtrees; pairs with [flattenLiveNode].
+  factory SemanticInspectionNode._fromSemanticNodeShallow(SemanticNode node) =>
+      SemanticInspectionNode._redact(node, const <SemanticInspectionNode>[]);
+
+  /// The one site that maps a live [SemanticNode] to its redacted, sanitized
+  /// inspection form, adopting [children] as given — so the recursive
+  /// ([_fromSemanticNode]) and shallow ([_fromSemanticNodeShallow])
+  /// constructors cannot drift on the fields they share.
+  factory SemanticInspectionNode._redact(
+    SemanticNode node,
+    List<SemanticInspectionNode> children,
+  ) {
     final redacted = _redactsNode(node);
     return SemanticInspectionNode._(
       id: sanitizeForDisplay(node.id.value),
@@ -369,11 +390,26 @@ final class SemanticInspectionNode {
       bounds: node.bounds,
       actions: [for (final action in node.actions) action.name]..sort(),
       state: _semanticStateToJson(node.state),
-      children: [
-        for (final child in node.children)
-          SemanticInspectionNode._fromSemanticNode(child),
-      ],
+      children: children,
     );
+  }
+
+  /// The flat wire form — scalar fields plus sanitized `childIds` — of a single
+  /// live [SemanticNode], redacting on demand without materializing its subtree.
+  /// The O(changed) wire path flattens only the changed nodes through here; the
+  /// result is byte-identical to flattening the node's full [_fromSemanticNode]
+  /// form (the encoder's debug oracle asserts exactly this).
+  @internal
+  static Map<String, Object?> flattenLiveNode(SemanticNode node) {
+    final json = SemanticInspectionNode._fromSemanticNodeShallow(
+      node,
+    ).toScalarJson(includeBounds: true);
+    if (node.children.isNotEmpty) {
+      json['childIds'] = <String>[
+        for (final child in node.children) sanitizeForDisplay(child.id.value),
+      ];
+    }
+    return json;
   }
 
   /// Parses a node from semantic inspection JSON.

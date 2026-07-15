@@ -2,10 +2,9 @@ import 'dart:typed_data';
 
 import '../foundation/geometry.dart';
 import '../remote/remote_protocol.dart' show RemoteClipboardStatus;
-import '../remote/remote_semantics.dart' show SemanticWireDelta;
 import '../rendering/cell_buffer.dart';
-import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
+import '../semantics/semantics_owner.dart' show SemanticTreeUpdate;
 import 'frame_presentation.dart';
 
 /// Handles an inbound semantic-action request from the peer (the browser or an
@@ -45,18 +44,15 @@ abstract interface class RemoteSurfaceSink {
     FramePresentationPlan plan,
   );
 
-  /// Presents the current frame's semantic [snapshot], so a served session
-  /// stays agent-drivable and accessible. The sink diffs it against the last
-  /// sent snapshot and ships only what changed — a full frame once per peer,
-  /// patches after — because a full resend stops compressing past DEFLATE's
-  /// 32 KiB window. Called when the semantic tree changed. [delta] optionally
-  /// names the nodes whose wire form may have changed (from `SemanticsOwner`'s
-  /// per-frame diff), letting the encoder re-serialize only those; a null delta
+  /// Presents the current frame's semantic [tree], so a served session stays
+  /// agent-drivable and accessible. The sink diffs it against the last sent
+  /// state and ships only what changed — a full frame once per peer, patches
+  /// after — because a full resend stops compressing past DEFLATE's 32 KiB
+  /// window. Called when the semantic tree changed. [update] carries the owner's
+  /// per-frame diff (the changed ids AND the live nodes), letting the encoder
+  /// redact and re-serialize only those straight from the tree; a null update
   /// falls back to a full flatten + structural compare.
-  void presentSemantics(
-    SemanticInspectionSnapshot snapshot, {
-    SemanticWireDelta? delta,
-  });
+  void presentSemantics(SemanticTree tree, {SemanticTreeUpdate? update});
 
   /// Ships the focused editable's caret rect (or its absence) so the peer
   /// can position its hidden IME capture element at the caret. Callers
