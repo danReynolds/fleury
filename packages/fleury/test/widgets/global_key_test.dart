@@ -25,7 +25,7 @@ class _OtherState extends State<_Counter> {
 // A parent that reports each build, used to prove a legitimate reparent does
 // not rebuild the losing parent an extra time.
 class _BuildCounter extends StatefulWidget {
-  const _BuildCounter({super.key, required this.onBuild, this.child});
+  const _BuildCounter({required this.onBuild, this.child});
   final void Function() onBuild;
   final Widget? child;
   @override
