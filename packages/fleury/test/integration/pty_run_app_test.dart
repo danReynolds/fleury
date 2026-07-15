@@ -53,26 +53,20 @@ void main() {
       skip: skipPty,
     );
 
-    test('stray print + raw native write(1) never corrupt the frame; '
-        'both replay after exit', () async {
+    test('stray stdout never corrupts the frame and each stream replays to '
+        'its original destination', () async {
+      final stderrFile = File('${tempDir.path}/stray-output.stderr');
       final capture = await _capturePty(
         tempDir,
         'stray-output',
-        extraArgs: const [
-          '--cols',
-          '60',
-          '--rows',
-          '12',
-          '--resize-sequence',
-          '61x12',
-          '--resize-interval-ms',
-          '3000',
-        ],
+        extraArgs: const ['--cols', '60', '--rows', '12'],
         fixtureArgs: const ['--stray-output'],
+        stderrPath: stderrFile.path,
       );
       if (capture == null) return;
 
       expect(capture.metadata['timedOut'], isFalse);
+      expect(capture.metadata['exitCode'], 0);
       expect(capture.output, contains('PTY-STRAY-MODE'));
 
       // The session region is everything up to the alt-screen pop; the
@@ -114,6 +108,18 @@ void main() {
         isNot(contains('\x1B]0;pwned')),
         reason: 'hostile OSC must be neutralized in the replay',
       );
+
+      // fd2 had a distinct destination before capture. Its marker must return
+      // there after the alt-screen exits, never be folded into fd1's replay.
+      expect(
+        capture.output,
+        isNot(contains('STRAY-STDERR-MARKER')),
+        reason: 'stderr was replayed to the PTY instead of its original fd2',
+      );
+      final replayedStderr = stderrFile.readAsStringSync();
+      expect(replayedStderr, contains('STRAY-STDERR-MARKER'));
+      expect(replayedStderr, isNot(contains('STRAY-PRINT-MARKER')));
+      expect(replayedStderr, isNot(contains('STRAY-NATIVE-MARKER')));
     }, skip: skipPty);
 
     test('onStrayOutput takes ownership: lines reach the hook tagged, '
@@ -302,12 +308,28 @@ Future<({Map<String, Object?> metadata, String output})?> _capturePty(
   String name, {
   required List<String> extraArgs,
   List<String> fixtureArgs = const [],
+  String? stderrPath,
 }) async {
   final packageRoot = Directory.current;
   final repoRoot = _findRepoRoot(packageRoot);
   final profilingRoot = Directory('${repoRoot.path}/profiling');
   final fixtureApp =
       '${packageRoot.path}/test/fixtures/pty_run_app_fixture.dart';
+  final fixtureCommand = <String>[
+    Platform.resolvedExecutable,
+    fixtureApp,
+    ...fixtureArgs,
+  ];
+  final childCommand = stderrPath == null
+      ? fixtureCommand
+      : <String>[
+          '/bin/sh',
+          '-c',
+          r'stderr_path=$1; shift; exec "$@" 2>"$stderr_path"',
+          '_',
+          stderrPath,
+          ...fixtureCommand,
+        ];
   final outBase = '${tempDir.path}/$name';
   final result = await Process.run(Platform.resolvedExecutable, <String>[
     'run',
@@ -318,9 +340,7 @@ Future<({Map<String, Object?> metadata, String output})?> _capturePty(
     '8',
     ...extraArgs,
     '--',
-    Platform.resolvedExecutable,
-    fixtureApp,
-    ...fixtureArgs,
+    ...childCommand,
   ], workingDirectory: profilingRoot.path);
 
   if (result.exitCode != 0 &&
