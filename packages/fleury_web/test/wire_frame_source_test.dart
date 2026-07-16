@@ -211,6 +211,88 @@ void main() {
     expect(results.single.status, RemoteClipboardStatus.denied);
   });
 
+  test('a wire-sized paste keeps its original single-frame encoding', () {
+    const paste = PasteEvent('small\r\npaste 🌿');
+    final expected = encodeFrame(const InputEventFrame(paste));
+
+    source.sendInputForTest(paste);
+
+    expect(source.sentForTest, hasLength(1));
+    expect(source.sentForTest.single, orderedEquals(expected));
+    final event =
+        (_decodeAll(source.sentForTest).single as InputEventFrame).event;
+    expect(event, paste);
+  });
+
+  test('oversized paste is segmented without splitting UTF-8 or newlines', () {
+    final inputLimit = remoteFramePayloadLimit(FrameType.inputEvent);
+    const segmentedOverhead = 1 + 4 + 1 + 4;
+    final textBudget = inputLimit - segmentedOverhead;
+    final text = '${'a' * (textBudget - 2)}😀${'b' * (textBudget - 5)}\r\nend';
+
+    source.sendInputForTest(PasteEvent(text));
+
+    final events = _decodeAll(source.sentForTest)
+        .whereType<InputEventFrame>()
+        .map((frame) => frame.event)
+        .whereType<PasteEvent>()
+        .toList();
+    expect(events, hasLength(3));
+    expect(events.map((event) => event.phase), [
+      PasteEventPhase.start,
+      PasteEventPhase.continuation,
+      PasteEventPhase.end,
+    ]);
+    expect(events.map((event) => event.pasteId).toSet(), hasLength(1));
+    expect(events.map((event) => event.text).join(), text);
+    expect(events[1].text, startsWith('😀'));
+    expect(events[1].text, isNot(endsWith('\r')));
+    expect(events[2].text, startsWith('\r\n'));
+    for (final wire in source.sentForTest) {
+      final payloadLength = ByteData.sublistView(wire, 1, 5).getUint32(0);
+      expect(payloadLength, lessThanOrEqualTo(inputLimit));
+    }
+  });
+
+  test('paste above the bounded transaction cap is dropped whole', () {
+    final text = 'a' * (defaultMaxRemoteFramePayloadLength + 1);
+
+    source.sendInputForTest(PasteEvent(text));
+
+    expect(source.sentForTest, isEmpty);
+  });
+
+  test('maximum accepted paste leaves startup control-frame headroom', () {
+    final text = 'a' * source.maxPasteBytesForTest;
+
+    source.sendInputForTest(PasteEvent(text));
+
+    expect(source.sentForTest, isNotEmpty);
+    final pasteWireBytes = source.sentForTest.fold<int>(
+      0,
+      (total, wire) => total + wire.length,
+    );
+    const frameHeaderBytes = 5;
+    const queueCapacity = defaultMaxRemoteFramePayloadLength + frameHeaderBytes;
+    expect(
+      pasteWireBytes + maxRemoteControlFramePayloadLength + frameHeaderBytes,
+      lessThanOrEqualTo(queueCapacity),
+      reason: 'one queued INIT/control frame cannot make the paste overflow',
+    );
+
+    final initWire = encodeFrame(
+      const InitFrame(
+        size: CellSize(80, 24),
+        colorMode: ColorMode.truecolor,
+        imageProtocol: ImageProtocol.halfBlock,
+        tmuxPassthrough: false,
+        images: InlineImageSupport.placements,
+        hyperlinks: true,
+      ),
+    );
+    expect(initWire.length + pasteWireBytes, lessThanOrEqualTo(queueCapacity));
+  });
+
   test('CARET frames position the IME capture element without error', () {
     source.handleFrameForTest(CaretFrame(CellRect.fromLTWH(4, 2, 1, 1)));
     source.handleFrameForTest(const CaretFrame(null));

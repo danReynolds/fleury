@@ -7,6 +7,7 @@
 // built them, not because this file remembered to.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:typed_data';
 
@@ -39,6 +40,7 @@ final class WireFrameSource implements BrowserFrameSource {
   CellBuffer _mirror = CellBuffer(const CellSize(80, 24));
   bool _handshakeSent = false;
   bool _closed = false;
+  int _nextPasteId = 1;
   CellRect? _lastCaret;
   web.HTMLElement? _disconnectBanner;
 
@@ -215,12 +217,82 @@ final class WireFrameSource implements BrowserFrameSource {
   }
 
   void _sendInput(TuiEvent event) {
+    if (event case PasteEvent(
+      text: final text,
+      phase: PasteEventPhase.single,
+    )) {
+      _sendPaste(text);
+      return;
+    }
+    _sendInputEvent(event);
+  }
+
+  void _sendInputEvent(TuiEvent event) {
     try {
       _send(encodeFrame(InputEventFrame(event)));
     } on Object {
       // An event the serve protocol doesn't carry: drop it rather than
       // tearing down the session.
     }
+  }
+
+  void _sendPaste(String text) {
+    final bytes = utf8.encode(text);
+    final inputLimit = remoteFramePayloadLimit(FrameType.inputEvent);
+
+    // A complete paste is [tag:u8][textLength:u32][text]. Preserve that
+    // existing one-frame encoding whenever it fits so ordinary browser input
+    // remains byte-for-byte unchanged.
+    if (bytes.length <= inputLimit - _singlePastePayloadOverhead) {
+      _sendInputEvent(PasteEvent(text));
+      return;
+    }
+
+    // Browser clipboard APIs materialize the whole paste before this point.
+    // Refuse a document-sized paste as one transaction rather than enqueueing
+    // an unbounded run of WebSocket sends or applying a misleading prefix.
+    if (bytes.length > _maxRemotePasteBytes) {
+      web.console.warn(
+        'fleury: ignored ${bytes.length}-byte paste; remote paste limit is '
+                '$_maxRemotePasteBytes bytes.'
+            .toJS,
+      );
+      return;
+    }
+
+    // A segment adds [phase:u8][pasteId:u32] after the ordinary paste body.
+    // Every emitted INPUT_EVENT therefore remains independently acceptable to
+    // the receiver's type-specific frame limit.
+    final textBudget = inputLimit - _segmentedPastePayloadOverhead;
+    if (textBudget <= 0) return;
+
+    final pasteId = _takePasteId();
+    var offset = 0;
+    var first = true;
+    while (offset < bytes.length) {
+      final end = _pasteChunkEnd(bytes, offset, textBudget);
+      final last = end == bytes.length;
+      final phase = first
+          ? PasteEventPhase.start
+          : last
+          ? PasteEventPhase.end
+          : PasteEventPhase.continuation;
+      _sendInputEvent(
+        PasteEvent.segment(
+          utf8.decode(bytes.sublist(offset, end)),
+          pasteId: pasteId,
+          phase: phase,
+        ),
+      );
+      first = false;
+      offset = end;
+    }
+  }
+
+  int _takePasteId() {
+    final id = _nextPasteId;
+    _nextPasteId = id == 0x7FFFFFFF ? 1 : id + 1;
+    return id;
   }
 
   void _observeMetrics() {
@@ -557,6 +629,13 @@ final class WireFrameSource implements BrowserFrameSource {
   /// arrive through the socket's onmessage).
   void handleFrameForTest(RemoteFrame frame) => _handleFrame(frame);
 
+  /// Sends browser input through the production wire-encoding path —
+  /// test-only.
+  void sendInputForTest(TuiEvent event) => _sendInput(event);
+
+  /// Largest paste transaction the production sender admits — test-only.
+  int get maxPasteBytesForTest => _maxRemotePasteBytes;
+
   /// Feeds raw bytes through the same decode + apply + failure-classification
   /// pipeline production uses from onmessage — test-only.
   void feedBytesForTest(Uint8List bytes) => _ingest(bytes);
@@ -650,6 +729,60 @@ final class WireFrameSource implements BrowserFrameSource {
     _disconnectBanner = null;
     banner?.remove();
   }
+}
+
+const int _singlePastePayloadOverhead = 1 + 4;
+const int _segmentedPastePayloadOverhead = _singlePastePayloadOverhead + 1 + 4;
+const int _remoteFrameHeaderBytes = 5;
+const int _remotePasteSegmentTextBudget =
+    maxRemoteInputFramePayloadLength - _segmentedPastePayloadOverhead;
+const int _remoteInputQueueCapacity =
+    defaultMaxRemoteFramePayloadLength + _remoteFrameHeaderBytes;
+const int _remoteInputQueueHeadroom =
+    maxRemoteControlFramePayloadLength + _remoteFrameHeaderBytes;
+const int _remotePasteQueueBudget =
+    _remoteInputQueueCapacity - _remoteInputQueueHeadroom;
+const int _remotePasteSegmentsWithinQueue =
+    (_remotePasteQueueBudget + _remotePasteSegmentTextBudget - 1) ~/
+    _remotePasteSegmentTextBudget;
+const int _maxRemotePasteBytesByPayload =
+    _remotePasteSegmentsWithinQueue * _remotePasteSegmentTextBudget;
+const int _maxRemotePasteBytesByQueue =
+    _remotePasteQueueBudget -
+    _remotePasteSegmentsWithinQueue *
+        (_remoteFrameHeaderBytes + _segmentedPastePayloadOverhead);
+
+// Keep the entire segmented transaction within the server's queued-input cap,
+// including every frame header and per-segment metadata, while retaining one
+// maximum control frame of headroom for the mandatory startup INIT (and other
+// control traffic already queued ahead of the paste).
+const int _maxRemotePasteBytes =
+    _maxRemotePasteBytesByPayload < _maxRemotePasteBytesByQueue
+    ? _maxRemotePasteBytesByPayload
+    : _maxRemotePasteBytesByQueue;
+
+int _pasteChunkEnd(List<int> bytes, int start, int budget) {
+  var end = start + budget;
+  if (end >= bytes.length) return bytes.length;
+
+  // A boundary points at the first byte of the next chunk. Move it backward
+  // while that byte is a UTF-8 continuation so the complete scalar starts the
+  // next segment. [budget] is far larger than UTF-8's four-byte maximum, so
+  // this always leaves a non-empty prefix.
+  while (end > start && (bytes[end] & 0xC0) == 0x80) {
+    end--;
+  }
+
+  // Text editables normalize line endings one PasteEvent at a time. Keeping a
+  // CRLF/LFCR pair in one segment prevents one logical newline from becoming
+  // two merely because it landed at the wire boundary.
+  final previous = bytes[end - 1];
+  final next = bytes[end];
+  if ((previous == 0x0D && next == 0x0A) ||
+      (previous == 0x0A && next == 0x0D)) {
+    end--;
+  }
+  return end;
 }
 
 /// The viewport size to adopt from a cell measurement, or null when the

@@ -348,7 +348,24 @@ final class RemoteTerminalDriver
     if (!_active || !wantsPresentationPlans) return;
     final bytes = _semanticsEncoder.encodeTree(tree, update: update);
     if (bytes == null) return;
-    _transport.send(SemanticsFrame(bytes));
+    // The encoder advances its retained mirror while producing [bytes]. If the
+    // payload cannot pass the same cap the peer enforces, do not emit a frame
+    // that will destroy its stream framing; reset so a later, smaller tree is a
+    // FULL resync rather than a PATCH against state the peer never received.
+    if (bytes.length > remoteFramePayloadLimit(FrameType.semantics)) {
+      _semanticsEncoder.reset();
+      return;
+    }
+    try {
+      _transport.send(SemanticsFrame(bytes));
+    } catch (_) {
+      // A synchronous transport rejection has the same state consequence as
+      // an oversized payload: delivery did not happen after the encoder moved
+      // forward. Restore the only safe next-send contract, then preserve the
+      // transport failure for the caller's normal error path.
+      _semanticsEncoder.reset();
+      rethrow;
+    }
   }
 
   @override

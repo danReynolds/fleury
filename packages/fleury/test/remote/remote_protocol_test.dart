@@ -172,6 +172,57 @@ void main() {
       expect(decoded.status, SemanticActionInvocationStatus.disabled);
     });
 
+    test('semantic action ids always leave room for their result frame', () {
+      final atLimit = SemanticNodeId('x' * maxRemoteSemanticNodeIdBytes);
+      final resultWire = encodeFrame(
+        SemanticActionResultFrame(
+          atLimit,
+          SemanticAction.activate,
+          SemanticActionInvocationStatus.completed,
+        ),
+      );
+      expect(
+        resultWire.length,
+        lessThanOrEqualTo(5 + maxRemoteControlFramePayloadLength),
+      );
+
+      final oversizedLength = maxRemoteSemanticNodeIdBytes + 1;
+      final payload = Uint8List.fromList([
+        ..._varint(oversizedLength),
+        ...Uint8List(oversizedLength),
+        8,
+        ...'activate'.codeUnits,
+        0,
+      ]);
+      final decoder = FrameDecoder()
+        ..feed(_rawFrame(FrameType.semanticAction, payload));
+      expect(
+        () => decoder.drain().toList(),
+        throwsA(
+          isA<RemoteProtocolException>().having(
+            (error) => error.recoverable,
+            'recoverable',
+            isTrue,
+          ),
+        ),
+      );
+
+      final malformedPayload = Uint8List.fromList([
+        ..._varint(maxRemoteSemanticNodeIdBytes),
+        ...List<int>.filled(maxRemoteSemanticNodeIdBytes, 0xFF),
+        8,
+        ...'activate'.codeUnits,
+        0,
+      ]);
+      final malformedDecoder = FrameDecoder()
+        ..feed(_rawFrame(FrameType.semanticAction, malformedPayload));
+      expect(
+        () => malformedDecoder.drain().toList(),
+        throwsA(isA<RemoteProtocolException>()),
+        reason: 'replacement characters could re-encode beyond result limit',
+      );
+    });
+
     test('SEMANTIC_ACTION_RESULT rejects an unknown status name', () {
       final wire = encodeFrame(
         SemanticActionResultFrame(
@@ -287,6 +338,54 @@ void main() {
             'recoverable',
             isFalse,
           ),
+        ),
+      );
+    });
+
+    test('producers and consumers share the per-type payload limits', () {
+      expect(
+        remoteFramePayloadLimit(FrameType.init),
+        maxRemoteControlFramePayloadLength,
+      );
+      expect(
+        remoteFramePayloadLimit(FrameType.semanticAction),
+        maxRemoteInputFramePayloadLength,
+      );
+      expect(
+        remoteFramePayloadLimit(FrameType.semantics),
+        maxRemoteDocumentFramePayloadLength,
+      );
+      expect(
+        remoteFramePayloadLimit(FrameType.inlineImage),
+        maxRemoteImageFramePayloadLength,
+      );
+      expect(remoteFramePayloadLimit(null), defaultMaxRemoteFramePayloadLength);
+    });
+
+    test('the encoder rejects a payload the decoder would reject', () {
+      final atLimit = InputFrame(Uint8List(maxRemoteInputFramePayloadLength));
+      expect(
+        encodeFrame(atLimit),
+        hasLength(5 + maxRemoteInputFramePayloadLength),
+      );
+
+      final oversized = InputFrame(
+        Uint8List(maxRemoteInputFramePayloadLength + 1),
+      );
+      expect(
+        () => encodeFrame(oversized),
+        throwsA(
+          isA<RemoteProtocolException>()
+              .having((error) => error.recoverable, 'recoverable', isTrue)
+              .having(
+                (error) => error.message,
+                'message',
+                allOf(
+                  contains(FrameType.input.name),
+                  contains('$maxRemoteInputFramePayloadLength'),
+                  contains('not encoded'),
+                ),
+              ),
         ),
       );
     });
@@ -498,6 +597,20 @@ void main() {
       expect(frame.json, json);
     });
 
+    test('debug JSON limit accounts for the exact response envelope', () {
+      const kind = 'logs';
+      final jsonLimit = maxRemoteDebugResponseJsonLength(kind);
+      final atLimit = encodeFrame(
+        DebugResponseFrame(7, kind, Uint8List(jsonLimit)),
+      );
+      expect(atLimit, hasLength(5 + maxRemoteDocumentFramePayloadLength));
+      expect(
+        () =>
+            encodeFrame(DebugResponseFrame(7, kind, Uint8List(jsonLimit + 1))),
+        throwsA(isA<RemoteProtocolException>()),
+      );
+    });
+
     test('debug kinds longer than the u8 wire field are rejected', () {
       final oversizedKind = List<String>.filled(256, 'x').join();
       expect(
@@ -536,6 +649,17 @@ Uint8List _rawFrame(FrameType type, List<int> payload) {
     ..add(length)
     ..add(payload);
   return builder.toBytes();
+}
+
+List<int> _varint(int value) {
+  final out = <int>[];
+  var remaining = value;
+  while (remaining >= 0x80) {
+    out.add((remaining & 0x7F) | 0x80);
+    remaining >>= 7;
+  }
+  out.add(remaining);
+  return out;
 }
 
 /// Presents a large logical list while making any payload read fail. Decoder

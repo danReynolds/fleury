@@ -19,6 +19,7 @@ import '../debug/debug_shell.dart';
 import '../debug/debug_state.dart';
 import '../foundation/fleury_error.dart';
 import '../remote/remote_driver.dart';
+import '../remote/remote_protocol.dart' show maxRemoteDebugResponseJsonLength;
 import '../remote/unix_socket_transport.dart';
 import '../rendering/ansi_byte_budget.dart';
 import '../rendering/ansi_renderer.dart';
@@ -189,6 +190,10 @@ const _cleanupResourceTimeout = Duration(seconds: 1);
 /// `package:stdio` already bounds inherited-child drain at two seconds. Leave
 /// headroom for that valid tail flush while retaining an outer fail-safe.
 const _stdioCleanupResourceTimeout = Duration(seconds: 3);
+
+/// One stalled remote semantic handler must not retain an unbounded chain of
+/// actions (and their optional values) for the lifetime of the session.
+const _maxPendingRemoteSemanticActions = 64;
 
 /// Runs an fleury application.
 ///
@@ -946,11 +951,39 @@ Future<AppExit> _runAppImpl(
           // runApp starts with an empty tail; it lives beside the sink /
           // errorReporter the chained link uses.
           var semanticActionTail = Future<void>.value();
+          var pendingSemanticActions = 0;
+          var semanticActionOverflowReported = false;
           // The peer can activate a node in its accessible DOM; invoke the
           // action against the live tree and re-render, completing the
           // semantics round trip (presentSemantics ships the tree out, this
           // brings activations back). Mirrors the in-browser host.
           negotiatedSink.onSemanticAction = (id, action, value) {
+            if (pendingSemanticActions >= _maxPendingRemoteSemanticActions) {
+              // Queue one marker behind every earlier admitted action. RESULT
+              // has no sequence number, so sending this immediately would put
+              // a rejection ahead of results for indistinguishable earlier
+              // id/action requests. Keep the epoch set until the marker itself
+              // runs: there can be at most 64 action closures plus one marker,
+              // even if the source keeps flooding while the queue drains.
+              if (!semanticActionOverflowReported) {
+                semanticActionOverflowReported = true;
+                semanticActionTail = semanticActionTail.then((_) {
+                  try {
+                    negotiatedSink.presentSemanticActionResult(
+                      id,
+                      action,
+                      SemanticActionInvocationStatus.failed,
+                    );
+                  } catch (error, stackTrace) {
+                    reportSemanticActionFault(error, stackTrace);
+                  } finally {
+                    semanticActionOverflowReported = false;
+                  }
+                });
+              }
+              return;
+            }
+            pendingSemanticActions++;
             // Serialize on a per-connection tail: an agent that sends
             // setValue(field) then activate(submit) back-to-back needs the
             // activate to snapshot the tree the setValue mutated, and the two
@@ -1013,6 +1046,8 @@ Future<AppExit> _runAppImpl(
                 // path (e.g. a throwing sink). reportSemanticActionFault can
                 // NOT throw, so the link's future always RESOLVES.
                 reportSemanticActionFault(error, stackTrace);
+              } finally {
+                pendingSemanticActions--;
               }
             });
             scheduleFrame('semantic-action:${action.name}');
@@ -1038,6 +1073,7 @@ Future<AppExit> _runAppImpl(
                 buildDebugResponseJson(
                   kind,
                   limit: limit,
+                  maxBytes: maxRemoteDebugResponseJsonLength(kind),
                   frameLog: debugFrameLog,
                   logBuffer: logBuffer,
                   errorReporter: errorReporter,

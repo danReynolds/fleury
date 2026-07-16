@@ -1252,6 +1252,111 @@ void main() {
       await transport.disconnect();
       await done;
     });
+
+    test(
+      'a stalled action bounds the pending queue and reports one overflow',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final firstActionGate = Completer<void>();
+        var invocations = 0;
+        scheduleMicrotask(() => transport.emit(_init));
+        final done = runApp(
+          Semantics(
+            id: const SemanticNodeId('slow'),
+            role: SemanticRole.button,
+            actions: const {SemanticAction.activate},
+            onAction: (action) async {
+              invocations++;
+              if (invocations == 1) await firstActionGate.future;
+            },
+            child: const Text('slow'),
+          ),
+          driver: driver,
+          requireInteractiveTerminal: false,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+
+        const admitted = 64;
+        for (var i = 0; i < admitted + 4; i++) {
+          transport.emit(
+            const SemanticActionFrame(
+              SemanticNodeId('slow'),
+              SemanticAction.activate,
+            ),
+          );
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+
+        var results = transport.sent
+            .whereType<SemanticActionResultFrame>()
+            .toList();
+        expect(invocations, 1, reason: 'the first admitted action is parked');
+        expect(
+          results,
+          isEmpty,
+          reason: 'the overflow marker must not pass admitted requests',
+        );
+
+        firstActionGate.complete();
+        final stopwatch = Stopwatch()..start();
+        while (stopwatch.elapsed < const Duration(seconds: 2)) {
+          results = transport.sent
+              .whereType<SemanticActionResultFrame>()
+              .toList();
+          if (results.length == admitted + 1) break;
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        }
+        expect(invocations, admitted);
+        expect(
+          results.map((frame) => frame.status),
+          [
+            ...List<SemanticActionInvocationStatus>.filled(
+              admitted,
+              SemanticActionInvocationStatus.completed,
+            ),
+            SemanticActionInvocationStatus.failed,
+          ],
+          reason: 'one overflow result follows every earlier admitted result',
+        );
+
+        // Draining below the cap opens a fresh epoch; later input is admitted
+        // instead of leaving the connection permanently rate-limited.
+        transport.emit(
+          const SemanticActionFrame(
+            SemanticNodeId('slow'),
+            SemanticAction.activate,
+          ),
+        );
+        final acceptanceStopwatch = Stopwatch()..start();
+        while (invocations == admitted &&
+            acceptanceStopwatch.elapsed < const Duration(seconds: 2)) {
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        }
+        expect(invocations, admitted + 1);
+        final finalResultStopwatch = Stopwatch()..start();
+        while (finalResultStopwatch.elapsed < const Duration(seconds: 2)) {
+          final completed = transport.sent
+              .whereType<SemanticActionResultFrame>()
+              .where(
+                (frame) =>
+                    frame.status == SemanticActionInvocationStatus.completed,
+              )
+              .length;
+          if (completed == admitted + 1) break;
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        }
+        expect(
+          transport.sent.whereType<SemanticActionResultFrame>().where(
+            (frame) => frame.status == SemanticActionInvocationStatus.completed,
+          ),
+          hasLength(admitted + 1),
+        );
+
+        await transport.disconnect();
+        await done;
+      },
+    );
   });
 }
 
