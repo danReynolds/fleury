@@ -27,4 +27,16 @@ void main() {
 
     await flushed.future.timeout(const Duration(seconds: 1));
   });
+
+  test('browser frame scheduler cancels a delayed flush', () async {
+    var flushed = false;
+    final cancel = browserFrameFlushScheduler(
+      const Duration(milliseconds: 50),
+      () => flushed = true,
+    );
+
+    cancel();
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    expect(flushed, isFalse);
+  });
 }

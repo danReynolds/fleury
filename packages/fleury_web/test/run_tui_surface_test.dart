@@ -49,10 +49,15 @@ class _FakeFlush {
 
   bool get pending => _pending != null;
 
-  void schedule(Duration delay, void Function() flush) {
+  void Function() schedule(Duration delay, void Function() flush) {
     scheduleCount += 1;
     this.delay = delay;
     _pending = flush;
+    return () {
+      if (!identical(_pending, flush)) return;
+      _pending = null;
+      this.delay = null;
+    };
   }
 
   void fire() {

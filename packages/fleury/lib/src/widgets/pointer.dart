@@ -9,6 +9,8 @@
 // order. The router is cleared each frame and repopulated on paint, so
 // only what's currently on screen is hit-testable.
 
+import 'package:meta/meta.dart';
+
 import '../foundation/geometry.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
@@ -32,6 +34,7 @@ typedef PointerModifiedTapCallback =
 /// regions re-register as they paint.
 class PointerRouter {
   final List<RenderPointerListener> _regions = <RenderPointerListener>[];
+  final Set<RenderObject> _inputExcludedSubtrees = <RenderObject>{};
   RenderPointerListener? _hovered;
   RenderPointerListener? _downTarget;
   MouseButton _downButton = MouseButton.none;
@@ -93,6 +96,7 @@ class PointerRouter {
     if (_disposed) return;
     _disposed = true;
     _regions.clear();
+    _inputExcludedSubtrees.clear();
     _hovered = null;
     _downTarget = null;
     _downButton = MouseButton.none;
@@ -100,11 +104,53 @@ class PointerRouter {
     _dragging = false;
   }
 
+  /// Makes every pointer listener below [root] inert while [excluded] is true.
+  ///
+  /// Error boundaries use this when a child throws after partially painting:
+  /// registrations created before the throw, including registrations replayed
+  /// later by an enclosing repaint boundary, must not remain clickable behind
+  /// the error presentation.
+  @internal
+  void setSubtreeInputExcluded(RenderObject root, bool excluded) {
+    if (_disposed) return;
+    if (excluded) {
+      if (!_inputExcludedSubtrees.add(root)) return;
+      _regions.removeWhere((region) => _isUnderExcludedRoot(region, root));
+      if (_hovered != null && _isUnderExcludedRoot(_hovered!, root)) {
+        _hovered = null;
+      }
+      if (_downTarget != null && _isUnderExcludedRoot(_downTarget!, root)) {
+        _downTarget = null;
+        _downButton = MouseButton.none;
+      }
+      if (_dragTarget != null && _isUnderExcludedRoot(_dragTarget!, root)) {
+        _dragTarget = null;
+        _dragging = false;
+      }
+      return;
+    }
+    _inputExcludedSubtrees.remove(root);
+  }
+
   // Registers a region in paint order (later = on top). Called by the
   // region's render object during paint.
   void _register(RenderPointerListener region) {
     if (_disposed) return;
+    if (_inputExcludedSubtrees.any(
+      (root) => _isUnderExcludedRoot(region, root),
+    )) {
+      return;
+    }
     _regions.add(region);
+  }
+
+  static bool _isUnderExcludedRoot(RenderObject node, RenderObject root) {
+    RenderObject? current = node;
+    while (current != null) {
+      if (identical(current, root)) return true;
+      current = current.parent;
+    }
+    return false;
   }
 
   void _remove(RenderPointerListener region) {

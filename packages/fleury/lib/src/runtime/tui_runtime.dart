@@ -146,6 +146,7 @@ final class TuiRuntime {
       throw StateError('TuiRuntime has no mounted root.');
     }
     pointerRouter.beginFrame();
+    focusManager.beginFrame();
     try {
       owner.renderFrame(
         root,
@@ -154,10 +155,12 @@ final class TuiRuntime {
         onBuildStats: onBuildStats,
       );
       pointerRouter.endFrame();
+      focusManager.endFrame();
     } catch (_) {
       // A partial paint was never presented. Drop all regions and captures so
       // input cannot activate a target from that unsuccessful frame.
       pointerRouter.abortFrame();
+      focusManager.abortFrame();
       rethrow;
     }
   }

@@ -2,6 +2,7 @@
 library;
 
 import 'package:fleury_doc_examples/registry.dart';
+import 'package:fleury_doc_examples/frame_flush_scheduler.dart';
 import 'package:fleury/fleury_host.dart';
 import 'package:fleury_web/fleury_web.dart';
 import 'package:fleury_widgets/fleury_widgets_web.dart';
@@ -13,7 +14,13 @@ import 'package:web/web.dart' as web;
 final class _FakeFlush {
   void Function()? _pending;
   bool get pending => _pending != null;
-  void schedule(Duration delay, void Function() flush) => _pending = flush;
+  void Function() schedule(Duration delay, void Function() flush) {
+    _pending = flush;
+    return () {
+      if (identical(_pending, flush)) _pending = null;
+    };
+  }
+
   void fire() {
     final flush = _pending;
     if (flush == null) return;
@@ -114,6 +121,29 @@ String? _firstSpanColorContaining(web.Element host, String text) {
 }
 
 void main() {
+  test('docs fallback cancels a held animation-frame callback', () async {
+    void Function()? heldFrame;
+    int? canceledFrame;
+    var flushes = 0;
+
+    scheduleDocsFrameFlush(
+      Duration.zero,
+      () => flushes += 1,
+      requestAnimationFrame: (callback) {
+        heldFrame = callback;
+        return 41;
+      },
+      cancelAnimationFrame: (frameId) => canceledFrame = frameId,
+      fallbackDelay: Duration.zero,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(flushes, 1);
+    expect(canceledFrame, 41);
+    heldFrame!();
+    expect(flushes, 1, reason: 'the losing rAF cannot flush a second time');
+  });
+
   test('textinput.basic mounts focused and accepts browser text', () async {
     final fixture = await _mountExample('textinput.basic');
 

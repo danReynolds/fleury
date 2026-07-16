@@ -6,16 +6,24 @@ import '../animation/clock.dart';
 typedef FrameRenderCallback = void Function(String reason);
 
 /// Schedules [flush] to run after [delay]. `Duration.zero` means "as soon as
-/// possible" (a microtask). Injectable so tests drive timing deterministically.
+/// possible" (a microtask). Returns an optional cancellation callback so a
+/// disposed runtime can release delayed timers / browser frame callbacks
+/// instead of retaining the whole session until they fire. Injectable so
+/// tests drive timing deterministically.
+typedef FrameFlushCancellation = void Function();
 typedef FrameFlushScheduler =
-    void Function(Duration delay, void Function() flush);
+    FrameFlushCancellation? Function(Duration delay, void Function() flush);
 
-void _defaultFlushScheduler(Duration delay, void Function() flush) {
+FrameFlushCancellation? _defaultFlushScheduler(
+  Duration delay,
+  void Function() flush,
+) {
   if (delay <= Duration.zero) {
     scheduleMicrotask(flush);
-  } else {
-    Timer(delay, flush);
+    return null;
   }
+  final timer = Timer(delay, flush);
+  return timer.cancel;
 }
 
 /// Coalesces frame requests and optionally caps the render rate.
@@ -53,6 +61,8 @@ class FrameScheduler {
   bool _pending = false;
   bool _disposed = false;
   String _reason = 'scheduled';
+  FrameFlushCancellation? _cancelScheduledFlush;
+  var _scheduleToken = 0;
 
   /// Whether a flush is scheduled but has not yet run.
   bool get hasPendingFrame => _pending;
@@ -66,7 +76,29 @@ class FrameScheduler {
     }
     _pending = true;
     _reason = reason;
-    _flushScheduler(_waitBeforeFlush(), _flush);
+    _schedule(_waitBeforeFlush());
+  }
+
+  void _schedule(Duration delay) {
+    final token = ++_scheduleToken;
+    var ranSynchronously = false;
+    void flush() {
+      ranSynchronously = true;
+      if (token != _scheduleToken) return;
+      _cancelScheduledFlush = null;
+      _flush();
+    }
+
+    final cancel = _flushScheduler(delay, flush);
+    // A custom test scheduler may invoke flush synchronously. onRender can
+    // then request another frame before this outer scheduler call returns;
+    // never overwrite that newer request's cancellation handle with the old
+    // one. Cancel any stale handle the custom scheduler returned.
+    if (!ranSynchronously && token == _scheduleToken && _pending) {
+      _cancelScheduledFlush = cancel;
+    } else {
+      cancel?.call();
+    }
   }
 
   Duration _waitBeforeFlush() {
@@ -88,8 +120,12 @@ class FrameScheduler {
   }
 
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
     _pending = false;
+    _scheduleToken += 1;
+    _cancelScheduledFlush?.call();
+    _cancelScheduledFlush = null;
   }
 }
 

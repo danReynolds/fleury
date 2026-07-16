@@ -67,6 +67,188 @@ class _HostState extends State<_Host> {
   }
 }
 
+class _RecoverableInteractivePaintFailure extends StatefulWidget {
+  const _RecoverableInteractivePaintFailure({
+    super.key,
+    required this.controller,
+    required this.onTap,
+  });
+
+  final TextEditingController controller;
+  final void Function() onTap;
+
+  @override
+  State<_RecoverableInteractivePaintFailure> createState() =>
+      _RecoverableInteractivePaintFailureState();
+}
+
+class _RecoverableInteractivePaintFailureState
+    extends State<_RecoverableInteractivePaintFailure> {
+  var _mode = BoomMode.paint;
+
+  void recover() => setState(() => _mode = BoomMode.healthy);
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: ErrorBoundary(
+        rethrowContained: false,
+        child: Column(
+          children: [
+            GestureDetector(
+              onTap: widget.onTap,
+              child: const SizedBox(width: 8, height: 1, child: Text('tap me')),
+            ),
+            TextInput(
+              controller: widget.controller,
+              autofocus: true,
+              enableBlink: false,
+            ),
+            Boom(mode: _mode, size: const CellSize(14, 3)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SequenceInteractivePaintFailure extends StatefulWidget {
+  const _SequenceInteractivePaintFailure({
+    super.key,
+    required this.onTriggered,
+  });
+
+  final void Function() onTriggered;
+
+  @override
+  State<_SequenceInteractivePaintFailure> createState() =>
+      _SequenceInteractivePaintFailureState();
+}
+
+class _SequenceInteractivePaintFailureState
+    extends State<_SequenceInteractivePaintFailure> {
+  var _mode = BoomMode.healthy;
+
+  void failPaint() => setState(() => _mode = BoomMode.paint);
+
+  @override
+  Widget build(BuildContext context) {
+    return ErrorBoundary(
+      rethrowContained: false,
+      child: KeyBindings(
+        bindings: [
+          KeyBinding(KeyChord.g.g, onEvent: (_) => widget.onTriggered()),
+        ],
+        child: Focus(
+          autofocus: true,
+          child: Boom(mode: _mode, size: const CellSize(14, 3)),
+        ),
+      ),
+    );
+  }
+}
+
+class _FocusDependentContainedFailure extends StatelessWidget {
+  const _FocusDependentContainedFailure({required this.onBuild});
+
+  final void Function() onBuild;
+
+  @override
+  Widget build(BuildContext context) {
+    onBuild();
+    Focus.of(context);
+    return const ErrorBoundary(
+      rethrowContained: false,
+      child: Boom(mode: BoomMode.paint),
+    );
+  }
+}
+
+class _MovableContainedFailure extends StatefulWidget {
+  const _MovableContainedFailure({
+    super.key,
+    required this.firstFocusManager,
+    required this.secondFocusManager,
+    required this.firstPointerRouter,
+    required this.secondPointerRouter,
+    required this.focusNode,
+    required this.controller,
+  });
+
+  final FocusManager firstFocusManager;
+  final FocusManager secondFocusManager;
+  final PointerRouter firstPointerRouter;
+  final PointerRouter secondPointerRouter;
+  final FocusNode focusNode;
+  final TextEditingController controller;
+
+  @override
+  State<_MovableContainedFailure> createState() =>
+      _MovableContainedFailureState();
+}
+
+class _MovableContainedFailureState extends State<_MovableContainedFailure> {
+  final _boundaryKey = GlobalKey();
+  late final Widget _boundary;
+  var _second = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Reuse this exact widget instance so global-key activation, not a widget
+    // update, is responsible for rebinding inherited input services.
+    _boundary = ErrorBoundary(
+      key: _boundaryKey,
+      rethrowContained: false,
+      child: Column(
+        children: [
+          TextInput(
+            controller: widget.controller,
+            focusNode: widget.focusNode,
+            enableBlink: false,
+          ),
+          const Boom(mode: BoomMode.paint, size: CellSize(14, 3)),
+        ],
+      ),
+    );
+  }
+
+  void moveToSecondServices() => setState(() => _second = true);
+
+  Widget _slot({
+    required FocusManager focusManager,
+    required PointerRouter pointerRouter,
+    required Widget child,
+  }) {
+    return SizedBox(
+      width: 18,
+      height: 5,
+      child: FocusManagerScope(
+        manager: focusManager,
+        child: PointerRouterScope(router: pointerRouter, child: child),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _slot(
+          focusManager: widget.firstFocusManager,
+          pointerRouter: widget.firstPointerRouter,
+          child: _second ? const SizedBox() : _boundary,
+        ),
+        _slot(
+          focusManager: widget.secondFocusManager,
+          pointerRouter: widget.secondPointerRouter,
+          child: _second ? _boundary : const SizedBox(),
+        ),
+      ],
+    );
+  }
+}
+
 void main() {
   _secondaryTests();
   _coherenceOracle();
@@ -115,6 +297,186 @@ void main() {
       );
       expect(out, contains('sibling stays'));
     });
+
+    testWidgets(
+      'a contained paint failure makes partial pointer and focus state inert',
+      (tester) {
+        final controller = TextEditingController();
+        addTearDown(controller.dispose);
+        final key = GlobalKey<_RecoverableInteractivePaintFailureState>();
+        var taps = 0;
+        tester.pumpWidget(
+          _RecoverableInteractivePaintFailure(
+            key: key,
+            controller: controller,
+            onTap: () => taps += 1,
+          ),
+        );
+
+        final failed = tester.renderToString(size: const CellSize(30, 8));
+        expect(failed, contains('paint-boom'));
+        // Exercise an enclosing RepaintBoundary cache hit too: it captured
+        // the partial child's paint geometry before the later Boom threw.
+        tester.pump();
+        tester.render(size: const CellSize(30, 8));
+
+        tester.sendMouse(
+          const MouseEvent(
+            kind: MouseEventKind.down,
+            button: MouseButton.left,
+            col: 1,
+            row: 0,
+          ),
+        );
+        tester.sendMouse(
+          const MouseEvent(
+            kind: MouseEventKind.up,
+            button: MouseButton.left,
+            col: 1,
+            row: 0,
+          ),
+        );
+        tester.type('secret');
+        expect(taps, 0, reason: 'the hidden gesture region is input-inert');
+        expect(
+          controller.text,
+          isEmpty,
+          reason: 'the hidden autofocus claimant cannot receive text',
+        );
+
+        key.currentState!.recover();
+        tester.pump();
+        final recovered = tester.renderToString(size: const CellSize(30, 8));
+        expect(recovered, contains('healthy###'));
+
+        tester.sendMouse(
+          const MouseEvent(
+            kind: MouseEventKind.down,
+            button: MouseButton.left,
+            col: 1,
+            row: 0,
+          ),
+        );
+        tester.sendMouse(
+          const MouseEvent(
+            kind: MouseEventKind.up,
+            button: MouseButton.left,
+            col: 1,
+            row: 0,
+          ),
+        );
+        tester.type('ok');
+        expect(taps, 1, reason: 'pointer input recovers with the subtree');
+        expect(controller.text, 'ok', reason: 'focus input recovers too');
+      },
+    );
+
+    testWidgets(
+      'a pending key sequence cannot fire after its boundary is contained',
+      (tester) {
+        final key = GlobalKey<_SequenceInteractivePaintFailureState>();
+        var triggers = 0;
+        tester.pumpWidget(
+          _SequenceInteractivePaintFailure(
+            key: key,
+            onTriggered: () => triggers += 1,
+          ),
+        );
+        tester.render(size: const CellSize(30, 6));
+
+        tester.sendKey(const KeyEvent(char: 'g'));
+        expect(tester.dispatcher.hasPendingSequence, isTrue);
+
+        key.currentState!.failPaint();
+        tester.pump();
+        expect(
+          tester.renderToString(size: const CellSize(30, 6)),
+          contains('⚠'),
+        );
+        tester.sendKey(const KeyEvent(char: 'g'));
+
+        expect(triggers, 0);
+        expect(tester.dispatcher.hasPendingSequence, isFalse);
+      },
+    );
+
+    testWidgets(
+      'retained containment does not churn focus-dependent rebuilds',
+      (tester) {
+        var builds = 0;
+        tester.pumpWidget(
+          _FocusDependentContainedFailure(onBuild: () => builds += 1),
+        );
+        expect(
+          tester.renderToString(size: const CellSize(30, 6)),
+          contains('⚠'),
+        );
+
+        tester.pump();
+        expect(
+          () => tester.render(size: const CellSize(30, 6)),
+          returnsNormally,
+        );
+        expect(builds, lessThan(5));
+      },
+    );
+
+    testWidgets(
+      'a contained global-key move transfers inherited input exclusion',
+      (tester) {
+        final firstFocusManager = FocusManager();
+        final secondFocusManager = FocusManager();
+        final firstPointerRouter = PointerRouter();
+        final secondPointerRouter = PointerRouter();
+        final focusNode = FocusNode();
+        final controller = TextEditingController();
+        final key = GlobalKey<_MovableContainedFailureState>();
+        final secondDispatcher = InputDispatcher(
+          focusManager: secondFocusManager,
+          pointerRouter: secondPointerRouter,
+        );
+        addTearDown(() {
+          secondDispatcher.dispose();
+          controller.dispose();
+          focusNode.dispose();
+          firstPointerRouter.dispose();
+          secondPointerRouter.dispose();
+          firstFocusManager.dispose();
+          secondFocusManager.dispose();
+        });
+
+        tester.pumpWidget(
+          _MovableContainedFailure(
+            key: key,
+            firstFocusManager: firstFocusManager,
+            secondFocusManager: secondFocusManager,
+            firstPointerRouter: firstPointerRouter,
+            secondPointerRouter: secondPointerRouter,
+            focusNode: focusNode,
+            controller: controller,
+          ),
+        );
+        expect(
+          tester.renderToString(size: const CellSize(40, 6)),
+          contains('⚠'),
+        );
+
+        key.currentState!.moveToSecondServices();
+        tester.pump();
+        expect(
+          tester.renderToString(size: const CellSize(40, 6)),
+          contains('⚠'),
+        );
+
+        expect(
+          secondFocusManager.requestFocus(focusNode),
+          isFalse,
+          reason: 'the new focus manager inherits the active exclusion',
+        );
+        secondDispatcher.dispatch(const TextInputEvent('hidden'));
+        expect(controller.text, isEmpty);
+      },
+    );
 
     testWidgets('(f) semantics: one node, descendants dropped, notFound', (
       tester,

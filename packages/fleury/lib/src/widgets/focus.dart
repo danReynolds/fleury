@@ -212,6 +212,13 @@ class FocusNode {
   /// Whether this node is currently the focused node in its manager.
   bool get hasFocus => _manager?.focusedNode == this;
 
+  /// Whether the node's mounted subtree currently participates in input.
+  ///
+  /// A contained render failure keeps the element tree mounted so it can
+  /// recover, but temporarily removes that subtree from input routing.
+  @internal
+  bool get acceptsInput => _manager?._acceptsInput(this) ?? false;
+
   /// Whether this node is attached to a [FocusManager].
   bool get isAttached => _manager != null;
 
@@ -301,6 +308,7 @@ class FocusManager extends ChangeNotifier {
 
   FocusNode? _focusedNode;
   bool _disposed = false;
+  bool _frameInputAborted = false;
 
   /// The currently focused node, or null when nothing is focused.
   FocusNode? get focusedNode => _focusedNode;
@@ -322,6 +330,36 @@ class FocusManager extends ChangeNotifier {
       <_FocusScopeMarkerElement>{};
   final Set<_ExcludeFocusMarkerElement> _activeExcludeFocusMarkers =
       <_ExcludeFocusMarkerElement>{};
+  final Set<Element> _inputExcludedSubtrees = <Element>{};
+
+  /// Starts a paint transaction for focus-owned geometry/input state.
+  @internal
+  void beginFrame() {
+    if (_disposed) return;
+    _frameInputAborted = false;
+  }
+
+  /// Commits the current focus paint transaction.
+  @internal
+  void endFrame() {
+    if (_disposed) return;
+    _frameInputAborted = false;
+  }
+
+  /// Makes focus routing inert after a frame-wide render failure.
+  ///
+  /// The host did not present the partially painted frame, so geometry and
+  /// claimants touched during it cannot safely receive input until another
+  /// frame begins and completes.
+  @internal
+  void abortFrame() {
+    if (_disposed) return;
+    _frameInputAborted = true;
+    for (final node in _attachedNodes) {
+      node.rect = null;
+      node.caretRect = null;
+    }
+  }
 
   void _registerModalScope(_FocusScopeMarkerElement element) {
     _checkNotDisposed();
@@ -371,7 +409,12 @@ class FocusManager extends ChangeNotifier {
   /// ([KeyChord.isShadowedByTextInput]) can never fire — the claimant
   /// consumes the characters before chord matching runs. The hint bar uses
   /// this to hide such bindings instead of advertising dead keys.
-  bool get focusedNodeClaimsText => _focusedNode?.textInputClaimant != null;
+  bool get focusedNodeClaimsText {
+    final focused = _focusedNode;
+    return focused != null &&
+        _acceptsInput(focused) &&
+        focused.textInputClaimant != null;
+  }
 
   /// Read-only view of every node currently attached to this manager,
   /// in attachment order. `FocusTraversalGroup` uses this to find
@@ -393,6 +436,7 @@ class FocusManager extends ChangeNotifier {
   @internal
   bool isClickable(FocusNode node) {
     if (!node.canRequestFocus) return false;
+    if (!_acceptsInput(node)) return false;
     if (_activeExcludeFocusMarkers.isEmpty) return true;
     Element? e = node._element?.elementParent;
     while (e != null) {
@@ -400,6 +444,47 @@ class FocusManager extends ChangeNotifier {
       e = e.elementParent;
     }
     return true;
+  }
+
+  /// Temporarily removes the mounted subtree below [root] from focus and text
+  /// input routing while preserving its focus identity for later recovery.
+  ///
+  /// Paint-error containment uses this instead of unmounting the subtree: the
+  /// same State and FocusNode can recover on a later rebuild, but a control
+  /// hidden behind the error presentation cannot receive keys, text, paste,
+  /// traversal, clicks, or expose stale caret geometry in the meantime.
+  @internal
+  void setSubtreeInputExcluded(Element root, bool excluded) {
+    _checkNotDisposed();
+    final changed = excluded
+        ? _inputExcludedSubtrees.add(root)
+        : _inputExcludedSubtrees.remove(root);
+    if (!changed) return;
+    if (excluded) {
+      for (final node in _attachedNodes) {
+        if (_isUnderElement(node, root)) {
+          node.rect = null;
+          node.caretRect = null;
+        }
+      }
+    }
+    _notifyManagerScopeChanged();
+  }
+
+  bool _acceptsInput(FocusNode node) {
+    if (_frameInputAborted) return false;
+    final element = node._element;
+    return element != null && !_isElementInputExcluded(element);
+  }
+
+  bool _isElementInputExcluded(Element element) {
+    if (_inputExcludedSubtrees.isEmpty) return false;
+    Element? current = element;
+    while (current != null) {
+      if (_inputExcludedSubtrees.contains(current)) return true;
+      current = current.elementParent;
+    }
+    return false;
   }
 
   /// Attaches [node] to this manager, or refreshes its element if it is
@@ -441,7 +526,9 @@ class FocusManager extends ChangeNotifier {
   /// focus). Returns whether focus actually moved.
   bool requestFocus(FocusNode? node) {
     _checkNotDisposed();
-    if (node != null && !node.canRequestFocus) return false;
+    if (node != null && (!node.canRequestFocus || !_acceptsInput(node))) {
+      return false;
+    }
     if (identical(_focusedNode, node)) return false;
     _focusedNode = node;
     if (node != null) _rememberFocusInScopes(node);
@@ -574,7 +661,9 @@ class FocusManager extends ChangeNotifier {
     if (node == null) return _deepestActiveModalScope();
     Element? element = node._element;
     while (element != null) {
-      if (element is _FocusScopeMarkerElement && element._capturedModal) {
+      if (element is _FocusScopeMarkerElement &&
+          element._capturedModal &&
+          !_isElementInputExcluded(element)) {
         return element;
       }
       element = element.elementParent;
@@ -592,6 +681,7 @@ class FocusManager extends ChangeNotifier {
     if (_activeModalScopes.isEmpty) return null;
     _FocusScopeMarkerElement? best;
     for (final marker in _activeModalScopes) {
+      if (_isElementInputExcluded(marker)) continue;
       if (best == null) {
         best = marker;
         continue;
@@ -694,16 +784,19 @@ class FocusManager extends ChangeNotifier {
   List<FocusNode> activeChain() {
     final focused = _focusedNode;
     if (focused == null) return _rootActiveChain();
-    final chain = <FocusNode>[focused];
+    final chain = <FocusNode>[];
+    if (_acceptsInput(focused)) chain.add(focused);
     var element = focused._element?.elementParent;
     while (element != null) {
-      if (element is _FocusScopeMarkerElement && element.scope.modal) {
+      if (element is _FocusScopeMarkerElement &&
+          element.scope.modal &&
+          !_isElementInputExcluded(element)) {
         // We're about to exit a modal scope. Stop — anything above
         // this marker is outside the modal.
         break;
       }
       if (element is _FocusElement) {
-        chain.add(element.node);
+        if (_acceptsInput(element.node)) chain.add(element.node);
       }
       element = element.elementParent;
     }
@@ -742,6 +835,7 @@ class FocusManager extends ChangeNotifier {
     }
     final nodes = _attachedNodes
         .where((n) => !n.canRequestFocus)
+        .where(_acceptsInput)
         .where((n) => n.bindingSource != null || n.onKey != null)
         .where((n) => modal == null || _isUnderScopeMarker(n, modal))
         .toList();
@@ -771,11 +865,11 @@ class FocusManager extends ChangeNotifier {
   /// (e.g. wrapping a text field that wants to swallow chord-like
   /// `KeyEvent`s) must still gate globals.
   bool get suppressGlobals {
-    if (_activeModalScopes.isNotEmpty) {
-      final modal = _deepestActiveModalScope();
-      if (modal != null) return modal._capturedSuppressGlobals;
-    }
-    return _focusedNode?._enclosingScope?.suppressGlobals ?? false;
+    final modal = _deepestActiveModalScope();
+    if (modal != null) return modal._capturedSuppressGlobals;
+    final focused = _focusedNode;
+    if (focused == null || !_acceptsInput(focused)) return false;
+    return focused._enclosingScope?.suppressGlobals ?? false;
   }
 
   /// Delivers [event] to the active focus chain, calling each node's
@@ -807,6 +901,8 @@ class FocusManager extends ChangeNotifier {
     _attachedNodes.clear();
     _activeModalScopes.clear();
     _activeExcludeFocusMarkers.clear();
+    _inputExcludedSubtrees.clear();
+    _frameInputAborted = true;
     super.dispose();
   }
 
@@ -850,6 +946,29 @@ class _FocusManagerProvider extends InheritedNotifier<FocusManager> {
   }
 }
 
+/// Identity-only companion to [_FocusManagerProvider].
+///
+/// Broad framework boundaries sometimes need to rebind when the surrounding
+/// manager instance changes, but must not rebuild for every focus movement or
+/// geometry notification. Depending on this provider expresses that narrower
+/// contract while ordinary focus consumers keep using the notifier provider.
+class _FocusManagerIdentityProvider extends InheritedWidget {
+  const _FocusManagerIdentityProvider({
+    required this.manager,
+    required super.child,
+  });
+
+  final FocusManager manager;
+
+  static FocusManager? maybeOf(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<_FocusManagerIdentityProvider>()
+      ?.manager;
+
+  @override
+  bool updateShouldNotify(_FocusManagerIdentityProvider oldWidget) =>
+      !identical(manager, oldWidget.manager);
+}
+
 /// Root of the focus tree. Installed by `runApp` so application widget
 /// code can always reach a `FocusManager` via [Focus.of].
 class FocusManagerScope extends StatelessWidget {
@@ -864,7 +983,10 @@ class FocusManagerScope extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _FocusManagerProvider(manager: manager, child: child);
+    return _FocusManagerIdentityProvider(
+      manager: manager,
+      child: _FocusManagerProvider(manager: manager, child: child),
+    );
   }
 }
 
@@ -938,6 +1060,12 @@ class Focus extends StatefulWidget {
   @internal
   static FocusManager? maybeOfWithoutDependency(BuildContext context) =>
       _FocusManagerProvider.maybeOfWithoutDependency(context);
+
+  /// Returns the surrounding manager and rebuilds only when that manager
+  /// instance is replaced, not when its ordinary focus state changes.
+  @internal
+  static FocusManager? maybeOfIdentityDependency(BuildContext context) =>
+      _FocusManagerIdentityProvider.maybeOf(context);
 
   @override
   StatefulElement createElement() => _FocusElement(this);
@@ -1162,7 +1290,9 @@ class _RenderFocusBounds extends RenderObject
     // A focusable that is fully clipped out of view (e.g. scrolled past the
     // viewport) records no rect, so it can't act as a directional-traversal
     // candidate while invisible — you scroll to it, you don't arrow to it.
-    _node.rect = clipRect == null || clipRect.intersect(bounds) != null
+    _node.rect =
+        _node.acceptsInput &&
+            (clipRect == null || clipRect.intersect(bounds) != null)
         ? bounds
         : null;
     _child?.paint(buffer, offset, screenOffset: screen, clipRect: clipRect);
@@ -1173,7 +1303,7 @@ class _RenderFocusBounds extends RenderObject
   // node in a cached closure.
   // ignore: prefer_function_declarations_over_variables
   late final FocusGeometryCallback _replayBounds = (bounds) {
-    _node.rect = bounds;
+    _node.rect = _node.acceptsInput ? bounds : null;
   };
 }
 

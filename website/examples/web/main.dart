@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
+import 'package:fleury_doc_examples/frame_flush_scheduler.dart';
 import 'package:fleury_doc_examples/registry.dart';
 import 'package:fleury_web/fleury_web.dart';
 import 'package:web/web.dart' as web;
@@ -190,21 +191,22 @@ DocsExampleThemeController? _followSiteTheme(
   final root = web.document.documentElement;
   if (root == null) return null;
   _siteThemeEmbeds.add((host, controller));
-  _siteThemeObserver ??= web.MutationObserver(
-    ((JSArray<web.MutationRecord> _, web.MutationObserver __) {
-      _siteThemeEmbeds.removeWhere((e) => !e.$1.isConnected);
-      final style = _siteDocsExampleStyle();
-      for (final (_, c) in _siteThemeEmbeds) {
-        c.style = style;
-      }
-    }).toJS,
-  )..observe(
-      root,
-      web.MutationObserverInit(
-        attributes: true,
-        attributeFilter: <JSString>['data-theme'.toJS].toJS,
-      ),
-    );
+  _siteThemeObserver ??=
+      web.MutationObserver(
+        ((JSArray<web.MutationRecord> _, web.MutationObserver __) {
+          _siteThemeEmbeds.removeWhere((e) => !e.$1.isConnected);
+          final style = _siteDocsExampleStyle();
+          for (final (_, c) in _siteThemeEmbeds) {
+            c.style = style;
+          }
+        }).toJS,
+      )..observe(
+        root,
+        web.MutationObserverInit(
+          attributes: true,
+          attributeFilter: <JSString>['data-theme'.toJS].toJS,
+        ),
+      );
   return controller;
 }
 
@@ -221,32 +223,13 @@ void _unfollowSiteTheme(DocsExampleThemeController? controller) {
 /// (smooth, vsync-aligned) but guarantee a flush via a short Timer fallback even
 /// when rAF is paused (a backgrounded or headless tab). Without this, a
 /// late-mounted or animating example would never paint there. First to fire wins.
-void _docsFlush(Duration delay, void Function() flush) {
-  void arm() {
-    var done = false;
-    Timer? fallback;
-    void run() {
-      if (done) return;
-      done = true;
-      fallback?.cancel();
-      flush();
-    }
-
-    try {
-      web.window.requestAnimationFrame(
-        ((JSNumber _) {
-          run();
-        }).toJS,
-      );
-    } catch (_) {
-      // Partial window API — the Timer fallback still flushes.
-    }
-    fallback = Timer(const Duration(milliseconds: 120), run);
-  }
-
-  if (delay <= Duration.zero) {
-    arm();
-  } else {
-    Timer(delay, arm);
-  }
+void Function() _docsFlush(Duration delay, void Function() flush) {
+  return scheduleDocsFrameFlush(
+    delay,
+    flush,
+    requestAnimationFrame: (callback) =>
+        web.window.requestAnimationFrame(((JSNumber _) => callback()).toJS),
+    // dart2js disallows tearing off external extension-type interop members.
+    cancelAnimationFrame: (frameId) => web.window.cancelAnimationFrame(frameId),
+  );
 }

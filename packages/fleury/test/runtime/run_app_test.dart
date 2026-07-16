@@ -136,6 +136,178 @@ class _ThrowingDisposeState extends State<_ThrowingDisposeApp> {
   }
 }
 
+class _DisposeProbeApp extends StatefulWidget {
+  const _DisposeProbeApp({required this.onDispose});
+
+  final void Function() onDispose;
+
+  @override
+  State<_DisposeProbeApp> createState() => _DisposeProbeState();
+}
+
+class _DisposeProbeState extends State<_DisposeProbeApp> {
+  @override
+  Widget build(BuildContext context) => const Text('dispose probe');
+
+  @override
+  void dispose() {
+    widget.onDispose();
+    super.dispose();
+  }
+}
+
+class _CancelFaultStream<T> extends Stream<T> {
+  const _CancelFaultStream(
+    this.delegate, {
+    required this.cancelThrows,
+    required this.cancelNeverCompletes,
+  });
+
+  final Stream<T> delegate;
+  final bool cancelThrows;
+  final bool cancelNeverCompletes;
+
+  @override
+  StreamSubscription<T> listen(
+    void Function(T event)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {
+    return _CancelFaultSubscription<T>(
+      delegate.listen(
+        onData,
+        onError: onError,
+        onDone: onDone,
+        cancelOnError: cancelOnError,
+      ),
+      cancelThrows: cancelThrows,
+      cancelNeverCompletes: cancelNeverCompletes,
+    );
+  }
+}
+
+class _CancelFaultSubscription<T> implements StreamSubscription<T> {
+  const _CancelFaultSubscription(
+    this.delegate, {
+    required this.cancelThrows,
+    required this.cancelNeverCompletes,
+  });
+
+  final StreamSubscription<T> delegate;
+  final bool cancelThrows;
+  final bool cancelNeverCompletes;
+
+  @override
+  Future<void> cancel() async {
+    await delegate.cancel();
+    if (cancelThrows) throw StateError('cancel-boom');
+    if (cancelNeverCompletes) await Completer<void>().future;
+  }
+
+  @override
+  void onData(void Function(T data)? handleData) => delegate.onData(handleData);
+
+  @override
+  void onError(Function? handleError) => delegate.onError(handleError);
+
+  @override
+  void onDone(void Function()? handleDone) => delegate.onDone(handleDone);
+
+  @override
+  void pause([Future<void>? resumeSignal]) => delegate.pause(resumeSignal);
+
+  @override
+  void resume() => delegate.resume();
+
+  @override
+  bool get isPaused => delegate.isPaused;
+
+  @override
+  Future<E> asFuture<E>([E? futureValue]) => delegate.asFuture(futureValue);
+}
+
+/// A synchronous driver that can exercise events emitted inside enter() and
+/// independent teardown failures without depending on OS terminal timing.
+class _LifecycleFaultDriver implements TerminalDriver {
+  _LifecycleFaultDriver({
+    this.enterEvent,
+    this.onEnter,
+    this.closeDuringEnter = false,
+    this.cancelThrows = false,
+    this.cancelNeverCompletes = false,
+    this.restoreThrows = false,
+  }) {
+    _events = StreamController<TuiEvent>.broadcast(sync: true);
+  }
+
+  final TuiEvent? enterEvent;
+  final void Function(StreamController<TuiEvent> events)? onEnter;
+  final bool closeDuringEnter;
+  final bool cancelThrows;
+  final bool cancelNeverCompletes;
+  final bool restoreThrows;
+
+  late final StreamController<TuiEvent> _events;
+  var _active = false;
+  var restoreCallCount = 0;
+  final StringBuffer output = StringBuffer();
+
+  @override
+  CellSize get size => const CellSize(40, 6);
+
+  @override
+  TerminalCapabilities get capabilities =>
+      TerminalCapabilities.defaultCapabilities;
+
+  @override
+  Stream<TuiEvent> get events => cancelThrows || cancelNeverCompletes
+      ? _CancelFaultStream<TuiEvent>(
+          _events.stream,
+          cancelThrows: cancelThrows,
+          cancelNeverCompletes: cancelNeverCompletes,
+        )
+      : _events.stream;
+
+  @override
+  bool get isActive => _active;
+
+  @override
+  bool get isInteractive => true;
+
+  @override
+  RemoteSurfaceSink? get surfaceSink => null;
+
+  @override
+  Future<void> enter(TerminalMode mode) async {
+    _active = true;
+    onEnter?.call(_events);
+    final event = enterEvent;
+    if (event != null) _events.add(event);
+    if (closeDuringEnter) await _events.close();
+  }
+
+  void enqueue(TuiEvent event) => _events.add(event);
+
+  @override
+  Future<void> restore() async {
+    restoreCallCount += 1;
+    _active = false;
+    if (restoreThrows) throw StateError('restore-boom');
+  }
+
+  @override
+  void write(String data) => output.write(data);
+
+  Future<void> dispose() async {
+    if (!_events.isClosed) {
+      try {
+        await _events.close();
+      } catch (_) {}
+    }
+  }
+}
+
 /// Lets the run loop's async body reach the point where it's listening for
 /// events before the test pushes one (a broadcast stream drops events that
 /// arrive with no listener).
@@ -143,6 +315,131 @@ Future<void> _settle() => Future<void>.delayed(const Duration(milliseconds: 5));
 
 void main() {
   group('runApp terminal restoration', () {
+    test('replays text emitted synchronously during driver.enter', () async {
+      final controller = TextEditingController();
+      final driver = _LifecycleFaultDriver(
+        enterEvent: const TextInputEvent('startup'),
+      );
+      try {
+        final future = runApp(
+          TextInput(
+            controller: controller,
+            autofocus: true,
+            enableBlink: false,
+          ),
+          driver: driver,
+          enableHotReload: false,
+        );
+        await _settle();
+        expect(controller.text, 'startup');
+
+        driver.enqueue(
+          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+        );
+        await future.timeout(const Duration(seconds: 2));
+      } finally {
+        controller.dispose();
+        await driver.dispose();
+      }
+    });
+
+    test('drains enter-time text before a buffered input EOF exits', () async {
+      final controller = TextEditingController();
+      final driver = _LifecycleFaultDriver(
+        enterEvent: const TextInputEvent('piped'),
+        closeDuringEnter: true,
+      );
+      try {
+        await runApp(
+          TextInput(
+            controller: controller,
+            autofocus: true,
+            enableBlink: false,
+          ),
+          driver: driver,
+          enableHotReload: false,
+        ).timeout(const Duration(seconds: 2));
+
+        expect(controller.text, 'piped');
+        expect(driver.restoreCallCount, 1);
+      } finally {
+        controller.dispose();
+        await driver.dispose();
+      }
+    });
+
+    test('ignores startup data emitted after a stream error', () async {
+      final controller = TextEditingController();
+      final driver = _LifecycleFaultDriver(
+        onEnter: (events) {
+          events.add(const TextInputEvent('before'));
+          events.addError(StateError('startup-stream-boom'));
+          events.add(const TextInputEvent('after'));
+        },
+      );
+      try {
+        await runApp(
+          TextInput(
+            controller: controller,
+            autofocus: true,
+            enableBlink: false,
+          ),
+          driver: driver,
+          enableHotReload: false,
+        ).timeout(const Duration(seconds: 2));
+
+        expect(controller.text, 'before');
+        expect(driver.restoreCallCount, 1);
+      } finally {
+        controller.dispose();
+        await driver.dispose();
+      }
+    });
+
+    test('event-count startup overflow fails closed and restores', () async {
+      final driver = _LifecycleFaultDriver(
+        onEnter: (events) {
+          for (var i = 0; i < 4097; i += 1) {
+            events.add(const KeyEvent(char: 'x'));
+          }
+        },
+      );
+      try {
+        await expectLater(
+          runApp(
+            const Text('overflow'),
+            driver: driver,
+            enableHotReload: false,
+          ).timeout(const Duration(seconds: 2)),
+          throwsA(isA<StateError>()),
+        );
+        expect(driver.restoreCallCount, 1);
+      } finally {
+        await driver.dispose();
+      }
+    });
+
+    test('payload startup overflow fails closed and restores', () async {
+      final driver = _LifecycleFaultDriver(
+        onEnter: (events) {
+          events.add(TextInputEvent('x' * (1024 * 1024 + 1)));
+        },
+      );
+      try {
+        await expectLater(
+          runApp(
+            const Text('overflow'),
+            driver: driver,
+            enableHotReload: false,
+          ).timeout(const Duration(seconds: 2)),
+          throwsA(isA<StateError>()),
+        );
+        expect(driver.restoreCallCount, 1);
+      } finally {
+        await driver.dispose();
+      }
+    });
+
     test('a normal Ctrl+C exit restores the terminal', () async {
       final driver = FakeTerminalDriver();
       final future = runApp(
@@ -357,6 +654,105 @@ void main() {
       );
       expect(driver.isActive, isFalse);
       await driver.dispose();
+    });
+
+    test(
+      'subscription cancellation failure cannot skip State.dispose',
+      () async {
+        final driver = _LifecycleFaultDriver(cancelThrows: true);
+        var disposeCount = 0;
+        try {
+          final future = runApp(
+            _DisposeProbeApp(onDispose: () => disposeCount += 1),
+            driver: driver,
+            enableHotReload: false,
+          );
+          await _settle();
+          driver.enqueue(
+            const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          );
+
+          await future.timeout(const Duration(seconds: 2));
+          expect(disposeCount, 1);
+          expect(driver.restoreCallCount, 1);
+        } finally {
+          await driver.dispose();
+        }
+      },
+    );
+
+    test('subscription cancellation timeout cannot strand teardown', () async {
+      final driver = _LifecycleFaultDriver(cancelNeverCompletes: true);
+      var disposeCount = 0;
+      try {
+        final future = runApp(
+          _DisposeProbeApp(onDispose: () => disposeCount += 1),
+          driver: driver,
+          enableHotReload: false,
+        );
+        await _settle();
+        driver.enqueue(
+          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+        );
+
+        await future.timeout(const Duration(seconds: 3));
+        expect(disposeCount, 1);
+        expect(driver.restoreCallCount, 1);
+      } finally {
+        await driver.dispose();
+      }
+    });
+
+    test('multiple teardown failures still run every resource once', () async {
+      final driver = _LifecycleFaultDriver(
+        cancelThrows: true,
+        restoreThrows: true,
+      );
+      var disposeCount = 0;
+      try {
+        final future = runApp(
+          _DisposeProbeApp(
+            onDispose: () {
+              disposeCount += 1;
+              throw StateError('dispose-boom');
+            },
+          ),
+          driver: driver,
+          enableHotReload: false,
+        );
+        await _settle();
+        driver.enqueue(
+          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+        );
+
+        await future.timeout(const Duration(seconds: 2));
+        expect(disposeCount, 1);
+        expect(driver.restoreCallCount, 1);
+      } finally {
+        await driver.dispose();
+      }
+    });
+
+    test('restore failure is reported but runApp still settles', () async {
+      final driver = _LifecycleFaultDriver(restoreThrows: true);
+      var disposeCount = 0;
+      try {
+        final future = runApp(
+          _DisposeProbeApp(onDispose: () => disposeCount += 1),
+          driver: driver,
+          enableHotReload: false,
+        );
+        await _settle();
+        driver.enqueue(
+          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+        );
+
+        await future.timeout(const Duration(seconds: 2));
+        expect(disposeCount, 1);
+        expect(driver.restoreCallCount, 1);
+      } finally {
+        await driver.dispose();
+      }
     });
   });
 

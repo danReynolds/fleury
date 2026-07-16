@@ -10,9 +10,14 @@ class _FakeFlush {
   Duration? delay;
   void Function()? _cb;
 
-  void schedule(Duration d, void Function() cb) {
+  void Function() schedule(Duration d, void Function() cb) {
     delay = d;
     _cb = cb;
+    return () {
+      if (!identical(_cb, cb)) return;
+      _cb = null;
+      delay = null;
+    };
   }
 
   bool get pending => _cb != null;
@@ -135,5 +140,26 @@ void main() {
     s.requestFrame('build');
     expect(flush.pending, isFalse);
     expect(out, isEmpty);
+  });
+
+  test('dispose cancels an already scheduled delayed flush', () {
+    final clock = FakeClock();
+    final flush = _FakeFlush();
+    final s = FrameScheduler(
+      clock: clock,
+      onRender: (_) {},
+      minFrameInterval: const Duration(seconds: 1),
+      flushScheduler: flush.schedule,
+    );
+
+    s.requestFrame('first');
+    flush.fire();
+    clock.advance(const Duration(milliseconds: 1));
+    s.requestFrame('delayed');
+    expect(flush.pending, isTrue);
+
+    s.dispose();
+    expect(flush.pending, isFalse, reason: 'the scheduler releases its timer');
+    expect(s.hasPendingFrame, isFalse);
   });
 }
