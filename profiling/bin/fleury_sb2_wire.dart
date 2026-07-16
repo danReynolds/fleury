@@ -148,7 +148,7 @@ final class _WireTextEditingAppState extends State<_WireTextEditingApp> {
           _editorFocus.requestFocus();
           final index = _editor.text.indexOf(_fixture.selectionNeedle);
           if (index >= 0) {
-            _editor.textSelection = TextSelection(
+            _editor.selection = TextSelection(
               baseOffset: index,
               extentOffset: index + _fixture.selectionNeedle.length,
             );

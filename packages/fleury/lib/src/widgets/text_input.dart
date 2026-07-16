@@ -91,10 +91,11 @@ enum _EditTransaction { edit, typing, paste }
 
 /// Mutable model for text input widgets.
 ///
-/// The compatibility [selection] accessor remains a Dart string offset, but
-/// writes and editing operations snap to extended-grapheme boundaries. This
-/// prevents cursor movement and deletion from splitting emoji, combining
-/// marks, or other multi-code-unit user-perceived characters.
+/// [selection] follows Flutter's range-valued controller contract, while
+/// [caretOffset] is the terminal-friendly shorthand for a collapsed selection.
+/// Writes and editing operations snap to extended-grapheme boundaries. This
+/// prevents cursor movement and deletion from splitting emoji, combining marks,
+/// or other multi-code-unit user-perceived characters.
 class TextEditingController extends ChangeNotifier {
   TextEditingController({String text = ''})
     : _value = TextEditingValue(text: text);
@@ -116,16 +117,20 @@ class TextEditingController extends ChangeNotifier {
     _setValue(_value.copyWith(text: text), resetHistory: true);
   }
 
-  /// Cursor index as a Dart string offset. Always snapped to a grapheme
-  /// boundary within `0..text.length`.
-  int get selection => _value.selection.extentOffset;
-  set selection(int offset) {
-    _setValue(_value.copyWith(selection: TextSelection.collapsed(offset)));
+  /// The current directional selection, normalized to grapheme boundaries
+  /// within [text]. A collapsed selection represents the caret.
+  TextSelection get selection => _value.selection;
+  set selection(TextSelection selection) {
+    _setValue(_value.copyWith(selection: selection));
   }
 
-  TextSelection get textSelection => _value.selection;
-  set textSelection(TextSelection selection) {
-    _setValue(_value.copyWith(selection: selection));
+  /// The active caret edge as a Dart string offset.
+  ///
+  /// Assigning an offset collapses [selection] there after snapping it to a
+  /// grapheme boundary within `0..text.length`.
+  int get caretOffset => _value.selection.extentOffset;
+  set caretOffset(int offset) {
+    selection = TextSelection.collapsed(offset: offset);
   }
 
   TextRange get composing => _value.composing;
@@ -1354,7 +1359,7 @@ class _TextInputState extends State<TextInput>
     required bool atStart,
   }) {
     if (event.hasShift || event.hasCtrl || event.hasAlt) return false;
-    final selection = _controller.textSelection;
+    final selection = _controller.selection;
     if (!selection.isCollapsed) return false;
     final offset = selection.extentOffset;
     return atStart ? offset <= 0 : offset >= _controller.text.length;
@@ -1465,8 +1470,8 @@ class _TextInputState extends State<TextInput>
         if (widget.enabled && widget.onSubmit != null) SemanticAction.submit,
       },
       state: widget.semanticState.merge({
-        'selectionBase': _controller.textSelection.baseOffset,
-        'selectionExtent': _controller.textSelection.extentOffset,
+        'selectionBase': _controller.selection.baseOffset,
+        'selectionExtent': _controller.selection.extentOffset,
         'composingActive': _controller.hasComposingRange,
         'composingStart': _controller.composing.normalizedStart,
         'composingEnd': _controller.composing.normalizedEnd,
@@ -1511,7 +1516,7 @@ class _TextInputState extends State<TextInput>
         child: _TextInputDisplay(
           focusNode: _focusNode,
           text: _controller.text,
-          selection: _controller.textSelection,
+          selection: _controller.selection,
           placeholder: widget.placeholder,
           placeholderStyle: widget.enabled
               ? widget.placeholderStyle

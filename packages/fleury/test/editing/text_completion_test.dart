@@ -73,7 +73,7 @@ void main() {
       final next = completions.accept(TextEditingValue(text: 'git che'));
 
       expect(next?.text, 'git checkout');
-      expect(next?.selection, const TextSelection.collapsed(12));
+      expect(next?.selection, const TextSelection.collapsed(offset: 12));
       expect(completions.isOpen, isFalse);
     });
 

@@ -798,7 +798,7 @@ void main() {
 
   testWidgets('TextInput exposes non-collapsed selection semantics', (tester) {
     final controller = TextEditingController(text: 'deploy')
-      ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 4);
+      ..selection = const TextSelection(baseOffset: 1, extentOffset: 4);
     tester.pumpWidget(TextInput(controller: controller, autofocus: true));
 
     final field = tester.semantics().single(role: SemanticRole.textField);
@@ -824,7 +824,7 @@ void main() {
     tester,
   ) {
     final controller = TextEditingController(text: 'deploy')
-      ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 4);
+      ..selection = const TextSelection(baseOffset: 1, extentOffset: 4);
     tester.pumpWidget(TextInput(controller: controller, autofocus: true));
 
     final field = tester.semantics().single(
@@ -1025,8 +1025,8 @@ void main() {
 
     expect(area.value, 'one\ntwo');
     expect(area.actions, contains(SemanticAction.focus));
-    expect(area.state['selectionBase'], controller.selection);
-    expect(area.state['selectionExtent'], controller.selection);
+    expect(area.state['selectionBase'], controller.caretOffset);
+    expect(area.state['selectionExtent'], controller.caretOffset);
   });
 
   testWidgets('semantic actions can focus and clear TextArea', (tester) async {

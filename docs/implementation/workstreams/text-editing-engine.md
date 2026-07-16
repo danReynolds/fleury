@@ -11,7 +11,8 @@ agent consoles, forms, command palettes, search boxes, and config editors.
 - M1.2 now has a first pure editing model:
   `TextRange`, `TextSelection`, `TextEditingValue`, and `TextEditingModel`.
 - `TextEditingController` now stores a `TextEditingValue` internally while
-  preserving `text` and integer `selection` compatibility accessors.
+  exposing Flutter-shaped, range-valued `selection` as its canonical API and
+  `caretOffset` as the scalar collapsed-selection convenience.
 - `TextHistoryController` now provides opt-in command/submission history for
   single-line inputs.
 - `TextCompletionController` now provides completion range/query/options
@@ -163,7 +164,11 @@ agent consoles, forms, command palettes, search boxes, and config editors.
     through the same controller/range replacement path as Tab acceptance, and
     the demo app composer now uses that path for slash-command completion.
     The same composer now proves opt-in submission history semantics in the
-    integrated demo workflow.
+    integrated demo workflow. Before launch, the controller API also converged
+    on range-valued `selection`, `TextSelection.collapsed(offset: value)`, and
+    scalar `caretOffset`. Both selection forms retain Fleury's grapheme-boundary
+    normalization, and controllers initialized with text retain a collapsed
+    caret at the end.
 
 - [x] TEE.4 Add editing semantics and tests.
   - Intent: Make text fields testable above rendered cells.
@@ -192,8 +197,11 @@ agent consoles, forms, command palettes, search boxes, and config editors.
   primitives where possible.
 - Keep provider/rendering widgets in `fleury_widgets`; keep value/state/key
   semantics in core.
-- Keep public compatibility in mind: integer `selection` remains an accessor
-  for now, but `textSelection`/`value` are the richer model surface.
+- Keep one selection vocabulary across controller and value APIs:
+  `controller.selection` and `controller.value.selection` are range-valued;
+  `controller.caretOffset` is the explicit scalar convenience. Both normalize
+  to grapheme boundaries, and text-seeded controllers place the caret at the
+  end by default.
 - Treat composition as an adapter seam for now. The MVP exposes durable
   controller/model/semantic behavior, but does not promise native terminal IME
   protocol coverage.

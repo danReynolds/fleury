@@ -41,7 +41,7 @@ final class TextRange {
 final class TextSelection {
   const TextSelection({required this.baseOffset, required this.extentOffset});
 
-  const TextSelection.collapsed(int offset)
+  const TextSelection.collapsed({required int offset})
     : baseOffset = offset,
       extentOffset = offset;
 
@@ -84,7 +84,7 @@ final class TextSelection {
 
   @override
   String toString() => isCollapsed
-      ? 'TextSelection.collapsed($extentOffset)'
+      ? 'TextSelection.collapsed(offset: $extentOffset)'
       : 'TextSelection($baseOffset, $extentOffset)';
 }
 
@@ -94,7 +94,7 @@ final class TextEditingValue {
     required this.text,
     TextSelection? selection,
     TextRange composing = TextRange.empty,
-  }) : selection = (selection ?? TextSelection.collapsed(text.length))
+  }) : selection = (selection ?? TextSelection.collapsed(offset: text.length))
            .normalizeForText(text),
        composing = composing.clamp(text.length);
 
@@ -220,7 +220,7 @@ final class TextEditingModel {
     final nextOffset = snappedRange.normalizedStart + input.length;
     return TextEditingValue(
       text: nextText,
-      selection: TextSelection.collapsed(nextOffset),
+      selection: TextSelection.collapsed(offset: nextOffset),
     );
   }
 
@@ -267,7 +267,7 @@ final class TextEditingModel {
     final nextEnd = nextStart + input.length;
     return TextEditingValue(
       text: nextText,
-      selection: TextSelection.collapsed(nextEnd),
+      selection: TextSelection.collapsed(offset: nextEnd),
       composing: TextRange(start: nextStart, end: nextEnd),
     );
   }
@@ -298,7 +298,7 @@ final class TextEditingModel {
     final start = previousGraphemeBoundary(value.text, offset);
     return TextEditingValue(
       text: value.text.replaceRange(start, offset, ''),
-      selection: TextSelection.collapsed(start),
+      selection: TextSelection.collapsed(offset: start),
     );
   }
 
@@ -311,7 +311,7 @@ final class TextEditingModel {
     final end = nextGraphemeBoundary(value.text, offset);
     return TextEditingValue(
       text: value.text.replaceRange(offset, end, ''),
-      selection: TextSelection.collapsed(offset),
+      selection: TextSelection.collapsed(offset: offset),
     );
   }
 
@@ -338,7 +338,7 @@ final class TextEditingModel {
     killRing = value.text.substring(lo, hi);
     return TextEditingValue(
       text: value.text.replaceRange(lo, hi, ''),
-      selection: TextSelection.collapsed(lo),
+      selection: TextSelection.collapsed(offset: lo),
     );
   }
 
@@ -384,14 +384,14 @@ final class TextEditingModel {
     final selection = value.selection;
     if (!selection.isCollapsed && !extend) {
       return value.copyWith(
-        selection: TextSelection.collapsed(selection.start),
+        selection: TextSelection.collapsed(offset: selection.start),
       );
     }
     final next = previousGraphemeBoundary(value.text, selection.extentOffset);
     return value.copyWith(
       selection: extend
           ? selection.copyWith(extentOffset: next).normalizeForText(value.text)
-          : TextSelection.collapsed(next),
+          : TextSelection.collapsed(offset: next),
     );
   }
 
@@ -401,13 +401,15 @@ final class TextEditingModel {
   }) {
     final selection = value.selection;
     if (!selection.isCollapsed && !extend) {
-      return value.copyWith(selection: TextSelection.collapsed(selection.end));
+      return value.copyWith(
+        selection: TextSelection.collapsed(offset: selection.end),
+      );
     }
     final next = nextGraphemeBoundary(value.text, selection.extentOffset);
     return value.copyWith(
       selection: extend
           ? selection.copyWith(extentOffset: next).normalizeForText(value.text)
-          : TextSelection.collapsed(next),
+          : TextSelection.collapsed(offset: next),
     );
   }
 
@@ -421,7 +423,7 @@ final class TextEditingModel {
           ? value.selection
                 .copyWith(extentOffset: next)
                 .normalizeForText(value.text)
-          : TextSelection.collapsed(next),
+          : TextSelection.collapsed(offset: next),
     );
   }
 
@@ -435,7 +437,7 @@ final class TextEditingModel {
           ? value.selection
                 .copyWith(extentOffset: next)
                 .normalizeForText(value.text)
-          : TextSelection.collapsed(next),
+          : TextSelection.collapsed(offset: next),
     );
   }
 
@@ -446,7 +448,7 @@ final class TextEditingModel {
     return value.copyWith(
       selection: extend
           ? value.selection.copyWith(extentOffset: 0)
-          : const TextSelection.collapsed(0),
+          : const TextSelection.collapsed(offset: 0),
     );
   }
 
@@ -457,7 +459,7 @@ final class TextEditingModel {
     return value.copyWith(
       selection: extend
           ? value.selection.copyWith(extentOffset: value.text.length)
-          : TextSelection.collapsed(value.text.length),
+          : TextSelection.collapsed(offset: value.text.length),
     );
   }
 
@@ -469,7 +471,7 @@ final class TextEditingModel {
     return value.copyWith(
       selection: extend
           ? value.selection.copyWith(extentOffset: next)
-          : TextSelection.collapsed(next),
+          : TextSelection.collapsed(offset: next),
     );
   }
 
@@ -481,7 +483,7 @@ final class TextEditingModel {
     return value.copyWith(
       selection: extend
           ? value.selection.copyWith(extentOffset: next)
-          : TextSelection.collapsed(next),
+          : TextSelection.collapsed(offset: next),
     );
   }
 
@@ -505,7 +507,7 @@ final class TextEditingModel {
     return value.copyWith(
       selection: extend
           ? value.selection.copyWith(extentOffset: nextOffset)
-          : TextSelection.collapsed(nextOffset),
+          : TextSelection.collapsed(offset: nextOffset),
     );
   }
 
@@ -530,7 +532,7 @@ final class TextEditingModel {
     return value.copyWith(
       selection: extend
           ? value.selection.copyWith(extentOffset: nextOffset)
-          : TextSelection.collapsed(nextOffset),
+          : TextSelection.collapsed(offset: nextOffset),
     );
   }
 

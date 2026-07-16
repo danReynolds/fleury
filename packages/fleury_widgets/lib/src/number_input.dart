@@ -149,7 +149,7 @@ class _NumberInputState extends State<NumberInput> {
         _suppress = true;
         _controller
           ..text = text
-          ..selection = text.length;
+          ..caretOffset = text.length;
         _suppress = false;
       }
     }
@@ -211,7 +211,7 @@ class _NumberInputState extends State<NumberInput> {
       // Revert to the last accepted value without firing onChanged, keeping the
       // caret where the rejected character would have landed rather than
       // jumping it to the end (readline / every peer field leaves it in place).
-      final priorOffset = _controller.selection;
+      final priorOffset = _controller.caretOffset;
       final added = text.length - _lastAccepted.length;
       final keepAt = (priorOffset - (added > 0 ? added : 0)).clamp(
         0,
@@ -220,7 +220,7 @@ class _NumberInputState extends State<NumberInput> {
       _suppress = true;
       _controller
         ..text = _lastAccepted
-        ..selection = keepAt;
+        ..caretOffset = keepAt;
       _suppress = false;
       return;
     }
@@ -273,7 +273,7 @@ class _NumberInputState extends State<NumberInput> {
           _suppress = true;
           _controller
             ..text = s
-            ..selection = s.length;
+            ..caretOffset = s.length;
           _suppress = false;
           setState(() {});
         }

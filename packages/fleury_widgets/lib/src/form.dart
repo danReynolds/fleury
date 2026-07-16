@@ -1382,7 +1382,7 @@ class _FormPanelState extends State<FormPanel> {
       } else if (controller.text != text) {
         controller
           ..text = text
-          ..selection = text.length;
+          ..caretOffset = text.length;
       }
     }
   }

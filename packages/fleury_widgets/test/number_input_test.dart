@@ -32,11 +32,11 @@ void main() {
       tester.pumpWidget(
         NumberInput(controller: ctrl, autofocus: true, onChanged: (_) {}),
       );
-      ctrl.selection = 1; // caret between '1' and '2'
+      ctrl.caretOffset = 1; // caret between '1' and '2'
       tester.type('a'); // rejected: "1a2" reverts to "12"
       expect(ctrl.text, '12');
       expect(
-        ctrl.selection,
+        ctrl.caretOffset,
         1,
         reason: 'caret stays where the bad char would have gone, not the end',
       );

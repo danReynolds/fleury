@@ -58,7 +58,7 @@ void main() {
     tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
 
     expect(controller.text, 'cherry-pick');
-    expect(controller.textSelection, const TextSelection.collapsed(11));
+    expect(controller.selection, const TextSelection.collapsed(offset: 11));
     expect(accepted?.label, 'cherry-pick');
     expect(tester.overlay.entries.length, 1);
 
@@ -80,7 +80,7 @@ void main() {
     tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
 
     expect(controller.text, 'git checkout');
-    expect(controller.textSelection, const TextSelection.collapsed(12));
+    expect(controller.selection, const TextSelection.collapsed(offset: 12));
   });
 
   testWidgets('Escape closes completion before calling onEscape', (tester) {
@@ -187,7 +187,7 @@ void main() {
 
     expect(result.completed, isTrue);
     expect(controller.text, 'cherry-pick');
-    expect(controller.textSelection, const TextSelection.collapsed(11));
+    expect(controller.selection, const TextSelection.collapsed(offset: 11));
     expect(accepted?.label, 'cherry-pick');
     expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
     expect(
