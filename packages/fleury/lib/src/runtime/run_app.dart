@@ -567,7 +567,7 @@ Future<AppExit> _runAppImpl(
     if (fdCap != null) {
       // Drain + restore fd 1/2 (stop() delivers every in-flight line to our
       // listener before closing the streams, and closes the driver's saved
-      // terminal handle) — then replay via the real, now-restored stdout.
+      // terminal handle) — then replay via the real, now-restored streams.
       try {
         await fdCap.stop();
       } catch (_) {}
@@ -576,10 +576,18 @@ Future<AppExit> _runAppImpl(
       // replaying here would duplicate it all on the pipe.
       if (onStrayOutput == null && !remoteFdMirror && !logBuffer.isEmpty) {
         for (final line in logBuffer.lines) {
-          stdout.writeln(line.text);
+          switch (line.source) {
+            case LogSource.stdout:
+              stdout.writeln(line.text);
+            case LogSource.stderr:
+              stderr.writeln(line.text);
+          }
         }
         try {
           await stdout.flush();
+        } catch (_) {}
+        try {
+          await stderr.flush();
         } catch (_) {}
       }
     }

@@ -44,33 +44,20 @@ Future<void> main(List<String> args) async {
       print('HOOKED-PRINT');
       _nativeWrite('HOOKED-NATIVE\n');
     });
-    _exitWith(await runApp(
-      const _PtySmokeApp(label: 'PTY-HOOK-MODE'),
-      enableHotReload: false,
-      onStrayOutput: (line) => hookFile.writeAsStringSync(
-        '${line.source.name}:${line.text}\n',
-        mode: FileMode.append,
+    _exitWith(
+      await runApp(
+        const _PtySmokeApp(label: 'PTY-HOOK-MODE'),
+        enableHotReload: false,
+        onStrayOutput: (line) => hookFile.writeAsStringSync(
+          '${line.source.name}:${line.text}\n',
+          mode: FileMode.append,
+        ),
+        onEvent: (event) => event is ResizeEvent ? const ExitRequested() : null,
       ),
-      onEvent: (event) => event is ResizeEvent ? const ExitRequested() : null,
-    ));
+    );
   }
   if (args.contains('--stray-output')) {
-    Timer(const Duration(milliseconds: 300), () {
-      // Both classes of stray writer: Dart print (zone-visible) and a raw
-      // native descriptor write (zone-INvisible).
-      print('STRAY-PRINT-MARKER');
-      _nativeWrite('STRAY-NATIVE-MARKER\n');
-      // Hostile terminal payload (OSC title set) — replay must be sanitized.
-      print('STRAY-HOSTILE \x1B]0;pwned\x07END');
-    });
-    _exitWith(await runApp(
-      const _PtySmokeApp(label: 'PTY-STRAY-MODE'),
-      enableHotReload: false,
-      // Exit cleanly on the harness's SIGWINCH — input-byte exits need a
-      // controlling terminal (job control) that sandboxes/CI lack, but
-      // SIGWINCH delivery works everywhere the resize smoke test does.
-      onEvent: (event) => event is ResizeEvent ? const ExitRequested() : null,
-    ));
+    _exitWith(await runApp(const _StrayOutputApp(), enableHotReload: false));
   }
   if (args.contains('--layout-crash')) {
     _exitWith(await runApp(const _BoomWidget(), enableHotReload: false));
@@ -86,6 +73,42 @@ Future<void> main(List<String> args) async {
     );
   }
   _exitWith(await runApp(const _PtySmokeApp(), enableHotReload: false));
+}
+
+class _StrayOutputApp extends StatefulWidget {
+  const _StrayOutputApp();
+
+  @override
+  State<_StrayOutputApp> createState() => _StrayOutputAppState();
+}
+
+class _StrayOutputAppState extends State<_StrayOutputApp> {
+  var _scheduled = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_scheduled) {
+      _scheduled = true;
+      // Emit only after the first frame is presented so the proof never races
+      // terminal setup. requestExit then drives the normal restoration path;
+      // fd capture drains every write before replaying it.
+      TuiBinding.of(context).addPostFrameCallback((_) {
+        // Both classes of stray writer: Dart print (zone-visible) and a raw
+        // native descriptor write (zone-INvisible).
+        print('STRAY-PRINT-MARKER');
+        _nativeWrite('STRAY-NATIVE-MARKER\n');
+        stderr.writeln('STRAY-STDERR-MARKER');
+        // Hostile terminal payload (OSC title set) — replay is sanitized.
+        print('STRAY-HOSTILE \x1B]0;pwned\x07END');
+        if (!requestExit()) {
+          throw StateError(
+            'Stray-output proof completed without an active app.',
+          );
+        }
+      });
+    }
+    return const _PtySmokeApp(label: 'PTY-STRAY-MODE');
+  }
 }
 
 class _PtyHandoffApp extends StatefulWidget {
