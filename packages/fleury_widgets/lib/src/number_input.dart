@@ -36,12 +36,31 @@ class NumberInput extends StatefulWidget {
     this.semanticLabel,
     this.focusNode,
     this.autofocus = false,
-  });
+  }) : assert(
+         allowDecimal ||
+             controller != null ||
+             initialValue == null ||
+             initialValue is int,
+         'initialValue must be an int when allowDecimal is false.',
+       ),
+       assert(
+         allowDecimal || min == null || min is int,
+         'min must be an int when allowDecimal is false.',
+       ),
+       assert(
+         allowDecimal || max == null || max is int,
+         'max must be an int when allowDecimal is false.',
+       ),
+       assert(
+         min == null || max == null || min <= max,
+         'min must be less than or equal to max.',
+       );
 
   /// Initial parsed value to seed the field with. `null` starts empty.
   ///
   /// Ignored when [controller] is supplied; the controller text is treated as
-  /// the source of truth in controlled form bindings.
+  /// the source of truth in controlled form bindings. Otherwise this must be
+  /// an [int] when [allowDecimal] is false.
   final num? initialValue;
 
   /// Optional text controller for embedding this field in a larger form.
@@ -60,9 +79,12 @@ class NumberInput extends StatefulWidget {
   /// lower bound. Per-keystroke values *below* the bound are still
   /// accepted while the user is typing — the clamp applies on submit.
   /// Set to enforce a non-negative budget, percentage, etc.
+  ///
+  /// Must be an [int] when [allowDecimal] is false.
   final num? min;
 
-  /// Upper-bound mirror of [min].
+  /// Upper-bound mirror of [min]. Must be an [int] when [allowDecimal] is
+  /// false.
   final num? max;
 
   /// When false, the field rejects `-` entirely.
@@ -207,6 +229,7 @@ class _NumberInputState extends State<NumberInput> {
   void _onChanged() {
     if (_suppress) return;
     final text = _controller.text;
+    if (text == _lastAccepted) return;
     if (!_isValid(text)) {
       // Revert to the last accepted value without firing onChanged, keeping the
       // caret where the rejected character would have landed rather than
@@ -276,6 +299,7 @@ class _NumberInputState extends State<NumberInput> {
             ..caretOffset = s.length;
           _suppress = false;
           setState(() {});
+          widget.onChanged?.call(clamped);
         }
         widget.onSubmit?.call(clamped);
       },

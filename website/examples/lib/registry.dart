@@ -572,6 +572,93 @@ Tabs(
 
   // ── Inputs & controls ────────────────────────────────────────────────────
   ExampleInfo(
+    id: 'textinput.basic',
+    widget: 'TextInput',
+    category: 'Inputs & controls',
+    blurb:
+        'A single-line editor with selection, clipboard, history, and completion support.',
+    cols: 44,
+    rows: 4,
+    interactive: true,
+    code: '''final controller = TextEditingController(text: 'deploy staging')
+  ..selection = const TextSelection(baseOffset: 7, extentOffset: 14);
+
+TextInput(
+  controller: controller,
+  semanticLabel: 'Command',
+  onChanged: (text) => updateDraft(text),
+  onSubmit: (text) => runCommand(text),
+)''',
+    builder: () => const _TextInputExample(),
+  ),
+  ExampleInfo(
+    id: 'textarea.basic',
+    widget: 'TextArea',
+    category: 'Inputs & controls',
+    blurb:
+        'A multiline editor with shared selection, clipboard, paste, and semantic editing.',
+    cols: 44,
+    rows: 7,
+    interactive: true,
+    code: '''TextArea(
+  minLines: 4,
+  maxLines: 8,
+  placeholder: 'Write release notes…',
+  semanticLabel: 'Release notes',
+  keymap: TextEditingKeymap.chat,
+  onChanged: (text) => updateReleaseNotes(text),
+  onSubmit: (text) => saveReleaseNotes(text),
+)''',
+    builder: () => _framed(
+      TextArea(
+        autofocus: true,
+        minLines: 4,
+        maxLines: 4,
+        placeholder: 'Write release notes…',
+        semanticLabel: 'Release notes',
+        onChanged: (_) {},
+      ),
+    ),
+  ),
+  ExampleInfo(
+    id: 'form.basic',
+    widget: 'FormPanel',
+    category: 'Inputs & controls',
+    blurb:
+        'A declarative, validated form that runs in terminal, served, and embedded apps.',
+    cols: 54,
+    rows: 12,
+    interactive: true,
+    code: '''FormPanel(
+  definition: FormDefinition(
+    title: 'Project settings',
+    fields: <FormFieldSpec>[
+      FormFieldSpec.text(id: 'name', label: 'Name', required: true),
+      FormFieldSpec.checkbox(id: 'private', label: 'Private project'),
+    ],
+  ),
+  onSubmit: (result) => saveSettings(result.values),
+)''',
+    builder: () => _framed(
+      FormPanel(
+        definition: FormDefinition(
+          title: 'Project settings',
+          fields: <FormFieldSpec>[
+            FormFieldSpec.text(
+              id: 'name',
+              label: 'Name',
+              initialValue: 'fleury',
+              required: true,
+            ),
+            FormFieldSpec.checkbox(id: 'private', label: 'Private project'),
+          ],
+        ),
+        layout: FormPanelLayout.inline,
+        onSubmit: (_) {},
+      ),
+    ),
+  ),
+  ExampleInfo(
     id: 'button.basic',
     widget: 'Button',
     category: 'Inputs & controls',
@@ -1328,6 +1415,36 @@ class _DocsExampleTheme extends InheritedWidget {
 // ── Stateful wrappers ───────────────────────────────────────────────────────
 // Controlled widgets (value + onChanged) need a holder so interacting with the
 // live example actually moves them; self-managing widgets are used directly.
+class _TextInputExample extends StatefulWidget {
+  const _TextInputExample();
+
+  @override
+  State<_TextInputExample> createState() => _TextInputExampleState();
+}
+
+class _TextInputExampleState extends State<_TextInputExample> {
+  final TextEditingController _controller = TextEditingController(
+    text: 'deploy staging',
+  )..selection = const TextSelection(baseOffset: 7, extentOffset: 14);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    TextInput(
+      controller: _controller,
+      autofocus: true,
+      semanticLabel: 'Command',
+      onChanged: (_) {},
+      onSubmit: (_) {},
+    ),
+  );
+}
+
 class _SelectExample extends StatefulWidget {
   const _SelectExample();
   @override

@@ -129,6 +129,40 @@ void main() {
     expect(b.hasFocus, isTrue);
   });
 
+  testWidgets('forwards onChanged and text-field semantics', (tester) {
+    final controller = TextEditingController();
+    final changes = <String>[];
+    tester.pumpWidget(
+      CompletionTextInput(
+        provider: _commandProvider,
+        controller: controller,
+        autofocus: true,
+        onChanged: changes.add,
+        semanticLabel: 'Command field',
+        semanticState: const SemanticState({'fieldKind': 'command'}),
+      ),
+    );
+
+    controller.value = TextEditingValue(
+      text: 'ch',
+      selection: const TextSelection.collapsed(offset: 2),
+    );
+    tester.pump();
+    controller.caretOffset = 1;
+    tester.pump();
+    controller.caretOffset = 2;
+    tester.pump();
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
+
+    expect(changes, ['ch', 'checkout']);
+    final field = tester.semantics().single(
+      role: SemanticRole.textField,
+      label: 'Command field',
+    );
+    expect(field.value, 'checkout');
+    expect(field.state['fieldKind'], 'command');
+  });
+
   testWidgets('completion menu contributes semantic rows', (tester) {
     tester.pumpWidget(
       CompletionTextInput(provider: _commandProvider, autofocus: true),

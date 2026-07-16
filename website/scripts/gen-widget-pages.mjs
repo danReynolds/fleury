@@ -247,8 +247,6 @@ const DOC_ONLY = [
     code: "FileBrowser(\n  initialDirectory: Directory.current.path,\n  onActivate: (entry) => openFile(entry.path),\n)" },
   { slug: 'filepicker', widget: 'FilePicker', category: 'Inputs & controls', reason: 'native',
     code: "FilePicker(\n  initialDirectory: Directory.current.path,\n  filter: (entity) => entity is Directory || entity.path.endsWith('.dart'),\n  onSelect: (file) => openFile(file.path),\n)" },
-  { slug: 'form', widget: 'FormPanel', category: 'Inputs & controls', reason: 'native',
-    code: "FormPanel(\n  definition: FormDefinition(\n    title: 'Project settings',\n    fields: const [\n      FormFieldSpec.text(id: 'name', label: 'Name', required: true),\n      FormFieldSpec.checkbox(id: 'private', label: 'Private'),\n    ],\n  ),\n  onSubmit: (result) => saveSettings(result.values),\n)" },
   { slug: 'image', widget: 'Image', category: 'Data & lists', reason: 'native',
     code: "Image.file('assets/logo.png', fit: ImageFit.contain)" },
   { slug: 'logregion', widget: 'LogRegion', category: 'Agent surfaces', reason: 'native',

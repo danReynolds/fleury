@@ -66,6 +66,7 @@ class CompletionTextInput extends StatefulWidget {
     this.historyController,
     this.focusNode,
     this.autofocus = false,
+    this.onChanged,
     this.onSubmit,
     this.onEscape,
     this.onCompletionAccepted,
@@ -78,6 +79,8 @@ class CompletionTextInput extends StatefulWidget {
     this.enabled = true,
     this.readOnly = false,
     this.validationError,
+    this.semanticLabel,
+    this.semanticState = SemanticState.empty,
     this.clipboardPolicy,
     this.pastePolicy = const TextPastePolicy(),
     this.commitHistoryOnSubmit = true,
@@ -105,6 +108,10 @@ class CompletionTextInput extends StatefulWidget {
 
   /// Whether the field should request focus when mounted.
   final bool autofocus;
+
+  /// Called with the new text on every edit, including programmatic
+  /// [controller] changes. See [TextInput.onChanged].
+  final void Function(String text)? onChanged;
 
   /// Called when the user submits the current text.
   final void Function(String text)? onSubmit;
@@ -141,6 +148,14 @@ class CompletionTextInput extends StatefulWidget {
 
   /// Optional validation error displayed by the underlying input.
   final String? validationError;
+
+  /// Label exposed through the underlying text-field semantic node.
+  ///
+  /// When omitted, [placeholder] is used when non-empty.
+  final String? semanticLabel;
+
+  /// Extra semantic state merged into the underlying text-field node.
+  final SemanticState semanticState;
 
   /// Clipboard write/read policy for input copy and paste.
   final TextClipboardPolicy? clipboardPolicy;
@@ -194,11 +209,13 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
   void didUpdateWidget(CompletionTextInput oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
-      _controller.removeListener(_onTextChange);
-      if (_ownsController) _controller.dispose();
+      final oldController = _controller;
+      final disposeOldController = _ownsController;
+      oldController.removeListener(_onTextChange);
       _controller = widget.controller ?? TextEditingController();
       _ownsController = widget.controller == null;
       _controller.addListener(_onTextChange);
+      if (disposeOldController) oldController.dispose();
     }
     if (widget.completionController != oldWidget.completionController) {
       _completion.removeListener(_onCompletionChange);
@@ -208,10 +225,12 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
       _completion.addListener(_onCompletionChange);
     }
     if (widget.focusNode != oldWidget.focusNode) {
-      if (_ownsFocusNode) _focusNode.dispose();
+      final oldFocusNode = _focusNode;
+      final disposeOldFocusNode = _ownsFocusNode;
       _focusNode =
           widget.focusNode ?? FocusNode(debugLabel: 'CompletionTextInput');
       _ownsFocusNode = widget.focusNode == null;
+      if (disposeOldFocusNode) oldFocusNode.dispose();
     }
     _syncCompletion();
   }
@@ -438,6 +457,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
         controller: _controller,
         focusNode: _focusNode,
         autofocus: widget.autofocus,
+        onChanged: widget.onChanged,
         onSubmit: widget.onSubmit,
         onEscape: widget.onEscape,
         placeholder: widget.placeholder,
@@ -449,6 +469,8 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
         enabled: widget.enabled,
         readOnly: widget.readOnly,
         validationError: widget.validationError,
+        semanticLabel: widget.semanticLabel,
+        semanticState: widget.semanticState,
         clipboardPolicy: widget.clipboardPolicy,
         historyController: widget.historyController,
         commitHistoryOnSubmit: widget.commitHistoryOnSubmit,

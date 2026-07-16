@@ -619,6 +619,93 @@ void main() {
     });
   });
 
+  group('onChanged and semantics', () {
+    testWidgets('reports text edits but not cursor-only changes', (tester) {
+      final changes = <String>[];
+      tester.pumpWidget(TextArea(autofocus: true, onChanged: changes.add));
+
+      tester.type('a');
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.type('b');
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+
+      expect(changes, ['a', 'a\n', 'a\nb']);
+    });
+
+    testWidgets('reports programmatic and semantic edits', (tester) async {
+      final changes = <String>[];
+      final controller = TextEditingController();
+      tester.pumpWidget(
+        TextArea(controller: controller, onChanged: changes.add),
+      );
+
+      controller.text = 'programmatic';
+      await tester.invokeSemanticAction(
+        SemanticAction.setValue,
+        role: SemanticRole.textArea,
+        payload: 'semantic\nvalue',
+      );
+
+      expect(changes, ['programmatic', 'semantic\nvalue']);
+    });
+
+    testWidgets(
+      'controller swaps detach the old value and reset the baseline',
+      (tester) {
+        final changes = <String>[];
+        final first = TextEditingController(text: 'first');
+        final second = TextEditingController(text: 'second');
+
+        tester.pumpWidget(TextArea(controller: first, onChanged: changes.add));
+        first.text = 'first edit';
+        tester.pumpWidget(TextArea(controller: second, onChanged: changes.add));
+        first.text = 'stale edit';
+        second.text = 'second edit';
+
+        expect(changes, ['first edit', 'second edit']);
+      },
+    );
+
+    testWidgets('semanticLabel and semanticState customize area semantics', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const TextArea(
+          placeholder: 'example body',
+          semanticLabel: 'Message body',
+          semanticState: SemanticState({'fieldType': 'message'}),
+        ),
+      );
+
+      final area = tester.semantics().single(
+        role: SemanticRole.textArea,
+        label: 'Message body',
+      );
+      expect(area.state['fieldType'], 'message');
+    });
+
+    testWidgets('semantic submit invokes the current value', (tester) async {
+      final submitted = <String>[];
+      tester.pumpWidget(
+        TextArea(
+          controller: TextEditingController(text: 'ship\nthis'),
+          onSubmit: submitted.add,
+        ),
+      );
+
+      expect(
+        tester.semantics().single(role: SemanticRole.textArea).actions,
+        contains(SemanticAction.submit),
+      );
+      await tester.invokeSemanticAction(
+        SemanticAction.submit,
+        role: SemanticRole.textArea,
+      );
+
+      expect(submitted, ['ship\nthis']);
+    });
+  });
+
   group('enabled and readOnly', () {
     testWidgets('readOnly area consumes edits without mutating', (tester) {
       final ctl = TextEditingController(text: 'ab\ncd');
