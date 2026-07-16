@@ -117,11 +117,10 @@ void main() {
       expect(buf.atColRow(1, 1).role, CellRole.empty);
     });
 
-    test('a blit at a negative offset drops the placement, not negates it', () {
-      // A repaint-boundary cache blitted at a negative destOffset (a parent
-      // painting above the buffer origin) must NOT record a placement at a
-      // negative cell — that becomes an invalid cursor address on terminals
-      // and an out-of-range varint on the wire.
+    test('a blit at a negative offset retains only the visible window', () {
+      // A repaint-boundary cache blitted above/left of the frame keeps the
+      // intersecting pixels while recording only non-negative visible
+      // geometry. Presenters fit against the original box via the offsets.
       final cache = CellBuffer(const CellSize(6, 4));
       cache.writeImage(
         const CellOffset(0, 0),
@@ -135,18 +134,14 @@ void main() {
         CellRect.fromLTWH(0, 0, 6, 4),
         const CellOffset(-2, -1),
       );
-      expect(
-        frame.imagePlacements,
-        isEmpty,
-        reason: 'the translated top-left (-2,-1) is out of bounds',
-      );
-      for (final p in frame.imagePlacements) {
-        expect(p.col, greaterThanOrEqualTo(0));
-        expect(p.row, greaterThanOrEqualTo(0));
-      }
+      final p = frame.imagePlacements.single;
+      expect([p.col, p.row, p.cols, p.rows], [0, 0, 1, 1]);
+      expect([p.boxCols, p.boxRows], [3, 2]);
+      expect([p.boxOffsetCol, p.boxOffsetRow], [2, 1]);
+      expect(frame.atColRow(0, 0).role, CellRole.overlay);
     });
 
-    test('a region clipped by the buffer edge writes only in-bounds cells', () {
+    test('right/bottom clipping retains the original fit box', () {
       final buf = CellBuffer(const CellSize(4, 2));
       buf.writeImage(
         const CellOffset(2, 1),
@@ -156,9 +151,90 @@ void main() {
       );
       expect(buf.atColRow(2, 1).role, CellRole.overlay);
       expect(buf.atColRow(3, 1).role, CellRole.overlay);
-      // The placement itself keeps the full requested geometry (presenters
-      // clip at the screen edge, matching terminal protocol behavior).
-      expect(buf.imagePlacements.single.cols, 5);
+      final p = buf.imagePlacements.single;
+      expect([p.col, p.row, p.cols, p.rows], [2, 1, 2, 1]);
+      expect([p.boxCols, p.boxRows], [5, 3]);
+      expect([p.boxOffsetCol, p.boxOffsetRow], [0, 0]);
+    });
+
+    test('left/top clipping records the visible window inside the box', () {
+      final buf = CellBuffer(const CellSize(4, 3));
+      buf.writeImage(
+        const CellOffset(-2, -1),
+        Uint8List.fromList([1]),
+        width: 5,
+        height: 3,
+        fit: InlineImageFit.none,
+      );
+
+      final p = buf.imagePlacements.single;
+      expect([p.col, p.row, p.cols, p.rows], [0, 0, 3, 2]);
+      expect([p.boxCols, p.boxRows], [5, 3]);
+      expect([p.boxOffsetCol, p.boxOffsetRow], [2, 1]);
+      expect(p.fit, InlineImageFit.none);
+      expect(buf.atColRow(0, 0).role, CellRole.overlay);
+      expect(buf.atColRow(2, 1).role, CellRole.overlay);
+      expect(buf.atColRow(3, 1).role, CellRole.empty);
+    });
+
+    test('source-region and destination clips accumulate box offsets', () {
+      final source = CellBuffer(const CellSize(8, 6));
+      source.writeImage(
+        const CellOffset(1, 1),
+        Uint8List.fromList([4, 2]),
+        width: 5,
+        height: 4,
+        fit: InlineImageFit.cover,
+      );
+      final first = CellBuffer(const CellSize(4, 3));
+      first.compositeImageRectFrom(
+        source,
+        CellRect.fromLTWH(2, 2, 4, 3),
+        const CellOffset(0, 0),
+      );
+      final p1 = first.imagePlacements.single;
+      expect([p1.col, p1.row, p1.cols, p1.rows], [0, 0, 4, 3]);
+      expect([p1.boxCols, p1.boxRows], [5, 4]);
+      expect([p1.boxOffsetCol, p1.boxOffsetRow], [1, 1]);
+
+      final nested = CellBuffer(const CellSize(3, 2));
+      nested.compositeImageRectFrom(
+        first,
+        CellRect.fromLTWH(0, 0, 4, 3),
+        const CellOffset(-1, -1),
+      );
+      final p2 = nested.imagePlacements.single;
+      expect([p2.col, p2.row, p2.cols, p2.rows], [0, 0, 3, 2]);
+      expect([p2.boxCols, p2.boxRows], [5, 4]);
+      expect([p2.boxOffsetCol, p2.boxOffsetRow], [2, 2]);
+      expect(p2.fit, InlineImageFit.cover);
+    });
+
+    test('region composition preserves overlapping paint order', () {
+      final source = CellBuffer(const CellSize(6, 3));
+      source.writeImage(
+        const CellOffset(0, 0),
+        Uint8List.fromList([1]),
+        width: 4,
+        height: 2,
+      );
+      source.writeImage(
+        const CellOffset(1, 0),
+        Uint8List.fromList([2]),
+        width: 4,
+        height: 2,
+      );
+      final ids = source.imagePlacements.map((p) => p.id).toList();
+
+      final target = CellBuffer(const CellSize(3, 2));
+      target.compositeImageRectFrom(
+        source,
+        CellRect.fromLTWH(1, 0, 3, 2),
+        CellOffset.zero,
+      );
+      expect(target.imagePlacements.map((p) => p.id), ids);
+      expect(target.imagePlacements[0].boxOffsetCol, 1);
+      expect(target.imagePlacements[1].boxOffsetCol, 0);
     });
 
     test('fit defaults to contain and records an explicit fit', () {

@@ -736,6 +736,10 @@ final class _SurfaceFramePresenter implements FramePresenter {
           cols: p.cols,
           rows: p.rows,
           fit: p.fit,
+          boxCols: p.boxCols,
+          boxRows: p.boxRows,
+          boxOffsetCol: p.boxOffsetCol,
+          boxOffsetRow: p.boxOffsetRow,
         ),
     ], metrics);
   }

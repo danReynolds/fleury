@@ -133,6 +133,19 @@ void main() {
     // The region is overlay (the encoder/overlay renders the pixels).
     expect(buf.atColRow(0, 0).role, CellRole.overlay);
 
+    // A leading-edge clip keeps the lower row without recomputing fit against
+    // a one-row box.
+    ctl.scrollBy(1);
+    final partial = tester.render(size: const CellSize(6, 5));
+    final clipped = partial.imagePlacements.single;
+    expect(
+      [clipped.col, clipped.row, clipped.cols, clipped.rows],
+      [0, 0, 4, 1],
+    );
+    expect([clipped.boxCols, clipped.boxRows], [4, 2]);
+    expect([clipped.boxOffsetCol, clipped.boxOffsetRow], [0, 1]);
+    expect(partial.atColRow(0, 0).role, CellRole.overlay);
+
     // Scroll the image out of view → the placement is no longer carried
     // (the scratch drops it, so nothing lingers on the surface).
     ctl.scrollBy(6);

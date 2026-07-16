@@ -41,7 +41,7 @@ cleanly beside the input byte stream instead of being smuggled inside ANSI.
 
 ## Protocol version
 
-Current version: **4** (`remoteProtocolVersion`). It is carried in the INIT
+Current version: **5** (`remoteProtocolVersion`). It is carried in the INIT
 handshake as `v=<n>`; a peer that omits `v` is treated as **v1** (the legacy
 ANSI host).
 
@@ -51,6 +51,7 @@ ANSI host).
 | v2 | Structured host: PLAN, SEMANTICS, INPUT_EVENT (and the frames that support them). |
 | v3 | SEMANTIC_ACTION_RESULT, and the app-side INIT echo (app → peer) so the client can detect version skew. |
 | v4 | Optional OSC 8 link in the PLAN cell-style entry: spare set-mask bit 6 flags "has link" and, when set, a varint-prefixed UTF-8 URI rides after the two mask bytes (before the colors). Version-gated — a link-free style leaves bit 6 clear and writes no URI, so link-free frames stay byte-identical to v3, and the app emits links only to a peer that negotiated v>=4. |
+| v5 | Original-box geometry for clipped inline-image placements in PLAN: plan flag bit 2 declares four varints after each placement (`boxCols`, `boxRows`, `boxOffsetCol`, `boxOffsetRow`). Version-gated — the app emits the fields only to a peer that negotiated v>=5; an absent flag decodes as an unclipped legacy placement. |
 
 ## Frame types
 
@@ -108,3 +109,11 @@ Worked examples:
   serializes links only to a peer that negotiated v>=4; a stale v3 client — whose
   decoder would misalign on the unexpected URI and lose stream framing — never
   receives them, and a link-free frame is byte-identical to v3 either way.
+- v5's inline-image window is also a version-gated PLAN encoding. When plan
+  flag bit 2 is set, the four trailing placement varints preserve the original
+  fit box plus the visible window's offset inside it, so clipping never causes
+  the browser to re-fit the image fragment. A v5 decoder treats an absent flag
+  as `boxCols=cols`, `boxRows=rows`, and zero offsets, which keeps plans from an
+  older app readable. A v5 app emits the flag only to v5 peers; for a v4 peer it
+  keeps full placements on the legacy shape and omits clipped placements rather
+  than rendering a silently mis-fitted image.

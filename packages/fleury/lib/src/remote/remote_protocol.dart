@@ -106,6 +106,13 @@
 // v>=4 decides whether the wire SERIALIZES it. Both must hold for a browser to
 // receive a clickable cell-grid anchor.
 //
+// v5 is another version-gated PLAN change. Flag bit 2 declares four extra
+// varints after each inline-image placement: original box columns/rows and the
+// visible window's column/row offset within that box. A v5 decoder treats an
+// absent flag as the legacy full-box placement, while the app emits the flag
+// only to a peer that negotiated v>=5. This preserves both compatibility
+// directions while letting clipped images retain their original fit geometry.
+//
 // The normative statement of this protocol — the version, the frame table
 // above, the additive-vs-version-gated rule, and the launch-relevant caveat
 // that the wire is NOT a public/stable integration surface (same-build peers
@@ -129,9 +136,11 @@ import 'remote_codec.dart';
 /// echoed app → peer so the client can detect version skew).
 ///
 /// v4 version-gates the optional OSC 8 link in the PLAN cell-style entry
-/// (RFC 0017 §5): a link-free frame stays byte-identical to v3, and links
-/// are emitted only to a peer that negotiated v>=4.
-const int remoteProtocolVersion = 4;
+/// (RFC 0017 §5). v5 adds an explicitly flagged original-box window to
+/// inline-image placements so clipped images keep their fit and source crop.
+/// Both additions are emitted only to peers that negotiated the corresponding
+/// version; plans without the feature remain byte-compatible with older peers.
+const int remoteProtocolVersion = 5;
 
 /// Default remote frame payload cap.
 ///

@@ -203,6 +203,30 @@ void main() {
     );
 
     test(
+      'protocol v5 negotiates image windows while v4 stays legacy',
+      () async {
+        for (final (version, expected) in [(4, false), (5, true)]) {
+          final transport = _FakeTransport();
+          final driver = RemoteTerminalDriver(transport);
+          final entering = driver.enter(TerminalMode.interactive);
+          transport.emit(
+            InitFrame(
+              size: const CellSize(80, 24),
+              colorMode: ColorMode.truecolor,
+              imageProtocol: ImageProtocol.halfBlock,
+              tmuxPassthrough: false,
+              protocolVersion: version,
+            ),
+          );
+          await entering;
+
+          expect(driver.wantsImageWindows, expected, reason: 'peer v$version');
+          await driver.restore();
+        }
+      },
+    );
+
+    test(
       'remote grid clamping enforces the total cell allocation budget',
       () async {
         final transport = _FakeTransport();

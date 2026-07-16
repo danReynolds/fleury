@@ -21,20 +21,22 @@
 //    removed image would ghost. `cover`/`none` crops use the protocol's
 //    source-rectangle keys (x,y,w,h) — no pixel work app-side.
 //
-//  * iTerm2 — fire-and-forget OSC 1337 at the resolved sub-rect; the
-//    protocol attaches images to cells, so the text diff repainting a
-//    vacated region also clears the pixels. iTerm2 cannot crop a source:
-//    fits that need one (`cover`, overflowing `none`) degrade to
-//    `contain` geometry (aspect-true, never distorted).
+//  * iTerm2 — fire-and-forget OSC 1337 at the resolved sub-rect. Because
+//    the protocol has no source-rectangle keys, an image provider can
+//    supply a lazy cropped-PNG callback; custom providers without one
+//    degrade crop-requiring fits to `contain`. Changed overlapping stacks
+//    are cleared and replayed in paint order so replacements cannot ghost.
 //
 //  * Sixel — rasterized app-side from the placement's decoded-RGBA
 //    sidecar ([InlineImage.pixels]) at the conventional 10×20 pixels per
 //    cell, median-cut quantized to ≤128 colors. Placements without the
-//    sidecar are skipped (PNG cannot be decoded here).
+//    sidecar are skipped (PNG cannot be decoded here). Changed overlapping
+//    stacks are likewise cleared and replayed in paint order.
 
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../rendering/cell.dart' show CellRole;
 import '../rendering/cell_buffer.dart';
 import 'capabilities.dart';
 
@@ -85,10 +87,11 @@ final class TerminalImageEncoder {
 
   // ---- iTerm2 / Sixel state ------------------------------------------------
 
-  /// Emission keys (content + resolved geometry) of the previous frame.
-  /// These protocols attach pixels to cells: a vacated region is cleared
-  /// by the text diff repainting it, so only new/changed keys re-emit.
-  Set<String> _emittedKeys = <String>{};
+  /// Raster placements emitted in the previous frame, in paint order.
+  /// Neither protocol has Kitty's individually-addressable placement model,
+  /// so an ordered list (rather than a set) is required: duplicate and
+  /// overlapping placements are visually meaningful.
+  List<_RasterPlacement> _rasterLive = <_RasterPlacement>[];
 
   /// Escape bytes for [next]'s placements, diffed against the previous
   /// frame. Empty when nothing image-related changed. [fullRepaint] must
@@ -106,7 +109,7 @@ final class TerminalImageEncoder {
     if (!fullRepaint &&
         next.imagePlacements.isEmpty &&
         _kittyLive.isEmpty &&
-        _emittedKeys.isEmpty) {
+        _rasterLive.isEmpty) {
       return '';
     }
     final out = StringBuffer();
@@ -126,24 +129,30 @@ final class TerminalImageEncoder {
 
   void _resetForRepaint(StringBuffer out) {
     if (protocol == ImageProtocol.kitty && _kittyLive.isNotEmpty) {
-      // Belt and braces: kitty deletes visible images on ED-based clears,
-      // but an explicit delete-all is a no-op in that case and protects
-      // terminals with laxer clear semantics.
-      out.write(_wrap('\x1B_Ga=d,d=a,q=2\x1B\\'));
+      // ED must clear visible kitty placements, but use the uppercase form
+      // as a belt-and-braces reset that also frees their stored image data.
+      // Otherwise clearing [_transmitted] below would lose the only record
+      // from which an unreferenced terminal-side allocation can be freed.
+      out.write(_wrap('\x1B_Ga=d,d=A,q=2\x1B\\'));
     }
     _kittyLive = <_KittyPlacement>[];
     // Conservatively assume the terminal may have dropped stored data on
     // a clear; retransmit on next placement. Full repaints are rare
     // (startup, resize), so the retransmit cost is incidental.
     _transmitted.clear();
-    _emittedKeys = <String>{};
+    _rasterLive = <_RasterPlacement>[];
   }
 
   // ---- Shared helpers ------------------------------------------------------
 
   /// Resolves the placement's fit against its content dimensions, or a
   /// whole-box `fill` when the content didn't declare them.
-  ResolvedImageFit _resolve(InlineImagePlacement p, InlineImage image) {
+  ResolvedImageFit? _resolve(
+    InlineImagePlacement p,
+    InlineImage image, {
+    int pixelsPerCellX = 1,
+    int pixelsPerCellY = 2,
+  }) {
     final w = image.sourceWidth;
     final h = image.sourceHeight;
     if (w == null || h == null || w <= 0 || h <= 0) {
@@ -160,12 +169,12 @@ final class TerminalImageEncoder {
         sourceHeight: 0,
       );
     }
-    return resolveInlineImageFit(
+    return resolveClippedInlineImageFit(
+      placement: p,
       sourceWidth: w,
       sourceHeight: h,
-      cols: p.cols,
-      rows: p.rows,
-      fit: p.fit,
+      pixelsPerCellX: pixelsPerCellX,
+      pixelsPerCellY: pixelsPerCellY,
     );
   }
 
@@ -188,25 +197,68 @@ final class TerminalImageEncoder {
       final image = next.images[p.id];
       if (image == null) continue;
       final f = _resolve(p, image);
-      wanted.add(_KittyPlacement(contentId: p.id, placement: p, fit: f));
+      if (f == null) continue;
+      wanted.add(
+        _KittyPlacement(
+          contentId: p.id,
+          placement: p,
+          fit: f,
+          zIndex: wanted.length,
+        ),
+      );
     }
 
     // Multiset-match against the live set: identical (content, geometry)
-    // survives untouched; everything else is placed/deleted.
-    final survivors = <_KittyPlacement>[];
-    final pool = List<_KittyPlacement>.of(_kittyLive);
-    final toPlace = <_KittyPlacement>[];
-    for (final w in wanted) {
-      final i = pool.indexWhere((live) => live.key == w.key);
-      if (i >= 0) {
-        survivors.add(pool.removeAt(i));
-      } else {
-        toPlace.add(w);
+    // survives untouched; everything else is placed/deleted. The resulting
+    // list is built in WANTED order. Each placement also carries an explicit
+    // z-index, so a mixture of survivors and additions can never accidentally
+    // acquire creation-order stacking instead of paint-order stacking.
+    //
+    // Exact stable stacks are the hot path. A linear ordered-key check avoids
+    // building any reconciliation tables and preserves every live placement
+    // id as-is.
+    if (wanted.length == _kittyLive.length) {
+      var exact = true;
+      for (var i = 0; i < wanted.length; i++) {
+        if (wanted[i].key == _kittyLive[i].key) continue;
+        exact = false;
+        break;
+      }
+      // An exact empty stack can immediately follow a full-repaint reset.
+      // In that case stored-data state was cleared but stale content→id
+      // mappings still need the normal cleanup below.
+      if (exact &&
+          (wanted.isNotEmpty ||
+              (_kittyIdByContent.isEmpty && _transmitted.isEmpty))) {
+        return;
       }
     }
-    final toDelete = pool; // live placements no frame wants anymore
 
-    for (final dead in toDelete) {
+    final reconciled = <_KittyPlacement>[];
+    final matchedLive = List<bool>.filled(_kittyLive.length, false);
+    final liveOccurrences = <String, List<int>>{};
+    for (var liveIndex = 0; liveIndex < _kittyLive.length; liveIndex++) {
+      (liveOccurrences[_kittyLive[liveIndex].key] ??= <int>[]).add(liveIndex);
+    }
+    final occurrenceCursors = <String, int>{};
+    for (final desired in wanted) {
+      final occurrences = liveOccurrences[desired.key];
+      final cursor = occurrenceCursors[desired.key] ?? 0;
+      if (occurrences != null && cursor < occurrences.length) {
+        final liveIndex = occurrences[cursor];
+        occurrenceCursors[desired.key] = cursor + 1;
+        matchedLive[liveIndex] = true;
+        reconciled.add(_kittyLive[liveIndex]);
+      } else {
+        reconciled.add(desired);
+      }
+    }
+
+    // Unmatched live placements remain in their original order, matching the
+    // old pool-based reconciliation without its repeated scans/removals.
+    for (var liveIndex = 0; liveIndex < _kittyLive.length; liveIndex++) {
+      if (matchedLive[liveIndex]) continue;
+      final dead = _kittyLive[liveIndex];
       out.write(
         _wrap(
           '\x1B_Ga=d,d=i,i=${dead.kittyImageId},p=${dead.kittyPlacementId},'
@@ -215,7 +267,8 @@ final class TerminalImageEncoder {
       );
     }
 
-    for (final place in toPlace) {
+    for (final place in reconciled) {
+      if (place.kittyPlacementId != 0) continue;
       final image = next.images[place.contentId]!;
       final kittyId = _kittyIdByContent.putIfAbsent(
         place.contentId,
@@ -234,10 +287,9 @@ final class TerminalImageEncoder {
       out.write(
         _wrap(
           '\x1B_Ga=p,i=$kittyId,p=${place.kittyPlacementId},'
-          'c=${f.cols},r=${f.rows}$crop,C=1,q=2\x1B\\',
+          'c=${f.cols},r=${f.rows},z=${place.zIndex}$crop,C=1,q=2\x1B\\',
         ),
       );
-      survivors.add(place);
     }
 
     // Free terminal-side data for content nothing references anymore
@@ -245,17 +297,22 @@ final class TerminalImageEncoder {
     // Drop the id mapping too, so the content→id table doesn't grow
     // without bound over a long session of ever-changing images; if the
     // same content returns it simply gets a fresh id and re-transmits.
-    final referenced = {for (final s in survivors) s.contentId};
+    final referenced = {for (final s in reconciled) s.contentId};
     for (final contentId in _transmitted.toList()) {
       if (referenced.contains(contentId)) continue;
-      out.write(
-        _wrap('\x1B_Ga=d,d=I,i=${_kittyIdByContent[contentId]},q=2\x1B\\'),
-      );
+      final kittyId = _kittyIdByContent[contentId];
+      if (kittyId == null) {
+        _transmitted.remove(contentId);
+        continue;
+      }
+      out.write(_wrap('\x1B_Ga=d,d=I,i=$kittyId,q=2\x1B\\'));
       _transmitted.remove(contentId);
-      _kittyIdByContent.remove(contentId);
     }
+    _kittyIdByContent.removeWhere(
+      (contentId, _) => !referenced.contains(contentId),
+    );
 
-    _kittyLive = survivors;
+    _kittyLive = reconciled;
   }
 
   /// Transmit-only (`a=t`) upload: PNG bytes pass through untouched
@@ -294,14 +351,19 @@ final class TerminalImageEncoder {
   // ---- iTerm2 --------------------------------------------------------------
 
   void _encodeIterm2(CellBuffer next, StringBuffer out) {
-    final current = <String>{};
+    final wanted = <_RasterPlacement>[];
+    final croppers = <Uint8List Function(int, int, int, int)?>[];
     for (final p in next.imagePlacements) {
       final image = next.images[p.id];
       if (image == null) continue;
       var f = _resolve(p, image);
-      // iTerm2 has no source-crop keys: fits that require one degrade to
-      // contain — aspect-true and fully visible, never distorted.
-      if (f.sourceWidth > 0 && f.cropsSource) {
+      if (f == null) continue;
+      final cropper = image.croppedBytes;
+      // Custom providers may omit the lazy PNG crop sidecar. Preserve the
+      // historical safe fallback for them: show the complete source with
+      // contain geometry inside the visible rectangle rather than stretching
+      // or pretending that an unexpressible source crop is exact.
+      if (f.sourceWidth > 0 && f.cropsSource && cropper == null) {
         f = resolveInlineImageFit(
           sourceWidth: f.sourceWidth,
           sourceHeight: f.sourceHeight,
@@ -310,26 +372,46 @@ final class TerminalImageEncoder {
           fit: InlineImageFit.contain,
         );
       }
-      final key =
-          '${p.id}|${p.col + f.col},${p.row + f.row},${f.cols},${f.rows}';
-      current.add(key);
-      if (_emittedKeys.contains(key)) continue;
-      final b64 = base64.encode(image.bytes);
-      out.write(_cup(p, f));
+      wanted.add(_RasterPlacement(contentId: p.id, placement: p, fit: f));
+      croppers.add(cropper);
+    }
+    final reconciliation = _reconcileRasterStack(wanted);
+    if (!reconciliation.hasAffectedPlacements) {
+      // This also updates logical paint order for a reorder of disjoint
+      // placements, which has no visual work and therefore emits zero bytes.
+      _rasterLive = wanted;
+      return;
+    }
+
+    _clearStaleRasterCells(next, out, reconciliation.affectedOld);
+    for (var i = 0; i < wanted.length; i++) {
+      if (!reconciliation.affectedNew[i]) continue;
+      final place = wanted[i];
+      final image = next.images[place.contentId]!;
+      final f = place.fit;
+      // Keep the common/full-source path byte-for-byte zero-copy. The crop
+      // callback is deliberately invoked only after reconciliation proves a
+      // changed frame needs emission, and only for a partial source window.
+      final cropper = croppers[i];
+      final payload = f.sourceWidth > 0 && f.cropsSource && cropper != null
+          ? cropper(f.cropX, f.cropY, f.cropW, f.cropH)
+          : image.bytes;
+      final b64 = base64.encode(payload);
+      out.write(_cup(place.placement, f));
       out.write(
         _wrap(
-          '\x1B]1337;File=inline=1;size=${image.bytes.length};'
+          '\x1B]1337;File=inline=1;size=${payload.length};'
           'width=${f.cols};height=${f.rows};preserveAspectRatio=0:$b64\x07',
         ),
       );
     }
-    _emittedKeys = current;
+    _rasterLive = wanted;
   }
 
   // ---- Sixel ---------------------------------------------------------------
 
   void _encodeSixelFrame(CellBuffer next, StringBuffer out) {
-    final current = <String>{};
+    final wanted = <_RasterPlacement>[];
     for (final p in next.imagePlacements) {
       final image = next.images[p.id];
       if (image == null) continue;
@@ -338,28 +420,245 @@ final class TerminalImageEncoder {
       final srcH = image.sourceHeight;
       // Sixel must re-rasterize; without the decoded-RGBA sidecar there
       // is nothing to encode (core cannot decode PNG).
-      if (pixels == null || srcW == null || srcH == null) continue;
-      final f = resolveInlineImageFit(
-        sourceWidth: srcW,
-        sourceHeight: srcH,
-        cols: p.cols,
-        rows: p.rows,
-        fit: p.fit,
+      if (pixels == null ||
+          srcW == null ||
+          srcH == null ||
+          srcW <= 0 ||
+          srcH <= 0) {
+        continue;
+      }
+      final f = _resolve(
+        p,
+        image,
         pixelsPerCellX: cellPixelWidth,
         pixelsPerCellY: cellPixelHeight,
       );
-      final key =
-          '${p.id}|${p.col + f.col},${p.row + f.row},${f.cols},${f.rows}|'
-          '${f.cropX},${f.cropY},${f.cropW},${f.cropH}';
-      current.add(key);
-      if (_emittedKeys.contains(key)) continue;
+      if (f == null) continue;
+      wanted.add(_RasterPlacement(contentId: p.id, placement: p, fit: f));
+    }
+    final reconciliation = _reconcileRasterStack(wanted);
+    if (!reconciliation.hasAffectedPlacements) {
+      _rasterLive = wanted;
+      return;
+    }
+
+    _clearStaleRasterCells(next, out, reconciliation.affectedOld);
+    for (var i = 0; i < wanted.length; i++) {
+      if (!reconciliation.affectedNew[i]) continue;
+      final place = wanted[i];
+      final image = next.images[place.contentId]!;
+      final pixels = image.pixels!;
+      final srcW = image.sourceWidth!;
+      final srcH = image.sourceHeight!;
+      final f = place.fit;
       final tgtW = f.cols * cellPixelWidth;
       final tgtH = f.rows * cellPixelHeight;
       final rgba = _sampleCrop(pixels(), srcW, srcH, f, tgtW, tgtH);
-      out.write(_cup(p, f));
+      out.write(_cup(place.placement, f));
       out.write(_wrap(encodeSixel(rgba, tgtW, tgtH)));
     }
-    _emittedKeys = current;
+    _rasterLive = wanted;
+  }
+
+  _RasterReconciliation _reconcileRasterStack(List<_RasterPlacement> wanted) {
+    // The overwhelmingly common path is an exact stable stack. Keep it
+    // allocation-light and strictly O(n): no occurrence table, inversion
+    // search, or overlap graph is needed when every ordered key matches.
+    if (wanted.length == _rasterLive.length) {
+      var exact = true;
+      for (var i = 0; i < wanted.length; i++) {
+        if (wanted[i].key == _rasterLive[i].key) continue;
+        exact = false;
+        break;
+      }
+      if (exact) {
+        return _RasterReconciliation(
+          affectedOld: List<bool>.filled(_rasterLive.length, false),
+          affectedNew: List<bool>.filled(wanted.length, false),
+        );
+      }
+    }
+
+    final oldToNew = List<int>.filled(_rasterLive.length, -1);
+    final newToOld = List<int>.filled(wanted.length, -1);
+
+    // Multiset match. Duplicate placements are significant, so consume each
+    // old occurrence at most once rather than reducing to a key set. Indexing
+    // each key's old occurrences once and advancing a cursor keeps matching
+    // O(old + wanted), including stacks with many identical duplicates.
+    final oldOccurrences = <String, List<int>>{};
+    for (var oldIndex = 0; oldIndex < _rasterLive.length; oldIndex++) {
+      (oldOccurrences[_rasterLive[oldIndex].key] ??= <int>[]).add(oldIndex);
+    }
+    final occurrenceCursors = <String, int>{};
+    var matchedOldIndicesMonotonic = true;
+    var lastMatchedOldIndex = -1;
+    for (var newIndex = 0; newIndex < wanted.length; newIndex++) {
+      final key = wanted[newIndex].key;
+      final occurrences = oldOccurrences[key];
+      if (occurrences == null) continue;
+      final cursor = occurrenceCursors[key] ?? 0;
+      if (cursor >= occurrences.length) continue;
+      final oldIndex = occurrences[cursor];
+      occurrenceCursors[key] = cursor + 1;
+      oldToNew[oldIndex] = newIndex;
+      newToOld[newIndex] = oldIndex;
+      if (oldIndex < lastMatchedOldIndex) {
+        matchedOldIndicesMonotonic = false;
+      }
+      lastMatchedOldIndex = oldIndex;
+    }
+
+    final affectedOld = List<bool>.generate(
+      _rasterLive.length,
+      (i) => oldToNew[i] == -1,
+      growable: false,
+    );
+    final affectedNew = List<bool>.generate(
+      wanted.length,
+      (i) => newToOld[i] == -1,
+      growable: false,
+    );
+
+    // Reordering disjoint rectangles is only a bookkeeping change. An order
+    // inversion matters precisely when the two live rectangles overlap. A
+    // monotonic matched-index sequence proves there are no inversions at all,
+    // avoiding this O(n²) changed-stack scan for stable order plus disjoint
+    // insertions/removals.
+    if (!matchedOldIndicesMonotonic) {
+      for (var a = 0; a < wanted.length; a++) {
+        final oldA = newToOld[a];
+        if (oldA == -1) continue;
+        for (var b = a + 1; b < wanted.length; b++) {
+          final oldB = newToOld[b];
+          if (oldB == -1 || oldA < oldB || !wanted[a].overlaps(wanted[b])) {
+            continue;
+          }
+          affectedNew[a] = true;
+          affectedNew[b] = true;
+          affectedOld[oldA] = true;
+          affectedOld[oldB] = true;
+        }
+      }
+    }
+
+    // Clearing one stale rectangle can erase any overlapping layer. Expand
+    // seeds through the union of old and new overlap graphs (and through each
+    // matched old/new occurrence) until every affected connected component is
+    // complete. A queue visits each node once, keeping reconciliation O(n²).
+    // Non-overlapping placements remain true survivors and never resend their
+    // raster payload.
+    final queue = <int>[];
+    final newBase = _rasterLive.length;
+    for (var i = 0; i < affectedOld.length; i++) {
+      if (affectedOld[i]) queue.add(i);
+    }
+    for (var i = 0; i < affectedNew.length; i++) {
+      if (affectedNew[i]) queue.add(newBase + i);
+    }
+
+    void addOld(int index) {
+      if (affectedOld[index]) return;
+      affectedOld[index] = true;
+      queue.add(index);
+    }
+
+    void addNew(int index) {
+      if (affectedNew[index]) return;
+      affectedNew[index] = true;
+      queue.add(newBase + index);
+    }
+
+    for (var head = 0; head < queue.length; head++) {
+      final node = queue[head];
+      if (node < newBase) {
+        final oldIndex = node;
+        final newIndex = oldToNew[oldIndex];
+        if (newIndex != -1) addNew(newIndex);
+        for (var other = 0; other < _rasterLive.length; other++) {
+          if (_rasterLive[oldIndex].overlaps(_rasterLive[other])) addOld(other);
+        }
+        for (var other = 0; other < wanted.length; other++) {
+          if (_rasterLive[oldIndex].overlaps(wanted[other])) addNew(other);
+        }
+      } else {
+        final newIndex = node - newBase;
+        final oldIndex = newToOld[newIndex];
+        if (oldIndex != -1) addOld(oldIndex);
+        for (var other = 0; other < wanted.length; other++) {
+          if (wanted[newIndex].overlaps(wanted[other])) addNew(other);
+        }
+        for (var other = 0; other < _rasterLive.length; other++) {
+          if (wanted[newIndex].overlaps(_rasterLive[other])) addOld(other);
+        }
+      }
+    }
+
+    return _RasterReconciliation(
+      affectedOld: affectedOld,
+      affectedNew: affectedNew,
+    );
+  }
+
+  /// Clears stale raster pixels only where the next frame still owns the cell
+  /// as an image overlay. Cells that reveal text/emptiness are intentionally
+  /// excluded: the ANSI diff has just repainted those, and clearing them in
+  /// this trailer would erase the new text. Every current placement is then
+  /// replayed in paint order by the caller, restoring any stack this bounded
+  /// screen-sized mask intersects.
+  void _clearStaleRasterCells(
+    CellBuffer next,
+    StringBuffer out,
+    List<bool> affectedOld,
+  ) {
+    if (_rasterLive.isEmpty ||
+        next.size.isEmpty ||
+        !affectedOld.any((affected) => affected)) {
+      return;
+    }
+    final cols = next.size.cols;
+    final rows = next.size.rows;
+    final clear = Uint8List(cols * rows);
+    var any = false;
+    for (var i = 0; i < _rasterLive.length; i++) {
+      if (!affectedOld[i]) continue;
+      final old = _rasterLive[i];
+      final left = (old.placement.col + old.fit.col).clamp(0, cols);
+      final top = (old.placement.row + old.fit.row).clamp(0, rows);
+      final right = (old.placement.col + old.fit.col + old.fit.cols).clamp(
+        0,
+        cols,
+      );
+      final bottom = (old.placement.row + old.fit.row + old.fit.rows).clamp(
+        0,
+        rows,
+      );
+      for (var row = top; row < bottom; row++) {
+        for (var col = left; col < right; col++) {
+          if (next.atColRow(col, row).role != CellRole.overlay) continue;
+          clear[row * cols + col] = 1;
+          any = true;
+        }
+      }
+    }
+    if (!any) return;
+
+    out.write('\x1B[0m');
+    for (var row = 0; row < rows; row++) {
+      var col = 0;
+      while (col < cols) {
+        while (col < cols && clear[row * cols + col] == 0) {
+          col++;
+        }
+        if (col == cols) break;
+        final start = col;
+        while (col < cols && clear[row * cols + col] != 0) {
+          col++;
+        }
+        out.write('\x1B[${row + 1};${start + 1}H');
+        out.write(''.padRight(col - start));
+      }
+    }
   }
 
   /// Bilinearly samples the resolved source crop into a tgtW×tgtH RGBA
@@ -411,11 +710,13 @@ final class _KittyPlacement {
     required this.contentId,
     required this.placement,
     required this.fit,
+    required this.zIndex,
   });
 
   final String contentId;
   final InlineImagePlacement placement;
   final ResolvedImageFit fit;
+  final int zIndex;
   int kittyImageId = 0;
   int kittyPlacementId = 0;
 
@@ -428,7 +729,49 @@ final class _KittyPlacement {
   late final String key =
       '$contentId|${placement.col},${placement.row}|'
       '${fit.col},${fit.row},${fit.cols},${fit.rows}|'
+      '${fit.cropX},${fit.cropY},${fit.cropW},${fit.cropH}|z=$zIndex';
+}
+
+final class _RasterPlacement {
+  _RasterPlacement({
+    required this.contentId,
+    required this.placement,
+    required this.fit,
+  });
+
+  final String contentId;
+  final InlineImagePlacement placement;
+  final ResolvedImageFit fit;
+
+  late final String key =
+      '$contentId|${placement.col},${placement.row}|'
+      '${fit.col},${fit.row},${fit.cols},${fit.rows}|'
       '${fit.cropX},${fit.cropY},${fit.cropW},${fit.cropH}';
+
+  int get left => placement.col + fit.col;
+  int get top => placement.row + fit.row;
+  int get right => left + fit.cols;
+  int get bottom => top + fit.rows;
+
+  bool overlaps(_RasterPlacement other) =>
+      left < other.right &&
+      other.left < right &&
+      top < other.bottom &&
+      other.top < bottom;
+}
+
+final class _RasterReconciliation {
+  const _RasterReconciliation({
+    required this.affectedOld,
+    required this.affectedNew,
+  });
+
+  final List<bool> affectedOld;
+  final List<bool> affectedNew;
+
+  bool get hasAffectedPlacements =>
+      affectedOld.any((affected) => affected) ||
+      affectedNew.any((affected) => affected);
 }
 
 /// Encodes an RGBA buffer as a Sixel byte stream: raster attributes for

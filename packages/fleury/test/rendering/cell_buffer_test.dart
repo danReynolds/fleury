@@ -320,19 +320,28 @@ void main() {
   });
 
   group('Overlay regions', () {
-    test('an image whose top-left is out of bounds is dropped', () {
-      final buf = CellBuffer(const CellSize(3, 1));
-      final bytes = Uint8List.fromList([1]);
-      buf.writeImage(const CellOffset(-1, 0), bytes, width: 2, height: 1);
-      buf.writeImage(const CellOffset(0, -1), bytes, width: 2, height: 1);
-      buf.writeImage(const CellOffset(3, 0), bytes, width: 2, height: 1);
-      buf.writeImage(const CellOffset(0, 1), bytes, width: 2, height: 1);
+    test(
+      'a partial image is retained while fully outside images are dropped',
+      () {
+        final buf = CellBuffer(const CellSize(3, 1));
+        final bytes = Uint8List.fromList([1]);
+        buf.writeImage(const CellOffset(-1, 0), bytes, width: 2, height: 1);
+        buf.writeImage(const CellOffset(0, -1), bytes, width: 2, height: 1);
+        buf.writeImage(const CellOffset(3, 0), bytes, width: 2, height: 1);
+        buf.writeImage(const CellOffset(0, 1), bytes, width: 2, height: 1);
 
-      expect(buf.atColRow(0, 0), const Cell.empty());
-      expect(buf.atColRow(2, 0), const Cell.empty());
-      expect(buf.imagePlacements, isEmpty);
-      expect(buf.images, isEmpty);
-    });
+        expect(buf.atColRow(0, 0), const Cell.overlay());
+        expect(buf.atColRow(2, 0), const Cell.empty());
+        final placement = buf.imagePlacements.single;
+        expect(
+          [placement.col, placement.row, placement.cols, placement.rows],
+          [0, 0, 1, 1],
+        );
+        expect([placement.boxCols, placement.boxRows], [2, 1]);
+        expect([placement.boxOffsetCol, placement.boxOffsetRow], [1, 0]);
+        expect(buf.images, hasLength(1));
+      },
+    );
 
     test('an in-bounds image covers its region with overlay cells', () {
       final buf = CellBuffer(const CellSize(3, 1));

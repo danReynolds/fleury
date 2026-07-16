@@ -249,5 +249,13 @@ class RenderClip extends RenderObject implements RenderObjectWithSingleChild {
         );
       }
     }
+    // Placements are stored off-grid and therefore are not carried by the
+    // leading-cell loop above. Composite the same clipped rectangle so image
+    // pixels follow expand/collapse geometry exactly.
+    buffer.compositeImageRectFrom(
+      scratch,
+      CellRect(offset: CellOffset.zero, size: clipped),
+      offset,
+    );
   }
 }

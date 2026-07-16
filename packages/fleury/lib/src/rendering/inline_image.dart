@@ -36,6 +36,7 @@ final class InlineImage {
     this.sourceWidth,
     this.sourceHeight,
     this.pixels,
+    this.croppedBytes,
   });
 
   final String id;
@@ -43,12 +44,26 @@ final class InlineImage {
   final int? sourceWidth;
   final int? sourceHeight;
   final Uint8List Function()? pixels;
+
+  /// Lazily encodes a source-pixel crop as PNG bytes. Most presenters can
+  /// express a crop directly (Kitty) or rasterize from [pixels] (Sixel), but
+  /// iTerm2's inline-image protocol cannot. Image providers that already own
+  /// a decoded bitmap can supply this without making the rendering core learn
+  /// how to decode or encode PNGs.
+  final Uint8List Function(int x, int y, int width, int height)? croppedBytes;
 }
 
-/// One placement of an inline image: which [id]'s bytes go where ([col],
-/// [row]) over how many cells ([cols]×[rows]) and how they fill that box
-/// ([fit]). One is recorded per [CellBuffer.writeImage] call, so the same
-/// image drawn twice yields two placements with independent geometry.
+/// One visible placement of an inline image.
+///
+/// [col], [row], [cols], and [rows] describe the non-empty rectangle visible
+/// in the current buffer. [boxCols]×[boxRows] is the original laid-out image
+/// box, and [boxOffsetCol]/[boxOffsetRow] locate the visible rectangle inside
+/// that box. Keeping both rectangles is essential: fitting is resolved against
+/// the original box and only then clipped, so scrolling or clipping a `cover`,
+/// `contain`, or `none` image never rescales or recenters it.
+///
+/// One is recorded per image paint, so the same [id] drawn twice yields two
+/// placements with independent geometry and stable paint-list order.
 final class InlineImagePlacement {
   const InlineImagePlacement({
     required this.id,
@@ -57,7 +72,17 @@ final class InlineImagePlacement {
     required this.cols,
     required this.rows,
     required this.fit,
-  });
+    int? boxCols,
+    int? boxRows,
+    this.boxOffsetCol = 0,
+    this.boxOffsetRow = 0,
+  }) : boxCols = boxCols ?? cols,
+       boxRows = boxRows ?? rows,
+       assert(cols > 0 && rows > 0, 'visible box must be non-empty'),
+       assert((boxCols ?? cols) > 0 && (boxRows ?? rows) > 0),
+       assert(boxOffsetCol >= 0 && boxOffsetRow >= 0),
+       assert(boxOffsetCol + cols <= (boxCols ?? cols)),
+       assert(boxOffsetRow + rows <= (boxRows ?? rows));
 
   final String id;
   final int col;
@@ -65,6 +90,16 @@ final class InlineImagePlacement {
   final int cols;
   final int rows;
   final InlineImageFit fit;
+  final int boxCols;
+  final int boxRows;
+  final int boxOffsetCol;
+  final int boxOffsetRow;
+
+  bool get isClipped =>
+      boxOffsetCol != 0 ||
+      boxOffsetRow != 0 ||
+      cols != boxCols ||
+      rows != boxRows;
 }
 
 /// The geometry a fit resolves to: a destination sub-rectangle inside the
@@ -199,4 +234,95 @@ ResolvedImageFit resolveInlineImageFit({
         sourceHeight: srcH,
       );
   }
+}
+
+/// Resolves [placement]'s fit against its original box, then intersects that
+/// result with the placement's visible window.
+///
+/// The returned destination is relative to the visible placement rectangle,
+/// while its source crop is refined to the same window. `null` means the
+/// visible window contains only a letterbox band and therefore has no image
+/// pixels to present.
+ResolvedImageFit? resolveClippedInlineImageFit({
+  required InlineImagePlacement placement,
+  required int sourceWidth,
+  required int sourceHeight,
+  int pixelsPerCellX = 1,
+  int pixelsPerCellY = 2,
+}) {
+  final fitted = resolveInlineImageFit(
+    sourceWidth: sourceWidth,
+    sourceHeight: sourceHeight,
+    cols: placement.boxCols,
+    rows: placement.boxRows,
+    fit: placement.fit,
+    pixelsPerCellX: pixelsPerCellX,
+    pixelsPerCellY: pixelsPerCellY,
+  );
+
+  final visibleLeft = placement.boxOffsetCol;
+  final visibleTop = placement.boxOffsetRow;
+  final visibleRight = visibleLeft + placement.cols;
+  final visibleBottom = visibleTop + placement.rows;
+  final fittedRight = fitted.col + fitted.cols;
+  final fittedBottom = fitted.row + fitted.rows;
+  final left = visibleLeft > fitted.col ? visibleLeft : fitted.col;
+  final top = visibleTop > fitted.row ? visibleTop : fitted.row;
+  final right = visibleRight < fittedRight ? visibleRight : fittedRight;
+  final bottom = visibleBottom < fittedBottom ? visibleBottom : fittedBottom;
+  if (left >= right || top >= bottom) return null;
+
+  int cropBoundary(int position, int extent, int cropStart, int cropExtent) {
+    return cropStart + (position * cropExtent / extent).round();
+  }
+
+  var cropLeft = cropBoundary(
+    left - fitted.col,
+    fitted.cols,
+    fitted.cropX,
+    fitted.cropW,
+  );
+  var cropRight = cropBoundary(
+    right - fitted.col,
+    fitted.cols,
+    fitted.cropX,
+    fitted.cropW,
+  );
+  var cropTop = cropBoundary(
+    top - fitted.row,
+    fitted.rows,
+    fitted.cropY,
+    fitted.cropH,
+  );
+  var cropBottom = cropBoundary(
+    bottom - fitted.row,
+    fitted.rows,
+    fitted.cropY,
+    fitted.cropH,
+  );
+
+  // A source pixel may be stretched across several cells. Any non-empty
+  // visible destination still needs at least that one pixel in the protocol
+  // crop, even when both rounded boundaries land on it.
+  if (cropRight <= cropLeft) {
+    cropLeft = cropLeft.clamp(fitted.cropX, fitted.cropX + fitted.cropW - 1);
+    cropRight = cropLeft + 1;
+  }
+  if (cropBottom <= cropTop) {
+    cropTop = cropTop.clamp(fitted.cropY, fitted.cropY + fitted.cropH - 1);
+    cropBottom = cropTop + 1;
+  }
+
+  return ResolvedImageFit(
+    col: left - visibleLeft,
+    row: top - visibleTop,
+    cols: right - left,
+    rows: bottom - top,
+    cropX: cropLeft,
+    cropY: cropTop,
+    cropW: cropRight - cropLeft,
+    cropH: cropBottom - cropTop,
+    sourceWidth: sourceWidth,
+    sourceHeight: sourceHeight,
+  );
 }

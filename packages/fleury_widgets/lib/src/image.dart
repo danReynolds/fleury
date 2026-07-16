@@ -439,6 +439,8 @@ class RenderImage extends RenderObject {
     _encodedPng = null;
     _encodedId = null;
     _rgba = null;
+    _lastCrop = null;
+    _lastCroppedPng = null;
     markNeedsLayout();
   }
 
@@ -458,6 +460,23 @@ class RenderImage extends RenderObject {
   Uint8List? _rgba;
   Uint8List _rgbaPixels() =>
       _rgba ??= _decoded.getBytes(order: img.ChannelOrder.rgba);
+
+  // iTerm2 cannot express a source crop in its escape protocol. Keep one
+  // lazily encoded crop beside the full PNG: stable clipped frames reuse it,
+  // while scrolling through many windows cannot grow an unbounded cache.
+  (int, int, int, int)? _lastCrop;
+  Uint8List? _lastCroppedPng;
+  Uint8List _croppedPng(int x, int y, int width, int height) {
+    final crop = (x, y, width, height);
+    if (_lastCrop == crop && _lastCroppedPng != null) return _lastCroppedPng!;
+    final encoded = Uint8List.fromList(
+      img.encodePng(
+        img.copyCrop(_decoded, x: x, y: y, width: width, height: height),
+      ),
+    );
+    _lastCrop = crop;
+    return _lastCroppedPng = encoded;
+  }
 
   ImageFit _fit;
   set fit(ImageFit v) {
@@ -819,6 +838,7 @@ class RenderImage extends RenderObject {
       sourceWidth: _decoded.width,
       sourceHeight: _decoded.height,
       pixels: _rgbaPixels,
+      croppedBytes: _croppedPng,
     );
   }
 

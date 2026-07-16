@@ -5,6 +5,8 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
+import '../support/render_fixtures.dart';
+
 String _row(FleuryTester tester, int cols, {int row = 0, int? height}) {
   final buf = tester.render(size: CellSize(cols, height ?? row + 1));
   final sb = StringBuffer();
@@ -62,6 +64,35 @@ void main() {
       expect(_row(tester, 6, row: 0, height: 3), 'A');
       expect(_row(tester, 6, row: 1, height: 3), 'B');
       expect(_row(tester, 6, row: 2, height: 3), 'after');
+    });
+
+    testWidgets('vertical clipping carries a partial true-pixel image', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const ImageLeaf()
+            .animate(
+              curve: Curves.linear,
+              duration: const Duration(milliseconds: 100),
+            )
+            .expand(axis: Axis.vertical),
+      );
+
+      tester.pump(const Duration(milliseconds: 50));
+      final partial = tester.render(size: const CellSize(4, 2));
+      final clipped = partial.imagePlacements.single;
+      expect(
+        [clipped.col, clipped.row, clipped.cols, clipped.rows],
+        [0, 0, 4, 1],
+      );
+      expect([clipped.boxCols, clipped.boxRows], [4, 2]);
+      expect([clipped.boxOffsetCol, clipped.boxOffsetRow], [0, 0]);
+
+      tester.pump(const Duration(milliseconds: 50));
+      final full = tester.render(size: const CellSize(4, 2));
+      final placement = full.imagePlacements.single;
+      expect([placement.cols, placement.rows], [4, 2]);
+      expect(placement.isClipped, isFalse);
     });
   });
 

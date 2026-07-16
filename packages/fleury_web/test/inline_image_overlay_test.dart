@@ -42,15 +42,23 @@ ImagePlacement _place(
   int col,
   int row,
   int cols,
-  int rows, [
+  int rows, {
   InlineImageFit fit = InlineImageFit.contain,
-]) => ImagePlacement(
+  int? boxCols,
+  int? boxRows,
+  int boxOffsetCol = 0,
+  int boxOffsetRow = 0,
+}) => ImagePlacement(
   id: id,
   col: col,
   row: row,
   cols: cols,
   rows: rows,
   fit: fit,
+  boxCols: boxCols,
+  boxRows: boxRows,
+  boxOffsetCol: boxOffsetCol,
+  boxOffsetRow: boxOffsetRow,
 );
 
 List<web.HTMLImageElement> _imgs(web.HTMLElement host) {
@@ -73,7 +81,7 @@ void main() {
     final overlay = InlineImageOverlay(host)
       ..cacheImage('a', Uint8List.fromList([1, 2, 3, 4]))
       ..presentPlan([
-        _place('a', 2, 1, 3, 2, InlineImageFit.cover),
+        _place('a', 2, 1, 3, 2, fit: InlineImageFit.cover),
       ], _box(cw: 10, ch: 20, insetX: 5, insetY: 7));
 
     final imgs = _imgs(host);
@@ -90,6 +98,44 @@ void main() {
     overlay.dispose();
     host.remove();
   });
+
+  test(
+    'clips against the original box without re-fitting the visible slice',
+    () {
+      final host = _makeHost();
+      final overlay = InlineImageOverlay(host)
+        ..cacheImage('clipped', Uint8List.fromList([1, 2, 3, 4]))
+        ..presentPlan([
+          _place(
+            'clipped',
+            0,
+            2,
+            3,
+            2,
+            fit: InlineImageFit.cover,
+            boxCols: 7,
+            boxRows: 5,
+            boxOffsetCol: 2,
+            boxOffsetRow: 1,
+          ),
+        ], _box(cw: 10, ch: 20, insetX: 5, insetY: 7));
+
+      final img = _imgs(host).single;
+      expect(img.style.left, '-15px');
+      expect(img.style.top, '27px');
+      expect(img.style.width, '70px');
+      expect(img.style.height, '100px');
+      expect(
+        img.style.getPropertyValue('clip-path'),
+        'inset(20px 20px 40px)',
+        reason: 'CSSOM collapses equal left/right inset values',
+      );
+      expect(img.style.getPropertyValue('object-fit'), 'cover');
+
+      overlay.dispose();
+      host.remove();
+    },
+  );
 
   test('positioned host uses local inset without double-counting its viewport '
       'origin', () {
@@ -255,6 +301,36 @@ void main() {
     final imgs = _imgs(host);
     expect(imgs, hasLength(1), reason: 'reused, not recreated');
     expect(imgs.single.style.left, '40px', reason: 'repositioned');
+
+    overlay.dispose();
+    host.remove();
+  });
+
+  test('reorders retained elements to match authoritative paint order', () {
+    final host = _makeHost();
+    final overlay = InlineImageOverlay(host)
+      ..cacheImage('back', Uint8List.fromList([1]))
+      ..cacheImage('front', Uint8List.fromList([2]))
+      ..presentPlan([
+        _place('back', 0, 0, 2, 2),
+        _place('front', 0, 0, 2, 2),
+      ], _box());
+    final initial = _imgs(host);
+    expect(initial, hasLength(2));
+
+    overlay.presentPlan([
+      _place('front', 0, 0, 2, 2),
+      _place('back', 0, 0, 2, 2),
+    ], _box());
+
+    final reordered = _imgs(host);
+    expect(reordered[0], same(initial[1]));
+    expect(reordered[1], same(initial[0]));
+    expect(
+      overlay.imageElementCount,
+      2,
+      reason: 'nodes were moved, not rebuilt',
+    );
 
     overlay.dispose();
     host.remove();
