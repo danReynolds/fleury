@@ -101,6 +101,19 @@ class _ShrinkTextAppState extends State<_ShrinkTextApp> {
   Widget build(BuildContext context) => Text(_short ? 'hi' : 'hello');
 }
 
+class _NavigationProbe extends StatelessWidget {
+  const _NavigationProbe({required this.onBuild, required this.child});
+
+  final void Function(BuildContext context) onBuild;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    onBuild(context);
+    return child;
+  }
+}
+
 /// A stateful widget whose [State.dispose] throws — stands in for a faulty
 /// user teardown. runtime.dispose() unmounts the tree and this throw bubbles
 /// out of the framework-disposal block; the terminal must still be restored.
@@ -268,9 +281,9 @@ void main() {
 
     // DELIBERATE INVERSION (pipeline-program PR6): these two tests used to
     // assert that a layout/paint crash tears the session down. Containment
-    // overturns that posture — the implicit route boundary renders the
-    // error presentation, the session survives, and Ctrl+C still exits
-    // with exactly one terminal restore.
+    // overturns that posture — the host OverlayEntry boundary renders the
+    // error presentation, the session survives, and Ctrl+C still exits with
+    // exactly one terminal restore.
     test('a render crash is contained; the session survives', () async {
       final driver = FakeTerminalDriver();
       final future = runApp(
@@ -347,31 +360,68 @@ void main() {
     });
   });
 
-  group('runApp root focus traversal', () {
+  group('runApp application-shell ownership', () {
+    test('mounts a bare root without installing a Navigator', () async {
+      final driver = FakeTerminalDriver();
+      BuildContext? context;
+      try {
+        final future = runApp(
+          _NavigationProbe(
+            onBuild: (value) => context = value,
+            child: const Text('bare root'),
+          ),
+          driver: driver,
+          enableHotReload: false,
+        );
+        await _settle();
+
+        expect(driver.output, contains('bare root'));
+        expect(context, isNotNull);
+        expect(Navigator.maybeOf(context!), isNull);
+        expect(TuiBinding.of(context!).rootNavigator, isNull);
+
+        driver.enqueue(
+          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+        );
+        await future;
+      } finally {
+        await driver.dispose();
+      }
+    });
+
     test(
-      'installs a root traversal group so arrows move focus with no app shell '
-      'or manual FocusTraversalGroup',
+      'FleuryApp installs the app-owned root Navigator and traversal',
       () async {
         final driver = FakeTerminalDriver();
         final nodeA = FocusNode();
         final nodeB = FocusNode();
+        BuildContext? routeContext;
         try {
-          // A bare two-widget column — no FleuryApp, no FocusTraversalGroup.
           final future = runApp(
-            Column(
-              children: [
-                Focus(
-                  focusNode: nodeA,
-                  autofocus: true,
-                  child: const Text('A'),
+            FleuryApp(
+              title: 'Runtime shell',
+              home: _NavigationProbe(
+                onBuild: (value) => routeContext = value,
+                child: Column(
+                  children: [
+                    Focus(
+                      focusNode: nodeA,
+                      autofocus: true,
+                      child: const Text('A'),
+                    ),
+                    Focus(focusNode: nodeB, child: const Text('B')),
+                  ],
                 ),
-                Focus(focusNode: nodeB, child: const Text('B')),
-              ],
+              ),
             ),
             driver: driver,
             enableHotReload: false,
           );
           await _settle();
+          expect(routeContext, isNotNull);
+          expect(FleuryApp.of(routeContext!).title, 'Runtime shell');
+          final navigator = Navigator.of(routeContext!);
+          expect(TuiBinding.of(routeContext!).rootNavigator, same(navigator));
           expect(nodeA.hasFocus, isTrue, reason: 'autofocus lands on A');
 
           driver.enqueue(const KeyEvent(keyCode: KeyCode.arrowDown));
@@ -380,9 +430,8 @@ void main() {
             nodeB.hasFocus,
             isTrue,
             reason:
-                'arrowDown moves focus A→B via the traversal group runApp '
-                'installs at the root; without it a bare app would not '
-                'traverse at all',
+                'arrowDown moves focus A→B via the traversal group owned by '
+                'the app-supplied Navigator',
           );
 
           driver.enqueue(

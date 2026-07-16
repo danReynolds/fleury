@@ -7,7 +7,7 @@
 import 'package:fleury/fleury.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 
-void main() => runApp(const SignupForm());
+void main() => runApp(const FleuryApp(title: 'Sign up', home: SignupForm()));
 
 class SignupForm extends StatefulWidget {
   const SignupForm({super.key});
@@ -59,7 +59,10 @@ class _SignupFormState extends State<SignupForm> {
     final showErrors = _submitted;
     return KeyBindings(
       bindings: [
-        KeyBinding(const KeyChord.char('s', ctrl: true), onEvent: (_) => _submit()),
+        KeyBinding(
+          const KeyChord.char('s', ctrl: true),
+          onEvent: (_) => _submit(),
+        ),
       ],
       child: Padding(
         padding: const EdgeInsets.all(1),

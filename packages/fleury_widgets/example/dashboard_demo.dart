@@ -31,7 +31,7 @@ import 'package:fleury_widgets/fleury_widgets.dart';
 
 Future<void> main() async {
   await runApp(
-    const DashboardApp(),
+    const FleuryApp(title: 'Widget dashboard', home: DashboardApp()),
     onEvent: (event) {
       if (event is KeyEvent && event.hasCtrl && event.char == 'c') {
         return const ExitRequested();
@@ -156,14 +156,14 @@ class _DashboardAppState extends State<DashboardApp> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Focus(
-      onKey: (event) {
-        if (event.keyCode == null && event.char == ' ') {
-          setState(() => _paused = !_paused);
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
+    return KeyBindings(
+      bindings: [
+        KeyBinding(
+          KeyChord.space,
+          label: _paused ? 'Resume' : 'Pause',
+          onEvent: (_) => setState(() => _paused = !_paused),
+        ),
+      ],
       child: Padding(
         padding: const EdgeInsets.all(1),
         child: Column(

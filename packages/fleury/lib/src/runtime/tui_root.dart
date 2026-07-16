@@ -30,9 +30,9 @@ import 'clipboard.dart';
 import 'output_capture.dart';
 
 /// Assembles the shared scope stack a Fleury host mounts around [overlayEntries]
-/// (the app's Navigator route entry, plus any host-owned floating entries like
-/// the runtime-error overlay — created once by the caller so their subtree
-/// state survives a resize rebuild).
+/// (the application root entry, plus any host-owned floating entries like the
+/// runtime-error overlay — created once by the caller so their subtree state
+/// survives a resize rebuild).
 ///
 /// [logBuffer] and [debugController] are optional layers: supply them to get
 /// the captured-output scope and the debug shell (the native terminal host
@@ -53,8 +53,8 @@ Widget buildTuiRoot({
   required LogBuffer? logBuffer,
   required DebugController? debugController,
 }) {
-  // The Overlay is the innermost shared layer; the app's Navigator and any
-  // floating host entries live inside it. Entry repaint boundaries stay on
+  // The Overlay is the innermost shared layer; the app root and any floating
+  // host entries live inside it. Entry repaint boundaries stay on
   // (the default): every floating widget — toast, menu, palette — inserts
   // into THIS overlay via Overlay.of, so it is exactly where sibling-churn
   // pruning pays. Engagement is adaptive (see Overlay.addRepaintBoundaries):

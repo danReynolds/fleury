@@ -61,7 +61,10 @@ final hasIt = _node.hasFocus;
 _node.dispose();
 ```
 
-`Tab` / `Shift+Tab` move focus between focusable nodes by default.
+Inside a `FleuryApp(home: ...)` route or an explicit
+`FocusTraversalGroup`, `Tab` / `Shift+Tab` move between focusable nodes. A bare
+widget passed directly to `runApp` has the focus manager but no traversal
+policy; wrap it in a group when it has multiple controls.
 
 ## App-wide shortcuts
 
@@ -82,9 +85,10 @@ KeyBindings(
 `KeyChord` has the common chords built in (`KeyChord.enter`, `.escape`, `.tab`)
 and a `ctrl` / `alt` / `shift` builder for combinations (`KeyChord.ctrl.s`).
 
-**One key to watch:** `Esc` already pops the `Navigator` by default. If you also
-bind it — above, or in a `Focus` — be deliberate about which should win; to
-intercept the pop rather than race it, reach for a `PopScope` (see
+**One key to watch:** inside `FleuryApp(home: ...)` (or another explicit
+`Navigator`), `Esc` already pops the current route by default. If you also bind
+it — above, or in a `Focus` — be deliberate about which should win; to intercept
+the pop rather than race it, reach for a `PopScope` (see
 [Navigation](/guides/navigation/#guarding-back)).
 
 ## Which tool? A quick decision

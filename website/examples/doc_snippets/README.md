@@ -18,6 +18,8 @@ changes underneath a doc, the build goes red instead of the docs going stale.
 
 | Program | Backs |
 |---|---|
+| `app_shell.dart` | [App entry points](../../src/content/docs/concepts/app-entry.md), [Theming](../../src/content/docs/guides/theming.md) |
+| `web_app_shell.dart` | Browser entry snippets in [App entry points](../../src/content/docs/concepts/app-entry.md) and [Coming from Flutter](../../src/content/docs/coming-from-flutter.md) |
 | `coming_from_flutter.dart` | [Coming from Flutter](../../src/content/docs/coming-from-flutter.md) |
 | `filterable_list.dart` | [Tutorial: a filterable list](../../src/content/docs/tutorial.md) |
 | `core_widgets.dart` | Lists & scrolling, Loading data, Input & gestures, Theming (RichText) |

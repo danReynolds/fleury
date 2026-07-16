@@ -4,9 +4,19 @@ description: Move between screens with a Navigator stack — push, pop, return r
 ---
 
 Multi-screen terminal apps — a list that drills into a detail view, a wizard, a
-settings page — use a `Navigator`, exactly like Flutter. You don't set one up:
-`runApp` installs a root `Navigator` over your app, so `context.push` and
-`context.pop` work everywhere out of the box.
+settings page — use a `Navigator`, much like Flutter. Give `FleuryApp` a `home`
+screen and it owns the app's route stack:
+
+```dart
+void main() => runApp(
+  const FleuryApp(title: 'My app', home: HomeScreen()),
+);
+```
+
+The app theme, commands, status, shortcuts, and extensions sit above that
+Navigator. `context.push` and `context.pop` therefore work from every route
+without losing app-wide state. A bare widget passed directly to `runApp` is
+still useful for one-screen tools, but it does not create a route stack.
 
 ## Push and pop
 
@@ -50,6 +60,31 @@ on the context:
 - `Navigator.of(context).pushAndClear(screen)` — reset the stack to one screen.
 - `Navigator.of(context).popUntil<HomeScreen>()` — pop back to a screen by type.
 - `Navigator.of(context).canPop` — whether there's anything to pop.
+
+## Custom shells
+
+`FleuryApp(home: ...)` is the normal path, including for a home screen that
+contains nested pane-local stacks. Use `child:` when fixed chrome must sit
+outside the app's one root route, when you need to configure that root
+Navigator explicitly, or when the app intentionally has no Navigator. The
+custom-shell path never adds a hidden Navigator:
+
+```dart
+FleuryApp(
+  title: 'Workspace',
+  child: Row(
+    children: [
+      const SizedBox(width: 18, child: Text('Workspace')),
+      const Expanded(child: Navigator(home: HomeScreen())),
+    ],
+  ),
+)
+```
+
+Pass either `home` or `child`, never both. A descendant's nearest Navigator is
+the one returned by `Navigator.of(context)`. Keep exactly one top-level
+Navigator when using `child:`; put independent pane stacks beneath it. Sibling
+root Navigators have no unambiguous target for `rootNavigator: true`.
 
 ## Transitions
 

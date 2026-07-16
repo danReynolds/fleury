@@ -72,7 +72,22 @@ void main() {
       await controller.close();
     });
 
-    testWidgets('pumpApp installs a root Navigator so present() works', (
+    testWidgets('pumpWidget leaves app-shell policy to the supplied root', (
+      tester,
+    ) {
+      BuildContext? ctx;
+      tester.pumpWidget(_CtxCapture(sink: (c) => ctx = c, label: 'bare'));
+
+      expect(ctx, isNotNull);
+      expect(Navigator.maybeOf(ctx!), isNull);
+      expect(tester.binding.rootNavigator, isNull);
+      expect(
+        tester.renderToString(size: const CellSize(8, 1)),
+        contains('bare'),
+      );
+    });
+
+    testWidgets('pumpApp installs the canonical FleuryApp shell', (
       tester,
     ) async {
       BuildContext? ctx;
@@ -82,7 +97,11 @@ void main() {
         contains('home'),
       );
 
-      // Without pumpApp's root Navigator this would throw "No Navigator above".
+      final app = FleuryApp.of(ctx!);
+      final navigator = Navigator.of(ctx!);
+      expect(app.title, 'Fleury test app');
+      expect(tester.binding.rootNavigator, same(navigator));
+
       ctx!.present<void>(const Text('modal'), transition: RouteTransition.none);
       await tester.settle();
       expect(

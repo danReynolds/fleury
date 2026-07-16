@@ -275,36 +275,28 @@ StorybookRenderResult renderStorybookTarget(
   var actionSequence = 0;
   try {
     tester.pumpWidget(
-      Theme(
-        data: storybookThemeFor(theme),
-        child: FleuryApp(
-          title: 'Fleury Storybook Snapshot',
-          child: Navigator(
-            home: CommandScope(
-              label: 'Snapshot story commands',
-              commands: const <AppCommand>[],
-              child: target.story.builder(
-                StoryBuildContext(
-                  story: target.story,
-                  variant: target.variant,
-                  selectedWidgetName: target.story.widgets.isEmpty
-                      ? target.story.title
-                      : target.story.widgets.first,
-                  values: target.values,
-                  recordAction: (name, [data = const <String, Object?>{}]) {
-                    actionSequence += 1;
-                    actions.add(
-                      StoryAction(
-                        sequence: actionSequence,
-                        storyId: target.story.id,
-                        name: name,
-                        data: Map<String, Object?>.unmodifiable(data),
-                      ),
-                    );
-                  },
+      FleuryApp(
+        title: 'Fleury Storybook Snapshot',
+        theme: storybookThemeFor(theme),
+        home: target.story.builder(
+          StoryBuildContext(
+            story: target.story,
+            variant: target.variant,
+            selectedWidgetName: target.story.widgets.isEmpty
+                ? target.story.title
+                : target.story.widgets.first,
+            values: target.values,
+            recordAction: (name, [data = const <String, Object?>{}]) {
+              actionSequence += 1;
+              actions.add(
+                StoryAction(
+                  sequence: actionSequence,
+                  storyId: target.story.id,
+                  name: name,
+                  data: Map<String, Object?>.unmodifiable(data),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
       ),

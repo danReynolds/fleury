@@ -35,7 +35,6 @@ import '../terminal/terminal_driver.dart';
 import '../widgets/focus.dart';
 import '../widgets/framework.dart';
 import '../widgets/key_bindings.dart';
-import '../widgets/navigator.dart';
 import '../widgets/overlay.dart';
 import 'clipboard.dart';
 import '../terminal/ansi_frame_presenter.dart';
@@ -164,6 +163,12 @@ bool requestExit() {
 /// grace deadline at delivery ([PosixTerminalDriver.signalGrace], default 5s)
 /// and force-terminates a hung app — a second same-signal forces immediately —
 /// so claiming a signal obliges finishing within the grace.
+///
+/// [root] is mounted exactly as supplied. The runtime owns terminal and
+/// framework host services, but it does not choose an application shell.
+/// Wrap the root in `FleuryApp(home: ...)` for Fleury's standard navigation
+/// shell, or supply a `Navigator`/custom shell explicitly. Bare single-screen
+/// roots remain valid.
 Future<AppExit> runApp(
   Widget root, {
   TerminalDriver? driver,
@@ -759,23 +764,20 @@ Future<AppExit> _runAppImpl(
           }
         }
         try {
-          // Wrap the app in:
+          // Wrap the app in host services only:
           //   - TuiBindingScope so animation (and future cross-cutting
           //     services) can reach the binding via TuiBinding.of(context).
           //   - FocusManagerScope so descendants can reach the manager
           //     via Focus.of(context).
           //   - Overlay as the floating-layer primitive (direct OverlayEntry
           //     use: tooltips, toasts).
-          //   - Navigator as the app's root route stack, registering as the
-          //     global root navigator. The user's widget is its home page, so
-          //     `context.push` / `context.present` work app-wide out of the box.
+          // The user's root is otherwise mounted exactly as supplied. App
+          // policy — navigation, theme, commands, and other app-wide scopes —
+          // belongs to FleuryApp or another explicit user shell, not the host.
           // The root entry is created once; rebuilding `buildRoot` only swaps
           // the ambient MediaQuery data when the terminal resizes, preserving
-          // the Overlay/Navigator subtree (and all its state).
-          // The Navigator gives every route (home, pushed, presented modal) its
-          // own root FocusTraversalGroup, so arrow/Tab focus traversal works out
-          // of the box without the app wrapping anything — see [Navigator].
-          final rootEntry = OverlayEntry(builder: (_) => Navigator(home: root));
+          // the app subtree (and all its state).
+          final rootEntry = OverlayEntry(builder: (_) => root);
           // A full-screen layer above the app that shows the uncaught-error
           // banner. As its own entry it never touches the app's layout — the
           // app keeps rendering full-screen underneath. Created once so its

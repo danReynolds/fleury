@@ -4,6 +4,7 @@ library;
 import 'package:fleury_doc_examples/registry.dart';
 import 'package:fleury/fleury_host.dart';
 import 'package:fleury_web/fleury_web.dart';
+import 'package:fleury_widgets/fleury_widgets_web.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;
 
@@ -32,7 +33,14 @@ Future<web.Element> _mount(String id) async {
         'font-family:monospace;font-size:16px;line-height:18px;',
   );
   web.document.body!.appendChild(host);
-  await mountApp(examples[id]!, into: host, flushScheduler: flush.schedule);
+  await mountApp(
+    () => themedExampleRoot(
+      examples[id]!,
+      DocsExampleThemeController(DocsExampleStyle.dark),
+    ),
+    into: host,
+    flushScheduler: flush.schedule,
+  );
   // Drain the initial frame(s) so the DOM grid is painted.
   for (var i = 0; i < 4 && flush.pending; i++) {
     flush.fire();
@@ -89,6 +97,53 @@ void main() {
     final host = await _mount('linechart.basic');
     addTearDown(() => host.remove());
     expect(host.textContent, contains('load')); // the series legend label
+  });
+
+  test('docs example root supplies Tab traversal in the browser', () async {
+    final flush = _FakeFlush();
+    final host = web.document.createElement('div');
+    host.setAttribute(
+      'style',
+      'position:absolute;left:0;top:0;width:40ch;height:120px;'
+          'font-family:monospace;font-size:16px;line-height:18px;',
+    );
+    web.document.body!.appendChild(host);
+    addTearDown(() => host.remove());
+
+    final mounted = await mountApp(
+      () => themedExampleRoot(
+        () => Column(
+          children: <Widget>[
+            Button(label: 'First', onPressed: () {}),
+            Button(label: 'Second', onPressed: () {}),
+          ],
+        ),
+        DocsExampleThemeController(DocsExampleStyle.dark),
+      ),
+      into: host,
+      flushScheduler: flush.schedule,
+    );
+    addTearDown(mounted.dispose);
+    while (flush.pending) {
+      flush.fire();
+    }
+
+    final keyboardCapture =
+        host.querySelector('textarea') as web.HTMLTextAreaElement;
+    keyboardCapture.dispatchEvent(
+      web.KeyboardEvent(
+        'keydown',
+        web.KeyboardEventInit(key: 'Tab', bubbles: true, cancelable: true),
+      ),
+    );
+    expect(flush.pending, isTrue);
+    flush.fire();
+    await mounted.awaitSemanticIdle();
+
+    final focused = host.querySelector(
+      '.fleury-semantics [role="button"][data-fleury-focused="true"]',
+    );
+    expect(focused?.textContent, contains('First'));
   });
 
   test('barchart.basic renders its categories', () async {

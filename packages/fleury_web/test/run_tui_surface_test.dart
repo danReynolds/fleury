@@ -82,6 +82,19 @@ class _CounterState extends State<_Counter> {
   }
 }
 
+class _NavigationProbe extends StatelessWidget {
+  const _NavigationProbe({required this.onBuild, required this.child});
+
+  final void Function(BuildContext context) onBuild;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    onBuild(context);
+    return child;
+  }
+}
+
 class _FakeMetrics implements CellMetrics {
   _FakeMetrics(this.box);
 
@@ -444,8 +457,12 @@ void main() {
     final surface = DomGridSurface(root: root, size: const CellSize(20, 3));
     final flush = _FakeFlush();
 
+    BuildContext? context;
     final host = await runTuiSurface(
-      () => const Text('hello dom'),
+      () => _NavigationProbe(
+        onBuild: (value) => context = value,
+        child: const Text('hello dom'),
+      ),
       surface: surface,
       flushScheduler: flush.schedule,
     );
@@ -457,11 +474,99 @@ void main() {
     await host.awaitSemanticIdle();
 
     expect(root.textContent, contains('hello dom'));
+    expect(context, isNotNull);
+    expect(Navigator.maybeOf(context!), isNull);
+    expect(TuiBinding.of(context!).rootNavigator, isNull);
     expect(surface.presentCount, 1);
     expect(surface.rowElements, hasLength(3));
 
     await host.dispose();
   });
+
+  test('mounts an app-supplied Navigator as the root Navigator', () async {
+    final root = web.document.createElement('div');
+    final surface = DomGridSurface(root: root, size: const CellSize(20, 3));
+    final flush = _FakeFlush();
+    BuildContext? context;
+
+    final host = await runTuiSurface(
+      () => Navigator(
+        home: _NavigationProbe(
+          onBuild: (value) => context = value,
+          child: const Text('navigated dom'),
+        ),
+      ),
+      surface: surface,
+      flushScheduler: flush.schedule,
+    );
+    flush.fire();
+    await host.awaitSemanticIdle();
+
+    expect(root.textContent, contains('navigated dom'));
+    expect(context, isNotNull);
+    final navigator = Navigator.of(context!);
+    expect(TuiBinding.of(context!).rootNavigator, same(navigator));
+
+    await host.dispose();
+  });
+
+  test(
+    'FleuryApp routes retain app, theme, and root Navigator scopes',
+    () async {
+      final root = web.document.createElement('div');
+      final surface = DomGridSurface(root: root, size: const CellSize(20, 3));
+      final flush = _FakeFlush();
+      BuildContext? homeContext;
+      BuildContext? detailContext;
+
+      final host = await runTuiSurface(
+        () => FleuryApp(
+          title: 'Web shell',
+          theme: const ThemeData(brightness: Brightness.light),
+          home: _NavigationProbe(
+            onBuild: (value) => homeContext = value,
+            child: const Text('web home'),
+          ),
+        ),
+        surface: surface,
+        flushScheduler: flush.schedule,
+      );
+      flush.fire();
+      await host.awaitSemanticIdle();
+
+      expect(root.textContent, contains('web home'));
+      expect(homeContext, isNotNull);
+      final binding = TuiBinding.of(homeContext!);
+      final navigator = Navigator.of(homeContext!);
+      expect(FleuryApp.of(homeContext!).title, 'Web shell');
+      expect(Theme.of(homeContext!).brightness, Brightness.light);
+      expect(binding.rootNavigator, same(navigator));
+
+      navigator.push<void>(
+        _NavigationProbe(
+          onBuild: (value) => detailContext = value,
+          child: const Text('web detail'),
+        ),
+        transition: RouteTransition.none,
+      );
+      expect(flush.pending, isTrue);
+      flush.fire();
+      await host.awaitSemanticIdle();
+
+      expect(root.textContent, contains('web detail'));
+      expect(detailContext, isNotNull);
+      expect(FleuryApp.of(detailContext!), same(FleuryApp.of(homeContext!)));
+      expect(Theme.of(detailContext!), same(Theme.of(homeContext!)));
+      expect(Navigator.of(detailContext!), same(navigator));
+      expect(
+        Navigator.of(detailContext!, rootNavigator: true),
+        same(navigator),
+      );
+
+      await host.dispose();
+      expect(binding.rootNavigator, isNull);
+    },
+  );
 
   test('setState schedules and presents another DOM frame', () async {
     final root = web.document.createElement('div');

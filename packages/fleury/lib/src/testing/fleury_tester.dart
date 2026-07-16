@@ -4,6 +4,7 @@
 // the operations every test actually wants:
 //
 //   - pumpWidget(w)          mount or replace the user widget
+//   - pumpApp(w)             mount a standard FleuryApp shell
 //   - pump([duration])       advance scheduler + flush builds
 //   - pumpAndSettle(...)     pump until no active tickers
 //   - find(finder)           apply a Finder to the tree
@@ -58,7 +59,6 @@ import '../widgets/clipboard_scope.dart';
 import '../widgets/focus.dart';
 import '../widgets/framework.dart';
 import '../widgets/media_query.dart';
-import '../widgets/navigator.dart';
 import '../widgets/overlay.dart';
 import '../widgets/pointer.dart';
 import '../widgets/tui_binding.dart';
@@ -224,21 +224,20 @@ class FleuryTester {
     }
   }
 
-  /// Like [pumpWidget], but mounts [widget] as the `home` of a root
-  /// [Navigator] — reproducing the runtime's root wrapper (`run_app.dart`),
-  /// which always installs one. Use this for app-level tests so
-  /// `context.present(...)` / `context.push(...)` and
-  /// `TuiBinding.rootNavigator` resolve without hand-wrapping; use bare
-  /// [pumpWidget] for widget-level tests. Mirrors Flutter's
-  /// `pumpWidget(MyWidget())` vs `pumpWidget(MaterialApp(...))` split.
+  /// Like [pumpWidget], but mounts [widget] as the `home` of Fleury's standard
+  /// [FleuryApp] shell. Use this for app-level tests so navigation, commands,
+  /// status, and other app-owned scopes match the canonical production shape;
+  /// use bare [pumpWidget] for widget-level tests or to exercise a custom
+  /// shell. Runtime hosts mount either shape exactly as supplied.
   ///
   /// Plain composition over [pumpWidget] — nothing latches: a later
-  /// [pumpApp] REPLACES the whole app (fresh Navigator, fresh home; the
-  /// Navigator is keyed because it snapshots `home` once and would silently
-  /// ignore a swap), and a later [pumpWidget] mounts its widget bare.
+  /// [pumpApp] REPLACES the whole app with a fresh shell and route stack, and a
+  /// later [pumpWidget] mounts its widget bare.
   void pumpApp(Widget widget) {
     _assertNotDisposed('pumpApp');
-    pumpWidget(Navigator(key: UniqueKey(), home: widget));
+    pumpWidget(
+      FleuryApp(key: UniqueKey(), title: 'Fleury test app', home: widget),
+    );
   }
 
   /// Advances time and flushes any pending rebuilds. When [duration]

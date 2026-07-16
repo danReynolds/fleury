@@ -133,7 +133,7 @@ class _Route {
            ? null
            : transition;
 
-  final Widget screen;
+  Widget screen;
 
   /// null = instant. Normalized in the constructor: [RouteTransition.none]
   /// maps to null here so EVERY construction site inherits the instant path
@@ -204,6 +204,11 @@ class Navigator extends StatefulWidget {
   const Navigator({required this.home, this.transition, super.key});
 
   /// The initial (root) screen.
+  ///
+  /// Updating this widget reconciles the original root route in place, keeping
+  /// its state, focus memory, and any pushed routes. Once replacement or a
+  /// stack clear removes that original route, later [home] updates do not
+  /// recreate it.
   final Widget home;
 
   /// Default transition for pushes that don't specify one.
@@ -218,10 +223,10 @@ class Navigator extends StatefulWidget {
     throw StateError(
       rootNavigator
           ? 'No root Navigator for this BuildContext. Wrap your app in a '
-                'Navigator(home: ...) and run it with runApp (which installs '
-                'a TuiBinding).'
+                'FleuryApp(home: ...) or Navigator(home: ...) before passing '
+                'it to runApp.'
           : 'No Navigator above this BuildContext. Wrap the relevant '
-                'subtree in a Navigator(home: ...).',
+                'subtree in a FleuryApp(home: ...) or Navigator(home: ...).',
     );
   }
 
@@ -249,6 +254,9 @@ class NavigatorState extends State<Navigator> {
   // Routes in paint order, root-first. Includes routes that are leaving
   // (animating out) until their exit completes.
   final List<_Route> _routes = <_Route>[];
+  _Route? _initialRoute;
+  int _navigationRevision = 0;
+  int _lastReportedNavigationRevision = -1;
 
   TuiBinding? _binding;
   bool _installed = false;
@@ -267,6 +275,18 @@ class NavigatorState extends State<Navigator> {
   /// Whether there's more than the root route (so a pop is possible).
   bool get canPop => depth > 1;
 
+  /// A mounted context inside the current top route's Navigator scope.
+  ///
+  /// This is the route-stable context for app shells and other non-widget
+  /// command surfaces that already hold a [NavigatorState] but still need a
+  /// [BuildContext] for context-based navigation or route-scoped lookups. It
+  /// follows replacements and stack clears; null means the active route has
+  /// not mounted yet or the navigator is tearing down.
+  BuildContext? get activeRouteContext {
+    final context = _topLive?.restoreKey.currentContext;
+    return context != null && context.mounted ? context : null;
+  }
+
   /// The topmost live (non-leaving) route — the one that receives input.
   _Route? get _topLive {
     for (var i = _routes.length - 1; i >= 0; i--) {
@@ -275,7 +295,7 @@ class NavigatorState extends State<Navigator> {
     return null;
   }
 
-  FocusManager? get _manager => Focus.maybeOf(context);
+  FocusManager? get _manager => Focus.maybeOfWithoutDependency(context);
 
   @override
   void didChangeDependencies() {
@@ -291,9 +311,22 @@ class NavigatorState extends State<Navigator> {
     }
 
     final root = _Route(widget.home, null)..opaque = true;
+    _initialRoute = root;
     if (_binding != null) root.presence.attach(_binding!);
     root.presence.snap(1.0);
     _routes.add(root);
+  }
+
+  @override
+  void didUpdateWidget(covariant Navigator oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final root = _initialRoute;
+    if (root == null || identical(oldWidget.home, widget.home)) return;
+    // `home` is the configuration for the original root route, not a reset
+    // command. Keep that route's identity, focus memory, and any routes above
+    // it while reconciling updated home props. Once replacement/clear removes
+    // the original root, later parent rebuilds must not resurrect it.
+    root.screen = widget.home;
   }
 
   /// Pushes [screen] and returns a future that completes with the value
@@ -561,11 +594,14 @@ class NavigatorState extends State<Navigator> {
 
   void _remove(_Route route) {
     _routes.remove(route);
+    if (identical(_initialRoute, route)) _initialRoute = null;
     route.presence.dispose();
   }
 
   void _rebuild() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    _navigationRevision += 1;
+    setState(() {});
   }
 
   bool _isActive(_Route route) => !route.leaving && identical(route, _topLive);
@@ -594,6 +630,7 @@ class NavigatorState extends State<Navigator> {
 
   @override
   Widget build(BuildContext context) {
+    _reportNavigationRevision();
     // Expose this navigator to its routes' subtrees so `context.push` /
     // `context.pop` resolve to it, then lay the routes out in our own
     // slot via RenderNavigatorStack.
@@ -627,6 +664,30 @@ class NavigatorState extends State<Navigator> {
         ),
       ),
     );
+  }
+
+  /// Invalidates focus-chain consumers once a navigation revision is mounted.
+  ///
+  /// App-level command predicates and hint surfaces resolve against the
+  /// focused context, then the active route context. A stack mutation happens
+  /// before the new route host has built, so notifying from [push] / [pop]
+  /// would make those consumers rebuild against a stale or absent context.
+  /// Reporting from this build and deferring one microtask lets the route's
+  /// restore anchor mount first. Gating by structural revision is essential:
+  /// the manager notification rebuilds dependents (including an enclosing app
+  /// shell), and an unconditional notification here would create a loop. A
+  /// revision (rather than active-route identity) also reports the settled
+  /// depth after replacement/clear removes covered routes while leaving the
+  /// same route active.
+  void _reportNavigationRevision() {
+    final revision = _navigationRevision;
+    if (_lastReportedNavigationRevision == revision) return;
+    _lastReportedNavigationRevision = revision;
+    final manager = _manager;
+    scheduleMicrotask(() {
+      if (!mounted || _navigationRevision != revision) return;
+      manager?.notifyBindingsChanged();
+    });
   }
 
   void _handleNavigatorAction(SemanticAction action) {
@@ -731,8 +792,8 @@ class _RouteHost extends StatelessWidget {
             // or a presented modal — gets arrow + Tab focus traversal for free.
             // It sits inside the route's FocusScope, so a modal's traversal is
             // trapped within it (an explicit inner group can still sub-scope a
-            // pane). This is where a runApp app and every navigated route pick
-            // up traversal, so no screen has to wrap one itself.
+            // pane). This is where a Navigator-backed app and every navigated
+            // route pick up traversal, so no screen has to wrap one itself.
             child: FocusTraversalGroup(child: ErrorBoundary(child: screen)),
           ),
         ),

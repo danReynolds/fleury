@@ -42,5 +42,14 @@ void main() {
       );
       tester.render(size: const CellSize(80, 24));
     });
+
+    testWidgets('app route supplies the advertised Tab traversal', (tester) {
+      tester.pumpApp(const DashboardApp());
+      tester.render(size: const CellSize(80, 24));
+
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
+
+      expect(tester.focusManager.focusedNode?.debugLabel, 'line chart');
+    });
   });
 }

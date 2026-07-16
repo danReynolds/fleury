@@ -146,6 +146,11 @@ final class MountedApp {
 /// installed through [clipboard] for the lifetime of the host. A semantic
 /// presenter may be supplied through [semanticPresenter]; it receives a full
 /// semantic snapshot after visual presentation for the same frame.
+///
+/// [rootFactory] supplies the exact application root. This browser host owns
+/// browser/framework services only; it does not add a Navigator or other app
+/// shell. Use `FleuryApp(home: ...)`, an explicit `Navigator`, or a custom
+/// shell when the application needs navigation. Bare roots remain valid.
 Future<MountedApp> runTuiSurface(
   Widget Function() rootFactory, {
   required FrameSurface surface,
@@ -221,9 +226,7 @@ Future<MountedApp> runTuiSurface(
     frameDriver?.requestFrame(reason);
   }
 
-  final rootEntry = OverlayEntry(
-    builder: (_) => Navigator(home: rootFactory()),
-  );
+  final rootEntry = OverlayEntry(builder: (_) => rootFactory());
   final overlayKey = GlobalKey<OverlayState>();
 
   // The shared scope stack (see buildTuiRoot). The browser embed has neither a

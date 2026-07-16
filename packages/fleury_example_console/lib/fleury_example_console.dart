@@ -494,20 +494,16 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
       recordDiagnostic: _recordDiagnostic,
       activateScreen: _activateScreen,
     );
-    return Theme(
-      data: _demoTheme,
-      child: FleuryApp(
-        title: 'Fleury Demo Console',
-        extensions: <Object>[extension],
-        commands: _commands,
-        status: _status,
-        child: Navigator(
-          home: _ConsoleShell(
-            screens: _screens,
-            navigation: _navigation,
-            onActivateScreen: _activateScreen,
-          ),
-        ),
+    return FleuryApp(
+      title: 'Fleury Demo Console',
+      theme: _demoTheme,
+      extensions: <Object>[extension],
+      commands: _commands,
+      status: _status,
+      home: _ConsoleShell(
+        screens: _screens,
+        navigation: _navigation,
+        onActivateScreen: _activateScreen,
       ),
     );
   }
@@ -3095,7 +3091,7 @@ const _demoMarkdown =
     '- Capability policy guards output\n'
     '> unsafe safe\x1b]52;c;token\x07 payload stays inert\n'
     '```dart\n'
-    "final shell = FleuryApp(title: 'Launch');\n"
+    "final shell = FleuryApp(title: 'Launch', home: LaunchScreen());\n"
     '```\n';
 
 class _DocsScreen extends StatelessWidget {

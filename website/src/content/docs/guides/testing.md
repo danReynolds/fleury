@@ -27,11 +27,29 @@ void main() {
 
 ## Render and assert
 
-- `pumpWidget(widget)` mounts (or replaces) the tree.
+- `pumpWidget(widget)` mounts (or replaces) the exact, bare tree. Use it for
+  isolated widgets and custom shells.
+- `pumpApp(widget)` mounts the widget as `FleuryApp(home: widget)`. Use it for
+  app tests that need the canonical route stack, app scopes, or route-owned
+  focus traversal.
 - `render(size:)` returns a `CellBuffer` — inspect individual cells with
   `buf.atColRow(col, row)` (grapheme + style).
 - `renderToString(size:)` flattens the buffer to text, which is the quickest
   thing to assert against.
+
+For example, an app-level navigation test starts with `pumpApp`:
+
+```dart
+testWidgets('opens details', (tester) async {
+  tester.pumpApp(const HomeScreen());
+  await tester.invokeSemanticAction(
+    SemanticAction.activate,
+    role: SemanticRole.button,
+    label: 'Open details',
+  );
+  expect(tester.exists(text('Details')), isTrue);
+});
+```
 
 ## Drive input
 

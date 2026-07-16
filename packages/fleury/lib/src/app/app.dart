@@ -3,12 +3,14 @@ import 'dart:async' show unawaited;
 import '../foundation/collections.dart';
 import '../foundation/change_notifier.dart';
 import '../semantics/semantics.dart';
-import '../widgets/basic.dart';
+import '../widgets/focus.dart';
 import '../widgets/focus_traversal.dart';
 import '../widgets/framework.dart';
 import '../widgets/inherited_notifier.dart';
 import '../widgets/key_bindings.dart';
+import '../widgets/navigator.dart';
 import '../widgets/theme.dart';
+import '../widgets/tui_binding.dart';
 import 'commands.dart';
 import 'status.dart';
 
@@ -217,7 +219,14 @@ extension FleuryCommandContext on CommandContext {
   }
 }
 
-/// App-scale shell for commands, status, and app-level extension plumbing.
+/// App-scale shell for navigation, theme, commands, status, and extensions.
+///
+/// Pass [home] for the standard app shell. Fleury installs a root [Navigator]
+/// below every app-owned scope, so all pushed routes retain the same theme,
+/// commands, status, extensions, and data sources.
+///
+/// Pass [child] instead when the app owns a custom shell, including its own
+/// navigation. Exactly one of [home] and [child] must be provided.
 class FleuryApp extends StatefulWidget {
   const FleuryApp({
     super.key,
@@ -225,13 +234,36 @@ class FleuryApp extends StatefulWidget {
     this.commands = const <AppCommand>[],
     this.extensions = const <Object>[],
     this.status,
+    this.theme,
+    this.home,
     this.child,
-  });
+  }) : assert(
+         (home == null) != (child == null),
+         'Exactly one of home or child must be provided.',
+       );
 
   final String title;
   final List<AppCommand> commands;
   final List<Object> extensions;
   final AppStatusBuilder? status;
+
+  /// App-wide theme installed above the standard or custom shell.
+  ///
+  /// When omitted, Fleury preserves the ambient theme. Theme extensions
+  /// contributed through [extensions] are appended as package defaults;
+  /// entries in this theme (or the ambient theme) win on matching types.
+  final ThemeData? theme;
+
+  /// Initial route for Fleury's standard root [Navigator].
+  final Widget? home;
+
+  /// Explicit custom shell escape hatch.
+  ///
+  /// Fleury does not install a [Navigator] around this widget. Use this when
+  /// the app supplies its own navigation or intentionally has none. A custom
+  /// shell that needs global root navigation should expose one top-level
+  /// [Navigator] and place any pane-local navigators beneath it; sibling root
+  /// navigators have no unambiguous app-wide target.
   final Widget? child;
 
   static FleuryAppController of(BuildContext context) =>
@@ -272,6 +304,7 @@ class _FleuryAppState extends State<FleuryApp> {
   late final CommandRegistry _commands;
   late final StatusController _status;
   late final FleuryAppController _app;
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
@@ -311,14 +344,20 @@ class _FleuryAppState extends State<FleuryApp> {
     final bindings = <KeyBinding>[];
     for (final command in _commands.localCommands) {
       if (command.shortcuts.isEmpty) continue;
-      if (!_commandVisible(command, context)) continue;
+      final sourceContext = _commandSourceContext(context);
+      if (!_commandVisible(command, sourceContext)) continue;
       bindings.add(
         KeyBinding.list(
           command.shortcuts,
           label: command.title,
-          enabled: _commandEnabled(command, context),
+          enabled: _commandEnabled(command, sourceContext),
           onEvent: (_) {
-            unawaited(_commands.invoke(command.id, buildContext: context));
+            unawaited(
+              _commands.invoke(
+                command.id,
+                buildContext: _commandSourceContext(context),
+              ),
+            );
           },
         ),
       );
@@ -338,6 +377,24 @@ class _FleuryAppState extends State<FleuryApp> {
     );
   }
 
+  BuildContext _commandSourceContext(BuildContext fallback) {
+    final focused = Focus.maybeOf(fallback)?.focusedNode?.context;
+    if (_isCurrentAppContext(focused)) return focused!;
+    final route = _navigatorKey.currentState?.activeRouteContext;
+    if (_isCurrentAppContext(route)) return route!;
+    final rootRoute = TuiBinding.maybeOf(
+      fallback,
+    )?.rootNavigator?.activeRouteContext;
+    if (_isCurrentAppContext(rootRoute)) return rootRoute!;
+    return fallback;
+  }
+
+  bool _isCurrentAppContext(BuildContext? context) {
+    return context != null &&
+        context.mounted &&
+        identical(FleuryAppScope.maybeOf(context), _app);
+  }
+
   @override
   void dispose() {
     _commands.removeListener(_syncStatus);
@@ -349,7 +406,12 @@ class _FleuryAppState extends State<FleuryApp> {
 
   @override
   Widget build(BuildContext context) {
-    final body = widget.child ?? const EmptyBox();
+    final Widget body;
+    if (widget.home != null) {
+      body = Navigator(key: _navigatorKey, home: widget.home!);
+    } else {
+      body = widget.child!;
+    }
     final app = CommandRegistryScope(
       registry: _commands,
       child: StatusHostScope(
@@ -360,10 +422,12 @@ class _FleuryAppState extends State<FleuryApp> {
             builder: (innerContext) {
               return _FleuryAppSemantics(
                 controller: _app,
-                buildContext: innerContext,
+                commandContext: () => _commandSourceContext(innerContext),
                 child: KeyBindings(
                   bindings: _bindings(innerContext),
-                  child: FocusTraversalGroup(child: body),
+                  child: widget.home != null
+                      ? body
+                      : FocusTraversalGroup(child: body),
                 ),
               );
             },
@@ -371,7 +435,7 @@ class _FleuryAppState extends State<FleuryApp> {
         ),
       ),
     );
-    return _AppExtensionTheme(app: widget, child: app);
+    return _AppTheme(app: widget, child: app);
   }
 }
 
@@ -419,8 +483,8 @@ List<Object> _appExtensionDataSources(List<Object> extensions) {
   return dataSources;
 }
 
-final class _AppExtensionTheme extends StatelessWidget {
-  const _AppExtensionTheme({required this.app, required this.child});
+final class _AppTheme extends StatelessWidget {
+  const _AppTheme({required this.app, required this.child});
 
   final FleuryApp app;
   final Widget child;
@@ -428,8 +492,9 @@ final class _AppExtensionTheme extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final extensionThemes = _appThemeExtensions(app);
-    if (extensionThemes.isEmpty) return child;
-    final base = Theme.of(context);
+    final configuredTheme = app.theme;
+    if (configuredTheme == null && extensionThemes.isEmpty) return child;
+    final base = configuredTheme ?? Theme.of(context);
     return Theme(
       data: base.copyWith(
         extensions: <Object>[...base.extensions, ...extensionThemes],
@@ -464,12 +529,12 @@ final class _ContextBuilder extends StatelessWidget {
 final class _FleuryAppSemantics extends ProxyWidget {
   const _FleuryAppSemantics({
     required this.controller,
-    required this.buildContext,
+    required this.commandContext,
     required super.child,
   });
 
   final FleuryAppController controller;
-  final BuildContext buildContext;
+  final BuildContext Function() commandContext;
 
   @override
   _FleuryAppSemanticsElement createElement() {
@@ -497,10 +562,11 @@ final class _FleuryAppSemanticsElement extends ComponentElement
   SemanticNode buildSemanticNode(List<SemanticNode> children) {
     final commands = widget.controller.commands.localCommands;
     final commandNodes = <SemanticNode>[];
+    final buildContext = widget.commandContext();
     for (final command in commands) {
       final context = _ScopedCommandContext(
         commands: widget.controller.commands,
-        buildContext: widget.buildContext,
+        buildContext: buildContext,
       );
       if (!command.visible(context)) continue;
       final shortcut = command.primaryShortcutLabel;
@@ -584,7 +650,7 @@ final class _FleuryAppSemanticsElement extends ComponentElement
       }
       await widget.controller.commands.invokeCommand(
         command,
-        buildContext: widget.buildContext,
+        buildContext: widget.commandContext(),
       );
       return true;
     }

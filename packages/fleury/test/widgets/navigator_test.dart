@@ -46,6 +46,19 @@ class _CaptureChild extends StatelessWidget {
   }
 }
 
+class _BuildProbe extends StatelessWidget {
+  const _BuildProbe({required this.onBuild, required this.child});
+
+  final void Function() onBuild;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    onBuild();
+    return child;
+  }
+}
+
 /// Distinct screen types so `popUntil<T>` has something to target.
 class _Alpha extends StatelessWidget {
   const _Alpha();
@@ -59,10 +72,165 @@ class _Beta extends StatelessWidget {
   Widget build(BuildContext context) => const Text('beta');
 }
 
+class _HomeScreen extends StatefulWidget {
+  const _HomeScreen(this.label, {super.key});
+
+  final String label;
+
+  @override
+  State<_HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<_HomeScreen> {
+  var count = 0;
+
+  void increment() {
+    setState(() {
+      count += 1;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Text('${widget.label}:$count');
+}
+
 void main() {
   testWidgets('renders the home route', (tester) {
     tester.pumpWidget(Navigator(home: const Text('home')));
     expect(_screen(tester), 'home');
+  });
+
+  testWidgets('focus changes do not rebuild the route stack', (tester) async {
+    final first = FocusNode(debugLabel: 'first');
+    final second = FocusNode(debugLabel: 'second');
+    addTearDown(first.dispose);
+    addTearDown(second.dispose);
+    var routeBuilds = 0;
+
+    tester.pumpWidget(
+      Navigator(
+        home: _BuildProbe(
+          onBuild: () {
+            routeBuilds += 1;
+          },
+          child: Column(
+            children: <Widget>[
+              Focus(focusNode: first, child: const Text('first')),
+              Focus(focusNode: second, child: const Text('second')),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.settle();
+    final buildsAfterMount = routeBuilds;
+
+    first.requestFocus();
+    tester.pump();
+    second.requestFocus();
+    tester.pump();
+
+    expect(first.hasFocus, isFalse);
+    expect(second.hasFocus, isTrue);
+    expect(routeBuilds, buildsAfterMount);
+  });
+
+  testWidgets('updated home preserves its root route and pushed stack', (
+    tester,
+  ) {
+    final navigatorKey = GlobalKey<NavigatorState>();
+    final homeKey = GlobalKey<_HomeScreenState>();
+    tester.pumpWidget(
+      Navigator(
+        key: navigatorKey,
+        home: _HomeScreen('home one', key: homeKey),
+      ),
+    );
+    final navigator = navigatorKey.currentState!;
+    final homeState = homeKey.currentState!;
+    homeState.increment();
+    tester.pump();
+    navigator.push<void>(
+      const Text('detail'),
+      transition: RouteTransition.none,
+    );
+    tester.pump();
+
+    tester.pumpWidget(
+      Navigator(
+        key: navigatorKey,
+        home: _HomeScreen('home two', key: homeKey),
+      ),
+    );
+
+    expect(homeKey.currentState, same(homeState));
+    expect(tester.exists(text('home one:1')), isFalse);
+    expect(tester.exists(text('home two:1')), isTrue);
+    expect(tester.exists(text('detail')), isTrue);
+    expect(navigator.depth, 2);
+
+    navigator.popUntil<_HomeScreen>();
+    tester.pump();
+
+    expect(navigator.depth, 1);
+    expect(_screen(tester), 'home two:1');
+    expect(
+      tester
+          .semantics()
+          .single(role: SemanticRole.route, selected: true)
+          .state
+          .routeName,
+      '_HomeScreen',
+    );
+  });
+
+  testWidgets('home updates do not resurrect a replaced or cleared root', (
+    tester,
+  ) {
+    final navigatorKey = GlobalKey<NavigatorState>();
+    tester.pumpWidget(
+      Navigator(key: navigatorKey, home: const _HomeScreen('home one')),
+    );
+    final navigator = navigatorKey.currentState!;
+
+    navigator.pushReplacement<void>(
+      const _Alpha(),
+      transition: RouteTransition.none,
+    );
+    tester.pump();
+    tester.pumpWidget(
+      Navigator(key: navigatorKey, home: const _HomeScreen('home two')),
+    );
+
+    expect(navigator.depth, 1);
+    expect(_screen(tester), 'alpha');
+    expect(tester.exists(text('home two:0')), isFalse);
+
+    navigator.push<void>(
+      const Text('temporary'),
+      transition: RouteTransition.none,
+    );
+    tester.pump();
+    navigator.pushAndClear<void>(
+      const _Beta(),
+      transition: RouteTransition.none,
+    );
+    tester.pump();
+    tester.pumpWidget(
+      Navigator(key: navigatorKey, home: const _HomeScreen('home three')),
+    );
+
+    expect(navigator.depth, 1);
+    expect(_screen(tester), 'beta');
+    expect(tester.exists(text('home three:0')), isFalse);
+    expect(
+      tester
+          .semantics()
+          .single(role: SemanticRole.route, selected: true)
+          .state
+          .routeName,
+      '_Beta',
+    );
   });
 
   testWidgets('push shows a new screen; pop returns its result', (
@@ -626,6 +794,42 @@ void main() {
       tester.pumpWidget(Navigator(home: const Text('home')));
       expect(tester.binding.rootNavigator, isNotNull);
       expect(tester.binding.rootNavigator!.canPop, isFalse);
+    });
+
+    testWidgets('activeRouteContext follows replacement and stack clear', (
+      tester,
+    ) {
+      tester.pumpWidget(Navigator(home: const Text('home')));
+      final navigator = tester.binding.rootNavigator!;
+      final homeContext = navigator.activeRouteContext;
+
+      expect(homeContext, isNotNull);
+      expect(Navigator.of(homeContext!), same(navigator));
+
+      navigator.pushReplacement<void>(
+        const Text('replacement'),
+        transition: RouteTransition.none,
+      );
+      tester.pump();
+      final replacementContext = navigator.activeRouteContext;
+
+      expect(replacementContext, isNotNull);
+      expect(replacementContext, isNot(same(homeContext)));
+      expect(Navigator.of(replacementContext!), same(navigator));
+
+      navigator.pushAndClear<void>(
+        const Text('cleared'),
+        transition: RouteTransition.none,
+      );
+      tester.pump();
+      final clearedContext = navigator.activeRouteContext;
+
+      expect(clearedContext, isNotNull);
+      expect(clearedContext, isNot(same(replacementContext)));
+      expect(Navigator.of(clearedContext!), same(navigator));
+
+      tester.pumpWidget(const Text('gone'));
+      expect(navigator.activeRouteContext, isNull);
     });
 
     testWidgets('disposing the root navigator clears the registration', (

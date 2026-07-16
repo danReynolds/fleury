@@ -7,7 +7,7 @@ import 'dart:async';
 
 import 'package:fleury/fleury.dart';
 
-void main() => runApp(const CounterApp());
+void main() => runApp(const FleuryApp(title: 'Counter', home: CounterApp()));
 
 class CounterApp extends StatefulWidget {
   const CounterApp({super.key});
