@@ -29,26 +29,11 @@ class FilterApp extends StatefulWidget {
 }
 
 class _FilterAppState extends State<FilterApp> {
-  final _controller = TextEditingController();
+  String _query = '';
 
-  @override
-  void initState() {
-    super.initState();
-    _controller.addListener(() => setState(() {}));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  List<String> get _matches {
-    final query = _controller.text.toLowerCase();
-    return _languages
-        .where((name) => name.toLowerCase().contains(query))
-        .toList();
-  }
+  List<String> get _matches => _languages
+      .where((name) => name.toLowerCase().contains(_query.toLowerCase()))
+      .toList();
 
   @override
   Widget build(BuildContext context) {
@@ -59,9 +44,9 @@ class _FilterAppState extends State<FilterApp> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           TextInput(
-            controller: _controller,
             autofocus: true,
             placeholder: 'Filter languages…',
+            onChanged: (value) => setState(() => _query = value),
           ),
           const SizedBox(height: 1),
           Text(

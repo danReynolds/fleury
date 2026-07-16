@@ -33,6 +33,54 @@ Pop back from within a screen:
 context.pop();
 ```
 
+## Commands that navigate
+
+Treat navigation as an application action, not as a second routing system.
+Keep the operation in one method, then let buttons, shortcuts, semantics, and
+the command palette invoke that same operation.
+
+Put commands that are valid on every screen in `FleuryApp.commands`. Put
+route-specific actions in a `CommandScope` on that route:
+
+```dart
+CommandScope(
+  commands: [
+    AppCommand(
+      id: const CommandId('navigation.open-detail'),
+      title: 'Open detail',
+      category: 'Navigation',
+      shortcuts: [KeyChord.ctrl.o],
+      semanticAction: SemanticAction.navigate,
+      run: (command) {
+        final source = command.buildContext;
+        if (source != null) {
+          unawaited(source.push<void>(const DetailScreen()));
+        }
+      },
+    ),
+  ],
+  child: const HomeScreenBody(),
+)
+```
+
+`command.buildContext` is the context where the active command scope lives, so
+navigation targets the right route or nested pane. A registry-backed
+`CommandPalette` automatically discovers the visible commands from that source
+scope; you do not maintain a separate palette list. `KeyHintBar` likewise shows
+the active shortcuts from the focus chain.
+
+Do not await a pushed route's lifetime inside a navigation command that is
+exposed as a semantic action. `push` completes only when that route pops; remote
+semantic dispatch waits for the command callback and serializes later semantic
+actions. Start the navigation with `unawaited` (from `dart:async`) and await any
+returned route result in the screen-owned helper instead, as the full example
+does.
+
+The repository's
+[app-shell example](https://github.com/danReynolds/fleury/blob/main/packages/fleury_widgets/example/app_shell_demo.dart)
+puts the complete pattern together: an app-wide Ctrl+K palette command,
+route-local navigation and state commands, buttons, and semantic actions.
+
 ## Returning a result
 
 `push` returns a `Future` that completes with whatever the pushed screen pops.

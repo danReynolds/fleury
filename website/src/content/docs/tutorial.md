@@ -88,33 +88,16 @@ always `''`, so nothing's filtered — until we wire up the input.
 
 ## 3. Add the text field
 
-`TextInput` edits text through a `TextEditingController`. The controller is a
-`ChangeNotifier`, so we can **listen** to it and rebuild whenever the text
-changes — that's how the list filters as you type. Create the controller in
-`initState`, listen, and clean up in `dispose`:
+`TextInput.onChanged` reports the current text. Store that value in `_query`
+with `setState`, and the list filters as you type:
 
 ```dart
 class _FilterAppState extends State<FilterApp> {
-  final _controller = TextEditingController();
+  String _query = '';
 
-  @override
-  void initState() {
-    super.initState();
-    _controller.addListener(() => setState(() {}));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  List<String> get _matches {
-    final query = _controller.text.toLowerCase();
-    return _languages
-        .where((name) => name.toLowerCase().contains(query))
-        .toList();
-  }
+  List<String> get _matches => _languages
+      .where((name) => name.toLowerCase().contains(_query.toLowerCase()))
+      .toList();
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -123,9 +106,9 @@ class _FilterAppState extends State<FilterApp> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         TextInput(
-          controller: _controller,
           autofocus: true,
           placeholder: 'Filter languages…',
+          onChanged: (value) => setState(() => _query = value),
         ),
         SizedBox(height: 1),
         for (final name in _matches) Text(name),
@@ -135,10 +118,10 @@ class _FilterAppState extends State<FilterApp> {
 }
 ```
 
-Run it again and type. The listener calls `setState` on every keystroke; `build`
-re-reads `_controller.text`, recomputes `_matches`, and the framework repaints
-only the rows that changed. That's the whole reactive loop — `autofocus: true`
-means you can type the moment it launches.
+Run it again and type. `onChanged` calls `setState` on every edit; `build`
+recomputes `_matches` from `_query`, and the framework repaints only the rows
+that changed. That's the whole reactive loop — `autofocus: true` means you can
+type the moment it launches.
 
 ## 4. Layout and polish
 
@@ -156,9 +139,9 @@ Widget build(BuildContext context) {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         TextInput(
-          controller: _controller,
           autofocus: true,
           placeholder: 'Filter languages…',
+          onChanged: (value) => setState(() => _query = value),
         ),
         SizedBox(height: 1),
         Text('${matches.length} of ${_languages.length}',
@@ -179,7 +162,7 @@ Widget build(BuildContext context) {
 ```
 
 That's a complete, interactive Fleury app: state held in a `State`, an input
-bound through a controller, a derived list, and a layout that fills the screen.
+reported through `onChanged`, a derived list, and a layout that fills the screen.
 
 ## Where to go next
 

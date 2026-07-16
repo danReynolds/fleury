@@ -84,10 +84,14 @@ same traversal behavior:
 FleuryApp(
   title: 'Status monitor',
   theme: ThemeData.dark(),
-  commands: <AppCommand>[/* app-wide commands */],
   home: DashboardScreen(),
 )
 ```
+
+App-wide commands can be passed through `commands:`; route-local actions belong
+in a `CommandScope` beside the screen that owns them. See
+[Navigation and commands](/guides/navigation/#commands-that-navigate) for a
+complete, compile-checked pattern.
 
 Choose exactly one root mode:
 

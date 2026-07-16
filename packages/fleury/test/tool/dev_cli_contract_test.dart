@@ -44,6 +44,10 @@ void main() {
       expect(result.exitCode, 0, reason: result.stderr.toString());
       expect(result.stdout, contains('Core demos:'));
       expect(result.stdout, contains('Widget demos:'));
+      expect(
+        result.stdout,
+        contains('app-shell -> example/app_shell_demo.dart'),
+      );
       expect(result.stdout, contains('Demo app:'));
       expect(result.stdout, contains('Storybook:'));
       expect(
@@ -94,6 +98,20 @@ void main() {
           ),
         );
 
+        final appShell = await _runTool([
+          '--dry-run',
+          'widget-demo',
+          'app-shell',
+        ]);
+        expect(appShell.exitCode, 0, reason: appShell.stderr.toString());
+        expect(
+          appShell.stdout,
+          contains(
+            '(packages/fleury_widgets) dart run '
+            'example/app_shell_demo.dart',
+          ),
+        );
+
         final check = await _runTool(['--dry-run', 'check', '--quick']);
         expect(check.exitCode, 0, reason: check.stderr.toString());
         expect(check.stdout, contains('(packages/fleury) dart analyze'));
@@ -106,6 +124,13 @@ void main() {
         );
         expect(check.stdout, contains('(packages/storybook) dart analyze'));
         expect(check.stdout, contains('(packages/storybook) dart test'));
+        expect(
+          check.stdout,
+          contains(
+            '(packages/fleury_widgets) dart test '
+            'test/dashboard_demo_test.dart test/app_shell_demo_test.dart',
+          ),
+        );
         expect(check.stdout, isNot(contains('proof_console_test.dart')));
 
         final coverage = await _runTool(['--dry-run', 'coverage', '--strict']);
@@ -126,6 +151,37 @@ void main() {
         expect(coverage.stdout, contains('floor widgets >= 85%'));
       },
     );
+
+    test('check explains a missing bootstrap before analysis', () async {
+      final fixture = await Directory.systemTemp.createTemp(
+        'fleury-unbootstrapped-check-',
+      );
+      try {
+        final fixtureTool = File('${fixture.path}/tool/fleury_dev.dart');
+        await fixtureTool.parent.create(recursive: true);
+        await File('../../tool/fleury_dev.dart').copy(fixtureTool.path);
+        final result = await Process.run(Platform.resolvedExecutable, <String>[
+          fixtureTool.path,
+          'check',
+          '--quick',
+        ], workingDirectory: fixture.path);
+
+        expect(result.exitCode, 2);
+        expect(
+          result.stderr,
+          contains('Fleury workspace is not bootstrapped.'),
+        );
+        expect(
+          result.stderr,
+          contains('Missing package configuration for: packages/fleury'),
+        );
+        expect(result.stderr, contains('profiling'));
+        expect(result.stderr, contains('dart tool/fleury_dev.dart bootstrap'));
+        expect(result.stdout, isNot(contains('Analyzing')));
+      } finally {
+        await fixture.delete(recursive: true);
+      }
+    });
   });
 
   group('benchmark command discovery', () {

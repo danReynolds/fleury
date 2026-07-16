@@ -1,5 +1,4 @@
-// The compiled, tested counterpart to the README "Quick start". If you change
-// this file, update the snippet in README.md to match (and vice versa).
+// A minimal, compiled counter example.
 //
 // Run it:
 //
