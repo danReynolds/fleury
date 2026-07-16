@@ -415,6 +415,9 @@ class _TextAreaState extends State<TextArea>
 
   KeyEventResult _copyOrCutSelection({required bool cut}) {
     if (!widget.enabled) return KeyEventResult.ignored;
+    // Clipboard actions read selection/text synchronously. They must observe
+    // all paste content the area has already accepted, not a rendered prefix.
+    _cancelScheduledPaste();
     final selected = _controller.selectedText;
     if (selected.isEmpty) return KeyEventResult.ignored;
     if (cut && !_canEdit) return KeyEventResult.handled;
@@ -432,7 +435,6 @@ class _TextAreaState extends State<TextArea>
         return KeyEventResult.handled;
     }
     if (cut) {
-      _cancelScheduledPaste();
       _controller.deleteSelection();
     }
     return KeyEventResult.handled;
@@ -524,7 +526,12 @@ class _TextAreaState extends State<TextArea>
   KeyEventResult _handleKey(KeyEvent event) {
     if (!widget.enabled) return KeyEventResult.ignored;
     final action = widget.keymap.resolve(event);
-    if (action == null) return KeyEventResult.ignored;
+    if (action == null) {
+      // An ancestor binding may synchronously inspect the controller or unmount
+      // this area. Preserve input ordering before bubbling any later key.
+      _cancelScheduledPaste();
+      return KeyEventResult.ignored;
+    }
     switch (action) {
       case TextEditingKeyAction.copy:
         return _copyOrCutSelection(cut: false);
@@ -616,12 +623,18 @@ class _TextAreaState extends State<TextArea>
         _controller.insert('\n');
         return KeyEventResult.handled;
       case TextEditingKeyAction.escape:
+        // Escape still bubbles when no callback is installed, but an ancestor
+        // may inspect the value or unmount this area synchronously.
+        _cancelScheduledPaste();
         if (widget.onEscape != null) {
           widget.onEscape!();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
       case TextEditingKeyAction.submit:
+        // Submission may bubble to an app-level binding. It must observe the
+        // complete accepted transaction whether or not this area has a callback.
+        _cancelScheduledPaste();
         if (widget.onSubmit != null) {
           widget.onSubmit!(_controller.text);
           return KeyEventResult.handled;
@@ -630,6 +643,7 @@ class _TextAreaState extends State<TextArea>
       case TextEditingKeyAction.previousVertical:
       case TextEditingKeyAction.nextVertical:
       case TextEditingKeyAction.acceptCompletion:
+        _cancelScheduledPaste();
         return KeyEventResult.ignored;
     }
   }

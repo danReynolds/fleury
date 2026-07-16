@@ -51,7 +51,7 @@ final class FrameContainmentError {
   /// `errorBoundary` node's bounds. Null before the first errored paint.
   final CellRect? paintedRegion;
 
-  FrameContainmentError _withRegion(CellRect region) => FrameContainmentError(
+  FrameContainmentError _withRegion(CellRect? region) => FrameContainmentError(
     error: error,
     stack: stack,
     phase: phase,
@@ -184,10 +184,26 @@ class RenderErrorBoundary extends RenderObject
       contained.error,
       clipRect: clipRect,
     );
-    _containedError = contained._withRegion(
-      CellRect(offset: screenOffset ?? offset, size: size),
-    );
+    final bounds = CellRect(offset: screenOffset ?? offset, size: size);
+    _updateRetainedPaintedRegion(bounds, clipRect);
+    if (RetainedPaintGeometryCapture.isActive) {
+      RetainedPaintGeometryCapture.record(
+        _replayPaintedRegion,
+        bounds,
+        clipRect: clipRect,
+      );
+    }
   }
+
+  void _updateRetainedPaintedRegion(CellRect? bounds, CellRect? _) {
+    final contained = _containedError;
+    if (contained == null) return;
+    _containedError = contained._withRegion(bounds);
+  }
+
+  // ignore: prefer_function_declarations_over_variables
+  late final RetainedPaintGeometryCallback _replayPaintedRegion =
+      _updateRetainedPaintedRegion;
 
   void _contain(Object error, StackTrace stack, FrameContainmentPhase phase) {
     final alreadyErrored = _containedError != null;

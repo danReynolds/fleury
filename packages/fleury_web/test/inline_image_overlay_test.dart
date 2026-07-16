@@ -173,6 +173,42 @@ void main() {
     },
   );
 
+  test('positions a computed-static inherited host and restores its exact '
+      'inline token', () {
+    final host = _makeHost()
+      ..setAttribute(
+        'style',
+        'position:inherit;margin-left:53px;margin-top:31px;'
+            'width:240px;height:120px;padding:7px 11px;'
+            'font-family:monospace;font-size:10px;line-height:20px;',
+      )
+      ..style.setProperty('position', 'inherit', 'important');
+    final metrics = DomCellMetrics(container: host);
+    final box = metrics.measure();
+    expect(box.hostPositionIsStatic, isTrue);
+    expect(host.style.getPropertyValue('position'), 'inherit');
+    expect(host.style.getPropertyPriority('position'), 'important');
+
+    final overlay = InlineImageOverlay(host)
+      ..cacheImage('inherited', Uint8List.fromList([1, 2, 3, 4]))
+      ..presentPlan([_place('inherited', 2, 1, 1, 1)], box);
+
+    expect(host.style.getPropertyValue('position'), 'relative');
+    expect(host.style.getPropertyPriority('position'), isEmpty);
+    final imageRect = _imgs(host).single.getBoundingClientRect();
+    expect(
+      imageRect.left,
+      closeTo(box.cssCanvasLeft + 2 * box.cssCellWidth, 0.5),
+    );
+    expect(imageRect.top, closeTo(box.cssCanvasTop + box.cssCellHeight, 0.5));
+
+    overlay.dispose();
+    expect(host.style.getPropertyValue('position'), 'inherit');
+    expect(host.style.getPropertyPriority('position'), 'important');
+    metrics.dispose();
+    host.remove();
+  });
+
   test('same id at two positions yields two distinct <img> elements', () {
     final host = _makeHost();
     final overlay = InlineImageOverlay(host)

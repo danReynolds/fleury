@@ -131,6 +131,61 @@ void main() {
     );
   });
 
+  for (final failureCase
+      in <({String label, web.Event Function() event, String message})>[
+        (
+          label: 'socket error',
+          event: () => web.Event('error'),
+          message: 'connection failed',
+        ),
+        (
+          label: 'socket close',
+          event: () => web.CloseEvent('close'),
+          message: 'closed before it opened',
+        ),
+      ]) {
+    test('a pre-open ${failureCase.label} rejects start and tears down the '
+        'source and browser host', () async {
+      final failedInto = web.document.createElement('div') as web.HTMLElement;
+      web.document.body!.appendChild(failedInto);
+      addTearDown(() => failedInto.remove());
+      final bodyChildrenBeforeAttach = web.document.body!.children.length;
+      final failingSource = WireFrameSource(
+        url: 'ws://127.0.0.1:1/fleury-pre-open-failure',
+      );
+
+      final start = BrowserPresentationHost(
+        into: failedInto,
+      ).attach(failingSource);
+      final socket = failingSource.socketForTest!;
+      socket.dispatchEvent(failureCase.event());
+
+      await expectLater(
+        start.timeout(const Duration(seconds: 1)),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains(failureCase.message),
+          ),
+        ),
+      );
+      expect(failingSource.isClosedForTest, isTrue);
+      expect(failingSource.socketForTest, isNull);
+      expect(failingSource.bannerShownForTest, isFalse);
+      expect(
+        failedInto.children.length,
+        0,
+        reason: 'attach cleanup removed every generated root',
+      );
+      expect(
+        web.document.body!.children.length,
+        bodyChildrenBeforeAttach,
+        reason: 'failed attachment removed the cell metrics probe',
+      );
+    });
+  }
+
   test('CLIPBOARD_WRITE lands on the host clipboard and answers', () async {
     source.handleFrameForTest(const ClipboardWriteFrame(9, 'from the app'));
     await Future<void>.delayed(Duration.zero);

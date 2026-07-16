@@ -502,6 +502,97 @@ void main() {
       );
     });
 
+    testWidgets('submit observes the complete accepted paste transaction', (
+      tester,
+    ) {
+      final ctl = TextEditingController();
+      final submitted = <String>[];
+      tester.pumpWidget(
+        TextArea(
+          controller: ctl,
+          autofocus: true,
+          keymap: TextEditingKeymap.chat,
+          onSubmit: submitted.add,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 0,
+            chunkSize: 2,
+          ),
+        ),
+      );
+
+      tester.paste('ab\ncd');
+      expect(ctl.text, 'ab', reason: 'the paste is still frame-chunked');
+
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+
+      expect(submitted, ['ab\ncd']);
+      expect(ctl.text, 'ab\ncd');
+      tester.pump();
+      tester.pump();
+      expect(ctl.text, 'ab\ncd', reason: 'no paste tail may land after submit');
+
+      tester.sendKey(_ctrlChar('z'));
+      expect(ctl.text, '', reason: 'the completed paste remains one undo step');
+    });
+
+    testWidgets('Escape callback observes the complete accepted paste', (
+      tester,
+    ) {
+      final ctl = TextEditingController();
+      String? escapedValue;
+      tester.pumpWidget(
+        TextArea(
+          controller: ctl,
+          autofocus: true,
+          onEscape: () => escapedValue = ctl.text,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 0,
+            chunkSize: 2,
+          ),
+        ),
+      );
+
+      tester.paste('ab\ncd');
+      expect(ctl.text, 'ab');
+
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+
+      expect(escapedValue, 'ab\ncd');
+      expect(ctl.text, 'ab\ncd');
+      tester.sendKey(_ctrlChar('z'));
+      expect(ctl.text, '');
+    });
+
+    testWidgets('bubbled Escape follows the complete accepted paste', (tester) {
+      final ctl = TextEditingController();
+      var ancestorEscapes = 0;
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeyChord.escape, onEvent: (_) => ancestorEscapes += 1),
+          ],
+          child: TextArea(
+            controller: ctl,
+            autofocus: true,
+            pastePolicy: const TextPastePolicy(
+              largePasteThreshold: 0,
+              chunkSize: 2,
+            ),
+          ),
+        ),
+      );
+
+      tester.paste('ab\ncd');
+      expect(ctl.text, 'ab');
+
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+
+      expect(ancestorEscapes, 1);
+      expect(ctl.text, 'ab\ncd');
+      tester.sendKey(_ctrlChar('z'));
+      expect(ctl.text, '');
+    });
+
     testWidgets('parser segments preserve a paired newline at the byte cap', (
       tester,
     ) {

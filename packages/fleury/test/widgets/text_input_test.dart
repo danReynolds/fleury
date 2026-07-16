@@ -306,6 +306,36 @@ void main() {
       expect(history.isBrowsing, isFalse);
     });
 
+    testWidgets('history snapshots the complete accepted paste draft', (
+      tester,
+    ) {
+      final controller = TextEditingController();
+      final history = TextHistoryController(entries: ['previous']);
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          historyController: history,
+          autofocus: true,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 0,
+            chunkSize: 2,
+          ),
+        ),
+      );
+
+      tester.paste('abcdef');
+      expect(controller.text, 'ab');
+
+      tester.sendKey(_code(KeyCode.arrowUp));
+      expect(controller.text, 'previous');
+      tester.sendKey(_code(KeyCode.arrowDown));
+      expect(
+        controller.text,
+        'abcdef',
+        reason: 'history must retain the full accepted draft, not its prefix',
+      );
+    });
+
     testWidgets('Up bubbles when no history controller is provided', (tester) {
       var ancestorUps = 0;
       tester.pumpWidget(
@@ -406,6 +436,47 @@ void main() {
 
       tester.sendKey(_ctrlChar('z'));
       expect(controller.text, 'git che');
+    });
+
+    testWidgets('completion reads its range after the accepted paste tail', (
+      tester,
+    ) {
+      final controller = TextEditingController();
+      final completions = TextCompletionController()
+        ..open(
+          range: TextRange.empty,
+          options: const [TextCompletionOption(label: 'initial')],
+        );
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          completionController: completions,
+          autofocus: true,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 0,
+            chunkSize: 2,
+          ),
+          onChanged: (text) {
+            completions.update(
+              range: TextRange(start: 0, end: text.length),
+              options: [
+                TextCompletionOption(label: text, replacement: '<$text>'),
+              ],
+            );
+          },
+        ),
+      );
+
+      tester.paste('abcdef');
+      expect(controller.text, 'ab');
+
+      tester.sendKey(_code(KeyCode.tab));
+
+      expect(
+        controller.text,
+        '<abcdef>',
+        reason: 'completion must not apply a prefix-derived range or option',
+      );
     });
 
     testWidgets('Up and Down move completion selection before history', (
@@ -845,6 +916,34 @@ void main() {
             'undo must finish the accepted paste tail before recording redo',
       );
     });
+
+    testWidgets('Escape callback observes the complete accepted paste', (
+      tester,
+    ) {
+      final controller = TextEditingController();
+      String? escapedValue;
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          autofocus: true,
+          onEscape: () => escapedValue = controller.text,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 0,
+            chunkSize: 2,
+          ),
+        ),
+      );
+
+      tester.paste('abcdef');
+      expect(controller.text, 'ab');
+
+      tester.sendKey(_code(KeyCode.escape));
+
+      expect(escapedValue, 'abcdef');
+      expect(controller.text, 'abcdef');
+      tester.sendKey(_ctrlChar('z'));
+      expect(controller.text, '');
+    });
   });
 
   group('enabled and readOnly', () {
@@ -972,6 +1071,36 @@ void main() {
 
       expect(ancestorCopies, 1);
       expect(tester.clipboard.readInProcess(), isNull);
+    });
+
+    testWidgets('Ctrl+C bubbles only after completing an accepted paste', (
+      tester,
+    ) {
+      var ancestorCopies = 0;
+      final controller = TextEditingController();
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeyChord.ctrl.c, onEvent: (_) => ancestorCopies += 1),
+          ],
+          child: TextInput(
+            controller: controller,
+            autofocus: true,
+            pastePolicy: const TextPastePolicy(
+              largePasteThreshold: 0,
+              chunkSize: 2,
+            ),
+          ),
+        ),
+      );
+
+      tester.paste('abcdef');
+      expect(controller.text, 'ab');
+
+      tester.sendKey(_ctrlChar('c'));
+
+      expect(controller.text, 'abcdef');
+      expect(ancestorCopies, 1);
     });
 
     testWidgets('disabled clipboard policy blocks copy and bubbling', (

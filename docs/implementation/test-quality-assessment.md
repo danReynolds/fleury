@@ -56,15 +56,15 @@ What a strong TUI suite needs, and where fleury stands:
 | Lifecycle/leak discipline | rare | 34/34 disposal correctness; post-dispose mutation is a tested lifecycle error | **Strong** |
 | Perf regression gates | rare | web readiness gate + wire byte gate + oracle | **Beyond field** |
 | Multi-surface testing | textual-web (untested parity) | same scenarios on VM + real Chrome + parity oracle | **Strong** |
-| Untrusted-input fuzzing | rare but correct practice | only 2 seeded-RNG suites (ticker, renderer oracle); **input parser has 50 deterministic tests, zero fuzz** | **GAP** |
+| Untrusted-input fuzzing | rare but correct practice | Seeded byte-soup coverage drives malformed/truncated CSI, OSC, paste, UTF-8, mouse, and ordinary text across randomized chunk boundaries, asserting no throw, bounded output, and recovery | **Strong** |
 | Real-PTY integration tests | teatest does this | Deterministic lifecycle seams plus a real-PTY suite cover boot, resize, startup termination, Ctrl+Z/`fg`, handoff, crash containment, and restoration | **Strong** |
 | Capability-matrix testing | none in field | capabilities detection tested; widgets not systematically tested under degraded profiles | **GAP** (pairs with GlyphTier) |
 | Coverage measurement + gate | standard | first measured today; no gate, no CI | **GAP** |
 
 Verdict: **the suite is genuinely strong — top of the field on
 methodology, with real coverage to back it** — and the remaining gaps are
-specific, not systemic: fuzzing, capability matrices, platform-device checks,
-and the absence of a coverage gate.
+specific, not systemic: capability matrices, platform-device checks, and the
+absence of a coverage gate.
 
 ## The plan
 
@@ -76,11 +76,11 @@ suites cover failure paths that are unsafe or platform-specific in the PTY
 harness. Real Windows console behavior and native IME/accessibility behavior
 remain release-device checks.
 
-**T2 — input-parser fuzz suite.** The parser is the untrusted-input
-surface. Seeded-RNG suite (the renderer-oracle pattern): random byte
-soup, truncated/malformed CSI/OSC/DCS, broken UTF-8, paste bombs —
-asserting no-throw, bounded event output, and parser-state recovery.
-Cheap; high assurance per line.
+**T2 — input-parser fuzz suite — completed 2026-07-15.** The parser's
+seeded-RNG suite mixes random bytes with truncated and malformed CSI/OSC,
+broken UTF-8, bracketed paste, SGR mouse, SS3, and ordinary text across random
+feed boundaries and idle flushes. It asserts no throw and bounded event output;
+focused deterministic cases assert parser-state recovery and paste bounds.
 
 **T3 — coverage made repeatable and floored.** A `fleury_dev coverage`
 verb encoding the per-directory recipe + JSON-count sanity check +

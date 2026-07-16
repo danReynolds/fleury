@@ -130,7 +130,8 @@ final class _PaintGeometryClipScope {
   static bool get isCapturing =>
       SemanticPaintBoundsCapture.isActive ||
       PointerRegionCapture.isActive ||
-      FocusGeometryCapture.isActive;
+      FocusGeometryCapture.isActive ||
+      RetainedPaintGeometryCapture.isActive;
 
   static _PaintGeometryClip _clipSince(int depth) {
     var result = const _PaintGeometryClip.unbounded();
@@ -172,6 +173,178 @@ _PaintGeometryClip _capturedLocalClip({
   // rather than provenance-perfect, but preserves the pre-scope behavior instead of
   // silently dropping an observable tighter clip.
   return effectiveClip.sameAs(rootClip) ? localClip : effectiveClip;
+}
+
+/// Refreshes arbitrary paint-owned screen geometry on repaint-boundary cache
+/// hits.
+///
+/// [bounds] is the full paint rectangle, while [clipRect] is the effective
+/// screen clip. A null [bounds] retires geometry that is no longer painted. A
+/// null [clipRect] means unbounded; a bounded-empty clip is represented by a
+/// zero-sized rectangle so consumers can distinguish it from unbounded paint.
+typedef RetainedPaintGeometryCallback =
+    void Function(CellRect? bounds, CellRect? clipRect);
+
+CellRect? _paintGeometryCallbackClip(
+  _PaintGeometryClip clip,
+  CellOffset emptyOrigin,
+) {
+  if (!clip.isBounded) return null;
+  return clip.bounds ?? CellRect(offset: emptyOrigin, size: CellSize.zero);
+}
+
+/// A generic paint-owned geometry callback plus its cache-local bounds and
+/// clip provenance.
+///
+/// Focus, pointer, and semantic geometry have specialized replay semantics.
+/// This record covers the remaining screen-space state populated during paint:
+/// selection bounds, anchor links, and contained-error presentation regions.
+final class RetainedPaintGeometryRecord {
+  const RetainedPaintGeometryRecord._({
+    required this.update,
+    required this.localBounds,
+    required _PaintGeometryClip localClip,
+  }) : _localClip = localClip;
+
+  final RetainedPaintGeometryCallback update;
+
+  /// Bounds relative to the owning boundary's captured screen origin.
+  final CellRect localBounds;
+  final _PaintGeometryClip _localClip;
+
+  void publishToActiveCapture({
+    required CellOffset screenOffset,
+    required CellRect? clipRect,
+  }) {
+    if (!RetainedPaintGeometryCapture.isActive) return;
+    final effectiveClip = _resolvedClip(screenOffset, clipRect);
+    RetainedPaintGeometryCapture._recordResolved(
+      update,
+      _translatePaintRect(localBounds, screenOffset),
+      effectiveClip,
+      explicitLocalClip: _localClip.translate(screenOffset),
+    );
+  }
+
+  void replay({required CellOffset screenOffset, required CellRect? clipRect}) {
+    final screenBounds = _translatePaintRect(localBounds, screenOffset);
+    final resolvedClip = _resolvedClip(screenOffset, clipRect);
+    RetainedPaintGeometryCapture._recordResolved(
+      update,
+      screenBounds,
+      resolvedClip,
+      explicitLocalClip: _localClip.translate(screenOffset),
+    );
+    update(
+      screenBounds,
+      _paintGeometryCallbackClip(resolvedClip, screenBounds.offset),
+    );
+  }
+
+  void clear() => update(null, null);
+
+  _PaintGeometryClip _resolvedClip(
+    CellOffset screenOffset,
+    CellRect? inheritedClip,
+  ) {
+    return _localClip
+        .translate(screenOffset)
+        .intersect(_PaintGeometryClip.fromPaintRect(inheritedClip));
+  }
+}
+
+final class _RetainedPaintGeometryCollector {
+  _RetainedPaintGeometryCollector({
+    required this.records,
+    required CellOffset screenOrigin,
+    required this.rootClip,
+    required this.scopeDepth,
+  }) : _inverseScreenOrigin = _inversePaintOffset(screenOrigin);
+
+  final List<RetainedPaintGeometryRecord> records;
+  final _PaintGeometryClip rootClip;
+  final int scopeDepth;
+  final CellOffset _inverseScreenOrigin;
+
+  void record(
+    RetainedPaintGeometryCallback update,
+    CellRect screenBounds,
+    _PaintGeometryClip effectiveClip, {
+    _PaintGeometryClip explicitLocalClip = const _PaintGeometryClip.unbounded(),
+  }) {
+    final localClip = _capturedLocalClip(
+      scopeDepth: scopeDepth,
+      rootClip: rootClip,
+      effectiveClip: effectiveClip,
+      explicitLocalClip: explicitLocalClip,
+    );
+    records.add(
+      RetainedPaintGeometryRecord._(
+        update: update,
+        localBounds: _translatePaintRect(screenBounds, _inverseScreenOrigin),
+        localClip: localClip.translate(_inverseScreenOrigin),
+      ),
+    );
+  }
+}
+
+/// Stack-scoped collector for general paint-owned screen geometry.
+final class RetainedPaintGeometryCapture {
+  RetainedPaintGeometryCapture._();
+
+  static final List<_RetainedPaintGeometryCollector> _stack =
+      <_RetainedPaintGeometryCollector>[];
+
+  static bool get isActive => _stack.isNotEmpty;
+
+  static void collect(
+    List<RetainedPaintGeometryRecord> records, {
+    required CellOffset screenOrigin,
+    required CellRect? clipRect,
+    required void Function() paint,
+  }) {
+    _stack.add(
+      _RetainedPaintGeometryCollector(
+        records: records,
+        screenOrigin: screenOrigin,
+        rootClip: _PaintGeometryClip.fromPaintRect(clipRect),
+        scopeDepth: _PaintGeometryClipScope._depth,
+      ),
+    );
+    try {
+      paint();
+    } finally {
+      _stack.removeLast();
+    }
+  }
+
+  static void record(
+    RetainedPaintGeometryCallback update,
+    CellRect screenBounds, {
+    required CellRect? clipRect,
+  }) {
+    if (_stack.isEmpty) return;
+    _recordResolved(
+      update,
+      screenBounds,
+      _PaintGeometryClip.fromPaintRect(clipRect),
+    );
+  }
+
+  static void _recordResolved(
+    RetainedPaintGeometryCallback update,
+    CellRect screenBounds,
+    _PaintGeometryClip effectiveClip, {
+    _PaintGeometryClip explicitLocalClip = const _PaintGeometryClip.unbounded(),
+  }) {
+    if (_stack.isEmpty) return;
+    _stack.last.record(
+      update,
+      screenBounds,
+      effectiveClip,
+      explicitLocalClip: explicitLocalClip,
+    );
+  }
 }
 
 /// A paint-captured semantic bounds callback plus its cache-local bounds.

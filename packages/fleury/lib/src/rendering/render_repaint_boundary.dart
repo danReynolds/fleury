@@ -134,6 +134,8 @@ class RenderRepaintBoundary extends RenderObject
       <SemanticPaintBoundsRecord>[];
   final List<PointerRegionRecord> _pointerRegions = <PointerRegionRecord>[];
   final List<FocusGeometryRecord> _focusGeometry = <FocusGeometryRecord>[];
+  final List<RetainedPaintGeometryRecord> _retainedPaintGeometry =
+      <RetainedPaintGeometryRecord>[];
 
   /// Whether this boundary currently caches its subtree's paint.
   ///
@@ -265,11 +267,18 @@ class RenderRepaintBoundary extends RenderObject
                 screenOrigin: currentScreenOffset,
                 clipRect: clipRect,
                 paint: () {
-                  c.paint(
-                    targetCache,
-                    CellOffset.zero,
-                    screenOffset: currentScreenOffset,
+                  RetainedPaintGeometryCapture.collect(
+                    _retainedPaintGeometry,
+                    screenOrigin: currentScreenOffset,
                     clipRect: clipRect,
+                    paint: () {
+                      c.paint(
+                        targetCache,
+                        CellOffset.zero,
+                        screenOffset: currentScreenOffset,
+                        clipRect: clipRect,
+                      );
+                    },
                   );
                 },
               );
@@ -302,6 +311,10 @@ class RenderRepaintBoundary extends RenderObject
         screenOffset: currentScreenOffset,
         clipRect: clipRect,
       );
+      _replayRetainedPaintGeometry(
+        screenOffset: currentScreenOffset,
+        clipRect: clipRect,
+      );
     }
 
     final bounds = _cacheBounds;
@@ -319,6 +332,10 @@ class RenderRepaintBoundary extends RenderObject
         clipRect: clipRect,
       );
       _publishFocusGeometry(
+        screenOffset: currentScreenOffset,
+        clipRect: clipRect,
+      );
+      _publishRetainedPaintGeometry(
         screenOffset: currentScreenOffset,
         clipRect: clipRect,
       );
@@ -401,6 +418,27 @@ class RenderRepaintBoundary extends RenderObject
     }
   }
 
+  void _publishRetainedPaintGeometry({
+    required CellOffset screenOffset,
+    required CellRect? clipRect,
+  }) {
+    for (final record in _retainedPaintGeometry) {
+      record.publishToActiveCapture(
+        screenOffset: screenOffset,
+        clipRect: clipRect,
+      );
+    }
+  }
+
+  void _replayRetainedPaintGeometry({
+    required CellOffset screenOffset,
+    required CellRect? clipRect,
+  }) {
+    for (final record in _retainedPaintGeometry) {
+      record.replay(screenOffset: screenOffset, clipRect: clipRect);
+    }
+  }
+
   void _discardCapturedGeometry() {
     for (final record in _semanticBounds) {
       record.onPaintBounds(null);
@@ -411,6 +449,10 @@ class RenderRepaintBoundary extends RenderObject
       record.clear();
     }
     _focusGeometry.clear();
+    for (final record in _retainedPaintGeometry) {
+      record.clear();
+    }
+    _retainedPaintGeometry.clear();
   }
 
   void _resetCapturedGeometryForRepaint() {
@@ -426,5 +468,9 @@ class RenderRepaintBoundary extends RenderObject
       record.clear();
     }
     _focusGeometry.clear();
+    for (final record in _retainedPaintGeometry) {
+      record.clear();
+    }
+    _retainedPaintGeometry.clear();
   }
 }

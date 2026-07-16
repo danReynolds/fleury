@@ -68,13 +68,11 @@ final class WireFrameSource implements BrowserFrameSource {
       // caller's Future resolves and attach()'s cleanup runs — don't show
       // the mid-session disconnect banner or hang on `opened`.
       if (!handshakeOpened) {
-        if (!opened.isCompleted) {
-          opened.completeError(
-            StateError(
-              'fleury serve connection closed before it opened: $_url',
-            ),
-          );
-        }
+        _failOpen(
+          opened,
+          StateError('fleury serve connection closed before it opened: $_url'),
+          StackTrace.current,
+        );
         return;
       }
       _teardown('Disconnected from the fleury session.');
@@ -83,9 +81,11 @@ final class WireFrameSource implements BrowserFrameSource {
       // Errors before open (connection refused, TLS failure) fire error
       // then close; surface the failure through start() rather than
       // stranding it.
-      if (!handshakeOpened && !opened.isCompleted) {
-        opened.completeError(
+      if (!handshakeOpened) {
+        _failOpen(
+          opened,
           StateError('fleury serve connection failed: $_url'),
+          StackTrace.current,
         );
       }
     }).toJS;
@@ -103,24 +103,31 @@ final class WireFrameSource implements BrowserFrameSource {
       // is awaiting, and close the partially-started source before the host's
       // own idempotent cleanup runs. Without this catch, the callback throws to
       // JavaScript and `opened.future` remains pending forever.
-      try {
-        _teardown('The fleury session failed to start.', banner: false);
-      } catch (_) {
-        // Teardown is best-effort here, but the socket must not outlive a
-        // failed start and a cleanup error must not strand the Future again.
-        _closed = true;
-        final socket = _socket;
-        _socket = null;
-        try {
-          socket?.close();
-        } catch (_) {}
-      }
-      if (!opened.isCompleted) {
-        opened.completeError(error, stackTrace);
-      }
+      _failOpen(opened, error, stackTrace);
       return;
     }
     if (!opened.isCompleted) opened.complete();
+  }
+
+  void _failOpen(Completer<void> opened, Object error, StackTrace stackTrace) {
+    if (opened.isCompleted) return;
+    try {
+      _teardown('The fleury session failed to start.', banner: false);
+    } catch (_) {
+      // Teardown is best-effort here, but the socket must not outlive a
+      // failed start and a cleanup error must not strand the Future again.
+      _closed = true;
+      final socket = _socket;
+      _socket = null;
+      try {
+        socket?.close();
+      } catch (_) {}
+    }
+    // No MountedApp can ever use this component set. BrowserPresentationHost
+    // still owns its local reference and completes the idempotent cleanup when
+    // this error reaches attach().
+    _components = null;
+    if (!opened.isCompleted) opened.completeError(error, stackTrace);
   }
 
   MountedApp _mountedAppFor(BrowserHostComponents components) {

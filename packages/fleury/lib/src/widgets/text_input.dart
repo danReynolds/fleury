@@ -1103,13 +1103,16 @@ class _TextInputState extends State<TextInput>
   KeyEventResult _acceptCompletion() {
     final completion = widget.completionController;
     if (completion == null || !completion.isOpen) return KeyEventResult.ignored;
-    final state = completion.state;
-    final option = state.selectedOption;
-    if (option == null) return KeyEventResult.ignored;
     if (!_canEdit) {
       return widget.enabled ? KeyEventResult.handled : KeyEventResult.ignored;
     }
+    // Finish any accepted paste before reading the completion range/options.
+    // They may be synchronously refreshed by onChanged as the tail lands.
     _cancelScheduledPaste();
+    if (!completion.isOpen) return KeyEventResult.ignored;
+    final state = completion.state;
+    final option = state.selectedOption;
+    if (option == null) return KeyEventResult.ignored;
     _resetHistoryBrowsing();
     _controller.replaceRange(state.range, option.replacement, singleLine: true);
     completion.close();
@@ -1131,17 +1134,22 @@ class _TextInputState extends State<TextInput>
     if (!_canEdit) {
       return widget.enabled ? KeyEventResult.handled : KeyEventResult.ignored;
     }
+    // History snapshots the current editing value. Complete an accepted paste
+    // first so browsing cannot save/replace only its frame-applied prefix.
+    _cancelScheduledPaste();
     final next = previous
         ? history.navigatePrevious(_controller.value)
         : history.navigateNext();
     if (next == null) return KeyEventResult.ignored;
-    _cancelScheduledPaste();
     _controller.value = next;
     return KeyEventResult.handled;
   }
 
   KeyEventResult _copyOrCutSelection({required bool cut}) {
     if (!widget.enabled) return KeyEventResult.ignored;
+    // Clipboard actions read selection/text synchronously. They must observe
+    // all paste content the field has already accepted, not a rendered prefix.
+    _cancelScheduledPaste();
     final selected = _controller.selectedText;
     if (selected.isEmpty) return KeyEventResult.ignored;
     if (cut && !_canEdit) return KeyEventResult.handled;
@@ -1159,7 +1167,6 @@ class _TextInputState extends State<TextInput>
         return KeyEventResult.handled;
     }
     if (cut) {
-      _cancelScheduledPaste();
       _resetHistoryBrowsing();
       _controller.deleteSelection();
     }
@@ -1218,7 +1225,12 @@ class _TextInputState extends State<TextInput>
   KeyEventResult _handleKey(KeyEvent event) {
     if (!widget.enabled) return KeyEventResult.ignored;
     final action = widget.keymap.resolve(event);
-    if (action == null) return KeyEventResult.ignored;
+    if (action == null) {
+      // An ancestor binding may synchronously inspect the controller or unmount
+      // this field. Preserve input ordering before bubbling any later key.
+      _cancelScheduledPaste();
+      return KeyEventResult.ignored;
+    }
     switch (action) {
       case TextEditingKeyAction.copy:
         return _copyOrCutSelection(cut: false);
@@ -1273,17 +1285,17 @@ class _TextInputState extends State<TextInput>
         _controller.yank(singleLine: true);
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveLeft:
+        _cancelScheduledPaste();
         if (_shouldBubbleHorizontalBoundary(event, atStart: true)) {
           return KeyEventResult.ignored;
         }
-        _cancelScheduledPaste();
         _controller.moveCursorLeft(extend: event.hasShift);
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveRight:
+        _cancelScheduledPaste();
         if (_shouldBubbleHorizontalBoundary(event, atStart: false)) {
           return KeyEventResult.ignored;
         }
-        _cancelScheduledPaste();
         _controller.moveCursorRight(extend: event.hasShift);
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveWordLeft:
@@ -1295,12 +1307,15 @@ class _TextInputState extends State<TextInput>
         _controller.moveCursorWordRight(extend: event.hasShift);
         return KeyEventResult.handled;
       case TextEditingKeyAction.previousVertical:
+        _cancelScheduledPaste();
         if (_completionIsOpenWithOptions()) return _moveCompletion(-1);
         return _navigateHistory(previous: true);
       case TextEditingKeyAction.nextVertical:
+        _cancelScheduledPaste();
         if (_completionIsOpenWithOptions()) return _moveCompletion(1);
         return _navigateHistory(previous: false);
       case TextEditingKeyAction.acceptCompletion:
+        _cancelScheduledPaste();
         return _acceptCompletion();
       case TextEditingKeyAction.moveDocumentStart:
         _cancelScheduledPaste();
@@ -1313,6 +1328,7 @@ class _TextInputState extends State<TextInput>
       case TextEditingKeyAction.submit:
         return _submitCurrentText();
       case TextEditingKeyAction.escape:
+        _cancelScheduledPaste();
         final completion = widget.completionController;
         if (completion != null && completion.isOpen) {
           completion.close();
@@ -1328,6 +1344,7 @@ class _TextInputState extends State<TextInput>
       case TextEditingKeyAction.moveLineStart:
       case TextEditingKeyAction.moveLineEnd:
       case TextEditingKeyAction.insertNewline:
+        _cancelScheduledPaste();
         return KeyEventResult.ignored;
     }
   }

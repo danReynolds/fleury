@@ -31,9 +31,11 @@ No action needed on any of the above. Now the ranked findings.
 ### 1. Terminal IME / hardware-cursor caret — **resolved 2026-07-15**
 
 The original audit found that the serve path published the focused caret while
-the ANSI terminal path kept the hardware cursor hidden. The terminal presenter
-now emits the focused caret as a final CUP + show-cursor trailer, or hides it
-when no editable caret exists. Regression tests cover exact ordering relative
+the ANSI terminal path kept the hardware cursor hidden and left it at the
+renderer's last write. The terminal presenter now repositions that hidden
+hardware cursor with a final CUP trailer whenever an editable caret exists;
+Fleury continues to paint the visible caret itself rather than layering a
+second terminal cursor over it. Regression tests cover exact ordering relative
 to synchronized updates and retained-frame presentation, and the PTY suite
 covers the surrounding terminal lifecycle. Native CJK candidate-window and
 screen-reader behavior remain release-device checks because neither can be

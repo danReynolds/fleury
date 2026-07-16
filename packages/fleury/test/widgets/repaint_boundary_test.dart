@@ -4,6 +4,8 @@ import 'package:fleury/src/rendering/render_effect.dart';
 import 'package:fleury/src/rendering/render_repaint_boundary.dart';
 import 'package:test/test.dart';
 
+import '../support/render_fixtures.dart';
+
 /// All [RenderRepaintBoundary]s in the tree, in visit (outer-first) order.
 List<RenderRepaintBoundary> _boundaries(FleuryTester tester) {
   final found = <RenderRepaintBoundary>[];
@@ -11,6 +13,19 @@ List<RenderRepaintBoundary> _boundaries(FleuryTester tester) {
     if (e is RenderObjectElement) {
       final render = e.renderObject;
       if (render is RenderRepaintBoundary) found.add(render);
+    }
+    e.visitChildren(visit);
+  }
+
+  visit(tester.root!);
+  return found;
+}
+
+List<Selectable> _selectables(FleuryTester tester) {
+  final found = <Selectable>[];
+  void visit(Element e) {
+    if (e is RenderObjectElement && e.renderObject is Selectable) {
+      found.add(e.renderObject as Selectable);
     }
     e.visitChildren(visit);
   }
@@ -224,6 +239,160 @@ void main() {
       expect(stats.cachedCount, 1, reason: 'the editor paint was skipped');
       expect(focusNode.rect, CellRect.fromLTWH(4, 2, 6, 1));
       expect(focusNode.caretRect, CellRect.fromLTWH(7, 2, 1, 1));
+    });
+
+    testWidgets('cached Text and RichText selection geometry follows moves', (
+      tester,
+    ) {
+      final cases = <Widget>[
+        const Text('plain'),
+        const RichText(text: TextSpan(text: 'rich!')),
+      ];
+
+      for (final content in cases) {
+        final boundary = RepaintBoundary(child: content);
+        tester.pumpWidget(
+          Padding(
+            padding: const EdgeInsets.only(left: 1, top: 1),
+            child: boundary,
+          ),
+        );
+        tester.render(size: const CellSize(20, 5));
+        expect(
+          _selectables(tester).single.cellBounds,
+          CellRect.fromLTWH(1, 1, 5, 1),
+        );
+
+        tester.pumpWidget(
+          Padding(
+            padding: const EdgeInsets.only(left: 4, top: 2),
+            child: boundary,
+          ),
+        );
+        RepaintBoundaryDebugStats.beginFrame(enabled: true);
+        tester.render(size: const CellSize(20, 5));
+        final stats = RepaintBoundaryDebugStats.takeFrameStats();
+
+        expect(stats.cachedCount, 1, reason: '$content paint was skipped');
+        expect(
+          _selectables(tester).single.cellBounds,
+          CellRect.fromLTWH(4, 2, 5, 1),
+        );
+        expect(
+          _selectables(tester).single.visibleBounds,
+          CellRect.fromLTWH(4, 2, 5, 1),
+        );
+      }
+    });
+
+    testWidgets('cached selectable geometry reapplies a changing scroll clip', (
+      tester,
+    ) {
+      final controller = ScrollController();
+      addTearDown(controller.dispose);
+      tester.pumpWidget(
+        SizedBox(
+          width: 6,
+          height: 1,
+          child: ScrollView(
+            controller: controller,
+            child: const Column(
+              children: [
+                Text('top'),
+                RepaintBoundary(child: Text('target')),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      tester.render(size: const CellSize(6, 1));
+      var target = _selectables(
+        tester,
+      ).singleWhere((selectable) => selectable.cellBounds?.size.cols == 6);
+      expect(target.cellBounds, CellRect.fromLTWH(0, 1, 6, 1));
+      expect(target.visibleBounds, isNull);
+
+      controller.jumpTo(1);
+      tester.pump();
+      RepaintBoundaryDebugStats.beginFrame(enabled: true);
+      tester.render(size: const CellSize(6, 1));
+      final stats = RepaintBoundaryDebugStats.takeFrameStats();
+
+      target = _selectables(
+        tester,
+      ).singleWhere((selectable) => selectable.cellBounds?.size.cols == 6);
+      expect(stats.cachedCount, 1, reason: 'the target paint was skipped');
+      expect(target.cellBounds, CellRect.fromLTWH(0, 0, 6, 1));
+      expect(target.visibleBounds, CellRect.fromLTWH(0, 0, 6, 1));
+    });
+
+    testWidgets('cached anchor geometry keeps its follower attached on move', (
+      tester,
+    ) {
+      final link = AnchorLink();
+      final boundary = RepaintBoundary(
+        child: Anchor(link: link, child: const Text('A')),
+      );
+
+      Widget frame(EdgeInsets padding) => Stack(
+        children: [
+          Padding(padding: padding, child: boundary),
+          Follower(link: link, child: const Text('m')),
+        ],
+      );
+
+      tester.pumpWidget(frame(const EdgeInsets.only(left: 1, top: 1)));
+      tester.render(size: const CellSize(12, 6));
+      expect(link.rect, CellRect.fromLTWH(1, 1, 1, 1));
+
+      tester.pumpWidget(frame(const EdgeInsets.only(left: 4, top: 2)));
+      RepaintBoundaryDebugStats.beginFrame(enabled: true);
+      final moved = tester.render(size: const CellSize(12, 6));
+      final stats = RepaintBoundaryDebugStats.takeFrameStats();
+
+      expect(stats.cachedCount, 1, reason: 'the anchor paint was skipped');
+      expect(link.rect, CellRect.fromLTWH(4, 2, 1, 1));
+      expect(moved.atColRow(4, 3).grapheme, 'm');
+    });
+
+    testWidgets('cached contained-error semantics follows a moved boundary', (
+      tester,
+    ) {
+      const boundary = RepaintBoundary(
+        child: ErrorBoundary(rethrowContained: false, child: Boom()),
+      );
+
+      Widget frame(EdgeInsets padding) => Padding(
+        padding: padding,
+        child: const SizedBox(width: 6, height: 2, child: boundary),
+      );
+
+      tester.pumpWidget(frame(const EdgeInsets.only(left: 1, top: 1)));
+      tester.render(size: const CellSize(12, 6));
+      expect(
+        tester
+            .semantics()
+            .where(role: SemanticRole.errorBoundary)
+            .single
+            .bounds,
+        CellRect.fromLTWH(1, 1, 6, 2),
+      );
+
+      tester.pumpWidget(frame(const EdgeInsets.only(left: 4, top: 2)));
+      RepaintBoundaryDebugStats.beginFrame(enabled: true);
+      tester.render(size: const CellSize(12, 6));
+      final stats = RepaintBoundaryDebugStats.takeFrameStats();
+
+      expect(stats.cachedCount, 1, reason: 'the error paint was skipped');
+      expect(
+        tester
+            .semantics()
+            .where(role: SemanticRole.errorBoundary)
+            .single
+            .bounds,
+        CellRect.fromLTWH(4, 2, 6, 2),
+      );
     });
 
     testWidgets(
