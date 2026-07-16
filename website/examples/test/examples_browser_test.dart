@@ -22,7 +22,19 @@ final class _FakeFlush {
   }
 }
 
-Future<web.Element> _mount(String id) async {
+final class _MountedExample {
+  const _MountedExample({
+    required this.host,
+    required this.flush,
+    required this.app,
+  });
+
+  final web.Element host;
+  final _FakeFlush flush;
+  final MountedApp app;
+}
+
+Future<_MountedExample> _mountExample(String id) async {
   final flush = _FakeFlush();
   final host = web.document.createElement('div');
   // The DOM grid sizes itself from the host box + monospace cell metrics; an
@@ -33,7 +45,7 @@ Future<web.Element> _mount(String id) async {
         'font-family:monospace;font-size:16px;line-height:18px;',
   );
   web.document.body!.appendChild(host);
-  await mountApp(
+  final app = await mountApp(
     () => themedExampleRoot(
       examples[id]!,
       DocsExampleThemeController(DocsExampleStyle.dark),
@@ -45,8 +57,15 @@ Future<web.Element> _mount(String id) async {
   for (var i = 0; i < 4 && flush.pending; i++) {
     flush.fire();
   }
-  return host;
+  await app.awaitSemanticIdle();
+  addTearDown(() async {
+    await app.dispose();
+    host.remove();
+  });
+  return _MountedExample(host: host, flush: flush, app: app);
 }
+
+Future<web.Element> _mount(String id) async => (await _mountExample(id)).host;
 
 Future<web.Element> _mountRoot(Widget Function() builder) async {
   final flush = _FakeFlush();
@@ -57,10 +76,19 @@ Future<web.Element> _mountRoot(Widget Function() builder) async {
         'font-family:monospace;font-size:16px;line-height:18px;',
   );
   web.document.body!.appendChild(host);
-  await mountApp(builder, into: host, flushScheduler: flush.schedule);
+  final app = await mountApp(
+    builder,
+    into: host,
+    flushScheduler: flush.schedule,
+  );
   for (var i = 0; i < 4 && flush.pending; i++) {
     flush.fire();
   }
+  await app.awaitSemanticIdle();
+  addTearDown(() async {
+    await app.dispose();
+    host.remove();
+  });
   return host;
 }
 
@@ -86,16 +114,94 @@ String? _firstSpanColorContaining(web.Element host, String text) {
 }
 
 void main() {
+  test('textinput.basic mounts focused and accepts browser text', () async {
+    final fixture = await _mountExample('textinput.basic');
+
+    final semantics = fixture.host.querySelector('.fleury-semantics')!;
+    final field =
+        semantics.querySelector('[role="textbox"]')! as web.HTMLInputElement;
+    expect(field.getAttribute('data-fleury-focused'), 'true');
+    expect(field.value, 'deploy staging');
+
+    final keyboardCapture =
+        fixture.host.querySelector('textarea') as web.HTMLTextAreaElement;
+    keyboardCapture.dispatchEvent(
+      web.InputEvent(
+        'input',
+        web.InputEventInit(
+          data: '!',
+          inputType: 'insertText',
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+    expect(fixture.flush.pending, isTrue);
+    fixture.flush.fire();
+    await fixture.app.awaitSemanticIdle();
+
+    expect(field.value, 'deploy !');
+    expect(fixture.host.textContent, contains('deploy !'));
+  });
+
+  test('textarea.basic mounts focused and accepts browser text', () async {
+    final fixture = await _mountExample('textarea.basic');
+
+    final semantics = fixture.host.querySelector('.fleury-semantics')!;
+    final field =
+        semantics.querySelector('textarea[role="textbox"]')!
+            as web.HTMLTextAreaElement;
+    expect(field.getAttribute('data-fleury-focused'), 'true');
+    expect(field.getAttribute('aria-label'), 'Release notes');
+
+    final keyboardCapture =
+        fixture.host.querySelector('textarea[aria-hidden="true"]')!
+            as web.HTMLTextAreaElement;
+    keyboardCapture.dispatchEvent(
+      web.InputEvent(
+        'input',
+        web.InputEventInit(
+          data: 'Ship it',
+          inputType: 'insertText',
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+    expect(fixture.flush.pending, isTrue);
+    fixture.flush.fire();
+    await fixture.app.awaitSemanticIdle();
+
+    expect(field.value, 'Ship it');
+    expect(fixture.host.textContent, contains('Ship it'));
+  });
+
+  test('form.basic mounts its form and field semantics', () async {
+    final fixture = await _mountExample('form.basic');
+
+    final semantics = fixture.host.querySelector('.fleury-semantics')!;
+    expect(
+      semantics.querySelector('[role="form"][aria-label="Project settings"]'),
+      isNotNull,
+    );
+    expect(
+      semantics.querySelector('[role="region"][aria-label="Name"]'),
+      isNotNull,
+    );
+    expect(
+      semantics.querySelector('[role="region"][aria-label="Private project"]'),
+      isNotNull,
+    );
+  });
+
   test('gauge.basic renders its label in the browser DOM grid', () async {
     final host = await _mount('gauge.basic');
-    addTearDown(() => host.remove());
     expect(host.querySelector('.fleury-screen'), isNotNull);
     expect(host.textContent, contains('CPU'));
   });
 
   test('linechart.basic renders client-side (offset fix holds)', () async {
     final host = await _mount('linechart.basic');
-    addTearDown(() => host.remove());
     expect(host.textContent, contains('load')); // the series legend label
   });
 
@@ -148,7 +254,6 @@ void main() {
 
   test('barchart.basic renders its categories', () async {
     final host = await _mount('barchart.basic');
-    addTearDown(() => host.remove());
     expect(host.textContent, contains('q4'));
   });
 
@@ -159,7 +264,6 @@ void main() {
         DocsExampleThemeController(DocsExampleStyle.light),
       ),
     );
-    addTearDown(() => host.remove());
 
     expect(_firstSpanColorContaining(host, 'accent'), 'rgb(19, 138, 92)');
   });
@@ -168,7 +272,6 @@ void main() {
     'digits.basic renders the interactive world-clock timezone tabs',
     () async {
       final host = await _mount('digits.basic');
-      addTearDown(() => host.remove());
       // The timezone tab labels are real text; the clock itself is block glyphs.
       expect(host.textContent, contains('UTC'));
       expect(host.textContent, contains('PST'));
@@ -184,18 +287,21 @@ void main() {
           'font-family:monospace;font-size:16px;line-height:18px;',
     );
     web.document.body!.appendChild(host);
-    addTearDown(() => host.remove());
 
     final params = KnobParams(<String, Object?>{
       'value': 0.30,
       'label': 'CPU',
       'showPercentage': true,
     });
-    await mountApp(
+    final app = await mountApp(
       () => knobRoot('gauge', params),
       into: host,
       flushScheduler: flush.schedule,
     );
+    addTearDown(() async {
+      await app.dispose();
+      host.remove();
+    });
     for (var i = 0; i < 4 && flush.pending; i++) {
       flush.fire();
     }
@@ -216,13 +322,11 @@ void main() {
 
   test('codeview.basic renders the (now scrollable) source', () async {
     final host = await _mount('codeview.basic');
-    addTearDown(() => host.remove());
     expect(host.textContent, contains('CounterApp'));
   });
 
   test('messagelist.basic renders the (now scrollable) transcript', () async {
     final host = await _mount('messagelist.basic');
-    addTearDown(() => host.remove());
     expect(host.textContent, contains('Ship it'));
   });
 
@@ -235,14 +339,17 @@ void main() {
           'font-family:monospace;font-size:16px;line-height:18px;',
     );
     web.document.body!.appendChild(host);
-    addTearDown(() => host.remove());
 
     final params = KnobParams(<String, Object?>{'bins': 4, 'showValues': true});
-    await mountApp(
+    final app = await mountApp(
       () => knobRoot('histogram', params),
       into: host,
       flushScheduler: flush.schedule,
     );
+    addTearDown(() async {
+      await app.dispose();
+      host.remove();
+    });
     for (var i = 0; i < 4 && flush.pending; i++) {
       flush.fire();
     }

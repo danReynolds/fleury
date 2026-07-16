@@ -43,6 +43,7 @@ class TextArea extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.autofocus = false,
+    this.onChanged,
     this.onEscape,
     this.onSubmit,
     this.placeholder = '',
@@ -52,6 +53,8 @@ class TextArea extends StatefulWidget {
     this.enabled = true,
     this.readOnly = false,
     this.validationError,
+    this.semanticLabel,
+    this.semanticState = SemanticState.empty,
     this.clipboardPolicy = TextClipboardPolicy.allowed,
     this.keymap = TextEditingKeymap.defaultMultiline,
     this.pastePolicy = const TextPastePolicy(),
@@ -66,6 +69,13 @@ class TextArea extends StatefulWidget {
   final TextEditingController? controller;
   final FocusNode? focusNode;
   final bool autofocus;
+
+  /// Called with the new text whenever the controller text changes.
+  ///
+  /// Like [TextInput.onChanged], this includes typing, deletion, paste,
+  /// semantic edits, and programmatic controller writes, but excludes
+  /// cursor-only and selection-only changes.
+  final void Function(String text)? onChanged;
 
   /// Called when the user presses Escape; bubbles if null.
   final void Function()? onEscape;
@@ -87,6 +97,15 @@ class TextArea extends StatefulWidget {
   final bool enabled;
   final bool readOnly;
   final String? validationError;
+
+  /// Label exposed through the semantic app graph.
+  ///
+  /// When omitted, [placeholder] is used when non-empty. Use this when the
+  /// placeholder is example text rather than the durable field name.
+  final String? semanticLabel;
+
+  /// Extra semantic state merged into the text-area node.
+  final SemanticState semanticState;
 
   /// Policy future copy/cut actions should use for this area.
   final TextClipboardPolicy clipboardPolicy;
@@ -117,6 +136,7 @@ class _TextAreaState extends State<TextArea>
 
   late TextEditingController _controller;
   late FocusNode _focusNode;
+  late String _lastNotifiedText;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
   TextPasteSession? _pasteSession;
@@ -139,6 +159,7 @@ class _TextAreaState extends State<TextArea>
     super.initState();
     _controller = widget.controller ?? TextEditingController();
     _ownsController = widget.controller == null;
+    _lastNotifiedText = _controller.text;
     _controller.addListener(_onChange);
     _focusNode =
         widget.focusNode ??
@@ -165,6 +186,7 @@ class _TextAreaState extends State<TextArea>
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? TextEditingController();
       _ownsController = widget.controller == null;
+      _lastNotifiedText = _controller.text;
       _controller.addListener(_onChange);
     }
     if (widget.focusNode != oldWidget.focusNode) {
@@ -199,7 +221,14 @@ class _TextAreaState extends State<TextArea>
     Focus.maybeOf(context); // rebuild on focus change (cursor visibility)
   }
 
-  void _onChange() => setState(() {});
+  void _onChange() {
+    setState(() {});
+    final text = _controller.text;
+    if (text != _lastNotifiedText) {
+      _lastNotifiedText = text;
+      widget.onChanged?.call(text);
+    }
+  }
 
   bool get _canEdit => widget.enabled && !widget.readOnly;
 
@@ -454,6 +483,12 @@ class _TextAreaState extends State<TextArea>
       case SemanticAction.copy:
         _copyOrCutSelection(cut: false);
         return;
+      case SemanticAction.submit:
+        if (widget.enabled && widget.onSubmit != null) {
+          _cancelScheduledPaste();
+          widget.onSubmit!(_controller.text);
+        }
+        return;
       case _:
         return;
     }
@@ -664,7 +699,9 @@ class _TextAreaState extends State<TextArea>
     final focused = _focusNode.hasFocus;
     return Semantics(
       role: SemanticRole.textArea,
-      label: widget.placeholder.isEmpty ? null : widget.placeholder,
+      label:
+          widget.semanticLabel ??
+          (widget.placeholder.isEmpty ? null : widget.placeholder),
       value: widget.clipboardPolicy == TextClipboardPolicy.redacted
           ? null
           : _controller.text,
@@ -679,8 +716,9 @@ class _TextAreaState extends State<TextArea>
             _controller.hasSelection &&
             widget.clipboardPolicy != TextClipboardPolicy.disabled)
           SemanticAction.copy,
+        if (widget.enabled && widget.onSubmit != null) SemanticAction.submit,
       },
-      state: SemanticState({
+      state: widget.semanticState.merge({
         'selectionBase': _controller.selection.baseOffset,
         'selectionExtent': _controller.selection.extentOffset,
         'composingActive': _controller.hasComposingRange,

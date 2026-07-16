@@ -15,6 +15,48 @@ void main() {
       expect(value, 42);
     });
 
+    testWidgets('cursor and selection changes do not repeat onChanged', (
+      tester,
+    ) {
+      final controller = TextEditingController();
+      final calls = <num?>[];
+      tester.pumpWidget(
+        NumberInput(
+          controller: controller,
+          autofocus: true,
+          onChanged: calls.add,
+        ),
+      );
+      tester.type('12');
+
+      controller.caretOffset = 1;
+      controller.selection = const TextSelection(
+        baseOffset: 0,
+        extentOffset: 2,
+      );
+
+      expect(calls, [12]);
+    });
+
+    test('integer mode rejects fractional values and bounds', () {
+      expect(
+        () => NumberInput(initialValue: 1.5),
+        throwsA(isA<AssertionError>()),
+      );
+      expect(() => NumberInput(min: 0.5), throwsA(isA<AssertionError>()));
+      expect(() => NumberInput(max: 1.5), throwsA(isA<AssertionError>()));
+      expect(() => NumberInput(min: 2, max: 1), throwsA(isA<AssertionError>()));
+      expect(
+        () => NumberInput(allowDecimal: true, min: 0.5, max: 1.5),
+        returnsNormally,
+      );
+      expect(
+        () =>
+            NumberInput(controller: TextEditingController(), initialValue: 1.5),
+        returnsNormally,
+      );
+    });
+
     testWidgets('rejects non-digit characters (reverts the text)', (tester) {
       final calls = <num?>[];
       tester.pumpWidget(NumberInput(autofocus: true, onChanged: calls.add));
@@ -104,19 +146,105 @@ void main() {
       expect(submitted, 123);
     });
 
-    testWidgets('onSubmit clamps to min/max', (tester) {
-      num? submitted;
+    testWidgets('submit emits a clamped change before the clamped value', (
+      tester,
+    ) {
+      final controller = TextEditingController();
+      final changed = <num?>[];
+      final events = <String>[];
       tester.pumpWidget(
         NumberInput(
+          controller: controller,
           autofocus: true,
           min: 0,
           max: 100,
-          onSubmit: (v) => submitted = v,
+          onChanged: (value) {
+            changed.add(value);
+            events.add('changed:$value');
+          },
+          onSubmit: (value) => events.add('submitted:$value'),
         ),
       );
       tester.type('250');
+      expect(changed, [250]);
+
       tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
-      expect(submitted, 100);
+
+      expect(changed, [250, 100]);
+      expect(events, ['changed:250', 'changed:100', 'submitted:100']);
+      expect(controller.text, '100');
+      expect(controller.caretOffset, 3);
+    });
+
+    testWidgets('submit does not repeat onChanged for an in-range value', (
+      tester,
+    ) {
+      final controller = TextEditingController();
+      final events = <String>[];
+      tester.pumpWidget(
+        NumberInput(
+          controller: controller,
+          autofocus: true,
+          min: 0,
+          max: 100,
+          onChanged: (value) => events.add('changed:$value'),
+          onSubmit: (value) => events.add('submitted:$value'),
+        ),
+      );
+      tester.type('50');
+
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+
+      expect(events, ['changed:50', 'submitted:50']);
+      expect(controller.text, '50');
+      expect(controller.caretOffset, 2);
+    });
+
+    testWidgets('empty submit remains null without an onChanged callback', (
+      tester,
+    ) {
+      final controller = TextEditingController();
+      final events = <String>[];
+      tester.pumpWidget(
+        NumberInput(
+          controller: controller,
+          autofocus: true,
+          min: 0,
+          max: 100,
+          onChanged: (value) => events.add('changed:$value'),
+          onSubmit: (value) => events.add('submitted:$value'),
+        ),
+      );
+
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+
+      expect(events, ['submitted:null']);
+      expect(controller.text, isEmpty);
+      expect(controller.caretOffset, 0);
+    });
+
+    testWidgets('in-progress submit remains null without a duplicate change', (
+      tester,
+    ) {
+      final controller = TextEditingController();
+      final events = <String>[];
+      tester.pumpWidget(
+        NumberInput(
+          controller: controller,
+          autofocus: true,
+          min: 0,
+          max: 100,
+          onChanged: (value) => events.add('changed:$value'),
+          onSubmit: (value) => events.add('submitted:$value'),
+        ),
+      );
+      tester.type('-');
+
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+
+      expect(events, ['changed:null', 'submitted:null']);
+      expect(controller.text, '-');
+      expect(controller.caretOffset, 1);
     });
 
     testWidgets('exposes constrained numeric text-field semantics', (tester) {

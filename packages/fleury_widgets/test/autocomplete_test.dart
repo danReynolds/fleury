@@ -52,6 +52,42 @@ void main() {
     tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
     expect(tester.overlay.entries.length, 1, reason: 'dropdown closed');
     expect(_screen(tester).contains('ba'), isTrue, reason: 'typed text stays');
+
+    tester.pumpWidget(const Autocomplete(options: _fruits, autofocus: true));
+    expect(
+      tester.overlay.entries.length,
+      1,
+      reason: 'an unrelated parent rebuild must preserve explicit dismissal',
+    );
+  });
+
+  testWidgets('Enter after dismissal bubbles without picking a hidden row', (
+    tester,
+  ) {
+    final controller = TextEditingController();
+    String? selected;
+    var ancestorSubmits = 0;
+    tester.pumpWidget(
+      KeyBindings(
+        bindings: <KeyBinding>[
+          KeyBinding(KeyChord.enter, onEvent: (_) => ancestorSubmits += 1),
+        ],
+        child: Autocomplete(
+          options: _fruits,
+          controller: controller,
+          autofocus: true,
+          onSelect: (value) => selected = value,
+        ),
+      ),
+    );
+    tester.type('ap');
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+
+    expect(controller.text, 'ap');
+    expect(selected, isNull);
+    expect(ancestorSubmits, 1);
   });
 
   testWidgets('a non-matching query shows no dropdown', (tester) {
@@ -92,6 +128,189 @@ void main() {
       );
     },
   );
+
+  testWidgets('refreshes live options while a query is open', (tester) {
+    final controller = TextEditingController(text: 'ap')..caretOffset = 2;
+    final options = <String>['apple', 'apricot'];
+    tester.pumpWidget(
+      Autocomplete(options: options, controller: controller, autofocus: true),
+    );
+
+    expect(tester.overlay.entries.length, 2);
+    _screen(tester);
+    expect(
+      tester
+          .semantics()
+          .byRole(SemanticRole.menuItem)
+          .map((node) => node.label),
+      ['apple', 'apricot'],
+    );
+
+    // A retained list may be mutated before its owner rebuilds. Autocomplete
+    // must re-read it even though oldWidget.options is the same object.
+    options
+      ..clear()
+      ..add('apex');
+    tester.pumpWidget(
+      Autocomplete(options: options, controller: controller, autofocus: true),
+    );
+    _screen(tester);
+    expect(
+      tester
+          .semantics()
+          .byRole(SemanticRole.menuItem)
+          .map((node) => node.label),
+      ['apex'],
+    );
+
+    options.clear();
+    tester.pumpWidget(
+      Autocomplete(options: options, controller: controller, autofocus: true),
+    );
+    expect(
+      tester.overlay.entries.length,
+      1,
+      reason: 'empty source closes menu',
+    );
+
+    options.add('apogee');
+    tester.pumpWidget(
+      Autocomplete(options: options, controller: controller, autofocus: true),
+    );
+    expect(
+      tester.overlay.entries.length,
+      2,
+      reason: 'new live matches reopen the focused menu',
+    );
+  });
+
+  testWidgets('refreshes matches when the display mapping changes', (tester) {
+    const people = [_Person('Alice', 1), _Person('Bob', 2)];
+    final controller = TextEditingController(text: 'ali')..caretOffset = 3;
+    tester.pumpWidget(
+      Autocomplete<_Person>(
+        options: people,
+        controller: controller,
+        autofocus: true,
+        displayStringForOption: (person) => person.name,
+      ),
+    );
+    expect(tester.overlay.entries.length, 2);
+    _screen(tester);
+    expect(
+      tester.semantics().single(role: SemanticRole.menuItem).label,
+      'Alice',
+    );
+
+    tester.pumpWidget(
+      Autocomplete<_Person>(
+        options: people,
+        controller: controller,
+        autofocus: true,
+        displayStringForOption: (person) => 'person-${person.id}',
+      ),
+    );
+    expect(
+      tester.overlay.entries.length,
+      1,
+      reason: 'the old display mapping must not leave stale suggestions open',
+    );
+  });
+
+  testWidgets('swaps controller and focus node without retaining ownership', (
+    tester,
+  ) {
+    final firstController = TextEditingController(text: 'ap')..caretOffset = 2;
+    final secondController = TextEditingController(text: 'ba')..caretOffset = 2;
+    final firstFocus = FocusNode(debugLabel: 'first autocomplete');
+    final secondFocus = FocusNode(debugLabel: 'second autocomplete');
+    addTearDown(firstController.dispose);
+    addTearDown(secondController.dispose);
+    addTearDown(firstFocus.dispose);
+    addTearDown(secondFocus.dispose);
+
+    tester.pumpWidget(
+      Autocomplete(
+        options: _fruits,
+        controller: firstController,
+        focusNode: firstFocus,
+        autofocus: true,
+      ),
+    );
+    expect(firstFocus.hasFocus, isTrue);
+    expect(_screen(tester), contains('apricot'));
+
+    tester.pumpWidget(
+      Autocomplete(
+        options: _fruits,
+        controller: secondController,
+        focusNode: firstFocus,
+        autofocus: true,
+      ),
+    );
+    expect(_screen(tester), contains('banana'));
+    firstController.text = 'ch';
+    tester.pump();
+    expect(_screen(tester), contains('banana'));
+    expect(_screen(tester), isNot(contains('cherry')));
+
+    tester.pumpWidget(
+      Autocomplete(
+        options: _fruits,
+        controller: secondController,
+        focusNode: secondFocus,
+      ),
+    );
+    expect(tester.overlay.entries.length, 1);
+
+    secondFocus.requestFocus();
+    tester.pump();
+    expect(tester.overlay.entries.length, 2);
+    expect(_screen(tester), contains('banana'));
+
+    tester.pumpWidget(const Text('unmounted'));
+    firstController.text = 'still owned by caller';
+    secondController.text = 'still owned by caller';
+    expect(firstController.text, 'still owned by caller');
+    expect(secondController.text, 'still owned by caller');
+  });
+
+  testWidgets('forwards onChanged and text-field semantics', (tester) {
+    final controller = TextEditingController();
+    final changes = <String>[];
+    tester.pumpWidget(
+      Autocomplete(
+        options: _fruits,
+        controller: controller,
+        autofocus: true,
+        onChanged: changes.add,
+        fieldSemanticLabel: 'Fruit field',
+        semanticLabel: 'Fruit suggestions',
+        semanticState: const SemanticState({'fieldKind': 'fruit'}),
+      ),
+    );
+
+    controller.value = TextEditingValue(
+      text: 'ap',
+      selection: const TextSelection.collapsed(offset: 2),
+    );
+    tester.pump();
+    controller.caretOffset = 1;
+    tester.pump();
+    expect(
+      tester.semantics().single(role: SemanticRole.menu).label,
+      'Fruit suggestions',
+    );
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+
+    expect(changes, ['ap', 'apple']);
+    final field = tester.semantics().single(
+      role: SemanticRole.textField,
+      label: 'Fruit field',
+    );
+    expect(field.value, 'apple');
+    expect(field.state['fieldKind'], 'fruit');
+  });
 
   group('semantics', () {
     testWidgets('suggestion menu exposes filtered option semantics', (tester) {
@@ -199,6 +418,27 @@ void main() {
             .single(role: SemanticRole.textField, label: 'Fruit')
             .value,
         'ba',
+      );
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.textField, label: 'Fruit')
+            .actions,
+        isNot(contains(SemanticAction.submit)),
+      );
+
+      tester.pumpWidget(
+        const Autocomplete(
+          options: _fruits,
+          autofocus: true,
+          placeholder: 'Fruit',
+          semanticLabel: 'Fruit suggestions',
+        ),
+      );
+      expect(
+        tester.semantics().where(role: SemanticRole.menu),
+        isEmpty,
+        reason: 'a rebuild must not undo semantic dismissal',
       );
     });
 
