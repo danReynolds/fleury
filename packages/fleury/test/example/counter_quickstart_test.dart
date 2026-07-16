@@ -1,6 +1,5 @@
-// Exercises the compiled counterpart to the README "Quick start": the example
-// mounts and its space-to-increment binding fires. Keep the example and README
-// snippet aligned when either changes.
+// Exercises the minimal counter example: it mounts and its
+// space-to-increment binding fires.
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';

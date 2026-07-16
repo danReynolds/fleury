@@ -11,51 +11,79 @@
 
 ---
 
-The standalone Fleury workspace is split into local Dart packages:
+Fleury brings Dart's Flutter-shaped widget model to cell-based interfaces:
+compose widgets, keep state with `StatefulWidget`, rebuild with `setState`, and
+let the framework diff the resulting cell grid. The same widget tree can run in
+a native terminal or mount into a browser.
 
-- `packages/fleury` - the core Flutter-shaped terminal UI framework.
-- `packages/fleury_widgets` - higher-level widgets built on `fleury`.
-- `packages/fleury_git` - small Git integration package proving app-extension
-  package seams.
-- `packages/fleury_web` - retained-DOM browser host, served client, and demo
-  surface.
-- `packages/fleury_example_console` - internal demo app for the current
-  implementation cycle.
-- `packages/storybook` - interactive widget storybook for browsing and
-  exercising supported Fleury widgets.
-- `docs/architecture.md`, `docs/core-and-targets.md`,
-  `docs/serving-and-embedding.md` - how Fleury is layered (a platform-neutral
-  core + pluggable targets) and the two ways to run it in a browser (serve vs.
-  embed).
-- `docs/rfcs` - design notes and implementation RFCs from the original work.
-- `docs/implementation` - active milestone trackers, workstream notes, and the
-  execution journal.
-- `peer-fixtures` - comparison-only peer framework fixtures and run artifacts.
+It also keeps a semantic graph alongside the visual tree, so tests and agents
+can inspect and invoke stable application actions instead of relying on terminal
+coordinates. The browser host mirrors that graph into a semantic DOM; native
+terminal assistive-technology adapters remain future work.
 
-## Local Launcher
+**Start here:** [Getting started](https://fleury.dev/getting-started/) ·
+[Widget catalog](https://fleury.dev/widgets/) ·
+[Navigation and commands](https://fleury.dev/guides/navigation/) ·
+[Architecture](https://fleury.dev/architecture/core-and-targets/) ·
+[Performance](https://fleury.dev/architecture/performance/)
 
-From the workspace root:
+## Try it from this checkout
 
 ```sh
 dart tool/fleury_dev.dart bootstrap
-dart tool/fleury_dev.dart list
-dart tool/fleury_dev.dart demo
-dart tool/fleury_dev.dart storybook
-dart tool/fleury_dev.dart storybook list
-dart tool/fleury_dev.dart storybook verify
-dart tool/fleury_dev.dart storybook coverage --strict
-dart tool/fleury_dev.dart storybook run --story visualization.charts --theme dark --size 80x24
-dart tool/fleury_dev.dart core-demo counter
-dart tool/fleury_dev.dart widget-demo dashboard
-dart tool/fleury_dev.dart cli diagnose --json
-dart tool/fleury_dev.dart benchmark list
-dart tool/fleury_dev.dart benchmark manifest --json
-dart tool/fleury_dev.dart benchmark result --input=peer-run.json --json
-dart tool/fleury_dev.dart check --quick
+dart tool/fleury_dev.dart widget-demo app-shell
 ```
 
-The launcher is intentionally small. It shells into the package that owns each
-command, so the repo does not need a root `pubspec.yaml` yet.
+The app-shell demo is the shortest tour of a real multi-screen Fleury app:
+route-local commands, keyboard shortcuts, a registry-backed command palette,
+buttons, and semantic actions all invoke the same application operations.
+
+At its smallest, an app is just a widget tree handed to `runApp`:
+
+```dart
+import 'package:fleury/fleury.dart';
+
+void main() => runApp(
+  const FleuryApp(
+    title: 'My app',
+    home: Center(child: Text('Hello, cells!')),
+  ),
+);
+```
+
+The [getting-started guide](https://fleury.dev/getting-started/) covers Git
+dependencies, state, higher-level widgets, and running the same tree in a
+browser.
+
+## Repository development
+
+The workspace is split into local Dart packages:
+
+- `packages/fleury` — the platform-neutral retained core, app shell, native
+  terminal host, and theme-free primitives.
+- `packages/fleury_widgets` — higher-level, theme-driven widgets built on
+  `fleury`.
+- `packages/fleury_git` — a small Git integration package proving app-extension
+  package seams.
+- `packages/fleury_web` — the retained-DOM browser host, served client, and demo
+  surface.
+- `packages/fleury_example_console` — the internal integration demo app.
+- `packages/storybook` — an interactive catalog for supported widgets.
+- `docs/architecture.md`, `docs/core-and-targets.md`, and
+  `docs/serving-and-embedding.md` — the core/host layering and browser paths.
+- `docs/rfcs` and `docs/implementation` — design records and milestone notes.
+- `peer-fixtures` — comparison-only peer framework fixtures and run artifacts.
+
+The root launcher delegates to the package that owns each command, so the
+workspace does not need a root `pubspec.yaml`:
+
+```sh
+dart tool/fleury_dev.dart bootstrap
+dart tool/fleury_dev.dart check --quick
+dart tool/fleury_dev.dart widget-demo app-shell
+dart tool/fleury_dev.dart storybook
+dart tool/fleury_dev.dart --help
+```
 
 Optional local CLI paths:
 
@@ -64,45 +92,23 @@ dart tool/fleury_dev.dart activate-cli
 dart tool/fleury_dev.dart build-cli
 ```
 
-After local activation, contributor commands can also be run through the
-public CLI namespace:
+After local activation, contributor commands are also available under
+`fleury dev`; app-developer commands such as `fleury diagnose`, `fleury shell`,
+and `fleury serve` remain top-level. Run `fleury dev --help` and
+`fleury benchmark --help` for the full command surfaces.
 
-```sh
-fleury dev check --quick
-fleury dev demo
-fleury dev storybook
-fleury dev storybook verify
-fleury dev core-demo counter
-fleury benchmark list
-fleury benchmark wire sb6 --help
-fleury benchmark manifest --json
-```
+## Performance and benchmarks
 
-`fleury dev` requires a Fleury framework checkout and delegates to
-`tool/fleury_dev.dart`; public app-developer commands remain top-level
-commands such as `fleury diagnose`, `fleury shell`, and `fleury serve`.
-`fleury benchmark` is the canonical namespace for local scenario runners,
-peer-wire comparisons, profiling, scoreboards, and manifest/result/variance
-tools. Release and evidence commands such as terminal matrix capture and MVP
-readiness remain available through `fleury dev --help`.
+Fleury documents performance as an implementation model plus repeatable
+scenario evidence. Read the public
+[performance guide](https://fleury.dev/architecture/performance/) and the
+detailed [benchmark matrix](benchmarks/README.md).
 
-## Performance and Benchmarks
-
-Fleury documents performance as an implementation model plus repeatable scenario
-evidence. The public docs page is
-[Performance](https://fleury.dev/architecture/performance/); the detailed
-scenario matrix and runner commands live in [benchmarks/README.md](benchmarks/README.md).
-
-The suite tracks the pressure points that usually matter for terminal apps:
-startup and first paint, input latency, large data navigation, streaming logs
-and Markdown, dashboard update cadence, layout invalidation, resize churn,
-command-palette churn, process output, wire bytes, CPU, and RSS. Peer-wire
-comparisons use source fixtures and repeated captures to answer regression,
-fixture-shape, runtime-floor, and terminal-boundary cost questions. Results are
-most useful when the fixture, terminal, machine, framework versions, and variance
-are recorded beside the captures.
-
-Quick entry points:
+The suite covers startup and first paint, input latency, large-data navigation,
+streaming logs and Markdown, dashboard cadence, layout invalidation, resize and
+overlay churn, process output, wire bytes, CPU, and RSS. Peer-wire comparisons
+record fixture shape, runtime floors, framework versions, machine context, and
+variance alongside results.
 
 ```sh
 fleury benchmark list
@@ -113,38 +119,12 @@ fleury benchmark manifest --json
 
 ## Validate
 
-Run the packages independently:
+For the normal local gate:
 
 ```sh
-cd packages/fleury
-dart pub get
-dart analyze
-dart test -x integration
-
-cd ../fleury_widgets
-dart pub get
-dart analyze
-dart test
-
-cd ../fleury_git
-dart pub get
-dart analyze
-dart test
-
-cd ../fleury_web
-dart pub get
-dart analyze
+dart tool/fleury_dev.dart check --quick
 ```
 
-## Try The Core Demo
-
-```sh
-cd packages/fleury
-dart run example/counter_quickstart.dart
-```
-
-Or from the workspace root:
-
-```sh
-dart tool/fleury_dev.dart core-demo counter
-```
+Each package can also be checked independently with `dart analyze` and
+`dart test` from its directory. Run `dart tool/fleury_dev.dart --help` for the
+broader release, docs, terminal-matrix, and benchmark evidence commands.

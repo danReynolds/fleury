@@ -303,6 +303,7 @@ final _coreDemos = <String, String>{
 };
 
 final _widgetDemos = <String, String>{
+  'app-shell': 'example/app_shell_demo.dart',
   'dashboard': 'example/dashboard_demo.dart',
   'dashboard-snapshot': 'example/dashboard_snapshot.dart',
   'image': 'example/image_demo.dart',
@@ -378,6 +379,8 @@ class _Runner {
   }
 
   Future<void> check({required bool quick}) async {
+    _requireBootstrapForCheck(quick: quick);
+
     // Analyze EVERY package first, before any test suite runs. `_run` aborts
     // the whole check on the first failure, so an interleaved analyze/test
     // order lets a red test mask every analyze after it — which is how a DT1
@@ -418,7 +421,13 @@ class _Runner {
     }
     await _run(
       'dart',
-      quick ? ['test', 'test/dashboard_demo_test.dart'] : ['test'],
+      quick
+          ? [
+              'test',
+              'test/dashboard_demo_test.dart',
+              'test/app_shell_demo_test.dart',
+            ]
+          : ['test'],
       workingDirectory: widgets,
     );
     await _run('dart', ['test'], workingDirectory: git);
@@ -460,6 +469,36 @@ class _Runner {
         '--concurrency=1',
       ], workingDirectory: fleury);
     }
+  }
+
+  void _requireBootstrapForCheck({required bool quick}) {
+    if (dryRun) return;
+
+    final requiredPackages = <String>[
+      fleury,
+      widgets,
+      git,
+      demo,
+      storybook,
+      web,
+      samples,
+      mcp,
+      profiling,
+      if (!quick) webExamples,
+    ];
+    final missing = <String>[
+      for (final package in requiredPackages)
+        if (!File('$package/.dart_tool/package_config.json').existsSync())
+          _relative(package),
+    ];
+    if (missing.isEmpty) return;
+
+    stderr.writeln('Fleury workspace is not bootstrapped.');
+    stderr.writeln('Missing package configuration for: ${missing.join(', ')}');
+    stderr.writeln(
+      'Run `dart tool/fleury_dev.dart bootstrap`, then retry the check.',
+    );
+    exit(2);
   }
 
   /// Compiles the structured serve client (web/remote_client.dart) and
