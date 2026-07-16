@@ -9,15 +9,16 @@ and style their cells from it, so a single theme drives the whole tree.
 
 ## Apply a theme
 
-`runApp` doesn't install a `Theme` for you — until you add one, widgets fall back
-to sensible built-in defaults (`Theme.of(context)` always returns *something*).
-To customize, wrap a subtree in a `Theme`:
+For an app-wide theme, pass `theme` to `FleuryApp`. The theme sits above the
+app's Navigator, so the home screen, pushed screens, and presented dialogs all
+inherit it:
 
 ```dart
 import 'package:fleury/fleury.dart';
 
-Theme(
-  data: ThemeData(
+FleuryApp(
+  title: 'Status monitor',
+  theme: ThemeData(
     brightness: Brightness.dark,
     borderStyle: BorderStyle.rounded,
     colorScheme: const ColorScheme(
@@ -27,12 +28,18 @@ Theme(
       error: RgbColor(0xFF, 0x5C, 0x57),
     ),
   ),
-  child: myApp,
+  home: const DashboardScreen(),
 );
 ```
 
 `ThemeData.dark()` and `ThemeData.light()` give you sensible defaults to start
-from, and `copyWith(...)` overrides individual fields.
+from, and `copyWith(...)` overrides individual fields. If `theme` is omitted,
+widgets use sensible built-in defaults (`Theme.of(context)` always returns
+something).
+
+Use `Theme(data:, child:)` when only one subtree should differ from the app
+theme, such as a high-contrast preview or a branded panel. The nearest Theme
+wins.
 
 ## ColorScheme
 

@@ -40,7 +40,13 @@ Widget themedExampleRoot(
     final theme = _themeFor(controller.style);
     return _DocsExampleTheme(
       data: theme,
-      child: Theme(data: theme, child: child!),
+      child: Theme(
+        data: theme,
+        // Docs embeds are intentionally not full applications, but interactive
+        // examples still need a traversal policy now that browser hosts mount
+        // their supplied root exactly.
+        child: FocusTraversalGroup(child: child!),
+      ),
     );
   },
 );
@@ -1553,9 +1559,11 @@ class KnobParams with ChangeNotifier {
 Widget knobRoot(String id, KnobParams params) {
   final builder = knobExamples[id];
   if (builder == null) return const Center(child: Text('Unknown knob example'));
-  return ListenableBuilder(
-    listenable: params,
-    builder: (context, _) => builder(params.value),
+  return FocusTraversalGroup(
+    child: ListenableBuilder(
+      listenable: params,
+      builder: (context, _) => builder(params.value),
+    ),
   );
 }
 

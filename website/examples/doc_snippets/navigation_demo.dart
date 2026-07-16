@@ -5,7 +5,8 @@
 
 import 'package:fleury/fleury.dart';
 
-void main() => runApp(const NavApp());
+void main() =>
+    runApp(const FleuryApp(title: 'Navigation demo', home: NavApp()));
 
 class NavApp extends StatelessWidget {
   const NavApp({super.key});

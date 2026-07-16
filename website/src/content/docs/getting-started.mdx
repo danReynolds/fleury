@@ -61,7 +61,9 @@ day to day you just import both.
 
 ## 2. Hello, cells
 
-A Fleury app is a widget tree handed to `runApp`. You build it with the familiar
+A Fleury program is a widget tree handed to `runApp`. `FleuryApp` is the
+lightweight app shell: its `home` screen gets app-wide navigation, theming, and
+command/status scopes. You build everything beneath it with the familiar
 `Widget` / `build` / `setState` model — it just paints to a grid of cells
 instead of pixels.
 
@@ -69,7 +71,10 @@ instead of pixels.
 import 'package:fleury/fleury.dart';
 
 void main() => runApp(
-      const Center(child: Text('Hello, cells!')),
+      const FleuryApp(
+        title: 'My app',
+        home: Center(child: Text('Hello, cells!')),
+      ),
     );
 ```
 
@@ -94,7 +99,9 @@ import 'dart:async';
 import 'package:fleury/fleury.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 
-void main() => runApp(const StatusApp());
+void main() => runApp(
+  const FleuryApp(title: 'Status monitor', home: StatusApp()),
+);
 
 class StatusApp extends StatefulWidget {
   const StatusApp({super.key});
@@ -142,9 +149,10 @@ Run it again — the progress bar fills once a minute.
 
 ## 4. Compose widgets
 
-The widget library is broad — [browse the catalog](/widgets/), every entry has a
-live example. Charts, meters, and the rest compose like any other widget. Replace
-the `build` method with the panel behind the live example at the top of this page:
+The widget library is broad — [browse the catalog](/widgets/) for API details and
+live examples across the main widget families. Charts, meters, and the rest
+compose like any other widget. Replace the `build` method with the panel behind
+the live example at the top of this page:
 
 ```dart title="bin/my_app.dart"
 @override
@@ -181,7 +189,7 @@ when to choose each, are in
 
 ## Where to next
 
-- [Widgets](/widgets/) — the full catalog, each with a live, interactive example.
+- [Widgets](/widgets/) — the full catalog, with live examples where available.
 - [Core and targets](/architecture/core-and-targets/) — how one app runs in a
   terminal, an embedded browser bundle, and a served browser session.
 - [Built for agents](/architecture/agents-and-semantics/) — the semantic app

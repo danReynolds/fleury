@@ -28,7 +28,8 @@
 
 import 'package:fleury/fleury.dart';
 
-Future<void> main() => runApp(const ChatApp());
+Future<void> main() =>
+    runApp(const FleuryApp(title: 'Chat demo', home: ChatApp()));
 // Ctrl+C is a framework-level exit guard in runApp — apps don't need
 // to wire it themselves.
 

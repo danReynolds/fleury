@@ -105,12 +105,12 @@ void main() {
       expect(out, contains('press Ctrl+G')); // Ctrl+G is the reliable toggle
     });
 
-    testWidgets('arrow keys traverse the scenario buttons via the root '
-        'traversal group', (tester) {
-      // In production runApp wraps the app in a root FocusTraversalGroup, so the
-      // sample itself adds none. The test harness pumps the widget directly, so
-      // reproduce that ambient root group here.
-      tester.pumpWidget(const FocusTraversalGroup(child: DebugPlaygroundApp()));
+    testWidgets('arrow keys traverse the scenario buttons via the app route', (
+      tester,
+    ) {
+      // The sample runner mounts every showcase as FleuryApp(home: ...), whose
+      // Navigator gives the home route its traversal group.
+      tester.pumpApp(const DebugPlaygroundApp());
       tester.render(size: _size); // autofocus lands on the first button
       expect(
         tester

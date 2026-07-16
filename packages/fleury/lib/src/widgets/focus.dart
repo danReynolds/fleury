@@ -842,6 +842,12 @@ class _FocusManagerProvider extends InheritedNotifier<FocusManager> {
         .dependOnInheritedWidgetOfExactType<_FocusManagerProvider>()
         ?.notifier;
   }
+
+  static FocusManager? maybeOfWithoutDependency(BuildContext context) {
+    return context
+        .getInheritedWidgetOfExactType<_FocusManagerProvider>()
+        ?.notifier;
+  }
 }
 
 /// Root of the focus tree. Installed by `runApp` so application widget
@@ -922,6 +928,16 @@ class Focus extends StatefulWidget {
   /// one.
   static FocusManager? maybeOf(BuildContext context) =>
       _FocusManagerProvider.maybeOf(context);
+
+  /// Returns the surrounding manager without rebuilding [context] when its
+  /// focus or active bindings change.
+  ///
+  /// Framework widgets that only need to issue imperative manager operations
+  /// use this to avoid accidentally making a broad structural ancestor a
+  /// focus-change dependent. App/widget code should normally use [maybeOf].
+  @internal
+  static FocusManager? maybeOfWithoutDependency(BuildContext context) =>
+      _FocusManagerProvider.maybeOfWithoutDependency(context);
 
   @override
   StatefulElement createElement() => _FocusElement(this);

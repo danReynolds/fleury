@@ -20,10 +20,10 @@ structured terminal/browser surfaces.
 |---|---|
 | `Widget`, `State`, `BuildContext`, `setState` | Same model, same names. |
 | `runApp(const MyApp())` | Same name for terminal/native apps. |
-| `MaterialApp` / `WidgetsApp` | No root app widget; `runApp` installs Fleury's runtime scaffold. |
+| `MaterialApp` / `WidgetsApp` | `FleuryApp(title:, home:, theme:)` is the lightweight app shell. |
 | logical pixels | integer cells (`EdgeInsets.all(1)`, not `8.0`). |
 | Material controls | Fleury core widgets plus `fleury_widgets` for tables, charts, forms, agent surfaces, and controls. |
-| Flutter web build | `mountApp(() => const MyApp(), into: host)` for client-side browser embeds, or `fleury serve` for a native app streamed to the browser. |
+| Flutter web build | `mountApp(() => const FleuryApp(title: 'My app', home: MyApp()), into: host)` for client-side browser embeds, or `fleury serve` for a native app streamed to the browser. |
 
 ## A tiny app
 
@@ -32,7 +32,9 @@ If you can read this Flutter-style counter, you can read Fleury:
 ```dart
 import 'package:fleury/fleury.dart';
 
-void main() => runApp(const CounterApp());
+void main() => runApp(
+  const FleuryApp(title: 'Counter', home: CounterApp()),
+);
 
 class CounterApp extends StatefulWidget {
   const CounterApp({super.key});
@@ -82,20 +84,24 @@ the same widget tree, but different host entrypoints:
 
 | Use case | Import | Entrypoint |
 |---|---|---|
-| Native terminal app | `package:fleury/fleury.dart` | `runApp(const MyApp())` |
+| Native terminal app | `package:fleury/fleury.dart` | `runApp(const FleuryApp(title: 'My app', home: MyApp()))` |
 | Higher-level widgets in a terminal app | `package:fleury_widgets/fleury_widgets.dart` | still `runApp` |
-| Client-side browser embed | `package:fleury_web/fleury_web.dart` plus web-safe widgets | `mountApp(() => const MyApp(), into: host)` |
+| Client-side browser embed | `package:fleury/fleury_core.dart`, `package:fleury_web/fleury_web.dart`, plus web-safe widgets | `mountApp(() => const FleuryApp(title: 'My app', home: MyApp()), into: host)` |
 | Browser session backed by a native process | terminal app imports | `fleury serve --spawn ./my_app` |
 
 For a browser embed, the entrypoint is a tiny web file:
 
 ```dart
+import 'package:fleury/fleury_core.dart';
 import 'package:fleury_web/fleury_web.dart';
 import 'package:web/web.dart' as web;
 
 void main() {
   final host = web.document.getElementById('app')!;
-  mountApp(() => const MyApp(), into: host);
+  mountApp(
+    () => const FleuryApp(title: 'My app', home: MyApp()),
+    into: host,
+  );
 }
 ```
 
@@ -157,24 +163,29 @@ That sounds small, but it changes what "polish" means. You tune information
 density, alignment, wrapping, keyboard flow, and semantic structure before you
 think about pixel-perfect spacing.
 
-### There is no `MaterialApp`
+### `FleuryApp` is deliberately smaller than `MaterialApp`
 
-You do not wrap your app in `MaterialApp`, `CupertinoApp`, or `WidgetsApp`.
-`runApp` installs the runtime scaffold: `MediaQuery`, focus management, pointer
-routing, `Overlay`, log capture, and a root `Navigator`. It does **not** install
-a custom app theme; `Theme.of(context)` returns defaults until you wrap a
-subtree in `Theme`.
+You do not port `MaterialApp`, `CupertinoApp`, or `WidgetsApp` wholesale.
+`runApp` installs terminal host services such as `MediaQuery`, focus, pointer
+routing, the root `Overlay`, log capture, and scheduling. `FleuryApp` owns the
+application concerns: its theme and command/status/extension scopes sit above
+its `Navigator`, so pushed routes keep the same app context.
 
 ```dart
 void main() => runApp(
-  Theme(
-    data: ThemeData(
+  FleuryApp(
+    title: 'My app',
+    theme: ThemeData(
       colorScheme: const ColorScheme(primary: RgbColor(0x3D, 0xDC, 0x97)),
     ),
-    child: const MyApp(),
+    home: const MyApp(),
   ),
 );
 ```
+
+Small one-screen tools can still pass a bare widget to `runApp`. For a custom
+navigation topology, use `FleuryApp(child: ...)` and place explicit `Navigator`
+widgets in that shell. `child` does not create an implicit route stack.
 
 ### Input is keyboard-first, pointer-aware
 
@@ -224,8 +235,8 @@ Reveal(visible: open, enter: Effects.expand(), child: Panel());
 
 ### Routes are widgets, not route names
 
-There is no `MaterialPageRoute` and no named-route table. Push the widget you
-want to show:
+With `FleuryApp(home: ...)` there is no `MaterialPageRoute` and no named-route
+table. Push the widget you want to show:
 
 ```dart
 context.push(DetailScreen(id: id));
@@ -250,8 +261,8 @@ in Flutter.
 
 1. Start with the app's state and widget structure; most `StatefulWidget` /
    `setState` code ports directly.
-2. Replace `MaterialApp` and app theme setup with `runApp` plus an optional
-   `Theme`.
+2. Replace `MaterialApp` with `FleuryApp(title:, home:, theme:)`; keep `runApp`
+   focused on the terminal host.
 3. Translate dimensions from pixels to cells. Remove `double` spacing habits.
 4. Replace Material controls with Fleury widgets or focused app-specific
    widgets.

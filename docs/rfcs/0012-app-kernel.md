@@ -103,14 +103,14 @@ palette, while preserving the existing retained widget model.
 - Implementing full replay.
 - Replacing existing `KeyBindings`; the kernel should build on them.
 - Requiring every app to use `FleuryApp`. Small examples can still call
-  `runTui(const CounterApp())`.
+  `runApp(const CounterApp())`.
 
 ## 6. Proposed Public Shape
 
 Names are proposed, not final.
 
 ```dart
-void main() => runTui(
+void main() => runApp(
   FleuryApp(
     title: 'Fleury Example Console',
     commands: [
@@ -200,6 +200,7 @@ It should not own every pixel. Apps still compose their own layout:
 
 ```dart
 FleuryApp(
+  title: 'Fleury Example Console',
   commands: commands,
   child: ConsoleScaffold(
     sidebar: AppSidebar(),
@@ -209,9 +210,11 @@ FleuryApp(
 )
 ```
 
-For simple apps, `FleuryApp.simple(home: ...)` can wrap `Navigator` and a
-default command palette. But the demo app should use the explicit shell form
-so the APIs are pressured.
+For standard apps, `FleuryApp(home: ...)` wraps a root `Navigator` beneath the
+app-wide theme, command, status, and extension scopes. Apps with a custom
+layout or navigation topology use `FleuryApp(child: ...)` and place any
+Navigator explicitly. The two shapes stay compositional; neither installs a
+framework screen registry or a default command palette.
 
 ## 9. App-Owned Sections And Navigator
 
@@ -396,8 +399,6 @@ This is required for RFC 0011 and the demo-app tests.
   `fleury_widgets`, or should a minimal palette live in core?
 - Should `AppCommand.run` be allowed to return `Future<void>` in v0, or should
   async behavior go exclusively through the worker/effects model?
-- How much default UI should `FleuryApp.simple` provide before the demo app
-  hardens the shape?
 - Should command IDs be strings, typed const objects, or generated enum-like
   values?
 

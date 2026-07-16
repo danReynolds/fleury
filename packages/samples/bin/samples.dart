@@ -14,7 +14,10 @@ const Map<String, (String, Widget Function())> _apps =
       'dashboard': ('htop-style live system monitor', DashboardApp.new),
       'files': ('two-pane keyboard file manager', FileManagerApp.new),
       'agent': ('Claude-Code-style coding-agent TUI', AgentApp.new),
-      'debug': ('debug-shell + agent-devtools playground', DebugPlaygroundApp.new),
+      'debug': (
+        'debug-shell + agent-devtools playground',
+        DebugPlaygroundApp.new,
+      ),
     };
 
 Future<void> main(List<String> args) async {
@@ -37,7 +40,7 @@ Future<void> main(List<String> args) async {
   }
 
   await runApp(
-    entry.$2(),
+    FleuryApp(title: 'Fleury $name sample', home: entry.$2()),
     mode: const TerminalMode(mouse: true),
     onEvent: (event) {
       if (event is KeyEvent &&

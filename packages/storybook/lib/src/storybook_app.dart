@@ -326,8 +326,49 @@ class _StorybookAppState extends State<StorybookApp> {
   Widget build(BuildContext context) {
     final theme = storybookThemeFor(_themeMode);
     final background = theme.colorScheme.background;
-    final app = FleuryApp(
+    final commands = _commands();
+    final home = KeyBindings(
+      bindings: [
+        // Esc steps out of whatever widget has focus, back to the widget
+        // list — the coarse escape hatch alongside arrow boundary-escape
+        // and Tab. (Bubbled here: widgets that use Esc themselves consume
+        // it first.)
+        KeyBinding(
+          KeyChord.escape,
+          onEvent: (_) => _selectorFocusNode.requestFocus(),
+          hideFromHintBar: true,
+        ),
+      ],
+      child: _StorybookShell(
+        selectorFocusNode: _selectorFocusNode,
+        stories: widget.stories,
+        selectedIndex: _selectedIndex,
+        selectedWidgetName: _selectedWidgetName,
+        story: _selectedStory,
+        variant: _selectedVariant,
+        controlValues: _selectedControlValues,
+        actionLog: _actionLog,
+        commands: commands,
+        themeMode: _themeMode,
+        viewport: _viewport,
+        compactPreview: _compactPreview,
+        showInspector: _showInspector,
+        resetGeneration: _resetGeneration,
+        onSelectWidget: _selectWidget,
+        onCycleTheme: _cycleTheme,
+        onCycleViewport: _cycleViewport,
+        onToggleInspector: _toggleInspector,
+        onToggleDensity: _toggleDensity,
+        onResetStory: _resetStory,
+        onChangeControl: _changeControl,
+        onSetControlValue: _setControlValue,
+        onRecordAction: _recordStoryAction,
+      ),
+    );
+    return FleuryApp(
       title: 'Fleury Storybook',
+      theme: theme,
+      commands: commands,
       status: (_) => [
         StatusItem.text('Widget', value: _selectedWidgetName),
         StatusItem.text('Story', value: _selectedStory.title),
@@ -335,63 +376,18 @@ class _StorybookAppState extends State<StorybookApp> {
         StatusItem.text('Viewport', value: storybookViewportLabel(_viewport)),
         StatusItem.text('Widgets', value: '${_widgetCount(widget.stories)}'),
       ],
-      child: CommandScope(
-        label: 'Storybook commands',
-        commands: _commands(),
-        child: KeyBindings(
-          bindings: [
-            // Esc steps out of whatever widget has focus, back to the widget
-            // list — the coarse escape hatch alongside arrow boundary-escape
-            // and Tab. (Bubbled here: widgets that use Esc themselves consume
-            // it first.)
-            KeyBinding(
-              KeyChord.escape,
-              onEvent: (_) => _selectorFocusNode.requestFocus(),
-              hideFromHintBar: true,
-            ),
-          ],
-          child: _StorybookShell(
-            selectorFocusNode: _selectorFocusNode,
-            stories: widget.stories,
-            selectedIndex: _selectedIndex,
-            selectedWidgetName: _selectedWidgetName,
-            story: _selectedStory,
-            variant: _selectedVariant,
-            controlValues: _selectedControlValues,
-            actionLog: _actionLog,
-            commands: _commands(),
-            themeMode: _themeMode,
-            viewport: _viewport,
-            compactPreview: _compactPreview,
-            showInspector: _showInspector,
-            resetGeneration: _resetGeneration,
-            onSelectWidget: _selectWidget,
-            onCycleTheme: _cycleTheme,
-            onCycleViewport: _cycleViewport,
-            onToggleInspector: _toggleInspector,
-            onToggleDensity: _toggleDensity,
-            onResetStory: _resetStory,
-            onChangeControl: _changeControl,
-            onSetControlValue: _setControlValue,
-            onRecordAction: _recordStoryAction,
-          ),
-        ),
-      ),
-    );
-    return Theme(
-      data: theme,
-      // Provide an app-wide Toaster. Stories surface results via Toaster.show
-      // (e.g. the Dialog story toasting its result on dismiss); without a
-      // Toaster ancestor that call throws an unhandled exception that tears the
-      // whole session down — which, over `fleury serve`, drops the socket and
-      // blanks the browser until reload.
-      child: Toaster(
+      home: Toaster(
+        // Provide the Storybook home route with a Toaster. Stories surface
+        // results via Toaster.show (e.g. the Dialog story toasting its result
+        // on dismiss); without this ancestor that call throws an unhandled
+        // exception that tears the whole session down — which, over
+        // `fleury serve`, drops the socket and blanks the browser until reload.
         // The theme's background isn't auto-painted, so fill the whole surface
         // with it (when set) before the panels render on top — this is what
         // makes the cyber theme's dark backdrop show through transparent cells.
         child: background == null
-            ? app
-            : Container(color: background, child: app),
+            ? home
+            : Container(color: background, child: home),
       ),
     );
   }
@@ -866,7 +862,9 @@ class _PreviewPanel extends StatelessWidget {
         // dropdown) would attach to the bottom of a stretched box and collide
         // with the footer.
         if (fit)
-          Expanded(child: Align(alignment: Alignment.topLeft, child: body))
+          Expanded(
+            child: Align(alignment: Alignment.topLeft, child: body),
+          )
         else
           body,
       ],

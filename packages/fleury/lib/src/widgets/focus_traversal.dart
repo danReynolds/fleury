@@ -52,11 +52,11 @@ enum TraversalDirection { left, right, up, down }
 /// moves focus to the spatially nearest focusable in that direction.
 ///
 /// The [Navigator] installs one around every route — the home screen, a pushed
-/// page, and a presented modal — so a [runApp] app and every route it navigates
-/// to get arrow/Tab traversal out of the box, with no app shell or manual group
-/// required. Add explicit groups only to *scope* traversal: a pane that should
-/// traverse on its own, an embedded surface, or a framework-level test that
-/// mounts a widget with no [Navigator] above it.
+/// page, and a presented modal — so a `FleuryApp(home: ...)` or explicit
+/// Navigator gives every route arrow/Tab traversal without a manual group.
+/// Add explicit groups only to *scope* traversal: a pane that should traverse
+/// on its own, an embedded surface, or a bare single-screen root with no
+/// [Navigator] above it.
 class FocusTraversalGroup extends StatelessWidget {
   const FocusTraversalGroup({super.key, required this.child});
 

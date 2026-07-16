@@ -221,9 +221,10 @@ class _DebugPlaygroundBodyState extends State<_DebugPlaygroundBody>
   }
 
   Widget _scenarioPanel(ThemeData theme) {
-    // Arrows move focus between these buttons via the root FocusTraversalGroup
-    // that runApp installs — no per-container group needed here. Tab/Shift+Tab
-    // traverse too; a list or text field still owns its own arrows (they bubble
+    // Arrows move focus between these buttons via the FocusTraversalGroup on
+    // the FleuryApp home route — no per-container group needed here.
+    // Tab/Shift+Tab traverse too; a list or text field still owns its own
+    // arrows (they bubble
     // to traversal only when the focused widget doesn't consume them).
     return Panel(
       title: 'Scenarios',
