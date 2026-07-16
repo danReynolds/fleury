@@ -353,13 +353,17 @@ void main() {
       final rng = Random(0x29);
       for (var iter = 0; iter < 20; iter++) {
         final ww = 2 + rng.nextInt(20);
+        final allowDecimal = rng.nextBool();
+        final initialValue = allowDecimal
+            ? rng.nextDouble() * 1000 - 500
+            : rng.nextInt(1001) - 500;
         tester.pumpWidget(
           SizedBox(
             width: ww,
             height: 1,
             child: NumberInput(
-              initialValue: rng.nextDouble() * 1000 - 500,
-              allowDecimal: rng.nextBool(),
+              initialValue: initialValue,
+              allowDecimal: allowDecimal,
               allowNegative: rng.nextBool(),
               min: rng.nextBool() ? -200 : null,
               max: rng.nextBool() ? 200 : null,
