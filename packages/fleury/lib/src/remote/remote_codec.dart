@@ -34,6 +34,14 @@ const int maxRemotePlanPatches = maxRemotePlanGridCells;
 const int maxRemotePlanRuns = maxRemotePlanGridCells;
 const int maxRemotePlanPlacements = 4096;
 
+/// Maximum UTF-8 byte length of a semantic node id on the remote wire.
+///
+/// A semantic action result echoes the request id in a 64 KiB control frame.
+/// Keeping the id below 60 KiB leaves deterministic room for the varint
+/// prefixes, action name, and longest invocation-status name, so every valid
+/// request can receive a valid result.
+const int maxRemoteSemanticNodeIdBytes = 60 * 1024;
+
 /// A frame reduced to its changed cells for the wire: the grid size,
 /// repaint/scroll flags, a per-frame style table, and the changed
 /// column-range patches. The client applies the patches to a [CellBuffer]
@@ -177,8 +185,13 @@ class _Writer {
   }
 
   /// Varint-length-prefixed UTF-8 string.
-  void vstr(String s) {
+  void vstr(String s, {int? maxBytes, String field = 'string'}) {
     final bytes = utf8.encode(s);
+    if (maxBytes != null && bytes.length > maxBytes) {
+      throw RemoteCodecException(
+        '$field UTF-8 length ${bytes.length} exceeds limit $maxBytes',
+      );
+    }
     varint(bytes.length);
     _b.add(bytes);
   }
@@ -254,13 +267,27 @@ class _Reader {
     }
   }
 
-  String vstr() {
+  String vstr({
+    int? maxBytes,
+    String field = 'string',
+    bool allowMalformed = true,
+  }) {
     final len = varint();
+    if (maxBytes != null && len > maxBytes) {
+      throw RemoteCodecException(
+        '$field UTF-8 length $len exceeds limit $maxBytes',
+      );
+    }
     _need(len);
-    final s = utf8.decode(
-      _data.sublist(_pos, _pos + len),
-      allowMalformed: true,
-    );
+    final String s;
+    try {
+      s = utf8.decode(
+        _data.sublist(_pos, _pos + len),
+        allowMalformed: allowMalformed,
+      );
+    } on FormatException {
+      throw RemoteCodecException('$field is not valid UTF-8');
+    }
     _pos += len;
     return s;
   }
@@ -1044,7 +1071,11 @@ Uint8List encodeSemanticAction(
   Object? value,
 }) {
   final w = _Writer();
-  w.vstr(id.value);
+  w.vstr(
+    id.value,
+    maxBytes: maxRemoteSemanticNodeIdBytes,
+    field: 'semantic node id',
+  );
   w.vstr(action.name);
   w.boolean(value != null);
   if (value != null) w.vstr(jsonEncode(value));
@@ -1057,7 +1088,11 @@ Uint8List encodeSemanticAction(
 ({SemanticNodeId id, SemanticAction action, Object? value})
 decodeSemanticAction(Uint8List bytes) {
   final r = _Reader(bytes);
-  final id = r.vstr();
+  final id = r.vstr(
+    maxBytes: maxRemoteSemanticNodeIdBytes,
+    field: 'semantic node id',
+    allowMalformed: false,
+  );
   final actionName = r.vstr();
   Object? value;
   // The value byte is additive (protocol v3). Tolerate its absence so a frame
@@ -1091,7 +1126,11 @@ Uint8List encodeSemanticActionResult(
   SemanticActionInvocationStatus status,
 ) {
   final w = _Writer();
-  w.vstr(id.value);
+  w.vstr(
+    id.value,
+    maxBytes: maxRemoteSemanticNodeIdBytes,
+    field: 'semantic node id',
+  );
   w.vstr(action.name);
   w.vstr(status.name);
   return w.take();
@@ -1107,7 +1146,11 @@ Uint8List encodeSemanticActionResult(
 })
 decodeSemanticActionResult(Uint8List bytes) {
   final r = _Reader(bytes);
-  final id = r.vstr();
+  final id = r.vstr(
+    maxBytes: maxRemoteSemanticNodeIdBytes,
+    field: 'semantic node id',
+    allowMalformed: false,
+  );
   final actionName = r.vstr();
   final statusName = r.vstr();
   r.expectEnd();

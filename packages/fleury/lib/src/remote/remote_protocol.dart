@@ -153,6 +153,44 @@ const int maxRemoteDocumentFramePayloadLength = 8 * 1024 * 1024;
 /// global cap.
 const int maxRemoteImageFramePayloadLength = defaultMaxRemoteFramePayloadLength;
 
+/// The maximum payload accepted for [type] by the default remote wire.
+///
+/// Both producers and consumers use this table. Keeping it outside
+/// [FrameDecoder] prevents a local producer from emitting a frame that the
+/// matching decoder is guaranteed to reject and classify as an unrecoverable
+/// loss of stream framing.
+int remoteFramePayloadLimit(FrameType? type) => switch (type) {
+  FrameType.init ||
+  FrameType.resize ||
+  FrameType.clipboardResult ||
+  FrameType.caret ||
+  FrameType.semanticActionResult ||
+  FrameType.debugRequest ||
+  FrameType.bye => maxRemoteControlFramePayloadLength,
+  FrameType.input ||
+  FrameType.inputEvent ||
+  FrameType.semanticAction ||
+  FrameType.clipboardWrite => maxRemoteInputFramePayloadLength,
+  FrameType.output ||
+  FrameType.plan ||
+  FrameType.semantics ||
+  FrameType.debugResponse => maxRemoteDocumentFramePayloadLength,
+  FrameType.inlineImage => maxRemoteImageFramePayloadLength,
+  null => defaultMaxRemoteFramePayloadLength,
+};
+
+/// Maximum raw JSON bytes that fit in a [DebugResponseFrame] for [kind].
+///
+/// The response payload also carries a four-byte sequence, a one-byte kind
+/// length, and the UTF-8 kind itself. Debug producers use this exact remainder
+/// so a locally valid document can never be rejected by [encodeFrame].
+int maxRemoteDebugResponseJsonLength(String kind) {
+  final kindBytes = _encodeDebugKind(kind);
+  return remoteFramePayloadLimit(FrameType.debugResponse) -
+      5 -
+      kindBytes.length;
+}
+
 /// A malformed frame or payload was received from a remote peer.
 final class RemoteProtocolException implements Exception {
   const RemoteProtocolException(this.message, {this.recoverable = true});
@@ -433,6 +471,13 @@ Uint8List encodeFrame(RemoteFrame frame) {
     DebugResponseFrame f => (FrameType.debugResponse, _encodeDebugResponse(f)),
     ByeFrame() => (FrameType.bye, const <int>[]),
   };
+  final limit = remoteFramePayloadLimit(type);
+  if (payload.length > limit) {
+    throw RemoteProtocolException(
+      '${type.name} frame payload length ${payload.length} exceeds limit '
+      '$limit; frame was not encoded.',
+    );
+  }
   final out = BytesBuilder(copy: false);
   out.addByte(type.code);
   final header = ByteData(4)..setUint32(0, payload.length);
@@ -738,28 +783,8 @@ final class FrameDecoder {
     _end = 0;
   }
 
-  int _payloadLimit(FrameType? type) => switch (type) {
-    FrameType.init ||
-    FrameType.resize ||
-    FrameType.clipboardResult ||
-    FrameType.caret ||
-    FrameType.semanticActionResult ||
-    FrameType.debugRequest ||
-    FrameType.bye => maxRemoteControlFramePayloadLength,
-    FrameType.input ||
-    FrameType.inputEvent ||
-    FrameType.semanticAction ||
-    FrameType.clipboardWrite => maxRemoteInputFramePayloadLength,
-    FrameType.output ||
-    FrameType.plan ||
-    FrameType.semantics ||
-    FrameType.debugResponse => maxRemoteDocumentFramePayloadLength,
-    FrameType.inlineImage => maxRemoteImageFramePayloadLength,
-    null => defaultMaxRemoteFramePayloadLength,
-  };
-
   int _effectivePayloadLimit(FrameType? type) {
-    final typeLimit = _payloadLimit(type);
+    final typeLimit = remoteFramePayloadLimit(type);
     return typeLimit < maxPayloadLength ? typeLimit : maxPayloadLength;
   }
 

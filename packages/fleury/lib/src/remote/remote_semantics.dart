@@ -31,6 +31,8 @@ import '../rendering/text_sanitizer.dart' show sanitizeForDisplay;
 import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
 import '../semantics/semantics_owner.dart' show SemanticTreeUpdate;
+import 'remote_codec.dart' show maxRemoteSemanticNodeIdBytes;
+import 'remote_protocol.dart' show maxRemoteDocumentFramePayloadLength;
 
 /// Wire envelope schema version. Bumped only on a breaking shape change; the
 /// decoder rejects an unknown version rather than misreading it.
@@ -42,6 +44,46 @@ const int semanticsWireVersion = 1;
 /// depth turns that into a pruned subtree instead of a stack overflow. Far
 /// beyond any real UI nesting.
 const int maxSemanticTreeDepth = 1024;
+
+/// Maximum retained nodes in one decoded semantic mirror.
+///
+/// A real terminal exposes a windowed visible tree that is normally orders of
+/// magnitude smaller. This cap is deliberately generous while preventing a
+/// sequence of individually-valid patches from accumulating unbounded
+/// unreachable state across the lifetime of a connection.
+const int maxSemanticWireNodes = 16 * 1024;
+
+/// Maximum child references in one decoded semantic mirror.
+///
+/// The semantic wire describes a tree, not a general graph. Bounding edges in
+/// addition to nodes limits both reconstruction work and adversarial wide
+/// `childIds` lists before the inspection parser allocates nested children.
+const int maxSemanticWireEdges = 64 * 1024;
+
+/// Scalar fields retained from one flat semantic wire node.
+///
+/// `children` is intentionally absent: the semantic wire is flat and may only
+/// express structure through `childIds`. Passing a raw nested `children` field
+/// through to [SemanticInspectionSnapshot.fromJson] would bypass the node,
+/// edge, depth, and cycle bounds applied to the flat graph. Unknown additive
+/// fields are ignored, matching the inspection schema's reader contract.
+const Set<String> _semanticWireScalarFields = <String>{
+  'id',
+  'role',
+  'label',
+  'value',
+  'hint',
+  'enabled',
+  'focused',
+  'selected',
+  'checked',
+  'expanded',
+  'busy',
+  'validationError',
+  'bounds',
+  'actions',
+  'state',
+};
 
 /// The set of node ids whose wire form may have changed since the last
 /// present, in WIRE-id space (already sanitized). Derived from
@@ -65,20 +107,39 @@ final class SemanticWireDelta {
 /// nodes on demand, O(changed)) and [encode] (for consumers that already hold a
 /// pre-redacted [SemanticInspectionSnapshot], e.g. inspection/agent bridges).
 final class SemanticsWireEncoder {
+  SemanticsWireEncoder({
+    int maxWirePayloadLength = maxRemoteDocumentFramePayloadLength,
+  }) : maxWirePayloadLength = _checkedSemanticPayloadLimit(
+         maxWirePayloadLength,
+       );
+
+  /// Maximum bytes for both an emitted frame and the equivalent retained FULL.
+  ///
+  /// The retained mirror must always fit in one FULL frame: otherwise a fresh
+  /// peer could never synchronize after reconnect even though a sequence of
+  /// individually-small PATCH frames built the state successfully.
+  final int maxWirePayloadLength;
+
   /// id -> the node's flat wire form (own fields + childIds) as last sent to the
   /// peer, maintained incrementally: a patch re-serializes only the changed
   /// nodes (named by a [SemanticTreeUpdate] or [SemanticWireDelta]) and applies
-  /// them here, so the per-frame CPU is O(changed) rather than O(tree). Without
-  /// a change-set (first frame, or a caller that doesn't supply one) the encoder
-  /// falls back to flattening the whole frame and comparing against this map.
+  /// them here. The production [encodeTree] update path is O(changed); the
+  /// snapshot path avoids a second flatten/redaction pass but may lazily build
+  /// that snapshot's O(tree) id index on its first lookup. Without a change-set
+  /// (first frame, or a caller that doesn't supply one) the encoder falls back
+  /// to flattening the whole frame and comparing against this map.
   Map<String, Map<String, Object?>> _sent = const {};
+  Map<String, int> _sentNodeByteLengths = const {};
+  int _sentNodeBytes = 0;
+  String? _sentRootId;
   bool _sentFull = false;
   int _lastFlattenedNodes = 0;
 
   /// How many nodes the most recent [encodeTree] redacted and flattened. On a
-  /// steady-state patch this is O(changed) — the very count a regression back to
-  /// full-tree redaction blows up to O(tree); the first (full) frame flattens
-  /// the whole tree. Drives the serve-semantics redaction-cost gate.
+  /// steady-state [encodeTree] patch this is O(changed) — the very count a
+  /// regression back to full-tree redaction blows up to O(tree); the first
+  /// (full) frame flattens the whole tree. Drives the serve-semantics
+  /// redaction-cost gate; it does not describe a snapshot's lazy index cost.
   int get lastFlattenedNodeCount => _lastFlattenedNodes;
 
   /// Encodes [tree] for the wire, or returns null when the exposed semantics are
@@ -96,91 +157,68 @@ final class SemanticsWireEncoder {
   /// the ground truth, so any gap between the update and the wire form fails
   /// loudly in tests.
   Uint8List? encodeTree(SemanticTree tree, {SemanticTreeUpdate? update}) {
+    final rootId = sanitizeForDisplay(tree.root.id.value);
     if (!_sentFull) {
       final flat = _flattenTree(tree);
-      _sentFull = true;
-      _sent = flat;
-      _lastFlattenedNodes = flat.length;
-      return _bytes(<String, Object?>{
-        'v': semanticsWireVersion,
-        'mode': 'full',
-        'root': sanitizeForDisplay(tree.root.id.value),
-        'nodes': flat.values.toList(growable: false),
-      });
+      return _encodeFull(flat, rootId: rootId, flattenedNodes: flat.length);
     }
 
-    final set = <Map<String, Object?>>[];
-    final removed = <String>[];
     if (update == null) {
       // No update: fall back to the full flatten + structural compare.
       final flat = _flattenTree(tree);
-      for (final entry in flat.entries) {
-        final prior = _sent[entry.key];
-        if (prior == null || !_jsonEquals(prior, entry.value)) {
-          set.add(entry.value);
-        }
-      }
-      for (final id in _sent.keys) {
-        if (!flat.containsKey(id)) removed.add(id);
-      }
-      _sent = flat;
-      _lastFlattenedNodes = flat.length;
-    } else {
-      // O(changed): redact + serialize only the nodes the update names, taking
-      // each live node straight from `nextNodesById`, compare against the sent
-      // form (so a redaction-equal node still ships nothing), and drop the
-      // removed ids. [_sent] is mutated in place — it's always a fresh mutable
-      // map from the last [_flattenTree] (full frame or no-update patch), so
-      // there's nothing to preserve; copying it would reintroduce the O(n)
-      // per-frame cost this path exists to remove.
-      var flattened = 0;
-      final touched = <String>{};
-      for (final id in update.added.followedBy(update.updated)) {
-        final node = update.nextNodesById[id];
-        if (node == null) continue; // named-changed but gone from the tree.
-        flattened++;
-        final json = SemanticInspectionNode.flattenLiveNode(node);
-        final wireId = json['id']! as String;
-        touched.add(wireId);
-        final prior = _sent[wireId];
-        if (prior == null || !_jsonEquals(prior, json)) {
-          set.add(json);
-          _sent[wireId] = json;
-        }
-      }
-      for (final id in update.removed) {
-        final wireId = sanitizeForDisplay(id.value);
-        // A changed node may carry this same wire id — a duplicate, or two raw
-        // ids that sanitize alike — in which case it is LIVE and was just
-        // (re)written above. Don't drop it, or it would land in both `set` and
-        // `removed` and the client would delete a present node.
-        if (touched.contains(wireId)) continue;
-        if (_sent.remove(wireId) != null) removed.add(wireId);
-      }
-      _lastFlattenedNodes = flattened;
-      assert(
-        _oracleHoldsForTree(tree),
-        'On-demand redaction diverged from a full flatten — a changed node was '
-        'missing from the update. This is a correctness bug in the changed-set '
-        'plumbing, not the encoder.',
+      final encoded = _encodeFlattenedPatch(
+        flat,
+        rootId: rootId,
+        flattenedNodes: flat.length,
       );
+      if (_sentFull) _assertTreeOracle(tree);
+      return encoded;
     }
 
-    if (set.isEmpty && removed.isEmpty) return null;
-    // Canonical order by id: the client applies patch nodes by id (order is
-    // immaterial to it), but a stable order makes the full and patch paths
-    // byte-identical and keeps a given mutation's bytes deterministic
-    // frame-to-frame (the full path emits in tree pre-order, the patch path in
-    // changed-set order — sorting reconciles them).
-    set.sort((a, b) => (a['id']! as String).compareTo(b['id']! as String));
-    removed.sort();
-    return _bytes(<String, Object?>{
-      'v': semanticsWireVersion,
-      'mode': 'patch',
-      'root': sanitizeForDisplay(tree.root.id.value),
-      if (set.isNotEmpty) 'set': set,
-      if (removed.isNotEmpty) 'removed': removed,
-    });
+    // O(changed): redact + serialize only the nodes the update names. Stage the
+    // edits without touching [_sent]; validation and byte accounting happen
+    // before commit so a rejected state can only force the NEXT send to FULL,
+    // never leave a PATCH base the peer did not receive.
+    var flattened = 0;
+    final staged = <String, Map<String, Object?>>{};
+    final touched = <String>{};
+    for (final id in update.added.followedBy(update.updated)) {
+      final node = update.nextNodesById[id];
+      if (node == null) continue; // named-changed but gone from the tree.
+      flattened++;
+      final json = SemanticInspectionNode.flattenLiveNode(node);
+      final wireId = json['id']! as String;
+      touched.add(wireId);
+      final prior = staged[wireId] ?? _sent[wireId];
+      if (prior == null || !_jsonEquals(prior, json)) {
+        staged[wireId] = json;
+      }
+    }
+    final removed = <String>{};
+    for (final id in update.removed) {
+      final wireId = sanitizeForDisplay(id.value);
+      // A changed node may carry this same wire id — a duplicate, or two raw
+      // ids that sanitize alike — in which case it is LIVE. Do not delete it.
+      if (touched.contains(wireId)) continue;
+      if (_sent.containsKey(wireId)) removed.add(wireId);
+    }
+    final encoded = _finishPatch(
+      rootId: rootId,
+      staged: staged,
+      removed: removed,
+      flattenedNodes: flattened,
+    );
+    if (_sentFull) _assertTreeOracle(tree);
+    return encoded;
+  }
+
+  void _assertTreeOracle(SemanticTree tree) {
+    assert(
+      _oracleHoldsForTree(tree),
+      'On-demand redaction diverged from a full flatten — a changed node was '
+      'missing from the update. This is a correctness bug in the changed-set '
+      'plumbing, not the encoder.',
+    );
   }
 
   /// Debug ground-truth check for [encodeTree]: the incrementally-maintained
@@ -205,78 +243,65 @@ final class SemanticsWireEncoder {
   ///
   /// [delta] names the changed nodes (in wire-id space); on a patch frame the
   /// encoder re-serializes only those instead of flattening the whole snapshot.
-  /// A debug-only oracle asserts the incrementally-maintained `_sent` still
-  /// equals a full flatten, so any gap fails loudly in tests.
+  /// A fresh snapshot may still build its lazy O(tree) id index on the first
+  /// lookup. A debug-only oracle asserts the incrementally-maintained `_sent`
+  /// still equals a full flatten, so any gap fails loudly in tests.
   Uint8List? encode(
     SemanticInspectionSnapshot snapshot, {
     SemanticWireDelta? delta,
   }) {
+    final rootId = snapshot.root.id;
     if (!_sentFull) {
       final flat = _flatten(snapshot.root);
-      _sentFull = true;
-      _sent = flat;
-      _lastFlattenedNodes = flat.length;
-      return _bytes(<String, Object?>{
-        'v': semanticsWireVersion,
-        'mode': 'full',
-        'root': snapshot.root.id,
-        'nodes': flat.values.toList(growable: false),
-      });
+      return _encodeFull(flat, rootId: rootId, flattenedNodes: flat.length);
     }
 
-    final set = <Map<String, Object?>>[];
-    final removed = <String>[];
     if (delta == null) {
       // No changed-set: fall back to the full flatten + structural compare.
       final flat = _flatten(snapshot.root);
-      for (final entry in flat.entries) {
-        final prior = _sent[entry.key];
-        if (prior == null || !_jsonEquals(prior, entry.value)) {
-          set.add(entry.value);
-        }
-      }
-      for (final id in _sent.keys) {
-        if (!flat.containsKey(id)) removed.add(id);
-      }
-      _sent = flat;
-      _lastFlattenedNodes = flat.length;
-    } else {
-      // O(changed): serialize only the named nodes, compare each against the
-      // sent form, and drop the removed ids. [_sent] is mutated in place.
-      var flattened = 0;
-      for (final id in delta.changed) {
-        final node = snapshot.nodeById(id);
-        if (node == null) continue; // named-changed but not in the tree.
-        flattened++;
-        final json = _flattenNode(node);
-        final prior = _sent[id];
-        if (prior == null || !_jsonEquals(prior, json)) {
-          set.add(json);
-          _sent[id] = json;
-        }
-      }
-      for (final id in delta.removed) {
-        if (_sent.remove(id) != null) removed.add(id);
-      }
-      _lastFlattenedNodes = flattened;
-      assert(
-        _oracleHolds(snapshot),
-        'SemanticWireDelta diverged from a full flatten — a changed node was '
-        'missing from the delta. This is a correctness bug in the changed-set '
-        'plumbing, not the encoder.',
+      final encoded = _encodeFlattenedPatch(
+        flat,
+        rootId: rootId,
+        flattenedNodes: flat.length,
       );
+      if (_sentFull) _assertSnapshotOracle(snapshot);
+      return encoded;
     }
 
-    if (set.isEmpty && removed.isEmpty) return null;
-    set.sort((a, b) => (a['id']! as String).compareTo(b['id']! as String));
-    removed.sort();
-    return _bytes(<String, Object?>{
-      'v': semanticsWireVersion,
-      'mode': 'patch',
-      'root': snapshot.root.id,
-      if (set.isNotEmpty) 'set': set,
-      if (removed.isNotEmpty) 'removed': removed,
-    });
+    final staged = <String, Map<String, Object?>>{};
+    var flattened = 0;
+    for (final id in delta.changed) {
+      final node = snapshot.nodeById(id);
+      if (node == null) continue; // named-changed but not in the tree.
+      flattened++;
+      final json = _flattenNode(node);
+      final prior = staged[id] ?? _sent[id];
+      if (prior == null || !_jsonEquals(prior, json)) staged[id] = json;
+    }
+    final removed = <String>{};
+    for (final id in delta.removed) {
+      // A contradictory delta is invalid. Removal wins in the staged candidate;
+      // the debug oracle below still makes the producer bug loud in tests.
+      staged.remove(id);
+      if (_sent.containsKey(id)) removed.add(id);
+    }
+    final encoded = _finishPatch(
+      rootId: rootId,
+      staged: staged,
+      removed: removed,
+      flattenedNodes: flattened,
+    );
+    if (_sentFull) _assertSnapshotOracle(snapshot);
+    return encoded;
+  }
+
+  void _assertSnapshotOracle(SemanticInspectionSnapshot snapshot) {
+    assert(
+      _oracleHolds(snapshot),
+      'SemanticWireDelta diverged from a full flatten — a changed node was '
+      'missing from the delta. This is a correctness bug in the changed-set '
+      'plumbing, not the encoder.',
+    );
   }
 
   /// Debug ground-truth check for [encode]: [_sent] must equal a from-scratch
@@ -292,16 +317,306 @@ final class SemanticsWireEncoder {
     return true;
   }
 
+  Uint8List? _encodeFull(
+    Map<String, Map<String, Object?>> flat, {
+    required String rootId,
+    required int flattenedNodes,
+  }) {
+    _lastFlattenedNodes = flattenedNodes;
+    if (!_semanticFlatGraphIsValid(flat, rootId)) {
+      _rejectCandidate(flattenedNodes);
+      return null;
+    }
+    final bytes = _fullBytes(rootId, flat);
+    if (bytes.length > maxWirePayloadLength) {
+      _rejectCandidate(flattenedNodes);
+      return null;
+    }
+
+    final nodeByteLengths = <String, int>{};
+    var nodeBytes = 0;
+    for (final entry in flat.entries) {
+      final length = _semanticNodeWireLength(entry.value);
+      nodeByteLengths[entry.key] = length;
+      nodeBytes += length;
+    }
+    _sent = flat;
+    _sentNodeByteLengths = nodeByteLengths;
+    _sentNodeBytes = nodeBytes;
+    _sentRootId = rootId;
+    _sentFull = true;
+    return bytes;
+  }
+
+  Uint8List? _encodeFlattenedPatch(
+    Map<String, Map<String, Object?>> flat, {
+    required String rootId,
+    required int flattenedNodes,
+  }) {
+    final staged = <String, Map<String, Object?>>{};
+    for (final entry in flat.entries) {
+      final prior = _sent[entry.key];
+      if (prior == null || !_jsonEquals(prior, entry.value)) {
+        staged[entry.key] = entry.value;
+      }
+    }
+    final removed = <String>{
+      for (final id in _sent.keys)
+        if (!flat.containsKey(id)) id,
+    };
+    return _finishPatch(
+      rootId: rootId,
+      staged: staged,
+      removed: removed,
+      flattenedNodes: flattenedNodes,
+    );
+  }
+
+  Uint8List? _finishPatch({
+    required String rootId,
+    required Map<String, Map<String, Object?>> staged,
+    required Set<String> removed,
+    required int flattenedNodes,
+  }) {
+    _lastFlattenedNodes = flattenedNodes;
+    final rootChanged = rootId != _sentRootId;
+    if (staged.isEmpty && removed.isEmpty && !rootChanged) return null;
+
+    final stagedByteLengths = <String, int>{};
+    var candidateNodeBytes = _sentNodeBytes;
+    var candidateNodeCount = _sent.length;
+    for (final id in removed) {
+      final oldLength = _sentNodeByteLengths[id];
+      if (oldLength == null) continue;
+      candidateNodeBytes -= oldLength;
+      candidateNodeCount--;
+    }
+    var structureChanged = rootChanged || removed.isNotEmpty;
+    for (final entry in staged.entries) {
+      final length = _semanticNodeWireLength(entry.value);
+      stagedByteLengths[entry.key] = length;
+      final prior = _sent[entry.key];
+      if (prior == null) {
+        candidateNodeCount++;
+        candidateNodeBytes += length;
+        structureChanged = true;
+      } else {
+        candidateNodeBytes += length - _sentNodeByteLengths[entry.key]!;
+        if (!_jsonEquals(prior['childIds'], entry.value['childIds'])) {
+          structureChanged = true;
+        }
+      }
+    }
+
+    if (candidateNodeCount > maxSemanticWireNodes ||
+        _semanticFullPayloadLength(
+              rootId,
+              nodeBytes: candidateNodeBytes,
+              nodeCount: candidateNodeCount,
+            ) >
+            maxWirePayloadLength) {
+      _rejectCandidate(flattenedNodes);
+      return null;
+    }
+
+    Map<String, Map<String, Object?>>? candidate;
+    if (structureChanged) {
+      candidate = _candidateAfter(staged, removed);
+      if (!_semanticFlatGraphIsValid(candidate, rootId)) {
+        _rejectCandidate(flattenedNodes);
+        return null;
+      }
+    }
+
+    final set = staged.values.toList(growable: false)
+      ..sort((a, b) => (a['id']! as String).compareTo(b['id']! as String));
+    final removedList = removed.toList(growable: false)..sort();
+    var bytes = _bytes(<String, Object?>{
+      'v': semanticsWireVersion,
+      'mode': 'patch',
+      'root': rootId,
+      if (set.isNotEmpty) 'set': set,
+      if (removedList.isNotEmpty) 'removed': removedList,
+    });
+    if (bytes.length > maxWirePayloadLength) {
+      // The next state is representable, but this transition is not (for
+      // example a replace-all PATCH carrying both new nodes and removed ids).
+      // A FULL is a valid in-stream resync and is smaller than losing the base.
+      candidate ??= _candidateAfter(staged, removed);
+      bytes = _fullBytes(rootId, candidate);
+      if (bytes.length > maxWirePayloadLength) {
+        _rejectCandidate(flattenedNodes);
+        return null;
+      }
+    }
+
+    for (final id in removed) {
+      _sent.remove(id);
+      _sentNodeByteLengths.remove(id);
+    }
+    for (final entry in staged.entries) {
+      _sent[entry.key] = entry.value;
+      _sentNodeByteLengths[entry.key] = stagedByteLengths[entry.key]!;
+    }
+    _sentNodeBytes = candidateNodeBytes;
+    _sentRootId = rootId;
+    return bytes;
+  }
+
+  Map<String, Map<String, Object?>> _candidateAfter(
+    Map<String, Map<String, Object?>> staged,
+    Set<String> removed,
+  ) {
+    final candidate = Map<String, Map<String, Object?>>.of(_sent);
+    for (final id in removed) {
+      candidate.remove(id);
+    }
+    candidate.addAll(staged);
+    return candidate;
+  }
+
+  void _rejectCandidate(int flattenedNodes) {
+    reset();
+    _lastFlattenedNodes = flattenedNodes;
+  }
+
   /// Forgets the peer's state so the next encode re-sends a full frame.
   /// Call when a new peer connects on a reused encoder.
   void reset() {
     _sent = const {};
+    _sentNodeByteLengths = const {};
+    _sentNodeBytes = 0;
+    _sentRootId = null;
     _sentFull = false;
     _lastFlattenedNodes = 0;
   }
 
   static Uint8List _bytes(Map<String, Object?> payload) =>
       Uint8List.fromList(utf8.encode(jsonEncode(payload)));
+
+  static Uint8List _fullBytes(
+    String rootId,
+    Map<String, Map<String, Object?>> flat,
+  ) => _bytes(<String, Object?>{
+    'v': semanticsWireVersion,
+    'mode': 'full',
+    'root': rootId,
+    'nodes': flat.values.toList(growable: false),
+  });
+}
+
+int _checkedSemanticPayloadLimit(int value) {
+  if (value <= 0 || value > maxRemoteDocumentFramePayloadLength) {
+    throw ArgumentError.value(
+      value,
+      'maxWirePayloadLength',
+      'must be within 1..$maxRemoteDocumentFramePayloadLength',
+    );
+  }
+  return value;
+}
+
+int _semanticNodeWireLength(Map<String, Object?> node) =>
+    utf8.encode(jsonEncode(node)).length;
+
+bool _semanticWireIdIsValid(String id) {
+  if (id.isEmpty) return false;
+  var byteLength = 0;
+  for (var i = 0; i < id.length; i++) {
+    final unit = id.codeUnitAt(i);
+    if (unit >= 0xD800 && unit <= 0xDBFF) {
+      if (i + 1 >= id.length) return false;
+      final low = id.codeUnitAt(++i);
+      if (low < 0xDC00 || low > 0xDFFF) return false;
+      byteLength += 4;
+    } else if (unit >= 0xDC00 && unit <= 0xDFFF) {
+      return false;
+    } else if (unit <= 0x7F) {
+      byteLength++;
+    } else if (unit <= 0x7FF) {
+      byteLength += 2;
+    } else {
+      byteLength += 3;
+    }
+    if (byteLength > maxRemoteSemanticNodeIdBytes) return false;
+  }
+  return true;
+}
+
+/// Exact bytes of the equivalent FULL envelope from incrementally-maintained
+/// node JSON lengths. The empty-list encoding already includes `[]`; filling it
+/// adds each node plus one comma between adjacent entries.
+int _semanticFullPayloadLength(
+  String rootId, {
+  required int nodeBytes,
+  required int nodeCount,
+}) {
+  final emptyEnvelopeLength = utf8
+      .encode(
+        jsonEncode(<String, Object?>{
+          'v': semanticsWireVersion,
+          'mode': 'full',
+          'root': rootId,
+          'nodes': const <Object?>[],
+        }),
+      )
+      .length;
+  return emptyEnvelopeLength + nodeBytes + (nodeCount > 1 ? nodeCount - 1 : 0);
+}
+
+/// Whether one producer-side flat mirror is exactly reconstructable under the
+/// decoder's structural limits.
+///
+/// This runs for the initial FULL and only when a PATCH changes structure; a
+/// scalar-only steady PATCH retains the already-validated graph and stays
+/// O(changed). Duplicate leaves remain legal for ambiguity diagnostics, while a
+/// repeated internal node is rejected before it can form an expanding DAG.
+bool _semanticFlatGraphIsValid(
+  Map<String, Map<String, Object?>> flat,
+  String rootId,
+) {
+  if (flat.isEmpty ||
+      flat.length > maxSemanticWireNodes ||
+      !_semanticWireIdIsValid(rootId)) {
+    return false;
+  }
+  var edgeCount = 0;
+  for (final entry in flat.entries) {
+    if (!_semanticWireIdIsValid(entry.key)) return false;
+    final node = entry.value;
+    final childIds = node['childIds'];
+    if (childIds is List<String>) {
+      edgeCount += childIds.length;
+      if (edgeCount > maxSemanticWireEdges) return false;
+      if (childIds.any((id) => !_semanticWireIdIsValid(id))) return false;
+    }
+  }
+
+  final visited = <String>{};
+  var occurrenceCount = 0;
+  bool visit(String id, int depth) {
+    if (depth >= maxSemanticTreeDepth) return false;
+    final node = flat[id];
+    if (node == null) return false;
+    occurrenceCount++;
+    if (occurrenceCount > maxSemanticWireNodes) return false;
+    final childIds = node['childIds'];
+    if (!visited.add(id)) {
+      return childIds is! List<String> || childIds.isEmpty;
+    }
+    if (childIds is List<String>) {
+      for (final childId in childIds) {
+        if (!visit(childId, depth + 1)) return false;
+      }
+    }
+    return true;
+  }
+
+  if (!visit(rootId, 0)) return false;
+  // A legal producer tree has no orphaned flat nodes. Requiring exact reachability
+  // also keeps its retained mirror identical to the decoder, which prunes raw
+  // orphan nodes from hostile inputs.
+  return visited.length == flat.length;
 }
 
 /// Deep equality over JSON-shaped values (Map / List / scalars). Used to detect
@@ -387,7 +702,17 @@ Map<String, Object?> _flattenNode(SemanticInspectionNode node) {
 /// Client side: replays the encoder's frames, holding the flat node state and
 /// rebuilding a [SemanticTree] after each. One instance per session.
 final class SemanticsWireDecoder {
+  SemanticsWireDecoder({
+    int maxWirePayloadLength = maxRemoteDocumentFramePayloadLength,
+  }) : maxWirePayloadLength = _checkedSemanticPayloadLimit(
+         maxWirePayloadLength,
+       );
+
+  /// Maximum accepted frame and equivalent retained FULL payload bytes.
+  final int maxWirePayloadLength;
+
   final Map<String, Map<String, Object?>> _flat = {};
+  final Map<String, int> _flatNodeByteLengths = {};
   String _rootId = 'root';
   bool _hasState = false;
   List<String> _changedIds = const <String>[];
@@ -414,6 +739,7 @@ final class SemanticsWireDecoder {
   /// the payload is malformed or a patch arrives before any full frame (a
   /// desync the caller should ignore, keeping the last good tree).
   SemanticTree? apply(List<int> bytes) {
+    if (bytes.length > maxWirePayloadLength) return null;
     final Object? decoded;
     try {
       decoded = jsonDecode(utf8.decode(bytes));
@@ -423,104 +749,214 @@ final class SemanticsWireDecoder {
     if (decoded is! Map) return null;
     if (decoded['v'] != semanticsWireVersion) return null;
 
+    late final Map<String, Map<String, Object?>> candidate;
+    late final String candidateRootId;
+    late final bool candidateWasFull;
+    final candidateChangedIds = <String>{};
+    final candidateRemovedIds = <String>{};
+
     switch (decoded['mode']) {
       case 'full':
         final nodes = decoded['nodes'];
         if (nodes is! List) return null;
-        _flat.clear();
+        if (nodes.length > maxSemanticWireNodes) return null;
+        final root = decoded['root'];
+        if (root is! String || !_semanticWireIdIsValid(root)) return null;
+        candidate = <String, Map<String, Object?>>{};
         for (final node in nodes) {
-          if (node is Map) _put(node);
+          final normalized = _normalizeNode(node);
+          if (normalized == null) return null;
+          candidate[normalized.id] = normalized.node;
         }
-        _rootId = _stringOr(decoded['root'], _rootId);
-        _hasState = true;
-        _changedIds = _flat.keys.toList(growable: false);
-        _removedIds = const <String>[];
-        _wasFull = true;
+        candidateRootId = root;
+        candidateWasFull = true;
       case 'patch':
         if (!_hasState) return null;
+        candidate = Map<String, Map<String, Object?>>.of(_flat);
         final set = decoded['set'];
-        final changed = <String>[];
-        if (set is List) {
+        if (set != null) {
+          if (set is! List || set.length > maxSemanticWireNodes) return null;
           for (final node in set) {
-            if (node is Map) {
-              _put(node);
-              final id = node['id'];
-              if (id is String) changed.add(id);
-            }
+            final normalized = _normalizeNode(node);
+            if (normalized == null) return null;
+            candidate[normalized.id] = normalized.node;
+            candidateChangedIds.add(normalized.id);
           }
         }
-        final removedList = <String>[];
         final removed = decoded['removed'];
-        if (removed is List) {
+        if (removed != null) {
+          if (removed is! List || removed.length > maxSemanticWireNodes) {
+            return null;
+          }
           for (final id in removed) {
-            if (id is String) {
-              _flat.remove(id);
-              removedList.add(id);
-            }
+            if (id is! String || !_semanticWireIdIsValid(id)) return null;
+            candidate.remove(id);
+            candidateRemovedIds.add(id);
           }
         }
-        _rootId = _stringOr(decoded['root'], _rootId);
-        _changedIds = changed;
-        _removedIds = removedList;
-        _wasFull = false;
+        final root = decoded['root'];
+        if (root != null &&
+            (root is! String || !_semanticWireIdIsValid(root))) {
+          return null;
+        }
+        candidateRootId = root is String ? root : _rootId;
+        candidateWasFull = false;
       default:
         return null;
     }
 
-    final nested = _nest(_rootId, <String>{}, 0);
-    if (nested == null) return null;
+    if (candidate.length > maxSemanticWireNodes) return null;
+    var edgeCount = 0;
+    for (final node in candidate.values) {
+      final childIds = node['childIds'];
+      if (childIds is List<String>) {
+        edgeCount += childIds.length;
+        if (edgeCount > maxSemanticWireEdges) return null;
+      }
+    }
+
+    // Build against the candidate map without touching the retained mirror.
+    // [visited] is GLOBAL for this reconstruction and is never popped. A repeat
+    // of a node that itself has children is a cycle or branching DAG, and is
+    // rejected before it can expand exponentially under the old path-local
+    // cycle guard. Repeated leaves remain representable: Fleury intentionally
+    // tolerates duplicate semantic ids long enough for inspection tooling to
+    // diagnose them as ambiguous, and a leaf cannot recurse. The occurrence
+    // count below keeps even a very wide repeated-leaf fan-out bounded.
+    final visited = <String>{};
+    var invalidGraph = false;
+    var nestedNodeCount = 0;
+    Map<String, Object?>? nest(String id, int depth) {
+      if (depth >= maxSemanticTreeDepth) return null;
+      final flat = candidate[id];
+      if (flat == null) return null;
+      nestedNodeCount++;
+      if (nestedNodeCount > maxSemanticWireNodes) {
+        invalidGraph = true;
+        return null;
+      }
+      final json = <String, Object?>{
+        for (final entry in flat.entries)
+          if (entry.key != 'childIds') entry.key: entry.value,
+      };
+      final childIds = flat['childIds'];
+      if (!visited.add(id)) {
+        if (childIds is List<String> && childIds.isNotEmpty) {
+          invalidGraph = true;
+          return null;
+        }
+        return json;
+      }
+      if (childIds is List<String>) {
+        final children = <Map<String, Object?>>[];
+        for (final childId in childIds) {
+          final child = nest(childId, depth + 1);
+          if (invalidGraph) return null;
+          if (child != null) children.add(child);
+        }
+        if (children.isNotEmpty) json['children'] = children;
+      }
+      return json;
+    }
+
+    final nested = nest(candidateRootId, 0);
+    if (nested == null || invalidGraph) return null;
+    final reachableNodeByteLengths = <String, int>{};
+    var reachableNodeBytes = 0;
+    for (final id in visited) {
+      final node = candidate[id]!;
+      final retained = _flat[id];
+      final length = identical(node, retained)
+          ? _flatNodeByteLengths[id] ?? _semanticNodeWireLength(node)
+          : _semanticNodeWireLength(node);
+      reachableNodeByteLengths[id] = length;
+      reachableNodeBytes += length;
+    }
+    if (_semanticFullPayloadLength(
+          candidateRootId,
+          nodeBytes: reachableNodeBytes,
+          nodeCount: visited.length,
+        ) >
+        maxWirePayloadLength) {
+      return null;
+    }
+    final SemanticTree tree;
     try {
-      return SemanticInspectionSnapshot.fromJson(<String, Object?>{
+      tree = SemanticInspectionSnapshot.fromJson(<String, Object?>{
         'schemaVersion': SemanticInspectionSnapshot.currentSchemaVersion,
         'root': nested,
       }).toSemanticTree();
-    } on FormatException {
+    } on Object {
       // A reconstructed node was missing a required field (e.g. a corrupt or
-      // hostile patch dropped a node's role). Reject this frame rather than
-      // throw; the last good tree stays on screen.
+      // hostile patch dropped a node's role) or had a field of the wrong shape.
+      // Reject this frame rather than throw; no retained state has changed, so
+      // the last good tree remains a valid base for the next patch.
       return null;
     }
-  }
 
-  void _put(Map<Object?, Object?> node) {
-    final id = node['id'];
-    if (id is! String) return;
-    _flat[id] = <String, Object?>{
-      for (final entry in node.entries)
-        if (entry.key is String) entry.key as String: entry.value,
+    // Commit only after reconstruction AND inspection parsing both succeed.
+    // Keeping reachable nodes only prevents an attacker from accumulating
+    // orphaned nodes through a long stream of bounded patches.
+    final previousIds = _flat.keys.toSet();
+    final reachable = <String, Map<String, Object?>>{
+      for (final id in visited) id: candidate[id]!,
     };
-  }
-
-  /// Rebuilds the nested node JSON for [id] from the flat map, guarding against
-  /// cycles (the [seen] path set), missing ids, and excessive depth (a corrupt
-  /// or hostile patch yields a pruned subtree rather than an infinite loop or a
-  /// stack overflow).
-  Map<String, Object?>? _nest(String id, Set<String> seen, int depth) {
-    if (depth >= maxSemanticTreeDepth) return null;
-    if (!seen.add(id)) return null;
-    final flat = _flat[id];
-    if (flat == null) {
-      seen.remove(id);
-      return null;
+    _flat
+      ..clear()
+      ..addAll(reachable);
+    _flatNodeByteLengths
+      ..clear()
+      ..addAll(reachableNodeByteLengths);
+    final rootChanged = candidateRootId != _rootId;
+    _rootId = candidateRootId;
+    _hasState = true;
+    _wasFull = candidateWasFull;
+    if (candidateWasFull) {
+      _changedIds = visited.toList(growable: false);
+      _removedIds = const <String>[];
+    } else {
+      if (rootChanged) candidateChangedIds.add(candidateRootId);
+      final removed = <String>{
+        ...candidateRemovedIds,
+        for (final id in previousIds)
+          if (!visited.contains(id)) id,
+      }..removeAll(visited);
+      _changedIds = candidateChangedIds
+          .where(visited.contains)
+          .toList(growable: false);
+      _removedIds = removed.toList(growable: false);
     }
-    final json = <String, Object?>{
-      for (final entry in flat.entries)
-        if (entry.key != 'childIds') entry.key: entry.value,
-    };
-    final childIds = flat['childIds'];
-    if (childIds is List) {
-      final children = <Map<String, Object?>>[];
-      for (final childId in childIds) {
-        if (childId is! String) continue;
-        final child = _nest(childId, seen, depth + 1);
-        if (child != null) children.add(child);
+    return tree;
+  }
+
+  static ({String id, Map<String, Object?> node})? _normalizeNode(
+    Object? value,
+  ) {
+    if (value is! Map) return null;
+    final id = value['id'];
+    if (id is! String || !_semanticWireIdIsValid(id)) return null;
+    final childIds = value['childIds'];
+    List<String>? normalizedChildIds;
+    if (childIds != null) {
+      if (childIds is! List ||
+          childIds.length > maxSemanticWireEdges ||
+          childIds.any((child) => child is! String)) {
+        return null;
       }
-      if (children.isNotEmpty) json['children'] = children;
+      normalizedChildIds = <String>[
+        for (final child in childIds) child as String,
+      ];
+      if (normalizedChildIds.any((id) => !_semanticWireIdIsValid(id))) {
+        return null;
+      }
     }
-    seen.remove(id);
-    return json;
+    final node = <String, Object?>{
+      for (final entry in value.entries)
+        if (entry.key is String &&
+            _semanticWireScalarFields.contains(entry.key))
+          entry.key as String: entry.value,
+      'childIds': ?normalizedChildIds,
+    };
+    return (id: id, node: node);
   }
-
-  static String _stringOr(Object? value, String fallback) =>
-      value is String ? value : fallback;
 }

@@ -52,15 +52,72 @@ final class RemoteClipboard extends Clipboard {
   }) async {
     _register = text;
     final payloadBytes = utf8.encode(text).length;
+
+    // A remote host-surface write is the served equivalent of a platform
+    // clipboard write. Respect an in-process-only policy before allocating a
+    // sequence or pending result, so policy-protected text never reaches the
+    // peer.
+    if (!policy.allowPlatformTool) {
+      return _report(
+        policy: policy,
+        payloadBytes: payloadBytes,
+        fallbackState: CapabilityResolutionState.disabledByPolicy,
+        warning: 'Remote clipboard write is disabled by policy.',
+      );
+    }
+
+    // CLIPBOARD_WRITE carries [seq:u32] before its UTF-8 text. Oversized
+    // writes stay useful inside the app, but must not create a request that
+    // encodeFrame will reject or leave a completer waiting for a result that
+    // can never arrive.
+    final textLimit =
+        remoteFramePayloadLimit(FrameType.clipboardWrite) -
+        _clipboardSequenceBytes;
+    if (payloadBytes > textLimit) {
+      return _report(
+        policy: policy,
+        payloadBytes: payloadBytes,
+        warning:
+            'Remote clipboard payload exceeds the $textLimit-byte wire limit.',
+      );
+    }
+
     final seq = _nextSeq++;
     final completer = Completer<RemoteClipboardStatus?>();
     _pending[seq] = completer;
-    _sink.sendClipboardWrite(seq, text);
+    try {
+      _sink.sendClipboardWrite(seq, text);
+    } on Object catch (error) {
+      _pending.remove(seq);
+      return _report(
+        policy: policy,
+        payloadBytes: payloadBytes,
+        warning: 'Remote clipboard write could not be sent: $error',
+      );
+    }
     final status = await completer.future
         .timeout(_resultTimeout, onTimeout: () => null)
         .whenComplete(() => _pending.remove(seq));
 
     final delivered = status == RemoteClipboardStatus.written;
+    return _report(
+      delivered: delivered,
+      policy: policy,
+      payloadBytes: payloadBytes,
+      warning: delivered
+          ? null
+          : 'Peer clipboard write was denied or unanswered.',
+    );
+  }
+
+  ClipboardWriteReport _report({
+    required ClipboardWritePolicy policy,
+    required int payloadBytes,
+    bool delivered = false,
+    CapabilityResolutionState fallbackState =
+        CapabilityResolutionState.degraded,
+    String? warning,
+  }) {
     return ClipboardWriteReport(
       result: delivered
           ? ClipboardWriteResult.hostSurface
@@ -68,10 +125,9 @@ final class RemoteClipboard extends Clipboard {
       resolution: CapabilityResolution(
         feature: TerminalFeature.clipboardWrite,
         level: CapabilityLevel.preferred,
-        state: delivered
-            ? CapabilityResolutionState.available
-            : CapabilityResolutionState.degraded,
+        state: delivered ? CapabilityResolutionState.available : fallbackState,
         fallbackLabel: delivered ? null : 'in-process register',
+        warning: warning,
       ),
       policy: policy,
       payloadBytes: payloadBytes,
@@ -84,3 +140,5 @@ final class RemoteClipboard extends Clipboard {
     );
   }
 }
+
+const int _clipboardSequenceBytes = 4;

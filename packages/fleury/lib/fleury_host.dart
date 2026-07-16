@@ -122,7 +122,9 @@ export 'src/remote/remote_protocol.dart'
         maxRemoteDocumentFramePayloadLength,
         maxRemoteImageFramePayloadLength,
         maxRemoteInputFramePayloadLength,
+        maxRemoteDebugResponseJsonLength,
         encodeFrame,
+        remoteFramePayloadLimit,
         remoteProtocolVersion;
 export 'src/remote/inline_image_cache.dart'
     show
@@ -143,13 +145,16 @@ export 'src/remote/remote_codec.dart'
         decodeSemanticAction,
         encodeInputEvent,
         encodeRemotePlan,
-        encodeSemanticAction;
+        encodeSemanticAction,
+        maxRemoteSemanticNodeIdBytes;
 export 'src/remote/remote_semantics.dart'
     show
         SemanticWireDelta,
         SemanticsWireDecoder,
         SemanticsWireEncoder,
         maxSemanticTreeDepth,
+        maxSemanticWireEdges,
+        maxSemanticWireNodes,
         semanticsWireVersion;
 export 'src/remote/remote_transport.dart'
     show RemoteFrameTransport, SynchronousSendTransport;

@@ -30,6 +30,7 @@ import 'dart:io';
 import 'dart:typed_data' show Uint8List;
 
 import 'package:fleury/src/foundation/geometry.dart';
+import 'package:fleury/src/remote/buffered_browser_input.dart';
 import 'package:fleury/src/remote/remote_client_asset.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/remote/serve_index_html.dart';
@@ -595,7 +596,7 @@ Future<int> _runServeBridge({
   // Pairing state. Order of arrival doesn't matter — first one
   // through the door waits for its partner.
   Socket? pendingApp;
-  _BufferedBrowserInput? pendingBrowser;
+  BufferedBrowserInput? pendingBrowser;
   var sessionInFlight = false;
 
   void tryPair() {
@@ -606,10 +607,9 @@ Future<int> _runServeBridge({
     pendingBrowser = null;
     sessionInFlight = true;
     stderr.writeln('[serve] paired app ↔ browser; session live');
-    browser.markPaired();
     _pumpBytes(
       app: app,
-      browser: browser.webSocket,
+      browser: browser.webSocket!,
       browserInput: browser.stream,
       onDone: () {
         unawaited(browser.dispose());
@@ -684,12 +684,22 @@ Future<int> _runServeBridge({
         await ws.close();
         return;
       }
-      final browser = _BufferedBrowserInput(ws);
+      final browser = BufferedBrowserInput(ws);
       pendingBrowser = browser;
       unawaited(
         browser.closed.then((_) {
           if (pendingBrowser == browser) {
             pendingBrowser = null;
+            // `closed` intentionally wins the race with a potentially stalled
+            // WebSocket close handshake. Deterministically release the source
+            // subscription/controller before admitting the next browser.
+            unawaited(
+              browser.dispose().catchError((Object error) {
+                stderr.writeln(
+                  '[serve] browser input cleanup failed before attach: $error',
+                );
+              }),
+            );
             stderr.writeln('[serve] browser disconnected before app attach');
           }
         }),
@@ -761,9 +771,10 @@ void _pumpBytes({
     browser.addStream(app).then((_) => stop(), onError: (Object _) => stop()),
   );
 
-  // Browser → app. WebSocket text messages are ignored; the protocol is
-  // binary-only. `addStream` again carries backpressure: a flood of input
-  // stalls at the app socket instead of piling up.
+  // Browser → app. WebSocket text messages are rejected; the protocol is
+  // binary-only. `addStream` pauses its input when the app socket stalls;
+  // BufferedBrowserInput propagates that pause to the WebSocket subscription
+  // and independently caps bytes already queued between the two.
   final browserBytes =
       browserInput ??
       browser.where((data) => data is List<int>).cast<List<int>>();
@@ -930,89 +941,6 @@ final class _ServeOriginPolicy {
     final scheme = uri.scheme.toLowerCase();
     if (scheme != 'http' && scheme != 'https') return null;
     return '$scheme://${uri.authority.toLowerCase()}';
-  }
-}
-
-final class _BufferedBrowserInput {
-  _BufferedBrowserInput(this.webSocket) {
-    _subscription = webSocket.listen(
-      (data) {
-        if (data is! List<int> || _rejected) return;
-        // The WebSocket implementation has already materialized this message,
-        // but reject it before copying/queueing it into the app-socket pump.
-        // The bundled client sends one framed message at a time, so header +
-        // the global frame maximum is the largest legitimate message.
-        if (data.length > defaultMaxRemoteFramePayloadLength + 5) {
-          _reject('browser message exceeded remote frame payload limit');
-          return;
-        }
-        if (!_paired) {
-          _pendingBytes += data.length;
-          if (_pendingBytes > defaultMaxRemoteFramePayloadLength) {
-            _reject(
-              'pending browser input exceeded remote frame payload limit',
-            );
-            return;
-          }
-        }
-        if (!_controller.isClosed) {
-          _controller.add(_asUint8(data));
-        }
-      },
-      onError: (Object error, StackTrace stackTrace) {
-        if (!_controller.isClosed) {
-          _controller.addError(error, stackTrace);
-        }
-        _completeClosed();
-      },
-      onDone: () {
-        if (!_controller.isClosed) unawaited(_controller.close());
-        _completeClosed();
-      },
-      cancelOnError: false,
-    );
-  }
-
-  final WebSocket webSocket;
-  final _controller = StreamController<List<int>>();
-  final _closed = Completer<void>();
-
-  late final StreamSubscription<dynamic> _subscription;
-  var _paired = false;
-  var _rejected = false;
-  var _pendingBytes = 0;
-
-  Stream<List<int>> get stream => _controller.stream;
-  Future<void> get closed => _closed.future;
-
-  void markPaired() {
-    _paired = true;
-  }
-
-  void _reject(String reason) {
-    if (_rejected) return;
-    _rejected = true;
-    if (!_controller.isClosed) {
-      _controller.addError(
-        RemoteProtocolException(
-          reason,
-          // Force-closes the socket (1009) below: genuinely unrecoverable,
-          // matching FrameDecoder's oversized-length classification.
-          recoverable: false,
-        ),
-      );
-    }
-    unawaited(webSocket.close(1009, 'input too large'));
-  }
-
-  Future<void> dispose() async {
-    await _subscription.cancel();
-    if (!_controller.isClosed) await _controller.close();
-    _completeClosed();
-  }
-
-  void _completeClosed() {
-    if (!_closed.isCompleted) _closed.complete();
   }
 }
 
@@ -1336,15 +1264,14 @@ class _SpawnSession {
   /// the waiting app, which renders its first frame straight away.
   void attach(WebSocket browser) {
     _browser = browser;
-    _attachPump(browser, _BufferedBrowserInput(browser), _app!.socket);
+    _attachPump(browser, BufferedBrowserInput(browser), _app!.socket);
   }
 
   void _attachPump(
     WebSocket browser,
-    _BufferedBrowserInput browserInput,
+    BufferedBrowserInput browserInput,
     Socket app,
   ) {
-    browserInput.markPaired();
     _pumpBytes(
       app: app,
       browser: browser,
@@ -1371,7 +1298,7 @@ class _SpawnSession {
     // subprocess can connect back. Listen + buffer now so the handshake isn't
     // missed — and pass its close as the spawn's abort, so a browser that leaves
     // before the app connects doesn't orphan the process.
-    final browserInput = _BufferedBrowserInput(browser);
+    final browserInput = BufferedBrowserInput(browser);
     try {
       _app = await spawnFleuryApp(
         command: command,

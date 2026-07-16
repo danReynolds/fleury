@@ -23,6 +23,35 @@ const _init = InitFrame(
 Future<void> _settle() =>
     Future<void>.delayed(const Duration(milliseconds: 20));
 
+final class _ClipboardSink implements RemoteSurfaceSink {
+  final sent = <({int seq, String text})>[];
+  bool failSend = false;
+  void Function(int seq, RemoteClipboardStatus status)? _onResult;
+
+  @override
+  bool get wantsPresentationPlans => true;
+
+  @override
+  void sendClipboardWrite(int seq, String text) {
+    if (failSend) throw StateError('injected send failure');
+    sent.add((seq: seq, text: text));
+  }
+
+  @override
+  set onClipboardResult(
+    void Function(int seq, RemoteClipboardStatus status)? handler,
+  ) {
+    _onResult = handler;
+  }
+
+  void answer(int seq, RemoteClipboardStatus status) {
+    _onResult?.call(seq, status);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   test('RemoteClipboard resolves hostSurface from the peer answer', () async {
     final transport = FakeFrameTransport();
@@ -152,6 +181,88 @@ void main() {
     transport.emit(const ByeFrame());
     await _settle();
     await transport.close();
+  });
+
+  group('bounded remote clipboard writes', () {
+    late _ClipboardSink sink;
+    late RemoteClipboard clipboard;
+
+    setUp(() {
+      sink = _ClipboardSink();
+      clipboard = RemoteClipboard(
+        sink,
+        resultTimeout: const Duration(seconds: 10),
+      );
+    });
+
+    tearDown(() => clipboard.dispose());
+
+    test(
+      'oversized text degrades immediately without a pending request',
+      () async {
+        final textLimit = remoteFramePayloadLimit(FrameType.clipboardWrite) - 4;
+        final text = 'a' * (textLimit + 1);
+
+        final report = await clipboard
+            .writeWithReport(text)
+            .timeout(const Duration(milliseconds: 250));
+
+        expect(report.result, ClipboardWriteResult.inProcessOnly);
+        expect(report.resolution.state, CapabilityResolutionState.degraded);
+        expect(clipboard.readInProcess(), text);
+        expect(sink.sent, isEmpty);
+
+        final valid = clipboard.writeWithReport('next');
+        expect(
+          sink.sent.single.seq,
+          0,
+          reason: 'oversize consumed no sequence',
+        );
+        sink.answer(0, RemoteClipboardStatus.written);
+        expect((await valid).result, ClipboardWriteResult.hostSurface);
+      },
+    );
+
+    test('an exact-limit payload still travels to the peer', () async {
+      final textLimit = remoteFramePayloadLimit(FrameType.clipboardWrite) - 4;
+      final text = 'a' * textLimit;
+
+      final pending = clipboard.writeWithReport(text);
+      expect(sink.sent, hasLength(1));
+      expect(sink.sent.single.text, text);
+      sink.answer(sink.sent.single.seq, RemoteClipboardStatus.written);
+
+      expect((await pending).result, ClipboardWriteResult.hostSurface);
+    });
+
+    test('in-process-only policy never sends text to the peer', () async {
+      final report = await clipboard.writeWithReport(
+        'local secret',
+        policy: ClipboardWritePolicy.inProcessOnly,
+      );
+
+      expect(report.result, ClipboardWriteResult.inProcessOnly);
+      expect(
+        report.resolution.state,
+        CapabilityResolutionState.disabledByPolicy,
+      );
+      expect(clipboard.readInProcess(), 'local secret');
+      expect(sink.sent, isEmpty);
+    });
+
+    test(
+      'a synchronous send failure degrades without a pending leak',
+      () async {
+        sink.failSend = true;
+
+        final report = await clipboard.writeWithReport('still local');
+
+        expect(report.result, ClipboardWriteResult.inProcessOnly);
+        expect(report.resolution.state, CapabilityResolutionState.degraded);
+        expect(clipboard.readInProcess(), 'still local');
+        expect(sink.sent, isEmpty);
+      },
+    );
   });
 
   test('the focused caret rect ships and dedupes', () async {

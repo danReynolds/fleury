@@ -218,6 +218,399 @@ void main() {
       );
     });
 
+    test('rejected full and patch frames preserve the last-good base', () {
+      final encoder = SemanticsWireEncoder();
+      final decoder = SemanticsWireDecoder();
+      final full = encoder.encode(_snap(messages: 3, tick: 0))!;
+      final initial = decoder.apply(full)!;
+      final initialJson = _canonical(initial);
+      final initialChanged = List<String>.of(decoder.changedIds);
+
+      List<int> wire(Map<String, Object?> envelope) =>
+          utf8.encode(jsonEncode(envelope));
+
+      // A malformed FULL must not clear a decoder that already has a good base.
+      expect(
+        decoder.apply(
+          wire(<String, Object?>{
+            'v': semanticsWireVersion,
+            'mode': 'full',
+            'root': 'root',
+            'nodes': <Object?>[
+              <String, Object?>{'id': 'root'}, // missing required role
+            ],
+          }),
+        ),
+        isNull,
+      );
+      expect(decoder.isPrimed, isTrue);
+      expect(decoder.wasFull, isTrue);
+      expect(decoder.changedIds, initialChanged);
+
+      // Likewise, a malformed PATCH may stage a replacement but cannot poison
+      // the retained map when inspection parsing rejects that candidate.
+      expect(
+        decoder.apply(
+          wire(<String, Object?>{
+            'v': semanticsWireVersion,
+            'mode': 'patch',
+            'root': 'root',
+            'set': <Object?>[
+              <String, Object?>{'id': 'status'}, // missing required role
+            ],
+          }),
+        ),
+        isNull,
+      );
+      expect(decoder.wasFull, isTrue);
+      expect(decoder.changedIds, initialChanged);
+
+      // The sender still believes the original FULL is the base. Its next real
+      // PATCH therefore succeeds only if both rejected candidates were atomic.
+      final validPatch = encoder.encode(_snap(messages: 3, tick: 1))!;
+      final recovered = decoder.apply(validPatch);
+      expect(recovered, isNotNull);
+      expect(_canonical(recovered!), isNot(initialJson));
+      expect(recovered.root.children.first.label, 'streaming — 1 tokens');
+    });
+
+    test('flat nodes cannot inject a nested children tree', () {
+      List<int> wire({required bool unresolvedChildIds}) => utf8.encode(
+        jsonEncode(<String, Object?>{
+          'v': semanticsWireVersion,
+          'mode': 'full',
+          'root': 'root',
+          'nodes': <Object?>[
+            <String, Object?>{
+              'id': 'root',
+              'role': 'app',
+              if (unresolvedChildIds) 'childIds': <String>['missing'],
+              // `children` is not part of the flat wire. If it reaches the
+              // inspection parser it bypasses every childIds graph bound.
+              'children': <Object?>[
+                <String, Object?>{
+                  'id': 'injected',
+                  'role': 'button',
+                  'label': 'must stay hidden',
+                },
+              ],
+            },
+          ],
+        }),
+      );
+
+      for (final unresolved in <bool>[false, true]) {
+        final tree = SemanticsWireDecoder().apply(
+          wire(unresolvedChildIds: unresolved),
+        );
+        expect(tree, isNotNull);
+        expect(tree!.root.children, isEmpty);
+        expect(tree.nodeById(const SemanticNodeId('injected')), isNull);
+      }
+    });
+
+    test('retained FULL-equivalent bytes are bounded across patches', () {
+      const limit = 700;
+      List<int> wire(Map<String, Object?> envelope) =>
+          utf8.encode(jsonEncode(envelope));
+      Map<String, Object?> node(String id, {String? label}) =>
+          <String, Object?>{'id': id, 'role': 'text', 'label': ?label};
+      final largeALabel = ''.padRight(400, 'a');
+      final largeBLabel = ''.padRight(400, 'b');
+
+      final decoder = SemanticsWireDecoder(maxWirePayloadLength: limit);
+      final full = wire(<String, Object?>{
+        'v': semanticsWireVersion,
+        'mode': 'full',
+        'root': 'root',
+        'nodes': <Object?>[
+          <String, Object?>{
+            'id': 'root',
+            'role': 'app',
+            'childIds': <String>['a', 'b'],
+          },
+          node('a'),
+          node('b'),
+        ],
+      });
+      expect(decoder.apply(full), isNotNull);
+
+      final largeA = wire(<String, Object?>{
+        'v': semanticsWireVersion,
+        'mode': 'patch',
+        'root': 'root',
+        'set': <Object?>[node('a', label: largeALabel)],
+      });
+      expect(largeA.length, lessThan(limit));
+      final afterA = decoder.apply(largeA);
+      expect(afterA, isNotNull);
+      expect(afterA!.nodeById(const SemanticNodeId('a'))!.label, largeALabel);
+
+      // This frame is individually below the cap, but retaining both large
+      // siblings would make the equivalent reconnect FULL exceed it.
+      final largeB = wire(<String, Object?>{
+        'v': semanticsWireVersion,
+        'mode': 'patch',
+        'root': 'root',
+        'set': <Object?>[node('b', label: largeBLabel)],
+      });
+      expect(largeB.length, lessThan(limit));
+      expect(decoder.apply(largeB), isNull);
+
+      // Rejection was transactional: a small B patch still lands on the state
+      // after A, rather than a hidden retained 400-byte B poisoning the base.
+      final smallB = wire(<String, Object?>{
+        'v': semanticsWireVersion,
+        'mode': 'patch',
+        'root': 'root',
+        'set': <Object?>[node('b', label: 'ok')],
+      });
+      final recovered = decoder.apply(smallB);
+      expect(recovered, isNotNull);
+      expect(
+        recovered!.nodeById(const SemanticNodeId('a'))!.label,
+        largeALabel,
+      );
+      expect(recovered.nodeById(const SemanticNodeId('b'))!.label, 'ok');
+    });
+
+    test('encoder rejects an unrepresentable retained state then resyncs', () {
+      const limit = 700;
+      SemanticInspectionSnapshot snapshot(String a, String b) => SemanticTree(
+        root: SemanticNode(
+          id: const SemanticNodeId('root'),
+          role: SemanticRole.app,
+          children: <SemanticNode>[
+            SemanticNode(
+              id: const SemanticNodeId('a'),
+              role: SemanticRole.text,
+              label: a,
+            ),
+            SemanticNode(
+              id: const SemanticNodeId('b'),
+              role: SemanticRole.text,
+              label: b,
+            ),
+          ],
+        ),
+      ).toInspectionSnapshot();
+
+      final encoder = SemanticsWireEncoder(maxWirePayloadLength: limit);
+      final largeA = ''.padRight(400, 'a');
+      final largeB = ''.padRight(400, 'b');
+      expect(_envelope(encoder.encode(snapshot('a', 'b'))!)['mode'], 'full');
+      expect(
+        _envelope(encoder.encode(snapshot(largeA, 'b'))!)['mode'],
+        'patch',
+      );
+      expect(encoder.encode(snapshot(largeA, largeB)), isNull);
+
+      final recovered = encoder.encode(snapshot('small-a', 'small-b'));
+      expect(recovered, isNotNull);
+      expect(_envelope(recovered!)['mode'], 'full');
+      expect(SemanticsWireDecoder().apply(recovered), isNotNull);
+    });
+
+    test('semantic ids use the action wire UTF-8 bound', () {
+      final oversizedId = List<String>.filled(
+        maxRemoteSemanticNodeIdBytes ~/ 2 + 1,
+        'é',
+      ).join();
+      final oversizedTree = SemanticTree(
+        root: SemanticNode(
+          id: SemanticNodeId(oversizedId),
+          role: SemanticRole.app,
+        ),
+      ).toInspectionSnapshot();
+      final encoder = SemanticsWireEncoder();
+      expect(encoder.encode(oversizedTree), isNull);
+      expect(
+        _envelope(encoder.encode(_snap(messages: 1, tick: 0))!)['mode'],
+        'full',
+      );
+
+      List<int> fullWith(Map<String, Object?> root) => utf8.encode(
+        jsonEncode(<String, Object?>{
+          'v': semanticsWireVersion,
+          'mode': 'full',
+          'root': root['id'],
+          'nodes': <Object?>[root],
+        }),
+      );
+      expect(
+        SemanticsWireDecoder().apply(
+          fullWith(<String, Object?>{'id': oversizedId, 'role': 'app'}),
+        ),
+        isNull,
+      );
+      expect(
+        SemanticsWireDecoder().apply(
+          fullWith(<String, Object?>{
+            'id': 'root',
+            'role': 'app',
+            'childIds': <String>[oversizedId],
+          }),
+        ),
+        isNull,
+      );
+
+      final loneSurrogate = utf8.encode(
+        r'{"v":1,"mode":"full","root":"\uD800","nodes":[]}',
+      );
+      expect(
+        () => SemanticsWireDecoder().apply(loneSurrogate),
+        returnsNormally,
+      );
+      expect(SemanticsWireDecoder().apply(loneSurrogate), isNull);
+    });
+
+    test('a compact DAG or cycle is rejected instead of expanded', () {
+      List<int> dag({required bool cycle}) {
+        const depth = 14;
+        final nodes = <Map<String, Object?>>[
+          for (var i = 0; i < depth; i++)
+            <String, Object?>{
+              'id': 'n$i',
+              'role': 'app',
+              if (i < depth - 1)
+                'childIds': <String>['n${i + 1}', 'n${i + 1}']
+              else if (cycle)
+                'childIds': <String>['n0'],
+            },
+        ];
+        return utf8.encode(
+          jsonEncode(<String, Object?>{
+            'v': semanticsWireVersion,
+            'mode': 'full',
+            'root': 'n0',
+            'nodes': nodes,
+          }),
+        );
+      }
+
+      final dagDecoder = SemanticsWireDecoder();
+      expect(dagDecoder.apply(dag(cycle: false)), isNull);
+      expect(dagDecoder.isPrimed, isFalse);
+
+      final cycleDecoder = SemanticsWireDecoder();
+      expect(cycleDecoder.apply(dag(cycle: true)), isNull);
+      expect(cycleDecoder.isPrimed, isFalse);
+    });
+
+    test('duplicate leaf ids remain visible for ambiguity diagnostics', () {
+      final bytes = utf8.encode(
+        jsonEncode(<String, Object?>{
+          'v': semanticsWireVersion,
+          'mode': 'full',
+          'root': 'root',
+          'nodes': <Object?>[
+            <String, Object?>{
+              'id': 'root',
+              'role': 'app',
+              'childIds': <String>['dup', 'dup'],
+            },
+            <String, Object?>{
+              'id': 'dup',
+              'role': 'button',
+              'label': 'duplicate',
+            },
+          ],
+        }),
+      );
+      final tree = SemanticsWireDecoder().apply(bytes);
+      expect(tree, isNotNull);
+      expect(tree!.root.children, hasLength(2));
+      expect(
+        tree.root.children.map((child) => child.id.value),
+        everyElement('dup'),
+      );
+    });
+
+    test('node and edge bounds reject oversized semantic graphs', () {
+      List<int> wire(List<Map<String, Object?>> nodes) => utf8.encode(
+        jsonEncode(<String, Object?>{
+          'v': semanticsWireVersion,
+          'mode': 'full',
+          'root': 'root',
+          'nodes': nodes,
+        }),
+      );
+
+      final tooManyNodes = <Map<String, Object?>>[
+        <String, Object?>{'id': 'root', 'role': 'app'},
+        for (var i = 1; i <= maxSemanticWireNodes; i++)
+          <String, Object?>{'id': 'orphan-$i', 'role': 'text'},
+      ];
+      expect(SemanticsWireDecoder().apply(wire(tooManyNodes)), isNull);
+
+      final tooManyEdges = <Map<String, Object?>>[
+        <String, Object?>{
+          'id': 'root',
+          'role': 'app',
+          'childIds': List<String>.filled(maxSemanticWireEdges + 1, 'missing'),
+        },
+      ];
+      expect(SemanticsWireDecoder().apply(wire(tooManyEdges)), isNull);
+
+      final tooManyRepeatedLeaves = <Map<String, Object?>>[
+        <String, Object?>{
+          'id': 'root',
+          'role': 'app',
+          'childIds': List<String>.filled(maxSemanticWireNodes + 1, 'leaf'),
+        },
+        <String, Object?>{'id': 'leaf', 'role': 'text'},
+      ];
+      expect(SemanticsWireDecoder().apply(wire(tooManyRepeatedLeaves)), isNull);
+    });
+
+    test('unreachable patch nodes are pruned and cannot later resurrect', () {
+      List<int> wire(Map<String, Object?> envelope) =>
+          utf8.encode(jsonEncode(envelope));
+      final decoder = SemanticsWireDecoder();
+      final full = wire(<String, Object?>{
+        'v': semanticsWireVersion,
+        'mode': 'full',
+        'root': 'root',
+        'nodes': <Object?>[
+          <String, Object?>{'id': 'root', 'role': 'app'},
+        ],
+      });
+      expect(decoder.apply(full), isNotNull);
+
+      final orphanPatch = wire(<String, Object?>{
+        'v': semanticsWireVersion,
+        'mode': 'patch',
+        'root': 'root',
+        'set': <Object?>[
+          <String, Object?>{
+            'id': 'orphan',
+            'role': 'button',
+            'label': 'must not persist',
+          },
+        ],
+      });
+      final afterOrphan = decoder.apply(orphanPatch)!;
+      expect(afterOrphan.root.children, isEmpty);
+      expect(decoder.changedIds, isEmpty);
+
+      // Reference the old id without re-sending its node. A retained orphan
+      // would now become visible; a pruned one remains a missing child.
+      final linkPatch = wire(<String, Object?>{
+        'v': semanticsWireVersion,
+        'mode': 'patch',
+        'root': 'root',
+        'set': <Object?>[
+          <String, Object?>{
+            'id': 'root',
+            'role': 'app',
+            'childIds': <String>['orphan'],
+          },
+        ],
+      });
+      final afterLink = decoder.apply(linkPatch)!;
+      expect(afterLink.root.children, isEmpty);
+    });
+
     test(
       'a childIds chain deeper than the cap is pruned, not a stack overflow',
       () {
