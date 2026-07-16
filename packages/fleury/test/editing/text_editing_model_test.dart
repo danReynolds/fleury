@@ -5,15 +5,15 @@ void main() {
   group('TextEditingValue', () {
     test('defaults selection to the end of the text', () {
       final value = TextEditingValue(text: 'hello');
-      expect(value.selection, const TextSelection.collapsed(5));
+      expect(value.selection, const TextSelection.collapsed(offset: 5));
     });
 
     test('snaps selection offsets to grapheme boundaries', () {
       final value = TextEditingValue(
         text: 'a🙂b',
-        selection: const TextSelection.collapsed(2),
+        selection: const TextSelection.collapsed(offset: 2),
       );
-      expect(value.selection, const TextSelection.collapsed(3));
+      expect(value.selection, const TextSelection.collapsed(offset: 3));
     });
   });
 
@@ -21,7 +21,7 @@ void main() {
     test('moves across emoji as one editable character', () {
       var value = TextEditingValue(
         text: 'a🙂b',
-        selection: const TextSelection.collapsed(3),
+        selection: const TextSelection.collapsed(offset: 3),
       );
 
       value = TextEditingModel.moveLeft(value);
@@ -34,7 +34,7 @@ void main() {
     test('moves across combining sequences as one editable character', () {
       var value = TextEditingValue(
         text: 'e\u0301x',
-        selection: const TextSelection.collapsed(2),
+        selection: const TextSelection.collapsed(offset: 2),
       );
 
       value = TextEditingModel.moveLeft(value);
@@ -47,7 +47,7 @@ void main() {
     test('shift-style extension preserves the selection anchor', () {
       var value = TextEditingValue(
         text: 'a🙂b',
-        selection: const TextSelection.collapsed(1),
+        selection: const TextSelection.collapsed(offset: 1),
       );
 
       value = TextEditingModel.moveRight(value, extend: true);
@@ -63,7 +63,7 @@ void main() {
       );
 
       value = TextEditingModel.moveLeft(value);
-      expect(value.selection, const TextSelection.collapsed(1));
+      expect(value.selection, const TextSelection.collapsed(offset: 1));
     });
   });
 
@@ -72,24 +72,24 @@ void main() {
       final value = TextEditingModel.backspace(
         TextEditingValue(
           text: 'a🙂b',
-          selection: const TextSelection.collapsed(3),
+          selection: const TextSelection.collapsed(offset: 3),
         ),
       );
 
       expect(value.text, 'ab');
-      expect(value.selection, const TextSelection.collapsed(1));
+      expect(value.selection, const TextSelection.collapsed(offset: 1));
     });
 
     test('delete removes one grapheme after the cursor', () {
       final value = TextEditingModel.delete(
         TextEditingValue(
           text: 'a🙂b',
-          selection: const TextSelection.collapsed(1),
+          selection: const TextSelection.collapsed(offset: 1),
         ),
       );
 
       expect(value.text, 'ab');
-      expect(value.selection, const TextSelection.collapsed(1));
+      expect(value.selection, const TextSelection.collapsed(offset: 1));
     });
 
     test('insert replaces the selected range', () {
@@ -102,7 +102,7 @@ void main() {
       );
 
       expect(value.text, 'aXd');
-      expect(value.selection, const TextSelection.collapsed(2));
+      expect(value.selection, const TextSelection.collapsed(offset: 2));
     });
 
     test('replaceRange replaces an arbitrary range', () {
@@ -113,7 +113,7 @@ void main() {
       );
 
       expect(value.text, 'git checkout');
-      expect(value.selection, const TextSelection.collapsed(12));
+      expect(value.selection, const TextSelection.collapsed(offset: 12));
     });
 
     test('single-line replaceRange collapses replacement newlines', () {
@@ -125,34 +125,34 @@ void main() {
       );
 
       expect(value.text, 'say one two');
-      expect(value.selection, const TextSelection.collapsed(11));
+      expect(value.selection, const TextSelection.collapsed(offset: 11));
     });
 
     test('word movement skips whitespace-delimited grapheme runs', () {
       const text = 'run  deploy 🙂 now';
       var value = TextEditingValue(
         text: text,
-        selection: TextSelection.collapsed(text.length),
+        selection: TextSelection.collapsed(offset: text.length),
       );
 
       value = TextEditingModel.moveWordLeft(value);
-      expect(value.selection, const TextSelection.collapsed(15));
+      expect(value.selection, const TextSelection.collapsed(offset: 15));
 
       value = TextEditingModel.moveWordLeft(value);
-      expect(value.selection, const TextSelection.collapsed(12));
+      expect(value.selection, const TextSelection.collapsed(offset: 12));
 
       value = TextEditingModel.moveWordLeft(value);
-      expect(value.selection, const TextSelection.collapsed(5));
+      expect(value.selection, const TextSelection.collapsed(offset: 5));
 
       value = TextEditingModel.moveWordRight(value);
-      expect(value.selection, const TextSelection.collapsed(11));
+      expect(value.selection, const TextSelection.collapsed(offset: 11));
 
       value = TextEditingModel.moveWordRight(value);
-      expect(value.selection, const TextSelection.collapsed(14));
+      expect(value.selection, const TextSelection.collapsed(offset: 14));
 
       value = TextEditingValue(
         text: 'run deploy',
-        selection: const TextSelection.collapsed(10),
+        selection: const TextSelection.collapsed(offset: 10),
       );
       value = TextEditingModel.moveWordLeft(value, extend: true);
       expect(
@@ -169,7 +169,10 @@ void main() {
       );
 
       expect(value.text, 'one two three');
-      expect(value.selection, TextSelection.collapsed(value.text.length));
+      expect(
+        value.selection,
+        TextSelection.collapsed(offset: value.text.length),
+      );
     });
 
     test('multiline input canonicalizes clipboard line endings', () {
@@ -199,7 +202,7 @@ void main() {
         );
 
         expect(value.text, 'git checkout');
-        expect(value.selection, const TextSelection.collapsed(12));
+        expect(value.selection, const TextSelection.collapsed(offset: 12));
         expect(value.composing, const TextRange(start: 4, end: 12));
       },
     );
@@ -213,7 +216,7 @@ void main() {
       final second = TextEditingModel.updateComposing(first, '日本');
 
       expect(second.text, 'say 日本');
-      expect(second.selection, const TextSelection.collapsed(6));
+      expect(second.selection, const TextSelection.collapsed(offset: 6));
       expect(second.composing, const TextRange(start: 4, end: 6));
     });
 
@@ -226,7 +229,7 @@ void main() {
       final committed = TextEditingModel.commitComposing(composing);
 
       expect(committed.text, 'run deploy');
-      expect(committed.selection, const TextSelection.collapsed(10));
+      expect(committed.selection, const TextSelection.collapsed(offset: 10));
       expect(committed.composing, TextRange.empty);
     });
 
@@ -245,7 +248,7 @@ void main() {
       );
 
       expect(committed.text, 'git cherry-pick');
-      expect(committed.selection, const TextSelection.collapsed(15));
+      expect(committed.selection, const TextSelection.collapsed(offset: 15));
       expect(committed.composing, TextRange.empty);
     });
 
@@ -282,37 +285,37 @@ void main() {
     test('moves up and down by grapheme column', () {
       var value = TextEditingValue(
         text: 'abcd\nxy\nw🙂z',
-        selection: const TextSelection.collapsed(11),
+        selection: const TextSelection.collapsed(offset: 11),
       );
 
       value = TextEditingModel.moveLineUp(value);
-      expect(value.selection, const TextSelection.collapsed(7));
+      expect(value.selection, const TextSelection.collapsed(offset: 7));
 
       value = TextEditingModel.moveLineUp(value);
-      expect(value.selection, const TextSelection.collapsed(2));
+      expect(value.selection, const TextSelection.collapsed(offset: 2));
 
       value = TextEditingModel.moveLineDown(value);
-      expect(value.selection, const TextSelection.collapsed(7));
+      expect(value.selection, const TextSelection.collapsed(offset: 7));
     });
 
     test('line start and end stay on the current line', () {
       var value = TextEditingValue(
         text: 'hello\nworld',
-        selection: const TextSelection.collapsed(8),
+        selection: const TextSelection.collapsed(offset: 8),
       );
 
       value = TextEditingModel.moveToLineStart(value);
-      expect(value.selection, const TextSelection.collapsed(6));
+      expect(value.selection, const TextSelection.collapsed(offset: 6));
 
       value = TextEditingModel.moveToLineEnd(value);
-      expect(value.selection, const TextSelection.collapsed(11));
+      expect(value.selection, const TextSelection.collapsed(offset: 11));
     });
 
     test('line movement can extend a range', () {
       final value = TextEditingModel.moveLineDown(
         TextEditingValue(
           text: 'ab\ncd',
-          selection: const TextSelection.collapsed(0),
+          selection: const TextSelection.collapsed(offset: 0),
         ),
         extend: true,
       );

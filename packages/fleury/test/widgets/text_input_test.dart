@@ -32,7 +32,7 @@ void main() {
       tester.type('h');
       tester.type('i');
       expect(controller.text, 'hi');
-      expect(controller.selection, 2);
+      expect(controller.caretOffset, 2);
     });
 
     testWidgets('cursor advances with every character', (tester) {
@@ -40,9 +40,9 @@ void main() {
       tester.pumpWidget(TextInput(controller: controller, autofocus: true));
 
       tester.type('a');
-      expect(controller.selection, 1);
+      expect(controller.caretOffset, 1);
       tester.type('b');
-      expect(controller.selection, 2);
+      expect(controller.caretOffset, 2);
     });
   });
 
@@ -53,20 +53,20 @@ void main() {
 
       tester.sendKey(_code(KeyCode.backspace));
       expect(controller.text, 'hell');
-      expect(controller.selection, 4);
+      expect(controller.caretOffset, 4);
     });
 
     testWidgets('arrow chords move the cursor', (tester) {
       final controller = TextEditingController(text: 'abc');
       tester.pumpWidget(TextInput(controller: controller, autofocus: true));
-      expect(controller.selection, 3);
+      expect(controller.caretOffset, 3);
 
       tester.sendKey(_code(KeyCode.arrowLeft));
-      expect(controller.selection, 2);
+      expect(controller.caretOffset, 2);
       tester.sendKey(_code(KeyCode.home));
-      expect(controller.selection, 0);
+      expect(controller.caretOffset, 0);
       tester.sendKey(_code(KeyCode.end));
-      expect(controller.selection, 3);
+      expect(controller.caretOffset, 3);
     });
 
     testWidgets('horizontal arrows bubble at text edges for focus traversal', (
@@ -92,7 +92,7 @@ void main() {
       );
 
       tester.render(size: const CellSize(20, 3));
-      expect(controller.selection, 3);
+      expect(controller.caretOffset, 3);
 
       tester.sendKey(_code(KeyCode.arrowRight));
       tester.pump();
@@ -105,14 +105,14 @@ void main() {
       tester.pumpWidget(TextInput(controller: controller, autofocus: true));
 
       tester.sendKey(_code(KeyCode.arrowLeft));
-      expect(controller.selection, 3);
+      expect(controller.caretOffset, 3);
       tester.sendKey(_code(KeyCode.backspace));
       expect(controller.text, 'ab');
-      expect(controller.selection, 1);
+      expect(controller.caretOffset, 1);
     });
 
     testWidgets('Shift+arrows extend and render a selection range', (tester) {
-      final controller = TextEditingController(text: 'abcd')..selection = 1;
+      final controller = TextEditingController(text: 'abcd')..caretOffset = 1;
       tester.pumpWidget(
         TextInput(controller: controller, autofocus: true, enableBlink: false),
       );
@@ -121,7 +121,7 @@ void main() {
       tester.sendKey(_shiftCode(KeyCode.arrowRight));
 
       expect(
-        controller.textSelection,
+        controller.selection,
         const TextSelection(baseOffset: 1, extentOffset: 3),
       );
       final buf = tester.render(size: const CellSize(6, 1));
@@ -132,11 +132,11 @@ void main() {
 
       tester.type('X');
       expect(controller.text, 'aXd');
-      expect(controller.textSelection, const TextSelection.collapsed(2));
+      expect(controller.selection, const TextSelection.collapsed(offset: 2));
     });
 
     testWidgets('keymap presets can add Emacs-style movement', (tester) {
-      final controller = TextEditingController(text: 'abc')..selection = 3;
+      final controller = TextEditingController(text: 'abc')..caretOffset = 3;
       tester.pumpWidget(
         TextInput(
           controller: controller,
@@ -146,17 +146,17 @@ void main() {
       );
 
       tester.sendKey(_ctrlChar('a'));
-      expect(controller.selection, 0);
+      expect(controller.caretOffset, 0);
 
       tester.sendKey(_ctrlChar('e'));
-      expect(controller.selection, 3);
+      expect(controller.caretOffset, 3);
     });
 
     testWidgets('emacs kill ring: Ctrl+K kills to end, Ctrl+Y yanks back', (
       tester,
     ) {
       final controller = TextEditingController(text: 'hello world')
-        ..selection = 5;
+        ..caretOffset = 5;
       tester.pumpWidget(
         TextInput(
           controller: controller,
@@ -169,14 +169,14 @@ void main() {
       expect(TextEditingModel.killRing, ' world');
       tester.sendKey(_ctrlChar('y')); // yank it back at the caret
       expect(controller.text, 'hello world');
-      expect(controller.selection, 11);
+      expect(controller.caretOffset, 11);
     });
 
     testWidgets('emacs Ctrl+W kills the previous word; Ctrl+U to line start', (
       tester,
     ) {
       final controller = TextEditingController(text: 'one two three')
-        ..selection = 13;
+        ..caretOffset = 13;
       tester.pumpWidget(
         TextInput(
           controller: controller,
@@ -194,7 +194,7 @@ void main() {
       tester,
     ) {
       final controller = TextEditingController(text: 'run deploy now')
-        ..selection = 14;
+        ..caretOffset = 14;
       tester.pumpWidget(TextInput(controller: controller, autofocus: true));
 
       tester.sendKey(
@@ -203,7 +203,7 @@ void main() {
           modifiers: {KeyModifier.ctrl},
         ),
       );
-      expect(controller.selection, 11);
+      expect(controller.caretOffset, 11);
 
       tester.sendKey(
         const KeyEvent(
@@ -212,7 +212,7 @@ void main() {
         ),
       );
       expect(
-        controller.textSelection,
+        controller.selection,
         const TextSelection(baseOffset: 11, extentOffset: 4),
       );
     });
@@ -289,7 +289,7 @@ void main() {
 
       tester.sendKey(_code(KeyCode.arrowUp));
       expect(controller.text, 'two');
-      expect(controller.selection, 3);
+      expect(controller.caretOffset, 3);
       expect(history.isBrowsing, isTrue);
       expect(history.selectedIndex, 1);
 
@@ -431,7 +431,7 @@ void main() {
       tester.sendKey(_code(KeyCode.tab));
 
       expect(controller.text, 'git checkout');
-      expect(controller.textSelection, const TextSelection.collapsed(12));
+      expect(controller.selection, const TextSelection.collapsed(offset: 12));
       expect(completions.isOpen, isFalse);
 
       tester.sendKey(_ctrlChar('z'));
@@ -975,10 +975,10 @@ void main() {
       tester.paste('YZ');
       tester.sendKey(_code(KeyCode.backspace));
       expect(controller.text, 'abc');
-      expect(controller.selection, 3);
+      expect(controller.caretOffset, 3);
 
       tester.sendKey(_code(KeyCode.arrowLeft));
-      expect(controller.selection, 2);
+      expect(controller.caretOffset, 2);
     });
 
     testWidgets('disabled field does not autofocus or edit', (tester) {
@@ -1032,7 +1032,7 @@ void main() {
   group('copy and cut', () {
     testWidgets('Ctrl+C copies selected text', (tester) async {
       final controller = TextEditingController(text: 'abcdef')
-        ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 4);
+        ..selection = const TextSelection(baseOffset: 1, extentOffset: 4);
       tester.pumpWidget(TextInput(controller: controller, autofocus: true));
 
       tester.sendKey(_ctrlChar('c'));
@@ -1044,7 +1044,7 @@ void main() {
 
     testWidgets('Ctrl+X cuts selected text when editable', (tester) async {
       final controller = TextEditingController(text: 'abcdef')
-        ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 4);
+        ..selection = const TextSelection(baseOffset: 1, extentOffset: 4);
       tester.pumpWidget(TextInput(controller: controller, autofocus: true));
 
       tester.sendKey(_ctrlChar('x'));
@@ -1052,7 +1052,7 @@ void main() {
 
       expect(tester.clipboard.readInProcess(), 'bcd');
       expect(controller.text, 'aef');
-      expect(controller.textSelection, const TextSelection.collapsed(1));
+      expect(controller.selection, const TextSelection.collapsed(offset: 1));
     });
 
     testWidgets('Ctrl+C bubbles when there is no field selection', (tester) {
@@ -1108,7 +1108,7 @@ void main() {
     ) async {
       var ancestorCopies = 0;
       final controller = TextEditingController(text: 'abcdef')
-        ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 4);
+        ..selection = const TextSelection(baseOffset: 1, extentOffset: 4);
       tester.pumpWidget(
         KeyBindings(
           bindings: [
@@ -1133,7 +1133,7 @@ void main() {
       tester,
     ) async {
       final controller = TextEditingController(text: 'secret')
-        ..textSelection = const TextSelection(baseOffset: 0, extentOffset: 6);
+        ..selection = const TextSelection(baseOffset: 0, extentOffset: 6);
       tester.pumpWidget(
         TextInput(
           controller: controller,
@@ -1151,7 +1151,7 @@ void main() {
 
     testWidgets('readOnly field can copy but not cut', (tester) async {
       final controller = TextEditingController(text: 'abcdef')
-        ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 4);
+        ..selection = const TextSelection(baseOffset: 1, extentOffset: 4);
       tester.pumpWidget(
         TextInput(controller: controller, autofocus: true, readOnly: true),
       );
@@ -1263,7 +1263,7 @@ void main() {
 
     testWidgets('keeps the active end of a selection visible', (tester) {
       final controller = TextEditingController(text: 'abcdefgh')
-        ..textSelection = const TextSelection(baseOffset: 3, extentOffset: 8);
+        ..selection = const TextSelection(baseOffset: 3, extentOffset: 8);
       tester.pumpWidget(
         TextInput(controller: controller, autofocus: true, enableBlink: false),
       );

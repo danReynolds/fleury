@@ -164,7 +164,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
     final text = _display(option);
     _justPicked = text; // set before mutating text so _onChange suppresses
     _controller.text = text;
-    _controller.selection = text.length;
+    _controller.caretOffset = text.length;
     _close();
     widget.onSelect?.call(option);
   }

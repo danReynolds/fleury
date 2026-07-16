@@ -12,13 +12,15 @@ void main() {
     test('default empty text and cursor at 0', () {
       final c = TextEditingController();
       expect(c.text, '');
-      expect(c.selection, 0);
+      expect(c.caretOffset, 0);
+      expect(c.selection, const TextSelection.collapsed(offset: 0));
     });
 
     test('initial text puts cursor at end', () {
       final c = TextEditingController(text: 'hello');
       expect(c.text, 'hello');
-      expect(c.selection, 5);
+      expect(c.caretOffset, 5);
+      expect(c.selection, const TextSelection.collapsed(offset: 5));
     });
   });
 
@@ -36,9 +38,9 @@ void main() {
 
     test('clamps selection to new length', () {
       final c = TextEditingController(text: 'hello');
-      expect(c.selection, 5);
+      expect(c.caretOffset, 5);
       c.text = 'hi';
-      expect(c.selection, 2);
+      expect(c.caretOffset, 2);
     });
 
     test('no-op on identical text', () {
@@ -51,20 +53,54 @@ void main() {
   });
 
   group('selection setter', () {
+    test('round-trips directional ranges and exposes the active edge', () {
+      final c = TextEditingController(text: 'abcd');
+
+      c.selection = const TextSelection(baseOffset: 1, extentOffset: 3);
+      expect(c.selection, const TextSelection(baseOffset: 1, extentOffset: 3));
+      expect(c.caretOffset, 3);
+
+      c.selection = const TextSelection(baseOffset: 3, extentOffset: 1);
+      expect(c.selection, const TextSelection(baseOffset: 3, extentOffset: 1));
+      expect(c.caretOffset, 1);
+    });
+
     test('clamps to text bounds', () {
       final c = TextEditingController(text: 'abc');
-      c.selection = 99;
-      expect(c.selection, 3);
-      c.selection = -1;
-      expect(c.selection, 0);
+      c.caretOffset = 99;
+      expect(c.caretOffset, 3);
+      c.caretOffset = -1;
+      expect(c.caretOffset, 0);
     });
 
     test('notifies on change', () {
       final c = TextEditingController(text: 'abc');
-      c.selection = 0;
+      c.caretOffset = 0;
       var fires = 0;
       c.addListener(() => fires += 1);
-      c.selection = 1;
+      c.caretOffset = 1;
+      expect(fires, 1);
+    });
+
+    test('caretOffset collapses and snaps to grapheme boundaries', () {
+      final c = TextEditingController(text: 'a🙂b')
+        ..selection = const TextSelection(baseOffset: 0, extentOffset: 4);
+
+      c.caretOffset = 2;
+
+      expect(c.selection, const TextSelection.collapsed(offset: 3));
+      expect(c.caretOffset, 3);
+    });
+
+    test('range writes snap both edges without losing direction', () {
+      final c = TextEditingController(text: 'a🙂b');
+      var fires = 0;
+      c.addListener(() => fires += 1);
+
+      c.selection = const TextSelection(baseOffset: 99, extentOffset: 2);
+
+      expect(c.selection, const TextSelection(baseOffset: 4, extentOffset: 3));
+      expect(c.caretOffset, 3);
       expect(fires, 1);
     });
   });
@@ -72,10 +108,10 @@ void main() {
   group('insert', () {
     test('inserts at cursor and advances', () {
       final c = TextEditingController(text: 'hello');
-      c.selection = 2; // h e | l l o
+      c.caretOffset = 2; // h e | l l o
       c.insert('X');
       expect(c.text, 'heXllo');
-      expect(c.selection, 3);
+      expect(c.caretOffset, 3);
     });
 
     test('empty insert is a no-op', () {
@@ -90,7 +126,7 @@ void main() {
     test('multi-char insert advances by length', () {
       final c = TextEditingController()..insert('hello');
       expect(c.text, 'hello');
-      expect(c.selection, 5);
+      expect(c.caretOffset, 5);
     });
   });
 
@@ -99,11 +135,11 @@ void main() {
       final c = TextEditingController(text: 'hello'); // cursor at 5
       c.backspace();
       expect(c.text, 'hell');
-      expect(c.selection, 4);
+      expect(c.caretOffset, 4);
     });
 
     test('no-op at the start', () {
-      final c = TextEditingController(text: 'hi')..selection = 0;
+      final c = TextEditingController(text: 'hi')..caretOffset = 0;
       var fires = 0;
       c.addListener(() => fires += 1);
       c.backspace();
@@ -112,19 +148,19 @@ void main() {
     });
 
     test('deletes an emoji as one character', () {
-      final c = TextEditingController(text: 'a🙂b')..selection = 3;
+      final c = TextEditingController(text: 'a🙂b')..caretOffset = 3;
       c.backspace();
       expect(c.text, 'ab');
-      expect(c.selection, 1);
+      expect(c.caretOffset, 1);
     });
   });
 
   group('delete', () {
     test('deletes the character after the cursor', () {
-      final c = TextEditingController(text: 'hello')..selection = 1;
+      final c = TextEditingController(text: 'hello')..caretOffset = 1;
       c.delete();
       expect(c.text, 'hllo');
-      expect(c.selection, 1);
+      expect(c.caretOffset, 1);
     });
 
     test('no-op at the end', () {
@@ -137,85 +173,82 @@ void main() {
     });
 
     test('deletes a combining sequence as one character', () {
-      final c = TextEditingController(text: 'e\u0301x')..selection = 0;
+      final c = TextEditingController(text: 'e\u0301x')..caretOffset = 0;
       c.delete();
       expect(c.text, 'x');
-      expect(c.selection, 0);
+      expect(c.caretOffset, 0);
     });
   });
 
   group('cursor movement', () {
     test('left / right / start / end', () {
-      final c = TextEditingController(text: 'abc')..selection = 1;
+      final c = TextEditingController(text: 'abc')..caretOffset = 1;
       c.moveCursorLeft();
-      expect(c.selection, 0);
+      expect(c.caretOffset, 0);
       c.moveCursorRight();
       c.moveCursorRight();
-      expect(c.selection, 2);
+      expect(c.caretOffset, 2);
       c.moveCursorToEnd();
-      expect(c.selection, 3);
+      expect(c.caretOffset, 3);
       c.moveCursorToStart();
-      expect(c.selection, 0);
+      expect(c.caretOffset, 0);
     });
 
     test('movement at boundaries is a no-op', () {
-      final c = TextEditingController(text: 'a')..selection = 0;
+      final c = TextEditingController(text: 'a')..caretOffset = 0;
       var fires = 0;
       c.addListener(() => fires += 1);
       c.moveCursorLeft();
       expect(fires, 0);
-      c.selection = 1;
+      c.caretOffset = 1;
       fires = 0;
       c.moveCursorRight();
       expect(fires, 0);
     });
 
     test('left and right movement snap across grapheme clusters', () {
-      final c = TextEditingController(text: 'a🙂b')..selection = 3;
+      final c = TextEditingController(text: 'a🙂b')..caretOffset = 3;
       c.moveCursorLeft();
-      expect(c.selection, 1);
+      expect(c.caretOffset, 1);
       c.moveCursorRight();
-      expect(c.selection, 3);
+      expect(c.caretOffset, 3);
     });
 
     test('extended movement creates a range selection', () {
-      final c = TextEditingController(text: 'abcd')..selection = 1;
+      final c = TextEditingController(text: 'abcd')..caretOffset = 1;
       c.moveCursorRight(extend: true);
       c.moveCursorRight(extend: true);
-      expect(
-        c.textSelection,
-        const TextSelection(baseOffset: 1, extentOffset: 3),
-      );
+      expect(c.selection, const TextSelection(baseOffset: 1, extentOffset: 3));
 
       c.moveCursorLeft();
-      expect(c.textSelection, const TextSelection.collapsed(1));
+      expect(c.selection, const TextSelection.collapsed(offset: 1));
     });
   });
 
   group('range replacement', () {
     test('typing replaces selected text', () {
       final c = TextEditingController(text: 'abcd')
-        ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 3);
+        ..selection = const TextSelection(baseOffset: 1, extentOffset: 3);
 
       c.insert('X');
 
       expect(c.text, 'aXd');
-      expect(c.textSelection, const TextSelection.collapsed(2));
+      expect(c.selection, const TextSelection.collapsed(offset: 2));
     });
 
     test('backspace deletes selected text', () {
       final c = TextEditingController(text: 'abcd')
-        ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 3);
+        ..selection = const TextSelection(baseOffset: 1, extentOffset: 3);
 
       c.backspace();
 
       expect(c.text, 'ad');
-      expect(c.textSelection, const TextSelection.collapsed(1));
+      expect(c.selection, const TextSelection.collapsed(offset: 1));
     });
 
     test('selectedText returns a normalized range', () {
       final c = TextEditingController(text: 'abcd')
-        ..textSelection = const TextSelection(baseOffset: 3, extentOffset: 1);
+        ..selection = const TextSelection(baseOffset: 3, extentOffset: 1);
 
       expect(c.hasSelection, isTrue);
       expect(c.selectedText, 'bc');
@@ -223,12 +256,12 @@ void main() {
 
     test('deleteSelection deletes the selected range', () {
       final c = TextEditingController(text: 'abcd')
-        ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 3);
+        ..selection = const TextSelection(baseOffset: 1, extentOffset: 3);
 
       c.deleteSelection();
 
       expect(c.text, 'ad');
-      expect(c.textSelection, const TextSelection.collapsed(1));
+      expect(c.selection, const TextSelection.collapsed(offset: 1));
     });
 
     test('replaceRange is undoable', () {
@@ -237,11 +270,11 @@ void main() {
       c.replaceRange(const TextRange(start: 4, end: 7), 'checkout');
 
       expect(c.text, 'git checkout');
-      expect(c.textSelection, const TextSelection.collapsed(12));
+      expect(c.selection, const TextSelection.collapsed(offset: 12));
 
       c.undo();
       expect(c.text, 'git che');
-      expect(c.textSelection, const TextSelection.collapsed(7));
+      expect(c.selection, const TextSelection.collapsed(offset: 7));
     });
   });
 
@@ -256,12 +289,12 @@ void main() {
 
       c.undo();
       expect(c.text, 'a');
-      expect(c.textSelection, const TextSelection.collapsed(1));
+      expect(c.selection, const TextSelection.collapsed(offset: 1));
       expect(c.canRedo, isTrue);
 
       c.redo();
       expect(c.text, 'ab');
-      expect(c.textSelection, const TextSelection.collapsed(2));
+      expect(c.selection, const TextSelection.collapsed(offset: 2));
     });
 
     test('new edits clear the redo stack', () {
@@ -297,11 +330,11 @@ void main() {
 
       c.undo();
       expect(c.text, '');
-      expect(c.textSelection, const TextSelection.collapsed(0));
+      expect(c.selection, const TextSelection.collapsed(offset: 0));
 
       c.redo();
       expect(c.text, 'abc');
-      expect(c.textSelection, const TextSelection.collapsed(3));
+      expect(c.selection, const TextSelection.collapsed(offset: 3));
     });
 
     test('cursor movement breaks typed insert coalescing', () {
@@ -314,11 +347,11 @@ void main() {
       expect(c.text, 'aXb');
       c.undo();
       expect(c.text, 'ab');
-      expect(c.textSelection, const TextSelection.collapsed(1));
+      expect(c.selection, const TextSelection.collapsed(offset: 1));
 
       c.undo();
       expect(c.text, '');
-      expect(c.textSelection, const TextSelection.collapsed(0));
+      expect(c.selection, const TextSelection.collapsed(offset: 0));
     });
 
     test('paste is one undo step and does not coalesce with typing', () {
@@ -329,11 +362,11 @@ void main() {
       expect(c.text, 'ab c');
       c.undo();
       expect(c.text, 'a');
-      expect(c.textSelection, const TextSelection.collapsed(1));
+      expect(c.selection, const TextSelection.collapsed(offset: 1));
 
       c.redo();
       expect(c.text, 'ab c');
-      expect(c.textSelection, const TextSelection.collapsed(4));
+      expect(c.selection, const TextSelection.collapsed(offset: 4));
     });
 
     test('coalesced paste chunks undo as one paste operation', () {
@@ -346,7 +379,7 @@ void main() {
 
       c.undo();
       expect(c.text, '');
-      expect(c.textSelection, const TextSelection.collapsed(0));
+      expect(c.selection, const TextSelection.collapsed(offset: 0));
     });
   });
 
@@ -357,7 +390,7 @@ void main() {
       c.updateComposingText('che', singleLine: true);
 
       expect(c.text, 'git che');
-      expect(c.textSelection, const TextSelection.collapsed(7));
+      expect(c.selection, const TextSelection.collapsed(offset: 7));
       expect(c.composing, const TextRange(start: 4, end: 7));
       expect(c.hasComposingRange, isTrue);
       expect(c.canUndo, isFalse);
@@ -365,7 +398,7 @@ void main() {
       c.updateComposingText('checkout', singleLine: true);
 
       expect(c.text, 'git checkout');
-      expect(c.textSelection, const TextSelection.collapsed(12));
+      expect(c.selection, const TextSelection.collapsed(offset: 12));
       expect(c.composing, const TextRange(start: 4, end: 12));
       expect(c.canUndo, isFalse);
     });
@@ -383,14 +416,14 @@ void main() {
 
       c.undo();
       expect(c.text, 'git ');
-      expect(c.textSelection, const TextSelection.collapsed(4));
+      expect(c.selection, const TextSelection.collapsed(offset: 4));
       expect(c.composing, TextRange.empty);
       expect(c.canUndo, isFalse);
       expect(c.canRedo, isTrue);
 
       c.redo();
       expect(c.text, 'git checkout');
-      expect(c.textSelection, const TextSelection.collapsed(12));
+      expect(c.selection, const TextSelection.collapsed(offset: 12));
       expect(c.composing, TextRange.empty);
     });
 
@@ -405,7 +438,7 @@ void main() {
 
       c.undo();
       expect(c.text, '');
-      expect(c.textSelection, const TextSelection.collapsed(0));
+      expect(c.selection, const TextSelection.collapsed(offset: 0));
     });
 
     test('cancelComposing restores the pre-composition value', () {
@@ -415,7 +448,7 @@ void main() {
       c.cancelComposing();
 
       expect(c.text, 'git ');
-      expect(c.textSelection, const TextSelection.collapsed(4));
+      expect(c.selection, const TextSelection.collapsed(offset: 4));
       expect(c.composing, TextRange.empty);
       expect(c.canUndo, isFalse);
     });
@@ -427,7 +460,7 @@ void main() {
       c.clearComposing();
 
       expect(c.text, 'run deploy');
-      expect(c.textSelection, const TextSelection.collapsed(10));
+      expect(c.selection, const TextSelection.collapsed(offset: 10));
       expect(c.composing, TextRange.empty);
       expect(c.canUndo, isFalse);
     });
@@ -462,7 +495,7 @@ void main() {
       c.undo();
 
       expect(c.text, 'run ');
-      expect(c.textSelection, const TextSelection.collapsed(4));
+      expect(c.selection, const TextSelection.collapsed(offset: 4));
       expect(c.composing, TextRange.empty);
       expect(c.canRedo, isFalse);
     });
@@ -500,11 +533,11 @@ void main() {
       final previous = history.navigatePrevious(
         TextEditingValue(
           text: 'draft',
-          selection: const TextSelection.collapsed(2),
+          selection: const TextSelection.collapsed(offset: 2),
         ),
       );
       expect(previous?.text, 'two');
-      expect(previous?.selection, const TextSelection.collapsed(3));
+      expect(previous?.selection, const TextSelection.collapsed(offset: 3));
       expect(history.isBrowsing, isTrue);
       expect(history.selectedIndex, 1);
       expect(history.draft, 'draft');
@@ -526,7 +559,7 @@ void main() {
 
       final restored = history.navigateNext();
       expect(restored?.text, 'draft');
-      expect(restored?.selection, const TextSelection.collapsed(5));
+      expect(restored?.selection, const TextSelection.collapsed(offset: 5));
       expect(history.isBrowsing, isFalse);
       expect(history.navigateNext(), isNull);
     });
@@ -591,7 +624,7 @@ void main() {
       c.addListener(() => fires += 1);
       c.clear();
       expect(c.text, '');
-      expect(c.selection, 0);
+      expect(c.caretOffset, 0);
       expect(fires, 1);
     });
 
@@ -629,9 +662,9 @@ void main() {
         _stateError(message),
       );
       expect(() => c.text = 'reset', _stateError(message));
-      expect(() => c.selection = 1, _stateError(message));
+      expect(() => c.caretOffset = 1, _stateError(message));
       expect(
-        () => c.textSelection = const TextSelection.collapsed(1),
+        () => c.selection = const TextSelection.collapsed(offset: 1),
         _stateError(message),
       );
       expect(() => c.insert('!'), _stateError(message));

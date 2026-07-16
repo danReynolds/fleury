@@ -1125,7 +1125,7 @@ class _TextControlEditorState extends State<_TextControlEditor> {
     _updating = true;
     _controller
       ..text = widget.value
-      ..selection = widget.value.length;
+      ..caretOffset = widget.value.length;
     _updating = false;
   }
 

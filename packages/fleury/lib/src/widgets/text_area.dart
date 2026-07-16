@@ -681,8 +681,8 @@ class _TextAreaState extends State<TextArea>
           SemanticAction.copy,
       },
       state: SemanticState({
-        'selectionBase': _controller.textSelection.baseOffset,
-        'selectionExtent': _controller.textSelection.extentOffset,
+        'selectionBase': _controller.selection.baseOffset,
+        'selectionExtent': _controller.selection.extentOffset,
         'composingActive': _controller.hasComposingRange,
         'composingStart': _controller.composing.normalizedStart,
         'composingEnd': _controller.composing.normalizedEnd,
@@ -707,7 +707,7 @@ class _TextAreaState extends State<TextArea>
         child: _TextAreaDisplay(
           focusNode: _focusNode,
           text: _controller.text,
-          selection: _controller.textSelection,
+          selection: _controller.selection,
           placeholder: widget.placeholder,
           placeholderStyle: widget.enabled
               ? widget.placeholderStyle

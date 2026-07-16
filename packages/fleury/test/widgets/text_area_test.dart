@@ -60,31 +60,31 @@ void main() {
   testWidgets('Up/Down move between lines, preserving the column', (tester) {
     final ctl = TextEditingController(text: 'abcd\nxy\nwxyz');
     // Put the cursor at column 3 on the last line (index 8 + 3 = 11).
-    ctl.selection = 11;
+    ctl.caretOffset = 11;
     tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
 
     tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
     // Middle line "xy" is only length 2 → column clamps to end (index 7).
-    expect(ctl.selection, 7);
+    expect(ctl.caretOffset, 7);
 
     tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
     // First line "abcd": the preserved column came from "xy" (col 2) → 2.
-    expect(ctl.selection, 2);
+    expect(ctl.caretOffset, 2);
   });
 
   testWidgets('Home/End move within the current line', (tester) {
     final ctl = TextEditingController(text: 'hello\nworld');
-    ctl.selection = 8; // "wo|rld"
+    ctl.caretOffset = 8; // "wo|rld"
     tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
 
     tester.sendKey(const KeyEvent(keyCode: KeyCode.home));
-    expect(ctl.selection, 6, reason: 'start of "world"');
+    expect(ctl.caretOffset, 6, reason: 'start of "world"');
     tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
-    expect(ctl.selection, 11, reason: 'end of "world"');
+    expect(ctl.caretOffset, 11, reason: 'end of "world"');
   });
 
   testWidgets('keymap presets can add Emacs-style line movement', (tester) {
-    final ctl = TextEditingController(text: 'one\ntwo')..selection = 7;
+    final ctl = TextEditingController(text: 'one\ntwo')..caretOffset = 7;
     tester.pumpWidget(
       TextArea(
         controller: ctl,
@@ -94,23 +94,20 @@ void main() {
     );
 
     tester.sendKey(_ctrlChar('a'));
-    expect(ctl.selection, 4);
+    expect(ctl.caretOffset, 4);
 
     tester.sendKey(_ctrlChar('e'));
-    expect(ctl.selection, 7);
+    expect(ctl.caretOffset, 7);
   });
 
   testWidgets('Shift+arrows extend and render a selection range', (tester) {
-    final ctl = TextEditingController(text: 'ab\ncd')..selection = 0;
+    final ctl = TextEditingController(text: 'ab\ncd')..caretOffset = 0;
     tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
 
     tester.sendKey(_shiftCode(KeyCode.arrowRight));
     tester.sendKey(_shiftCode(KeyCode.arrowRight));
 
-    expect(
-      ctl.textSelection,
-      const TextSelection(baseOffset: 0, extentOffset: 2),
-    );
+    expect(ctl.selection, const TextSelection(baseOffset: 0, extentOffset: 2));
     final buf = tester.render(size: const CellSize(4, 2));
     expect(buf.atColRow(0, 0).style.inverse, isTrue);
     expect(buf.atColRow(1, 0).style.inverse, isTrue);
@@ -118,19 +115,16 @@ void main() {
 
     tester.type('X');
     expect(ctl.text, 'X\ncd');
-    expect(ctl.textSelection, const TextSelection.collapsed(1));
+    expect(ctl.selection, const TextSelection.collapsed(offset: 1));
   });
 
   testWidgets('Shift+Down extends by grapheme column across lines', (tester) {
-    final ctl = TextEditingController(text: 'ab\ncd')..selection = 0;
+    final ctl = TextEditingController(text: 'ab\ncd')..caretOffset = 0;
     tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
 
     tester.sendKey(_shiftCode(KeyCode.arrowDown));
 
-    expect(
-      ctl.textSelection,
-      const TextSelection(baseOffset: 0, extentOffset: 3),
-    );
+    expect(ctl.selection, const TextSelection(baseOffset: 0, extentOffset: 3));
   });
 
   testWidgets('Ctrl+Z and Ctrl+Y undo and redo multiline edits', (tester) {
@@ -152,7 +146,7 @@ void main() {
     tester,
   ) {
     final ctl = TextEditingController(text: 'ab\ncd');
-    ctl.selection = 3; // just after the newline, before "cd"
+    ctl.caretOffset = 3; // just after the newline, before "cd"
     tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
     tester.sendKey(const KeyEvent(keyCode: KeyCode.backspace));
     expect(ctl.text, 'abcd');
@@ -160,18 +154,18 @@ void main() {
 
   testWidgets('Home/Up at the very start are safe no-ops', (tester) {
     final ctl = TextEditingController(text: 'abc');
-    ctl.selection = 0; // cursor at index 0
+    ctl.caretOffset = 0; // cursor at index 0
     tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
     // These compute the line start from index 0 — must not throw.
     tester.sendKey(const KeyEvent(keyCode: KeyCode.home));
     tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
     tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-    expect(ctl.selection, isNonNegative);
+    expect(ctl.caretOffset, isNonNegative);
   });
 
   testWidgets('scrolls to keep the cursor line visible', (tester) {
     final ctl = TextEditingController(text: 'r0\nr1\nr2\nr3\nr4');
-    ctl.selection = ctl.text.length; // cursor on r4
+    ctl.caretOffset = ctl.text.length; // cursor on r4
     tester.pumpWidget(
       SizedBox(height: 3, child: TextArea(controller: ctl, autofocus: true)),
     );
@@ -184,7 +178,7 @@ void main() {
       final focusNode = FocusNode(debugLabel: 'area-caret');
       addTearDown(focusNode.dispose);
       final ctl = TextEditingController(text: 'r0\nr1\nr2\nr3\nr4')
-        ..selection = 'r0\nr1\nr2\nr3\nr4'.length;
+        ..caretOffset = 'r0\nr1\nr2\nr3\nr4'.length;
       tester.pumpWidget(
         SizedBox(
           width: 4,
@@ -247,7 +241,7 @@ void main() {
 
     testWidgets('keeps the active end of a selection visible', (tester) {
       final ctl = TextEditingController(text: 'abcdefgh')
-        ..textSelection = const TextSelection(baseOffset: 3, extentOffset: 8);
+        ..selection = const TextSelection(baseOffset: 3, extentOffset: 8);
       tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
 
       final buf = tester.render(size: const CellSize(5, 1));
@@ -639,7 +633,7 @@ void main() {
       expect(ctl.text, 'ab\ncd');
 
       tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
-      expect(ctl.selection, ctl.text.length - 1);
+      expect(ctl.caretOffset, ctl.text.length - 1);
     });
 
     testWidgets('disabled area does not autofocus or edit', (tester) {
@@ -663,7 +657,7 @@ void main() {
   group('copy and cut', () {
     testWidgets('Ctrl+C copies selected multiline text', (tester) async {
       final ctl = TextEditingController(text: 'one\ntwo')
-        ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 5);
+        ..selection = const TextSelection(baseOffset: 1, extentOffset: 5);
       tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
 
       tester.sendKey(_ctrlChar('c'));
@@ -675,7 +669,7 @@ void main() {
 
     testWidgets('Ctrl+X cuts selected multiline text', (tester) async {
       final ctl = TextEditingController(text: 'one\ntwo')
-        ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 5);
+        ..selection = const TextSelection(baseOffset: 1, extentOffset: 5);
       tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
 
       tester.sendKey(_ctrlChar('x'));
@@ -683,14 +677,14 @@ void main() {
 
       expect(tester.clipboard.readInProcess(), 'ne\nt');
       expect(ctl.text, 'owo');
-      expect(ctl.textSelection, const TextSelection.collapsed(1));
+      expect(ctl.selection, const TextSelection.collapsed(offset: 1));
     });
 
     testWidgets('redacted policy preserves newlines without raw content', (
       tester,
     ) async {
       final ctl = TextEditingController(text: 'one\ntwo')
-        ..textSelection = const TextSelection(baseOffset: 1, extentOffset: 5);
+        ..selection = const TextSelection(baseOffset: 1, extentOffset: 5);
       tester.pumpWidget(
         TextArea(
           controller: ctl,
@@ -708,7 +702,7 @@ void main() {
     testWidgets('disabled policy blocks copy and bubbling', (tester) async {
       var ancestorCopies = 0;
       final ctl = TextEditingController(text: 'one')
-        ..textSelection = const TextSelection(baseOffset: 0, extentOffset: 3);
+        ..selection = const TextSelection(baseOffset: 0, extentOffset: 3);
       tester.pumpWidget(
         KeyBindings(
           bindings: [
@@ -911,7 +905,7 @@ void main() {
       // scroll math ran against the un-capped height and froze on l0/l1,
       // dropping the caret off-screen.
       final ctl = TextEditingController(text: 'l0\nl1\nl2\nl3\nl4')
-        ..selection = 14; // end of the text, on line l4
+        ..caretOffset = 14; // end of the text, on line l4
       tester.pumpWidget(
         Column(
           children: [
@@ -945,7 +939,7 @@ void main() {
       tester,
     ) {
       final ctl = TextEditingController(text: 'one\ntwo\nthree')
-        ..selection = 13; // end of the document
+        ..caretOffset = 13; // end of the document
       tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
 
       expect(
@@ -966,7 +960,7 @@ void main() {
         }),
         0,
       );
-      expect(ctl.selection, 7, reason: 'column clamps to the end of "two"');
+      expect(ctl.caretOffset, 7, reason: 'column clamps to the end of "two"');
 
       // An edit reassigns the text: exactly one new split, and the memoized
       // lines reflect the new document.

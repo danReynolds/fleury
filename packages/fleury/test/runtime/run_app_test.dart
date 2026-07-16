@@ -166,7 +166,7 @@ void main() {
       () async {
         final clipboard = InProcessClipboard();
         final controller = TextEditingController(text: 'copyme')
-          ..textSelection = const TextSelection(baseOffset: 0, extentOffset: 4);
+          ..selection = const TextSelection(baseOffset: 0, extentOffset: 4);
         final driver = FakeTerminalDriver();
         try {
           final future = runApp(
