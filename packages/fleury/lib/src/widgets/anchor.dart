@@ -79,7 +79,15 @@ class RenderAnchorBounds extends RenderObject
     // Screen coordinates: a Follower positions overlay content from this
     // rect in root/absolute space, so a scratch-local offset would misplace
     // dropdowns anchored inside composited subtrees.
-    _link.rect = CellRect(offset: screenOffset ?? offset, size: size);
+    final bounds = CellRect(offset: screenOffset ?? offset, size: size);
+    _link.rect = bounds;
+    if (RetainedPaintGeometryCapture.isActive) {
+      RetainedPaintGeometryCapture.record(
+        _replayBounds,
+        bounds,
+        clipRect: clipRect,
+      );
+    }
     _child?.paint(
       buffer,
       offset,
@@ -87,6 +95,14 @@ class RenderAnchorBounds extends RenderObject
       clipRect: clipRect,
     );
   }
+
+  // Stable callback retained by repaint boundaries. It deliberately reads the
+  // current link so swapping AnchorLink invalidates once without keeping the
+  // old link alive in a cached closure.
+  // ignore: prefer_function_declarations_over_variables
+  late final RetainedPaintGeometryCallback _replayBounds = (bounds, _) {
+    _link.rect = bounds;
+  };
 }
 
 /// Which side of the anchor a [Follower] places its child on.

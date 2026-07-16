@@ -5,6 +5,13 @@
 below), full methodology inventory across all packages, scored against
 TUI testing best practice.
 
+> Historical measurement snapshot. As of 2026-07-15, the previously missing
+> terminal tier exists: deterministic POSIX lifecycle and Windows handoff tests
+> cover mode ownership, startup signals, EOF, suspend, and handoff concurrency;
+> the PTY integration suite covers boot, resize, startup termination,
+> Ctrl+Z/`fg`, handoff, crash containment, and restoration. The counts and
+> coverage percentages below remain the original 2026-06-12 measurements.
+
 ## The numbers (measured, not estimated)
 
 | Package | Line coverage | Tests |
@@ -20,9 +27,9 @@ widgets 87.5%. The honest low spots:
 
 | Area / file | Coverage | Why |
 | --- | --- | --- |
-| `terminal/windows_driver.dart` | 12.7% | Windows APIs can't run on the dev host; Windows validation is deferred post-MVP by decision |
+| `terminal/windows_driver.dart` | 12.7% (historical) | Deterministic mode-planning, EOF, and handoff lifecycle paths are now covered off-host; real console behavior remains a Windows release-device check |
 | `runtime/run_tui.dart` | 59.1% | Real-terminal entry: signal handlers, suspend/resume, crash-restore paths — unreachable headless |
-| `terminal/posix_driver.dart` | ~0 (no unit suite) | Real-TTY code (termios, SIGWINCH/SIGTSTP); exercised daily by the benchmark harness but not by a test |
+| `terminal/posix_driver.dart` | ~0 (historical) | Now covered by deterministic lifecycle/signal suites and real-PTY integration; this row preserves the original coverage snapshot |
 | `widgets/key_bindings.dart` | 54.8% | Chord-sequence machinery partially covered |
 | `runtime` area overall | 67.9% | Dominated by run_tui + hot-reload paths |
 
@@ -49,34 +56,31 @@ What a strong TUI suite needs, and where fleury stands:
 | Lifecycle/leak discipline | rare | 34/34 disposal correctness; post-dispose mutation is a tested lifecycle error | **Strong** |
 | Perf regression gates | rare | web readiness gate + wire byte gate + oracle | **Beyond field** |
 | Multi-surface testing | textual-web (untested parity) | same scenarios on VM + real Chrome + parity oracle | **Strong** |
-| Untrusted-input fuzzing | rare but correct practice | only 2 seeded-RNG suites (ticker, renderer oracle); **input parser has 50 deterministic tests, zero fuzz** | **GAP** |
-| Real-PTY integration tests | teatest does this | **none as tests** — the benchmark harness exercises PTY daily, but boot/resize/suspend/crash-restore have no test | **GAP** |
+| Untrusted-input fuzzing | rare but correct practice | Seeded byte-soup coverage drives malformed/truncated CSI, OSC, paste, UTF-8, mouse, and ordinary text across randomized chunk boundaries, asserting no throw, bounded output, and recovery | **Strong** |
+| Real-PTY integration tests | teatest does this | Deterministic lifecycle seams plus a real-PTY suite cover boot, resize, startup termination, Ctrl+Z/`fg`, handoff, crash containment, and restoration | **Strong** |
 | Capability-matrix testing | none in field | capabilities detection tested; widgets not systematically tested under degraded profiles | **GAP** (pairs with GlyphTier) |
 | Coverage measurement + gate | standard | first measured today; no gate, no CI | **GAP** |
 
 Verdict: **the suite is genuinely strong — top of the field on
-methodology, with real coverage to back it** — and the gaps are
-specific, not systemic: the real-terminal seam (exactly the files
-headless tests can't reach), fuzzing, capability matrices, and the
+methodology, with real coverage to back it** — and the remaining gaps are
+specific, not systemic: capability matrices, platform-device checks, and the
 absence of a coverage gate.
 
 ## The plan
 
-**T1 — PTY integration suite (the one real hole).** We already own the
-machinery (`profiling/capture_pty.dart`, dart:ffi openpty). Add
-`test/integration/pty_test.dart` (tagged, on-demand + pre-release):
-spawn a small fixture on a real PTY and assert (a) boots and emits a
-first frame; (b) SIGWINCH resize repaints at the new size; (c) SIGTSTP
-suspend emits restore sequences and `fg` re-enters; (d) clean exit
-restores the terminal (mouse-mode resets present); (e) kill mid-frame
-still restores. This is what takes `run_tui`/`posix_driver` from
-"exercised by benchmarks" to "asserted by tests."
+**T1 — PTY integration suite — completed 2026-07-15.**
+`test/integration/pty_run_app_test.dart` uses the existing openpty harness to
+assert boot, resize, startup termination, Ctrl+Z/`fg`, child-process handoff,
+crash containment, and restoration. Deterministic POSIX and Windows lifecycle
+suites cover failure paths that are unsafe or platform-specific in the PTY
+harness. Real Windows console behavior and native IME/accessibility behavior
+remain release-device checks.
 
-**T2 — input-parser fuzz suite.** The parser is the untrusted-input
-surface. Seeded-RNG suite (the renderer-oracle pattern): random byte
-soup, truncated/malformed CSI/OSC/DCS, broken UTF-8, paste bombs —
-asserting no-throw, bounded event output, and parser-state recovery.
-Cheap; high assurance per line.
+**T2 — input-parser fuzz suite — completed 2026-07-15.** The parser's
+seeded-RNG suite mixes random bytes with truncated and malformed CSI/OSC,
+broken UTF-8, bracketed paste, SGR mouse, SS3, and ordinary text across random
+feed boundaries and idle flushes. It asserts no throw and bounded event output;
+focused deterministic cases assert parser-state recovery and paste bounds.
 
 **T3 — coverage made repeatable and floored.** A `fleury_dev coverage`
 verb encoding the per-directory recipe + JSON-count sanity check +
@@ -93,8 +97,8 @@ spot-check suite across ColorMode (and GlyphTier when it lands) via
 MediaQuery override, using storybook stories as fixtures — making
 degraded-terminal rendering an asserted contract, not a hope.
 
-Explicitly accepted, not planned: windows_driver stays at ~13% until
-the post-MVP Windows validation pass (testing it properly requires
-Windows CI); browser line-coverage for fleury_web (dart2js coverage
-tooling is not worth the complexity — the Chrome suite + parity oracle
-+ readiness gate carry that surface).
+Explicitly accepted: native Windows console and IME/accessibility checks remain
+release-device work rather than pretending an off-host test proves them;
+browser line coverage for fleury_web is still not worth the dart2js tooling
+complexity because the Chrome suite, parity oracle, and readiness gate carry
+that surface.

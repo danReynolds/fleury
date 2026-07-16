@@ -47,6 +47,7 @@ class WindowsTerminalDriver
 
   bool _active = false;
   bool _handoffActive = false;
+  Future<void> _handoffTail = Future<void>.value();
   TerminalMode? _mode;
   CellSize? _lastSize;
   bool _wroteEnterSequences = false;
@@ -116,7 +117,13 @@ class WindowsTerminalDriver
         _scheduleFlush();
       },
       onError: (Object error, StackTrace stack) {
-        _events.addError(error, stack);
+        if (!_events.isClosed) _events.addError(error, stack);
+      },
+      onDone: () {
+        _flushTimer?.cancel();
+        _flushTimer = null;
+        _parser.finish(_sink);
+        if (!_events.isClosed) unawaited(_events.close());
       },
       cancelOnError: false,
     );
@@ -152,8 +159,12 @@ class WindowsTerminalDriver
 
   void _setRawMode() {
     try {
-      _stdin.lineMode = false;
+      // Windows requires echo to be disabled while line input is still
+      // enabled; reversing this order can make the first setter fail and skip
+      // both changes. The native console-mode path below is authoritative,
+      // while these dart:io setters remain the detached/redirected fallback.
       _stdin.echoMode = false;
+      _stdin.lineMode = false;
     } on StdinException {
       // ignore - console may have detached
     }
@@ -177,42 +188,77 @@ class WindowsTerminalDriver
     final current = size;
     if (current == _lastSize) return;
     _lastSize = current;
-    _events.add(ResizeEvent(current));
+    if (!_events.isClosed) _events.add(ResizeEvent(current));
   }
 
   @override
   Future<T> runWithTerminalHandoff<T>(FutureOr<T> Function() operation) async {
-    final mode = _mode;
-    if (!_active || mode == null) return await operation();
+    if (Zone.current[this] == true) return await operation();
 
-    _handoffActive = true;
-    if (_wroteEnterSequences) {
-      _stdout.write(buildTerminalExitSequences(mode));
-    }
-    try {
-      await _stdout.flush();
-    } catch (_) {}
-    if (_changedStdin) _restoreCookedMode();
-    _restoreConsoleMode();
+    final previous = _handoffTail;
+    final release = Completer<void>();
+    _handoffTail = release.future;
 
+    var didHandoff = false;
+    var stdinPaused = false;
+    TerminalMode? handoffMode;
     try {
-      return await operation();
-    } finally {
-      if (_active && identical(_mode, mode)) {
-        _enableConsoleMode(mode);
-        if (_changedStdin) _setRawMode();
+      await previous;
+      try {
+        final mode = _mode;
+        if (!_active || mode == null) return await operation();
+        handoffMode = mode;
+        didHandoff = true;
+        _handoffActive = true;
+
+        final input = _stdinSubscription;
+        if (input != null) {
+          input.pause();
+          stdinPaused = true;
+        }
         if (_wroteEnterSequences) {
-          _stdout.write(buildTerminalEnterSequences(mode));
+          _stdout.write(buildTerminalExitSequences(mode));
         }
         try {
           await _stdout.flush();
         } catch (_) {}
-        _handoffActive = false;
-        _lastSize = size;
-        _events.add(ResizeEvent(_lastSize!));
-      } else {
-        _handoffActive = false;
+        if (_changedStdin) _restoreCookedMode();
+        _restoreConsoleMode();
+
+        return await runZoned(
+          () => Future<T>.sync(operation),
+          zoneValues: <Object?, Object?>{this: true},
+        );
+      } finally {
+        if (didHandoff) {
+          final mode = handoffMode!;
+          final shouldReenter = _active && identical(_mode, mode);
+          try {
+            if (shouldReenter) {
+              _enableConsoleMode(mode);
+              if (_changedStdin) _setRawMode();
+              if (_wroteEnterSequences) {
+                _stdout.write(buildTerminalEnterSequences(mode));
+              }
+              try {
+                await _stdout.flush();
+              } catch (_) {}
+              _lastSize = size;
+            }
+          } finally {
+            try {
+              if (stdinPaused) _stdinSubscription?.resume();
+            } finally {
+              _handoffActive = false;
+              if (shouldReenter && !_events.isClosed) {
+                _events.add(ResizeEvent(_lastSize ?? size));
+              }
+            }
+          }
+        }
       }
+    } finally {
+      if (!release.isCompleted) release.complete();
     }
   }
 
@@ -225,19 +271,24 @@ class WindowsTerminalDriver
       return;
     }
 
+    _active = false;
     _handoffActive = false;
     _flushTimer?.cancel();
     _flushTimer = null;
     _resizePollTimer?.cancel();
     _resizePollTimer = null;
 
-    await _stdinSubscription?.cancel();
+    try {
+      await _stdinSubscription?.cancel();
+    } catch (_) {}
     _stdinSubscription = null;
 
     if (_wroteEnterSequences) {
-      _stdout.write(
-        buildTerminalExitSequences(_mode ?? TerminalMode.interactive),
-      );
+      try {
+        _stdout.write(
+          buildTerminalExitSequences(_mode ?? TerminalMode.interactive),
+        );
+      } catch (_) {}
       _wroteEnterSequences = false;
     }
 
@@ -251,8 +302,8 @@ class WindowsTerminalDriver
     }
     _restoreConsoleMode();
 
-    _active = false;
     _mode = null;
+    _sink.target = null;
   }
 
   @override
@@ -327,7 +378,12 @@ WindowsConsoleModePlan planWindowsConsoleModes({
   int? desiredInputMode;
   var inputChanged = false;
   if (mode.rawInput && inputMode != null) {
-    desiredInputMode = inputMode | _enableVirtualTerminalInput;
+    desiredInputMode =
+        (inputMode | _enableVirtualTerminalInput | _enableExtendedFlags) &
+        ~(_enableProcessedInput |
+            _enableLineInput |
+            _enableEchoInput |
+            _enableQuickEditMode);
     inputChanged = desiredInputMode != inputMode;
   }
 
@@ -473,7 +529,8 @@ class _ParserSink implements TuiEventSink {
 
   @override
   void add(TuiEvent event) {
-    target?.add(event);
+    final controller = target;
+    if (controller != null && !controller.isClosed) controller.add(event);
   }
 }
 
@@ -485,3 +542,8 @@ const _enableProcessedOutput = 0x0001;
 const _enableVirtualTerminalProcessing = 0x0004;
 const _disableNewlineAutoReturn = 0x0008;
 const _enableVirtualTerminalInput = 0x0200;
+const _enableProcessedInput = 0x0001;
+const _enableLineInput = 0x0002;
+const _enableEchoInput = 0x0004;
+const _enableQuickEditMode = 0x0040;
+const _enableExtendedFlags = 0x0080;

@@ -349,8 +349,18 @@ class RenderText extends RenderObject
     // region checks see only the on-screen portion. Selectables with
     // empty intersections (fully scrolled off) report null and are
     // skipped.
-    _selectionPaintRect = CellRect(offset: screenOffset ?? offset, size: size);
-    _selectionClipRect = clipRect;
+    final selectionBounds = CellRect(
+      offset: screenOffset ?? offset,
+      size: size,
+    );
+    _updateRetainedSelectionGeometry(selectionBounds, clipRect);
+    if (RetainedPaintGeometryCapture.isActive) {
+      RetainedPaintGeometryCapture.record(
+        _replaySelectionGeometry,
+        selectionBounds,
+        clipRect: clipRect,
+      );
+    }
     if (_text.isEmpty || size.isEmpty) return;
     final visibleRows = _lines.length < size.rows ? _lines.length : size.rows;
     var lineStartOffset = 0;
@@ -525,6 +535,15 @@ class RenderText extends RenderObject
 
   CellRect? _selectionPaintRect;
   CellRect? _selectionClipRect;
+
+  void _updateRetainedSelectionGeometry(CellRect? bounds, CellRect? clipRect) {
+    _selectionPaintRect = bounds;
+    _selectionClipRect = bounds == null ? null : clipRect;
+  }
+
+  // ignore: prefer_function_declarations_over_variables
+  late final RetainedPaintGeometryCallback _replaySelectionGeometry =
+      _updateRetainedSelectionGeometry;
 
   @override
   CellRect? get selectionPaintRect => _selectionPaintRect;
@@ -768,9 +787,19 @@ class RenderPadding extends RenderObject
   }) {
     final c = _child;
     if (c == null) return;
+    final childOffset = CellOffset(
+      offset.col + _padding.left,
+      offset.row + _padding.top,
+    );
+    final screen = screenOffset ?? offset;
     c.paint(
       buffer,
-      CellOffset(offset.col + _padding.left, offset.row + _padding.top),
+      childOffset,
+      screenOffset: CellOffset(
+        screen.col + _padding.left,
+        screen.row + _padding.top,
+      ),
+      clipRect: clipRect,
     );
   }
 }

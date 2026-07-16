@@ -53,15 +53,15 @@ void main() {
         await _settle();
         driver.clearOutput();
 
-        // Drag inside the first paragraph (which starts on screen row 2
-        // because of the title bar + border). Pick a stable substring
-        // that lives mid-line.
+        // Drag inside the first paragraph (screen row 4 after the title
+        // border and the selection container's padding). Pick a stable
+        // substring that lives mid-line.
         driver.enqueue(
           const MouseEvent(
             kind: MouseEventKind.down,
             button: MouseButton.left,
             col: 1,
-            row: 3,
+            row: 4,
           ),
         );
         driver.enqueue(
@@ -69,7 +69,7 @@ void main() {
             kind: MouseEventKind.drag,
             button: MouseButton.left,
             col: 5,
-            row: 3,
+            row: 4,
           ),
         );
         driver.enqueue(
@@ -77,7 +77,7 @@ void main() {
             kind: MouseEventKind.up,
             button: MouseButton.left,
             col: 5,
-            row: 3,
+            row: 4,
           ),
         );
         await _settle();

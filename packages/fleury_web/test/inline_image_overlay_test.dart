@@ -14,14 +14,16 @@ import 'package:fleury/fleury_host.dart'
 import 'package:fleury/src/remote/remote_codec.dart' show ImagePlacement;
 import 'package:fleury_web/src/metrics/cell_metrics.dart';
 import 'package:fleury_web/src/dom_grid/inline_image_overlay.dart';
+import 'package:fleury_web/src/metrics/dom_cell_metrics.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;
 
 MeasuredCellBox _box({
   double cw = 10,
   double ch = 20,
-  double ox = 0,
-  double oy = 0,
+  double insetX = 0,
+  double insetY = 0,
+  bool hostPositionIsStatic = true,
 }) => MeasuredCellBox(
   cssCellWidth: cw,
   cssCellHeight: ch,
@@ -30,8 +32,9 @@ MeasuredCellBox _box({
   devicePixelRatio: 1,
   cols: 80,
   rows: 24,
-  cssCanvasLeft: ox,
-  cssCanvasTop: oy,
+  cssCanvasInsetLeft: insetX,
+  cssCanvasInsetTop: insetY,
+  hostPositionIsStatic: hostPositionIsStatic,
 );
 
 ImagePlacement _place(
@@ -71,12 +74,12 @@ void main() {
       ..cacheImage('a', Uint8List.fromList([1, 2, 3, 4]))
       ..presentPlan([
         _place('a', 2, 1, 3, 2, InlineImageFit.cover),
-      ], _box(cw: 10, ch: 20, ox: 5, oy: 7));
+      ], _box(cw: 10, ch: 20, insetX: 5, insetY: 7));
 
     final imgs = _imgs(host);
     expect(imgs, hasLength(1));
     final img = imgs.single;
-    // left = canvasLeft + col*cw = 5 + 2*10; top = 7 + 1*20.
+    // left = host-local inset + col*cw; top = inset + row*ch.
     expect(img.style.left, '25px');
     expect(img.style.top, '27px');
     expect(img.style.width, '30px'); // cols*cw
@@ -85,6 +88,124 @@ void main() {
     expect(img.alt, '', reason: 'decorative — semantics ride the separate DOM');
 
     overlay.dispose();
+    host.remove();
+  });
+
+  test('positioned host uses local inset without double-counting its viewport '
+      'origin', () {
+    final host = _makeHost()
+      ..setAttribute(
+        'style',
+        'margin-left:73px;margin-top:41px;width:400px;height:240px;'
+            'box-sizing:border-box;border:7px solid transparent;'
+            'padding:11px 17px 13px 19px;'
+            'font-family:monospace;font-size:10px;line-height:20px;',
+      );
+    final metrics = DomCellMetrics(container: host);
+    final box = metrics.measure();
+    final overlay = InlineImageOverlay(host)
+      ..cacheImage('positioned', Uint8List.fromList([1, 2, 3, 4]))
+      ..presentPlan([_place('positioned', 2, 1, 3, 2)], box);
+    addTearDown(() {
+      overlay.dispose();
+      metrics.dispose();
+      host.remove();
+    });
+
+    final imageRect = _imgs(host).single.getBoundingClientRect();
+    expect(box.cssCanvasInsetLeft, closeTo(19, 0.01));
+    expect(box.cssCanvasInsetTop, closeTo(11, 0.01));
+    expect(
+      imageRect.left,
+      closeTo(box.cssCanvasLeft + 2 * box.cssCellWidth, 0.5),
+      reason: 'image viewport x matches the grid cell, not host x + grid x',
+    );
+    expect(
+      imageRect.top,
+      closeTo(box.cssCanvasTop + box.cssCellHeight, 0.5),
+      reason: 'image viewport y matches the grid cell, not host y + grid y',
+    );
+    expect(imageRect.width, closeTo(3 * box.cssCellWidth, 0.5));
+    expect(imageRect.height, closeTo(2 * box.cssCellHeight, 0.5));
+  });
+
+  test(
+    'preserves embedder positioning and restores an owned static position',
+    () {
+      for (final position in const [
+        'relative',
+        'absolute',
+        'fixed',
+        'sticky',
+      ]) {
+        final positionedHost = _makeHost();
+        positionedHost.style.setProperty('position', position);
+        final positionedOverlay = InlineImageOverlay(positionedHost)
+          ..presentPlan(const [], _box(hostPositionIsStatic: false));
+
+        expect(positionedHost.style.getPropertyValue('position'), position);
+        positionedOverlay.dispose();
+        expect(positionedHost.style.getPropertyValue('position'), position);
+        positionedHost.remove();
+      }
+
+      final stylesheetPositionedHost = _makeHost();
+      final stylesheetPositionedOverlay = InlineImageOverlay(
+        stylesheetPositionedHost,
+      )..presentPlan(const [], _box(hostPositionIsStatic: false));
+      expect(
+        stylesheetPositionedHost.style.getPropertyValue('position'),
+        isEmpty,
+        reason: 'a non-static computed style must not be shadowed inline',
+      );
+      stylesheetPositionedOverlay.dispose();
+      stylesheetPositionedHost.remove();
+
+      final staticHost = _makeHost();
+      staticHost.style.setProperty('position', 'static');
+      final staticOverlay = InlineImageOverlay(staticHost)
+        ..presentPlan(const [], _box());
+
+      expect(staticHost.style.getPropertyValue('position'), 'relative');
+      staticOverlay.dispose();
+      expect(staticHost.style.getPropertyValue('position'), 'static');
+      staticHost.remove();
+    },
+  );
+
+  test('positions a computed-static inherited host and restores its exact '
+      'inline token', () {
+    final host = _makeHost()
+      ..setAttribute(
+        'style',
+        'position:inherit;margin-left:53px;margin-top:31px;'
+            'width:240px;height:120px;padding:7px 11px;'
+            'font-family:monospace;font-size:10px;line-height:20px;',
+      )
+      ..style.setProperty('position', 'inherit', 'important');
+    final metrics = DomCellMetrics(container: host);
+    final box = metrics.measure();
+    expect(box.hostPositionIsStatic, isTrue);
+    expect(host.style.getPropertyValue('position'), 'inherit');
+    expect(host.style.getPropertyPriority('position'), 'important');
+
+    final overlay = InlineImageOverlay(host)
+      ..cacheImage('inherited', Uint8List.fromList([1, 2, 3, 4]))
+      ..presentPlan([_place('inherited', 2, 1, 1, 1)], box);
+
+    expect(host.style.getPropertyValue('position'), 'relative');
+    expect(host.style.getPropertyPriority('position'), isEmpty);
+    final imageRect = _imgs(host).single.getBoundingClientRect();
+    expect(
+      imageRect.left,
+      closeTo(box.cssCanvasLeft + 2 * box.cssCellWidth, 0.5),
+    );
+    expect(imageRect.top, closeTo(box.cssCanvasTop + box.cssCellHeight, 0.5));
+
+    overlay.dispose();
+    expect(host.style.getPropertyValue('position'), 'inherit');
+    expect(host.style.getPropertyPriority('position'), 'important');
+    metrics.dispose();
     host.remove();
   });
 

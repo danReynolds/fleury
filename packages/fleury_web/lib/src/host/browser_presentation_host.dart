@@ -9,6 +9,9 @@
 // never again silently lack a component the embed host has, because both
 // receive the same [BrowserHostComponents] from the same constructor.
 
+import 'dart:async';
+import 'dart:js_interop';
+
 import 'package:fleury/fleury_host.dart';
 import 'package:web/web.dart' as web;
 
@@ -177,7 +180,11 @@ final class BrowserPresentationHost {
       host.appendChild(semanticRoot);
     }
 
+    DomCellMetrics? metricsForCleanup;
+    DomGridSurface? surfaceForCleanup;
     InlineImageOverlay? imageOverlay;
+    SemanticDomPresenter? semanticPresenterForCleanup;
+    DomInputSource? inputForCleanup;
     void removeGeneratedRoots() {
       imageOverlay?.dispose();
       if (removeSemanticRoot) {
@@ -187,17 +194,28 @@ final class BrowserPresentationHost {
     }
 
     try {
-      final metrics = DomCellMetrics(container: host);
-      final surface = DomGridSurface(root: surfaceRoot, size: CellSize.zero);
+      final metrics = metricsForCleanup = DomCellMetrics(container: host);
+      final surface = surfaceForCleanup = DomGridSurface(
+        root: surfaceRoot,
+        size: CellSize.zero,
+      );
+      if (!host.isA<web.HTMLElement>()) {
+        throw ArgumentError.value(
+          host,
+          'into',
+          'BrowserPresentationHost requires an HTML element.',
+        );
+      }
       final overlay = imageOverlay = InlineImageOverlay(
         host as web.HTMLElement,
       );
-      final semanticPresenter = semanticRoot == null
+      final semanticPresenter = semanticPresenterForCleanup =
+          semanticRoot == null
           ? null
           : SemanticDomPresenter(root: semanticRoot);
       final webFocusCoordinator = _focusCoordinator ?? WebFocusCoordinator();
       final webClipboard = _clipboard ?? WebClipboard();
-      final input = DomInputSource(
+      final input = inputForCleanup = DomInputSource(
         hostElement: host,
         pointerTarget: surfaceRoot,
         cellMetrics: metrics,
@@ -218,7 +236,19 @@ final class BrowserPresentationHost {
         removeGeneratedRoots: removeGeneratedRoots,
       );
     } catch (_) {
-      removeGeneratedRoots();
+      // Assembly is synchronous, so start every cleanup step before returning
+      // the original error. The helper swallows cleanup failures and completes
+      // any asynchronous disposals in the background.
+      unawaited(
+        _disposeBrowserHostComponentsBestEffort(
+          inputSource: inputForCleanup,
+          metrics: metricsForCleanup,
+          semanticPresenter: semanticPresenterForCleanup,
+          surface: surfaceForCleanup,
+          imageOverlay: imageOverlay,
+          removeGeneratedRoots: removeGeneratedRoots,
+        ),
+      );
       rethrow;
     }
   }
@@ -229,8 +259,65 @@ final class BrowserPresentationHost {
     try {
       return await source.start(components);
     } catch (_) {
-      components.removeGeneratedRoots();
+      // A source may fail after partially starting the shared host stack. No
+      // MountedApp exists to own teardown, so release every assembled resource
+      // here. Cleanup is idempotent and best-effort: the source/start error
+      // remains the useful failure even if one disposer also fails.
+      await _disposeBrowserHostComponentsBestEffort(
+        inputSource: components.inputSource,
+        metrics: components.metrics,
+        semanticPresenter: components.semanticPresenter,
+        surface: components.surface,
+        imageOverlay: components.imageOverlay,
+        removeGeneratedRoots: components.removeGeneratedRoots,
+      );
       rethrow;
     }
+  }
+}
+
+/// Releases a partially or fully assembled browser host without allowing a
+/// cleanup failure to replace the setup/start failure that triggered it.
+///
+/// Every disposer is invoked before the returned future first yields. That
+/// keeps the synchronous [BrowserPresentationHost.assemble] failure contract:
+/// generated DOM and probes are already gone when the original exception
+/// reaches its caller, while asynchronous disposer completions are still
+/// observed and swallowed.
+Future<void> _disposeBrowserHostComponentsBestEffort({
+  required DomInputSource? inputSource,
+  required DomCellMetrics? metrics,
+  required SemanticDomPresenter? semanticPresenter,
+  required DomGridSurface? surface,
+  required InlineImageOverlay? imageOverlay,
+  required void Function()? removeGeneratedRoots,
+}) async {
+  Future<void>? semanticDispose;
+  Future<void>? surfaceDispose;
+
+  try {
+    inputSource?.dispose();
+  } catch (_) {}
+  try {
+    metrics?.dispose();
+  } catch (_) {}
+  try {
+    semanticDispose = semanticPresenter?.dispose();
+  } catch (_) {}
+  try {
+    surfaceDispose = surface?.dispose();
+  } catch (_) {}
+  try {
+    imageOverlay?.dispose();
+  } catch (_) {}
+  try {
+    removeGeneratedRoots?.call();
+  } catch (_) {}
+
+  for (final pending in <Future<void>?>[semanticDispose, surfaceDispose]) {
+    if (pending == null) continue;
+    try {
+      await pending;
+    } catch (_) {}
   }
 }

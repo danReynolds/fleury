@@ -76,6 +76,7 @@ void main() {
   late _RecordingClipboard clipboard;
   late BrowserHostComponents components;
   late WireFrameSource source;
+  late MountedApp mounted;
 
   setUp(() {
     into = web.document.createElement('div') as web.HTMLElement;
@@ -85,13 +86,105 @@ void main() {
       into: into,
       clipboard: clipboard,
     ).assemble();
-    source = WireFrameSource(url: 'ws://unused/')
-      ..attachComponentsForTest(components);
-    addTearDown(() {
-      components.removeGeneratedRoots();
+    source = WireFrameSource(url: 'ws://unused/');
+    mounted = source.attachComponentsForTest(components);
+    addTearDown(() async {
+      await mounted.dispose();
       into.remove();
     });
   });
+
+  test('an on-open setup failure rejects start and tears down partial browser '
+      'resources', () async {
+    final failedInto = web.document.createElement('div') as web.HTMLElement;
+    web.document.body!.appendChild(failedInto);
+    addTearDown(() => failedInto.remove());
+    final bodyChildrenBeforeAttach = web.document.body!.children.length;
+    final failure = StateError('injected on-open setup failure');
+    final failingSource = WireFrameSource(
+      url: 'ws://127.0.0.1:1/fleury-open-failure',
+    )..openSetupHookForTest = () => throw failure;
+
+    final start = BrowserPresentationHost(
+      into: failedInto,
+    ).attach(failingSource);
+    // Drive the production WebSocket callback synchronously. The injected hook
+    // throws after input has started, which used to escape to JavaScript and
+    // leave BrowserPresentationHost.attach pending forever.
+    failingSource.socketForTest!.dispatchEvent(web.Event('open'));
+
+    await expectLater(
+      start.timeout(const Duration(seconds: 1)),
+      throwsA(same(failure)),
+    );
+    expect(failingSource.isClosedForTest, isTrue);
+    expect(failingSource.bannerShownForTest, isFalse);
+    expect(
+      failedInto.children.length,
+      0,
+      reason: 'attach cleanup removed every generated partial-start root',
+    );
+    expect(
+      web.document.body!.children.length,
+      bodyChildrenBeforeAttach,
+      reason: 'the partially-started metrics probe was removed',
+    );
+  });
+
+  for (final failureCase
+      in <({String label, web.Event Function() event, String message})>[
+        (
+          label: 'socket error',
+          event: () => web.Event('error'),
+          message: 'connection failed',
+        ),
+        (
+          label: 'socket close',
+          event: () => web.CloseEvent('close'),
+          message: 'closed before it opened',
+        ),
+      ]) {
+    test('a pre-open ${failureCase.label} rejects start and tears down the '
+        'source and browser host', () async {
+      final failedInto = web.document.createElement('div') as web.HTMLElement;
+      web.document.body!.appendChild(failedInto);
+      addTearDown(() => failedInto.remove());
+      final bodyChildrenBeforeAttach = web.document.body!.children.length;
+      final failingSource = WireFrameSource(
+        url: 'ws://127.0.0.1:1/fleury-pre-open-failure',
+      );
+
+      final start = BrowserPresentationHost(
+        into: failedInto,
+      ).attach(failingSource);
+      final socket = failingSource.socketForTest!;
+      socket.dispatchEvent(failureCase.event());
+
+      await expectLater(
+        start.timeout(const Duration(seconds: 1)),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains(failureCase.message),
+          ),
+        ),
+      );
+      expect(failingSource.isClosedForTest, isTrue);
+      expect(failingSource.socketForTest, isNull);
+      expect(failingSource.bannerShownForTest, isFalse);
+      expect(
+        failedInto.children.length,
+        0,
+        reason: 'attach cleanup removed every generated root',
+      );
+      expect(
+        web.document.body!.children.length,
+        bodyChildrenBeforeAttach,
+        reason: 'failed attachment removed the cell metrics probe',
+      );
+    });
+  }
 
   test('CLIPBOARD_WRITE lands on the host clipboard and answers', () async {
     source.handleFrameForTest(const ClipboardWriteFrame(9, 'from the app'));
@@ -122,6 +215,141 @@ void main() {
     source.handleFrameForTest(CaretFrame(CellRect.fromLTWH(4, 2, 1, 1)));
     source.handleFrameForTest(const CaretFrame(null));
   });
+
+  test('observed resize invalidates cached metrics, sends RESIZE, and '
+      'repositions the last caret', () {
+    into.setAttribute(
+      'style',
+      'position:absolute;left:10px;top:20px;width:160px;height:80px;'
+          'padding:0;font-family:monospace;font-size:10px;line-height:10px;',
+    );
+    components.inputSource.start((_) {});
+    source.handleObservedResizeForTest();
+    source.handleFrameForTest(CaretFrame(CellRect.fromLTWH(4, 2, 1, 1)));
+
+    final textArea = into.querySelector('textarea')!;
+    final beforeLeft = textArea.getAttribute('data-fleury-caret-css-left');
+    final beforeTop = textArea.getAttribute('data-fleury-caret-css-top');
+    expect(textArea.getAttribute('data-fleury-caret-state'), 'positioned');
+    expect(beforeLeft, isNotNull);
+    expect(beforeTop, isNotNull);
+
+    source.sentForTest.clear();
+    into.setAttribute(
+      'style',
+      'position:absolute;left:40px;top:50px;width:640px;height:240px;'
+          'padding-left:20px;font-family:monospace;font-size:20px;'
+          'line-height:20px;',
+    );
+    source.handleObservedResizeForTest();
+
+    final resizeFrames = _decodeAll(
+      source.sentForTest,
+    ).whereType<ResizeFrame>().toList();
+    expect(resizeFrames, hasLength(1));
+    expect(components.surface.size, resizeFrames.single.size);
+    expect(
+      textArea.getAttribute('data-fleury-caret-css-left'),
+      isNot(beforeLeft),
+    );
+    expect(
+      textArea.getAttribute('data-fleury-caret-css-top'),
+      isNot(beforeTop),
+    );
+    expect(textArea.getAttribute('data-fleury-caret-state'), 'positioned');
+  });
+
+  test('production metrics observer routes host, font, and window signals '
+      'through one refresh path', () async {
+    into.setAttribute(
+      'style',
+      'position:absolute;left:10px;top:20px;width:320px;height:160px;'
+          'padding:0;font-family:monospace;font-size:10px;line-height:10px;',
+    );
+    components.inputSource.start((_) {});
+    source.handleObservedResizeForTest();
+    source.handleFrameForTest(CaretFrame(CellRect.fromLTWH(4, 2, 1, 1)));
+    source.sentForTest.clear();
+    source.startObservingMetricsForTest();
+
+    // Font readiness is not a host-size change. Changing the probe's font
+    // pitch and dispatching the same signal a loaded webfont emits must still
+    // remeasure, resize the surface, and tell the server.
+    into.setAttribute(
+      'style',
+      'position:absolute;left:10px;top:20px;width:320px;height:160px;'
+          'padding:0;font-family:monospace;font-size:20px;line-height:20px;',
+    );
+    web.document.fonts.dispatchEvent(web.Event('loadingdone'));
+
+    var resizeFrames = _decodeAll(
+      source.sentForTest,
+    ).whereType<ResizeFrame>().toList();
+    expect(resizeFrames, hasLength(1));
+    expect(components.surface.size, resizeFrames.single.size);
+
+    final textArea = into.querySelector('textarea')!;
+    final beforeWindowLeft = textArea.getAttribute(
+      'data-fleury-caret-css-left',
+    );
+    final beforeWindowTop = textArea.getAttribute('data-fleury-caret-css-top');
+    source.sentForTest.clear();
+
+    // Window resize is also the DPR/zoom invalidation signal. Keep the content
+    // box and cell pitch fixed but move its viewport origin; no wire resize is
+    // needed, while the hidden IME capture geometry must move.
+    into.setAttribute(
+      'style',
+      'position:absolute;left:70px;top:90px;width:320px;height:160px;'
+          'padding:0;font-family:monospace;font-size:20px;line-height:20px;',
+    );
+    web.window.dispatchEvent(web.Event('resize'));
+
+    expect(_decodeAll(source.sentForTest).whereType<ResizeFrame>(), isEmpty);
+    expect(
+      textArea.getAttribute('data-fleury-caret-css-left'),
+      isNot(beforeWindowLeft),
+    );
+    expect(
+      textArea.getAttribute('data-fleury-caret-css-top'),
+      isNot(beforeWindowTop),
+    );
+    source.sentForTest.clear();
+
+    // The same CellMetrics observer also owns the host ResizeObserver. Its
+    // callback is delivered on a browser rendering turn, so wait briefly for
+    // the production callback rather than invoking the test seam.
+    into.setAttribute(
+      'style',
+      'position:absolute;left:70px;top:90px;width:640px;height:240px;'
+          'padding:0;font-family:monospace;font-size:20px;line-height:20px;',
+    );
+    for (var attempt = 0; attempt < 30; attempt++) {
+      resizeFrames = _decodeAll(
+        source.sentForTest,
+      ).whereType<ResizeFrame>().toList();
+      if (resizeFrames.isNotEmpty) break;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+
+    expect(resizeFrames, hasLength(1));
+    expect(components.surface.size, resizeFrames.single.size);
+  });
+
+  test(
+    'disposing a disconnected session removes its reconnect banner',
+    () async {
+      source.handleFrameForTest(const ByeFrame());
+      expect(source.bannerShownForTest, isTrue);
+      expect(into.textContent, contains('reload to reconnect'));
+
+      await mounted.dispose();
+
+      expect(source.bannerShownForTest, isFalse);
+      expect(into.children.length, 0);
+      expect(into.parentNode, same(web.document.body));
+    },
+  );
 
   test('a failed action result is absorbed (logged), not thrown', () {
     source.handleFrameForTest(

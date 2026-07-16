@@ -40,6 +40,12 @@ typedef CellComposite =
 
 /// Paints [child] to a scratch buffer, then composites its cells via
 /// [composite]. Layout-transparent (reports the child's size).
+///
+/// A composite is deliberately paint-only: focus, caret, semantic, and pointer
+/// geometry stays at the child's stable layout position while inherited clips
+/// still apply. Use [RenderClip] when interaction geometry must be clipped with
+/// the visible region; an arbitrary per-cell transform has no general inverse
+/// that could safely remap descendant interaction regions.
 class RenderCellEffect extends RenderObject
     implements RenderObjectWithSingleChild {
   RenderCellEffect(
@@ -112,10 +118,13 @@ class RenderCellEffect extends RenderObject
     if (size.isEmpty) return;
 
     final scratch = CellBuffer(size);
+    final screen = screenOffset ?? offset;
     // Paint at a scratch-local origin but propagate the TRUE screen position:
     // descendants that record absolute geometry (focus bounds, pointer
     // regions) must not capture scratch-local coordinates.
-    c.paint(scratch, CellOffset.zero, screenOffset: screenOffset ?? offset);
+    // Effects deliberately keep interaction geometry in the child's stable
+    // layout position, but inherited clipping must still apply.
+    c.paint(scratch, CellOffset.zero, screenOffset: screen, clipRect: clipRect);
 
     final cols = buffer.size.cols;
     final rows = buffer.size.rows;
@@ -207,8 +216,22 @@ class RenderClip extends RenderObject implements RenderObjectWithSingleChild {
     if (clipped.isEmpty) return;
 
     final scratch = CellBuffer(c.size);
+    final screen = screenOffset ?? offset;
+    final ownScreenRect = CellRect(offset: screen, size: clipped);
+    final inheritedIntersection = clipRect?.intersect(ownScreenRect);
+    final effectiveClip = clipRect == null
+        ? ownScreenRect
+        : inheritedIntersection ??
+              CellRect(offset: screen, size: CellSize.zero);
     // Scratch-local origin, true screen position — see RenderCellEffect.
-    c.paint(scratch, CellOffset.zero, screenOffset: screenOffset ?? offset);
+    paintWithGeometryClip(ownScreenRect, () {
+      c.paint(
+        scratch,
+        CellOffset.zero,
+        screenOffset: screen,
+        clipRect: effectiveClip,
+      );
+    });
 
     final cols = buffer.size.cols;
     final rows = buffer.size.rows;

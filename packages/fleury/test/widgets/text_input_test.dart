@@ -12,6 +12,17 @@ KeyEvent _shiftCode(KeyCode kc) =>
 KeyEvent _ctrlChar(String c) =>
     KeyEvent(char: c, modifiers: const {KeyModifier.ctrl});
 
+final class _DispatcherSink implements TuiEventSink {
+  const _DispatcherSink(this.dispatcher);
+
+  final InputDispatcher dispatcher;
+
+  @override
+  void add(TuiEvent event) {
+    dispatcher.dispatch(event);
+  }
+}
+
 void main() {
   group('TextInput receives insertable text', () {
     testWidgets('typing letters accumulates into the controller', (tester) {
@@ -295,6 +306,36 @@ void main() {
       expect(history.isBrowsing, isFalse);
     });
 
+    testWidgets('history snapshots the complete accepted paste draft', (
+      tester,
+    ) {
+      final controller = TextEditingController();
+      final history = TextHistoryController(entries: ['previous']);
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          historyController: history,
+          autofocus: true,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 0,
+            chunkSize: 2,
+          ),
+        ),
+      );
+
+      tester.paste('abcdef');
+      expect(controller.text, 'ab');
+
+      tester.sendKey(_code(KeyCode.arrowUp));
+      expect(controller.text, 'previous');
+      tester.sendKey(_code(KeyCode.arrowDown));
+      expect(
+        controller.text,
+        'abcdef',
+        reason: 'history must retain the full accepted draft, not its prefix',
+      );
+    });
+
     testWidgets('Up bubbles when no history controller is provided', (tester) {
       var ancestorUps = 0;
       tester.pumpWidget(
@@ -395,6 +436,47 @@ void main() {
 
       tester.sendKey(_ctrlChar('z'));
       expect(controller.text, 'git che');
+    });
+
+    testWidgets('completion reads its range after the accepted paste tail', (
+      tester,
+    ) {
+      final controller = TextEditingController();
+      final completions = TextCompletionController()
+        ..open(
+          range: TextRange.empty,
+          options: const [TextCompletionOption(label: 'initial')],
+        );
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          completionController: completions,
+          autofocus: true,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 0,
+            chunkSize: 2,
+          ),
+          onChanged: (text) {
+            completions.update(
+              range: TextRange(start: 0, end: text.length),
+              options: [
+                TextCompletionOption(label: text, replacement: '<$text>'),
+              ],
+            );
+          },
+        ),
+      );
+
+      tester.paste('abcdef');
+      expect(controller.text, 'ab');
+
+      tester.sendKey(_code(KeyCode.tab));
+
+      expect(
+        controller.text,
+        '<abcdef>',
+        reason: 'completion must not apply a prefix-derived range or option',
+      );
     });
 
     testWidgets('Up and Down move completion selection before history', (
@@ -612,6 +694,177 @@ void main() {
       expect(controller.text, '');
     });
 
+    testWidgets(
+      'a rapid second paste preserves the first tail as a separate undo',
+      (tester) {
+        final controller = TextEditingController();
+        tester.pumpWidget(
+          TextInput(
+            controller: controller,
+            autofocus: true,
+            pastePolicy: const TextPastePolicy(
+              largePasteThreshold: 0,
+              chunkSize: 2,
+            ),
+          ),
+        );
+
+        tester.paste('abcdef');
+        expect(
+          controller.text,
+          'ab',
+          reason: 'the first paste is still active',
+        );
+        tester.paste('XY');
+
+        for (var i = 0; i < 8; i++) {
+          tester.pump();
+        }
+        expect(
+          controller.text,
+          'abcdefXY',
+          reason: 'accepting a second paste must not discard the first tail',
+        );
+
+        tester.sendKey(_ctrlChar('z'));
+        expect(controller.text, 'abcdef', reason: 'undo only the second paste');
+        tester.sendKey(_ctrlChar('z'));
+        expect(controller.text, '', reason: 'undo the complete first paste');
+
+        tester.sendKey(_ctrlChar('y'));
+        expect(controller.text, 'abcdef');
+        tester.sendKey(_ctrlChar('y'));
+        expect(controller.text, 'abcdefXY');
+      },
+    );
+
+    testWidgets('parser-segmented paste is lossless and one undo transaction', (
+      tester,
+    ) {
+      final controller = TextEditingController();
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          autofocus: true,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 100,
+            chunkSize: 2,
+          ),
+        ),
+      );
+
+      final parser = InputParser(maxPasteBytes: 4);
+      final sink = _DispatcherSink(tester.dispatcher);
+      parser.feed('\x1B[200~abcd'.codeUnits, sink);
+      expect(controller.text, 'abcd');
+
+      // Each parser segment is below the widget's own chunking threshold and
+      // arrives in a separate read. Phase/id, not timing or size heuristics,
+      // must keep these inserts in one paste transaction.
+      parser.feed('efgh'.codeUnits, sink);
+      parser.feed('ijkl'.codeUnits, sink);
+      parser.feed('\x1B[201~'.codeUnits, sink);
+      expect(controller.text, 'abcdefghijkl');
+
+      tester.sendKey(_ctrlChar('z'));
+      expect(controller.text, '');
+    });
+
+    testWidgets('segmented paste queue drains iteratively under burst input', (
+      tester,
+    ) {
+      final controller = TextEditingController();
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          autofocus: true,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 0,
+            chunkSize: 1,
+          ),
+        ),
+      );
+
+      const pasteId = 73;
+      tester.dispatcher.dispatch(
+        const PasteEvent.segment(
+          'abcdefghij',
+          pasteId: pasteId,
+          phase: PasteEventPhase.start,
+        ),
+      );
+      for (var i = 0; i < 2000; i++) {
+        tester.dispatcher.dispatch(
+          const PasteEvent.segment(
+            'x',
+            pasteId: pasteId,
+            phase: PasteEventPhase.continuation,
+          ),
+        );
+      }
+      tester.dispatcher.dispatch(
+        const PasteEvent.segment(
+          'z',
+          pasteId: pasteId,
+          phase: PasteEventPhase.end,
+        ),
+      );
+
+      for (var i = 0; i < 300; i++) {
+        tester.pump();
+      }
+      expect(controller.text, 'abcdefghij${List.filled(2000, 'x').join()}z');
+      tester.sendKey(_ctrlChar('z'));
+      expect(controller.text, '');
+    });
+
+    testWidgets(
+      'segmented queue pressure performs bounded synchronous controller edits',
+      (tester) {
+        final controller = TextEditingController();
+        tester.pumpWidget(
+          TextInput(
+            controller: controller,
+            autofocus: true,
+            pastePolicy: const TextPastePolicy(
+              largePasteThreshold: 0,
+              chunkSize: 1,
+            ),
+          ),
+        );
+
+        var notifications = 0;
+        controller.addListener(() => notifications++);
+        const pasteId = 991;
+        tester.dispatcher.dispatch(
+          PasteEvent.segment(
+            List.filled(600, 'x').join(),
+            pasteId: pasteId,
+            phase: PasteEventPhase.start,
+          ),
+        );
+        expect(notifications, 1, reason: 'the first chunk applies immediately');
+
+        final beforePressure = notifications;
+        tester.dispatcher.dispatch(
+          PasteEvent.segment(
+            List.filled(64 * 1024 + 1, 'y').join(),
+            pasteId: pasteId,
+            phase: PasteEventPhase.end,
+          ),
+        );
+        final synchronousPressureEdits = notifications - beforePressure;
+
+        expect(
+          synchronousPressureEdits,
+          lessThan(32),
+          reason:
+              'one over-bound segment must not synchronously drain hundreds '
+              'of one-code-unit controller edits',
+        );
+      },
+    );
+
     testWidgets('single-line large paste normalizes before chunking', (tester) {
       final controller = TextEditingController();
       tester.pumpWidget(
@@ -630,7 +883,7 @@ void main() {
       expect(controller.text, 'one two three');
     });
 
-    testWidgets('undo during a scheduled paste cancels remaining chunks', (
+    testWidgets('undo during a scheduled paste preserves the full redo value', (
       tester,
     ) {
       final controller = TextEditingController();
@@ -653,6 +906,42 @@ void main() {
 
       tester.pump();
       tester.pump();
+      expect(controller.text, '');
+
+      tester.sendKey(_ctrlChar('y'));
+      expect(
+        controller.text,
+        'abcdef',
+        reason:
+            'undo must finish the accepted paste tail before recording redo',
+      );
+    });
+
+    testWidgets('Escape callback observes the complete accepted paste', (
+      tester,
+    ) {
+      final controller = TextEditingController();
+      String? escapedValue;
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          autofocus: true,
+          onEscape: () => escapedValue = controller.text,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 0,
+            chunkSize: 2,
+          ),
+        ),
+      );
+
+      tester.paste('abcdef');
+      expect(controller.text, 'ab');
+
+      tester.sendKey(_code(KeyCode.escape));
+
+      expect(escapedValue, 'abcdef');
+      expect(controller.text, 'abcdef');
+      tester.sendKey(_ctrlChar('z'));
       expect(controller.text, '');
     });
   });
@@ -782,6 +1071,36 @@ void main() {
 
       expect(ancestorCopies, 1);
       expect(tester.clipboard.readInProcess(), isNull);
+    });
+
+    testWidgets('Ctrl+C bubbles only after completing an accepted paste', (
+      tester,
+    ) {
+      var ancestorCopies = 0;
+      final controller = TextEditingController();
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeyChord.ctrl.c, onEvent: (_) => ancestorCopies += 1),
+          ],
+          child: TextInput(
+            controller: controller,
+            autofocus: true,
+            pastePolicy: const TextPastePolicy(
+              largePasteThreshold: 0,
+              chunkSize: 2,
+            ),
+          ),
+        ),
+      );
+
+      tester.paste('abcdef');
+      expect(controller.text, 'ab');
+
+      tester.sendKey(_ctrlChar('c'));
+
+      expect(controller.text, 'abcdef');
+      expect(ancestorCopies, 1);
     });
 
     testWidgets('disabled clipboard policy blocks copy and bubbling', (

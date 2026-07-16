@@ -418,8 +418,18 @@ class RenderRichText extends RenderObject
     // clipRect is the visible window. Together they let the mixin
     // route hit-tests correctly even inside a ScrollView. See
     // SelectableTextMixin for the contract.
-    _selectionPaintRect = CellRect(offset: screenOffset ?? offset, size: size);
-    _selectionClipRect = clipRect;
+    final selectionBounds = CellRect(
+      offset: screenOffset ?? offset,
+      size: size,
+    );
+    _updateRetainedSelectionGeometry(selectionBounds, clipRect);
+    if (RetainedPaintGeometryCapture.isActive) {
+      RetainedPaintGeometryCapture.record(
+        _replaySelectionGeometry,
+        selectionBounds,
+        clipRect: clipRect,
+      );
+    }
 
     if (_lines.isEmpty || size.isEmpty) return;
     final visibleRows = _lines.length < size.rows ? _lines.length : size.rows;
@@ -449,6 +459,15 @@ class RenderRichText extends RenderObject
       lineStartOffset += _selectionLines[i].length + 1;
     }
   }
+
+  void _updateRetainedSelectionGeometry(CellRect? bounds, CellRect? clipRect) {
+    _selectionPaintRect = bounds;
+    _selectionClipRect = bounds == null ? null : clipRect;
+  }
+
+  // ignore: prefer_function_declarations_over_variables
+  late final RetainedPaintGeometryCallback _replaySelectionGeometry =
+      _updateRetainedSelectionGeometry;
 
   void _paintLine(
     CellBuffer buffer,

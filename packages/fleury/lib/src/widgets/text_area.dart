@@ -12,6 +12,7 @@
 // Not yet here: soft-wrap and a blinking cursor (solid while focused for now).
 
 import 'dart:async' show scheduleMicrotask, unawaited;
+import 'dart:collection' show Queue;
 
 import 'package:characters/characters.dart';
 
@@ -110,12 +111,26 @@ class TextArea extends StatefulWidget {
 }
 
 class _TextAreaState extends State<TextArea>
-    implements TextInputClaimant, TextCompositionClaimant {
+    implements TextInputClaimant, PasteEventClaimant, TextCompositionClaimant {
+  static const int _maxQueuedPasteCodeUnits = 64 * 1024;
+  static const int _maxQueuedPasteSegments = 256;
+
   late TextEditingController _controller;
   late FocusNode _focusNode;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
   TextPasteSession? _pasteSession;
+  final Queue<({String text, bool isFinal})> _queuedPasteSegments =
+      Queue<({String text, bool isFinal})>();
+  int _queuedPasteCodeUnits = 0;
+  bool _pasteActive = false;
+  bool _pasteFinalReceived = false;
+  bool _pasteTransactionStarted = false;
+  bool _currentPasteSegmentIsFinal = false;
+  bool _pasteChunkScheduled = false;
+  int? _activePasteId;
+  int _pasteInsertedLength = 0;
+  int _pasteTotalLength = 0;
   TextPasteProgress _pasteProgress = TextPasteProgress.inactive;
   int _pasteGeneration = 0;
 
@@ -145,7 +160,7 @@ class _TextAreaState extends State<TextArea>
   void didUpdateWidget(TextArea oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
-      _cancelScheduledPaste();
+      _discardScheduledPaste();
       _controller.removeListener(_onChange);
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? TextEditingController();
@@ -174,7 +189,7 @@ class _TextAreaState extends State<TextArea>
     if ((!widget.enabled || widget.readOnly) &&
         (oldWidget.enabled != widget.enabled ||
             oldWidget.readOnly != widget.readOnly)) {
-      _cancelScheduledPaste();
+      _discardScheduledPaste();
     }
   }
 
@@ -188,64 +203,208 @@ class _TextAreaState extends State<TextArea>
 
   bool get _canEdit => widget.enabled && !widget.readOnly;
 
-  void _cancelScheduledPaste() {
+  void _discardScheduledPaste() {
     _pasteGeneration++;
     _pasteSession = null;
+    _queuedPasteSegments.clear();
+    _queuedPasteCodeUnits = 0;
+    _pasteActive = false;
+    _pasteFinalReceived = false;
+    _pasteTransactionStarted = false;
+    _currentPasteSegmentIsFinal = false;
+    _pasteChunkScheduled = false;
+    _activePasteId = null;
+    _pasteInsertedLength = 0;
+    _pasteTotalLength = 0;
     _pasteProgress = TextPasteProgress.inactive;
   }
 
-  void _startPaste(String text) {
-    _cancelScheduledPaste();
-    if (text.isEmpty) return;
-
-    if (!widget.pastePolicy.shouldChunk(text)) {
-      _controller.paste(text);
+  /// Finishes an accepted paste before the next editing transaction.
+  ///
+  /// Frame chunking is a responsiveness policy, not permission to discard the
+  /// unapplied tail when a second paste or key action arrives.
+  void _cancelScheduledPaste() {
+    if (!_pasteActive) {
+      _discardScheduledPaste();
       return;
     }
-
-    final generation = _pasteGeneration;
-    _pasteSession = TextPasteSession(text: text, policy: widget.pastePolicy);
-    _applyNextPasteChunk(generation, firstChunk: true);
+    final pending = StringBuffer();
+    final session = _pasteSession;
+    if (session != null) {
+      final remaining = session.takeRemaining();
+      if (remaining != null) pending.write(remaining);
+    }
+    while (_queuedPasteSegments.isNotEmpty) {
+      pending.write(_queuedPasteSegments.removeFirst().text);
+    }
+    final text = pending.toString();
+    if (text.isNotEmpty) _applyBulkPaste(text);
+    _completePaste();
   }
 
-  void _applyNextPasteChunk(int generation, {required bool firstChunk}) {
-    if (!mounted || generation != _pasteGeneration) return;
-    final session = _pasteSession;
-    if (session == null) return;
-    final chunk = session.nextChunk();
-    if (chunk == null) {
-      _finishScheduledPaste(generation);
-      return;
+  void _startPaste(PasteEvent event, String text) {
+    final continuesActivePaste =
+        _pasteActive &&
+        !event.isFirst &&
+        !_pasteFinalReceived &&
+        event.pasteId == _activePasteId;
+    if (!continuesActivePaste) {
+      _cancelScheduledPaste();
+      _pasteActive = true;
+      _activePasteId = event.pasteId;
     }
 
-    _controller.paste(chunk, coalesce: !firstChunk);
-    _pasteProgress = session.progress;
-    if (session.isComplete) {
-      _finishScheduledPaste(generation);
-      return;
-    }
-    setState(() {});
+    _queuedPasteSegments.addLast((text: text, isFinal: event.isFinal));
+    _queuedPasteCodeUnits += text.length;
+    _pasteTotalLength += text.length;
+    if (event.isFinal) _pasteFinalReceived = true;
+
+    final generation = _pasteGeneration;
+    if (_pasteSession == null) _applyNextPasteChunk(generation);
+    _drainQueuedPasteToBound(generation);
+    _updatePasteProgress();
+    if (mounted) setState(() {});
     _scheduleNextPasteChunk(generation);
   }
 
-  void _finishScheduledPaste(int generation) {
-    if (generation != _pasteGeneration) return;
+  bool get _hasPendingPasteWork =>
+      _pasteSession != null || _queuedPasteSegments.isNotEmpty;
+
+  bool get _pasteQueueIsOverBound =>
+      _queuedPasteCodeUnits > _maxQueuedPasteCodeUnits ||
+      _queuedPasteSegments.length > _maxQueuedPasteSegments;
+
+  void _drainQueuedPasteToBound(int generation) {
+    // TuiEventSink is synchronous, so it cannot signal parser backpressure.
+    // Collapse only the active tail under pressure, in one controller edit,
+    // then promote a queued parser segment to the separately bounded active
+    // slot. This avoids hundreds of synchronous 2 KiB edits per segment.
+    while (_pasteQueueIsOverBound &&
+        generation == _pasteGeneration &&
+        _pasteActive) {
+      if (_pasteSession == null && !_activateNextPasteSegment(generation)) {
+        break;
+      }
+      if (!_pasteQueueIsOverBound || generation != _pasteGeneration) break;
+      final session = _pasteSession!;
+      final remaining = session.takeRemaining();
+      if (remaining != null) _applyBulkPaste(remaining);
+      _pasteSession = null;
+      if (_currentPasteSegmentIsFinal) _completePaste();
+    }
+  }
+
+  bool _activateNextPasteSegment(int generation) {
+    while (_pasteSession == null &&
+        _pasteActive &&
+        generation == _pasteGeneration) {
+      if (_queuedPasteSegments.isEmpty) return false;
+      final segment = _queuedPasteSegments.removeFirst();
+      _queuedPasteCodeUnits -= segment.text.length;
+      _currentPasteSegmentIsFinal = segment.isFinal;
+      if (segment.text.isEmpty) {
+        if (segment.isFinal) _completePaste();
+        continue;
+      }
+      _pasteSession = TextPasteSession(
+        text: segment.text,
+        policy: widget.pastePolicy,
+      );
+    }
+    return _pasteSession != null;
+  }
+
+  void _applyBulkPaste(String text) {
+    _controller.paste(text, coalesce: _pasteTransactionStarted);
+    _pasteTransactionStarted = true;
+    _pasteInsertedLength += text.length;
+    _updatePasteProgress();
+  }
+
+  bool _applyNextPasteChunk(int generation) {
+    if (!mounted || generation != _pasteGeneration || !_pasteActive) {
+      return false;
+    }
+
+    // Skip empty phase markers iteratively. A paste whose last data segment
+    // lands exactly on the parser byte cap ends with an empty `end` event that
+    // must close (not add to) the undo transaction.
+    while (_pasteActive && generation == _pasteGeneration) {
+      if (_pasteSession == null && !_activateNextPasteSegment(generation)) {
+        return false;
+      }
+      if (!_pasteActive || generation != _pasteGeneration) return false;
+
+      final session = _pasteSession!;
+      final chunk = session.nextChunk();
+      if (chunk == null) {
+        _pasteSession = null;
+        if (_currentPasteSegmentIsFinal) _completePaste();
+        continue;
+      }
+
+      _controller.paste(chunk, coalesce: _pasteTransactionStarted);
+      _pasteTransactionStarted = true;
+      _pasteInsertedLength += chunk.length;
+      if (session.isComplete) {
+        _pasteSession = null;
+        if (_currentPasteSegmentIsFinal) _completePaste();
+      }
+      _updatePasteProgress();
+      return true;
+    }
+    return false;
+  }
+
+  void _completePaste() {
+    _pasteGeneration++;
     _pasteSession = null;
+    _queuedPasteSegments.clear();
+    _queuedPasteCodeUnits = 0;
+    _pasteActive = false;
+    _pasteFinalReceived = false;
+    _pasteTransactionStarted = false;
+    _currentPasteSegmentIsFinal = false;
+    _pasteChunkScheduled = false;
+    _activePasteId = null;
+    _pasteInsertedLength = 0;
+    _pasteTotalLength = 0;
     _pasteProgress = TextPasteProgress.inactive;
-    if (mounted) setState(() {});
+  }
+
+  void _updatePasteProgress() {
+    _pasteProgress = _pasteActive
+        ? TextPasteProgress(
+            active: true,
+            insertedLength: _pasteInsertedLength,
+            totalLength: _pasteTotalLength,
+          )
+        : TextPasteProgress.inactive;
   }
 
   void _scheduleNextPasteChunk(int generation) {
-    final binding = TuiBinding.maybeOf(context);
-    if (binding == null) {
-      scheduleMicrotask(() {
-        _applyNextPasteChunk(generation, firstChunk: false);
-      });
+    if (generation != _pasteGeneration ||
+        !_pasteActive ||
+        !_hasPendingPasteWork ||
+        _pasteChunkScheduled) {
       return;
     }
-    binding.addPostFrameCallback((_) {
-      _applyNextPasteChunk(generation, firstChunk: false);
-    });
+    _pasteChunkScheduled = true;
+    final binding = TuiBinding.maybeOf(context);
+    if (binding == null) {
+      scheduleMicrotask(() => _runScheduledPasteChunk(generation));
+      return;
+    }
+    binding.addPostFrameCallback((_) => _runScheduledPasteChunk(generation));
+  }
+
+  void _runScheduledPasteChunk(int generation) {
+    if (!mounted || generation != _pasteGeneration) return;
+    _pasteChunkScheduled = false;
+    _applyNextPasteChunk(generation);
+    _updatePasteProgress();
+    if (mounted) setState(() {});
+    _scheduleNextPasteChunk(generation);
   }
 
   String _redactClipboardText(String text) {
@@ -256,6 +415,9 @@ class _TextAreaState extends State<TextArea>
 
   KeyEventResult _copyOrCutSelection({required bool cut}) {
     if (!widget.enabled) return KeyEventResult.ignored;
+    // Clipboard actions read selection/text synchronously. They must observe
+    // all paste content the area has already accepted, not a rendered prefix.
+    _cancelScheduledPaste();
     final selected = _controller.selectedText;
     if (selected.isEmpty) return KeyEventResult.ignored;
     if (cut && !_canEdit) return KeyEventResult.handled;
@@ -273,7 +435,6 @@ class _TextAreaState extends State<TextArea>
         return KeyEventResult.handled;
     }
     if (cut) {
-      _cancelScheduledPaste();
       _controller.deleteSelection();
     }
     return KeyEventResult.handled;
@@ -320,7 +481,18 @@ class _TextAreaState extends State<TextArea>
   KeyEventResult onPaste(String text) {
     if (!widget.enabled) return KeyEventResult.ignored;
     if (widget.readOnly) return KeyEventResult.handled;
-    _startPaste(text);
+    _startPaste(
+      PasteEvent(text),
+      TextEditingModel.normalizeMultilineInput(text),
+    );
+    return KeyEventResult.handled;
+  }
+
+  @override
+  KeyEventResult onPasteEvent(PasteEvent event) {
+    if (!widget.enabled) return KeyEventResult.ignored;
+    if (widget.readOnly) return KeyEventResult.handled;
+    _startPaste(event, TextEditingModel.normalizeMultilineInput(event.text));
     return KeyEventResult.handled;
   }
 
@@ -354,7 +526,12 @@ class _TextAreaState extends State<TextArea>
   KeyEventResult _handleKey(KeyEvent event) {
     if (!widget.enabled) return KeyEventResult.ignored;
     final action = widget.keymap.resolve(event);
-    if (action == null) return KeyEventResult.ignored;
+    if (action == null) {
+      // An ancestor binding may synchronously inspect the controller or unmount
+      // this area. Preserve input ordering before bubbling any later key.
+      _cancelScheduledPaste();
+      return KeyEventResult.ignored;
+    }
     switch (action) {
       case TextEditingKeyAction.copy:
         return _copyOrCutSelection(cut: false);
@@ -446,12 +623,18 @@ class _TextAreaState extends State<TextArea>
         _controller.insert('\n');
         return KeyEventResult.handled;
       case TextEditingKeyAction.escape:
+        // Escape still bubbles when no callback is installed, but an ancestor
+        // may inspect the value or unmount this area synchronously.
+        _cancelScheduledPaste();
         if (widget.onEscape != null) {
           widget.onEscape!();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
       case TextEditingKeyAction.submit:
+        // Submission may bubble to an app-level binding. It must observe the
+        // complete accepted transaction whether or not this area has a callback.
+        _cancelScheduledPaste();
         if (widget.onSubmit != null) {
           widget.onSubmit!(_controller.text);
           return KeyEventResult.handled;
@@ -460,13 +643,14 @@ class _TextAreaState extends State<TextArea>
       case TextEditingKeyAction.previousVertical:
       case TextEditingKeyAction.nextVertical:
       case TextEditingKeyAction.acceptCompletion:
+        _cancelScheduledPaste();
         return KeyEventResult.ignored;
     }
   }
 
   @override
   void dispose() {
-    _cancelScheduledPaste();
+    _discardScheduledPaste();
     _controller.removeListener(_onChange);
     if (_ownsController) _controller.dispose();
     _focusNode.textInputClaimant = null;
@@ -900,7 +1084,18 @@ class RenderTextArea extends RenderObject {
       _focusNode.caretRect = null;
       return;
     }
-    _focusNode.caretRect = _caretRect(screenOffset ?? offset, clipRect);
+    final screen = screenOffset ?? offset;
+    final screenCaret = _caretRect(screen, null);
+    if (screenCaret != null && FocusGeometryCapture.isActive) {
+      FocusGeometryCapture.record(
+        _replayCaret,
+        screenCaret,
+        clipRect: clipRect,
+      );
+    }
+    _focusNode.caretRect = clipRect == null
+        ? screenCaret
+        : screenCaret?.intersect(clipRect);
 
     // Empty: paint the (possibly multi-line) placeholder, with the
     // cursor over the very first cell when visible.
@@ -1022,6 +1217,11 @@ class RenderTextArea extends RenderObject {
     );
     return clipRect == null ? rect : rect.intersect(clipRect);
   }
+
+  // ignore: prefer_function_declarations_over_variables
+  late final FocusGeometryCallback _replayCaret = (bounds) {
+    _focusNode.caretRect = bounds;
+  };
 
   int _lineStartOffset(List<String> lines, int lineIndex) {
     var offset = 0;

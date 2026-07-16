@@ -24,7 +24,7 @@ void main() {
   });
 
   group('Windows console mode planning', () {
-    test('enables virtual terminal input and output for interactive mode', () {
+    test('enables raw virtual-terminal input and output', () {
       final plan = planWindowsConsoleModes(
         mode: TerminalMode.interactive,
         inputMode: 0x0007,
@@ -33,7 +33,7 @@ void main() {
 
       expect(plan.inputChanged, isTrue);
       expect(plan.outputChanged, isTrue);
-      expect(plan.desiredInputMode, 0x0207);
+      expect(plan.desiredInputMode, 0x0280);
       expect(plan.desiredOutputMode, 0x000d);
     });
 
@@ -56,12 +56,12 @@ void main() {
     test('does not mark already-enabled flags as changed', () {
       final plan = planWindowsConsoleModes(
         mode: TerminalMode.interactive,
-        inputMode: 0x0207,
+        inputMode: 0x0280,
         outputMode: 0x000d,
       );
 
       expect(plan.changed, isFalse);
-      expect(plan.desiredInputMode, 0x0207);
+      expect(plan.desiredInputMode, 0x0280);
       expect(plan.desiredOutputMode, 0x000d);
     });
 
@@ -83,8 +83,32 @@ void main() {
       );
       expect(noOutput.inputChanged, isTrue);
       expect(noOutput.outputChanged, isFalse);
-      expect(noOutput.desiredInputMode, 0x0200);
+      expect(noOutput.desiredInputMode, 0x0280);
       expect(noOutput.desiredOutputMode, isNull);
+    });
+
+    test('clears quick-edit together with processed, line, and echo input', () {
+      final plan = planWindowsConsoleModes(
+        mode: TerminalMode.interactive,
+        inputMode: 0x00c7,
+        outputMode: 0x000d,
+      );
+
+      expect(plan.inputChanged, isTrue);
+      expect(plan.desiredInputMode, 0x0280);
+      expect(plan.outputChanged, isFalse);
+    });
+
+    test('preserves unrelated input flags while applying the raw mask', () {
+      final plan = planWindowsConsoleModes(
+        mode: TerminalMode.interactive,
+        inputMode: 0x02ff,
+        outputMode: 0x000d,
+      );
+
+      expect(plan.inputChanged, isTrue);
+      expect(plan.desiredInputMode, 0x02b8);
+      expect(plan.outputChanged, isFalse);
     });
   });
 }

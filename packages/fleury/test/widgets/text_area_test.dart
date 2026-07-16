@@ -14,6 +14,17 @@ KeyEvent _shiftCode(KeyCode keyCode) =>
 KeyEvent _ctrlChar(String char) =>
     KeyEvent(char: char, modifiers: const {KeyModifier.ctrl});
 
+final class _DispatcherSink implements TuiEventSink {
+  const _DispatcherSink(this.dispatcher);
+
+  final InputDispatcher dispatcher;
+
+  @override
+  void add(TuiEvent event) {
+    dispatcher.dispatch(event);
+  }
+}
+
 List<String> _lines(FleuryTester tester, {int cols = 10, required int rows}) {
   final buf = tester.render(size: CellSize(cols, rows));
   return [
@@ -277,6 +288,25 @@ void main() {
       expect(_lines(tester, rows: 3), ['one', 'two', 'three']);
     });
 
+    testWidgets('paste canonicalizes CRLF, LFCR, and lone CR separators', (
+      tester,
+    ) {
+      final ctl = TextEditingController();
+      tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
+
+      tester.paste('one\r\ntwo\n\rthree\rfour\r\n\r\nfive');
+
+      expect(ctl.text, 'one\ntwo\nthree\nfour\n\nfive');
+      expect(_lines(tester, rows: 6), [
+        'one',
+        'two',
+        'three',
+        'four',
+        '',
+        'five',
+      ]);
+    });
+
     testWidgets('paste is one undoable multiline transaction', (tester) {
       final ctl = TextEditingController();
       tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
@@ -319,6 +349,276 @@ void main() {
       tester.pump();
       area = tester.semantics().single(role: SemanticRole.textArea);
       expect(area.state.pasteInProgress, isFalse);
+
+      tester.sendKey(_ctrlChar('z'));
+      expect(ctl.text, '');
+    });
+
+    testWidgets(
+      'a rapid second paste preserves the first tail as a separate undo',
+      (tester) {
+        final ctl = TextEditingController();
+        tester.pumpWidget(
+          TextArea(
+            controller: ctl,
+            autofocus: true,
+            pastePolicy: const TextPastePolicy(
+              largePasteThreshold: 0,
+              chunkSize: 2,
+            ),
+          ),
+        );
+
+        tester.paste('ab\ncd');
+        expect(ctl.text, 'ab', reason: 'the first paste is still active');
+        tester.paste('XY\nZ');
+
+        for (var i = 0; i < 10; i++) {
+          tester.pump();
+        }
+        expect(
+          ctl.text,
+          'ab\ncdXY\nZ',
+          reason: 'accepting a second paste must not discard the first tail',
+        );
+
+        tester.sendKey(_ctrlChar('z'));
+        expect(ctl.text, 'ab\ncd', reason: 'undo only the second paste');
+        tester.sendKey(_ctrlChar('z'));
+        expect(ctl.text, '', reason: 'undo the complete first paste');
+
+        tester.sendKey(_ctrlChar('y'));
+        expect(ctl.text, 'ab\ncd');
+        tester.sendKey(_ctrlChar('y'));
+        expect(ctl.text, 'ab\ncdXY\nZ');
+      },
+    );
+
+    testWidgets('parser-segmented paste is lossless and one undo transaction', (
+      tester,
+    ) {
+      final ctl = TextEditingController();
+      tester.pumpWidget(
+        TextArea(
+          controller: ctl,
+          autofocus: true,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 100,
+            chunkSize: 2,
+          ),
+        ),
+      );
+
+      final parser = InputParser(maxPasteBytes: 4);
+      final sink = _DispatcherSink(tester.dispatcher);
+      parser.feed('\x1B[200~abcd'.codeUnits, sink);
+      parser.feed('efgh'.codeUnits, sink);
+      parser.feed('ijkl'.codeUnits, sink);
+      parser.feed('\x1B[201~'.codeUnits, sink);
+      expect(ctl.text, 'abcdefghijkl');
+
+      tester.sendKey(_ctrlChar('z'));
+      expect(ctl.text, '');
+    });
+
+    testWidgets(
+      'segmented queue pressure performs bounded synchronous controller edits',
+      (tester) {
+        final ctl = TextEditingController();
+        tester.pumpWidget(
+          TextArea(
+            controller: ctl,
+            autofocus: true,
+            pastePolicy: const TextPastePolicy(
+              largePasteThreshold: 0,
+              chunkSize: 1,
+            ),
+          ),
+        );
+
+        var notifications = 0;
+        ctl.addListener(() => notifications++);
+        const pasteId = 992;
+        tester.dispatcher.dispatch(
+          PasteEvent.segment(
+            List.filled(600, 'x').join(),
+            pasteId: pasteId,
+            phase: PasteEventPhase.start,
+          ),
+        );
+        expect(notifications, 1, reason: 'the first chunk applies immediately');
+
+        final beforePressure = notifications;
+        tester.dispatcher.dispatch(
+          PasteEvent.segment(
+            List.filled(64 * 1024 + 1, 'y').join(),
+            pasteId: pasteId,
+            phase: PasteEventPhase.end,
+          ),
+        );
+        final synchronousPressureEdits = notifications - beforePressure;
+
+        expect(
+          synchronousPressureEdits,
+          lessThan(32),
+          reason:
+              'one over-bound segment must not synchronously drain hundreds '
+              'of one-code-unit controller edits',
+        );
+      },
+    );
+
+    testWidgets('undo during a scheduled paste preserves the full redo value', (
+      tester,
+    ) {
+      final ctl = TextEditingController();
+      tester.pumpWidget(
+        TextArea(
+          controller: ctl,
+          autofocus: true,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 0,
+            chunkSize: 2,
+          ),
+        ),
+      );
+
+      tester.paste('ab\ncd');
+      expect(ctl.text, 'ab');
+
+      tester.sendKey(_ctrlChar('z'));
+      expect(ctl.text, '');
+
+      tester.pump();
+      tester.pump();
+      expect(ctl.text, '');
+
+      tester.sendKey(_ctrlChar('y'));
+      expect(
+        ctl.text,
+        'ab\ncd',
+        reason:
+            'undo must finish the accepted paste tail before recording redo',
+      );
+    });
+
+    testWidgets('submit observes the complete accepted paste transaction', (
+      tester,
+    ) {
+      final ctl = TextEditingController();
+      final submitted = <String>[];
+      tester.pumpWidget(
+        TextArea(
+          controller: ctl,
+          autofocus: true,
+          keymap: TextEditingKeymap.chat,
+          onSubmit: submitted.add,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 0,
+            chunkSize: 2,
+          ),
+        ),
+      );
+
+      tester.paste('ab\ncd');
+      expect(ctl.text, 'ab', reason: 'the paste is still frame-chunked');
+
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+
+      expect(submitted, ['ab\ncd']);
+      expect(ctl.text, 'ab\ncd');
+      tester.pump();
+      tester.pump();
+      expect(ctl.text, 'ab\ncd', reason: 'no paste tail may land after submit');
+
+      tester.sendKey(_ctrlChar('z'));
+      expect(ctl.text, '', reason: 'the completed paste remains one undo step');
+    });
+
+    testWidgets('Escape callback observes the complete accepted paste', (
+      tester,
+    ) {
+      final ctl = TextEditingController();
+      String? escapedValue;
+      tester.pumpWidget(
+        TextArea(
+          controller: ctl,
+          autofocus: true,
+          onEscape: () => escapedValue = ctl.text,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 0,
+            chunkSize: 2,
+          ),
+        ),
+      );
+
+      tester.paste('ab\ncd');
+      expect(ctl.text, 'ab');
+
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+
+      expect(escapedValue, 'ab\ncd');
+      expect(ctl.text, 'ab\ncd');
+      tester.sendKey(_ctrlChar('z'));
+      expect(ctl.text, '');
+    });
+
+    testWidgets('bubbled Escape follows the complete accepted paste', (tester) {
+      final ctl = TextEditingController();
+      var ancestorEscapes = 0;
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeyChord.escape, onEvent: (_) => ancestorEscapes += 1),
+          ],
+          child: TextArea(
+            controller: ctl,
+            autofocus: true,
+            pastePolicy: const TextPastePolicy(
+              largePasteThreshold: 0,
+              chunkSize: 2,
+            ),
+          ),
+        ),
+      );
+
+      tester.paste('ab\ncd');
+      expect(ctl.text, 'ab');
+
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+
+      expect(ancestorEscapes, 1);
+      expect(ctl.text, 'ab\ncd');
+      tester.sendKey(_ctrlChar('z'));
+      expect(ctl.text, '');
+    });
+
+    testWidgets('parser segments preserve a paired newline at the byte cap', (
+      tester,
+    ) {
+      final ctl = TextEditingController();
+      tester.pumpWidget(
+        TextArea(
+          controller: ctl,
+          autofocus: true,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 0,
+            chunkSize: 2,
+          ),
+        ),
+      );
+
+      final parser = InputParser(maxPasteBytes: 4);
+      parser.feed(
+        '\x1B[200~abc\r\ndefghij\x1B[201~'.codeUnits,
+        _DispatcherSink(tester.dispatcher),
+      );
+
+      for (var i = 0; i < 10; i++) {
+        tester.pump();
+      }
+      expect(ctl.text, 'abc\ndefghij');
+      expect(_lines(tester, rows: 2), ['abc', 'defghij']);
 
       tester.sendKey(_ctrlChar('z'));
       expect(ctl.text, '');
@@ -508,9 +808,7 @@ void main() {
   });
 
   group('F5: chat keymap + auto-grow', () {
-    testWidgets('chat keymap submits on Enter with the current text', (
-      tester,
-    ) {
+    testWidgets('chat keymap submits on Enter with the current text', (tester) {
       final submitted = <String>[];
       final ctl = TextEditingController(text: 'hello');
       tester.pumpWidget(
@@ -657,10 +955,7 @@ void main() {
       );
 
       // An unchanged frame performs zero new splits.
-      expect(
-        splitsDuring(() => tester.render(size: const CellSize(10, 4))),
-        0,
-      );
+      expect(splitsDuring(() => tester.render(size: const CellSize(10, 4))), 0);
 
       // Cursor movement re-lays-out and repaints, but the text is unchanged
       // — still no new split.
@@ -700,10 +995,7 @@ void main() {
         TextArea(controller: ctl, autofocus: true, placeholder: 'type\nhere'),
       );
 
-      expect(
-        splitsDuring(() => tester.render(size: const CellSize(10, 2))),
-        1,
-      );
+      expect(splitsDuring(() => tester.render(size: const CellSize(10, 2))), 1);
       expect(
         splitsDuring(() => expect(_lines(tester, rows: 2), ['type', 'here'])),
         0,

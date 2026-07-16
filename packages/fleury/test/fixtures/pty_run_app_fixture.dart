@@ -77,22 +77,54 @@ Future<void> main(List<String> args) async {
   }
   if (args.contains('--handoff')) {
     final driver = createNativeTerminalDriver();
-    Timer(const Duration(milliseconds: 250), () {
-      unawaited(
-        withTerminalHandoff(driver, () {
-          File('/dev/stdout').writeAsStringSync('PTY-HANDOFF\n');
-        }),
-      );
-    });
     _exitWith(
       await runApp(
-        const _PtySmokeApp(label: 'PTY-HANDOFF-MODE'),
+        _PtyHandoffApp(driver),
         driver: driver,
         enableHotReload: false,
       ),
     );
   }
   _exitWith(await runApp(const _PtySmokeApp(), enableHotReload: false));
+}
+
+class _PtyHandoffApp extends StatefulWidget {
+  const _PtyHandoffApp(this.driver);
+
+  final TerminalDriver driver;
+
+  @override
+  State<_PtyHandoffApp> createState() => _PtyHandoffAppState();
+}
+
+class _PtyHandoffAppState extends State<_PtyHandoffApp> {
+  var _scheduled = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_scheduled) {
+      _scheduled = true;
+      // Prove handoff only after the first frame has mounted and reached the
+      // presenter. A fixed startup timer can fire during bounded terminal
+      // capability probes, while the driver is still inactive.
+      TuiBinding.of(context).addPostFrameCallback((_) {
+        unawaited(_runHandoff());
+      });
+    }
+    return const _PtySmokeApp(label: 'PTY-HANDOFF-MODE');
+  }
+
+  Future<void> _runHandoff() async {
+    await withTerminalHandoff(widget.driver, () {
+      File('/dev/stdout').writeAsStringSync('PTY-HANDOFF-OPERATION\n');
+    });
+    // The handoff future resolves only after Fleury has re-entered its raw and
+    // alternate-screen modes. End from that proof point instead of racing a
+    // separately timed Ctrl+C against the child-terminal window.
+    if (!requestExit()) {
+      throw StateError('PTY handoff completed without an active app.');
+    }
+  }
 }
 
 class _PtySmokeApp extends StatelessWidget {

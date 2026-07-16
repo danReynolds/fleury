@@ -148,6 +148,40 @@ final class TextEditingModel {
         .replaceAll(RegExp('[\n\r]'), ' ');
   }
 
+  /// Canonicalizes clipboard line endings for a multiline editing value.
+  ///
+  /// Terminal and browser clipboards can supply CRLF (Windows), LFCR, or lone
+  /// CR separators. Fleury stores multiline text with LF so renderers do not
+  /// expose the otherwise-unsafe CR as a replacement glyph.
+  static String normalizeMultilineInput(String text) {
+    if (!text.contains('\r')) return text;
+    final normalized = StringBuffer();
+    var index = 0;
+    while (index < text.length) {
+      final codeUnit = text.codeUnitAt(index);
+      if (codeUnit != 0x0D && codeUnit != 0x0A) {
+        normalized.writeCharCode(codeUnit);
+        index++;
+        continue;
+      }
+
+      // Consume one paired CRLF/LFCR separator, or one lone CR/LF. This is a
+      // single left-to-right pass: in `CR LF CR`, for example, the CRLF and
+      // trailing CR remain two newlines instead of two replaceAll passes
+      // accidentally matching the newly-adjacent LFCR and collapsing them.
+      if (index + 1 < text.length) {
+        final next = text.codeUnitAt(index + 1);
+        if ((codeUnit == 0x0D && next == 0x0A) ||
+            (codeUnit == 0x0A && next == 0x0D)) {
+          index++;
+        }
+      }
+      normalized.write('\n');
+      index++;
+    }
+    return normalized.toString();
+  }
+
   static TextEditingValue insert(
     TextEditingValue value,
     String text, {

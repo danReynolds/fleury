@@ -4,18 +4,18 @@
 // SIGTERM become [SignalEvent]s so the app owns its shutdown, backed by
 // a grace deadline that force-terminates a hung app (restore → exit).
 //
-// Status: ships, but lacks test coverage by design — driver tests need
-// a real (or simulated) PTY, and that lives one slice further out.
-// The byte-level work is delegated to [InputParser] which IS heavily
-// tested.
+// Lifecycle behavior is covered at two levels: deterministic fake-stdio tests
+// pin mode ownership, EOF, signals, suspend, and handoff invariants; the PTY
+// integration tier proves actual terminal entry/restoration bytes.
 //
-// Windows: not supported in this driver. A WindowsTerminalDriver lives
-// behind the same [TerminalDriver] interface in a future slice; the
-// console-mode dance is different enough to be its own file.
+// Windows uses its own console-mode driver behind the same [TerminalDriver]
+// interface; the console-mode dance is different enough to stay separate.
 
 import 'dart:async';
+import 'dart:ffi';
 import 'dart:io';
 
+import 'package:ffi/ffi.dart';
 import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
@@ -27,6 +27,12 @@ import 'terminal_driver.dart';
 import 'terminal_probe.dart';
 import 'terminal_sequences.dart';
 
+/// Native POSIX terminal lifecycle and byte-input driver.
+///
+/// Interactive Ctrl+Z is handled orderly: Fleury restores the terminal,
+/// self-stops, then re-enters after `fg`. Externally sending SIGTSTP is not a
+/// supported lifecycle path because Dart cannot safely watch SIGTSTP/SIGCONT;
+/// it may stop the process before Fleury can restore terminal modes.
 class PosixTerminalDriver
     with TerminalAttentionSequences
     implements TerminalDriver, TerminalHandoffDriver {
@@ -36,10 +42,20 @@ class PosixTerminalDriver
     this.signalGrace = const Duration(seconds: 5),
     @visibleForTesting void Function(int exitCode)? forceExitOverride,
     @visibleForTesting bool Function()? selfStopOverride,
+    @visibleForTesting PosixTerminalModeController? terminalModeController,
   }) : _stdin = stdinOverride ?? stdin,
        _stdout = stdoutOverride ?? stdout,
        _forceExitOverride = forceExitOverride,
-       _selfStopOverride = selfStopOverride;
+       _selfStopOverride = selfStopOverride,
+       _terminalModeController =
+           terminalModeController ?? NativePosixTerminalModeController() {
+    _events = StreamController<TuiEvent>.broadcast(
+      onListen: _deliverPendingSignalToNewListener,
+    );
+    _sink
+      ..target = _events
+      ..intercept = _interceptParsedEvent;
+  }
 
   final Stdin _stdin;
   final Stdout _stdout;
@@ -54,11 +70,18 @@ class PosixTerminalDriver
   /// behavior is assertable without killing the test process.
   final void Function(int exitCode)? _forceExitOverride;
 
-  /// Test seam: replaces the SIGTSTP self-stop (`Process.killPid`) so
+  /// Test seam: replaces the SIGSTOP self-stop (`Process.killPid`) so
   /// [_suspend]'s gating/single-flight is assertable without actually
   /// stopping the test process. Returns whether the stop "took" — a test can
   /// return false to exercise the failed-stop un-gate path.
   final bool Function()? _selfStopOverride;
+
+  /// Owns the complete POSIX termios snapshot used by raw mode. Dart's
+  /// `Stdin.lineMode` / `echoMode` API only toggles ICANON/ECHO and leaves ISIG
+  /// enabled, so Ctrl+Z is consumed by the kernel as SIGTSTP before Fleury can
+  /// restore the screen. The native controller uses cfmakeraw, making Ctrl+Z a
+  /// parsed byte that can take the orderly restore -> stop -> resume path.
+  final PosixTerminalModeController _terminalModeController;
 
   // Snapshotted once: whether each standard stream is a real TTY. Output
   // governs whether we may emit screen-control sequences; input governs
@@ -67,26 +90,28 @@ class PosixTerminalDriver
   late final bool _stdoutIsTerminal = _stdout.hasTerminal;
 
   final InputParser _parser = InputParser();
-  final StreamController<TuiEvent> _events =
-      StreamController<TuiEvent>.broadcast();
+  late final StreamController<TuiEvent> _events;
   final _ParserSink _sink = _ParserSink();
 
   StreamSubscription<List<int>>? _stdinSubscription;
   StreamSubscription<ProcessSignal>? _resizeSubscription;
   StreamSubscription<ProcessSignal>? _intSubscription;
   StreamSubscription<ProcessSignal>? _termSubscription;
-  StreamSubscription<ProcessSignal>? _tstpSubscription;
-  StreamSubscription<ProcessSignal>? _contSubscription;
   Timer? _flushTimer;
   Timer? _graceTimer;
   AppSignal? _pendingSignal;
+  bool _pendingSignalDelivered = false;
 
   bool _active = false;
+  bool _entering = false;
+  bool _restoring = false;
+  int _lifecycleGeneration = 0;
   bool _handoffActive = false;
-  // True from the moment SIGTSTP restore begins until SIGCONT re-enters our
-  // mode. Like [_handoffActive], it gates frame [write]s: while the terminal
-  // is restored for the shell (or the process is stopped), a frame flush must
-  // not spray ANSI onto the user's screen. Also single-flights [_suspend].
+  Future<void> _handoffTail = Future<void>.value();
+  // True from the moment Ctrl+Z restoration begins until foregrounding
+  // continues after SIGSTOP and re-enters our mode. Like [_handoffActive], it
+  // gates frame [write]s while the shell owns the terminal and single-flights
+  // [_suspend].
   bool _suspended = false;
   TerminalMode? _mode;
 
@@ -118,6 +143,7 @@ class PosixTerminalDriver
   AmbiguousCharWidth? _ambiguousCharWidthOverride;
   bool _wroteEnterSequences = false;
   bool _changedStdin = false;
+  bool _nativeRawMode = false;
   bool? _originalLineMode;
   bool? _originalEchoMode;
 
@@ -194,14 +220,50 @@ class PosixTerminalDriver
   /// [restore], and [restore] disarms the deadline.
   @visibleForTesting
   void deliverSignal(AppSignal signal) {
+    // Teardown is already the terminal condition. A watcher callback queued
+    // just before cancellation must not re-arm the grace timer or publish into
+    // an event stream whose owner is going away.
+    if (_restoring) return;
     if (_pendingSignal == signal) {
+      // During enter() there is not yet an app event listener to own shutdown.
+      // Keep the latest signal pending instead of racing an asynchronous
+      // restore against the still-running terminal handshake. The ordinary
+      // second-signal force contract begins once enter() has completed.
+      if (_entering && !_active) {
+        _graceTimer?.cancel();
+        _graceTimer = Timer(signalGrace, () => _forceExit(signal));
+        return;
+      }
       _forceExit(signal);
       return;
     }
     _pendingSignal = signal;
-    _events.add(SignalEvent(signal));
+    _pendingSignalDelivered = false;
+    _emitPendingSignalIfListened();
     _graceTimer?.cancel();
     _graceTimer = Timer(signalGrace, () => _forceExit(signal));
+  }
+
+  void _emitPendingSignalIfListened() {
+    final signal = _pendingSignal;
+    if (signal == null ||
+        _pendingSignalDelivered ||
+        !_events.hasListener ||
+        _events.isClosed) {
+      return;
+    }
+    _pendingSignalDelivered = true;
+    _events.add(SignalEvent(signal));
+  }
+
+  /// Replays a signal received during enter() to runApp's first listener.
+  ///
+  /// The controller is broadcast, so adding synchronously from `onListen`
+  /// risks firing before the first subscription is fully installed. One
+  /// microtask preserves the signal without that ordering ambiguity.
+  void _deliverPendingSignalToNewListener() {
+    if (_pendingSignal == null || _pendingSignalDelivered) return;
+    scheduleMicrotask(_emitPendingSignalIfListened);
   }
 
   @override
@@ -234,17 +296,38 @@ class PosixTerminalDriver
     if (_active) {
       throw StateError('PosixTerminalDriver.enter called on an active driver.');
     }
+    _restoring = false;
+    _entering = true;
+    final enterGeneration = ++_lifecycleGeneration;
     _mode = mode;
     _sink.target = _events;
+
+    // Arm process-termination signals BEFORE the first terminal mutation. The
+    // startup probes below can take up to ~300ms; installing these afterward
+    // left a reproducible window where SIGTERM killed the process after the alt
+    // screen was entered but before any cleanup handler existed. A signal that
+    // lands before runApp subscribes is retained and replayed by
+    // [_deliverPendingSignalToNewListener].
+    _intSubscription = _watchSignal(
+      ProcessSignal.sigint,
+      (_) => deliverSignal(AppSignal.interrupt),
+    );
+    _termSubscription = _watchSignal(
+      ProcessSignal.sigterm,
+      (_) => deliverSignal(AppSignal.terminate),
+    );
 
     // Raw mode only makes sense on a terminal stdin; reading lineMode/
     // echoMode throws on a pipe, so guard rather than catch. Piped input
     // (stdin not a terminal, e.g. scripted keystrokes) still streams in
     // via the listener below.
     if (mode.rawInput && _stdinIsTerminal) {
-      _originalLineMode = _stdin.lineMode;
-      _originalEchoMode = _stdin.echoMode;
-      _setRawMode();
+      _nativeRawMode = _terminalModeController.enableRawMode();
+      if (!_nativeRawMode) {
+        _originalLineMode = _stdin.lineMode;
+        _originalEchoMode = _stdin.echoMode;
+        _setDartRawMode();
+      }
       _changedStdin = true;
     }
 
@@ -286,7 +369,16 @@ class PosixTerminalDriver
         _scheduleFlush();
       },
       onError: (Object error, StackTrace stack) {
-        _events.addError(error, stack);
+        if (!_events.isClosed) _events.addError(error, stack);
+      },
+      onDone: () {
+        // stdin EOF / PTY disconnect is the end of a local terminal session.
+        // Closing the driver event stream lets runApp's onDone path exit and
+        // restore instead of waiting forever on an input source that vanished.
+        _flushTimer?.cancel();
+        _flushTimer = null;
+        _parser.finish(_sink);
+        if (!_events.isClosed) unawaited(_events.close());
       },
       cancelOnError: false,
     );
@@ -298,27 +390,17 @@ class PosixTerminalDriver
     await _maybeProbeImageProtocol();
     await _maybeProbeAmbiguousWidth(mode.alternateScreen);
 
+    // A concurrent force-restore can complete while a bounded startup probe is
+    // awaiting its reply. Never reactivate a driver whose lifecycle moved on.
+    if (_restoring || enterGeneration != _lifecycleGeneration) return;
+
     _resizeSubscription = _watchSignal(ProcessSignal.sigwinch, (_) {
-      _events.add(ResizeEvent(size));
+      if (!_events.isClosed) _events.add(ResizeEvent(size));
     });
 
-    _intSubscription = _watchSignal(
-      ProcessSignal.sigint,
-      (_) => deliverSignal(AppSignal.interrupt),
-    );
-    _termSubscription = _watchSignal(
-      ProcessSignal.sigterm,
-      (_) => deliverSignal(AppSignal.terminate),
-    );
-
-    // Job control: on Ctrl+Z, hand the terminal back to the shell before
-    // stopping; on `fg`, re-enter and repaint. SIGCONT is watched for the
-    // whole session; SIGTSTP is dropped during the stop and re-armed on
-    // resume (so the default stop action can fire).
-    _contSubscription = _watchSignal(ProcessSignal.sigcont, (_) => _resume());
-    _tstpSubscription = _watchSignal(ProcessSignal.sigtstp, (_) => _suspend());
-
     _active = true;
+    _entering = false;
+    _emitPendingSignalIfListened();
   }
 
   /// When the environment doesn't already name a native image protocol, ask
@@ -470,78 +552,129 @@ class PosixTerminalDriver
     return buildTerminalExitSequences(mode);
   }
 
-  void _setRawMode() {
+  bool _interceptParsedEvent(TuiEvent event) {
+    if (!_active ||
+        !_nativeRawMode ||
+        event is! KeyEvent ||
+        event.char != 'z' ||
+        event.type != KeyEventType.down ||
+        event.modifiers.length != 1 ||
+        !event.hasCtrl) {
+      return false;
+    }
+    // cfmakeraw disables ISIG, so the terminal delivers Ctrl+Z as 0x1a and the
+    // parser turns it into this chord. Consume the terminal job-control chord
+    // here: app dispatch must not race the restore/stop sequence.
+    unawaited(_suspend());
+    return true;
+  }
+
+  bool _setRawMode() {
+    if (_nativeRawMode) return _terminalModeController.enableRawMode();
+    return _setDartRawMode();
+  }
+
+  bool _setDartRawMode() {
+    var ok = true;
     try {
       _stdin.lineMode = false;
       _stdin.echoMode = false;
     } on StdinException {
       // ignore — terminal may have detached
+      ok = false;
     }
+    return ok;
   }
 
-  void _restoreCookedMode() {
+  bool _restoreCookedMode() {
+    if (_nativeRawMode) return _terminalModeController.restoreMode();
+    var ok = true;
     try {
       if (_originalLineMode != null) _stdin.lineMode = _originalLineMode!;
     } on StdinException {
       // ignore
+      ok = false;
     }
     try {
       if (_originalEchoMode != null) _stdin.echoMode = _originalEchoMode!;
     } on StdinException {
       // ignore
+      ok = false;
     }
+    return ok;
   }
 
-  /// SIGTSTP (Ctrl+Z): restore the terminal for the shell, then drop our
-  /// handler and re-raise the stop so the process actually suspends.
+  /// Ctrl+Z: restore the terminal for the shell, stop this process, then
+  /// continue here after the shell's `fg` sends SIGCONT and repaint.
+  ///
+  /// Dart deliberately does not allow watching SIGTSTP/SIGCONT. Production
+  /// therefore reaches this method from the parsed Ctrl+Z byte (ISIG is off in
+  /// our cfmakeraw mode) and self-stops with uncatchable SIGSTOP. An external
+  /// `kill -TSTP` cannot be observed safely by pure Dart and may bypass this
+  /// orderly path; callers should use the terminal's Ctrl+Z job-control chord.
   Future<void> _suspend() async {
     final mode = _mode;
     if (mode == null) return;
+    final lifecycleGeneration = _lifecycleGeneration;
     // Single-flight: a rapid second Ctrl+Z (or one queued while the awaits
-    // below run) must not re-write exit sequences or re-raise the stop.
+    // below run) must not re-write exit sequences or repeat the self-stop.
     if (_suspended) return;
-    // Latch the frame-write gate only if a resume can actually clear it — a
-    // watched SIGCONT in production, or a test driving debugResume (which
-    // supplies selfStopOverride). Without an observable resume, gating would
-    // risk a permanently FROZEN screen if `fg` delivers a SIGCONT nobody
-    // handles; the ungated fall-through matches the pre-gate behavior
-    // (visible, if briefly garbled) — strictly the safer failure. Set BEFORE
-    // the first await so a scheduled frame flush can't spray onto the shell
-    // during the flush/cancel below.
-    final canResume = _contSubscription != null || _selfStopOverride != null;
-    _suspended = canResume;
+    // A native raw-mode controller is what makes Ctrl+Z observable as a byte;
+    // production resumes inline after SIGSTOP/SIGCONT. Tests use the explicit
+    // self-stop seam and drive debugResume themselves.
+    // Parent stdin is paused during a child handoff, so production cannot
+    // legitimately receive the chord then. A test seam or already-queued
+    // callback must not stop the parent while the child owns the terminal.
+    if ((!_nativeRawMode && _selfStopOverride == null) || _handoffActive) {
+      return;
+    }
+    _suspended = true;
     // Restore the terminal for the shell. Guarded so a failing write/flush
     // still reaches the stop below: a half-suspend that never stops (and so
-    // is never resumed) would otherwise wedge the gate forever. If a handoff
-    // already restored the terminal (an editor is up and the user Ctrl+Z'd
-    // it), skip the re-write.
+    // is never resumed) would otherwise wedge the gate forever.
     if (!_handoffActive) {
+      final inputRestored = !_changedStdin || _restoreCookedMode();
       try {
         if (_wroteEnterSequences) _stdout.write(_exitSequences(mode));
-        if (_changedStdin) _restoreCookedMode();
         await _stdout.flush();
       } catch (_) {}
+      // restore() can run while the flush yields (SIGTERM, stdin EOF, or an
+      // app-requested exit). A stale suspend continuation must never stop the
+      // already-restored process.
+      if (_handoffActive) {
+        _suspended = false;
+        return;
+      }
+      if (!_active ||
+          _restoring ||
+          lifecycleGeneration != _lifecycleGeneration ||
+          !identical(_mode, mode) ||
+          !_suspended) {
+        return;
+      }
+      if (!inputRestored) {
+        // Never stop while the shell would inherit a terminal we failed to
+        // restore. Re-enter best-effort and leave the process running.
+        _resume();
+        return;
+      }
     }
-    try {
-      await _tstpSubscription?.cancel();
-    } catch (_) {}
-    _tstpSubscription = null;
     final selfStop = _selfStopOverride;
     final bool stopped;
     if (selfStop != null) {
       stopped = selfStop();
     } else {
-      stopped = Process.killPid(pid, ProcessSignal.sigtstp);
+      // SIGSTOP cannot be caught or discarded. For a self-signal it takes
+      // effect before this isolate executes more Dart; after `fg` sends
+      // SIGCONT, killPid returns and the inline resume below re-enters Fleury.
+      stopped = Process.killPid(pid, ProcessSignal.sigstop);
     }
     if (!stopped) {
-      // The stop didn't take (e.g. killPid failed) — we're still running, so
-      // un-gate and re-arm SIGTSTP rather than freeze waiting for a resume
-      // that will never come.
-      _suspended = false;
-      _tstpSubscription ??= _watchSignal(
-        ProcessSignal.sigtstp,
-        (_) => _suspend(),
-      );
+      // The stop didn't take (e.g. killPid failed) — re-enter immediately
+      // rather than freeze or let frames target the restored shell.
+      _resume();
+    } else if (selfStop == null) {
+      _resume();
     }
   }
 
@@ -570,98 +703,159 @@ class PosixTerminalDriver
 
   @override
   Future<T> runWithTerminalHandoff<T>(FutureOr<T> Function() operation) async {
-    final mode = _mode;
-    if (!_active || mode == null) return await operation();
+    // A helper invoked from inside an existing handoff is already in the safe
+    // restored-terminal zone; nesting must not restore/re-enter a second time.
+    if (Zone.current[this] == true) return await operation();
 
-    _handoffActive = true;
-    if (_wroteEnterSequences) _stdout.write(_exitSequences(mode));
-    if (_changedStdin) _restoreCookedMode();
+    // Distinct concurrent handoffs (two process tasks launched together) must
+    // not overlap. With a single boolean, the first completion re-entered and
+    // ungated Fleury frames while the second child still owned the terminal.
+    final previous = _handoffTail;
+    final release = Completer<void>();
+    _handoffTail = release.future;
+
+    var didHandoff = false;
+    var stdinPaused = false;
+    TerminalMode? handoffMode;
     try {
-      await _stdout.flush();
-    } catch (_) {}
-    final hs = onHandoffStart;
-    if (hs != null) {
+      await previous;
       try {
-        await hs();
-      } catch (_) {}
-    }
+        final mode = _mode;
+        if (!_active || mode == null) return await operation();
+        handoffMode = mode;
+        didHandoff = true;
+        _handoffActive = true;
 
-    try {
-      return await operation();
-    } finally {
-      final he = onHandoffEnd;
-      if (he != null) {
+        // Stop the parent subscription before terminal modes change so it
+        // never races an inherited-stdio editor/pager for tty input.
+        final input = _stdinSubscription;
+        if (input != null) {
+          input.pause();
+          stdinPaused = true;
+        }
         try {
-          await he();
+          if (_wroteEnterSequences) _stdout.write(_exitSequences(mode));
         } catch (_) {}
-      }
-      if (_active && identical(_mode, mode)) {
-        if (_changedStdin) _setRawMode();
-        if (_wroteEnterSequences) _stdout.write(_enterSequences(mode));
+        if (_changedStdin) _restoreCookedMode();
         try {
           await _stdout.flush();
         } catch (_) {}
-        _handoffActive = false;
-        _events.add(ResizeEvent(size));
-      } else {
-        _handoffActive = false;
+
+        final hs = onHandoffStart;
+        if (hs != null) {
+          try {
+            await hs();
+          } catch (_) {}
+        }
+
+        return await runZoned(
+          () => Future<T>.sync(operation),
+          zoneValues: <Object?, Object?>{this: true},
+        );
+      } finally {
+        if (didHandoff) {
+          var shouldReenter = false;
+          try {
+            final he = onHandoffEnd;
+            if (he != null) {
+              try {
+                await he();
+              } catch (_) {}
+            }
+            final mode = handoffMode!;
+            shouldReenter = _active && identical(_mode, mode);
+            if (shouldReenter) {
+              if (_changedStdin) _setRawMode();
+              try {
+                if (_wroteEnterSequences) _stdout.write(_enterSequences(mode));
+                await _stdout.flush();
+              } catch (_) {}
+            }
+          } finally {
+            try {
+              if (stdinPaused) _stdinSubscription?.resume();
+            } finally {
+              _handoffActive = false;
+              if (shouldReenter && !_events.isClosed) {
+                _events.add(ResizeEvent(size));
+              }
+            }
+          }
+        }
       }
+    } finally {
+      if (!release.isCompleted) release.complete();
     }
   }
 
-  /// SIGCONT (`fg`): re-enter the configured mode, re-arm SIGTSTP, and
-  /// force a full repaint (the window may have resized while stopped).
+  /// Foreground continuation: re-enter the configured mode and force a full
+  /// repaint (the window may have resized while stopped).
   void _resume() {
     final mode = _mode;
     if (mode == null || !_active) return;
     // Clear the write gate BEFORE re-entering so the repaint below can paint.
     _suspended = false;
-    // Re-arm SIGTSTP regardless — [_suspend] cancelled it.
-    _tstpSubscription ??= _watchSignal(
-      ProcessSignal.sigtstp,
-      (_) => _suspend(),
-    );
-    // A SIGCONT delivered while an editor handoff is active (the child and we
-    // share the process group, so we both get `fg`'d) must NOT re-enter our
-    // mode — the child owns the screen. The handoff's own `finally` re-enters
-    // when the operation completes.
+    // A nested suspend seam during an editor handoff must not re-enter our mode
+    // while the child owns the screen. The handoff's own finally re-enters.
     if (_handoffActive) return;
     if (_changedStdin) _setRawMode();
     if (_wroteEnterSequences) _stdout.write(_enterSequences(mode));
-    _events.add(ResizeEvent(size));
+    if (!_events.isClosed) _events.add(ResizeEvent(size));
   }
 
   @override
   Future<void> restore() async {
+    _restoring = true;
+    _lifecycleGeneration++;
+    _active = false;
+    _suspended = false;
     // Disarm the signal-grace deadline unconditionally (even when there's
     // nothing else to restore): an orderly shutdown that reaches restore()
     // must never be shot down by a stale timer afterwards.
     _graceTimer?.cancel();
     _graceTimer = null;
     _pendingSignal = null;
+    _pendingSignalDelivered = false;
+    _entering = false;
     // Before the early-return: a late-probe drain timer must never outlive
     // restore(), even on the nothing-else-to-restore path.
     _cancelLateProbeDrain();
-    if (!_active && !_wroteEnterSequences && !_changedStdin) return;
+    if (!_active &&
+        !_wroteEnterSequences &&
+        !_changedStdin &&
+        _stdinSubscription == null &&
+        _resizeSubscription == null &&
+        _intSubscription == null &&
+        _termSubscription == null) {
+      _mode = null;
+      _sink.target = null;
+      _restoring = false;
+      return;
+    }
 
     _handoffActive = false;
-    _suspended = false;
     _flushTimer?.cancel();
     _flushTimer = null;
 
-    await _stdinSubscription?.cancel();
-    _stdinSubscription = null;
-    await _resizeSubscription?.cancel();
-    _resizeSubscription = null;
-    await _intSubscription?.cancel();
+    // Termination watchers go first. This closes the only path that can re-arm
+    // signal grace while the remaining asynchronous cleanup yields.
+    try {
+      await _intSubscription?.cancel();
+    } catch (_) {}
     _intSubscription = null;
-    await _termSubscription?.cancel();
+    try {
+      await _termSubscription?.cancel();
+    } catch (_) {}
     _termSubscription = null;
-    await _tstpSubscription?.cancel();
-    _tstpSubscription = null;
-    await _contSubscription?.cancel();
-    _contSubscription = null;
 
+    try {
+      await _stdinSubscription?.cancel();
+    } catch (_) {}
+    _stdinSubscription = null;
+    try {
+      await _resizeSubscription?.cancel();
+    } catch (_) {}
+    _resizeSubscription = null;
     if (_changedStdin) {
       // Best-effort restoration of stdin modes. If stdin has been
       // closed or detached (e.g. the parent disconnected the TTY
@@ -675,7 +869,9 @@ class PosixTerminalDriver
     if (_wroteEnterSequences) {
       // Disable input modes first so no stray sequences leak as the
       // terminal returns to the shell.
-      _stdout.write(_exitSequences(_mode ?? TerminalMode.interactive));
+      try {
+        _stdout.write(_exitSequences(_mode ?? TerminalMode.interactive));
+      } catch (_) {}
       _wroteEnterSequences = false;
     }
 
@@ -689,8 +885,15 @@ class PosixTerminalDriver
       // can do at that point.
     }
 
-    _active = false;
     _mode = null;
+    _sink.target = null;
+    // Belt-and-suspenders against a callback already queued before watcher
+    // cancellation. Successful teardown must leave no force-exit timer behind.
+    _graceTimer?.cancel();
+    _graceTimer = null;
+    _pendingSignal = null;
+    _pendingSignalDelivered = false;
+    _restoring = false;
   }
 
   @override
@@ -715,11 +918,122 @@ class PosixTerminalDriver
 
 class _ParserSink implements TuiEventSink {
   StreamController<TuiEvent>? target;
+  bool Function(TuiEvent event)? intercept;
 
   @override
   void add(TuiEvent event) {
-    target?.add(event);
+    if (intercept?.call(event) ?? false) return;
+    final controller = target;
+    if (controller != null && !controller.isClosed) controller.add(event);
   }
+}
+
+/// Testable ownership boundary for the complete POSIX terminal mode.
+///
+/// Unlike Dart's ICANON/ECHO-only setters, [enableRawMode] must disable ISIG so
+/// Ctrl+Z reaches Fleury as a byte. [restoreMode] restores the exact snapshot
+/// captured by the first successful enable and intentionally retains it across
+/// suspend/handoff cycles.
+@visibleForTesting
+abstract interface class PosixTerminalModeController {
+  bool enableRawMode();
+  bool restoreMode();
+}
+
+/// libc-backed termios controller. The termios object is intentionally opaque:
+/// tcgetattr/cfmakeraw/tcsetattr own its ABI, so Fleury does not encode Darwin
+/// vs Linux field offsets. A generously sized byte buffer is safe because libc
+/// reads/writes only `sizeof(struct termios)`.
+final class NativePosixTerminalModeController
+    implements PosixTerminalModeController {
+  NativePosixTerminalModeController()
+    : _bindings = _PosixTermiosBindings.load();
+
+  static const _termiosStorageBytes = 256;
+  final _PosixTermiosBindings? _bindings;
+  List<int>? _original;
+
+  @override
+  bool enableRawMode() {
+    final bindings = _bindings;
+    if (bindings == null) return false;
+    final storage = calloc<Uint8>(_termiosStorageBytes);
+    try {
+      final original = _original;
+      if (original == null) {
+        if (bindings.tcgetattr(0, storage.cast<Void>()) != 0) return false;
+        _original = List<int>.of(storage.asTypedList(_termiosStorageBytes));
+      } else {
+        storage.asTypedList(_termiosStorageBytes).setAll(0, original);
+      }
+      bindings.cfmakeraw(storage.cast<Void>());
+      return bindings.tcsetattr(0, _tcsanow, storage.cast<Void>()) == 0;
+    } on Object {
+      return false;
+    } finally {
+      calloc.free(storage);
+    }
+  }
+
+  @override
+  bool restoreMode() {
+    final bindings = _bindings;
+    final original = _original;
+    if (bindings == null || original == null) return false;
+    final storage = calloc<Uint8>(_termiosStorageBytes);
+    try {
+      storage.asTypedList(_termiosStorageBytes).setAll(0, original);
+      return bindings.tcsetattr(0, _tcsanow, storage.cast<Void>()) == 0;
+    } on Object {
+      return false;
+    } finally {
+      calloc.free(storage);
+    }
+  }
+
+  static const _tcsanow = 0;
+}
+
+typedef _TcgetattrNative = Int32 Function(Int32, Pointer<Void>);
+typedef _TcgetattrDart = int Function(int, Pointer<Void>);
+typedef _TcsetattrNative = Int32 Function(Int32, Int32, Pointer<Void>);
+typedef _TcsetattrDart = int Function(int, int, Pointer<Void>);
+typedef _CfmakerawNative = Void Function(Pointer<Void>);
+typedef _CfmakerawDart = void Function(Pointer<Void>);
+
+final class _PosixTermiosBindings {
+  const _PosixTermiosBindings({
+    required this.tcgetattr,
+    required this.tcsetattr,
+    required this.cfmakeraw,
+  });
+
+  static _PosixTermiosBindings? load() {
+    if (Platform.isWindows) return null;
+    try {
+      final libc = DynamicLibrary.process();
+      return _PosixTermiosBindings(
+        tcgetattr: libc.lookupFunction<_TcgetattrNative, _TcgetattrDart>(
+          'tcgetattr',
+        ),
+        tcsetattr: libc.lookupFunction<_TcsetattrNative, _TcsetattrDart>(
+          'tcsetattr',
+        ),
+        cfmakeraw: libc.lookupFunction<_CfmakerawNative, _CfmakerawDart>(
+          'cfmakeraw',
+        ),
+      );
+    } on Object {
+      // Non-glibc/non-Darwin POSIX target: retain the old ICANON/ECHO fallback.
+      // Ctrl+Z orderly suspension is unavailable there, but raw input/rendering
+      // still work and no unsafe Dart FFI signal callback is installed.
+      return null;
+    }
+  }
+
+  final _TcgetattrDart tcgetattr;
+  final _TcsetattrDart tcsetattr;
+  final _CfmakerawDart cfmakeraw;
 }
 
 /// Probe transport over a [PosixTerminalDriver]'s live stdin/stdout. Writes the

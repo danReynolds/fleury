@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:js_interop';
 
 import 'package:fleury/fleury_host.dart';
@@ -49,6 +50,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   String? _lastCompositionText;
   String? _pendingCompositionInput;
   String? _suppressNextInputText;
+  var _compositionSuppressionGeneration = 0;
   MouseButton _pressedButton = MouseButton.none;
   CellOffset? _lastPointerUpCell;
 
@@ -105,6 +107,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _lastCompositionText = null;
     _pendingCompositionInput = null;
     _suppressNextInputText = null;
+    _compositionSuppressionGeneration += 1;
     _pressedButton = MouseButton.none;
     _lastPointerUpCell = null;
     _focusCoordinator?.handleBrowserFocusOut(WebFocusTarget.keyboardCapture);
@@ -266,6 +269,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     final suppressNext = _suppressNextInputText;
     if (suppressNext != null) {
       _suppressNextInputText = null;
+      _compositionSuppressionGeneration += 1;
       if (data == suppressNext) {
         raw.preventDefault();
         _clearTextArea();
@@ -283,6 +287,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _lastCompositionText = null;
     _pendingCompositionInput = null;
     _suppressNextInputText = null;
+    _compositionSuppressionGeneration += 1;
   }
 
   void _handleCompositionUpdate(web.Event raw) {
@@ -313,6 +318,18 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
       return;
     }
     _suppressNextInputText = commitText;
+    final suppressionGeneration = ++_compositionSuppressionGeneration;
+    Timer.run(() {
+      // A browser that echoes the committed composition as a trailing `input`
+      // dispatches it in the same native event task. Keep the one-shot guard for
+      // that echo, but do not let it suppress an unrelated identical character
+      // typed later when an engine emits no trailing input at all.
+      if (!_started ||
+          suppressionGeneration != _compositionSuppressionGeneration) {
+        return;
+      }
+      _suppressNextInputText = null;
+    });
     _emit(TextCompositionEvent.commit(commitText));
   }
 

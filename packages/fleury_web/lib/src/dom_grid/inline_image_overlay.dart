@@ -25,7 +25,6 @@ class InlineImageOverlay {
     // The grid replaceChildren's its own root, so the overlay must be a sibling
     // of it under the host; absolutely positioned over the grid, with
     // pointer-events:none so clicks fall through to the cells.
-    _host.style.setProperty('position', 'relative');
     final overlay = web.document.createElement('div') as web.HTMLElement;
     overlay.style
       ..setProperty('position', 'absolute')
@@ -42,6 +41,9 @@ class InlineImageOverlay {
 
   final web.HTMLElement _host;
   final InlineImageCacheLedger _imageCache;
+  bool _ownsHostPosition = false;
+  String _previousHostInlinePosition = '';
+  String _previousHostInlinePositionPriority = '';
   web.HTMLElement? _overlay;
 
   // Blob URLs by content-hash id (so the same image at several spots shares one
@@ -117,13 +119,28 @@ class InlineImageOverlay {
     _last = placements;
     final overlay = _overlay;
     if (overlay == null) return;
+    if (!_ownsHostPosition && box.hostPositionIsStatic) {
+      // The computed value is authoritative. Inline tokens such as `inherit`,
+      // `initial`, `unset`, or `var(...)` can all resolve to static too; leaving
+      // one untouched would position the overlay against an ancestor instead of
+      // this host. Preserve the exact token so dispose can restore ownership.
+      _previousHostInlinePosition = _host.style
+          .getPropertyValue('position')
+          .trim();
+      _previousHostInlinePositionPriority = _host.style.getPropertyPriority(
+        'position',
+      );
+      _host.style.setProperty('position', 'relative');
+      _ownsHostPosition = true;
+    }
     final placedIds = <String>{for (final p in placements) p.id};
     final cw = box.cssCellWidth;
     final ch = box.cssCellHeight;
-    // Match the grid's origin convention (see DomInputSource caret math): the
-    // canvas may be inset within the host, so add its offset.
-    final ox = box.cssCanvasLeft;
-    final oy = box.cssCanvasTop;
+    // This overlay is absolute inside the positioned host, so its coordinates
+    // are host-local. Viewport coordinates (used by the fixed IME capture
+    // element) would count the host's page position twice here.
+    final ox = box.cssCanvasInsetLeft;
+    final oy = box.cssCanvasInsetTop;
     final seen = <String>{};
     final occurrence = <String, int>{};
     for (final p in placements) {
@@ -251,5 +268,21 @@ class InlineImageOverlay {
     _last = const <ImagePlacement>[];
     _overlay?.remove();
     _overlay = null;
+    // Restore only the positioning value this overlay installed. If the
+    // embedder replaced it with a different value while mounted, that newer
+    // value remains authoritative.
+    if (_ownsHostPosition &&
+        _host.style.getPropertyValue('position') == 'relative' &&
+        _host.style.getPropertyPriority('position').isEmpty) {
+      if (_previousHostInlinePosition.isEmpty) {
+        _host.style.removeProperty('position');
+      } else {
+        _host.style.setProperty(
+          'position',
+          _previousHostInlinePosition,
+          _previousHostInlinePositionPriority,
+        );
+      }
+    }
   }
 }
