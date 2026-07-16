@@ -79,7 +79,7 @@ Shared helpers: `Palettes` (prebuilt color palettes), `TickFormat`
 
 | Widget | What it is |
 | --- | --- |
-| `Image` | Raster images in the terminal — auto-selects the Kitty, iTerm2, or Sixel graphics protocol, falling back to half-block / quarter-block / sextant / braille ANSI art with dithering. Animated GIF/APNG/WebP supported. |
+| `Image` | Raster images in the terminal — auto-selects Kitty, iTerm2, or Sixel, with a dithered ANSI cell-art fallback. tmux, GNU Screen, and Zellij use cell art so redraw, resize, and pane lifecycle stay deterministic. Animated GIF/APNG/WebP supported. |
 | `Canvas` | A retained drawing surface for lines, shapes, and points. |
 
 ## Testing

@@ -432,7 +432,7 @@ class _DebugPanelState extends State<DebugPanel> {
   String _sessionSummary(TerminalEnvironmentReport environment) {
     final parts = <String>[
       if (environment.ssh) 'ssh',
-      if (environment.tmux) 'tmux',
+      if (environment.tmux) 'multiplexer',
       if (environment.ci) 'ci',
       if (environment.noColor) 'no-color',
       if (environment.clicolorForce) 'force-color',

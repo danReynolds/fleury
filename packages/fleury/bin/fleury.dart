@@ -1477,7 +1477,7 @@ Future<int> _runDiagnose(List<String> args) async {
   row('stdout is terminal', terminal.stdoutIsTerminal);
   row('stdin is terminal', terminal.stdinIsTerminal);
   row('interactive', terminal.isInteractive);
-  row('tmux/screen', environment.tmux);
+  row('multiplexer', environment.tmux);
   row('ssh', environment.ssh);
   row('NO_COLOR', environment.noColor);
   row('CLICOLOR_FORCE', environment.clicolorForce);

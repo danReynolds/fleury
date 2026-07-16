@@ -961,7 +961,7 @@ void main() {
       expect(output, contains('Interactive  no'));
       expect(output, contains('TERM  xterm-256color'));
       expect(output, contains('Program  Ghostty 1.2.3'));
-      expect(output, contains('Session  ssh tmux'));
+      expect(output, contains('Session  ssh multiplexer'));
       expect(output, contains('— terminal capabilities —'));
       expect(output, contains('Color  truecolor'));
       expect(output, contains('Images  kitty'));

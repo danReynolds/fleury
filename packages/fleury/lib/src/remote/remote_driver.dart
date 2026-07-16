@@ -434,8 +434,14 @@ final class RemoteTerminalDriver
         _capabilities = TerminalCapabilities(
           colorMode: f.colorMode,
           glyphTier: f.glyphTier,
-          imageProtocol: f.imageProtocol,
-          tmuxPassthrough: f.tmuxPassthrough,
+          // Legacy terminal peers used `tmux=1` as a session marker while
+          // still advertising host-native images. Normalize that combination
+          // at the trust boundary so old clients fail safe to cell art without
+          // changing TerminalCapabilities value/round-trip semantics.
+          imageProtocol: f.tmuxPassthrough
+              ? ImageProtocol.halfBlock
+              : f.imageProtocol,
+          tmuxPassthrough: false,
           // Thread the peer's link capability into BOTH capability objects so
           // surfaceCapabilities.hyperlinks reflects the peer whether or not it
           // sent `images=` (the projection fallback below reads this field).

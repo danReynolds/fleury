@@ -461,8 +461,8 @@ void main() {
       expect(out, contains(base64.encode(png)));
     });
 
-    test('an unchanged frame costs zero bytes; removal costs zero bytes '
-        '(the text diff clears the cells)', () {
+    test('native removal costs zero image bytes because its ANSI diff clears '
+        'the same terminal cells', () {
       final e = encoder();
       e.encodeFrame(bufferWith(bytes: png), fullRepaint: true);
       expect(

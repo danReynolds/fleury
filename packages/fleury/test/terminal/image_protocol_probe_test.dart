@@ -45,6 +45,80 @@ void main() {
       expect(await probeImageProtocol(transport), isNull);
     });
   });
+
+  group('resolveImageProtocolForEnvironment', () {
+    test('does not let an active result bypass multiplexer policy', () {
+      for (final environment in const <Map<String, String>>[
+        <String, String>{
+          'TERM': 'tmux-256color',
+          'TMUX': '/tmp/tmux-501/default,123,0',
+        },
+        <String, String>{'TERM': 'screen-256color'},
+        <String, String>{'TERM': 'xterm-256color', 'STY': '1234.session'},
+        <String, String>{
+          'TERM': 'xterm-256color',
+          'TERM_PROGRAM': 'WezTerm',
+          'ZELLIJ': '0',
+        },
+        <String, String>{
+          'TERM': 'xterm-256color',
+          'TERM_PROGRAM': 'iTerm.app',
+          'ZELLIJ_SESSION_NAME': 'dev',
+        },
+        <String, String>{
+          'TERM': 'screen-256color',
+          'TMUX': '/tmp/tmux-501/default,123,0',
+          'STY': '1234.session',
+        },
+      ]) {
+        expect(
+          resolveImageProtocolForEnvironment(ImageProtocol.kitty, environment),
+          ImageProtocol.halfBlock,
+        );
+      }
+    });
+
+    test('allows direct native images but not tmux images', () {
+      expect(
+        resolveImageProtocolForEnvironment(
+          ImageProtocol.kitty,
+          const <String, String>{'TERM': 'xterm-256color'},
+        ),
+        ImageProtocol.kitty,
+      );
+      expect(
+        resolveImageProtocolForEnvironment(
+          ImageProtocol.kitty,
+          const <String, String>{
+            'TERM': 'xterm-kitty',
+            'KITTY_WINDOW_ID': '1',
+            'ZELLIJ': '',
+          },
+        ),
+        ImageProtocol.kitty,
+      );
+      expect(
+        resolveImageProtocolForEnvironment(
+          ImageProtocol.kitty,
+          const <String, String>{
+            'TERM': 'tmux-256color',
+            'TMUX': '/tmp/tmux-501/default,123,0',
+          },
+        ),
+        ImageProtocol.halfBlock,
+      );
+      expect(
+        resolveImageProtocolForEnvironment(
+          ImageProtocol.iterm2,
+          const <String, String>{
+            'TERM': 'tmux-256color',
+            'TMUX': '/tmp/tmux-501/default,123,0',
+          },
+        ),
+        ImageProtocol.halfBlock,
+      );
+    });
+  });
 }
 
 class _ThrowingTransport implements TerminalProbeTransport {

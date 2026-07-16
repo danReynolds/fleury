@@ -55,7 +55,7 @@ void main() {
             colorMode: ColorMode.truecolor,
             glyphTier: GlyphTier.ascii,
             imageProtocol: ImageProtocol.kitty,
-            tmuxPassthrough: true,
+            tmuxPassthrough: false,
             protocolVersion: 1,
           ),
         );
@@ -66,11 +66,34 @@ void main() {
         expect(driver.capabilities.colorMode, ColorMode.truecolor);
         expect(driver.capabilities.glyphTier, GlyphTier.ascii);
         expect(driver.capabilities.imageProtocol, ImageProtocol.kitty);
-        expect(driver.capabilities.tmuxPassthrough, isTrue);
+        expect(driver.capabilities.tmuxPassthrough, isFalse);
 
         await driver.restore();
       }),
     );
+
+    test('legacy tmux native-image INIT fails safe to cell art', () async {
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(transport);
+
+      final entering = driver.enter(TerminalMode.interactive);
+      transport.emit(
+        const InitFrame(
+          size: CellSize(80, 24),
+          colorMode: ColorMode.truecolor,
+          imageProtocol: ImageProtocol.kitty,
+          tmuxPassthrough: true,
+          protocolVersion: 1,
+        ),
+      );
+      await entering;
+
+      expect(driver.capabilities.imageProtocol, ImageProtocol.halfBlock);
+      expect(driver.capabilities.tmuxPassthrough, isFalse);
+      expect(driver.surfaceCapabilities.images, InlineImageSupport.none);
+
+      await driver.restore();
+    });
 
     test('inbound INPUT bytes parse into events', () async {
       final transport = _FakeTransport();

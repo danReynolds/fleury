@@ -268,13 +268,17 @@ class PosixTerminalDriver
 
   @override
   TerminalCapabilities get capabilities {
-    final base = detectTerminalCapabilitiesFromEnvironment(
-      Platform.environment,
-    );
+    final environment = Platform.environment;
+    final base = detectTerminalCapabilitiesFromEnvironment(environment);
     final override = _imageProtocolOverride;
     final merged = override == null
         ? base
-        : base.copyWith(imageProtocol: override);
+        : base.copyWith(
+            imageProtocol: resolveImageProtocolForEnvironment(
+              override,
+              environment,
+            ),
+          );
     final width = _ambiguousCharWidthOverride;
     return width == null ? merged : merged.copyWith(ambiguousCharWidth: width);
   }
@@ -415,6 +419,10 @@ class PosixTerminalDriver
     // on a terminal where it misbehaves (the conservative env fallback stands).
     final flag = Platform.environment['FLEURY_IMAGE_PROBE'];
     if (flag == '0' || flag == 'false') return;
+    // A raw query is not a reliable statement about the host terminal through
+    // a multiplexer, and an accepted reply must not upgrade the conservative
+    // multiplexer fallback.
+    if (detectTerminalMultiplexerFromEnvironment(Platform.environment)) return;
     if (detectImageProtocolFromEnvironment(Platform.environment) !=
         ImageProtocol.halfBlock) {
       return;

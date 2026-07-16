@@ -605,7 +605,9 @@ final class TerminalImageEncoder {
   /// excluded: the ANSI diff has just repainted those, and clearing them in
   /// this trailer would erase the new text. Every current placement is then
   /// replayed in paint order by the caller, restoring any stack this bounded
-  /// screen-sized mask intersects.
+  /// screen-sized mask intersects. This relies on raster and ANSI cells sharing
+  /// one terminal screen model, so native image protocols never take this path
+  /// through a multiplexer; capability selection uses cell art there.
   void _clearStaleRasterCells(
     CellBuffer next,
     StringBuffer out,

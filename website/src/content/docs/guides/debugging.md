@@ -111,6 +111,19 @@ They need debug tooling enabled (the default in development runs).
   hyperlinks on (even under tmux); `FLEURY_HYPERLINKS=0` forces them off. See
   [Terminal hyperlinks](#terminal-hyperlinks-osc-8) below.
 
+## Terminal images through multiplexers
+
+`Image` uses native Kitty, iTerm2, or Sixel graphics in a directly supported
+terminal and falls back to cell art everywhere else. Fleury defaults to cell
+art inside tmux, GNU Screen, and Zellij because multiplexers can drop or
+transform native-image escapes and cannot safely model every protocol's raster
+lifecycle across redraws and resizes.
+
+Fleury currently keeps Kitty, iTerm2, and Sixel on cell art through those
+multiplexers. Direct sessions still use their native image protocol. `fleury
+diagnose` reports `image_multiplexer_fallback` when this policy suppresses a
+detected native protocol.
+
 ## Terminal hyperlinks (OSC 8)
 
 Widgets like `MarkdownText` emit **real clickable links** (the OSC 8 escape) on

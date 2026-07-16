@@ -70,12 +70,13 @@ final class TerminalCapabilities {
   final bool supportsAlternateScreen;
   final bool supportsHidingCursor;
 
-  /// True when we're running inside tmux (`$TMUX` is set). Image
-  /// protocols (Kitty / Sixel / iTerm2) emit DCS / APC sequences that
-  /// tmux drops by default; wrappers re-emit them through tmux's own
-  /// passthrough envelope (`ESC P tmux ; <doubled-ESC payload> ESC \\`).
-  /// tmux 3.3+ users can also opt out by setting
-  /// `allow-passthrough on` directly.
+  /// True when a driver reports that its output path can carry tmux
+  /// passthrough envelopes.
+  ///
+  /// Passive environment detection does not enable passthrough. Built-in
+  /// drivers use cell art under multiplexers because transport alone does not
+  /// make host-side raster lifecycle safe across redraw, resize, detach, or
+  /// pane transitions. Explicit custom drivers retain control of this value.
   final bool tmuxPassthrough;
 
   /// How the terminal sizes ambiguous-width glyphs. Defaults to the safe
@@ -132,16 +133,45 @@ final class TerminalCapabilities {
 TerminalCapabilities detectTerminalCapabilitiesFromEnvironment(
   Map<String, String> environment,
 ) {
+  final detectedImageProtocol = detectImageProtocolFromEnvironment(environment);
   return TerminalCapabilities(
     colorMode: detectColorModeFromEnvironment(environment),
     glyphTier: detectGlyphTierFromEnvironment(environment),
-    imageProtocol: detectImageProtocolFromEnvironment(environment),
-    tmuxPassthrough: detectTerminalMultiplexerFromEnvironment(environment),
+    imageProtocol: resolveImageProtocolForEnvironment(
+      detectedImageProtocol,
+      environment,
+    ),
+    tmuxPassthrough: false,
     ambiguousCharWidth:
         detectAmbiguousCharWidthFromEnvironment(environment) ??
         AmbiguousCharWidth.wide,
     hyperlinks: detectHyperlinksFromEnvironment(environment),
   );
+}
+
+/// Applies Fleury's multiplexer policy to a detected or actively probed image
+/// protocol.
+///
+/// Kept separate from passive detection so a later active probe cannot bypass
+/// the same policy when it upgrades an otherwise inconclusive environment.
+/// This is internal implementation surface and is not exported by
+/// `package:fleury/fleury.dart`.
+ImageProtocol resolveImageProtocolForEnvironment(
+  ImageProtocol detected,
+  Map<String, String> environment,
+) {
+  return _effectiveImageProtocol(
+    detected,
+    multiplexer: detectTerminalMultiplexerFromEnvironment(environment),
+  );
+}
+
+ImageProtocol _effectiveImageProtocol(
+  ImageProtocol detected, {
+  required bool multiplexer,
+}) {
+  if (!multiplexer) return detected;
+  return ImageProtocol.halfBlock;
 }
 
 /// Why the terminal does or doesn't get OSC 8 hyperlinks — the reason behind
@@ -366,9 +396,12 @@ ImageProtocol detectImageProtocolFromEnvironment(
   return ImageProtocol.halfBlock;
 }
 
-/// Detects whether a terminal multiplexer is likely to need passthrough.
+/// Detects whether output is routed through a known terminal multiplexer.
 bool detectTerminalMultiplexerFromEnvironment(Map<String, String> environment) {
   if ((environment['TMUX'] ?? '').isNotEmpty) return true;
+  if ((environment['STY'] ?? '').isNotEmpty) return true;
+  if ((environment['ZELLIJ'] ?? '').isNotEmpty) return true;
+  if ((environment['ZELLIJ_SESSION_NAME'] ?? '').isNotEmpty) return true;
   final term = environment['TERM']?.toLowerCase() ?? '';
   if (term.startsWith('screen') || term.startsWith('tmux')) return true;
   return false;

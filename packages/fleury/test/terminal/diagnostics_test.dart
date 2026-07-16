@@ -14,8 +14,126 @@ void main() {
 
       expect(capabilities.colorMode, ColorMode.truecolor);
       expect(capabilities.glyphTier, GlyphTier.unicode);
-      expect(capabilities.imageProtocol, ImageProtocol.kitty);
-      expect(capabilities.tmuxPassthrough, isTrue);
+      expect(capabilities.imageProtocol, ImageProtocol.halfBlock);
+      expect(capabilities.tmuxPassthrough, isFalse);
+    });
+
+    test('uses a conservative native-image policy under multiplexers', () {
+      TerminalCapabilities detect(Map<String, String> environment) =>
+          detectTerminalCapabilitiesFromEnvironment(environment);
+
+      final nativeIterm = detect(const <String, String>{
+        'TERM': 'xterm-256color',
+        'TERM_PROGRAM': 'iTerm.app',
+        'LC_TERMINAL': 'iTerm2',
+      });
+      expect(nativeIterm.imageProtocol, ImageProtocol.iterm2);
+      expect(
+        nativeIterm.toSurfaceCapabilities().images,
+        InlineImageSupport.placements,
+      );
+
+      for (final environment in const <Map<String, String>>[
+        <String, String>{
+          'TERM': 'tmux-256color',
+          'TERM_PROGRAM': 'iTerm.app',
+          'LC_TERMINAL': 'iTerm2',
+          'TMUX': '/tmp/tmux-501/default,123,0',
+        },
+        <String, String>{
+          'TERM': 'xterm-sixel',
+          'TMUX': '/tmp/tmux-501/default,123,0',
+        },
+      ]) {
+        final capabilities = detect(environment);
+        expect(capabilities.imageProtocol, ImageProtocol.halfBlock);
+        expect(capabilities.tmuxPassthrough, isFalse);
+        expect(
+          capabilities.toSurfaceCapabilities().images,
+          InlineImageSupport.none,
+        );
+      }
+
+      final screen = detect(const <String, String>{
+        'TERM': 'screen-256color',
+        'TERM_PROGRAM': 'ghostty',
+      });
+      expect(screen.imageProtocol, ImageProtocol.halfBlock);
+      expect(screen.tmuxPassthrough, isFalse);
+
+      final screenBySession = detect(const <String, String>{
+        'TERM': 'xterm-256color',
+        'KITTY_WINDOW_ID': '1',
+        'STY': '1234.session',
+      });
+      expect(screenBySession.imageProtocol, ImageProtocol.halfBlock);
+      expect(screenBySession.tmuxPassthrough, isFalse);
+
+      final zellij = detect(const <String, String>{
+        'TERM': 'xterm-256color',
+        'TERM_PROGRAM': 'WezTerm',
+        'ZELLIJ': '0',
+      });
+      expect(zellij.imageProtocol, ImageProtocol.halfBlock);
+      expect(zellij.tmuxPassthrough, isFalse);
+
+      final screenNestedInTmux = detect(const <String, String>{
+        'TERM': 'screen-256color',
+        'KITTY_WINDOW_ID': '1',
+        'TMUX': '/tmp/tmux-501/default,123,0',
+        'STY': '1234.session',
+      });
+      expect(screenNestedInTmux.imageProtocol, ImageProtocol.halfBlock);
+      expect(screenNestedInTmux.tmuxPassthrough, isFalse);
+
+      final tmuxKitty = detect(const <String, String>{
+        'TERM': 'xterm-kitty',
+        'KITTY_WINDOW_ID': '1',
+        'TMUX': '/tmp/tmux-501/default,123,0',
+      });
+      expect(tmuxKitty.imageProtocol, ImageProtocol.halfBlock);
+      expect(tmuxKitty.tmuxPassthrough, isFalse);
+      expect(tmuxKitty.toSurfaceCapabilities().images, InlineImageSupport.none);
+    });
+
+    test('custom capability values round-trip without normalization', () {
+      const caps = TerminalCapabilities(
+        imageProtocol: ImageProtocol.kitty,
+        tmuxPassthrough: true,
+      );
+      final restored = TerminalCapabilityReport.fromCapabilities(
+        caps,
+      ).toCapabilities();
+
+      expect(caps.imageProtocol, ImageProtocol.kitty);
+      expect(restored.imageProtocol, ImageProtocol.kitty);
+      expect(restored.tmuxPassthrough, isTrue);
+    });
+
+    test('diagnoses the multiplexer image fallback explicitly', () {
+      const environment = <String, String>{
+        'TERM': 'tmux-256color',
+        'TERM_PROGRAM': 'iTerm.app',
+        'LC_TERMINAL': 'iTerm2',
+        'TMUX': '/tmp/tmux-501/default,123,0',
+      };
+      final capabilities = detectTerminalCapabilitiesFromEnvironment(
+        environment,
+      );
+      final diagnosis = diagnoseTerminal(
+        FakeTerminalDriver(
+          size: const CellSize(100, 30),
+          capabilities: capabilities,
+        ),
+        environment: environment,
+      );
+
+      expect(capabilities.imageProtocol, ImageProtocol.halfBlock);
+      expect(capabilities.tmuxPassthrough, isFalse);
+      expect(
+        diagnosis.toJson()['fallbacks'],
+        containsMessageCode('image_multiplexer_fallback'),
+      );
     });
 
     test('the capability report round-trips ambiguousCharWidth', () {
@@ -236,6 +354,87 @@ void main() {
         compatibility['confirmedAvailableFeatures'],
         isNot(contains('imageKitty')),
       );
+    });
+
+    test('does not advertise probe-only Kitty through a multiplexer', () {
+      const environment = <String, String>{
+        'TERM': 'tmux-256color',
+        'KITTY_WINDOW_ID': '1',
+        'TMUX': '/tmp/tmux-501/default,123,0',
+      };
+      final capabilities = detectTerminalCapabilitiesFromEnvironment(
+        environment,
+      );
+      final diagnosis =
+          diagnoseTerminal(
+            FakeTerminalDriver(capabilities: capabilities),
+            environment: environment,
+          ).withActiveProbes(
+            const TerminalProbeReport(
+              probes: <TerminalProbeResult>[
+                TerminalProbeResult(
+                  id: 'kittyGraphicsQuery',
+                  label: 'Kitty graphics query',
+                  feature: TerminalFeature.imageKitty,
+                  status: TerminalProbeStatus.confirmed,
+                  elapsed: Duration(milliseconds: 2),
+                ),
+              ],
+            ),
+          );
+
+      final graphics = diagnosis.compatibility!.findingFor(
+        TerminalFeature.imageKitty,
+      )!;
+      expect(capabilities.imageProtocol, ImageProtocol.halfBlock);
+      expect(graphics.activeStatus, TerminalProbeStatus.confirmed);
+      expect(graphics.status, TerminalCompatibilityStatus.inconclusive);
+      expect(graphics.detail, contains('not authoritative'));
+      expect(
+        diagnosis.confirmedAvailableFeatures,
+        isNot(contains(TerminalFeature.imageKitty)),
+      );
+      expect(
+        diagnosis.compatibility!.activeConfirmedFeatures,
+        isNot(contains(TerminalFeature.imageKitty)),
+      );
+    });
+
+    test('ignores raw Kitty probe results through any multiplexer', () {
+      const environment = <String, String>{
+        'TERM': 'xterm-kitty',
+        'KITTY_WINDOW_ID': '1',
+        'TMUX': '/tmp/tmux-501/default,123,0',
+      };
+      const capabilities = TerminalCapabilities(
+        imageProtocol: ImageProtocol.kitty,
+      );
+      final diagnosis =
+          diagnoseTerminal(
+            FakeTerminalDriver(capabilities: capabilities),
+            environment: environment,
+          ).withActiveProbes(
+            const TerminalProbeReport(
+              probes: <TerminalProbeResult>[
+                TerminalProbeResult(
+                  id: 'kittyGraphicsQuery',
+                  label: 'Kitty graphics query',
+                  feature: TerminalFeature.imageKitty,
+                  status: TerminalProbeStatus.unsupported,
+                  elapsed: Duration(milliseconds: 2),
+                ),
+              ],
+            ),
+          );
+
+      final graphics = diagnosis.compatibility!.findingFor(
+        TerminalFeature.imageKitty,
+      )!;
+      expect(capabilities.imageProtocol, ImageProtocol.kitty);
+      expect(graphics.passiveSupported, isTrue);
+      expect(graphics.activeStatus, TerminalProbeStatus.unsupported);
+      expect(graphics.status, TerminalCompatibilityStatus.inconclusive);
+      expect(graphics.detail, contains('not authoritative'));
     });
 
     test('compatibility findings are inconclusive when probes are skipped', () {

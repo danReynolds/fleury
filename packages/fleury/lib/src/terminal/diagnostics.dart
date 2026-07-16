@@ -222,7 +222,8 @@ enum TerminalCompatibilityStatus {
   /// Active evidence indicates the feature is unsupported.
   unsupported,
 
-  /// Probe evidence was skipped, missing, timed out, or errored.
+  /// Probe evidence was skipped, missing, timed out, errored, or is not
+  /// authoritative for the runtime path.
   inconclusive,
 }
 
@@ -377,6 +378,10 @@ final class TerminalDiagnosis {
       compatibility: buildTerminalCompatibilityReport(
         capabilities: capabilities,
         activeProbes: report,
+        // The diagnostics transport sends a raw Kitty APC to identify the host
+        // terminal. That evidence is not authoritative through a multiplexer
+        // and must not override the runtime cell-art policy.
+        imageKittyProbeUsable: !environment.tmux,
       ),
     );
   }
@@ -399,6 +404,7 @@ final class TerminalDiagnosis {
 TerminalCompatibilityReport buildTerminalCompatibilityReport({
   required TerminalCapabilityReport capabilities,
   TerminalProbeReport? activeProbes,
+  bool imageKittyProbeUsable = true,
 }) {
   final skippedReason = activeProbes?.skippedReason;
   return TerminalCompatibilityReport(
@@ -421,6 +427,10 @@ TerminalCompatibilityReport buildTerminalCompatibilityReport({
             'capabilities.imageProtocol=${capabilities.imageProtocol.name}',
         probe: activeProbes?.resultFor('kittyGraphicsQuery'),
         skippedReason: skippedReason,
+        activeEvidenceUsable: imageKittyProbeUsable,
+        unusableEvidenceDetail:
+            'Raw Kitty probe evidence is not authoritative through a '
+            'multiplexer and cannot override the runtime cell-art policy.',
       ),
     ],
   );
@@ -433,6 +443,8 @@ TerminalCompatibilityFinding _buildCompatibilityFinding({
   required String passiveEvidence,
   required TerminalProbeResult? probe,
   required String? skippedReason,
+  bool activeEvidenceUsable = true,
+  String? unusableEvidenceDetail,
 }) {
   final activeStatus = probe?.status;
   return TerminalCompatibilityFinding(
@@ -442,12 +454,16 @@ TerminalCompatibilityFinding _buildCompatibilityFinding({
     passiveEvidence: passiveEvidence,
     probeId: probe?.id,
     activeStatus: activeStatus,
-    status: _compatibilityStatus(
-      passiveSupported: passiveSupported,
-      activeStatus: activeStatus,
-      skipped: skippedReason != null,
-    ),
-    detail: skippedReason ?? probe?.detail,
+    status: activeEvidenceUsable
+        ? _compatibilityStatus(
+            passiveSupported: passiveSupported,
+            activeStatus: activeStatus,
+            skipped: skippedReason != null,
+          )
+        : TerminalCompatibilityStatus.inconclusive,
+    detail:
+        skippedReason ??
+        (activeEvidenceUsable ? probe?.detail : unusableEvidenceDetail),
   );
 }
 
@@ -503,15 +519,22 @@ TerminalDiagnosis diagnoseTerminal(
     clicolorForce: _clicolorForce(environment),
     ci: (environment['CI'] ?? '').isNotEmpty,
   );
+  final detectedImageProtocol = detectImageProtocolFromEnvironment(environment);
   final capabilityReport = TerminalCapabilityReport.fromCapabilities(
     capabilities,
     // Compute the OSC 8 state from the FULL env picture at this (detection)
     // altitude — the four states aren't reconstructable from the capability
     // snapshot's (hyperlinks, tmuxPassthrough) bools alone.
-    osc8Hyperlinks:
-        detectHyperlinkSupportFromEnvironment(environment).diagnoseLabel,
+    osc8Hyperlinks: detectHyperlinkSupportFromEnvironment(
+      environment,
+    ).diagnoseLabel,
   );
-  final fallbacks = _buildFallbacks(capabilities, terminal, envReport);
+  final fallbacks = _buildFallbacks(
+    capabilities,
+    terminal,
+    envReport,
+    detectedImageProtocol: detectedImageProtocol,
+  );
   final warnings = _buildWarnings(terminal, envReport);
   final unsupported = _buildUnsupportedFeatures(capabilities, terminal);
   return TerminalDiagnosis(
@@ -545,8 +568,9 @@ bool _clicolorForce(Map<String, String> environment) {
 List<TerminalDiagnosticMessage> _buildFallbacks(
   TerminalCapabilities capabilities,
   TerminalProfileReport terminal,
-  TerminalEnvironmentReport environment,
-) {
+  TerminalEnvironmentReport environment, {
+  required ImageProtocol detectedImageProtocol,
+}) {
   final fallbacks = <TerminalDiagnosticMessage>[];
   if (capabilities.colorMode == ColorMode.none) {
     fallbacks.add(
@@ -559,12 +583,27 @@ List<TerminalDiagnosticMessage> _buildFallbacks(
     );
   }
   if (capabilities.imageProtocol == ImageProtocol.halfBlock) {
+    final nativeProtocolSuppressed =
+        environment.tmux && detectedImageProtocol != ImageProtocol.halfBlock;
     fallbacks.add(
-      const TerminalDiagnosticMessage(
-        severity: TerminalDiagnosticSeverity.info,
-        code: 'image_half_block_fallback',
-        message: 'Native image output is unavailable; images use cell art.',
-      ),
+      nativeProtocolSuppressed
+          ? TerminalDiagnosticMessage(
+              severity: TerminalDiagnosticSeverity.info,
+              code: 'image_multiplexer_fallback',
+              message:
+                  'Native images are disabled in this multiplexer session; '
+                  'images use cell art.',
+              details: <String, Object?>{
+                'detectedProtocol': detectedImageProtocol.name,
+                'multiplexerDetected': true,
+              },
+            )
+          : const TerminalDiagnosticMessage(
+              severity: TerminalDiagnosticSeverity.info,
+              code: 'image_half_block_fallback',
+              message:
+                  'Native image output is unavailable; images use cell art.',
+            ),
     );
   }
   if (capabilities.glyphTier == GlyphTier.ascii) {
@@ -634,7 +673,9 @@ List<TerminalDiagnosticMessage> _buildWarnings(
       const TerminalDiagnosticMessage(
         severity: TerminalDiagnosticSeverity.info,
         code: 'terminal_multiplexer',
-        message: 'tmux/screen is active; rich protocols may need passthrough.',
+        message:
+            'A terminal multiplexer is active; features may use conservative '
+            'fallbacks.',
       ),
     );
   }
