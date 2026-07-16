@@ -106,6 +106,7 @@ export 'src/rendering/cell_buffer.dart'
         InlineImageFit,
         InlineImagePlacement,
         ResolvedImageFit,
+        resolveClippedInlineImageFit,
         resolveInlineImageFit;
 export 'src/rendering/edge_insets.dart' show EdgeInsets;
 export 'src/rendering/layout.dart' show CellConstraints;

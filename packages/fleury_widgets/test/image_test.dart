@@ -808,6 +808,15 @@ void main() {
       expect(rgba.length, 8 * 6 * 4);
       expect(rgba[0], 200, reason: 'row-major RGBA, red first');
       expect(rgba[3], 255, reason: 'opaque alpha');
+
+      final cropped = image.croppedBytes!(2, 1, 3, 2);
+      final decodedCrop = img.decodePng(cropped)!;
+      expect([decodedCrop.width, decodedCrop.height], [3, 2]);
+      expect(
+        image.croppedBytes!(2, 1, 3, 2),
+        same(cropped),
+        reason: 'a stable iTerm2 crop reuses the lazy one-entry cache',
+      );
     });
 
     testWidgets('a repaint reuses the cached content id (no re-hash churn)', (

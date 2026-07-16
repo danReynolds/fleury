@@ -49,6 +49,47 @@ void main() {
         [placement.col, placement.row, placement.cols, placement.rows],
         [3, 2, 1, 1],
       );
+      expect(
+        [
+          placement.boxCols,
+          placement.boxRows,
+          placement.boxOffsetCol,
+          placement.boxOffsetRow,
+        ],
+        [20, 20, 0, 0],
+      );
+      final decoded = decodeRemotePlan(
+        encodeRemotePlan(plan),
+      ).placements.single;
+      expect(
+        [
+          decoded.cols,
+          decoded.rows,
+          decoded.boxCols,
+          decoded.boxRows,
+          decoded.boxOffsetCol,
+          decoded.boxOffsetRow,
+        ],
+        [1, 1, 20, 20, 0, 0],
+      );
+    });
+
+    test('an image box beyond the remote geometry cap degrades to blank', () {
+      final next = CellBuffer(const CellSize(4, 3))
+        ..writeImage(
+          const CellOffset(0, 0),
+          Uint8List.fromList([1, 2, 3]),
+          width: maxRemotePlanGridCols + 1,
+          height: 1,
+        );
+
+      final plan = buildRemotePlan(
+        CellBuffer(const CellSize(4, 3)),
+        next,
+        fullRepaint: true,
+      );
+
+      expect(plan.placements, isEmpty);
       expect(() => decodeRemotePlan(encodeRemotePlan(plan)), returnsNormally);
     });
 
@@ -124,6 +165,133 @@ void main() {
       final p = decoded.placements.single;
       final original = plan.placements.single;
       expect([p.id, p.col, p.row, p.cols, p.rows], [original.id, 0, 0, 2, 2]);
+      expect(
+        [p.boxCols, p.boxRows, p.boxOffsetCol, p.boxOffsetRow],
+        [2, 2, 0, 0],
+      );
+    });
+
+    test('v5 placement windows round-trip without losing original fit box', () {
+      const plan = RemotePlan(
+        size: CellSize(10, 6),
+        fullRepaint: false,
+        styleTable: [],
+        patches: [],
+        placements: [
+          ImagePlacement(
+            id: 'clipped',
+            col: 0,
+            row: 1,
+            cols: 3,
+            rows: 2,
+            fit: InlineImageFit.cover,
+            boxCols: 7,
+            boxRows: 5,
+            boxOffsetCol: 2,
+            boxOffsetRow: 1,
+          ),
+        ],
+      );
+
+      final decoded = decodeRemotePlan(encodeRemotePlan(plan));
+      final placement = decoded.placements.single;
+      expect(decoded.includeImageWindows, isTrue);
+      expect(
+        [
+          placement.col,
+          placement.row,
+          placement.cols,
+          placement.rows,
+          placement.boxCols,
+          placement.boxRows,
+          placement.boxOffsetCol,
+          placement.boxOffsetRow,
+        ],
+        [0, 1, 3, 2, 7, 5, 2, 1],
+      );
+      expect(placement.fit, InlineImageFit.cover);
+    });
+
+    test('legacy placement wire defaults the original box to its window', () {
+      const plan = RemotePlan(
+        size: CellSize(10, 6),
+        fullRepaint: false,
+        styleTable: [],
+        patches: [],
+        includeImageWindows: false,
+        placements: [
+          ImagePlacement(
+            id: 'legacy',
+            col: 2,
+            row: 1,
+            cols: 3,
+            rows: 2,
+            boxCols: 7,
+            boxRows: 5,
+            boxOffsetCol: 2,
+            boxOffsetRow: 1,
+          ),
+        ],
+      );
+
+      final decoded = decodeRemotePlan(encodeRemotePlan(plan));
+      final placement = decoded.placements.single;
+      expect(decoded.includeImageWindows, isFalse);
+      expect(
+        [
+          placement.boxCols,
+          placement.boxRows,
+          placement.boxOffsetCol,
+          placement.boxOffsetRow,
+        ],
+        [3, 2, 0, 0],
+      );
+    });
+
+    test('a legacy peer gets blank instead of a mis-fitted clipped image', () {
+      final next = CellBuffer(const CellSize(4, 3))
+        ..writeImage(
+          const CellOffset(3, 2),
+          Uint8List.fromList([1, 2, 3]),
+          width: 2,
+          height: 2,
+        );
+
+      final plan = buildRemotePlan(
+        CellBuffer(const CellSize(4, 3)),
+        next,
+        fullRepaint: true,
+        includeImageWindows: false,
+      );
+
+      expect(plan.placements, isEmpty);
+      expect(() => decodeRemotePlan(encodeRemotePlan(plan)), returnsNormally);
+    });
+
+    test('a v5 window extending outside its original box is rejected', () {
+      const plan = RemotePlan(
+        size: CellSize(10, 6),
+        fullRepaint: false,
+        styleTable: [],
+        patches: [],
+        placements: [
+          ImagePlacement(
+            id: 'invalid',
+            col: 0,
+            row: 0,
+            cols: 4,
+            rows: 2,
+            boxCols: 5,
+            boxRows: 2,
+            boxOffsetCol: 2,
+          ),
+        ],
+      );
+
+      expect(
+        () => decodeRemotePlan(encodeRemotePlan(plan)),
+        throwsA(isA<RemoteCodecException>()),
+      );
     });
 
     test('a non-default fit round-trips through the plan wire', () {
@@ -163,6 +331,7 @@ void main() {
           CellBuffer(const CellSize(6, 3)),
           next,
           fullRepaint: true,
+          includeImageWindows: false,
         ),
       );
       // The final byte is the single placement's fit ordinal (0 = contain);

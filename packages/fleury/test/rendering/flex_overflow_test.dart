@@ -2,6 +2,8 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
 import 'package:test/test.dart';
 
+import '../support/render_fixtures.dart';
+
 void main() {
   // The harness disables the indicator in its constructor, so flip it on
   // inside each test body (after the tester exists).
@@ -64,5 +66,42 @@ void main() {
     for (var c = 0; c < 4; c++) {
       expect(buf.atColRow(c, 0).grapheme, isNot('▓'));
     }
+  });
+
+  testWidgets('clips a trailing image to the Flex box', (tester) {
+    tester.pumpWidget(
+      const Column(
+        children: [
+          SizedBox(width: 4, height: 2, child: Text('before')),
+          ImageLeaf(),
+        ],
+      ),
+    );
+
+    final buf = tester.render(size: const CellSize(4, 3));
+    final p = buf.imagePlacements.single;
+    expect([p.col, p.row, p.cols, p.rows], [0, 2, 4, 1]);
+    expect([p.boxCols, p.boxRows], [4, 2]);
+    expect([p.boxOffsetCol, p.boxOffsetRow], [0, 0]);
+    expect(buf.atColRow(0, 2).role, CellRole.overlay);
+  });
+
+  testWidgets('end-aligned overflow retains an image leading slice', (tester) {
+    tester.pumpWidget(
+      const Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          ImageLeaf(),
+          SizedBox(width: 4, height: 2, child: Text('after')),
+        ],
+      ),
+    );
+
+    final buf = tester.render(size: const CellSize(4, 3));
+    final p = buf.imagePlacements.single;
+    expect([p.col, p.row, p.cols, p.rows], [0, 0, 4, 1]);
+    expect([p.boxCols, p.boxRows], [4, 2]);
+    expect([p.boxOffsetCol, p.boxOffsetRow], [0, 1]);
+    expect(buf.atColRow(0, 0).role, CellRole.overlay);
   });
 }

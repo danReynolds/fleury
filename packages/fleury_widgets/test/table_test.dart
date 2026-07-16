@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
@@ -65,6 +67,35 @@ class _CountingCell extends RenderObject {
     CellOffset? screenOffset,
     CellRect? clipRect,
   }) {}
+}
+
+class _ImageCell extends LeafRenderObjectWidget {
+  const _ImageCell();
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _ImageCellRender();
+}
+
+class _ImageCellRender extends RenderObject {
+  @override
+  CellSize performLayout(CellConstraints constraints) =>
+      constraints.constrain(const CellSize(4, 2));
+
+  @override
+  void paint(
+    CellBuffer buffer,
+    CellOffset offset, {
+    CellOffset? screenOffset,
+    CellRect? clipRect,
+  }) {
+    buffer.writeImage(
+      offset,
+      Uint8List.fromList([1]),
+      width: 4,
+      height: 2,
+      fit: InlineImageFit.cover,
+    );
+  }
 }
 
 void main() {
@@ -166,6 +197,50 @@ void main() {
     // Should not throw; the missing cell is empty.
     final lines = _lines(tester, cols: 8, rows: 2);
     expect(lines[1], 'only');
+  });
+
+  testWidgets('selectable scratch path carries an inline image', (tester) {
+    tester.pumpWidget(
+      Table(
+        selectable: true,
+        autofocus: true,
+        headerSeparator: false,
+        rows: [
+          [_ImageCell()],
+        ],
+      ),
+    );
+
+    final buf = tester.render(size: const CellSize(4, 2));
+    final p = buf.imagePlacements.single;
+    expect([p.col, p.row, p.cols, p.rows], [0, 0, 4, 2]);
+    expect(p.isClipped, isFalse);
+    expect(buf.atColRow(0, 0).role, CellRole.overlay);
+  });
+
+  testWidgets('pinned header clips a tall body image without rescaling it', (
+    tester,
+  ) {
+    tester.pumpWidget(
+      Table(
+        selectable: true,
+        autofocus: true,
+        headerSeparator: false,
+        header: [Text('H')],
+        rows: [
+          [_ImageCell()],
+          [Text('tail')],
+        ],
+      ),
+    );
+
+    final buf = tester.render(size: const CellSize(4, 2));
+    expect(buf.atColRow(0, 0).grapheme, 'H');
+    final p = buf.imagePlacements.single;
+    expect([p.col, p.row, p.cols, p.rows], [0, 1, 4, 1]);
+    expect([p.boxCols, p.boxRows], [4, 2]);
+    expect([p.boxOffsetCol, p.boxOffsetRow], [0, 0]);
+    expect(p.fit, InlineImageFit.cover);
   });
 
   test(

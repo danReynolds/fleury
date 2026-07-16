@@ -113,6 +113,11 @@ final class RemoteTerminalDriver
   /// client's decoder from misaligning on an unexpected URI.
   bool get wantsHyperlinks => _protocolVersion >= 4;
 
+  /// Whether the peer understands protocol-v5 inline-image placement windows.
+  /// A v4 client still receives the legacy placement shape, while a v5 client
+  /// can preserve the original fit when only part of an image box is visible.
+  bool get wantsImageWindows => _protocolVersion >= 5;
+
   @override
   CellSize get size => _size;
 
@@ -234,6 +239,7 @@ final class RemoteTerminalDriver
       // if a cell carries a link, so a stale client can't misalign on a URI it
       // doesn't expect.
       includeLinks: wantsHyperlinks,
+      includeImageWindows: wantsImageWindows,
     );
     final boundedPlacements = _boundedImagePlacements(remotePlan, next);
     if (boundedPlacements.length != remotePlan.placements.length) {
@@ -245,6 +251,7 @@ final class RemoteTerminalDriver
         scrollUpRows: remotePlan.scrollUpRows,
         placements: boundedPlacements,
         includeLinks: remotePlan.includeLinks,
+        includeImageWindows: remotePlan.includeImageWindows,
       );
     }
     // Ship the bytes for each image the peer does not yet hold, before the

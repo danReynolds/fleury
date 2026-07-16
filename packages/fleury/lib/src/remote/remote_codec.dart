@@ -56,6 +56,7 @@ final class RemotePlan {
     this.scrollUpRows,
     this.placements = const <ImagePlacement>[],
     this.includeLinks = false,
+    this.includeImageWindows = true,
   });
 
   final CellSize size;
@@ -76,6 +77,15 @@ final class RemotePlan {
   /// link itself still round-trips through the styles' `linkUri`.
   final bool includeLinks;
 
+  /// Whether [encodeRemotePlan] serializes the original image-box geometry
+  /// needed to render a clipped placement without re-fitting its visible
+  /// fragment. Protocol v5 peers set this; older peers receive the legacy
+  /// visible-rectangle-only shape and therefore keep their decoder aligned.
+  ///
+  /// The encoder only claims the v5 PLAN flag when there is at least one
+  /// placement, so an image-free plan remains byte-identical to older plans.
+  final bool includeImageWindows;
+
   /// Changed column-range patches.
   final List<RemoteRowPatch> patches;
 
@@ -86,8 +96,9 @@ final class RemotePlan {
   final List<ImagePlacement> placements;
 }
 
-/// Where an inline image sits: its content-hash [id] and the cell rectangle it
-/// spans. Bytes travel out-of-band (an `InlineImageFrame`), shipped once per id.
+/// Where an inline image sits: its content-hash [id], visible cell window, and
+/// original fit box. Bytes travel out-of-band (an `InlineImageFrame`), shipped
+/// once per id.
 final class ImagePlacement {
   const ImagePlacement({
     required this.id,
@@ -96,7 +107,12 @@ final class ImagePlacement {
     required this.cols,
     required this.rows,
     this.fit = InlineImageFit.contain,
-  });
+    int? boxCols,
+    int? boxRows,
+    this.boxOffsetCol = 0,
+    this.boxOffsetRow = 0,
+  }) : boxCols = boxCols ?? cols,
+       boxRows = boxRows ?? rows;
 
   final String id;
   final int col;
@@ -104,7 +120,17 @@ final class ImagePlacement {
   final int cols;
   final int rows;
 
-  /// How the client's `<img>` fills this cell rectangle (CSS `object-fit`).
+  /// Size of the unclipped placement box that [fit] resolves against.
+  /// Defaults to the visible size for legacy/full placements.
+  final int boxCols;
+  final int boxRows;
+
+  /// Offset of the visible [cols] x [rows] window within the original box.
+  final int boxOffsetCol;
+  final int boxOffsetRow;
+
+  /// How the client's `<img>` fills the original [boxCols] x [boxRows] box
+  /// (CSS `object-fit`) before the result is clipped to the visible window.
   /// Carried per placement so a wrong-aspect box doesn't stretch the image.
   final InlineImageFit fit;
 }
@@ -434,6 +460,9 @@ Uint8List encodeRemotePlan(RemotePlan plan) {
   var flags = 0;
   if (plan.fullRepaint) flags |= 1;
   if (plan.scrollUpRows != null) flags |= 2;
+  final includeImageWindows =
+      plan.includeImageWindows && plan.placements.isNotEmpty;
+  if (includeImageWindows) flags |= 4;
   w
     ..u8(flags)
     ..varint(plan.size.cols)
@@ -464,6 +493,13 @@ Uint8List encodeRemotePlan(RemotePlan plan) {
       ..varint(p.cols)
       ..varint(p.rows)
       ..varint(p.fit.index);
+    if (includeImageWindows) {
+      w
+        ..varint(p.boxCols)
+        ..varint(p.boxRows)
+        ..varint(p.boxOffsetCol)
+        ..varint(p.boxOffsetRow);
+    }
   }
   return w.take();
 }
@@ -472,6 +508,7 @@ Uint8List encodeRemotePlan(RemotePlan plan) {
 RemotePlan decodeRemotePlan(Uint8List bytes) {
   final r = _Reader(bytes);
   final flags = r.u8();
+  final hasImageWindows = (flags & 4) != 0;
   final cols = r.varint();
   final rows = r.varint();
   _validatePlanGrid(cols, rows);
@@ -535,6 +572,10 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
     final pcols = r.varint();
     final prows = r.varint();
     final fitIndex = r.varint();
+    final boxCols = hasImageWindows ? r.varint() : pcols;
+    final boxRows = hasImageWindows ? r.varint() : prows;
+    final boxOffsetCol = hasImageWindows ? r.varint() : 0;
+    final boxOffsetRow = hasImageWindows ? r.varint() : 0;
     if (id.isEmpty || id.length > 256) {
       throw RemoteCodecException(
         'image placement $i id length is outside 1..256',
@@ -552,6 +593,17 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
         'image placement $i is outside ${cols}x$rows grid',
       );
     }
+    if (boxCols <= 0 ||
+        boxRows <= 0 ||
+        boxCols > maxRemotePlanGridCols ||
+        boxRows > maxRemotePlanGridRows ||
+        boxOffsetCol + pcols > boxCols ||
+        boxOffsetRow + prows > boxRows) {
+      throw RemoteCodecException(
+        'image placement $i visible window is outside its '
+        '${boxCols}x$boxRows source box',
+      );
+    }
     final fit = fitIndex < InlineImageFit.values.length
         ? InlineImageFit.values[fitIndex]
         : InlineImageFit.contain;
@@ -563,6 +615,10 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
         cols: pcols,
         rows: prows,
         fit: fit,
+        boxCols: boxCols,
+        boxRows: boxRows,
+        boxOffsetCol: boxOffsetCol,
+        boxOffsetRow: boxOffsetRow,
       ),
     );
   }
@@ -574,6 +630,7 @@ RemotePlan decodeRemotePlan(Uint8List bytes) {
     styleTable: List.unmodifiable(styleTable),
     patches: List.unmodifiable(patches),
     placements: List.unmodifiable(placements),
+    includeImageWindows: hasImageWindows,
   );
 }
 
@@ -634,12 +691,18 @@ void _checkPlanCount(String label, int count, int maximum) {
 /// affects encoding — the style table is built link-aware either way (two
 /// runs differing only by link stay distinct entries), so this parameter
 /// never changes which rows or runs the plan contains.
+///
+/// [includeImageWindows] is the protocol-v5 peer gate. When true, placements
+/// retain their original fit box and visible-window offsets. When false,
+/// unclipped placements use the legacy wire shape and clipped placements are
+/// omitted rather than re-fitted incorrectly by an older peer.
 RemotePlan buildRemotePlan(
   CellBuffer prev,
   CellBuffer next, {
   required bool fullRepaint,
   TuiDirtyRows? dirtyRows,
   bool includeLinks = false,
+  bool includeImageWindows = true,
 }) {
   final full = fullRepaint || prev.size != next.size;
   final rows = next.size.rows;
@@ -718,8 +781,12 @@ RemotePlan buildRemotePlan(
     scrollUpRows: scrollUpRows,
     styleTable: styleTable,
     patches: patches,
-    placements: _imagePlacements(next),
+    placements: _imagePlacements(
+      next,
+      includeImageWindows: includeImageWindows,
+    ),
     includeLinks: includeLinks,
+    includeImageWindows: includeImageWindows,
   );
   // Full frames ignore the hint entirely, so only steady-state bounded
   // builds are oracle-checked.
@@ -762,6 +829,7 @@ bool _boundedPlanOracleHolds(
       next,
       fullRepaint: fullRepaint,
       includeLinks: bounded.includeLinks,
+      includeImageWindows: bounded.includeImageWindows,
     ),
   );
   final got = encodeRemotePlan(bounded);
@@ -777,22 +845,39 @@ bool _boundedPlanOracleHolds(
 /// current set every frame, so a static image isn't dropped on an unchanged
 /// frame and the same bytes drawn twice keep independent geometry. Empty when
 /// no image was placed, so image-free frames pay nothing.
-List<ImagePlacement> _imagePlacements(CellBuffer next) {
+List<ImagePlacement> _imagePlacements(
+  CellBuffer next, {
+  required bool includeImageWindows,
+}) {
   final placements = next.imagePlacements;
   if (placements.isEmpty) return const <ImagePlacement>[];
   return [
     for (final p in placements)
-      ImagePlacement(
-        id: p.id,
-        col: p.col,
-        row: p.row,
-        // CellBuffer clips overlay writes at its edge. Keep the wire geometry
-        // inside that same declared grid so a partially visible image cannot
-        // produce an oversized DOM overlay or fail structural decoding.
-        cols: p.cols.clamp(1, next.size.cols - p.col),
-        rows: p.rows.clamp(1, next.size.rows - p.row),
-        fit: p.fit,
-      ),
+      // Keep producer output inside the same original-box cap the decoder
+      // enforces. A pathological application-requested box degrades to blank
+      // cells instead of emitting a plan its own browser would reject (or an
+      // enormous CSS element that is almost entirely clipped away).
+      if (p.boxCols <= maxRemotePlanGridCols &&
+          p.boxRows <= maxRemotePlanGridRows &&
+          // A legacy peer would re-fit the full source into the visible slice,
+          // which is observably wrong. Degrade a clipped placement to blank;
+          // full placements keep the old wire shape.
+          (includeImageWindows || !p.isClipped))
+        ImagePlacement(
+          id: p.id,
+          col: p.col,
+          row: p.row,
+          // CellBuffer clips overlay writes at its edge. Keep the wire geometry
+          // inside that same declared grid so a partially visible image cannot
+          // produce an oversized DOM overlay or fail structural decoding.
+          cols: p.cols.clamp(1, next.size.cols - p.col),
+          rows: p.rows.clamp(1, next.size.rows - p.row),
+          fit: p.fit,
+          boxCols: p.boxCols,
+          boxRows: p.boxRows,
+          boxOffsetCol: p.boxOffsetCol,
+          boxOffsetRow: p.boxOffsetRow,
+        ),
   ];
 }
 

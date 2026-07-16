@@ -990,6 +990,31 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
         );
       }
     }
+
+    // The pinned header and scrolled body are two discontinuous source
+    // windows, so carry their off-grid image placements separately using the
+    // exact row mapping applied above. A whole-scratch replay would scroll the
+    // header or expose hidden body rows.
+    final headerRows = _headerBlock < outRows ? _headerBlock : outRows;
+    if (maxCol > 0 && headerRows > 0) {
+      buffer.compositeImageRectFrom(
+        scratch,
+        CellRect.fromLTWH(0, 0, maxCol, headerRows),
+        offset,
+      );
+    }
+    final bodyRows = outRows - headerRows;
+    final availableBodyRows = _naturalHeight - bodyScrollTopY;
+    final copiedBodyRows = bodyRows < availableBodyRows
+        ? bodyRows
+        : availableBodyRows;
+    if (maxCol > 0 && copiedBodyRows > 0) {
+      buffer.compositeImageRectFrom(
+        scratch,
+        CellRect.fromLTWH(0, bodyScrollTopY, maxCol, copiedBodyRows),
+        CellOffset(offset.col, offset.row + headerRows),
+      );
+    }
   }
 
   void _paintNatural(CellBuffer buffer, CellOffset offset) {

@@ -143,6 +143,7 @@ class InlineImageOverlay {
     final oy = box.cssCanvasInsetTop;
     final seen = <String>{};
     final occurrence = <String, int>{};
+    web.Node? orderCursor = overlay.firstChild;
     for (final p in placements) {
       final occ = occurrence[p.id] = (occurrence[p.id] ?? 0) + 1;
       final key = '${p.id}#$occ';
@@ -162,7 +163,6 @@ class InlineImageOverlay {
           _els[key]?.style.setProperty('visibility', 'hidden');
         }.toJS;
         el.src = url;
-        overlay.appendChild(el);
         _els[key] = el;
       } else if (el.src != url) {
         // Bytes re-shipped under a new blob URL: point at the fresh URL and
@@ -171,20 +171,40 @@ class InlineImageOverlay {
         el.style.removeProperty('visibility');
         _rects.remove(key);
       }
-      // Re-style only when the geometry changed (static images hold their rect).
-      final left = ox + p.col * cw;
-      final top = oy + p.row * ch;
-      final rect = '$left|$top|${p.cols * cw}|${p.rows * ch}|${p.fit.name}';
+      // Resolve object-fit against the original box and clip that element down
+      // to the visible cell window. Re-fitting a smaller element here would
+      // change contain/cover geometry as it crossed a viewport boundary.
+      final left = ox + (p.col - p.boxOffsetCol) * cw;
+      final top = oy + (p.row - p.boxOffsetRow) * ch;
+      final width = p.boxCols * cw;
+      final height = p.boxRows * ch;
+      final clipTop = p.boxOffsetRow * ch;
+      final clipLeft = p.boxOffsetCol * cw;
+      final clipRight = (p.boxCols - p.boxOffsetCol - p.cols) * cw;
+      final clipBottom = (p.boxRows - p.boxOffsetRow - p.rows) * ch;
+      final clipPath =
+          'inset(${clipTop}px ${clipRight}px ${clipBottom}px ${clipLeft}px)';
+      final rect = '$left|$top|$width|$height|$clipPath|${p.fit.name}';
       if (_rects[key] != rect) {
         _rects[key] = rect;
         el.style
           ..setProperty('left', '${left}px')
           ..setProperty('top', '${top}px')
-          ..setProperty('width', '${p.cols * cw}px')
-          ..setProperty('height', '${p.rows * ch}px')
+          ..setProperty('width', '${width}px')
+          ..setProperty('height', '${height}px')
+          ..setProperty('clip-path', clipPath)
           // InlineImageFit names ARE the CSS object-fit keywords, so the source
           // fit maps straight through (without it, fill would stretch).
           ..setProperty('object-fit', p.fit.name);
+      }
+      // Existing keyed elements retain their node identity, but stacking must
+      // follow this frame's paint order. Move only a node that is not already
+      // at the next desired position, preserving zero DOM mutations for an
+      // unchanged placement list while still making reorders authoritative.
+      if (!identical(el, orderCursor)) {
+        overlay.insertBefore(el, orderCursor);
+      } else {
+        orderCursor = orderCursor?.nextSibling;
       }
     }
     for (final key in _els.keys.toList()) {

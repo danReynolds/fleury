@@ -69,7 +69,7 @@ void main() {
       // Before INIT the version is unknown (defaults to v1, ANSI).
       expect(driver.wantsPresentationPlans, isFalse);
       final entered = driver.enter(TerminalMode.interactive);
-      transport.emit(_init); // v2
+      transport.emit(_init); // current structured protocol
       await entered;
       expect(driver.wantsPresentationPlans, isTrue);
       await driver.restore();
@@ -254,7 +254,7 @@ void main() {
         final transport = _FakeTransport();
         final driver = RemoteTerminalDriver(transport);
         final entered = driver.enter(TerminalMode.interactive);
-        transport.emit(_init); // v3 → structured path
+        transport.emit(_init); // current structured protocol
         await entered;
         expect(driver.wantsPresentationPlans, isTrue);
 
@@ -540,8 +540,8 @@ void main() {
               tmuxPassthrough: false,
               images: InlineImageSupport.placements,
               hyperlinks: true,
-              // protocolVersion defaults to v4 → wantsHyperlinks → the plan
-              // serializes the link.
+              // The current protocol is >=v4, so wantsHyperlinks makes the
+              // plan serialize the link.
             ),
           ),
         );
@@ -700,6 +700,69 @@ void main() {
       transport.sent.clear();
       return driver;
     }
+
+    test(
+      'presentFrame gates clipped image windows for v4 and v5 peers',
+      () async {
+        for (final (version, expectsWindow) in [(4, false), (5, true)]) {
+          final transport = _FakeTransport();
+          final driver = RemoteTerminalDriver(transport);
+          final entered = driver.enter(TerminalMode.interactive);
+          transport.emit(
+            InitFrame(
+              size: const CellSize(40, 10),
+              colorMode: ColorMode.truecolor,
+              imageProtocol: ImageProtocol.halfBlock,
+              tmuxPassthrough: false,
+              protocolVersion: version,
+            ),
+          );
+          await entered;
+          transport.sent.clear();
+          const size = CellSize(40, 10);
+          final next = CellBuffer(size)
+            ..writeImage(
+              const CellOffset(-1, 1),
+              Uint8List.fromList([1, 2, 3, 4]),
+              width: 4,
+              height: 3,
+            );
+
+          driver.presentFrame(CellBuffer(size), next, fullPlan(size));
+
+          final plan = transport.sent.whereType<PlanFrame>().single.plan;
+          expect(
+            plan.includeImageWindows,
+            expectsWindow,
+            reason: 'peer v$version',
+          );
+          expect(encodeRemotePlan(plan).first & 4, expectsWindow ? 4 : 0);
+          if (expectsWindow) {
+            final placement = plan.placements.single;
+            expect(
+              [
+                placement.col,
+                placement.row,
+                placement.cols,
+                placement.rows,
+                placement.boxCols,
+                placement.boxRows,
+                placement.boxOffsetCol,
+                placement.boxOffsetRow,
+              ],
+              [0, 1, 3, 3, 4, 3, 1, 0],
+            );
+          } else {
+            expect(
+              plan.placements,
+              isEmpty,
+              reason: 'v4 must not silently re-fit a clipped source image',
+            );
+          }
+          await driver.restore();
+        }
+      },
+    );
 
     test('ships bytes once, then not while the peer still caches them '
         '(no re-ship on leave-and-return under the cache bound)', () async {

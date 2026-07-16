@@ -228,41 +228,17 @@ final class CellBuffer {
     final srcStride = source._size.cols;
     _recordDamageRect(dstCol0, dstRow0, cols, rows);
 
-    // Inline images ride along: placements live on the buffer, not in
-    // cells, so a cached-subtree blit (RenderRepaintBoundary) must carry
-    // them or the presenter would see overlay cells with no placement and
-    // the image would vanish on the first cached frame. Geometry
-    // translates by the copy delta; content dedupes by id.
-    for (final p in source._imagePlacements) {
-      final intersects =
-          p.col < srcCol + cols &&
-          p.col + p.cols > srcCol &&
-          p.row < srcRow + rows &&
-          p.row + p.rows > srcRow;
-      if (!intersects) continue;
-      final newCol = p.col - srcCol + dstCol0;
-      final newRow = p.row - srcRow + dstRow0;
-      // Only carry a placement whose top-left lands in-bounds — the same
-      // rule [writeImageWithId] applies. A blit at a negative destOffset
-      // (a repaint boundary under a negatively-positioned parent) would
-      // otherwise record a placement at a negative cell, which a terminal
-      // presenter turns into an invalid cursor address and the wire codec
-      // into an out-of-range varint.
-      if (!_containsColRow(newCol, newRow)) continue;
-      final image = source._images[p.id];
-      if (image == null) continue;
-      _images[p.id] = image;
-      _imagePlacements.add(
-        InlineImagePlacement(
-          id: p.id,
-          col: newCol,
-          row: newRow,
-          cols: p.cols,
-          rows: p.rows,
-          fit: p.fit,
-        ),
-      );
-    }
+    // Placements live off-grid, so carry them explicitly. The region-aware
+    // compositor preserves the original fit box while accumulating source
+    // and destination clipping; repaint-boundary cache blits therefore match
+    // a direct paint even when only a leading/trailing slice is visible.
+    _compositeImageRectFrom(
+      source,
+      CellRect.fromLTWH(srcCol, srcRow, cols, rows),
+      destOffset,
+      markOverlayCells: false,
+      recordDamage: false,
+    );
 
     // Fast path: full-width rows landing at column 0 of this buffer — the
     // sliced source rows map to a contiguous range in the destination, so
@@ -519,6 +495,8 @@ final class CellBuffer {
   /// without them a terminal presenter falls back to `fill` geometry.
   /// [pixels] lazily provides decoded RGBA (row-major, 4 bytes/pixel) —
   /// required only by Sixel, which must re-rasterize.
+  /// [croppedBytes] lazily supplies a PNG source crop for protocols such as
+  /// iTerm2 that cannot express cropping in their placement command.
   void writeImage(
     CellOffset topLeft,
     Uint8List bytes, {
@@ -528,6 +506,7 @@ final class CellBuffer {
     int? sourceWidth,
     int? sourceHeight,
     Uint8List Function()? pixels,
+    Uint8List Function(int x, int y, int width, int height)? croppedBytes,
   }) {
     writeImageWithId(
       topLeft,
@@ -539,6 +518,7 @@ final class CellBuffer {
       sourceWidth: sourceWidth,
       sourceHeight: sourceHeight,
       pixels: pixels,
+      croppedBytes: croppedBytes,
     );
   }
 
@@ -555,42 +535,42 @@ final class CellBuffer {
     int? sourceWidth,
     int? sourceHeight,
     Uint8List Function()? pixels,
+    Uint8List Function(int x, int y, int width, int height)? croppedBytes,
   }) {
     // A zero (or negative) dimension is a no-op, like a width-0 grapheme:
     // recording it would hand the terminal image encoder a degenerate box
     // whose fit math divides/clamps by zero and throws in the present
     // phase — outside the render backstop, so it would wedge the session.
     if (width <= 0 || height <= 0) return;
-    if (!_containsColRow(topLeft.col, topLeft.row)) return;
+    final left = topLeft.col < 0 ? 0 : topLeft.col;
+    final top = topLeft.row < 0 ? 0 : topLeft.row;
+    final unclippedRight = topLeft.col + width;
+    final unclippedBottom = topLeft.row + height;
+    final right = unclippedRight > _size.cols ? _size.cols : unclippedRight;
+    final bottom = unclippedBottom > _size.rows ? _size.rows : unclippedBottom;
+    if (left >= right || top >= bottom) return;
     // Bytes are deduplicated by id; geometry is recorded per placement so the
     // same image drawn twice (or at two sizes) keeps independent rectangles.
-    _images[id] = InlineImage(
+    final image = InlineImage(
       id: id,
       bytes: bytes,
       sourceWidth: sourceWidth,
       sourceHeight: sourceHeight,
       pixels: pixels,
+      croppedBytes: croppedBytes,
     );
-    _imagePlacements.add(
-      InlineImagePlacement(
-        id: id,
-        col: topLeft.col,
-        row: topLeft.row,
-        cols: width,
-        rows: height,
-        fit: fit,
-      ),
+    _recordImagePlacement(
+      image,
+      col: left,
+      row: top,
+      cols: right - left,
+      rows: bottom - top,
+      fit: fit,
+      boxCols: width,
+      boxRows: height,
+      boxOffsetCol: left - topLeft.col,
+      boxOffsetRow: top - topLeft.row,
     );
-    _recordDamageRect(topLeft.col, topLeft.row, width, height);
-    final r0 = topLeft.row;
-    final c0 = topLeft.col;
-    final maxR = (r0 + height).clamp(0, _size.rows);
-    final maxC = (c0 + width).clamp(0, _size.cols);
-    for (var r = r0; r < maxR; r++) {
-      for (var c = c0; c < maxC; c++) {
-        _cells[r * _size.cols + c] = const Cell.overlay();
-      }
-    }
   }
 
   /// Carries the inline-image placements of [source] into this buffer,
@@ -602,26 +582,120 @@ final class CellBuffer {
   /// effect layers) must also carry the scratch's placements, or an Image
   /// inside them renders nothing on a true-pixel surface: the presenter
   /// sees no placement and the renderer emits nothing for the overlay
-  /// cells. Each placement is re-recorded through [writeImageWithId] (so
-  /// the overlay cells, damage, and image dedup all happen the normal way)
-  /// and dropped when its translated top-left lands out of bounds — the
-  /// same clip the manual cell loops apply.
+  /// cells. Each placement is intersected with both buffers and retains its
+  /// original fit box plus accumulated visible-window offsets.
   void compositeImagesFrom(CellBuffer source, CellOffset destOffset) {
-    if (source._imagePlacements.isEmpty) return;
+    compositeImageRectFrom(
+      source,
+      CellRect(offset: CellOffset.zero, size: source.size),
+      destOffset,
+    );
+  }
+
+  /// Carries placements intersecting [sourceRect] into this buffer, mapping
+  /// [sourceRect]'s top-left to [destOffset]. Both source-region clipping and
+  /// destination-buffer clipping accumulate as offsets inside each image's
+  /// original fit box.
+  ///
+  /// This is the image analogue of a clipped cell blit. Scratch-buffer
+  /// renderers must use the same source rectangle for their cell copy and this
+  /// call so true-pixel content cannot disappear or escape its clip.
+  void compositeImageRectFrom(
+    CellBuffer source,
+    CellRect sourceRect,
+    CellOffset destOffset,
+  ) {
+    _compositeImageRectFrom(
+      source,
+      sourceRect,
+      destOffset,
+      markOverlayCells: true,
+      recordDamage: true,
+    );
+  }
+
+  void _compositeImageRectFrom(
+    CellBuffer source,
+    CellRect sourceRect,
+    CellOffset destOffset, {
+    required bool markOverlayCells,
+    required bool recordDamage,
+  }) {
+    if (source._imagePlacements.isEmpty || sourceRect.size.isEmpty) return;
+    final destinationBounds = CellRect(offset: CellOffset.zero, size: _size);
     for (final p in source._imagePlacements) {
+      final sourceVisible = CellRect.fromLTWH(p.col, p.row, p.cols, p.rows);
+      final copied = sourceVisible.intersect(sourceRect);
+      if (copied == null) continue;
+      final translated = CellRect.fromLTWH(
+        destOffset.col + copied.left - sourceRect.left,
+        destOffset.row + copied.top - sourceRect.top,
+        copied.size.cols,
+        copied.size.rows,
+      );
+      final visible = translated.intersect(destinationBounds);
+      if (visible == null) continue;
       final image = source._images[p.id];
       if (image == null) continue;
-      writeImageWithId(
-        CellOffset(p.col + destOffset.col, p.row + destOffset.row),
-        p.id,
-        image.bytes,
-        width: p.cols,
-        height: p.rows,
+      _recordImagePlacement(
+        image,
+        col: visible.left,
+        row: visible.top,
+        cols: visible.size.cols,
+        rows: visible.size.rows,
         fit: p.fit,
-        sourceWidth: image.sourceWidth,
-        sourceHeight: image.sourceHeight,
-        pixels: image.pixels,
+        boxCols: p.boxCols,
+        boxRows: p.boxRows,
+        boxOffsetCol:
+            p.boxOffsetCol +
+            (copied.left - p.col) +
+            (visible.left - translated.left),
+        boxOffsetRow:
+            p.boxOffsetRow +
+            (copied.top - p.row) +
+            (visible.top - translated.top),
+        markOverlayCells: markOverlayCells,
+        recordDamage: recordDamage,
       );
+    }
+  }
+
+  void _recordImagePlacement(
+    InlineImage image, {
+    required int col,
+    required int row,
+    required int cols,
+    required int rows,
+    required InlineImageFit fit,
+    required int boxCols,
+    required int boxRows,
+    required int boxOffsetCol,
+    required int boxOffsetRow,
+    bool markOverlayCells = true,
+    bool recordDamage = true,
+  }) {
+    _images[image.id] = image;
+    _imagePlacements.add(
+      InlineImagePlacement(
+        id: image.id,
+        col: col,
+        row: row,
+        cols: cols,
+        rows: rows,
+        fit: fit,
+        boxCols: boxCols,
+        boxRows: boxRows,
+        boxOffsetCol: boxOffsetCol,
+        boxOffsetRow: boxOffsetRow,
+      ),
+    );
+    if (recordDamage) _recordDamageRect(col, row, cols, rows);
+    if (!markOverlayCells) return;
+    for (var r = row; r < row + rows; r++) {
+      final base = r * _size.cols;
+      for (var c = col; c < col + cols; c++) {
+        _cells[base + c] = const Cell.overlay();
+      }
     }
   }
 

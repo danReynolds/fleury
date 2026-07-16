@@ -171,4 +171,86 @@ void main() {
       expect([glyph.cols, glyph.rows], [4, 1]);
     });
   });
+
+  group('resolveClippedInlineImageFit', () {
+    test('fits against the original box before refining the source crop', () {
+      const placement = InlineImagePlacement(
+        id: 'image',
+        col: 0,
+        row: 0,
+        cols: 4,
+        rows: 2,
+        fit: InlineImageFit.fill,
+        boxCols: 4,
+        boxRows: 4,
+        boxOffsetRow: 1,
+      );
+      final f = resolveClippedInlineImageFit(
+        placement: placement,
+        sourceWidth: 40,
+        sourceHeight: 80,
+      )!;
+
+      expect([f.col, f.row, f.cols, f.rows], [0, 0, 4, 2]);
+      expect([f.cropX, f.cropY, f.cropW, f.cropH], [0, 20, 40, 40]);
+    });
+
+    test('a visible window containing only letterbox space emits nothing', () {
+      const placement = InlineImagePlacement(
+        id: 'image',
+        col: 0,
+        row: 0,
+        cols: 8,
+        rows: 1,
+        fit: InlineImageFit.contain,
+        boxCols: 8,
+        boxRows: 8,
+      );
+      expect(
+        resolveClippedInlineImageFit(
+          placement: placement,
+          sourceWidth: 16,
+          sourceHeight: 4,
+        ),
+        isNull,
+      );
+    });
+
+    test('adjacent visible windows share one deterministic crop boundary', () {
+      const leading = InlineImagePlacement(
+        id: 'image',
+        col: 0,
+        row: 0,
+        cols: 4,
+        rows: 2,
+        fit: InlineImageFit.fill,
+        boxCols: 10,
+        boxRows: 2,
+      );
+      const trailing = InlineImagePlacement(
+        id: 'image',
+        col: 4,
+        row: 0,
+        cols: 6,
+        rows: 2,
+        fit: InlineImageFit.fill,
+        boxCols: 10,
+        boxRows: 2,
+        boxOffsetCol: 4,
+      );
+      final a = resolveClippedInlineImageFit(
+        placement: leading,
+        sourceWidth: 101,
+        sourceHeight: 20,
+      )!;
+      final b = resolveClippedInlineImageFit(
+        placement: trailing,
+        sourceWidth: 101,
+        sourceHeight: 20,
+      )!;
+
+      expect(a.cropX + a.cropW, b.cropX);
+      expect(a.cropW + b.cropW, 101);
+    });
+  });
 }

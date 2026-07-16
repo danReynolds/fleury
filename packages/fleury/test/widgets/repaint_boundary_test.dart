@@ -648,6 +648,36 @@ void main() {
       );
     });
 
+    testWidgets('a clipped cache-hit image matches its visible source window', (
+      tester,
+    ) {
+      final controller = ScrollController();
+      addTearDown(controller.dispose);
+      tester.pumpWidget(
+        ScrollView(
+          controller: controller,
+          child: const Column(
+            children: [
+              RepaintBoundary(child: ImageLeaf()),
+              SizedBox(width: 4, height: 8, child: Text('tail')),
+            ],
+          ),
+        ),
+      );
+      const viewport = CellSize(4, 3);
+      tester.render(size: viewport);
+
+      controller.scrollBy(1);
+      RepaintBoundaryDebugStats.beginFrame(enabled: true);
+      final partial = tester.render(size: viewport);
+      final stats = RepaintBoundaryDebugStats.takeFrameStats();
+      expect(stats.cachedCount, greaterThanOrEqualTo(1));
+      final p = partial.imagePlacements.single;
+      expect([p.col, p.row, p.cols, p.rows], [0, 0, 4, 1]);
+      expect([p.boxCols, p.boxRows], [4, 2]);
+      expect([p.boxOffsetCol, p.boxOffsetRow], [0, 1]);
+    });
+
     testWidgets('ancestor clips are reapplied instead of retained locally', (
       tester,
     ) {
