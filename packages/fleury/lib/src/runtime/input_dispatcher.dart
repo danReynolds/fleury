@@ -144,7 +144,28 @@ class InputDispatcher {
   KeyEventResult _dispatchKeyEvent(KeyEvent event) {
     // 1. Pending sequence handling.
     if (_pending != null) {
-      final pending = _pending!;
+      var pending = _pending!;
+      final activeCandidates = pending.candidates
+          .where(_isBindingCurrentlyActive)
+          .toList(growable: false);
+      if (activeCandidates.length != pending.candidates.length) {
+        if (activeCandidates.isEmpty) {
+          // Input topology changed while the leader was held (for example an
+          // ErrorBoundary contained the focused subtree). Never invoke a
+          // captured handler directly after its source left the active chain.
+          final held = List<KeyEvent>.from(pending.events);
+          _clearPending();
+          for (final e in held) {
+            _dispatchPlain(e, allowSequenceStart: false);
+          }
+          return _dispatchPlain(event);
+        }
+        pending = _PendingSequence(
+          events: pending.events,
+          candidates: activeCandidates,
+        );
+        _pending = pending;
+      }
       final completedBinding = pending.tryComplete(event);
       if (completedBinding != null) {
         _clearPending();
@@ -175,6 +196,19 @@ class InputDispatcher {
       return _dispatchPlain(event);
     }
     return _dispatchPlain(event);
+  }
+
+  bool _isBindingCurrentlyActive(KeyBinding binding) {
+    if (!binding.enabled) return false;
+    for (final node in focusManager.activeChain()) {
+      final source = node.bindingSource;
+      if (source != null &&
+          source.activeBindings.any((entry) => identical(entry, binding))) {
+        return true;
+      }
+    }
+    return !focusManager.suppressGlobals &&
+        _globalBindings.any((entry) => identical(entry, binding));
   }
 
   /// Runs [binding]'s handler and returns the propagation decision.

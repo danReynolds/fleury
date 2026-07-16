@@ -43,7 +43,11 @@ export 'src/runtime/frame_driver.dart'
 export 'src/runtime/frame_semantics_pipeline.dart'
     show FrameSemanticsPipeline, SemanticFlushStats;
 export 'src/runtime/frame_scheduler.dart'
-    show FrameFlushScheduler, FrameRenderCallback, FrameScheduler;
+    show
+        FrameFlushCancellation,
+        FrameFlushScheduler,
+        FrameRenderCallback,
+        FrameScheduler;
 export 'src/runtime/input_dispatcher.dart' show InputDispatcher;
 export 'src/runtime/tui_frame_loop.dart'
     show

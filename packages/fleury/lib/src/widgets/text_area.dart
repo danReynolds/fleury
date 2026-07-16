@@ -1258,7 +1258,7 @@ class RenderTextArea extends RenderObject {
 
   // ignore: prefer_function_declarations_over_variables
   late final FocusGeometryCallback _replayCaret = (bounds) {
-    _focusNode.caretRect = bounds;
+    _focusNode.caretRect = _focusNode.acceptsInput ? bounds : null;
   };
 
   int _lineStartOffset(List<String> lines, int lineIndex) {

@@ -21,8 +21,11 @@ class _FakeFlush {
 
   bool get pending => _pending != null;
 
-  void schedule(Duration delay, void Function() flush) {
+  void Function() schedule(Duration delay, void Function() flush) {
     _pending = flush;
+    return () {
+      if (identical(_pending, flush)) _pending = null;
+    };
   }
 
   void fire() {

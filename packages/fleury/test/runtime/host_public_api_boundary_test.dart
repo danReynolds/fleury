@@ -22,7 +22,10 @@ void main() {
     final scheduler = FrameScheduler(
       clock: SystemClock(),
       onRender: (_) {},
-      flushScheduler: (_, flush) => flush(),
+      flushScheduler: (_, flush) {
+        flush();
+        return null;
+      },
     );
     addTearDown(scheduler.dispose);
     scheduler.requestFrame('host-smoke');
@@ -48,6 +51,7 @@ void main() {
     for (final symbol in <String>[
       'RenderDamageTracker',
       'FrameScheduler',
+      'FrameFlushCancellation',
       'FrameFlushScheduler',
       'InputDispatcher',
       'TuiRuntime',

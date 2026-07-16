@@ -6,6 +6,7 @@
 // exception bubbles up.
 
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io'
     show File, FileMode, Platform, RandomAccessFile, Stdout, stderr, stdout;
@@ -127,6 +128,68 @@ bool requestExit() {
   return true;
 }
 
+/// Bounded replay for driver events that arrive while [TerminalDriver.enter]
+/// negotiates capabilities and the application tree mounts.
+///
+/// Driver event streams are broadcast. Subscribing after `enter()` silently
+/// loses ready stdin, probe-tail keystrokes, and EOF-time input; subscribing
+/// early without a bound merely moves the problem into unbounded startup
+/// memory. This queue makes the handoff explicit and fails startup loudly if a
+/// custom driver exceeds the short negotiation budget.
+final class _StartupEventBuffer {
+  static const maxEvents = 4096;
+  static const maxPayloadBytes = 1024 * 1024;
+
+  final Queue<TuiEvent> _events = Queue<TuiEvent>();
+  var _payloadBytes = 0;
+  StateError? overflowError;
+
+  void add(TuiEvent event) {
+    if (overflowError != null) return;
+    final payloadBytes = _eventPayloadBytes(event);
+    if (_events.length >= maxEvents ||
+        _payloadBytes + payloadBytes > maxPayloadBytes) {
+      overflowError = StateError(
+        'Terminal input exceeded the bounded startup replay buffer '
+        '($maxEvents events / $maxPayloadBytes UTF-8 bytes) before the app '
+        'finished mounting.',
+      );
+      return;
+    }
+    _events.addLast(event);
+    _payloadBytes += payloadBytes;
+  }
+
+  Iterable<TuiEvent> drain() sync* {
+    while (_events.isNotEmpty) {
+      yield _events.removeFirst();
+    }
+    _payloadBytes = 0;
+  }
+
+  static int _eventPayloadBytes(TuiEvent event) {
+    final text = switch (event) {
+      TextInputEvent(:final text) => text,
+      TextCompositionEvent(:final text) => text,
+      PasteEvent(:final text) => text,
+      KeyEvent(:final char) => char,
+      _ => null,
+    };
+    return text == null ? 0 : utf8.encode(text).length;
+  }
+}
+
+/// Maximum time teardown waits for one asynchronous resource before moving on.
+///
+/// A broken custom stream/controller must not strand the process in raw mode or
+/// keep [runApp] pending forever. Timed-out futures may still settle later, but
+/// every callback they can reach observes `disposed` before teardown starts.
+const _cleanupResourceTimeout = Duration(seconds: 1);
+
+/// `package:stdio` already bounds inherited-child drain at two seconds. Leave
+/// headroom for that valid tail flush while retaining an outer fail-safe.
+const _stdioCleanupResourceTimeout = Duration(seconds: 3);
+
 /// Runs an fleury application.
 ///
 /// This thin wrapper exists for one safety property: if ANYTHING escapes the
@@ -204,7 +267,7 @@ Future<AppExit> runApp(
     final c = cap;
     if (c != null && c.isActive) {
       try {
-        await c.stop();
+        await c.stop().timeout(_stdioCleanupResourceTimeout);
       } catch (_) {}
     }
     rethrow;
@@ -217,20 +280,22 @@ Future<AppExit> runApp(
 /// Sequence:
 ///
 ///   1. Acquire a [TerminalDriver] (defaults to the native platform driver).
-///   2. Enter [mode] (raw input, alt screen, hidden cursor by default).
-///   3. Mount [root] under a [BuildOwner]; render the first
+///   2. Subscribe to driver events into a bounded startup replay buffer.
+///   3. Enter [mode] (raw input, alt screen, hidden cursor by default).
+///   4. Mount [root] under a [BuildOwner]; render the first
 ///      frame.
-///   4. Attach hot-reload handlers (`ext.fleury.reassemble` extension
+///   5. Attach hot-reload handlers (`ext.fleury.reassemble` extension
 ///      + VM-service `IsolateReload` listener) unless [enableHotReload]
 ///      is false.
-///   5. Listen to driver events; on each event, optionally consult
+///   6. Replay buffered input in source order, then dispatch live driver
+///      events. On each event, optionally consult
 ///      [onEvent]; if it returns [ExitRequested], or the event is an
 ///      unhandled Ctrl+C, or it is a [SignalEvent] the handler did not
 ///      claim with [EventHandled], exit the loop. [requestExit] exits
 ///      programmatically from anywhere in the app.
-///   6. Schedule a render frame after every event and after every
+///   7. Schedule a render frame after every event and after every
 ///      `setState` (via [BuildOwner.onScheduleBuild]).
-///   7. On exit (normal or exceptional): cancel subscriptions, dispose
+///   8. On exit (normal or exceptional): cancel subscriptions, dispose
 ///      hot-reload, restore the terminal.
 ///
 /// The frame loop renders on demand — the first frame is painted
@@ -458,7 +523,7 @@ Future<AppExit> _runAppImpl(
   _activeExitCompleter = exit;
 
   final done = Completer<AppExit>();
-  var cleanedUp = false;
+  Future<void>? cleanupFuture;
 
   // Captures stray output (see below). The buffer powers replay-on-exit; the
   // optional hook lets the caller route lines live (e.g. to a file).
@@ -515,50 +580,197 @@ Future<AppExit> _runAppImpl(
       errorReporter.report(contained.error, contained.stack);
   debugController.setErrorHistoryProvider(() => errorReporter.history);
 
-  // Single idempotent teardown, driven by either the normal exit path
-  // (the finally below) or the zone's uncaught-error handler.
-  Future<void> cleanup() async {
-    if (cleanedUp) return;
-    cleanedUp = true;
+  final startupEvents = _StartupEventBuffer();
+  var driverEventsReady = false;
+  var driverEventStreamDone = false;
+  Object? driverEventStreamError;
+  StackTrace? driverEventStreamStack;
+
+  void handleDriverEvent(TuiEvent event) {
+    if (disposed || exit.isCompleted) return;
+    try {
+      DebugEvents.emitInput(event);
+      if (event is ResizeEvent) {
+        // Same-size resize events represent a resumed/handed-off terminal and
+        // still require a full repaint even though size comparison sees no
+        // change.
+        frameDriver?.forceFullRepaint();
+        DebugEvents.emitTerminalDiagnosis(currentTerminalDiagnosis());
+      }
+
+      // Debug-shell hotkeys bypass modal suppression at the same escape-hatch
+      // tier as Ctrl+C.
+      if (event is KeyEvent && tryConsumeDebugKey(debugController, event)) {
+        scheduleFrame('debug-key');
+        return;
+      }
+      if (event is TextInputEvent &&
+          tryConsumeDebugText(debugController, event)) {
+        scheduleFrame('debug-key');
+        return;
+      }
+
+      KeyEventResult dispatchResult = KeyEventResult.ignored;
+      if (event is KeyEvent ||
+          event is TextInputEvent ||
+          event is TextCompositionEvent ||
+          event is PasteEvent ||
+          event is MouseEvent) {
+        dispatchResult = dispatcher.dispatch(event);
+        semanticsPipeline?.markSemanticsDirty();
+      }
+
+      // Ctrl+C exits only when the app did not handle it first. Structured
+      // browser sessions are exempt because browser Cmd+C maps to Ctrl+C.
+      if (event is KeyEvent &&
+          event.char == 'c' &&
+          event.hasCtrl &&
+          dispatchResult != KeyEventResult.handled &&
+          surfaceSink == null) {
+        if (!exit.isCompleted) exit.complete(const AppExit.requested());
+        return;
+      }
+
+      EventResponse? response;
+      if (onEvent != null) {
+        response = onEvent(event);
+        if (response is ExitRequested) {
+          if (!exit.isCompleted) exit.complete(const AppExit.requested());
+          return;
+        }
+      }
+
+      if (event is SignalEvent && response is! EventHandled) {
+        if (!exit.isCompleted) exit.complete(AppExit.signal(event.signal));
+        return;
+      }
+
+      scheduleFrame(_frameReasonForEvent(event));
+    } catch (error, stack) {
+      // A throwing app handler must not kill the input loop.
+      errorReporter.report(error, stack);
+      scheduleFrame('event-error');
+    }
+  }
+
+  void handleDriverStreamError(Object error, StackTrace stack) {
+    if (disposed) return;
+    try {
+      errorReporter.report(error, stack);
+    } finally {
+      if (!exit.isCompleted) exit.complete(const AppExit.requested());
+    }
+  }
+
+  void handleDriverStreamDone() {
+    if (!exit.isCompleted) exit.complete(const AppExit.requested());
+  }
+
+  void activateDriverEvents() {
+    final overflow = startupEvents.overflowError;
+    if (overflow != null) throw overflow;
+    // Keep startup mode active while draining. A synchronous custom stream can
+    // emit recursively from an app callback; those events append behind the
+    // already-buffered input and preserve source order.
+    for (final event in startupEvents.drain()) {
+      handleDriverEvent(event);
+    }
+    final replayOverflow = startupEvents.overflowError;
+    if (replayOverflow != null) throw replayOverflow;
+    driverEventsReady = true;
+    final streamError = driverEventStreamError;
+    if (streamError != null && !exit.isCompleted) {
+      handleDriverStreamError(
+        streamError,
+        driverEventStreamStack ?? StackTrace.current,
+      );
+    } else if (driverEventStreamDone && !exit.isCompleted) {
+      handleDriverStreamDone();
+    }
+  }
+
+  // Single idempotent teardown, driven by either the normal exit path or the
+  // zone's uncaught-error handler. Every resource gets its own fault boundary:
+  // a failed subscription cancel must not skip State.dispose, and a failed
+  // restore must never leave runApp's returned future unresolved.
+  Future<void> performCleanup() async {
     disposed = true;
-    // frameDriver.dispose() stays the first statement: synchronously, before
+    // frameDriver.dispose() stays the first resource action: synchronously,
+    // before
     // the first await, a frame microtask scheduled just before cleanup (e.g. by
     // the error reporter's listener) must find the driver disposed, or it
     // re-renders a crashing tree outside the guarded zone.
     //
-    // A faulty user State.dispose() (bubbling out of runtime.dispose()) must NOT
-    // abort teardown. If it escaped here it would BOTH skip the terminal restore
-    // below AND hang runApp: the normal path's `done.complete(appExit)` is
-    // skipped, and the zone handler treats the error as survivable so it never
-    // completes `done` either — the process wedges with the terminal still in
-    // raw/alt-screen. So capture it, let the finally restore the terminal, and
-    // surface it after fd 1/2 are back (below); the app then exits cleanly.
-    Object? teardownError;
-    StackTrace? teardownStack;
-    try {
-      frameDriver?.dispose();
-      semanticsPipeline?.dispose();
-      remoteClipboard?.dispose();
-      if (identical(_activeExitCompleter, exit)) _activeExitCompleter = null;
-      await eventSub?.cancel();
-      eventSub = null;
-      await hotReload?.dispose();
-      hotReload = null;
-      debugController.setSemanticTreeProvider(null);
-      debugController.setTerminalDiagnosisProvider(null);
-      debugFrameLog?.dispose();
-      DebugInvalidations.reset();
-      dispatcher.dispose();
-      errorReporter.dispose();
-      runtime.dispose();
-    } catch (error, stack) {
-      teardownError = error;
-      teardownStack = stack;
-    } finally {
-      runtimeMarkers?.mark('terminal.restore.start');
-      await usedDriver.restore();
-      runtimeMarkers?.mark('terminal.restore.end');
+    final teardownErrors =
+        <({String resource, Object error, StackTrace stack})>[];
+    void captureSync(String resource, void Function() action) {
+      try {
+        action();
+      } catch (error, stack) {
+        teardownErrors.add((resource: resource, error: error, stack: stack));
+      }
     }
+
+    Future<void> captureAsync(
+      String resource,
+      FutureOr<void> Function() action, {
+      Duration timeout = _cleanupResourceTimeout,
+    }) async {
+      try {
+        await Future<void>.sync(action).timeout(
+          timeout,
+          onTimeout: () => throw TimeoutException(
+            '$resource did not finish during teardown',
+            timeout,
+          ),
+        );
+      } catch (error, stack) {
+        teardownErrors.add((resource: resource, error: error, stack: stack));
+      }
+    }
+
+    captureSync('frame driver', () => frameDriver?.dispose());
+    captureSync('semantics pipeline', () => semanticsPipeline?.dispose());
+    captureSync('remote clipboard', () => remoteClipboard?.dispose());
+    if (identical(_activeExitCompleter, exit)) _activeExitCompleter = null;
+
+    final activeEventSub = eventSub;
+    eventSub = null;
+    if (activeEventSub != null) {
+      await captureAsync('terminal event subscription', activeEventSub.cancel);
+    }
+
+    final activeHotReload = hotReload;
+    hotReload = null;
+    if (activeHotReload != null) {
+      await captureAsync('hot reload controller', activeHotReload.dispose);
+    }
+
+    captureSync(
+      'debug semantic provider',
+      () => debugController.setSemanticTreeProvider(null),
+    );
+    captureSync(
+      'debug terminal provider',
+      () => debugController.setTerminalDiagnosisProvider(null),
+    );
+    captureSync('debug frame log', () => debugFrameLog?.dispose());
+    captureSync('debug invalidations', DebugInvalidations.reset);
+    captureSync('input dispatcher', dispatcher.dispose);
+    captureSync('runtime error reporter', errorReporter.dispose);
+    // Must run even if every prior cleanup resource failed: this is the owner
+    // of State.dispose, focus, pointer, binding, and inactive-element teardown.
+    captureSync('runtime', runtime.dispose);
+
+    captureSync(
+      'terminal restore marker',
+      () => runtimeMarkers?.mark('terminal.restore.start'),
+    );
+    await captureAsync('terminal restore', usedDriver.restore);
+    captureSync(
+      'terminal restored marker',
+      () => runtimeMarkers?.mark('terminal.restore.end'),
+    );
 
     // The terminal is back on the normal screen now. Unless the caller took
     // the lines live via onStrayOutput, replay everything captured during the
@@ -568,46 +780,75 @@ Future<AppExit> _runAppImpl(
       // Drain + restore fd 1/2 (stop() delivers every in-flight line to our
       // listener before closing the streams, and closes the driver's saved
       // terminal handle) — then replay via the real, now-restored streams.
-      try {
-        await fdCap.stop();
-      } catch (_) {}
-      await fdCaptureSub?.cancel();
+      await captureAsync(
+        'stdio capture',
+        fdCap.stop,
+        timeout: _stdioCleanupResourceTimeout,
+      );
+      final activeFdCaptureSub = fdCaptureSub;
+      fdCaptureSub = null;
+      if (activeFdCaptureSub != null) {
+        await captureAsync(
+          'stdio capture subscription',
+          activeFdCaptureSub.cancel,
+        );
+      }
       // The remote mirror already delivered everything to the parent live;
       // replaying here would duplicate it all on the pipe.
       if (onStrayOutput == null && !remoteFdMirror && !logBuffer.isEmpty) {
-        for (final line in logBuffer.lines) {
-          switch (line.source) {
-            case LogSource.stdout:
-              stdout.writeln(line.text);
-            case LogSource.stderr:
-              stderr.writeln(line.text);
+        captureSync('captured output replay', () {
+          for (final line in logBuffer.lines) {
+            switch (line.source) {
+              case LogSource.stdout:
+                stdout.writeln(line.text);
+              case LogSource.stderr:
+                stderr.writeln(line.text);
+            }
           }
-        }
-        try {
-          await stdout.flush();
-        } catch (_) {}
-        try {
-          await stderr.flush();
-        } catch (_) {}
+        });
+        await captureAsync('stdout flush', stdout.flush);
+        await captureAsync('stderr flush', stderr.flush);
       }
     }
 
     // Byte telemetry summary, after the terminal is restored.
     if (byteTelemetry != null) {
-      stderr.write(_formatByteTelemetry(byteTelemetry));
-    }
-    // Surface a teardown-time dispose() fault now that the terminal is back and
-    // fd 1/2 are restored. The app still exits normally — a shutdown bug in one
-    // State shouldn't wedge the process or mask an otherwise clean exit.
-    if (teardownError != null) {
-      stderr.writeln(
-        'fleury: error during teardown (a State.dispose() threw): '
-        '$teardownError',
+      captureSync(
+        'byte telemetry',
+        () => stderr.write(_formatByteTelemetry(byteTelemetry)),
       );
-      stderr.writeln(teardownStack);
     }
-    runtimeMarkers?.mark('runApp.cleanup.complete');
-    runtimeMarkers?.write();
+
+    captureSync(
+      'cleanup marker',
+      () => runtimeMarkers?.mark('runApp.cleanup.complete'),
+    );
+    captureSync('runtime marker output', () => runtimeMarkers?.write());
+
+    // Report only after terminal and stdio restoration attempts. Teardown
+    // errors are diagnostic and do not replace an otherwise orderly AppExit,
+    // but every resource is named accurately (not all failures are
+    // State.dispose faults) and the returned future is guaranteed to settle.
+    for (final failure in teardownErrors) {
+      try {
+        stderr.writeln(
+          'fleury: error during teardown (${failure.resource}): '
+          '${failure.error}',
+        );
+        stderr.writeln(failure.stack);
+      } catch (_) {
+        // There is no safer reporting channel left; teardown is still done.
+      }
+    }
+  }
+
+  Future<void> cleanup() {
+    final active = cleanupFuture;
+    if (active != null) return active;
+    final completer = Completer<void>();
+    cleanupFuture = completer.future;
+    performCleanup().then(completer.complete, onError: completer.completeError);
+    return completer.future;
   }
 
   // runZonedGuarded is the safety net. A throw inside an async callback —
@@ -622,9 +863,43 @@ Future<AppExit> _runAppImpl(
         // the normal path (the fatal-error path bypasses it entirely and
         // completes `done` with the error instead).
         var appExit = const AppExit.requested();
+        // Subscribe BEFORE enter(): POSIX starts stdin/probe handling during
+        // enter, and TerminalDriver.events is broadcast, so attaching later
+        // silently drops ready pipe input, fast keystrokes, and probe-tail
+        // bytes. Events replay only after mount so autofocus/claimants exist.
+        eventSub = usedDriver.events.listen(
+          (event) {
+            if (driverEventsReady) {
+              handleDriverEvent(event);
+            } else if (driverEventStreamError == null &&
+                !driverEventStreamDone) {
+              // The live path completes [exit] on the first stream error/EOF,
+              // so later data is ignored there. Preserve that ordering while
+              // startup is buffered instead of replaying post-terminal data.
+              startupEvents.add(event);
+            }
+          },
+          onError: (Object error, StackTrace stack) {
+            if (driverEventsReady) {
+              handleDriverStreamError(error, stack);
+            } else {
+              driverEventStreamError ??= error;
+              driverEventStreamStack ??= stack;
+            }
+          },
+          onDone: () {
+            if (driverEventsReady) {
+              handleDriverStreamDone();
+            } else {
+              driverEventStreamDone = true;
+            }
+          },
+        );
         runtimeMarkers?.mark('terminal.enter.start');
         await usedDriver.enter(mode);
         runtimeMarkers?.mark('terminal.enter.end');
+        final startupOverflow = startupEvents.overflowError;
+        if (startupOverflow != null) throw startupOverflow;
         // The ambiguous-width probe has now run (inside enter()); build the
         // renderer with the confirmed width mode. A terminal that draws
         // ambiguous glyphs one column wide drops the defensive per-cell
@@ -946,118 +1221,7 @@ Future<AppExit> _runAppImpl(
             );
           }
 
-          eventSub = usedDriver.events.listen(
-            (event) {
-              try {
-                DebugEvents.emitInput(event);
-                if (event is ResizeEvent) {
-                  // Force the next frame to a full repaint. A real size
-                  // change also rebuilds the root via the driver's own
-                  // size-change detection, but a SAME-SIZE ResizeEvent —
-                  // which PosixTerminalDriver emits after continuation from
-                  // Ctrl+Z (`fg`) and after a terminal handoff, precisely to
-                  // repaint a blanked alt-screen — is invisible to that
-                  // detection, so
-                  // the diff-base reset must be driven from the event here
-                  // (the scheduled frame below then re-emits the screen).
-                  frameDriver?.forceFullRepaint();
-                  DebugEvents.emitTerminalDiagnosis(currentTerminalDiagnosis());
-                }
-
-                // Debug-shell hotkeys bypass the dispatcher so they fire inside
-                // an active modal route's `suppressGlobals: true` scope (same
-                // escape-hatch tier as Ctrl+C). Two arms: key-code chords
-                // (Ctrl+G, F11/F12, Esc, Tab, arrows, Enter/Backspace) and the
-                // printable shortcuts the parser delivers as text (`p`, `/`,
-                // `s`, and the typed Logs-search query).
-                if (event is KeyEvent &&
-                    tryConsumeDebugKey(debugController, event)) {
-                  scheduleFrame('debug-key');
-                  return;
-                }
-                if (event is TextInputEvent &&
-                    tryConsumeDebugText(debugController, event)) {
-                  scheduleFrame('debug-key');
-                  return;
-                }
-
-                // Route input through the InputDispatcher: chords walk the focus
-                // chain (sequences, KeyBindings, Focus.onKey, globals), text +
-                // paste go to the nearest TextInputClaimant, and mouse events go
-                // to pointer regions + click-to-focus.
-                KeyEventResult dispatchResult = KeyEventResult.ignored;
-                if (event is KeyEvent ||
-                    event is TextInputEvent ||
-                    event is TextCompositionEvent ||
-                    event is PasteEvent ||
-                    event is MouseEvent) {
-                  dispatchResult = dispatcher.dispatch(event);
-                  // Conservative rule (shared with the embed host): a
-                  // dispatched event may change state the dirty tracker
-                  // can't see; the next flush re-walks and the encoder
-                  // dedupes, so an unchanged tree still sends nothing.
-                  semanticsPipeline?.markSemanticsDirty();
-                }
-
-                // Ctrl+C exits only when the app did not handle it first.
-                // SelectionArea and focused text fields use Ctrl+C for copy and
-                // bubble when no selection exists, preserving the escape hatch.
-                //
-                // Structured remote sessions (a browser peer) are exempt: the
-                // browser key map folds macOS Cmd into Ctrl, so a reflexive
-                // Cmd+C with nothing selected would otherwise kill the served
-                // session. A browser user ends the session by closing the tab;
-                // the v1 ANSI shell path (a real terminal on the far end)
-                // keeps the escape hatch.
-                if (event is KeyEvent &&
-                    event.char == 'c' &&
-                    event.hasCtrl &&
-                    dispatchResult != KeyEventResult.handled &&
-                    surfaceSink == null) {
-                  if (!exit.isCompleted) {
-                    exit.complete(const AppExit.requested());
-                  }
-                  return;
-                }
-
-                EventResponse? response;
-                if (onEvent != null) {
-                  response = onEvent(event);
-                  if (response is ExitRequested) {
-                    if (!exit.isCompleted) {
-                      exit.complete(const AppExit.requested());
-                    }
-                    return;
-                  }
-                }
-
-                // A signal the app did not claim keeps its POSIX meaning:
-                // terminate. Claiming it (EventHandled) hands shutdown to
-                // the app, which finishes via requestExit() — inside the
-                // driver's grace deadline.
-                if (event is SignalEvent && response is! EventHandled) {
-                  if (!exit.isCompleted) {
-                    exit.complete(AppExit.signal(event.signal));
-                  }
-                  return;
-                }
-
-                scheduleFrame(_frameReasonForEvent(event));
-              } catch (error, stack) {
-                // A throwing handler must not kill the input loop: report it
-                // (it surfaces on screen) and keep processing events.
-                errorReporter.report(error, stack);
-                scheduleFrame('event-error');
-              }
-            },
-            onDone: () {
-              // The driver's event stream ended — native stdin EOF, or a remote
-              // peer (`fleury shell` / `fleury serve`) disconnected.
-              // Exit cleanly instead of stranding the app waiting for an
-              // input source that will never arrive.
-              if (!exit.isCompleted) exit.complete(const AppExit.requested());
-            },
-          );
+          activateDriverEvents();
 
           appExit = await exit.future;
         } finally {
@@ -1072,7 +1236,21 @@ Future<AppExit> _runAppImpl(
         // error before the app has mounted (nothing to recover into), and a
         // storm of errors every frame (an unrecoverable loop) — both restore
         // the terminal and fail the run.
-        errorReporter.report(error, stack);
+        var reportingFailed = false;
+        try {
+          errorReporter.report(error, stack);
+        } catch (reportError, reportStack) {
+          reportingFailed = true;
+          try {
+            stderr.writeln(
+              'fleury: error reporter failed while handling a fatal runtime '
+              'error: $reportError',
+            );
+            stderr.writeln(reportStack);
+          } catch (_) {
+            // Cleanup remains the only safe response even if stderr is broken.
+          }
+        }
         // Stay fatal (restore the terminal, fail the run) only for the
         // cases that genuinely can't continue: the driver declared the
         // session unrecoverable (a backstop storm — render crashes are
@@ -1081,7 +1259,8 @@ Future<AppExit> _runAppImpl(
         // a storm of errors every frame. Everything else is reported and
         // survived.
         final driver = frameDriver;
-        if ((driver?.renderUnrecoverable ?? false) ||
+        if (reportingFailed ||
+            (driver?.renderUnrecoverable ?? false) ||
             driver?.rootElement == null ||
             errorReporter.isStorming) {
           cleanup().whenComplete(() {

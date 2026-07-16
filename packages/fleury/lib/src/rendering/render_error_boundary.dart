@@ -18,8 +18,10 @@
 //   - The frame buffer is cleared each frame and the presentation writes
 //     every cell of the boundary's rect, so paint atomicity and
 //     write-recorded damage need no special-casing.
-//   - Pointer regions register during paint; an errored subtree doesn't
-//     paint, so its interactive regions vanish — fail-closed hit-testing.
+//   - The widget layer marks a contained subtree input-excluded. That filters
+//     pointer registrations and focus dispatch even when the throw happened
+//     after a control partially painted or an enclosing repaint boundary later
+//     replays captured geometry.
 //   - While errored with no new dirt, the boundary's own layout memoizes:
 //     retained error state costs nothing per frame beyond repainting the
 //     fill.
@@ -84,6 +86,48 @@ class RenderErrorBoundary extends RenderObject
 
   FrameContainmentError? _containedError;
   CellSize? _lastGoodSize;
+  void Function(bool excluded)? _onInputContainmentChanged;
+  Object? _inputContainmentElementToken;
+  Object? _inputContainmentFocusToken;
+  Object? _inputContainmentPointerToken;
+
+  /// Widget-layer bridge that makes a contained render subtree input-inert.
+  ///
+  /// The callback itself is recreated by ordinary widget updates. Identity is
+  /// therefore determined by the owning element and the two input services,
+  /// so a retained error does not churn false/true focus notifications merely
+  /// because its widget configuration rebuilt. A real inherited-service or
+  /// global-key move transfers an active exclusion to the new services.
+  void updateInputContainmentBridge({
+    required Object elementToken,
+    required Object? focusToken,
+    required Object? pointerToken,
+    required void Function(bool excluded) onChanged,
+  }) {
+    if (identical(elementToken, _inputContainmentElementToken) &&
+        identical(focusToken, _inputContainmentFocusToken) &&
+        identical(pointerToken, _inputContainmentPointerToken)) {
+      _onInputContainmentChanged = onChanged;
+      return;
+    }
+    final excluded = _containedError != null;
+    if (excluded) _onInputContainmentChanged?.call(false);
+    _inputContainmentElementToken = elementToken;
+    _inputContainmentFocusToken = focusToken;
+    _inputContainmentPointerToken = pointerToken;
+    _onInputContainmentChanged = onChanged;
+    if (excluded) onChanged(true);
+  }
+
+  /// Releases a bridge owned by [elementToken] during deactivate/unmount.
+  void clearInputContainmentBridge(Object elementToken) {
+    if (!identical(elementToken, _inputContainmentElementToken)) return;
+    if (_containedError != null) _onInputContainmentChanged?.call(false);
+    _inputContainmentElementToken = null;
+    _inputContainmentFocusToken = null;
+    _inputContainmentPointerToken = null;
+    _onInputContainmentChanged = null;
+  }
 
   @override
   FrameContainmentError? get containedError => _containedError;
@@ -99,7 +143,7 @@ class RenderErrorBoundary extends RenderObject
     _child = value;
     // A new subtree is a fresh start: clear any retained error so the
     // next layout attempts it.
-    _containedError = null;
+    _clearContainedError();
     if (value != null) adoptChild(value);
   }
 
@@ -215,13 +259,20 @@ class RenderErrorBoundary extends RenderObject
     // The dropped subtree is a structural semantics change (descendants
     // vanish from the projected tree); leaf replacement can't express it.
     markSemanticsStructureDirty();
+    if (!alreadyErrored) _onInputContainmentChanged?.call(true);
     if (!alreadyErrored) onContained?.call(_containedError!);
   }
 
   void _recover() {
     if (_containedError == null) return;
-    _containedError = null;
+    _clearContainedError();
     markSemanticsStructureDirty();
+  }
+
+  void _clearContainedError() {
+    if (_containedError == null) return;
+    _containedError = null;
+    _onInputContainmentChanged?.call(false);
   }
 
   /// Escalates the semantic dirty tracker to a full rebuild; overridden
