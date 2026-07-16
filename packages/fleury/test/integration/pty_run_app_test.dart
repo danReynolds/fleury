@@ -245,19 +245,7 @@ void main() {
       final capture = await _capturePty(
         tempDir,
         'handoff',
-        extraArgs: const [
-          '--cols',
-          '40',
-          '--rows',
-          '8',
-          '--input-hex',
-          '03',
-          // Key input from the first emitted byte, not process start: a cold
-          // Dart launch can take longer than a fixed delay, in which case
-          // Ctrl+C lands in cooked mode, is echoed, and never reaches Fleury.
-          '--input-after-output-ms',
-          '600',
-        ],
+        extraArgs: const ['--cols', '40', '--rows', '8'],
         fixtureArgs: const ['--handoff'],
       );
       if (capture == null) return;
@@ -265,9 +253,9 @@ void main() {
       expect(capture.metadata['timedOut'], isFalse);
       expect(capture.metadata['exitCode'], 0);
       expect(capture.output, contains('PTY-HANDOFF-MODE'));
-      expect(capture.output, contains('PTY-HANDOFF'));
+      expect(capture.output, contains('PTY-HANDOFF-OPERATION'));
       _expectTerminalRestored(capture.output);
-      _expectTerminalReentered(capture.output);
+      _expectTerminalHandoffOrder(capture.output);
     }, skip: skipPty);
 
     // DELIBERATE INVERSION (pipeline-program PR6): a render crash used to
@@ -385,6 +373,37 @@ void _expectTerminalRestored(String output) {
 void _expectTerminalReentered(String output) {
   expect(_countOccurrences(output, '\x1B[?1049h'), greaterThanOrEqualTo(2));
   expect(_countOccurrences(output, '\x1B[?1049l'), greaterThanOrEqualTo(2));
+  expect(_countOccurrences(output, '\x1B[?2004h'), greaterThanOrEqualTo(2));
+  expect(_countOccurrences(output, '\x1B[?2004l'), greaterThanOrEqualTo(2));
+}
+
+void _expectTerminalHandoffOrder(String output) {
+  const enter = '\x1B[?1049h';
+  const exit = '\x1B[?1049l';
+  const frame = 'PTY-HANDOFF-MODE';
+  const operation = 'PTY-HANDOFF-OPERATION';
+
+  final initialEnter = output.indexOf(enter);
+  final initialFrame = output.indexOf(frame, initialEnter + enter.length);
+  final handoffExit = output.indexOf(exit, initialFrame + frame.length);
+  final operationWrite = output.indexOf(operation, handoffExit + exit.length);
+  final reenter = output.indexOf(enter, operationWrite + operation.length);
+  final finalExit = output.indexOf(exit, reenter + enter.length);
+
+  expect(
+    [
+      initialEnter,
+      initialFrame,
+      handoffExit,
+      operationWrite,
+      reenter,
+      finalExit,
+    ],
+    everyElement(greaterThanOrEqualTo(0)),
+    reason:
+        'expected initial enter/frame, handoff restore/operation/re-entry, '
+        'and final restore in byte order',
+  );
   expect(_countOccurrences(output, '\x1B[?2004h'), greaterThanOrEqualTo(2));
   expect(_countOccurrences(output, '\x1B[?2004l'), greaterThanOrEqualTo(2));
 }
