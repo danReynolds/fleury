@@ -110,6 +110,15 @@ abstract interface class TextInputClaimant {
   KeyEventResult onPaste(String text);
 }
 
+/// Optional richer paste contract for editable [TextInputClaimant]s.
+///
+/// The dispatcher uses this interface when present so parser-segmented paste
+/// identity and finality survive focus routing. Claimants that only implement
+/// [TextInputClaimant] keep receiving plain text through `onPaste`.
+abstract interface class PasteEventClaimant {
+  KeyEventResult onPasteEvent(PasteEvent event);
+}
+
 /// Widgets that consume IME composition updates.
 ///
 /// The dispatcher routes [TextCompositionEvent] to the nearest claimant in the
@@ -1124,6 +1133,16 @@ class _RenderFocusBounds extends RenderObject
     // sibling pane). `screenOffset` is the real screen origin.
     final screen = screenOffset ?? offset;
     final bounds = CellRect(offset: screen, size: size);
+    if (FocusGeometryCapture.isActive) {
+      // Directional traversal uses the complete focusable rectangle whenever
+      // any part is visible; clipping is only a visibility gate.
+      FocusGeometryCapture.record(
+        _replayBounds,
+        bounds,
+        clipRect: clipRect,
+        clipToBounds: false,
+      );
+    }
     // A focusable that is fully clipped out of view (e.g. scrolled past the
     // viewport) records no rect, so it can't act as a directional-traversal
     // candidate while invisible — you scroll to it, you don't arrow to it.
@@ -1132,6 +1151,14 @@ class _RenderFocusBounds extends RenderObject
         : null;
     _child?.paint(buffer, offset, screenOffset: screen, clipRect: clipRect);
   }
+
+  // Stable callback captured by repaint boundaries. It reads the current node
+  // so swapping FocusNode invalidates/repaints once without retaining the old
+  // node in a cached closure.
+  // ignore: prefer_function_declarations_over_variables
+  late final FocusGeometryCallback _replayBounds = (bounds) {
+    _node.rect = bounds;
+  };
 }
 
 // ---------------------------------------------------------------------------

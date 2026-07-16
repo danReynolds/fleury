@@ -1317,6 +1317,11 @@ final class SemanticsElement extends ComponentElement
     if (_bounds == bounds) return;
     _bounds = bounds;
     _cachedSemanticNode = null;
+    // A repaint boundary can retire a cached callback after this semantic
+    // element was removed from the tree. Keep its local cache truthful in case
+    // a global-key reparent reactivates it, but there is no BuildOwner to
+    // invalidate while detached.
+    if (!mounted) return;
     if (_canBuildRetainedLeaf) {
       owner.semanticDirtyTracker.recordLeafDirty(this);
     } else {
@@ -1569,9 +1574,8 @@ final class _RenderSemanticBounds extends RenderObject
     CellOffset? screenOffset,
     CellRect? clipRect,
   }) {
-    final localRect = CellRect(offset: offset, size: size);
     final rect = CellRect(offset: screenOffset ?? offset, size: size);
-    SemanticPaintBoundsCapture.record(_onPaintBounds, localRect);
+    SemanticPaintBoundsCapture.record(_onPaintBounds, rect, clipRect: clipRect);
     _onPaintBounds(clipRect == null ? rect : rect.intersect(clipRect));
     _child?.paint(
       buffer,

@@ -1,16 +1,15 @@
-// Launch-audit F7: SIGTSTP (Ctrl+Z) must be write-exclusive and single-flight,
-// the way editor handoff already is. Before the fix, _suspend restored the
+// Launch-audit F7: Ctrl+Z self-suspension must be write-exclusive and
+// single-flight, the way editor handoff already is. Before the fix, _suspend
+// restored the
 // terminal for the shell and then `await`ed (flush/cancel) with NO write gate,
 // so a frame flush scheduled on a microtask / the ~30Hz ticker sprayed ANSI
 // onto the bare shell — the classic "my terminal is garbled after Ctrl+Z" —
-// and a second Ctrl+Z re-raised the stop.
+// and a second Ctrl+Z attempted another self-stop.
 //
-// The real signal delivery + editor handoff are covered by the PTY job-control
-// tier (opt-in, FLEURY_PTY_JOB_CONTROL=1). This unit test drives the gate
-// directly through @visibleForTesting seams so the invariant runs in CI: it
-// needs no real job control (selfStopOverride replaces Process.killPid) and no
-// real terminal (non-TTY fake stdio — enter() sets _mode and skips the
-// probe/raw-mode work, while write()'s gate is terminal-independent).
+// The raw Ctrl+Z byte path is covered by the ordinary PTY tier; inherited-stdio
+// editor handoff remains an opt-in controlling-terminal proof. This unit test
+// drives the gate directly through @visibleForTesting seams: selfStopOverride
+// replaces Process.killPid and non-TTY fake stdio keeps the test deterministic.
 
 import 'dart:async';
 import 'dart:io';
@@ -74,7 +73,7 @@ class _FakeStdin implements Stdin {
 }
 
 void main() {
-  group('PosixTerminalDriver SIGTSTP gating (F7)', () {
+  group('PosixTerminalDriver Ctrl+Z self-stop gating (F7)', () {
     late _RecordingStdout out;
     late _FakeStdin input;
     late int selfStops;
@@ -110,7 +109,11 @@ void main() {
 
         await driver.debugSuspend();
         expect(driver.debugSuspended, isTrue);
-        expect(selfStops, 1, reason: 'the stop was re-raised once');
+        expect(
+          selfStops,
+          1,
+          reason: 'the process self-stop was attempted once',
+        );
 
         out.written.clear();
         driver.write('FRAME-B'); // scheduled frame arriving mid-suspend

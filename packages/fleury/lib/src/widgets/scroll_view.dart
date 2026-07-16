@@ -182,6 +182,7 @@ class _ScrollViewState extends State<ScrollView> {
   late FocusNode _focusNode;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
+  int _paintRevision = 0;
 
   @override
   void initState() {
@@ -210,7 +211,11 @@ class _ScrollViewState extends State<ScrollView> {
     }
   }
 
-  void _onChange() => setState(() {});
+  void _onChange() {
+    setState(() {
+      _paintRevision += 1;
+    });
+  }
 
   KeyEventResult _handleKey(KeyEvent event) {
     final page = _controller.viewportExtent < 1
@@ -280,7 +285,11 @@ class _ScrollViewState extends State<ScrollView> {
         focusNode: _focusNode,
         autofocus: widget.autofocus,
         onKey: _handleKey,
-        child: _ScrollViewport(controller: _controller, child: widget.child),
+        child: _ScrollViewport(
+          controller: _controller,
+          paintRevision: _paintRevision,
+          child: widget.child,
+        ),
       ),
     );
     if (!widget.scrollbar) return content;
@@ -291,13 +300,18 @@ class _ScrollViewState extends State<ScrollView> {
 }
 
 class _ScrollViewport extends SingleChildRenderObjectWidget {
-  const _ScrollViewport({required this.controller, required super.child});
+  const _ScrollViewport({
+    required this.controller,
+    required this.paintRevision,
+    required super.child,
+  });
 
   final ScrollController controller;
+  final int paintRevision;
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _RenderScrollView(controller: controller);
+      _RenderScrollView(controller: controller, paintRevision: paintRevision);
 
   @override
   void updateRenderObject(
@@ -305,6 +319,7 @@ class _ScrollViewport extends SingleChildRenderObjectWidget {
     covariant _RenderScrollView renderObject,
   ) {
     renderObject.controller = controller;
+    renderObject.paintRevision = paintRevision;
   }
 }
 
@@ -314,8 +329,11 @@ class _ScrollViewport extends SingleChildRenderObjectWidget {
 /// and below it.
 class _RenderScrollView extends RenderObject
     implements RenderObjectWithSingleChild {
-  _RenderScrollView({required ScrollController controller})
-    : _controller = controller;
+  _RenderScrollView({
+    required ScrollController controller,
+    required int paintRevision,
+  }) : _controller = controller,
+       _paintRevision = paintRevision;
 
   ScrollController _controller;
   ScrollController get controller => _controller;
@@ -323,6 +341,13 @@ class _RenderScrollView extends RenderObject
     if (identical(_controller, value)) return;
     _controller = value;
     markNeedsLayout();
+  }
+
+  int _paintRevision;
+  set paintRevision(int value) {
+    if (_paintRevision == value) return;
+    _paintRevision = value;
+    markNeedsPaintOnly();
   }
 
   RenderObject? _child;
@@ -379,25 +404,37 @@ class _RenderScrollView extends RenderObject
     // both boundaries.
     final ourScreenOffset = screenOffset ?? offset;
     final ourScreenRect = CellRect(offset: ourScreenOffset, size: size);
+    final inheritedIntersection = clipRect?.intersect(ourScreenRect);
+    if (clipRect != null &&
+        inheritedIntersection == null &&
+        !isRetainingPaintGeometry) {
+      return;
+    }
+    // A retained boundary must cache locally hidden viewport content too: an
+    // ancestor scroll can reveal it later without invalidating this subtree.
+    // Preserve a real empty clip for geometry while still walking/painting the
+    // viewport into the boundary-local cache.
     final effectiveClip = clipRect == null
         ? ourScreenRect
-        : clipRect.intersect(ourScreenRect);
-    if (effectiveClip == null) return;
+        : inheritedIntersection ??
+              CellRect(offset: ourScreenOffset, size: CellSize.zero);
 
     final scroll = _controller.offset;
     // Paint only the visible viewport into scratch. The negative child offset
     // drops rows above the scroll window while screenOffset preserves the
     // child's full screen-space origin for selection and hit-testing.
     final scratch = CellBuffer(size);
-    c.paint(
-      scratch,
-      CellOffset(0, -scroll),
-      screenOffset: CellOffset(
-        ourScreenOffset.col,
-        ourScreenOffset.row - scroll,
-      ),
-      clipRect: effectiveClip,
-    );
+    paintWithGeometryClip(ourScreenRect, () {
+      c.paint(
+        scratch,
+        CellOffset(0, -scroll),
+        screenOffset: CellOffset(
+          ourScreenOffset.col,
+          ourScreenOffset.row - scroll,
+        ),
+        clipRect: effectiveClip,
+      );
+    });
 
     final bufCols = buffer.size.cols;
     final bufRows = buffer.size.rows;

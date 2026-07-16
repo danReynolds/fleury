@@ -772,6 +772,30 @@ void main() {
       }
     });
 
+    test('complete paste retains its legacy byte encoding', () {
+      final encoded = encodeInputEvent(const PasteEvent('abc'));
+      expect(encoded, <int>[5, 0, 0, 0, 3, 97, 98, 99]);
+      expect(
+        decodeInputEvent(Uint8List.fromList(encoded)),
+        const PasteEvent('abc'),
+      );
+    });
+
+    test('segmented paste phase and identity round-trip', () {
+      const events = <PasteEvent>[
+        PasteEvent.segment('ab', pasteId: 42, phase: PasteEventPhase.start),
+        PasteEvent.segment(
+          'cd',
+          pasteId: 42,
+          phase: PasteEventPhase.continuation,
+        ),
+        PasteEvent.segment('', pasteId: 42, phase: PasteEventPhase.end),
+      ];
+      for (final event in events) {
+        expect(decodeInputEvent(encodeInputEvent(event)), event);
+      }
+    });
+
     test('through the framing layer', () {
       const event = KeyEvent(keyCode: KeyCode.enter);
       final wire = encodeFrame(const InputEventFrame(event));

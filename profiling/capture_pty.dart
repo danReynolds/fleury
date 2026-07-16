@@ -102,6 +102,7 @@ const _fSetfl = 4;
 const _fGetfl = 3;
 final int _oNonblock = Platform.isMacOS ? 0x0004 : 0x800;
 const _wnohang = 1;
+const _wuntraced = 2;
 const _sigint = 2;
 const _sigterm = 15;
 const _sigkill = 9;
@@ -238,6 +239,7 @@ void main(List<String> args) {
   int? suspendAfterMs;
   int? suspendAfterOutputMs;
   int? continueAfterSuspendMs;
+  int? continueAfterInputMs;
   final allowedExitCodes = <int>{0};
   final cmd = <String>[];
   for (var i = 0; i < args.length; i++) {
@@ -314,6 +316,11 @@ void main(List<String> args) {
       if (continueAfterSuspendMs <= 0) {
         _fail('--continue-after-suspend-ms must be a positive integer');
       }
+    } else if (a == '--continue-after-input-ms') {
+      continueAfterInputMs = int.parse(args[++i]);
+      if (continueAfterInputMs <= 0) {
+        _fail('--continue-after-input-ms must be a positive integer');
+      }
     } else if (a == '--allow-exit-code') {
       allowedExitCodes.addAll(_parseExitCodes(args[++i]));
     } else if (a == '--allow-exit-codes') {
@@ -326,6 +333,10 @@ void main(List<String> args) {
     }
   }
   if (cmd.isEmpty) _fail('no command (use: --out X -- cmd args)');
+  if (continueAfterInputMs != null &&
+      (inputBytes == null || inputBytes.isEmpty)) {
+    _fail('--continue-after-input-ms requires --input-hex');
+  }
 
   final arena = Arena();
   try {
@@ -411,6 +422,7 @@ void main(List<String> args) {
     var suspendSent = false;
     var continueSent = false;
     double? suspendAtMs;
+    double? inputAtMs;
     Pointer<Uint8>? inputBuffer;
     if (inputBytes != null && inputBytes.isNotEmpty) {
       inputBuffer = arena<Uint8>(inputBytes.length)
@@ -434,6 +446,7 @@ void main(List<String> args) {
           _fail('failed to write ${bytes.length} input bytes to PTY');
         }
         inputSent = true;
+        inputAtMs = elapsedMs;
       }
       if (!interruptSent &&
           ((interruptAfterMs != null && elapsedMs >= interruptAfterMs) ||
@@ -472,16 +485,33 @@ void main(List<String> args) {
         suspendSent = true;
         suspendAtMs = elapsedMs;
       }
-      if (!continueSent &&
-          suspendAtMs != null &&
-          continueAfterSuspendMs != null &&
-          elapsedMs - suspendAtMs >= continueAfterSuspendMs) {
-        _kill(pid, _sigCont);
-        signals.add(<String, Object?>{
-          'tMs': double.parse(elapsedMs.toStringAsFixed(3)),
-          'signal': 'sigcont',
-        });
-        continueSent = true;
+      final continueDue = (suspendAtMs != null &&
+              continueAfterSuspendMs != null &&
+              elapsedMs - suspendAtMs >= continueAfterSuspendMs) ||
+          (inputAtMs != null &&
+              continueAfterInputMs != null &&
+              elapsedMs - inputAtMs >= continueAfterInputMs);
+      if (!continueSent && !childExited && continueDue) {
+        // A fixed delay alone is racy under load: SIGCONT sent before the child
+        // reaches SIGSTOP is lost, and the child then stops forever. Reap the
+        // waitable stop transition first, then continue it. A final exit can
+        // also become waitable here, so retain that status for normal decode.
+        final waited = _waitpid(pid, status, _wnohang | _wuntraced);
+        if (waited == pid) {
+          final waitStatus = status.value;
+          final stopped = (waitStatus & 0xff) == 0x7f;
+          if (stopped) {
+            _kill(pid, _sigCont);
+            signals.add(<String, Object?>{
+              'tMs': double.parse(elapsedMs.toStringAsFixed(3)),
+              'signal': 'sigcont',
+            });
+            continueSent = true;
+          } else {
+            childStatus = waitStatus;
+            childExited = true;
+          }
+        }
       }
       if (elapsedMs > timeout * 1000) {
         timedOut = true;

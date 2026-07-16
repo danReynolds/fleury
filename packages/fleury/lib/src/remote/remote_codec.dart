@@ -941,6 +941,15 @@ Uint8List encodeInputEvent(TuiEvent event) {
     case PasteEvent e:
       w.u8(_evPaste);
       w.str(e.text);
+      // Complete paste keeps the pre-segmentation payload byte-for-byte
+      // identical. Segment metadata is an optional trailing extension: current
+      // decoders accept its absence, while old decoders cannot consume a
+      // segmented event (production browser peers only originate complete
+      // paste events).
+      if (e.phase != PasteEventPhase.single) {
+        w.u8(e.phase.index);
+        w.u32(e.pasteId!);
+      }
     case ResizeEvent e:
       w.u8(_evResize);
       w
@@ -1003,7 +1012,18 @@ TuiEvent decodeInputEvent(Uint8List bytes) {
         modifiers: mods,
       );
     case _evPaste:
-      event = PasteEvent(r.str());
+      final text = r.str();
+      if (!r.hasMore) {
+        event = PasteEvent(text);
+      } else {
+        final phase = r.enumValue(PasteEventPhase.values);
+        if (phase == PasteEventPhase.single) {
+          throw const RemoteCodecException(
+            'segmented paste cannot use single phase',
+          );
+        }
+        event = PasteEvent.segment(text, phase: phase, pasteId: r.u32());
+      }
     case _evResize:
       event = ResizeEvent(CellSize(r.u16(), r.u16()));
     case _evSignal:

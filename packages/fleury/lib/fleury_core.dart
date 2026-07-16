@@ -248,6 +248,7 @@ export 'src/input/events.dart'
         MouseEvent,
         MouseEventKind,
         PasteEvent,
+        PasteEventPhase,
         ResizeEvent,
         SignalEvent,
         TextCompositionEvent,
@@ -285,6 +286,7 @@ export 'src/widgets/focus.dart'
         FocusWithin,
         KeyBindingSource,
         KeyEventResult,
+        PasteEventClaimant,
         TextCompositionClaimant,
         TextInputClaimant,
         moveOrEscape;

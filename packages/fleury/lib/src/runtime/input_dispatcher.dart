@@ -222,7 +222,7 @@ class InputDispatcher {
     if (_pending != null) {
       _cancelPendingAndRedispatchHeld();
     }
-    return _deliverPaste(event.text);
+    return _deliverPaste(event);
   }
 
   /// Delivers IME composition lifecycle events to the nearest claimant.
@@ -261,11 +261,14 @@ class InputDispatcher {
 
   /// Offers bracketed paste content to each [TextInputClaimant] up the focus
   /// chain until one consumes it.
-  KeyEventResult _deliverPaste(String text) {
+  KeyEventResult _deliverPaste(PasteEvent event) {
     for (final node in focusManager.activeChain()) {
       final claimant = node.textInputClaimant;
-      if (claimant != null &&
-          claimant.onPaste(text) == KeyEventResult.handled) {
+      if (claimant == null) continue;
+      final result = claimant is PasteEventClaimant
+          ? (claimant as PasteEventClaimant).onPasteEvent(event)
+          : claimant.onPaste(event.text);
+      if (result == KeyEventResult.handled) {
         return KeyEventResult.handled;
       }
     }

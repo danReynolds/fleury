@@ -8,18 +8,6 @@ void main() {
       ? 'PTY capture uses POSIX openpty and posix_spawnp.'
       : null;
 
-  // SIGTSTP/SIGCONT (Ctrl+Z suspend / resume) and the editor handoff need real
-  // job control — a session with an interactive controlling terminal. openpty
-  // gives the child a tty, but headless CI runners, sandboxes, and piped
-  // `dart test` runs have no job-control-capable session, so the signals never
-  // deliver. Opt in from a real terminal with FLEURY_PTY_JOB_CONTROL=1; skipped
-  // (green) everywhere else. (The non-job-control PTY tests still run.)
-  final skipJobControl = skipPty ??
-      (Platform.environment.containsKey('FLEURY_PTY_JOB_CONTROL')
-          ? null
-          : 'Needs job control (an interactive controlling terminal). Set '
-              'FLEURY_PTY_JOB_CONTROL=1 in a real terminal to run.');
-
   // `pty` tag: needs a real openpty-capable environment — exclude with
   // `dart test -x pty` in sandboxes/CI where PTY allocation fails.
   group('runApp over a real PTY', tags: ['integration', 'pty'], () {
@@ -93,18 +81,27 @@ void main() {
       // ONLY in the replay region — one mid-frame marker means fd capture
       // failed and the frame was corrupted.
       final pop = capture.output.lastIndexOf('\x1B[?1049l');
-      expect(pop, greaterThanOrEqualTo(0),
-          reason: 'alt-screen pop missing — terminal not restored');
+      expect(
+        pop,
+        greaterThanOrEqualTo(0),
+        reason: 'alt-screen pop missing — terminal not restored',
+      );
       final session = capture.output.substring(0, pop);
       final replay = capture.output.substring(pop);
       for (final marker in const [
         'STRAY-PRINT-MARKER',
         'STRAY-NATIVE-MARKER',
       ]) {
-        expect(session, isNot(contains(marker)),
-            reason: '$marker leaked into the live frame region');
-        expect(replay, contains(marker),
-            reason: '$marker was not replayed after exit');
+        expect(
+          session,
+          isNot(contains(marker)),
+          reason: '$marker leaked into the live frame region',
+        );
+        expect(
+          replay,
+          contains(marker),
+          reason: '$marker was not replayed after exit',
+        );
       }
 
       // The replay is SANITIZED terminal-bound text: the hostile OSC
@@ -112,8 +109,11 @@ void main() {
       // terminal (runApp constructs OutputCapture with
       // sanitizeForTerminal: true — this pins that wiring end-to-end).
       expect(replay, contains('STRAY-HOSTILE'));
-      expect(replay, isNot(contains('\x1B]0;pwned')),
-          reason: 'hostile OSC must be neutralized in the replay');
+      expect(
+        replay,
+        isNot(contains('\x1B]0;pwned')),
+        reason: 'hostile OSC must be neutralized in the replay',
+      );
     }, skip: skipPty);
 
     test('onStrayOutput takes ownership: lines reach the hook tagged, '
@@ -169,37 +169,77 @@ void main() {
       _expectTerminalRestored(capture.output);
     }, skip: skipPty);
 
-    test('restores before SIGTSTP and re-enters after SIGCONT', () async {
+    test('startup SIGTERM after terminal entry still restores modes', () async {
       final capture = await _capturePty(
         tempDir,
-        'suspend-resume',
+        'startup-sigterm',
         extraArgs: const [
           '--cols',
           '40',
           '--rows',
           '8',
-          '--suspend-after-output-ms',
-          '350',
-          '--continue-after-suspend-ms',
-          '300',
-          '--input-hex',
-          '03',
-          '--input-delay-ms',
-          '1200',
+          '--terminate-after-output-ms',
+          '1',
+          '--allow-exit-code',
+          '143',
         ],
       );
       if (capture == null) return;
 
       expect(capture.metadata['timedOut'], isFalse);
-      expect(capture.metadata['exitCode'], 0);
-      expect(capture.output, contains('PTY-FIRST-FRAME'));
+      expect(capture.metadata['exitCode'], 143);
       expect(
-        _signalNames(capture.metadata),
-        containsAll(['sigtstp', 'sigcont']),
+        capture.output,
+        contains('\x1B[?1049h'),
+        reason: 'SIGTERM must land after the first terminal mutation',
       );
       _expectTerminalRestored(capture.output);
-      _expectTerminalReentered(capture.output);
-    }, skip: skipJobControl);
+      expect(
+        capture.output.lastIndexOf('\x1B[?1049l'),
+        greaterThan(capture.output.indexOf('\x1B[?1049h')),
+      );
+    }, skip: skipPty);
+
+    test(
+      'raw Ctrl+Z restores, self-stops, and re-enters after SIGCONT',
+      () async {
+        final capture = await _capturePty(
+          tempDir,
+          'suspend-resume',
+          extraArgs: const [
+            '--cols',
+            '40',
+            '--rows',
+            '8',
+            '--input-hex',
+            '1a',
+            '--input-after-output-ms',
+            '700',
+            '--continue-after-input-ms',
+            '300',
+            '--interrupt-after-output-ms',
+            '1500',
+            '--allow-exit-code',
+            '130',
+          ],
+        );
+        if (capture == null) return;
+
+        expect(capture.metadata['timedOut'], isFalse);
+        expect(capture.metadata['exitCode'], 130);
+        expect(capture.output, contains('PTY-FIRST-FRAME'));
+        final signals = _signalNames(capture.metadata);
+        expect(signals, containsAll(['sigcont', 'sigint']));
+        expect(
+          signals,
+          isNot(contains('sigtstp')),
+          reason: 'the proof must exercise the parsed Ctrl+Z byte path',
+        );
+        _expectTerminalRestored(capture.output);
+        _expectTerminalReentered(capture.output);
+      },
+      skip: skipPty,
+    );
 
     test('terminal handoff restores, runs operation, and re-enters', () async {
       final capture = await _capturePty(
@@ -212,8 +252,11 @@ void main() {
           '8',
           '--input-hex',
           '03',
-          '--input-delay-ms',
-          '1200',
+          // Key input from the first emitted byte, not process start: a cold
+          // Dart launch can take longer than a fixed delay, in which case
+          // Ctrl+C lands in cooked mode, is echoed, and never reaches Fleury.
+          '--input-after-output-ms',
+          '600',
         ],
         fixtureArgs: const ['--handoff'],
       );
@@ -225,7 +268,7 @@ void main() {
       expect(capture.output, contains('PTY-HANDOFF'));
       _expectTerminalRestored(capture.output);
       _expectTerminalReentered(capture.output);
-    }, skip: skipJobControl);
+    }, skip: skipPty);
 
     // DELIBERATE INVERSION (pipeline-program PR6): a render crash used to
     // be fatal; containment keeps the session alive on the error

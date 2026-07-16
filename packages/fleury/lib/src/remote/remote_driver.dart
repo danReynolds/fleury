@@ -534,7 +534,7 @@ final class RemoteTerminalDriver
       }
       return;
     }
-    _events.addError(error, stackTrace);
+    if (!_events.isClosed) _events.addError(error, stackTrace);
   }
 
   void _onDisconnect() {
@@ -550,6 +550,7 @@ final class RemoteTerminalDriver
       }
       return;
     }
+    if (!wantsPresentationPlans) _parser.finish(_sink);
     _active = false;
     // Closing the events stream surfaces as `onDone` in `runApp`, which
     // completes the exit completer and runs cleanup. No custom event
@@ -563,6 +564,7 @@ class _RemoteParserSink implements TuiEventSink {
 
   @override
   void add(TuiEvent event) {
-    target?.add(event);
+    final controller = target;
+    if (controller != null && !controller.isClosed) controller.add(event);
   }
 }

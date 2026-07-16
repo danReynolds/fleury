@@ -133,6 +133,7 @@ class RenderRepaintBoundary extends RenderObject
   final List<SemanticPaintBoundsRecord> _semanticBounds =
       <SemanticPaintBoundsRecord>[];
   final List<PointerRegionRecord> _pointerRegions = <PointerRegionRecord>[];
+  final List<FocusGeometryRecord> _focusGeometry = <FocusGeometryRecord>[];
 
   /// Whether this boundary currently caches its subtree's paint.
   ///
@@ -161,6 +162,12 @@ class RenderRepaintBoundary extends RenderObject
       // (now dirty) boundary — ancestors would never hear about it and
       // would keep blitting stale cells.
       markAncestorRepaintBoundariesDirty();
+    } else {
+      // Pass-through paint no longer replays this boundary's retained
+      // callbacks. Retire them now so externally owned FocusNodes and
+      // semantic elements cannot retain geometry from the last cached frame
+      // if the subtree changes while caching is disengaged.
+      _discardCapturedGeometry();
     }
     // Disengaging keeps the cache buffer: engagement flaps with structure
     // (an overlay entry appearing and vanishing), and freeing would cost a
@@ -199,7 +206,10 @@ class RenderRepaintBoundary extends RenderObject
     CellRect? clipRect,
   }) {
     final c = _child;
-    if (c == null) return;
+    if (c == null) {
+      _discardCapturedGeometry();
+      return;
+    }
     if (!_cachingEnabled) {
       // Pass-through: no cache, no blit, no stats — indistinguishable from
       // the child painting bare.
@@ -212,7 +222,17 @@ class RenderRepaintBoundary extends RenderObject
       return;
     }
     final s = size;
-    if (s.cols == 0 || s.rows == 0) return;
+    if (s.cols == 0 || s.rows == 0) {
+      // A cache hit cannot walk the old subtree to clear its paint-owned
+      // geometry. Explicitly retire the callbacks when layout collapses the
+      // boundary, otherwise focus traversal and IME anchoring keep using the
+      // last non-empty frame's rectangles.
+      _discardCapturedGeometry();
+      _cacheBounds = null;
+      return;
+    }
+
+    final currentScreenOffset = screenOffset ?? offset;
 
     var cache = _cache;
     if (cache == null || cache.size != s) {
@@ -229,18 +249,34 @@ class RenderRepaintBoundary extends RenderObject
       // no post-paint full-grid scan.
       cache.withoutDamageTracking(targetCache.clear);
       cache.resetDamageTracking();
-      _semanticBounds.clear();
-      _pointerRegions.clear();
-      SemanticPaintBoundsCapture.collect(_semanticBounds, () {
-        PointerRegionCapture.collect(_pointerRegions, () {
-          c.paint(
-            targetCache,
-            CellOffset.zero,
-            screenOffset: screenOffset ?? offset,
+      _resetCapturedGeometryForRepaint();
+      SemanticPaintBoundsCapture.collect(
+        _semanticBounds,
+        screenOrigin: currentScreenOffset,
+        clipRect: clipRect,
+        paint: () {
+          PointerRegionCapture.collect(
+            _pointerRegions,
+            screenOrigin: currentScreenOffset,
             clipRect: clipRect,
+            paint: () {
+              FocusGeometryCapture.collect(
+                _focusGeometry,
+                screenOrigin: currentScreenOffset,
+                clipRect: clipRect,
+                paint: () {
+                  c.paint(
+                    targetCache,
+                    CellOffset.zero,
+                    screenOffset: currentScreenOffset,
+                    clipRect: clipRect,
+                  );
+                },
+              );
+            },
           );
-        });
-      });
+        },
+      );
       // Tighten the blit to just the non-empty cells, using the damage rect
       // as the scan window. Damage is a conservative superset (grapheme
       // writes pad the wide-cell guard columns), and tightness matters: the
@@ -255,13 +291,16 @@ class RenderRepaintBoundary extends RenderObject
       repainted = true;
     } else {
       _replaySemanticBounds(
-        paintOffset: offset,
-        screenOffset: screenOffset ?? offset,
+        screenOffset: currentScreenOffset,
         clipRect: clipRect,
       );
       _replayPointerRegions(
-        paintOffset: offset,
-        screenOffset: screenOffset ?? offset,
+        screenOffset: currentScreenOffset,
+        clipRect: clipRect,
+      );
+      _replayFocusGeometry(
+        screenOffset: currentScreenOffset,
+        clipRect: clipRect,
       );
     }
 
@@ -271,8 +310,18 @@ class RenderRepaintBoundary extends RenderObject
       copiedBounds: bounds,
     );
     if (repainted) {
-      _publishSemanticBounds(paintOffset: offset);
-      _publishPointerRegions(paintOffset: offset);
+      _publishSemanticBounds(
+        screenOffset: currentScreenOffset,
+        clipRect: clipRect,
+      );
+      _publishPointerRegions(
+        screenOffset: currentScreenOffset,
+        clipRect: clipRect,
+      );
+      _publishFocusGeometry(
+        screenOffset: currentScreenOffset,
+        clipRect: clipRect,
+      );
     }
     if (bounds == null) return; // entirely empty cache — nothing to draw
     final cacheForCopy = cache;
@@ -289,38 +338,93 @@ class RenderRepaintBoundary extends RenderObject
     }
   }
 
-  void _publishSemanticBounds({required CellOffset paintOffset}) {
-    for (final record in _semanticBounds) {
-      record.publishToActiveCapture(paintOffset);
-    }
-  }
-
-  void _replaySemanticBounds({
-    required CellOffset paintOffset,
+  void _publishSemanticBounds({
     required CellOffset screenOffset,
     required CellRect? clipRect,
   }) {
     for (final record in _semanticBounds) {
-      record.replay(
-        paintOffset: paintOffset,
+      record.publishToActiveCapture(
         screenOffset: screenOffset,
         clipRect: clipRect,
       );
     }
   }
 
-  void _publishPointerRegions({required CellOffset paintOffset}) {
+  void _replaySemanticBounds({
+    required CellOffset screenOffset,
+    required CellRect? clipRect,
+  }) {
+    for (final record in _semanticBounds) {
+      record.replay(screenOffset: screenOffset, clipRect: clipRect);
+    }
+  }
+
+  void _publishPointerRegions({
+    required CellOffset screenOffset,
+    required CellRect? clipRect,
+  }) {
     for (final record in _pointerRegions) {
-      record.publishToActiveCapture(paintOffset);
+      record.publishToActiveCapture(
+        screenOffset: screenOffset,
+        clipRect: clipRect,
+      );
     }
   }
 
   void _replayPointerRegions({
-    required CellOffset paintOffset,
     required CellOffset screenOffset,
+    required CellRect? clipRect,
   }) {
     for (final record in _pointerRegions) {
-      record.replay(paintOffset: paintOffset, screenOffset: screenOffset);
+      record.replay(screenOffset: screenOffset, clipRect: clipRect);
     }
+  }
+
+  void _publishFocusGeometry({
+    required CellOffset screenOffset,
+    required CellRect? clipRect,
+  }) {
+    for (final record in _focusGeometry) {
+      record.publishToActiveCapture(
+        screenOffset: screenOffset,
+        clipRect: clipRect,
+      );
+    }
+  }
+
+  void _replayFocusGeometry({
+    required CellOffset screenOffset,
+    required CellRect? clipRect,
+  }) {
+    for (final record in _focusGeometry) {
+      record.replay(screenOffset: screenOffset, clipRect: clipRect);
+    }
+  }
+
+  void _discardCapturedGeometry() {
+    for (final record in _semanticBounds) {
+      record.onPaintBounds(null);
+    }
+    _semanticBounds.clear();
+    _pointerRegions.clear();
+    for (final record in _focusGeometry) {
+      record.clear();
+    }
+    _focusGeometry.clear();
+  }
+
+  void _resetCapturedGeometryForRepaint() {
+    // A still-mounted semantic can be culled by the fresh paint and never
+    // republish. Retire every previous callback first; the semantic dirty set
+    // deduplicates the null -> current-bounds updates for nodes that do paint.
+    for (final record in _semanticBounds) {
+      record.onPaintBounds(null);
+    }
+    _semanticBounds.clear();
+    _pointerRegions.clear();
+    for (final record in _focusGeometry) {
+      record.clear();
+    }
+    _focusGeometry.clear();
   }
 }

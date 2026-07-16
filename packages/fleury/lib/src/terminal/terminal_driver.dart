@@ -35,8 +35,9 @@ final class TerminalMode {
   final bool resetStyleOnExit;
 
   /// Enable bracketed paste (DEC 2004) so pasted text — including its
-  /// newlines — arrives as one [PasteEvent] instead of line-by-line
-  /// Enter chords. On by default; it's harmless and only helps.
+  /// newlines — arrives as one or more consecutive [PasteEvent] segments
+  /// instead of line-by-line Enter chords. On by default; it's harmless and
+  /// only helps.
   final bool bracketedPaste;
 
   /// Negotiate the Kitty keyboard protocol (CSI-u) by pushing the

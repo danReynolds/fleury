@@ -21,10 +21,12 @@ final class AnsiFramePresenter implements FramePresenter {
     required AnsiRenderer renderer,
     required DebugController debug,
     TerminalImageEncoder? imageEncoder,
+    CellRect? Function()? readCaret,
   }) : _sink = sink,
        _renderer = renderer,
        _debug = debug,
-       _imageEncoder = imageEncoder;
+       _imageEncoder = imageEncoder,
+       _readCaret = readCaret;
 
   final AnsiSink _sink;
   final AnsiRenderer _renderer;
@@ -33,6 +35,12 @@ final class AnsiFramePresenter implements FramePresenter {
   /// Emits inline-image placements as the terminal's graphics protocol,
   /// or null when the terminal has none (glyph art needs no encoder).
   final TerminalImageEncoder? _imageEncoder;
+
+  /// Reads the focused editable's latest painted caret. The native terminal
+  /// keeps the hardware cursor hidden, but its position still anchors OS IME
+  /// candidate windows. Reposition it after every diff because rendering (and
+  /// inline-image placement) can leave the cursor at an unrelated cell.
+  final CellRect? Function()? _readCaret;
 
   // Cells we tinted green in the previous frame's paint-flash pass.
   // Empty when paint-flash is off; populated each frame the flash is
@@ -92,13 +100,17 @@ final class AnsiFramePresenter implements FramePresenter {
           fullRepaint: frame.damage.fullRepaint,
         ) ??
         '';
+    final caretTrailer = _caretPositionSequence(_readCaret?.call(), next.size);
     _renderer.renderDiff(
       prev,
       next,
       _sink,
       dirtyBounds: frame.damage.diffBounds,
       onDirtyCell: debugWatching ? recordDirtyCell : null,
-      trailer: imageTrailer,
+      // Caret positioning must be last: graphics protocols can move the
+      // terminal cursor while placing an image. Both trailers remain inside
+      // the renderer's synchronized-output wrapper.
+      trailer: '$imageTrailer$caretTrailer',
     );
     _phaseDiff = diffSw?.elapsed ?? Duration.zero;
     _dirtyCellCount = dirtyCellCount;
@@ -126,6 +138,9 @@ final class AnsiFramePresenter implements FramePresenter {
         lastFlashed: _lastFlashedCells,
       );
       _lastFlashedCells = _currentDirty;
+      // Paint flash writes directly after the synchronized frame and moves
+      // the cursor. Preserve the IME anchor in debug mode too.
+      if (caretTrailer.isNotEmpty) _sink.write(caretTrailer);
     } else if (_lastFlashedCells.isNotEmpty) {
       // Flash got toggled off — clear any lingering tints from the last
       // on-frame so the terminal doesn't carry stale highlights.
@@ -136,6 +151,7 @@ final class AnsiFramePresenter implements FramePresenter {
         lastFlashed: _lastFlashedCells,
       );
       _lastFlashedCells = const [];
+      if (caretTrailer.isNotEmpty) _sink.write(caretTrailer);
     }
   }
 
@@ -156,6 +172,13 @@ final class AnsiFramePresenter implements FramePresenter {
 
   @override
   void onFrameCommitted(TuiRenderedFrame frame, FramePresentInfo info) {}
+}
+
+String _caretPositionSequence(CellRect? caret, CellSize viewport) {
+  if (caret == null || viewport.isEmpty) return '';
+  final col = caret.left.clamp(0, viewport.cols - 1);
+  final row = caret.top.clamp(0, viewport.rows - 1);
+  return '\x1B[${row + 1};${col + 1}H';
 }
 
 /// Emits the paint-flash overlay bytes: un-tints last frame's flashed

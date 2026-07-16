@@ -1031,6 +1031,76 @@ void main() {
     ]);
   });
 
+  test('DomInputSource expires duplicate suppression when composition has no '
+      'trailing input event', () async {
+    final events = <TuiEvent>[];
+    final host = web.document.createElement('div');
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    web.document.body!.appendChild(host);
+    final source = DomInputSource(
+      hostElement: host,
+      textArea: textArea,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.parentNode?.removeChild(host);
+    });
+
+    source.start(events.add);
+    textArea.dispatchEvent(
+      web.CompositionEvent(
+        'compositionstart',
+        web.CompositionEventInit(bubbles: true, cancelable: true),
+      ),
+    );
+    textArea.dispatchEvent(
+      web.CompositionEvent(
+        'compositionupdate',
+        web.CompositionEventInit(data: 'あ', bubbles: true, cancelable: true),
+      ),
+    );
+    textArea.dispatchEvent(
+      web.CompositionEvent(
+        'compositionend',
+        web.CompositionEventInit(data: 'あ', bubbles: true, cancelable: true),
+      ),
+    );
+
+    // This valid browser sequence has no duplicate input after compositionend.
+    // Move to the next event task, then type the same character normally: it
+    // is user input, not the absent composition echo, and must not be dropped.
+    await Future<void>.delayed(Duration.zero);
+    textArea.dispatchEvent(
+      web.InputEvent(
+        'input',
+        web.InputEventInit(
+          data: 'あ',
+          inputType: 'insertText',
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+
+    expect(events, [
+      const TextCompositionEvent.update('あ'),
+      const TextCompositionEvent.commit('あ'),
+      const TextInputEvent('あ'),
+    ]);
+  });
+
   test('DomInputSource positions textarea from caret geometry', () {
     final host = web.document.createElement('div');
     final textArea =
@@ -1154,7 +1224,11 @@ void main() {
       ),
     );
     host.dispatchEvent(cellClick);
-    expect(cellClick.defaultPrevented, isTrue, reason: 'app captures the click');
+    expect(
+      cellClick.defaultPrevented,
+      isTrue,
+      reason: 'app captures the click',
+    );
     expect(events, isNotEmpty, reason: 'normal cell click routes as input');
   });
 }

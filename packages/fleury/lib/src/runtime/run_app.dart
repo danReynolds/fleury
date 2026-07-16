@@ -869,6 +869,7 @@ Future<AppExit> _runAppImpl(
                     sink: sink,
                     renderer: renderer,
                     debug: debugController,
+                    readCaret: () => focusManager.focusedNode?.caretRect,
                     // Native graphics protocol, when the terminal has one:
                     // widgets place neutral image placements; the encoder
                     // emits Kitty/iTerm2/Sixel escapes after each diff.
@@ -943,9 +944,10 @@ Future<AppExit> _runAppImpl(
                   // Force the next frame to a full repaint. A real size
                   // change also rebuilds the root via the driver's own
                   // size-change detection, but a SAME-SIZE ResizeEvent —
-                  // which PosixTerminalDriver emits on SIGCONT (`fg`) and
-                  // after a terminal handoff, precisely to repaint a
-                  // blanked alt-screen — is invisible to that detection, so
+                  // which PosixTerminalDriver emits after continuation from
+                  // Ctrl+Z (`fg`) and after a terminal handoff, precisely to
+                  // repaint a blanked alt-screen — is invisible to that
+                  // detection, so
                   // the diff-base reset must be driven from the event here
                   // (the scheduled frame below then re-emits the screen).
                   frameDriver?.forceFullRepaint();
@@ -1039,8 +1041,8 @@ Future<AppExit> _runAppImpl(
               }
             },
             onDone: () {
-              // The driver's event stream ended — stdin EOF on Posix, or a
-              // remote peer (`fleury shell` / `fleury serve`) disconnected.
+              // The driver's event stream ended — native stdin EOF, or a remote
+              // peer (`fleury shell` / `fleury serve`) disconnected.
               // Exit cleanly instead of stranding the app waiting for an
               // input source that will never arrive.
               if (!exit.isCompleted) exit.complete(const AppExit.requested());

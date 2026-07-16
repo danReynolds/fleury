@@ -245,21 +245,71 @@ final class MouseEvent extends TuiEvent {
   String toString() => 'MouseEvent(${kind.name} ${button.name} @$col,$row)';
 }
 
-/// A bracketed paste: the full clipboard text the terminal delivered
-/// between its paste markers, as one event. Crucially the embedded
-/// newlines arrive here rather than as individual Enter chords, so a
-/// multi-line paste inserts verbatim instead of submitting line by line.
+/// The position of one [PasteEvent] in a bracketed-paste transaction.
+enum PasteEventPhase {
+  /// A complete paste carried by one event.
+  single,
+
+  /// The first event of a parser-segmented paste.
+  start,
+
+  /// A non-final event after [start].
+  continuation,
+
+  /// The final event of a parser-segmented paste.
+  end,
+}
+
+/// Clipboard text delivered by bracketed paste.
+///
+/// A normal paste arrives as one event. To bound live parser memory, a large
+/// bracketed paste may arrive as consecutive events with a shared [pasteId]
+/// and explicit [phase]. That identity lets editable widgets keep all segments
+/// in one undo transaction even when reads are separated in time. Embedded
+/// newlines still arrive as text rather than individual Enter chords, so a
+/// multi-line paste inserts instead of submitting line by line.
 @immutable
 final class PasteEvent extends TuiEvent {
-  const PasteEvent(this.text);
+  /// Creates a complete, unsegmented paste.
+  const PasteEvent(this.text) : pasteId = null, phase = PasteEventPhase.single;
+
+  /// Creates one segment of a larger bracketed paste.
+  const PasteEvent.segment(
+    this.text, {
+    required int this.pasteId,
+    required this.phase,
+  }) : assert(phase != PasteEventPhase.single),
+       assert(pasteId >= 0);
+
   final String text;
 
+  /// Parser-local identity shared by every event in a segmented paste.
+  ///
+  /// Null only for an unsegmented [PasteEventPhase.single] event.
+  final int? pasteId;
+
+  /// This event's position in its paste transaction.
+  final PasteEventPhase phase;
+
+  bool get isFirst =>
+      phase == PasteEventPhase.single || phase == PasteEventPhase.start;
+
+  bool get isFinal =>
+      phase == PasteEventPhase.single || phase == PasteEventPhase.end;
+
   @override
-  bool operator ==(Object other) => other is PasteEvent && other.text == text;
+  bool operator ==(Object other) =>
+      other is PasteEvent &&
+      other.text == text &&
+      other.pasteId == pasteId &&
+      other.phase == phase;
   @override
-  int get hashCode => Object.hash(PasteEvent, text);
+  int get hashCode => Object.hash(PasteEvent, text, pasteId, phase);
   @override
-  String toString() => 'PasteEvent(${_quote(text)})';
+  String toString() => switch (phase) {
+    PasteEventPhase.single => 'PasteEvent(${_quote(text)})',
+    _ => 'PasteEvent.${phase.name}($pasteId, ${_quote(text)})',
+  };
 }
 
 /// Terminal viewport size changed (e.g. from SIGWINCH on POSIX).

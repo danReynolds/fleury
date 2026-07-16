@@ -26,11 +26,27 @@ final class _RecordingSource implements BrowserFrameSource {
 
 final class _Recorded implements Exception {}
 
+final class _PartiallyStartingSource implements BrowserFrameSource {
+  _PartiallyStartingSource(this.failure);
+
+  final Object failure;
+  BrowserHostComponents? components;
+
+  @override
+  Future<MountedApp> start(BrowserHostComponents components) {
+    this.components = components;
+    components.surface.resize(const CellSize(4, 2));
+    components.inputSource.start((_) {});
+    throw failure;
+  }
+}
+
 void main() {
   test('the host assembles the full component set for any source', () async {
     final into = web.document.createElement('div') as web.HTMLElement;
     web.document.body!.appendChild(into);
     addTearDown(() => into.remove());
+    final bodyChildCountBeforeAttach = web.document.body!.children.length;
 
     final host = BrowserPresentationHost(into: into);
     final source = _RecordingSource();
@@ -51,6 +67,85 @@ void main() {
 
     // Failure path removed the generated roots.
     expect(into.children.length, 0, reason: 'generated roots cleaned up');
+    expect(
+      web.document.body!.children.length,
+      bodyChildCountBeforeAttach,
+      reason: 'failed attachment removed the body-level cell metrics probe',
+    );
+  });
+
+  test('a partially-started source is fully cleaned without replacing its '
+      'error or removing caller-owned roots', () async {
+    final into = web.document.createElement('div') as web.HTMLElement;
+    final surface = web.document.createElement('div') as web.HTMLElement;
+    final semantics = web.document.createElement('div') as web.HTMLElement;
+    into
+      ..appendChild(surface)
+      ..appendChild(semantics);
+    web.document.body!.appendChild(into);
+    addTearDown(() => into.remove());
+    final bodyChildCountBeforeAttach = web.document.body!.children.length;
+    final failure = _Recorded();
+    final source = _PartiallyStartingSource(failure);
+
+    final host = BrowserPresentationHost(
+      into: into,
+      surfaceElement: surface,
+      semanticElement: semantics,
+    );
+    await expectLater(host.attach(source), throwsA(same(failure)));
+
+    expect(into.parentNode, same(web.document.body));
+    expect(surface.parentNode, same(into), reason: 'caller-owned surface kept');
+    expect(
+      semantics.parentNode,
+      same(into),
+      reason: 'caller-owned semantic root kept',
+    );
+    expect(surface.children.length, 0, reason: 'surface rows disposed');
+    expect(semantics.children.length, 0, reason: 'semantic DOM disposed');
+    expect(
+      into.querySelector('textarea'),
+      isNull,
+      reason: 'started input capture and its listeners were disposed',
+    );
+    expect(
+      into.children.length,
+      2,
+      reason: 'generated overlay removed; caller roots remain',
+    );
+    expect(
+      web.document.body!.children.length,
+      bodyChildCountBeforeAttach,
+      reason: 'body-level metrics probe removed',
+    );
+  });
+
+  test('an assembly failure after metrics creation cleans partial resources '
+      'and preserves the original error', () {
+    // A namespaced Element is a valid `web.Element` but not an HTMLElement;
+    // InlineImageOverlay's HTMLElement-only setup fails after metrics and the
+    // surface have already been created.
+    final into = web.document.createElementNS('urn:fleury-test', 'host');
+    web.document.body!.appendChild(into);
+    addTearDown(() => into.remove());
+    final bodyChildCountBeforeAssemble = web.document.body!.children.length;
+
+    Object? failure;
+    try {
+      BrowserPresentationHost(into: into).assemble();
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure, isNotNull, reason: 'invalid host preserves setup failure');
+    expect(into.parentNode, same(web.document.body));
+    expect(into.children.length, 0, reason: 'partial roots removed');
+    expect(
+      web.document.body!.children.length,
+      bodyChildCountBeforeAssemble,
+      reason: 'partially-created metrics probe removed',
+    );
   });
 
   test('mountApp and a direct attach produce identical assemblies', () async {

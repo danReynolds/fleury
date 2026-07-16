@@ -101,15 +101,15 @@ final class DomCellMetrics implements CellMetrics {
     // pointers against the outer rect offsets every hit-test by that inset — a
     // constant, full-pixel error far larger than the sub-pixel snap drift, and
     // the canvas would also report cells that overflow the visible area.
-    final insetLeft =
-        _edgePx(style, 'padding-left') + _edgePx(style, 'border-left-width');
-    final insetTop =
-        _edgePx(style, 'padding-top') + _edgePx(style, 'border-top-width');
-    final insetRight =
-        _edgePx(style, 'padding-right') + _edgePx(style, 'border-right-width');
-    final insetBottom =
-        _edgePx(style, 'padding-bottom') +
-        _edgePx(style, 'border-bottom-width');
+    final paddingLeft = _edgePx(style, 'padding-left');
+    final paddingTop = _edgePx(style, 'padding-top');
+    final paddingRight = _edgePx(style, 'padding-right');
+    final paddingBottom = _edgePx(style, 'padding-bottom');
+    final hostPosition = style.getPropertyValue('position').trim();
+    final insetLeft = paddingLeft + _edgePx(style, 'border-left-width');
+    final insetTop = paddingTop + _edgePx(style, 'border-top-width');
+    final insetRight = paddingRight + _edgePx(style, 'border-right-width');
+    final insetBottom = paddingBottom + _edgePx(style, 'border-bottom-width');
     final cssCanvasWidth = math.max(
       containerRect.width - insetLeft - insetRight,
       0.0,
@@ -132,6 +132,13 @@ final class DomCellMetrics implements CellMetrics {
       cssCanvasHeight: cssCanvasHeight,
       cssCanvasLeft: containerRect.left + insetLeft,
       cssCanvasTop: containerRect.top + insetTop,
+      // An absolute child of a positioned host starts at the host's padding
+      // box (inside the border), while normal-flow grid content starts after
+      // the padding. The overlay therefore needs padding only; the viewport
+      // origin above still needs border + padding.
+      cssCanvasInsetLeft: paddingLeft,
+      cssCanvasInsetTop: paddingTop,
+      hostPositionIsStatic: hostPosition.isEmpty || hostPosition == 'static',
       devicePixelRatio: _window.devicePixelRatio,
       cols: cols,
       rows: rows,

@@ -53,6 +53,7 @@ abstract interface class TuiEventSink {
 /// final parser = InputParser();
 /// parser.feed([0x1B, 0x5B, 0x41], sink); // ESC [ A → arrowUp
 /// parser.flush(sink);                     // emits any pending events
+/// parser.finish(sink);                    // resolves state at stream EOF
 /// ```
 ///
 /// `feed` may be called repeatedly with byte fragments; the parser
@@ -79,8 +80,8 @@ class InputParser {
   ///
   /// Larger pastes are emitted as multiple [PasteEvent]s, preserving all input
   /// while bounding the parser's live buffer. A trailing incomplete UTF-8
-  /// scalar may carry over by at most three bytes rather than being split into
-  /// replacement characters.
+  /// scalar may carry over by at most three bytes, and a CRLF/LFCR pair by one
+  /// byte, rather than splitting either unit across events.
   final int maxPasteBytes;
 
   _State _state = _State.ground;
@@ -114,6 +115,8 @@ class InputParser {
   final List<int> _pasteBytes = <int>[];
   int _pasteMatch = 0;
   bool _pasteEmittedChunk = false;
+  int _nextPasteId = 1;
+  int _activePasteId = 0;
 
   /// Feeds [bytes] to the parser and emits any complete events to
   /// [sink].
@@ -127,6 +130,11 @@ class InputParser {
   /// Used to disambiguate a lone ESC press from the start of a CSI/SS3
   /// sequence: if state is still [_State.afterEsc] when this is
   /// called, the ESC is emitted as a standalone keypress.
+  ///
+  /// UTF-8 scalars and bracketed paste are deliberately not terminated by an
+  /// idle flush. Driver reads may split either across an arbitrary boundary
+  /// (and slow PTYs can exceed the ESC timeout); both states are bounded and
+  /// can safely wait for their continuation bytes.
   void flush(TuiEventSink sink) {
     // An idle flush ends the "immediately after CR" window: a lone CR is the
     // normal raw-mode Enter byte, and the driver flushes on a ~30ms idle
@@ -139,10 +147,10 @@ class InputParser {
         sink.add(const KeyEvent(keyCode: KeyCode.escape));
         _state = _State.ground;
       case _State.utf8Continuation:
-        // Incomplete UTF-8 sequence — discard. (Real terminals should
-        // never split a codepoint across input bursts in practice.)
-        _pendingUtf8.clear();
-        _state = _State.ground;
+        // A stream read can split a scalar and the next byte can arrive after
+        // the driver's ESC-disambiguation timeout. Keep the at-most-four-byte
+        // prefix; a later invalid continuation recovers through ground state.
+        break;
       case _State.csi:
       case _State.csiDiscard:
       case _State.ss3:
@@ -150,12 +158,46 @@ class InputParser {
         _resetCsi();
         _state = _State.ground;
       case _State.paste:
-        // Idle mid-paste (no terminator yet) — emit what we have so the
-        // content isn't lost, rather than stranding it forever.
-        _flushPaste(sink);
+        // Bracketed paste can span many reads (especially over SSH). Its live
+        // buffer is bounded by maxPasteBytes, so wait for the explicit 201~
+        // marker instead of turning a short network pause into typed keys.
+        break;
       case _State.ground:
         break;
     }
+  }
+
+  /// Resolves any pending parser state when the byte stream reaches EOF.
+  ///
+  /// Unlike [flush], this is a hard boundary: an incomplete UTF-8 scalar is
+  /// emitted with Unicode replacement semantics, and an unterminated
+  /// bracketed paste is finalized as one complete undo transaction. Partial
+  /// control sequences are discarded. A driver should call this exactly once
+  /// from its stdin `onDone` path; idle timeouts must continue to use [flush]
+  /// so a slow but valid paste is never truncated.
+  void finish(TuiEventSink sink) {
+    _swallowNextLf = false;
+    switch (_state) {
+      case _State.afterEsc:
+        sink.add(const KeyEvent(keyCode: KeyCode.escape));
+      case _State.utf8Continuation:
+        if (_pendingUtf8.isNotEmpty) {
+          sink.add(
+            TextInputEvent(utf8.decode(_pendingUtf8, allowMalformed: true)),
+          );
+        }
+      case _State.paste:
+        _finishPaste(sink);
+        return;
+      case _State.csi:
+      case _State.csiDiscard:
+      case _State.ss3:
+      case _State.ground:
+        break;
+    }
+    _pendingUtf8.clear();
+    _resetCsi();
+    _state = _State.ground;
   }
 
   void _consume(int byte, TuiEventSink sink) {
@@ -346,6 +388,8 @@ class InputParser {
         _pasteBytes.clear();
         _pasteMatch = 0;
         _pasteEmittedChunk = false;
+        _activePasteId = _nextPasteId;
+        _nextPasteId = _nextPasteId == 0x7FFFFFFF ? 1 : _nextPasteId + 1;
         _state = _State.paste;
         return;
       }
@@ -468,7 +512,7 @@ class InputParser {
   /// into the matching key or text event.
   void _emitKittyKey(TuiEventSink sink) {
     final codepoint = _groupValue(0);
-    if (codepoint == null) return;
+    if (codepoint == null || !_isUnicodeScalar(codepoint)) return;
 
     var modifiers = const <KeyModifier>{};
     var type = KeyEventType.down;
@@ -497,6 +541,7 @@ class InputParser {
       if (modifiers.contains(KeyModifier.shift) && _csiGroups[0].length >= 2) {
         cp = _csiGroups[0][1];
       }
+      if (!_isUnicodeScalar(cp) || !_kittyAssociatedTextIsValid()) return;
       final text = _kittyAssociatedText() ?? String.fromCharCode(cp);
       sink.add(TextInputEvent(text));
       return;
@@ -533,6 +578,14 @@ class InputParser {
     if (_csiGroups.length < 3 || _csiGroups[2].isEmpty) return null;
     return String.fromCharCodes(_csiGroups[2]);
   }
+
+  bool _kittyAssociatedTextIsValid() {
+    if (_csiGroups.length < 3) return true;
+    return _csiGroups[2].every(_isUnicodeScalar);
+  }
+
+  bool _isUnicodeScalar(int value) =>
+      value >= 0 && value <= 0x10FFFF && (value < 0xD800 || value > 0xDFFF);
 
   Set<KeyModifier> _decodeModifiers(int code) {
     // Modifier param is `1 + bitmask`. The low three bits (shift/alt/ctrl)
@@ -636,7 +689,7 @@ class InputParser {
       _pasteMatch++;
       if (_pasteMatch == _pasteEnd.length) {
         _pasteMatch = 0;
-        _flushPaste(sink);
+        _finishPaste(sink);
       }
       return;
     }
@@ -658,16 +711,13 @@ class InputParser {
   void _appendPasteByte(int byte, TuiEventSink sink) {
     _pasteBytes.add(byte);
     if (_pasteBytes.length < maxPasteBytes) return;
-    _emitPasteChunk(sink, preserveIncompleteUtf8: true);
+    _emitPasteChunk(sink, preserveSegmentUnits: true);
   }
 
-  void _emitPasteChunk(
-    TuiEventSink sink, {
-    bool preserveIncompleteUtf8 = false,
-  }) {
+  void _emitPasteChunk(TuiEventSink sink, {bool preserveSegmentUnits = false}) {
     if (_pasteBytes.isEmpty) return;
-    final emitLength = preserveIncompleteUtf8
-        ? _completeUtf8PrefixLength(_pasteBytes, maxPasteBytes)
+    final emitLength = preserveSegmentUnits
+        ? _completePastePrefixLength(_pasteBytes, maxPasteBytes)
         : _pasteBytes.length;
     if (emitLength == 0) return;
     final text = utf8.decode(
@@ -675,16 +725,34 @@ class InputParser {
       allowMalformed: true,
     );
     _pasteBytes.removeRange(0, emitLength);
+    final phase = _pasteEmittedChunk
+        ? PasteEventPhase.continuation
+        : PasteEventPhase.start;
     _pasteEmittedChunk = true;
-    sink.add(PasteEvent(text));
+    sink.add(PasteEvent.segment(text, pasteId: _activePasteId, phase: phase));
   }
 
-  /// Returns a prefix no larger than [limit] unless the scalar crossing that
-  /// boundary needs up to three continuation bytes to complete. Malformed
-  /// bytes still make progress and are handled by `allowMalformed` at decode.
-  int _completeUtf8PrefixLength(List<int> bytes, int limit) {
+  /// Returns a prefix near [limit] without splitting a UTF-8 scalar or a
+  /// paired CRLF/LFCR newline. A complete unit may exceed the target by up to
+  /// three bytes. Malformed bytes still make progress and are handled by
+  /// `allowMalformed` at decode.
+  int _completePastePrefixLength(List<int> bytes, int limit) {
     if (bytes.isEmpty) return 0;
     final boundary = bytes.length < limit ? bytes.length : limit;
+
+    // TextArea canonicalizes line endings per PasteEvent. Hold a newline byte
+    // at the segment edge until we know whether its partner follows, otherwise
+    // splitting CR|LF or LF|CR would turn one logical newline into two.
+    final edge = bytes[boundary - 1];
+    if (edge == 0x0D || edge == 0x0A) {
+      if (bytes.length == boundary) return boundary - 1;
+      final next = bytes[boundary];
+      if ((edge == 0x0D && next == 0x0A) || (edge == 0x0A && next == 0x0D)) {
+        return boundary + 1;
+      }
+      return boundary;
+    }
+
     var first = boundary - 1;
     while (first >= 0 && (bytes[first] & 0xC0) == 0x80) {
       first--;
@@ -708,8 +776,8 @@ class InputParser {
     return first;
   }
 
-  void _flushPaste(TuiEventSink sink) {
-    // A flush can arrive after a partial terminator match. Those tentative
+  void _finishPaste(TuiEventSink sink) {
+    // EOF can arrive after a partial terminator match. Those tentative
     // bytes were content unless the full marker landed, so preserve them.
     if (_pasteMatch > 0) {
       final matched = _pasteMatch;
@@ -718,12 +786,21 @@ class InputParser {
         _appendPasteByte(_pasteEnd[i], sink);
       }
     }
-    if (_pasteBytes.isNotEmpty) {
-      _emitPasteChunk(sink);
-    } else if (!_pasteEmittedChunk) {
-      sink.add(const PasteEvent(''));
+    final text = utf8.decode(_pasteBytes, allowMalformed: true);
+    _pasteBytes.clear();
+    if (_pasteEmittedChunk) {
+      sink.add(
+        PasteEvent.segment(
+          text,
+          pasteId: _activePasteId,
+          phase: PasteEventPhase.end,
+        ),
+      );
+    } else {
+      sink.add(PasteEvent(text));
     }
     _pasteEmittedChunk = false;
+    _activePasteId = 0;
     _state = _State.ground;
   }
 

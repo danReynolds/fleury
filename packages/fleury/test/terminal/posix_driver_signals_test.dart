@@ -14,25 +14,47 @@ void main() {
   Future<void> wait(int ms) => Future<void>.delayed(Duration(milliseconds: ms));
 
   group('PosixTerminalDriver signal delivery', () {
-    test('delivers a SignalEvent and force-exits after the grace deadline',
-        () async {
+    test('replays a startup signal to the first event listener', () async {
       final codes = <int>[];
       final driver = PosixTerminalDriver(
-        signalGrace: const Duration(milliseconds: 50),
+        signalGrace: const Duration(seconds: 30),
         forceExitOverride: codes.add,
       );
+
+      // enter() installs the OS watchers before runApp can listen. Model a
+      // signal landing in that startup gap and then attach runApp's listener.
+      driver.deliverSignal(AppSignal.terminate);
       final events = <TuiEvent>[];
       final sub = driver.events.listen(events.add);
-
-      driver.deliverSignal(AppSignal.terminate);
       await wait(10);
-      expect(events, [const SignalEvent(AppSignal.terminate)]);
-      expect(codes, isEmpty, reason: 'grace not elapsed yet');
 
-      await wait(120);
-      expect(codes, [143], reason: '128 + SIGTERM after the grace deadline');
+      expect(events, [const SignalEvent(AppSignal.terminate)]);
+      expect(codes, isEmpty);
       await sub.cancel();
+      await driver.restore();
     });
+
+    test(
+      'delivers a SignalEvent and force-exits after the grace deadline',
+      () async {
+        final codes = <int>[];
+        final driver = PosixTerminalDriver(
+          signalGrace: const Duration(milliseconds: 50),
+          forceExitOverride: codes.add,
+        );
+        final events = <TuiEvent>[];
+        final sub = driver.events.listen(events.add);
+
+        driver.deliverSignal(AppSignal.terminate);
+        await wait(10);
+        expect(events, [const SignalEvent(AppSignal.terminate)]);
+        expect(codes, isEmpty, reason: 'grace not elapsed yet');
+
+        await wait(120);
+        expect(codes, [143], reason: '128 + SIGTERM after the grace deadline');
+        await sub.cancel();
+      },
+    );
 
     test('a second same-signal forces immediately', () async {
       final codes = <int>[];
@@ -58,8 +80,11 @@ void main() {
       driver.deliverSignal(AppSignal.terminate);
       await driver.restore(); // what runApp's cleanup does
       await wait(120);
-      expect(codes, isEmpty,
-          reason: 'an app that shut down cleanly must not be shot afterwards');
+      expect(
+        codes,
+        isEmpty,
+        reason: 'an app that shut down cleanly must not be shot afterwards',
+      );
     });
 
     test('a different signal re-delivers and re-arms', () async {

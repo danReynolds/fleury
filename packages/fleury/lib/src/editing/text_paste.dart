@@ -69,9 +69,11 @@ final class TextPasteProgress {
 /// Mutable iterator over one paste operation.
 final class TextPasteSession {
   TextPasteSession({required String text, required TextPastePolicy policy})
-    : totalLength = text.length,
+    : _text = text,
+      totalLength = text.length,
       _chunks = policy.chunks(text).iterator;
 
+  final String _text;
   final int totalLength;
   final Iterator<String> _chunks;
   int _insertedLength = 0;
@@ -98,5 +100,18 @@ final class TextPasteSession {
     _insertedLength += chunk.length;
     if (_insertedLength >= totalLength) _complete = true;
     return chunk;
+  }
+
+  /// Takes all unapplied text as one bulk chunk.
+  ///
+  /// Normal progress remains frame-chunked. Queue-pressure and ordering
+  /// barriers use this escape hatch to avoid hundreds of synchronous
+  /// whole-string edits while preserving every code unit already accepted.
+  String? takeRemaining() {
+    if (_complete) return null;
+    final remaining = _text.substring(_insertedLength);
+    _insertedLength = totalLength;
+    _complete = true;
+    return remaining.isEmpty ? null : remaining;
   }
 }

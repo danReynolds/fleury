@@ -590,19 +590,17 @@ class RenderPointerListener extends RenderObject
     // buffer) the local offset is scratch-relative — hit-testing against it
     // targets phantom positions.
     final screen = screenOffset ?? offset;
-    _rect = CellRect(offset: screen, size: size);
-    _router?._register(this);
+    final bounds = CellRect(offset: screen, size: size);
+    _rect = clipRect == null ? bounds : bounds.intersect(clipRect);
+    if (_rect != null) _router?._register(this);
     // Record for a possible enclosing RepaintBoundary: on a cache-hit frame it
     // skips this paint, so it must replay the registration or the region goes
-    // dead. localBounds is in paint-local coords (like the semantic record),
-    // re-translated to the current screen offset at replay. Guarded on an
+    // dead. The capture normalizes this screen rectangle against its owning
+    // boundary's screen origin and re-translates it on replay. Guarded on an
     // active capture and using a reused closure field, so an unenclosed region
     // allocates nothing on this hot path.
     if (PointerRegionCapture.isActive) {
-      PointerRegionCapture.record(
-        _replayRegister,
-        CellRect(offset: offset, size: size),
-      );
+      PointerRegionCapture.record(_replayRegister, bounds, clipRect: clipRect);
     }
     _child?.paint(buffer, offset, screenOffset: screen, clipRect: clipRect);
   }
@@ -614,6 +612,6 @@ class RenderPointerListener extends RenderObject
   // ignore: prefer_function_declarations_over_variables
   late final PointerRegionRegister _replayRegister = (screenRect) {
     _rect = screenRect;
-    _router?._register(this);
+    if (screenRect != null) _router?._register(this);
   };
 }

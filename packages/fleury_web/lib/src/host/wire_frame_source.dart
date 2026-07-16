@@ -39,8 +39,8 @@ final class WireFrameSource implements BrowserFrameSource {
   CellBuffer _mirror = CellBuffer(const CellSize(80, 24));
   bool _handshakeSent = false;
   bool _closed = false;
+  CellRect? _lastCaret;
   web.HTMLElement? _disconnectBanner;
-  web.ResizeObserver? _resizeObserver;
 
   /// The host-assembled inline-image layer (shared with the embed path).
   InlineImageOverlay? get _imageOverlay => _components?.imageOverlay;
@@ -55,9 +55,9 @@ final class WireFrameSource implements BrowserFrameSource {
     final opened = Completer<void>();
     var handshakeOpened = false;
     socket.onopen = ((web.Event _) {
+      if (opened.isCompleted || _closed) return;
       handshakeOpened = true;
-      _onOpen();
-      if (!opened.isCompleted) opened.complete();
+      _completeOpen(opened);
     }).toJS;
     socket.onmessage = ((web.MessageEvent event) {
       _onMessage(event);
@@ -91,6 +91,39 @@ final class WireFrameSource implements BrowserFrameSource {
     }).toJS;
     await opened.future;
 
+    return _mountedAppFor(components);
+  }
+
+  void _completeOpen(Completer<void> opened) {
+    try {
+      _onOpen();
+    } catch (error, stackTrace) {
+      // The event callback sits outside start()'s async stack. Convert any
+      // setup failure back into the Future that BrowserPresentationHost.attach
+      // is awaiting, and close the partially-started source before the host's
+      // own idempotent cleanup runs. Without this catch, the callback throws to
+      // JavaScript and `opened.future` remains pending forever.
+      try {
+        _teardown('The fleury session failed to start.', banner: false);
+      } catch (_) {
+        // Teardown is best-effort here, but the socket must not outlive a
+        // failed start and a cleanup error must not strand the Future again.
+        _closed = true;
+        final socket = _socket;
+        _socket = null;
+        try {
+          socket?.close();
+        } catch (_) {}
+      }
+      if (!opened.isCompleted) {
+        opened.completeError(error, stackTrace);
+      }
+      return;
+    }
+    if (!opened.isCompleted) opened.complete();
+  }
+
+  MountedApp _mountedAppFor(BrowserHostComponents components) {
     return MountedApp.forFrameSource(
       surface: components.surface,
       cellMetrics: components.metrics,
@@ -99,6 +132,7 @@ final class WireFrameSource implements BrowserFrameSource {
       semanticFlushScheduler: components.semanticFlushScheduler,
       disposeHostResources: () {
         _teardown('The fleury session was disposed.', banner: false);
+        _removeDisconnectBanner();
         components.removeGeneratedRoots();
       },
     );
@@ -123,8 +157,9 @@ final class WireFrameSource implements BrowserFrameSource {
     };
     _mirror = CellBuffer(_size);
     components.inputSource.start(_sendInput);
+    _openSetupHookForTest?.call();
     _sendInit();
-    _observeResize();
+    _observeMetrics();
   }
 
   /// Reconciles the inline-image overlay against this frame's
@@ -181,35 +216,47 @@ final class WireFrameSource implements BrowserFrameSource {
     }
   }
 
-  void _observeResize() {
-    final observer = web.ResizeObserver(
-      ((JSArray<JSAny?> _, web.ResizeObserver __) {
-        if (_closed) return;
-        // A ResizeObserver callback can fire mid-reflow with the container
-        // momentarily collapsed; [_measureViewport] returns null for such
-        // a degenerate read. Adopting it would resize the grid to a
-        // one-row sliver and blank the screen, so we ignore it and keep
-        // the last good size.
-        final next = _measureViewport();
-        if (next == null || next == _size) return;
-        _size = next;
-        _components?.surface.resize(next, metrics: _cellBox());
-        // Do NOT reset _mirror here: an in-flight plan built against the
-        // old size (sent before the server saw our ResizeFrame) would then
-        // patch a blank new-size mirror and blank every unchanged cell.
-        // The mirror is reset by [_handleFrame] when the server's
-        // size-matched full-repaint plan arrives (plan.size != mirror.size),
-        // so old-size plans keep applying to the old mirror until then.
-        // Reposition the overlay images to the new cell pitch now, so they
-        // stay pinned to their cells even if the host doesn't send a fresh
-        // plan; the next PlanFrame (the usual case) supersedes this.
-        final box = _cellBox();
-        if (box != null) _imageOverlay?.reapply(box);
-        _send(encodeFrame(ResizeFrame(next)));
-      }).toJS,
-    );
-    observer.observe(_components!.hostElement);
-    _resizeObserver = observer;
+  void _observeMetrics() {
+    // One observer owner for every geometry invalidation. DomCellMetrics
+    // combines host ResizeObserver callbacks with font-readiness and window
+    // resize/DPR signals, marks its cache dirty, then drives this refresh path.
+    // Installing a second host observer here would duplicate resize work while
+    // still missing the non-host signals.
+    _components!.metrics.startObserving(_handleObservedResize);
+  }
+
+  void _handleObservedResize() {
+    if (_closed) return;
+    final components = _components;
+    if (components == null) return;
+
+    // CellMetrics observers mark dirty before invoking us. Keep this idempotent
+    // invalidation in the shared path so the direct test seam and any future
+    // host-driven refresh cannot accidentally reuse a cached box.
+    components.metrics.markDirty();
+
+    // A ResizeObserver callback can fire mid-reflow with the container
+    // momentarily collapsed; [_measureViewport] returns null for such a
+    // degenerate read. Adopting it would resize the grid to a one-row sliver and
+    // blank the screen, so ignore it and keep the last good size.
+    final next = _measureViewport();
+    if (next == null) return;
+    final box = _cellBox();
+
+    // Refresh row pitch, image placement, and the hidden IME capture rectangle
+    // even when the grid's integer rows/cols did not change. Font/padding/DPR
+    // changes can move the caret in CSS pixels while leaving its cell rect (and
+    // therefore the server's deduped CaretFrame) unchanged.
+    components.surface.resize(next, metrics: box);
+    components.inputSource.syncCaretGeometry(_lastCaret, box);
+    if (box != null) _imageOverlay?.reapply(box);
+
+    if (next == _size) return;
+    _size = next;
+    // Do NOT reset _mirror here: an in-flight plan built against the old size
+    // (sent before the server saw our ResizeFrame) must keep applying to the old
+    // mirror. The next size-matched full-repaint plan resets it in _handleFrame.
+    _send(encodeFrame(ResizeFrame(next)));
   }
 
   /// Consecutive frame-apply failures tolerated before a persistently failing
@@ -391,6 +438,7 @@ final class WireFrameSource implements BrowserFrameSource {
         // capture element at the caret so composition candidate windows
         // appear where the user is typing — parity with the embed host's
         // per-frame syncCaretGeometry.
+        _lastCaret = f.caret;
         components.inputSource.syncCaretGeometry(f.caret, _cellBox());
       case ClipboardWriteFrame f:
         // The app copied: place the text on THIS machine's clipboard and
@@ -513,16 +561,34 @@ final class WireFrameSource implements BrowserFrameSource {
   set failApplyForTest(bool Function(RemoteFrame frame)? predicate) =>
       _shouldFailApplyForTest = predicate;
 
+  void Function()? _openSetupHookForTest;
+
+  /// Injects a failure after browser input has partially started — test-only.
+  set openSetupHookForTest(void Function()? hook) =>
+      _openSetupHookForTest = hook;
+
   /// Whether the session has been torn down (socket closed) — test-only.
   bool get isClosedForTest => _closed;
 
   /// Whether the reconnect banner is currently showing — test-only.
   bool get bannerShownForTest => _disconnectBanner != null;
 
+  /// The live socket while start is pending or the session is open — test-only.
+  web.WebSocket? get socketForTest => _socket;
+
   /// Attaches [components] without a socket — test-only.
-  void attachComponentsForTest(BrowserHostComponents components) {
+  MountedApp attachComponentsForTest(BrowserHostComponents components) {
     _components = components;
+    return _mountedAppFor(components);
   }
+
+  /// Drives the same cached-metrics invalidation and resize path as the browser
+  /// observer — test-only.
+  void handleObservedResizeForTest() => _handleObservedResize();
+
+  /// Installs the same combined host/font/window metrics observer as start() —
+  /// test-only.
+  void startObservingMetricsForTest() => _observeMetrics();
 
   /// The session has ended — a dropped socket or a BYE from the host.
   /// Stop interacting, keep the last rendered frame on screen, and overlay
@@ -530,9 +596,10 @@ final class WireFrameSource implements BrowserFrameSource {
   void _teardown(String message, {bool banner = true}) {
     if (_closed) return;
     _closed = true;
-    _resizeObserver?.disconnect();
-    _resizeObserver = null;
     _components?.inputSource.dispose();
+    // Stops the combined host/font/window observers immediately on disconnect;
+    // MountedApp.dispose invokes this idempotent disposer again later.
+    _components?.metrics.dispose();
     try {
       _socket?.close();
     } catch (_) {
@@ -569,6 +636,12 @@ final class WireFrameSource implements BrowserFrameSource {
     );
     host.appendChild(banner);
     _disconnectBanner = banner;
+  }
+
+  void _removeDisconnectBanner() {
+    final banner = _disconnectBanner;
+    _disconnectBanner = null;
+    banner?.remove();
   }
 }
 

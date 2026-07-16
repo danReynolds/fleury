@@ -768,9 +768,19 @@ class RenderPadding extends RenderObject
   }) {
     final c = _child;
     if (c == null) return;
+    final childOffset = CellOffset(
+      offset.col + _padding.left,
+      offset.row + _padding.top,
+    );
+    final screen = screenOffset ?? offset;
     c.paint(
       buffer,
-      CellOffset(offset.col + _padding.left, offset.row + _padding.top),
+      childOffset,
+      screenOffset: CellOffset(
+        screen.col + _padding.left,
+        screen.row + _padding.top,
+      ),
+      clipRect: clipRect,
     );
   }
 }

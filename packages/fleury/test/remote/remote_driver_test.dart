@@ -138,6 +138,43 @@ void main() {
     );
 
     test(
+      'legacy raw INPUT finalizes pending paste before disconnect',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final events = <TuiEvent>[];
+        final done = Completer<void>();
+        final eventSub = driver.events.listen(
+          events.add,
+          onDone: done.complete,
+        );
+
+        final entering = driver.enter(TerminalMode.interactive);
+        transport.emit(
+          const InitFrame(
+            size: CellSize(80, 24),
+            colorMode: ColorMode.truecolor,
+            imageProtocol: ImageProtocol.halfBlock,
+            tmuxPassthrough: false,
+            protocolVersion: 1,
+          ),
+        );
+        await entering;
+        transport.emit(
+          InputFrame(Uint8List.fromList('\x1B[200~abc'.codeUnits)),
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        await transport.disconnect();
+        await done.future.timeout(const Duration(seconds: 1));
+
+        expect(events.whereType<PasteEvent>(), [const PasteEvent('abc')]);
+        await eventSub.cancel();
+        await driver.restore();
+      },
+    );
+
+    test(
       'structured negotiation rejects the legacy raw INPUT channel',
       () async {
         final transport = _FakeTransport();

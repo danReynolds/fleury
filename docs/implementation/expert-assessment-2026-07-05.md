@@ -17,9 +17,9 @@ the peer set. **Validated (with evidence):**
 | --- | --- |
 | **Idle cost** | Render-on-demand, measured: an idle app emits **0 bytes and 0.00s CPU over 15s** in a real PTY. Ticker timer starts with the first animation, stops with the last; the text-caret blink stops on unfocus. |
 | **Input→paint latency** | Same event-loop turn (microtask), ~0 added latency; 50 `setState`s in a turn coalesce to 1 frame (`frame_scheduler.dart`). |
-| **Input parser** | Fuzz-tested state machine; 30ms ESC disambiguation; atomic bracketed paste with KMP terminator matching + flush-on-idle; SGR mouse; **full kitty keyboard protocol** (press/repeat/release, super/meta — `input_parser.dart:379-462`) — ahead of Bubble Tea/Textual. |
+| **Input parser** | Fuzz-tested state machine; 30ms ESC disambiguation; bounded, lossless bracketed-paste segmentation that survives idle read gaps; SGR mouse; **full kitty keyboard protocol** (press/repeat/release, super/meta) — ahead of Bubble Tea/Textual. |
 | **Unicode widths** | CJK=2, ZWJ family emoji=2, **VS16 emoji presentation=2** (most TUIs get this wrong), skin-tone=2, combining=1 — measured via cell probes. |
-| **Panic safety** | Layered restore (finally + zone guard + SIGINT/SIGTERM/SIGTSTP/SIGCONT + editor handoff); raw-mode/alt-screen/mouse/paste all unwound. |
+| **Panic safety** | Layered restore (finally + zone guard + SIGINT/SIGTERM + serialized editor handoff); interactive Ctrl+Z restores, self-stops with SIGSTOP, and re-enters after `fg`. External `kill -TSTP` is not an orderly lifecycle path because Dart cannot safely watch SIGTSTP/SIGCONT. |
 | **Resize** | Scheduler-coalesced, full reset + DEC 2026 sync wrap — no tearing, no debounce needed. |
 | **Slow-terminal backpressure** | Native path blocks on write (bounded, ncurses-style); serve path has the producer gate. |
 | **Deployment** | AOT: **25ms to first frame, 8.0MB binary** (measured); JIT `dart run` 1.7s (dev-only). |
@@ -28,25 +28,20 @@ No action needed on any of the above. Now the ranked findings.
 
 ## Priority list
 
-### 1. Terminal IME / hardware-cursor caret — **fix; high value, low effort**
+### 1. Terminal IME / hardware-cursor caret — **resolved 2026-07-15**
 
-The serve path publishes the focused caret every frame (`WireFramePresenter
-readCaret:` → CARET frames → the browser positions its IME element). The
-**terminal path never does the symmetric thing**: the hardware cursor is
-hidden at enter (`?25l`, `terminal_sequences.dart:15`) and never repositioned
-— `ansi_frame_presenter.dart` has zero caret handling. Consequences on a real
-terminal: **OS-level IME composition (Chinese/Japanese/Korean input) has no
-anchor** — the composition window floats at the wrong place or nowhere;
-terminal-native screen readers can't track the caret; terminals' cursor
-features (beam styling, cursor-trail) are inert.
+The original audit found that the serve path published the focused caret while
+the ANSI terminal path kept the hardware cursor hidden. The terminal presenter
+now emits the focused caret as a final CUP + show-cursor trailer, or hides it
+when no editable caret exists. Regression tests cover exact ordering relative
+to synchronized updates and retained-frame presentation, and the PTY suite
+covers the surrounding terminal lifecycle. Native CJK candidate-window and
+screen-reader behavior remain release-device checks because neither can be
+proved by a headless byte-stream assertion.
 
-The plumbing already exists end-to-end: `TextInput`/`TextArea` set
-`focusNode.caretRect` on every paint (`text_input.dart:1590`,
-`text_area.dart:767`); only the ANSI presenter ignores it. Fix ≈ after
-presenting a frame, if a caret exists → CUP to it + `?25h`, else `?25l`
-(mind the sync-update wrap and the diff-cursor bookkeeping). Bubble Tea, Ink,
-and Textual all do this. **The single biggest gap for international users —
-and it's ~a day of work including tests.**
+The supporting geometry remains shared end-to-end: `TextInput`/`TextArea`
+publish `focusNode.caretRect`; both ANSI and wire presenters consume that
+focused caret for their respective terminal and browser input surfaces.
 
 ### 2. Inline mode — **product decision needed pre-freeze**
 

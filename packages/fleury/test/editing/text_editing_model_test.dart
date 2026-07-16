@@ -171,6 +171,19 @@ void main() {
       expect(value.text, 'one two three');
       expect(value.selection, TextSelection.collapsed(value.text.length));
     });
+
+    test('multiline input canonicalizes clipboard line endings', () {
+      expect(
+        TextEditingModel.normalizeMultilineInput('one\r\ntwo\n\rthree\rfour'),
+        'one\ntwo\nthree\nfour',
+      );
+      expect(
+        TextEditingModel.normalizeMultilineInput('\r\n\r\n\r'),
+        '\n\n\n',
+        reason: 'adjacent separators must not be collapsed by a second pass',
+      );
+      expect(TextEditingModel.normalizeMultilineInput('\n\r\n'), '\n\n');
+    });
   });
 
   group('composition operations', () {

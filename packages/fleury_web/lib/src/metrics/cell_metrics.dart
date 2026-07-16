@@ -12,6 +12,9 @@ final class MeasuredCellBox {
     required this.rows,
     this.cssCanvasLeft = 0,
     this.cssCanvasTop = 0,
+    this.cssCanvasInsetLeft = 0,
+    this.cssCanvasInsetTop = 0,
+    this.hostPositionIsStatic = true,
     double? layoutCellWidth,
     double? layoutCellHeight,
   }) : layoutCellWidth = layoutCellWidth ?? cssCellWidth,
@@ -32,8 +35,26 @@ final class MeasuredCellBox {
   final double layoutCellHeight;
   final double cssCanvasWidth;
   final double cssCanvasHeight;
+
+  /// Canvas origin in browser viewport coordinates. Fixed-position browser
+  /// affordances such as the hidden IME capture element use this origin.
   final double cssCanvasLeft;
   final double cssCanvasTop;
+
+  /// Canvas origin relative to an absolutely-positioned child of the host.
+  ///
+  /// The host is the overlay's containing block. Its absolute-position origin
+  /// is the host's padding-box edge, so these values contain the host padding
+  /// but not its viewport position or border. Using [cssCanvasLeft] here would
+  /// count the host's viewport origin twice whenever it is not at (0, 0).
+  final double cssCanvasInsetLeft;
+  final double cssCanvasInsetTop;
+
+  /// Whether the host needs a positioned containing block for overlays.
+  ///
+  /// This is captured alongside the other computed-style reads so paint-side
+  /// consumers never need to force browser layout or style resolution.
+  final bool hostPositionIsStatic;
   final double devicePixelRatio;
   final int cols;
   final int rows;
@@ -51,6 +72,9 @@ final class MeasuredCellBox {
       other.cssCanvasHeight == cssCanvasHeight &&
       other.cssCanvasLeft == cssCanvasLeft &&
       other.cssCanvasTop == cssCanvasTop &&
+      other.cssCanvasInsetLeft == cssCanvasInsetLeft &&
+      other.cssCanvasInsetTop == cssCanvasInsetTop &&
+      other.hostPositionIsStatic == hostPositionIsStatic &&
       other.devicePixelRatio == devicePixelRatio &&
       other.cols == cols &&
       other.rows == rows;
@@ -65,6 +89,9 @@ final class MeasuredCellBox {
     cssCanvasHeight,
     cssCanvasLeft,
     cssCanvasTop,
+    cssCanvasInsetLeft,
+    cssCanvasInsetTop,
+    hostPositionIsStatic,
     devicePixelRatio,
     cols,
     rows,

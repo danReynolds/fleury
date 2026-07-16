@@ -50,6 +50,31 @@ void main() {
       parser.feed([0xAD], sink);
       expect(sink.events, [const TextInputEvent('中')]);
     });
+
+    test('idle flush does not discard a split UTF-8 scalar', () {
+      final parser = InputParser();
+      final sink = _ListSink();
+
+      parser.feed([0xE4, 0xB8], sink);
+      parser.flush(sink); // the driver's lone-ESC idle timeout fires
+      parser.feed([0xAD], sink);
+
+      expect(sink.events, [const TextInputEvent('中')]);
+    });
+
+    test('stream finish resolves a truncated UTF-8 scalar and recovers', () {
+      final parser = InputParser();
+      final sink = _ListSink();
+
+      parser.feed([0xE4, 0xB8], sink);
+      parser.finish(sink);
+      parser.feed('q'.codeUnits, sink);
+
+      expect(sink.events, [
+        const TextInputEvent(replacementCharacter),
+        const TextInputEvent('q'),
+      ]);
+    });
   });
 
   group('Special chords', () {
@@ -303,21 +328,23 @@ void main() {
   });
 
   group('Malformed sequences', () {
-    test('lone continuation byte is dropped on flush', () {
-      // 0x80 is a continuation byte with no leader. Parser starts a
-      // UTF-8 sequence, then flush gives up and discards.
-      final parser = InputParser();
-      final sink = _ListSink();
-      parser.feed([0x80], sink); // treated as UTF-8 lead with expected=1
-      // The 'expected=1' branch in _isUtf8Complete returns true after
-      // one byte, so the parser tries to decode it. allowMalformed:true
-      // produces a replacement char rather than throwing.
-      parser.flush(sink);
-      // Result: exactly one event of some kind. We don't tightly
-      // constrain the malformed-byte behavior; we just assert we don't
-      // crash and we don't leak bytes.
-      expect(sink.events.length, lessThanOrEqualTo(1));
-    });
+    test(
+      'malformed UTF-8 prefix stays bounded and recovers on ordinary text',
+      () {
+        // 0x80 is a continuation byte with no leader. Parser starts a
+        // bounded UTF-8 prefix; idle flush must not turn it into an event.
+        final parser = InputParser();
+        final sink = _ListSink();
+        parser.feed([0x80], sink);
+        parser.flush(sink);
+        expect(sink.events, isEmpty);
+
+        // A non-continuation drops the malformed prefix and is reprocessed from
+        // ground, so the parser cannot become wedged.
+        parser.feed('q'.codeUnits, sink);
+        expect(sink.events, [const TextInputEvent('q')]);
+      },
+    );
 
     test('unknown CSI final byte is ignored', () {
       // ESC [ ? — '?' starts a private sequence; we never see a final.
@@ -358,6 +385,45 @@ void main() {
       expect(sink.events, isEmpty); // still mid-paste
       parser.feed([...'lo'.codeUnits, ...end()], sink);
       expect(sink.events, [const PasteEvent('hello')]);
+    });
+
+    test('idle flush does not terminate a fragmented bracketed paste', () {
+      final parser = InputParser();
+      final sink = _ListSink();
+
+      parser.feed([...start(), ...'ab'.codeUnits], sink);
+      parser.flush(sink); // a slow PTY pauses longer than the ESC timeout
+      parser.feed([...'cd'.codeUnits, ...end()], sink);
+
+      expect(sink.events, [const PasteEvent('abcd')]);
+      expect(sink.events.whereType<KeyEvent>(), isEmpty);
+      expect(sink.events.whereType<TextInputEvent>(), isEmpty);
+    });
+
+    test('stream finish finalizes a truncated bracketed paste', () {
+      final parser = InputParser(maxPasteBytes: 4);
+      final sink = _ListSink();
+
+      parser.feed([...start(), ...'abcdef'.codeUnits], sink);
+      parser.finish(sink);
+
+      final paste = sink.events.whereType<PasteEvent>().toList();
+      expect(paste.map((event) => event.text), ['abcd', 'ef']);
+      expect(paste.map((event) => event.phase), [
+        PasteEventPhase.start,
+        PasteEventPhase.end,
+      ]);
+      expect(paste.map((event) => event.pasteId).toSet(), hasLength(1));
+    });
+
+    test('stream finish preserves a partial paste terminator as content', () {
+      final parser = InputParser();
+      final sink = _ListSink();
+
+      parser.feed([...start(), ...'ab\x1B[20'.codeUnits], sink);
+      parser.finish(sink);
+
+      expect(sink.events, [const PasteEvent('ab\x1B[20')]);
     });
   });
 
@@ -545,6 +611,21 @@ void main() {
     test('a protocol flags reply (CSI ? flags u) is ignored', () {
       expect(_parse([0x1B, 0x5B, ...'?5u'.codeUnits]), isEmpty);
     });
+
+    test('invalid Unicode scalars fail closed and the parser recovers', () {
+      for (final params in <String>[
+        '1114112', // one above Unicode max
+        '55296', // leading surrogate, not a Unicode scalar
+        '97:1114112;2', // invalid shifted codepoint
+        '97;1;1114112', // invalid associated text
+      ]) {
+        expect(
+          _parse([...csiu(params), 0x71]),
+          [const TextInputEvent('q')],
+          reason: 'invalid CSI $params u must be ignored without throwing',
+        );
+      }
+    });
   });
 
   group('Fuzzing', () {
@@ -574,7 +655,7 @@ void main() {
       }
     });
 
-    test('large unterminated paste flushes as one PasteEvent', () {
+    test('large unterminated paste remains bounded across idle flush', () {
       final parser = InputParser();
       final sink = _ListSink();
       parser.feed([
@@ -586,9 +667,10 @@ void main() {
 
       expect(sink.events, isEmpty);
       parser.flush(sink);
+      expect(sink.events, isEmpty);
 
+      parser.feed('\x1B[201~'.codeUnits, sink);
       expect(sink.events, hasLength(1));
-      expect(sink.events.single, isA<PasteEvent>());
       expect((sink.events.single as PasteEvent).text.length, 4096);
     });
 
@@ -607,6 +689,43 @@ void main() {
         'efgh',
         'ij',
       ]);
+      final segments = sink.events.whereType<PasteEvent>().toList();
+      expect(segments.map((event) => event.phase), [
+        PasteEventPhase.start,
+        PasteEventPhase.continuation,
+        PasteEventPhase.end,
+      ]);
+      expect(segments.map((event) => event.pasteId).toSet(), hasLength(1));
+    });
+
+    test('an exact-cap paste emits an empty final phase marker', () {
+      final parser = InputParser(maxPasteBytes: 4);
+      final sink = _ListSink();
+
+      parser.feed('\x1B[200~abcd\x1B[201~'.codeUnits, sink);
+
+      final paste = sink.events.whereType<PasteEvent>().toList();
+      expect(paste.map((event) => event.text), ['abcd', '']);
+      expect(paste.map((event) => event.phase), [
+        PasteEventPhase.start,
+        PasteEventPhase.end,
+      ]);
+      expect(paste[0].pasteId, paste[1].pasteId);
+    });
+
+    test('consecutive segmented pastes receive distinct identities', () {
+      final parser = InputParser(maxPasteBytes: 2);
+      final sink = _ListSink();
+
+      parser.feed('\x1B[200~abc\x1B[201~'.codeUnits, sink);
+      parser.feed('\x1B[200~def\x1B[201~'.codeUnits, sink);
+
+      final starts = sink.events
+          .whereType<PasteEvent>()
+          .where((event) => event.phase == PasteEventPhase.start)
+          .toList();
+      expect(starts, hasLength(2));
+      expect(starts[0].pasteId, isNot(starts[1].pasteId));
     });
 
     test('paste segmentation never splits a UTF-8 scalar', () {
@@ -626,6 +745,26 @@ void main() {
           .toList();
       expect(segments.join(), text);
       expect(segments.join(), isNot(contains(replacementCharacter)));
+    });
+
+    test('paste segmentation never splits paired newline encodings', () {
+      for (final lineEnding in ['\r\n', '\n\r']) {
+        final parser = InputParser(maxPasteBytes: 4);
+        final sink = _ListSink();
+        final text = 'abc${lineEnding}def';
+
+        parser.feed([
+          ...'\x1B[200~'.codeUnits,
+          ...text.codeUnits,
+          ...'\x1B[201~'.codeUnits,
+        ], sink);
+
+        expect(sink.events.whereType<PasteEvent>().map((event) => event.text), [
+          'abc',
+          '${lineEnding}de',
+          'f',
+        ]);
+      }
     });
   });
 
