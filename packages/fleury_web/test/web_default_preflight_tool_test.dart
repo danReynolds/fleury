@@ -819,6 +819,7 @@ Map<String, Object?> _bundle({
     'kind': 'fleuryWebReadinessBundle',
     'strictPass': true,
     'input': <String, Object?>{
+      'targetPreset': 'v1',
       'captureDir': captureDir,
       'manualDir': manualDir,
       'commandWorkingDirectory':
