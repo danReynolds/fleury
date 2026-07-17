@@ -2,9 +2,14 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
+const site = 'https://danreynolds.github.io';
+const base = '/fleury';
+const asset = (path) => `${base}/${path}`;
+
 // https://astro.build/config
 export default defineConfig({
-  site: 'https://fleury.dev',
+  site,
+  base,
   integrations: [
     starlight({
       title: 'Fleury',
@@ -17,19 +22,20 @@ export default defineConfig({
       },
       // Primary favicon is the scalable SVG; the rest (ICO fallback, PNG sizes,
       // apple-touch, PWA manifest, social card) are added via head below.
+      // Starlight adds Astro's configured base path to this public asset.
       favicon: '/favicon.svg',
       head: [
-        { tag: 'link', attrs: { rel: 'icon', href: '/favicon.ico', sizes: '32x32' } },
-        { tag: 'link', attrs: { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/favicon-32.png' } },
-        { tag: 'link', attrs: { rel: 'icon', type: 'image/png', sizes: '16x16', href: '/favicon-16.png' } },
-        { tag: 'link', attrs: { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' } },
-        { tag: 'link', attrs: { rel: 'manifest', href: '/site.webmanifest' } },
+        { tag: 'link', attrs: { rel: 'icon', href: asset('favicon.ico'), sizes: '32x32' } },
+        { tag: 'link', attrs: { rel: 'icon', type: 'image/png', sizes: '32x32', href: asset('favicon-32.png') } },
+        { tag: 'link', attrs: { rel: 'icon', type: 'image/png', sizes: '16x16', href: asset('favicon-16.png') } },
+        { tag: 'link', attrs: { rel: 'apple-touch-icon', sizes: '180x180', href: asset('apple-touch-icon.png') } },
+        { tag: 'link', attrs: { rel: 'manifest', href: asset('site.webmanifest') } },
         { tag: 'meta', attrs: { name: 'theme-color', content: '#070d0b' } },
-        { tag: 'meta', attrs: { property: 'og:image', content: 'https://fleury.dev/og.png' } },
+        { tag: 'meta', attrs: { property: 'og:image', content: `${site}${asset('og.png')}` } },
         { tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
         { tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
         { tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
-        { tag: 'meta', attrs: { name: 'twitter:image', content: 'https://fleury.dev/og.png' } },
+        { tag: 'meta', attrs: { name: 'twitter:image', content: `${site}${asset('og.png')}` } },
       ],
       // Drop the per-page table-of-contents site-wide; content goes full-width
       // (see the .sl-container override in fleury.css).

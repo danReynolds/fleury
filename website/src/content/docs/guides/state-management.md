@@ -83,8 +83,8 @@ of the other.
 |---|---|
 | One widget owns it; descendants render it | `setState` |
 | Siblings / distant widgets share it | `ChangeNotifier` + `ListenableBuilder` |
-| A value that arrives async (timer, stream, future) | [`FutureBuilder` / `StreamBuilder`](/guides/loading-data/) |
-| App-wide config read deep in the tree | `InheritedWidget` (see [Widgets & state](/concepts/widgets-and-state/)) |
+| A value that arrives async (timer, stream, future) | [`FutureBuilder` / `StreamBuilder`](/fleury/guides/loading-data/) |
+| App-wide config read deep in the tree | `InheritedWidget` (see [Widgets & state](/fleury/concepts/widgets-and-state/)) |
 
 There's no framework-blessed "app state" singleton — a `ChangeNotifier` you
 create at the root and pass down (or expose via an `InheritedWidget`) is the

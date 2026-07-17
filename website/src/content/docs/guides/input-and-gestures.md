@@ -4,7 +4,7 @@ description: Handle taps, drags, and mouse hover — yes, mouse — in the termi
 ---
 
 Keyboard is the terminal's primary input, and Fleury handles it through focus and
-key bindings (see [Focus & keyboard](/guides/focus-and-keyboard/)). But terminals
+key bindings (see [Focus & keyboard](/fleury/guides/focus-and-keyboard/)). But terminals
 also report the **mouse**, and Fleury surfaces it with the same widgets you'd use
 in Flutter: `GestureDetector` and `MouseRegion`.
 
@@ -71,4 +71,4 @@ the keyboard — many users run without mouse reporting, over SSH, or in
 multiplexers that swallow it. Treat the mouse as an accelerator on top of
 keyboard navigation, not the only way in. For the keyboard side — focus
 traversal, key chords, and bindings — see
-[Focus & keyboard](/guides/focus-and-keyboard/).
+[Focus & keyboard](/fleury/guides/focus-and-keyboard/).

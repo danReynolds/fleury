@@ -24,7 +24,7 @@ dev_dependencies:
 ```
 
 While Fleury's packages are unpublished, keep the `fleury` dependency override
-from [Getting started](/getting-started/) so the app and `fleury_test` resolve
+from [Getting started](/fleury/getting-started/) so the app and `fleury_test` resolve
 the same Git checkout. After the packages are published together, replace the
 Git entry with `fleury_test: ^0.1.0` and remove that temporary override.
 

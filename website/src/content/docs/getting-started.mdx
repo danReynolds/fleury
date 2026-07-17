@@ -62,7 +62,7 @@ install; remove it once you switch both packages to hosted releases.
 editing, focus), and `fleury_widgets` is the theme-driven control library on
 top (buttons, selects, tables, charts). `fleury_web` and `web` are the browser
 host and DOM bindings used in step 5. The [core and
-targets](/architecture/core-and-targets/) page explains the split.
+targets](/fleury/architecture/core-and-targets/) page explains the split.
 
 ## 2. Hello, cells
 
@@ -154,7 +154,7 @@ Run it again — the progress bar fills once a minute.
 
 ## 4. Compose widgets
 
-The widget library is broad — [browse the catalog](/widgets/) for API details and
+The widget library is broad — [browse the catalog](/fleury/widgets/) for API details and
 live examples across the main widget families. Charts, meters, and the rest
 compose like any other widget. Replace the `build` method with the panel behind
 the live example at the top of this page:
@@ -232,18 +232,18 @@ Future<void> main() async {
 The terminal entrypoint still imports `fleury.dart` and calls `runApp`. You can
 also use the local **serve** bridge to preview that native app in a browser tab
 without changing its imports. Both modes, the compile command, and when to
-choose each are in [Deployment & distribution](/guides/deployment/).
+choose each are in [Deployment & distribution](/fleury/guides/deployment/).
 
 ## Where to next
 
-- [Widgets](/widgets/) — every exported higher-level widget plus the most-used
+- [Widgets](/fleury/widgets/) — every exported higher-level widget plus the most-used
   core primitives, with live examples where available.
-- [Navigation and commands](/guides/navigation/) — build a multi-screen app and
+- [Navigation and commands](/fleury/guides/navigation/) — build a multi-screen app and
   expose the same actions through buttons, shortcuts, semantics, and a command
   palette. The
   [compile-checked app-shell example](https://github.com/danReynolds/fleury/blob/main/packages/fleury_widgets/example/app_shell_demo.dart)
   is the canonical starting point.
-- [Core and targets](/architecture/core-and-targets/) — how one app runs in a
+- [Core and targets](/fleury/architecture/core-and-targets/) — how one app runs in a
   terminal, an embedded browser bundle, and a served browser session.
-- [Built for agents](/architecture/agents-and-semantics/) — the semantic app
+- [Built for agents](/fleury/architecture/agents-and-semantics/) — the semantic app
   graph that lets tests and AI agents drive the UI.

@@ -8,6 +8,7 @@ interface Props {
   widgets: { name: string; slug: string; category: string }[];
 }
 const { widgets } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const byCat = new Map<string, { name: string; slug: string }[]>();
 for (const w of widgets) {
   if (!byCat.has(w.category)) byCat.set(w.category, []);
@@ -34,7 +35,7 @@ const groups = [...byCat.entries()];
               <ul>
                 {ws.map((w) => (
                   <li data-name={w.name.toLowerCase()}>
-                    <a href={`/widgets/${w.slug}/`}>{w.name}</a>
+                    <a href={`${base}/widgets/${w.slug}/`}>{w.name}</a>
                   </li>
                 ))}
               </ul>

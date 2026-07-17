@@ -62,5 +62,5 @@ finished state from one builder.
 - A one-shot load (a request, a file read) → **`FutureBuilder`**.
 - A continuing feed (logs, metrics, a socket) → **`StreamBuilder`**.
 - State you mutate yourself on a timer or callback → hold it in a `State` and
-  `setState` (see [Widgets & state](/concepts/widgets-and-state/)); reach for the
+  `setState` (see [Widgets & state](/fleury/concepts/widgets-and-state/)); reach for the
   async builders specifically when the *source* is a `Future`/`Stream`.

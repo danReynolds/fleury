@@ -72,8 +72,8 @@ Give it a `ScrollController` to read or set the scroll offset, and wrap it in a
 - A homogeneous, navigable list of items → **`ListView`** (or `.builder` when
   it's long).
 - A one-off tall thing that just needs to scroll → **`ScrollView`**.
-- Tabular or hierarchical data → reach for [`DataTable`](/widgets/datatable/) or
-  [`TreeTable`](/widgets/treetable/), which window their rows the same way
+- Tabular or hierarchical data → reach for [`DataTable`](/fleury/widgets/datatable/) or
+  [`TreeTable`](/fleury/widgets/treetable/), which window their rows the same way
   `ListView.builder` does.
 
 Fleury intentionally keeps the scrolling surface small — there are no slivers or
