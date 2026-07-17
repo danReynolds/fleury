@@ -203,8 +203,10 @@ final class TaskContext {
   final TaskController<Object?> _controller;
   final int _runId;
 
+  /// Whether this run should stop: cancellation was requested, or the run
+  /// was superseded by a restart/reset/dispose and is no longer current.
   bool get isCancellationRequested =>
-      _controller._isCurrent(_runId) && _controller._cancelRequested;
+      !_controller._isCurrent(_runId) || _controller._cancelRequested;
 
   void checkCancellation() {
     if (isCancellationRequested) throw const TaskCanceled();
@@ -393,6 +395,12 @@ class TaskController<T> extends ChangeNotifier {
       _completeIfOpen(completer, TaskResult<T>.canceled());
     } catch (error, stackTrace) {
       if (!_isCurrent(runId)) {
+        _completeIfOpen(completer, TaskResult<T>.canceled());
+        return;
+      }
+      if (_cancelRequested || _status == TaskStatus.canceled) {
+        // Canceled is terminal: a late error from the interrupted runner
+        // (often caused by the cancellation itself) must not overwrite it.
         _completeIfOpen(completer, TaskResult<T>.canceled());
         return;
       }

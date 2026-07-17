@@ -1,6 +1,8 @@
 import 'dart:convert' show Encoding, Utf8Codec;
 import 'dart:io' show Process, ProcessSignal, ProcessStartMode;
 
+import 'package:meta/meta.dart' show protected;
+
 import '../rendering/text_sanitizer.dart';
 import '../runtime/output_capture.dart';
 import '../terminal/terminal_driver.dart';
@@ -82,6 +84,13 @@ class ProcessTaskController extends TaskController<ProcessTaskResult> {
   Process? get process => _process;
   ProcessTaskCommand? get command => _command;
 
+  /// Starts [command] as a child process bound to this task.
+  ///
+  /// [mode] supports [ProcessStartMode.normal] (stdout/stderr are captured
+  /// as task output) and [ProcessStartMode.inheritStdio] (the child talks to
+  /// the terminal directly, typically combined with [handoffTerminal]).
+  /// Detached modes are rejected with an [ArgumentError]: a detached child
+  /// cannot report the exit code that settles the task.
   Future<TaskResult<ProcessTaskResult>> startProcess(
     ProcessTaskCommand command, {
     bool restart = true,
@@ -90,10 +99,20 @@ class ProcessTaskController extends TaskController<ProcessTaskResult> {
     ProcessStartMode mode = ProcessStartMode.normal,
     ProcessSignal cancelSignal = ProcessSignal.sigterm,
   }) {
+    if (mode == ProcessStartMode.detached ||
+        mode == ProcessStartMode.detachedWithStdio) {
+      throw ArgumentError.value(
+        mode,
+        'mode',
+        'Detached processes cannot report the exit code that settles the '
+            'task. Use Process.start directly for fire-and-forget children.',
+      );
+    }
     _cancelSignal = cancelSignal;
     _command = command;
     return start((context) {
-      Future<ProcessTaskResult> run() => _runProcess(context, command, mode);
+      Future<ProcessTaskResult> run() =>
+          _runProcess(context, command, mode, cancelSignal);
       if (handoffTerminal && terminalDriver != null) {
         return withTerminalHandoff(terminalDriver, run);
       }
@@ -119,12 +138,27 @@ class ProcessTaskController extends TaskController<ProcessTaskResult> {
     super.reset();
   }
 
-  Future<ProcessTaskResult> _runProcess(
-    TaskContext context,
+  @override
+  void dispose() {
+    // The base dispose cancels the active run without going through the
+    // virtual cancel(), so the subprocess kill must happen here.
+    if (isRunning) {
+      _process?.kill(_cancelSignal);
+    }
+    _process = null;
+    super.dispose();
+  }
+
+  /// Spawns the child process for one [startProcess] run.
+  ///
+  /// Subclasses can override this to control spawn timing or substitute
+  /// process construction in tests.
+  @protected
+  Future<Process> spawnProcess(
     ProcessTaskCommand command,
     ProcessStartMode mode,
-  ) async {
-    final process = await Process.start(
+  ) {
+    return Process.start(
       command.executable,
       command.arguments,
       workingDirectory: command.workingDirectory,
@@ -133,52 +167,73 @@ class ProcessTaskController extends TaskController<ProcessTaskResult> {
       runInShell: command.runInShell,
       mode: mode,
     );
-    _process = process;
+  }
+
+  Future<ProcessTaskResult> _runProcess(
+    TaskContext context,
+    ProcessTaskCommand command,
+    ProcessStartMode mode,
+    ProcessSignal cancelSignal,
+  ) async {
+    final process = await spawnProcess(command, mode);
     if (context.isCancellationRequested) {
-      process.kill(_cancelSignal);
+      // The run was canceled, superseded, or disposed while spawning: kill
+      // the child and never let it become this controller's current process.
+      process.kill(cancelSignal);
       await process.exitCode;
       context.checkCancellation();
     }
-    context.reportProgress(label: 'running');
-
-    final capture = OutputCapture(
-      buffer: LogBuffer(),
-      onLine: (line) {
-        final sanitized = _sanitizeProcessLine(line.text);
-        context.write(
-          sanitized.text,
-          source: line.source.name,
-          severity: line.source == LogSource.stderr
-              ? TaskOutputSeverity.error
-              : TaskOutputSeverity.info,
-          sanitized: sanitized.sanitized,
-          truncated: sanitized.truncated,
-          originalLength: sanitized.changed ? line.text.length : null,
-        );
-      },
-    );
-
-    final stdoutDone = _pipeProcessOutput(
-      process.stdout.transform(encoding.decoder),
-      capture,
-      LogSource.stdout,
-    );
-    final stderrDone = _pipeProcessOutput(
-      process.stderr.transform(encoding.decoder),
-      capture,
-      LogSource.stderr,
-    );
-
+    _process = process;
+    var exited = false;
     try {
+      context.reportProgress(label: 'running');
+
+      var stdoutDone = Future<void>.value();
+      var stderrDone = Future<void>.value();
+      OutputCapture? capture;
+      if (mode == ProcessStartMode.normal) {
+        // Only normal mode connects stdio pipes; an inheritStdio child talks
+        // to the terminal directly and has nothing to capture.
+        capture = OutputCapture(
+          buffer: LogBuffer(),
+          onLine: (line) {
+            final sanitized = _sanitizeProcessLine(line.text);
+            context.write(
+              sanitized.text,
+              source: line.source.name,
+              severity: line.source == LogSource.stderr
+                  ? TaskOutputSeverity.error
+                  : TaskOutputSeverity.info,
+              sanitized: sanitized.sanitized,
+              truncated: sanitized.truncated,
+              originalLength: sanitized.changed ? line.text.length : null,
+            );
+          },
+        );
+        stdoutDone = _pipeProcessOutput(
+          process.stdout.transform(encoding.decoder),
+          capture,
+          LogSource.stdout,
+        );
+        stderrDone = _pipeProcessOutput(
+          process.stderr.transform(encoding.decoder),
+          capture,
+          LogSource.stderr,
+        );
+      }
+
       final exitCode = await process.exitCode;
+      exited = true;
       await Future.wait([stdoutDone, stderrDone]);
-      capture.flushPartials();
+      capture?.flushPartials();
       final result = ProcessTaskResult(command: command, exitCode: exitCode);
       context.checkCancellation();
       if (exitCode != 0) throw ProcessTaskException(result);
       context.reportProgress(current: 1, total: 1, label: 'exited 0');
       return result;
     } finally {
+      // A failure before the child exited must not orphan it.
+      if (!exited) process.kill(cancelSignal);
       if (identical(_process, process)) _process = null;
     }
   }
