@@ -388,14 +388,199 @@ String? _docTextFromLexemes(Iterable<String> lexemes) {
       if (buffer.isNotEmpty) break; // stop at the first blank line
       continue;
     }
-    if (line.trimLeft().startsWith('```')) break;
+    if (_markdownFenceOpening(line, 0, line.length) != null) break;
     buffer.add(line.trim());
   }
   final text = buffer.join(' ').trim();
   return text.isEmpty ? null : _normalizeDartdocReferences(text);
 }
 
-String _normalizeDartdocReferences(String text) => text.replaceAllMapped(
+String _normalizeDartdocReferences(String text) {
+  final out = StringBuffer();
+  var plainStart = 0;
+  var lineStart = 0;
+
+  while (lineStart < text.length) {
+    final newline = text.indexOf('\n', lineStart);
+    final lineEnd = newline == -1 ? text.length : newline;
+    final contentEnd =
+        lineEnd > lineStart && text.codeUnitAt(lineEnd - 1) == 0x0d
+        ? lineEnd - 1
+        : lineEnd;
+    final opening = _markdownFenceOpening(text, lineStart, contentEnd);
+
+    if (opening == null) {
+      lineStart = newline == -1 ? text.length : newline + 1;
+      continue;
+    }
+
+    final fenceEnd = _findMarkdownFenceEnd(
+      text,
+      newline == -1 ? text.length : newline + 1,
+      opening.$1,
+      opening.$2,
+    );
+
+    out.write(
+      _normalizeInlineDartdocReferences(text.substring(plainStart, lineStart)),
+    );
+    out.write(text.substring(lineStart, fenceEnd));
+    plainStart = fenceEnd;
+    lineStart = fenceEnd;
+  }
+
+  out.write(_normalizeInlineDartdocReferences(text.substring(plainStart)));
+  return out.toString();
+}
+
+/// Returns the fence marker and run length for a CommonMark fence opener.
+///
+/// Fence openers may be indented by up to three spaces and use at least three
+/// backticks or tildes. Backtick info strings cannot themselves contain a
+/// backtick.
+(int, int)? _markdownFenceOpening(String text, int start, int end) {
+  var cursor = start;
+  while (cursor < end && text.codeUnitAt(cursor) == 0x20) {
+    cursor++;
+    if (cursor - start > 3) return null;
+  }
+  if (cursor == end) return null;
+
+  final marker = text.codeUnitAt(cursor);
+  if (marker != 0x60 && marker != 0x7e) return null;
+
+  final markerStart = cursor;
+  while (cursor < end && text.codeUnitAt(cursor) == marker) {
+    cursor++;
+  }
+  final markerLength = cursor - markerStart;
+  if (markerLength < 3) return null;
+
+  if (marker == 0x60) {
+    while (cursor < end) {
+      if (text.codeUnitAt(cursor) == 0x60) return null;
+      cursor++;
+    }
+  }
+
+  return (marker, markerLength);
+}
+
+int _findMarkdownFenceEnd(
+  String text,
+  int start,
+  int marker,
+  int openingLength,
+) {
+  var lineStart = start;
+  while (lineStart < text.length) {
+    final newline = text.indexOf('\n', lineStart);
+    final lineEnd = newline == -1 ? text.length : newline;
+    final contentEnd =
+        lineEnd > lineStart && text.codeUnitAt(lineEnd - 1) == 0x0d
+        ? lineEnd - 1
+        : lineEnd;
+
+    if (_isMarkdownFenceClosingLine(
+      text,
+      lineStart,
+      contentEnd,
+      marker,
+      openingLength,
+    )) {
+      return newline == -1 ? text.length : newline + 1;
+    }
+
+    if (newline == -1) return text.length;
+    lineStart = newline + 1;
+  }
+  return text.length;
+}
+
+bool _isMarkdownFenceClosingLine(
+  String text,
+  int start,
+  int end,
+  int marker,
+  int openingLength,
+) {
+  var cursor = start;
+  while (cursor < end && text.codeUnitAt(cursor) == 0x20) {
+    cursor++;
+    if (cursor - start > 3) return false;
+  }
+
+  final markerStart = cursor;
+  while (cursor < end && text.codeUnitAt(cursor) == marker) {
+    cursor++;
+  }
+  if (cursor - markerStart < openingLength) return false;
+
+  while (cursor < end) {
+    final character = text.codeUnitAt(cursor);
+    if (character != 0x20 && character != 0x09) return false;
+    cursor++;
+  }
+  return true;
+}
+
+String _normalizeInlineDartdocReferences(String text) {
+  final out = StringBuffer();
+  var plainStart = 0;
+  var cursor = 0;
+
+  while (cursor < text.length) {
+    if (text.codeUnitAt(cursor) != 0x60) {
+      cursor++;
+      continue;
+    }
+
+    final openingEnd = _backtickRunEnd(text, cursor);
+    final delimiterLength = openingEnd - cursor;
+    final closingStart = _findClosingBacktickRun(
+      text,
+      openingEnd,
+      delimiterLength,
+    );
+    if (closingStart == null) {
+      cursor = openingEnd;
+      continue;
+    }
+
+    out.write(
+      _normalizePlainDartdocReferences(text.substring(plainStart, cursor)),
+    );
+    final closingEnd = closingStart + delimiterLength;
+    out.write(text.substring(cursor, closingEnd));
+    plainStart = closingEnd;
+    cursor = closingEnd;
+  }
+
+  out.write(_normalizePlainDartdocReferences(text.substring(plainStart)));
+  return out.toString();
+}
+
+int _backtickRunEnd(String text, int start) {
+  var end = start;
+  while (end < text.length && text.codeUnitAt(end) == 0x60) {
+    end++;
+  }
+  return end;
+}
+
+int? _findClosingBacktickRun(String text, int start, int delimiterLength) {
+  var cursor = start;
+  while (cursor < text.length) {
+    final runStart = text.indexOf('`', cursor);
+    if (runStart == -1) return null;
+    final runEnd = _backtickRunEnd(text, runStart);
+    if (runEnd - runStart == delimiterLength) return runStart;
+    cursor = runEnd;
+  }
+  return null;
+}
+
+String _normalizePlainDartdocReferences(String text) => text.replaceAllMapped(
   RegExp(r'\[([A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)*)\](?!\()'),
   (match) => '`${match[1]}`',
 );

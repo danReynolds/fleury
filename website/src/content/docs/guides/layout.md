@@ -178,7 +178,7 @@ directly:
   costs an extra measurement pass per layout, so use it deliberately.
 - **`AspectRatio(aspectRatio: …, child: …)`** sizes the child to a width÷height
   ratio. Remember terminal cells are about twice as tall as they are wide, so
-  `aspectRatio: 0.5` reads as visually square, not `1.0`.
+  `aspectRatio: 2.0` reads as visually square, not `1.0`.
 
 ## Layering and wrapping
 

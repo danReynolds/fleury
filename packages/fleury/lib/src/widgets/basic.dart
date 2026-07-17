@@ -309,7 +309,8 @@ final class SizedBox extends SingleChildRenderObjectWidget {
 
   /// Forces the box to fill the parent's bounded space on both axes.
   /// An unbounded axis remains unconstrained, and the child chooses its size.
-  /// Common pattern for "fill the rest of this row/column."
+  /// In a [Row] or [Column], use [Expanded] or [Flexible] to claim remaining
+  /// main-axis space; inflexible children are unbounded on that axis.
   const SizedBox.expand({
     super.key,
 
@@ -1066,8 +1067,9 @@ class _RenderConstrainedBox extends RenderObject
 /// ⚠ Terminal cells are typically *taller than wide* (often roughly
 /// 2:1 height:width). A literal 1:1 [aspectRatio] produces a visually
 /// rectangular box. For visually square content (e.g. heatmap cells)
-/// scale by the cell ratio: `AspectRatio(aspectRatio: 0.5, ...)` or
-/// pre-multiply by your terminal's known cell aspect.
+/// multiply by the cell height-to-width ratio:
+/// `AspectRatio(aspectRatio: 2.0, ...)` for a typical 2:1 cell, or use your
+/// terminal's measured cell aspect.
 final class AspectRatio extends SingleChildRenderObjectWidget {
   const AspectRatio({
     super.key,

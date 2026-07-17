@@ -86,9 +86,11 @@ offline apps, or anything that should deploy as a static asset.
 ## Serve — `fleury serve` (local bridge)
 
 `fleury serve` carries a **native** Dart app's rendering to the browser. The
-native process holds the real widget tree; on each frame its remote driver emits
-**cell-diff + semantics frames** over a WebSocket, and a small dart2js client in
-the browser paints them into the same DOM cell grid and sends input events back.
+native process holds the real widget tree. Its remote driver emits visual
+cell-diff frames over a WebSocket; semantic updates are diffed and sent
+separately when the exposed tree or its painted coverage changes. A small
+dart2js client in the browser paints the visual frames into the same DOM cell
+grid and sends input events back.
 
 There are two lifecycle models:
 

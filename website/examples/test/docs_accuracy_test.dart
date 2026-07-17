@@ -123,6 +123,43 @@ void main() {
       expect(guide, contains("package:my_app/status_app.dart"));
     });
 
+    test('testing guide uses the current Git package boundary', () {
+      final guide = File(
+        p.join(repo.path, 'website/src/content/docs/guides/testing.md'),
+      ).readAsStringSync();
+      expect(guide, contains('path: packages/fleury_test'));
+      expect(guide, contains('fleury_test: ^0.1.0'));
+      expect(guide, contains('After the packages are published together'));
+    });
+
+    test('layout guidance preserves cell width-over-height semantics', () {
+      final basic = File(
+        p.join(repo.path, 'packages/fleury/lib/src/widgets/basic.dart'),
+      ).readAsStringSync();
+      final layout = File(
+        p.join(repo.path, 'website/src/content/docs/guides/layout.md'),
+      ).readAsStringSync();
+      final flutter = File(
+        p.join(repo.path, 'website/src/content/docs/coming-from-flutter.md'),
+      ).readAsStringSync();
+
+      expect(basic, contains('AspectRatio(aspectRatio: 2.0, ...)'));
+      expect(basic, isNot(contains('AspectRatio(aspectRatio: 0.5, ...)')));
+      expect(layout, contains('`aspectRatio: 2.0` reads as visually square'));
+      expect(flutter, contains('`AspectRatio` around `2.0`'));
+      expect(basic, isNot(contains('fill the rest of this row/column')));
+      expect(basic, contains('use [Expanded] or [Flexible]'));
+    });
+
+    test('serve docs describe semantics as a separate change stream', () {
+      final guide = File(
+        p.join(repo.path, 'docs/serving-and-embedding.md'),
+      ).readAsStringSync();
+      expect(guide, contains('semantic updates are diffed and sent'));
+      expect(guide, contains('when the exposed tree or its painted coverage'));
+      expect(guide, isNot(contains('cell-diff + semantics frames')));
+    });
+
     test('serve guide documents every public lifecycle and safety flag', () {
       final guide = File(
         p.join(repo.path, 'website/src/content/docs/guides/deployment.md'),

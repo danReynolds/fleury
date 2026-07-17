@@ -173,6 +173,44 @@ void main() {
       ]);
     });
 
+    test('normalizes Dartdoc references only outside Markdown code', () {
+      final api = extractApiFromSource(_markdownFixture, file: 'fixture.dart');
+      final entry = api['Documented']! as Map<String, Object?>;
+
+      expect(
+        entry['classDoc'],
+        r'''Renders `Widget` values such as `[x]` and `values[row][col]`.
+
+```dart
+final item = values[row][col];
+final type = [Widget];
+```''',
+      );
+      final parameter = (entry['params']! as List<Map<String, Object?>>).single;
+      expect(parameter['doc'], 'Reads `values[row][col]`; see `Widget.build`.');
+    });
+
+    test('recognizes CommonMark fenced code boundaries', () {
+      final api = extractApiFromSource(
+        _markdownFenceFixture,
+        file: 'fixture.dart',
+      );
+      final entry = api['FencedDocumented']! as Map<String, Object?>;
+
+      expect(entry['classDoc'], r'''Before `Widget`.
+
+```dart
+final marker = '```';
+final type = [Widget.build];
+````
+
+~~~dart
+final type = [Widget];
+~~~~
+
+After `Widget.build`.''');
+    });
+
     test('omits private classes and private constructors', () {
       final api = extractApiFromSource(
         _visibilityFixture,
@@ -329,4 +367,35 @@ class ChildrenBox extends MultiChildWidget {
     super.children = const <Widget>[],
   });
 }
+''';
+
+const _markdownFixture = r'''
+/// Renders [Widget] values such as `[x]` and `values[row][col]`.
+///
+/// ```dart
+/// final item = values[row][col];
+/// final type = [Widget];
+/// ```
+class Documented {
+  const Documented({required this.value});
+
+  /// Reads `values[row][col]`; see [Widget.build].
+  final String value;
+}
+''';
+
+const _markdownFenceFixture = r'''
+/// Before [Widget].
+///
+/// ```dart
+/// final marker = '```';
+/// final type = [Widget.build];
+/// ````
+///
+/// ~~~dart
+/// final type = [Widget];
+/// ~~~~
+///
+/// After [Widget.build].
+class FencedDocumented {}
 ''';
