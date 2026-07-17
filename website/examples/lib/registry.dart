@@ -889,7 +889,7 @@ TextInput(
     category: 'Inputs & controls',
     blurb: 'A two-handle slider for picking a low/high range.',
     cols: 44,
-    rows: 3,
+    rows: 5,
     interactive: true,
     code: '''RangeSlider(
   values: _range,
@@ -1896,6 +1896,7 @@ class _RangeSliderExampleState extends State<_RangeSliderExample> {
       max: 100,
       label: 'Range',
       showValues: true,
+      autofocus: true,
       onChanged: (v) => setState(() => _v = v),
     ),
   );

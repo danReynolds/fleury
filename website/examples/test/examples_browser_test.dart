@@ -41,14 +41,20 @@ final class _MountedExample {
   final MountedApp app;
 }
 
-Future<_MountedExample> _mountExample(String id) async {
+Future<_MountedExample> _mountExample(
+  String id, {
+  bool useManifestSize = false,
+}) async {
   final flush = _FakeFlush();
   final host = web.document.createElement('div');
+  final info = exampleList.singleWhere((example) => example.id == id);
+  final width = useManifestSize ? '${info.cols}ch' : '80ch';
+  final height = useManifestSize ? '${info.rows * 18}px' : '240px';
   // The DOM grid sizes itself from the host box + monospace cell metrics; an
   // unsized host yields a 0x0 grid (nothing paints), so give it real dimensions.
   host.setAttribute(
     'style',
-    'position:absolute;left:0;top:0;width:80ch;height:240px;'
+    'position:absolute;left:0;top:0;width:$width;height:$height;'
         'font-family:monospace;font-size:16px;line-height:18px;',
   );
   web.document.body!.appendChild(host);
@@ -269,6 +275,67 @@ void main() {
     expect(checkbox.getAttribute('aria-checked'), 'true');
     expect(fixture.host.textContent, contains('[x] Accept terms'));
   });
+
+  test(
+    'rangeslider.basic fits its live frame and accepts pointer input',
+    () async {
+      final fixture = await _mountExample(
+        'rangeslider.basic',
+        useManifestSize: true,
+      );
+      final info = exampleList.singleWhere(
+        (example) => example.id == 'rangeslider.basic',
+      );
+      final screen = fixture.host.querySelector('.fleury-screen')!;
+      final slider = fixture.host.querySelector('[role="slider"]')!;
+
+      expect(fixture.host.textContent, contains('●'));
+      expect(fixture.host.textContent, contains('○'));
+      expect(fixture.host.textContent, contains('━'));
+      expect(slider.getAttribute('data-fleury-value'), '20-70');
+
+      final bounds = screen.getBoundingClientRect();
+      final cellWidth = bounds.width / info.cols;
+      final cellHeight = bounds.height / info.rows;
+      final clientX = (bounds.left + cellWidth * 5.5).round();
+      final clientY = (bounds.top + cellHeight * 2.5).round();
+      screen.dispatchEvent(
+        web.PointerEvent(
+          'pointerdown',
+          web.PointerEventInit(
+            pointerId: 1,
+            clientX: clientX,
+            clientY: clientY,
+            button: 0,
+            buttons: 1,
+            bubbles: true,
+            cancelable: true,
+          ),
+        ),
+      );
+      screen.dispatchEvent(
+        web.PointerEvent(
+          'pointerup',
+          web.PointerEventInit(
+            pointerId: 1,
+            clientX: clientX,
+            clientY: clientY,
+            button: -1,
+            buttons: 0,
+            bubbles: true,
+            cancelable: true,
+          ),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      for (var i = 0; i < 4 && fixture.flush.pending; i++) {
+        fixture.flush.fire();
+      }
+      await fixture.app.awaitSemanticIdle();
+
+      expect(slider.getAttribute('data-fleury-value'), '10-70');
+    },
+  );
 
   test('gauge.basic renders its label in the browser DOM grid', () async {
     final host = await _mount('gauge.basic');
