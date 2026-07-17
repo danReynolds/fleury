@@ -416,6 +416,38 @@ void main() {
     expect(selected, 3);
   });
 
+  testWidgets('typeahead jumps the selection; typeahead: false lets the '
+      'printable bubble to ancestor bindings', (tester) {
+    // A focused table with grid type-ahead on consumes every printable,
+    // which makes app-level bare-printable bindings (a `q` quit key)
+    // unreachable. The opt-out must let the character fall through.
+    final controller = DataTableController();
+    var quits = 0;
+    Widget host({required bool typeahead}) => KeyBindings(
+      bindings: [KeyBinding(KeyChord.q, onEvent: (_) => quits += 1)],
+      child: DataTable(
+        rowCount: 5,
+        columns: _columns(),
+        controller: controller,
+        autofocus: true,
+        typeahead: typeahead,
+        cellBuilder: _cell,
+      ),
+    );
+
+    tester.pumpWidget(host(typeahead: true));
+    tester.render(size: const CellSize(20, 8));
+    tester.type('r');
+    expect(controller.selectedIndex, 1, reason: 'jumped to the next run- row');
+    tester.type('q');
+    expect(quits, 0, reason: 'type-ahead on: the table swallows the key');
+
+    tester.pumpWidget(host(typeahead: false));
+    tester.render(size: const CellSize(20, 8));
+    tester.type('q');
+    expect(quits, 1, reason: 'type-ahead off: the binding receives it');
+  });
+
   testWidgets('mouse click selects a visible DataTable row', (tester) {
     final controller = DataTableController();
     tester.pumpWidget(

@@ -40,17 +40,27 @@ Future<void> main(List<String> args) async {
   }
 
   await runApp(
-    FleuryApp(title: 'Fleury $name sample', home: entry.$2()),
+    FleuryApp(title: 'Fleury $name sample', home: withQuitKey(entry.$2())),
     mode: const TerminalMode(mouse: true),
-    onEvent: (event) {
-      if (event is KeyEvent &&
-          ((event.hasCtrl && event.char == 'c') || event.char == 'q')) {
-        return const ExitRequested();
-      }
-      return null;
-    },
   );
 }
+
+/// Wraps a sample's root so the advertised `q` key quits.
+///
+/// Typed printables arrive as [TextInputEvent]s (the parser never emits a
+/// bare `KeyEvent` for them), so quit must be a widget-level [KeyBinding]
+/// routed through the dispatcher — an `onEvent` match on `KeyEvent.char`
+/// can never fire, and matching the raw [TextInputEvent] there would quit
+/// while the user types `q` into the agent sample's prompt. Bound this
+/// way, a focused text field claims the character first and [requestExit]
+/// fires only when nothing does. (Ctrl+C keeps working via runApp's
+/// built-in unhandled-Ctrl+C escape hatch.)
+Widget withQuitKey(Widget app) => KeyBindings(
+  bindings: [
+    KeyBinding(KeyChord.q, onEvent: (_) => requestExit(), label: 'Quit'),
+  ],
+  child: app,
+);
 
 void _printUsage() {
   stdout.writeln('Fleury sample apps');

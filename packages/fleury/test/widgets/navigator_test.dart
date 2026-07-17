@@ -435,6 +435,53 @@ void main() {
     expect(homeInput.text, 'ac', reason: 'focus restored to home');
   });
 
+  testWidgets('an app claim from the pop future wins over scope restore', (
+    tester,
+  ) async {
+    // pop() lifts the revealed route's ExcludeFocus eagerly, so focus
+    // claimed from the pop future's continuation (microtasks run before
+    // the reveal frame) is admitted and overrides the scope-memory
+    // restore — the documented contract for `await push(); x.requestFocus()`.
+    BuildContext? home;
+    final first = FocusNode(debugLabel: 'first');
+    final second = FocusNode(debugLabel: 'second');
+    final firstC = TextEditingController();
+    final secondC = TextEditingController();
+
+    tester.pumpWidget(
+      Navigator(
+        home: _CaptureChild(
+          sink: (x) => home = x,
+          child: Column(
+            children: [
+              TextInput(controller: firstC, focusNode: first, autofocus: true),
+              TextInput(controller: secondC, focusNode: second),
+            ],
+          ),
+        ),
+      ),
+    );
+    tester.render();
+    expect(first.hasFocus, isTrue);
+
+    final popped = home!.push<void>(
+      TextInput(controller: TextEditingController(), autofocus: true),
+    );
+    tester.pump(const Duration(milliseconds: 300));
+    expect(first.hasFocus, isFalse);
+
+    final claimed = popped.then((_) => second.requestFocus());
+    home!.navigator.pop();
+    await claimed;
+    expect(
+      second.hasFocus,
+      isTrue,
+      reason: 'the app claim into the revealed screen is admitted and wins',
+    );
+    tester.pump(const Duration(milliseconds: 300));
+    expect(second.hasFocus, isTrue, reason: 'the reveal frame keeps it');
+  });
+
   testWidgets('popUntil restores focus to the target route', (tester) {
     // The old priorFocus chain pointed into intermediate routes that popUntil
     // removes — restore died with them. Scope memory lives on the TARGET

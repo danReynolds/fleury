@@ -72,12 +72,17 @@ void main() {
         const Text('hi'),
         driver: driver,
         enableHotReload: false,
-        onEvent: (event) =>
-            event is KeyEvent && event.char == 'q' ? const ExitRequested() : null,
+        // A typed printable reaches onEvent as the parser emits it — a
+        // TextInputEvent, never a bare KeyEvent(char). (Quit keys should
+        // use a widget-level KeyBinding + requestExit, which respects a
+        // focused text field; this test pins the raw onEvent mechanism.)
+        onEvent: (event) => event is TextInputEvent && event.text == 'q'
+            ? const ExitRequested()
+            : null,
       );
       await pump();
 
-      driver.enqueue(const KeyEvent(char: 'q'));
+      driver.enqueue(const TextInputEvent('q'));
       final exit = await future;
       expect(exit.signal, isNull);
       await driver.dispose();
@@ -93,6 +98,66 @@ void main() {
       await pump();
 
       driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      final exit = await future;
+      expect(exit.signal, isNull);
+      await driver.dispose();
+    });
+
+    test("the documented quit pattern: a widget-level 'q' binding + "
+        'requestExit exits on typed text', () async {
+      // run_app.dart documents requestExit as "the programmatic quit for
+      // `q` keys". The parser emits a typed q as a TextInputEvent; the
+      // dispatcher's synthesized-KeyEvent fallback carries it to the
+      // binding when no text claimant consumes it.
+      final driver = FakeTerminalDriver();
+      final future = runApp(
+        KeyBindings(
+          bindings: [
+            KeyBinding(
+              KeyChord.q,
+              onEvent: (_) => requestExit(),
+              label: 'Quit',
+            ),
+          ],
+          child: const Text('hi'),
+        ),
+        driver: driver,
+        enableHotReload: false,
+      );
+      await pump();
+
+      driver.enqueue(const TextInputEvent('q'));
+      final exit = await future;
+      expect(exit.signal, isNull);
+      await driver.dispose();
+    });
+
+    test("a focused text field claims the typed 'q' before the quit binding",
+        () async {
+      final driver = FakeTerminalDriver();
+      final controller = TextEditingController();
+      final future = runApp(
+        KeyBindings(
+          bindings: [
+            KeyBinding(
+              KeyChord.q,
+              onEvent: (_) => requestExit(),
+              label: 'Quit',
+            ),
+          ],
+          child: TextInput(controller: controller, autofocus: true),
+        ),
+        driver: driver,
+        enableHotReload: false,
+      );
+      await pump();
+
+      driver.enqueue(const TextInputEvent('q'));
+      await pump();
+      expect(controller.text, 'q', reason: 'typing wins over the quit key');
+      expect(driver.isActive, isTrue, reason: 'the app must not exit');
+
+      requestExit();
       final exit = await future;
       expect(exit.signal, isNull);
       await driver.dispose();

@@ -443,18 +443,28 @@ class NavigatorState extends State<Navigator> {
     if (!route.completer.isCompleted) route.completer.complete(result);
 
     // Restore focus to the revealed screen immediately — not after the
-    // exit animation — so input lands on it right away. The revealed route's
-    // FocusScope memory is the primary path (correct even for popUntil,
-    // where the routes between are already gone); the push-time snapshot is
-    // the fallback for focus that lived OUTSIDE this navigator's routes (a
-    // sidebar pane, app chrome), which no route scope ever recorded.
+    // exit animation — so input lands on it right away. Covered routes are
+    // focus-inert (ExcludeFocus) and the revealed route's marker only flips
+    // off in the rebuild below, so lift its exclusion first: the reveal is
+    // decided NOW, and an eager lift keeps the restore synchronous and lets
+    // app code claim focus into the revealed screen from the pop future's
+    // continuation (those microtasks run before the frame; a later claim
+    // simply overrides the restore). The revealed route's FocusScope memory
+    // is the primary path (correct even for popUntil, where the routes
+    // between are already gone); the push-time snapshot is the fallback for
+    // focus that lived OUTSIDE this navigator's routes (a sidebar pane, app
+    // chrome), which no route scope ever recorded.
     _manager?.requestFocus(null);
     final revealed = _topLive;
+    final revealedContext = revealed?.restoreKey.currentContext;
+    if (revealedContext != null) {
+      // The route's marker is the restore anchor's direct child
+      // (FocusScope > restoreKey > ExcludeFocus(excluding: !isTop)).
+      _manager?.liftExclusionIn(revealedContext);
+    }
     var restored = false;
     if (revealed != null) {
-      restored =
-          _manager?.restoreFocusInScope(revealed.restoreKey.currentContext) ??
-          false;
+      restored = _manager?.restoreFocusInScope(revealedContext) ?? false;
     }
     if (!restored) {
       final prior = route.priorFocus;

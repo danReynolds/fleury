@@ -452,5 +452,62 @@ void main() {
           reason: 'the remounted ancestor binding still fires — the reattach '
               'refreshed node._element so the upward walk reaches it');
     });
+
+    test('requestFocus on a node whose Focus was unmounted no-ops — it must '
+        'not focus a dead node', () {
+      // A caller-provided node outlives its Focus widget. After the widget
+      // unmounts, requestFocus must no-op (per the FocusNode doc: "No-op
+      // when ... this node is not attached") — focusing the dead node routes
+      // every subsequent key into a handler whose State is disposed, which
+      // throws on first widget access and bypasses the Ctrl+C exit guard.
+      final manager = FocusManager();
+      final node = FocusNode(debugLabel: 'kept');
+      var deadHits = 0;
+      var liveHits = 0;
+      final owner = BuildOwner();
+
+      Widget host({required bool show}) => FocusManagerScope(
+            manager: manager,
+            // Non-focusable, so it participates in the ambient (unfocused)
+            // dispatch chain — where keys land once nothing holds focus.
+            child: Focus(
+              canRequestFocus: false,
+              onKey: (e) {
+                liveHits++;
+                return KeyEventResult.handled;
+              },
+              child: show
+                  ? Focus(
+                      focusNode: node,
+                      onKey: (e) {
+                        deadHits++;
+                        return KeyEventResult.handled;
+                      },
+                      child: const EmptyBox(),
+                    )
+                  : const EmptyBox(),
+            ),
+          );
+
+      var root = owner.mountRoot(host(show: true));
+      node.requestFocus();
+      expect(node.hasFocus, isTrue);
+
+      root = owner.updateRoot(root, host(show: false)); // widget unmounts
+
+      expect(node.isAttached, isFalse, reason: 'unregister detaches the node');
+      expect(node.context, isNull, reason: 'context is null when unattached');
+
+      node.requestFocus();
+      expect(manager.focusedNode, isNull,
+          reason: 'a dead node must not become the focused node');
+      expect(node.hasFocus, isFalse);
+
+      // Keys route to the live tree, never through the unmounted handler.
+      manager.dispatchKey(_key('a'));
+      expect(deadHits, 0);
+      expect(liveHits, 1,
+          reason: 'the live ambient chain still receives keys');
+    });
   });
 }

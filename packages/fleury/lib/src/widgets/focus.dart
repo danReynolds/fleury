@@ -374,7 +374,21 @@ class FocusManager extends ChangeNotifier {
 
   void _registerExcludeFocus(_ExcludeFocusMarkerElement element) {
     _checkNotDisposed();
-    if (_activeExcludeFocusMarkers.add(element)) _notifyManagerScopeChanged();
+    if (_activeExcludeFocusMarkers.add(element)) {
+      // Exclusion just activated. A node focused inside it must be released
+      // — [ExcludeFocus] promises the keyboard can't stay in a hidden pane,
+      // and a retained focused node would keep receiving every keystroke.
+      // The state flips synchronously (input routing reads `_focusedNode`
+      // directly); the listener notification rides the deferred
+      // scope-change microtask below, because registration runs mid-build
+      // where a synchronous notify would re-enter `setState` on a
+      // dependent.
+      final focused = _focusedNode;
+      if (focused != null && _isExcludedFromFocus(focused)) {
+        _focusedNode = null;
+      }
+      _notifyManagerScopeChanged();
+    }
   }
 
   void _unregisterExcludeFocus(_ExcludeFocusMarkerElement element) {
@@ -438,13 +452,48 @@ class FocusManager extends ChangeNotifier {
   bool isClickable(FocusNode node) {
     if (!node.canRequestFocus) return false;
     if (!_acceptsInput(node)) return false;
-    if (_activeExcludeFocusMarkers.isEmpty) return true;
+    return !_isExcludedFromFocus(node);
+  }
+
+  /// Whether [node] sits under an active (`excluding: true`) [ExcludeFocus]
+  /// marker. THE exclusion test: click-to-focus ([isClickable]), traversal,
+  /// [requestFocus], and exclusion activation all consult this one walk so
+  /// the boundary rule can never diverge between them.
+  bool _isExcludedFromFocus(FocusNode node) {
+    if (_activeExcludeFocusMarkers.isEmpty) return false;
     Element? e = node._element?.elementParent;
     while (e != null) {
-      if (e is _ExcludeFocusMarkerElement && e.excluding) return false;
+      if (e is _ExcludeFocusMarkerElement && e.excluding) return true;
       e = e.elementParent;
     }
-    return true;
+    return false;
+  }
+
+  /// Lifts the outermost active [ExcludeFocus] marker(s) inside [root],
+  /// ahead of the rebuild that will flip them off. For containers that
+  /// reveal previously covered content by intent (Navigator.pop wraps each
+  /// route in `ExcludeFocus(excluding: !isTop)`): the reveal is decided
+  /// NOW, but the marker widget only updates next frame — lifting eagerly
+  /// lets focus restoration run synchronously and lets app code claim
+  /// focus into the revealed subtree from completion microtasks. The walk
+  /// never descends past a marker, so an app's own nested [ExcludeFocus]
+  /// (a hidden tab, say) stays excluded; each lifted marker re-syncs to
+  /// its widget configuration on its next update.
+  void liftExclusionIn(BuildContext root) {
+    _checkNotDisposed();
+    if (_activeExcludeFocusMarkers.isEmpty) return;
+    void visit(Element e) {
+      if (e is _ExcludeFocusMarkerElement) {
+        if (e.excluding) {
+          e._liftedEarly = true;
+          _notifyManagerScopeChanged();
+        }
+        return;
+      }
+      e.visitChildren(visit);
+    }
+
+    if (root is Element) visit(root);
   }
 
   /// Temporarily removes the mounted subtree below [root] from focus and text
@@ -508,14 +557,18 @@ class FocusManager extends ChangeNotifier {
   }
 
   /// Detaches [node] from this manager. Safe if not attached.
+  ///
+  /// Always clears the node's back-pointers, so a detached node is really
+  /// dead: `requestFocus` on it no-ops (per its doc) instead of focusing a
+  /// node whose element is defunct — which would route every key into a
+  /// disposed State's handler. The sanctioned unmount-then-remount reuse of
+  /// a long-lived node keeps working because [_register] re-sets both.
   void _unregister(FocusNode node) {
     if (!identical(node._manager, this)) return;
-    if (_disposed) {
-      node._manager = null;
-      node._element = null;
-      node._enclosingScope = null;
-      return;
-    }
+    node._manager = null;
+    node._element = null;
+    node._enclosingScope = null;
+    if (_disposed) return;
     if (identical(_focusedNode, node)) {
       _focusedNode = null;
       notifyListeners();
@@ -525,9 +578,17 @@ class FocusManager extends ChangeNotifier {
 
   /// Requests that [node] become the focused node (null to clear
   /// focus). Returns whether focus actually moved.
+  ///
+  /// Denied — returning false — for a node that can't take focus, whose
+  /// subtree doesn't accept input, or that sits under an active
+  /// [ExcludeFocus]: programmatic focus obeys the same exclusion boundary
+  /// as click, Tab/arrow traversal, and autofocus.
   bool requestFocus(FocusNode? node) {
     _checkNotDisposed();
-    if (node != null && (!node.canRequestFocus || !_acceptsInput(node))) {
+    if (node != null &&
+        (!node.canRequestFocus ||
+            !_acceptsInput(node) ||
+            _isExcludedFromFocus(node))) {
       return false;
     }
     if (identical(_focusedNode, node)) return false;
@@ -1516,8 +1577,15 @@ class _ExcludeFocusMarker extends Widget {
 class _ExcludeFocusMarkerElement extends ComponentElement {
   _ExcludeFocusMarkerElement(_ExcludeFocusMarker super.widget);
 
-  bool get excluding => (widget as _ExcludeFocusMarker).excluding;
+  bool get excluding =>
+      (widget as _ExcludeFocusMarker).excluding && !_liftedEarly;
   bool _capturedExcluding = false;
+
+  /// Set by [FocusManager.liftExclusionAbove] when a container reveals
+  /// this subtree by intent before the rebuild that flips [excluding]
+  /// lands (Navigator.pop). Cleared on the next update, which re-syncs
+  /// to the widget's real configuration.
+  bool _liftedEarly = false;
   FocusManager? _registeredManager;
 
   @override
@@ -1552,6 +1620,7 @@ class _ExcludeFocusMarkerElement extends ComponentElement {
 
   @override
   void update(Widget newWidget) {
+    _liftedEarly = false;
     super.update(newWidget);
     final newExcluding = (newWidget as _ExcludeFocusMarker).excluding;
     if (newExcluding != _capturedExcluding) {

@@ -71,7 +71,9 @@ void main() {
       tester.render();
       expect(inputFocus.hasFocus, isFalse, reason: 'modal grabbed focus');
 
-      // Dismiss with Esc; focus should return to the TextInput.
+      // Dismiss with Esc; focus returns to the TextInput synchronously —
+      // pop() lifts the revealed route's ExcludeFocus eagerly, so the
+      // restore does not wait for the reveal frame.
       tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
       await modal;
       expect(

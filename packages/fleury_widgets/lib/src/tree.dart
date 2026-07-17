@@ -48,6 +48,7 @@ class Tree<T> extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.onSelect,
+    this.typeahead = true,
     this.selectedStyle,
   });
 
@@ -62,6 +63,14 @@ class Tree<T> extends StatefulWidget {
 
   /// Whether the tree should request focus when mounted.
   final bool autofocus;
+
+  /// Whether typing a printable character jumps the selection to the next
+  /// visible node whose label starts with it (WAI-ARIA treeview
+  /// type-ahead). On by default. Turn it off when the surrounding app
+  /// binds bare printables (a vim-style command key, a `q` quit): a
+  /// focused tree with type-ahead on consumes every printable before
+  /// those bindings see it.
+  final bool typeahead;
 
   /// Called when Enter activates a leaf node.
   final void Function(TreeNode<T> node)? onSelect;
@@ -266,7 +275,8 @@ class _TreeState<T> extends State<Tree<T>> {
               return _collapseOrParent();
             default:
               final ch = event.char;
-              if (ch != null &&
+              if (widget.typeahead &&
+                  ch != null &&
                   ch.length == 1 &&
                   ch.codeUnitAt(0) >= 0x21 &&
                   !event.hasCtrl &&
