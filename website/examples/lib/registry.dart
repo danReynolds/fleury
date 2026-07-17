@@ -288,6 +288,32 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     ),
   ),
   ExampleInfo(
+    id: 'canvas.basic',
+    widget: 'Canvas',
+    category: 'Charts & meters',
+    blurb: 'A sub-cell drawing surface for custom plots and diagrams.',
+    cols: 52,
+    rows: 11,
+    code: '''Canvas(
+  painter: SineWavePainter(),
+  bounds: const CanvasBounds(minX: 0, maxX: 6.28, minY: -1, maxY: 1),
+  semanticRole: SemanticRole.chart,
+  semanticLabel: 'Sine wave',
+)''',
+    builder: () => _framed(
+      SizedBox(
+        width: 48,
+        height: 9,
+        child: Canvas(
+          painter: _DocsCanvasPainter(),
+          bounds: const CanvasBounds(minX: 0, maxX: 6.28, minY: -1, maxY: 1),
+          semanticRole: SemanticRole.chart,
+          semanticLabel: 'Sine wave',
+        ),
+      ),
+    ),
+  ),
+  ExampleInfo(
     id: 'panel.basic',
     widget: 'Panel',
     category: 'Layout',
@@ -429,6 +455,29 @@ Tabs(
     rows: 13,
     interactive: true,
     builder: () => _framed(MarkdownView(markdown: _markdownSample)),
+  ),
+  ExampleInfo(
+    id: 'markdowntext.basic',
+    widget: 'MarkdownText',
+    category: 'Documents',
+    blurb: 'Lightweight Markdown for headings, emphasis, lists, and links.',
+    cols: 56,
+    rows: 9,
+    code: """MarkdownText('''
+## Release
+
+- **Checks:** passing
+- [Open the docs](https://example.com)
+''')""",
+    builder: () => _framed(
+      const MarkdownText('''
+## Release
+
+- **Checks:** passing
+- **Target:** terminal + browser
+- [Open the docs](https://example.com)
+'''),
+    ),
   ),
   ExampleInfo(
     id: 'codeview.basic',
@@ -659,6 +708,54 @@ TextInput(
     ),
   ),
   ExampleInfo(
+    id: 'formwizard.basic',
+    widget: 'FormWizard',
+    category: 'Inputs & controls',
+    blurb: 'A validated form split into an ordered sequence of steps.',
+    cols: 54,
+    rows: 13,
+    interactive: true,
+    code: '''FormWizard(
+  definition: definition,
+  steps: const <FormWizardStep>[
+    FormWizardStep(id: 'project', title: 'Project', fieldIds: ['name']),
+    FormWizardStep(id: 'access', title: 'Access', fieldIds: ['private']),
+  ],
+  onSubmit: handleSubmit,
+)''',
+    builder: () => _framed(
+      FormWizard(
+        definition: FormDefinition(
+          title: 'Create project',
+          fields: <FormFieldSpec>[
+            FormFieldSpec.text(
+              id: 'name',
+              label: 'Name',
+              initialValue: 'fleury-app',
+              required: true,
+            ),
+            FormFieldSpec.checkbox(id: 'private', label: 'Private project'),
+          ],
+        ),
+        steps: const <FormWizardStep>[
+          FormWizardStep(
+            id: 'project',
+            title: 'Project',
+            fieldIds: <String>['name'],
+          ),
+          FormWizardStep(
+            id: 'access',
+            title: 'Access',
+            fieldIds: <String>['private'],
+          ),
+        ],
+        layout: FormPanelLayout.inline,
+        fieldWidth: 24,
+        onSubmit: (_) {},
+      ),
+    ),
+  ),
+  ExampleInfo(
     id: 'button.basic',
     widget: 'Button',
     category: 'Inputs & controls',
@@ -672,6 +769,85 @@ TextInput(
   onPressed: () => save(),
 )''',
     builder: () => const _ButtonExample(),
+  ),
+  ExampleInfo(
+    id: 'checkbox.basic',
+    widget: 'Checkbox',
+    category: 'Inputs & controls',
+    blurb: 'A controlled boolean input; toggle it with Enter or Space.',
+    cols: 36,
+    rows: 4,
+    interactive: true,
+    code: '''Checkbox(
+  value: _accepted,
+  label: 'Accept terms',
+  onChanged: (value) => setState(() => _accepted = value),
+)''',
+    builder: () => const _CheckboxExample(),
+  ),
+  ExampleInfo(
+    id: 'toggle.basic',
+    widget: 'Toggle',
+    category: 'Inputs & controls',
+    blurb: 'A compact controlled on/off toggle.',
+    cols: 34,
+    rows: 4,
+    interactive: true,
+    code: '''Toggle(
+  value: _compact,
+  label: 'Compact rows',
+  onChanged: (value) => setState(() => _compact = value),
+)''',
+    builder: () => const _ToggleExample(),
+  ),
+  ExampleInfo(
+    id: 'switch.basic',
+    widget: 'Switch',
+    category: 'Inputs & controls',
+    blurb: 'An accent-tinted controlled switch for prominent settings.',
+    cols: 40,
+    rows: 4,
+    interactive: true,
+    code: '''Switch(
+  value: _streaming,
+  label: 'Streaming updates',
+  onChanged: (value) => setState(() => _streaming = value),
+)''',
+    builder: () => const _SwitchExample(),
+  ),
+  ExampleInfo(
+    id: 'radio.basic',
+    widget: 'Radio',
+    category: 'Inputs & controls',
+    blurb: 'A controlled single choice within a group of radio inputs.',
+    cols: 34,
+    rows: 6,
+    interactive: true,
+    code: '''Radio<String>(
+  value: 'fast',
+  groupValue: _mode,
+  label: 'Fast',
+  onChanged: (value) => setState(() => _mode = value),
+)''',
+    builder: () => const _RadioExample(),
+  ),
+  ExampleInfo(
+    id: 'radiogroup.basic',
+    widget: 'RadioGroup',
+    category: 'Inputs & controls',
+    blurb: 'A roving, arrow-key-navigable group of radio choices.',
+    cols: 40,
+    rows: 6,
+    interactive: true,
+    code: '''RadioGroup<String>(
+  value: _mode,
+  options: const <RadioOption<String>>[
+    RadioOption(value: 'fast', label: 'Fast'),
+    RadioOption(value: 'safe', label: 'Safe'),
+  ],
+  onChanged: (value) => setState(() => _mode = value),
+)''',
+    builder: () => const _RadioGroupExample(),
   ),
   ExampleInfo(
     id: 'select.basic',
@@ -691,6 +867,21 @@ TextInput(
   onChanged: (value) => setState(() => _size = value),
 )''',
     builder: () => const _SelectExample(),
+  ),
+  ExampleInfo(
+    id: 'multiselect.basic',
+    widget: 'MultiSelect',
+    category: 'Inputs & controls',
+    blurb: 'A keyboard-navigable list of independently checkable options.',
+    cols: 42,
+    rows: 8,
+    interactive: true,
+    code: '''MultiSelect<String>(
+  options: options,
+  values: _selected,
+  onChanged: (values) => setState(() => _selected = values),
+)''',
+    builder: () => const _MultiSelectExample(),
   ),
   ExampleInfo(
     id: 'rangeslider.basic',
@@ -877,6 +1068,39 @@ TextInput(
       const Dialog(
         title: 'Confirm',
         child: Text('Delete 3 files? This cannot be undone.'),
+      ),
+    ),
+  ),
+  ExampleInfo(
+    id: 'keyhintbar.basic',
+    widget: 'KeyHintBar',
+    category: 'Navigation & overlays',
+    blurb: 'Shows the active focus chain’s visible keyboard bindings.',
+    cols: 52,
+    rows: 6,
+    code: '''KeyBindings(
+  bindings: <KeyBinding>[
+    KeyBinding(KeyChord.char('s'), label: 'Save', onEvent: save),
+    KeyBinding(KeyChord.char('q'), label: 'Quit', onEvent: quit),
+  ],
+  child: const KeyHintBar(),
+)''',
+    builder: () => _framed(
+      KeyBindings(
+        bindings: <KeyBinding>[
+          KeyBinding(KeyChord.char('s'), label: 'Save', onEvent: (_) {}),
+          KeyBinding(KeyChord.char('r'), label: 'Run', onEvent: (_) {}),
+          KeyBinding(KeyChord.char('q'), label: 'Quit', onEvent: (_) {}),
+        ],
+        child: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Focus(autofocus: true, child: Text('Focused editor')),
+            SizedBox(height: 1),
+            KeyHintBar(),
+          ],
+        ),
       ),
     ),
   ),
@@ -1218,6 +1442,31 @@ TextInput(
       ),
     ),
   ),
+  ExampleInfo(
+    id: 'tokenmeter.basic',
+    widget: 'TokenMeter',
+    category: 'Agent surfaces',
+    blurb: 'A compact context-window and token-usage indicator.',
+    cols: 52,
+    rows: 3,
+    code: '''TokenMeter(
+  usage: const TokenUsage(contextUsed: 128000, contextLimit: 200000),
+  label: 'Context',
+  width: 20,
+)''',
+    builder: () => _framed(
+      const TokenMeter(
+        usage: TokenUsage(
+          input: 8200,
+          output: 1400,
+          contextUsed: 128000,
+          contextLimit: 200000,
+        ),
+        label: 'Context',
+        width: 20,
+      ),
+    ),
+  ),
 
   // ── Showcases (full apps; rendered on the Showcases page, not as widgets) ──
   ExampleInfo(
@@ -1415,6 +1664,170 @@ class _DocsExampleTheme extends InheritedWidget {
 // ── Stateful wrappers ───────────────────────────────────────────────────────
 // Controlled widgets (value + onChanged) need a holder so interacting with the
 // live example actually moves them; self-managing widgets are used directly.
+final class _DocsCanvasPainter extends CanvasPainter {
+  @override
+  void paint(CanvasContext ctx) {
+    const segments = 96;
+    var previousX = 0.0;
+    var previousY = 0.0;
+    for (var i = 1; i <= segments; i++) {
+      final x = 6.28 * i / segments;
+      final y = sin(x);
+      ctx.drawLine(previousX, previousY, x, y);
+      previousX = x;
+      previousY = y;
+    }
+  }
+}
+
+class _CheckboxExample extends StatefulWidget {
+  const _CheckboxExample();
+
+  @override
+  State<_CheckboxExample> createState() => _CheckboxExampleState();
+}
+
+class _CheckboxExampleState extends State<_CheckboxExample> {
+  bool _accepted = false;
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Checkbox(
+      value: _accepted,
+      label: 'Accept terms',
+      autofocus: true,
+      onChanged: (value) => setState(() => _accepted = value),
+    ),
+  );
+}
+
+class _ToggleExample extends StatefulWidget {
+  const _ToggleExample();
+
+  @override
+  State<_ToggleExample> createState() => _ToggleExampleState();
+}
+
+class _ToggleExampleState extends State<_ToggleExample> {
+  bool _compact = true;
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Toggle(
+      value: _compact,
+      label: 'Compact rows',
+      autofocus: true,
+      onChanged: (value) => setState(() => _compact = value),
+    ),
+  );
+}
+
+class _SwitchExample extends StatefulWidget {
+  const _SwitchExample();
+
+  @override
+  State<_SwitchExample> createState() => _SwitchExampleState();
+}
+
+class _SwitchExampleState extends State<_SwitchExample> {
+  bool _streaming = false;
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Switch(
+      value: _streaming,
+      label: 'Streaming updates',
+      autofocus: true,
+      onChanged: (value) => setState(() => _streaming = value),
+    ),
+  );
+}
+
+class _RadioExample extends StatefulWidget {
+  const _RadioExample();
+
+  @override
+  State<_RadioExample> createState() => _RadioExampleState();
+}
+
+class _RadioExampleState extends State<_RadioExample> {
+  String _mode = 'fast';
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Radio<String>(
+          value: 'fast',
+          groupValue: _mode,
+          label: 'Fast',
+          autofocus: true,
+          onChanged: (value) => setState(() => _mode = value),
+        ),
+        Radio<String>(
+          value: 'safe',
+          groupValue: _mode,
+          label: 'Safe',
+          onChanged: (value) => setState(() => _mode = value),
+        ),
+      ],
+    ),
+  );
+}
+
+class _RadioGroupExample extends StatefulWidget {
+  const _RadioGroupExample();
+
+  @override
+  State<_RadioGroupExample> createState() => _RadioGroupExampleState();
+}
+
+class _RadioGroupExampleState extends State<_RadioGroupExample> {
+  String _mode = 'fast';
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    RadioGroup<String>(
+      value: _mode,
+      autofocus: true,
+      options: const <RadioOption<String>>[
+        RadioOption(value: 'fast', label: 'Fast'),
+        RadioOption(value: 'safe', label: 'Safe'),
+        RadioOption(value: 'thorough', label: 'Thorough'),
+      ],
+      onChanged: (value) => setState(() => _mode = value),
+    ),
+  );
+}
+
+class _MultiSelectExample extends StatefulWidget {
+  const _MultiSelectExample();
+
+  @override
+  State<_MultiSelectExample> createState() => _MultiSelectExampleState();
+}
+
+class _MultiSelectExampleState extends State<_MultiSelectExample> {
+  Set<String> _selected = <String>{'logs'};
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    MultiSelect<String>(
+      autofocus: true,
+      semanticLabel: 'Enabled telemetry',
+      options: const <SelectOption<String>>[
+        SelectOption(value: 'logs', label: 'Logs'),
+        SelectOption(value: 'traces', label: 'Traces'),
+        SelectOption(value: 'metrics', label: 'Metrics'),
+      ],
+      values: _selected,
+      onChanged: (values) => setState(() => _selected = values),
+    ),
+  );
+}
+
 class _TextInputExample extends StatefulWidget {
   const _TextInputExample();
 

@@ -381,8 +381,9 @@ for (const e of widgets) {
 
 // ── Source-backed pages ─────────────────────────────────────────────────────
 // Public APIs without an embedded registry example still get a full reference
-// page. Some require dart:io, some are invoked imperatively or are supporting
-// models, and some simply do not need a second live showcase.
+// page. Keep this list narrow: native-only APIs, supporting models, and APIs
+// that cannot be represented without an imperative call. Web-safe widgets
+// belong in registry.dart with a live example instead.
 const DOC_ONLY = [
   { slug: 'filebrowser', widget: 'FileBrowser', category: 'Inputs & controls', reason: 'native',
     code: "FileBrowser(\n  initialDirectory: Directory.current.path,\n  onActivate: (entry) => openFile(entry.path),\n)" },
@@ -401,6 +402,15 @@ const DOC_ONLY = [
   { slug: 'toaster', widget: 'Toaster', category: 'Navigation & overlays', reason: 'imperative',
     code: "// Wrap your app once:\nToaster(child: app)\n\n// …then from anywhere below it:\nToaster.show(context, 'Saved', severity: ToastSeverity.success);" },
 ];
+const DOC_ONLY_REASONS = new Set(['native', 'native-model', 'imperative']);
+for (const entry of DOC_ONLY) {
+  if (!DOC_ONLY_REASONS.has(entry.reason)) {
+    throw new Error(
+      `${entry.widget} uses unsupported doc-only reason "${entry.reason}"; ` +
+      `add a live browser example for web-safe widgets`
+    );
+  }
+}
 const docNote = (reason) => {
   if (reason === 'native')
     return (
@@ -423,45 +433,12 @@ const docNote = (reason) => {
       `same model you know from Flutter. The reference below is generated from ` +
       `the source; the [guides](/fleury/guides/layout/) show these in context.\n:::\n`
     );
-  if (reason === 'reference')
-    return (
-      `:::note[Source-backed reference]\nThis public widget does not have an ` +
-      `embedded showcase on this page. Its constructor reference is generated ` +
-      `directly from the current Dart source.\n:::\n`
-    );
   return (
     `:::note[Imperative]\nShown by calling \`Toaster.show(context, …)\`, so ` +
     `there's no static preview — wrap your app in a \`Toaster\` once, then ` +
     `raise toasts from anywhere below it.\n:::\n`
   );
 };
-
-// Every exported higher-level widget gets a page, even when it is not useful to
-// duplicate its behavior as a standalone embedded example.
-const REFERENCE_ONLY = [
-  { slug: 'canvas', widget: 'Canvas', category: 'Charts & meters', reason: 'reference',
-    code: "Canvas(\n  painter: painter,\n  bounds: const CanvasBounds(minX: 0, maxX: 10, minY: 0, maxY: 10),\n)" },
-  { slug: 'checkbox', widget: 'Checkbox', category: 'Inputs & controls', reason: 'reference',
-    code: "Checkbox(value: accepted, label: 'Accept', onChanged: setAccepted)" },
-  { slug: 'formwizard', widget: 'FormWizard', category: 'Inputs & controls', reason: 'reference',
-    code: "FormWizard(\n  definition: form,\n  steps: steps,\n  onSubmit: handleSubmit,\n)" },
-  { slug: 'keyhintbar', widget: 'KeyHintBar', category: 'Navigation & overlays', reason: 'reference',
-    code: "const KeyHintBar()" },
-  { slug: 'markdowntext', widget: 'MarkdownText', category: 'Documents', reason: 'reference',
-    code: "MarkdownText('## Status\\n\\n**Ready** to deploy.')" },
-  { slug: 'multiselect', widget: 'MultiSelect', category: 'Inputs & controls', reason: 'reference',
-    code: "MultiSelect<String>(\n  options: options,\n  values: selected,\n  onChanged: setSelected,\n)" },
-  { slug: 'radio', widget: 'Radio', category: 'Inputs & controls', reason: 'reference',
-    code: "Radio<String>(\n  value: 'fast',\n  groupValue: mode,\n  label: 'Fast',\n  onChanged: setMode,\n)" },
-  { slug: 'radiogroup', widget: 'RadioGroup', category: 'Inputs & controls', reason: 'reference',
-    code: "RadioGroup<String>(\n  value: mode,\n  options: const [\n    RadioOption(value: 'fast', label: 'Fast'),\n    RadioOption(value: 'safe', label: 'Safe'),\n  ],\n  onChanged: setMode,\n)" },
-  { slug: 'switch', widget: 'Switch', category: 'Inputs & controls', reason: 'reference',
-    code: "Switch(value: enabled, label: 'Feature', onChanged: setEnabled)" },
-  { slug: 'toggle', widget: 'Toggle', category: 'Inputs & controls', reason: 'reference',
-    code: "Toggle(value: enabled, label: 'Feature', onChanged: setEnabled)" },
-  { slug: 'tokenmeter', widget: 'TokenMeter', category: 'Agent surfaces', reason: 'reference',
-    code: "TokenMeter(usage: usage, label: 'Context')" },
-];
 
 // Core framework widgets (from package:fleury): the layout, text, async, input,
 // and builder primitives a Flutter developer reaches for. Documented from source
@@ -510,12 +487,12 @@ const CORE = [
     code: "AspectRatio(\n  aspectRatio: 2.0,\n  child: Heatmap(values: values),\n)" },
 ].map((d) => ({ ...d, category: 'Core widgets', reason: 'core' }));
 
-const DOC_PAGES = [...DOC_ONLY, ...REFERENCE_ONLY, ...CORE];
+const DOC_PAGES = [...DOC_ONLY, ...CORE];
 const exportedWidgetCount = assertExportedWidgetCoverage([
   ...widgets,
   ...DOC_PAGES,
 ]);
-assertReferenceComplete(DOC_PAGES.map((entry) => entry.widget), 'source-only widget');
+assertReferenceComplete(DOC_PAGES.map((entry) => entry.widget), 'doc-only widget');
 for (const d of DOC_PAGES) {
   const intro = api[d.widget]?.classDoc ? mdxSafe(api[d.widget].classDoc) : '';
   writeFileSync(
@@ -536,8 +513,8 @@ for (const e of widgets) {
   if (!byCategory.has(e.category)) byCategory.set(e.category, []);
   byCategory.get(e.category).push(e);
 }
-// Fold the doc-only widgets into the catalog index, flagged so the lack of a
-// live demo is no surprise.
+// Fold the intentionally doc-only APIs into the catalog index and explain why
+// they do not have a client-side live demo.
 for (const d of DOC_PAGES) {
   const tag = d.reason === 'native'
     ? ' *(runs locally)*'
@@ -545,9 +522,7 @@ for (const d of DOC_PAGES) {
       ? ' *(core)*'
       : d.reason === 'native-model'
         ? ' *(supporting model; runs locally)*'
-        : d.reason === 'reference'
-          ? ' *(source-backed)*'
-      : ' *(imperative)*';
+        : ' *(imperative)*';
   const blurb = (api[d.widget]?.doc ?? '') + tag;
   if (!byCategory.has(d.category)) byCategory.set(d.category, []);
   byCategory.get(d.category).push({ widget: d.widget, id: d.slug, blurb });
