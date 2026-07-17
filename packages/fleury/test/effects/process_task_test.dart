@@ -610,10 +610,13 @@ final class _GatedSpawnController extends ProcessTaskController {
     ProcessTaskCommand command,
     ProcessStartMode mode,
   ) async {
+    // Claim the hold synchronously at entry so it binds to startProcess CALL
+    // order; claiming after the await would bind by OS-spawn-completion
+    // order, which can invert under load and gate the wrong run.
+    final hold = _holds.isNotEmpty ? _holds.removeAt(0) : null;
     final process = await super.spawnProcess(command, mode);
     spawnedProcesses.add(process);
-    if (_holds.isNotEmpty) {
-      final hold = _holds.removeAt(0);
+    if (hold != null) {
       hold._spawnedProcess.complete(process);
       await hold._release.future;
     }
