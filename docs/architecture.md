@@ -68,8 +68,8 @@ the bet.
 ## The architecture
 
 If you know Flutter, you know fleury's shape; if you've never touched
-Flutter, here's the part worth knowing. The framework keeps *four*
-trees, each with one job:
+Flutter, here's the part worth knowing. The framework's pipeline has four
+related views, though not every view is retained on every surface:
 
 - **The widget tree** is immutable configuration — cheap, throwaway
   descriptions of what the UI should look like. Because widgets are
@@ -82,16 +82,18 @@ trees, each with one job:
   application state — focus, selection, undo — a durable home the app
   doesn't have to build for itself.
 - **The render tree** does layout and paint over a cell grid —
-  constraints down, sizes up, exactly like Flutter but with cells
-  instead of pixels. Its persistent identity is what change-tracking
+  constraints down, sizes up, following Flutter's central layout rule but
+  using cells instead of pixels. Its persistent identity is what change-tracking
   hangs on: a damage tracker records which rows actually changed,
   repaint boundaries cache cells for subtrees that didn't, and scroll
   detection turns moving content into buffer moves instead of repaints.
-- **The semantics tree** is the machine-readable shadow of your UI —
-  roles, state, actions — updated incrementally and flushed *off* the
-  visual frame so it costs the frame budget nothing. Tests query it.
-  Agents drive it. It's Flutter's accessibility-tree idea, promoted to a
-  headline feature, because the terminal's newest users are programs.
+- **The semantics tree** is the machine-readable shadow of your UI — roles,
+  state, and actions. Browser and agent surfaces retain and update it when
+  semantics or painted coverage change; tests and plain-terminal debug collect
+  it on demand. Its transport can flush independently from visual presentation.
+  Tests query it. Agents drive it. It's Flutter's accessibility-tree idea,
+  promoted to a headline feature, because the terminal's newest users are
+  programs.
 
 From a state change, the pipeline runs: rebuild the dirty subtree →
 layout → paint into a damage-tracked cell buffer → backend. The terminal

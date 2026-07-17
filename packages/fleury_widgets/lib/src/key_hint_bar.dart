@@ -5,7 +5,7 @@
 import 'package:fleury/fleury_core.dart';
 
 /// Walks the active focus chain and renders each visible binding as
-/// "[label] description". Updates automatically when focus moves (because it
+/// "`[label] description`". Updates automatically when focus moves (because it
 /// depends on the [FocusManager] via [Focus.of]).
 ///
 /// Under width pressure it degrades **honestly**: it fits as many whole

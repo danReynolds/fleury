@@ -1,6 +1,7 @@
 # Fleury Web
 
-Run [fleury](../fleury) apps in a browser through the retained DOM host:
+Run [fleury](https://github.com/danReynolds/fleury/tree/main/packages/fleury)
+apps in a browser through the retained DOM host:
 
 - **`mountApp`** runs Fleury-owned apps through the retained DOM host:
   Fleury paints into a `CellBuffer`, browser frames flush under

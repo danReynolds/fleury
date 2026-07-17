@@ -18,10 +18,10 @@ Fleury already exposes to the browser and to its testing API.
 
 ## How it works
 
-A Fleury app builds a widget tree, and **every widget already contributes
-accessible semantics** — a role, a label, a value, the actions it supports. That
-same semantic tree powers Fleury's browser accessibility mirror and its testing
-API; `fleury_mcp` is a third consumer of it.
+A Fleury app builds a widget tree whose interactive and content widgets already
+contribute meaningful accessible semantics; layout-only structure may be folded
+away. That semantic tree powers Fleury's browser accessibility mirror and its
+testing API; `fleury_mcp` is a third consumer of it.
 
 The connection reuses the wire `fleury serve` already speaks:
 
@@ -281,5 +281,5 @@ The app works with zero effort; these make the agent's job easier:
 Pre-1.0, developed in the Fleury monorepo (`publish_to: none`, path dependency on
 `fleury`). The protocol surface is stable and verified against the MCP Inspector,
 a host-process end-to-end harness, and live drives of the sample apps. See
-[`docs/agents-and-semantics.md`](../../docs/agents-and-semantics.md) for the
+[`docs/agents-and-semantics.md`](https://github.com/danReynolds/fleury/blob/main/docs/agents-and-semantics.md) for the
 broader semantics story.

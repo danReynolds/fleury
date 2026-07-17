@@ -11,12 +11,23 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { exportedClassNames } from './api-reference-exports.mjs';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const MANIFEST = join(here, '..', 'src', 'examples.json');
 const API = join(here, '..', 'src', 'api.json');
 const CODE = join(here, '..', 'src', 'examples_code.json');
 const TYPES = join(here, '..', 'src', 'types.json');
 const DOCS = join(here, '..', 'src', 'content', 'docs');
+const WIDGET_BARREL = join(
+  here,
+  '..',
+  '..',
+  'packages',
+  'fleury_widgets',
+  'lib',
+  'fleury_widgets.dart'
+);
 // From src/content/docs/<section>/*.mdx up to src/components/.
 const COMPONENT = '../../../components/FleuryExample.astro';
 const KNOBS_COMPONENT = '../../../components/FleuryKnobs.astro';
@@ -88,7 +99,7 @@ function usageSection(slug, widget, snippet) {
   // Interactive examples built from a private `_FooExample()` wrapper extract to
   // that wrapper call, which is a meaningless, leaky snippet (the wrapper is a
   // registry implementation detail, not how you use the widget). Suppress the
-  // Usage block in that case — the page still has the live example + properties.
+  // Usage block in that case — the page still has the live example + API reference.
   // Add an explicit `code:` to the registry entry to show real usage instead.
   if (snippet && !/^const\s+_\w+\(\)$/.test(snippet.trim())) {
     return `## Usage\n\n\`\`\`dart title=${yaml(widget + '.dart')}\n${snippet}\n\`\`\`\n\n`;
@@ -105,6 +116,115 @@ const REPO = 'https://github.com/danReynolds/fleury/blob/main';
 // API reference + example source, extracted from the Dart source at build time.
 const api = JSON.parse(readFileSync(API, 'utf8'));
 const exampleCode = JSON.parse(readFileSync(CODE, 'utf8'));
+
+// Reference pages are a public contract, so generation must not quietly turn a
+// missing source comment into an em dash. Keep this check beside the generator:
+// every local build then validates the exact set of pages it is about to write.
+function assertReferenceComplete(widgetNames, section) {
+  const failures = [];
+  for (const widget of [...new Set(widgetNames)].sort()) {
+    const entry = api[widget];
+    if (!entry) {
+      failures.push(`${widget}: no extracted API entry`);
+      continue;
+    }
+    if (!entry.classDoc?.trim()) failures.push(`${widget}: missing class docs`);
+    if (!entry.file || !entry.line) failures.push(`${widget}: missing source link`);
+    // `undefined` is the pre-constructor-schema compatibility case. An explicit
+    // empty list means the class has no public constructor and must not be
+    // rendered as a fabricated unnamed constructor.
+    const constructors = entry.constructors ?? [
+      { name: widget, params: entry.params ?? [] },
+    ];
+    if (!constructors.length) {
+      failures.push(`${widget}: missing public constructors`);
+      continue;
+    }
+    const undocumentedNamedConstructors = constructors
+      .filter((constructor) => constructor.name !== widget && !constructor.doc?.trim())
+      .map(
+        (constructor) =>
+          `${constructor.name} (${entry.file}:${constructor.line ?? entry.line})`
+      );
+    if (undocumentedNamedConstructors.length) {
+      failures.push(
+        `${widget}: undocumented named constructors: ` +
+        undocumentedNamedConstructors.join(', ')
+      );
+    }
+    const undocumented = constructors
+      .flatMap((constructor) => constructor.params ?? [])
+      .filter((param) => !param.doc?.trim())
+      .map((param) => param.name)
+      .filter((name, index, names) => names.indexOf(name) === index);
+    if (undocumented.length) {
+      failures.push(`${widget}: undocumented parameters: ${undocumented.join(', ')}`);
+    }
+    const unresolved = constructors
+      .flatMap((constructor) =>
+        (constructor.params ?? [])
+          .filter((param) => param.type === 'dynamic')
+          .map((param) => `${constructor.name}.${param.name}`)
+      );
+    if (unresolved.length) {
+      failures.push(`${widget}: unresolved parameter types: ${unresolved.join(', ')}`);
+    }
+  }
+  if (failures.length) {
+    throw new Error(
+      `Incomplete ${section} API reference:\n- ${failures.join('\n- ')}\n` +
+      'Add Dart doc comments to the public constructor fields or parameters, then run npm run generate.'
+    );
+  }
+}
+
+function assertExportedWidgetCoverage(entries) {
+  const bySlug = new Map();
+  const byWidget = new Map();
+  const failures = [];
+  for (const entry of entries) {
+    const slug = entry.id?.split('.')[0] ?? entry.slug;
+    if (bySlug.has(slug)) failures.push(`duplicate slug ${slug}`);
+    if (byWidget.has(entry.widget)) failures.push(`duplicate widget ${entry.widget}`);
+    bySlug.set(slug, entry.widget);
+    byWidget.set(entry.widget, slug);
+  }
+
+  const exported = exportedClassNames(readFileSync(WIDGET_BARREL, 'utf8'), {
+    barrelRepoDirectory: 'packages/fleury_widgets/lib',
+    api,
+  });
+  const widgetBases = new Set([
+    'Widget',
+    'StatelessWidget',
+    'StatefulWidget',
+    'RenderObjectWidget',
+    'LeafRenderObjectWidget',
+    'SingleChildRenderObjectWidget',
+    'MultiChildRenderObjectWidget',
+    'ProxyWidget',
+    'InheritedWidget',
+  ]);
+  const isWidget = (name, seen = new Set()) => {
+    if (widgetBases.has(name)) return true;
+    if (seen.has(name)) return false;
+    seen.add(name);
+    const parent = api[name]?.extends?.replace(/<.*>$/, '');
+    return parent ? isWidget(parent, seen) : false;
+  };
+  const exportedWidgets = [...exported]
+    .filter((name) => api[name] && !api[name].abstract && isWidget(name))
+    .sort();
+  const missing = exportedWidgets
+    .filter((name) => !byWidget.has(name))
+  if (missing.length) {
+    failures.push(`exported widgets without pages: ${missing.join(', ')}`);
+  }
+  if (failures.length) {
+    throw new Error(`Invalid widget reference coverage:\n- ${failures.join('\n- ')}`);
+  }
+  return exportedWidgets.length;
+}
 
 // A "## Source" section linking the widget class to its file on GitHub, at the
 // class declaration line.
@@ -160,28 +280,48 @@ function linkType(typeStr) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/\|/g, '&#124;');
-  const linked = esc.replace(/[A-Z][A-Za-z0-9_]*/g, (name) =>
+  // A prefixed external type such as `img.Image` must not link its `Image`
+  // suffix to Fleury's own class of the same name.
+  const linked = esc.replace(/(?<!\.)\b[A-Z][A-Za-z0-9_]*/g, (name) =>
     types[name] ? `<a href="${REPO}/${types[name]}">${name}</a>` : name
   );
   return `<code>${linked}</code>`;
 }
 
-// A "Properties" table for a widget class, from its extracted constructor params.
-function propsTable(widget) {
+// Constructor-specific parameter tables from the source. Keeping overloads
+// separate matters for APIs such as ListView.builder and Image.file: a single
+// merged "properties" table can contradict the usage example above it.
+function constructorsSection(widget) {
   const entry = api[widget];
-  if (!entry || !entry.params.length) return '';
-  const rows = entry.params
-    .map((p) => {
-      const def = p.required ? '**required**' : p.default ? codeCell(p.default) : '—';
-      return `| ${codeCell(p.name)} | ${linkType(p.type)} | ${def} | ${cell(p.doc)} |`;
-    })
-    .join('\n');
-  return (
-    `## Properties\n\n` +
-    `| Property | Type | Default | Description |\n` +
-    `| --- | --- | --- | --- |\n` +
-    `${rows}\n\n`
-  );
+  if (!entry) return '';
+  const constructors = entry.constructors ?? [
+    { name: widget, doc: null, params: entry.params ?? [] },
+  ];
+  if (!constructors.length) {
+    throw new Error(`${widget} has no public constructors to document`);
+  }
+  let out = `## Constructors\n\n`;
+  for (const constructor of constructors) {
+    const params = constructor.params ?? [];
+    out += `### ${codeCell(`${constructor.name}()`)}\n\n`;
+    if (constructor.doc) out += `${mdxSafe(constructor.doc)}\n\n`;
+    if (!params.length) {
+      out += `This constructor has no public parameters.\n\n`;
+      continue;
+    }
+    const rows = params
+      .map((p) => {
+        const def = p.required ? '**required**' : p.default ? codeCell(p.default) : '—';
+        const name = p.named ? `${p.name}:` : p.name;
+        return `| ${codeCell(name)} | ${linkType(p.type)} | ${def} | ${cell(p.doc)} |`;
+      })
+      .join('\n');
+    out +=
+      `| Parameter | Type | Default | Description |\n` +
+      `| --- | --- | --- | --- |\n` +
+      `${rows}\n\n`;
+  }
+  return out;
 }
 
 const all = JSON.parse(readFileSync(MANIFEST, 'utf8'));
@@ -193,6 +333,7 @@ const widgets = all.filter(
 const showcases = all.filter((e) => e.category === 'Showcases');
 
 // ── Widget pages ────────────────────────────────────────────────────────────
+assertReferenceComplete(widgets.map((entry) => entry.widget), 'widget');
 const widgetsDir = join(DOCS, 'widgets');
 rmSync(widgetsDir, { recursive: true, force: true });
 mkdirSync(widgetsDir, { recursive: true });
@@ -231,17 +372,17 @@ for (const e of widgets) {
       // Left column: description → usage example(s) → API breakdown.
       `${intro}\n\n` +
       usageSection(slug, e.widget, snippet) +
-      propsTable(e.widget) +
+      constructorsSection(e.widget) +
       sourceSection(e.widget) +
       `**Category:** ${e.category} · [All widgets](/widgets/)\n\n` +
       `</WidgetLayout>\n`
   );
 }
 
-// ── Doc-only pages ──────────────────────────────────────────────────────────
-// Widgets that can't be an in-browser embed — they use dart:io (filesystem,
-// processes, image decoding) or are invoked imperatively. They still get a full
-// reference page (description, properties, source), just no live demo.
+// ── Source-backed pages ─────────────────────────────────────────────────────
+// Public APIs without an embedded registry example still get a full reference
+// page. Some require dart:io, some are invoked imperatively or are supporting
+// models, and some simply do not need a second live showcase.
 const DOC_ONLY = [
   { slug: 'filebrowser', widget: 'FileBrowser', category: 'Inputs & controls', reason: 'native',
     code: "FileBrowser(\n  initialDirectory: Directory.current.path,\n  onActivate: (entry) => openFile(entry.path),\n)" },
@@ -255,7 +396,7 @@ const DOC_ONLY = [
     code: "final controller = ProcessTaskController(id: 'doctor', label: 'Doctor');\n\nProcessPanel(\n  controller: controller,\n  command: const ProcessTaskCommand('dart', ['--version']),\n)" },
   { slug: 'terminaloutputregion', widget: 'TerminalOutputRegion', category: 'Agent surfaces', reason: 'native',
     code: "TerminalOutputRegion(\n  buffer: LogBuffer(),\n  label: 'Build output',\n  filter: const LogRegionFilterDescriptor(severities: {LogSeverity.error}),\n)" },
-  { slug: 'workflowsnapshot', widget: 'WorkflowSnapshot', category: 'Agent surfaces', reason: 'native',
+  { slug: 'workflowsnapshot', widget: 'WorkflowSnapshot', category: 'Supporting models', reason: 'native-model',
     code: "final snapshot = WorkflowSnapshot(\n  title: 'Release check',\n  tasks: const [\n    TaskGraphNode(id: 'tests', label: 'Tests', status: TaskGraphStatus.running),\n  ],\n);\n\nfinal health = snapshot.summary.health;" },
   { slug: 'toaster', widget: 'Toaster', category: 'Navigation & overlays', reason: 'imperative',
     code: "// Wrap your app once:\nToaster(child: app)\n\n// …then from anywhere below it:\nToaster.show(context, 'Saved', severity: ToastSeverity.success);" },
@@ -268,11 +409,25 @@ const docNote = (reason) => {
       `[\`fleury serve\`](/architecture/serving-and-embedding/) — not as an ` +
       `in-browser embed. The reference below is generated from the source.\n:::\n`
     );
+  if (reason === 'native-model')
+    return (
+      `:::note[Supporting model]\nThis is a protocol-neutral data snapshot, not ` +
+      `a widget or an I/O service. Its current \`LogEntry\` dependency lives ` +
+      `in the native-only log library, so use it in a terminal or through ` +
+      `[\`fleury serve\`](/architecture/serving-and-embedding/), not in a ` +
+      `client-side embed.\n:::\n`
+    );
   if (reason === 'core')
     return (
       `:::note[Core widget]\nA framework primitive from \`package:fleury\` — the ` +
       `same model you know from Flutter. The reference below is generated from ` +
       `the source; the [guides](/guides/layout/) show these in context.\n:::\n`
+    );
+  if (reason === 'reference')
+    return (
+      `:::note[Source-backed reference]\nThis public widget does not have an ` +
+      `embedded showcase on this page. Its constructor reference is generated ` +
+      `directly from the current Dart source.\n:::\n`
     );
   return (
     `:::note[Imperative]\nShown by calling \`Toaster.show(context, …)\`, so ` +
@@ -280,6 +435,33 @@ const docNote = (reason) => {
     `raise toasts from anywhere below it.\n:::\n`
   );
 };
+
+// Every exported higher-level widget gets a page, even when it is not useful to
+// duplicate its behavior as a standalone embedded example.
+const REFERENCE_ONLY = [
+  { slug: 'canvas', widget: 'Canvas', category: 'Charts & meters', reason: 'reference',
+    code: "Canvas(\n  painter: painter,\n  bounds: const CanvasBounds(minX: 0, maxX: 10, minY: 0, maxY: 10),\n)" },
+  { slug: 'checkbox', widget: 'Checkbox', category: 'Inputs & controls', reason: 'reference',
+    code: "Checkbox(value: accepted, label: 'Accept', onChanged: setAccepted)" },
+  { slug: 'formwizard', widget: 'FormWizard', category: 'Inputs & controls', reason: 'reference',
+    code: "FormWizard(\n  definition: form,\n  steps: steps,\n  onSubmit: handleSubmit,\n)" },
+  { slug: 'keyhintbar', widget: 'KeyHintBar', category: 'Navigation & overlays', reason: 'reference',
+    code: "const KeyHintBar()" },
+  { slug: 'markdowntext', widget: 'MarkdownText', category: 'Documents', reason: 'reference',
+    code: "MarkdownText('## Status\\n\\n**Ready** to deploy.')" },
+  { slug: 'multiselect', widget: 'MultiSelect', category: 'Inputs & controls', reason: 'reference',
+    code: "MultiSelect<String>(\n  options: options,\n  values: selected,\n  onChanged: setSelected,\n)" },
+  { slug: 'radio', widget: 'Radio', category: 'Inputs & controls', reason: 'reference',
+    code: "Radio<String>(\n  value: 'fast',\n  groupValue: mode,\n  label: 'Fast',\n  onChanged: setMode,\n)" },
+  { slug: 'radiogroup', widget: 'RadioGroup', category: 'Inputs & controls', reason: 'reference',
+    code: "RadioGroup<String>(\n  value: mode,\n  options: const [\n    RadioOption(value: 'fast', label: 'Fast'),\n    RadioOption(value: 'safe', label: 'Safe'),\n  ],\n  onChanged: setMode,\n)" },
+  { slug: 'switch', widget: 'Switch', category: 'Inputs & controls', reason: 'reference',
+    code: "Switch(value: enabled, label: 'Feature', onChanged: setEnabled)" },
+  { slug: 'toggle', widget: 'Toggle', category: 'Inputs & controls', reason: 'reference',
+    code: "Toggle(value: enabled, label: 'Feature', onChanged: setEnabled)" },
+  { slug: 'tokenmeter', widget: 'TokenMeter', category: 'Agent surfaces', reason: 'reference',
+    code: "TokenMeter(usage: usage, label: 'Context')" },
+];
 
 // Core framework widgets (from package:fleury): the layout, text, async, input,
 // and builder primitives a Flutter developer reaches for. Documented from source
@@ -328,7 +510,12 @@ const CORE = [
     code: "AspectRatio(\n  aspectRatio: 2.0,\n  child: Heatmap(values: values),\n)" },
 ].map((d) => ({ ...d, category: 'Core widgets', reason: 'core' }));
 
-const DOC_PAGES = [...DOC_ONLY, ...CORE];
+const DOC_PAGES = [...DOC_ONLY, ...REFERENCE_ONLY, ...CORE];
+const exportedWidgetCount = assertExportedWidgetCoverage([
+  ...widgets,
+  ...DOC_PAGES,
+]);
+assertReferenceComplete(DOC_PAGES.map((entry) => entry.widget), 'source-only widget');
 for (const d of DOC_PAGES) {
   const intro = api[d.widget]?.classDoc ? mdxSafe(api[d.widget].classDoc) : '';
   writeFileSync(
@@ -338,7 +525,7 @@ for (const d of DOC_PAGES) {
       (intro ? `${intro}\n\n` : '') +
       `${docNote(d.reason)}\n` +
       (d.code ? `## Usage\n\n\`\`\`dart\n${d.code}\n\`\`\`\n\n` : '') +
-      propsTable(d.widget) +
+      constructorsSection(d.widget) +
       sourceSection(d.widget) +
       `**Category:** ${d.category} · [All widgets](/widgets/)\n`
   );
@@ -356,17 +543,22 @@ for (const d of DOC_PAGES) {
     ? ' *(runs locally)*'
     : d.reason === 'core'
       ? ' *(core)*'
+      : d.reason === 'native-model'
+        ? ' *(supporting model; runs locally)*'
+        : d.reason === 'reference'
+          ? ' *(source-backed)*'
       : ' *(imperative)*';
   const blurb = (api[d.widget]?.doc ?? '') + tag;
   if (!byCategory.has(d.category)) byCategory.set(d.category, []);
   byCategory.get(d.category).push({ widget: d.widget, id: d.slug, blurb });
 }
 let widgetIndex =
-  `---\ntitle: Overview\ndescription: The Fleury widget library — live examples where they can run in the browser, source-backed references everywhere else.\n---\n\n` +
-  `Fleury ships a broad widget library: charts and meters, data and lists, ` +
-  `document viewers, and agent surfaces. Browser-safe widgets have **live, ` +
-  `client-side examples** compiled with dart2js; native and imperative widgets ` +
-  `still get source-backed reference pages.\n\n`;
+  `---\ntitle: Overview\ndescription: Every exported Fleury higher-level widget, plus the most-used core primitives — live where useful and source-backed throughout.\n---\n\n` +
+  `This reference covers every widget exported by \`fleury_widgets\`, plus ` +
+  `the core layout, text, async, and input primitives most apps reach for. ` +
+  `Live client-side examples are compiled with dart2js; every page has ` +
+  `constructor-specific API details generated from the ` +
+  `current Dart source.\n\n`;
 for (const [category, items] of byCategory) {
   widgetIndex += `## ${category}\n\n`;
   for (const e of items)
@@ -474,5 +666,7 @@ const showIndex =
 writeFileSync(join(showDir, 'index.mdx'), showIndex);
 
 console.log(
-  `generated ${widgets.length} widget pages + ${showcases.length} showcase pages`
+  `generated ${widgets.length + DOC_PAGES.length} widget/API pages + ` +
+  `${showcases.length} showcase pages; covered ${exportedWidgetCount} ` +
+  `exported concrete widgets`
 );

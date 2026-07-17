@@ -19,8 +19,9 @@ excellent frameworks; this is the particular combination Fleury is built for.
     reload, and a broad widget library. Write it like Flutter; run it in a terminal.
   </Card>
   <Card title="A UI that agents can read" icon="seti:default">
-    Every frame emits a semantic graph — roles, state, typed actions — so tests
-    assert on *meaning* and AI agents drive the UI instead of scraping it.
+    Semantics-consuming surfaces maintain a graph of roles, state, and typed
+    actions, so tests assert on *meaning* and AI agents drive the UI instead of
+    scraping it.
   </Card>
   <Card title="One app, terminal or browser" icon="laptop">
     The same tree runs native, compiles into a page with dart2js, or streams over
@@ -61,13 +62,17 @@ click into one and use it (type, arrow, select):
   ]}
 />
 
-Browse the whole set in the [widget reference](/widgets/), or see them composed
+Browse the catalog in the [widget reference](/widgets/), or see them composed
 into real apps in the [showcases](/showcases/).
 
 ### A UI built for agents and tests
 
-Every frame, Fleury emits a **semantic graph** alongside the visual one — each node
-a role, a label, a value, its state, and the typed actions it supports. The
+On agent-reachable and browser surfaces, Fleury maintains a **semantic graph**
+alongside the visual tree and updates it when semantics or painted coverage
+change. Tests materialize a snapshot when `tester.semantics()` asks, and a plain
+terminal run does the same only when a debug consumer asks. Meaningful content
+and interactive nodes carry a role plus the labels, values, state, and typed
+actions relevant to them, while layout-only structure may be folded away. The
 vocabulary is broad and domain-specific: not just `button` and `slider` but
 `conversation`, `messageList`, `patchReview`, `commandPalette`, and `traceTimeline`,
 with concrete actions like `activate`, `submit`, `select`, `increment`, and `copy`.

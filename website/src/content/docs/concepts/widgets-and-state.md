@@ -59,10 +59,10 @@ setState(() => _count++);
 ```
 
 `setState` runs your callback synchronously, then marks this widget for rebuild.
-On the next frame the framework re-runs `build`, re-lays-out, and diffs the new
-cell grid against the old — repainting only the cells that actually changed. An
-idle widget costs nothing; a `setState` that changes one number repaints one
-number.
+On the next frame the framework re-runs the dirty build path, performs the
+layout and paint work that change requires, and diffs the new cell grid against
+the old. The terminal presenter writes only cells that actually changed; when
+the runtime has no frame work, it skips build, layout, paint, and presentation.
 
 The rule is simply: **any state your `build` reads, you must change inside
 `setState`.** Mutating a field without it leaves the screen stale.
@@ -77,8 +77,9 @@ the order they fire:
 - **`didChangeDependencies()`** — right after `initState`, and again whenever an
   inherited dependency you read (a `Theme`, a `MediaQuery`) changes. *Not* called
   for a plain `setState`.
-- **`build(context)`** — every frame this widget needs to repaint. Keep it pure:
-  no side effects, just describe the tree.
+- **`build(context)`** — whenever this state is marked dirty, an inherited
+  dependency changes, or its parent supplies updated configuration. Keep it
+  pure: no side effects, just describe the tree.
 - **`didUpdateWidget(oldWidget)`** — when the parent rebuilds and hands this state
   a new widget instance of the same type. Compare `widget` to `oldWidget` and
   react (e.g. re-subscribe if a callback prop changed).

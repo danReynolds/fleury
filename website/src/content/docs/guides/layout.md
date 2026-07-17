@@ -3,13 +3,13 @@ title: Layout
 description: Arrange widgets on the cell grid — rows, columns, flex, spacing, and constraints.
 ---
 
-Fleury lays out exactly like Flutter — **constraints go down, sizes go up** — with
-one difference: everything is measured in whole **terminal cells**, not pixels.
-A parent hands each child a `CellConstraints` (a min/max width and height in
-cells); the child picks a size within them and reports it back; the parent
-positions it. There's no floating-point math, and "no upper bound" is an
-explicit `null` max rather than a huge number — so an unbounded height is
-genuinely unbounded, not `999999`.
+Fleury follows Flutter's central layout rule — **constraints go down, sizes go
+up** — but implements it for whole **terminal cells**, not pixels. A parent
+hands each child a `CellConstraints` (a min/max width and height in cells); the
+child picks a size within them and reports it back; the parent positions it.
+There's no floating-point geometry, and "no upper bound" is an explicit `null`
+max rather than a huge number — so an unbounded height is genuinely unbounded,
+not `999999`.
 
 You compose layout from small single-purpose widgets. Here are the ones you'll
 reach for, roughly most-used first.
@@ -94,10 +94,12 @@ Column(
 SizedBox(width: 20, child: ProgressBar(value: 0.4))   // a 20-cell-wide bar
 ```
 
-A `null` width or height means "as large as the parent allows on that axis," so
-`SizedBox(height: 4, child: …)` fixes the height and lets the width flow. The
-named constructors cover the common cases: `SizedBox.shrink()` (zero), and
-`SizedBox.expand(child: …)` (fill the parent both ways).
+A `null` width or height adds no constraint on that axis beyond the bounds the
+parent already supplied, so the child chooses its size there. With no child, a
+null axis resolves to the parent's minimum (often zero). Thus
+`SizedBox(height: 4, child: …)` fixes the height and lets the child's width
+flow. The named constructors cover the common cases: `SizedBox.shrink()`
+(zero), and `SizedBox.expand(child: …)` (fill all bounded parent space).
 
 ## Spacing inside a widget: Padding
 

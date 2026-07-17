@@ -832,7 +832,7 @@ Map<SemanticNodeId, SemanticNode> _cachedNodesById(SemanticTree tree) {
 }
 
 /// Invokes [action] on the semantic node [id] by dispatching through the
-/// mounted element tree rooted at [root].
+/// mounted element tree rooted at `root`.
 ///
 /// This is the runtime counterpart to semantic-test action invocation. Hosts
 /// such as the web semantic DOM can use it to route assistive-technology or
@@ -904,32 +904,6 @@ FutureOr<bool> _dispatchSemanticActionOnElement(
   return contributor.handleSemanticAction(target, action);
 }
 
-/// A stable, position-derived identity anchor for [element], folding the chain
-/// of keyed ancestors (the same `Key`s reconciliation uses) with a positional
-/// `~<index>` segment for each unkeyed step *below* the nearest key.
-///
-/// Returns null when no foldable key exists anywhere above [element] — the
-/// caller then keeps the snapshot-local `element-<hash>` form. Unlike that hash,
-/// this anchor is derived from keys + tree position rather than element
-/// instance identity, so it is identical across rebuilds: a node under a keyed
-/// list row keeps its id wherever the row moves. `GlobalKey`s are treated as
-/// transparent (they have no stable string and survive reparenting on their
-/// own), so anchoring lands on the nearest value key, which is what stays put
-/// under a `GlobalKey` move.
-///
-/// The *full* keyed chain is folded (not just the nearest key) deliberately: it
-/// keeps ids globally unique — no false "ambiguous" rejections — and gives even
-/// unkeyed nodes a session-stable anchor (the runtime/overlay root is keyed), at
-/// the cost of a constant, opaque framework-key prefix on every id. Ids are
-/// opaque handles, so that prefix is harmless; trimming it would trade that
-/// uniqueness and stability for cosmetics.
-///
-/// Privacy: a folded key value is the same identifier the app already chose for
-/// reconciliation, and a keyed ancestor already exposes it as *its own* node id,
-/// so folding it into descendant ids reveals no value the snapshot didn't
-/// already carry. Ids are display-sanitized at the inspection boundary; like the
-/// own-`key:` form, this scheme treats `Key`s as structural identifiers, not a
-/// place to encode secrets.
 /// Escapes a folded key value so it cannot inject the `/` segment separator or
 /// the `~` positional marker into a derived id (see [semanticAnchorOf]).
 ///
@@ -962,6 +936,32 @@ String _renderSemanticKeySegment(Key key) {
   return '${value.runtimeType}#${identityHashCode(value).toRadixString(36)}';
 }
 
+/// A stable, position-derived identity anchor for [element], folding the chain
+/// of keyed ancestors (the same `Key`s reconciliation uses) with a positional
+/// `~<index>` segment for each unkeyed step *below* the nearest key.
+///
+/// Returns null when no foldable key exists anywhere above [element] — the
+/// caller then keeps the snapshot-local `element-<hash>` form. Unlike that hash,
+/// this anchor is derived from keys + tree position rather than element
+/// instance identity, so it is identical across rebuilds: a node under a keyed
+/// list row keeps its id wherever the row moves. `GlobalKey`s are treated as
+/// transparent (they have no stable string and survive reparenting on their
+/// own), so anchoring lands on the nearest value key, which is what stays put
+/// under a `GlobalKey` move.
+///
+/// The *full* keyed chain is folded (not just the nearest key) deliberately: it
+/// keeps ids globally unique — no false "ambiguous" rejections — and gives even
+/// unkeyed nodes a session-stable anchor (the runtime/overlay root is keyed), at
+/// the cost of a constant, opaque framework-key prefix on every id. Ids are
+/// opaque handles, so that prefix is harmless; trimming it would trade that
+/// uniqueness and stability for cosmetics.
+///
+/// Privacy: a folded key value is the same identifier the app already chose for
+/// reconciliation, and a keyed ancestor already exposes it as *its own* node id,
+/// so folding it into descendant ids reveals no value the snapshot didn't
+/// already carry. Ids are display-sanitized at the inspection boundary; like the
+/// own-`key:` form, this scheme treats `Key`s as structural identifiers, not a
+/// place to encode secrets.
 String? semanticAnchorOf(Element element) {
   final scope = <String>[]; // keyed segments, leaf→root
   // Elements below the nearest key (leaf→root). We only need their POSITIONAL
@@ -1045,8 +1045,9 @@ abstract interface class SemanticActionContributor {
   );
 }
 
-/// Implemented by semantic contributors that can apply a [SemanticAction
-/// .setValue] payload. Opt-in and additive: only value-bearing nodes implement
+/// Implemented by semantic contributors that can apply a
+/// [SemanticAction.setValue] payload. Opt-in and additive: only value-bearing
+/// nodes implement
 /// it, so the existing [SemanticActionContributor]s are untouched. Return true
 /// if the value was applied.
 abstract interface class SemanticValueContributor {
@@ -1125,8 +1126,8 @@ final Expando<SemanticDirtyTracker> _semanticDirtyTrackers =
 ///
 /// [SemanticsElement]s record into their owner's tracker, so two Fleury
 /// runtimes in one isolate never observe each other's semantic dirt. The
-/// tracker accumulates marks across frames until [SemanticDirtyTracker
-/// .takeDirtySnapshot] consumes them, which lets deferred semantic
+/// tracker accumulates marks across frames until
+/// [SemanticDirtyTracker.takeDirtySnapshot] consumes them, which lets deferred semantic
 /// presentation coalesce several frames into one flush. Attached lazily via
 /// an [Expando] (the same per-instance idiom [SemanticTree]'s caches use) so
 /// the widgets layer takes no dependency on semantics.

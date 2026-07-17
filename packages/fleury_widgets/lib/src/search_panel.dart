@@ -49,7 +49,7 @@ typedef SearchResultMatcher = bool Function(SearchResult result, String query);
 /// The index returns source-result indexes instead of reordered result objects
 /// so callers can preserve stable selection, activation, copy, and semantic
 /// state from their original list. Default matching is ranked as exact,
-/// prefix, contains, then fuzzy subsequence. Passing a custom [matcher] keeps
+/// prefix, contains, then fuzzy subsequence. Passing a custom `matcher` keeps
 /// caller-owned source-order filtering semantics.
 final class SearchResultIndex {
   SearchResultIndex(List<SearchResult> results)

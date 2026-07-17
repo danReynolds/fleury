@@ -1048,7 +1048,7 @@ abstract class RenderObject {
 
   /// Attaches [child] to this render object as its parent. Subclasses
   /// that hold children call this whenever they accept one; it also
-  /// gives the parent a chance to ensure [child.parentData] is the right
+  /// gives the parent a chance to ensure [RenderObject.parentData] is the right
   /// type via [setupParentData].
   @protected
   void adoptChild(RenderObject child) {

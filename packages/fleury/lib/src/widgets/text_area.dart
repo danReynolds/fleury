@@ -66,8 +66,13 @@ class TextArea extends StatefulWidget {
          'maxLines must be >= minLines',
        );
 
+  /// External editing state. When null, the widget owns an internal controller.
   final TextEditingController? controller;
+
+  /// External focus state. When null, the widget owns an internal focus node.
   final FocusNode? focusNode;
+
+  /// Whether to request focus when the widget first mounts.
   final bool autofocus;
 
   /// Called with the new text whenever the controller text changes.
@@ -92,10 +97,19 @@ class TextArea extends StatefulWidget {
   /// Style for the [placeholder] text. Defaults to dim.
   final CellStyle placeholderStyle;
 
+  /// Style applied to editable text.
   final CellStyle style;
+
+  /// Style applied to the grapheme cell under the visible cursor.
   final CellStyle cursorStyle;
+
+  /// Whether the area can receive focus and editing input.
   final bool enabled;
+
+  /// Whether navigation and selection remain available while edits are blocked.
   final bool readOnly;
+
+  /// Validation message exposed in semantics, or null when the value is valid.
   final String? validationError;
 
   /// Label exposed through the semantic app graph.

@@ -20,8 +20,13 @@ class Digits extends StatelessWidget {
     this.semanticLabel = 'Digits',
   });
 
+  /// Characters to render using the built-in large-glyph alphabet.
   final String text;
+
+  /// Complete cell style override for lit digit segments.
   final CellStyle? style;
+
+  /// Foreground color used when [style] is null.
   final Color? color;
 
   /// When set, "off" segments are painted with this dim glyph (e.g. `·` or
@@ -29,6 +34,7 @@ class Digits extends StatelessWidget {
   /// shape reads on bright backgrounds. Default null leaves them blank.
   final String? offGlyph;
 
+  /// Label exposed through the semantic app graph.
   final String semanticLabel;
 
   @override
@@ -75,8 +81,13 @@ class _RawDigits extends LeafRenderObjectWidget {
 /// Render object behind [Digits]. See its docs.
 class RenderDigits extends RenderObject {
   RenderDigits({
+    /// Characters to lay out using the built-in large-glyph alphabet.
     required String text,
+
+    /// Cell style used to paint lit digit segments.
     required CellStyle style,
+
+    /// Optional glyph used to paint unlit digit segments.
     required String? offGlyph,
   }) : _text = text,
        _style = style,

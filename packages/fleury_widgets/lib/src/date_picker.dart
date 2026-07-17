@@ -44,7 +44,9 @@ class DatePicker extends StatefulWidget {
   /// Currently-selected day (only the y/m/d portion is read).
   final DateTime value;
 
-  /// Called with the new day on each cursor move and on Enter.
+  /// Called when keyboard, pointer, or semantic interaction selects a day.
+  /// Enter is consumed without invoking this callback because navigation has
+  /// already committed the selection.
   final void Function(DateTime date)? onChanged;
 
   /// Lower bound (inclusive). Days before this are dimmed and skipped.
@@ -60,7 +62,10 @@ class DatePicker extends StatefulWidget {
   /// Optional label exposed through the semantic app graph.
   final String? label;
 
+  /// Focus node used for keyboard navigation.
   final FocusNode? focusNode;
+
+  /// Whether the picker requests focus when mounted.
   final bool autofocus;
 
   @override

@@ -77,6 +77,7 @@ class PasswordInput extends StatefulWidget {
   /// Glyph used in place of each typed grapheme. Defaults to `•`.
   final String obscuringCharacter;
 
+  /// Whether the field accepts focus and user input.
   final bool enabled;
 
   /// Whether the field can receive focus but not edit text.

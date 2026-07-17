@@ -115,8 +115,9 @@ class RouteTransition {
   );
 
   /// Instant — the route settles in a single frame with no enter/exit
-  /// animation. The reachable opt-out from the animated default: [push] and
-  /// [NavigatorState.present] detect it and skip transition building entirely.
+  /// animation. The reachable opt-out from the animated default:
+  /// [NavigatorState.push] and [NavigatorState.present] detect it and skip
+  /// transition building entirely.
   /// Pass per-push (`push(screen, transition: RouteTransition.none)`) or as a
   /// Navigator-wide default (`Navigator(transition: RouteTransition.none)`).
   static final RouteTransition none = RouteTransition._instant();

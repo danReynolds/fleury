@@ -26,7 +26,7 @@ typedef TickerCallback = void Function(Duration elapsed);
 /// [TickerProvider] (typically via `SingleTickerProviderStateMixin`
 /// on a `State`).
 class Ticker {
-  /// Creates a Ticker that will invoke [onTick] each time
+  /// Creates a Ticker that invokes the supplied callback each time
   /// [scheduler] fires while this ticker is active. The Ticker is
   /// inactive until [start] is called.
   Ticker(this._onTick, {required TickerScheduler scheduler})

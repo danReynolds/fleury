@@ -335,12 +335,25 @@ class MultiSelect<T> extends StatefulWidget {
     this.autofocus = false,
   });
 
+  /// Ordered choices; disabled options remain visible but cannot be toggled.
   final List<SelectOption<T>> options;
+
+  /// Controlled set of currently selected option values.
   final Set<T> values;
+
+  /// Called with a new unmodifiable selection after a toggle; null disables it.
   final void Function(Set<T> values)? onChanged;
+
+  /// Label exposed for the option list through the semantic app graph.
   final String semanticLabel;
+
+  /// Text rendered when [options] is empty.
   final String emptyLabel;
+
+  /// Optional externally owned focus node used for keyboard navigation.
   final FocusNode? focusNode;
+
+  /// Whether the list requests focus when mounted.
   final bool autofocus;
 
   @override

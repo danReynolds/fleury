@@ -35,8 +35,8 @@ enum ImageProtocol {
 ///
 /// Fleury lays them out as one column. When a terminal renders them two columns
 /// wide, its cursor advances further than Fleury's model and rows desync (the
-/// "Warp garble"). Detected by an opt-in startup Cursor-Position probe
-/// ([probeAmbiguousWidth]); [wide] is the safe default when unknown, so the
+/// "Warp garble"). Detected by the internal opt-in startup Cursor-Position
+/// probe (`probeAmbiguousWidth`); [wide] is the safe default when unknown, so the
 /// renderer defensively pins each ambiguous cell with an absolute reposition —
 /// correct on any terminal, at a per-cell cursor-byte cost. A confirmed [narrow]
 /// lets the renderer emit compact contiguous runs instead.

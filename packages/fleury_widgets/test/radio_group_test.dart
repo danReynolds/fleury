@@ -64,4 +64,21 @@ void main() {
     ); // a -> c (skip b)
     expect(picked, ['c']);
   });
+
+  testWidgets('autofocus falls back from a disabled selection', (tester) {
+    tester.pumpWidget(
+      RadioGroup<String>(
+        value: 'a',
+        autofocus: true,
+        options: const <RadioOption<String>>[
+          RadioOption(value: 'a', label: 'A', enabled: false),
+          RadioOption(value: 'b', label: 'B'),
+        ],
+        onChanged: (_) {},
+      ),
+    );
+    tester.render(size: const CellSize(20, 3));
+
+    expect(tester.focusManager.focusedNode?.debugLabel, 'radio-1');
+  });
 }

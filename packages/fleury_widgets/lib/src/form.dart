@@ -1695,6 +1695,13 @@ class _FormPanelState extends State<FormPanel> {
   }
 }
 
+/// Presents a [FormDefinition] as an ordered sequence of validated steps.
+///
+/// The wizard keeps one form controller across steps, exposes navigation
+/// through [wizardController], and calls [onSubmit] after full-form validation
+/// completes. The result can be invalid; inspect [FormSubmitResult.valid]
+/// before acting on its values. Omit either controller to let the widget create
+/// and dispose it.
 class FormWizard extends StatefulWidget {
   const FormWizard({
     super.key,
@@ -1711,16 +1718,40 @@ class FormWizard extends StatefulWidget {
     this.backLabel = 'Back',
   });
 
+  /// Form schema shared by every wizard step.
   final FormDefinition definition;
+
+  /// Ordered steps that partition every field in [definition] exactly once.
+  ///
+  /// The list must be non-empty, each step ID must be unique, and every step
+  /// must contain at least one known field.
   final List<FormWizardStep> steps;
+
+  /// External form state, or null to let the wizard create and own it.
   final FormController? controller;
+
+  /// External step-navigation state, or null to let the wizard create and own it.
   final FormWizardController? wizardController;
+
+  /// Layout passed to the form panel that renders the active step.
   final FormPanelLayout layout;
+
+  /// Called with the submission result after final-step validation completes.
   final void Function(FormSubmitResult result)? onSubmit;
+
+  /// Called when the user activates the optional cancel action.
   final void Function()? onCancel;
+
+  /// Whether the active step's first field requests focus when mounted.
   final bool autofocus;
+
+  /// Preferred width of text-like inputs in terminal cells.
   final int fieldWidth;
+
+  /// Label for the forward action on every non-final step.
   final String nextLabel;
+
+  /// Label for the action that returns to the previous step.
   final String backLabel;
 
   @override

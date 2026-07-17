@@ -472,7 +472,6 @@ presentation, input, focus, clipboard, semantics, or benchmark capture behavior:
 
 ```sh
 cd packages/fleury_web
-dart test -p chrome test/run_tui_web_test.dart
 dart test -p chrome test/run_tui_surface_test.dart
 ```
 

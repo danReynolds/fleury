@@ -52,7 +52,7 @@ final class SemanticTreeDelta {
 /// Drives a single Fleury app over the structured remote wire and keeps its
 /// latest semantic snapshot. One bridge per app session.
 final class FleuryAppBridge {
-  /// Wraps an existing [transport] to the app. Call [start] to handshake and
+  /// Wraps an existing transport to the app. Call [start] to handshake and
   /// begin tracking semantics. [onClose] runs during [close] (used by [spawn]
   /// to kill the subprocess and remove its socket).
   FleuryAppBridge(
@@ -536,4 +536,3 @@ final class FleuryAppBridgeException implements Exception {
   @override
   String toString() => 'FleuryAppBridgeException: $message';
 }
-

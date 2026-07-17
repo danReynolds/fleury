@@ -307,7 +307,7 @@ final class KeyChord {
 
   /// Whether this chord's *first step* matches [event]. Multi-step
   /// chords have their continuation matched by [InputDispatcher] via
-  /// [KeyChordInternals.matchesStepAt].
+  /// the framework-internal `matchesStepAt` hook.
   bool matches(KeyEvent event) => _matchStep(this, event);
 
   /// Whether a focused text field swallows this chord before chord matching

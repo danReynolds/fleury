@@ -17,8 +17,13 @@ final class MenuItem extends MenuEntry {
     this.enabled = true,
   });
 
+  /// Text displayed for this menu row.
   final String label;
+
+  /// Called when the enabled item is activated.
   final void Function() onSelect;
+
+  /// Whether the row can receive selection and be activated.
   final bool enabled;
 }
 
@@ -31,8 +36,13 @@ final class SubMenu extends MenuEntry {
     this.enabled = true,
   });
 
+  /// Text displayed for this submenu row.
   final String label;
+
+  /// Entries displayed when the submenu opens.
   final List<MenuEntry> items;
+
+  /// Whether the row can receive selection and open its submenu.
   final bool enabled;
 }
 
@@ -63,8 +73,13 @@ class Menu extends StatefulWidget {
     this.semanticLabel,
   });
 
+  /// Widget that opens the menu when activated.
   final Widget trigger;
+
+  /// Top-level entries displayed by the menu.
   final List<MenuEntry> items;
+
+  /// Whether the trigger should request focus when mounted.
   final bool autofocus;
 
   /// Label for the menu trigger and root menu in semantic snapshots.

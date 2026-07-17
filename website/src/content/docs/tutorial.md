@@ -166,9 +166,10 @@ reported through `onChanged`, a derived list, and a layout that fills the screen
 
 ## Where to go next
 
-- The same app runs in a **browser** unchanged — see [Deployment &
-  distribution](/guides/deployment/) to compile it with `dart2js` or preview it
-  locally with `fleury serve`.
+- The same **widget tree** runs in a browser with a target-specific host
+  entrypoint and web-safe imports — see [Deployment &
+  distribution](/guides/deployment/) to compile it with `dart2js` or preview the
+  native app locally with `fleury serve`.
 - Swap the plain `Column` of `Text` for a richer widget — a [`Tree`](/widgets/tree/),
   [`DataTable`](/widgets/datatable/), or [`Select`](/widgets/select/) — from the
   [widget reference](/widgets/). (Those live in `fleury_widgets`; add

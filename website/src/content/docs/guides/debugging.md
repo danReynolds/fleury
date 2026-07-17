@@ -3,10 +3,12 @@ title: Debugging
 description: The built-in debug shell — a toggleable sidebar with live frame stats, the semantic tree, rebuild diagnostics, captured logs, and runtime errors.
 ---
 
-Every fleury app ships with a **debug shell**: a dockable sidebar you can
-toggle at any time during development, with no setup, no separate process, and
-full support over SSH (it renders in the same terminal). It is on by default
-in development runs and off by default in release builds.
+Native apps launched with `runApp` include an optional **debug shell**: a
+dockable sidebar that needs no separate process and works over SSH because it
+renders in the same terminal. The default `DebugConfig` enables its hotkeys and
+event collection for JIT development runs, disables them for AOT product builds,
+and starts with the panel closed in either case. Apps can override both
+`enabled` and `startMode`.
 
 ## Try it hands-on
 
@@ -18,10 +20,11 @@ repainting region — and lets you trigger each and watch the matching tab react
 dart run packages/samples/bin/samples.dart debug   # then press Ctrl+G
 ```
 
-Each trigger is a semantic button, so the same app is the agent-devtools demo:
-point `fleury mcp` at it and an agent can invoke a scenario, then `read_errors`
-/ `read_frames` / `read_logs` to see what it just caused — your AI reading your
-debugger while it drives the app.
+Each trigger is a semantic button, so the same app is the agent-devtools demo.
+Run `fleury_mcp -- dart run packages/samples/bin/samples.dart debug` and an
+agent can invoke a scenario, then use `read_errors` / `read_frames` /
+`read_logs` to see what it just caused — your AI reading your debugger while it
+drives the app.
 
 ## Toggling it
 
@@ -45,7 +48,7 @@ back to the app.
 - **Live** — frame number, slow-frame count (>16ms), approximate FPS, and
   per-phase timings (build / layout / paint) with recent history.
 - **Tree** — the live **semantic tree** (the same agent-legible tree your
-  tests and `fleury mcp` consume), plus the terminal diagnosis: detected
+  tests and `fleury_mcp` consume), plus the terminal diagnosis: detected
   capabilities, color mode, image protocol, session type. Arrow keys move the
   node cursor; `Home` resets it.
 - **Rebuilds** — what dirtied each frame: invalidation sources, last phase

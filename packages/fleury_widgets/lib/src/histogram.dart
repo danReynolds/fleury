@@ -41,9 +41,16 @@ class Histogram extends StatelessWidget {
   /// [values]. Values outside the range are dropped.
   final (num, num)? range;
 
+  /// Whether each bar shows its bin midpoint label.
   final bool showLabels;
+
+  /// Whether each bar shows its observation count.
   final bool showValues;
+
+  /// Width of each bar in terminal cells.
   final int barWidth;
+
+  /// Horizontal gap between adjacent bars in terminal cells.
   final int gap;
 
   /// Bar color override; defaults to the theme's primary.

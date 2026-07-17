@@ -8,15 +8,20 @@ import 'package:fleury/fleury_core.dart';
 /// underlying datum without keeping a label→data map of its own. Leave
 /// `T` unspecified (it defaults to `dynamic`) when you only need labels.
 ///
-/// Expansion is tracked by node **identity**, so hold a stable [roots]
+/// Expansion is tracked by node **identity**, so give [Tree.roots] a stable
 /// list (build it once, e.g. as `const` or in `initState`). If you
 /// rebuild `roots` into fresh `TreeNode` instances each frame, expansion
 /// state resets — the old instances are no longer in the tree.
 class TreeNode<T> {
   const TreeNode(this.label, {this.value, this.children = const []});
 
+  /// Text displayed for this node's row.
   final String label;
+
+  /// Optional payload returned with this node through [Tree.onSelect].
   final T? value;
+
+  /// Child nodes shown when this branch is expanded.
   final List<TreeNode<T>> children;
 
   bool get isBranch => children.isNotEmpty;
@@ -46,9 +51,16 @@ class Tree<T> extends StatefulWidget {
     this.selectedStyle,
   });
 
+  /// Top-level nodes, whose object identities also anchor expansion state.
   final List<TreeNode<T>> roots;
+
+  /// Semantic label for the complete tree.
   final String semanticLabel;
+
+  /// Focus node used for keyboard navigation.
   final FocusNode? focusNode;
+
+  /// Whether the tree should request focus when mounted.
   final bool autofocus;
 
   /// Called when Enter activates a leaf node.

@@ -25,7 +25,7 @@ import 'selection_event.dart';
 ///   1. Mount → call [SelectionRegistrar.add] (typically via
 ///      [SelectionRegistrant]).
 ///   2. Paint → record current global bounds.
-///   3. Event arrives → [dispatch] mutates internal state and
+///   3. Event arrives → [dispatchSelectionEvent] mutates internal state and
 ///      notifies [geometry] listeners.
 ///   4. Container reads [geometry] and triggers a repaint, OR
 ///      [getSelectedContent] for copy.

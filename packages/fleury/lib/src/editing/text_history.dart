@@ -85,7 +85,7 @@ final class TextHistoryController extends ChangeNotifier {
 
   /// Moves toward older entries and returns the value to display.
   ///
-  /// The first call captures [current.text] as the draft so navigating forward
+  /// The first call captures `current.text` as the draft so navigating forward
   /// past the newest history entry can restore it.
   TextEditingValue? navigatePrevious(TextEditingValue current) {
     _checkNotDisposed();

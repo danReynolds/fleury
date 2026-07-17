@@ -57,7 +57,10 @@ class Stepper extends StatefulWidget {
   /// Optional label shown to the left of the stepper.
   final String? label;
 
+  /// Focus node used for keyboard and text-input interaction.
   final FocusNode? focusNode;
+
+  /// Whether the stepper should request focus when mounted.
   final bool autofocus;
 
   @override

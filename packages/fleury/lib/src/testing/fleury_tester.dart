@@ -77,7 +77,8 @@ Never _throwFleuryTestFailure(String message) {
 /// `testWidgets` invocation.
 class FleuryTester {
   /// Constructs a tester with fresh, isolated framework pieces.
-  /// Tests typically don't call this directly — use [testWidgets].
+  /// Tests typically don't call this directly — use `testWidgets` from
+  /// `package:fleury_test`.
   FleuryTester({
     AnimationPolicy animationPolicy = AnimationPolicy.enabled,
     this.viewportSize = const CellSize(80, 24),
@@ -752,7 +753,8 @@ class FleuryTester {
   }
 
   /// Tears down the test fixtures. Called automatically by
-  /// [testWidgets]; tests that construct an [FleuryTester] manually
+  /// `testWidgets` from `package:fleury_test`; tests that construct a
+  /// [FleuryTester] manually
   /// must call this in their test teardown.
   void dispose() {
     if (_disposed) return;

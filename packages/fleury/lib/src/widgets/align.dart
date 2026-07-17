@@ -44,9 +44,12 @@ final class Align extends SingleChildRenderObjectWidget {
   const Align({
     super.key,
     this.alignment = Alignment.center,
+
+    /// The subtree to position within the available space.
     required Widget super.child,
   });
 
+  /// Where to place the child within the space this widget receives.
   final Alignment alignment;
 
   @override

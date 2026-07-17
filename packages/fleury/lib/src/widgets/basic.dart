@@ -62,10 +62,10 @@ final class _EmptyBoxElement extends Element {
 ///
 /// With [softWrap] true (default), text exceeding the available width
 /// wraps onto additional rows at word boundaries (or hard-breaks
-/// inside words longer than the width). With [softWrap] false, the
-/// text stays on one row and is clipped at the right edge — useful
-/// for status bars, key hints, or anywhere overflow is preferable to
-/// reflow.
+/// inside words longer than the width). With [softWrap] false, automatic
+/// reflow is disabled; explicit newlines still create rows, and each long row
+/// is clipped at the right edge. This is useful for status bars, key hints, or
+/// anywhere overflow is preferable to reflow.
 /// Its own [style] is merged on top of the ambient [DefaultTextStyle], so
 /// a parent can set a base color/dim for a whole subtree once and each
 /// `Text` overrides only what it sets.
@@ -82,8 +82,16 @@ final class Text extends StatelessWidget implements WidgetUpdatePruner {
     this.allowSelect = true,
   });
 
+  /// The text to display. Terminal control codes are sanitized before paint.
   final String data;
+
+  /// Style merged over the nearest [DefaultTextStyle].
   final CellStyle style;
+
+  /// Whether text automatically wraps to additional rows.
+  ///
+  /// When false, explicit newlines still create rows and each long row clips
+  /// horizontally.
   final bool softWrap;
 
   /// Cap the number of lines; extra content is cut off (and ellipsized
@@ -99,6 +107,7 @@ final class Text extends StatelessWidget implements WidgetUpdatePruner {
   /// right-anchored key hints.
   final TextAlign textAlign;
 
+  /// Terminal width profile used to measure grapheme clusters.
   final TerminalProfile profile;
 
   /// Whether this Text participates in any ancestor `SelectionArea`'s
@@ -266,16 +275,31 @@ final class ErrorWidget extends StatelessWidget {
 
 /// A widget that imposes specific dimensions on its child.
 ///
-/// `width == null` means "as wide as the parent allows"; likewise for
-/// height. With both null and no child, this collapses to zero cells.
+/// A null width or height adds no constraint on that axis beyond the bounds
+/// supplied by the parent, so the child chooses its size there. With no child,
+/// a null axis resolves to the parent's minimum (often zero).
 final class SizedBox extends SingleChildRenderObjectWidget {
-  const SizedBox({super.key, this.width, this.height, super.child});
+  const SizedBox({
+    super.key,
+    this.width,
+    this.height,
+
+    /// Content constrained to the requested size, or null for an empty box.
+    super.child,
+  });
 
   /// Convenience for a fixed `width x height` box with no child.
-  const SizedBox.fromSize({super.key, required int cols, required int rows})
-    : width = cols,
-      height = rows,
-      super(child: null);
+  const SizedBox.fromSize({
+    super.key,
+
+    /// Fixed width in terminal cells.
+    required int cols,
+
+    /// Fixed height in terminal rows.
+    required int rows,
+  }) : width = cols,
+       height = rows,
+       super(child: null);
 
   /// Convenience for a zero-sized leaf.
   const SizedBox.shrink({super.key})
@@ -283,25 +307,39 @@ final class SizedBox extends SingleChildRenderObjectWidget {
       height = 0,
       super(child: null);
 
-  /// Forces the box to be as large as the parent allows on both axes.
-  /// The child (if any) is constrained to fill all available cells.
+  /// Forces the box to fill the parent's bounded space on both axes.
+  /// An unbounded axis remains unconstrained, and the child chooses its size.
   /// Common pattern for "fill the rest of this row/column."
-  const SizedBox.expand({super.key, super.child})
-    : width = expandSize,
-      height = expandSize;
+  const SizedBox.expand({
+    super.key,
+
+    /// Content forced to fill all bounded space supplied by the parent.
+    super.child,
+  }) : width = expandSize,
+       height = expandSize;
 
   /// Forces the box to be `dimension x dimension`. Equivalent to
   /// `SizedBox(width: dimension, height: dimension, child: child)`.
-  const SizedBox.square({super.key, int? dimension, super.child})
-    : width = dimension,
-      height = dimension;
+  const SizedBox.square({
+    super.key,
+
+    /// Width and height in cells, or null to defer both axes to the parent.
+    int? dimension,
+
+    /// Content constrained to the square.
+    super.child,
+  }) : width = dimension,
+       height = dimension;
 
   /// Sentinel value carried as a `width`/`height` to mean "take all
   /// the parent-imposed space on this axis." Exposed for advanced
   /// callers; most code should reach for [SizedBox.expand] instead.
   static const int expandSize = 0x7fffffff;
 
+  /// Requested width in cells, or null to add no width constraint.
   final int? width;
+
+  /// Requested height in rows, or null to add no height constraint.
   final int? height;
 
   @override
@@ -326,8 +364,15 @@ final class SizedBox extends SingleChildRenderObjectWidget {
 
 /// Wraps [child] in an [EdgeInsets] of empty cells on each side.
 final class Padding extends SingleChildRenderObjectWidget {
-  const Padding({super.key, required this.padding, super.child});
+  const Padding({
+    super.key,
+    required this.padding,
 
+    /// Content inset by [padding], or null to reserve padding alone.
+    super.child,
+  });
+
+  /// Empty cells to insert around the child.
   final EdgeInsets padding;
 
   @override
@@ -445,10 +490,15 @@ class Flexible extends SingleChildRenderObjectWidget {
     super.key,
     this.flex = 1,
     this.fit = FlexFit.loose,
+
+    /// Content laid out within this widget's flex allocation.
     required Widget super.child,
   });
 
+  /// Share of remaining main-axis space relative to sibling flex children.
   final int flex;
+
+  /// Whether the child must fill its allocation or may use less of it.
   final FlexFit fit;
 
   @override
@@ -550,7 +600,9 @@ final class Wrap extends MultiChildRenderObjectWidget {
     super.key,
     this.spacing = 0,
     this.runSpacing = 0,
-    super.children,
+
+    /// Widgets flowed into successive runs in declaration order.
+    super.children = const <Widget>[],
   });
 
   /// Gap between children within a row.
@@ -588,12 +640,21 @@ final class Positioned extends SingleChildRenderObjectWidget {
     this.top = 0,
     this.width,
     this.height,
+
+    /// Content positioned relative to the surrounding [Stack].
     required Widget super.child,
   });
 
+  /// Horizontal offset from the stack's left edge, in cells.
   final int left;
+
+  /// Vertical offset from the stack's top edge, in rows.
   final int top;
+
+  /// Child width in cells, or null to use its intrinsic width.
   final int? width;
+
+  /// Child height in rows, or null to use its intrinsic height.
   final int? height;
 
   @override
@@ -645,7 +706,10 @@ final class Container extends StatelessWidget {
   /// to centre a fixed-size child inside a larger container, etc.
   final Alignment? alignment;
 
+  /// Outer width in cells, including border and padding; null leaves it flexible.
   final int? width;
+
+  /// Outer height in rows, including border and padding; null leaves it flexible.
   final int? height;
 
   /// Empty cells inserted between the border and the child.
@@ -666,6 +730,7 @@ final class Container extends StatelessWidget {
   /// already-styled background.
   final Color? color;
 
+  /// Content inside the optional padding, fill, and border.
   final Widget? child;
 
   @override
@@ -867,7 +932,7 @@ class _Border extends SingleChildRenderObjectWidget {
 ///
 /// The child is laid out within the intersection of the parent's
 /// constraints and these additional ones. If the intersection is
-/// empty (e.g. you asked for `minCols: 50` inside a parent that
+/// empty (e.g. you asked for `minWidth: 50` inside a parent that
 /// offered at most 20), the parent's bounds win.
 final class ConstrainedBox extends SingleChildRenderObjectWidget {
   const ConstrainedBox({
@@ -876,12 +941,21 @@ final class ConstrainedBox extends SingleChildRenderObjectWidget {
     this.maxWidth,
     this.minHeight,
     this.maxHeight,
+
+    /// Content laid out within the intersection of these and parent constraints.
     required Widget super.child,
   });
 
+  /// Additional minimum width in cells, bounded by the parent's constraints.
   final int? minWidth;
+
+  /// Additional maximum width in cells, bounded by the parent's constraints.
   final int? maxWidth;
+
+  /// Additional minimum height in rows, bounded by the parent's constraints.
   final int? minHeight;
+
+  /// Additional maximum height in rows, bounded by the parent's constraints.
   final int? maxHeight;
 
   @override
@@ -984,9 +1058,10 @@ class _RenderConstrainedBox extends RenderObject
 // AspectRatio
 // ---------------------------------------------------------------------------
 
-/// Sizes its child to a target width:height ratio while staying
-/// within the parent's constraints. The largest box that fits the
-/// parent AND has the given ratio wins.
+/// Sizes its child to a target width:height ratio while staying within the
+/// parent's constraints. When bounded constraints admit the ratio, the largest
+/// matching box wins. An unbounded axis falls back to its minimum, and
+/// incompatible minimums can force the result away from the target ratio.
 ///
 /// ⚠ Terminal cells are typically *taller than wide* (often roughly
 /// 2:1 height:width). A literal 1:1 [aspectRatio] produces a visually
@@ -997,6 +1072,8 @@ final class AspectRatio extends SingleChildRenderObjectWidget {
   const AspectRatio({
     super.key,
     required this.aspectRatio,
+
+    /// Content laid out within the resolved box.
     required Widget super.child,
   }) : assert(aspectRatio > 0, 'aspectRatio must be > 0');
 

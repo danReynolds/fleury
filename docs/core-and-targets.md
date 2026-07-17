@@ -79,6 +79,10 @@ That gives a simple rule for any code that might run in the browser:
   `FilePicker`, `Image`, `ProcessPanel`, `LogRegion`, `TerminalOutputRegion`.
   These can render over the **served** target — the server has `dart:io` — but
   can't compile into a client-side bundle.
+- **`WorkflowSnapshot` is a supporting model, not a widget or an I/O service.**
+  Its current `LogEntry` dependency lives in the native-only log library, so it
+  is also omitted from `fleury_widgets_web.dart` today. Use it in terminal or
+  served apps until that model dependency is split onto the web-safe surface.
 
 ## Package map
 

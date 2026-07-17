@@ -40,9 +40,13 @@ final class CodeDocument {
   });
 
   factory CodeDocument.parse(
+    /// Raw source text to split, sanitize, classify, and render as rows.
     String source, {
     String? language,
     String? filePath,
+
+    /// Maximum display length including any line-number prefix; null disables
+    /// truncation.
     int? maxLineLength = 1000,
     int tabSize = 2,
     bool showLineNumbers = true,
@@ -57,14 +61,32 @@ final class CodeDocument {
     );
   }
 
+  /// Parsed source rows in their original order.
   final List<CodeLine> lines;
+
+  /// Optional language hint used for coarse row classification.
   final String? language;
+
+  /// Optional file-path metadata; [CodeDocument.parse] sanitizes the supplied
+  /// text.
   final String? filePath;
+
+  /// Total number of source rows.
   final int lineCount;
+
+  /// Number of rows whose [CodeLine.kind] is not [CodeLineKind.blank].
   final int nonEmptyLineCount;
+
+  /// Number of rows classified as [CodeLineKind.comment].
   final int commentCount;
+
+  /// Number of rows classified as [CodeLineKind.blank].
   final int blankCount;
+
+  /// Whether [CodeLine.displayText] includes line-number prefixes.
   final bool showLineNumbers;
+
+  /// Number of spaces used to expand each tab in the source.
   final int tabSize;
 
   bool get isEmpty => lines.isEmpty;
@@ -84,21 +106,40 @@ final class CodeLine {
     required this.outputOriginalLength,
   });
 
+  /// Zero-based row index in the containing [CodeDocument].
   final int index;
+
+  /// One-based source line number.
   final int lineNumber;
+
+  /// Coarse classification used to style the row.
   final CodeLineKind kind;
+
+  /// Sanitized source text without a line-number prefix.
   final String text;
+
+  /// Render-ready text after line numbering and optional truncation.
   final String displayText;
+
+  /// Number of leading spaces in [text].
   final int indentation;
+
+  /// Whether unsafe terminal text was replaced while producing [text].
   final bool outputSanitized;
+
+  /// Whether [displayText] was shortened to the configured line limit.
   final bool outputTruncated;
+
+  /// Source row length before sanitization or display truncation.
   final int outputOriginalLength;
 }
 
 /// Controller for [CodeView] selection.
 class CodeViewController extends ChangeNotifier {
-  CodeViewController({int selectedIndex = 0})
-    : _list = ListController(selectedIndex: selectedIndex) {
+  CodeViewController({
+    /// Zero-based row selected when the controller is created.
+    int selectedIndex = 0,
+  }) : _list = ListController(selectedIndex: selectedIndex) {
     _list.addListener(notifyListeners);
   }
 
@@ -143,7 +184,10 @@ final class CodeViewCopyOptions {
     this.clipboardPolicy = ClipboardWritePolicy.standard,
   });
 
+  /// Whether copy exports the selected line or the complete document.
   final CodeViewCopyMode mode;
+
+  /// Transport-selection policy for platform tools, SSH, and OSC 52 writes.
   final ClipboardWritePolicy clipboardPolicy;
 }
 
@@ -156,9 +200,16 @@ final class CodeViewCopyResult {
     required this.report,
   });
 
+  /// Zero-based index of the line selected for the copy operation.
   final int lineIndex;
+
+  /// Selected parsed line.
   final CodeLine line;
+
+  /// Sanitized text submitted to the clipboard.
   final String text;
+
+  /// Transport outcome and capability diagnostics for the clipboard write.
   final ClipboardWriteReport report;
 }
 
@@ -242,6 +293,8 @@ String exportCodeSelection(
 class CodeView extends StatefulWidget {
   CodeView({
     super.key,
+
+    /// Raw source text parsed into [document] before the widget is mounted.
     required String source,
     this.controller,
     this.focusNode,
@@ -266,6 +319,10 @@ class CodeView extends StatefulWidget {
        assert(maxLineLength == null || maxLineLength >= 0),
        assert(tabSize > 0);
 
+  /// Creates a viewer from an already parsed [CodeDocument].
+  ///
+  /// The document's prepared rows and parsing metadata are used as supplied;
+  /// source parsing is not repeated.
   const CodeView.document({
     super.key,
     required this.document,

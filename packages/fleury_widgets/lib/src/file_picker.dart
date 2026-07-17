@@ -53,7 +53,10 @@ class FilePicker extends StatefulWidget {
   /// Label exposed through the semantic app graph.
   final String semanticLabel;
 
+  /// Focus node used for keyboard navigation.
   final FocusNode? focusNode;
+
+  /// Whether the picker requests focus when mounted.
   final bool autofocus;
 
   @override

@@ -102,8 +102,13 @@ class FutureBuilder<T> extends StatefulWidget {
     required this.builder,
   });
 
+  /// The asynchronous computation to observe. A null future stays disconnected.
   final Future<T>? future;
+
+  /// Data exposed before [future] completes, or null when there is no seed value.
   final T? initialData;
+
+  /// Builds the subtree from the latest connection state, data, or error.
   final AsyncWidgetBuilder<T> builder;
 
   @override
@@ -185,8 +190,13 @@ class StreamBuilder<T> extends StatefulWidget {
     required this.builder,
   });
 
+  /// The stream to observe. A null stream stays disconnected.
   final Stream<T>? stream;
+
+  /// Data exposed before [stream] emits, or null when there is no seed value.
   final T? initialData;
+
+  /// Builds the subtree after each data event, error, and connection change.
   final AsyncWidgetBuilder<T> builder;
 
   @override

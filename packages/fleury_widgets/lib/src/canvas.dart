@@ -42,7 +42,7 @@ abstract class CanvasPainter {
 
 /// A braille drawing surface — each terminal cell holds a 2×4 pixel grid,
 /// so lines and dots render at sub-cell resolution. Use it to build custom
-/// data visualisations; [LineChart] is built on the same primitive.
+/// data visualisations; `LineChart` is built on the same primitive.
 ///
 /// ```dart
 /// Canvas(
@@ -69,6 +69,12 @@ enum CanvasMarker {
   quadrant,
 }
 
+/// A sub-cell drawing surface for custom plots, diagrams, and markers.
+///
+/// The [painter] draws in the logical coordinate space described by [bounds];
+/// [marker] selects how those points map onto terminal cells. Provide semantic
+/// metadata when the drawing communicates information that is not otherwise
+/// represented by an enclosing widget.
 class Canvas extends StatelessWidget {
   const Canvas({
     super.key,
@@ -82,6 +88,10 @@ class Canvas extends StatelessWidget {
     this.semanticState = SemanticState.empty,
   });
 
+  /// Drawing routine invoked with logical [bounds] during canvas painting.
+  ///
+  /// Replace the painter instance when its drawing inputs change so the render
+  /// object schedules a repaint.
   final CanvasPainter painter;
 
   /// Logical coordinate range. Defaults to [CanvasBounds.unit].

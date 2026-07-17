@@ -5,7 +5,7 @@ import 'package:fleury/fleury_core.dart';
 import 'glyphs.dart';
 
 /// A 2×2-pixel-per-cell drawing surface that renders as Unicode block-
-/// element quadrants. Sits between [HalfBlockBuffer] (1×2) and
+/// element quadrants. Sits between `HalfBlockBuffer` (1×2) and
 /// `BrailleBuffer` (2×4) in resolution, with the visual character of
 /// solid blocks. Wide font coverage (the quadrant glyphs are part of
 /// the Block Elements range that's existed for decades).

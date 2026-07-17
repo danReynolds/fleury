@@ -1,9 +1,9 @@
 import 'package:fleury/fleury_core.dart';
 
-/// A grid of color swatches. The currently-selected swatch is bordered
-/// with the theme's focus style; arrow chords move between cells; Enter
-/// confirms (selection already committed on each move, like
-/// `CalendarHeatmap`'s navigation pattern).
+/// A grid of color swatches. The preview cursor is bracketed with the theme's
+/// focus style while the committed swatch remains marked; arrow chords preview
+/// other cells without changing [value], and Enter or Space commits the
+/// preview. Escape restores the value active when the picker gained focus.
 ///
 /// Defaults to the 16 base ANSI colors laid out in 2 rows × 8 cols.
 /// Pass [colors] for a custom palette (e.g. a 256-color picker, brand
@@ -32,11 +32,11 @@ class ColorPicker extends StatefulWidget {
   }) : assert(columns >= 1, 'columns must be >= 1'),
        assert(swatchWidth >= 1, 'swatchWidth must be >= 1');
 
-  /// Currently-selected color. The first matching entry in [colors] (or
-  /// the default palette) becomes the highlighted cell.
+  /// Currently-selected color. The first matching entry in [colors] (or the
+  /// default palette) becomes the committed cell and initial preview cursor.
   final Color value;
 
-  /// Called with the new color when the cursor moves or on Enter.
+  /// Called when a preview is committed or Escape restores the initial color.
   final void Function(Color color)? onChanged;
 
   /// Palette to pick from. `null` uses the 16 base ANSI colors.
@@ -56,7 +56,10 @@ class ColorPicker extends StatefulWidget {
   /// Optional semantic label builder for custom palette entries.
   final String Function(Color color, int index)? semanticColorLabelBuilder;
 
+  /// Focus node used for keyboard navigation.
   final FocusNode? focusNode;
+
+  /// Whether the picker requests focus when mounted.
   final bool autofocus;
 
   @override
@@ -70,7 +73,7 @@ class _ColorPickerState extends State<ColorPicker>
 
   /// The highlighted candidate — where the keyboard cursor sits. Arrows move
   /// this *without* committing; Enter / Space / a click commit it to
-  /// [widget.value]. Separating preview from commit is what lets you browse the
+  /// [ColorPicker.value]. Separating preview from commit lets you browse the
   /// palette and Tab away without changing the value.
   int _cursor = 0;
 
