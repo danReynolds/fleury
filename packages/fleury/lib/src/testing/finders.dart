@@ -133,7 +133,7 @@ Iterable<Element> _walk(Element root) sync* {
 String _quote(String s) =>
     "'${s.replaceAll(r'\', r'\\').replaceAll("'", r"\'")}'";
 
-/// Matches elements whose widget [runtimeType] equals [type].
+/// Matches elements whose widget [Object.runtimeType] equals [type].
 ///
 /// `byType(TextInput)` matches every `TextInput` widget in the tree
 /// — including duplicates. Use [byKey] when there are multiple

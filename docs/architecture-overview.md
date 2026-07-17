@@ -10,15 +10,15 @@ of pixels.
 
 ## One tree, four jobs
 
-Fleury is a **retained-mode** framework. From your widgets it builds and keeps
-four parallel trees, each with a single responsibility:
+Fleury is a **retained-mode** framework. Its pipeline has four related views,
+but not every view is retained on every surface:
 
 | Tree | Job |
 |------|-----|
 | **widget** | Immutable, throwaway configuration. Widgets describe *what* the UI should be; rebuilding one is cheap. |
 | **element** | The durable spine. Elements hold identity and state across rebuilds — your `setState` lives here, and it's what lets Fleury rebuild only the subtree that changed. |
 | **render** | Layout and paint over a **grid of cells**: constraints flow down, sizes come back up, and each render object paints graphemes-plus-style into a shared buffer. |
-| **semantics** | A machine-readable shadow of the UI — roles, state, geometry, and supported actions — retained for tests, accessibility, agents, and browser hosts. |
+| **semantics** | A machine-readable projection of the UI — roles, state, geometry, and supported actions. Browser and agent surfaces retain and update it; tests and plain-terminal debug collect it on demand. |
 
 A state change runs one **incremental** pipeline:
 

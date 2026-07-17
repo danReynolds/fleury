@@ -3,11 +3,11 @@ title: State management
 description: setState for local state, ChangeNotifier + ListenableBuilder for state shared across widgets — the same model as Flutter.
 ---
 
-Fleury's state story is Flutter's, unchanged. Most state is **local** — a field
-in a `State`, mutated inside `setState`. When state needs to be shared by
-widgets that aren't parent-and-child, reach for a **`ChangeNotifier`** model and
-rebuild the readers with **`ListenableBuilder`**. No provider package, no new
-concepts.
+Fleury follows Flutter's familiar local-state primitives. Most state is
+**local** — a field in a `State`, mutated inside `setState`. When state needs to
+be shared by widgets that aren't parent-and-child, reach for a
+**`ChangeNotifier`** model and rebuild the readers with **`ListenableBuilder`**.
+Fleury does not require a provider package for this pattern.
 
 ## Local state: `setState`
 
@@ -88,4 +88,4 @@ of the other.
 
 There's no framework-blessed "app state" singleton — a `ChangeNotifier` you
 create at the root and pass down (or expose via an `InheritedWidget`) is the
-idiomatic answer, exactly as in Flutter.
+idiomatic built-in pattern, and it should feel familiar to Flutter developers.

@@ -114,7 +114,7 @@ class BarChart extends StatelessWidget {
   /// warning, success, error).
   ///
   /// For stacked bars where segments are categorical (no semantic
-  /// meaning), prefer overriding with [Palettes.categorical] to avoid
+  /// meaning), prefer overriding with `Palettes.categorical` to avoid
   /// implying that a yellow segment is a "warning" or red is "error".
   final List<Color>? palette;
 

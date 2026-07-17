@@ -150,6 +150,7 @@ class ScrollView extends StatefulWidget {
     this.scrollbar = false,
   });
 
+  /// The full content subtree; it is laid out eagerly and clipped to the viewport.
   final Widget child;
 
   /// External controller. If null, the widget creates and disposes its own.

@@ -76,8 +76,10 @@ final class PatchReviewFile {
 
 /// Controller for [PatchReview] file selection and viewport state.
 class PatchReviewController extends ChangeNotifier {
-  PatchReviewController({int selectedIndex = 0})
-    : _list = ListController(selectedIndex: selectedIndex) {
+  PatchReviewController({
+    /// Zero-based file row selected when the controller is created.
+    int selectedIndex = 0,
+  }) : _list = ListController(selectedIndex: selectedIndex) {
     _list.addListener(notifyListeners);
   }
 
@@ -142,9 +144,16 @@ final class PatchReviewCopyResult {
     required this.report,
   });
 
+  /// Zero-based index of the file selected when copying occurred.
   final int fileIndex;
+
+  /// File selected when copying occurred.
   final PatchReviewFile file;
+
+  /// Sanitized file summary submitted to the clipboard writer.
   final String text;
+
+  /// Outcome reported by the clipboard writer.
   final ClipboardWriteReport report;
 }
 
@@ -155,7 +164,10 @@ final class PatchReviewFileSelectResult {
     required this.file,
   });
 
+  /// Zero-based index of the activated file row.
   final int fileIndex;
+
+  /// File represented by the activated row.
   final PatchReviewFile file;
 }
 
@@ -217,6 +229,8 @@ String exportPatchReviewFile(
 class PatchReview extends StatefulWidget {
   factory PatchReview({
     Key? key,
+
+    /// Unified diff source parsed into [document] before rendering.
     required String diff,
     List<PatchReviewFile>? files,
     Object? patchId,
@@ -264,6 +278,10 @@ class PatchReview extends StatefulWidget {
     );
   }
 
+  /// Creates a review from a parsed [DiffDocument] and explicit [files].
+  ///
+  /// Unlike the source-taking constructor, this constructor does not derive
+  /// file rows from the document.
   const PatchReview.document({
     super.key,
     required this.document,

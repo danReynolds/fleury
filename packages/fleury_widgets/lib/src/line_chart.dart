@@ -8,7 +8,7 @@ import 'braille.dart';
 
 /// Pre-built color palettes for the viz catalog.
 ///
-/// [LineChart] and [BarChart] cycle a [palette] across series / stacked
+/// [LineChart] and `BarChart` cycle their `palette` across series / stacked
 /// segments. The default is the theme-derived "semantic" palette
 /// (primary/info/warning/success/error) — useful when each series has
 /// inherent meaning. For arbitrary categorical data where colors are

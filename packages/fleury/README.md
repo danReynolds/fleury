@@ -51,9 +51,11 @@ tree with a diffing ANSI renderer. Unhandled Ctrl+C exits by default.
 - **Framework**: `Widget` / `StatefulWidget` / `State`, `BuildContext`,
   `InheritedWidget`, keys + reconciliation, `MediaQuery`, layout
   constraints, the `RenderObject` tree, and a swappable
-  `TerminalDriver` (POSIX today; `fleury_web` renders the same tree to a
-  browser DOM cell grid — selectable text and a real accessibility tree,
-  not a canvas bitmap).
+  `TerminalDriver` (native POSIX and Windows drivers; the current launch matrix
+  validates macOS Terminal and tmux, while broader terminal coverage and
+  real-Windows acceptance are still pending).
+  `fleury_web` renders the same tree to a browser DOM cell grid — selectable
+  text and a real accessibility tree, not a canvas bitmap.
 - **Layout**: `Row` / `Column` / `Flex`, `Stack`, `Align` / `Center`,
   `Padding`, `SizedBox`, `Expanded` / `Flexible`, intrinsic sizing,
   `LayoutBuilder`.
@@ -65,13 +67,13 @@ tree with a diffing ANSI renderer. Unhandled Ctrl+C exits by default.
   value-driven) and `FrameBuilder` / `FrameTicker` (frame-indexed),
   sharing one per-runtime scheduler. See below.
 - **Hot reload**: state-preserving reload wired for VS Code — see
-  [`doc/hot_reload.md`](doc/hot_reload.md).
+  [the hot-reload guide](https://github.com/danReynolds/fleury/blob/main/packages/fleury/doc/hot_reload.md).
 - **Widgets**: a deep catalog lives in the companion `fleury_widgets`
   package — inputs, selects, tables, trees, charts, an image widget
   with four terminal graphics protocols, and more.
 
 Design rationale and the phased delivery plan live in the RFC:
-[`docs/rfcs/0007-fleury-framework.md`](../../docs/rfcs/0007-fleury-framework.md).
+[Fleury framework RFC 0007](https://github.com/danReynolds/fleury/blob/main/docs/rfcs/0007-fleury-framework.md).
 
 ## Testing
 
@@ -116,7 +118,7 @@ snapping) and discrete frame-indexed primitives (`FrameTicker` /
 the `TuiBinding` that `runApp` installs at the root; idle apps burn no
 scheduler CPU.
 
-See [`docs/rfcs/0010-animation-infrastructure.md`](../../docs/rfcs/0010-animation-infrastructure.md)
+See [animation infrastructure RFC 0010](https://github.com/danReynolds/fleury/blob/main/docs/rfcs/0010-animation-infrastructure.md)
 for the design rationale.
 
 ### Ready-made widgets

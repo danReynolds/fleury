@@ -5,12 +5,14 @@ import '../animation/clock.dart';
 /// Render callback the scheduler drives, given the merged frame reason.
 typedef FrameRenderCallback = void Function(String reason);
 
+/// Cancels a pending frame flush.
+typedef FrameFlushCancellation = void Function();
+
 /// Schedules [flush] to run after [delay]. `Duration.zero` means "as soon as
 /// possible" (a microtask). Returns an optional cancellation callback so a
 /// disposed runtime can release delayed timers / browser frame callbacks
 /// instead of retaining the whole session until they fire. Injectable so
 /// tests drive timing deterministically.
-typedef FrameFlushCancellation = void Function();
 typedef FrameFlushScheduler =
     FrameFlushCancellation? Function(Duration delay, void Function() flush);
 

@@ -540,7 +540,7 @@ class DataTableController extends ChangeNotifier {
 
 /// Render-island table for large, text-shaped data sets.
 ///
-/// Unlike [Table], this widget does not mount every cell as a widget. It asks
+/// Unlike `Table`, this widget does not mount every cell as a widget. It asks
 /// [cellBuilder] only for the visible body rows, paints those directly into the
 /// cell buffer, and contributes visible-row semantics from the render object.
 class DataTable extends StatefulWidget {

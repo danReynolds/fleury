@@ -43,6 +43,7 @@ class Dialog extends StatelessWidget {
   /// Total panel width (including the border). Null sizes to content.
   final int? width;
 
+  /// Content rendered inside the dialog frame, beneath [title] when present.
   final Widget child;
 
   @override

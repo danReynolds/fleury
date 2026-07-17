@@ -165,8 +165,13 @@ class CommandPalette extends StatelessWidget {
   /// user was acting when the palette opened.
   final BuildContext? sourceContext;
 
+  /// Hint shown in the palette's search field while it is empty.
   final String placeholder;
+
+  /// Total palette width in terminal cells.
   final int width;
+
+  /// Maximum number of matching command rows shown before scrolling.
   final int maxVisible;
 
   /// Opens a registry-backed command palette for the active source context.

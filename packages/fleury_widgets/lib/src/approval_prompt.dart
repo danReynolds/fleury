@@ -26,13 +26,28 @@ final class ApprovalRequest {
     this.cancelLabel = 'Deny',
   });
 
+  /// Stable request identifier exposed through the semantic app graph.
   final String id;
+
+  /// Heading shown at the top of the approval dialog.
   final String title;
+
+  /// Primary explanation shown beneath [title].
   final String message;
+
+  /// Optional resource or action that the decision applies to.
   final String? subject;
+
+  /// Supplemental detail lines rendered as a bulleted list.
   final List<String> details;
+
+  /// Visual severity and safe-focus policy for the request.
   final ApprovalSeverity severity;
+
+  /// Label shown on the button that emits [ApprovalDecision.approved].
   final String confirmLabel;
+
+  /// Label shown on the button that emits [ApprovalDecision.denied].
   final String cancelLabel;
 }
 
@@ -46,8 +61,13 @@ class ApprovalPrompt extends StatelessWidget {
     this.autofocusApprove,
   });
 
+  /// Request content and severity to present.
   final ApprovalRequest request;
+
+  /// Called whenever the user approves or denies [request].
   final void Function(ApprovalDecision decision) onDecision;
+
+  /// Total dialog width, including its border; null sizes to the content.
   final int? width;
 
   /// Whether the confirm button is focused on open. When null (the default)

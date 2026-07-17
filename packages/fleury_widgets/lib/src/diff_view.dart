@@ -35,14 +35,26 @@ final class DiffDocument {
     required this.deletionCount,
   });
 
-  factory DiffDocument.parseUnified(String source) {
+  factory DiffDocument.parseUnified(
+    /// Unified-diff source text to parse and sanitize.
+    String source,
+  ) {
     return parseUnifiedDiff(source);
   }
 
+  /// Parsed diff rows in source order.
   final List<DiffLine> rows;
+
+  /// Number of files represented by parsed file headers.
   final int fileCount;
+
+  /// Number of parsed unified-diff hunks.
   final int hunkCount;
+
+  /// Number of added source lines, excluding headers.
   final int additionCount;
+
+  /// Number of deleted source lines, excluding headers.
   final int deletionCount;
 
   bool get isEmpty => rows.isEmpty;
@@ -66,18 +78,44 @@ final class DiffLine {
     required this.outputOriginalLength,
   });
 
+  /// Zero-based row index in the containing [DiffDocument].
   final int index;
+
+  /// Logical unified-diff row classification.
   final DiffLineKind kind;
+
+  /// Sanitized source row, including its unified-diff prefix.
   final String text;
+
+  /// Render-ready row after optional truncation.
   final String displayText;
+
+  /// Zero-based inferred file-section index, or null until a file header or
+  /// hunk is parsed.
   final int? fileIndex;
+
+  /// Zero-based hunk index, or null when the row is outside a hunk.
   final int? hunkIndex;
+
+  /// One-based old-file line number when this row maps to the old file.
   final int? oldLine;
+
+  /// One-based new-file line number when this row maps to the new file.
   final int? newLine;
+
+  /// Normalized path parsed from the current old-file header.
   final String? oldPath;
+
+  /// Normalized path parsed from the current new-file header.
   final String? newPath;
+
+  /// Whether unsafe terminal text was replaced while producing [text].
   final bool outputSanitized;
+
+  /// Whether [displayText] was shortened to the configured line limit.
   final bool outputTruncated;
+
+  /// Source row length before sanitization or display truncation.
   final int outputOriginalLength;
 
   String? get filePath => newPath ?? oldPath;
@@ -85,8 +123,10 @@ final class DiffLine {
 
 /// Controller for [DiffView] selection.
 class DiffViewController extends ChangeNotifier {
-  DiffViewController({int selectedIndex = 0})
-    : _list = ListController(selectedIndex: selectedIndex) {
+  DiffViewController({
+    /// Zero-based row selected when the controller is created.
+    int selectedIndex = 0,
+  }) : _list = ListController(selectedIndex: selectedIndex) {
     _list.addListener(notifyListeners);
   }
 
@@ -131,7 +171,10 @@ final class DiffViewCopyOptions {
     this.clipboardPolicy = ClipboardWritePolicy.standard,
   });
 
+  /// Whether copy exports one row or its complete containing hunk.
   final DiffViewCopyMode mode;
+
+  /// Transport-selection policy for platform tools, SSH, and OSC 52 writes.
   final ClipboardWritePolicy clipboardPolicy;
 }
 
@@ -144,9 +187,16 @@ final class DiffViewCopyResult {
     required this.report,
   });
 
+  /// Zero-based index of the row selected for the copy operation.
   final int rowIndex;
+
+  /// Selected parsed diff row.
   final DiffLine row;
+
+  /// Sanitized row or hunk text submitted to the clipboard.
   final String text;
+
+  /// Transport outcome and capability diagnostics for the clipboard write.
   final ClipboardWriteReport report;
 }
 
@@ -296,6 +346,8 @@ String exportDiffSelection(
 class DiffView extends StatefulWidget {
   DiffView({
     super.key,
+
+    /// Unified-diff source parsed into [document] before mounting.
     required String diff,
     this.controller,
     this.focusNode,
@@ -309,6 +361,10 @@ class DiffView extends StatefulWidget {
   }) : document = parseUnifiedDiff(diff, maxLineLength: maxLineLength),
        assert(maxLineLength == null || maxLineLength >= 0);
 
+  /// Creates a viewer from an already parsed [DiffDocument].
+  ///
+  /// The document's sanitized, optionally truncated rows are reused without
+  /// parsing the unified-diff source again.
   const DiffView.document({
     super.key,
     required this.document,

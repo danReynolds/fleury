@@ -66,10 +66,11 @@ BarChart(
 <FleuryExample slot="demo-2" id="barchart.basic" cols={52} rows={12} surfaceTheme="site" />
 </HomeSplit>
 
-None of these are screenshots — each is the real Fleury widget tree, compiled to
+None of these are screenshots — each is a real Fleury widget tree, compiled to
 JavaScript with `dart2js` and running live in your browser: the clock ticks, the
 bars stream, and the table responds to your clicks. Tab through them in the title
-bar, or watch them cycle. The *same* code runs in a terminal.
+bar, or watch them cycle. The same reusable widget trees also run behind a
+native terminal entrypoint.
 
 And dropping it into *your* page is the fun part: hand Fleury a host element and a
 widget tree, and a `dart2js` bundle does the rest — no iframe, no backend, no
@@ -81,12 +82,14 @@ mountApp(() => const Dashboard(), into: appHost);
 
 [Embed Fleury in any page →](/architecture/serving-and-embedding/)
 
-And that same widget tree is *agent-first*: every node already carries its role,
-value, and the actions it supports, so an AI agent can **drive** your app instead
-of screen-scraping it. Point any [Model Context Protocol](https://modelcontextprotocol.io)
-host — Claude included — at a Fleury app and it reads the UI by meaning and
-operates it through those actions. No ANSI parsing, no guessed keystrokes, and
-nothing to wire up: it's the same semantic tree your tests and accessibility use.
+And that same widget tree is *agent-first*: meaningful content and interactive
+widgets contribute roles, values, state, and supported actions, while
+layout-only structure can be folded away. An AI agent can therefore **drive**
+your app instead of screen-scraping it. Point any [Model Context
+Protocol](https://modelcontextprotocol.io) host — Claude included — at a Fleury
+app and it reads the UI by meaning and operates it through those actions. No
+ANSI parsing or guessed keystrokes, and no agent-specific app integration: it is
+the same semantic model your tests and accessibility use.
 
 ```sh
 fleury_mcp -- dart run my_app.dart
@@ -137,7 +140,7 @@ in your browser** — open one and use your keyboard and mouse.
     description="A two-pane file explorer over an in-memory project, with a preview that adapts to each file type — code, Markdown, JSON."
   />
   <LinkCard
-    title="Browse every widget →"
+    title="Browse the widget reference →"
     href="/widgets/"
     description="Charts, meters, tables, trees, document viewers, and agent surfaces — with live examples across the main widget families."
   />

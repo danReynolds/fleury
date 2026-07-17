@@ -49,8 +49,8 @@ enum TextAlign {
 /// With [softWrap] true (default), the text is broken into lines on
 /// word boundaries when it exceeds the available width. Words longer
 /// than the available width are broken at grapheme boundaries.
-/// With [softWrap] false, the text lays out on a single row and is
-/// clipped horizontally at the right edge.
+/// With [softWrap] false, automatic reflow is disabled; explicit newlines
+/// still create rows, and each long row is clipped horizontally.
 ///
 /// The text is sanitized once at construction; later updates re-
 /// sanitize. Wide graphemes occupy leading + continuation cells via
@@ -568,8 +568,8 @@ class RenderText extends RenderObject
 /// Constrains a child to specific dimensions (or, with a null child,
 /// just reports its own preferred size).
 ///
-/// `width == null` means "as wide as the parent allows," and likewise
-/// for height. With both null and no child, this collapses to zero.
+/// A null dimension adds no constraint on that axis: a child chooses within
+/// the parent's bounds, while a box without a child uses the parent's minimum.
 class RenderSizedBox extends RenderObject
     implements RenderObjectWithSingleChild {
   RenderSizedBox({int? width, int? height, RenderObject? child})

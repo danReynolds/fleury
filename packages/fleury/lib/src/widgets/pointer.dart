@@ -329,15 +329,24 @@ class GestureDetector extends StatelessWidget {
     required this.child,
   });
 
+  /// Called after a left-button press and release complete in this region.
   final PointerTapCallback? onTap;
+
+  /// Called on button press with absolute terminal cell coordinates.
   final PointerPositionCallback? onTapDown;
 
-  /// Fires on a left-button press alongside [onTapDown], with the
+  /// Fires on any button press alongside [onTapDown], with the
   /// terminal-reported modifier set. Use when you need to distinguish
   /// plain click from Shift / Ctrl / Alt-click. Both callbacks fire
-  /// on every press — register only the one you care about.
+  /// on every press routed to this region — register only the one you care
+  /// about.
   final PointerModifiedTapCallback? onTapDownWithModifiers;
+
+  /// Called on a non-drag button release over this region, with absolute
+  /// terminal cell coordinates. A completed drag suppresses this callback.
   final PointerPositionCallback? onTapUp;
+
+  /// Called after a right-button press and release complete in this region.
   final PointerTapCallback? onSecondaryTap;
 
   /// Drag: a left press, then motion (with the button held), then
@@ -345,8 +354,14 @@ class GestureDetector extends StatelessWidget {
   /// pointer leaves it (pointer capture), so sliders and splitters track
   /// smoothly. A drag suppresses [onTap].
   final PointerPositionCallback? onDragStart;
+
+  /// Called for captured pointer motion after a drag has started.
   final PointerPositionCallback? onDragUpdate;
+
+  /// Called when the captured drag ends on button release.
   final PointerTapCallback? onDragEnd;
+
+  /// Subtree whose painted bounds form the interactive region.
   final Widget child;
 
   @override
@@ -376,9 +391,16 @@ class MouseRegion extends StatelessWidget {
     required this.child,
   });
 
+  /// Called when the pointer enters the child's painted bounds.
   final PointerTapCallback? onEnter;
+
+  /// Called when the pointer leaves the child's painted bounds.
   final PointerTapCallback? onExit;
+
+  /// Called on pointer motion within the region with absolute cell coordinates.
   final PointerPositionCallback? onHover;
+
+  /// Subtree whose painted bounds define the hover region.
   final Widget child;
 
   @override

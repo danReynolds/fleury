@@ -7,9 +7,9 @@ import FleuryExample from '../../components/FleuryExample.astro';
 
 Fleury is a retained-mode UI framework — the familiar Flutter model of a widget
 tree rebuilt declaratively, `setState` and all — that paints to a **grid of
-cells** instead of pixels. One widget tree renders in a terminal *and* a browser,
-and because that same tree is also a **semantic graph**, a test or an agent can
-read it like a screen reader.
+cells** instead of pixels. One widget tree renders in a terminal *and* a browser.
+Fleury can also project that tree into a **semantic graph**, so a test or an
+agent can read it like a screen reader.
 
 The status panel below is live — a real Fleury tree compiled to JavaScript and
 running in your browser, from the *same* Dart you'll run in a terminal.
@@ -40,6 +40,11 @@ dependencies:
     git:
       url: https://github.com/danReynolds/fleury.git
       path: packages/fleury_widgets
+  fleury_web:
+    git:
+      url: https://github.com/danReynolds/fleury.git
+      path: packages/fleury_web
+  web: ^1.1.1
 
 # Until the packages are published together, keep fleury_widgets' framework
 # dependency on the same Git checkout as the app's direct dependency.
@@ -53,11 +58,11 @@ dependency_overrides:
 Then run `dart pub get`. The temporary override is required only for the Git
 install; remove it once you switch both packages to hosted releases.
 
-Two packages, one line each: `fleury` is the framework plus its theme-free
-primitives (layout, `Text`, text editing, focus), and `fleury_widgets` is the
-theme-driven control library on top (buttons, selects, tables, charts). The
-[core and targets](/architecture/core-and-targets/) page explains the split;
-day to day you just import both.
+`fleury` is the framework plus its theme-free primitives (layout, `Text`, text
+editing, focus), and `fleury_widgets` is the theme-driven control library on
+top (buttons, selects, tables, charts). `fleury_web` and `web` are the browser
+host and DOM bindings used in step 5. The [core and
+targets](/architecture/core-and-targets/) page explains the split.
 
 ## 2. Hello, cells
 
@@ -179,17 +184,60 @@ call `setState` — exactly the way step 3 drove the progress bar from `_tick`. 
 you do drop the timer, remove the now-unused `_tick` and `_timer` too.) State,
 lifecycle, composition: the same three moves, however rich the screen gets.
 
-## 5. Run it in a browser
+## 5. Run the same widget tree in a browser
 
-The same code runs on the web. You can **embed** it client-side — compile to
-JavaScript with `dart2js`, no backend — or use the local **serve** bridge while
-developing a native app and stream its frames to a browser tab. Both modes, and
-when to choose each, are in
-[Serving and embedding](/architecture/serving-and-embedding/).
+The `StatusApp` widget tree above is portable; the host entrypoint and imports
+are target-specific. For a client-side embed, move the reusable tree into a
+web-safe library that imports `package:fleury/fleury_core.dart` and
+`package:fleury_widgets/fleury_widgets_web.dart`.
+
+Move `StatusApp` and `_StatusAppState` from step 3 into `lib/status_app.dart`,
+keeping their bodies unchanged and using these imports at the top:
+
+```dart title="lib/status_app.dart"
+import 'dart:async';
+
+import 'package:fleury/fleury_core.dart';
+import 'package:fleury_widgets/fleury_widgets_web.dart';
+```
+
+The native entrypoint remains small and target-specific:
+
+```dart title="bin/my_app.dart"
+import 'package:fleury/fleury.dart';
+import 'package:my_app/status_app.dart';
+
+void main() => runApp(
+  const FleuryApp(title: 'Status monitor', home: StatusApp()),
+);
+```
+
+Then mount the shared tree from the browser entrypoint:
+
+```dart title="web/main.dart"
+import 'package:fleury/fleury_core.dart';
+import 'package:fleury_web/fleury_web.dart';
+import 'package:my_app/status_app.dart';
+import 'package:web/web.dart' as web;
+
+Future<void> main() async {
+  final host = web.document.getElementById('app')!;
+  await mountApp(
+    () => const FleuryApp(title: 'Status monitor', home: StatusApp()),
+    into: host,
+  );
+}
+```
+
+The terminal entrypoint still imports `fleury.dart` and calls `runApp`. You can
+also use the local **serve** bridge to preview that native app in a browser tab
+without changing its imports. Both modes, the compile command, and when to
+choose each are in [Deployment & distribution](/guides/deployment/).
 
 ## Where to next
 
-- [Widgets](/widgets/) — the full catalog, with live examples where available.
+- [Widgets](/widgets/) — every exported higher-level widget plus the most-used
+  core primitives, with live examples where available.
 - [Navigation and commands](/guides/navigation/) — build a multi-screen app and
   expose the same actions through buttons, shortcuts, semantics, and a command
   palette. The

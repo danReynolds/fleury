@@ -25,6 +25,7 @@ typedef LayoutWidgetBuilder =
 class LayoutBuilder extends RenderObjectWidget {
   const LayoutBuilder({super.key, required this.builder});
 
+  /// Creates the child for the constraints received during the current layout.
   final LayoutWidgetBuilder builder;
 
   @override

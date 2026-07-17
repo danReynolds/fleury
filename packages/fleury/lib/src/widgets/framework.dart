@@ -874,7 +874,7 @@ abstract class Element implements BuildContext {
     return inflateWidget(newWidget);
   }
 
-  /// Creates an element for [newWidget] and mounts it under [this].
+  /// Creates an element for [newWidget] and mounts it under this element.
   ///
   /// If [newWidget] carries a [GlobalKey] whose element is available for
   /// reuse — either deactivated this build pass or still active under
@@ -1507,7 +1507,7 @@ class BuildOwner {
   }
 
   /// Drives a single frame end-to-end: flushes pending builds, runs the
-  /// layout pass against [size], and paints into [buffer]. Returns the
+  /// layout pass against `buffer.size`, and paints into [buffer]. Returns the
   /// root render object for inspection in tests.
   ///
   /// [onPhaseTiming] is invoked once with the build / layout / paint

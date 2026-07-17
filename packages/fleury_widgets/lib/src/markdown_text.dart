@@ -58,7 +58,10 @@ class MarkdownText extends StatelessWidget {
     this.inlineLinkUrls = true,
   });
 
+  /// Light Markdown source rendered by this widget.
   final String data;
+
+  /// Base cell style inherited by the rendered Markdown spans.
   final CellStyle? baseStyle;
 
   /// Whether a link keeps its inspectable ` (url)` suffix after the text.
@@ -143,9 +146,16 @@ final class MarkdownLink {
     required this.url,
   });
 
+  /// Zero-based position of this link in the parsed document.
   final int index;
+
+  /// Zero-based index of the [MarkdownBlock] containing this link.
   final int blockIndex;
+
+  /// Sanitized label displayed for the link.
   final String text;
+
+  /// Sanitized destination parsed from the Markdown source.
   final String url;
 
   String? get scheme => _urlScheme(url);
@@ -167,8 +177,13 @@ final class MarkdownDocument {
   });
 
   factory MarkdownDocument.parse(
+    /// Markdown source to parse.
     String source, {
+
+    /// Maximum grapheme length of each displayed row, or null for no limit.
     int? maxLineLength = 1000,
+
+    /// Number of spaces used to expand each tab.
     int tabSize = 2,
   }) {
     return parseMarkdownDocument(
@@ -178,14 +193,31 @@ final class MarkdownDocument {
     );
   }
 
+  /// Parsed visible rows in document order.
   final List<MarkdownBlock> blocks;
+
+  /// Links discovered outside fenced code blocks, in document order.
   final List<MarkdownLink> links;
+
+  /// Sanitized Markdown source represented by this document.
   final String source;
+
+  /// Number of parsed rows, including blank rows and fenced-code rows.
   final int blockCount;
+
+  /// Number of heading rows in [blocks].
   final int headingCount;
+
+  /// Number of ordered and unordered list-item rows in [blocks].
   final int listItemCount;
+
+  /// Number of links in [links].
   final int linkCount;
+
+  /// Number of fenced code blocks in the source.
   final int codeBlockCount;
+
+  /// Number of code rows contained by fenced code blocks.
   final int codeLineCount;
 
   bool get isEmpty => blocks.isEmpty;
@@ -208,24 +240,49 @@ final class MarkdownBlock {
     required this.outputOriginalLength,
   });
 
+  /// Zero-based position of this row in its [MarkdownDocument].
   final int index;
+
+  /// Parsed block classification for this row.
   final MarkdownBlockKind kind;
+
+  /// Sanitized Markdown source represented by this row.
   final String sourceText;
+
+  /// Text content with supported inline Markdown markers removed.
   final String plainText;
+
+  /// Sanitized, length-limited text passed to the row renderer.
   final String displayText;
+
+  /// Heading level for heading rows, otherwise null.
   final int? headingLevel;
+
+  /// Leading-space indentation recorded for a list item.
   final int listDepth;
+
+  /// Source number for an ordered-list item, otherwise null.
   final int? listNumber;
+
+  /// Number of links discovered in this row.
   final int linkCount;
+
+  /// Whether control-character sanitization changed the source row.
   final bool outputSanitized;
+
+  /// Whether [displayText] was shortened to the configured line limit.
   final bool outputTruncated;
+
+  /// UTF-16 length of the source row before sanitization and truncation.
   final int outputOriginalLength;
 }
 
 /// Controller for [MarkdownView] selection.
 class MarkdownViewController extends ChangeNotifier {
-  MarkdownViewController({int selectedIndex = 0})
-    : _list = ListController(selectedIndex: selectedIndex) {
+  MarkdownViewController({
+    /// Zero-based block selected when the controller is created.
+    int selectedIndex = 0,
+  }) : _list = ListController(selectedIndex: selectedIndex) {
     _list.addListener(notifyListeners);
   }
 
@@ -270,7 +327,10 @@ final class MarkdownViewCopyOptions {
     this.clipboardPolicy = ClipboardWritePolicy.standard,
   });
 
+  /// Scope of Markdown source exported by a copy action.
   final MarkdownViewCopyMode mode;
+
+  /// Clipboard policy applied to the exported text.
   final ClipboardWritePolicy clipboardPolicy;
 }
 
@@ -283,9 +343,16 @@ final class MarkdownViewCopyResult {
     required this.report,
   });
 
+  /// Zero-based index of the block selected when copying occurred.
   final int blockIndex;
+
+  /// Block selected when copying occurred.
   final MarkdownBlock block;
+
+  /// Sanitized Markdown source submitted to the clipboard writer.
   final String text;
+
+  /// Outcome reported by the clipboard writer.
   final ClipboardWriteReport report;
 }
 
@@ -518,6 +585,8 @@ String exportMarkdownSelection(
 class MarkdownView extends StatefulWidget {
   MarkdownView({
     super.key,
+
+    /// Markdown source parsed into [document] before rendering.
     required String markdown,
     this.controller,
     this.focusNode,
@@ -537,6 +606,10 @@ class MarkdownView extends StatefulWidget {
        assert(maxLineLength == null || maxLineLength >= 0),
        assert(tabSize > 0);
 
+  /// Creates a viewer from an already parsed [MarkdownDocument].
+  ///
+  /// The document's sanitized blocks, links, and parsing statistics are reused
+  /// without parsing Markdown source again.
   const MarkdownView.document({
     super.key,
     required this.document,

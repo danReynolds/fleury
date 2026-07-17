@@ -34,7 +34,7 @@ class _Scenario {
   /// What byte-pattern this scenario isolates.
   final String note;
 
-  /// Drives the tester. Call [capture] after each frame to render + diff it
+  /// Drives the tester. Call `capture` after each frame to render + diff it
   /// into the sink. The first capture is the initial full paint; the rest are
   /// incremental update frames.
   final void Function(FleuryTester tester, _Capture capture) body;

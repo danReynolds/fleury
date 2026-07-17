@@ -42,12 +42,13 @@ making your app drive well.
 ## What powers it — the semantic tree
 
 The MCP server is a *thin shim*, not a bolted-on adapter, because **the app
-already produces everything the agent reads.** Alongside the visual tree, Fleury
-keeps a **semantic tree**: a *semantic app graph* describing what the UI
-**means**, not how it's painted. On every agent-reachable surface (`fleury
-serve`, the browser hosts, the headless tester) the framework rebuilds it
-whenever semantics change; a plain terminal run skips the work until a
-debug consumer asks. That graph *is* the
+already produces everything the agent reads.** Alongside the visual tree,
+Fleury can project a **semantic tree**: a *semantic app graph* describing what
+the UI **means**, not how it's painted. Agent-reachable and browser surfaces
+retain and update that graph when semantics or painted coverage change. The
+headless tester builds a snapshot when `tester.semantics()` asks for one, and a
+plain terminal run likewise skips the work until a debug consumer asks. That
+graph *is* the
 MCP resource; the `SemanticAction`s on it *are* the MCP tools. There's no scraping
 layer to maintain — driving the UI is just reading the graph and invoking its
 actions. The rest of this page is that graph.

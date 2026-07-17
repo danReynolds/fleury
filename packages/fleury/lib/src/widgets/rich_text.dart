@@ -20,8 +20,13 @@ import 'theme.dart';
 class TextSpan {
   const TextSpan({this.text, this.style, this.children});
 
+  /// Text contributed by this span before any [children].
   final String? text;
+
+  /// Style merged over the parent span or ambient text style.
   final CellStyle? style;
+
+  /// Nested spans that inherit and may override this span's style.
   final List<TextSpan>? children;
 }
 
@@ -45,9 +50,16 @@ class RichText extends StatelessWidget {
     this.allowSelect = true,
   });
 
+  /// Root of the styled span tree to render.
   final TextSpan text;
+
+  /// Whether content wraps to additional rows at the available width.
   final bool softWrap;
+
+  /// Maximum rendered rows, or null for no explicit line limit.
   final int? maxLines;
+
+  /// How content beyond the width or [maxLines] budget is represented.
   final TextOverflow overflow;
 
   /// Whether this RichText participates in ambient

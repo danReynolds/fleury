@@ -73,8 +73,9 @@ final class SelectionGranularEvent extends SelectionEvent {
   /// Which unit of content to select.
   final SelectionGranularity granularity;
 
-  /// Screen-space cell anchor point. Required for [word] and [line]
-  /// (the unit at this point); null and ignored for [all].
+  /// Screen-space cell anchor point. Required for [SelectionGranularity.word]
+  /// and [SelectionGranularity.line] (the unit at this point); null and ignored
+  /// for [SelectionGranularity.all].
   final CellOffset? globalPosition;
 
   @override

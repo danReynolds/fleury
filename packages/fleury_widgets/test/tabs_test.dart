@@ -73,6 +73,25 @@ void main() {
     expect(_row(tester, 1), 'first', reason: 'active content on row 1');
   });
 
+  testWidgets('clamps an out-of-range initial index when first attached', (
+    tester,
+  ) {
+    final controller = TabController(initialIndex: 99);
+    tester.pumpWidget(
+      Tabs(
+        controller: controller,
+        tabs: const [
+          TabItem(label: 'One', content: Text('first')),
+          TabItem(label: 'Two', content: Text('second')),
+        ],
+      ),
+    );
+
+    expect(controller.length, 2);
+    expect(controller.index, 1);
+    expect(_row(tester, 1), 'second');
+  });
+
   testWidgets('clicking a tab label switches to it', (tester) {
     final controller = TabController();
     addTearDown(controller.dispose);

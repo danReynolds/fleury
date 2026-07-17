@@ -4,21 +4,30 @@ import 'package:fleury/fleury_core.dart';
 class TabItem {
   const TabItem({required this.label, required this.content});
 
+  /// Text displayed in the tab strip.
   final String label;
+
+  /// Widget shown while this tab is active.
   final Widget content;
 }
 
 /// Selected-tab state for a [Tabs]. Optional — [Tabs] creates its own when
 /// none is given. `length` is set by the widget on each build.
 class TabController extends ChangeNotifier {
-  TabController({int initialIndex = 0})
-    : _index = initialIndex < 0 ? 0 : initialIndex;
+  TabController({
+    /// Initial zero-based selection; negative values are clamped to zero.
+    int initialIndex = 0,
+  }) : _index = initialIndex < 0 ? 0 : initialIndex;
 
   int _index;
   int _length = 0;
   bool _disposed = false;
 
+  /// Zero-based index of the selected tab, or the pending selection while no
+  /// tabs are attached.
   int get index => _index;
+
+  /// Number of tabs attached by the current [Tabs] widget.
   int get length => _length;
 
   set index(int value) {
@@ -85,9 +94,16 @@ class Tabs extends StatefulWidget {
     this.bordered = false,
   });
 
+  /// Tab labels and content, in strip order.
   final List<TabItem> tabs;
+
+  /// External selected-tab controller, or null to use widget-owned state.
   final TabController? controller;
+
+  /// Focus node used by the tab strip's keyboard interaction.
   final FocusNode? focusNode;
+
+  /// Whether the tab strip should request focus when mounted.
   final bool autofocus;
 
   /// When true, the active content sits in a bordered, padded panel below the
@@ -117,6 +133,8 @@ class _TabsState extends State<Tabs> {
     _controller = widget.controller ?? TabController();
     _ownsController = widget.controller == null;
     _controller._length = widget.tabs.length;
+    // Clamp a positive initialIndex now that the controller has a tab count.
+    _controller.index = _controller.index;
     _controller.addListener(_onChange);
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'Tabs');
     _ownsFocusNode = widget.focusNode == null;

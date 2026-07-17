@@ -85,8 +85,8 @@ final class TuiRuntime {
 
   /// This runtime's semantic dirty tracker (owned per [BuildOwner]).
   ///
-  /// Marks accumulate across frames until [SemanticDirtyTracker
-  /// .takeDirtySnapshot] consumes them, so a deferred semantic presenter can
+  /// Marks accumulate across frames until
+  /// [SemanticDirtyTracker.takeDirtySnapshot] consumes them, so a deferred semantic presenter can
   /// coalesce multiple frames into one flush.
   SemanticDirtyTracker get semanticDirtyTracker => owner.semanticDirtyTracker;
 

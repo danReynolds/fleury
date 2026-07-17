@@ -28,7 +28,10 @@ final class JsonViewDocument {
     required this.error,
   });
 
-  factory JsonViewDocument.parse(String source) {
+  factory JsonViewDocument.parse(
+    /// JSON source text to decode, retaining any [FormatException].
+    String source,
+  ) {
     try {
       return JsonViewDocument._(
         value: jsonDecode(source),
@@ -40,8 +43,14 @@ final class JsonViewDocument {
     }
   }
 
+  /// Decoded or directly supplied root JSON value.
   final Object? value;
+
+  /// Original JSON source when the document was created with
+  /// [JsonViewDocument.parse].
   final String? source;
+
+  /// Parse failure for invalid [source], or null for a valid document.
   final FormatException? error;
 
   bool get valid => error == null;
@@ -55,8 +64,13 @@ final class JsonViewCopyOptions {
     this.clipboardPolicy = ClipboardWritePolicy.standard,
   });
 
+  /// Whether copy exports the selected node or its visible row text.
   final JsonViewCopyMode mode;
+
+  /// Whether node-mode JSON uses indented rather than compact encoding.
   final bool pretty;
+
+  /// Transport-selection policy for platform tools, SSH, and OSC 52 writes.
   final ClipboardWritePolicy clipboardPolicy;
 }
 
@@ -69,17 +83,29 @@ final class JsonViewCopyResult {
     required this.report,
   });
 
+  /// Zero-based index of the row selected for the copy operation.
   final int rowIndex;
+
+  /// Selected visible JSON row.
   final JsonViewRow row;
+
+  /// Sanitized row or encoded node text submitted to the clipboard.
   final String text;
+
+  /// Transport outcome and capability diagnostics for the clipboard write.
   final ClipboardWriteReport report;
 }
 
 /// Controller for [JsonView] expansion and selection.
 class JsonViewController extends ChangeNotifier {
   JsonViewController({
+    /// JSON Pointer paths that start explicitly expanded.
     Iterable<String> expandedPointers = const <String>[],
+
+    /// JSON Pointer paths that start explicitly collapsed.
     Iterable<String> collapsedPointers = const <String>[],
+
+    /// Zero-based visible row selected when the controller is created.
     int selectedIndex = 0,
   }) : _expandedPointers = Set<String>.of(expandedPointers),
        _collapsedPointers = Set<String>.of(collapsedPointers),
@@ -94,12 +120,15 @@ class JsonViewController extends ChangeNotifier {
 
   ListController get _listController => _list;
 
+  /// Immutable snapshot of JSON Pointer paths explicitly marked expanded.
   Set<String> get expandedPointers =>
       Set<String>.unmodifiable(_expandedPointers);
 
+  /// Immutable snapshot of JSON Pointer paths explicitly marked collapsed.
   Set<String> get collapsedPointers =>
       Set<String>.unmodifiable(_collapsedPointers);
 
+  /// Zero-based selected visible-row index, or null when nothing is selected.
   int? get selectedIndex => _list.selectedIndex;
   set selectedIndex(int? value) {
     _checkNotDisposed();
@@ -181,20 +210,49 @@ final class JsonViewRow {
     required this.outputOriginalLength,
   });
 
+  /// RFC 6901-style pointer for this node; the root pointer is empty.
   final String pointer;
+
+  /// Human-readable `$`-rooted path for this node.
   final String path;
+
+  /// Object key or array index label, or null for the root row.
   final String? key;
+
+  /// Zero-based tree depth, where the root row has depth zero.
   final int depth;
+
+  /// JSON value category represented by this row.
   final JsonValueType type;
+
+  /// Normalized JSON value represented by this row.
   final Object? value;
+
+  /// Number of direct children beneath this node.
   final int childCount;
+
+  /// Whether this row has children that can be expanded or collapsed.
   final bool expandable;
+
+  /// Whether this row's direct children are present in the visible row list.
   final bool expanded;
+
+  /// Sanitized key, array index, or root label rendered for this row.
   final String label;
+
+  /// Compact value or child-count summary rendered after [label].
   final String preview;
+
+  /// Complete render-ready row after indentation and optional truncation.
   final String line;
+
+  /// Whether unsafe terminal text in the key or value was replaced.
   final bool outputSanitized;
+
+  /// Whether [line] was shortened to the configured line limit.
   final bool outputTruncated;
+
+  /// Rendered row length before display truncation.
   final int outputOriginalLength;
 }
 
@@ -297,6 +355,8 @@ String exportJsonViewRow(
 class JsonView extends StatefulWidget {
   JsonView({
     super.key,
+
+    /// Already-materialized JSON-compatible value wrapped in [document].
     required Object? value,
     this.controller,
     this.focusNode,
@@ -311,6 +371,9 @@ class JsonView extends StatefulWidget {
        assert(initialExpandedDepth >= 0),
        assert(maxLineLength == null || maxLineLength >= 0);
 
+  /// Creates a viewer from a parsed or already-materialized [JsonViewDocument].
+  ///
+  /// A document that retains a parse error renders its invalid-document state.
   const JsonView.document({
     super.key,
     required this.document,
@@ -326,7 +389,12 @@ class JsonView extends StatefulWidget {
   }) : assert(initialExpandedDepth >= 0),
        assert(maxLineLength == null || maxLineLength >= 0);
 
+  /// Creates a viewer by parsing JSON [source].
+  ///
+  /// Invalid JSON is retained as a document error and rendered by the viewer
+  /// instead of being thrown from this constructor.
   factory JsonView.string(
+    /// JSON source parsed into a document before the widget is mounted.
     String source, {
     Key? key,
     JsonViewController? controller,

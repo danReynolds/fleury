@@ -199,10 +199,19 @@ class Checkbox extends StatelessWidget {
     this.autofocus = false,
   });
 
+  /// Controlled checked state rendered by the checkbox.
   final bool value;
+
+  /// Called with the requested next state on activation; null disables it.
   final void Function(bool value)? onChanged;
+
+  /// Optional visible text and semantic label beside the indicator.
   final String? label;
+
+  /// Optional externally owned focus node used for activation.
   final FocusNode? focusNode;
+
+  /// Whether the checkbox requests focus when mounted.
   final bool autofocus;
 
   @override
@@ -248,10 +257,19 @@ class Toggle extends StatelessWidget {
     this.autofocus = false,
   });
 
+  /// Controlled on/off state rendered by the toggle.
   final bool value;
+
+  /// Called with the requested next state on activation; null disables it.
   final void Function(bool value)? onChanged;
+
+  /// Optional visible text and semantic label beside the indicator.
   final String? label;
+
+  /// Optional externally owned focus node used for activation.
   final FocusNode? focusNode;
+
+  /// Whether the toggle requests focus when mounted.
   final bool autofocus;
 
   @override
@@ -303,10 +321,19 @@ class Switch extends StatelessWidget {
     this.autofocus = false,
   });
 
+  /// Controlled on/off state that positions and colors the switch handle.
   final bool value;
+
+  /// Called with the requested next state on activation; null disables it.
   final void Function(bool value)? onChanged;
+
+  /// Optional visible text and semantic label beside the track.
   final String? label;
+
+  /// Optional externally owned focus node used for activation.
   final FocusNode? focusNode;
+
+  /// Whether the switch requests focus when mounted.
   final bool autofocus;
 
   @override
@@ -367,11 +394,22 @@ class Radio<T> extends StatelessWidget {
     this.autofocus = false,
   });
 
+  /// Value emitted when this radio is activated.
   final T value;
+
+  /// Controlled group selection; equality with [value] selects this radio.
   final T? groupValue;
+
+  /// Called with [value] on activation; null disables this radio.
   final void Function(T value)? onChanged;
+
+  /// Optional visible text and semantic label beside the indicator.
   final String? label;
+
+  /// Optional externally owned focus node used for activation.
   final FocusNode? focusNode;
+
+  /// Whether this radio requests focus when mounted.
   final bool autofocus;
 
   @override
@@ -442,16 +480,21 @@ class RadioGroup<T> extends StatefulWidget {
   /// Passing null disables the whole group.
   final void Function(T value)? onChanged;
 
+  /// Ordered choices; disabled options remain visible but navigation skips them.
   final List<RadioOption<T>> options;
 
-  /// Vertical stacks the radios (arrows + Up/Down primary); horizontal lays
-  /// them in a row.
+  /// Whether options are stacked vertically or laid out in one row.
+  /// All four directional arrows navigate in either layout.
   final Axis axis;
 
   /// Horizontal gap between options when [axis] is horizontal.
   final int spacing;
 
+  /// Label exposed for the group through the semantic app graph.
   final String semanticLabel;
+
+  /// Whether the selected enabled radio, or first enabled option, requests
+  /// initial focus.
   final bool autofocus;
 
   @override
@@ -526,7 +569,11 @@ class _RadioGroupState<T> extends State<RadioGroup<T>> {
 
   @override
   Widget build(BuildContext context) {
-    final autofocusIndex = _selectedIndex >= 0 ? _selectedIndex : 0;
+    final selectedIndex = _selectedIndex;
+    final autofocusIndex =
+        selectedIndex >= 0 && widget.options[selectedIndex].enabled
+        ? selectedIndex
+        : widget.options.indexWhere((option) => option.enabled);
     final radios = <Widget>[
       for (var i = 0; i < widget.options.length; i++)
         Radio<T>(

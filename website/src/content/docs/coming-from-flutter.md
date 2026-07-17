@@ -157,7 +157,7 @@ Padding(
 
 Fleury layout is integer cell layout. Width is columns; height is rows. A
 terminal cell is usually taller than it is wide, so a visually square box often
-uses an `AspectRatio` around `0.5`, not `1.0`.
+uses an `AspectRatio` around `2.0`, not `1.0`.
 
 That sounds small, but it changes what "polish" means. You tune information
 density, alignment, wrapping, keyboard flow, and semantic structure before you

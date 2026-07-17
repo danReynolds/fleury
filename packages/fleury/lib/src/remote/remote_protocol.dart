@@ -291,7 +291,8 @@ final class InitFrame extends RemoteFrame {
   /// INIT param: absent from older peers, decoded as false. Threaded into the
   /// app-side [SurfaceCapabilities.hyperlinks] so the server-side producer gate
   /// (e.g. `MarkdownText`) only emits a `linkUri` when the peer can actually
-  /// show it. Distinct from [protocolVersion]/[RemoteTerminalDriver.wantsHyperlinks],
+  /// show it. Distinct from [protocolVersion] and the remote driver's internal
+  /// `wantsHyperlinks` gate,
   /// which gates whether the wire *serializes* a link at all (v>=4); this gates
   /// whether one is ever *produced*.
   final bool hyperlinks;

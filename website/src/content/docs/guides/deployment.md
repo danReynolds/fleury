@@ -35,7 +35,9 @@ Write a tiny web entry point that mounts your app with
 
 ```dart
 // web/main.dart
+import 'package:fleury/fleury_core.dart';
 import 'package:fleury_web/fleury_web.dart';
+import 'package:fleury_widgets/fleury_widgets_web.dart';
 import 'package:web/web.dart' as web;
 
 void main() {
@@ -69,10 +71,11 @@ widgets in a browser during development, use `serve` instead.
 
 ## Preview a native app with `serve`
 
-`fleury serve` runs your **native** app and streams its rendered frames to a
-browser over a WebSocket, painting into a DOM cell grid. It is primarily a local
-preview and debugging bridge. The app keeps full `dart:io` access, so every
-widget works, including the native-only ones:
+`fleury serve` carries a **native** app's rendered frames to a browser over a
+WebSocket, painting into a DOM cell grid. In spawn mode it starts and owns the
+app process; in bridge mode it attaches to an app that you start. It is
+primarily a local preview and debugging bridge. The app keeps full `dart:io`
+access, so every widget works, including the native-only ones:
 
 ```sh
 # Spawn a fresh app process for each browser session:
@@ -88,12 +91,14 @@ as the command to run):
 | `--host=<addr>` | `127.0.0.1` | Bind address (`0.0.0.0` to expose) |
 | `--allow-origin=<origin>` | same-origin | Allow an embedding origin, or `*` |
 | `--token=<secret>` | none | Require `?token=<secret>` on the WebSocket |
+| `--debug` | off | Expose frame, log, and full error diagnostics in spawn mode |
+| `--max-sessions=<n>` | `8` | Cap concurrent browser sessions in spawn mode |
 | `--spawn <cmd …>` | bridge mode | Spawn an isolated process per connection |
 
 There are two models. **Bridge mode** (no `--spawn`) serves a single shared
 session — good for a local demo or IDE-driven debugging. **Spawn mode**
 (`--spawn dart run my_app.dart`) gives every browser connection its own isolated
-subprocess, with a warm-standby pool so reconnects start quickly.
+subprocess, with a warm standby so reconnects start quickly.
 
 The default bind address is loopback. If you deliberately expose it on a trusted
 network, set `--token`, choose explicit origins, and prefer a trusted tunnel or
@@ -108,7 +113,7 @@ semantic tree.
 | Where it runs | In the browser | A native process |
 | Backend needed | None — static asset | Yes — the running app |
 | Widgets | Web-safe only | All, incl. file/process/log |
-| Scaling | Static/CDN asset | A local process per session |
+| Scaling | Static/CDN asset | One shared app (bridge) or one process per connection (spawn) |
 | Use when | It fits the browser sandbox | Local preview needs the real machine |
 
 Rule of thumb: ship an embed when it can run in the sandbox; use `serve` during

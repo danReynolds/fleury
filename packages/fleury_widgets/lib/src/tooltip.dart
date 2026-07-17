@@ -15,11 +15,14 @@ class Tooltip extends StatefulWidget {
     required this.child,
   });
 
+  /// Hint text shown while focus is within [child], unless the user dismisses
+  /// it with Escape. Leaving and re-entering the child restores the hint.
   final String message;
 
   /// Label exposed through the semantic app graph.
   final String semanticLabel;
 
+  /// Widget whose descendant focus controls tooltip visibility.
   final Widget child;
 
   @override

@@ -1,11 +1,16 @@
 /// Web-safe subset of `fleury_widgets.dart`. Re-exports every widget EXCEPT the
-/// 7 that depend on `dart:io` — directly (file I/O, log capture, process
-/// running) or transitively (widgets built on the log/process widgets) — and so
-/// cannot compile to JavaScript with dart2js. Import THIS, not `fleury_widgets.dart`,
-/// from code that runs client-side in the browser (see docs/serving-and-embedding.md).
-/// The excluded widgets still run over the `fleury serve` path.
+/// 6 that depend on `dart:io` — directly (file I/O, image decoding, log capture,
+/// process running) or transitively (widgets built on the log/process widgets)
+/// — and so cannot compile to JavaScript with dart2js. It also omits the
+/// supporting `WorkflowSnapshot` model: its current `LogEntry` dependency lives
+/// in the native-only log library. Import THIS, not `fleury_widgets.dart`, from
+/// code that runs client-side in the browser (see
+/// docs/serving-and-embedding.md). The excluded APIs still run over the
+/// `fleury serve` path.
 ///
-/// Excluded: file_browser, file_picker, image, log_region, process_panel, terminal_output_region, workflow_snapshot.
+/// Excluded widgets: file_browser, file_picker, image, log_region,
+/// process_panel, terminal_output_region.
+/// Excluded supporting model: workflow_snapshot.
 library;
 
 export 'src/autocomplete.dart' show Autocomplete;

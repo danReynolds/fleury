@@ -5,7 +5,7 @@ import '../rendering/cell.dart';
 import 'framework.dart';
 
 /// Whether a theme is tuned for a dark or light terminal background. A
-/// hint apps and [ThemeExtension]s can branch on; the framework does not
+/// hint apps and `ThemeExtension`s can branch on; the framework does not
 /// auto-detect the terminal background (that probe is unreliable).
 enum Brightness { dark, light }
 

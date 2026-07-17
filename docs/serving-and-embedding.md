@@ -68,8 +68,10 @@ void main() {
 **Constraints**
 
 - **Web-safe widgets only.** Anything that reaches `dart:io` won't compile to JS
-  — that's the 7 native-only `fleury_widgets` (file I/O, image, log capture,
-  process, and the widgets built on them).
+  — that includes six native-only widgets (file I/O, image, log capture,
+  process, and the widgets built on them). The supporting `WorkflowSnapshot`
+  model is also absent from the web barrel today because its `LogEntry`
+  dependency lives in the native-only log library.
   Import `package:fleury/fleury_core.dart`, not `fleury.dart` (see
   [Core and targets](core-and-targets.md#the-web-safety-boundary-practical-rule)).
 - **No host machine.** No filesystem, processes, or environment — the browser
@@ -83,11 +85,20 @@ offline apps, or anything that should deploy as a static asset.
 
 ## Serve — `fleury serve` (local bridge)
 
-`fleury serve` runs your app as a normal **native** Dart process and proxies its
-rendering to the browser. The server holds the real widget tree; on each frame
-its remote driver emits **cell-diff + semantics frames** over a WebSocket, and a
-small dart2js client in the browser paints them into the same DOM cell grid and
-sends input events back.
+`fleury serve` carries a **native** Dart app's rendering to the browser. The
+native process holds the real widget tree. Its remote driver emits visual
+cell-diff frames over a WebSocket; semantic updates are diffed and sent
+separately when the exposed tree or its painted coverage changes. A small
+dart2js client in the browser paints the visual frames into the same DOM cell
+grid and sends input events back.
+
+There are two lifecycle models:
+
+- **Bridge mode** (no `--spawn`) attaches one app process that you start and
+  serves one shared session. It is useful for IDE-driven debugging and local
+  demos.
+- **Spawn mode** (`--spawn <command …>`) owns an isolated app subprocess per
+  browser connection and keeps a warm standby so reconnects start quickly.
 
 ```sh
 # Run any fleury app and open it in a browser at http://127.0.0.1:5777
@@ -101,7 +112,14 @@ fleury serve --port=8080 --host=0.0.0.0 \
 # → open http://<host>:8080/?token=<secret>
 ```
 
-`--spawn` runs your app as a subprocess, isolated per browser connection.
+`--spawn` selects the isolated, managed-process model. Without it, `serve`
+waits for the single bridge-mode app session instead.
+
+Two additional spawn-only controls must appear before `--spawn`:
+
+- `--max-sessions=<n>` caps concurrent browser sessions (default `8`).
+- `--debug` exposes frame timings, captured logs, and full error details over
+  the debug wire. It is off for spawned sessions unless explicitly requested.
 
 ### Trust model
 
@@ -141,8 +159,10 @@ authenticating reverse proxy.
 
 **Constraints**
 
-- **Needs a running native process** — one per session, with startup and memory
-  costs (warm-standby pre-spawning reduces reconnect latency).
+- **Needs a running native process** — one shared app in bridge mode, or one
+  managed subprocess per connection in spawn mode. The spawn pool's warm
+  standby reduces reconnect latency but still carries process startup and
+  memory costs.
 - **Network latency** sits between input and paint.
 - **Not public hosting.** Origin and token checks are useful local/trusted-network
   safeguards, not a user-account or internet-service security boundary.
@@ -157,8 +177,8 @@ access), debugging, and deliberately trusted remote pairing.
 | | **Embed** (`mountApp`) | **Serve** (`fleury serve`) |
 |---|---|---|
 | Widget tree runs… | in the browser (dart2js) | in a local native Dart process |
-| Backend required | **none** — static asset | a local native process per session |
-| Scaling | static/CDN asset | one process per session |
+| Backend required | **none** — static asset | one native app process (shared in bridge mode; managed per connection in spawn mode) |
+| Scaling | static/CDN asset | one shared process (bridge) or one per connection (spawn) |
 | `dart:io` widgets (files/process/log) | ❌ no | ✅ yes |
 | Host machine access | ❌ sandbox only | ✅ full |
 | Latency | local | network round-trip |
@@ -170,5 +190,7 @@ and scales like a static web asset. **Reach for serve during development when a
 browser preview needs the real machine** (files, processes, the host environment)
 or for a deliberately trusted remote pairing session.
 
-Because both paths drive the same DOM cell-grid presenter, you can start by
-embedding and move to serve later (or offer both) without changing your app.
+Because both paths drive the same DOM cell-grid presenter, the reusable widget
+tree and application logic can move between them unchanged. The host entrypoint
+and imports still differ: an embed calls `mountApp` from web-safe code, while a
+served app keeps its native `runApp` entrypoint.

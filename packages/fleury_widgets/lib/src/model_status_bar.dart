@@ -26,10 +26,22 @@ final class TokenUsage {
        assert(contextUsed == null || contextUsed >= 0),
        assert(contextLimit == null || contextLimit >= 0);
 
+  /// Input-token count reported for the current workflow.
   final int input;
+
+  /// Output-token count reported for the current workflow.
   final int output;
+
+  /// Cached-token count reported separately from [input] and [output].
   final int cached;
+
+  /// Current context-window occupancy, when known explicitly.
+  ///
+  /// When absent, [effectiveContextUsed] falls back to a nonzero [total]; an
+  /// all-zero usage remains unknown.
   final int? contextUsed;
+
+  /// Maximum context-window capacity, when known.
   final int? contextLimit;
 
   int get total => input + output + cached;
@@ -69,15 +81,34 @@ final class ModelStatusInfo {
     this.metadata = const <String, Object?>{},
   });
 
+  /// Model name or identifier displayed by the status bar.
   final String model;
+
+  /// Optional provider name displayed before [model].
   final String? provider;
+
+  /// Current lifecycle state used for text, color, and busy semantics.
   final ModelRuntimeStatus status;
+
+  /// Optional operating mode appended to the status summary.
   final String? mode;
+
+  /// Optional short status detail appended to the summary.
   final String? detail;
+
+  /// Optional latency measurement displayed in milliseconds.
   final Duration? latency;
+
+  /// Optional number of queued work items displayed in the summary.
   final int? queueDepth;
+
+  /// Token and context-window metrics exposed by the status bar.
   final TokenUsage tokenUsage;
+
+  /// Optional error exposed as the status bar's semantic validation error.
   final String? error;
+
+  /// App-specific values merged into the status bar's semantic state.
   final Map<String, Object?> metadata;
 
   bool get busy =>
@@ -99,10 +130,19 @@ class TokenMeter extends StatelessWidget {
        assert(warningThreshold >= 0),
        assert(errorThreshold >= warningThreshold);
 
+  /// Token and context-window metrics to display.
   final TokenUsage usage;
+
+  /// Visible and semantic label placed before the usage value.
   final String label;
+
+  /// Number of cells used by the utilization bar; zero hides the bar.
   final int width;
+
+  /// Context-usage ratio at which the near-limit state begins.
   final double warningThreshold;
+
+  /// Context-usage ratio at which the over-limit state begins.
   final double errorThreshold;
 
   @override
@@ -168,9 +208,16 @@ class ModelStatusBar extends StatelessWidget {
     this.tokenMeterWidth = 10,
   });
 
+  /// Model, lifecycle, and token state to present.
   final ModelStatusInfo info;
+
+  /// Semantic label for the complete status bar.
   final String label;
+
+  /// Whether to show a [TokenMeter] beside the model summary.
   final bool showTokenMeter;
+
+  /// Number of cells used by the optional token meter's bar.
   final int tokenMeterWidth;
 
   @override

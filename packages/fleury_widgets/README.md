@@ -1,6 +1,6 @@
 # Fleury Widgets
 
-> The widget catalog for [`fleury`](../fleury).
+> The widget catalog for [`fleury`](https://github.com/danReynolds/fleury/tree/main/packages/fleury).
 
 A batteries-included set of higher-level widgets built on the
 `fleury` framework — inputs, data displays, overlays, charts, and
@@ -85,7 +85,7 @@ Shared helpers: `Palettes` (prebuilt color palettes), `TickFormat`
 ## Testing
 
 Every widget here is exercised with `FleuryTester` from
-`package:fleury_test/fleury_test.dart` (443 tests in this package). Add
+`package:fleury_test/fleury_test.dart`. Add
 `fleury_test` as a dev dependency; it keeps the test runner and golden matcher
 out of production applications.
 Use `renderToString()` for inline assertions or `matchesGolden(...)`

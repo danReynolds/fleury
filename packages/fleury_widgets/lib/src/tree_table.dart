@@ -101,8 +101,9 @@ final class TreeTableFilterDescriptor {
 ///
 /// Small trees can rely on [buildTreeTableRows] scanning nodes directly. Large
 /// retained hierarchies should build one search index when the data changes and
-/// pass it to [TreeTable.searchIndex] or [buildTreeTableRows.searchIndex] so
-/// repeated filter queries do not rebuild and sanitize every searchable field.
+/// pass it to [TreeTable.searchIndex] or the `searchIndex` parameter of
+/// [buildTreeTableRows] so repeated filter queries do not rebuild and sanitize
+/// every searchable field.
 final class TreeTableSearchIndex<T> {
   TreeTableSearchIndex._({
     required List<_TreeTableSearchEntry<T>> entries,
@@ -156,9 +157,9 @@ final class TreeTableSearchIndex<T> {
 
   /// Builds a [TreeTableSearchIndex] cooperatively under [context].
   ///
-  /// This preserves the same row order and token semantics as [build], while
-  /// allowing large hierarchy indexing to report progress, observe
-  /// cancellation, and yield between batches.
+  /// This preserves the same row order and token semantics as
+  /// [TreeTableSearchIndex.build], while allowing large hierarchy indexing to
+  /// report progress, observe cancellation, and yield between batches.
   static Future<TreeTableSearchIndex<T>> buildCooperatively<T>({
     required List<TreeTableNode<T>> roots,
     required List<DataTableColumn> columns,

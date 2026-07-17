@@ -16,10 +16,12 @@ compose widgets, keep state with `StatefulWidget`, rebuild with `setState`, and
 let the framework diff the resulting cell grid. The same widget tree can run in
 a native terminal or mount into a browser.
 
-It also keeps a semantic graph alongside the visual tree, so tests and agents
-can inspect and invoke stable application actions instead of relying on terminal
-coordinates. The browser host mirrors that graph into a semantic DOM; native
-terminal assistive-technology adapters remain future work.
+It can project the visual tree into a semantic graph, so tests and agents can
+inspect and invoke stable application actions instead of relying on terminal
+coordinates. Browser and agent-facing hosts retain that graph; tests and native
+debug tools materialize it on demand. The browser host mirrors retained
+semantics into a semantic DOM; native terminal assistive-technology adapters
+remain future work.
 
 **Start here:** [Getting started](https://fleury.dev/getting-started/) ·
 [Widget catalog](https://fleury.dev/widgets/) ·

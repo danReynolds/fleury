@@ -11,9 +11,9 @@ elements, state, layout) and terminal-native internals.
   terminal cell grid.
 - **Two surfaces** — render to a terminal, or serve the same app to a browser
   over a structured wire (`fleury serve`).
-- **Semantics, built in** — every widget contributes an accessible semantic tree
-  that powers the browser accessibility mirror, the testing API, and agent
-  drivability (see the `fleury_mcp` package).
+- **Semantics, built in** — interactive and content widgets contribute a
+  meaningful semantic tree that powers the browser accessibility mirror, the
+  testing API, and agent drivability (see the `fleury_mcp` package).
 - **Host SPI** — `fleury_host.dart` / `fleury_host_io.dart` expose the runtime,
   damage, semantics, and remote-render wire contracts a platform host builds on.
 - **Testing** — the companion `fleury_test` package drives apps and asserts on

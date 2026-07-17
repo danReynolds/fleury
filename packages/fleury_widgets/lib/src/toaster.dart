@@ -34,8 +34,13 @@ class ToastAction {
     required this.key,
   });
 
+  /// Text displayed for the toast action.
   final String label;
+
+  /// Called after the toast is dismissed through this action.
   final void Function() onPressed;
+
+  /// App-wide chord that activates this action while the toast is visible.
   final KeyChord key;
 }
 
@@ -57,6 +62,7 @@ class Toaster extends StatefulWidget {
     this.duration = const Duration(seconds: 5),
   });
 
+  /// Application subtree over which toast overlays are presented.
   final Widget child;
 
   /// Which corner toasts stack in.

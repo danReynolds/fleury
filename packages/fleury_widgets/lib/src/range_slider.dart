@@ -55,8 +55,10 @@ class RangeSlider extends StatefulWidget {
   /// Called with the new `(low, high)` tuple when either handle moves.
   final void Function((num low, num high) values)? onChanged;
 
-  /// Lower and upper bounds of the slider's range.
+  /// Inclusive lower bound of the slider's range.
   final num min;
+
+  /// Inclusive upper bound of the slider's range.
   final num max;
 
   /// Granularity of arrow-key moves.
@@ -73,7 +75,10 @@ class RangeSlider extends StatefulWidget {
   /// the numbers behind the bar are legible. Adds two rows of height.
   final bool showValues;
 
+  /// Focus node used for keyboard interaction.
   final FocusNode? focusNode;
+
+  /// Whether the slider should request focus when mounted.
   final bool autofocus;
 
   @override
@@ -174,7 +179,8 @@ class _RangeSliderState extends State<RangeSlider> {
     }
   }
 
-  /// The slider value under absolute column [col], snapped to the [step] grid.
+  /// The slider value under absolute column [col], snapped to the
+  /// [RangeSlider.step] grid.
   num _valueForColumn(int col) {
     final width = _geom.width;
     if (width <= 1) return widget.min;

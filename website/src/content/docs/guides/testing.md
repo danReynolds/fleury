@@ -16,9 +16,17 @@ golden-file I/O stay out of production applications:
 
 ```yaml
 dev_dependencies:
-  fleury_test: ^0.1.0
+  fleury_test:
+    git:
+      url: https://github.com/danReynolds/fleury.git
+      path: packages/fleury_test
   test: ^1.26.3
 ```
+
+While Fleury's packages are unpublished, keep the `fleury` dependency override
+from [Getting started](/getting-started/) so the app and `fleury_test` resolve
+the same Git checkout. After the packages are published together, replace the
+Git entry with `fleury_test: ^0.1.0` and remove that temporary override.
 
 ```dart
 import 'package:fleury/fleury.dart';

@@ -59,11 +59,11 @@ enum ImageFit {
   none,
 }
 
-/// Source for an [Image] widget. Holds the decoded pixel data.
+/// Source for an [Image] widget. Provides decoded pixels and caches decoding.
 ///
-/// Decoding happens synchronously when the source is constructed
-/// — fine for bundled assets and config-driven previews; not for
-/// HTTP/large-PNG cases (decode upstream and pass via
+/// Decoding happens synchronously on the first [decode] call, normally when an
+/// [Image] mounts — fine for bundled assets and config-driven previews; not
+/// for HTTP/large-PNG cases (decode upstream and pass via
 /// [ImageSource.decoded] instead).
 abstract class ImageSource {
   /// Decoded pixel data. Implementations cache.
@@ -71,20 +71,30 @@ abstract class ImageSource {
 
   /// Backed by an in-memory byte buffer (PNG / JPEG / BMP / TIFF /
   /// GIF — whatever `package:image` recognises).
-  factory ImageSource.bytes(Uint8List bytes) = _BytesSource;
+  factory ImageSource.bytes(
+    /// Encoded image bytes to decode lazily and cache in this source.
+    Uint8List bytes,
+  ) = _BytesSource;
 
-  /// Backed by a file on disk. Read synchronously at construction.
+  /// Backed by a file on disk. On a cache miss, read synchronously during the
+  /// first [decode].
   ///
   /// Decoded images are cached cross-instance keyed by absolute path,
   /// so mounting the same `logo.png` in N widgets decodes once. Call
   /// [evictFile] to drop the cache for a path that has changed on
   /// disk; [evictAll] clears everything.
-  factory ImageSource.file(String path) = _FileSource;
+  factory ImageSource.file(
+    /// File path to read, decode, and cache by absolute path.
+    String path,
+  ) = _FileSource;
 
   /// An already-decoded image (e.g. produced by `img.decodePng`).
   /// Use this when the caller manages decoding (HTTP, large files,
   /// transformations).
-  factory ImageSource.decoded(img.Image image) = _DecodedSource;
+  factory ImageSource.decoded(
+    /// Decoded pixels to expose without additional decoding.
+    img.Image image,
+  ) = _DecodedSource;
 
   /// Drop the cached decode for [path]. Call after writing to the file
   /// to force the next [decode] to re-read from disk.
@@ -179,6 +189,7 @@ class Image extends StatefulWidget {
   /// common path for asset-style usage. Mirrors Flutter's
   /// `Image.file(File(path))`.
   Image.file(
+    /// File path read by the synchronously decoded, shared file cache.
     String path, {
     super.key,
     this.fit = ImageFit.contain,
@@ -189,6 +200,7 @@ class Image extends StatefulWidget {
 
   /// Shorthand for `Image(source: ImageSource.bytes(bytes))`.
   Image.bytes(
+    /// Encoded image bytes decoded synchronously by the created source.
     Uint8List bytes, {
     super.key,
     this.fit = ImageFit.contain,
@@ -201,6 +213,7 @@ class Image extends StatefulWidget {
   /// pass an already-decoded `package:image` Image (e.g. from an HTTP
   /// fetch, generated programmatically, or transformed).
   Image.decoded(
+    /// Already-decoded pixels to render directly.
     img.Image decoded, {
     super.key,
     this.fit = ImageFit.contain,
@@ -209,7 +222,10 @@ class Image extends StatefulWidget {
     this.semanticLabel,
   }) : source = ImageSource.decoded(decoded);
 
+  /// Pixel source decoded when the widget is mounted or replaced.
   final ImageSource source;
+
+  /// Scaling and cropping policy within the widget's allotted cell area.
   final ImageFit fit;
 
   /// Symbol palette for the glyph-art fallback. [ImageGlyph.halfBlock]
@@ -220,9 +236,10 @@ class Image extends StatefulWidget {
   /// already pixel-perfect and needs no palette.
   final ImageGlyph glyph;
 
-  /// If non-null, semitransparent pixels (0 < α < 255) are alpha-
-  /// composited against this color: `out = α · src + (1−α) · bg`.
-  /// Fully-transparent pixels are also flattened to [backgroundColor].
+  /// For the glyph-art fallback, semitransparent pixels (0 < α < 255) are
+  /// alpha-composited against this color when non-null:
+  /// `out = α · src + (1−α) · bg`. Fully-transparent pixels are also flattened
+  /// to [backgroundColor]. True-pixel placements retain the source alpha.
   ///
   /// When null, transparent pixels render as empty cells (showing the
   /// terminal's own background) and semitransparent pixels are
@@ -419,11 +436,22 @@ class _RawImage extends LeafRenderObjectWidget {
 /// Render object behind [Image].
 class RenderImage extends RenderObject {
   RenderImage({
+    /// Decoded pixels for the frame currently being rendered.
     required img.Image decoded,
+
+    /// Scaling and cropping policy within the laid-out cell area.
     required ImageFit fit,
+
+    /// Symbol palette used by the glyph-art fallback.
     required ImageGlyph glyph,
+
+    /// Terminal color depth used to quantize glyph-art output.
     required ColorMode colorMode,
+
+    /// Whether the surface accepts neutral true-pixel placements.
     InlineImageSupport images = InlineImageSupport.none,
+
+    /// Optional color used to flatten transparent glyph-art source pixels.
     Color? backgroundColor,
   }) : _decoded = decoded,
        _fit = fit,

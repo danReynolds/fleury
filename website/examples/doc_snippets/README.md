@@ -19,6 +19,7 @@ changes underneath a doc, the build goes red instead of the docs going stale.
 | Program | Backs |
 |---|---|
 | `app_shell.dart` | [App entry points](../../src/content/docs/concepts/app-entry.md), [Theming](../../src/content/docs/guides/theming.md) |
+| `status_app.dart`, `status_app_terminal.dart`, `status_app_web.dart` | Shared tree plus native/browser entrypoints in [Getting started](../../src/content/docs/getting-started.mdx) |
 | `web_app_shell.dart` | Browser entry snippets in [App entry points](../../src/content/docs/concepts/app-entry.md) and [Coming from Flutter](../../src/content/docs/coming-from-flutter.md) |
 | `coming_from_flutter.dart` | [Coming from Flutter](../../src/content/docs/coming-from-flutter.md) |
 | `filterable_list.dart` | [Tutorial: a filterable list](../../src/content/docs/tutorial.md) |
@@ -28,6 +29,7 @@ changes underneath a doc, the build goes red instead of the docs going stale.
 | `shared_state.dart` | [State management](../../src/content/docs/guides/state-management.md) |
 | `semantic_actions.dart` | [Built for agents](../../../docs/agents-and-semantics.md) |
 
-Keep each file a single, self-contained program (real imports, a `main`) so it
-analyzes on its own. When you add or change documented code, add or update the
-program here too.
+Keep each entrypoint a complete program with real imports and a `main`; shared
+libraries should be imported by every target-specific entrypoint they support.
+When you add or change documented code, add or update the matching source here
+too.
