@@ -161,6 +161,89 @@ void main() {
       expect(selected, _d(2025, 3, 15));
     });
 
+    testWidgets('PageUp from January goes to December of the previous year', (
+      tester,
+    ) {
+      DateTime? selected;
+      tester.pumpWidget(
+        DatePicker(
+          value: _d(2026, 1, 15),
+          autofocus: true,
+          onChanged: (d) => selected = d,
+        ),
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.pageUp));
+      expect(selected, _d(2025, 12, 15));
+    });
+
+    testWidgets('PageUp clamps the day if the previous month is shorter', (
+      tester,
+    ) {
+      DateTime? selected;
+      // Mar 31 → Feb 29 in a leap year (clamps the day in).
+      tester.pumpWidget(
+        DatePicker(
+          value: _d(2024, 3, 31),
+          autofocus: true,
+          onChanged: (d) => selected = d,
+        ),
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.pageUp));
+      expect(selected, _d(2024, 2, 29));
+    });
+
+    testWidgets('[  pages back one year from mid-year and from January', (
+      tester,
+    ) {
+      DateTime? selected;
+      tester.pumpWidget(
+        DatePicker(
+          value: _d(2026, 6, 15),
+          autofocus: true,
+          onChanged: (d) => selected = d,
+        ),
+      );
+      tester.type('[');
+      expect(selected, _d(2025, 6, 15));
+
+      selected = null;
+      tester.pumpWidget(
+        DatePicker(
+          value: _d(2026, 1, 15),
+          autofocus: true,
+          onChanged: (d) => selected = d,
+        ),
+      );
+      tester.type('[');
+      expect(selected, _d(2025, 1, 15));
+    });
+
+    testWidgets('month/year paging is a no-op past firstDate / lastDate', (
+      tester,
+    ) {
+      DateTime? selected;
+      tester.pumpWidget(
+        DatePicker(
+          value: _d(2024, 3, 15),
+          firstDate: _d(2024, 3, 1),
+          lastDate: _d(2024, 12, 31),
+          autofocus: true,
+          onChanged: (d) => selected = d,
+        ),
+      );
+      // Backward past firstDate: ignored.
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.pageUp));
+      expect(selected, isNull);
+      tester.type('[');
+      expect(selected, isNull);
+      // Forward a year past lastDate: ignored.
+      tester.type(']');
+      expect(selected, isNull);
+      // In-bounds paging still works.
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.pageDown));
+      expect(selected, _d(2024, 4, 15));
+    });
+
     testWidgets('respects firstDate / lastDate bounds — moves clamp', (tester) {
       DateTime? selected;
       tester.pumpWidget(

@@ -86,8 +86,10 @@ class Heatmap extends StatelessWidget {
         'chartRowCount': stats.rows,
         'chartColumnCount': stats.columns,
         'chartPointCount': stats.pointCount,
-        'chartMinValue': stats.min,
-        'chartMaxValue': stats.max,
+        // Only finite bounds go on the wire: serve's semantics encoder
+        // jsonEncodes this map, and JSON has no NaN/Infinity.
+        'chartMinValue': ?(stats.min.isFinite ? stats.min : null),
+        'chartMaxValue': ?(stats.max.isFinite ? stats.max : null),
         'rowLabelCount': rowLabels?.length ?? 0,
         'columnLabelCount': colLabels?.length ?? 0,
       }),
@@ -108,8 +110,10 @@ class Heatmap extends StatelessWidget {
   }
 }
 
-String _fmtHeat(num v) =>
-    v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+String _fmtHeat(num v) {
+  if (!v.isFinite) return v.toString(); // 'NaN' / 'Infinity' — toInt throws
+  return v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+}
 
 bool _labelsEqual(List<String>? a, List<String>? b) {
   if (identical(a, b)) return true;
@@ -134,6 +138,7 @@ bool _labelsEqual(List<String>? a, List<String>? b) {
     if (row.length > columns) columns = row.length;
     pointCount += row.length;
     for (final value in row) {
+      if (!value.isFinite) continue; // gaps must not poison the legend range
       if (autoMin == null || value < autoMin) autoMin = value;
       if (autoMax == null || value > autoMax) autoMax = value;
     }
@@ -328,7 +333,8 @@ class RenderHeatmap extends RenderObject {
   }) {
     if (size.cols == 0 || size.rows == 0 || _values.isEmpty) return;
 
-    // Compute min/max (autoscale fallback).
+    // Compute min/max (autoscale fallback) over the finite cells only —
+    // one NaN/±Infinity cell must not poison the scale for the grid.
     var lo = _min?.toDouble();
     var hi = _max?.toDouble();
     if (lo == null || hi == null) {
@@ -336,6 +342,7 @@ class RenderHeatmap extends RenderObject {
       for (final row in _values) {
         for (final v in row) {
           final d = v.toDouble();
+          if (!d.isFinite) continue;
           if (autoLo == null || d < autoLo) autoLo = d;
           if (autoHi == null || d > autoHi) autoHi = d;
         }
@@ -398,8 +405,10 @@ class RenderHeatmap extends RenderObject {
       final row = _values[r];
       for (var c = 0; c < row.length && c < _cols; c++) {
         final v = row[c].toDouble();
+        // Non-finite cells render as gaps — ceil() on them would throw.
+        if (!v.isFinite) continue;
         var t = (v - lo) / (hi - lo);
-        if (t <= 0) continue; // leave empty
+        if (t <= 0 || t.isNaN) continue; // leave empty
         if (t > 1) t = 1;
         // Quartile mapping: (0, .25] → ░, (.25, .5] → ▒, (.5, .75] → ▓, (.75, 1] → █.
         final idx = ((t * 4).ceil() - 1).clamp(0, 3);

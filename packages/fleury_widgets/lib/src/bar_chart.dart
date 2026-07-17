@@ -447,9 +447,12 @@ class RenderBarChart extends RenderObject {
 
     var topVal = _max?.toDouble();
     if (topVal == null) {
-      var hi = _bars.first.total.toDouble();
+      // Autoscale over the finite totals only — one NaN/±Infinity bar must
+      // not poison the scale for the rest.
+      var hi = 0.0;
       for (final b in _bars) {
         final v = b.total.toDouble();
+        if (!v.isFinite) continue;
         if (v > hi) hi = v;
       }
       topVal = hi;
@@ -519,7 +522,10 @@ class RenderBarChart extends RenderObject {
     double topVal,
   ) {
     final style = CellStyle(foreground: bar.color ?? _defaultColor);
-    final ticks = ((bar.value!.toDouble() / topVal) * chartRows * 8).round();
+    // A non-finite value (or scale) renders as an empty column — round()
+    // on NaN/±Infinity would throw.
+    final rawTicks = (bar.value!.toDouble() / topVal) * chartRows * 8;
+    final ticks = rawTicks.isFinite ? rawTicks.round() : 0;
     final fullRows = ticks ~/ 8;
     final partial = ticks % 8;
     final hasPartial = partial > 0 && fullRows < chartRows;
@@ -558,19 +564,22 @@ class RenderBarChart extends RenderObject {
     // Compute each segment's pixel-eighths height. Carry rounding error
     // forward so cumulative tops match the bar's overall total.
     final n = bar.segments.length;
-    final totalTicks = ((bar.total.toDouble() / topVal) * chartRows * 8)
-        .round();
     final segTicks = List<int>.filled(n, 0);
     var runningTicks = 0;
     var totalAssigned = 0;
     for (var i = 0; i < n; i++) {
-      runningTicks += ((bar.segments[i].toDouble() / topVal) * chartRows * 8)
-          .round();
+      // A non-finite segment contributes no height (rendered as a gap) —
+      // round() on NaN/±Infinity would throw.
+      final raw = (bar.segments[i].toDouble() / topVal) * chartRows * 8;
+      runningTicks += raw.isFinite ? raw.round() : 0;
       // Each segment ends at `runningTicks` ticks from the baseline.
       segTicks[i] = runningTicks - totalAssigned;
       totalAssigned = runningTicks;
     }
-    // Soak any rounding drift into the top segment.
+    // Soak any rounding drift into the top segment. A non-finite total
+    // (one bad segment poisons the sum) keeps the per-segment answer.
+    final rawTotal = (bar.total.toDouble() / topVal) * chartRows * 8;
+    final totalTicks = rawTotal.isFinite ? rawTotal.round() : totalAssigned;
     if (totalAssigned != totalTicks && n > 0) {
       segTicks[n - 1] += totalTicks - totalAssigned;
     }
@@ -733,6 +742,7 @@ class RenderBarChart extends RenderObject {
   }
 
   static String _formatValue(num v) {
+    if (!v.isFinite) return v.toString(); // 'NaN' / 'Infinity' — toInt throws
     if (v == v.truncate()) return v.toInt().toString();
     return v.toStringAsFixed(1);
   }

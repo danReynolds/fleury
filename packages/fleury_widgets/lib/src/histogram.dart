@@ -123,15 +123,17 @@ _histogramDistribution(
   var lo = range?.$1.toDouble();
   var hi = range?.$2.toDouble();
   if (lo == null || hi == null) {
-    var autoLo = values.first.toDouble();
-    var autoHi = values.first.toDouble();
+    // Auto range over the finite values only — one NaN/±Infinity sample
+    // must not poison the bin edges.
+    double? autoLo, autoHi;
     for (final v in values) {
       final d = v.toDouble();
-      if (d < autoLo) autoLo = d;
-      if (d > autoHi) autoHi = d;
+      if (!d.isFinite) continue;
+      if (autoLo == null || d < autoLo) autoLo = d;
+      if (autoHi == null || d > autoHi) autoHi = d;
     }
-    lo ??= autoLo;
-    hi ??= autoHi;
+    lo ??= autoLo ?? 0;
+    hi ??= autoHi ?? 1;
   }
   if (hi == lo) hi = lo + 1;
 
@@ -140,8 +142,12 @@ _histogramDistribution(
   var included = 0;
   for (final v in values) {
     final d = v.toDouble();
-    if (d < lo || d > hi) continue;
-    var idx = ((d - lo) / binWidth).floor();
+    // Non-finite values fall outside every bin (NaN compares false against
+    // the bounds, and floor() on it would throw).
+    if (!d.isFinite || d < lo || d > hi) continue;
+    final rel = (d - lo) / binWidth;
+    if (!rel.isFinite) continue; // degenerate user-supplied range
+    var idx = rel.floor();
     if (idx >= bins) idx = bins - 1;
     if (idx < 0) idx = 0;
     counts[idx]++;

@@ -1380,6 +1380,19 @@ class _FormPanelState extends State<FormPanel> {
         }
         _textControllers[id] = next;
       } else if (controller.text != text) {
+        // Number fields round-trip through NumberInput, which reports null
+        // for in-progress tokens ("1.", "-"); rewriting from that null would
+        // erase the text mid-edit (typing "1.5" used to submit 5). Keep the
+        // text whenever it still reads back as the current form value — only
+        // a genuine external change (setValue / reset) resets it. Known
+        // ambiguity: an external clear to null while an in-progress token is
+        // showing is indistinguishable from mid-typing, so the token stays
+        // visible (value is null either way).
+        if (field.type == FormFieldType.number &&
+            _numberEditValue(field, controller.text) ==
+                _parseNumberValue(field, _controller.value(id))) {
+          continue;
+        }
         controller
           ..text = text
           ..caretOffset = text.length;
@@ -2343,6 +2356,15 @@ num? _parseNumberValue(FormFieldSpec field, Object? value) {
 num? _parseNumberText(FormFieldSpec field, String text) {
   if (text.isEmpty || text == '-' || text == '.' || text == '-.') return null;
   return field.allowDecimal ? num.tryParse(text) : int.tryParse(text);
+}
+
+/// The value [NumberInput] reports for the field text — `null` for empty /
+/// in-progress tokens ("-", "1.") that don't parse to a [num] yet. Differs
+/// from [_parseNumberText] in the trailing-dot rule: `num.tryParse` accepts
+/// "1." but NumberInput deliberately treats it as still-being-typed.
+num? _numberEditValue(FormFieldSpec field, String text) {
+  if (text.endsWith('.')) return null;
+  return _parseNumberText(field, text);
 }
 
 String _dateDisplayValue(Object? value) {

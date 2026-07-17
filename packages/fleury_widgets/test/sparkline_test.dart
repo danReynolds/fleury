@@ -64,6 +64,50 @@ void main() {
       expect(_row(tester, 5).trim(), '');
     });
 
+    testWidgets('renders non-finite data points as gaps instead of throwing', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        SizedBox(
+          width: 5,
+          height: 1,
+          child: Sparkline(
+            data: const [4, double.nan, 2, double.infinity, 4],
+            max: 4,
+          ),
+        ),
+      );
+      expect(_row(tester, 5), '█ ▄ █');
+    });
+
+    testWidgets('non-finite values do not poison the autoscaled max', (tester) {
+      tester.pumpWidget(
+        SizedBox(
+          width: 3,
+          height: 1,
+          child: Sparkline(data: const [double.nan, 2, 4]),
+        ),
+      );
+      // Autoscale ignores the NaN: max = 4 → gap, ▄, █.
+      expect(_row(tester, 3), ' ▄█');
+    });
+
+    testWidgets('showValue formats a non-finite latest value without '
+        'throwing', (tester) {
+      tester.pumpWidget(
+        SizedBox(
+          width: 12,
+          height: 1,
+          child: Sparkline(
+            data: const [1, 2, double.infinity],
+            max: 4,
+            showValue: true,
+          ),
+        ),
+      );
+      expect(_row(tester, 12), contains('Infinity'));
+    });
+
     testWidgets('same-length data updates repaint without relayout', (tester) {
       tester.pumpWidget(
         SizedBox(
@@ -123,5 +167,24 @@ void main() {
         contains('chart sparkline, 3 points, min 0, max 10, latest 5'),
       );
     });
+
+  testWidgets('semantic state omits non-finite values', (tester) {
+    tester.pumpWidget(
+      const Sparkline(
+        data: [1, 2, double.nan],
+        semanticLabel: 'q',
+        min: double.nan,
+      ),
+    );
+    final chart = tester.semantics().single(
+      role: SemanticRole.chart,
+      label: 'q',
+    );
+    // serve jsonEncodes semantic state; JSON has no NaN/Infinity, so a
+    // non-finite latest sample or bound must be absent, not shipped raw.
+    expect(chart.state.chartLatestValue, isNull);
+    expect(chart.state.chartMinValue, isNull);
+    expect(chart.state.chartMaxValue, 2);
+  });
   });
 }

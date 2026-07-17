@@ -54,6 +54,48 @@ void main() {
       expect(_graphemeAt(tester, 1, 0, cols: 2, rows: 1), '█');
     });
 
+    testWidgets('renders non-finite cells as gaps instead of throwing', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 3,
+          height: 1,
+          child: Heatmap(
+            values: [
+              [1.0, double.nan, 0.5],
+            ],
+            cellWidth: 1,
+            min: 0,
+            max: 1,
+          ),
+        ),
+      );
+      expect(_graphemeAt(tester, 0, 0, cols: 3, rows: 1), '█');
+      expect(_graphemeAt(tester, 1, 0, cols: 3, rows: 1), isNull);
+      expect(_graphemeAt(tester, 2, 0, cols: 3, rows: 1), '▒');
+    });
+
+    testWidgets('autoscale ignores non-finite cells', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 3,
+          height: 1,
+          child: Heatmap(
+            values: [
+              [double.nan, 2.0, 4.0],
+            ],
+            cellWidth: 1,
+            min: 0,
+          ),
+        ),
+      );
+      // The autoscaled max comes from the finite cells (4): 2 → ▒, 4 → █.
+      expect(_graphemeAt(tester, 0, 0, cols: 3, rows: 1), isNull);
+      expect(_graphemeAt(tester, 1, 0, cols: 3, rows: 1), '▒');
+      expect(_graphemeAt(tester, 2, 0, cols: 3, rows: 1), '█');
+    });
+
     testWidgets('renders column labels above and row labels to the left', (
       tester,
     ) {
@@ -176,6 +218,52 @@ void main() {
         fallback.states,
         contains('chart heatmap, 2 rows, 2 columns, 4 points, min 0, max 5'),
       );
+    });
+
+    testWidgets('legend renders with non-finite cells instead of throwing', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 20,
+          height: 3,
+          child: Heatmap(
+            values: [
+              [double.infinity, 1.0],
+              [double.nan, 3.0],
+            ],
+            cellWidth: 1,
+            showLegend: true,
+          ),
+        ),
+      );
+      // The legend range comes from the finite cells only (1..3); a
+      // non-finite first cell must not NaN-stick or crash _fmtHeat.
+      final rendered = tester.renderToString(size: const CellSize(20, 3));
+      expect(rendered, contains('1'));
+      expect(rendered, contains('3'));
+      expect(rendered, isNot(contains('NaN')));
+    });
+
+    testWidgets('semantic state omits non-finite bounds', (tester) {
+      tester.pumpWidget(
+        const Heatmap(
+          values: [
+            [double.infinity, 2.0],
+          ],
+          cellWidth: 1,
+          min: double.negativeInfinity,
+          semanticLabel: 'load',
+        ),
+      );
+      final chart = tester.semantics().single(
+        role: SemanticRole.chart,
+        label: 'load',
+      );
+      // serve jsonEncodes semantic state; JSON has no NaN/Infinity, so
+      // non-finite bounds must be absent rather than shipped raw.
+      expect(chart.state.chartMinValue, isNull);
+      expect(chart.state.chartMaxValue, 2.0);
     });
   });
 }
