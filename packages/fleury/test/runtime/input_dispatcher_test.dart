@@ -535,6 +535,67 @@ void main() {
       expect(h.dispatcher.hasPendingSequence, isFalse);
     });
 
+    test('16k. A text-origin mid-sequence step is delivered to the field '
+        'when a later step breaks the sequence', () {
+      // A 3-step chord holds the middle 'a' (which arrived as text). When
+      // 'z' breaks the sequence, that held character belongs to the
+      // focused field: replaying it direct-only would silently eat it.
+      final controller = TextEditingController();
+      var fired = 0;
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeyChord.ctrl.x.a.b, onEvent: (_) => fired += 1),
+          ],
+          child: TextInput(controller: controller, autofocus: true),
+        ),
+      );
+
+      h.dispatch(_char('x', ctrl: true));
+      h.dispatcher.dispatch(const TextInputEvent('a'));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+      expect(controller.text, isEmpty, reason: 'held while the chord lives');
+
+      h.dispatcher.dispatch(const TextInputEvent('z'));
+      expect(fired, 0);
+      expect(
+        controller.text,
+        'az',
+        reason: 'the held text char reaches the field before the breaker',
+      );
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('16l. A text-origin mid-sequence step is delivered to the field '
+        'when the sequence times out', () async {
+      final controller = TextEditingController();
+      var fired = 0;
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeyChord.ctrl.x.a.b, onEvent: (_) => fired += 1),
+          ],
+          child: TextInput(controller: controller, autofocus: true),
+        ),
+      );
+
+      h.dispatch(_char('x', ctrl: true));
+      h.dispatcher.dispatch(const TextInputEvent('a'));
+      expect(controller.text, isEmpty, reason: 'held while the chord lives');
+
+      // Harness timeout is 50ms; the held 'a' must surface in the field.
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(fired, 0);
+      expect(
+        controller.text,
+        'a',
+        reason: 'timeout must not silently eat the typed character',
+      );
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
     test('16d. Bracketed paste dispatches to onPaste, not onTextInput', () {
       final events = <String>[];
       final h = _TestHarness();

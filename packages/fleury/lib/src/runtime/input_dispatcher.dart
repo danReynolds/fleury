@@ -141,23 +141,23 @@ class InputDispatcher {
     return KeyEventResult.ignored;
   }
 
-  KeyEventResult _dispatchKeyEvent(KeyEvent event) {
+  KeyEventResult _dispatchKeyEvent(KeyEvent event, {String? textOrigin}) {
     // 1. Pending sequence handling.
     if (_pending != null) {
-      final result = _tryPendingSequence(event);
+      final result = _tryPendingSequence(event, textOrigin: textOrigin);
       if (result != null) return result;
       // Sequence cancelled; the held events were replayed. The current
       // event runs through full dispatch so it can start a fresh
       // sequence if applicable.
     }
-    return _dispatchPlain(event);
+    return _dispatchPlain(event, textOrigin: textOrigin);
   }
 
   /// Runs the pending-sequence machinery for [event]: completes or
   /// advances the sequence (non-null result), or cancels it — replaying
   /// every held event direct-only — and returns null so the caller
   /// dispatches [event] through its own normal path.
-  KeyEventResult? _tryPendingSequence(KeyEvent event) {
+  KeyEventResult? _tryPendingSequence(KeyEvent event, {String? textOrigin}) {
     var pending = _pending;
     if (pending == null) return null;
     final activeCandidates = pending.candidates
@@ -174,6 +174,7 @@ class InputDispatcher {
       pending = _PendingSequence(
         events: pending.events,
         candidates: activeCandidates,
+        texts: pending.texts,
       );
       _pending = pending;
     }
@@ -185,7 +186,7 @@ class InputDispatcher {
     // Could the event extend the sequence by one more step?
     final survivors = pending.surviveOneMoreStep(event);
     if (survivors.isNotEmpty) {
-      _pending = pending.advance(event, survivors);
+      _pending = pending.advance(event, survivors, textOrigin);
       _timer?.cancel();
       _timer = Timer(sequenceTimeout, _onTimeout);
       return KeyEventResult.handled;
@@ -240,7 +241,7 @@ class InputDispatcher {
     if (_pending != null) {
       final keyEvent = _keyEventForText(event.text);
       if (keyEvent != null) {
-        final result = _tryPendingSequence(keyEvent);
+        final result = _tryPendingSequence(keyEvent, textOrigin: event.text);
         if (result != null) return result;
       } else {
         // Multi-grapheme text (an input burst) can't be a sequence step.
@@ -255,7 +256,7 @@ class InputDispatcher {
 
     final keyEvent = _keyEventForText(event.text);
     if (keyEvent != null) {
-      return _dispatchKeyEvent(keyEvent);
+      return _dispatchKeyEvent(keyEvent, textOrigin: event.text);
     }
 
     return KeyEventResult.ignored;
@@ -289,8 +290,21 @@ class InputDispatcher {
     final pending = _pending;
     if (pending == null) return;
     _clearPending();
-    for (final e in pending.events) {
-      _dispatchPlain(e, allowSequenceStart: false);
+    _replayHeld(pending);
+  }
+
+  /// Replays events held by a cancelled/timed-out sequence. Text-origin
+  /// steps are owed to the focused text claimant first — replaying them
+  /// direct-only would silently eat the typed character; only unclaimed
+  /// ones fall through to direct key dispatch. Key-origin steps replay
+  /// direct-only so the same prefix cannot immediately re-arm pending.
+  void _replayHeld(_PendingSequence pending) {
+    for (var i = 0; i < pending.events.length; i++) {
+      final text = pending.texts[i];
+      if (text != null && _deliverText(text) == KeyEventResult.handled) {
+        continue;
+      }
+      _dispatchPlain(pending.events[i], allowSequenceStart: false);
     }
   }
 
@@ -354,6 +368,7 @@ class InputDispatcher {
   KeyEventResult _dispatchPlain(
     KeyEvent event, {
     bool allowSequenceStart = true,
+    String? textOrigin,
   }) {
     // Precedence (vim-style):
     //
@@ -410,7 +425,7 @@ class InputDispatcher {
 
     // Sequence start, if any candidates emerged from the chain.
     if (allowSequenceStart && sequenceCandidates.isNotEmpty) {
-      _startPending(event, sequenceCandidates);
+      _startPending(event, sequenceCandidates, textOrigin);
       return KeyEventResult.handled;
     }
 
@@ -422,7 +437,7 @@ class InputDispatcher {
         final globalSeqs = <KeyBinding>[];
         _collectSequenceStarts(_globalBindings, event, globalSeqs);
         if (globalSeqs.isNotEmpty) {
-          _startPending(event, globalSeqs);
+          _startPending(event, globalSeqs, textOrigin);
           return KeyEventResult.handled;
         }
       }
@@ -471,9 +486,17 @@ class InputDispatcher {
     }
   }
 
-  void _startPending(KeyEvent firstEvent, List<KeyBinding> candidates) {
+  void _startPending(
+    KeyEvent firstEvent,
+    List<KeyBinding> candidates,
+    String? textOrigin,
+  ) {
     _clearPending();
-    _pending = _PendingSequence(events: [firstEvent], candidates: candidates);
+    _pending = _PendingSequence(
+      events: [firstEvent],
+      candidates: candidates,
+      texts: [textOrigin],
+    );
     _timer = Timer(sequenceTimeout, _onTimeout);
   }
 
@@ -481,12 +504,7 @@ class InputDispatcher {
     final pending = _pending;
     if (pending == null) return;
     _clearPending();
-    // Replay as direct-only so we don't immediately re-arm pending
-    // on the same prefix (the new precedence rule would defer the
-    // direct match again forever otherwise).
-    for (final e in pending.events) {
-      _dispatchPlain(e, allowSequenceStart: false);
-    }
+    _replayHeld(pending);
   }
 
   void _clearPending() {
@@ -511,7 +529,11 @@ class InputDispatcher {
 }
 
 class _PendingSequence {
-  _PendingSequence({required this.events, required this.candidates});
+  _PendingSequence({
+    required this.events,
+    required this.candidates,
+    required this.texts,
+  });
 
   /// The events held by the dispatcher so far. `events[0]` is the
   /// first event that opened the sequence; subsequent events are
@@ -521,6 +543,12 @@ class _PendingSequence {
 
   /// Bindings whose chord still has events held matched as a prefix.
   final List<KeyBinding> candidates;
+
+  /// Per-held-event text origin: `texts[i]` is the original typed text
+  /// when `events[i]` was synthesized from a [TextInputEvent], null for a
+  /// real key event. On cancel/timeout a text-origin step is owed to the
+  /// focused text claimant, not just direct key dispatch.
+  final List<String?> texts;
 
   /// Tries to complete a candidate chord with [event] as its final
   /// step. Returns the binding to fire, or null if none completes
@@ -563,8 +591,16 @@ class _PendingSequence {
 
   /// Returns a new _PendingSequence with [event] appended and the
   /// survivor candidate list.
-  _PendingSequence advance(KeyEvent event, List<KeyBinding> survivors) {
-    return _PendingSequence(events: [...events, event], candidates: survivors);
+  _PendingSequence advance(
+    KeyEvent event,
+    List<KeyBinding> survivors,
+    String? textOrigin,
+  ) {
+    return _PendingSequence(
+      events: [...events, event],
+      candidates: survivors,
+      texts: [...texts, textOrigin],
+    );
   }
 }
 

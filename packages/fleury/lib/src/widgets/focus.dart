@@ -469,6 +469,33 @@ class FocusManager extends ChangeNotifier {
     return false;
   }
 
+  /// Lifts the outermost active [ExcludeFocus] marker(s) inside [root],
+  /// ahead of the rebuild that will flip them off. For containers that
+  /// reveal previously covered content by intent (Navigator.pop wraps each
+  /// route in `ExcludeFocus(excluding: !isTop)`): the reveal is decided
+  /// NOW, but the marker widget only updates next frame — lifting eagerly
+  /// lets focus restoration run synchronously and lets app code claim
+  /// focus into the revealed subtree from completion microtasks. The walk
+  /// never descends past a marker, so an app's own nested [ExcludeFocus]
+  /// (a hidden tab, say) stays excluded; each lifted marker re-syncs to
+  /// its widget configuration on its next update.
+  void liftExclusionIn(BuildContext root) {
+    _checkNotDisposed();
+    if (_activeExcludeFocusMarkers.isEmpty) return;
+    void visit(Element e) {
+      if (e is _ExcludeFocusMarkerElement) {
+        if (e.excluding) {
+          e._liftedEarly = true;
+          _notifyManagerScopeChanged();
+        }
+        return;
+      }
+      e.visitChildren(visit);
+    }
+
+    if (root is Element) visit(root);
+  }
+
   /// Temporarily removes the mounted subtree below [root] from focus and text
   /// input routing while preserving its focus identity for later recovery.
   ///
@@ -1550,8 +1577,15 @@ class _ExcludeFocusMarker extends Widget {
 class _ExcludeFocusMarkerElement extends ComponentElement {
   _ExcludeFocusMarkerElement(_ExcludeFocusMarker super.widget);
 
-  bool get excluding => (widget as _ExcludeFocusMarker).excluding;
+  bool get excluding =>
+      (widget as _ExcludeFocusMarker).excluding && !_liftedEarly;
   bool _capturedExcluding = false;
+
+  /// Set by [FocusManager.liftExclusionAbove] when a container reveals
+  /// this subtree by intent before the rebuild that flips [excluding]
+  /// lands (Navigator.pop). Cleared on the next update, which re-syncs
+  /// to the widget's real configuration.
+  bool _liftedEarly = false;
   FocusManager? _registeredManager;
 
   @override
@@ -1586,6 +1620,7 @@ class _ExcludeFocusMarkerElement extends ComponentElement {
 
   @override
   void update(Widget newWidget) {
+    _liftedEarly = false;
     super.update(newWidget);
     final newExcluding = (newWidget as _ExcludeFocusMarker).excluding;
     if (newExcluding != _capturedExcluding) {
