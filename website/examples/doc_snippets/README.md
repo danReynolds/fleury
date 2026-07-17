@@ -20,6 +20,7 @@ changes underneath a doc, the build goes red instead of the docs going stale.
 |---|---|
 | `app_shell.dart` | [App entry points](../../src/content/docs/concepts/app-entry.md), [Theming](../../src/content/docs/guides/theming.md) |
 | `status_app.dart`, `status_app_terminal.dart`, `status_app_web.dart` | Shared tree plus native/browser entrypoints in [Getting started](../../src/content/docs/getting-started.mdx) |
+| `getting_started_hello.dart`, `getting_started_gauges.dart` | Hello-world and gauges steps in [Getting started](../../src/content/docs/getting-started.mdx) |
 | `web_app_shell.dart` | Browser entry snippets in [App entry points](../../src/content/docs/concepts/app-entry.md) and [Coming from Flutter](../../src/content/docs/coming-from-flutter.md) |
 | `coming_from_flutter.dart` | [Coming from Flutter](../../src/content/docs/coming-from-flutter.md) |
 | `filterable_list.dart` | [Tutorial: a filterable list](../../src/content/docs/tutorial.md) |
