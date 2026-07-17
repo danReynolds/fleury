@@ -3,3 +3,5 @@
 dependency_overrides:
   fleury:
     path: ../fleury
+  fleury_test:
+    path: ../fleury_test

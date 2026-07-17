@@ -1,19 +1,9 @@
-/// Test helpers for `fleury`. Import from test files only.
+/// Package-neutral harness support for `fleury_test` and framework tooling.
 ///
-///     import 'package:fleury/fleury.dart';
-///     import 'package:fleury/fleury_test.dart';
-///     import 'package:test/test.dart';
-///
-///     void main() {
-///       testWidgets('autofocus claims focus', (tester) {
-///         tester.pumpWidget(TextInput(autofocus: true));
-///         expect(tester.find(byType(TextInput)), hasLength(1));
-///       });
-///     }
-///
-/// Follows the `flutter_test` convention: a second public library
-/// alongside the main one, used only in test files so production
-/// builds don't depend on `dart:io` or test harness machinery.
+/// Most application tests should import `package:fleury_test/fleury_test.dart`
+/// instead. This lower-level library intentionally has no dependency on
+/// package:test or matcher, which also makes it suitable for benchmarks,
+/// snapshot tools, and other deterministic harnesses.
 library;
 
 export 'src/animation/clock.dart' show FakeClock;
@@ -23,10 +13,10 @@ export 'src/animation/ticker_scheduler.dart' show FakeTickerScheduler;
 // while idle) without reaching into src/.
 export 'src/rendering/render_repaint_boundary.dart'
     show RepaintBoundaryDebugStats, RepaintBoundaryFrameStats;
-export 'src/testing/fleury_tester.dart' show FleuryTester, testWidgets;
+export 'src/testing/fleury_tester.dart'
+    show FleuryTestFailure, FleuryTestFailureHandler, FleuryTester;
 export 'src/testing/finders.dart'
     show Finder, byKey, byPredicate, byType, descendantOf, text;
-export 'src/testing/goldens.dart' show matchesGolden;
 export 'src/semantics/semantics.dart'
     show
         SemanticAction,
@@ -76,5 +66,3 @@ export 'src/rendering/render_layout_stats.dart'
     show RenderLayoutDebugStats, RenderLayoutFrameStats;
 export 'src/rendering/ansi_byte_budget.dart'
     show AnsiByteBreakdown, CountingAnsiSink, TransportProfile;
-export 'src/rendering/render_repaint_boundary.dart'
-    show RepaintBoundaryFrameStats;

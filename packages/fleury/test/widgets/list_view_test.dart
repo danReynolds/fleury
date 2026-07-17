@@ -2,8 +2,7 @@
 // dispatch + focus + rendering use the canonical test surface.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
-import 'package:fleury/src/rendering/render_repaint_boundary.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 KeyEvent _code(KeyCode kc) => KeyEvent(keyCode: kc);
@@ -13,6 +12,31 @@ MouseEvent _mouse(MouseEventKind kind, int col, int row) =>
 
 Widget _itemBuilder(BuildContext context, int index, bool selected) {
   return Text('Item $index');
+}
+
+Widget _keyedStringList(
+  List<String> items, {
+  ListController? controller,
+  int height = 3,
+  void Function(int)? onActivate,
+  Widget Function(BuildContext, int, bool)? itemBuilder,
+}) {
+  final indexByKey = <String, int>{
+    for (var index = 0; index < items.length; index++) items[index]: index,
+  };
+  return SizedBox(
+    width: 12,
+    height: height,
+    child: ListView.builder(
+      controller: controller,
+      itemCount: items.length,
+      itemKeyBuilder: (index) => items[index],
+      findChildIndexCallback: (key) => indexByKey[key],
+      onActivate: onActivate,
+      itemBuilder:
+          itemBuilder ?? (context, index, selected) => Text(items[index]),
+    ),
+  );
 }
 
 void main() {
@@ -169,6 +193,47 @@ void main() {
       tester.sendKey(_code(KeyCode.arrowDown));
       tester.sendKey(_code(KeyCode.enter));
       expect(selected, 1);
+    });
+
+    testWidgets('selection movement and activation are separate events', (
+      tester,
+    ) {
+      final controller = ListController(selectedIndex: 0);
+      final selections = <int>[];
+      final activations = <int>[];
+      tester.pumpWidget(
+        SizedBox(
+          width: 12,
+          height: 3,
+          child: ListView.builder(
+            controller: controller,
+            itemCount: 3,
+            autofocus: true,
+            onSelectionChanged: selections.add,
+            onActivate: activations.add,
+            itemBuilder: (context, index, selected) => Text('item $index'),
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(12, 3));
+
+      tester.sendKey(_code(KeyCode.arrowDown));
+      expect(selections, [1]);
+      expect(activations, isEmpty);
+
+      tester.sendKey(_code(KeyCode.enter));
+      expect(selections, [1]);
+      expect(activations, [1]);
+
+      tester.sendMouse(_mouse(MouseEventKind.down, 1, 2));
+      expect(selections, [1, 2]);
+      expect(activations, [1, 2]);
+
+      controller.selectedIndex = 0;
+      expect(selections, [
+        1,
+        2,
+      ], reason: 'programmatic selection is not reported as user input');
     });
   });
 
@@ -416,6 +481,33 @@ void main() {
       );
       expect(controller.selectedIndex, 2);
     });
+
+    testWidgets('swapping controllers attaches without counting arrivals', (
+      tester,
+    ) {
+      var controller = ListController(selectedIndex: 3);
+
+      Widget app() => ListView.builder(
+        controller: controller,
+        itemCount: 5,
+        itemBuilder: _itemBuilder,
+      );
+
+      tester.pumpWidget(app());
+      expect(controller.itemCount, 5);
+      expect(controller.unseenCount, 0);
+
+      controller = ListController(selectedIndex: 2);
+      tester.pumpWidget(app());
+
+      expect(controller.itemCount, 5);
+      expect(controller.selectedIndex, 2);
+      expect(
+        controller.unseenCount,
+        0,
+        reason: 'attaching existing data is not a five-item arrival',
+      );
+    });
   });
 
   group('empty list', () {
@@ -432,6 +524,44 @@ void main() {
       expect(controller.selectedIndex, isNull);
 
       tester.sendKey(_code(KeyCode.arrowDown));
+      expect(controller.selectedIndex, isNull);
+    });
+
+    testWidgets('a list populated after mounting restores its default cursor', (
+      tester,
+    ) {
+      var count = 0;
+      final controller = ListController();
+
+      Widget app() => ListView.builder(
+        controller: controller,
+        itemCount: count,
+        itemBuilder: _itemBuilder,
+      );
+
+      tester.pumpWidget(app());
+      expect(controller.selectedIndex, isNull);
+      count = 3;
+      tester.pumpWidget(app());
+      expect(controller.selectedIndex, 0);
+    });
+
+    testWidgets('an explicitly cleared cursor stays in scroll-only mode', (
+      tester,
+    ) {
+      var count = 2;
+      final controller = ListController();
+
+      Widget app() => ListView.builder(
+        controller: controller,
+        itemCount: count,
+        itemBuilder: _itemBuilder,
+      );
+
+      tester.pumpWidget(app());
+      controller.selectedIndex = null;
+      count = 3;
+      tester.pumpWidget(app());
       expect(controller.selectedIndex, isNull);
     });
   });
@@ -922,6 +1052,28 @@ void main() {
   });
 
   group('lazy ListView.builder', () {
+    testWidgets('duplicate keyed items fail on their initial mount', (tester) {
+      tester.pumpWidget(
+        ListView.builder(
+          itemCount: 2,
+          itemKeyBuilder: (_) => 'duplicate',
+          findChildIndexCallback: (_) => 0,
+          itemBuilder: (context, index, selected) => Text('item $index'),
+        ),
+      );
+
+      expect(
+        () => tester.render(size: const CellSize(10, 2)),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('being mounted at index 1'),
+          ),
+        ),
+      );
+    });
+
     testWidgets('itemBuilder is only invoked for visible items', (tester) {
       final builtIndices = <int>[];
       Widget builder(BuildContext context, int i, bool selected) {
@@ -985,6 +1137,37 @@ void main() {
       expect(mountCounts.keys, containsAll([50, 51, 52, 53, 54]));
     });
 
+    testWidgets('a non-fitting anchor probe is unmounted after layout', (
+      tester,
+    ) {
+      final mountCounts = <int, int>{};
+      final unmountCounts = <int, int>{};
+      final controller = ListController();
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 30,
+          itemBuilder: (context, index, selected) => _LifecycleWidget(
+            index: index,
+            mounts: mountCounts,
+            unmounts: unmountCounts,
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(10, 5));
+
+      controller.selectedIndex = 10;
+      tester.render(size: const CellSize(10, 5));
+
+      expect(controller.visibleRange, (first: 6, last: 10));
+      expect(mountCounts[5], 1, reason: 'index 5 was the first probe not fit');
+      expect(
+        unmountCounts[5],
+        1,
+        reason: 'a non-visible probe must not leak in the sparse element map',
+      );
+    });
+
     testWidgets('selection styling updates active items without '
         'remounting', (tester) {
       final mountCounts = <int, int>{};
@@ -1023,6 +1206,335 @@ void main() {
       expect(unmountCounts, isEmpty);
       expect(lastSelected[0], isFalse);
       expect(lastSelected[1], isTrue);
+    });
+
+    testWidgets('keyed prepend preserves selection, viewport, and row state', (
+      tester,
+    ) {
+      var items = <String>['a', 'b', 'c', 'd'];
+      final controller = ListController(selectedIndex: 1);
+      final mounts = <String, int>{};
+      final unmounts = <String, int>{};
+
+      Widget app() => SizedBox(
+        width: 12,
+        height: 2,
+        child: ListView.builder(
+          controller: controller,
+          itemCount: items.length,
+          itemKeyBuilder: (index) => items[index],
+          findChildIndexCallback: (key) {
+            final index = items.indexWhere((item) => item == key);
+            return index == -1 ? null : index;
+          },
+          itemBuilder: (context, index, selected) => _KeyedLifecycleWidget(
+            id: items[index],
+            mounts: mounts,
+            unmounts: unmounts,
+          ),
+        ),
+      );
+
+      tester.pumpWidget(app());
+      controller.jumpToIndex(1);
+      expect(tester.renderToString(size: const CellSize(12, 2)), 'b:b\nc:c\n');
+      expect(controller.visibleRange, (first: 1, last: 2));
+
+      items = ['x', ...items];
+      tester.pumpWidget(app());
+
+      expect(tester.renderToString(size: const CellSize(12, 2)), 'b:b\nc:c\n');
+      expect(controller.selectedIndex, 2, reason: 'the selected key is b');
+      expect(controller.visibleRange, (first: 2, last: 3));
+      expect(controller.unseenCount, 0, reason: 'a prepend is not tail growth');
+      expect(mounts['b'], 1);
+      expect(mounts['c'], 1);
+      expect(unmounts, isEmpty);
+
+      items = [...items, 'e'];
+      tester.pumpWidget(app());
+      tester.render(size: const CellSize(12, 2));
+      expect(controller.selectedIndex, 2);
+      expect(controller.unseenCount, 1, reason: 'only the true append is new');
+    });
+
+    testWidgets('keyed reorder preserves the selected data item', (tester) {
+      var items = <String>['a', 'b', 'c', 'd'];
+      final controller = ListController(selectedIndex: 2);
+
+      Widget app() => SizedBox(
+        width: 12,
+        height: 4,
+        child: ListView.builder(
+          controller: controller,
+          itemCount: items.length,
+          itemKeyBuilder: (index) => items[index],
+          findChildIndexCallback: (key) {
+            final index = items.indexWhere((item) => item == key);
+            return index == -1 ? null : index;
+          },
+          itemBuilder: (context, index, selected) => Text(items[index]),
+        ),
+      );
+
+      tester.pumpWidget(app());
+      tester.render(size: const CellSize(12, 4));
+      items = ['c', 'a', 'd', 'b'];
+      tester.pumpWidget(app());
+      tester.render(size: const CellSize(12, 4));
+
+      expect(controller.selectedIndex, 0, reason: 'the selected key remains c');
+      expect(controller.unseenCount, 0);
+    });
+
+    testWidgets(
+      'keyed reorder disengages follow when selected identity leaves tail',
+      (tester) {
+        var items = <String>['a', 'b', 'c'];
+        final controller = ListController(pinToBottom: true);
+
+        Widget app() => _keyedStringList(items, controller: controller);
+
+        tester.pumpWidget(app());
+        tester.render(size: const CellSize(12, 3));
+        expect(controller.selectedIndex, 2);
+        expect(controller.pinToBottom, isTrue);
+        expect(controller.atBottom, isTrue);
+
+        items = ['c', 'a', 'b'];
+        tester.pumpWidget(app());
+        tester.render(size: const CellSize(12, 3));
+
+        expect(controller.selectedIndex, 0, reason: 'selected identity is c');
+        expect(
+          controller.pinToBottom,
+          isFalse,
+          reason: 'identity preservation wins over following after reorder',
+        );
+        expect(controller.atBottom, isFalse);
+        expect(controller.unseenCount, 0);
+
+        items = [...items, 'd'];
+        tester.pumpWidget(app());
+
+        expect(controller.selectedIndex, 0, reason: 'append does not yank c');
+        expect(controller.unseenCount, 1);
+      },
+    );
+
+    testWidgets('keyed scroll-only pin remains on the current tail', (tester) {
+      var items = <String>['a', 'b', 'c'];
+      final controller = ListController(pinToBottom: true);
+
+      Widget app() =>
+          _keyedStringList(items, controller: controller, height: 2);
+
+      tester.pumpWidget(app());
+      tester.render(size: const CellSize(12, 2));
+      controller.selectedIndex = null;
+      tester.render(size: const CellSize(12, 2));
+      expect(controller.pinToBottom, isTrue);
+      expect(controller.atBottom, isTrue);
+
+      items = ['c', 'a', 'b'];
+      tester.pumpWidget(app());
+      tester.render(size: const CellSize(12, 2));
+
+      expect(controller.selectedIndex, isNull);
+      expect(controller.pinToBottom, isTrue);
+      expect(controller.atBottom, isTrue);
+      expect(controller.visibleRange?.last, 2);
+    });
+
+    testWidgets('removing the selected key chooses its surviving successor', (
+      tester,
+    ) {
+      var items = <String>['a', 'b', 'c'];
+      final controller = ListController(selectedIndex: 1);
+      final mounts = <String, int>{};
+      final unmounts = <String, int>{};
+
+      Widget app() => _keyedStringList(
+        items,
+        controller: controller,
+        itemBuilder: (context, index, selected) => _KeyedLifecycleWidget(
+          id: items[index],
+          mounts: mounts,
+          unmounts: unmounts,
+        ),
+      );
+
+      tester.pumpWidget(app());
+      tester.render(size: const CellSize(12, 3));
+      items = ['a', 'c'];
+      tester.pumpWidget(app());
+
+      expect(controller.selectedIndex, 1, reason: 'c succeeds the removed b');
+      expect(
+        tester.renderToString(size: const CellSize(12, 3)),
+        'a:a\nc:c\n\n',
+      );
+      expect(mounts, {'a': 1, 'b': 1, 'c': 1});
+      expect(unmounts, {'b': 1}, reason: 'removed row state is disposed');
+    });
+
+    testWidgets('keyed reorder moves mounted row State with data identity', (
+      tester,
+    ) {
+      var items = <String>['a', 'b', 'c'];
+      final mounts = <String, int>{};
+      final unmounts = <String, int>{};
+
+      Widget app() => _keyedStringList(
+        items,
+        itemBuilder: (context, index, selected) => _KeyedLifecycleWidget(
+          id: items[index],
+          mounts: mounts,
+          unmounts: unmounts,
+        ),
+      );
+
+      tester.pumpWidget(app());
+      tester.render(size: const CellSize(12, 3));
+      items = ['a', 'c', 'b'];
+      tester.pumpWidget(app());
+
+      expect(
+        tester.renderToString(size: const CellSize(12, 3)),
+        'a:a\nc:c\nb:b\n',
+      );
+      expect(
+        tester
+            .semantics()
+            .where(role: SemanticRole.text)
+            .map((node) => node.label),
+        ['a:a', 'c:c', 'b:b'],
+        reason: 'semantic traversal follows the reordered visual rows',
+      );
+      expect(mounts, {'a': 1, 'b': 1, 'c': 1});
+      expect(unmounts, isEmpty);
+    });
+
+    testWidgets('pointer activation after reorder reports the current index', (
+      tester,
+    ) {
+      var items = <String>['a', 'b', 'c'];
+      final controller = ListController(selectedIndex: 0);
+      final activated = <({int index, String id})>[];
+
+      Widget app() => _keyedStringList(
+        items,
+        controller: controller,
+        onActivate: (index) => activated.add((index: index, id: items[index])),
+        itemBuilder: (context, index, selected) =>
+            SizedBox(width: 12, height: 1, child: Text(items[index])),
+      );
+
+      tester.pumpWidget(app());
+      tester.render(size: const CellSize(12, 3));
+      items = ['a', 'c', 'b'];
+      tester.pumpWidget(app());
+      expect(tester.renderToString(size: const CellSize(12, 3)), 'a\nc\nb\n');
+
+      tester.sendMouse(_mouse(MouseEventKind.down, 1, 1));
+      tester.sendMouse(_mouse(MouseEventKind.up, 1, 1));
+
+      expect(controller.selectedIndex, 1);
+      expect(activated, [(index: 1, id: 'c')]);
+    });
+
+    testWidgets('explicit jump wins over keyed anchor preservation', (tester) {
+      var items = <String>['a', 'b', 'c', 'd', 'e'];
+      final controller = ListController(selectedIndex: 2);
+
+      Widget app() =>
+          _keyedStringList(items, controller: controller, height: 2);
+
+      tester.pumpWidget(app());
+      controller.jumpToIndex(2);
+      expect(tester.renderToString(size: const CellSize(12, 2)), 'c\nd\n');
+
+      controller.jumpToIndex(0);
+      items = ['x', ...items];
+      tester.pumpWidget(app());
+
+      expect(tester.renderToString(size: const CellSize(12, 2)), 'x\na\n');
+      expect(controller.visibleRange, (first: 0, last: 1));
+    });
+
+    testWidgets('cursor movement does not rerun keyed data reconciliation', (
+      tester,
+    ) {
+      final items = [for (var i = 0; i < 1000; i++) 'item-$i'];
+      var reverseLookups = 0;
+      tester.pumpWidget(
+        SizedBox(
+          width: 12,
+          height: 5,
+          child: ListView.builder(
+            itemCount: items.length,
+            autofocus: true,
+            itemKeyBuilder: (index) => items[index],
+            findChildIndexCallback: (key) {
+              reverseLookups++;
+              final index = items.indexWhere((item) => item == key);
+              return index == -1 ? null : index;
+            },
+            itemBuilder: (context, index, selected) => Text(items[index]),
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(12, 5));
+      reverseLookups = 0;
+
+      tester.sendKey(_code(KeyCode.arrowDown));
+      tester.render(size: const CellSize(12, 5));
+
+      expect(
+        reverseLookups,
+        0,
+        reason: 'selection-only rebuilds must stay O(visible rows)',
+      );
+    });
+
+    testWidgets('leaving and re-entering keyed mode remounts safely', (tester) {
+      var items = <String>['a', 'b'];
+      var keyed = true;
+      final mounts = <String, int>{};
+      final unmounts = <String, int>{};
+
+      Widget app() => SizedBox(
+        width: 12,
+        height: 2,
+        child: ListView.builder(
+          itemCount: items.length,
+          itemKeyBuilder: keyed ? (index) => items[index] : null,
+          findChildIndexCallback: keyed
+              ? (key) {
+                  final index = items.indexWhere((item) => item == key);
+                  return index == -1 ? null : index;
+                }
+              : null,
+          itemBuilder: (context, index, selected) => _KeyedLifecycleWidget(
+            id: items[index],
+            mounts: mounts,
+            unmounts: unmounts,
+          ),
+        ),
+      );
+
+      tester.pumpWidget(app());
+      tester.render(size: const CellSize(12, 2));
+      keyed = false;
+      tester.pumpWidget(app());
+      tester.render(size: const CellSize(12, 2));
+
+      items = ['b', 'a'];
+      keyed = true;
+      tester.pumpWidget(app());
+      expect(tester.renderToString(size: const CellSize(12, 2)), 'b:b\na:a\n');
+      expect(unmounts, {'a': 1, 'b': 1});
+      expect(mounts, {'a': 2, 'b': 2});
     });
   });
 
@@ -1420,4 +1932,39 @@ class _LifecycleWidgetState extends State<_LifecycleWidget> {
 
   @override
   Widget build(BuildContext context) => Text('item ${widget.index}');
+}
+
+class _KeyedLifecycleWidget extends StatefulWidget {
+  const _KeyedLifecycleWidget({
+    required this.id,
+    required this.mounts,
+    required this.unmounts,
+  });
+
+  final String id;
+  final Map<String, int> mounts;
+  final Map<String, int> unmounts;
+
+  @override
+  State<_KeyedLifecycleWidget> createState() => _KeyedLifecycleWidgetState();
+}
+
+class _KeyedLifecycleWidgetState extends State<_KeyedLifecycleWidget> {
+  late final String mountedFor;
+
+  @override
+  void initState() {
+    super.initState();
+    mountedFor = widget.id;
+    widget.mounts.update(widget.id, (value) => value + 1, ifAbsent: () => 1);
+  }
+
+  @override
+  void dispose() {
+    widget.unmounts.update(mountedFor, (value) => value + 1, ifAbsent: () => 1);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Text('${widget.id}:$mountedFor');
 }

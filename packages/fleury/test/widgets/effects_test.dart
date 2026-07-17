@@ -2,7 +2,7 @@
 // .animate() entry point. FakeClock via FleuryTester.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 RgbColor? _fgAt(FleuryTester tester, int col, int row, {CellSize? size}) {

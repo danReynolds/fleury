@@ -39,6 +39,7 @@ class AppShellDemo extends StatelessWidget {
           description: 'Search app-wide and active-screen commands',
           category: 'Application',
           shortcuts: <KeyChord>[KeyChord.ctrl.k],
+          showInPalette: false,
           semanticAction: SemanticAction.open,
           run: (command) {
             final source = command.buildContext;

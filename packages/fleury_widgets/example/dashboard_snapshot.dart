@@ -6,7 +6,7 @@
 //   dart run example/dashboard_snapshot.dart
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import 'package:fleury/fleury_test_support.dart';
 
 import 'dashboard_demo.dart';
 

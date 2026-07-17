@@ -4,7 +4,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 /// Captures the BuildContext its build runs under (for present() tests).
@@ -45,7 +45,7 @@ void main() {
     });
   });
 
-  group('settle / pumpApp', () {
+  group('settle / pumpFleuryHome', () {
     testWidgets('settle() surfaces async stream values pump() cannot', (
       tester,
     ) async {
@@ -87,11 +87,11 @@ void main() {
       );
     });
 
-    testWidgets('pumpApp installs the canonical FleuryApp shell', (
+    testWidgets('pumpFleuryHome installs the canonical FleuryApp shell', (
       tester,
     ) async {
       BuildContext? ctx;
-      tester.pumpApp(_CtxCapture(sink: (c) => ctx = c, label: 'home'));
+      tester.pumpFleuryHome(_CtxCapture(sink: (c) => ctx = c, label: 'home'));
       expect(
         tester.renderToString(size: const CellSize(8, 1)),
         contains('home'),
@@ -111,32 +111,34 @@ void main() {
     });
   });
 
-  group('pumpApp re-pump / paint-only settle (review regressions)', () {
-    testWidgets('pumpApp replaces the app on re-pump; pumpWidget unwraps', (
-      tester,
-    ) {
-      tester.pumpApp(const Text('one'));
-      expect(
-        tester.renderToString(size: const CellSize(8, 1)),
-        contains('one'),
-      );
+  group('pumpFleuryHome re-pump / paint-only settle (review regressions)', () {
+    testWidgets(
+      'pumpFleuryHome replaces the app on re-pump; pumpWidget unwraps',
+      (tester) {
+        tester.pumpFleuryHome(const Text('one'));
+        expect(
+          tester.renderToString(size: const CellSize(8, 1)),
+          contains('one'),
+        );
 
-      tester.pumpApp(const Text('two'));
-      final second = tester.renderToString(size: const CellSize(8, 1));
-      expect(
-        second,
-        contains('two'),
-        reason: 'a later pumpApp must not be silently ignored',
-      );
-      expect(second, isNot(contains('one')));
+        tester.pumpFleuryHome(const Text('two'));
+        final second = tester.renderToString(size: const CellSize(8, 1));
+        expect(
+          second,
+          contains('two'),
+          reason: 'a later pumpFleuryHome must not be silently ignored',
+        );
+        expect(second, isNot(contains('one')));
 
-      tester.pumpWidget(const Text('three'));
-      expect(
-        tester.renderToString(size: const CellSize(8, 1)),
-        contains('three'),
-        reason: 'pumpWidget after pumpApp mounts bare (no latched mode)',
-      );
-    });
+        tester.pumpWidget(const Text('three'));
+        expect(
+          tester.renderToString(size: const CellSize(8, 1)),
+          contains('three'),
+          reason:
+              'pumpWidget after pumpFleuryHome mounts bare (no latched mode)',
+        );
+      },
+    );
 
     testWidgets('a LayoutBuilder subtree still mounts + subscribes under the '
         'render-skip settle', (tester) async {

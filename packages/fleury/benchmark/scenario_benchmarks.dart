@@ -8,7 +8,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import 'package:fleury/fleury_test_support.dart';
 
 const _schemaVersion = 1;
 const _fleuryVersion = '0.0.0';

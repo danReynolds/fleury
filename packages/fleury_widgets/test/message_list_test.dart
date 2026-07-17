@@ -1,5 +1,5 @@
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 
@@ -243,7 +243,9 @@ void main() {
     expect(list.state['selectedIndex'], 1);
   });
 
-  testWidgets('preserves selected message identity across refresh', (tester) {
+  testWidgets('synchronously preserves selected identity across prepend', (
+    tester,
+  ) {
     final controller = MessageListController(
       selectedIndex: 2,
       followTail: false,
@@ -278,11 +280,13 @@ void main() {
         ],
       ),
     );
-    tester.render(size: const CellSize(60, 5));
-    tester.pump();
-    tester.render(size: const CellSize(60, 5));
 
-    expect(controller.selectedIndex, 3);
+    expect(
+      controller.selectedIndex,
+      3,
+      reason: 'selection remaps during the rebuild, without a deferred pump',
+    );
+    tester.render(size: const CellSize(60, 5));
     final list = tester.semantics().single(
       role: SemanticRole.messageList,
       label: 'Conversation',
@@ -296,6 +300,160 @@ void main() {
       selected: true,
     );
     expect(selected.state.messageId, 'm3');
+  });
+
+  testWidgets('reorder preserves selection and refreshed message state', (
+    tester,
+  ) {
+    final controller = MessageListController(
+      selectedIndex: 1,
+      followTail: false,
+    );
+    tester.pumpWidget(
+      MessageList(
+        semanticLabel: 'Conversation',
+        controller: controller,
+        messages: const [
+          MessageEntry(id: 'm1', role: MessageRole.user, text: 'question'),
+          MessageEntry(id: 'm2', role: MessageRole.assistant, text: 'working'),
+          MessageEntry(id: 'm3', role: MessageRole.tool, text: 'lookup'),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(60, 5));
+
+    tester.pumpWidget(
+      MessageList(
+        semanticLabel: 'Conversation',
+        controller: controller,
+        messages: const [
+          MessageEntry(
+            id: 'm2',
+            role: MessageRole.assistant,
+            status: MessageStatus.complete,
+            text: 'finished',
+          ),
+          MessageEntry(id: 'm3', role: MessageRole.tool, text: 'lookup'),
+          MessageEntry(id: 'm1', role: MessageRole.user, text: 'question'),
+        ],
+      ),
+    );
+
+    expect(
+      controller.selectedIndex,
+      0,
+      reason: 'the selected m2 row moves synchronously with its stable id',
+    );
+    expect(controller.followTail, isFalse);
+    tester.render(size: const CellSize(60, 5));
+    final selected = tester.semantics().single(
+      role: SemanticRole.message,
+      label: 'finished',
+      selected: true,
+    );
+    expect(selected.state.messageId, 'm2');
+    expect(selected.state['messageStatus'], 'complete');
+  });
+
+  testWidgets('id-less entries retain identity when their instances move', (
+    tester,
+  ) {
+    final first = MessageEntry(role: MessageRole.user, text: 'first');
+    final selectedEntry = MessageEntry(
+      role: MessageRole.assistant,
+      status: MessageStatus.streaming,
+      text: 'selected',
+      metadata: const {'attempt': 7},
+    );
+    final last = MessageEntry(role: MessageRole.tool, text: 'last');
+    final prepended = MessageEntry(role: MessageRole.system, text: 'prepended');
+    final controller = MessageListController(
+      selectedIndex: 1,
+      followTail: false,
+    );
+
+    tester.pumpWidget(
+      MessageList(
+        controller: controller,
+        messages: [first, selectedEntry, last],
+      ),
+    );
+    tester.render(size: const CellSize(60, 5));
+
+    tester.pumpWidget(
+      MessageList(
+        controller: controller,
+        messages: [prepended, last, first, selectedEntry],
+      ),
+    );
+
+    expect(
+      controller.selectedIndex,
+      3,
+      reason: 'the same id-less MessageEntry instance is its fallback key',
+    );
+    tester.render(size: const CellSize(60, 5));
+    final selected = tester.semantics().single(
+      role: SemanticRole.message,
+      label: 'selected',
+      selected: true,
+    );
+    expect(selected.state['messageStatus'], 'streaming');
+    expect(selected.state['attempt'], 7);
+  });
+
+  testWidgets('repairs its key index after an in-place list reorder', (tester) {
+    final messages = <MessageEntry>[
+      const MessageEntry(id: 'm1', text: 'first'),
+      const MessageEntry(id: 'm2', text: 'selected'),
+      const MessageEntry(id: 'm3', text: 'third'),
+    ];
+    final controller = MessageListController(
+      selectedIndex: 1,
+      followTail: false,
+    );
+    tester.pumpWidget(MessageList(controller: controller, messages: messages));
+    tester.render(size: const CellSize(60, 5));
+
+    final reordered = <MessageEntry>[messages[2], messages[0], messages[1]];
+    messages
+      ..clear()
+      ..addAll(reordered);
+    tester.pumpWidget(MessageList(controller: controller, messages: messages));
+
+    expect(controller.selectedIndex, 2);
+    tester.render(size: const CellSize(60, 5));
+    expect(
+      tester
+          .semantics()
+          .single(role: SemanticRole.message, label: 'selected', selected: true)
+          .state
+          .messageId,
+      'm2',
+    );
+  });
+
+  testWidgets('clears selection synchronously when the list becomes empty', (
+    tester,
+  ) {
+    final controller = MessageListController(
+      selectedIndex: 1,
+      followTail: false,
+    );
+    tester.pumpWidget(
+      MessageList(
+        controller: controller,
+        messages: const [
+          MessageEntry(id: 'm1', text: 'first'),
+          MessageEntry(id: 'm2', text: 'second'),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(60, 5));
+
+    tester.pumpWidget(MessageList(controller: controller, messages: const []));
+
+    expect(controller.selectedIndex, isNull);
   });
 
   testWidgets('preserves tail-follow selection on append', (tester) {

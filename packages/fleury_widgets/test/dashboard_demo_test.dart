@@ -5,7 +5,7 @@
 // loudest.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
 
 import '../example/dashboard_demo.dart';
@@ -44,7 +44,7 @@ void main() {
     });
 
     testWidgets('app route supplies the advertised Tab traversal', (tester) {
-      tester.pumpApp(const DashboardApp());
+      tester.pumpFleuryHome(const DashboardApp());
       tester.render(size: const CellSize(80, 24));
 
       tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));

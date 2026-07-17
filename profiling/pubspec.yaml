@@ -11,10 +11,6 @@ dependencies:
   ffi: ^2.1.0
   vm_service: ^15.0.0
 dev_dependencies:
-  # bin/paint_gate.dart imports `package:fleury/fleury_test.dart` — the only
-  # export point of the repaint-boundary debug counters and the fake
-  # clock/scheduler — and that barrel imports package:test, so it must
-  # resolve in this package's graph. Dev (not regular) on purpose: `dart run`
-  # resolves the root package's dev deps for bin/, and a regular dep would
-  # needlessly widen the solve surface of this never-published harness.
+  # The low-level fleury_test_support barrel intentionally has no test-runner
+  # dependency; package:test is used only by this harness's own tests.
   test: ^1.26.3

@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 /// A leaf whose layout throws — stands in for a render/paint bug that

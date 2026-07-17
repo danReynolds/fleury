@@ -535,7 +535,7 @@ class _SearchPanelState extends State<SearchPanel> {
             focusNode: _resultsFocusNode,
             itemCount: order.length,
             selectionActive: panelFocused,
-            onSelect: (_) => _activateSelected(),
+            onActivate: (_) => _activateSelected(),
             itemBuilder: (context, viewIndex, activeSelected) {
               final sourceIndex = order[viewIndex];
               final selected = viewIndex == _list.selectedIndex;

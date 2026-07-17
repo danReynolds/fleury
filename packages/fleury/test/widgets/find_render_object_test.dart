@@ -2,7 +2,7 @@
 // element tree and painted geometry.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 /// Captures its build context once per build so a test can later call

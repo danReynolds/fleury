@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:fleury/src/runtime/output_capture.dart' show OutputCapture;
 import 'package:test/test.dart';
 

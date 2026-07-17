@@ -1,5 +1,5 @@
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
 
 import '../example/app_shell_demo.dart';
@@ -120,7 +120,7 @@ void main() {
 
       _openPalette(tester);
       var labels = _paletteRows(tester).map((node) => node.label).toSet();
-      expect(labels, contains('Open Command Palette'));
+      expect(labels, isNot(contains('Open Command Palette')));
       expect(labels, contains('Open Production Deployment'));
       expect(labels, isNot(contains('Refresh Production Deployment')));
       _dismissPalette(tester);
@@ -131,7 +131,7 @@ void main() {
 
       _openPalette(tester);
       labels = _paletteRows(tester).map((node) => node.label).toSet();
-      expect(labels, contains('Open Command Palette'));
+      expect(labels, isNot(contains('Open Command Palette')));
       expect(labels, contains('Refresh Production Deployment'));
       expect(labels, isNot(contains('Open Production Deployment')));
       _dismissPalette(tester);

@@ -2,7 +2,7 @@
 // animation attaches to a real binding + scheduler.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 /// Mounts a widget that reads [animation].value (implicit reactivity),

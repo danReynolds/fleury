@@ -23,7 +23,7 @@ void main() {
         isNot(contains('render_layout_stats.dart')),
         reason:
             '$path must not export layout debug counters as production API; '
-            'they belong to package:fleury/fleury_test.dart.',
+            'they belong to fleury_test_support.dart.',
       );
       expect(
         text,
@@ -60,8 +60,8 @@ void main() {
     }
   });
 
-  test('test library owns render performance diagnostics', () {
-    final testLibrary = File('lib/fleury_test.dart').readAsStringSync();
+  test('test support library owns render performance diagnostics', () {
+    final testLibrary = File('lib/fleury_test_support.dart').readAsStringSync();
 
     expect(testLibrary, contains('render_layout_stats.dart'));
     expect(testLibrary, contains('RenderLayoutDebugStats'));

@@ -110,7 +110,7 @@ fast, predictable, and correct under dense app workloads.
 - Render diagnostics now keep the same production/test split across layout and
   repaint-boundary counters: production exposes useful primitives such as
   `RenderRepaintBoundary`, while `RepaintBoundaryFrameStats` remains available
-  through `fleury_test.dart` for tests, captures, and benchmarks.
+  through `fleury_test_support.dart` for tests, captures, and benchmarks.
 - Core root lifecycle now follows the same compatibility rule as subtree
   reconciliation: `BuildOwner.updateRoot` preserves the root element and state
   only for compatible `runtimeType` plus `Key` updates; incompatible type/key
@@ -359,8 +359,8 @@ fast, predictable, and correct under dense app workloads.
   Keep their app-facing surface at the widget/controller level until a real
   package integration proves a lower-level contract.
 - Diagnostic DTOs are not automatically production API. Keep frame-counter
-  evidence behind `fleury_test.dart` unless app authors need a stable runtime
-  metrics contract.
+  evidence behind `fleury_test_support.dart` unless app authors need a stable
+  runtime metrics contract.
 - Root replacement should stay simple and explicit: preserve state on
   compatible updates, remount on incompatible updates, and require callers to
   keep the returned root element when the identity changes.

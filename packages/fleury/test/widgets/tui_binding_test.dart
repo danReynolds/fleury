@@ -2,7 +2,7 @@
 // SingleTickerProviderStateMixin. FakeClock-driven.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 Matcher _stateError(String message) => throwsA(

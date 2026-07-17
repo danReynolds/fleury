@@ -1,5 +1,5 @@
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 /// Builds a [FocusNode] with a pre-recorded `rect` so the traversal

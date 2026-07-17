@@ -1,7 +1,7 @@
 import 'dart:async' show unawaited;
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 
@@ -36,6 +36,7 @@ AppCommand _openPaletteCommand() {
     id: const CommandId('app.openPalette'),
     title: 'Open Command Palette',
     shortcuts: [KeyChord.ctrl.k],
+    showInPalette: false,
     semanticAction: SemanticAction.open,
     run: (context) {
       final buildContext = context.buildContext;
@@ -322,6 +323,60 @@ void main() {
   });
 
   group('CommandPalette registry mode', () {
+    testWidgets(
+      'palette visibility does not disable registry lookup or shortcuts',
+      (tester) async {
+        var shortcutCalls = 0;
+        tester.pumpWidget(
+          FleuryApp(
+            title: 'App',
+            commands: [
+              AppCommand(
+                id: const CommandId('app.openPalette'),
+                title: 'Open Command Palette',
+                shortcuts: [KeyChord.ctrl.k],
+                showInPalette: false,
+                run: (_) {
+                  shortcutCalls += 1;
+                },
+              ),
+              AppCommand(
+                id: const CommandId('workspace.refresh'),
+                title: 'Refresh Workspace',
+                run: (_) {},
+              ),
+            ],
+            child: Navigator(
+              home: Focus(autofocus: true, child: _Capture((c) => ctx = c)),
+            ),
+          ),
+        );
+
+        tester.sendKey(
+          const KeyEvent(char: 'k', modifiers: {KeyModifier.ctrl}),
+        );
+        await Future<void>.delayed(Duration.zero);
+        tester.pump();
+
+        expect(shortcutCalls, 1);
+        expect(
+          CommandRegistryScope.of(ctx)
+              .activeCommands(buildContext: ctx)
+              .map((command) => command.id.value),
+          ['app.openPalette', 'workspace.refresh'],
+        );
+
+        _openRegistryPalette(tester, ctx);
+
+        expect(_paletteCommandRows(tester).map((node) => node.label), [
+          'Refresh Workspace',
+        ]);
+
+        tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+        await _settleClose(tester);
+      },
+    );
+
     testWidgets('invokes active registry commands through the registry', (
       tester,
     ) async {

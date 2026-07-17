@@ -1,5 +1,5 @@
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_samples/samples.dart';
 import 'package:test/test.dart';
 
@@ -110,7 +110,7 @@ void main() {
     ) {
       // The sample runner mounts every showcase as FleuryApp(home: ...), whose
       // Navigator gives the home route its traversal group.
-      tester.pumpApp(const DebugPlaygroundApp());
+      tester.pumpFleuryHome(const DebugPlaygroundApp());
       tester.render(size: _size); // autofocus lands on the first button
       expect(
         tester

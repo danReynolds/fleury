@@ -7,7 +7,7 @@
 // manual scheduler/owner plumbing.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 /// True when the cell at [col] of the first row paints with the

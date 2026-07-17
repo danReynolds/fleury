@@ -7,7 +7,7 @@ void main() {
     final publicLibraries = <String>[
       'lib/fleury.dart',
       'lib/fleury_core.dart',
-      'lib/fleury_test.dart',
+      'lib/fleury_test_support.dart',
     ];
 
     for (final path in publicLibraries) {

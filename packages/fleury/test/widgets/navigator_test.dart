@@ -3,7 +3,7 @@
 // lower routes.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 /// Renders the visible (top) screen as trimmed text.

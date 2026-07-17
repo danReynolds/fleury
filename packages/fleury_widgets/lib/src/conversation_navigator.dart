@@ -642,7 +642,7 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
                   focusNode: _listFocusNode,
                   selectionActive: panelFocused,
                   itemCount: order.length,
-                  onSelect: (_) => _selectCurrent(),
+                  onActivate: (_) => _selectCurrent(),
                   itemBuilder: (context, viewIndex, activeSelected) {
                     final entryIndex = order[viewIndex];
                     final selected = viewIndex == _controller.selectedIndex;

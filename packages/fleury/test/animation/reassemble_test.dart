@@ -8,7 +8,7 @@
 //   - dispose unregisters cleanly (no callbacks after dispose).
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 /// Reads a animation's value (implicit reactivity) so it attaches to the

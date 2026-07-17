@@ -1,5 +1,5 @@
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 /// Returns the cell column where the [needle]'s first cell lands on row 0.

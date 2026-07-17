@@ -1,5 +1,5 @@
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:fleury/src/debug/debug_invalidation.dart';
 import 'package:fleury/src/rendering/render_navigator.dart';
 import 'package:test/test.dart';

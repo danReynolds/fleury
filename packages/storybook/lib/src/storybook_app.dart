@@ -246,6 +246,7 @@ class _StorybookAppState extends State<StorybookApp> {
         title: 'Open command palette',
         category: 'Storybook',
         shortcuts: [KeyChord.ctrl.k],
+        showInPalette: false,
         run: (context) {
           final buildContext = context.buildContext;
           if (buildContext != null) {

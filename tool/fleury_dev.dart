@@ -351,6 +351,7 @@ class _Runner {
   final bool dryRun;
 
   String get fleury => '$root/packages/fleury';
+  String get fleuryTest => '$root/packages/fleury_test';
   String get widgets => '$root/packages/fleury_widgets';
   String get web => '$root/packages/fleury_web';
   String get git => '$root/packages/fleury_git';
@@ -364,6 +365,7 @@ class _Runner {
   Future<void> bootstrap() async {
     for (final dir in [
       fleury,
+      fleuryTest,
       widgets,
       web,
       git,
@@ -391,6 +393,7 @@ class _Runner {
     // too so a rename can't silently compile-out the wire-gate fixtures.)
     for (final dir in [
       fleury,
+      fleuryTest,
       widgets,
       git,
       demo,
@@ -419,6 +422,7 @@ class _Runner {
         'integration',
       ], workingDirectory: fleury);
     }
+    await _run('dart', ['test'], workingDirectory: fleuryTest);
     await _run(
       'dart',
       quick
@@ -476,6 +480,7 @@ class _Runner {
 
     final requiredPackages = <String>[
       fleury,
+      fleuryTest,
       widgets,
       git,
       demo,

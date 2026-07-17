@@ -126,7 +126,8 @@ final class _CommandEntry {
 /// ```
 ///
 /// Apps that want a keyboard shortcut for the palette should register a normal
-/// [AppCommand] that calls [CommandPalette.open] with its command context.
+/// [AppCommand] that calls [CommandPalette.open] with its command context and
+/// sets [AppCommand.showInPalette] to false so the opener does not list itself.
 ///
 /// Type to narrow (case-insensitive subsequence match), Up/Down to move, and
 /// Enter to run the highlighted command. Esc dismissal comes from the modal
@@ -291,6 +292,7 @@ List<Command> _activePaletteCommands(
   void add(AppCommand command) {
     if (seen.contains(command.id)) return;
     if (!registry.isVisible(command, buildContext: context)) return;
+    if (!command.showInPalette) return;
     seen.add(command.id);
     commands.add(
       Command(

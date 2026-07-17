@@ -85,7 +85,9 @@ Shared helpers: `Palettes` (prebuilt color palettes), `TickFormat`
 ## Testing
 
 Every widget here is exercised with `FleuryTester` from
-`package:fleury/fleury_test.dart` (443 tests in this package).
+`package:fleury_test/fleury_test.dart` (443 tests in this package). Add
+`fleury_test` as a dev dependency; it keeps the test runner and golden matcher
+out of production applications.
 Use `renderToString()` for inline assertions or `matchesGolden(...)`
 for whole-screen snapshot regression — see the
 [`fleury` README](../fleury/README.md#testing).

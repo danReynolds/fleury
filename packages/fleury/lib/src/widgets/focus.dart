@@ -70,9 +70,10 @@ KeyEventResult moveOrEscape({
 /// active focus chain.
 ///
 /// `KeyBindings` widgets implement this and attach themselves to a
-/// `FocusNode.bindingSource`. The `InputDispatcher` and `KeyHintBar`
-/// walk the focus chain and read `activeBindings` from each
-/// non-null source.
+/// `FocusNode.bindingSource`. The `InputDispatcher` walks the focus chain and
+/// reads `activeBindings` from each non-null source. User-facing key discovery
+/// surfaces use `resolveActiveKeyBindings`, which applies the same precedence
+/// plus hint visibility and text-input shadowing rules.
 ///
 /// The interface lives here (rather than in `key_bindings.dart`) so
 /// that `FocusNode` can typed-reference it without creating a

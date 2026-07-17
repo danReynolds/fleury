@@ -16,7 +16,7 @@
 // Review every diff before committing.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import 'support/harness.dart';
 import 'package:test/test.dart';
 
 /// Captures the current rendered tree into a string, optionally

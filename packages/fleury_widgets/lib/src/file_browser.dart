@@ -473,7 +473,7 @@ class _FileBrowserState extends State<FileBrowser> {
               focusNode: _focusNode,
               autofocus: widget.autofocus,
               itemCount: order.length,
-              onSelect: (_) => _activateSelected(),
+              onActivate: (_) => _activateSelected(),
               itemBuilder: (context, viewIndex, activeSelected) {
                 final sourceIndex = order[viewIndex];
                 final selected = viewIndex == _controller.selectedIndex;

@@ -10,9 +10,9 @@ real terminal.
 - Fleury has `FleuryTester`, fake drivers, golden assertions, debug shell,
   debug panels, debug events, and output capture.
 - Deterministic clock, ticker-scheduler, and clipboard fakes now live behind
-  `fleury_test.dart` rather than production barrels, preserving a clean
-  Flutter-style production/test import split while keeping tests and internal
-  benchmarks deterministic.
+  the package-neutral `fleury_test_support.dart` barrel and are re-exported by
+  the `fleury_test` companion package, preserving a clean Flutter-style
+  production/test import split without coupling core to `package:test`.
 - Tests can drive input, assert output, and query semantic snapshots across
   first-widget M1.1 targets.
 - Tests can now invoke supported semantic actions by current semantic node,

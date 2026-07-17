@@ -1,7 +1,7 @@
 // Reveal: single-child presence with enter/exit + deferred unmount.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 String _line(FleuryTester tester, {int cols = 8}) {

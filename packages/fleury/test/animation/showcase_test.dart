@@ -24,7 +24,7 @@
 //     FLEURY_UPDATE_GOLDENS=1 dart test test/animation/showcase_test.dart
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 // ---------------------------------------------------------------------------

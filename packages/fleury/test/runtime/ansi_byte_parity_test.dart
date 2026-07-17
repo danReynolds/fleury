@@ -8,7 +8,7 @@
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 Future<void> _settle() =>
