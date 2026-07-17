@@ -224,6 +224,52 @@ void main() {
     );
   });
 
+  test('formerly source-only web widgets mount as live examples', () async {
+    const ids = <String>[
+      'canvas.basic',
+      'checkbox.basic',
+      'formwizard.basic',
+      'keyhintbar.basic',
+      'markdowntext.basic',
+      'multiselect.basic',
+      'radio.basic',
+      'radiogroup.basic',
+      'switch.basic',
+      'toggle.basic',
+      'tokenmeter.basic',
+    ];
+
+    expect(examples.keys, containsAll(ids));
+    for (final id in ids) {
+      final host = await _mount(id);
+      expect(
+        host.querySelector('.fleury-screen'),
+        isNotNull,
+        reason: '$id should paint into the browser DOM grid',
+      );
+    }
+  });
+
+  test('checkbox.basic toggles through the browser semantic control', () async {
+    final fixture = await _mountExample('checkbox.basic');
+    final checkbox = fixture.host.querySelector(
+      '.fleury-semantics [role="checkbox"]',
+    )!;
+
+    expect(checkbox.getAttribute('aria-label'), 'Accept terms');
+    expect(checkbox.getAttribute('aria-checked'), 'false');
+
+    (checkbox as web.HTMLElement).click();
+    await Future<void>.delayed(Duration.zero);
+    for (var i = 0; i < 4 && fixture.flush.pending; i++) {
+      fixture.flush.fire();
+    }
+    await fixture.app.awaitSemanticIdle();
+
+    expect(checkbox.getAttribute('aria-checked'), 'true');
+    expect(fixture.host.textContent, contains('[x] Accept terms'));
+  });
+
   test('gauge.basic renders its label in the browser DOM grid', () async {
     final host = await _mount('gauge.basic');
     expect(host.querySelector('.fleury-screen'), isNotNull);
