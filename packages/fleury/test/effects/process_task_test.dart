@@ -336,6 +336,214 @@ Future<void> main() async {
       controller.dispose();
     });
 
+    test('runs inheritStdio processes without touching stdio pipes', () async {
+      final script = await _script(tempDir, 'inherit_stdio', '''
+void main() {}
+''');
+      final controller = ProcessTaskController(id: 'process');
+
+      final result = await controller.startProcess(
+        _dartScript(script),
+        mode: ProcessStartMode.inheritStdio,
+      );
+
+      expect(result.succeeded, isTrue);
+      expect(result.value?.exitCode, 0);
+      expect(controller.status, TaskStatus.succeeded);
+      expect(controller.output, isEmpty);
+      expect(controller.process, isNull);
+
+      controller.dispose();
+    });
+
+    test('reports inheritStdio non-zero exits as task failures', () async {
+      final script = await _script(tempDir, 'inherit_stdio_fail', '''
+import 'dart:io';
+
+void main() {
+  exitCode = 9;
+}
+''');
+      final controller = ProcessTaskController(id: 'process');
+
+      final result = await controller.startProcess(
+        _dartScript(script),
+        mode: ProcessStartMode.inheritStdio,
+      );
+
+      expect(result.failed, isTrue);
+      expect(controller.status, TaskStatus.failed);
+      expect(controller.error, isA<ProcessTaskException>());
+      final error = controller.error! as ProcessTaskException;
+      expect(error.result.exitCode, 9);
+
+      controller.dispose();
+    });
+
+    test('rejects detached start modes before spawning', () async {
+      final controller = ProcessTaskController(id: 'process');
+      const command = ProcessTaskCommand('dart', ['--version']);
+
+      expect(
+        () => controller.startProcess(command, mode: ProcessStartMode.detached),
+        throwsArgumentError,
+      );
+      expect(
+        () => controller.startProcess(
+          command,
+          mode: ProcessStartMode.detachedWithStdio,
+        ),
+        throwsArgumentError,
+      );
+
+      // Rejection happens before any state mutation or spawn.
+      expect(controller.status, TaskStatus.idle);
+      expect(controller.process, isNull);
+      expect(controller.command, isNull);
+      expect(controller.events, isEmpty);
+
+      controller.dispose();
+    });
+
+    test('runs inheritStdio processes through terminal handoff', () async {
+      final script = await _script(tempDir, 'inherit_handoff', '''
+void main() {}
+''');
+      final driver = FakeTerminalDriver();
+      await driver.enter(TerminalMode.interactive);
+      final controller = ProcessTaskController(id: 'process');
+
+      final result = await controller.startProcess(
+        _dartScript(script),
+        terminalDriver: driver,
+        handoffTerminal: true,
+        mode: ProcessStartMode.inheritStdio,
+      );
+
+      expect(result.succeeded, isTrue);
+      expect(controller.status, TaskStatus.succeeded);
+      expect(driver.handoffCallCount, 1);
+      expect(driver.handoffSuspendCallCount, 1);
+      expect(driver.handoffResumeCallCount, 1);
+      expect(driver.isActive, isTrue);
+
+      controller.dispose();
+      await driver.dispose();
+    });
+
+    test(
+      'restart during the spawn window kills the superseded child',
+      () async {
+        final script = await _script(tempDir, 'spawn_window', '''
+import 'dart:async';
+import 'dart:io';
+
+Future<void> main() async {
+  stdout.writeln('ready');
+  await Future<void>.delayed(const Duration(seconds: 30));
+}
+''');
+        final controller = _GatedSpawnController(id: 'process');
+        addTearDown(() {
+          for (final process in controller.spawnedProcesses) {
+            process.kill(ProcessSignal.sigkill);
+          }
+        });
+        final command = _dartScript(script);
+        final hold = controller.holdNextSpawn();
+
+        final first = controller.startProcess(command);
+        final second = controller.startProcess(command);
+
+        final firstResult = await first;
+        expect(firstResult.canceled, isTrue);
+
+        // The superseded spawn has completed at the OS level but has not yet
+        // returned to the controller; the current run is live alongside it.
+        final staleProcess = await hold.spawned.timeout(
+          const Duration(seconds: 5),
+        );
+        await _waitForOutput(controller, (entry) => entry.text == 'ready');
+        final currentProcess = controller.process;
+        expect(currentProcess, isNotNull);
+        expect(identical(currentProcess, staleProcess), isFalse);
+
+        hold.release();
+
+        const orphaned = 0x7fffffff;
+        final staleExit = await staleProcess.exitCode.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            staleProcess.kill(ProcessSignal.sigkill);
+            return orphaned;
+          },
+        );
+        expect(
+          staleExit,
+          isNot(orphaned),
+          reason: 'a run superseded during spawn must kill its child',
+        );
+        expect(
+          controller.process,
+          same(currentProcess),
+          reason: 'a stale spawn must not clobber the current process handle',
+        );
+
+        controller.cancel();
+        final currentExit = await currentProcess!.exitCode.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            currentProcess.kill(ProcessSignal.sigkill);
+            return orphaned;
+          },
+        );
+        expect(currentExit, isNot(orphaned));
+        final secondResult = await second.timeout(const Duration(seconds: 5));
+        expect(secondResult.canceled, isTrue);
+
+        controller.dispose();
+      },
+    );
+
+    test('dispose kills the running subprocess', () async {
+      final script = await _script(tempDir, 'dispose_slow', '''
+import 'dart:async';
+import 'dart:io';
+
+Future<void> main() async {
+  stdout.writeln('ready');
+  await Future<void>.delayed(const Duration(seconds: 30));
+}
+''');
+      final controller = ProcessTaskController(id: 'process');
+
+      final future = controller.startProcess(_dartScript(script));
+      await _waitForOutput(controller, (entry) => entry.text == 'ready');
+      final process = controller.process;
+      expect(process, isNotNull);
+
+      controller.dispose();
+
+      const orphaned = 0x7fffffff;
+      final exitCode = await process!.exitCode.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          process.kill(ProcessSignal.sigkill);
+          return orphaned;
+        },
+      );
+      expect(
+        exitCode,
+        isNot(orphaned),
+        reason: 'dispose() must kill the running child process',
+      );
+      expect(controller.process, isNull);
+      expect(controller.status, TaskStatus.canceled);
+
+      final result = await future;
+      expect(result.canceled, isTrue);
+    });
+
     test('can run through terminal handoff when requested', () async {
       final script = await _script(tempDir, 'handoff', '''
 import 'dart:io';
@@ -368,4 +576,50 @@ void main() {
       await driver.dispose();
     });
   });
+}
+
+/// One spawn held open by [_GatedSpawnController.holdNextSpawn].
+final class _HeldSpawn {
+  final Completer<void> _release = Completer<void>();
+  final Completer<Process> _spawnedProcess = Completer<Process>();
+
+  /// Resolves with the real process once the held spawn completes at the OS
+  /// level (while the controller still sees the spawn as pending).
+  Future<Process> get spawned => _spawnedProcess.future;
+
+  /// Lets the held spawn return to the controller.
+  void release() => _release.complete();
+}
+
+/// Spawns real processes but can hold a spawn's completion so tests can
+/// deterministically exercise the restart-during-spawn window.
+final class _GatedSpawnController extends ProcessTaskController {
+  _GatedSpawnController({super.id});
+
+  final List<_HeldSpawn> _holds = [];
+  final List<Process> spawnedProcesses = [];
+
+  _HeldSpawn holdNextSpawn() {
+    final hold = _HeldSpawn();
+    _holds.add(hold);
+    return hold;
+  }
+
+  @override
+  Future<Process> spawnProcess(
+    ProcessTaskCommand command,
+    ProcessStartMode mode,
+  ) async {
+    // Claim the hold synchronously at entry so it binds to startProcess CALL
+    // order; claiming after the await would bind by OS-spawn-completion
+    // order, which can invert under load and gate the wrong run.
+    final hold = _holds.isNotEmpty ? _holds.removeAt(0) : null;
+    final process = await super.spawnProcess(command, mode);
+    spawnedProcesses.add(process);
+    if (hold != null) {
+      hold._spawnedProcess.complete(process);
+      await hold._release.future;
+    }
+    return process;
+  }
 }

@@ -112,6 +112,46 @@ void main() {
       controller.dispose();
     });
 
+    test(
+      'late runner error after cancellation keeps status canceled',
+      () async {
+        final controller = TaskController<void>(id: 'sticky-cancel');
+        final started = Completer<void>();
+        final finish = Completer<void>();
+        var notificationsAfterCancel = 0;
+
+        final future = controller.start((context) async {
+          started.complete();
+          await finish.future;
+          // A runner torn down by cancellation typically surfaces an ordinary
+          // error (broken pipe, aborted request) rather than TaskCanceled.
+          throw StateError('teardown failure after cancel');
+        });
+
+        await started.future;
+        controller.cancel();
+        final result = await future;
+        expect(result.canceled, isTrue);
+        expect(controller.status, TaskStatus.canceled);
+        controller.addListener(() => notificationsAfterCancel += 1);
+
+        finish.complete();
+        await Future<void>.delayed(Duration.zero);
+
+        expect(controller.status, TaskStatus.canceled);
+        expect(controller.error, isNull);
+        expect(controller.stackTrace, isNull);
+        expect(notificationsAfterCancel, 0);
+        expect(controller.events.last.kind, TaskEventKind.canceled);
+        expect(
+          controller.events.map((event) => event.kind),
+          isNot(contains(TaskEventKind.failed)),
+        );
+
+        controller.dispose();
+      },
+    );
+
     test('dispose cancels active run and ignores late task writes', () async {
       final controller = TaskController<void>(id: 'dispose-active');
       final started = Completer<void>();
@@ -225,6 +265,56 @@ void main() {
 
       controller.dispose();
     });
+
+    test(
+      'superseded run observes cancellation at its next checkpoint',
+      () async {
+        final controller = TaskController<int>(id: 'restart-observe');
+        final firstStarted = Completer<void>();
+        final firstFinished = Completer<void>();
+        var iterations = 0;
+        var sawCancellation = false;
+        var ranToCompletion = false;
+
+        final first = controller.start((context) async {
+          final checkpoint = const TaskYieldPolicy(
+            itemBudget: 1,
+            elapsedBudget: Duration(days: 1),
+          ).start(context);
+          try {
+            for (var i = 0; i < 50; i++) {
+              iterations += 1;
+              if (i == 0) firstStarted.complete();
+              await checkpoint.tick(current: iterations, total: 50);
+            }
+            ranToCompletion = true;
+            return iterations;
+          } on TaskCanceled {
+            sawCancellation = true;
+            rethrow;
+          } finally {
+            firstFinished.complete();
+          }
+        });
+
+        await firstStarted.future;
+        final second = await controller.start((context) => -1);
+        final firstResult = await first;
+        await firstFinished.future;
+
+        expect(firstResult.canceled, isTrue);
+        expect(second.succeeded, isTrue);
+        expect(
+          sawCancellation,
+          isTrue,
+          reason: 'a superseded cooperative runner must observe cancellation',
+        );
+        expect(ranToCompletion, isFalse);
+        expect(iterations, lessThan(50));
+
+        controller.dispose();
+      },
+    );
 
     test('reset returns to idle and clears run state', () async {
       final controller = TaskController<String>(id: 'resettable');
