@@ -13,13 +13,13 @@ class _SliderGeometry {
 
 /// A two-handle slider for picking a numeric `(low, high)` range. The
 /// selected interval is a filled bar between a solid active handle (`●`)
-/// and a hollow inactive one (`○`). Left/Right move between the two
-/// handles (they sit low-left, high-right); Up/Down change the active
-/// handle's value by [step], PageUp/PageDown by [largeStep], Home/End jump
-/// to [min]/[max] (still clamped so the handles can't cross). Each arrow
-/// bubbles at its edge so focus can leave the widget — Left/Right past the
-/// outer handle, Up/Down once the value is pinned — and Tab is left free
-/// for traversal.
+/// and a hollow inactive one (`○`). Click the track to move the nearest handle,
+/// or drag to slide that handle. Left/Right move between the two handles (they
+/// sit low-left, high-right); Up/Down change the active handle's value by
+/// [step], PageUp/PageDown by [largeStep], Home/End jump to [min]/[max] (still
+/// clamped so the handles can't cross). Each arrow bubbles at its edge so focus
+/// can leave the widget — Left/Right past the outer handle, Up/Down once the
+/// value is pinned — and Tab is left free for traversal.
 ///
 /// Controlled — hold the values yourself and update them from [onChanged].
 /// Passing null for [onChanged] disables the slider.
