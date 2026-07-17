@@ -29,8 +29,8 @@ class FilePicker extends StatefulWidget {
     this.autofocus = false,
   }) : assert(maxVisible > 0);
 
-  /// Directory the picker opens in. Must exist; missing dirs throw on
-  /// first listing attempt.
+  /// Directory the picker opens in. If it can't be listed (missing or
+  /// unreadable), the picker renders a dim error row instead of entries.
   final String initialDirectory;
 
   /// Called with the chosen [File] when Enter is pressed on a file row.
@@ -67,7 +67,8 @@ class _FilePickerState extends State<FilePicker> {
   late FocusNode _node;
   bool _owns = false;
   late Directory _cwd;
-  late List<FileSystemEntity> _entries;
+  List<FileSystemEntity> _entries = const [];
+  String? _error;
 
   // The selected row lives on a ListController so the entries can render in a
   // scrolling ListView that keeps the cursor in view (a plain Column clipped
@@ -82,7 +83,7 @@ class _FilePickerState extends State<FilePicker> {
     _node = widget.focusNode ?? FocusNode(debugLabel: 'file-picker');
     _owns = widget.focusNode == null;
     _cwd = Directory(widget.initialDirectory);
-    _listEntries();
+    _listEntries(_cwd);
   }
 
   @override
@@ -95,7 +96,7 @@ class _FilePickerState extends State<FilePicker> {
     }
     if (widget.showHidden != oldWidget.showHidden ||
         !identical(widget.filter, oldWidget.filter)) {
-      _listEntries();
+      _listEntries(_cwd);
     }
   }
 
@@ -112,11 +113,20 @@ class _FilePickerState extends State<FilePicker> {
     super.dispose();
   }
 
-  /// Lists `_cwd` into `_entries`, applying the filter and the hidden-
-  /// file rule, then sorts: directories first, files after, both
-  /// alphabetically. Resets the cursor to the top.
-  void _listEntries() {
-    final all = _cwd.listSync(followLinks: false);
+  /// Lists [dir] and, on success, commits it as the current directory:
+  /// entries filtered (hidden-file rule, [FilePicker.filter]) and sorted
+  /// directories first, files after, both alphabetically; cursor reset to
+  /// the top. When the listing fails — unreadable or just-deleted directory
+  /// — `_cwd`/`_entries` are left untouched and the failure is surfaced as
+  /// a dim error row instead of an uncaught [FileSystemException].
+  void _listEntries(Directory dir) {
+    final List<FileSystemEntity> all;
+    try {
+      all = dir.listSync(followLinks: false);
+    } on FileSystemException catch (error) {
+      _error = error.message;
+      return;
+    }
     final filtered = <FileSystemEntity>[];
     for (final e in all) {
       final name = _basename(e.path);
@@ -132,6 +142,8 @@ class _FilePickerState extends State<FilePicker> {
         a.path,
       ).toLowerCase().compareTo(_basename(b.path).toLowerCase());
     });
+    _error = null;
+    _cwd = dir;
     _entries = filtered;
     _list.selectedIndex = filtered.isEmpty ? null : 0;
   }
@@ -186,10 +198,7 @@ class _FilePickerState extends State<FilePicker> {
     if (_entries.isEmpty) return;
     final e = _entries[_cursor];
     if (e is Directory) {
-      setState(() {
-        _cwd = e;
-        _listEntries();
-      });
+      setState(() => _listEntries(e));
     } else if (e is File) {
       widget.onSelect(e);
     }
@@ -198,10 +207,7 @@ class _FilePickerState extends State<FilePicker> {
   void _goUp() {
     final parent = _cwd.parent;
     if (parent.path == _cwd.path) return; // already at filesystem root
-    setState(() {
-      _cwd = parent;
-      _listEntries();
-    });
+    setState(() => _listEntries(parent));
   }
 
   KeyEventResult _onKey(KeyEvent event) {
@@ -357,6 +363,7 @@ class _FilePickerState extends State<FilePicker> {
         'collectionRowCount': _entries.length,
         'showHidden': widget.showHidden,
         'outputSanitized': safeCwd != _cwd.path,
+        if (_error != null) 'error': _safeText(_error!),
         if (selected != null) ...{
           'selectedIndex': _cursor,
           'selectedKey': _safeText(selected.path),
@@ -375,6 +382,13 @@ class _FilePickerState extends State<FilePicker> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(safeCwd, style: theme.mutedStyle),
+              // A failed listing (unreadable / just-deleted directory) shows
+              // up as a dim status row; the retained listing stays usable.
+              if (_error != null)
+                Text(
+                  '  ${_safeText(_error!)}',
+                  style: const CellStyle(dim: true),
+                ),
               ?upRow,
               SizedBox(height: visible, child: listing),
             ],

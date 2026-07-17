@@ -31,6 +31,53 @@ void main() {
       expect(out[0], '3 1 2');
     });
 
+    testWidgets('excludes non-finite values from the bins instead of '
+        'throwing', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 5,
+          height: 4,
+          child: Histogram(
+            values: [0.1, 0.2, double.nan, 1.0, double.infinity, 2.0],
+            bins: 3,
+            range: (0, 2),
+            barWidth: 1,
+            gap: 1,
+            showLabels: false,
+            showValues: true,
+          ),
+        ),
+      );
+      // NaN and Infinity fall outside every bin: counts 2 / 1 / 1.
+      final out = _rows(tester, 5, 4);
+      expect(out[0], '2 1 1');
+
+      final chart = tester.semantics().single(role: SemanticRole.chart);
+      expect(chart.state['chartPointCount'], 6);
+      expect(chart.state['chartRecordedPointCount'], 4);
+    });
+
+    testWidgets('auto range ignores non-finite values', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 3,
+          height: 3,
+          child: Histogram(
+            values: [double.nan, 1, 2, 3],
+            bins: 2,
+            range: null,
+            barWidth: 1,
+            gap: 1,
+            showLabels: false,
+          ),
+        ),
+      );
+      // The auto range comes from the finite values (1..3): both bins get
+      // counts, so the bottom chart row is fully filled.
+      final out = _rows(tester, 3, 3);
+      expect(out[2], '█ █');
+    });
+
     testWidgets('autoscales when range is omitted', (tester) {
       tester.pumpWidget(
         const SizedBox(

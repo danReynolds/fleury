@@ -217,12 +217,12 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
   void _shiftMonth(int delta) {
     if (!_enabled) return;
     final v = widget.value;
-    // Use day 1 to avoid Feb 31 etc., then re-clamp the day.
-    final targetYear = v.year + ((v.month - 1 + delta) ~/ 12);
-    final targetMonth = ((v.month - 1 + delta) % 12 + 12) % 12 + 1;
-    final lastDayOfTarget = DateTime(targetYear, targetMonth + 1, 0).day;
+    // Let DateTime normalize the year/month (month 0 → December of the
+    // previous year); use day 1 to avoid Feb 31 etc., then re-clamp the day.
+    final target = DateTime(v.year, v.month + delta, 1);
+    final lastDayOfTarget = DateTime(target.year, target.month + 1, 0).day;
     final day = v.day > lastDayOfTarget ? lastDayOfTarget : v.day;
-    final next = DateTime(targetYear, targetMonth, day);
+    final next = DateTime(target.year, target.month, day);
     if (!_inBounds(next)) return;
     widget.onChanged!(next);
   }

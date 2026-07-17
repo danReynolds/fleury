@@ -54,6 +54,48 @@ void main() {
       expect(_graphemeAt(tester, 1, 0, cols: 2, rows: 1), '█');
     });
 
+    testWidgets('renders non-finite cells as gaps instead of throwing', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 3,
+          height: 1,
+          child: Heatmap(
+            values: [
+              [1.0, double.nan, 0.5],
+            ],
+            cellWidth: 1,
+            min: 0,
+            max: 1,
+          ),
+        ),
+      );
+      expect(_graphemeAt(tester, 0, 0, cols: 3, rows: 1), '█');
+      expect(_graphemeAt(tester, 1, 0, cols: 3, rows: 1), isNull);
+      expect(_graphemeAt(tester, 2, 0, cols: 3, rows: 1), '▒');
+    });
+
+    testWidgets('autoscale ignores non-finite cells', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 3,
+          height: 1,
+          child: Heatmap(
+            values: [
+              [double.nan, 2.0, 4.0],
+            ],
+            cellWidth: 1,
+            min: 0,
+          ),
+        ),
+      );
+      // The autoscaled max comes from the finite cells (4): 2 → ▒, 4 → █.
+      expect(_graphemeAt(tester, 0, 0, cols: 3, rows: 1), isNull);
+      expect(_graphemeAt(tester, 1, 0, cols: 3, rows: 1), '▒');
+      expect(_graphemeAt(tester, 2, 0, cols: 3, rows: 1), '█');
+    });
+
     testWidgets('renders column labels above and row labels to the left', (
       tester,
     ) {

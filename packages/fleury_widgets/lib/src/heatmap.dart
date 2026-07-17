@@ -328,7 +328,8 @@ class RenderHeatmap extends RenderObject {
   }) {
     if (size.cols == 0 || size.rows == 0 || _values.isEmpty) return;
 
-    // Compute min/max (autoscale fallback).
+    // Compute min/max (autoscale fallback) over the finite cells only —
+    // one NaN/±Infinity cell must not poison the scale for the grid.
     var lo = _min?.toDouble();
     var hi = _max?.toDouble();
     if (lo == null || hi == null) {
@@ -336,6 +337,7 @@ class RenderHeatmap extends RenderObject {
       for (final row in _values) {
         for (final v in row) {
           final d = v.toDouble();
+          if (!d.isFinite) continue;
           if (autoLo == null || d < autoLo) autoLo = d;
           if (autoHi == null || d > autoHi) autoHi = d;
         }
@@ -398,8 +400,10 @@ class RenderHeatmap extends RenderObject {
       final row = _values[r];
       for (var c = 0; c < row.length && c < _cols; c++) {
         final v = row[c].toDouble();
+        // Non-finite cells render as gaps — ceil() on them would throw.
+        if (!v.isFinite) continue;
         var t = (v - lo) / (hi - lo);
-        if (t <= 0) continue; // leave empty
+        if (t <= 0 || t.isNaN) continue; // leave empty
         if (t > 1) t = 1;
         // Quartile mapping: (0, .25] → ░, (.25, .5] → ▒, (.5, .75] → ▓, (.75, 1] → █.
         final idx = ((t * 4).ceil() - 1).clamp(0, 3);

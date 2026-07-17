@@ -95,8 +95,10 @@ class Sparkline extends StatelessWidget {
   }
 }
 
-String _formatSparkValue(num v) =>
-    v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+String _formatSparkValue(num v) {
+  if (!v.isFinite) return v.toString(); // 'NaN' / 'Infinity' — toInt throws
+  return v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+}
 
 num? _maxFinite(Iterable<num> values) {
   num? result;
@@ -229,25 +231,32 @@ class RenderSparkline extends RenderObject {
     final minD = _min.toDouble();
     var maxD = _max?.toDouble();
     if (maxD == null) {
-      var hi = window.first.toDouble();
+      // Autoscale over the finite values only — a NaN/±Infinity sample
+      // must not poison the max for the whole strip.
+      double? hi;
       for (final v in window) {
-        if (v > hi) hi = v.toDouble();
+        final d = v.toDouble();
+        if (!d.isFinite) continue;
+        if (hi == null || d > hi) hi = d;
       }
-      maxD = hi;
+      maxD = hi ?? minD;
     }
     final range = maxD - minD;
 
     for (var i = 0; i < window.length; i++) {
       final col = offset.col + leftPad + i;
       final v = window[i].toDouble();
+      // Non-finite samples (0/0 in a metrics stream, a sentinel Infinity)
+      // render as gaps — ceil() on them would throw.
+      if (!v.isFinite) continue;
       int level;
       if (range <= 0) {
         // Degenerate range: render baseline cells when at-or-above min,
         // empty otherwise.
         level = v >= minD ? 1 : 0;
       } else {
-        var t = (v - minD) / range;
-        if (t <= 0) {
+        final t = (v - minD) / range;
+        if (t <= 0 || t.isNaN) {
           level = 0;
         } else if (t >= 1) {
           level = 8;

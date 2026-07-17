@@ -78,6 +78,17 @@ FormDefinition _numericForm() {
   );
 }
 
+FormDefinition _decimalForm() {
+  return FormDefinition(
+    title: 'Rates',
+    submitLabel: 'Apply',
+    fields: [
+      FormFieldSpec.number(id: 'ratio', label: 'Ratio', allowDecimal: true),
+      FormFieldSpec.text(id: 'note', label: 'Note'),
+    ],
+  );
+}
+
 FormDefinition _dateForm() {
   return FormDefinition(
     title: 'Schedule',
@@ -1108,6 +1119,121 @@ void main() {
       value: '5',
     );
     expect(retries.state['hasValue'], isTrue);
+  });
+
+  testWidgets('decimal number fields keep in-progress text while typing', (
+    tester,
+  ) {
+    final definition = _decimalForm();
+    final controller = FormController(definition);
+    tester.pumpWidget(
+      FormPanel(definition: definition, controller: controller),
+    );
+
+    // "1.5" one keystroke at a time. The "." step parses to null — the
+    // panel must not round-trip that null back into the field as "".
+    tester.type('1');
+    tester.type('.');
+    tester.type('5');
+    expect(controller.value('ratio'), 1.5);
+    expect(_screen(tester), contains('1.5'));
+
+    // Editing: backspace over the "5" (leaving "1.") then typing 7.
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.backspace));
+    tester.type('7');
+    expect(controller.value('ratio'), 1.7);
+  });
+
+  testWidgets('leading-zero decimals and negatives parse character-by-'
+      'character', (tester) {
+    final definition = _decimalForm();
+    final controller = FormController(definition);
+    tester.pumpWidget(
+      FormPanel(definition: definition, controller: controller),
+    );
+
+    for (final ch in '0.05'.split('')) {
+      tester.type(ch);
+    }
+    expect(controller.value('ratio'), 0.05);
+
+    // Backspace the field empty, then type a negative number: the "-"
+    // in-progress token must survive to accept the digits after it.
+    for (var i = 0; i < 4; i++) {
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.backspace));
+    }
+    expect(controller.value('ratio'), isNull);
+    tester.type('-');
+    tester.type('2');
+    expect(controller.value('ratio'), -2);
+  });
+
+  testWidgets('programmatic setValue still rewrites number field text', (
+    tester,
+  ) {
+    final definition = _decimalForm();
+    final controller = FormController(definition);
+    tester.pumpWidget(
+      FormPanel(definition: definition, controller: controller),
+    );
+
+    // While the field holds an in-progress token, an external value change
+    // wins and resets the text to the canonical form.
+    tester.type('1');
+    tester.type('.');
+    controller.setValue('ratio', 4.25);
+    tester.pump();
+    expect(_screen(tester), contains('4.25'));
+    expect(controller.value('ratio'), 4.25);
+
+    // A programmatic clear empties the field text too.
+    controller.setValue('ratio', null);
+    tester.pump();
+    expect(_screen(tester), isNot(contains('4.25')));
+    expect(controller.value('ratio'), isNull);
+  });
+
+  testWidgets('external setValue syncs an unfocused number field', (tester) {
+    final definition = FormDefinition(
+      title: 'Rates',
+      submitLabel: 'Apply',
+      fields: [
+        FormFieldSpec.text(id: 'note', label: 'Note'),
+        FormFieldSpec.number(id: 'ratio', label: 'Ratio', allowDecimal: true),
+      ],
+    );
+    final controller = FormController(definition);
+    tester.pumpWidget(
+      FormPanel(definition: definition, controller: controller),
+    );
+
+    // Focus sits on the first (text) field; the number field is unfocused.
+    controller.setValue('ratio', 2.5);
+    tester.pump();
+    expect(_screen(tester), contains('2.5'));
+  });
+
+  testWidgets('blur keeps in-progress number text without corrupting the '
+      'value', (tester) {
+    final definition = _decimalForm();
+    final controller = FormController(definition);
+    tester.pumpWidget(
+      FormPanel(definition: definition, controller: controller),
+    );
+
+    tester.type('1');
+    tester.type('.');
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
+    tester.pump();
+
+    // No blur normalization: the token stays visible, the value stays null,
+    // and edits to other fields don't wipe it either.
+    expect(_screen(tester), contains('1.'));
+    expect(controller.value('ratio'), isNull);
+    tester.type('x'); // types into the now-focused Note field
+    expect(_screen(tester), contains('1.'));
+    expect(controller.value('ratio'), isNull);
+    expect(controller.value('note'), 'x');
   });
 
   testWidgets('date fields render through DatePicker and expose semantics', (

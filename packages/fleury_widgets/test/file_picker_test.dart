@@ -230,6 +230,110 @@ void main() {
       tester.render(size: const CellSize(60, 6));
     });
 
+    testWidgets('entering a just-deleted directory keeps the listing and '
+        'surfaces an error row', (tester) {
+      final dir = _scratchDir();
+      tester.pumpWidget(
+        FilePicker(initialDirectory: dir, autofocus: true, onSelect: (_) {}),
+      );
+      tester.render(size: const CellSize(70, 8));
+
+      // The cursor starts on sub/ (directories sort first). Delete it
+      // out-of-band, then try to enter it: must not throw, must not move.
+      Directory('$dir/sub').deleteSync(recursive: true);
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+
+      final out = tester.renderToString(
+        size: const CellSize(70, 8),
+        emptyMark: ' ',
+      );
+      expect(out, contains('a.txt'), reason: 'old listing is retained');
+      final tree = tester.semantics().single(role: SemanticRole.tree);
+      expect(tree.value, dir, reason: 'cwd did not move');
+      expect(tree.state['error'], isNotNull);
+
+      // A later successful navigation clears the error again.
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // a.txt: onSelect
+      expect(
+        tester.semantics().single(role: SemanticRole.tree).state['error'],
+        isNotNull,
+        reason: 'selecting a file does not relist',
+      );
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.backspace)); // parent
+      expect(
+        tester.semantics().single(role: SemanticRole.tree).state['error'],
+        isNull,
+      );
+    });
+
+    testWidgets('entering an unreadable directory keeps state and shows the '
+        'error', (tester) {
+      final dir = _scratchDir();
+      final locked = Directory('$dir/locked')..createSync();
+      // Restore permissions before _scratchDir's tearDown deletes the tree
+      // (tear-downs run last-registered-first, even on failure).
+      addTearDown(() => Process.runSync('chmod', ['700', locked.path]));
+      expect(Process.runSync('chmod', ['000', locked.path]).exitCode, 0);
+      try {
+        // Running as root ignores mode 000; nothing to assert in that case.
+        locked.listSync();
+        return;
+      } on FileSystemException {
+        // Expected: the directory is unreadable for this process.
+      }
+
+      tester.pumpWidget(
+        FilePicker(initialDirectory: dir, autofocus: true, onSelect: (_) {}),
+      );
+      tester.render(size: const CellSize(70, 9));
+
+      // Directories sort first alphabetically: locked/ is the cursor row.
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+
+      final out = tester.renderToString(
+        size: const CellSize(70, 9),
+        emptyMark: ' ',
+      );
+      expect(out, contains('sub/'), reason: 'old listing is retained');
+      final tree = tester.semantics().single(role: SemanticRole.tree);
+      expect(tree.value, dir, reason: 'cwd did not move');
+      expect(tree.state['error'], isNotNull);
+
+      // Pressing Enter again is still safe, and navigation elsewhere works.
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // into sub/
+      expect(
+        tester.renderToString(size: const CellSize(70, 9)),
+        contains('inside.dart'),
+      );
+      expect(
+        tester.semantics().single(role: SemanticRole.tree).state['error'],
+        isNull,
+      );
+    }, skip: Platform.isWindows ? 'chmod is unavailable on Windows' : false);
+
+    testWidgets('unlistable initial directory renders an error row instead '
+        'of throwing', (tester) {
+      final tmp = Directory.systemTemp.createTempSync('fleuryfp_gone_');
+      final missing = '${tmp.path}/missing';
+      addTearDown(() => tmp.deleteSync(recursive: true));
+
+      tester.pumpWidget(
+        FilePicker(initialDirectory: missing, onSelect: (_) {}),
+      );
+      final out = tester.renderToString(
+        size: const CellSize(70, 4),
+        emptyMark: ' ',
+      );
+      expect(out, contains('missing'), reason: 'header shows the request');
+      expect(
+        tester.semantics().single(role: SemanticRole.tree).state['error'],
+        isNotNull,
+      );
+    });
+
     testWidgets('empty directory renders a quiet "(empty)" notice', (tester) {
       final tmp = Directory.systemTemp.createTempSync('fleuryfp_empty_');
       addTearDown(() => tmp.deleteSync(recursive: true));

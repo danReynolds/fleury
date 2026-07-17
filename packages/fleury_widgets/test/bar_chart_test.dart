@@ -60,6 +60,73 @@ void main() {
       expect(out[3], '█ █');
     });
 
+    testWidgets('renders a non-finite bar as an empty column instead of '
+        'throwing', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 5,
+          height: 3,
+          child: BarChart(
+            bars: [Bar('a', 2), Bar('b', double.nan), Bar('c', 1)],
+            max: 2,
+            barWidth: 1,
+            gap: 1,
+            showLabels: true,
+          ),
+        ),
+      );
+      // 2 chart rows + label row; the NaN bar renders as a gap.
+      // (renderToString right-trims trailing empty cells.)
+      final out = _rows(tester, 5, 3);
+      expect(out[0], '█');
+      expect(out[1], '█   █');
+      expect(out[2], 'a b c');
+    });
+
+    testWidgets('non-finite values do not poison bar autoscale', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 3,
+          height: 2,
+          child: BarChart(
+            bars: [Bar('a', double.nan), Bar('b', 2)],
+            barWidth: 1,
+            gap: 1,
+            showLabels: false,
+            showValues: true,
+          ),
+        ),
+      );
+      // Autoscale ignores the NaN bar, so b is the max → full column; the
+      // NaN bar's value label degrades to its plain string form.
+      final out = _rows(tester, 3, 2);
+      expect(out[0], 'N 2');
+      expect(out[1], '  █');
+    });
+
+    testWidgets('stacked bars skip non-finite segments', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 1,
+          height: 2,
+          child: BarChart(
+            bars: [
+              Bar.stacked('a', [1, double.nan, 1]),
+            ],
+            max: 2,
+            barWidth: 1,
+            gap: 0,
+            showLabels: false,
+          ),
+        ),
+      );
+      // The finite segments (1 + 1 of max 2) still fill both rows; the NaN
+      // segment contributes no height instead of throwing.
+      final out = _rows(tester, 1, 2);
+      expect(out[0], '█');
+      expect(out[1], '█');
+    });
+
     testWidgets('uses block-eighths for partial fill', (tester) {
       // value = 0.25 of max → 0.25 chart-row → 2/8 of a single row → ▂.
       tester.pumpWidget(
