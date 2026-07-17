@@ -7,7 +7,7 @@
 // character first and keeps receiving it, while every other sample quits.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_samples/samples.dart';
 import 'package:test/test.dart';
 
