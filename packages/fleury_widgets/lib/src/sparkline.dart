@@ -65,9 +65,15 @@ class Sparkline extends StatelessWidget {
       state: SemanticState({
         'chartType': 'sparkline',
         'chartPointCount': data.length,
-        'chartMinValue': min,
-        'chartMaxValue': ?resolvedMax,
-        'chartLatestValue': ?latest,
+        // Only finite values go on the wire: serve's semantics encoder
+        // jsonEncodes this map, and JSON has no NaN/Infinity.
+        'chartMinValue': ?(min.isFinite ? min : null),
+        'chartMaxValue': ?(resolvedMax != null && resolvedMax.isFinite
+            ? resolvedMax
+            : null),
+        'chartLatestValue': ?(latest != null && latest.isFinite
+            ? latest
+            : null),
       }),
       child: showValue && latest != null
           ? Row(

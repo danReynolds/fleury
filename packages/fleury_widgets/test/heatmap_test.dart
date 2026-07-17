@@ -219,5 +219,51 @@ void main() {
         contains('chart heatmap, 2 rows, 2 columns, 4 points, min 0, max 5'),
       );
     });
+
+    testWidgets('legend renders with non-finite cells instead of throwing', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 20,
+          height: 3,
+          child: Heatmap(
+            values: [
+              [double.infinity, 1.0],
+              [double.nan, 3.0],
+            ],
+            cellWidth: 1,
+            showLegend: true,
+          ),
+        ),
+      );
+      // The legend range comes from the finite cells only (1..3); a
+      // non-finite first cell must not NaN-stick or crash _fmtHeat.
+      final rendered = tester.renderToString(size: const CellSize(20, 3));
+      expect(rendered, contains('1'));
+      expect(rendered, contains('3'));
+      expect(rendered, isNot(contains('NaN')));
+    });
+
+    testWidgets('semantic state omits non-finite bounds', (tester) {
+      tester.pumpWidget(
+        const Heatmap(
+          values: [
+            [double.infinity, 2.0],
+          ],
+          cellWidth: 1,
+          min: double.negativeInfinity,
+          semanticLabel: 'load',
+        ),
+      );
+      final chart = tester.semantics().single(
+        role: SemanticRole.chart,
+        label: 'load',
+      );
+      // serve jsonEncodes semantic state; JSON has no NaN/Infinity, so
+      // non-finite bounds must be absent rather than shipped raw.
+      expect(chart.state.chartMinValue, isNull);
+      expect(chart.state.chartMaxValue, 2.0);
+    });
   });
 }

@@ -1384,7 +1384,10 @@ class _FormPanelState extends State<FormPanel> {
         // for in-progress tokens ("1.", "-"); rewriting from that null would
         // erase the text mid-edit (typing "1.5" used to submit 5). Keep the
         // text whenever it still reads back as the current form value — only
-        // a genuine external change (setValue / reset) resets it.
+        // a genuine external change (setValue / reset) resets it. Known
+        // ambiguity: an external clear to null while an in-progress token is
+        // showing is indistinguishable from mid-typing, so the token stays
+        // visible (value is null either way).
         if (field.type == FormFieldType.number &&
             _numberEditValue(field, controller.text) ==
                 _parseNumberValue(field, _controller.value(id))) {

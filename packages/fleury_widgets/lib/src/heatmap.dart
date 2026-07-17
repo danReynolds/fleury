@@ -86,8 +86,10 @@ class Heatmap extends StatelessWidget {
         'chartRowCount': stats.rows,
         'chartColumnCount': stats.columns,
         'chartPointCount': stats.pointCount,
-        'chartMinValue': stats.min,
-        'chartMaxValue': stats.max,
+        // Only finite bounds go on the wire: serve's semantics encoder
+        // jsonEncodes this map, and JSON has no NaN/Infinity.
+        'chartMinValue': ?(stats.min.isFinite ? stats.min : null),
+        'chartMaxValue': ?(stats.max.isFinite ? stats.max : null),
         'rowLabelCount': rowLabels?.length ?? 0,
         'columnLabelCount': colLabels?.length ?? 0,
       }),
@@ -108,8 +110,10 @@ class Heatmap extends StatelessWidget {
   }
 }
 
-String _fmtHeat(num v) =>
-    v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+String _fmtHeat(num v) {
+  if (!v.isFinite) return v.toString(); // 'NaN' / 'Infinity' — toInt throws
+  return v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+}
 
 bool _labelsEqual(List<String>? a, List<String>? b) {
   if (identical(a, b)) return true;
@@ -134,6 +138,7 @@ bool _labelsEqual(List<String>? a, List<String>? b) {
     if (row.length > columns) columns = row.length;
     pointCount += row.length;
     for (final value in row) {
+      if (!value.isFinite) continue; // gaps must not poison the legend range
       if (autoMin == null || value < autoMin) autoMin = value;
       if (autoMax == null || value > autoMax) autoMax = value;
     }
