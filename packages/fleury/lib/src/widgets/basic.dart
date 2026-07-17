@@ -1021,6 +1021,11 @@ class _RenderConstrainedBox extends RenderObject
     }
     if (maxC != null && minC > maxC) minC = maxC;
     if (minC < constraints.minCols) minC = constraints.minCols;
+    // The parent-min re-clamp above can raise minC back above a smaller
+    // widget maxC (e.g. an Expanded parent's tight minCols vs a narrow
+    // maxWidth). Re-raise maxC so the parent's tight bound wins rather than
+    // building an impossible min > max — Flutter's enforce semantics.
+    if (maxC != null && maxC < minC) maxC = minC;
 
     int minR = (minHeight ?? constraints.minRows);
     int? maxR = maxHeight ?? parentMaxRows;
@@ -1029,6 +1034,7 @@ class _RenderConstrainedBox extends RenderObject
     }
     if (maxR != null && minR > maxR) minR = maxR;
     if (minR < constraints.minRows) minR = constraints.minRows;
+    if (maxR != null && maxR < minR) maxR = minR;
 
     final childConstraints = CellConstraints(
       minCols: minC,

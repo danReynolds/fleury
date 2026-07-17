@@ -166,6 +166,39 @@ void main() {
       // Beyond col 3 the ConstrainedBox didn't claim → grapheme is null.
       expect(buf.atColRow(3, 0).grapheme, isNull);
     });
+
+    testWidgets('maxWidth under a tight (Expanded) parent yields the parent '
+        'bound, not an impossible min>max', (tester) {
+      // Expanded delivers tight main-axis constraints (minCols == maxCols).
+      // A smaller maxWidth must not re-clamp the child to min > max: the
+      // parent's tight bound wins (Flutter enforce semantics). Before the fix
+      // this built CellConstraints(minCols: 80, maxCols: 20) and layout threw.
+      tester.pumpWidget(
+        const Row(
+          children: [
+            Expanded(child: ConstrainedBox(maxWidth: 20, child: Text('hi'))),
+          ],
+        ),
+      );
+      final buf = tester.render(size: const CellSize(80, 1));
+      expect(buf.atColRow(0, 0).grapheme, 'h');
+      expect(buf.atColRow(1, 0).grapheme, 'i');
+    });
+
+    testWidgets('maxHeight under a stretch (tight cross-axis) parent yields the '
+        'parent bound, not an impossible min>max', (tester) {
+      // CrossAxisAlignment.stretch delivers tight cross-axis (row) constraints
+      // equal to the Row's height. A smaller maxHeight is the rows analogue of
+      // the Expanded case — it must not re-clamp to minRows > maxRows.
+      tester.pumpWidget(
+        const Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [ConstrainedBox(maxHeight: 1, child: Text('x'))],
+        ),
+      );
+      final buf = tester.render(size: const CellSize(80, 24));
+      expect(buf.atColRow(0, 0).grapheme, 'x');
+    });
   });
 
   group('AspectRatio', () {

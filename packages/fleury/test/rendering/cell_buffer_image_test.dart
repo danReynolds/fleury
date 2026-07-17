@@ -348,6 +348,61 @@ void main() {
       expect(int.parse(parts[2]), 5, reason: 'trailing segment is byte length');
     });
 
+    test('image left edge on a wide continuation evicts the orphaned lead', () {
+      // A Stack that paints CJK text then an Image sibling can land the image's
+      // left edge on the continuation half of a wide glyph. Overlay marking
+      // must sever the pair like every other write path — a dangling leading
+      // '你' at col 10 would advance the terminal cursor 2 while the renderer
+      // tracks 1, garbling the rest of the row on probed-narrow terminals.
+      final buf = CellBuffer(const CellSize(20, 1));
+      buf.writeText(const CellOffset(10, 0), '你好');
+      expect(buf.atColRow(10, 0).role, CellRole.leading);
+      expect(buf.atColRow(11, 0).role, CellRole.continuation);
+
+      // Image left edge lands on the continuation at col 11.
+      buf.writeImage(
+        const CellOffset(11, 0),
+        Uint8List.fromList([1]),
+        width: 4,
+        height: 1,
+      );
+
+      expect(buf.atColRow(11, 0).role, CellRole.overlay);
+      expect(
+        buf.atColRow(10, 0).role,
+        CellRole.empty,
+        reason: 'the orphaned wide leading must be evicted, not left dangling',
+      );
+    });
+
+    test(
+      'image right edge on a wide leading evicts the orphaned continuation',
+      () {
+        // The mirror case: the image's right edge falls on the leading half, so
+        // the continuation one column past the region is orphaned.
+        final buf = CellBuffer(const CellSize(20, 1));
+        buf.writeText(const CellOffset(10, 0), '你');
+        expect(buf.atColRow(10, 0).role, CellRole.leading);
+        expect(buf.atColRow(11, 0).role, CellRole.continuation);
+
+        // Image spans cols 9..10; col 10 (the leading) is overwritten, its
+        // continuation at col 11 is left outside the region.
+        buf.writeImage(
+          const CellOffset(9, 0),
+          Uint8List.fromList([1]),
+          width: 2,
+          height: 1,
+        );
+
+        expect(buf.atColRow(10, 0).role, CellRole.overlay);
+        expect(
+          buf.atColRow(11, 0).role,
+          CellRole.empty,
+          reason: 'the orphaned wide continuation must be evicted',
+        );
+      },
+    );
+
     test('clear() drops the image table', () {
       final buf = CellBuffer(const CellSize(4, 2));
       buf.writeImage(

@@ -125,6 +125,16 @@ final class CellBuffer {
     }
   }
 
+  /// Marks [rect] damaged without touching cell contents.
+  ///
+  /// Used when a region must be revisited by the presenter diff even though
+  /// no write landed there this frame — e.g. a repaint boundary erasing the
+  /// cells a shrunk or moved subtree vacated. Clamped to the grid and subject
+  /// to [withoutDamageTracking] like any write-driven damage.
+  void recordDamage(CellRect rect) {
+    _recordDamageRect(rect.left, rect.top, rect.size.cols, rect.size.rows);
+  }
+
   /// Returns the cell at [position]. Throws if [position] is out of bounds.
   Cell at(CellOffset position) {
     _checkBounds(position);
@@ -693,6 +703,12 @@ final class CellBuffer {
     if (!markOverlayCells) return;
     for (var r = row; r < row + rows; r++) {
       final base = r * _size.cols;
+      // Sever any wide pair the region's edges bisect before stamping — a
+      // leading just left of the region, or a continuation just right of it,
+      // would otherwise be orphaned (the interior is fully overwritten). This
+      // keeps the same wide-cell invariant every grapheme write maintains.
+      _evictWideNeighbors(col, r);
+      _evictWideNeighbors(col + cols - 1, r);
       for (var c = col; c < col + cols; c++) {
         _cells[base + c] = const Cell.overlay();
       }

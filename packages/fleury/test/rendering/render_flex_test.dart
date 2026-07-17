@@ -52,7 +52,67 @@ class _PaintCountingBox extends RenderObject {
   }
 }
 
+/// A leaf that lays out to a fixed box and paints [text] (possibly wide
+/// graphemes) at its offset — for exercising the overflow-clip blit.
+class _CjkLeaf extends RenderObject {
+  _CjkLeaf(this.text, this.intrinsic);
+  final String text;
+  final CellSize intrinsic;
+
+  @override
+  CellSize performLayout(CellConstraints constraints) =>
+      constraints.constrain(intrinsic);
+
+  @override
+  void paint(
+    CellBuffer buffer,
+    CellOffset offset, {
+    CellOffset? screenOffset,
+    CellRect? clipRect,
+  }) {
+    buffer.writeText(offset, text);
+  }
+}
+
 void main() {
+  group('RenderFlex — overflow clip', () {
+    test('drops a wide glyph straddling the clip edge instead of spilling its '
+        'continuation past the box into a sibling', () {
+      final previous = RenderFlex.debugShowOverflow;
+      RenderFlex.debugShowOverflow = false;
+      addTearDown(() => RenderFlex.debugShowOverflow = previous);
+
+      // '你你你' is 6 columns; the box clips to 3, so the third glyph begins at
+      // clipped column 2 and cannot fit — its continuation would land at
+      // column 3, one past the flex box, evicting the sibling there.
+      final flex = RenderFlex(direction: Axis.horizontal);
+      flex.replaceAllChildren([_CjkLeaf('你你你', const CellSize(6, 1))]);
+      flex.layout(const CellConstraints(maxCols: 3, maxRows: 1));
+      expect(flex.size, const CellSize(3, 1));
+
+      final buffer = CellBuffer(const CellSize(20, 1));
+      buffer.writeGrapheme(const CellOffset(3, 0), 'X'); // sibling past the box
+
+      flex.paint(
+        buffer,
+        CellOffset.zero,
+        screenOffset: CellOffset.zero,
+        clipRect: const CellRect(
+          offset: CellOffset.zero,
+          size: CellSize(20, 1),
+        ),
+      );
+
+      expect(buffer.atColRow(0, 0).grapheme, '你');
+      expect(buffer.atColRow(1, 0).role, CellRole.continuation);
+      expect(
+        buffer.atColRow(3, 0).grapheme,
+        'X',
+        reason: 'a clipped wide glyph must not spill past the flex box',
+      );
+    });
+  });
+
   group('RenderFlex — empty', () {
     test('zero children: zero size', () {
       final flex = RenderFlex(direction: Axis.horizontal);

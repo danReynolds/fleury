@@ -239,6 +239,15 @@ class RenderClip extends RenderObject implements RenderObjectWithSingleChild {
       for (var col = 0; col < clipped.cols; col++) {
         final cell = scratch.atColRow(col, row);
         if (cell.role != CellRole.leading) continue;
+        // A wide glyph whose continuation falls outside the clipped box would
+        // spill one column past `clipped.cols` (writeGrapheme re-derives width
+        // 2 and writes the continuation), evicting the sibling there. Drop it
+        // rather than split it — wide graphemes are dropped, never split.
+        if (col + 1 >= clipped.cols &&
+            col + 1 < scratch.size.cols &&
+            scratch.atColRow(col + 1, row).role == CellRole.continuation) {
+          continue;
+        }
         final tc = offset.col + col;
         final tr = offset.row + row;
         if (tc < 0 || tr < 0 || tc >= cols || tr >= rows) continue;
