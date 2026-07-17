@@ -26,11 +26,6 @@
 // Review the file diff before committing — automated golden updates
 // are how subtle regressions get committed silently.
 
-// ignore_for_file: depend_on_referenced_packages
-// The `matcher` package is a transitive dep of `test`; once we split
-// into a dedicated fleury_test package this import becomes
-// first-party and the suppression goes away.
-
 import 'dart:io';
 
 import 'package:matcher/matcher.dart';

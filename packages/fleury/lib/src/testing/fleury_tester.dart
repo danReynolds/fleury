@@ -4,7 +4,7 @@
 // the operations every test actually wants:
 //
 //   - pumpWidget(w)          mount or replace the user widget
-//   - pumpApp(w)             mount a standard FleuryApp shell
+//   - pumpFleuryHome(w)      mount w as a standard FleuryApp home
 //   - pump([duration])       advance scheduler + flush builds
 //   - pumpAndSettle(...)     pump until no active tickers
 //   - find(finder)           apply a Finder to the tree
@@ -14,28 +14,15 @@
 //   - render(...)            produce a CellBuffer for inspection
 //   - renderToString(...)    convenience: render then stringify
 //
-// Tests use it via the testWidgets() wrapper:
-//
-//     testWidgets('autofocus claims focus', (tester) {
-//       tester.pumpWidget(TextInput(autofocus: true));
-//       expect(tester.find(byType(TextInput)), hasLength(1));
-//     });
+// The package-neutral harness lives in core so benchmarks and framework tools
+// can drive a tree without depending on package:test. App tests normally use
+// the `testWidgets` wrapper from package:fleury_test/fleury_test.dart.
 //
 // The tester is FakeClock-driven; SchedulerScheduler is the test
 // variant. Real wallclock is never read by the tester itself —
 // pump(duration) advances time in fixed deltas under the caller's
 // control. Mirrors the discipline already established in the
 // animation suite.
-
-import 'dart:async';
-
-// ignore_for_file: depend_on_referenced_packages
-// The `test` package will become a first-party dep once we split
-// into a dedicated fleury_test package; today it's reachable
-// transitively from the dev_dependencies block.
-
-import 'package:meta/meta.dart';
-import 'package:test/test.dart' as pkg_test;
 
 import '../animation/animation_policy.dart';
 import '../animation/clock.dart';
@@ -64,6 +51,28 @@ import '../widgets/pointer.dart';
 import '../widgets/tui_binding.dart';
 import 'finders.dart';
 
+/// A package-neutral assertion failure raised by [FleuryTester].
+///
+/// The `fleury_test` companion supplies a failure handler that throws
+/// package:test's `TestFailure` instead. This fallback keeps the low-level
+/// harness useful in benchmarks and tools without pulling test libraries into
+/// every Fleury application.
+final class FleuryTestFailure implements Exception {
+  const FleuryTestFailure(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// Converts a harness assertion message into the caller's failure type.
+typedef FleuryTestFailureHandler = Never Function(String message);
+
+Never _throwFleuryTestFailure(String message) {
+  throw FleuryTestFailure(message);
+}
+
 /// Drives a widget tree under test. One tester corresponds to one
 /// `testWidgets` invocation.
 class FleuryTester {
@@ -76,7 +85,9 @@ class FleuryTester {
     this.glyphTier = GlyphTier.unicode,
     this.images = InlineImageSupport.none,
     Clipboard? clipboard,
+    FleuryTestFailureHandler failureHandler = _throwFleuryTestFailure,
   }) : clipboard = clipboard ?? InProcessClipboard(),
+       _failureHandler = failureHandler,
        _clock = FakeClock(),
        _focusManager = FocusManager() {
     _scheduler = FakeTickerScheduler(clock: _clock);
@@ -109,6 +120,8 @@ class FleuryTester {
   /// `(tester.clipboard as InProcessClipboard).lastWritten` or pass a
   /// custom fake to the constructor.
   final Clipboard clipboard;
+
+  final FleuryTestFailureHandler _failureHandler;
 
   /// Default size used by [render] / [renderToString] when no
   /// explicit size is given. Mutable so tests can grow / shrink the
@@ -231,10 +244,10 @@ class FleuryTester {
   /// shell. Runtime hosts mount either shape exactly as supplied.
   ///
   /// Plain composition over [pumpWidget] — nothing latches: a later
-  /// [pumpApp] REPLACES the whole app with a fresh shell and route stack, and a
-  /// later [pumpWidget] mounts its widget bare.
-  void pumpApp(Widget widget) {
-    _assertNotDisposed('pumpApp');
+  /// [pumpFleuryHome] REPLACES the whole app with a fresh shell and route stack,
+  /// and a later [pumpWidget] mounts its widget bare.
+  void pumpFleuryHome(Widget widget) {
+    _assertNotDisposed('pumpFleuryHome');
     pumpWidget(
       FleuryApp(key: UniqueKey(), title: 'Fleury test app', home: widget),
     );
@@ -457,8 +470,8 @@ class FleuryTester {
   }
 
   /// Like [find] but asserts exactly one match and returns it. On
-  /// zero or multiple matches, throws a [pkg_test.TestFailure] with
-  /// a dump of the current tree.
+  /// zero or multiple matches, invokes the configured failure handler with a
+  /// dump of the current tree.
   Element findOne(Finder finder) {
     final matches = find(finder);
     if (matches.length == 1) return matches.single;
@@ -475,7 +488,7 @@ class FleuryTester {
     msg
       ..writeln('Current tree:')
       ..write(_root?.toStringDeep('  ') ?? '  (no root)');
-    throw pkg_test.TestFailure(msg.toString());
+    _failureHandler(msg.toString());
   }
 
   /// Returns true when [finder] matches at least one element.
@@ -911,47 +924,4 @@ String _rstrip(String s, String mark) {
     end -= mark.length;
   }
   return s.substring(0, end);
-}
-
-/// Registers a `package:test` test that runs [body] with a freshly-
-/// constructed [FleuryTester]. The tester is disposed in `finally`,
-/// even on exception.
-///
-/// Animation policy and viewport size default to "real-app" values.
-/// Both can be overridden per-test:
-///
-///     testWidgets('snaps to end when policy is disabled', (t) {
-///       ...
-///     }, animationPolicy: AnimationPolicy.disabled);
-@isTest
-void testWidgets(
-  String description,
-  FutureOr<void> Function(FleuryTester tester) body, {
-  AnimationPolicy animationPolicy = AnimationPolicy.enabled,
-  CellSize viewportSize = const CellSize(80, 24),
-  ColorMode colorMode = ColorMode.truecolor,
-  GlyphTier glyphTier = GlyphTier.unicode,
-  InlineImageSupport images = InlineImageSupport.none,
-  pkg_test.Timeout? timeout,
-  Object? skip,
-}) {
-  pkg_test.test(
-    description,
-    () async {
-      final tester = FleuryTester(
-        animationPolicy: animationPolicy,
-        viewportSize: viewportSize,
-        colorMode: colorMode,
-        glyphTier: glyphTier,
-        images: images,
-      );
-      try {
-        await body(tester);
-      } finally {
-        tester.dispose();
-      }
-    },
-    timeout: timeout,
-    skip: skip,
-  );
 }

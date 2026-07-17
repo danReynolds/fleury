@@ -12,7 +12,7 @@
 //      chain (which doesn't simulate runApp's pre-dispatcher tier).
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:fleury/src/debug/debug_shell.dart';
 import 'package:fleury/src/debug/debug_state.dart';
 import 'package:test/test.dart';

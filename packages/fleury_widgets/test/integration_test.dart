@@ -2,7 +2,7 @@
 // through focus traversal + input, the way real screens use them.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 

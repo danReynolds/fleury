@@ -7,7 +7,7 @@
 
 import 'package:benchmark_harness/benchmark_harness.dart';
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import 'package:fleury/fleury_test_support.dart';
 
 /// Structural assertion: 10 concurrent FrameTickers produce
 /// exactly one underlying scheduler timer. Asserts at construction

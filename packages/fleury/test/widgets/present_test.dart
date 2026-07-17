@@ -2,7 +2,7 @@
 // page beneath, dismissed by pop/Esc, returning a typed result.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 String _screen(FleuryTester tester, {required int cols, required int rows}) =>

@@ -5,7 +5,7 @@
 import 'dart:convert';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 // A representative keyed list: a keyed scope, R keyed rows, C unkeyed cells —

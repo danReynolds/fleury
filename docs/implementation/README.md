@@ -143,7 +143,9 @@ reactive TUI vision.
   [terminal public API boundary tests](../../packages/fleury/test/terminal/terminal_public_api_boundary_test.dart).
 - [x] Tighten the testing launch API boundary: production libraries keep real
   clock, scheduler, and clipboard contracts available, while deterministic
-  fakes live behind `fleury_test.dart` and are covered by
+  fakes live behind the package-neutral `fleury_test_support.dart` barrel and
+  are re-exported by the `fleury_test` companion package. The boundary is
+  covered by
   [test fake public API boundary tests](../../packages/fleury/test/testing/test_fakes_public_api_boundary_test.dart).
 - [x] Tighten the first-party widget launch API boundary: the
   `fleury_widgets` public barrel exposes widgets, controllers, data models,
@@ -159,7 +161,7 @@ reactive TUI vision.
   out of production barrels.
 - [x] Tighten render diagnostics production/test split: production keeps
   `RenderRepaintBoundary`, while repaint-boundary frame counters live with
-  other diagnostics behind `fleury_test.dart`.
+  other package-neutral diagnostics behind `fleury_test_support.dart`.
 - [x] Harden root lifecycle ergonomics in the core widget owner:
   `BuildOwner.updateRoot` preserves state for compatible root updates,
   remounts and disposes cleanly for incompatible type/key replacements, and

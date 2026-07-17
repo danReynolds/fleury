@@ -17,8 +17,8 @@ void main() {
       }
     });
 
-    test('fleury_test exposes deterministic test fakes', () {
-      final source = File('lib/fleury_test.dart').readAsStringSync();
+    test('fleury_test_support exposes deterministic test fakes', () {
+      final source = File('lib/fleury_test_support.dart').readAsStringSync();
 
       // The clipboard test double is InProcessClipboard, a production class
       // (the neutral default) exported from fleury_core — FleuryTester

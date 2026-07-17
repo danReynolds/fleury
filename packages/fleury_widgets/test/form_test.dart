@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 
@@ -648,6 +648,31 @@ void main() {
     expect(submitted!.values.text('project'), 'dune');
     expect(submitted!.values['environment'], 'prod');
     expect(submitted!.values.boolValue('confirm'), isTrue);
+  });
+
+  testWidgets('Enter submits from a secret field like other text fields', (
+    tester,
+  ) {
+    final definition = FormDefinition(
+      title: 'Credentials',
+      fields: [
+        FormFieldSpec.secret(id: 'token', label: 'Token', required: true),
+      ],
+    );
+    FormSubmitResult? submitted;
+    tester.pumpWidget(
+      FormPanel(
+        definition: definition,
+        onSubmit: (result) => submitted = result,
+      ),
+    );
+
+    tester.type('secret-token');
+    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+
+    expect(submitted, isNotNull);
+    expect(submitted!.valid, isTrue);
+    expect(submitted!.values.text('token'), 'secret-token');
   });
 
   testWidgets('controller reset updates mounted text controls and semantics', (

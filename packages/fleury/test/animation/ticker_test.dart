@@ -1,7 +1,7 @@
 // FakeClock-driven tests for Ticker. Discipline per RFC 0010 §21.1.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 ({FakeClock clock, FakeTickerScheduler scheduler}) _fixture() {

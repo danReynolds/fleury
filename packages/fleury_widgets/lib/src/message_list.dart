@@ -1,4 +1,4 @@
-import 'dart:async' show scheduleMicrotask, unawaited;
+import 'dart:async' show unawaited;
 
 import 'package:characters/characters.dart';
 import 'package:fleury/fleury_core.dart';
@@ -21,7 +21,13 @@ final class MessageEntry {
     this.metadata = const <String, Object?>{},
   });
 
-  /// Stable identity used by semantics and copy callbacks.
+  /// Stable identity used by list reconciliation, semantics, and copy
+  /// callbacks. Non-null values should be unique within a [MessageList].
+  ///
+  /// When omitted, [MessageList] falls back to the identity of this
+  /// [MessageEntry] instance. Reuse the same instance across collection
+  /// updates when selection and mounted row state should follow an id-less
+  /// message through a prepend or reorder.
   final Object? id;
 
   /// Protocol-neutral role for the message.
@@ -270,8 +276,7 @@ class _MessageListState extends State<MessageList> {
   bool _ownsController = false;
   bool _ownsFocusNode = false;
   bool _focusedWithin = false;
-  Object? _pendingSelectedMessageId;
-  int _selectionSyncGeneration = 0;
+  late Map<Object, int> _itemIndexByKey;
 
   @override
   void initState() {
@@ -281,6 +286,7 @@ class _MessageListState extends State<MessageList> {
     _controller.addListener(_onControllerChange);
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'MessageList');
     _ownsFocusNode = widget.focusNode == null;
+    _rebuildMessageIndex();
   }
 
   @override
@@ -298,77 +304,43 @@ class _MessageListState extends State<MessageList> {
       _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'MessageList');
       _ownsFocusNode = widget.focusNode == null;
     }
-    if (widget.messages != oldWidget.messages) {
-      _syncSelectionAfterMessageUpdate(oldWidget.messages);
+    if (!identical(widget.messages, oldWidget.messages)) {
+      _rebuildMessageIndex();
     }
   }
 
   void _onControllerChange() => setState(() {});
 
-  void _syncSelectionAfterMessageUpdate(List<MessageEntry> oldMessages) {
-    _selectionSyncGeneration++;
-    _pendingSelectedMessageId = null;
-    if (_controller.followTail) return;
-    if (widget.messages.isEmpty) {
-      _controller.selectedIndex = null;
-      return;
-    }
-    final selectedIndex = _controller.selectedIndex;
-    if (selectedIndex == null) {
-      _controller.selectedIndex = 0;
-      return;
-    }
-    if (selectedIndex >= 0 && selectedIndex < oldMessages.length) {
-      final selectedId = oldMessages[selectedIndex].id;
-      if (selectedId != null) {
-        final nextIndex = widget.messages.indexWhere(
-          (message) => message.id == selectedId,
+  void _rebuildMessageIndex() {
+    final indices = <Object, int>{};
+    for (var index = 0; index < widget.messages.length; index++) {
+      final key = _messageItemKey(widget.messages[index]);
+      if (indices.containsKey(key)) {
+        throw StateError(
+          'MessageEntry.id values must be unique within a MessageList. '
+          'Duplicate key: $key.',
         );
-        if (nextIndex != -1) {
-          _selectIndexAfterListCountRefresh(selectedId, nextIndex);
-          return;
-        }
       }
+      indices[key] = index;
     }
-    _controller.selectedIndex = selectedIndex.clamp(
-      0,
-      widget.messages.length - 1,
-    );
+    _itemIndexByKey = indices;
   }
 
-  void _selectIndexAfterListCountRefresh(Object selectedId, int nextIndex) {
-    final knownItemCount = _controller._listController.itemCount;
-    if (knownItemCount == 0 || nextIndex < knownItemCount) {
-      _controller.selectedIndex = nextIndex;
-      return;
+  int? _findMessageIndex(Object key) {
+    final cached = _itemIndexByKey[key];
+    if (cached != null &&
+        cached < widget.messages.length &&
+        _messageItemKey(widget.messages[cached]) == key) {
+      return cached;
     }
 
-    _pendingSelectedMessageId = selectedId;
-    final generation = _selectionSyncGeneration;
-    final binding = TuiBinding.maybeOf(context);
-    if (binding == null) {
-      scheduleMicrotask(() {
-        _applyPendingSelection(generation, selectedId);
-      });
-      return;
-    }
-    binding.addPostFrameCallback((_) {
-      _applyPendingSelection(generation, selectedId);
-    });
-  }
-
-  void _applyPendingSelection(int generation, Object selectedId) {
-    if (!mounted || generation != _selectionSyncGeneration) return;
-    if (_pendingSelectedMessageId != selectedId) return;
-    final nextIndex = widget.messages.indexWhere(
-      (message) => message.id == selectedId,
-    );
-    if (nextIndex == -1) {
-      _pendingSelectedMessageId = null;
-      return;
-    }
-    _pendingSelectedMessageId = null;
-    _controller.selectedIndex = nextIndex;
+    // Most callers pass a new immutable list, so didUpdateWidget rebuilds the
+    // map once and every reconciliation lookup is O(1). If an application
+    // mutates the same List instance in place, validate the cached answer and
+    // repair the whole map on the first stale/missing lookup instead of
+    // returning a wrong index or forcing every mounted row through a scan.
+    _rebuildMessageIndex();
+    return _itemIndexByKey[key];
   }
 
   void _onFocusWithinChange(bool focused) {
@@ -464,7 +436,9 @@ class _MessageListState extends State<MessageList> {
       focusNode: _focusNode,
       autofocus: widget.autofocus,
       itemCount: widget.messages.length,
-      onSelect: _activateAt,
+      itemKeyBuilder: (index) => _messageItemKey(widget.messages[index]),
+      findChildIndexCallback: _findMessageIndex,
+      onActivate: _activateAt,
       itemBuilder: (context, index, activeSelected) {
         final selected = index == _controller.selectedIndex;
         return _MessageRow(
@@ -525,6 +499,11 @@ class _MessageListState extends State<MessageList> {
       ),
     );
   }
+}
+
+Object _messageItemKey(MessageEntry message) {
+  final id = message.id;
+  return id == null ? (message: message) : (id: id);
 }
 
 class _MessageRow extends StatelessWidget {

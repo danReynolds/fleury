@@ -4,7 +4,7 @@
 // containment).
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:fleury/src/rendering/render_repaint_boundary.dart';
 import 'package:test/test.dart';
 

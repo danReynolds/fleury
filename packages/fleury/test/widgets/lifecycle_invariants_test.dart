@@ -12,7 +12,7 @@
 //        never-disposed State.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 class _DisposeProbe extends StatefulWidget {

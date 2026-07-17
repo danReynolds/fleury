@@ -1279,7 +1279,8 @@ terminal app development.
     while hiding their implementation renderers and scrollbar geometry/metrics
     plumbing from production barrels. Repaint-boundary frame counters now
     follow the same production/test split as layout counters: production keeps
-    `RenderRepaintBoundary`, while `fleury_test.dart` owns the diagnostics DTO.
+    `RenderRepaintBoundary`, while `fleury_test_support.dart` owns the
+    package-neutral diagnostics DTO.
     M3.7 is complete for MVP as a local core hardening milestone. Public
     render-island APIs, broader extension points, or stronger engine-boundary
     claims should wait for post-MVP package/demo-app pressure. Current root

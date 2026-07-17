@@ -4,7 +4,7 @@
 // boundary just like multiple Texts do.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../../support/harness.dart';
 import 'package:test/test.dart';
 
 MouseEvent _down(int col, int row) => MouseEvent(

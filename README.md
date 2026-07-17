@@ -61,6 +61,8 @@ The workspace is split into local Dart packages:
 
 - `packages/fleury` — the platform-neutral retained core, app shell, native
   terminal host, and theme-free primitives.
+- `packages/fleury_test` — deterministic widget tests, semantic assertions,
+  and golden helpers, kept out of application dependency graphs.
 - `packages/fleury_widgets` — higher-level, theme-driven widgets built on
   `fleury`.
 - `packages/fleury_git` — a small Git integration package proving app-extension

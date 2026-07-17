@@ -15,8 +15,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-// Import the categorizer directly (not via fleury_test.dart, which pulls in the
-// package:test-dependent harness this non-test tool doesn't need).
+// Import the categorizer directly (not via fleury_test_support.dart, which
+// exports harness utilities this non-test tool doesn't need).
 import 'package:fleury/src/rendering/ansi_byte_budget.dart'
     show AnsiByteBreakdown;
 

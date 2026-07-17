@@ -2,7 +2,7 @@
 // vertically-scrolling viewport that keeps the cursor visible.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 // The debug collector is deliberately not exported by the production barrels;
 // the split-memo assertions reach it through the src import, like other
 // render-internal tests.

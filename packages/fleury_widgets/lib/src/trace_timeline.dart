@@ -615,7 +615,7 @@ class _TraceTimelineState extends State<TraceTimeline> {
             focusNode: _focusNode,
             autofocus: widget.autofocus,
             itemCount: widget.events.length,
-            onSelect: (_) => _selectCurrent(),
+            onActivate: (_) => _selectCurrent(),
             itemBuilder: (context, index, activeSelected) {
               final selected = index == _controller.selectedIndex;
               return _TraceTimelineRow(

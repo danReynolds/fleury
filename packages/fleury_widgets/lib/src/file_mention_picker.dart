@@ -607,7 +607,7 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
                   focusNode: _resultsFocusNode,
                   selectionActive: panelFocused,
                   itemCount: order.length,
-                  onSelect: (_) => _pickSelected(),
+                  onActivate: (_) => _pickSelected(),
                   itemBuilder: (context, viewIndex, activeSelected) {
                     final entryIndex = order[viewIndex];
                     final selected = viewIndex == _controller.selectedIndex;

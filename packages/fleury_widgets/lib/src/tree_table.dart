@@ -1423,7 +1423,7 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
               focusNode: _focusNode,
               autofocus: widget.autofocus,
               itemCount: rows.length,
-              onSelect: (_) => _activateSelected(rows),
+              onActivate: (_) => _activateSelected(rows),
               itemBuilder: (context, index, activeSelected) {
                 final row = rows[index];
                 final selected = index == _controller.selectedIndex;

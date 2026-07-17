@@ -2,7 +2,7 @@
 // auto-subscribes that widget (no AnimationBuilder, no ListenableBuilder).
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 /// A widget that reads [animation] directly in build and paints the

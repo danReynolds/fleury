@@ -2,7 +2,7 @@
 // anchor's painted rect, flipping/clamping at screen edges.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 /// Finds the (col, row) of the first cell whose grapheme is [g]. The

@@ -12,7 +12,7 @@
 // text actually changed, so a no-op trigger can't make it vacuously pass.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 MouseEvent _down(int col, int row) => MouseEvent(

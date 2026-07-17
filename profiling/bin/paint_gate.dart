@@ -80,11 +80,11 @@
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
-// The repaint-boundary debug counters and the fake clock/scheduler are
-// deliberately published through the test barrel only. Profiling is a
-// harness (publish_to: none), so a gate binary importing the test surface
-// is intended reuse, not a leak into production.
-import 'package:fleury/fleury_test.dart'
+// The repaint-boundary debug counters and fake clock/scheduler are
+// deliberately published through the package-neutral test-support barrel.
+// Profiling is a harness (publish_to: none), so a gate binary importing that
+// support surface is intended reuse, not a leak into production.
+import 'package:fleury/fleury_test_support.dart'
     show
         FakeClock,
         FakeTickerScheduler,

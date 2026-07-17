@@ -578,7 +578,7 @@ class _JsonViewState extends State<JsonView> {
         focusNode: _focusNode,
         autofocus: widget.autofocus,
         itemCount: rows.length,
-        onSelect: (index) => _toggleSelected(rows, index),
+        onActivate: (index) => _toggleSelected(rows, index),
         itemBuilder: (context, index, activeSelected) {
           final selected = index == _controller.selectedIndex;
           return _JsonRowWidget(

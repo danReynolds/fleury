@@ -925,6 +925,96 @@ final class KeyBinding {
   String get displayLabel => label ?? chords.first.hintLabel;
 }
 
+/// A user-visible key binding resolved against the current focus context.
+///
+/// [chords] contains only the aliases this binding can actually fire on and
+/// owns at its position in the active focus chain. For example, while a text
+/// input is focused, a `[j, ↓]` binding resolves to just `↓`; if a deeper
+/// binding owns `↓`, the shallower binding resolves to just `j`.
+///
+/// Instances are produced by [resolveActiveKeyBindings]. The result and its
+/// [chords] list are immutable so help, hint, and inspection surfaces can
+/// safely retain a resolution for the frame in which it was computed.
+final class ActiveKeyBinding {
+  ActiveKeyBinding._(this.binding, List<KeyChord> chords)
+    : chords = List<KeyChord>.unmodifiable(chords);
+
+  /// The declarative binding that owns these effective [chords].
+  final KeyBinding binding;
+
+  /// The binding aliases that are live and unshadowed in this focus context.
+  final List<KeyChord> chords;
+
+  /// A combined label for all effective aliases, such as `↑↓`.
+  String get chordLabel => chords.map((chord) => chord.hintLabel).join();
+}
+
+/// Resolves the discoverable key bindings active in [manager]'s focus context.
+///
+/// Resolution follows the same precedence as key dispatch: the deepest local
+/// binding wins each chord, with [globalBindings] considered last unless the
+/// active focus scope suppresses globals. It also applies the framework's
+/// user-facing discovery rules:
+///
+///  * bindings need an explicit [KeyBinding.label];
+///  * disabled and [KeyBinding.hideFromHintBar] bindings are omitted;
+///  * bare printable chords swallowed by a focused text input are omitted;
+///  * multi-alias bindings remain visible through any alias that can fire;
+///  * duplicate and shadowed aliases are removed using canonical chord
+///    identity, not their rendered label.
+///
+/// The returned list is deepest-first and immutable. This is the canonical
+/// resolution API for hint bars, help overlays, and keymap inspection; those
+/// surfaces should not independently walk [FocusManager.activeChain].
+List<ActiveKeyBinding> resolveActiveKeyBindings(
+  FocusManager manager, {
+  List<KeyBinding> globalBindings = const <KeyBinding>[],
+}) {
+  final result = <ActiveKeyBinding>[];
+  // Canonical chord identity mirrors dispatch. Differently spelled aliases
+  // for the same firing event must not evade deeper-binding precedence.
+  final seenChords = <KeyChord>{};
+  final textFocused = manager.focusedNodeClaimsText;
+
+  void consider(KeyBinding binding) {
+    if (binding.label == null) return;
+    if (binding.hideFromHintBar) return;
+    if (!binding.enabled) return;
+
+    final firable = [
+      for (final chord in binding.chords)
+        if (!textFocused || !chord.isShadowedByTextInput) chord,
+    ];
+    if (firable.isEmpty) return;
+
+    final owned = <KeyChord>[];
+    for (final chord in firable) {
+      if (seenChords.contains(chord)) continue;
+      if (!owned.contains(chord)) owned.add(chord);
+    }
+    if (owned.isEmpty) return;
+
+    // Claim every firable alias, including aliases already represented by a
+    // sibling alias in [owned]. Shallower bindings cannot fire those chords.
+    seenChords.addAll(firable);
+    result.add(ActiveKeyBinding._(binding, owned));
+  }
+
+  for (final node in manager.activeChain()) {
+    final source = node.bindingSource;
+    if (source == null) continue;
+    for (final binding in source.activeBindings) {
+      consider(binding);
+    }
+  }
+  if (!manager.suppressGlobals) {
+    for (final binding in globalBindings) {
+      consider(binding);
+    }
+  }
+  return List<ActiveKeyBinding>.unmodifiable(result);
+}
+
 // ===========================================================================
 // KeyBindings widget
 // ===========================================================================

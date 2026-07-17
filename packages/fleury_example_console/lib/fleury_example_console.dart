@@ -887,6 +887,7 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
       description: 'Search and run available commands',
       category: 'App',
       shortcuts: [KeyChord.ctrl.k],
+      showInPalette: false,
       semanticAction: SemanticAction.open,
       run: _openPalette,
     ),

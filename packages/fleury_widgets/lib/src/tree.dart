@@ -269,7 +269,7 @@ class _TreeState<T> extends State<Tree<T>> {
           focusNode: _focusNode,
           autofocus: widget.autofocus,
           itemCount: _flat.length,
-          onSelect: _onEnter,
+          onActivate: _onEnter,
           itemBuilder: (context, i, activeSelected) {
             final row = _flat[i];
             final selected = i == _list.selectedIndex;

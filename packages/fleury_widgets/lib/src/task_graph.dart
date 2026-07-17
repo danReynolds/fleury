@@ -370,7 +370,7 @@ class _TaskGraphState extends State<TaskGraph> {
       focusNode: _focusNode,
       autofocus: widget.autofocus,
       itemCount: widget.nodes.length,
-      onSelect: _activateAt,
+      onActivate: _activateAt,
       itemBuilder: (context, index, activeSelected) {
         final selected = index == _controller.selectedIndex;
         return _TaskGraphRow(

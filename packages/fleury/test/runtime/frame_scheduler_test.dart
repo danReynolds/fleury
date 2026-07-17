@@ -1,7 +1,7 @@
 // Deterministic tests for FrameScheduler: coalescing + the opt-in frame-rate
 // cap. A fake clock and a fake flush scheduler drive timing synchronously.
 
-import 'package:fleury/fleury_test.dart' show FakeClock;
+import '../support/harness.dart' show FakeClock;
 import 'package:fleury/fleury_host.dart' show FrameScheduler;
 import 'package:test/test.dart';
 

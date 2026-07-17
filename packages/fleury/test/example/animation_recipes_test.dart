@@ -2,7 +2,7 @@
 // recipes actually animate as described (not just compile).
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 import '../../example/animation_recipes.dart';

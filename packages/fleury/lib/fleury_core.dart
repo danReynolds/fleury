@@ -297,6 +297,7 @@ export 'src/widgets/inherited_notifier.dart' show InheritedNotifier;
 export 'src/widgets/intrinsic.dart' show IntrinsicHeight, IntrinsicWidth;
 export 'src/widgets/key_bindings.dart'
     show
+        ActiveKeyBinding,
         KeyBinding,
         KeyBindingEvent,
         KeyBindingHandler,
@@ -304,8 +305,15 @@ export 'src/widgets/key_bindings.dart'
         KeyChord,
         KeyChordChain,
         PendingKeyChord,
-        PendingKeyChordChain;
-export 'src/widgets/list_view.dart' show EdgeBehavior, ListController, ListView;
+        PendingKeyChordChain,
+        resolveActiveKeyBindings;
+export 'src/widgets/list_view.dart'
+    show
+        EdgeBehavior,
+        ListController,
+        ListItemIndexCallback,
+        ListItemKeyBuilder,
+        ListView;
 export 'src/widgets/navigator.dart'
     show Navigator, NavigatorContext, NavigatorState, PopScope, RouteTransition;
 export 'src/widgets/layout_builder.dart'

@@ -11,9 +11,18 @@ assertions on *meaning* — "row 3 is selected", "the gauge reads 0.62" — surv
 re-theme, a relayout, or the port to the browser. The harness is `FleuryTester`,
 exposed through `testWidgets`.
 
+Add the companion package as a dev dependency so the test runner, matcher, and
+golden-file I/O stay out of production applications:
+
+```yaml
+dev_dependencies:
+  fleury_test: ^0.1.0
+  test: ^1.26.3
+```
+
 ```dart
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -29,19 +38,20 @@ void main() {
 
 - `pumpWidget(widget)` mounts (or replaces) the exact, bare tree. Use it for
   isolated widgets and custom shells.
-- `pumpApp(widget)` mounts the widget as `FleuryApp(home: widget)`. Use it for
-  app tests that need the canonical route stack, app scopes, or route-owned
-  focus traversal.
+- `pumpFleuryHome(widget)` mounts the widget as `FleuryApp(home: widget)`. Use it
+  when the tester should construct the canonical route stack and app scopes. A
+  complete application root still belongs in `pumpWidget`.
 - `render(size:)` returns a `CellBuffer` — inspect individual cells with
   `buf.atColRow(col, row)` (grapheme + style).
 - `renderToString(size:)` flattens the buffer to text, which is the quickest
   thing to assert against.
 
-For example, an app-level navigation test starts with `pumpApp`:
+For example, a navigation test that wants the standard shell starts with
+`pumpFleuryHome`:
 
 ```dart
 testWidgets('opens details', (tester) async {
-  tester.pumpApp(const HomeScreen());
+  tester.pumpFleuryHome(const HomeScreen());
   await tester.invokeSemanticAction(
     SemanticAction.activate,
     role: SemanticRole.button,

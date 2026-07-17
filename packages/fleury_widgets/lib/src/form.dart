@@ -1641,6 +1641,7 @@ class _FormPanelState extends State<FormPanel> {
         autofocus: autofocus,
         placeholder: field.placeholder,
         validationError: error,
+        onSubmit: (_) => _submit(),
       ),
       FormFieldType.select => Select<Object?>(
         value: _controller.value(field.id),

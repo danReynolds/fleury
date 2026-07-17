@@ -3,7 +3,7 @@
 // path; this file covers the new markers and their pixel→glyph maps.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 // ignore: implementation_imports
 import 'package:fleury_widgets/src/half_block_buffer.dart';

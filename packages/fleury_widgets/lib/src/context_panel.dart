@@ -452,7 +452,7 @@ class _ContextPanelState extends State<ContextPanel> {
             focusNode: _focusNode,
             autofocus: widget.autofocus,
             itemCount: widget.items.length,
-            onSelect: (_) => _selectCurrent(),
+            onActivate: (_) => _selectCurrent(),
             itemBuilder: (context, index, activeSelected) {
               final selected = index == _controller.selectedIndex;
               return _ContextItemRow(

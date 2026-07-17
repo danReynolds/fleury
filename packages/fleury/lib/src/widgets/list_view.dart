@@ -41,6 +41,22 @@ import 'framework.dart';
 import 'pointer.dart';
 import 'scrollbar.dart';
 
+/// Returns the stable data identity for the item currently at [index].
+///
+/// The key belongs to the data item, not its current position. It must remain
+/// equal when that item moves after a prepend, reorder, or filtered update.
+typedef ListItemKeyBuilder = Object Function(int index);
+
+/// Finds the current index for a stable item [key], or returns null when that
+/// item is no longer present.
+///
+/// This is the lazy-list counterpart to Flutter's
+/// `findChildIndexCallback`: a sparse list cannot inspect every off-screen
+/// child to rediscover where a keyed item moved, so the data owner supplies
+/// the reverse lookup. It should normally be map-backed/O(1): Fleury invokes it
+/// once per mounted row when a parent supplies an updated list configuration.
+typedef ListItemIndexCallback = int? Function(Object key);
+
 /// How a [ListView] handles up/down at the first/last item.
 enum EdgeBehavior {
   /// The key is consumed (no-op) and focus stays in the list. Opt in for a
@@ -84,6 +100,7 @@ class ListController extends ChangeNotifier {
   // mode just by selecting their last row. The coupling's own pin writes do
   // NOT latch it, so a non-following list stays non-following.
   bool _followsCursor;
+  bool _restoreSelectionWhenNonEmpty = true;
   int _unseenCount = 0;
   bool _disposed = false;
 
@@ -106,6 +123,12 @@ class ListController extends ChangeNotifier {
   ///
   /// For a scroll-only list (no selection) following advances the viewport to
   /// the last item on each append.
+  ///
+  /// With keyed lazy data, arrival tracking intentionally assumes an
+  /// order-preserving feed, not an arbitrary collection diff. Selection,
+  /// viewport, and row state still follow identity through reorders, but an
+  /// update that mixes reordering with insertion should not rely on
+  /// [unseenCount] to classify which rows are new.
   bool get pinToBottom => _pinToBottom;
   set pinToBottom(bool value) {
     _checkNotDisposed();
@@ -160,6 +183,7 @@ class ListController extends ChangeNotifier {
   int? get selectedIndex => _selectedIndex;
   set selectedIndex(int? value) {
     _checkNotDisposed();
+    _restoreSelectionWhenNonEmpty = value != null;
     final clamped = _clampSelection(value);
     var changed = _selectedIndex != clamped;
     _selectedIndex = clamped;
@@ -195,22 +219,68 @@ class ListController extends ChangeNotifier {
   /// Applies a new [itemCount] pushed by the [ListView] on rebuild, running the
   /// follow-mode state machine: while following, appends advance to the tail
   /// and clear [unseenCount]; while not following, appends only accumulate
-  /// [unseenCount] (no viewport/selection movement). Non-growth changes just
-  /// re-clamp. Internal — the widget owns the count.
-  void _handleCountChange(int newCount) {
+  /// [unseenCount] (no viewport/selection movement). Identity-aware
+  /// non-growth changes preserve the selected item and disengage following if
+  /// that item no longer occupies the tail. In scroll-only mode there is no
+  /// selected identity to preserve, so an explicit pin stays authoritative.
+  /// Internal — the widget owns the count.
+  void _handleCountChange(
+    int newCount, {
+    int? selectedIndex,
+    int? appendedCount,
+    bool identityAware = false,
+  }) {
     final oldCount = _itemCount;
+    final oldSelection = _selectedIndex;
+    final oldUnseenCount = _unseenCount;
+    final oldPinToBottom = _pinToBottom;
     _itemCount = newCount;
     final grew = newCount > oldCount && newCount > 0;
-    if (_pinToBottom && grew) {
+    final tailGrowth = appendedCount ?? (grew ? newCount - oldCount : 0);
+    if (newCount == 0) {
+      // Once attached, an empty list has no valid cursor. `_clampSelection`
+      // preserves values while itemCount is still unknown during controller
+      // construction, so the attached-empty case must be explicit here.
+      _restoreSelectionWhenNonEmpty = oldSelection != null;
+      _selectedIndex = null;
+    } else if (identityAware) {
+      _selectedIndex = _clampSelection(selectedIndex);
+    }
+    if (oldCount == 0 &&
+        newCount > 0 &&
+        _selectedIndex == null &&
+        _restoreSelectionWhenNonEmpty) {
+      _selectedIndex = _pinToBottom ? newCount - 1 : 0;
+    }
+    if (_pinToBottom && tailGrowth > 0) {
       _snapToTail();
       _unseenCount = 0;
-    } else if (grew) {
-      _unseenCount += newCount - oldCount;
+    } else if (tailGrowth > 0) {
+      _unseenCount += tailGrowth;
       _selectedIndex = _clampSelection(_selectedIndex);
     } else {
       _selectedIndex = _clampSelection(_selectedIndex);
     }
-    notifyListeners();
+    if (identityAware && tailGrowth == 0 && _pinToBottom && newCount > 0) {
+      if (_selectedIndex == null) {
+        // Scroll-only lists have no selected identity whose preservation can
+        // win over following, so keep the explicit pin truthful across keyed
+        // reorders by targeting the current tail.
+        _snapToTail();
+      } else if (_selectedIndex != newCount - 1) {
+        // A keyed reorder should not silently change which item is selected.
+        // When the followed identity moves away from the tail, preserve that
+        // identity and truthfully leave follow mode instead of claiming both
+        // `pinToBottom` and `!atBottom`.
+        _pinToBottom = false;
+      }
+    }
+    if (oldCount != _itemCount ||
+        oldSelection != _selectedIndex ||
+        oldUnseenCount != _unseenCount ||
+        oldPinToBottom != _pinToBottom) {
+      notifyListeners();
+    }
   }
 
   /// Moves the follow target to the newest item. When the list has a
@@ -275,7 +345,7 @@ class ListController extends ChangeNotifier {
 /// and enter:
 ///   - Arrows / Home / End move the selected item; the viewport
 ///     auto-scrolls to keep it visible.
-///   - Enter fires [onSelect] with the current selected index.
+///   - Enter fires [onActivate] with the current selected index.
 ///   - Up at the first item / Down at the last item respects
 ///     [edgeBehavior]: `contain` consumes the key, `bubble` returns
 ///     it to the focus chain so an ancestor `KeyBindings` (e.g. one
@@ -303,13 +373,21 @@ class ListView extends StatefulWidget {
     required List<Widget> this.children,
     this.autofocus = false,
     this.edgeBehavior = EdgeBehavior.bubble,
+    this.onActivate,
+    this.onSelectionChanged,
     this.onSelect,
     this.selectionActive,
     this.scrollbar = false,
     this.addRepaintBoundaries = true,
   }) : itemCount = null,
        itemBuilder = null,
-       separatorBuilder = null;
+       separatorBuilder = null,
+       itemKeyBuilder = null,
+       findChildIndexCallback = null,
+       assert(
+         onActivate == null || onSelect == null,
+         'Use onActivate rather than supplying both onActivate and onSelect.',
+       );
 
   /// Lazy constructor: build items on demand by index, mount only the
   /// visible ones. Each item builder invocation receives a `selected`
@@ -320,13 +398,25 @@ class ListView extends StatefulWidget {
     this.focusNode,
     required int this.itemCount,
     required Widget Function(BuildContext, int, bool) this.itemBuilder,
+    this.itemKeyBuilder,
+    this.findChildIndexCallback,
     this.autofocus = false,
     this.edgeBehavior = EdgeBehavior.bubble,
+    this.onActivate,
+    this.onSelectionChanged,
     this.onSelect,
     this.selectionActive,
     this.scrollbar = false,
     this.addRepaintBoundaries = true,
   }) : assert(itemCount >= 0, 'itemCount must be non-negative'),
+       assert(
+         (itemKeyBuilder == null) == (findChildIndexCallback == null),
+         'itemKeyBuilder and findChildIndexCallback must be supplied together.',
+       ),
+       assert(
+         onActivate == null || onSelect == null,
+         'Use onActivate rather than supplying both onActivate and onSelect.',
+       ),
        separatorBuilder = null,
        children = null;
 
@@ -349,13 +439,25 @@ class ListView extends StatefulWidget {
     required int this.itemCount,
     required Widget Function(BuildContext, int, bool) this.itemBuilder,
     required Widget? Function(BuildContext, int) this.separatorBuilder,
+    this.itemKeyBuilder,
+    this.findChildIndexCallback,
     this.autofocus = false,
     this.edgeBehavior = EdgeBehavior.bubble,
+    this.onActivate,
+    this.onSelectionChanged,
     this.onSelect,
     this.selectionActive,
     this.scrollbar = false,
     this.addRepaintBoundaries = true,
   }) : assert(itemCount >= 0, 'itemCount must be non-negative'),
+       assert(
+         (itemKeyBuilder == null) == (findChildIndexCallback == null),
+         'itemKeyBuilder and findChildIndexCallback must be supplied together.',
+       ),
+       assert(
+         onActivate == null || onSelect == null,
+         'Use onActivate rather than supplying both onActivate and onSelect.',
+       ),
        children = null;
 
   /// External controller. If null, the widget creates its own and
@@ -385,6 +487,25 @@ class ListView extends StatefulWidget {
   /// [ListView.builder] forms.
   final Widget? Function(BuildContext context, int index)? separatorBuilder;
 
+  /// Stable data identity for lazy items.
+  ///
+  /// Supply this together with [findChildIndexCallback] when items can move.
+  /// Fleury then preserves the selected item, viewport anchor, and mounted
+  /// element state across prepends, removals, filters, and reorders. Keys must
+  /// be unique within this list. This is data identity only: it does not install
+  /// a Fleury `Key` on the row or create a semantic identifier. Add those at the
+  /// item-widget layer when the application needs either contract.
+  final ListItemKeyBuilder? itemKeyBuilder;
+
+  /// Resolves a stable item key to its current index.
+  ///
+  /// Must be supplied together with [itemKeyBuilder]. Return null when the
+  /// keyed item was removed. Returning an out-of-range index or an index whose
+  /// key does not match is a contract error. Prefer a map-backed/O(1) lookup;
+  /// reconciliation invokes it once per currently mounted row, never once per
+  /// item in the full collection.
+  final ListItemIndexCallback? findChildIndexCallback;
+
   /// Wrap each item in a [RepaintBoundary] (default true, Flutter-parity) so a
   /// localized update — one row's setState, a streaming-token line — repaints
   /// only that row instead of re-walking every item's paint. Paint CPU scales
@@ -411,10 +532,23 @@ class ListView extends StatefulWidget {
   /// than collapsing the list; wrap the list in an Expanded or a SizedBox.
   final bool scrollbar;
 
-  /// Called with the current selected index when the user presses
-  /// Enter. Not invoked when the list is empty or there's no
-  /// selection.
+  /// Called when the user activates an item with Enter or a pointer press.
+  /// Not invoked when the list is empty or there is no selection.
+  final void Function(int index)? onActivate;
+
+  /// Called when user input moves the selection cursor.
+  ///
+  /// Programmatic controller writes and identity-preserving data updates do
+  /// not call this callback.
+  final void Function(int index)? onSelectionChanged;
+
+  /// Legacy alias for [onActivate].
+  ///
+  /// New code should use [onActivate]. Kept during the pre-1.0 migration so
+  /// downstream applications can update independently.
   final void Function(int index)? onSelect;
+
+  void Function(int index)? get _activationCallback => onActivate ?? onSelect;
 
   /// Overrides whether the selected row should render as active.
   ///
@@ -438,6 +572,10 @@ class _ListViewState extends State<ListView> {
   late FocusNode _focusNode;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
+  Object? _selectedItemKey;
+  Object? _firstItemKey;
+  Object? _lastItemKey;
+  int _dataRevision = 0;
 
   @override
   void initState() {
@@ -445,28 +583,22 @@ class _ListViewState extends State<ListView> {
     final count = widget.effectiveItemCount;
     _controller = widget.controller ?? ListController();
     _ownsController = widget.controller == null;
-    _controller._itemCount = count;
-    // Default the cursor when items exist but the controller doesn't have one —
-    // keyboard nav requires a starting point. Follow-mode starts on the tail;
-    // otherwise the top. Write directly so we don't notify before any listener
-    // is attached (and so we don't flip follow-mode at construction).
-    if (_controller._selectedIndex == null && count > 0) {
-      _controller._selectedIndex = _controller._pinToBottom ? count - 1 : 0;
-    } else {
-      // An externally-supplied selectedIndex may be out of range; clamp it
-      // directly (not through the follow-coupling setter).
-      _controller._selectedIndex = _controller._clampSelection(
-        _controller._selectedIndex,
-      );
-    }
+    _initializeController(count);
     _controller.addListener(_onControllerChange);
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'ListView');
     _ownsFocusNode = widget.focusNode == null;
+    _captureIdentitySnapshot();
   }
 
   @override
   void didUpdateWidget(ListView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _dataRevision++;
+    final oldCount = oldWidget.effectiveItemCount;
+    final oldSelectedKey = _selectedItemKey;
+    final oldFirstKey = _firstItemKey;
+    final oldLastKey = _lastItemKey;
+    var controllerChanged = false;
     if (widget.controller != oldWidget.controller) {
       _controller.removeListener(_onControllerChange);
       if (_ownsController) _controller.dispose();
@@ -476,7 +608,9 @@ class _ListViewState extends State<ListView> {
             selectedIndex: widget.effectiveItemCount > 0 ? 0 : null,
           );
       _ownsController = widget.controller == null;
+      _initializeController(widget.effectiveItemCount);
       _controller.addListener(_onControllerChange);
+      controllerChanged = true;
     }
     if (widget.focusNode != oldWidget.focusNode) {
       if (_ownsFocusNode) _focusNode.dispose();
@@ -484,15 +618,144 @@ class _ListViewState extends State<ListView> {
       _ownsFocusNode = widget.focusNode == null;
     }
     final newCount = widget.effectiveItemCount;
-    if (newCount != oldWidget.effectiveItemCount) {
+    final identityAware =
+        !controllerChanged &&
+        oldWidget.itemKeyBuilder != null &&
+        widget.itemKeyBuilder != null &&
+        widget.findChildIndexCallback != null;
+    if (identityAware) {
+      final remappedSelection = _remapSelectedIndex(
+        oldSelectedKey,
+        fallback: _controller.selectedIndex,
+      );
+      final appendedCount = _classifyTrailingGrowth(
+        oldCount: oldCount,
+        newCount: newCount,
+        oldFirstKey: oldFirstKey,
+        oldLastKey: oldLastKey,
+      );
+      _controller._handleCountChange(
+        newCount,
+        selectedIndex: remappedSelection,
+        appendedCount: appendedCount,
+        identityAware: true,
+      );
+    } else if (!controllerChanged && newCount != oldCount) {
       // Runs the follow-mode state machine (advance-to-tail while following,
       // accumulate unseenCount otherwise) and re-clamps the selection.
       _controller._handleCountChange(newCount);
     }
+    _captureIdentitySnapshot();
+  }
+
+  void _initializeController(int count) {
+    _controller._itemCount = count;
+    // Attaching a controller establishes the current data snapshot; it is not
+    // an arrival event and must not inflate unseenCount. Default the cursor
+    // when items exist, otherwise clamp an explicit initial selection.
+    if (count == 0) {
+      _controller._selectedIndex = null;
+    } else if (_controller._selectedIndex == null) {
+      _controller._selectedIndex = _controller._pinToBottom ? count - 1 : 0;
+    } else {
+      _controller._selectedIndex = _controller._clampSelection(
+        _controller._selectedIndex,
+      );
+    }
   }
 
   void _onControllerChange() {
+    _captureSelectedItemKey();
     setState(() {});
+  }
+
+  void _captureIdentitySnapshot() {
+    final keyBuilder = widget.itemKeyBuilder;
+    final count = widget.effectiveItemCount;
+    if (keyBuilder == null || count == 0) {
+      _selectedItemKey = null;
+      _firstItemKey = null;
+      _lastItemKey = null;
+      return;
+    }
+    _firstItemKey = keyBuilder(0);
+    _lastItemKey = keyBuilder(count - 1);
+    _captureSelectedItemKey();
+  }
+
+  void _captureSelectedItemKey() {
+    final keyBuilder = widget.itemKeyBuilder;
+    final selected = _controller.selectedIndex;
+    final count = widget.effectiveItemCount;
+    _selectedItemKey =
+        keyBuilder != null &&
+            selected != null &&
+            selected >= 0 &&
+            selected < count
+        ? keyBuilder(selected)
+        : null;
+  }
+
+  int? _remapSelectedIndex(Object? key, {required int? fallback}) {
+    if (key == null) return fallback;
+    return _validatedIndexForKey(key) ?? fallback;
+  }
+
+  int _classifyTrailingGrowth({
+    required int oldCount,
+    required int newCount,
+    required Object? oldFirstKey,
+    required Object? oldLastKey,
+  }) {
+    if (newCount <= oldCount) return 0;
+    if (oldCount == 0) return newCount;
+    if (oldFirstKey == null || oldLastKey == null) return 0;
+
+    final first = _validatedIndexForKey(oldFirstKey);
+    final last = _validatedIndexForKey(oldLastKey);
+    if (first == null || last == null || last < first) return 0;
+
+    // Only classify growth outside the old boundary span. If the old boundary
+    // items no longer enclose exactly the old number of rows, the mutation is
+    // ambiguous; preserving identity is still safe, but claiming "new at the
+    // tail" is not.
+    if (last - first + 1 != oldCount) return 0;
+    final leading = first;
+    final trailing = newCount - 1 - last;
+    if (leading + trailing != newCount - oldCount) return 0;
+    return trailing;
+  }
+
+  int? _validatedIndexForKey(Object key) {
+    final findIndex = widget.findChildIndexCallback;
+    final keyBuilder = widget.itemKeyBuilder;
+    if (findIndex == null || keyBuilder == null) return null;
+    final index = findIndex(key);
+    if (index == null) return null;
+    final count = widget.effectiveItemCount;
+    if (index < 0 || index >= count) {
+      throw StateError(
+        'findChildIndexCallback returned $index for $key, outside the current '
+        'ListView range 0..${count - 1}.',
+      );
+    }
+    final resolvedKey = keyBuilder(index);
+    if (resolvedKey != key) {
+      throw StateError(
+        'findChildIndexCallback returned index $index for $key, but '
+        'itemKeyBuilder($index) returned $resolvedKey.',
+      );
+    }
+    return index;
+  }
+
+  void _setUserSelection(int index) {
+    final before = _controller.selectedIndex;
+    _controller.selectedIndex = index;
+    final after = _controller.selectedIndex;
+    if (after != null && after != before) {
+      widget.onSelectionChanged?.call(after);
+    }
   }
 
   KeyEventResult _handleKey(KeyEvent event) {
@@ -509,34 +772,28 @@ class _ListViewState extends State<ListView> {
     switch (code) {
       case KeyCode.arrowUp:
         if (selected <= 0) return _edgeResult();
-        _controller.selectedIndex = selected - 1;
+        _setUserSelection(selected - 1);
         return KeyEventResult.handled;
       case KeyCode.arrowDown:
         if (selected >= count - 1) return _edgeResult();
-        _controller.selectedIndex = selected + 1;
+        _setUserSelection(selected + 1);
         return KeyEventResult.handled;
       case KeyCode.pageUp:
         if (selected <= 0) return _edgeResult();
-        _controller.selectedIndex = (selected - _pageSize()).clamp(
-          0,
-          count - 1,
-        );
+        _setUserSelection((selected - _pageSize()).clamp(0, count - 1));
         return KeyEventResult.handled;
       case KeyCode.pageDown:
         if (selected >= count - 1) return _edgeResult();
-        _controller.selectedIndex = (selected + _pageSize()).clamp(
-          0,
-          count - 1,
-        );
+        _setUserSelection((selected + _pageSize()).clamp(0, count - 1));
         return KeyEventResult.handled;
       case KeyCode.home:
-        _controller.selectedIndex = 0;
+        _setUserSelection(0);
         return KeyEventResult.handled;
       case KeyCode.end:
-        _controller.selectedIndex = count - 1;
+        _setUserSelection(count - 1);
         return KeyEventResult.handled;
       case KeyCode.enter:
-        widget.onSelect?.call(selected);
+        widget._activationCallback?.call(selected);
         return KeyEventResult.handled;
       default:
         return KeyEventResult.ignored;
@@ -568,7 +825,7 @@ class _ListViewState extends State<ListView> {
     if (count == 0) return;
     final sel = _controller.selectedIndex;
     if (sel != null) {
-      _controller.selectedIndex = (sel + delta).clamp(0, count - 1);
+      _setUserSelection((sel + delta).clamp(0, count - 1));
     } else {
       final first = _controller.visibleRange?.first ?? 0;
       _controller.jumpToIndex((first + delta).clamp(0, count - 1));
@@ -583,7 +840,7 @@ class _ListViewState extends State<ListView> {
     super.dispose();
   }
 
-  /// Pointer press on an item: select it, take focus, and fire [onSelect] —
+  /// Pointer press on an item: select it, take focus, and fire [onActivate] —
   /// the click-to-activate convention, so a mouse reaches the same outcome
   /// as moving the selection and pressing Enter.
   ///
@@ -595,9 +852,9 @@ class _ListViewState extends State<ListView> {
   void _handleItemTap(int index) {
     final count = widget.effectiveItemCount;
     if (index < 0 || index >= count) return;
-    _controller.selectedIndex = index;
+    _setUserSelection(index);
     _focusNode.requestFocus();
-    widget.onSelect?.call(index);
+    widget._activationCallback?.call(index);
   }
 
   /// Wraps an item in a [RepaintBoundary] when [ListView.addRepaintBoundaries]
@@ -652,6 +909,9 @@ class _ListViewState extends State<ListView> {
             return _LazyListBody(
               controller: _controller,
               itemCount: itemCount,
+              dataRevision: _dataRevision,
+              itemKeyBuilder: widget.itemKeyBuilder,
+              findChildIndexCallback: widget.findChildIndexCallback,
               itemBuilder: (context, index, itemActive) {
                 final built = widget.itemBuilder!(context, index, itemActive);
                 // No separator after the last item, when none was requested, or
@@ -1013,14 +1273,20 @@ class _LazyListBody extends RenderObjectWidget {
   const _LazyListBody({
     required this.controller,
     required this.itemCount,
+    required this.dataRevision,
     required this.itemBuilder,
+    required this.itemKeyBuilder,
+    required this.findChildIndexCallback,
     required this.selectedIndex,
     required this.selectionActive,
   });
 
   final ListController controller;
   final int itemCount;
+  final int dataRevision;
   final Widget Function(BuildContext, int, bool) itemBuilder;
+  final ListItemKeyBuilder? itemKeyBuilder;
+  final ListItemIndexCallback? findChildIndexCallback;
   final int? selectedIndex;
   final bool selectionActive;
 
@@ -1053,7 +1319,12 @@ class _LazyListElement extends RenderObjectElement {
 
   /// Currently-mounted items keyed by their data index. Sparse: only
   /// indices visible during the most recent layout are in this map.
+  // Keep insertion order aligned with data-index order. Element traversal is
+  // also semantic traversal, so letting reused rows retain their old map order
+  // would make accessibility and agent trees disagree with paint order after
+  // a keyed reorder (or after mounting a lower index while scrolling up).
   final Map<int, Element> _mountedChildren = <int, Element>{};
+  final Map<Element, Object> _itemKeyByElement = <Element, Object>{};
 
   @override
   _LazyListBody get widget => super.widget as _LazyListBody;
@@ -1076,8 +1347,119 @@ class _LazyListElement extends RenderObjectElement {
       el.unmount();
     }
     _mountedChildren.clear();
+    _itemKeyByElement.clear();
     renderObject._element = null;
     super.unmount();
+  }
+
+  @override
+  void update(covariant _LazyListBody newWidget) {
+    if (newWidget.dataRevision != widget.dataRevision) {
+      _reconcileDataIndices(newWidget);
+    }
+    super.update(newWidget);
+  }
+
+  void _reconcileDataIndices(_LazyListBody newWidget) {
+    final findIndex = newWidget.findChildIndexCallback;
+    final keyBuilder = newWidget.itemKeyBuilder;
+    if (findIndex == null || keyBuilder == null) {
+      if (_itemKeyByElement.isNotEmpty) {
+        _itemKeyByElement.clear();
+        renderObject._clearItemIdentity();
+      }
+      return;
+    }
+
+    final remapped = <int, Element>{};
+    final oldToNew = <int, int>{};
+    final removed = <({int index, Element element})>[];
+
+    for (final entry in _mountedChildren.entries) {
+      final oldIndex = entry.key;
+      final element = entry.value;
+      final itemKey = _itemKeyByElement[element];
+      if (itemKey == null) {
+        removed.add((index: oldIndex, element: element));
+        continue;
+      }
+      final newIndex = findIndex(itemKey);
+      if (newIndex == null) {
+        removed.add((index: oldIndex, element: element));
+        continue;
+      }
+      if (newIndex < 0 || newIndex >= newWidget.itemCount) {
+        throw StateError(
+          'findChildIndexCallback returned $newIndex for $itemKey, outside '
+          'the current ListView range 0..${newWidget.itemCount - 1}.',
+        );
+      }
+      final resolvedKey = keyBuilder(newIndex);
+      if (resolvedKey != itemKey) {
+        throw StateError(
+          'findChildIndexCallback returned index $newIndex for $itemKey, but '
+          'itemKeyBuilder($newIndex) returned $resolvedKey.',
+        );
+      }
+      final collision = remapped[newIndex];
+      if (collision != null) {
+        throw StateError(
+          'Multiple mounted ListView items resolved to index $newIndex. '
+          'Stable item keys must be unique.',
+        );
+      }
+      remapped[newIndex] = element;
+      oldToNew[oldIndex] = newIndex;
+    }
+
+    for (final entry in removed) {
+      _mountedChildren.remove(entry.index);
+      _itemKeyByElement.remove(entry.element);
+      entry.element.unmount();
+    }
+
+    renderObject._remapDataIndices(
+      oldToNew,
+      itemKeyBuilder: keyBuilder,
+      findChildIndexCallback: findIndex,
+      newItemCount: newWidget.itemCount,
+    );
+    _mountedChildren
+      ..clear()
+      ..addAll(remapped);
+    _sortMountedChildrenByIndex();
+  }
+
+  void _sortMountedChildrenByIndex() {
+    final sorted = _mountedChildren.entries.toList()
+      ..sort((left, right) => left.key.compareTo(right.key));
+    _mountedChildren
+      ..clear()
+      ..addEntries(sorted);
+  }
+
+  Object? _validateNewItemIdentity(int index, {Element? replacing}) {
+    final keyBuilder = widget.itemKeyBuilder;
+    final findIndex = widget.findChildIndexCallback;
+    if (keyBuilder == null || findIndex == null) return null;
+
+    final itemKey = keyBuilder(index);
+    final resolvedIndex = findIndex(itemKey);
+    if (resolvedIndex != index) {
+      throw StateError(
+        'findChildIndexCallback returned $resolvedIndex for $itemKey, but the '
+        'item is being mounted at index $index.',
+      );
+    }
+    for (final entry in _itemKeyByElement.entries) {
+      if (!identical(entry.key, replacing) && entry.value == itemKey) {
+        throw StateError(
+          'Duplicate ListView item key $itemKey at index $index. Stable item '
+          'keys must be unique.',
+        );
+      }
+    }
+    return itemKey;
   }
 
   @override
@@ -1096,7 +1478,11 @@ class _LazyListElement extends RenderObjectElement {
       if (i >= maxValid) toRemove.add(i);
     }
     for (final i in toRemove) {
-      _mountedChildren.remove(i)?.unmount();
+      final removed = _mountedChildren.remove(i);
+      if (removed != null) {
+        _itemKeyByElement.remove(removed);
+        removed.unmount();
+      }
     }
 
     // Second pass: re-build & reconcile remaining children.
@@ -1112,10 +1498,13 @@ class _LazyListElement extends RenderObjectElement {
       if (Widget.canUpdate(oldEl.widget, newWidget)) {
         oldEl.update(newWidget);
       } else {
+        final itemKey = _validateNewItemIdentity(i, replacing: oldEl);
         oldEl.unmount();
+        _itemKeyByElement.remove(oldEl);
         final fresh = newWidget.createElement();
         fresh.mount(this);
         _mountedChildren[i] = fresh;
+        if (itemKey != null) _itemKeyByElement[fresh] = itemKey;
       }
     }
   }
@@ -1127,6 +1516,7 @@ class _LazyListElement extends RenderObjectElement {
     if (existing != null) {
       return _findRootRenderObject(existing);
     }
+    final itemKey = _validateNewItemIdentity(index);
     final newWidget = widget.itemBuilder(
       this,
       index,
@@ -1134,7 +1524,14 @@ class _LazyListElement extends RenderObjectElement {
     );
     final element = newWidget.createElement();
     element.mount(this);
+    final priorLastIndex = _mountedChildren.isEmpty
+        ? null
+        : _mountedChildren.keys.last;
     _mountedChildren[index] = element;
+    if (priorLastIndex != null && index < priorLastIndex) {
+      _sortMountedChildrenByIndex();
+    }
+    if (itemKey != null) _itemKeyByElement[element] = itemKey;
     return _findRootRenderObject(element);
   }
 
@@ -1142,8 +1539,13 @@ class _LazyListElement extends RenderObjectElement {
   /// layout when an item scrolls out of the visible range.
   void disposeChild(int index) {
     final el = _mountedChildren.remove(index);
+    if (el != null) _itemKeyByElement.remove(el);
     el?.unmount();
   }
+
+  Object? itemKeyAt(int index) => widget.itemKeyBuilder?.call(index);
+
+  Set<int> get mountedIndices => _mountedChildren.keys.toSet();
 
   static RenderObject? _findRootRenderObject(Element element) {
     if (element is RenderObjectElement) return element.renderObject;
@@ -1231,6 +1633,7 @@ class _RenderLazyListView extends RenderObject
   final Set<RenderObject> _adopted = Set<RenderObject>.identity();
 
   int _scrollAnchor = 0;
+  Object? _scrollAnchorItemKey;
 
   @override
   List<RenderObject> get children => _activeByIndex.values.toList();
@@ -1264,6 +1667,52 @@ class _RenderLazyListView extends RenderObject
     _childOffsets.remove(child);
   }
 
+  void _clearItemIdentity() {
+    _scrollAnchorItemKey = null;
+  }
+
+  void _remapDataIndices(
+    Map<int, int> oldToNew, {
+    required ListItemKeyBuilder itemKeyBuilder,
+    required ListItemIndexCallback findChildIndexCallback,
+    required int newItemCount,
+  }) {
+    final anchorKey = _scrollAnchorItemKey;
+    if (anchorKey != null) {
+      final remappedAnchor = findChildIndexCallback(anchorKey);
+      if (remappedAnchor != null) {
+        if (remappedAnchor < 0 || remappedAnchor >= newItemCount) {
+          throw StateError(
+            'findChildIndexCallback returned $remappedAnchor for $anchorKey, '
+            'outside the current ListView range 0..${newItemCount - 1}.',
+          );
+        }
+        final resolvedKey = itemKeyBuilder(remappedAnchor);
+        if (resolvedKey != anchorKey) {
+          throw StateError(
+            'findChildIndexCallback returned index $remappedAnchor for '
+            '$anchorKey, but itemKeyBuilder($remappedAnchor) returned '
+            '$resolvedKey.',
+          );
+        }
+        _scrollAnchor = remappedAnchor;
+      }
+    }
+
+    if (_activeByIndex.isEmpty) return;
+    final activeEntries = <MapEntry<int, RenderObject>>[];
+    for (final entry in _activeByIndex.entries) {
+      final newIndex = oldToNew[entry.key];
+      if (newIndex == null) continue;
+      activeEntries.add(MapEntry(newIndex, entry.value));
+      _indexByObject[entry.value] = newIndex;
+    }
+    activeEntries.sort((a, b) => a.key.compareTo(b.key));
+    _activeByIndex
+      ..clear()
+      ..addEntries(activeEntries);
+  }
+
   @override
   CellSize performLayout(CellConstraints constraints) {
     final maxRows = constraints.maxRows;
@@ -1275,6 +1724,7 @@ class _RenderLazyListView extends RenderObject
       // Unmount any leftovers from a previous non-empty layout.
       _unmountAllVisible(element);
       _controller._visibleRange = null;
+      if (count == 0) _scrollAnchorItemKey = null;
       return constraints.constrain(CellSize(maxCols ?? 0, maxRows ?? 0));
     }
 
@@ -1295,7 +1745,13 @@ class _RenderLazyListView extends RenderObject
     }
 
     final childCC = CellConstraints(maxCols: maxCols);
-    final priorlyMounted = _activeByIndex.keys.toSet();
+    // Rebuild the active map in final visual-index order on every layout.
+    // Updating an existing Map key does not change insertion order; retaining
+    // the prior order across a scroll or keyed reorder would make paint and
+    // semantic traversal disagree with the newly-computed row offsets.
+    _activeByIndex.clear();
+    _indexByObject.clear();
+    _childOffsets.clear();
     final newlyVisible = <int>{};
 
     var (firstVisible, lastVisible) = _layoutFromAnchor(
@@ -1332,9 +1788,12 @@ class _RenderLazyListView extends RenderObject
       }
     }
 
-    // (5) Unmount items mounted in the previous layout that are not
-    // visible in this one.
-    for (final i in priorlyMounted) {
+    // (5) Unmount every mounted item that is not visible in the final window.
+    // This includes transient children mounted by [_anchorThatEndsAt] while it
+    // probes backwards for a variable-height selection anchor. Sweeping only
+    // the previous active map leaves the first non-fitting probe mounted
+    // forever because it was created during this layout but never made active.
+    for (final i in element.mountedIndices) {
       if (!newlyVisible.contains(i)) {
         element.disposeChild(i);
       }
@@ -1342,6 +1801,7 @@ class _RenderLazyListView extends RenderObject
 
     _controller._visibleRange = (first: firstVisible, last: lastVisible);
     _controller._itemCount = count;
+    _scrollAnchorItemKey = element.itemKeyAt(_scrollAnchor);
 
     return constraints.constrain(CellSize(maxCols ?? 0, maxRows));
   }

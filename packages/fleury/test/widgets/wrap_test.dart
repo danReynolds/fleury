@@ -1,7 +1,7 @@
 // Wrap: flow layout that reflows children onto new rows.
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 List<String> _lines(

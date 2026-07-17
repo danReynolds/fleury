@@ -1,6 +1,6 @@
 // No sibling package's lib/ may import fleury's src/ internals. The
 // public barrels (fleury_core / fleury_host / fleury_host_io / fleury /
-// fleury_test) are the entire supported surface; a src import is a
+// fleury_test_support) are the entire supported surface; a src import is a
 // semver-invisible dependency that breaks silently on any internal
 // refactor — exactly how fleury_web ended up built on an unexported
 // wire codec. Test/tool code in publish_to:none packages is exempt.
@@ -12,6 +12,7 @@ import 'package:test/test.dart';
 void main() {
   const packages = [
     'fleury_widgets',
+    'fleury_test',
     'fleury_web',
     'fleury_mcp',
     'fleury_git',

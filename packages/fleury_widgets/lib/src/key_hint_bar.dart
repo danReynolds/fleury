@@ -57,7 +57,10 @@ class KeyHintBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final manager = Focus.maybeOf(context);
     if (manager == null) return const EmptyBox();
-    final hints = _collectVisibleHints(manager);
+    final hints = resolveActiveKeyBindings(
+      manager,
+      globalBindings: globalBindings,
+    );
     if (hints.isEmpty) return const EmptyBox();
     // Highest-priority (deepest / most local) bindings come first; the hard
     // [maxBindings] cap bounds the candidate set before width fitting. `total`
@@ -66,7 +69,7 @@ class KeyHintBar extends StatelessWidget {
     final total = hints.length;
     final segments = [
       for (final h in hints.take(maxBindings))
-        '[${_chordLabel(h)}] ${h.binding.displayLabel}',
+        '[${h.chordLabel}] ${h.binding.displayLabel}',
     ];
     // Fit whole bindings to the width the bar is actually given, degrading
     // with a trailing "+N" instead of clipping a label mid-word. Under an
@@ -80,10 +83,6 @@ class KeyHintBar extends StatelessWidget {
       ),
     );
   }
-
-  /// Combined chord label — `↑↓` for a multi-alias binding
-  /// (`KeyBinding.list([↑, ↓], …)`), a single label otherwise.
-  String _chordLabel(_Hint h) => h.chords.map((c) => c.hintLabel).join();
 
   /// Renders the largest prefix of whole bindings (highest-priority first) that
   /// fits [maxCols], plus a trailing `+N` for every binding not shown — [total]
@@ -112,77 +111,4 @@ class KeyHintBar extends StatelessWidget {
     if (width(marker) <= maxCols) return marker;
     return maxCols >= 1 ? '+' : '';
   }
-
-  List<_Hint> _collectVisibleHints(FocusManager manager) {
-    final result = <_Hint>[];
-    // Keyed on KeyChord identity — canonical, so `char('S')` and
-    // `char('s', shift: true)` (the same firing event) compare equal — NOT on
-    // the display label, which spells them differently. Keying on the label
-    // would let a differently-spelled alias escape suppression (advertising a
-    // key that can't fire) or double up in a combined label (`[Shift+SS]`).
-    final seenChords = <KeyChord>{};
-    // Honesty filter: while a text field holds focus, bare-printable chords —
-    // chain and global alike — are swallowed as typed text and can never
-    // fire. Shadowing is a PER-CHORD property: a binding with several aliases
-    // (`KeyBinding.list([j, ↓], …)`) stays visible through its first
-    // non-shadowed chord (dispatch fires on any alias), and is hidden only
-    // when every alias is shadowed. Modifier/function chords (Ctrl+S, F1,
-    // Esc) bypass the text claimant and stay shown.
-    final textFocused = manager.focusedNodeClaimsText;
-
-    void consider(KeyBinding binding) {
-      if (binding.label == null) return;
-      if (binding.hideFromHintBar) return;
-      if (!binding.enabled) return;
-      // The keys this binding can actually FIRE on right now: while a text
-      // field holds focus, a bare-printable alias is swallowed as typed text,
-      // so it neither fires nor claims a key. A binding with no firable alias
-      // shows nothing and claims nothing (so it can't poison a shallower
-      // binding that shares one of its dead aliases).
-      final firable = [
-        for (final c in binding.chords)
-          if (!textFocused || !c.isShadowedByTextInput) c,
-      ];
-      if (firable.isEmpty) return;
-      // The firable chords this binding OWNS: distinct, and not already claimed
-      // by a DEEPER binding — dispatch is deepest-first, so a deeper binding
-      // wins every key they share, and a shallower binding advertising a lost
-      // key would lie. (Test only against what deeper bindings claimed, not
-      // this binding's own earlier aliases — a repeated alias must not
-      // self-suppress.) The bar combines the owned chords into one label.
-      final owned = <KeyChord>[];
-      for (final c in firable) {
-        if (seenChords.contains(c)) continue; // claimed by a deeper binding
-        if (!owned.contains(c)) owned.add(c); // dedupe within this binding
-      }
-      if (owned.isEmpty) return; // every firable alias is claimed deeper
-      // Now claim ALL of this binding's firable keys: it wins them for
-      // dispatch, so a shallower binding bound to any of them is dead.
-      seenChords.addAll(firable);
-      result.add(_Hint(binding, owned));
-    }
-
-    for (final node in manager.activeChain()) {
-      final source = node.bindingSource;
-      if (source == null) continue;
-      for (final binding in source.activeBindings) {
-        consider(binding);
-      }
-    }
-    if (!manager.suppressGlobals) {
-      for (final binding in globalBindings) {
-        consider(binding);
-      }
-    }
-    return result;
-  }
-}
-
-/// A binding paired with the firable chords the bar advertises for it — the
-/// aliases that can actually fire in the current focus context, combined into
-/// the rendered label.
-class _Hint {
-  const _Hint(this.binding, this.chords);
-  final KeyBinding binding;
-  final List<KeyChord> chords;
 }

@@ -75,10 +75,20 @@ Design rationale and the phased delivery plan live in the RFC:
 
 ## Testing
 
-Widget tests use `FleuryTester` (the `testWidgets` analog) from
-`package:fleury/fleury_test.dart`:
+Add `fleury_test` as a dev dependency, then use `FleuryTester` (the
+`testWidgets` analog) from `package:fleury_test/fleury_test.dart`:
+
+```yaml
+dev_dependencies:
+  fleury_test: ^0.1.0
+  test: ^1.26.3
+```
 
 ```dart
+import 'package:fleury/fleury.dart';
+import 'package:fleury_test/fleury_test.dart';
+import 'package:test/test.dart';
+
 testWidgets('space increments the counter', (tester) {
   tester.pumpWidget(const CounterApp());
   tester.sendKey(const KeyEvent(char: ' '));

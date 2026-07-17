@@ -588,7 +588,7 @@ class _PatchReviewState extends State<PatchReview> {
             focusNode: _focusNode,
             autofocus: widget.autofocus,
             itemCount: widget.files.length,
-            onSelect: (_) => _selectCurrent(),
+            onActivate: (_) => _selectCurrent(),
             itemBuilder: (context, index, activeSelected) {
               final selected = index == _controller.selectedIndex;
               return _PatchFileRow(

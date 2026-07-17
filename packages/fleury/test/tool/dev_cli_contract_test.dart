@@ -117,6 +117,11 @@ void main() {
         expect(check.stdout, contains('(packages/fleury) dart analyze'));
         expect(
           check.stdout,
+          contains('(packages/fleury_test) dart analyze'),
+        );
+        expect(check.stdout, contains('(packages/fleury_test) dart test'));
+        expect(
+          check.stdout,
           contains(
             '(packages/fleury_example_console) dart test '
             'test/demo_console_test.dart',

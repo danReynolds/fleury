@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
-import 'package:fleury/fleury_test.dart';
+import 'package:fleury/fleury_test_support.dart';
 
 import 'story.dart';
 import 'storybook_options.dart';

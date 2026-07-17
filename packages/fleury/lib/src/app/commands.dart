@@ -44,6 +44,7 @@ final class AppCommand {
     this.shortcuts = const <KeyChord>[],
     this.enabled = _alwaysCommandPredicate,
     this.visible = _alwaysCommandPredicate,
+    this.showInPalette = true,
     this.semanticAction,
   });
 
@@ -54,7 +55,21 @@ final class AppCommand {
   final String? category;
   final List<KeyChord> shortcuts;
   final AppCommandPredicate enabled;
+
+  /// Whether the command participates in its scope at all.
+  ///
+  /// Invisible commands cannot be found, invoked, exposed semantically, or
+  /// installed as shortcuts. To keep a command and its shortcuts active while
+  /// omitting it only from command palettes, use [showInPalette].
   final AppCommandPredicate visible;
+
+  /// Whether command palettes should list this command.
+  ///
+  /// This does not affect registry lookup, invocation, semantics, or shortcut
+  /// installation. It is useful for commands that open the palette itself or
+  /// actions discoverable through a more appropriate dedicated surface.
+  final bool showInPalette;
+
   final SemanticAction? semanticAction;
 
   String? get primaryShortcutLabel =>
