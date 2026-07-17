@@ -1253,12 +1253,18 @@ class BuildOwner {
       // is a true duplicate; that also keeps the steal-back storm detection
       // this check exists for, where the element IS active under the other
       // claimant at the moment of the second claim.
+      // The forgiveness is rebuild-order-dependent by design: within one
+      // flush, "moved on" is only observable once the old position's
+      // reconcile has deactivated the element. If the new position
+      // rebuilds first, this still throws — matching the invariant that
+      // at no point may two active widgets describe one key.
       final holder = key._element;
       if (holder != null && holder._lifecycle == _ElementLifecycle.active) {
+        final liveParent = holder._parent ?? existing;
         throw StateError(
           'Duplicate GlobalKey detected in the widget tree.\n'
           'The same $key was used to inflate two widgets in one build pass '
-          '(under ${existing.toStringShallow()} and '
+          '(under ${liveParent.toStringShallow()} and '
           '${parent.toStringShallow()}). A GlobalKey instance may identify at '
           'most one widget at a time; give the second widget its own key.',
         );
@@ -1933,6 +1939,24 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
       while (unkeyedIndex < unkeyedOlds.length) {
         deactivateOld(unkeyedOlds[unkeyedIndex]);
         unkeyedIndex += 1;
+      }
+
+      // A later slot's GlobalKey inflate can steal an element that an
+      // EARLIER slot already matched into `result` (the mirror ordering of
+      // the stale-candidate check above). Committing it would place one
+      // element at two tree positions; fail with the designed duplicate
+      // error instead, before any render-object adoption runs.
+      for (final el in result) {
+        if (el != null && !identical(el._parent, this)) {
+          throw StateError(
+            'Duplicate GlobalKey detected in the widget tree.\n'
+            'The same ${el.widget.key} matched a child of '
+            '${toStringShallow()} and was then reclaimed by '
+            '${el._parent?.toStringShallow() ?? 'another parent'} in the '
+            'same build pass. A GlobalKey instance may identify at most '
+            'one widget at a time; give the second widget its own key.',
+          );
+        }
       }
 
       return result.cast<Element>();

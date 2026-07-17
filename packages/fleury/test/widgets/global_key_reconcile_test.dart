@@ -137,6 +137,30 @@ class _DuplicateHostState extends State<_DuplicateHost> {
   }
 }
 
+/// Mirror ordering of [_DuplicateHost]: the bare keyed occurrence comes
+/// FIRST, so the reconcile matches it before the later slot's inflate
+/// steals it — probing the commit-time validation rather than the
+/// stale-candidate match guard.
+class _MirrorDuplicateHost extends StatefulWidget {
+  const _MirrorDuplicateHost({super.key, required this.probeKey});
+  final GlobalKey<_ProbeState> probeKey;
+  @override
+  State<_MirrorDuplicateHost> createState() => _MirrorDuplicateHostState();
+}
+
+class _MirrorDuplicateHostState extends State<_MirrorDuplicateHost> {
+  bool duplicated = false;
+  void advance() => setState(() => duplicated = true);
+
+  @override
+  Widget build(BuildContext context) {
+    final probe = _Probe(key: widget.probeKey);
+    return duplicated
+        ? Row(children: [probe, Center(child: _Probe(key: widget.probeKey))])
+        : Row(children: [probe, const Text('x')]);
+  }
+}
+
 void main() {
   setUp(_ProbeState.reset);
 
@@ -228,6 +252,31 @@ void main() {
         ),
       ),
       reason: 'one element committed at two positions must fail loudly',
+    );
+  });
+
+  testWidgets(
+      'a real duplicate whose bare occurrence precedes the nested one '
+      'throws the designed error at commit, not a corrupt adopt', (
+    tester,
+  ) {
+    final hostKey = GlobalKey<_MirrorDuplicateHostState>();
+    final probeKey = GlobalKey<_ProbeState>();
+    tester.pumpWidget(
+      _MirrorDuplicateHost(key: hostKey, probeKey: probeKey),
+    );
+
+    hostKey.currentState!.advance();
+    expect(
+      tester.pump,
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('Duplicate GlobalKey'),
+        ),
+      ),
+      reason: 'the matched-then-stolen ordering must fail the same way',
     );
   });
 }
