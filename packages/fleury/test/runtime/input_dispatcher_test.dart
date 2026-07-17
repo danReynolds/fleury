@@ -476,6 +476,65 @@ void main() {
       expect(h.dispatcher.hasPendingSequence, isFalse);
     });
 
+    test('16i. A bare-printable continuation completes a pending sequence '
+        'while a text field is focused', () {
+      // The parser emits plain printables as TextInputEvent, so the
+      // continuation of a held Ctrl+X leader arrives on the text path.
+      // Pending-sequence handling has precedence over text delivery
+      // (dispatch rule 1): the advertised .ctrl.x.b chord must fire, and
+      // the 'b' must NOT leak into the focused field.
+      final controller = TextEditingController();
+      var switchBuffer = 0;
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeyChord.ctrl.x.b, onEvent: (_) => switchBuffer += 1),
+          ],
+          child: TextInput(controller: controller, autofocus: true),
+        ),
+      );
+
+      h.dispatch(_char('x', ctrl: true));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      h.dispatcher.dispatch(const TextInputEvent('b'));
+      expect(switchBuffer, 1, reason: 'the sequence completes');
+      expect(controller.text, isEmpty,
+          reason: 'the continuation char must not corrupt the field');
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('16j. A non-matching printable cancels the pending sequence, '
+        'replays the held leader, then delivers the text to the field', () {
+      // The documented cancel path: the held Ctrl+X is redispatched
+      // (direct-only, so the deferred direct binding fires) BEFORE the
+      // breaking text is delivered — never silently dropped.
+      final controller = TextEditingController();
+      var switchBuffer = 0;
+      var directCtrlX = 0;
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeyChord.ctrl.x.b, onEvent: (_) => switchBuffer += 1),
+            KeyBinding(KeyChord.ctrl.x, onEvent: (_) => directCtrlX += 1),
+          ],
+          child: TextInput(controller: controller, autofocus: true),
+        ),
+      );
+
+      h.dispatch(_char('x', ctrl: true));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+      expect(directCtrlX, 0, reason: 'direct deferred while pending');
+
+      h.dispatcher.dispatch(const TextInputEvent('z'));
+      expect(directCtrlX, 1, reason: 'held leader replayed on cancel');
+      expect(switchBuffer, 0);
+      expect(controller.text, 'z', reason: 'the text still reaches the field');
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
     test('16d. Bracketed paste dispatches to onPaste, not onTextInput', () {
       final events = <String>[];
       final h = _TestHarness();

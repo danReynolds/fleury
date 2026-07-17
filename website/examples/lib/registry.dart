@@ -1558,11 +1558,15 @@ const String _codeSample = '''
 import 'package:fleury/fleury.dart';
 
 /// A tiny counter — the smallest interesting Fleury program.
+/// Typed printables arrive as TextInputEvents, so the quit key is a
+/// widget-level KeyBinding (requestExit), never an onEvent char match.
 void main() => runApp(
-      const CounterApp(),
-      onEvent: (event) => event is KeyEvent && event.char == 'q'
-          ? const ExitRequested()
-          : null,
+      KeyBindings(
+        bindings: [
+          KeyBinding(KeyChord.q, onEvent: (_) => requestExit(), label: 'Quit'),
+        ],
+        child: const CounterApp(),
+      ),
     );
 
 class CounterApp extends StatefulWidget {

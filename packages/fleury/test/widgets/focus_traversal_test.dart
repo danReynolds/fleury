@@ -814,6 +814,90 @@ void main() {
       );
     });
 
+    testWidgets('flipping excluding on releases focus already held inside', (
+      tester,
+    ) {
+      // The documented IndexedStack use: a hidden tab keeps its State but
+      // must not keep the keyboard. Without the release, the focused node
+      // stays focused and every keystroke keeps flowing into the hidden pane.
+      final a = FocusNode(debugLabel: 'a');
+      final hidden = FocusNode(debugLabel: 'hidden');
+      Widget tree(bool exclude) => FocusTraversalGroup(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(width: 6, child: Focus(focusNode: a, child: const Text('A'))),
+            SizedBox(
+              width: 6,
+              child: ExcludeFocus(
+                excluding: exclude,
+                child: Focus(focusNode: hidden, child: const Text('H')),
+              ),
+            ),
+          ],
+        ),
+      );
+
+      tester.pumpWidget(tree(false));
+      tester.render(size: const CellSize(20, 3));
+      hidden.requestFocus();
+      expect(hidden.hasFocus, isTrue);
+
+      tester.pumpWidget(tree(true));
+      tester.render(size: const CellSize(20, 3));
+      expect(
+        hidden.hasFocus,
+        isFalse,
+        reason: 'exclusion must release focus held inside the subtree',
+      );
+      expect(tester.focusManager.focusedNode, isNull);
+    });
+
+    testWidgets('typed input stops flowing into a subtree that becomes '
+        'excluded', (tester) {
+      final hidden = TextEditingController();
+      Widget tree(bool exclude) => Column(
+        children: [
+          ExcludeFocus(
+            excluding: exclude,
+            child: TextInput(controller: hidden, autofocus: true),
+          ),
+        ],
+      );
+
+      tester.pumpWidget(tree(false));
+      tester.render();
+      tester.type('a');
+      expect(hidden.text, 'a', reason: 'visible pane receives input');
+
+      tester.pumpWidget(tree(true));
+      tester.render();
+      tester.type('z');
+      expect(
+        hidden.text,
+        'a',
+        reason: 'a hidden pane must not receive keystrokes',
+      );
+    });
+
+    testWidgets('requestFocus into an active ExcludeFocus subtree is denied', (
+      tester,
+    ) {
+      final hidden = FocusNode(debugLabel: 'hidden');
+      tester.pumpWidget(
+        ExcludeFocus(child: Focus(focusNode: hidden, child: const Text('H'))),
+      );
+      tester.render(size: const CellSize(20, 3));
+
+      hidden.requestFocus();
+      expect(
+        hidden.hasFocus,
+        isFalse,
+        reason: 'programmatic focus must not enter an excluded subtree',
+      );
+      expect(tester.focusManager.focusedNode, isNull);
+    });
+
     testWidgets('flipping excluding back on lets traversal in again', (tester) {
       final a = FocusNode(debugLabel: 'a');
       final b = FocusNode(debugLabel: 'b');

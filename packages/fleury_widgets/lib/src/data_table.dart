@@ -554,6 +554,7 @@ class DataTable extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.onSelect,
+    this.typeahead = true,
     this.selectionMode = DataTableSelectionMode.row,
     this.copySelectedRow = true,
     this.copyOptions = const DataTableCopyOptions(),
@@ -592,6 +593,13 @@ class DataTable extends StatefulWidget {
 
   /// Called when the focused row is activated.
   final void Function(int rowIndex)? onSelect;
+
+  /// Whether typing a printable character jumps the selection to the next
+  /// row whose first-column cell starts with it (grid type-ahead). On by
+  /// default. Turn it off when the surrounding app binds bare printables
+  /// (a vim-style command key, a `q` quit): a focused table with
+  /// type-ahead on consumes every printable before those bindings see it.
+  final bool typeahead;
 
   /// Whether keyboard selection targets whole rows or individual cells.
   final DataTableSelectionMode selectionMode;
@@ -876,7 +884,8 @@ class _DataTableState extends State<DataTable> {
         return KeyEventResult.handled;
       default:
         final ch = event.char;
-        if (ch != null &&
+        if (widget.typeahead &&
+            ch != null &&
             ch.length == 1 &&
             ch.codeUnitAt(0) >= 0x21 &&
             !event.hasCtrl &&

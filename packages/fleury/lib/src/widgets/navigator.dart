@@ -442,23 +442,39 @@ class NavigatorState extends State<Navigator> {
     route.opaque = false; // reveal the route beneath during the exit
     if (!route.completer.isCompleted) route.completer.complete(result);
 
-    // Restore focus to the revealed screen immediately — not after the
-    // exit animation — so input lands on it right away. The revealed route's
-    // FocusScope memory is the primary path (correct even for popUntil,
-    // where the routes between are already gone); the push-time snapshot is
-    // the fallback for focus that lived OUTSIDE this navigator's routes (a
-    // sidebar pane, app chrome), which no route scope ever recorded.
+    // Release focus from the popped route immediately, and restore it to the
+    // revealed screen once the reveal has landed — a post-frame callback in
+    // the very next frame, well before the exit animation finishes. It can't
+    // run synchronously here: covered routes are focus-inert (ExcludeFocus),
+    // the manager refuses focus into an excluded subtree, and the revealed
+    // route's marker only flips off in the rebuild below. The revealed
+    // route's FocusScope memory is the primary path (correct even for
+    // popUntil, where the routes between are already gone); the push-time
+    // snapshot is the fallback for focus that lived OUTSIDE this navigator's
+    // routes (a sidebar pane, app chrome), which no route scope ever
+    // recorded. An app that claims focus right after the pop (say, from the
+    // route's completed future — those microtasks run before the frame)
+    // wins: the restore only fills still-empty focus.
     _manager?.requestFocus(null);
     final revealed = _topLive;
-    var restored = false;
-    if (revealed != null) {
-      restored =
-          _manager?.restoreFocusInScope(revealed.restoreKey.currentContext) ??
-          false;
+    final prior = route.priorFocus;
+    void restoreFocus() {
+      if (!mounted) return;
+      final manager = _manager;
+      if (manager == null || manager.focusedNode != null) return;
+      final restored =
+          revealed != null &&
+          manager.restoreFocusInScope(revealed.restoreKey.currentContext);
+      if (!restored && prior != null && prior.isAttached) {
+        prior.requestFocus();
+      }
     }
-    if (!restored) {
-      final prior = route.priorFocus;
-      if (prior != null && prior.isAttached) prior.requestFocus();
+
+    final binding = _binding;
+    if (binding != null) {
+      binding.addPostFrameCallback((_) => restoreFocus());
+    } else {
+      restoreFocus();
     }
 
     final transition = route.transition;

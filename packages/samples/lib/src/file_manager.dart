@@ -50,10 +50,13 @@ class _FileManagerBodyState extends State<_FileManagerBody> {
                 child: Panel(
                   title: 'Explorer',
                   focused: true,
+                  // No type-ahead: the footer advertises a bare-printable
+                  // quit key ('q'), which a type-ahead tree would swallow.
                   child: Tree<_FsNode>(
                     semanticLabel: 'my-app',
                     roots: _roots,
                     autofocus: true,
+                    typeahead: false,
                     onSelect: (node) {
                       final fs = node.value;
                       if (fs != null && !fs.isDir) {
@@ -246,19 +249,21 @@ dart run bin/my_app.dart
 ''';
 
 const String _mainDart = '''
-import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury.dart';
 
 import 'src/app.dart';
 
 Future<void> main() async {
+  // Typed printables arrive as TextInputEvents, so a quit key is a
+  // widget-level KeyBinding: a focused text field keeps claiming the
+  // character, and requestExit() ends the app cleanly otherwise.
   await runApp(
-    const CounterApp(),
-    onEvent: (event) {
-      if (event is KeyEvent && event.char == 'q') {
-        return const ExitRequested();
-      }
-      return null;
-    },
+    KeyBindings(
+      bindings: [
+        KeyBinding(KeyChord.q, onEvent: (_) => requestExit(), label: 'Quit'),
+      ],
+      child: const CounterApp(),
+    ),
   );
 }
 ''';

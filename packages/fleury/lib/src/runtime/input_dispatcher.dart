@@ -144,58 +144,62 @@ class InputDispatcher {
   KeyEventResult _dispatchKeyEvent(KeyEvent event) {
     // 1. Pending sequence handling.
     if (_pending != null) {
-      var pending = _pending!;
-      final activeCandidates = pending.candidates
-          .where(_isBindingCurrentlyActive)
-          .toList(growable: false);
-      if (activeCandidates.length != pending.candidates.length) {
-        if (activeCandidates.isEmpty) {
-          // Input topology changed while the leader was held (for example an
-          // ErrorBoundary contained the focused subtree). Never invoke a
-          // captured handler directly after its source left the active chain.
-          final held = List<KeyEvent>.from(pending.events);
-          _clearPending();
-          for (final e in held) {
-            _dispatchPlain(e, allowSequenceStart: false);
-          }
-          return _dispatchPlain(event);
-        }
-        pending = _PendingSequence(
-          events: pending.events,
-          candidates: activeCandidates,
-        );
-        _pending = pending;
-      }
-      final completedBinding = pending.tryComplete(event);
-      if (completedBinding != null) {
-        _clearPending();
-        return _fire(completedBinding, event);
-      }
-      // Could the event extend the sequence by one more step?
-      final survivors = pending.surviveOneMoreStep(event);
-      if (survivors.isNotEmpty) {
-        _pending = pending.advance(event, survivors);
-        _timer?.cancel();
-        _timer = Timer(sequenceTimeout, _onTimeout);
-        return KeyEventResult.handled;
-      }
-      // Sequence didn't complete and didn't continue: cancel and
-      // redispatch every event that was held, then the current one.
-      //
-      // Replays go through direct-match-only — we just CANCELLED a
-      // sequence, so re-arming pending on the same prefix (e.g.
-      // replaying Space and immediately re-entering the Space-leader
-      // sequence) would trap the dispatcher in a stale-pending loop.
-      // The new event runs through full dispatch so it can start a
-      // fresh sequence if applicable.
-      final held = List<KeyEvent>.from(pending.events);
-      _clearPending();
-      for (final e in held) {
-        _dispatchPlain(e, allowSequenceStart: false);
-      }
-      return _dispatchPlain(event);
+      final result = _tryPendingSequence(event);
+      if (result != null) return result;
+      // Sequence cancelled; the held events were replayed. The current
+      // event runs through full dispatch so it can start a fresh
+      // sequence if applicable.
     }
     return _dispatchPlain(event);
+  }
+
+  /// Runs the pending-sequence machinery for [event]: completes or
+  /// advances the sequence (non-null result), or cancels it — replaying
+  /// every held event direct-only — and returns null so the caller
+  /// dispatches [event] through its own normal path.
+  KeyEventResult? _tryPendingSequence(KeyEvent event) {
+    var pending = _pending;
+    if (pending == null) return null;
+    final activeCandidates = pending.candidates
+        .where(_isBindingCurrentlyActive)
+        .toList(growable: false);
+    if (activeCandidates.length != pending.candidates.length) {
+      if (activeCandidates.isEmpty) {
+        // Input topology changed while the leader was held (for example an
+        // ErrorBoundary contained the focused subtree). Never invoke a
+        // captured handler directly after its source left the active chain.
+        _cancelPendingAndRedispatchHeld();
+        return null;
+      }
+      pending = _PendingSequence(
+        events: pending.events,
+        candidates: activeCandidates,
+      );
+      _pending = pending;
+    }
+    final completedBinding = pending.tryComplete(event);
+    if (completedBinding != null) {
+      _clearPending();
+      return _fire(completedBinding, event);
+    }
+    // Could the event extend the sequence by one more step?
+    final survivors = pending.surviveOneMoreStep(event);
+    if (survivors.isNotEmpty) {
+      _pending = pending.advance(event, survivors);
+      _timer?.cancel();
+      _timer = Timer(sequenceTimeout, _onTimeout);
+      return KeyEventResult.handled;
+    }
+    // Sequence didn't complete and didn't continue: cancel and
+    // redispatch every event that was held; the caller dispatches the
+    // current one.
+    //
+    // Replays go through direct-match-only — we just CANCELLED a
+    // sequence, so re-arming pending on the same prefix (e.g.
+    // replaying Space and immediately re-entering the Space-leader
+    // sequence) would trap the dispatcher in a stale-pending loop.
+    _cancelPendingAndRedispatchHeld();
+    return null;
   }
 
   bool _isBindingCurrentlyActive(KeyBinding binding) {
@@ -226,13 +230,26 @@ class InputDispatcher {
   /// Modifier chords arrive as `KeyEvent`s, not `TextInputEvent`s,
   /// so they bypass this path entirely.
   ///
-  /// If a sequence is pending when text arrives, cancel + redispatch
-  /// the original key first (sequence got broken), then deliver
-  /// the text.
+  /// A pending sequence is consulted FIRST (dispatch precedence rule 1):
+  /// the parser emits bare printables as `TextInputEvent`s, so a chord
+  /// whose continuation step is a printable (`.ctrl.x.b`) completes here
+  /// even while a text field is focused. Text that instead breaks the
+  /// sequence cancels it — replaying the held keys direct-only — and is
+  /// then delivered as ordinary text.
   KeyEventResult _dispatchText(TextInputEvent event) {
+    if (_pending != null) {
+      final keyEvent = _keyEventForText(event.text);
+      if (keyEvent != null) {
+        final result = _tryPendingSequence(keyEvent);
+        if (result != null) return result;
+      } else {
+        // Multi-grapheme text (an input burst) can't be a sequence step.
+        _cancelPendingAndRedispatchHeld();
+      }
+    }
+
     final textResult = _deliverText(event.text);
     if (textResult == KeyEventResult.handled) {
-      if (_pending != null) _clearPending();
       return textResult;
     }
 
@@ -241,9 +258,6 @@ class InputDispatcher {
       return _dispatchKeyEvent(keyEvent);
     }
 
-    if (_pending != null) {
-      _cancelPendingAndRedispatchHeld();
-    }
     return KeyEventResult.ignored;
   }
 

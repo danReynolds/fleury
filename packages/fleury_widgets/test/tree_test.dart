@@ -35,9 +35,13 @@ List<String> _lines(FleuryTester tester, {int cols = 14, required int rows}) {
   ];
 }
 
-Tree<String> _tree({void Function(TreeNode<String>)? onSelect}) => Tree<String>(
+Tree<String> _tree({
+  void Function(TreeNode<String>)? onSelect,
+  bool typeahead = true,
+}) => Tree<String>(
   autofocus: true,
   onSelect: onSelect,
+  typeahead: typeahead,
   roots: const [
     TreeNode<String>(
       'src',
@@ -93,6 +97,28 @@ void main() {
     tester.sendKey(const KeyEvent(char: 'r'));
     tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
     expect(selected?.label, 'README');
+  });
+
+  testWidgets('typeahead: false lets a typed printable bubble to ancestor '
+      'bindings', (tester) {
+    // A focused tree with type-ahead on consumes every printable, which
+    // makes app-level bare-printable bindings (a `q` quit key) unreachable.
+    // The opt-out must let the character fall through the tree's handler.
+    var quits = 0;
+    Widget host({required bool typeahead}) => KeyBindings(
+      bindings: [KeyBinding(KeyChord.q, onEvent: (_) => quits += 1)],
+      child: _tree(typeahead: typeahead),
+    );
+
+    tester.pumpWidget(host(typeahead: true));
+    tester.render(size: const CellSize(14, 4));
+    tester.type('q');
+    expect(quits, 0, reason: 'type-ahead on: the tree swallows the key');
+
+    tester.pumpWidget(host(typeahead: false));
+    tester.render(size: const CellSize(14, 4));
+    tester.type('q');
+    expect(quits, 1, reason: 'type-ahead off: the binding receives it');
   });
 
   testWidgets('Down + Enter toggles the focused branch', (tester) {

@@ -223,10 +223,13 @@ class _DashboardBodyState extends State<_DashboardBody>
         '${_metrics.procs.length} tasks · sorted by CPU%',
         style: theme.mutedStyle,
       ),
+      // No type-ahead: the footer advertises a bare-printable quit key
+      // ('q'), which a type-ahead table would swallow.
       child: DataTable(
         rowCount: _metrics.procs.length,
         controller: _table,
         autofocus: true,
+        typeahead: false,
         selectionMode: DataTableSelectionMode.row,
         columns: const <DataTableColumn>[
           DataTableColumn(id: 'pid', title: 'PID', width: FixedColumnWidth(7)),
