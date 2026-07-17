@@ -6,7 +6,7 @@ description: Ship a Fleury app as a terminal binary or in-browser bundle, and pr
 The same app can ship as a native terminal program or a self-contained browser
 bundle. During development, `fleury serve` can also mirror a native process into
 a browser. This guide covers each path; for *how* the browser paths work under
-the hood, see [Serving and embedding](/architecture/serving-and-embedding/).
+the hood, see [Serving and embedding](/fleury/architecture/serving-and-embedding/).
 
 ## Ship a terminal app
 
@@ -31,7 +31,7 @@ That binary is the whole app. Ship it like any CLI tool.
 
 The *same* widget tree compiles to JavaScript and runs client-side — no server.
 Write a tiny web entry point that mounts your app with
-[`mountApp`](/concepts/app-entry/):
+[`mountApp`](/fleury/concepts/app-entry/):
 
 ```dart
 // web/main.dart
@@ -134,5 +134,5 @@ directly: `dart run packages/fleury/bin/fleury.dart serve …`.
 
 > **Release status.** Fleury is pre-1.0 and not yet published to pub.dev; apps
 > depend on it via git or path dependencies (as in [Getting
-> started](/getting-started/)). Published packages, a Homebrew tap, and a
+> started](/fleury/getting-started/)). Published packages, a Homebrew tap, and a
 > `create-fleury-app` scaffold are planned for after the API stabilizes.

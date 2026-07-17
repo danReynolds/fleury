@@ -26,13 +26,13 @@ agents.
 The framework itself never mentions a terminal: it paints into an abstract cell
 grid, and a **target** turns that grid into something real — diffed ANSI, a
 browser DOM, or a streamed session. The
-[architecture overview](/architecture/overview/) walks the whole pipeline.
+[architecture overview](/fleury/architecture/overview/) walks the whole pipeline.
 
 ## Where to start
 
-- **New here?** [Getting started](/getting-started/) builds your first app in a
+- **New here?** [Getting started](/fleury/getting-started/) builds your first app in a
   few minutes.
-- **Coming from Flutter?** [The map](/coming-from-flutter/) — what's identical,
+- **Coming from Flutter?** [The map](/fleury/coming-from-flutter/) — what's identical,
   what's renamed, and what's deliberately different.
 - **Putting Fleury on the web?**
-  [Serving and embedding](/architecture/serving-and-embedding/).
+  [Serving and embedding](/fleury/architecture/serving-and-embedding/).

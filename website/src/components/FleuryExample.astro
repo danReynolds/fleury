@@ -33,6 +33,8 @@ const badgeLabel = interactive ? 'Live · interactive' : 'Live';
 const badgeTitle = interactive
   ? 'The real widget, running live in your browser (dart2js) — click it and use your keyboard/mouse to interact.'
   : 'The real widget, running live in your browser, compiled with dart2js.';
+const servingGuide = '/fleury/architecture/serving-and-embedding/';
+const examplesBundle = '/fleury/fleury-examples.js';
 ---
 
 <figure class="fleury-example">
@@ -46,7 +48,7 @@ const badgeTitle = interactive
         {interactive && <span class="fleury-hint">click &amp; type to interact</span>}
         <a
           class="fleury-info"
-          href="/architecture/serving-and-embedding/"
+          href={servingGuide}
           title="The real widget, running live in your browser — compiled to JavaScript with dart2js, no server. Click to learn how."
         >ⓘ how it works</a>
         <button
@@ -74,7 +76,7 @@ const badgeTitle = interactive
   </div>
 </figure>
 
-<script is:inline>
+<script is:inline define:vars={{ examplesBundle }}>
   (function () {
     if (window.__fleuryExamplesBoot) return;
     window.__fleuryExamplesBoot = true;
@@ -82,7 +84,7 @@ const badgeTitle = interactive
     if (!document.getElementById('fleury-examples-bundle')) {
       const s = document.createElement('script');
       s.id = 'fleury-examples-bundle';
-      s.src = '/fleury-examples.js';
+      s.src = examplesBundle;
       s.defer = true;
       document.head.appendChild(s);
     }

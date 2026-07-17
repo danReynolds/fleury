@@ -136,7 +136,7 @@ are shorthands too: `context.theme` and `context.colors`.
 Note one difference from a render tree: a `BuildContext` has no `.size`. A widget
 doesn't know its own dimensions during `build` (it hasn't been laid out yet).
 Read the *screen* size from `MediaQuery`, and make a subtree adapt to *its* space
-with layout widgets like `Expanded` and `Wrap` (see [Layout](/guides/layout/)).
+with layout widgets like `Expanded` and `Wrap` (see [Layout](/fleury/guides/layout/)).
 
 ## Keys
 
@@ -170,6 +170,6 @@ rebuild automatically when it changes.
 
 ---
 
-Next: where the tree starts running — [App entry points](/concepts/app-entry/).
-For arranging widgets once you have them, see [Layout](/guides/layout/); for the
-leaf widgets that go in the tree, the [widget reference](/widgets/).
+Next: where the tree starts running — [App entry points](/fleury/concepts/app-entry/).
+For arranging widgets once you have them, see [Layout](/fleury/guides/layout/); for the
+leaf widgets that go in the tree, the [widget reference](/fleury/widgets/).

@@ -5,7 +5,7 @@ description: Build a multi-field form with live validation and a submit gated on
 
 Fleury has no special "form framework" you have to learn — a form is just
 stateful widgets and the same `setState` loop you already use. A text field
-holds its value in a [`TextEditingController`](/widgets/textinput/); a
+holds its value in a [`TextEditingController`](/fleury/widgets/textinput/); a
 validator is a plain function of the current values; and a disabled `Button` is
 one whose `onPressed` is `null`. Put those together and you get live validation
 for free.

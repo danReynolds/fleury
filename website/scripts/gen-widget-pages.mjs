@@ -235,7 +235,7 @@ function sourceSection(widget) {
   return (
     `## Source\n\n` +
     `\`${widget}\` is defined in [\`${e.file}\`](${url}) — read the ` +
-    `implementation, or jump straight to the [widget catalog](/widgets/).\n\n`
+    `implementation, or jump straight to the [widget catalog](/fleury/widgets/).\n\n`
   );
 }
 
@@ -374,7 +374,7 @@ for (const e of widgets) {
       usageSection(slug, e.widget, snippet) +
       constructorsSection(e.widget) +
       sourceSection(e.widget) +
-      `**Category:** ${e.category} · [All widgets](/widgets/)\n\n` +
+      `**Category:** ${e.category} · [All widgets](/fleury/widgets/)\n\n` +
       `</WidgetLayout>\n`
   );
 }
@@ -406,7 +406,7 @@ const docNote = (reason) => {
     return (
       `:::note[Runs locally]\nThis widget uses \`dart:io\` (filesystem, processes, ` +
       `or image decoding), so it runs in a terminal or through ` +
-      `[\`fleury serve\`](/architecture/serving-and-embedding/) — not as an ` +
+      `[\`fleury serve\`](/fleury/architecture/serving-and-embedding/) — not as an ` +
       `in-browser embed. The reference below is generated from the source.\n:::\n`
     );
   if (reason === 'native-model')
@@ -414,14 +414,14 @@ const docNote = (reason) => {
       `:::note[Supporting model]\nThis is a protocol-neutral data snapshot, not ` +
       `a widget or an I/O service. Its current \`LogEntry\` dependency lives ` +
       `in the native-only log library, so use it in a terminal or through ` +
-      `[\`fleury serve\`](/architecture/serving-and-embedding/), not in a ` +
+      `[\`fleury serve\`](/fleury/architecture/serving-and-embedding/), not in a ` +
       `client-side embed.\n:::\n`
     );
   if (reason === 'core')
     return (
       `:::note[Core widget]\nA framework primitive from \`package:fleury\` — the ` +
       `same model you know from Flutter. The reference below is generated from ` +
-      `the source; the [guides](/guides/layout/) show these in context.\n:::\n`
+      `the source; the [guides](/fleury/guides/layout/) show these in context.\n:::\n`
     );
   if (reason === 'reference')
     return (
@@ -527,7 +527,7 @@ for (const d of DOC_PAGES) {
       (d.code ? `## Usage\n\n\`\`\`dart\n${d.code}\n\`\`\`\n\n` : '') +
       constructorsSection(d.widget) +
       sourceSection(d.widget) +
-      `**Category:** ${d.category} · [All widgets](/widgets/)\n`
+      `**Category:** ${d.category} · [All widgets](/fleury/widgets/)\n`
   );
 }
 
@@ -562,7 +562,7 @@ let widgetIndex =
 for (const [category, items] of byCategory) {
   widgetIndex += `## ${category}\n\n`;
   for (const e of items)
-    widgetIndex += `- [${e.widget}](/widgets/${e.id.split('.')[0]}/) — ${e.blurb}\n`;
+    widgetIndex += `- [${e.widget}](/fleury/widgets/${e.id.split('.')[0]}/) — ${e.blurb}\n`;
   widgetIndex += `\n`;
 }
 writeFileSync(join(widgetsDir, 'index.mdx'), widgetIndex);
@@ -608,7 +608,7 @@ const SHOWCASE_GOALS = {
     'over a cell grid, expressive enough that a rich agent UI comes down to ' +
     'layout and color. And because it is an ordinary Fleury tree, the same UI is ' +
     'inspectable as a semantic graph — so a test, or another agent, can read it. ' +
-    'See [Built for agents](/architecture/agents-and-semantics/).',
+    'See [Built for agents](/fleury/architecture/agents-and-semantics/).',
 };
 
 // Catalog widget name → { slug, category }, for the "widgets used" links.
@@ -651,7 +651,7 @@ for (const e of showcases) {
       `</ShowcaseStage>\n\n` +
       `## Widgets used\n\n` +
       `<ShowcaseWidgets widgets={${JSON.stringify(used)}} />\n\n` +
-      `[All showcases](/showcases/)\n`
+      `[All showcases](/fleury/showcases/)\n`
   );
 }
 const showIndex =
@@ -660,7 +660,7 @@ const showIndex =
   `live in your browser** — open one and use your keyboard and mouse. Each is ` +
   `also a runnable native sample: \`fleury dev samples <app>\`.\n\n` +
   showcases
-    .map((e) => `- [${e.widget}](/showcases/${e.id.split('.')[1]}/) — ${e.blurb}`)
+    .map((e) => `- [${e.widget}](/fleury/showcases/${e.id.split('.')[1]}/) — ${e.blurb}`)
     .join('\n') +
   `\n`;
 writeFileSync(join(showDir, 'index.mdx'), showIndex);

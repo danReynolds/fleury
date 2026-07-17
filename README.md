@@ -9,38 +9,38 @@
   One widget tree, two surfaces.
 </p>
 
+<p align="center">
+  <a href="https://danreynolds.github.io/fleury/"><strong>Documentation</strong></a> ·
+  <a href="https://danreynolds.github.io/fleury/getting-started/">Get started</a> ·
+  <a href="https://danreynolds.github.io/fleury/widgets/">Widgets</a> ·
+  <a href="https://danreynolds.github.io/fleury/showcases/">Showcases</a>
+</p>
+
 ---
 
-Fleury brings Dart's Flutter-shaped widget model to cell-based interfaces:
+Fleury brings a Flutter-shaped authoring model to cell-based interfaces:
 compose widgets, keep state with `StatefulWidget`, rebuild with `setState`, and
-let the framework diff the resulting cell grid. The same widget tree can run in
-a native terminal or mount into a browser.
+let the framework incrementally lay out and paint the result.
 
-It can project the visual tree into a semantic graph, so tests and agents can
-inspect and invoke stable application actions instead of relying on terminal
-coordinates. Browser and agent-facing hosts retain that graph; tests and native
-debug tools materialize it on demand. The browser host mirrors retained
-semantics into a semantic DOM; native terminal assistive-technology adapters
-remain future work.
+The same reusable widget tree can run in a native terminal or mount into a web
+page. Alongside the visual tree, Fleury builds a semantic graph that tests and
+AI agents can inspect and operate by meaning instead of terminal coordinates.
 
-**Start here:** [Getting started](https://fleury.dev/getting-started/) ·
-[Widget catalog](https://fleury.dev/widgets/) ·
-[Navigation and commands](https://fleury.dev/guides/navigation/) ·
-[Architecture](https://fleury.dev/architecture/core-and-targets/) ·
-[Performance](https://fleury.dev/architecture/performance/)
+## Why Fleury
 
-## Try it from this checkout
+- **A familiar retained UI model.** Widgets, state, context, keys, constraints,
+  focus, navigation, animation, and inherited dependencies compose the way
+  application developers expect.
+- **Terminal-native rendering.** Fleury paints grapheme-aware cells and sends
+  diffed ANSI output instead of treating the terminal like a pixel canvas.
+- **Terminal and browser targets.** Share application UI while choosing a
+  native terminal host, a client-side web mount, or a served browser session.
+- **A real widget library.** Forms, tables, trees, charts, document views, and
+  agent-oriented surfaces live in `fleury_widgets`.
+- **Semantics from the start.** The same semantic model supports testing,
+  browser accessibility, inspection, and agent actions.
 
-```sh
-dart tool/fleury_dev.dart bootstrap
-dart tool/fleury_dev.dart widget-demo app-shell
-```
-
-The app-shell demo is the shortest tour of a real multi-screen Fleury app:
-route-local commands, keyboard shortcuts, a registry-backed command palette,
-buttons, and semantic actions all invoke the same application operations.
-
-At its smallest, an app is just a widget tree handed to `runApp`:
+## A Fleury app
 
 ```dart
 import 'package:fleury/fleury.dart';
@@ -53,82 +53,25 @@ void main() => runApp(
 );
 ```
 
-The [getting-started guide](https://fleury.dev/getting-started/) covers Git
-dependencies, state, higher-level widgets, and running the same tree in a
-browser.
+The [getting-started guide](https://danreynolds.github.io/fleury/getting-started/)
+covers installation, state, higher-level widgets, and running the same tree in
+a browser.
 
-## Repository development
+## Go deeper
 
-The workspace is split into local Dart packages:
+- [Browse the widget catalog](https://danreynolds.github.io/fleury/widgets/)
+- [Build a multi-screen app](https://danreynolds.github.io/fleury/guides/navigation/)
+- [Understand the architecture](https://danreynolds.github.io/fleury/architecture/overview/)
+- [Drive an app with an agent](https://danreynolds.github.io/fleury/guides/driving-with-agents/)
 
-- `packages/fleury` — the platform-neutral retained core, app shell, native
-  terminal host, and theme-free primitives.
-- `packages/fleury_test` — deterministic widget tests, semantic assertions,
-  and golden helpers, kept out of application dependency graphs.
-- `packages/fleury_widgets` — higher-level, theme-driven widgets built on
-  `fleury`.
-- `packages/fleury_git` — a small Git integration package proving app-extension
-  package seams.
-- `packages/fleury_web` — the retained-DOM browser host, served client, and demo
-  surface.
-- `packages/fleury_example_console` — the internal integration demo app.
-- `packages/storybook` — an interactive catalog for supported widgets.
-- `docs/architecture.md`, `docs/core-and-targets.md`, and
-  `docs/serving-and-embedding.md` — the core/host layering and browser paths.
-- `docs/rfcs` and `docs/implementation` — design records and milestone notes.
-- `peer-fixtures` — comparison-only peer framework fixtures and run artifacts.
+## Working on Fleury
 
-The root launcher delegates to the package that owns each command, so the
-workspace does not need a root `pubspec.yaml`:
+From a checkout, bootstrap the workspace and run the normal validation gate:
 
 ```sh
 dart tool/fleury_dev.dart bootstrap
 dart tool/fleury_dev.dart check --quick
-dart tool/fleury_dev.dart widget-demo app-shell
-dart tool/fleury_dev.dart storybook
-dart tool/fleury_dev.dart --help
 ```
 
-Optional local CLI paths:
-
-```sh
-dart tool/fleury_dev.dart activate-cli
-dart tool/fleury_dev.dart build-cli
-```
-
-After local activation, contributor commands are also available under
-`fleury dev`; app-developer commands such as `fleury diagnose`, `fleury shell`,
-and `fleury serve` remain top-level. Run `fleury dev --help` and
-`fleury benchmark --help` for the full command surfaces.
-
-## Performance and benchmarks
-
-Fleury documents performance as an implementation model plus repeatable
-scenario evidence. Read the public
-[performance guide](https://fleury.dev/architecture/performance/) and the
-detailed [benchmark matrix](benchmarks/README.md).
-
-The suite covers startup and first paint, input latency, large-data navigation,
-streaming logs and Markdown, dashboard cadence, layout invalidation, resize and
-overlay churn, process output, wire bytes, CPU, and RSS. Peer-wire comparisons
-record fixture shape, runtime floors, framework versions, machine context, and
-variance alongside results.
-
-```sh
-fleury benchmark list
-fleury benchmark local SB.6 --warmup=1 --iterations=3 --json
-fleury benchmark wire sb6 --runs=3
-fleury benchmark manifest --json
-```
-
-## Validate
-
-For the normal local gate:
-
-```sh
-dart tool/fleury_dev.dart check --quick
-```
-
-Each package can also be checked independently with `dart analyze` and
-`dart test` from its directory. Run `dart tool/fleury_dev.dart --help` for the
-broader release, docs, terminal-matrix, and benchmark evidence commands.
+Contributor notes and architecture records live under [`docs/`](docs/); the
+public documentation is built from `website/`.

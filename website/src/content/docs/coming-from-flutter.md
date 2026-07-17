@@ -270,5 +270,5 @@ in Flutter.
 6. Decide the host: terminal `runApp`, static browser `mountApp`, or native app
    streamed through `fleury serve`.
 
-The fastest way in is the [tutorial](/tutorial/), then
-[Widgets & state](/concepts/widgets-and-state/) and [App entry points](/concepts/app-entry/).
+The fastest way in is the [tutorial](/fleury/tutorial/), then
+[Widgets & state](/fleury/concepts/widgets-and-state/) and [App entry points](/fleury/concepts/app-entry/).

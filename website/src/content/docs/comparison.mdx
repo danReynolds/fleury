@@ -62,8 +62,8 @@ click into one and use it (type, arrow, select):
   ]}
 />
 
-Browse the catalog in the [widget reference](/widgets/), or see them composed
-into real apps in the [showcases](/showcases/).
+Browse the catalog in the [widget reference](/fleury/widgets/), or see them composed
+into real apps in the [showcases](/fleury/showcases/).
 
 ### A UI built for agents and tests
 
@@ -81,15 +81,15 @@ Tests assert on *meaning* — "row 3 is selected", "the CPU gauge reads 0.62" �
 survive a re-theme, a layout change, or a port to the browser. An AI agent reads
 the graph and drives the UI through those actions instead of scraping ANSI and
 guessing keystrokes. It's produced by the core, runs alongside the visual frame
-without adding terminal-paint work, and crosses the [`fleury serve`](/architecture/serving-and-embedding/)
+without adding terminal-paint work, and crosses the [`fleury serve`](/fleury/architecture/serving-and-embedding/)
 wire too — so a served preview is as inspectable as a terminal session. See
-[Built for agents](/architecture/agents-and-semantics/).
+[Built for agents](/fleury/architecture/agents-and-semantics/).
 
 ### One app, terminal or browser
 
 The same widget tree runs three ways: natively in a real terminal, compiled into a
 web page client-side with dart2js (no backend — every demo on this page is exactly
-that), or previewed from a native process with [`fleury serve`](/architecture/serving-and-embedding/).
+that), or previewed from a native process with [`fleury serve`](/fleury/architecture/serving-and-embedding/).
 They aren't separate ports. A **parity oracle** asserts the terminal and the
 browser render the same tree, cell for cell, so the two surfaces can't quietly
 drift apart — and a `dart:io`-free core is what lets one definition span all three.
@@ -102,7 +102,7 @@ busy one pays only for what moved. A cursor move in a 10,000-character editor co
 about **0.8 ms in the saved development fixture**, tracking the change rather
 than how much is on screen. Data widgets are virtualized, so a
 hundred-thousand-row table costs about a screenful. The
-[benchmark suite](/architecture/performance/) measures local pipeline work,
+[benchmark suite](/fleury/architecture/performance/) measures local pipeline work,
 real-terminal bytes and process cost, and the browser frame path. Current
 captures support a peer-competitive performance claim across many matched
 workloads, not a universal "fastest framework" ranking. The dashboard below
@@ -136,7 +136,7 @@ on, straight from the Dart VM. Most terminal stacks restart the process and lose
 your place.
 
 None of this makes Dart the *leanest* option at the floor — Rust boots quicker
-and idles smaller, and [the benchmarks](/architecture/performance/) say so
+and idles smaller, and [the benchmarks](/fleury/architecture/performance/) say so
 plainly — or the most common in the space. It makes it the right fit for *this*
 job: a real, retained UI framework that spans the terminal and the browser from
 one codebase.

@@ -90,7 +90,7 @@ FleuryApp(
 
 App-wide commands can be passed through `commands:`; route-local actions belong
 in a `CommandScope` beside the screen that owns them. See
-[Navigation and commands](/guides/navigation/#commands-that-navigate) for a
+[Navigation and commands](/fleury/guides/navigation/#commands-that-navigate) for a
 complete, compile-checked pattern.
 
 Choose exactly one root mode:
@@ -118,7 +118,7 @@ FleuryApp(
 ```
 
 Do not pass both `home` and `child`. `Theme.of(context)` still returns sensible
-defaults when `theme` is omitted; see [Theming](/guides/theming/) for app-wide
+defaults when `theme` is omitted; see [Theming](/fleury/guides/theming/) for app-wide
 and local themes.
 
 ## `mountApp` — the browser
@@ -170,5 +170,5 @@ surface is a real Fleury tree compiled with `dart2js` and mounted with
 To preview a native app in a browser *without* compiling it yourself, reach for
 `fleury serve` instead — it runs your native app and streams the frames to a thin
 client. That's local development tooling, not an entry point;
-[Serving and embedding](/architecture/serving-and-embedding/) covers when to
+[Serving and embedding](/fleury/architecture/serving-and-embedding/) covers when to
 embed versus serve.

@@ -19,12 +19,12 @@ const COMPONENT = '../../../components/FleuryExample.astro';
 const GITHUB = 'https://github.com/danReynolds/fleury/blob/main/docs';
 
 const ROUTES = {
-  'architecture-overview.md': '/architecture/overview/',
-  'architecture-deep-dive.md': '/architecture/deep-dive/',
-  'core-and-targets.md': '/architecture/core-and-targets/',
-  'serving-and-embedding.md': '/architecture/serving-and-embedding/',
-  'agents-and-semantics.md': '/architecture/agents-and-semantics/',
-  'performance.md': '/architecture/performance/',
+  'architecture-overview.md': '/fleury/architecture/overview/',
+  'architecture-deep-dive.md': '/fleury/architecture/deep-dive/',
+  'core-and-targets.md': '/fleury/architecture/core-and-targets/',
+  'serving-and-embedding.md': '/fleury/architecture/serving-and-embedding/',
+  'agents-and-semantics.md': '/fleury/architecture/agents-and-semantics/',
+  'performance.md': '/fleury/architecture/performance/',
 };
 
 const DOCS = [
@@ -74,10 +74,12 @@ const DOCS = [
 ];
 
 const rewriteLinks = (md) =>
-  md.replace(/\]\(([\w-]+)\.md(#[^)]*)?\)/g, (_m, file, anchor) => {
-    const dest = ROUTES[`${file}.md`] ?? `${GITHUB}/${file}.md`;
-    return `](${dest}${anchor ?? ''})`;
-  });
+  md
+    .replace(/\]\(([\w-]+)\.md(#[^)]*)?\)/g, (_m, file, anchor) => {
+      const dest = ROUTES[`${file}.md`] ?? `${GITHUB}/${file}.md`;
+      return `](${dest}${anchor ?? ''})`;
+    })
+    .replace(/\]\(\/(?!fleury\/)/g, '](/fleury/');
 
 // <!-- fleury-example: <id> [<cols>x<rows>] [| caption] -->
 const EXAMPLE_RE =

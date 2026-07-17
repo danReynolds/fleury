@@ -14,6 +14,8 @@ interface Props {
 }
 const { id, cols = 48, rows = 6 } = Astro.props;
 const style = `width:${cols}ch;height:${(rows * 1.25).toFixed(2)}em`;
+const servingGuide = '/fleury/architecture/serving-and-embedding/';
+const examplesBundle = '/fleury/fleury-examples.js';
 ---
 
 <div class="fleury-knobs" data-fleury-knobs={id}>
@@ -26,7 +28,7 @@ const style = `width:${cols}ch;height:${(rows * 1.25).toFixed(2)}em`;
         <span class="fleury-hint">▾ edit the props below</span>
         <a
           class="fleury-info"
-          href="/architecture/serving-and-embedding/"
+          href={servingGuide}
           title="The real widget, running live in your browser — compiled to JavaScript with dart2js, no server. Click to learn how."
         >ⓘ how it works</a>
       </div>
@@ -38,7 +40,7 @@ const style = `width:${cols}ch;height:${(rows * 1.25).toFixed(2)}em`;
   </div>
 </div>
 
-<script is:inline>
+<script is:inline define:vars={{ examplesBundle }}>
   (function () {
     // Control specs per knob id. Kept in sync with registry.dart knobExamples.
     const KNOBS = {
@@ -67,7 +69,7 @@ const style = `width:${cols}ch;height:${(rows * 1.25).toFixed(2)}em`;
     if (!document.getElementById('fleury-examples-bundle')) {
       const s = document.createElement('script');
       s.id = 'fleury-examples-bundle';
-      s.src = '/fleury-examples.js';
+      s.src = examplesBundle;
       s.defer = true;
       document.head.appendChild(s);
     }

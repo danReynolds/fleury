@@ -206,5 +206,5 @@ around it.
 Every layout widget here is exported from the main `fleury` import, and each
 takes a `child` (or `children`) like any other widget — layout *is* just more
 widgets. For the leaf widgets that go inside these — text, inputs, charts,
-viewers — see the [widget reference](/widgets/). For how a widget tree turns
-into state and rebuilds, see [Widgets & state](/concepts/widgets-and-state/).
+viewers — see the [widget reference](/fleury/widgets/). For how a widget tree turns
+into state and rebuilds, see [Widgets & state](/fleury/concepts/widgets-and-state/).

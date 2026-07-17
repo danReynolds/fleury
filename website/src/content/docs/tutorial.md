@@ -5,10 +5,10 @@ description: Build a small interactive TUI end-to-end — state, a text input, l
 
 In about fifteen minutes you'll build a list that narrows live as you type —
 touching the three things every Fleury app is made of:
-[state](/concepts/widgets-and-state/), [layout](/guides/layout/), and input.
+[state](/fleury/concepts/widgets-and-state/), [layout](/fleury/guides/layout/), and input.
 
 You'll need a project with the `fleury` and `fleury_widgets` dependencies; the
-first step of [Getting started](/getting-started/) sets that up if you haven't
+first step of [Getting started](/fleury/getting-started/) sets that up if you haven't
 already.
 
 ## What we're building
@@ -168,11 +168,11 @@ reported through `onChanged`, a derived list, and a layout that fills the screen
 
 - The same **widget tree** runs in a browser with a target-specific host
   entrypoint and web-safe imports — see [Deployment &
-  distribution](/guides/deployment/) to compile it with `dart2js` or preview the
+  distribution](/fleury/guides/deployment/) to compile it with `dart2js` or preview the
   native app locally with `fleury serve`.
-- Swap the plain `Column` of `Text` for a richer widget — a [`Tree`](/widgets/tree/),
-  [`DataTable`](/widgets/datatable/), or [`Select`](/widgets/select/) — from the
-  [widget reference](/widgets/). (Those live in `fleury_widgets`; add
+- Swap the plain `Column` of `Text` for a richer widget — a [`Tree`](/fleury/widgets/tree/),
+  [`DataTable`](/fleury/widgets/datatable/), or [`Select`](/fleury/widgets/select/) — from the
+  [widget reference](/fleury/widgets/). (Those live in `fleury_widgets`; add
   `import 'package:fleury_widgets/fleury_widgets.dart';` when you reach for them.)
 - Add keyboard navigation (arrow keys to move a selection) with the patterns in
-  [Focus & keyboard](/guides/focus-and-keyboard/).
+  [Focus & keyboard](/fleury/guides/focus-and-keyboard/).
