@@ -151,7 +151,7 @@ ManualValidationTarget? manualValidationTargetById(String id) {
 
 List<String>? manualValidationTargetIdsForPreset(String preset) {
   return switch (preset) {
-    'v1' || 'primary' => manualValidationV1TargetIds,
+    'v1' => manualValidationV1TargetIds,
     'all' => [for (final target in manualValidationTargets) target.id],
     _ => null,
   };
@@ -159,9 +159,8 @@ List<String>? manualValidationTargetIdsForPreset(String preset) {
 
 /// Current v1 release evidence scope.
 ///
-/// `primary` remains an alias for existing commands, while release packets use
-/// `v1` to make the current manual release gate explicit. IME and VoiceOver
-/// remain defined manual targets for roadmap validation; run them with
+/// IME and VoiceOver remain defined manual targets for roadmap validation. Run
+/// them with
 /// `--target=chrome-ime-macos`, `--target=chrome-voiceover-macos`, or
 /// `--target-preset=all`.
 const manualValidationV1TargetIds = <String>[];

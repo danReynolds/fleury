@@ -1434,7 +1434,7 @@ final class _Options {
     String? writeTemplatesDir;
     String? templateTargetId;
     String? jsonOutputPath;
-    var targetPreset = 'primary';
+    var targetPreset = 'v1';
     final targetIds = <String>[];
     var json = false;
     var strict = false;
@@ -1636,7 +1636,7 @@ void _printUsage() {
   );
   stdout.writeln('  --json-output=PATH           JSON audit output path.');
   stdout.writeln(
-    '  --target-preset=v1|primary|all  Target preset, default primary.',
+    '  --target-preset=v1|all          Target preset, default v1.',
   );
   stdout.writeln('  --target=ID                  Restrict audit to a target.');
   stdout.writeln(

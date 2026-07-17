@@ -1118,7 +1118,7 @@ void main() {
         '--write-templates=${tempDir.path}/templates',
         '--template-target=chrome-voiceover-macos',
         '--json-output=${tempDir.path}/manual-validation-audit.json',
-        '--target-preset=primary',
+        '--target-preset=v1',
         '--target=chrome-ime-macos',
         '--strict',
         '--json',
@@ -1188,7 +1188,7 @@ void main() {
         result.stdout,
         contains('--json-output=${tempDir.path}/manual-validation-audit.json'),
       );
-      expect(result.stdout, contains('--target-preset=primary'));
+      expect(result.stdout, contains('--target-preset=v1'));
       expect(result.stdout, contains('--target=chrome-ime-macos'));
       expect(result.stdout, contains('--strict'));
       expect(result.stdout, contains('--json'));

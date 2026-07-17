@@ -31,11 +31,10 @@ void main() {
       expect(output, contains('Primary contributor commands:'));
       expect(output, contains('Evidence and release commands:'));
       expect(output, contains('Maintenance commands:'));
-      expect(output, contains('Legacy benchmark aliases:'));
       expect(output, contains('coverage [options]'));
       expect(output, contains('storybook'));
       expect(output, contains('benchmark manifest --json'));
-      expect(output, contains('Prefer `benchmark manifest [options]`'));
+      expect(output, isNot(contains('benchmark-manifest')));
     });
 
     test('list exposes runnable demo names', () async {
@@ -202,14 +201,12 @@ void main() {
       expect(output, isNot(contains('benchmark-manifest')));
     });
 
-    test('legacy benchmark aliases remain available', () async {
+    test('removed benchmark aliases are rejected', () async {
       final result = await _runTool(['benchmark-manifest', '--help']);
 
-      expect(result.exitCode, 0, reason: result.stderr.toString());
-      expect(
-        result.stdout,
-        contains('Usage: dart tool/fleury_dev.dart benchmark-manifest'),
-      );
+      expect(result.exitCode, 2);
+      expect(result.stderr, contains('Unknown command: benchmark-manifest'));
+      expect(result.stdout, isNot(contains('benchmark-manifest [options]')));
     });
 
     test('wire peer discovery exposes SB.10 demo-app peers', () async {

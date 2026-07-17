@@ -423,8 +423,8 @@ Use `tool/web_manual_validation.dart` to generate the current checklist, create
 JSON evidence templates, and strict-audit reviewed entries. Pass
 `--write-templates=<dir>` to prepare one `<target-id>.template.json` file per
 selected target, or use `--write-template=<path> --template-target=<id>` for a
-single target. The explicit v1 preset currently has no required manual browser
-targets; `primary` remains a compatibility alias for that scoped release set.
+single target. The `v1` preset currently has no required manual browser
+targets.
 The `chrome-ime-macos` and `chrome-voiceover-macos` targets remain available
 through explicit `--target=...` flags or `--target-preset=all` for future IME
 and screen-reader validation. Manual evidence belongs under

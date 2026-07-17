@@ -41,7 +41,7 @@ Widget _keyedStringList(
 
 void main() {
   group('pointer selection', () {
-    testWidgets('tapping an item selects it and fires onSelect', (tester) {
+    testWidgets('tapping an item selects it and fires onActivate', (tester) {
       final controller = ListController(selectedIndex: 0);
       final activated = <int>[];
       tester.pumpWidget(
@@ -51,7 +51,7 @@ void main() {
           child: ListView.builder(
             controller: controller,
             itemCount: 4,
-            onSelect: activated.add,
+            onActivate: activated.add,
             itemBuilder: (context, index, selected) =>
                 SizedBox(width: 12, height: 1, child: Text('item $index')),
           ),
@@ -81,7 +81,7 @@ void main() {
           child: ListView.builder(
             controller: controller,
             itemCount: 4,
-            onSelect: activated.add,
+            onActivate: activated.add,
             itemBuilder: (context, index, selected) =>
                 SizedBox(width: 12, height: 1, child: Text('item $index')),
           ),
@@ -110,7 +110,7 @@ void main() {
           child: ListView.builder(
             controller: controller,
             itemCount: 4,
-            onSelect: activated.add,
+            onActivate: activated.add,
             itemBuilder: (context, index, selected) =>
                 SizedBox(width: 12, height: 1, child: Text('item $index')),
           ),
@@ -179,14 +179,14 @@ void main() {
       expect(controller.selectedIndex, 0);
     });
 
-    testWidgets('Enter fires onSelect with the current index', (tester) {
+    testWidgets('Enter fires onActivate with the current index', (tester) {
       int? selected;
       tester.pumpWidget(
         ListView.builder(
           itemCount: 3,
           itemBuilder: _itemBuilder,
           autofocus: true,
-          onSelect: (i) => selected = i,
+          onActivate: (i) => selected = i,
         ),
       );
 
@@ -370,7 +370,7 @@ void main() {
           child: ListView.builder(
             controller: controller,
             itemCount: 20,
-            onSelect: activated.add,
+            onActivate: activated.add,
             autofocus: true,
             itemBuilder: (context, index, selected) =>
                 SizedBox(width: 10, height: 1, child: Text('item $index')),
@@ -1633,7 +1633,7 @@ void main() {
           itemBuilder: itemB,
           separatorBuilder: sepB,
           autofocus: true,
-          onSelect: selections.add,
+          onActivate: selections.add,
         ),
       );
       tester.render(size: const CellSize(8, 12)); // 4 items + 3 seps = 7 rows
@@ -1654,7 +1654,7 @@ void main() {
     });
 
     testWidgets('clicking a separator selects the item it trails; clicking an '
-        'item selects and fires onSelect', (tester) {
+        'item selects and fires onActivate', (tester) {
       // A separator is composed into the block of the item it trails, and the
       // block is one tap target — so a click on the separator row selects that
       // item (it holds no index of its own).
@@ -1667,7 +1667,7 @@ void main() {
           child: ListView.separated(
             controller: controller,
             itemCount: 3,
-            onSelect: activated.add,
+            onActivate: activated.add,
             itemBuilder: (c, i, sel) =>
                 SizedBox(width: 12, height: 1, child: Text('item$i')),
             separatorBuilder: (c, i) =>
@@ -1682,7 +1682,7 @@ void main() {
       tester.sendMouse(_mouse(MouseEventKind.up, 1, 1));
       expect(controller.selectedIndex, 0);
       expect(activated, [0], reason: 'a separator click selects its item');
-      // The item on row 2 selects and fires onSelect(1) as usual.
+      // The item on row 2 selects and fires onActivate(1) as usual.
       tester.sendMouse(_mouse(MouseEventKind.down, 1, 2));
       tester.sendMouse(_mouse(MouseEventKind.up, 1, 2));
       expect(controller.selectedIndex, 1);
@@ -1705,7 +1705,7 @@ void main() {
           child: ListView.separated(
             controller: controller,
             itemCount: 4,
-            onSelect: activated.add,
+            onActivate: activated.add,
             itemBuilder: (c, i, sel) =>
                 SizedBox(width: 8, height: 1, child: Text('i$i')),
             // Only item 1 gets a (tall) trailing separator, so its block
