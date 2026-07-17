@@ -593,7 +593,17 @@ abstract class Element implements BuildContext {
     child.detachRenderObject();
     child._parent = null;
     try {
-      child._deactivateRecursively();
+      // A child reclaimed out of a subtree deactivated earlier in this same
+      // pass is already inactive (only the subtree ROOT had _parent nulled).
+      // Re-running the recursive deactivation would fire deactivate() hooks
+      // twice and recompute _hadDependenciesWhenDeactivated from the
+      // already-cleared dependency sets, leaving the moved subtree deaf to
+      // inherited values after reactivation (Flutter guards the same way in
+      // _InactiveElements.add). Detach + re-registration still happen above
+      // and below.
+      if (child._lifecycle == _ElementLifecycle.active) {
+        child._deactivateRecursively();
+      }
       _owner?._inactiveElements.add(child);
     } catch (error, stack) {
       // A user deactivate hook can throw after only part of the subtree has
@@ -1236,13 +1246,29 @@ class BuildOwner {
   void _claimGlobalKey(GlobalKey key, Element parent) {
     final existing = _globalKeyClaims[key];
     if (existing != null) {
-      throw StateError(
-        'Duplicate GlobalKey detected in the widget tree.\n'
-        'The same $key was used to inflate two widgets in one build pass '
-        '(under ${existing.toStringShallow()} and '
-        '${parent.toStringShallow()}). A GlobalKey instance may identify at '
-        'most one widget at a time; give the second widget its own key.',
-      );
+      // A claim from an earlier pass of this flush is stale when the key's
+      // element has since left the active tree (deactivated by a later
+      // reconcile): the key moved on sequentially — two claims, but never
+      // two live widgets at once. Only a key whose element is still active
+      // is a true duplicate; that also keeps the steal-back storm detection
+      // this check exists for, where the element IS active under the other
+      // claimant at the moment of the second claim.
+      // The forgiveness is rebuild-order-dependent by design: within one
+      // flush, "moved on" is only observable once the old position's
+      // reconcile has deactivated the element. If the new position
+      // rebuilds first, this still throws — matching the invariant that
+      // at no point may two active widgets describe one key.
+      final holder = key._element;
+      if (holder != null && holder._lifecycle == _ElementLifecycle.active) {
+        final liveParent = holder._parent ?? existing;
+        throw StateError(
+          'Duplicate GlobalKey detected in the widget tree.\n'
+          'The same $key was used to inflate two widgets in one build pass '
+          '(under ${liveParent.toStringShallow()} and '
+          '${parent.toStringShallow()}). A GlobalKey instance may identify at '
+          'most one widget at a time; give the second widget its own key.',
+        );
+      }
     }
     _globalKeyClaims[key] = parent;
   }
@@ -1813,6 +1839,14 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
     var unkeyedIndex = 0;
 
     void deactivateOld(Element child) {
+      // A GlobalKey inflate elsewhere in this loop can steal an old child
+      // mid-reconcile: forgetChild rebuilds _children, but this method's
+      // local partitions (keyedOlds, unkeyedOlds, result) still hold the
+      // reference. An element whose parent link has left this element is
+      // not ours to deactivate — ripping it out of its new home disposed
+      // relocated GlobalKey State and left the thief holding a defunct
+      // child (Flutter's _forgottenChildren guards the same hole).
+      if (!identical(child._parent, this)) return;
       _deactivateChild(child);
     }
 
@@ -1854,7 +1888,13 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
 
         if (newKey != null) {
           final candidate = keyedOlds.remove(newKey);
-          if (candidate != null) {
+          // A candidate stolen mid-loop by an earlier slot's GlobalKey
+          // inflate is stale: it is already committed under its new parent,
+          // and matching it here would place one element at two tree
+          // positions (silent corruption). Treat it as no-match — the
+          // inflate below re-claims the key and throws the designed
+          // duplicate-GlobalKey error instead.
+          if (candidate != null && identical(candidate._parent, this)) {
             if (Widget.canUpdate(candidate.widget, newWidget)) {
               matched = candidate;
             } else {
@@ -1899,6 +1939,24 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
       while (unkeyedIndex < unkeyedOlds.length) {
         deactivateOld(unkeyedOlds[unkeyedIndex]);
         unkeyedIndex += 1;
+      }
+
+      // A later slot's GlobalKey inflate can steal an element that an
+      // EARLIER slot already matched into `result` (the mirror ordering of
+      // the stale-candidate check above). Committing it would place one
+      // element at two tree positions; fail with the designed duplicate
+      // error instead, before any render-object adoption runs.
+      for (final el in result) {
+        if (el != null && !identical(el._parent, this)) {
+          throw StateError(
+            'Duplicate GlobalKey detected in the widget tree.\n'
+            'The same ${el.widget.key} matched a child of '
+            '${toStringShallow()} and was then reclaimed by '
+            '${el._parent?.toStringShallow() ?? 'another parent'} in the '
+            'same build pass. A GlobalKey instance may identify at most '
+            'one widget at a time; give the second widget its own key.',
+          );
+        }
       }
 
       return result.cast<Element>();
