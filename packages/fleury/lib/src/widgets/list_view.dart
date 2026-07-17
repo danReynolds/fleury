@@ -375,7 +375,6 @@ class ListView extends StatefulWidget {
     this.edgeBehavior = EdgeBehavior.bubble,
     this.onActivate,
     this.onSelectionChanged,
-    this.onSelect,
     this.selectionActive,
     this.scrollbar = false,
     this.addRepaintBoundaries = true,
@@ -383,11 +382,7 @@ class ListView extends StatefulWidget {
        itemBuilder = null,
        separatorBuilder = null,
        itemKeyBuilder = null,
-       findChildIndexCallback = null,
-       assert(
-         onActivate == null || onSelect == null,
-         'Use onActivate rather than supplying both onActivate and onSelect.',
-       );
+       findChildIndexCallback = null;
 
   /// Lazy constructor: build items on demand by index, mount only the
   /// visible ones. Each item builder invocation receives a `selected`
@@ -404,7 +399,6 @@ class ListView extends StatefulWidget {
     this.edgeBehavior = EdgeBehavior.bubble,
     this.onActivate,
     this.onSelectionChanged,
-    this.onSelect,
     this.selectionActive,
     this.scrollbar = false,
     this.addRepaintBoundaries = true,
@@ -412,10 +406,6 @@ class ListView extends StatefulWidget {
        assert(
          (itemKeyBuilder == null) == (findChildIndexCallback == null),
          'itemKeyBuilder and findChildIndexCallback must be supplied together.',
-       ),
-       assert(
-         onActivate == null || onSelect == null,
-         'Use onActivate rather than supplying both onActivate and onSelect.',
        ),
        separatorBuilder = null,
        children = null;
@@ -445,7 +435,6 @@ class ListView extends StatefulWidget {
     this.edgeBehavior = EdgeBehavior.bubble,
     this.onActivate,
     this.onSelectionChanged,
-    this.onSelect,
     this.selectionActive,
     this.scrollbar = false,
     this.addRepaintBoundaries = true,
@@ -453,10 +442,6 @@ class ListView extends StatefulWidget {
        assert(
          (itemKeyBuilder == null) == (findChildIndexCallback == null),
          'itemKeyBuilder and findChildIndexCallback must be supplied together.',
-       ),
-       assert(
-         onActivate == null || onSelect == null,
-         'Use onActivate rather than supplying both onActivate and onSelect.',
        ),
        children = null;
 
@@ -541,14 +526,6 @@ class ListView extends StatefulWidget {
   /// Programmatic controller writes and identity-preserving data updates do
   /// not call this callback.
   final void Function(int index)? onSelectionChanged;
-
-  /// Legacy alias for [onActivate].
-  ///
-  /// New code should use [onActivate]. Kept during the pre-1.0 migration so
-  /// downstream applications can update independently.
-  final void Function(int index)? onSelect;
-
-  void Function(int index)? get _activationCallback => onActivate ?? onSelect;
 
   /// Overrides whether the selected row should render as active.
   ///
@@ -793,7 +770,7 @@ class _ListViewState extends State<ListView> {
         _setUserSelection(count - 1);
         return KeyEventResult.handled;
       case KeyCode.enter:
-        widget._activationCallback?.call(selected);
+        widget.onActivate?.call(selected);
         return KeyEventResult.handled;
       default:
         return KeyEventResult.ignored;
@@ -854,7 +831,7 @@ class _ListViewState extends State<ListView> {
     if (index < 0 || index >= count) return;
     _setUserSelection(index);
     _focusNode.requestFocus();
-    widget._activationCallback?.call(index);
+    widget.onActivate?.call(index);
   }
 
   /// Wraps an item in a [RepaintBoundary] when [ListView.addRepaintBoundaries]

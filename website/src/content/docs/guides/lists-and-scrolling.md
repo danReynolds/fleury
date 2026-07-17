@@ -34,7 +34,7 @@ ListView.builder(
     rows[i].label,
     style: selected ? const CellStyle(inverse: true) : CellStyle.empty,
   ),
-  onSelect: (i) => _open(rows[i]),
+  onActivate: (i) => _open(rows[i]),
 )
 ```
 
@@ -42,7 +42,7 @@ If you've used Flutter, that third builder argument is the wrinkle: Fleury's
 `itemBuilder` is `(context, index, selected)`, because selection lives in the list
 itself rather than something you wire up around it.
 
-`onSelect` fires when the user activates the highlighted row (Enter). Pass a
+`onActivate` fires when the user activates the highlighted row (Enter). Pass a
 `ListController` if you need to drive scrolling or the selection programmatically;
 otherwise the list manages its own.
 

@@ -390,6 +390,21 @@ void verifyReadinessBundleManifestConsistency(
   Map<String, Object?> bundle, {
   required ReadinessBundleVerificationState state,
 }) {
+  final input = _map(bundle['input']);
+  final targetPreset = _string(input['targetPreset']);
+  if (targetPreset == null) {
+    state.missingManifestFields.add('input.targetPreset');
+  } else {
+    state.checkedManifestFieldCount += 1;
+    if (manualValidationTargetIdsForPreset(targetPreset) == null) {
+      state.manifestMismatches.add(<String, Object?>{
+        'id': 'input.targetPreset',
+        'expected': const <String>['v1', 'all'],
+        'actual': targetPreset,
+      });
+    }
+  }
+
   final artifacts = _map(bundle['artifacts']);
   final checks = _map(bundle['checks']);
   final readiness = _readArtifactJson(artifacts['readinessJson']);
@@ -435,7 +450,7 @@ void verifyReadinessBundleManifestConsistency(
     _expectManifestStringListField(
       state,
       id: 'artifacts.manualAudit.targets',
-      expected: _expectedManualTargetIds(_map(bundle['input'])),
+      expected: _expectedManualTargetIds(input),
       actual: _manualTargetIdsFromAudit(
         manualAudit,
         fallbackTargetIds: const <String>[],
@@ -662,7 +677,7 @@ void _verifyManualEvidenceReleaseActions(
     state.missingManifestFields.add('input.manualDir');
     return;
   }
-  final targetPreset = _string(input['targetPreset']) ?? 'primary';
+  final targetPreset = _string(input['targetPreset']) ?? 'v1';
   final targetIds = _strings(
     input['targetIds'],
   ).map((id) => id.trim()).where((id) => id.isNotEmpty).toList();
@@ -2012,7 +2027,7 @@ List<String> _expectedManualTargetIds(Map<String, Object?> input) {
   ).map((id) => id.trim()).where((id) => id.isNotEmpty).toList();
   if (explicitTargetIds.isNotEmpty) return explicitTargetIds;
   return manualValidationTargetIdsForPreset(
-        _string(input['targetPreset']) ?? 'primary',
+        _string(input['targetPreset']) ?? 'v1',
       ) ??
       const <String>[];
 }

@@ -6,7 +6,7 @@ benchmarks. These packages are not part of Fleury's runtime or public API.
 Peer fixture outputs should be validated with:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-result --input=<peer-run.json>
+dart tool/fleury_dev.dart benchmark result --input=<peer-run.json>
 ```
 
 Do not hand-edit `peerRuns` into
@@ -116,7 +116,7 @@ dart run bin/sb1_counter_benchmark.dart \
 Then validate from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-result \
+dart tool/fleury_dev.dart benchmark result \
   --input=peer-fixtures/nocterm/sb1_counter/results/nocterm-sb1-counter-2026-06-01.json \
   --output=/tmp/fleury-nocterm-sb1-manifest.json \
   --json
@@ -139,7 +139,7 @@ dart run bin/sb2_text_editing_benchmark.dart \
 Then validate from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-result \
+dart tool/fleury_dev.dart benchmark result \
   --input=peer-fixtures/nocterm/sb2_text_editing/results/nocterm-sb2-text-editing-2026-06-01.json \
   --output=/tmp/fleury-nocterm-sb2-manifest.json \
   --json
@@ -150,7 +150,7 @@ For repeated local Nocterm `SB.2` evidence, save comparable runs under
 from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-variance \
+dart tool/fleury_dev.dart benchmark variance \
   --input=peer-fixtures/nocterm/sb2_text_editing/results/variance \
   --min-runs=3 \
   --strict \
@@ -174,7 +174,7 @@ PYTHONPATH=.python python3 sb2_text_editing_benchmark.py \
 Then validate from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-result \
+dart tool/fleury_dev.dart benchmark result \
   --input=peer-fixtures/textual/sb2_text_editing/results/textual-sb2-text-editing-2026-06-02.json \
   --output=/tmp/fleury-textual-sb2-manifest.json \
   --json
@@ -185,7 +185,7 @@ For repeated local Textual `SB.2` evidence, save comparable runs under
 from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-variance \
+dart tool/fleury_dev.dart benchmark variance \
   --input=peer-fixtures/textual/sb2_text_editing/results/variance \
   --min-runs=3 \
   --strict \
@@ -209,7 +209,7 @@ go run . \
 Then validate from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-result \
+dart tool/fleury_dev.dart benchmark result \
   --input=peer-fixtures/bubbletea/sb2_text_editing/results/bubbletea-sb2-text-editing-2026-06-02.json \
   --output=/tmp/fleury-bubbletea-sb2-manifest.json \
   --json
@@ -220,7 +220,7 @@ under `peer-fixtures/bubbletea/sb2_text_editing/results/variance` and
 summarize them from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-variance \
+dart tool/fleury_dev.dart benchmark variance \
   --input=peer-fixtures/bubbletea/sb2_text_editing/results/variance \
   --min-runs=3 \
   --strict \
@@ -245,7 +245,7 @@ npm run benchmark -- \
 Then validate from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-result \
+dart tool/fleury_dev.dart benchmark result \
   --input=peer-fixtures/ink/sb2_text_editing/results/ink-sb2-text-editing-2026-06-02.json \
   --output=/tmp/fleury-ink-sb2-manifest.json \
   --json
@@ -256,7 +256,7 @@ For repeated local Ink `SB.2` evidence, save comparable runs under
 the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-variance \
+dart tool/fleury_dev.dart benchmark variance \
   --input=peer-fixtures/ink/sb2_text_editing/results/variance \
   --min-runs=3 \
   --strict \
@@ -281,7 +281,7 @@ dart run bin/sb3_datatable_benchmark.dart \
 Then validate from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-result \
+dart tool/fleury_dev.dart benchmark result \
   --input=peer-fixtures/nocterm/sb3_datatable/results/nocterm-sb3-datatable-2026-06-02.json \
   --output=/tmp/fleury-nocterm-sb3-manifest.json \
   --json
@@ -292,7 +292,7 @@ For repeated local Nocterm `SB.3` evidence, save comparable runs under
 the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-variance \
+dart tool/fleury_dev.dart benchmark variance \
   --input=peer-fixtures/nocterm/sb3_datatable/results/variance \
   --min-runs=3 \
   --strict \
@@ -316,7 +316,7 @@ PYTHONPATH=.python python sb3_datatable_benchmark.py \
 Then validate from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-result \
+dart tool/fleury_dev.dart benchmark result \
   --input=peer-fixtures/textual/sb3_datatable/results/textual-sb3-datatable-2026-06-01.json \
   --output=/tmp/fleury-textual-sb3-manifest.json \
   --json
@@ -327,7 +327,7 @@ For repeated local Textual `SB.3` evidence, save comparable runs under
 the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-variance \
+dart tool/fleury_dev.dart benchmark variance \
   --input=peer-fixtures/textual/sb3_datatable/results/variance \
   --min-runs=3 \
   --strict \
@@ -350,7 +350,7 @@ cargo run --release -- \
 Then validate from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-result \
+dart tool/fleury_dev.dart benchmark result \
   --input=peer-fixtures/ratatui/sb3_datatable/results/ratatui-sb3-datatable-2026-06-01.json \
   --output=/tmp/fleury-ratatui-sb3-manifest.json \
   --json
@@ -361,7 +361,7 @@ For repeated local Ratatui `SB.3` evidence, save comparable runs under
 the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-variance \
+dart tool/fleury_dev.dart benchmark variance \
   --input=peer-fixtures/ratatui/sb3_datatable/results/variance \
   --min-runs=3 \
   --strict \
@@ -385,7 +385,7 @@ npm run benchmark -- \
 Then validate from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-result \
+dart tool/fleury_dev.dart benchmark result \
   --input=peer-fixtures/opentui/sb3_datatable/results/opentui-sb3-datatable-2026-06-02.json \
   --output=/tmp/fleury-opentui-sb3-manifest.json \
   --json
@@ -396,7 +396,7 @@ For repeated local OpenTUI `SB.3` evidence, save comparable runs under
 the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-variance \
+dart tool/fleury_dev.dart benchmark variance \
   --input=peer-fixtures/opentui/sb3_datatable/results/variance \
   --min-runs=3 \
   --strict \
@@ -421,7 +421,7 @@ npm run benchmark -- \
 Then validate from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-result \
+dart tool/fleury_dev.dart benchmark result \
   --input=peer-fixtures/opentui/sb4_log_region/results/opentui-sb4-log-region-2026-06-02.json \
   --output=/tmp/fleury-opentui-sb4-manifest.json \
   --json
@@ -432,7 +432,7 @@ For repeated local OpenTUI `SB.4` evidence, save comparable runs under
 the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-variance \
+dart tool/fleury_dev.dart benchmark variance \
   --input=peer-fixtures/opentui/sb4_log_region/results/variance \
   --min-runs=3 \
   --strict \
@@ -457,7 +457,7 @@ PYTHONPATH=.python python sb4_log_benchmark.py \
 Then validate from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-result \
+dart tool/fleury_dev.dart benchmark result \
   --input=peer-fixtures/textual/sb4_log_region/results/textual-sb4-log-region-2026-06-01.json \
   --output=/tmp/fleury-textual-sb4-manifest.json \
   --json
@@ -468,7 +468,7 @@ For repeated local Textual `SB.4` evidence, save comparable runs under
 the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-variance \
+dart tool/fleury_dev.dart benchmark variance \
   --input=peer-fixtures/textual/sb4_log_region/results/variance \
   --min-runs=3 \
   --strict \
@@ -493,7 +493,7 @@ go run . \
 Then validate from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-result \
+dart tool/fleury_dev.dart benchmark result \
   --input=peer-fixtures/bubbletea/sb4_log_region/results/bubbletea-sb4-log-region-2026-06-02.json \
   --output=/tmp/fleury-bubbletea-sb4-manifest.json \
   --json
@@ -504,7 +504,7 @@ under `peer-fixtures/bubbletea/sb4_log_region/results/variance` and summarize
 them from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-variance \
+dart tool/fleury_dev.dart benchmark variance \
   --input=peer-fixtures/bubbletea/sb4_log_region/results/variance \
   --min-runs=3 \
   --strict \
@@ -530,7 +530,7 @@ dart run bin/sb4_log_region_benchmark.dart \
 Then validate from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-result \
+dart tool/fleury_dev.dart benchmark result \
   --input=peer-fixtures/nocterm/sb4_log_region/results/nocterm-sb4-log-region-2026-06-02.json \
   --output=/tmp/fleury-nocterm-sb4-manifest.json \
   --json
@@ -541,7 +541,7 @@ For repeated local Nocterm `SB.4` evidence, save comparable runs under
 the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-variance \
+dart tool/fleury_dev.dart benchmark variance \
   --input=peer-fixtures/nocterm/sb4_log_region/results/variance \
   --min-runs=3 \
   --strict \
@@ -566,7 +566,7 @@ PYTHONPATH=.python python sb5_markdown_benchmark.py \
 Then validate from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-result \
+dart tool/fleury_dev.dart benchmark result \
   --input=peer-fixtures/textual/sb5_streaming_markdown/results/textual-sb5-streaming-markdown-2026-06-02.json \
   --output=/tmp/fleury-textual-sb5-manifest.json \
   --json
@@ -582,7 +582,7 @@ For repeated local Textual `SB.5` evidence, save comparable runs under
 them from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-variance \
+dart tool/fleury_dev.dart benchmark variance \
   --input=peer-fixtures/textual/sb5_streaming_markdown/results/variance \
   --min-runs=3 \
   --strict \
@@ -606,7 +606,7 @@ go run . \
 Then validate from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-result \
+dart tool/fleury_dev.dart benchmark result \
   --input=peer-fixtures/bubbletea/sb5_streaming_markdown/results/bubbletea-sb5-streaming-markdown-2026-06-02.json \
   --output=/tmp/fleury-bubbletea-sb5-manifest.json \
   --json
@@ -623,7 +623,7 @@ runs under `peer-fixtures/bubbletea/sb5_streaming_markdown/results/variance`
 and summarize them from the Fleury workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-variance \
+dart tool/fleury_dev.dart benchmark variance \
   --input=peer-fixtures/bubbletea/sb5_streaming_markdown/results/variance \
   --min-runs=3 \
   --strict \

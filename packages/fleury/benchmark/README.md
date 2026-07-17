@@ -75,19 +75,19 @@ dart run benchmark/scenario_benchmarks.dart --filter=SB.10 --json
 The cross-framework comparison contract is tracked from the workspace root:
 
 ```sh
-dart tool/fleury_dev.dart benchmark-manifest
-dart tool/fleury_dev.dart benchmark-manifest --json
-dart tool/fleury_dev.dart benchmark-result --input=peer-run.json --output=manifest-with-peer.json
-dart tool/fleury_dev.dart benchmark-variance --input=peer-run-directory --json
+dart tool/fleury_dev.dart benchmark manifest
+dart tool/fleury_dev.dart benchmark manifest --json
+dart tool/fleury_dev.dart benchmark result --input=peer-run.json --output=manifest-with-peer.json
+dart tool/fleury_dev.dart benchmark variance --input=peer-run-directory --json
 ```
 
 That manifest defines peer-equivalent scenario contracts and required metrics.
 It does not contain peer results until matching peer fixtures have been built
-and run. Peer results should be added through `benchmark-result`, which
+and run. Peer results should be added through `benchmark result`, which
 validates the peer, scenario, required metrics, and claim gates before writing a
 manifest copy with `peerRuns` populated.
 
-Use `benchmark-variance` once a peer fixture has multiple comparable saved run
+Use `benchmark variance` once a peer fixture has multiple comparable saved run
 artifacts for the same peer, scenario, source version, terminal mode, terminal
 size, fixture directory, and fixture command. It reports per-metric spread over
 the artifact primary value, usually `p95`, and exposes `strictPass` for local

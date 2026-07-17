@@ -198,7 +198,7 @@ class _ChatAppState extends State<ChatApp> {
             softWrap: false,
           );
         },
-        onSelect: (index) => setState(() => _activeChannel = index),
+        onActivate: (index) => setState(() => _activeChannel = index),
       ),
     );
   }

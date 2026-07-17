@@ -2852,7 +2852,7 @@ final class _Options {
     int? maxFallbackCells;
     double? maxFallbackFramePercent;
     double? maxFallbackViewportPercent;
-    var targetPreset = 'primary';
+    var targetPreset = 'v1';
     final targetIds = <String>[];
     var requireScoreboardGates = true;
     var requireTotalFrameGate = true;
@@ -3090,7 +3090,7 @@ void _printUsage() {
   stdout.writeln(
     '  --max-fallback-viewport-percent=N   Semantic fallback gate.',
   );
-  stdout.writeln('  --target-preset=v1|primary|all     Manual target preset.');
+  stdout.writeln('  --target-preset=v1|all             Manual target preset.');
   stdout.writeln(
     '  --target=ID                         Restrict manual audit target.',
   );

@@ -336,6 +336,20 @@ void main() {
     },
   );
 
+  test('web manual validation rejects the removed primary preset', () async {
+    final result = await Process.run(Platform.resolvedExecutable, [
+      'run',
+      'tool/web_manual_validation.dart',
+      '--target-preset=primary',
+    ], workingDirectory: Directory.current.path);
+
+    expect(result.exitCode, 2);
+    expect(
+      result.stderr,
+      contains('Unknown manual validation target preset: primary'),
+    );
+  });
+
   test('web manual validation writes selected target templates', () async {
     final templatesDir = '${tempDir.path}/templates';
 
