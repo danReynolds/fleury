@@ -68,15 +68,6 @@ Future<void> main(List<String> rawArgs) async {
     case 'benchmark':
       await runner.benchmark(args);
       return;
-    case 'benchmark-manifest':
-      await runner.benchmarkManifest(args);
-      return;
-    case 'benchmark-result':
-      await runner.benchmarkResult(args);
-      return;
-    case 'benchmark-variance':
-      await runner.benchmarkVariance(args);
-      return;
     case 'activate-cli':
       await runner.activateCli();
       return;
@@ -232,17 +223,6 @@ void _printUsage() {
     '  build-cli                    Compile build/fleury from the local CLI',
   );
   stdout.writeln('');
-  stdout.writeln('Legacy benchmark aliases:');
-  stdout.writeln(
-    '  benchmark-manifest [options]  Prefer `benchmark manifest [options]`',
-  );
-  stdout.writeln(
-    '  benchmark-result [options]    Prefer `benchmark result [options]`',
-  );
-  stdout.writeln(
-    '  benchmark-variance [options]  Prefer `benchmark variance [options]`',
-  );
-  stdout.writeln('');
   stdout.writeln('Examples:');
   stdout.writeln('  dart tool/fleury_dev.dart bootstrap');
   stdout.writeln('  dart tool/fleury_dev.dart coverage --strict');
@@ -386,8 +366,8 @@ class _Runner {
     // Analyze EVERY package first, before any test suite runs. `_run` aborts
     // the whole check on the first failure, so an interleaved analyze/test
     // order lets a red test mask every analyze after it — which is how a DT1
-    // change that broke `fleury_web`'s compile shipped green (the chronic
-    // asset-freshness test red aborted `check` before the web analyze ran).
+    // change that broke `fleury_web`'s compile shipped green (an integration
+    // failure aborted `check` before the web analyze ran).
     // A compile break is the silent killer; front-loading analysis guarantees
     // it surfaces even when a downstream test is red. (Profiling is analyzed
     // too so a rename can't silently compile-out the wire-gate fixtures.)
@@ -407,9 +387,8 @@ class _Runner {
     }
 
     // Then the unit suites. The fleury INTEGRATION batch runs LAST (below),
-    // not here: it's the slowest and currently carries the chronic
-    // asset-freshness red, so keeping it out of the middle stops that one red
-    // from masking every package test after it too.
+    // not here: it is the slowest, so a failure there cannot mask another
+    // package's test result.
     if (quick) {
       await _run('dart', [
         'test',
@@ -463,9 +442,8 @@ class _Runner {
         '-O1',
       ], workingDirectory: webExamples);
 
-      // The fleury integration batch runs LAST: it's the slowest and carries
-      // the chronic asset-freshness red, so every other package's analyze +
-      // tests have already reported by the time it can abort the run.
+      // The fleury integration batch runs LAST so every other package's
+      // analysis and tests have reported by the time it can abort the run.
       await _run('dart', [
         'test',
         '-t',
@@ -2376,7 +2354,7 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       inputPaths: options.inputPaths,
     );
     if (inputFiles.isEmpty) {
-      stderr.writeln('benchmark-variance found no JSON peer run artifacts');
+      stderr.writeln('benchmark variance found no JSON peer run artifacts');
       exit(1);
     }
 
@@ -3873,10 +3851,9 @@ Map<String, Object?> _benchmarkCatalog() {
       ],
       'defaultInput': 'profiling/web/manual',
       'defaultOutput': 'stdout',
-      'purpose':
-          'audit manual retained DOM web evidence; current release gate is Chrome/macOS IME',
-      'targetPreset': 'primary',
-      'targets': ['chrome-ime-macos'],
+      'purpose': 'audit manual retained DOM web evidence',
+      'targetPreset': 'v1',
+      'targets': const <String>[],
       'artifacts': ['manual-validation-audit.json', 'review.md'],
     },
     'webReadiness': <String, Object?>{
@@ -3903,7 +3880,7 @@ Map<String, Object?> _benchmarkCatalog() {
         'matching threshold-review promotion summary for reviewed thresholds',
         'comparable run-environment enforcement',
         'semantic fallback audit strictPass with threshold gates',
-        'manual primary IME evidence strictPass',
+        'manual validation audit strictPass',
       ],
     },
     'webReadinessBundle': <String, Object?>{
@@ -4158,7 +4135,7 @@ final class _BenchmarkManifestOptions {
       } else if (arg.startsWith('--output=')) {
         outputPath = arg.substring('--output='.length).trim();
       } else {
-        stderr.writeln('Unknown option for benchmark-manifest: $arg');
+        stderr.writeln('Unknown option for benchmark manifest: $arg');
         _printBenchmarkManifestUsage();
         exit(2);
       }
@@ -4205,14 +4182,14 @@ final class _BenchmarkResultOptions {
       } else if (arg.startsWith('--output=')) {
         outputPath = arg.substring('--output='.length).trim();
       } else {
-        stderr.writeln('Unknown option for benchmark-result: $arg');
+        stderr.writeln('Unknown option for benchmark result: $arg');
         _printBenchmarkResultUsage();
         exit(2);
       }
     }
 
     if (inputPath.isEmpty) {
-      stderr.writeln('benchmark-result requires --input=<path>');
+      stderr.writeln('benchmark result requires --input=<path>');
       _printBenchmarkResultUsage();
       exit(2);
     }
@@ -4275,14 +4252,14 @@ final class _BenchmarkVarianceOptions {
         }
         minRuns = value;
       } else {
-        stderr.writeln('Unknown option for benchmark-variance: $arg');
+        stderr.writeln('Unknown option for benchmark variance: $arg');
         _printBenchmarkVarianceUsage();
         exit(2);
       }
     }
 
     if (inputPaths.isEmpty) {
-      stderr.writeln('benchmark-variance requires at least one --input=<path>');
+      stderr.writeln('benchmark variance requires at least one --input=<path>');
       _printBenchmarkVarianceUsage();
       exit(2);
     }
@@ -5332,7 +5309,7 @@ final class _BenchmarkWebManualValidationOptions {
     String? writeTemplatesDir;
     String? templateTargetId;
     String? jsonOutputPath;
-    var targetPreset = 'primary';
+    var targetPreset = 'v1';
     final targetIds = <String>[];
     var json = false;
     var strict = false;
@@ -5708,7 +5685,7 @@ final class _BenchmarkWebReadinessBundleOptions {
     int? maxFallbackCells;
     double? maxFallbackFramePercent;
     double? maxFallbackViewportPercent;
-    var targetPreset = 'primary';
+    var targetPreset = 'v1';
     final targetIds = <String>[];
     var requireScoreboardGates = true;
     var requireTotalFrameGate = true;
@@ -7294,9 +7271,7 @@ void _printBenchmarkWebManualValidationUsage() {
     '  --template-target=ID         Target for template generation',
   );
   stdout.writeln('  --json-output=PATH           JSON audit output path');
-  stdout.writeln(
-    '  --target-preset=v1|primary|all  Target preset, default primary',
-  );
+  stdout.writeln('  --target-preset=v1|all          Target preset, default v1');
   stdout.writeln('  --target=ID                  Restrict audit to a target');
   stdout.writeln(
     '  --strict                     Exit non-zero unless targets pass',
@@ -7443,7 +7418,7 @@ void _printBenchmarkWebReadinessBundleUsage() {
   stdout.writeln(
     '  --max-fallback-viewport-percent=N   Semantic fallback gate',
   );
-  stdout.writeln('  --target-preset=v1|primary|all     Manual target preset');
+  stdout.writeln('  --target-preset=v1|all             Manual target preset');
   stdout.writeln(
     '  --target=ID                         Restrict manual target',
   );
@@ -7747,7 +7722,7 @@ void _printBenchmarkCatalog(Map<String, Object?> catalog) {
 
 void _printBenchmarkManifestUsage() {
   stdout.writeln(
-    'Usage: dart tool/fleury_dev.dart benchmark-manifest [options]',
+    'Usage: dart tool/fleury_dev.dart benchmark manifest [options]',
   );
   stdout.writeln('');
   stdout.writeln('Options:');
@@ -7762,7 +7737,7 @@ void _printBenchmarkManifestUsage() {
 
 void _printBenchmarkResultUsage() {
   stdout.writeln(
-    'Usage: dart tool/fleury_dev.dart benchmark-result --input=<path> [options]',
+    'Usage: dart tool/fleury_dev.dart benchmark result --input=<path> [options]',
   );
   stdout.writeln('');
   stdout.writeln('Options:');
@@ -7782,7 +7757,7 @@ void _printBenchmarkResultUsage() {
 
 void _printBenchmarkVarianceUsage() {
   stdout.writeln(
-    'Usage: dart tool/fleury_dev.dart benchmark-variance --input=<path> [options]',
+    'Usage: dart tool/fleury_dev.dart benchmark variance --input=<path> [options]',
   );
   stdout.writeln('');
   stdout.writeln('Options:');

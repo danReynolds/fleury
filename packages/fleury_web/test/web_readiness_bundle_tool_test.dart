@@ -29,6 +29,30 @@ void main() {
     tempDir.deleteSync(recursive: true);
   });
 
+  test('readiness verifier rejects the removed primary preset', () {
+    final state = ReadinessBundleVerificationState();
+
+    verifyReadinessBundleManifestConsistency(<String, Object?>{
+      'input': <String, Object?>{'targetPreset': 'primary'},
+      'artifacts': <String, Object?>{},
+      'checks': <String, Object?>{},
+    }, state: state);
+
+    expect(
+      state.manifestMismatches,
+      contains(
+        isA<Map<String, Object?>>()
+            .having((mismatch) => mismatch['id'], 'id', 'input.targetPreset')
+            .having(
+              (mismatch) => mismatch['expected'],
+              'expected',
+              const <String>['v1', 'all'],
+            )
+            .having((mismatch) => mismatch['actual'], 'actual', 'primary'),
+      ),
+    );
+  });
+
   test('web readiness bundle writes passing reviewed artifacts', () async {
     _writeCaptureSet(capturesDir);
     _writeManualEvidence(manualDir);
@@ -1656,7 +1680,7 @@ void main() {
     expect(result.exitCode, 0, reason: result.stderr.toString());
     final bundle = jsonDecode(result.stdout.toString()) as Map<String, Object?>;
     final input = bundle['input'] as Map<String, Object?>;
-    expect(input['targetPreset'], 'primary');
+    expect(input['targetPreset'], 'v1');
     expect(input['targetIds'], ['chrome-ime-macos']);
     expect(bundle['strictPass'], isFalse);
     final artifacts = bundle['artifacts'] as Map<String, Object?>;
@@ -3053,7 +3077,7 @@ void main() {
     expect(result.exitCode, 0, reason: result.stderr.toString());
     final bundle = jsonDecode(result.stdout.toString()) as Map<String, Object?>;
     final input = bundle['input'] as Map<String, Object?>;
-    expect(input['targetPreset'], 'primary');
+    expect(input['targetPreset'], 'v1');
     expect(input['targetIds'], ['chrome-ime-macos']);
     final sourceInputFingerprints =
         bundle['sourceInputFingerprints'] as Map<String, Object?>;
@@ -3096,7 +3120,7 @@ void main() {
     );
     expect(
       imeAction['auditCommand'] as List<Object?>,
-      isNot(contains('--target-preset=primary')),
+      isNot(contains('--target-preset=v1')),
     );
     final regenerateAction = actions.singleWhere(
       (action) => action['id'] == 'regenerate-readiness-bundle',
@@ -3107,7 +3131,7 @@ void main() {
     );
     expect(
       regenerateAction['commandTemplate'] as List<Object?>,
-      isNot(contains('--target-preset=primary')),
+      isNot(contains('--target-preset=v1')),
     );
   });
 
@@ -3653,7 +3677,7 @@ void main() {
       expect(regenerateDetails['maxFallbackCells'], 0);
       expect(regenerateDetails['strictRequired'], isTrue);
       expect(regenerateDetails['jsonOutput'], isTrue);
-      expect(regenerateDetails['targetPreset'], 'primary');
+      expect(regenerateDetails['targetPreset'], 'v1');
       expect(regenerateDetails['completionAuditPath'], completionAuditPath);
       expect(
         regenerateAction['commandTemplate'] as List<Object?>,
