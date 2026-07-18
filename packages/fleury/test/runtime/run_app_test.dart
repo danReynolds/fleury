@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:fleury/fleury.dart';
 import '../support/harness.dart';
@@ -1333,6 +1334,93 @@ void main() {
       await driver.dispose();
     });
   });
+
+  group('runApp error observability', () {
+    test('a startup-input overflow thrown AFTER mount fails runApp loudly '
+        'and restores the terminal', () async {
+      // Emitting a >1 MiB payload from the first build lands it in the startup
+      // buffer (driver events are still buffered until activateDriverEvents),
+      // which then throws the overflow AFTER mount. Pre-fix, cleanup ran but
+      // runApp's future was never completed — it hung silently. It must reject.
+      final driver = _LifecycleFaultDriver();
+      var injected = false;
+      Widget buildOnce(BuildContext _) {
+        if (!injected) {
+          injected = true;
+          driver.enqueue(TextInputEvent('x' * (1024 * 1024 + 1)));
+        }
+        return const Text('boom');
+      }
+
+      try {
+        await expectLater(
+          runApp(
+            _BuildProbe(buildOnce),
+            driver: driver,
+            enableHotReload: false,
+          ).timeout(const Duration(seconds: 2)),
+          throwsA(isA<StateError>()),
+        );
+        expect(driver.restoreCallCount, 1);
+      } finally {
+        await driver.dispose();
+      }
+    });
+
+    test('an error thrown in build() is reported, not silently swallowed',
+        () async {
+      // build() errors are contained (red ErrorWidget) and the app survives,
+      // but pre-fix the error reached no reporter — no stderr, no banner, no
+      // debug history, stack trace lost. It must reach the reporter's log.
+      final logged = _StderrCapture();
+      await IOOverrides.runZoned(
+        () async {
+          final driver = _LifecycleFaultDriver();
+          final future = runApp(
+            const _ThrowingBuild(),
+            driver: driver,
+            enableHotReload: false,
+          );
+          await _settle();
+          driver.enqueue(
+            const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          );
+          await future;
+          await driver.dispose();
+        },
+        stderr: () => logged,
+      );
+      expect(logged.text, contains('build-boom'));
+    });
+
+    test('an async error thrown after the app exits is surfaced on stderr',
+        () async {
+      // A Timer created in the guarded zone that fires after a clean exit:
+      // pre-fix the disposed reporter swallowed it (no trace, exit 0). The
+      // terminal is already restored, so it must reach stderr.
+      final logged = _StderrCapture();
+      await IOOverrides.runZoned(
+        () async {
+          final driver = _LifecycleFaultDriver();
+          final future = runApp(
+            const _LateThrowApp(),
+            driver: driver,
+            enableHotReload: false,
+          );
+          await _settle();
+          driver.enqueue(
+            const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          );
+          await future;
+          // Let the post-exit Timer fire inside the still-live guarded zone.
+          await Future<void>.delayed(const Duration(milliseconds: 120));
+          await driver.dispose();
+        },
+        stderr: () => logged,
+      );
+      expect(logged.text, contains('late-boom'));
+    });
+  });
 }
 
 /// Ctrl+Y copies through the ambient ClipboardScope — the seam under test is
@@ -1361,4 +1449,70 @@ class _ClipboardCopyApp extends StatelessWidget {
       child: const Text('clipboard app'),
     );
   }
+}
+
+/// Runs [build] on every rebuild — the error-observability tests inject a
+/// startup event from inside the first build to hit the post-mount window.
+class _BuildProbe extends StatelessWidget {
+  const _BuildProbe(this.builder);
+  final Widget Function(BuildContext context) builder;
+  @override
+  Widget build(BuildContext context) => builder(context);
+}
+
+/// A widget whose build() always throws — the framework contains it behind an
+/// ErrorWidget, so the app survives and the run reaches a clean exit.
+class _ThrowingBuild extends StatelessWidget {
+  const _ThrowingBuild();
+  @override
+  Widget build(BuildContext context) => throw StateError('build-boom');
+}
+
+/// Schedules a Timer, in runApp's guarded zone, that throws after the app has
+/// already exited and torn down.
+class _LateThrowApp extends StatefulWidget {
+  const _LateThrowApp();
+  @override
+  State<_LateThrowApp> createState() => _LateThrowAppState();
+}
+
+class _LateThrowAppState extends State<_LateThrowApp> {
+  @override
+  void initState() {
+    super.initState();
+    Timer(const Duration(milliseconds: 40), () {
+      throw StateError('late-boom');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const Text('late');
+}
+
+/// A capturing [Stdout] for asserting on what the runtime writes to stderr
+/// under [IOOverrides.runZoned] (which types the override as [Stdout]). Only
+/// the write + async members the reporter path uses are implemented; the
+/// terminal-info getters go through noSuchMethod (this path never reads them).
+class _StderrCapture implements Stdout {
+  final StringBuffer _buffer = StringBuffer();
+  String get text => _buffer.toString();
+
+  @override
+  void writeln([Object? object = '']) => _buffer.writeln(object);
+  @override
+  void write(Object? object) => _buffer.write(object);
+  @override
+  void writeAll(Iterable<dynamic> objects, [String separator = '']) =>
+      _buffer.writeAll(objects, separator);
+  @override
+  void writeCharCode(int charCode) => _buffer.writeCharCode(charCode);
+  @override
+  Future<void> flush() async {}
+  @override
+  Future<void> close() async {}
+  @override
+  Future<void> get done => Future<void>.value();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
 }

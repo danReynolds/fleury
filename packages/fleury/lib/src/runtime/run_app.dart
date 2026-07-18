@@ -583,6 +583,11 @@ Future<AppExit> _runAppImpl(
   // while the boundary renders the in-place presentation.
   owner.onContainedRenderError = (contained) =>
       errorReporter.report(contained.error, contained.stack);
+  // Build-phase failures surface through the SAME reporter as every other
+  // error class (stderr line, on-screen banner, debug-shell Errors tab, serve
+  // read_errors wire). Without this a throwing build() only shows the red
+  // ErrorWidget pixels — its stack trace is otherwise lost everywhere.
+  owner.onBuildError = errorReporter.report;
   debugController.setErrorHistoryProvider(() => errorReporter.history);
 
   final startupEvents = _StartupEventBuffer();
@@ -868,6 +873,10 @@ Future<AppExit> _runAppImpl(
         // the normal path (the fatal-error path bypasses it entirely and
         // completes `done` with the error instead).
         var appExit = const AppExit.requested();
+        // A startup failure thrown after mount, captured across the finally
+        // so `done` is completed with it only once the terminal is restored.
+        Object? startupError;
+        StackTrace? startupStack;
         // Subscribe BEFORE enter(): POSIX starts stdin/probe handling during
         // enter, and TerminalDriver.events is broadcast, so attaching later
         // silently drops ready pipe input, fast keystrokes, and probe-tail
@@ -1260,10 +1269,23 @@ Future<AppExit> _runAppImpl(
           activateDriverEvents();
 
           appExit = await exit.future;
+        } catch (error, stack) {
+          // A throw during startup (most reachably a post-mount
+          // startup-input overflow from activateDriverEvents, thrown after
+          // enter() returned) must fail runApp's future LOUDLY, not leave it
+          // forever unresolved with the terminal already restored. Record it
+          // and complete `done` only after cleanup() below has torn down —
+          // so the caller never sees the error before the terminal is safe.
+          startupError = error;
+          startupStack = stack;
         } finally {
           await cleanup();
         }
-        if (!done.isCompleted) done.complete(appExit);
+        if (startupError != null) {
+          if (!done.isCompleted) done.completeError(startupError, startupStack!);
+        } else if (!done.isCompleted) {
+          done.complete(appExit);
+        }
       },
       (error, stack) {
         // Report and keep running (Flutter's posture): an uncaught handler or
@@ -1294,8 +1316,24 @@ Future<AppExit> _runAppImpl(
         // an error before the app mounted (nothing to recover into), or
         // a storm of errors every frame. Everything else is reported and
         // survived.
+        // Once teardown has begun the reporter is disposed, so report() above
+        // was a silent no-op and the fatal gate below would misread the still
+        // non-null rootElement as survivable. Surface the error on stderr —
+        // the terminal is already restored — so a late async throw (a Timer or
+        // socket callback outliving the session, an error during shutdown)
+        // isn't discarded with zero trace.
+        final teardownStarted = cleanupFuture != null;
+        if (teardownStarted && !reportingFailed) {
+          try {
+            stderr.writeln('fleury: uncaught error after teardown: $error');
+            stderr.writeln(stack);
+          } catch (_) {
+            // stderr may itself be broken; nothing more we can do.
+          }
+        }
         final driver = frameDriver;
         if (reportingFailed ||
+            teardownStarted ||
             (driver?.renderUnrecoverable ?? false) ||
             driver?.rootElement == null ||
             errorReporter.isStorming) {
