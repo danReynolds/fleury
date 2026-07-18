@@ -516,6 +516,15 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
       for (var col = 0; col < size.cols; col++) {
         final cell = scratch.atColRow(col, r);
         if (cell.role != CellRole.leading) continue;
+        // A wide glyph whose continuation falls outside the box would spill one
+        // column past `size.cols` (writeGrapheme re-derives width 2), evicting
+        // the sibling there. Drop it rather than split it — wide graphemes are
+        // dropped, never split.
+        if (col + 1 >= size.cols &&
+            col + 1 < scratch.size.cols &&
+            scratch.atColRow(col + 1, r).role == CellRole.continuation) {
+          continue;
+        }
         final tc = offset.col + col;
         if (tc < 0 || tc >= buffer.size.cols) continue;
         buffer.writeGrapheme(

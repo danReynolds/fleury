@@ -1009,6 +1009,68 @@ void main() {
       );
     });
 
+    testWidgets(
+      'a paint-only shrink damages the vacated cells (no stale ghost)',
+      (tester) {
+        // IndexedStack.index flips are paint-only (markNeedsPaintOnly): layout
+        // is reused, only the boundary repaints. When the newly shown child is
+        // narrower than the old one, the cells the wide child occupied must be
+        // reported as damage — the bounded presenter diff only revisits damaged
+        // cells, so without it the old glyphs linger on screen as ghosts.
+        const size = CellSize(12, 1);
+        Widget tree(int index) => RepaintBoundary(
+          child: IndexedStack(
+            index: index,
+            children: const [Text('WIDE-CONTENT'), Text('x')],
+          ),
+        );
+
+        final buffer = CellBuffer(size);
+        final tracker = tester.owner.renderDamageTracker;
+        // Mirror TuiFrameLoop.render: clear untracked, arm damage, paint, then
+        // consume the frame's damage signals.
+        CellRect? paintFrame() {
+          buffer.withoutDamageTracking(buffer.clear);
+          buffer.resetDamageTracking();
+          tester.owner.renderFrame(tester.root!, buffer);
+          final damage = buffer.takeDamageBounds();
+          tracker.takeVisualChange();
+          return damage;
+        }
+
+        // Frame 1: the wide child. Settles the boundary cache on the wide box.
+        tester.pumpWidget(tree(0));
+        paintFrame();
+        tracker.takeRequiresFullDiff(); // frame-1 full repaint, expected
+        expect(buffer.atColRow(11, 0).grapheme, 'T', reason: 'wide painted');
+
+        // Frame 2: flip to the narrow child (paint-only) and repaint.
+        tester.pumpWidget(tree(1));
+        final damage = paintFrame();
+        final requiresFullDiff = tracker.takeRequiresFullDiff();
+
+        expect(
+          requiresFullDiff,
+          isFalse,
+          reason: 'precondition: an index flip is a bounded paint-only frame',
+        );
+        expect(buffer.atColRow(0, 0).grapheme, 'x', reason: 'narrow painted');
+        expect(
+          buffer.atColRow(11, 0).grapheme,
+          isNull,
+          reason: 'the wide cell is vacated in the new frame',
+        );
+        expect(damage, isNotNull);
+        expect(
+          damage!.contains(const CellOffset(11, 0)),
+          isTrue,
+          reason:
+              'the vacated wide cell must be damaged so the bounded diff '
+              'erases the ghost instead of leaving it on screen',
+        );
+      },
+    );
+
     testWidgets('a change under an INNER boundary refreshes the OUTER cache', (
       tester,
     ) {
