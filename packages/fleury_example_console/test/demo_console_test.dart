@@ -1320,7 +1320,7 @@ void main() {
       size: const CellSize(90, 26),
       emptyMark: ' ',
     );
-    expect(output, contains('Framework patch review: 1 files'));
+    expect(output, contains('Framework patch review: 1 file'));
     expect(output, contains('+  final mode = \'reactive\';'));
     expect(output, contains('+  final note = \'safe'));
     expect(output, isNot(contains('token')));
