@@ -44,12 +44,16 @@ final class _MountedExample {
 Future<_MountedExample> _mountExample(
   String id, {
   bool useManifestSize = false,
+  int? cols,
+  int? rows,
 }) async {
   final flush = _FakeFlush();
   final host = web.document.createElement('div');
   final info = exampleList.singleWhere((example) => example.id == id);
-  final width = useManifestSize ? '${info.cols}ch' : '80ch';
-  final height = useManifestSize ? '${info.rows * 18}px' : '240px';
+  final effectiveCols = cols ?? (useManifestSize ? info.cols : null);
+  final effectiveRows = rows ?? (useManifestSize ? info.rows : null);
+  final width = effectiveCols != null ? '${effectiveCols}ch' : '80ch';
+  final height = effectiveRows != null ? '${effectiveRows * 18}px' : '240px';
   // The DOM grid sizes itself from the host box + monospace cell metrics; an
   // unsized host yields a 0x0 grid (nothing paints), so give it real dimensions.
   host.setAttribute(
@@ -443,6 +447,36 @@ void main() {
     );
   });
 
+  // The landing/onboarding pages (index / getting-started / comparison .mdx)
+  // embed catalog demos at their OWN cols/rows, overriding the manifest — so the
+  // manifest-size guards above never exercise what those high-traffic pages
+  // actually render. Guard them at their real embedded sizes. Keep this list in
+  // sync with the `<FleuryExample ... cols={} rows={} />` embeds in those pages.
+  test('landing-page demos render at their embedded sizes', () async {
+    const embeds = <({String id, int cols, int rows, String needle})>[
+      (id: 'digits.basic', cols: 56, rows: 11, needle: 'UTC'), // index.mdx
+      (id: 'datatable.basic', cols: 48, rows: 8, needle: 'COMMITS'), // index.mdx
+      (id: 'barchart.basic', cols: 52, rows: 12, needle: 'q4'), // index.mdx
+      (id: 'home.monitor', cols: 34, rows: 9, needle: 'CPU'), // getting-started, comparison
+    ];
+    final missing = <String>[];
+    for (final e in embeds) {
+      final fixture = await _mountExample(e.id, cols: e.cols, rows: e.rows);
+      final painted =
+          fixture.host.querySelector('.fleury-screen')?.textContent ?? '';
+      if (!painted.contains(e.needle)) {
+        missing.add('${e.id} (${e.cols}x${e.rows}) → "${e.needle}"');
+      }
+    }
+    expect(
+      missing,
+      isEmpty,
+      reason:
+          'A landing-page demo renders blank/clipped at its embedded size — fix '
+          'the embed size in the .mdx (or the widget). Missing: $missing',
+    );
+  });
+
   test('linechart.basic renders client-side (offset fix holds)', () async {
     final host = await _mount('linechart.basic');
     expect(host.textContent, contains('load')); // the series legend label
@@ -565,7 +599,10 @@ void main() {
 
   test('codeview.basic renders the (now scrollable) source', () async {
     final host = await _mount('codeview.basic');
-    expect(host.textContent, contains('CounterApp'));
+    // Assert on content near the top of the sample: the view is scrollable and
+    // only paints the visible rows, so a token lower in the file (e.g. the
+    // CounterApp class) can fall below the fold as the sample grows.
+    expect(host.textContent, contains('runApp'));
   });
 
   test('messagelist.basic renders the (now scrollable) transcript', () async {

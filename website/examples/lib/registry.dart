@@ -1512,7 +1512,12 @@ TextArea(
     blurb:
         'An htop-style live dashboard: per-core CPU gauges, a streaming history '
         'chart, memory/IO meters, and a live process table.',
-    cols: 116,
+    // Fits the full-bleed showcase column at a ~1280px laptop viewport (which
+    // holds ~110 cells beside the sidebar); at 116 the right edge — the
+    // load-average/uptime clock — was clipped with a horizontal scrollbar. The
+    // app is responsive, so 108 renders every panel without crowding, and the
+    // meta rail still sits beside it on wide viewports. (files/agent already fit.)
+    cols: 108,
     rows: 38,
     interactive: true,
     builder: () => const DashboardApp(),

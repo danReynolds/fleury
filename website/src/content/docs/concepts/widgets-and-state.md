@@ -12,7 +12,7 @@ home.)
 ## Two kinds of widget
 
 A **`StatelessWidget`** depends only on its inputs. Override one method, `build`,
-which returns the widget's children:
+which returns what the widget displays:
 
 ```dart
 class Greeting extends StatelessWidget {
