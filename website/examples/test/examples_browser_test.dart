@@ -189,6 +189,9 @@ void main() {
             as web.HTMLTextAreaElement;
     expect(field.getAttribute('data-fleury-focused'), 'true');
     expect(field.getAttribute('aria-label'), 'Release notes');
+    // The demo seeds multi-line content (with the caret parked at the end) so it
+    // reads as a filled editor rather than an empty field.
+    expect(field.value, contains('Ship v1.4.0'));
 
     final keyboardCapture =
         fixture.host.querySelector('textarea[aria-hidden="true"]')!
@@ -197,7 +200,7 @@ void main() {
       web.InputEvent(
         'input',
         web.InputEventInit(
-          data: 'Ship it',
+          data: '!',
           inputType: 'insertText',
           bubbles: true,
           cancelable: true,
@@ -208,8 +211,10 @@ void main() {
     fixture.flush.fire();
     await fixture.app.awaitSemanticIdle();
 
-    expect(field.value, 'Ship it');
-    expect(fixture.host.textContent, contains('Ship it'));
+    // Browser text is accepted — appended to (not replacing) the seeded value.
+    expect(field.value, 'Ship v1.4.0\n\n- Add a --version flag\n'
+        '- Fix the Windows resize crash!');
+    expect(fixture.host.textContent, contains('resize crash!'));
   });
 
   test('form.basic mounts its form and field semantics', () async {
@@ -341,6 +346,101 @@ void main() {
     final host = await _mount('gauge.basic');
     expect(host.querySelector('.fleury-screen'), isNotNull);
     expect(host.textContent, contains('CPU'));
+  });
+
+  // Guard for the whole catalog: every example must paint *visible* content at
+  // the exact frame size the docs page gives it. sparkline.basic and
+  // progressbar.basic shipped blank because their host (rows: 2) was too short
+  // for a 1-row widget inside `_framed` (Padding.all(1) needs pad + content +
+  // pad = 3 rows), so the padding squeezed the widget to zero height. It only
+  // appeared once Expand grew the host. The check reads `.fleury-screen` — the
+  // painted grid — not `host.textContent`, because the offscreen
+  // `.fleury-semantics` layer carries the value text even when nothing paints.
+  //
+  // Mounts and disposes each example in turn (one live app at a time) so the
+  // whole ~60-example sweep — including the large showcase apps — stays within
+  // the time budget instead of piling every app up until a shared teardown.
+  test(
+    'every registered example paints visible content at its frame',
+    () async {
+      final blank = <String>[];
+      for (final info in exampleList) {
+        final flush = _FakeFlush();
+        final host = web.document.createElement('div');
+        host.setAttribute(
+          'style',
+          'position:absolute;left:0;top:0;width:${info.cols}ch;'
+              'height:${info.rows * 18}px;'
+              'font-family:monospace;font-size:16px;line-height:18px;',
+        );
+        web.document.body!.appendChild(host);
+        final app = await mountApp(
+          () => themedExampleRoot(
+            examples[info.id]!,
+            DocsExampleThemeController(DocsExampleStyle.dark),
+          ),
+          into: host,
+          flushScheduler: flush.schedule,
+        );
+        for (var i = 0; i < 4 && flush.pending; i++) {
+          flush.fire();
+        }
+        await app.awaitSemanticIdle();
+        final screen = host.querySelector('.fleury-screen');
+        final painted = (screen?.textContent ?? '').trim();
+        if (painted.isEmpty) blank.add('${info.id} (${info.cols}x${info.rows})');
+        await app.dispose();
+        host.remove();
+      }
+      expect(
+        blank,
+        isEmpty,
+        reason:
+            'These live demos render blank at their manifest frame size — the '
+            'host is too short for the framed content. Give them more rows in '
+            'website/examples/lib/registry.dart. Blank: $blank',
+      );
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
+
+  // Beyond "not blank": these demos previously clipped the widget's *point*
+  // while still painting something, so the non-blank guard above wouldn't catch
+  // them. button.basic showed "Pressed 0×" but not the button; approvalprompt
+  // hid its Approve/Deny actions; commandpalette cut its shortcut column;
+  // table dropped its last row. Assert the essential content survives at the
+  // manifest frame size so an undersized frame fails loudly.
+  test('key demos render their essential content, not just something', () async {
+    final checks = <String, List<String>>{
+      'button.basic': <String>['Press me'],
+      'approvalprompt.basic': <String>['Approve', 'Deny'],
+      'commandpalette.basic': <String>['Ctrl-P'],
+      'table.basic': <String>['lin'],
+      'progressbar.basic': <String>['█'],
+      // Demos seeded/expanded/sized for a more legible resting state.
+      'tree.basic': <String>['main.dart'], // expanded, not a lone "▸ lib/"
+      'treetable.basic': <String>['main.dart'], // 'lib' branch expanded
+      'passwordinput.basic': <String>['•'], // obscured value, not a placeholder
+      'textarea.basic': <String>['Ship v1.4.0'], // seeded multi-line content
+      'conversationnavigator.basic': <String>['Docs site'], // both entries fit
+      'tooltip.basic': <String>['Saves the current file'], // tip shows on focus
+      'modelstatusbar.basic': <String>['Context', '%'], // full bar, meter intact
+    };
+    final missing = <String>[];
+    for (final entry in checks.entries) {
+      final fixture = await _mountExample(entry.key, useManifestSize: true);
+      final painted = fixture.host.querySelector('.fleury-screen')?.textContent ?? '';
+      for (final needle in entry.value) {
+        if (!painted.contains(needle)) missing.add('${entry.key} → "$needle"');
+      }
+    }
+    expect(
+      missing,
+      isEmpty,
+      reason:
+          'Essential demo content is clipped at the manifest frame size — give '
+          'the example more cols/rows in registry.dart. Missing: $missing',
+    );
   });
 
   test('linechart.basic renders client-side (offset fix holds)', () async {

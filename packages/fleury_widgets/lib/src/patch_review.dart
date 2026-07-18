@@ -834,10 +834,13 @@ String _summaryText(
   List<PatchReviewFile> files,
 ) {
   final safeLabel = _sanitizePatchText(label);
-  return '$safeLabel: ${files.length} files  +${_totalAdditions(files)}'
-      ' -${_totalDeletions(files)}  ${_totalHunks(files)} hunks'
+  return '$safeLabel: ${_plural(files.length, 'file')}  +${_totalAdditions(files)}'
+      ' -${_totalDeletions(files)}  ${_plural(_totalHunks(files), 'hunk')}'
       '  ${status.name}';
 }
+
+/// `1 file`, `2 files` — pluralizes [noun] unless [count] is exactly one.
+String _plural(int count, String noun) => '$count $noun${count == 1 ? '' : 's'}';
 
 String _rowText(PatchReviewFile file, {required bool activeSelection}) {
   final prefix = activeSelection ? '> ' : '  ';

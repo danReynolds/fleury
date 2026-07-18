@@ -151,7 +151,11 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     category: 'Charts & meters',
     blurb: 'A compact inline trend line with an optional trailing value.',
     cols: 44,
-    rows: 2,
+    // A 1-row widget inside `_framed` (Padding.all(1)) needs 3 rows: pad +
+    // content + pad. At rows: 2 the padding consumed both rows, squeezing the
+    // sparkline to zero height (a blank inline demo that only appeared once
+    // Expand grew the host to 3 rows).
+    rows: 3,
     code: '''Sparkline(
   data: <num>[3, 5, 4, 7, 6, 9, 8, 11, 9, 12],
   color: theme.colorScheme.success,
@@ -351,7 +355,8 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     category: 'Charts & meters',
     blurb: 'A determinate or indeterminate progress indicator.',
     cols: 44,
-    rows: 2,
+    // 1-row widget + `_framed` padding needs 3 rows; rows: 2 rendered blank.
+    rows: 3,
     builder: () => _framed(const ProgressBar(value: 0.45)),
   ),
   ExampleInfo(
@@ -424,6 +429,8 @@ Tabs(
     builder: () => _framed(
       Tree<String>(
         semanticLabel: 'project',
+        // Show the hierarchy expanded instead of a lone collapsed "▸ lib/".
+        initialExpandedDepth: 1,
         roots: <TreeNode<String>>[
           TreeNode<String>(
             'lib/',
@@ -658,16 +665,9 @@ TextInput(
   onChanged: (text) => updateReleaseNotes(text),
   onSubmit: (text) => saveReleaseNotes(text),
 )''',
-    builder: () => _framed(
-      TextArea(
-        autofocus: true,
-        minLines: 4,
-        maxLines: 4,
-        placeholder: 'Write release notes…',
-        semanticLabel: 'Release notes',
-        onChanged: (_) {},
-      ),
-    ),
+    // Seeded with a few lines so the demo reads as a filled multi-line editor
+    // instead of an empty field floating in the frame.
+    builder: () => const _TextAreaExample(),
   ),
   ExampleInfo(
     id: 'form.basic',
@@ -761,7 +761,10 @@ TextInput(
     category: 'Inputs & controls',
     blurb: 'A focusable action button; activate with Enter/Space.',
     cols: 24,
-    rows: 4,
+    // The example stacks "Pressed N×" + a spacer + the Button (3 rows); with
+    // `_framed` padding that needs 5. At rows: 4 the Padding clipped the Button
+    // itself — the demo showed the counter but not the button.
+    rows: 5,
     interactive: true,
     code: '''Button(
   label: 'Save',
@@ -938,7 +941,14 @@ TextInput(
     cols: 40,
     rows: 3,
     interactive: true,
-    builder: () => _framed(const PasswordInput(placeholder: 'Password')),
+    code: '''PasswordInput(
+  controller: controller,
+  semanticLabel: 'Password',
+  // Ctrl-R briefly reveals the obscured value.
+)''',
+    // Seeded with a value so the demo shows the obscuring dots (the widget's
+    // point) rather than a bare "Password" placeholder.
+    builder: () => const _PasswordInputExample(),
   ),
   ExampleInfo(
     id: 'autocomplete.basic',
@@ -1051,10 +1061,15 @@ TextInput(
     category: 'Navigation & overlays',
     blurb: 'A hover/focus hint attached to any child.',
     cols: 40,
-    rows: 4,
+    // A TUI tooltip triggers on focus (no hover), so the child is an autofocused
+    // Button — the hint renders beneath it on mount instead of an inert label.
+    rows: 5,
     interactive: true,
     builder: () => _framed(
-      const Tooltip(message: 'Saves the current file', child: Text('[ Save ]')),
+      Tooltip(
+        message: 'Saves the current file',
+        child: Button(label: 'Save', autofocus: true, onPressed: () {}),
+      ),
     ),
   ),
   ExampleInfo(
@@ -1109,7 +1124,9 @@ TextInput(
     widget: 'CommandPalette',
     category: 'Navigation & overlays',
     blurb: 'A fuzzy command launcher; type to filter, Enter to invoke.',
-    cols: 52,
+    // Wide enough to show the trailing shortcut column (Ctrl-P / Ctrl-T); at
+    // cols: 52 the shortcuts were clipped to "Ctr".
+    cols: 66,
     rows: 10,
     interactive: true,
     builder: () => _framed(
@@ -1207,7 +1224,9 @@ TextInput(
     category: 'Data & lists',
     blurb: 'A text table of widget cells, with optional row selection.',
     cols: 44,
-    rows: 6,
+    // Header + 3 data rows, framed, need 7; at rows: 6 the last row (lin) was
+    // clipped.
+    rows: 7,
     interactive: true,
     builder: () => _framed(
       Table(
@@ -1232,6 +1251,9 @@ TextInput(
     builder: () => _framed(
       TreeTable<String>(
         treeColumnId: 'name',
+        // Expand the top branch so the demo shows the hierarchy, not a collapsed
+        // "▸ lib" the reader has to imagine.
+        controller: TreeTableController(expandedKeys: const <Object>{'lib'}),
         columns: const <DataTableColumn>[
           DataTableColumn(id: 'name', title: 'Name'),
           DataTableColumn(id: 'size', title: 'Size'),
@@ -1297,7 +1319,10 @@ TextInput(
     category: 'Agent surfaces',
     blurb: 'A yes/no approval card for gating risky agent actions.',
     cols: 56,
-    rows: 8,
+    // Title + message + subject + the [Approve]/[Deny] actions need 11 rows
+    // once framed; at rows: 8 the subject and the decision buttons — the whole
+    // point of an approval card — were clipped off the bottom.
+    rows: 11,
     interactive: true,
     builder: () => _framed(
       ApprovalPrompt(
@@ -1392,8 +1417,13 @@ TextInput(
     widget: 'ConversationNavigator',
     category: 'Agent surfaces',
     blurb: 'A searchable list of conversations with status and unread counts.',
-    cols: 60,
-    rows: 8,
+    // Each entry is a single line (title · status · unread · latest); the list
+    // window is only as tall as the entry count, so extra rows don't reveal a
+    // hidden entry — the messages just have to fit one line. Sized so both rows
+    // render un-wrapped: at cols 60 the first entry's long message wrapped and
+    // pushed the second ("Docs site") out of the 2-row window.
+    cols: 64,
+    rows: 6,
     interactive: true,
     builder: () => _framed(
       const ConversationNavigator(
@@ -1403,14 +1433,14 @@ TextInput(
             title: 'Benchmark scoreboard',
             subtitle: 'Perf follow-up',
             status: ConversationStatus.active,
-            latestMessage: 'Run all peers before deciding.',
+            latestMessage: 'All peers green',
             unreadCount: 2,
           ),
           ConversationEntry(
             id: 'c2',
             title: 'Docs site',
             status: ConversationStatus.idle,
-            latestMessage: 'Tabbed examples shipped.',
+            latestMessage: 'Examples shipped',
           ),
         ],
       ),
@@ -1421,16 +1451,20 @@ TextInput(
     widget: 'ModelStatusBar',
     category: 'Agent surfaces',
     blurb:
-        'A status line for the active model: provider, mode, latency, tokens.',
-    cols: 60,
+        'A status line for the active model: name, status, latency, and '
+        'token/context usage.',
+    // A full-width status bar: model + live status + latency + a context meter.
+    // The full widget (provider + mode + …) is ~90 cols — wider than the docs
+    // column — so the demo drops the provider (the model id implies it) and the
+    // mode (status already reads as "streaming") to show the whole bar, meter
+    // and percentage included, without clipping or a horizontal scrollbar.
+    cols: 80,
     rows: 3,
     builder: () => _framed(
       const ModelStatusBar(
         info: ModelStatusInfo(
           model: 'claude-opus-4-8',
-          provider: 'Anthropic',
           status: ModelRuntimeStatus.streaming,
-          mode: 'edit',
           latency: Duration(milliseconds: 180),
           tokenUsage: TokenUsage(
             input: 8200,
@@ -1854,6 +1888,75 @@ class _TextInputExampleState extends State<_TextInputExample> {
       semanticLabel: 'Command',
       onChanged: (_) {},
       onSubmit: (_) {},
+    ),
+  );
+}
+
+class _PasswordInputExample extends StatefulWidget {
+  const _PasswordInputExample();
+
+  @override
+  State<_PasswordInputExample> createState() => _PasswordInputExampleState();
+}
+
+class _PasswordInputExampleState extends State<_PasswordInputExample> {
+  final TextEditingController _controller = TextEditingController(
+    text: 'correct-horse',
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    PasswordInput(
+      controller: _controller,
+      autofocus: true,
+      semanticLabel: 'Password',
+    ),
+  );
+}
+
+class _TextAreaExample extends StatefulWidget {
+  const _TextAreaExample();
+
+  @override
+  State<_TextAreaExample> createState() => _TextAreaExampleState();
+}
+
+class _TextAreaExampleState extends State<_TextAreaExample> {
+  final TextEditingController _controller = TextEditingController(
+    text: 'Ship v1.4.0\n\n- Add a --version flag\n- Fix the Windows resize crash',
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    // Park the caret at the end of the seeded notes so typing appends where a
+    // user would resume — and so keystrokes land deterministically in tests.
+    _controller.selection = TextSelection.collapsed(
+      offset: _controller.text.length,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    TextArea(
+      controller: _controller,
+      autofocus: true,
+      minLines: 4,
+      maxLines: 4,
+      semanticLabel: 'Release notes',
+      onChanged: (_) {},
     ),
   );
 }

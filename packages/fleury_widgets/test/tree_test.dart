@@ -53,6 +53,28 @@ void main() {
     expect(_lines(tester, rows: 4), ['▸ src', '  README', '', '']);
   });
 
+  testWidgets('initialExpandedDepth expands branches on mount', (tester) {
+    tester.pumpWidget(
+      Tree<String>(
+        autofocus: true,
+        initialExpandedDepth: 1,
+        roots: const [
+          TreeNode<String>(
+            'src',
+            children: [TreeNode<String>('a.dart'), TreeNode<String>('b.dart')],
+          ),
+          TreeNode<String>('README'),
+        ],
+      ),
+    );
+    expect(_lines(tester, rows: 4), [
+      '▾ src',
+      '    a.dart',
+      '    b.dart',
+      '  README',
+    ]);
+  });
+
   testWidgets('Right expands a branch, Left collapses it', (tester) {
     tester.pumpWidget(_tree());
 
