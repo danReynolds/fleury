@@ -358,6 +358,7 @@ void main() {
       buf.writeText(const CellOffset(10, 0), '你好');
       expect(buf.atColRow(10, 0).role, CellRole.leading);
       expect(buf.atColRow(11, 0).role, CellRole.continuation);
+      buf.resetDamageTracking(); // arm damage tracking for the image write
 
       // Image left edge lands on the continuation at col 11.
       buf.writeImage(
@@ -373,6 +374,15 @@ void main() {
         CellRole.empty,
         reason: 'the orphaned wide leading must be evicted, not left dangling',
       );
+      // The eviction sits at col 10, one column left of the image region — the
+      // placement must damage it too, or the bounded diff leaves the stale lead.
+      final damage = buf.takeDamageBounds();
+      expect(damage, isNotNull);
+      expect(
+        damage!.contains(const CellOffset(10, 0)),
+        isTrue,
+        reason: 'the evicted lead at col 10 must be damaged for the bounded diff',
+      );
     });
 
     test(
@@ -384,6 +394,7 @@ void main() {
         buf.writeText(const CellOffset(10, 0), '你');
         expect(buf.atColRow(10, 0).role, CellRole.leading);
         expect(buf.atColRow(11, 0).role, CellRole.continuation);
+        buf.resetDamageTracking(); // arm damage tracking for the image write
 
         // Image spans cols 9..10; col 10 (the leading) is overwritten, its
         // continuation at col 11 is left outside the region.
@@ -399,6 +410,15 @@ void main() {
           buf.atColRow(11, 0).role,
           CellRole.empty,
           reason: 'the orphaned wide continuation must be evicted',
+        );
+        // The eviction at col 11 is one column right of the image region and
+        // must be damaged too.
+        final damage = buf.takeDamageBounds();
+        expect(damage, isNotNull);
+        expect(
+          damage!.contains(const CellOffset(11, 0)),
+          isTrue,
+          reason: 'the evicted continuation at col 11 must be damaged',
         );
       },
     );

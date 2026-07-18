@@ -699,7 +699,10 @@ final class CellBuffer {
         boxOffsetRow: boxOffsetRow,
       ),
     );
-    if (recordDamage) _recordDamageRect(col, row, cols, rows);
+    // Include the ±1 edge columns: _evictWideNeighbors below empties a
+    // leading at col-1 or a continuation at col+cols, which sit outside the
+    // region proper — the same reason grapheme writes damage col-1..col+width+1.
+    if (recordDamage) _recordDamageRect(col - 1, row, cols + 2, rows);
     if (!markOverlayCells) return;
     for (var r = row; r < row + rows; r++) {
       final base = r * _size.cols;
