@@ -1026,6 +1026,22 @@ class _ListViewBody extends MultiChildRenderObjectWidget {
   }
 }
 
+/// The diagnostic both list render objects raise when handed an unbounded main
+/// axis. A [ListView] windows its items to the viewport height, so an unbounded
+/// `maxRows` (a [ScrollView], or a `mainAxisSize: MainAxisSize.min` Column/Row
+/// child) has no window to fill and would drop every item with no diagnostic.
+/// Mirrors [Scrollbar]'s unbounded-width failure — loud and actionable rather
+/// than a silently blank frame.
+Never _throwUnboundedListHeight() {
+  throw StateError(
+    'ListView needs a bounded height to window its items, but was given an '
+    'unbounded height (a ScrollView, or a Column/Row child with '
+    'mainAxisSize.min, gets an unbounded main axis). Every item would be '
+    'dropped. Give it a bounded height — wrap it in an Expanded or a '
+    'SizedBox(height: ...).',
+  );
+}
+
 /// Lays out a vertical stack of children with a movable scroll anchor.
 ///
 /// Strategy:
@@ -1103,6 +1119,8 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
     final maxRows = constraints.maxRows;
     final maxCols = constraints.maxCols;
     final count = _children.length;
+
+    if (maxRows == null && count > 0) _throwUnboundedListHeight();
 
     if (count == 0 || maxRows == null || maxRows == 0) {
       _visibleChildren.clear();
@@ -1696,6 +1714,10 @@ class _RenderLazyListView extends RenderObject
     final maxCols = constraints.maxCols;
     final element = _element;
     final count = _controller._itemCount;
+
+    if (maxRows == null && count > 0 && element != null) {
+      _throwUnboundedListHeight();
+    }
 
     if (element == null || count == 0 || maxRows == null || maxRows == 0) {
       // Unmount any leftovers from a previous non-empty layout.
