@@ -31,6 +31,7 @@ import '../foundation/change_notifier.dart';
 import '../foundation/geometry.dart';
 import '../rendering/cell.dart';
 import '../widgets/framework.dart';
+import '../widgets/ticker_mode.dart';
 import '../widgets/tui_binding.dart';
 import 'animation_policy.dart';
 import 'curves.dart';
@@ -173,6 +174,13 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
   // An animation requested before attach, replayed on attach.
   void Function()? _pendingOnAttach;
 
+  // Bumped by [_beginRequest] on every to() / loop() / run(). [_tick]
+  // captures it before running user listeners and bails if it changed:
+  // a listener that retargets during the settling tick re-arms a fresh
+  // request that must play out on later ticks, not be consumed by this
+  // tick's stale settle / loop / sequence branches.
+  int _requestGeneration = 0;
+
   /// Elements that read [value] during their build, auto-subscribed
   /// for rebuild on change. Distinct from [ChangeNotifier] listeners
   /// (which AnimationBuilder uses).
@@ -192,8 +200,28 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
         final binding = TuiBinding.maybeOf(element);
         if (binding != null) attach(binding);
       }
+      _syncMuted(element);
     }
     return _value;
+  }
+
+  /// Keeps the owned ticker's muted flag in sync with the enclosing
+  /// [TickerMode] (and [AnimationPolicy]) as seen by [element]. A hidden
+  /// subtree — `TickerMode(enabled: false)` — mutes the ticker so the
+  /// animation freezes instead of burning frames, exactly like a
+  /// [SingleTickerProviderStateMixin] ticker.
+  ///
+  /// Called from the [value] getter on every subscribing build.
+  /// `TickerMode.enabledOf` establishes an inherited dependency on the
+  /// reading element, so a TickerMode flip rebuilds that element and
+  /// re-resolves the flag here. Resolution is per-subscribing-build: an
+  /// animation displayed in a single subtree (the common case) mutes with
+  /// that subtree.
+  void _syncMuted(Element element) {
+    final ticker = _ticker;
+    if (ticker == null) return;
+    ticker.muted =
+        !TickerMode.enabledOf(element) || _policy == AnimationPolicy.disabled;
   }
 
   @override
@@ -383,7 +411,15 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
         : _stepSpring(dtSeconds);
 
     _value = _type.fromVector(_position);
+    final generation = _requestGeneration;
     _notify();
+    // A listener invoked by _notify may have retargeted (to / loop /
+    // run), which re-arms a fresh request via _beginRequest. The
+    // `settled` snapshot above belongs to the now-superseded request;
+    // falling through would snap to the freshly-set target and complete
+    // the new future instantly. Let the new request play out on the
+    // ticks that follow.
+    if (_requestGeneration != generation) return;
 
     if (!settled) return;
 
@@ -465,6 +501,7 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
     _stopFutureOnly(canceled: true);
     _looping = false;
     _queue = null;
+    _requestGeneration++;
     final future = TickerFuture.pending();
     _active = future;
     return future;

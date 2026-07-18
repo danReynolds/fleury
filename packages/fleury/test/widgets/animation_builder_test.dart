@@ -80,6 +80,65 @@ void main() {
     expect(() => tester.pump(const Duration(seconds: 1)), returnsNormally);
   });
 
+  testWidgets('under TickerMode(enabled: false) the animation freezes '
+      '(hidden subtree does not animate or rebuild)', (tester) {
+    Widget build(int target) => TickerMode(
+      enabled: false,
+      child: AnimationBuilder<int>(
+        target,
+        curve: Curves.linear,
+        duration: const Duration(milliseconds: 100),
+        builder: (_, v) => Text('$v'),
+      ),
+    );
+
+    tester.pumpWidget(build(0));
+    expect(tester.renderToString(size: const CellSize(4, 1)), '0\n');
+
+    // Retarget inside the muted subtree: the ticker starts but its
+    // callback must be muted, so the value stays pinned at the
+    // pre-retarget position instead of interpolating toward 10.
+    tester.pumpWidget(build(10));
+    tester.pump(const Duration(milliseconds: 50));
+    expect(
+      tester.renderToString(size: const CellSize(4, 1)),
+      '0\n',
+      reason: 'muted subtree: value frozen mid-flight',
+    );
+    tester.pump(const Duration(milliseconds: 100));
+    expect(
+      tester.renderToString(size: const CellSize(4, 1)),
+      '0\n',
+      reason: 'muted subtree: still frozen after the full duration',
+    );
+  });
+
+  testWidgets('flipping TickerMode back to enabled resumes the animation', (
+    tester,
+  ) {
+    Widget build({required bool enabled, required int target}) => TickerMode(
+      enabled: enabled,
+      child: AnimationBuilder<int>(
+        target,
+        curve: Curves.linear,
+        duration: const Duration(milliseconds: 100),
+        builder: (_, v) => Text('$v'),
+      ),
+    );
+
+    tester.pumpWidget(build(enabled: false, target: 0));
+    tester.pumpWidget(build(enabled: false, target: 10));
+    tester.pump(const Duration(milliseconds: 50));
+    expect(tester.renderToString(size: const CellSize(4, 1)), '0\n');
+
+    // Un-mute: the retarget that was frozen must now play out. Elapsed
+    // time kept tracking the clock while muted, so on resume the curve
+    // lands at its clock-relative position (no replay of missed frames).
+    tester.pumpWidget(build(enabled: true, target: 10));
+    tester.pump(const Duration(milliseconds: 100));
+    expect(tester.renderToString(size: const CellSize(4, 1)), '10\n');
+  });
+
   testWidgets('RgbColor value animates channel-wise', (tester) {
     bool isBlack(FleuryTester t) =>
         t.render(size: const CellSize(1, 1)).atColRow(0, 0).style.foreground ==

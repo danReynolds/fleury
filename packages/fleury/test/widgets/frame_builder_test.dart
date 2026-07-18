@@ -134,6 +134,49 @@ void main() {
       // the right frame), but no notifications => no rebuilds.
       expect(receivedFrames, [0]);
     });
+
+    test('interval change under TickerMode(false) keeps the recreated '
+        'ticker muted', () {
+      final receivedFrames = <int>[];
+      final clock = FakeClock();
+      final scheduler = FakeTickerScheduler(clock: clock);
+      final binding = TuiBinding(tickerScheduler: scheduler);
+      final owner = BuildOwner();
+
+      Widget tree(Duration interval) => TuiBindingScope(
+        binding: binding,
+        child: TickerMode(
+          enabled: false,
+          child: FrameBuilder(
+            interval: interval,
+            builder: (ctx, frame, elapsed, delta) {
+              receivedFrames.add(frame);
+              return const Text('hi');
+            },
+          ),
+        ),
+      );
+
+      final root = owner.mountRoot(tree(const Duration(milliseconds: 100)));
+      scheduler.advance(const Duration(milliseconds: 300));
+      owner.flushBuild();
+      expect(receivedFrames, [0], reason: 'muted from the start');
+
+      // Change the interval: the interval branch of didUpdateWidget
+      // disposes and recreates the ticker. didChangeDependencies does
+      // NOT fire for a plain widget update, so the fresh ticker must
+      // inherit the enclosing TickerMode muting at creation — otherwise
+      // the hidden subtree resumes rebuilding.
+      owner.updateRoot(root, tree(const Duration(milliseconds: 80)));
+      final countAfterChange = receivedFrames.length;
+      scheduler.advance(const Duration(milliseconds: 500));
+      owner.flushBuild();
+      expect(
+        receivedFrames.length,
+        countAfterChange,
+        reason: 'recreated ticker stays muted in the hidden subtree',
+      );
+    });
   });
 
   group('Spinner golden snapshots (braille)', () {

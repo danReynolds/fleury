@@ -71,8 +71,18 @@ class _FrameBuilderState extends State<FrameBuilder> {
       interval: widget.interval,
       scheduler: binding.tickerScheduler,
     )..addListener(_onFrame);
+    // Muting is derived here (not only in didChangeDependencies) so a
+    // ticker recreated by the interval branch of didUpdateWidget — which
+    // does not trigger didChangeDependencies — still inherits the
+    // enclosing TickerMode muting instead of resuming rebuilds in a
+    // hidden subtree.
+    _ticker!.muted = _resolveMuted();
     if (widget.enabled) _ticker!.start();
   }
+
+  bool _resolveMuted() =>
+      !TickerMode.enabledOf(context) ||
+      TuiBinding.of(context).animationPolicy == AnimationPolicy.disabled;
 
   void _disposeTicker() {
     final t = _ticker;
@@ -110,9 +120,7 @@ class _FrameBuilderState extends State<FrameBuilder> {
     // is the right place to create the ticker — context is wired
     // up and the binding lookup will succeed.
     _ensureTicker();
-    _ticker!.muted =
-        !TickerMode.enabledOf(context) ||
-        TuiBinding.of(context).animationPolicy == AnimationPolicy.disabled;
+    _ticker!.muted = _resolveMuted();
   }
 
   @override
