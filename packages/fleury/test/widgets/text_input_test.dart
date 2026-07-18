@@ -257,6 +257,37 @@ void main() {
       },
     );
 
+    testWidgets(
+      'a clipboardPolicy.disabled field skips kill-ring capture too (not just '
+      'obscured fields)',
+      (tester) {
+        // The gate keys on the clipboard policy, so `disabled` — a visible
+        // field whose content is barred from leaving — must also skip capture.
+        TextEditingModel.killRing = '';
+        addTearDown(() => TextEditingModel.killRing = '');
+
+        final controller = TextEditingController(text: 'classified')
+          ..caretOffset = 10;
+        tester.pumpWidget(
+          TextInput(
+            controller: controller,
+            autofocus: true,
+            clipboardPolicy: TextClipboardPolicy.disabled,
+            keymap: TextEditingKeymap.emacsSingleLine,
+          ),
+        );
+        tester.render(size: const CellSize(20, 1));
+
+        tester.sendKey(_ctrlChar('u'));
+        expect(controller.text, isEmpty, reason: 'kill still removes the text');
+        expect(
+          TextEditingModel.killRing,
+          isNot(contains('classified')),
+          reason: 'a disabled-policy field must not feed the shared kill ring',
+        );
+      },
+    );
+
     testWidgets('Ctrl+arrows move by word through the default keymap', (
       tester,
     ) {

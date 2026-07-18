@@ -205,8 +205,11 @@ class TextEditingController extends ChangeNotifier {
   /// Kill (cut to the shared kill ring) from the caret to the line end; if
   /// already at the line end, kill the newline. Recover with [yank].
   ///
-  /// Obscured / redacted fields pass `captureToKillRing: false` so the removed
-  /// secret is deleted without entering the process-wide, cross-field ring.
+  /// [TextInput]/[TextArea] pass `captureToKillRing: false` for obscured or
+  /// redacted fields so the removed secret is deleted without entering the
+  /// process-wide, cross-field ring. A custom obscured editor driving this
+  /// controller directly captures by default — pass `false` yourself, keyed on
+  /// your own obscured/policy state, or the plaintext becomes Ctrl+Y-yankable.
   void killToLineEnd({bool captureToKillRing = true}) {
     _checkNotDisposed();
     _applyEdit(
@@ -636,10 +639,15 @@ class TextInput extends StatefulWidget {
   /// numeric bounds while keeping the core text editing role and actions.
   final SemanticState semanticState;
 
-  /// Policy future copy/cut actions should use for this field.
+  /// Policy copy/cut AND kill-ring capture use for this field.
   ///
   /// When null, obscured fields default to [TextClipboardPolicy.redacted] and
-  /// normal fields default to [TextClipboardPolicy.allowed].
+  /// normal fields default to [TextClipboardPolicy.allowed]. An explicit value
+  /// overrides that default in both directions: setting [allowed] on an
+  /// [obscureText] field deliberately opts its plaintext into the system
+  /// clipboard (copy/cut) and the cross-field kill ring alike — kill is not
+  /// stricter than copy. Leave it null (or set [redacted]) to keep a password
+  /// field's content out of both.
   final TextClipboardPolicy? clipboardPolicy;
 
   /// Optional command/submission history for Up/Down navigation.
