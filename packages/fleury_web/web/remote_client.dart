@@ -10,15 +10,16 @@ import 'package:fleury_web/fleury_web.dart';
 import 'package:web/web.dart' as web;
 
 void main() {
-  unawaited(_run());
-}
-
-Future<void> _run() async {
-  final host = _hostElement();
-  await BrowserPresentationHost(
-    into: host,
-  ).attach(WireFrameSource(url: _socketUrl()));
-  web.document.body?.setAttribute('data-fleury-remote-client', 'connected');
+  // connectRemoteClient surfaces a failed initial connect (stale/wrong token,
+  // server down, rejected upgrade) on the page and swallows it, so the future
+  // never rejects — unawaited is safe and cannot become a silent uncaught
+  // promise rejection.
+  unawaited(
+    connectRemoteClient(
+      host: _hostElement(),
+      source: WireFrameSource(url: _socketUrl()),
+    ),
+  );
 }
 
 web.Element _hostElement() {

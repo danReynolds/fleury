@@ -20,6 +20,23 @@ final class DomRowFactory {
   final Map<CellStyle, String> _styleCssCache = {};
   final Map<_WidthCorrectionCacheKey, String> _widthCssCache = {};
 
+  /// Upper bound on distinct style→CSS entries retained. The [CellStyle] key
+  /// space is unbounded by content — per-frame truecolor interpolation, a
+  /// data-driven heatmap, or per-cell distinct `linkUri` all mint fresh keys —
+  /// so an unbounded cache is a slow memory leak over a long-lived session. This
+  /// cap comfortably exceeds any realistic single frame's distinct-style count
+  /// (so a frame never evicts a style it still needs), while a style-diverse app
+  /// stays bounded rather than growing forever. The width cache is intentionally
+  /// left unbounded: its key (widthCols × cssCellWidth) is already bounded by the
+  /// clamped grid geometry, not by content.
+  static const int _maxStyleCacheEntries = 16384;
+
+  /// Number of live style→CSS cache entries — test-only (bounds guard).
+  int get styleCacheEntryCountForTest => _styleCssCache.length;
+
+  /// The style cache's entry cap — test-only.
+  static int get styleCacheCapacityForTest => _maxStyleCacheEntries;
+
   /// Builds span nodes for [row].
   List<web.Node> createNodes(
     RowSpanModel row, {
@@ -190,12 +207,21 @@ final class DomRowFactory {
       ';${_styleCssFor(run.style, stats)}';
 
   String _styleCssFor(CellStyle style, DomRowReplacementStats? stats) {
-    if (_styleCssCache.containsKey(style)) {
+    final cached = _styleCssCache[style];
+    if (cached != null) {
       stats?.styleCacheHits += 1;
-      return _styleCssCache[style]!;
+      return cached;
     }
     stats?.styleCacheMisses += 1;
     final css = cellStyleToCss(style);
+    // The hit path above stays a plain lookup, so the common repeated-style set
+    // (well under the cap) keeps its full benefit at zero eviction cost. Only a
+    // miss past the cap evicts, dropping the oldest entry — LinkedHashMap keeps
+    // insertion order — so a style-diverse app's cache stays bounded instead of
+    // leaking one entry per distinct style for the surface's lifetime.
+    if (_styleCssCache.length >= _maxStyleCacheEntries) {
+      _styleCssCache.remove(_styleCssCache.keys.first);
+    }
     _styleCssCache[style] = css;
     return css;
   }
