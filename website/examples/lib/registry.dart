@@ -656,10 +656,12 @@ TextInput(
     cols: 44,
     rows: 7,
     interactive: true,
-    code: '''TextArea(
+    code: '''final controller = TextEditingController(text: releaseNotes);
+
+TextArea(
+  controller: controller,
   minLines: 4,
-  maxLines: 8,
-  placeholder: 'Write release notes…',
+  maxLines: 4,
   semanticLabel: 'Release notes',
   keymap: TextEditingKeymap.chat,
   onChanged: (text) => updateReleaseNotes(text),
