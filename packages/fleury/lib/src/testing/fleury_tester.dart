@@ -600,8 +600,11 @@ class FleuryTester {
   /// them as pixels — never as text — but the snapshot must still hold their
   /// columns or every later column shifts left, encoding wrong geometry in
   /// goldens and hiding text that overlaps the image. They render as
-  /// [imageMark] (default `#`): distinct from both [emptyMark] and glyphs, so
-  /// the footprint is visible and an overlap breaks its run.
+  /// [imageMark] (default `#`) so the footprint is visible and text painted
+  /// over the region breaks the mark's run. `#` is a real glyph, so a snapshot
+  /// that also renders a widget which paints literal `#` (a ProgressBar, say)
+  /// can't tell the two apart — override [imageMark] with a glyph that
+  /// subject doesn't emit for those cases.
   ///
   /// Trailing empty cells on a row are trimmed for readability; image marks
   /// are content and are never trimmed.
