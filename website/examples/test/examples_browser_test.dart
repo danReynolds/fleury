@@ -429,6 +429,8 @@ void main() {
       'conversationnavigator.basic': <String>['Docs site'], // both entries fit
       'tooltip.basic': <String>['Saves the current file'], // tip shows on focus
       'modelstatusbar.basic': <String>['Context', '%'], // full bar, meter intact
+      'autocomplete.basic': <String>['Apple'], // seeded query opens the matches
+      'tracetimeline.basic': <String>['Publish report'], // third event fits
     };
     final missing = <String>[];
     for (final entry in checks.entries) {

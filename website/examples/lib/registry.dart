@@ -960,18 +960,15 @@ TextArea(
     cols: 44,
     rows: 7,
     interactive: true,
-    builder: () => _framed(
-      Autocomplete<String>(
-        placeholder: 'Type a fruit…',
-        options: const <String>[
-          'Apple',
-          'Apricot',
-          'Banana',
-          'Cherry',
-          'Grape',
-        ],
-      ),
-    ),
+    code: '''Autocomplete<String>(
+  placeholder: 'Type a fruit…',
+  options: const ['Apple', 'Apricot', 'Banana', 'Cherry', 'Grape'],
+  onSelect: (fruit) => choose(fruit),
+)''',
+    // Seeded with a query + autofocus so the demo opens on the filtered matches
+    // (the point of the widget) instead of a bare prompt. Clear it to type your
+    // own.
+    builder: () => const _AutocompleteExample(),
   ),
   ExampleInfo(
     id: 'colorpicker.basic',
@@ -1409,6 +1406,14 @@ TextArea(
             kind: TraceTimelineKind.command,
             status: TraceTimelineStatus.running,
             timestamp: DateTime(2026, 6, 9, 10, 0, 1),
+          ),
+          // A third event so the connector rail reads as a sequence
+          // (╭ first → ├ middle → ╰ last), not a lone pair.
+          TraceTimelineEntry(
+            id: 't3',
+            label: 'Publish report',
+            kind: TraceTimelineKind.command,
+            status: TraceTimelineStatus.queued,
           ),
         ],
       ),
@@ -1927,6 +1932,40 @@ class _PasswordInputExampleState extends State<_PasswordInputExample> {
       controller: _controller,
       autofocus: true,
       semanticLabel: 'Password',
+    ),
+  );
+}
+
+class _AutocompleteExample extends StatefulWidget {
+  const _AutocompleteExample();
+
+  @override
+  State<_AutocompleteExample> createState() => _AutocompleteExampleState();
+}
+
+class _AutocompleteExampleState extends State<_AutocompleteExample> {
+  // Seed a partial query so the suggestion list is already open on mount.
+  final TextEditingController _controller = TextEditingController(text: 'Ap');
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Autocomplete<String>(
+      controller: _controller,
+      autofocus: true,
+      placeholder: 'Type a fruit…',
+      options: const <String>[
+        'Apple',
+        'Apricot',
+        'Banana',
+        'Cherry',
+        'Grape',
+      ],
     ),
   );
 }
