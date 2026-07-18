@@ -1316,14 +1316,17 @@ Future<AppExit> _runAppImpl(
         // an error before the app mounted (nothing to recover into), or
         // a storm of errors every frame. Everything else is reported and
         // survived.
-        // Once teardown has begun the reporter is disposed, so report() above
-        // was a silent no-op and the fatal gate below would misread the still
-        // non-null rootElement as survivable. Surface the error on stderr —
-        // the terminal is already restored — so a late async throw (a Timer or
-        // socket callback outliving the session, an error during shutdown)
-        // isn't discarded with zero trace.
+        // Once the reporter is disposed, report() above was a silent no-op and
+        // the fatal gate below would misread the still non-null rootElement as
+        // survivable. Surface the error on stderr — the terminal is already
+        // restored — so a late async throw (a Timer or socket callback
+        // outliving the session, an error during shutdown) isn't discarded with
+        // zero trace. Keyed on the reporter's own disposed state, not merely on
+        // teardown having begun: there is a brief window where cleanup has
+        // started but the reporter is still live and DID log the error, and
+        // stderr-ing here too would double-report it.
         final teardownStarted = cleanupFuture != null;
-        if (teardownStarted && !reportingFailed) {
+        if (errorReporter.isDisposed && !reportingFailed) {
           try {
             stderr.writeln('fleury: uncaught error after teardown: $error');
             stderr.writeln(stack);
