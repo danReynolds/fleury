@@ -200,6 +200,27 @@ class InputParser {
     _state = _State.ground;
   }
 
+  /// Whether the parser is mid bracketed-paste, so the driver can arm (and
+  /// re-arm) its paste-inactivity deadline that calls [flushPaste].
+  bool get isPasting => _state == _State.paste;
+
+  /// Finalizes an in-progress bracketed paste after prolonged inactivity.
+  ///
+  /// [flush] deliberately does NOT end a paste on the driver's ~30ms idle
+  /// debounce: a slow SSH paste can pause far longer than that between reads,
+  /// and splitting it into typed keys was itself an injection hazard. But an
+  /// abandoned paste — the paste source dies after `ESC[200~` so the `ESC[201~`
+  /// terminator never arrives — would otherwise capture ALL later input forever,
+  /// including the Ctrl+C escape hatch (raw mode disables ISIG, so 0x03 is just
+  /// a paste byte). The driver calls this on a separate, generous inactivity
+  /// deadline (seconds, not the 30ms ESC debounce) so an abandoned paste is
+  /// emitted as one [PasteEvent] and the parser returns to ground, restoring
+  /// keyboard control; a merely-slow paste stays far under the deadline. No-op
+  /// unless mid-paste.
+  void flushPaste(TuiEventSink sink) {
+    if (_state == _State.paste) _finishPaste(sink);
+  }
+
   void _consume(int byte, TuiEventSink sink) {
     switch (_state) {
       case _State.ground:
@@ -396,6 +417,15 @@ class InputParser {
       _emitCsi(byte, sink);
       _resetCsi();
       _state = _State.ground;
+      return;
+    }
+    if (byte == 0x1B) {
+      // ESC mid-CSI aborts this sequence and BEGINS a new one (ECMA-48 / VT
+      // behaviour), exactly as [_consumeDiscardedCsi] handles it. Re-entering
+      // afterEsc lets the immediately-following report (e.g. `ESC [ A`) decode
+      // instead of the ESC being dropped and `[ A` mis-parsed as typed text.
+      _resetCsi();
+      _state = _State.afterEsc;
       return;
     }
     // Unknown intermediate byte — abort sequence.
@@ -640,12 +670,20 @@ class InputParser {
     if (cb & 16 != 0) mods.add(KeyModifier.ctrl);
 
     if (cb & 64 != 0) {
-      // Wheel: low bit selects direction.
+      // Wheel. The low two bits select which wheel: 64 up, 65 down, 66 left,
+      // 67 right. Only the vertical pair maps to a MouseEventKind; a horizontal
+      // wheel gesture is dropped rather than mis-reported as a vertical scroll
+      // (there is no horizontal scroll kind, and scrolling the wrong axis is
+      // worse than ignoring the gesture).
+      final kind = switch (cb & 3) {
+        0 => MouseEventKind.scrollUp,
+        1 => MouseEventKind.scrollDown,
+        _ => null, // 66/67 — horizontal wheel-left/right.
+      };
+      if (kind == null) return;
       sink.add(
         MouseEvent(
-          kind: cb & 1 == 0
-              ? MouseEventKind.scrollUp
-              : MouseEventKind.scrollDown,
+          kind: kind,
           button: MouseButton.none,
           col: col,
           row: row,
@@ -655,12 +693,18 @@ class InputParser {
       return;
     }
 
-    final button = switch (cb & 3) {
-      0 => MouseButton.left,
-      1 => MouseButton.middle,
-      2 => MouseButton.right,
-      _ => MouseButton.none,
-    };
+    // Extended buttons 8-11 set bit 128 (back/forward/thumb buttons). We have no
+    // enum member for them, so report `none` rather than letting `cb & 3` alias
+    // them to left/middle/right — a thumb-button press must not activate the
+    // widget under the cursor as if left-clicked.
+    final button = cb & 128 != 0
+        ? MouseButton.none
+        : switch (cb & 3) {
+            0 => MouseButton.left,
+            1 => MouseButton.middle,
+            2 => MouseButton.right,
+            _ => MouseButton.none,
+          };
     final motion = cb & 32 != 0;
     final MouseEventKind kind;
     if (finalByte == 0x6D) {

@@ -98,6 +98,7 @@ class PosixTerminalDriver
   StreamSubscription<ProcessSignal>? _intSubscription;
   StreamSubscription<ProcessSignal>? _termSubscription;
   Timer? _flushTimer;
+  Timer? _pasteIdleTimer;
   Timer? _graceTimer;
   AppSignal? _pendingSignal;
   bool _pendingSignalDelivered = false;
@@ -122,12 +123,21 @@ class PosixTerminalDriver
   // graphics under Warp), upgrades [capabilities].
   bool _probing = false;
   List<int> _probeBuffer = <int>[];
+  // How many Device-Attributes replies the startup probe sequence still owes.
+  // Each probe query appends one DA request, and the terminal answers queries
+  // in order, so the reply to probe N is bracketed by the Nth DA. Counting them
+  // keeps the completion sentinel unambiguous PER EXCHANGE: a later probe waits
+  // for the LAST owed DA rather than settling on an earlier probe's straggling
+  // reply — without this, a slow-link image-probe DA satisfied the width
+  // probe's sentinel and the width probe's own (later) Cursor-Position reply
+  // leaked to the parser as a phantom Shift+F3 keypress on startup.
+  int _daRepliesPending = 0;
   // Late-reply drain: a probe that timed out may still get its reply on a slow
   // link (SSH). While draining, stdin keeps diverting into [_probeBuffer] —
-  // instead of being parsed as keystrokes — until the DA terminator lands
-  // (then real input after it replays) or [lateProbeGrace] expires. Without
-  // this, a Kitty/DA reply arriving after the probe window types garbage
-  // (`Gi=31,...`) into the focused widget.
+  // instead of being parsed as keystrokes — until every owed DA terminator
+  // lands (then real input after the last one replays) or [lateProbeGrace]
+  // expires. Without this, a Kitty/DA reply arriving after the probe window
+  // types garbage (`Gi=31,...`) into the focused widget.
   bool _drainingLateProbe = false;
   Timer? _lateProbeTimer;
   @visibleForTesting
@@ -355,22 +365,23 @@ class PosixTerminalDriver
         }
         if (_drainingLateProbe) {
           // A probe timed out; its reply may still be arriving. Keep diverting
-          // until the DA terminator lands (then replay real input after it),
-          // rather than parsing the reply as keystrokes.
+          // until every owed DA terminator lands (then replay real input after
+          // the last one), rather than parsing the reply as keystrokes.
           _probeBuffer.addAll(bytes);
-          if (_daReplyEnd(_probeBuffer) >= 0) {
+          if (_daReplyEndN(_probeBuffer, _daRepliesPending) >= 0) {
             _finishLateProbeDrain();
           } else if (_probeBuffer.length > _maxProbeBufferBytes) {
             // A terminal spraying without a DA terminator: a real reply is
             // tiny, so give up now rather than grow the buffer (and rescan it)
-            // for the full grace. Nothing real is lost — a genuine reply would
-            // have terminated far under this bound.
+            // for the full grace. Real keystrokes buffered here are replayed,
+            // not dropped (see [_giveUpLateProbeDrain]).
             _giveUpLateProbeDrain();
           }
           return;
         }
         _parser.feed(bytes, _sink);
         _scheduleFlush();
+        _schedulePasteIdleFlush();
       },
       onError: (Object error, StackTrace stack) {
         if (!_events.isClosed) _events.addError(error, stack);
@@ -381,7 +392,9 @@ class PosixTerminalDriver
         // restore instead of waiting forever on an input source that vanished.
         _flushTimer?.cancel();
         _flushTimer = null;
-        _parser.finish(_sink);
+        _pasteIdleTimer?.cancel();
+        _pasteIdleTimer = null;
+        _parser.finish(_sink); // finalizes any in-progress paste at EOF
         if (!_events.isClosed) unawaited(_events.close());
       },
       cancelOnError: false,
@@ -471,81 +484,139 @@ class PosixTerminalDriver
     }
   }
 
+  /// Begins one probe query/response exchange, invoked as a probe query is
+  /// written. Each probe appends a Device-Attributes request, so one more DA
+  /// reply is now owed. The buffer is deliberately NOT cleared between probes of
+  /// the same startup sequence: an earlier probe's reply may still be in flight
+  /// on a slow link and must be drained too, not leaked to the parser. Any
+  /// pending late-drain is paused — this exchange's own diversion ([_probing])
+  /// takes over — and re-armed by [_replayPostProbeInput] when the exchange
+  /// ends with replies still owed.
+  void _beginProbeExchange() {
+    _lateProbeTimer?.cancel();
+    _lateProbeTimer = null;
+    _drainingLateProbe = false;
+    if (_daRepliesPending == 0) _probeBuffer = <int>[];
+    _daRepliesPending++;
+    _probing = true;
+  }
+
+  /// True once the probe buffer holds every Device-Attributes reply currently
+  /// owed ([_daRepliesPending]) — the terminal has answered all outstanding
+  /// probe queries, so their graphics/cursor replies are already in and the
+  /// wait can stop.
+  bool _probeReplyComplete() =>
+      _daReplyEndN(_probeBuffer, _daRepliesPending) >= 0;
+
   /// Replays real keystrokes that arrived during the probe window. Everything
-  /// the terminal captured after its Device-Attributes reply is user input (the
-  /// reply is the last thing the terminal sends in response), so feed that tail
-  /// to the parser instead of dropping it. Bytes at/before the reply are the
-  /// terminal's own response and stay consumed; if no DA reply landed (timeout)
-  /// nothing is replayed, since the buffer may hold a partial response.
+  /// the terminal captured after the LAST owed Device-Attributes reply is user
+  /// input (each probe's reply ends at its DA, answered in query order), so feed
+  /// that tail to the parser instead of dropping it. Bytes at/before the final
+  /// owed reply are the terminal's own responses and stay consumed; if fewer DA
+  /// replies than owed have landed (a slow link, or a timeout), keep diverting
+  /// until the rest arrive rather than parsing a straggling reply as keystrokes.
   void _replayPostProbeInput() {
-    final tailStart = _daReplyEnd(_probeBuffer);
+    final tailStart = _daReplyEndN(_probeBuffer, _daRepliesPending);
     if (tailStart >= 0) {
-      // The DA reply already landed within the probe window — everything after
-      // it is real input; feed that tail to the parser.
+      // Every owed DA reply landed within the probe window — everything after
+      // the last one is real input; feed that tail to the parser.
       final buf = _probeBuffer;
       _probeBuffer = <int>[];
+      _daRepliesPending = 0;
       if (tailStart < buf.length) {
         _parser.feed(buf.sublist(tailStart), _sink);
         _scheduleFlush();
       }
       return;
     }
-    // No DA terminator yet. On a slow link the reply may still be en route;
-    // parsing it as keystrokes would type garbage into the app. Keep diverting
-    // stdin (the listener routes to the drain) until the DA lands or a short
-    // grace expires. On a terminal that already replied the DA was found
-    // above; on a no-reply terminal the grace simply elapses and the buffer is
-    // discarded.
+    // Fewer replies than owed have landed. On a slow link the rest may still be
+    // en route; parsing them as keystrokes would type garbage into the app.
+    // Keep diverting stdin (the listener routes to the drain) until the
+    // remaining DAs land or a short grace expires.
     _drainingLateProbe = true;
     _lateProbeTimer = Timer(lateProbeGrace, _giveUpLateProbeDrain);
   }
 
-  /// The late DA terminator arrived while draining: stop diverting, discard the
-  /// reply, and replay any real input that trailed it.
+  /// The last owed DA terminator arrived while draining: stop diverting, discard
+  /// the replies, and replay any real input that trailed the final one.
   void _finishLateProbeDrain() {
     _lateProbeTimer?.cancel();
     _lateProbeTimer = null;
     _drainingLateProbe = false;
     final buf = _probeBuffer;
     _probeBuffer = <int>[];
-    final tailStart = _daReplyEnd(buf);
+    final tailStart = _daReplyEndN(buf, _daRepliesPending);
+    _daRepliesPending = 0;
     if (tailStart >= 0 && tailStart < buf.length) {
       _parser.feed(buf.sublist(tailStart), _sink);
       _scheduleFlush();
     }
   }
 
-  /// The grace elapsed with no DA terminator (a terminal that doesn't answer
-  /// DA, or a malformed reply): discard the buffer rather than parse it as
-  /// keystrokes. Real input typed during the grace is dropped too, but the
-  /// window is bounded and only opens after a probe already timed out.
+  /// The grace elapsed before every owed DA terminator landed (a terminal that
+  /// doesn't answer DA, or a reply that stalled past the window). Rather than
+  /// discard the whole buffer — which silently drops real keystrokes typed
+  /// during the window, up to and including the Ctrl+C escape hatch on a
+  /// scripted/CI PTY that never answers DA — replay the buffered input, skipping
+  /// only a leading unanswered probe-reply fragment so a straggling
+  /// Cursor-Position/Device-Attributes reply is not decoded as a phantom key.
   void _giveUpLateProbeDrain() {
+    _lateProbeTimer?.cancel();
     _lateProbeTimer = null;
     _drainingLateProbe = false;
+    final buf = _probeBuffer;
     _probeBuffer = <int>[];
+    _daRepliesPending = 0;
+    final tailStart = _probeReplyPrefixEnd(buf);
+    if (tailStart < buf.length) {
+      _parser.feed(buf.sublist(tailStart), _sink);
+      _scheduleFlush();
+    }
   }
 
-  /// A fresh probe supersedes any pending late-drain (its own diversion takes
-  /// over); called when a probe request begins.
+  /// Tears down any pending late-probe drain on the restore path: cancel the
+  /// grace timer, stop diverting, and forget any owed replies / buffered bytes.
   void _cancelLateProbeDrain() {
     _lateProbeTimer?.cancel();
     _lateProbeTimer = null;
     _drainingLateProbe = false;
+    _daRepliesPending = 0;
+    _probeBuffer = <int>[];
   }
 
   /// Test seam: whether stdin is currently diverting a late probe reply.
   @visibleForTesting
   bool get debugDrainingLateProbe => _drainingLateProbe;
 
+  /// Test seam: how many Device-Attributes replies the probe sequence still owes.
+  @visibleForTesting
+  int get debugProbeRepliesPending => _daRepliesPending;
+
+  /// Test seam: the current probe-diversion buffer contents.
+  @visibleForTesting
+  List<int> get debugProbeBuffer => List<int>.unmodifiable(_probeBuffer);
+
   /// Test seam: enter the late-drain state as a timed-out probe would, with an
   /// optional [partial] already in the buffer — modelling a reply that began
   /// arriving before the timeout (e.g. `ESC [ ? 6 2` with the `c` still in
   /// flight), so the post-timeout tail must reassemble across the boundary.
+  /// [repliesOwed] models how many probes are outstanding (each owes one DA):
+  /// the default of 1 is a single timed-out probe; 2 models the image+width
+  /// startup pair where the first probe's reply is still in flight.
   @visibleForTesting
-  void debugBeginLateProbeDrain([List<int> partial = const <int>[]]) {
+  void debugBeginLateProbeDrain([
+    List<int> partial = const <int>[],
+    int repliesOwed = 1,
+  ]) {
     _probeBuffer = List<int>.of(partial);
+    _daRepliesPending = repliesOwed;
     _replayPostProbeInput();
   }
+
+  /// Test seam: begin a probe exchange as a probe query write would (models the
+  /// second startup probe starting while the first's reply is still owed).
+  @visibleForTesting
+  void debugBeginProbeExchange() => _beginProbeExchange();
 
   /// Builds the mode-entry escape sequence (alt screen, hide cursor,
   /// bracketed paste, Kitty keyboard, mouse), shared by [enter] and resume.
@@ -844,6 +915,8 @@ class PosixTerminalDriver
     _handoffActive = false;
     _flushTimer?.cancel();
     _flushTimer = null;
+    _pasteIdleTimer?.cancel();
+    _pasteIdleTimer = null;
 
     // Termination watchers go first. This closes the only path that can re-arm
     // signal grace while the remaining asynchronous cleanup yields.
@@ -920,6 +993,30 @@ class PosixTerminalDriver
     _flushTimer?.cancel();
     _flushTimer = Timer(const Duration(milliseconds: 30), () {
       _parser.flush(_sink);
+    });
+  }
+
+  /// How long a bracketed paste may stall between reads before the driver
+  /// finalizes it. Distinct from — and far longer than — the 30ms ESC flush
+  /// debounce: a slow SSH paste pauses well under this, but an abandoned paste
+  /// (`ESC[200~` with no `ESC[201~`, e.g. the paste source died) would otherwise
+  /// swallow all later input forever, so it is force-finalized here.
+  @visibleForTesting
+  static Duration pasteIdleTimeout = const Duration(seconds: 5);
+
+  /// (Re)arms the paste-inactivity deadline whenever input arrives while the
+  /// parser is mid bracketed-paste. Each fresh read pushes the deadline out, so
+  /// only a genuinely abandoned paste ever reaches it; a completed or
+  /// EOF-finalized paste leaves the parser out of the paste state, cancelling it.
+  void _schedulePasteIdleFlush() {
+    _pasteIdleTimer?.cancel();
+    if (!_parser.isPasting) {
+      _pasteIdleTimer = null;
+      return;
+    }
+    _pasteIdleTimer = Timer(pasteIdleTimeout, () {
+      _pasteIdleTimer = null;
+      _parser.flushPaste(_sink);
     });
   }
 }
@@ -1056,15 +1153,17 @@ class _DriverProbeTransport implements TerminalProbeTransport {
 
   @override
   Future<List<int>> request(String bytes, {required Duration timeout}) async {
-    _driver._cancelLateProbeDrain(); // a new probe supersedes any pending drain
-    _driver._probing = true;
-    _driver._probeBuffer = <int>[];
+    // Begin an exchange (one more DA reply owed). Unlike a naive reset, this
+    // keeps any earlier probe's still-in-flight reply in the buffer so it is
+    // drained, not leaked; the wait below completes only once EVERY owed DA has
+    // landed, so a later probe never settles on an earlier probe's reply.
+    _driver._beginProbeExchange();
     try {
       _driver._stdout.write(bytes);
       await _driver._stdout.flush();
       final deadline = Stopwatch()..start();
       while (deadline.elapsed < timeout) {
-        if (_looksComplete(_driver._probeBuffer)) break;
+        if (_driver._probeReplyComplete()) break;
         await Future<void>.delayed(const Duration(milliseconds: 4));
       }
       return List<int>.unmodifiable(_driver._probeBuffer);
@@ -1072,19 +1171,20 @@ class _DriverProbeTransport implements TerminalProbeTransport {
       _driver._probing = false;
     }
   }
-
-  /// True once the buffer holds a Device Attributes reply — the terminal has
-  /// processed our request, so any graphics reply is already in.
-  static bool _looksComplete(List<int> buf) => _daReplyEnd(buf) >= 0;
 }
 
-/// Index just past a Device-Attributes reply's `c` terminator in [buf], or -1
-/// if none is present yet. A DA reply is `ESC [` then CSI parameter/intermediate
-/// bytes (0x20–0x3F) then the final byte `c` (0x63). Requiring valid CSI bytes
-/// before the `c` stops a stray 0x63 in unrelated content (or a user keystroke
-/// that leaked in) from being mistaken for the terminator. Used both to end the
-/// probe wait and to find where real post-probe input begins.
-int _daReplyEnd(List<int> buf) {
+/// Index just past the [n]-th Device-Attributes reply's `c` terminator in [buf],
+/// or -1 if fewer than [n] are present yet. A DA reply is `ESC [` then CSI
+/// parameter/intermediate bytes (0x20–0x3F) then the final byte `c` (0x63).
+/// Requiring valid CSI bytes before the `c` stops a stray 0x63 in unrelated
+/// content (or a user keystroke that leaked in) from being mistaken for the
+/// terminator. Counting to [n] keeps the probe-completion sentinel unambiguous
+/// across a multi-probe startup sequence: the wait and the post-probe replay
+/// both key off the LAST owed reply, not an earlier probe's straggler. [n] <= 0
+/// returns 0 (nothing owed → the whole buffer is real input).
+int _daReplyEndN(List<int> buf, int n) {
+  if (n <= 0) return 0;
+  var seen = 0;
   for (var i = 0; i + 1 < buf.length; i++) {
     if (buf[i] != 0x1B || buf[i + 1] != 0x5B) continue; // ESC [
     var j = i + 2;
@@ -1092,8 +1192,55 @@ int _daReplyEnd(List<int> buf) {
       j++; // CSI parameter / intermediate bytes
     }
     if (j >= buf.length) return -1; // final byte not arrived yet
-    if (buf[j] == 0x63) return j + 1; // 'c' final byte → Device Attributes
-    i = j; // some other CSI final byte — keep scanning past it
+    if (buf[j] == 0x63) {
+      // 'c' final byte → Device Attributes.
+      seen++;
+      if (seen >= n) return j + 1;
+    }
+    i = j; // step past this CSI final byte and keep scanning
   }
   return -1;
+}
+
+/// Index in [buf] where real post-probe input begins, skipping a LEADING
+/// probe-reply fragment a slow terminal may have emitted: a Device-Attributes
+/// (`ESC [ … c`), Cursor-Position (`ESC [ … R`) or other private/incomplete CSI
+/// reply, or a Kitty graphics APC (`ESC _ … ESC \`). Genuine keystrokes — plain
+/// text, control bytes such as Ctrl+C (0x03), and real cursor/function-key CSIs
+/// — are NOT skipped, so a give-up replays them instead of discarding them, and
+/// a straggling Cursor-Position reply is not decoded as a phantom key.
+int _probeReplyPrefixEnd(List<int> buf) {
+  var i = 0;
+  while (i + 1 < buf.length && buf[i] == 0x1B) {
+    final next = buf[i + 1];
+    if (next == 0x5B) {
+      // CSI. Scan parameter / intermediate bytes.
+      var j = i + 2;
+      var private = false;
+      while (j < buf.length && buf[j] >= 0x20 && buf[j] <= 0x3F) {
+        if (buf[j] == 0x3F || buf[j] == 0x3E || buf[j] == 0x3D) private = true;
+        j++;
+      }
+      if (j >= buf.length) return buf.length; // incomplete reply fragment
+      final finalByte = buf[j];
+      // A probe reply is a private CSI (DA/keyboard-status carry `?`/`>`/`=`), a
+      // Cursor-Position report (`R`), or a Device-Attributes reply (`c`). Any
+      // other final byte is a genuine key report (arrow, kitty CSU, …) — stop.
+      final isReply =
+          private || finalByte == 0x52 /* R */ || finalByte == 0x63 /* c */;
+      if (!isReply) return i;
+      i = j + 1;
+    } else if (next == 0x5F) {
+      // APC (Kitty graphics reply): ESC _ … ESC \.
+      var j = i + 2;
+      while (j + 1 < buf.length && !(buf[j] == 0x1B && buf[j + 1] == 0x5C)) {
+        j++;
+      }
+      if (j + 1 >= buf.length) return buf.length; // incomplete APC
+      i = j + 2;
+    } else {
+      return i; // ESC + other (lone ESC, Alt+char, SS3) — genuine input.
+    }
+  }
+  return i;
 }

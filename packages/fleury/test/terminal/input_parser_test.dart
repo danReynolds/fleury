@@ -356,6 +356,28 @@ void main() {
       parser.flush(sink);
       expect(sink.events, isEmpty);
     });
+
+    test('an ESC aborting an in-progress CSI restarts a new sequence', () {
+      // ESC [ ESC [ A in one read — e.g. Alt+[ then arrow within the flush
+      // debounce, or a truncated CSI abutting the next report on a lossy link.
+      // The aborting ESC must restart a sequence (ECMA-48), so the trailing
+      // ESC [ A decodes as arrowUp — not swallowed and re-parsed as the typed
+      // text "[" then "A".
+      expect(_parse([0x1B, 0x5B, 0x1B, 0x5B, 0x41]), [
+        const KeyEvent(keyCode: KeyCode.arrowUp),
+      ]);
+    });
+
+    test('an ESC aborting a CSI can restart a lone-ESC keypress', () {
+      // ESC [ ESC then idle: the first CSI is aborted by the ESC, which is then
+      // resolved as the escape key on flush (not discarded).
+      final parser = InputParser();
+      final sink = _ListSink();
+      parser.feed([0x1B, 0x5B, 0x1B], sink);
+      expect(sink.events, isEmpty);
+      parser.flush(sink);
+      expect(sink.events, [const KeyEvent(keyCode: KeyCode.escape)]);
+    });
   });
 
   group('Bracketed paste', () {
@@ -425,6 +447,50 @@ void main() {
 
       expect(sink.events, [const PasteEvent('ab\x1B[20')]);
     });
+
+    test('idle flush never terminates a paste (anti-split fix preserved)', () {
+      final parser = InputParser();
+      final sink = _ListSink();
+      parser.feed([...start(), ...'ab'.codeUnits], sink);
+      expect(parser.isPasting, isTrue);
+      // Many 30ms ESC-debounce flushes must NOT split the paste into keys.
+      for (var i = 0; i < 100; i++) {
+        parser.flush(sink);
+      }
+      expect(sink.events, isEmpty);
+      expect(parser.isPasting, isTrue);
+    });
+
+    test('flushPaste finalizes an abandoned paste and restores control', () {
+      // The paste source died after ESC[200~ (the ESC[201~ terminator never
+      // arrives), so the parser is stuck in paste state and would swallow every
+      // later key — including Ctrl+C (ISIG is off in raw mode). A prolonged
+      // inactivity finalize emits the pending paste and returns to ground.
+      final parser = InputParser();
+      final sink = _ListSink();
+      parser.feed([...start(), ...'hello'.codeUnits], sink);
+      expect(sink.events, isEmpty);
+      expect(parser.isPasting, isTrue);
+
+      parser.flushPaste(sink);
+      expect(sink.events, [const PasteEvent('hello')]);
+      expect(parser.isPasting, isFalse);
+
+      // Keyboard control is back: Ctrl+C is now delivered, not eaten as paste.
+      parser.feed([0x03], sink);
+      expect(sink.events.last, const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    });
+
+    test('flushPaste is a no-op when not mid-paste', () {
+      final parser = InputParser();
+      final sink = _ListSink();
+      parser.feed('hi'.codeUnits, sink);
+      parser.flushPaste(sink);
+      expect(sink.events, [
+        const TextInputEvent('h'),
+        const TextInputEvent('i'),
+      ]);
+    });
   });
 
   group('SGR mouse', () {
@@ -477,6 +543,51 @@ void main() {
       expect(e.hasShift, isTrue);
       expect(e.hasCtrl, isTrue);
       expect(e.hasAlt, isFalse);
+    });
+
+    test('horizontal wheel (Cb 66/67) is not reported as vertical scroll', () {
+      // SGR encodes wheel-left as 66 and wheel-right as 67. The decoder must
+      // NOT treat them as scrollUp/scrollDown (a horizontal trackpad swipe
+      // scrolling a ListView vertically). With no horizontal MouseEventKind,
+      // the correct behaviour is to drop them rather than mis-report the axis.
+      expect(
+        _parse(sgr(66, 1, 1, 'M')).whereType<MouseEvent>(),
+        isEmpty,
+        reason: 'wheel-left must not become a vertical scroll',
+      );
+      expect(
+        _parse(sgr(67, 1, 1, 'M')).whereType<MouseEvent>(),
+        isEmpty,
+        reason: 'wheel-right must not become a vertical scroll',
+      );
+      // Vertical wheel (64/65) is unaffected.
+      expect(
+        (_parse(sgr(64, 1, 1, 'M')).single as MouseEvent).kind,
+        MouseEventKind.scrollUp,
+      );
+      expect(
+        (_parse(sgr(65, 1, 1, 'M')).single as MouseEvent).kind,
+        MouseEventKind.scrollDown,
+      );
+    });
+
+    test('extended buttons 8-11 (Cb 128+) do not alias to left/middle/right', () {
+      // SGR button 8 (mouse back/thumb) is cb=128. It must not decode as a left
+      // click that activates whatever widget is under the cursor. We have no
+      // back/forward button, so it reports MouseButton.none.
+      final down = _parse(sgr(128, 3, 4, 'M')).single as MouseEvent;
+      expect(down.button, MouseButton.none);
+      expect(down.kind, MouseEventKind.down);
+      expect(down.col, 2);
+      expect(down.row, 3);
+      // Buttons 9/10/11 (cb 129/130/131) likewise are not middle/right/none aliases.
+      for (final cb in [128, 129, 130, 131]) {
+        expect(
+          (_parse(sgr(cb, 1, 1, 'M')).single as MouseEvent).button,
+          MouseButton.none,
+          reason: 'extended button cb=$cb must not alias to a primary button',
+        );
+      }
     });
   });
 

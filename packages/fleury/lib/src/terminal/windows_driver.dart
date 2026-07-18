@@ -43,6 +43,7 @@ class WindowsTerminalDriver
 
   StreamSubscription<List<int>>? _stdinSubscription;
   Timer? _flushTimer;
+  Timer? _pasteIdleTimer;
   Timer? _resizePollTimer;
 
   bool _active = false;
@@ -115,6 +116,7 @@ class WindowsTerminalDriver
       (bytes) {
         _parser.feed(bytes, _sink);
         _scheduleFlush();
+        _schedulePasteIdleFlush();
       },
       onError: (Object error, StackTrace stack) {
         if (!_events.isClosed) _events.addError(error, stack);
@@ -122,6 +124,8 @@ class WindowsTerminalDriver
       onDone: () {
         _flushTimer?.cancel();
         _flushTimer = null;
+        _pasteIdleTimer?.cancel();
+        _pasteIdleTimer = null;
         _parser.finish(_sink);
         if (!_events.isClosed) unawaited(_events.close());
       },
@@ -275,6 +279,8 @@ class WindowsTerminalDriver
     _handoffActive = false;
     _flushTimer?.cancel();
     _flushTimer = null;
+    _pasteIdleTimer?.cancel();
+    _pasteIdleTimer = null;
     _resizePollTimer?.cancel();
     _resizePollTimer = null;
 
@@ -316,6 +322,27 @@ class WindowsTerminalDriver
     _flushTimer?.cancel();
     _flushTimer = Timer(const Duration(milliseconds: 30), () {
       _parser.flush(_sink);
+    });
+  }
+
+  /// How long a bracketed paste may stall before the driver force-finalizes it,
+  /// so an abandoned paste (`ESC[200~` with no `ESC[201~`) can't swallow all
+  /// later input — including Ctrl+C — forever. Distinct from the 30ms ESC flush
+  /// debounce, which deliberately never splits a slow paste into keys.
+  @visibleForTesting
+  static Duration pasteIdleTimeout = const Duration(seconds: 5);
+
+  /// (Re)arms the paste-inactivity deadline while the parser is mid-paste; each
+  /// fresh read pushes it out, so only a genuinely abandoned paste reaches it.
+  void _schedulePasteIdleFlush() {
+    _pasteIdleTimer?.cancel();
+    if (!_parser.isPasting) {
+      _pasteIdleTimer = null;
+      return;
+    }
+    _pasteIdleTimer = Timer(pasteIdleTimeout, () {
+      _pasteIdleTimer = null;
+      _parser.flushPaste(_sink);
     });
   }
 }

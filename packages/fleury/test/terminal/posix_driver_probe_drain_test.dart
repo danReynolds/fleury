@@ -57,6 +57,11 @@ class _FakeStdin implements Stdin {
 // ESC[?62;c — a Device-Attributes reply (the probe terminator).
 const _daReply = [0x1B, 0x5B, 0x3F, 0x36, 0x32, 0x63];
 
+// ESC[1;2R — a Cursor-Position report (row 1, col 2), which the ambiguous-width
+// probe elicits. Fed to the input parser it decodes as CSI final 'R' with
+// modifier param 2, i.e. KeyEvent(shift + f3): the phantom key this guards.
+const _cprReply = [0x1B, 0x5B, 0x31, 0x3B, 0x32, 0x52];
+
 Future<void> _pump() => Future<void>.delayed(const Duration(milliseconds: 5));
 
 void main() {
@@ -172,6 +177,137 @@ void main() {
         'ok',
         reason: 'no garbage from the discarded partial reply',
       );
+    });
+
+    // Finding 1 (P1): a later probe's reply must not be misattributed to an
+    // earlier probe's Device-Attributes reply. On a slow link the image probe's
+    // DA lands while the width probe is still outstanding; the completion
+    // sentinel must wait for the LAST owed DA, or the width probe's own
+    // Cursor-Position reply leaks to the parser as a phantom Shift+F3 at startup.
+    test('a straggling second-probe reply is not read as a phantom key', () async {
+      // Two DA replies are owed (image + width). The image probe's DA is already
+      // in the buffer, but the width probe's reply is still in flight.
+      driver.debugBeginLateProbeDrain([..._daReply], 2);
+      expect(
+        driver.debugDrainingLateProbe,
+        isTrue,
+        reason: 'the second probe’s DA is still owed — keep draining',
+      );
+
+      // The width probe's reply finally lands: its Cursor-Position report, then
+      // its own DA terminator.
+      input.push([..._cprReply, ..._daReply]);
+      await _pump();
+
+      expect(driver.debugDrainingLateProbe, isFalse);
+      expect(driver.debugProbeRepliesPending, 0);
+      expect(
+        events,
+        isEmpty,
+        reason: 'no phantom Shift+F3 from the late Cursor-Position reply',
+      );
+    });
+
+    test('a new probe exchange keeps a prior in-flight reply and owes a DA', () {
+      // The image probe timed out with a partial reply buffered → drain armed.
+      driver.debugBeginLateProbeDrain([0x1B, 0x5B, 0x3F], 1);
+      expect(driver.debugProbeRepliesPending, 1);
+
+      // The width probe starts before the image reply completes. It must not
+      // clear the buffer or cancel the drain (either would let the reply leak);
+      // it simply owes one more DA.
+      driver.debugBeginProbeExchange();
+      expect(
+        driver.debugProbeRepliesPending,
+        2,
+        reason: 'a second DA reply is now owed',
+      );
+      expect(
+        driver.debugProbeBuffer,
+        [0x1B, 0x5B, 0x3F],
+        reason: 'the first probe’s partial reply is kept, not cleared',
+      );
+    });
+
+    // Finding 3 (P2): give-up must replay real keystrokes, not discard them —
+    // otherwise a scripted/CI PTY that never answers DA loses everything typed
+    // during an output stall, including the Ctrl+C escape hatch.
+    test('give-up replays buffered keystrokes instead of discarding them', () async {
+      driver.debugBeginLateProbeDrain(); // one probe timed out, draining
+      // The terminal never answers DA; the user's keystrokes are what arrive.
+      input.push([0x71, 0x03]); // 'q' then Ctrl+C
+      await _pump();
+      expect(driver.debugDrainingLateProbe, isTrue, reason: 'within grace');
+
+      await Future<void>.delayed(const Duration(milliseconds: 90));
+      await _pump();
+      expect(driver.debugDrainingLateProbe, isFalse);
+
+      expect(
+        events.whereType<TextInputEvent>().map((e) => e.text).join(),
+        'q',
+        reason: 'plain keystrokes typed during the stall survive give-up',
+      );
+      expect(
+        events.whereType<KeyEvent>().where((e) => e.hasCtrl && e.char == 'c'),
+        isNotEmpty,
+        reason: 'the Ctrl+C escape hatch must survive give-up',
+      );
+    });
+
+    test('give-up strips a straggling reply but replays the trailing keys', () async {
+      driver.debugBeginLateProbeDrain();
+      // A late Cursor-Position reply the terminal emitted, then a real 'x'.
+      input.push([..._cprReply, 0x78]);
+      await _pump();
+
+      await Future<void>.delayed(const Duration(milliseconds: 90));
+      await _pump();
+      expect(driver.debugDrainingLateProbe, isFalse);
+
+      expect(
+        events.whereType<KeyEvent>(),
+        isEmpty,
+        reason: 'the straggling Cursor-Position reply is stripped, not decoded',
+      );
+      expect(
+        events.whereType<TextInputEvent>().map((e) => e.text).join(),
+        'x',
+        reason: 'real input trailing the reply is still replayed',
+      );
+    });
+
+    // Finding 2 (P2): an abandoned bracketed paste (ESC[200~ with no ESC[201~)
+    // must not capture all later input forever; a generous idle deadline
+    // finalizes it and restores keyboard control.
+    test('an abandoned bracketed paste is finalized after the idle timeout', () async {
+      final savedPaste = PosixTerminalDriver.pasteIdleTimeout;
+      PosixTerminalDriver.pasteIdleTimeout = const Duration(milliseconds: 40);
+      try {
+        // Paste opens but the ESC[201~ terminator never arrives.
+        input.push([0x1B, 0x5B, ...'200~'.codeUnits, ...'hi'.codeUnits]);
+        await _pump();
+        expect(events, isEmpty, reason: 'paste still open — nothing emitted yet');
+
+        await Future<void>.delayed(const Duration(milliseconds: 70));
+        await _pump();
+        expect(
+          events.whereType<PasteEvent>().map((e) => e.text),
+          ['hi'],
+          reason: 'the abandoned paste is force-finalized on the idle deadline',
+        );
+
+        // Keyboard control is restored: Ctrl+C now reaches the app.
+        input.push([0x03]);
+        await _pump();
+        expect(
+          events.whereType<KeyEvent>().where((e) => e.hasCtrl && e.char == 'c'),
+          isNotEmpty,
+          reason: 'input is no longer swallowed by the stuck paste',
+        );
+      } finally {
+        PosixTerminalDriver.pasteIdleTimeout = savedPaste;
+      }
     });
   });
 }
