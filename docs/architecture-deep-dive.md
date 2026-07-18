@@ -388,7 +388,7 @@ change, not on winning every tiny native-memory or cold-start comparison.
 | Retained semantic owner | `packages/fleury/lib/src/semantics/semantics_owner.dart` |
 | Embedded web host | `packages/fleury_web/lib/src/run_tui_surface.dart` |
 | Retained DOM grid | `packages/fleury_web/lib/src/dom_grid/dom_grid_surface.dart` |
-| Served browser client | `packages/fleury_web/lib/src/remote_client/remote_surface_client.dart` |
+| Served browser client | `packages/fleury_web/web/remote_client.dart` |
 | Remote protocol | `packages/fleury/lib/src/remote/remote_protocol.dart` |
 
 For the neighboring public docs, read [Core and targets](core-and-targets.md)

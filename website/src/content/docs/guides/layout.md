@@ -159,7 +159,7 @@ Container(
 
 It layers outer-to-inner: size → border → background fill → padding → align →
 child. One thing to know: **`width` and `height` are the outer dimensions,
-border included** — a `Container(width: 10, border: BoxBorder.all())` gives the
+border included** — a `Container(width: 10, border: BoxBorder())` gives the
 child 8 cells of interior, not 10. Leave `alignment` unset and the child
 stretches to fill; set it and the child is placed at that alignment instead.
 

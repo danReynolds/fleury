@@ -73,7 +73,7 @@ void main() {
   model is also absent from the web barrel today because its `LogEntry`
   dependency lives in the native-only log library.
   Import `package:fleury/fleury_core.dart`, not `fleury.dart` (see
-  [Core and targets](core-and-targets.md#the-web-safety-boundary-practical-rule)).
+  [Core and targets](core-and-targets.md#the-web-safety-boundary)).
 - **No host machine.** No filesystem, processes, or environment — the browser
   sandbox is all you get.
 - The host element needs an explicit CSS size.
