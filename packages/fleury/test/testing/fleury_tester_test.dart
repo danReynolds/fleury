@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
 import '../support/harness.dart';
@@ -342,6 +343,113 @@ void main() {
     });
   });
 
+  // Audit batch K #1: an inline-image (overlay) cell is stamped per column, so
+  // dropping it from the snapshot shifts every later column left. The footprint
+  // must hold its columns (as a distinct image mark) so goldens encode the real
+  // geometry and text/image overlap is detectable.
+  group('renderToString overlay geometry', () {
+    testWidgets('an inline image holds its columns; the caption keeps its '
+        'position', (tester) {
+      tester.pumpWidget(
+        const Row(children: [_ImageBox(width: 6), Text('HI')]),
+      );
+      expect(
+        tester.renderToString(size: const CellSize(10, 1)),
+        '######HI\n',
+        reason:
+            'the 6-column image footprint must occupy cols 0-5 so the caption '
+            'lands at col 6 — dropping the overlay cells shifted it to col 0',
+      );
+    });
+
+    testWidgets('image width is reflected in the snapshot (a narrower image '
+        'shifts the caption left)', (tester) {
+      // Under the drop-the-overlay-cell bug BOTH widths snapshotted as the
+      // identical "HI", so a layout differing only in image width was
+      // undetectable. They must now differ by the footprint width.
+      tester.pumpWidget(
+        const Row(children: [_ImageBox(width: 6), Text('HI')]),
+      );
+      final wide = tester.renderToString(size: const CellSize(10, 1));
+      tester.pumpWidget(
+        const Row(children: [_ImageBox(width: 2), Text('HI')]),
+      );
+      final narrow = tester.renderToString(size: const CellSize(10, 1));
+
+      expect(narrow, '##HI\n');
+      expect(
+        narrow,
+        isNot(wide),
+        reason: 'differing image widths must produce differing snapshots',
+      );
+    });
+
+    testWidgets('text painted over the image region is detectable', (tester) {
+      // A regression that moves text INTO the image footprint must change the
+      // snapshot: the overlapping columns render the text glyph, breaking the
+      // run of image marks (the harness silently green-lit this before).
+      tester.pumpWidget(
+        const Stack(
+          children: [
+            _ImageBox(width: 6),
+            // Painted after the image, so its cells overwrite the overlay
+            // cells at cols 0-1.
+            Text('XY'),
+          ],
+        ),
+      );
+      expect(
+        tester.renderToString(size: const CellSize(10, 1)),
+        'XY####\n',
+        reason:
+            'text over the image region must show through as glyphs, not hide '
+            'behind a full run of image marks',
+      );
+    });
+  });
+
+  // Audit batch K #2: mutating a capability knob mid-test must flow into the
+  // ambient MediaQuery and rebuild its dependents — the harness analog of a
+  // terminal resize — instead of leaving layout and MediaQuery diverged.
+  group('mid-test capability mutation', () {
+    testWidgets('a viewportSize change rebuilds the MediaQuery the tree sees', (
+      tester,
+    ) {
+      final seen = <CellSize>[];
+      tester.pumpWidget(_MediaProbe((data) => seen.add(data.size)));
+      expect(seen.last, const CellSize(80, 24));
+
+      tester.viewportSize = const CellSize(120, 40);
+      expect(
+        seen.last,
+        const CellSize(120, 40),
+        reason:
+            'assigning viewportSize mid-test must rebuild dependents at the '
+            'new size, exactly as a terminal ResizeEvent does',
+      );
+      // Layout and MediaQuery no longer diverge: the buffer the tree lays out
+      // into matches what a widget reading MediaQuery.sizeOf observed.
+      expect(tester.render().size, const CellSize(120, 40));
+    });
+
+    testWidgets('a glyphTier change propagates (ASCII fallback can engage)', (
+      tester,
+    ) {
+      final seen = <GlyphTier>[];
+      tester.pumpWidget(_MediaProbe((data) => seen.add(data.glyphTier)));
+      expect(seen.last, GlyphTier.unicode);
+
+      tester.glyphTier = GlyphTier.ascii;
+      expect(
+        seen.last,
+        GlyphTier.ascii,
+        reason:
+            'a mid-test glyphTier change must reach widgets that branch on '
+            'MediaQuery.glyphTierOf',
+      );
+    });
+  });
+
   group('Input', () {
     testWidgets('type dispatches a TextInputEvent and flushes builds', (
       tester,
@@ -475,6 +583,62 @@ class _RenderPaintPulse extends RenderObject {
       offset,
       _holder.value >= 1.0 ? 'D' : 'p',
       style: CellStyle.empty,
+    );
+  }
+}
+
+/// Reports the ambient [MediaQueryData] on every build, so a test can watch it
+/// track (or fail to track) a mid-test capability mutation.
+class _MediaProbe extends StatelessWidget {
+  const _MediaProbe(this.sink);
+  final void Function(MediaQueryData) sink;
+  @override
+  Widget build(BuildContext context) {
+    sink(MediaQuery.of(context));
+    return const Text('probe');
+  }
+}
+
+/// Leaf that stamps an inline-image placement [width] columns wide — the
+/// overlay-cell shape a Kitty/Sixel/browser surface renders as pixels. The
+/// tester's text snapshot must still account for the columns it occupies.
+class _ImageBox extends LeafRenderObjectWidget {
+  const _ImageBox({required this.width});
+  final int width;
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderImageBox(width);
+  @override
+  void updateRenderObject(BuildContext context, RenderObject renderObject) {
+    (renderObject as _RenderImageBox).width = width;
+  }
+}
+
+class _RenderImageBox extends RenderObject {
+  _RenderImageBox(this._width);
+  int _width;
+  set width(int value) {
+    if (value == _width) return;
+    _width = value;
+    markNeedsLayout();
+  }
+
+  @override
+  CellSize performLayout(CellConstraints constraints) =>
+      constraints.constrain(CellSize(_width, 1));
+
+  @override
+  void paint(
+    CellBuffer buffer,
+    CellOffset offset, {
+    CellOffset? screenOffset,
+    CellRect? clipRect,
+  }) {
+    buffer.writeImage(
+      offset,
+      Uint8List.fromList('IMG'.codeUnits),
+      width: _width,
+      height: 1,
     );
   }
 }

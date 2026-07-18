@@ -81,13 +81,17 @@ class FleuryTester {
   /// `package:fleury_test`.
   FleuryTester({
     AnimationPolicy animationPolicy = AnimationPolicy.enabled,
-    this.viewportSize = const CellSize(80, 24),
-    this.colorMode = ColorMode.truecolor,
-    this.glyphTier = GlyphTier.unicode,
-    this.images = InlineImageSupport.none,
+    CellSize viewportSize = const CellSize(80, 24),
+    ColorMode colorMode = ColorMode.truecolor,
+    GlyphTier glyphTier = GlyphTier.unicode,
+    InlineImageSupport images = InlineImageSupport.none,
     Clipboard? clipboard,
     FleuryTestFailureHandler failureHandler = _throwFleuryTestFailure,
   }) : clipboard = clipboard ?? InProcessClipboard(),
+       _viewportSize = viewportSize,
+       _colorMode = colorMode,
+       _glyphTier = glyphTier,
+       _images = images,
        _failureHandler = failureHandler,
        _clock = FakeClock(),
        _focusManager = FocusManager() {
@@ -124,20 +128,60 @@ class FleuryTester {
 
   final FleuryTestFailureHandler _failureHandler;
 
-  /// Default size used by [render] / [renderToString] when no
-  /// explicit size is given. Mutable so tests can grow / shrink the
-  /// viewport mid-test:
+  /// Default size used by [render] / [renderToString] when no explicit size is
+  /// given, and the size installed in the ambient [MediaQuery]. Mutable so
+  /// tests can grow / shrink the viewport mid-test:
   ///
   ///     tester.viewportSize = const CellSize(40, 10);
-  CellSize viewportSize;
+  ///
+  /// A change after the first [pumpWidget] rebuilds the tree's [MediaQuery] in
+  /// place and rebuilds its dependents — the harness analog of a terminal
+  /// resize (`run_app` rebuilds its ambient MediaQuery on every `ResizeEvent`),
+  /// so layout and what widgets read from [MediaQuery] never diverge.
+  CellSize get viewportSize => _viewportSize;
+  set viewportSize(CellSize value) {
+    if (value == _viewportSize) return;
+    _viewportSize = value;
+    _refreshSurface();
+  }
+
+  CellSize _viewportSize;
 
   /// Capability profile installed in the ambient [MediaQuery]. Tests set
   /// [glyphTier] to [GlyphTier.ascii] to exercise the ASCII drawing fallback,
   /// or [images] to [InlineImageSupport.placements] to exercise the
   /// true-pixel image path.
-  ColorMode colorMode;
-  GlyphTier glyphTier;
-  InlineImageSupport images;
+  ///
+  /// Like [viewportSize], a change after the first [pumpWidget] flows into the
+  /// ambient [MediaQuery] and rebuilds dependents, so a mid-test capability
+  /// switch engages (e.g. the ASCII drawing fallback) exactly as a
+  /// live capability change would.
+  ColorMode get colorMode => _colorMode;
+  set colorMode(ColorMode value) {
+    if (value == _colorMode) return;
+    _colorMode = value;
+    _refreshSurface();
+  }
+
+  ColorMode _colorMode;
+
+  GlyphTier get glyphTier => _glyphTier;
+  set glyphTier(GlyphTier value) {
+    if (value == _glyphTier) return;
+    _glyphTier = value;
+    _refreshSurface();
+  }
+
+  GlyphTier _glyphTier;
+
+  InlineImageSupport get images => _images;
+  set images(InlineImageSupport value) {
+    if (value == _images) return;
+    _images = value;
+    _refreshSurface();
+  }
+
+  InlineImageSupport _images;
 
   final FakeClock _clock;
   late final FakeTickerScheduler _scheduler;
@@ -550,8 +594,22 @@ class FleuryTester {
   /// empty cells are rendered with [emptyMark] (default `·` for
   /// visibility against runs of whitespace).
   ///
-  /// Trailing empty cells on a row are trimmed for readability.
-  String renderToString({CellSize? size, String emptyMark = '·'}) {
+  /// Overlay (inline-image) cells are stamped one per column by an image
+  /// placement (unlike a continuation, whose leading cell already contributed
+  /// the pair's width), so each occupies a real column. The presenter draws
+  /// them as pixels — never as text — but the snapshot must still hold their
+  /// columns or every later column shifts left, encoding wrong geometry in
+  /// goldens and hiding text that overlaps the image. They render as
+  /// [imageMark] (default `#`): distinct from both [emptyMark] and glyphs, so
+  /// the footprint is visible and an overlap breaks its run.
+  ///
+  /// Trailing empty cells on a row are trimmed for readability; image marks
+  /// are content and are never trimmed.
+  String renderToString({
+    CellSize? size,
+    String emptyMark = '·',
+    String imageMark = '#',
+  }) {
     final buffer = render(size: size);
     final out = StringBuffer();
     for (var row = 0; row < buffer.size.rows; row++) {
@@ -563,11 +621,13 @@ class FleuryTester {
             line.write(emptyMark);
           case CellRole.leading:
             line.write(cell.grapheme);
-          case CellRole.continuation:
           case CellRole.overlay:
-            // Overlay (inline-image) cells render as pixels via the
-            // presenter, not text; the snapshot is text-only so we
-            // treat them as emptyMark.
+            // An image-owned column: mark it so geometry is preserved and the
+            // footprint stays visible (see doc above).
+            line.write(imageMark);
+          case CellRole.continuation:
+            // The second column of a wide grapheme; its leading cell already
+            // wrote the whole glyph, so this contributes nothing.
             break;
         }
       }
@@ -770,6 +830,23 @@ class FleuryTester {
     _owner.drainInactiveElements();
     _binding.dispose();
     _focusManager.dispose();
+  }
+
+  /// Rebuilds the wrapper so a mutated capability knob (viewportSize,
+  /// colorMode, glyphTier, images) flows into the ambient [MediaQuery] and
+  /// rebuilds its dependents. Mirrors the runtime, which rebuilds its root —
+  /// and thus the ambient MediaQuery — in place on a resize / capability change
+  /// (`FrameDriver.handleResize` → `BuildOwner.updateRoot`), preserving the app
+  /// subtree and its state. The stable wrapper types reconcile in place, so
+  /// only the changed [MediaQueryData] triggers dependent rebuilds; the Overlay
+  /// keeps its existing entries (they are owned by its state, not re-read from
+  /// `initialEntries`). A no-op before the first [pumpWidget] (nothing is
+  /// mounted; the first [_wrap] reads the current field values) and after
+  /// [dispose].
+  void _refreshSurface() {
+    final root = _root;
+    if (root == null || _disposed) return;
+    _root = _owner.updateRoot(root, _wrap());
   }
 
   Widget _wrap() {
