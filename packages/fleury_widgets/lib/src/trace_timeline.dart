@@ -621,6 +621,8 @@ class _TraceTimelineState extends State<TraceTimeline> {
               return _TraceTimelineRow(
                 event: widget.events[index],
                 index: index,
+                isFirst: index == 0,
+                isLast: index == widget.events.length - 1,
                 selected: selected,
                 activeSelection: activeSelected,
                 canSelect: canSelect,
@@ -684,6 +686,8 @@ class _TraceTimelineRow extends StatelessWidget {
   const _TraceTimelineRow({
     required this.event,
     required this.index,
+    required this.isFirst,
+    required this.isLast,
     required this.selected,
     required this.activeSelection,
     required this.canSelect,
@@ -695,6 +699,11 @@ class _TraceTimelineRow extends StatelessWidget {
 
   final TraceTimelineEntry event;
   final int index;
+
+  /// Position on the timeline rail — drives the connector glyph (╭ ├ ╰) so the
+  /// events read as one connected sequence rather than a flat status list.
+  final bool isFirst;
+  final bool isLast;
   final bool selected;
   final bool activeSelection;
   final bool canSelect;
@@ -759,6 +768,8 @@ class _TraceTimelineRow extends StatelessWidget {
           label: label,
           event: event,
           activeSelection: activeSelection,
+          isFirst: isFirst,
+          isLast: isLast,
           timestamp: showTimestamp ? event.timestamp : null,
         ),
         style: _rowStyle(
@@ -794,18 +805,36 @@ String _rowText({
   required String label,
   required TraceTimelineEntry event,
   required bool activeSelection,
+  required bool isFirst,
+  required bool isLast,
   DateTime? timestamp,
 }) {
   final prefix = activeSelection ? '> ' : '  ';
   final clock = timestamp == null ? '' : '${_formatClock(timestamp)} ';
+  final rail = _railGlyph(isFirst: isFirst, isLast: isLast);
   final meta = <String>[
     event.kind.name,
     event.status.name,
     if (event.duration != null) '${event.duration!.inMilliseconds}ms',
     if (event.source != null) _sanitizeTraceText(event.source!),
   ];
-  return '$prefix$clock${_statusMarker(event.status)} $label  '
+  // Rail leads (before the optional clock) so it lands in the same column on
+  // every row — otherwise a missing timestamp would jog the connector sideways
+  // and break the continuous line.
+  return '$prefix$rail $clock${_statusMarker(event.status)} $label  '
       '${meta.join('  ')}';
+}
+
+/// Connector glyph for the timeline rail, by position. Adjacent rows' glyphs
+/// share a vertical stroke, so the gutter reads as one continuous rail with the
+/// status marker as the node beside each event.
+String _railGlyph({required bool isFirst, required bool isLast}) {
+  // All box-drawing glyphs here are covered by the renderer's boxDrawingMask,
+  // so they downgrade cleanly on ASCII-tier terminals.
+  if (isFirst && isLast) return '─'; // lone event: a stub, no vertical rail
+  if (isFirst) return '╭';
+  if (isLast) return '╰';
+  return '├';
 }
 
 /// Local `HH:mm:ss` clock for the optional per-row timestamp.

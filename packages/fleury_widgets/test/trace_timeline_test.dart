@@ -196,6 +196,38 @@ void main() {
       expect(out, isNot(contains('00:00:00 [*]')));
     });
 
+    testWidgets('renders a connecting timeline rail (first/middle/last)', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        TraceTimeline(label: 'Demo trace', events: _events()),
+      );
+      final out = tester.renderToString(
+        size: const CellSize(90, 5),
+        emptyMark: ' ',
+      );
+      // The rail glyphs share a leading column and sit just before each status
+      // marker, so the events read as one connected sequence rather than a flat
+      // list: ╭ (first) → ├ (middle) → ╰ (last).
+      expect(out, contains('╭ [x] Boot demo console'));
+      expect(out, contains('├ [>] Run fake worker'));
+      expect(out, contains('╰ [*] Capture diagnostics'));
+    });
+
+    testWidgets('a lone trace event uses a rail stub, not a connector', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        TraceTimeline(label: 'Demo trace', events: [_events().first]),
+      );
+      final out = tester.renderToString(
+        size: const CellSize(90, 3),
+        emptyMark: ' ',
+      );
+      expect(out, contains('─ [x] Boot demo console'));
+      expect(out, isNot(contains('╭')));
+    });
+
     testWidgets('selects and exposes trace semantics', (tester) async {
       TraceTimelineSelectResult? selected;
       tester.pumpWidget(
