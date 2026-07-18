@@ -7,6 +7,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import '../foundation/geometry.dart';
@@ -53,7 +54,25 @@ final class RemoteTerminalDriver
   RemoteTerminalDriver(
     this._transport, {
     InlineImageCachePolicy imageCachePolicy = defaultInlineImageCachePolicy,
-  }) : _shippedImages = InlineImageCacheLedger(imageCachePolicy);
+    bool? superviseHandshakeWait,
+  }) : _shippedImages = InlineImageCacheLedger(imageCachePolicy),
+       _superviseHandshakeWait =
+           superviseHandshakeWait ?? _handshakeWaitSupervisedByDefault;
+
+  /// When true, [enter] waits UNBOUNDED for the peer's INIT instead of failing
+  /// at [initTimeout]. A serve/bridge-supervised spawn (see `spawnFleuryApp`,
+  /// which sets `FLEURY_REMOTE_WAIT=supervised`) is reaped by its host, so a
+  /// warm standby that idles between spawn and a browser attaching must not
+  /// self-destruct on the leak-guard fuse — that silently defeats the
+  /// cold-start optimization. The fuse still bounds unsupervised connects (a
+  /// local `.fleury/handle`). Defaults to [_handshakeWaitSupervisedByDefault];
+  /// tests pass it explicitly.
+  final bool _superviseHandshakeWait;
+
+  /// Default supervise-wait mode for drivers that don't pass an explicit flag:
+  /// set by the supervising host via `FLEURY_REMOTE_WAIT`. Read once at load.
+  static final bool _handshakeWaitSupervisedByDefault =
+      Platform.environment['FLEURY_REMOTE_WAIT'] == 'supervised';
 
   /// The transport's send backlog IS this driver's output backlog: the
   /// frame program defers production while the peer (or the serve bridge
@@ -161,22 +180,36 @@ final class RemoteTerminalDriver
     // race the handshake and allocate the buffer pool at the default
     // 80×24, then immediately resize on the first frame.
     //
-    // BOUNDED: a peer that connects and then never speaks must not hang
-    // the app forever — under `serve --spawn` that is a process leak an
-    // attacker can multiply (open sockets, send nothing). A disconnect
-    // already fails the handshake; silence now does too. The deadline is
-    // generous for real peers (the bridge / serve client sends INIT
-    // immediately on accept) while bounding the leak window.
-    try {
-      await _handshake!.future.timeout(initTimeout);
-    } on TimeoutException {
-      await _frameSub?.cancel();
-      _frameSub = null;
-      unawaited(_transport.close());
-      throw StateError(
-        'RemoteTerminalDriver.enter: the peer connected but sent no INIT '
-        'within ${initTimeout.inSeconds}s — closing the session.',
-      );
+    // The WAIT MODE depends on who is on the other end:
+    //
+    //  - Unsupervised (a local `.fleury/handle`): BOUND the wait so a peer
+    //    that connects and then never speaks can't hang the app forever —
+    //    a process leak an attacker can multiply (open sockets, send
+    //    nothing). A disconnect already fails the handshake; silence now
+    //    does too, at [initTimeout].
+    //
+    //  - Supervised (a serve/bridge `spawnFleuryApp`, flagged via
+    //    `FLEURY_REMOTE_WAIT=supervised`): wait UNBOUNDED. The host reaps
+    //    orphans (abort/dispose, admission cap), and a warm standby
+    //    legitimately idles between spawn and a browser attaching — which
+    //    can be well past [initTimeout]. Applying the fuse here would kill
+    //    the standby and force every reconnect back onto the cold path,
+    //    defeating the warm pre-spawn optimization. A disconnect/error
+    //    still fails the handshake, so a dead socket can't hang us.
+    if (_superviseHandshakeWait) {
+      await _handshake!.future;
+    } else {
+      try {
+        await _handshake!.future.timeout(initTimeout);
+      } on TimeoutException {
+        await _frameSub?.cancel();
+        _frameSub = null;
+        unawaited(_transport.close());
+        throw StateError(
+          'RemoteTerminalDriver.enter: the peer connected but sent no INIT '
+          'within ${initTimeout.inSeconds}s — closing the session.',
+        );
+      }
     }
     _active = true;
   }

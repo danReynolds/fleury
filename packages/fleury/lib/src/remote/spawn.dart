@@ -123,7 +123,16 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
   }
 
   final env = Map<String, String>.from(environment ?? Platform.environment)
-    ..['FLEURY_HANDLE'] = path;
+    ..['FLEURY_HANDLE'] = path
+    // Every app spawned through here is SUPERVISED: this function reaps the
+    // process on abort/dispose/exit-before-connect, and serve additionally
+    // reaps on browser-close + an admission cap. So the app's
+    // RemoteTerminalDriver must wait UNBOUNDED for the peer's INIT rather than
+    // self-destruct on its leak-guard fuse — a serve warm standby legitimately
+    // idles between connecting and a browser attaching. Without this the
+    // standby dies at initTimeout and every reconnect pays full cold-start
+    // cost, defeating the warm pre-spawn optimization.
+    ..['FLEURY_REMOTE_WAIT'] = 'supervised';
   env['COLORTERM'] = env['COLORTERM'] ?? 'truecolor';
 
   final Process process;

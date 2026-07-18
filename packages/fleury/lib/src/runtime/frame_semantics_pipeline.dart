@@ -270,8 +270,18 @@ final class FrameSemanticsPipeline {
       // fallback nodes mirror painted buffer text, and patching around one
       // would keep its stale label "covering" cells whose text has since
       // changed. A full rebuild regenerates fallback from the live buffer.
+      //
+      // It also requires `!_semanticDirty` — the same conservative gate the
+      // retain-OUTPUT fast path above uses. `_semanticDirty` means input was
+      // dispatched and a handler may have mutated contributor state that only
+      // a tree walk reveals (a `DataTable` selection, an app/command scope
+      // counter). Those contributors record no leaf/structure dirt, so patching
+      // only the recorded leaf would ship their nodes STALE. Taking the full
+      // walk when input-dirtied keeps the retained path indistinguishable from
+      // a rebuild (the divergence oracle below enforces exactly that).
       final canApplyRetainedLeafUpdates =
           retainedTree != null &&
+          !_semanticDirty &&
           !_lastCoverageAudit.hasUncoveredText &&
           !semanticDirtySnapshot.requiresFullRebuild &&
           semanticDirtySnapshot.leafUpdates.isNotEmpty &&
@@ -371,6 +381,13 @@ final class FrameSemanticsPipeline {
 
   void dispose() {
     _disposed = true;
+    // Clear the outstanding-flush flag BEFORE completing idle: disposing the
+    // scheduler cancels the one callback that would have cleared it (the
+    // deferred flush), and `_completeIdleIfQuiet` refuses to complete while
+    // the flag is set. Without this, any awaitIdle() future outstanding at
+    // dispose (which implies `_flushScheduled == true`) would hang forever,
+    // contradicting the dispose-completes-pending contract hosts rely on.
+    _flushScheduled = false;
     _scheduler.dispose();
     _completeIdleIfQuiet();
   }
