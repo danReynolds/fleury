@@ -187,10 +187,17 @@ List<Bar> _thinLabels(
   final stride = ((maxLen + 1) / slot).ceil();
   if (stride <= 1) return bars; // every label already fits
   final last = bars.length - 1;
-  final count = (last ~/ stride + 1).clamp(2, bars.length);
-  final keep = <int>{
-    for (var j = 0; j < count; j++) (j * last / (count - 1)).round(),
-  };
+  final fit = last ~/ stride + 1; // labels that fit with spacing >= stride
+  final keep = <int>{};
+  if (fit < 2) {
+    // Not even two labels clear the widest one — a forced pair of endpoints
+    // would still overlap, so keep just the first.
+    keep.add(0);
+  } else {
+    for (var j = 0; j < fit; j++) {
+      keep.add((j * last / (fit - 1)).round());
+    }
+  }
   return <Bar>[
     for (var i = 0; i < bars.length; i++)
       if (keep.contains(i) || bars[i].value == null)
