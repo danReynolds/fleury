@@ -508,6 +508,57 @@ void main() {
         reason: 'attaching existing data is not a five-item arrival',
       );
     });
+
+    testWidgets('a controller swap keeps the lazy list rendering and '
+        'keyboard-navigable (L)', (tester) {
+      // The audit's "renders permanently blank after a controller swap"
+      // cluster (#473/#487): didUpdateWidget must re-push the count and default
+      // the selection onto the replacement controller — exactly as initState
+      // does — or the lazy render object reads itemCount == 0, unmounts every
+      // row, and stays blank until some later itemCount change. Prior tests
+      // only assert the controller's mirror fields; this pins the actual frame
+      // and that arrow nav survives.
+      var controller = ListController(selectedIndex: 0);
+      Widget app(ListController? c) => SizedBox(
+        width: 12,
+        height: 4,
+        child: ListView.builder(
+          controller: c,
+          itemCount: 5,
+          autofocus: true,
+          itemBuilder: (context, index, selected) => Text('Item $index'),
+        ),
+      );
+
+      tester.pumpWidget(app(controller));
+      expect(
+        tester.renderToString(size: const CellSize(12, 4), emptyMark: ' '),
+        contains('Item 0'),
+      );
+
+      // (1) Swap to a *different* controller instance, itemCount unchanged.
+      controller = ListController(selectedIndex: 0);
+      tester.pumpWidget(app(controller));
+      expect(
+        tester.renderToString(size: const CellSize(12, 4), emptyMark: ' '),
+        contains('Item 0'),
+        reason: 'a fresh controller instance must not blank the lazy list',
+      );
+      expect(controller.itemCount, 5);
+
+      // Keyboard nav is alive on the swapped-in controller.
+      tester.sendKey(_code(KeyCode.arrowDown));
+      expect(controller.selectedIndex, 1);
+
+      // (2) Drop the controller entirely — the state builds its own fallback.
+      tester.pumpWidget(app(null));
+      expect(
+        tester.renderToString(size: const CellSize(12, 4), emptyMark: ' '),
+        contains('Item 0'),
+        reason: 'dropping the controller for the internal fallback must not '
+            'blank the list',
+      );
+    });
   });
 
   group('empty list', () {
@@ -563,6 +614,82 @@ void main() {
       count = 3;
       tester.pumpWidget(app());
       expect(controller.selectedIndex, isNull);
+    });
+  });
+
+  group('unbounded height (L)', () {
+    // A ListView windows its items to the viewport height. Under an unbounded
+    // maxRows (a ScrollView, or a mainAxisSize.min Column/Row child) there is
+    // no window to fill, so every item would silently vanish. The list must
+    // fail loudly — like Scrollbar under unbounded width — instead of dropping
+    // content with no diagnostic.
+    Matcher throwsUnboundedHeight() => throwsA(
+      isA<StateError>().having(
+        (error) => error.message,
+        'message',
+        allOf(contains('ListView'), contains('bounded height')),
+      ),
+    );
+
+    testWidgets('eager ListView under a ScrollView throws instead of '
+        'rendering nothing', (tester) {
+      tester.pumpWidget(
+        ScrollView(
+          child: ListView(
+            children: [for (var i = 0; i < 5; i++) Text('item $i')],
+          ),
+        ),
+      );
+      expect(
+        () => tester.render(size: const CellSize(20, 8)),
+        throwsUnboundedHeight(),
+      );
+    });
+
+    testWidgets('lazy ListView.builder under a ScrollView throws instead of '
+        'rendering nothing', (tester) {
+      tester.pumpWidget(
+        ScrollView(
+          child: ListView.builder(itemCount: 5, itemBuilder: _itemBuilder),
+        ),
+      );
+      expect(
+        () => tester.render(size: const CellSize(20, 8)),
+        throwsUnboundedHeight(),
+      );
+    });
+
+    testWidgets('the reported nested-Column scenario fails loudly rather than '
+        'silently dropping the list', (tester) {
+      // ScrollView > Column(min) > [header, ListView, footer]: the ScrollView
+      // measures the Column with an unbounded main axis, so the nested list
+      // receives maxRows == null.
+      tester.pumpWidget(
+        ScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('header'),
+              ListView.builder(itemCount: 5, itemBuilder: _itemBuilder),
+              const Text('footer'),
+            ],
+          ),
+        ),
+      );
+      expect(
+        () => tester.render(size: const CellSize(20, 8)),
+        throwsUnboundedHeight(),
+      );
+    });
+
+    testWidgets('an empty list under unbounded height renders empty, not a '
+        'throw — there is no content to lose', (tester) {
+      tester.pumpWidget(
+        ScrollView(
+          child: ListView.builder(itemCount: 0, itemBuilder: _itemBuilder),
+        ),
+      );
+      expect(() => tester.render(size: const CellSize(20, 8)), returnsNormally);
     });
   });
 
@@ -1165,6 +1292,48 @@ void main() {
         unmountCounts[5],
         1,
         reason: 'a non-visible probe must not leak in the sparse element map',
+      );
+    });
+
+    testWidgets('a following list does not leak its pre-jump first-walk window '
+        'on the first layout (L)', (tester) {
+      // Audit #1337: pinToBottom sets the selection to the last item in
+      // initState, so the *first* layout walks the anchor-0 window (0..9),
+      // then the selection (999) forces the backward probe + a re-walk to the
+      // tail. The end-of-layout sweep must dispose the pre-jump first walk AND
+      // the non-fitting probe boundary — not just the (empty) prior active set,
+      // or those subtrees stay mounted forever and get rebuilt every rebuild.
+      final mountCounts = <int, int>{};
+      final unmountCounts = <int, int>{};
+      final controller = ListController(pinToBottom: true);
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 1000,
+          itemBuilder: (context, index, selected) => _LifecycleWidget(
+            index: index,
+            mounts: mountCounts,
+            unmounts: unmountCounts,
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(10, 10));
+
+      expect(controller.selectedIndex, 999);
+      expect(controller.visibleRange, (first: 990, last: 999));
+
+      // Net-mounted = mounted but not (yet) unmounted. Only the visible tail
+      // window may remain; the first walk (0..9) and the probe boundary (989)
+      // must all have been swept.
+      final netMounted = {
+        for (final entry in mountCounts.entries)
+          if (entry.value > (unmountCounts[entry.key] ?? 0)) entry.key,
+      };
+      expect(
+        netMounted,
+        {for (var i = 990; i <= 999; i++) i},
+        reason: 'only the visible tail window stays mounted; the pre-jump '
+            'first walk (0..9) and the probe boundary (989) must not leak',
       );
     });
 
