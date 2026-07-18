@@ -456,6 +456,14 @@ class _TextAreaState extends State<TextArea>
         .join();
   }
 
+  /// Whether a kill (Ctrl+K / Ctrl+U / Ctrl+W) may store the removed text in
+  /// the shared, cross-field kill ring. Only when the field permits its raw
+  /// content to leave — i.e. the clipboard policy is [TextClipboardPolicy
+  /// .allowed]. Redacted / disabled fields skip capture so a later Ctrl+Y
+  /// elsewhere cannot recover the plaintext, matching the copy/cut path.
+  bool get _captureKillRingText =>
+      widget.clipboardPolicy == TextClipboardPolicy.allowed;
+
   KeyEventResult _copyOrCutSelection({required bool cut}) {
     if (!widget.enabled) return KeyEventResult.ignored;
     // Clipboard actions read selection/text synchronously. They must observe
@@ -609,17 +617,17 @@ class _TextAreaState extends State<TextArea>
       case TextEditingKeyAction.killToLineEnd:
         if (!_canEdit) return KeyEventResult.handled;
         _cancelScheduledPaste();
-        _controller.killToLineEnd();
+        _controller.killToLineEnd(captureToKillRing: _captureKillRingText);
         return KeyEventResult.handled;
       case TextEditingKeyAction.killToLineStart:
         if (!_canEdit) return KeyEventResult.handled;
         _cancelScheduledPaste();
-        _controller.killToLineStart();
+        _controller.killToLineStart(captureToKillRing: _captureKillRingText);
         return KeyEventResult.handled;
       case TextEditingKeyAction.killWordLeft:
         if (!_canEdit) return KeyEventResult.handled;
         _cancelScheduledPaste();
-        _controller.killWordLeft();
+        _controller.killWordLeft(captureToKillRing: _captureKillRingText);
         return KeyEventResult.handled;
       case TextEditingKeyAction.yank:
         if (!_canEdit) return KeyEventResult.handled;

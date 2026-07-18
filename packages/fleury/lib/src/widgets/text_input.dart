@@ -204,21 +204,46 @@ class TextEditingController extends ChangeNotifier {
 
   /// Kill (cut to the shared kill ring) from the caret to the line end; if
   /// already at the line end, kill the newline. Recover with [yank].
-  void killToLineEnd() {
+  ///
+  /// [TextInput]/[TextArea] pass `captureToKillRing: false` for obscured or
+  /// redacted fields so the removed secret is deleted without entering the
+  /// process-wide, cross-field ring. A custom obscured editor driving this
+  /// controller directly captures by default — pass `false` yourself, keyed on
+  /// your own obscured/policy state, or the plaintext becomes Ctrl+Y-yankable.
+  void killToLineEnd({bool captureToKillRing = true}) {
     _checkNotDisposed();
-    _applyEdit(TextEditingModel.killToLineEnd(_value));
+    _applyEdit(
+      TextEditingModel.killToLineEnd(
+        _value,
+        captureToKillRing: captureToKillRing,
+      ),
+    );
   }
 
   /// Kill from the line start to the caret, into the kill ring.
-  void killToLineStart() {
+  ///
+  /// See [killToLineEnd] for [captureToKillRing].
+  void killToLineStart({bool captureToKillRing = true}) {
     _checkNotDisposed();
-    _applyEdit(TextEditingModel.killToLineStart(_value));
+    _applyEdit(
+      TextEditingModel.killToLineStart(
+        _value,
+        captureToKillRing: captureToKillRing,
+      ),
+    );
   }
 
   /// Kill the word before the caret, into the kill ring.
-  void killWordLeft() {
+  ///
+  /// See [killToLineEnd] for [captureToKillRing].
+  void killWordLeft({bool captureToKillRing = true}) {
     _checkNotDisposed();
-    _applyEdit(TextEditingModel.killWordLeft(_value));
+    _applyEdit(
+      TextEditingModel.killWordLeft(
+        _value,
+        captureToKillRing: captureToKillRing,
+      ),
+    );
   }
 
   /// Insert the kill ring at the caret (replacing any selection).
@@ -614,10 +639,15 @@ class TextInput extends StatefulWidget {
   /// numeric bounds while keeping the core text editing role and actions.
   final SemanticState semanticState;
 
-  /// Policy future copy/cut actions should use for this field.
+  /// Policy copy/cut AND kill-ring capture use for this field.
   ///
   /// When null, obscured fields default to [TextClipboardPolicy.redacted] and
-  /// normal fields default to [TextClipboardPolicy.allowed].
+  /// normal fields default to [TextClipboardPolicy.allowed]. An explicit value
+  /// overrides that default in both directions: setting [allowed] on an
+  /// [obscureText] field deliberately opts its plaintext into the system
+  /// clipboard (copy/cut) and the cross-field kill ring alike — kill is not
+  /// stricter than copy. Leave it null (or set [redacted]) to keep a password
+  /// field's content out of both.
   final TextClipboardPolicy? clipboardPolicy;
 
   /// Optional command/submission history for Up/Down navigation.
@@ -886,6 +916,14 @@ class _TextInputState extends State<TextInput>
   bool get _redactSemanticValue =>
       widget.obscureText ||
       _effectiveClipboardPolicy == TextClipboardPolicy.redacted;
+
+  /// Whether a kill (Ctrl+K / Ctrl+U / Ctrl+W) may store the removed text in
+  /// the shared, cross-field kill ring. Only when the field permits its raw
+  /// content to leave — i.e. the clipboard policy is [TextClipboardPolicy
+  /// .allowed]. Obscured / redacted / disabled fields skip capture so a later
+  /// Ctrl+Y elsewhere cannot recover the plaintext, matching the copy/cut path.
+  bool get _captureKillRingText =>
+      _effectiveClipboardPolicy == TextClipboardPolicy.allowed;
 
   Object? get _semanticValue => _redactSemanticValue ? null : _controller.text;
 
@@ -1276,19 +1314,19 @@ class _TextInputState extends State<TextInput>
         if (!_canEdit) return KeyEventResult.handled;
         _cancelScheduledPaste();
         _resetHistoryBrowsing();
-        _controller.killToLineEnd();
+        _controller.killToLineEnd(captureToKillRing: _captureKillRingText);
         return KeyEventResult.handled;
       case TextEditingKeyAction.killToLineStart:
         if (!_canEdit) return KeyEventResult.handled;
         _cancelScheduledPaste();
         _resetHistoryBrowsing();
-        _controller.killToLineStart();
+        _controller.killToLineStart(captureToKillRing: _captureKillRingText);
         return KeyEventResult.handled;
       case TextEditingKeyAction.killWordLeft:
         if (!_canEdit) return KeyEventResult.handled;
         _cancelScheduledPaste();
         _resetHistoryBrowsing();
-        _controller.killWordLeft();
+        _controller.killWordLeft(captureToKillRing: _captureKillRingText);
         return KeyEventResult.handled;
       case TextEditingKeyAction.yank:
         if (!_canEdit) return KeyEventResult.handled;

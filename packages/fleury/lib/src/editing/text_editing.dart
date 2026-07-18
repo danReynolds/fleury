@@ -320,22 +320,35 @@ final class TextEditingModel {
   // A shared most-recent-kill buffer, like emacs's: a kill in one field can be
   // yanked in another. Killing (cut-to-buffer) gives Ctrl+W a recovery path,
   // unlike a plain delete.
+  //
+  // Because the buffer is process-wide and cross-field, obscured/redacted
+  // fields must NOT capture into it: their removed text would otherwise be
+  // yankable as plaintext in any visible field, leaking the secret. Such fields
+  // pass `captureToKillRing: false` — the kill degrades to a plain delete (no
+  // recovery), mirroring how the copy/cut path refuses to expose raw obscured
+  // content. Real terminals take the same posture: password prompts run with
+  // echo off and no kill ring.
   /// The shared kill ring (most recent kill). Resettable for tests.
   static String killRing = '';
 
   /// Cuts `[start, end)` into the kill ring and returns the value with that
   /// span removed (caret at the cut point). Empty spans are a no-op.
+  ///
+  /// When [captureToKillRing] is false the span is still deleted but not stored
+  /// in [killRing] (leaving any prior entry untouched) — used by obscured /
+  /// redacted fields so the secret cannot be yanked back out elsewhere.
   static TextEditingValue killRange(
     TextEditingValue value,
     int start,
-    int end,
-  ) {
+    int end, {
+    bool captureToKillRing = true,
+  }) {
     final a = snapOffsetToGraphemeBoundary(value.text, start);
     final b = snapOffsetToGraphemeBoundary(value.text, end);
     final lo = a < b ? a : b;
     final hi = a < b ? b : a;
     if (lo == hi) return value;
-    killRing = value.text.substring(lo, hi);
+    if (captureToKillRing) killRing = value.text.substring(lo, hi);
     return TextEditingValue(
       text: value.text.replaceRange(lo, hi, ''),
       selection: TextSelection.collapsed(offset: lo),
@@ -344,25 +357,44 @@ final class TextEditingModel {
 
   /// Ctrl+K: kill from the caret to the end of the line; if already at the line
   /// end, kill the trailing newline (joining the next line) — emacs behavior.
-  static TextEditingValue killToLineEnd(TextEditingValue value) {
+  static TextEditingValue killToLineEnd(
+    TextEditingValue value, {
+    bool captureToKillRing = true,
+  }) {
     final offset = value.selection.extentOffset;
     var end = lineEndOffset(value.text, offset);
     if (end == offset && end < value.text.length && value.text[end] == '\n') {
       end += 1;
     }
-    return killRange(value, offset, end);
+    return killRange(value, offset, end, captureToKillRing: captureToKillRing);
   }
 
   /// Ctrl+U: kill from the start of the line to the caret.
-  static TextEditingValue killToLineStart(TextEditingValue value) {
+  static TextEditingValue killToLineStart(
+    TextEditingValue value, {
+    bool captureToKillRing = true,
+  }) {
     final offset = value.selection.extentOffset;
-    return killRange(value, lineStartOffset(value.text, offset), offset);
+    return killRange(
+      value,
+      lineStartOffset(value.text, offset),
+      offset,
+      captureToKillRing: captureToKillRing,
+    );
   }
 
   /// Ctrl+W: kill the word before the caret.
-  static TextEditingValue killWordLeft(TextEditingValue value) {
+  static TextEditingValue killWordLeft(
+    TextEditingValue value, {
+    bool captureToKillRing = true,
+  }) {
     final offset = value.selection.extentOffset;
-    return killRange(value, previousWordBoundary(value.text, offset), offset);
+    return killRange(
+      value,
+      previousWordBoundary(value.text, offset),
+      offset,
+      captureToKillRing: captureToKillRing,
+    );
   }
 
   /// Ctrl+Y: insert the kill ring at the caret (replacing any selection).
