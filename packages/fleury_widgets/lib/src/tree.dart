@@ -50,7 +50,8 @@ class Tree<T> extends StatefulWidget {
     this.onSelect,
     this.typeahead = true,
     this.selectedStyle,
-  });
+    this.initialExpandedDepth = 0,
+  }) : assert(initialExpandedDepth >= 0);
 
   /// Top-level nodes, whose object identities also anchor expansion state.
   final List<TreeNode<T>> roots;
@@ -78,6 +79,11 @@ class Tree<T> extends StatefulWidget {
   /// Style for the highlighted row. Defaults to inverse video.
   final CellStyle? selectedStyle;
 
+  /// Branch nodes shallower than this depth start expanded. `0` (the default)
+  /// leaves every branch collapsed; `1` expands the roots, `2` their children,
+  /// and so on. Matches `JsonView.initialExpandedDepth`.
+  final int initialExpandedDepth;
+
   @override
   State<Tree<T>> createState() => _TreeState<T>();
 }
@@ -94,6 +100,20 @@ class _TreeState<T> extends State<Tree<T>> {
     super.initState();
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'Tree');
     _ownsFocusNode = widget.focusNode == null;
+    _seedInitialExpansion(widget.roots, 0);
+  }
+
+  // Expands every branch shallower than [Tree.initialExpandedDepth]. The
+  // node identities are the same objects the flatten pass checks, so seeding
+  // [_expanded] here is enough for the first build to render them open.
+  void _seedInitialExpansion(List<TreeNode<T>> nodes, int depth) {
+    if (depth >= widget.initialExpandedDepth) return;
+    for (final node in nodes) {
+      if (node.isBranch) {
+        _expanded.add(node);
+        _seedInitialExpansion(node.children, depth + 1);
+      }
+    }
   }
 
   @override
