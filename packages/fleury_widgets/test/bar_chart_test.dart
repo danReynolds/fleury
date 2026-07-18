@@ -35,6 +35,36 @@ void main() {
       expect(out[4], 'a b');
     });
 
+    testWidgets('a wide label spills into blank (thinned) neighbours', (
+      tester,
+    ) {
+      // Labels only on the first and last of five bars, as a thinned axis
+      // leaves them. Each 4-char label is wider than its 2-cell bar, so it must
+      // reclaim the blank neighbours' space instead of clipping to "12"/"67".
+      tester.pumpWidget(
+        const SizedBox(
+          width: 10,
+          height: 4,
+          child: BarChart(
+            bars: [
+              Bar('12.5', 5),
+              Bar('', 3),
+              Bar('', 4),
+              Bar('', 2),
+              Bar('67.5', 6),
+            ],
+            max: 6,
+            barWidth: 2,
+            gap: 0,
+            showLabels: true,
+          ),
+        ),
+      );
+      final out = _rows(tester, 10, 4);
+      expect(out[3], contains('12.5'));
+      expect(out[3], contains('67.5'));
+    });
+
     testWidgets('renders a value row above the bars when enabled', (tester) {
       tester.pumpWidget(
         const SizedBox(

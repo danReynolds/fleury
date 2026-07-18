@@ -502,12 +502,60 @@ class RenderBarChart extends RenderObject {
         _writeCentered(buffer, col, valueRow, _barWidth, text, _labelStyle);
       }
 
-      // Category label below.
-      if (labelRow != null) {
-        _writeCentered(buffer, col, labelRow, _barWidth, b.label, _labelStyle);
-      }
-
       col += _barWidth;
+    }
+
+    // Category labels get their own pass so each can use the horizontal span up
+    // to the midpoint toward its nearest labelled neighbour — letting a label
+    // wider than one bar spill into the empty gaps a thinned axis leaves,
+    // instead of clipping to the bar. Labels stay clear of one another.
+    if (labelRow != null) {
+      _writeCategoryLabels(buffer, offset.col + gutter, rightEdge, labelRow);
+    }
+  }
+
+  /// Draws category labels under the bars. Each labelled bar centres its label
+  /// on the bar but may spread into the space up to the midpoint toward the
+  /// nearest *labelled* neighbour (or the chart edge), so a wide label reclaims
+  /// the room a blank (thinned) neighbour leaves without overlapping the next.
+  void _writeCategoryLabels(
+    CellBuffer buffer,
+    int firstCol,
+    int rightEdge,
+    int row,
+  ) {
+    if (row < 0 || row >= buffer.size.rows) return;
+    final stride = _barWidth + _gap;
+    final centers = <int>[];
+    final texts = <String>[];
+    for (var i = 0; i < _bars.length; i++) {
+      final start = firstCol + i * stride;
+      if (start >= rightEdge) break;
+      if (_bars[i].label.isEmpty) continue;
+      centers.add(start + _barWidth ~/ 2);
+      texts.add(_bars[i].label);
+    }
+    for (var k = 0; k < centers.length; k++) {
+      final center = centers[k];
+      // A one-cell gap between adjacent spans (prev.right = midpoint,
+      // this.left = midpoint + 1) guarantees labels never touch.
+      final left = k == 0 ? firstCol : (centers[k - 1] + center) ~/ 2 + 1;
+      final right = k == centers.length - 1
+          ? rightEdge
+          : (center + centers[k + 1]) ~/ 2;
+      if (right - left <= 0) continue;
+      final text = texts[k];
+      final shown = text.length > right - left
+          ? text.substring(0, right - left)
+          : text;
+      var start = center - shown.length ~/ 2;
+      if (start < left) start = left;
+      if (start + shown.length > right) start = right - shown.length;
+      for (var j = 0; j < shown.length; j++) {
+        final col = start + j;
+        if (col < 0 || col >= buffer.size.cols) continue;
+        buffer.writeGrapheme(CellOffset(col, row), shown[j], style: _labelStyle);
+      }
     }
   }
 
