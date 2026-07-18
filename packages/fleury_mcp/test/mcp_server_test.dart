@@ -621,6 +621,44 @@ void main() {
     expect((result['structuredContent'] as Map)['code'], 'too_large');
   });
 
+  test(
+    'set_value rejects an over-cap payload as too_large without killing the app',
+    () async {
+      // A textField accepts any string and 190k chars is under the server's 200k
+      // ceiling — but jsonEncode escapes each control char ~6x, inflating the
+      // semantic-action frame past the 1 MiB wire cap. The encoder rejects it;
+      // the bridge must surface a clean error, NOT mistake it for the app dying.
+      pushRoot(<String, Object?>{
+        'id': 'root',
+        'role': 'app',
+        'children': <Object?>[
+          <String, Object?>{
+            'id': 'field',
+            'role': 'textField',
+            'label': 'Name',
+            'actions': <String>['setValue'],
+          },
+        ],
+      });
+      await bridge.ready;
+
+      final escapeHeavy = String.fromCharCode(1) * 190000; // 190k × U+0001
+      await server.handleLine(
+        _rpc(1, 'tools/call', <String, Object?>{
+          'name': 'set_value',
+          'arguments': <String, Object?>{'id': 'field', 'value': escapeHeavy},
+        }),
+      );
+      final result = lastResult();
+      expect(result['isError'], isTrue);
+      expect((result['structuredContent'] as Map)['code'], 'too_large');
+      // The healthy app was not mis-declared dead, and the over-cap frame never
+      // reached the wire.
+      expect(bridge.isRunning, isTrue);
+      expect(transport.sent.whereType<SemanticActionFrame>(), isEmpty);
+    },
+  );
+
   test('press_key maps meta→super and rejects an unknown modifier', () async {
     pushRoot(buttonAndCount('btn', 'Go', 0));
     await bridge.ready;
@@ -1995,7 +2033,13 @@ final class _FakeTransport
   Stream<RemoteFrame> get incoming => _incoming.stream;
 
   @override
-  void send(RemoteFrame frame) => sent.add(frame);
+  void send(RemoteFrame frame) {
+    // Mirror UnixSocketFrameTransport.send: encode synchronously, so an over-cap
+    // outgoing frame throws RemoteProtocolException exactly as the real wire does
+    // (and is therefore never recorded as "sent").
+    encodeFrame(frame);
+    sent.add(frame);
+  }
 
   @override
   Future<void> close() async {

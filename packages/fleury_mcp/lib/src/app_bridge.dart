@@ -240,27 +240,69 @@ final class FleuryAppBridge {
     Object? value,
   ) {
     final status = _expectActionResult(id, SemanticAction.setValue);
-    _send(SemanticActionFrame(id, SemanticAction.setValue, value: value));
+    try {
+      _send(SemanticActionFrame(id, SemanticAction.setValue, value: value));
+    } catch (_) {
+      // The value could not be encoded into a frame (too large — see [_send]).
+      // Drop the armed wait and let the failure propagate so the caller reports
+      // it; the app is untouched. (invokeAction's payload is just id+action and
+      // is always within the cap, so it needs no such guard.)
+      _abortPendingAction();
+      rethrow;
+    }
     return status;
   }
 
-  Completer<SemanticActionInvocationStatus?>? _pendingActionResult;
+  /// The in-flight mutation awaiting its SEMANTIC_ACTION_RESULT, tagged with the
+  /// (id, action) it was armed for so an arriving result is correlated to the
+  /// request it belongs to. Mutations are serialized by the MCP server, so at
+  /// most one is pending.
+  ({
+    SemanticNodeId id,
+    SemanticAction action,
+    Completer<SemanticActionInvocationStatus?> completer,
+  })?
+  _pendingAction;
 
-  /// Arms a one-shot listener for the next matching SEMANTIC_ACTION_RESULT.
-  /// Mutations are serialized by the MCP server, so at most one is pending.
-  /// Bounded: resolves null when no result lands (pre-v3 app) so callers
-  /// degrade to the tree-diff heuristic instead of hanging.
+  /// Arms a one-shot listener for the SEMANTIC_ACTION_RESULT that echoes back
+  /// [id]/[action] (the app echoes both onto the result frame). Bounded:
+  /// resolves null when no result lands (a pre-v3 app, or one still running a
+  /// slow async handler) so callers degrade to the tree-diff heuristic instead
+  /// of hanging.
   Future<SemanticActionInvocationStatus?> _expectActionResult(
     SemanticNodeId id,
     SemanticAction action,
   ) {
-    _pendingActionResult?.complete(null); // superseded (shouldn't happen)
+    // Supersede any still-armed prior wait (shouldn't happen under the server's
+    // serialization, but keeps the field single-valued defensively).
+    final prior = _pendingAction;
+    if (prior != null && !prior.completer.isCompleted) {
+      prior.completer.complete(null);
+    }
     final completer = Completer<SemanticActionInvocationStatus?>();
-    _pendingActionResult = completer;
+    final pending = (id: id, action: action, completer: completer);
+    _pendingAction = pending;
     return completer.future.timeout(
       const Duration(seconds: 2),
-      onTimeout: () => null,
+      onTimeout: () {
+        // De-arm on timeout so a LATE result for THIS request (a >2s async
+        // handler that finished after we gave up) can't bind to the NEXT
+        // mutation armed in our place. Guard against a newer mutation having
+        // already replaced us.
+        if (identical(_pendingAction, pending)) _pendingAction = null;
+        return null;
+      },
     );
+  }
+
+  /// Aborts the in-flight mutation wait — its frame could not be sent — resolving
+  /// its caller to null so the tool degrades to the tree-diff heuristic.
+  void _abortPendingAction() {
+    final pending = _pendingAction;
+    _pendingAction = null;
+    if (pending != null && !pending.completer.isCompleted) {
+      pending.completer.complete(null);
+    }
   }
 
   int _debugSeq = 0;
@@ -316,13 +358,25 @@ final class FleuryAppBridge {
   /// windowed widgets are in the tree).
   void resize(CellSize size) => _send(ResizeFrame(size));
 
-  /// Sends a frame, treating a transport failure (the socket dropped between
-  /// our last `isRunning` check and now) as the app exiting — so callers get a
-  /// clean "app gone" path rather than an exception thrown back at them.
+  /// Sends a frame. A genuine transport failure (the socket dropped between our
+  /// last `isRunning` check and now) is treated as the app exiting, so callers
+  /// get a clean "app gone" path. A [RemoteProtocolException] is different: the
+  /// local encoder REJECTED an oversized in-band frame ("frame was not
+  /// encoded") — the connection is intact, so it rethrows for the caller to
+  /// surface as a recoverable error rather than falsely declaring the healthy
+  /// app dead and tearing the session down.
   void _send(RemoteFrame frame) {
     if (!isRunning) return;
     try {
       _transport.send(frame);
+    } on RemoteProtocolException catch (e) {
+      // A recoverable protocol error (an over-cap frame that couldn't be
+      // encoded) leaves the connection intact — rethrow so the caller surfaces
+      // it as a tool error, not app death. Key on the flag, not the type: an
+      // unrecoverable protocol error means the peer must reconnect, so it is a
+      // genuine death like any transport failure below.
+      if (e.recoverable) rethrow;
+      _markExited();
     } catch (_) {
       _markExited();
     }
@@ -449,10 +503,18 @@ final class FleuryAppBridge {
         // register without waiting out the result timeout.
         _send(ClipboardResultFrame(f.seq, RemoteClipboardStatus.unavailable));
       case SemanticActionResultFrame f:
-        final pending = _pendingActionResult;
-        _pendingActionResult = null;
-        if (pending != null && !pending.isCompleted) {
-          pending.complete(f.status);
+        // Correlate the result to the request it echoes. A late result from a
+        // prior slow action whose wait already timed out must NOT be attributed
+        // to the next mutation now armed — match on (id, action), and drop a
+        // stale straggler that matches nothing rather than mis-binding it.
+        final pending = _pendingAction;
+        if (pending != null &&
+            pending.id == f.id &&
+            pending.action == f.action) {
+          _pendingAction = null;
+          if (!pending.completer.isCompleted) {
+            pending.completer.complete(f.status);
+          }
         }
     }
   }

@@ -875,6 +875,17 @@ final class McpServer {
       rethrow; // control-flow, not an error — the dispatcher suppresses the reply.
     } on _ToolFailure catch (failure) {
       return _toolError(failure.message, code: failure.code);
+    } on RemoteProtocolException catch (error) {
+      // The wire encoder rejected an oversized in-band frame — a set_value /
+      // press_key payload that inflated past the frame cap (e.g. an escape-heavy
+      // string jsonEncode expands ~6x). The app is unharmed (the bridge does not
+      // treat this as the app dying); surface a clean too_large error rather than
+      // an internal fault.
+      return _toolError(
+        'The $name payload is too large to send to the app ($error). Send a '
+        'smaller value.',
+        code: _ErrorCode.tooLarge,
+      );
     } catch (error) {
       // Any other failure (e.g. a transport error mid-action) is surfaced to
       // the model as a tool error, never thrown back through the read loop.
