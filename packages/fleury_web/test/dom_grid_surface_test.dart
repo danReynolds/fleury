@@ -142,6 +142,59 @@ void main() {
       expect(retainedRows[1].textContent, 'ONE     ');
     });
 
+    test('a resize preserves overlapping row content instead of blanking it', () {
+      // A served session drives resize() straight from the ResizeObserver the
+      // instant the browser window changes size — a full network round trip
+      // before the server's full-repaint-at-new-size plan can arrive, and an
+      // in-flight old-size plan resizes the surface again on the way. If resize
+      // discarded every row, the mirrored content would blank for that whole
+      // RTT on every resize tick (a blank flash the length of a window drag).
+      final root = web.document.createElement('div');
+      final surface = DomGridSurface(root: root, size: const CellSize(6, 4));
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
+      final frame = loop.render(
+        size: const CellSize(6, 4),
+        paint: (buffer) {
+          buffer.writeText(const CellOffset(0, 0), 'aaaa');
+          buffer.writeText(const CellOffset(0, 1), 'bbbb');
+          buffer.writeText(const CellOffset(0, 2), 'cccc');
+          buffer.writeText(const CellOffset(0, 3), 'dddd');
+        },
+      )!;
+      surface.present(
+        frame.previous,
+        frame.next,
+        planner.build(reason: 'initial', frame: frame),
+      );
+      final retainedRow0 = surface.rowElements[0];
+      final retainedRow1 = surface.rowElements[1];
+
+      // Grow (window enlarged). Overlapping rows keep their content and their
+      // element identity; only the new bottom rows are freshly empty.
+      surface.resize(const CellSize(8, 6));
+      expect(surface.rowElements.length, 6);
+      expect(
+        identical(surface.rowElements[0], retainedRow0),
+        isTrue,
+        reason: 'overlapping row 0 is retained, not recreated empty',
+      );
+      expect(surface.rowElements[0].textContent, 'aaaa  ');
+      expect(surface.rowElements[3].textContent, 'dddd  ');
+      expect(surface.rowElements[4].textContent, isEmpty);
+      expect(root.children.length, 6);
+
+      // Shrink (e.g. an in-flight old-size plan resizes the surface back down).
+      // The surviving rows keep their content; the tail is dropped.
+      surface.resize(const CellSize(8, 2));
+      expect(surface.rowElements.length, 2);
+      expect(identical(surface.rowElements[0], retainedRow0), isTrue);
+      expect(identical(surface.rowElements[1], retainedRow1), isTrue);
+      expect(surface.rowElements[0].textContent, 'aaaa  ');
+      expect(surface.rowElements[1].textContent, 'bbbb  ');
+      expect(root.children.length, 2);
+    });
+
     test('reports DOM node creation and style cache stats', () {
       final root = web.document.createElement('div');
       final surface = DomGridSurface(root: root, size: size);

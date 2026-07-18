@@ -108,11 +108,24 @@ final class DomGridSurface implements FrameSurface {
       return;
     }
     _size = size;
-    _rows
-      ..clear()
-      ..addAll([
-        for (var row = 0; row < size.rows; row++) _createRowElement(row),
-      ]);
+    // Preserve the overlapping retained rows across a resize instead of
+    // discarding every row's content. A served session drives resize() straight
+    // from the ResizeObserver the instant the browser window changes size — a
+    // full network round trip before the server's full-repaint-at-new-size plan
+    // can arrive — and an in-flight old-size plan resizes the surface again on
+    // the way. Blanking every row here would flash the mirrored content away for
+    // that whole RTT on every resize tick (a blank the length of a window drag).
+    // Rows [0, min(old, new)) keep their spans; only the row-count delta is
+    // created (grow) or dropped (shrink). A column-only change keeps the same
+    // rows — their reflowed content is clipped/padded by the root width until the
+    // next repaint (which resize always precipitates), never blanked.
+    if (_rows.length > size.rows) {
+      _rows.removeRange(size.rows, _rows.length);
+    } else {
+      for (var row = _rows.length; row < size.rows; row++) {
+        _rows.add(_createRowElement(row));
+      }
+    }
     _root.callMethodVarArgs<JSAny?>('replaceChildren'.toJS, [
       for (final row in _rows) row,
     ]);
