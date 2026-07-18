@@ -31,6 +31,37 @@ void main() {
       expect(out[0], '3 1 2');
     });
 
+    testWidgets('thins crowded bin labels so the axis stays readable', (
+      tester,
+    ) {
+      // Seven 3-char midpoint labels (0.5 … 6.5) can't all fit under 2-cell
+      // bars; the axis keeps an evenly-spaced subset (endpoints included)
+      // instead of mashing every label together.
+      tester.pumpWidget(
+        const SizedBox(
+          width: 20,
+          height: 6,
+          child: Histogram(
+            values: [0, 1, 2, 3, 4, 5, 6, 7],
+            bins: 7,
+            range: (0, 7),
+            showLabels: true,
+          ),
+        ),
+      );
+      final out = tester.renderToString(
+        size: const CellSize(20, 6),
+        emptyMark: ' ',
+      );
+      // Kept labels are the evenly-spaced 0 · 2 · 4 · 6 (endpoints included),
+      // laid out with clear gaps instead of the mashed "0.1.2.3…" run. (Each
+      // still clips to the 2-cell bar width, so only the integer part shows.)
+      expect(out, matches(RegExp(r'0\D+2\D+4\D+6')));
+      expect(out, isNot(contains('1'))); // crowded in-between labels dropped
+      expect(out, isNot(contains('3')));
+      expect(out, isNot(contains('5')));
+    });
+
     testWidgets('excludes non-finite values from the bins instead of '
         'throwing', (tester) {
       tester.pumpWidget(

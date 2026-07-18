@@ -94,7 +94,9 @@ class Histogram extends StatelessWidget {
         'chartMaxValue': distribution.high,
       }),
       child: BarChart(
-        bars: distribution.bars,
+        bars: showLabels
+            ? _thinLabels(distribution.bars, barWidth: barWidth, gap: gap)
+            : distribution.bars,
         barWidth: barWidth,
         gap: gap,
         showLabels: showLabels,
@@ -163,4 +165,44 @@ _histogramDistribution(
       ),
   ];
   return (bars: bars, includedValueCount: included, low: lo, high: hi);
+}
+
+/// Blanks bin labels that would collide, keeping an evenly-spaced subset
+/// (endpoints included) so the axis stays readable when many bins pack into a
+/// narrow space. Bars are fixed width, so a stride in bins maps straight to
+/// cell spacing: keep one label per `stride` bins, where `stride` is the bins
+/// needed to clear the widest label plus a gap.
+List<Bar> _thinLabels(
+  List<Bar> bars, {
+  required int barWidth,
+  required int gap,
+}) {
+  if (bars.length < 2) return bars;
+  var maxLen = 0;
+  for (final b in bars) {
+    if (b.label.length > maxLen) maxLen = b.label.length;
+  }
+  if (maxLen == 0) return bars;
+  final slot = (barWidth < 1 ? 1 : barWidth) + (gap < 0 ? 0 : gap);
+  final stride = ((maxLen + 1) / slot).ceil();
+  if (stride <= 1) return bars; // every label already fits
+  final last = bars.length - 1;
+  final fit = last ~/ stride + 1; // labels that fit with spacing >= stride
+  final keep = <int>{};
+  if (fit < 2) {
+    // Not even two labels clear the widest one — a forced pair of endpoints
+    // would still overlap, so keep just the first.
+    keep.add(0);
+  } else {
+    for (var j = 0; j < fit; j++) {
+      keep.add((j * last / (fit - 1)).round());
+    }
+  }
+  return <Bar>[
+    for (var i = 0; i < bars.length; i++)
+      if (keep.contains(i) || bars[i].value == null)
+        bars[i]
+      else
+        Bar('', bars[i].value!, color: bars[i].color),
+  ];
 }
