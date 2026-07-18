@@ -1509,7 +1509,12 @@ Future<TerminalDriver> _resolveDefaultDriver({
   try {
     final transport = await UnixSocketFrameTransport.connect(path);
     await remoteCapture?.call();
-    return RemoteTerminalDriver(transport);
+    // The .fleury/handle path is a user-launched app (`fleury shell`,
+    // single-session serve), not a serve-supervised spawn — keep the bounded
+    // INIT fuse here regardless of an inherited FLEURY_REMOTE_WAIT, so it
+    // can't be tricked into waiting forever on a silent peer. Only the
+    // FLEURY_HANDLE spawn path above opts into the supervised unbounded wait.
+    return RemoteTerminalDriver(transport, superviseHandshakeWait: false);
   } on Object catch (e) {
     // ignore: avoid_print
     print(
