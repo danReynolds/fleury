@@ -71,6 +71,61 @@ void main() {
     expect(deleted.newLine, isNull);
   });
 
+  test('hunk-body -- / ++ content lines are edits, not file headers', () {
+    // Regression: a deleted SQL comment '-- drop old comment' becomes the diff
+    // line '--- drop old comment', and an added 'C' line '++i;' becomes '+++i;'.
+    // The parser matched '--- '/'+++' before checking hunk state, so it read
+    // these as file headers/metadata — overwriting oldPath, zeroing the
+    // add/delete counts, and desyncing every later gutter line number.
+    const diff = '''
+diff --git a/migrate.sql b/migrate.sql
+index 1111111..2222222 100644
+--- a/migrate.sql
++++ b/migrate.sql
+@@ -1,4 +1,4 @@
+ BEGIN;
+--- drop old comment
++++i;
+ SELECT 1;
+ COMMIT;
+''';
+    final document = parseUnifiedDiff(diff);
+
+    // The three genuine headers are the only file headers; the '--'/'++'
+    // content lines must not inflate the file count.
+    expect(document.fileCount, 1);
+    expect(document.hunkCount, 1);
+    expect(document.additionCount, 1);
+    expect(document.deletionCount, 1);
+
+    final deleted = document.rows.singleWhere(
+      (row) => row.text == '--- drop old comment',
+    );
+    expect(deleted.kind, DiffLineKind.deletion);
+    expect(deleted.oldLine, 2);
+    expect(deleted.newLine, isNull);
+    // The real path survives — it is not clobbered to 'drop old comment'.
+    expect(deleted.oldPath, 'migrate.sql');
+    expect(deleted.newPath, 'migrate.sql');
+    expect(deleted.hunkIndex, 0);
+
+    final added = document.rows.singleWhere(
+      (row) => row.text == '+++i;',
+    );
+    expect(added.kind, DiffLineKind.addition);
+    expect(added.newLine, 2);
+    expect(added.oldLine, isNull);
+
+    // The deletion advanced oldCursor, so the following context keeps its true
+    // numbering (old=3/new=3), not the off-by-one the misclassification caused.
+    final select = document.rows.singleWhere(
+      (row) => row.text == ' SELECT 1;',
+    );
+    expect(select.kind, DiffLineKind.context);
+    expect(select.oldLine, 3);
+    expect(select.newLine, 3);
+  });
+
   testWidgets('renders an old/new line-number gutter by default', (tester) {
     tester.pumpWidget(
       DiffView(diff: '@@ -1,2 +1,2 @@\n context\n-old\n+new\n', semanticLabel: 'Patch'),

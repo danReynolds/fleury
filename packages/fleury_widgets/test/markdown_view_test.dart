@@ -85,6 +85,26 @@ void main() {
     expect(hiddenLink, isEmpty, reason: 'links inside code fences stay inert');
   });
 
+  test('plainText unwraps inline emphasis to its text, never literal \$1', () {
+    // Regression: _plainInlineText stripped code/bold/strike/italic with
+    // String.replaceAll(regExp, r'$1'). Dart (unlike JS) uses the replacement
+    // string literally — no capture-group substitution — so every span became
+    // the two characters "$1". plainText is the Semantics label of every block
+    // and a public field, so agents and screen readers received "$1" in place
+    // of the emphasized/code text.
+    final document = parseMarkdownDocument(
+      'Deploy **failed** on `prod` after a ~~clean~~ *rushed* _final_ push\n',
+    );
+    final paragraph = document.blocks.singleWhere(
+      (block) => block.kind == MarkdownBlockKind.paragraph,
+    );
+    expect(
+      paragraph.plainText,
+      'Deploy failed on prod after a clean rushed final push',
+    );
+    expect(paragraph.plainText, isNot(contains(r'$1')));
+  });
+
   testWidgets(
     'renders markdown rows with aggregate, block, and link semantics',
     (tester) {

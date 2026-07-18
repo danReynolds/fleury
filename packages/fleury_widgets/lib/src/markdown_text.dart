@@ -1391,12 +1391,16 @@ String _plainInlineText(String src) {
         '${match.group(1)!} (${_sanitizeMarkdownText(match.group(2)!)}'
         ')',
   );
+  // Strip the emphasis/code delimiters, keeping the inner text. replaceAllMapped
+  // (not replaceAll) is required: Dart uses a replaceAll replacement string
+  // literally, so r'$1' would emit the two characters "$1" instead of group 1 —
+  // matching the link rule above, which already maps the group by hand.
   text = text
-      .replaceAll(RegExp(r'`([^`]+)`'), r'$1')
-      .replaceAll(RegExp(r'\*\*([^*]+)\*\*'), r'$1')
-      .replaceAll(RegExp(r'~~([^~]+)~~'), r'$1')
-      .replaceAll(RegExp(r'\*([^*]+)\*'), r'$1')
-      .replaceAll(RegExp(r'_([^_]+)_'), r'$1');
+      .replaceAllMapped(RegExp(r'`([^`]+)`'), (m) => m.group(1)!)
+      .replaceAllMapped(RegExp(r'\*\*([^*]+)\*\*'), (m) => m.group(1)!)
+      .replaceAllMapped(RegExp(r'~~([^~]+)~~'), (m) => m.group(1)!)
+      .replaceAllMapped(RegExp(r'\*([^*]+)\*'), (m) => m.group(1)!)
+      .replaceAllMapped(RegExp(r'_([^_]+)_'), (m) => m.group(1)!);
   return _sanitizeMarkdownText(text);
 }
 

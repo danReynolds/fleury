@@ -3,6 +3,20 @@ import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 
+// The DST regression only manifests in a zone that actually observes the
+// autumn fall-back / spring-forward transitions (a 25h / 23h civil day). Run
+// these under a US-DST zone — CI sets `TZ=America/New_York`. In a fixed-offset
+// zone (e.g. UTC) the buggy and fixed date math agree, so the checks would be
+// vacuous; skip with a clear reason there instead of asserting nothing.
+bool _hasFallBack2026() =>
+    DateTime(2026, 11, 2).difference(DateTime(2026, 11, 1)).inHours == 25;
+bool _hasSpringForward2026() =>
+    DateTime(2026, 3, 9).difference(DateTime(2026, 3, 8)).inHours == 23;
+
+final Object _dstSkip = _hasFallBack2026() && _hasSpringForward2026()
+    ? false
+    : 'requires a DST timezone (run with TZ=America/New_York)';
+
 void main() {
   group('CalendarHeatmap', () {
     testWidgets(
@@ -280,6 +294,85 @@ void main() {
       expect(buf.atColRow(4, 1).grapheme, '·');
       expect(buf.atColRow(4, 2).grapheme, '█');
     });
+
+    testWidgets(
+      'fall-back DST day maps to exactly one cell — no dup, shift, or drop',
+      (tester) {
+        // America/New_York fall-back is Nov 1 2026 (a 25h civil day). Oct 25
+        // (Sun) → Nov 7 (Sat) is exactly two Sun-first weeks. Stepping days
+        // with add(Duration(days:)) drifts to 23:00 of the previous date once
+        // past the transition, which snapped Nov 1 onto BOTH the Sun and Mon
+        // rows and pushed Nov 7 out of every cell slot.
+        tester.pumpWidget(
+          SizedBox(
+            width: 12,
+            height: 8,
+            child: CalendarHeatmap(
+              start: DateTime(2026, 10, 25),
+              end: DateTime(2026, 11, 7),
+              values: {
+                DateTime(2026, 11, 1): 4, // transition day → █
+                DateTime(2026, 11, 7): 1, // range end → ░
+              },
+              min: 0,
+              max: 4,
+              cellWidth: 1,
+            ),
+          ),
+        );
+        final buf = tester.render(size: const CellSize(12, 8));
+        int countGlyph(String glyph) {
+          var n = 0;
+          for (var r = 0; r < 8; r++) {
+            for (var c = 0; c < 12; c++) {
+              if (buf.atColRow(c, r).grapheme == glyph) n++;
+            }
+          }
+          return n;
+        }
+
+        expect(
+          countGlyph('█'),
+          1,
+          reason: 'the fall-back day must render once, not on two rows',
+        );
+        expect(
+          countGlyph('░'),
+          1,
+          reason: 'the range-end day must not be dropped by the 23:00 drift',
+        );
+      },
+      skip: _dstSkip,
+    );
+
+    testWidgets(
+      'spring-forward day count is not truncated by the 23h day',
+      (tester) {
+        // America/New_York spring-forward is Mar 8 2026 (a 23h civil day). A
+        // range spanning it must still count every calendar day; the old
+        // difference().inDays swallowed the short day and under-reported.
+        tester.pumpWidget(
+          SizedBox(
+            width: 20,
+            height: 8,
+            child: CalendarHeatmap(
+              semanticLabel: 'Activity',
+              start: DateTime(2026, 3, 7),
+              end: DateTime(2026, 3, 10),
+              values: const {},
+              cellWidth: 1,
+            ),
+          ),
+        );
+        final chart = tester.semantics().single(
+          role: SemanticRole.chart,
+          label: 'Activity',
+        );
+        // Mar 7, 8, 9, 10 inclusive = 4 calendar days.
+        expect(chart.state.chartPointCount, 4);
+      },
+      skip: _dstSkip,
+    );
 
     testWidgets('zero-day window renders nothing safely', (tester) {
       final d = DateTime(2024, 1, 1);

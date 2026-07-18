@@ -449,6 +449,82 @@ void main() {
       tester.render(size: const CellSize(30, 8));
     });
 
+    testWidgets('finite out-of-range spike clips to the top, not vanishes', (
+      tester,
+    ) {
+      // yRange 0..100 with a spike to 150. The segments into and out of the
+      // spike cross the top boundary. They must clip at the edge — leaving the
+      // top plot row lit where the peak reaches it — not get dropped as if
+      // they were the NaN missing-data sentinel.
+      tester.pumpWidget(
+        SizedBox(
+          width: 20,
+          height: 8,
+          child: LineChart(
+            yRange: (0, 100),
+            series: const [
+              LineSeries([(0, 50), (1, 50), (2, 150), (3, 50), (4, 50)]),
+            ],
+            showAxes: false,
+          ),
+        ),
+      );
+      final buf = tester.render(size: const CellSize(20, 8));
+      // Only a segment clipped to the top edge (y=100) can light the top cell
+      // row; the flat y=50 runs sit mid-plot. Before the fix the spike
+      // segments vanished, leaving the top row empty.
+      var topRowLit = false;
+      for (var c = 0; c < 20; c++) {
+        final g = buf.atColRow(c, 0).grapheme;
+        if (g != null &&
+            g.codeUnitAt(0) >= 0x2800 &&
+            g.codeUnitAt(0) <= 0x28FF) {
+          topRowLit = true;
+          break;
+        }
+      }
+      expect(
+        topRowLit,
+        isTrue,
+        reason: 'the clipped spike must draw up to the top edge, not disappear',
+      );
+    });
+
+    testWidgets('a far out-of-range point clips instead of hanging paint', (
+      tester,
+    ) {
+      // A far-past-range x (unit mistake: seconds-scale x against a 0..1
+      // window) maps to a huge pixel column. The unbounded Bresenham walk
+      // then costs one iteration per pixel step — linear in the overshoot and
+      // paid every frame — freezing paint (measured seconds-to-minutes). With
+      // clipping the walk is bounded by the plot, so paint stays flat-fast
+      // regardless of how far out the point is. The threshold sits ~150× above
+      // a clipped paint (single-digit ms) yet far below the pre-fix cost
+      // (seconds) for this 1e7 overshoot, so there is no false-positive risk.
+      tester.pumpWidget(
+        SizedBox(
+          width: 20,
+          height: 8,
+          child: LineChart(
+            xRange: (0, 1),
+            yRange: (0, 1),
+            series: const [
+              LineSeries([(0, 0), (1e7, 0.5), (1, 1)]),
+            ],
+            showAxes: false,
+          ),
+        ),
+      );
+      final stopwatch = Stopwatch()..start();
+      tester.render(size: const CellSize(20, 8));
+      stopwatch.stop();
+      expect(
+        stopwatch.elapsedMilliseconds,
+        lessThan(750),
+        reason: 'clipping must bound the line walk; the overshoot froze paint',
+      );
+    }, timeout: const Timeout(Duration(seconds: 60)));
+
     testWidgets('NaN and infinite y values do not crash', (tester) {
       tester.pumpWidget(
         SizedBox(
