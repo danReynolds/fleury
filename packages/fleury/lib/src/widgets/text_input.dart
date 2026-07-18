@@ -771,8 +771,15 @@ class _TextInputState extends State<TextInput>
     }
     if (widget.blinkInterval != oldWidget.blinkInterval ||
         widget.enableBlink != oldWidget.enableBlink) {
+      // Recreate the ticker at the new interval / enabled state now.
+      // didChangeDependencies only fires on a dependency notification (a
+      // focus change), so deferring recreation to it would leave a
+      // focused field's cursor frozen in whatever phase it was disposed
+      // in — invisible if disposed mid-OFF-blink, or solid-and-never-
+      // blinking when enableBlink is switched on.
       _disposeBlinkTicker();
-      // Recreate next didChangeDependencies / build pass.
+      _blinkOn = true; // resume from a visible phase, not a stale OFF one
+      _syncBlinkToFocus();
     }
   }
 

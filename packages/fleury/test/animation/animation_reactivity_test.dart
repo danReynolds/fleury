@@ -115,6 +115,54 @@ void main() {
       expect(m.value, 10);
     });
 
+    testWidgets('reading value inside TickerMode(enabled: false) freezes the '
+        'animation — no rebuilds in a hidden subtree', (tester) {
+      final m = Animation(0.0);
+      tester.pumpWidget(TickerMode(enabled: false, child: _Bar(m, width: 10)));
+      expect(
+        tester.renderToString(size: const CellSize(10, 1)),
+        '..........\n',
+      );
+
+      // A loop() would rebuild ~30 Hz forever; muted, it must not
+      // advance a single frame.
+      m.loop(between: (0.0, 1.0), period: const Duration(milliseconds: 200));
+      tester.pump(const Duration(milliseconds: 500));
+      expect(
+        tester.renderToString(size: const CellSize(10, 1)),
+        '..........\n',
+        reason: 'muted subtree: the loop is frozen at its first value',
+      );
+    });
+
+    testWidgets('flipping TickerMode from disabled to enabled resumes reading '
+        'widgets', (tester) {
+      final m = Animation(0.0);
+      tester.pumpWidget(TickerMode(enabled: false, child: _Bar(m, width: 10)));
+      m.to(
+        1.0,
+        curve: Curves.linear,
+        duration: const Duration(milliseconds: 100),
+      );
+      tester.pump(const Duration(milliseconds: 100));
+      expect(
+        tester.renderToString(size: const CellSize(10, 1)),
+        '..........\n',
+        reason: 'frozen while muted',
+      );
+
+      // Un-mute by rebuilding the ancestor TickerMode; the inherited
+      // dependency established by reading value marks the reader dirty,
+      // which re-resolves the muted flag and lets the curve finish.
+      tester.pumpWidget(TickerMode(enabled: true, child: _Bar(m, width: 10)));
+      tester.pump(const Duration(milliseconds: 100));
+      expect(
+        tester.renderToString(size: const CellSize(10, 1)),
+        '##########\n',
+        reason: 'resumes and lands at the clock-relative target',
+      );
+    });
+
     testWidgets('disposed animation value reads stay renderable but do not '
         'reattach', (tester) {
       final m = Animation(7)..dispose();

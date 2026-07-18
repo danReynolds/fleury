@@ -169,6 +169,112 @@ void main() {
     );
   });
 
+  group('retarget from a settling-tick listener', () {
+    testWidgets('a listener that retargets on settle animates to the new '
+        'target instead of snapping', (tester) async {
+      final m = Animation(0.0);
+      _host(tester, m);
+
+      // A chaining listener that flips direction the instant the value
+      // reaches the top. Curves.linear lands exactly on 1.0 on the
+      // settling tick, so this fires precisely then.
+      var retargeted = false;
+      Future<void>? chained;
+      m.addListener(() {
+        if (!retargeted && m.value >= 1.0) {
+          retargeted = true;
+          chained = m.to(
+            0.0,
+            curve: Curves.linear,
+            duration: const Duration(milliseconds: 100),
+          );
+        }
+      });
+
+      m.to(
+        1.0,
+        curve: Curves.linear,
+        duration: const Duration(milliseconds: 100),
+      );
+      tester.pump(const Duration(milliseconds: 100)); // reach 1.0 → retarget
+
+      expect(retargeted, isTrue, reason: 'listener fired on the settling tick');
+      expect(
+        m.isMoving,
+        isTrue,
+        reason: 'the retarget must animate, not snap-and-stop',
+      );
+      expect(
+        m.value,
+        closeTo(1.0, 1e-9),
+        reason: 'still at the top; must ease back down, not teleport to 0',
+      );
+
+      // The freshly-issued future must not have completed instantly.
+      var chainedDone = false;
+      chained!.then((_) => chainedDone = true);
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        chainedDone,
+        isFalse,
+        reason: 'new future completes only on the real settle',
+      );
+
+      tester.pump(const Duration(milliseconds: 50));
+      expect(m.value, closeTo(0.5, 0.05), reason: 'easing back down');
+
+      tester.pump(const Duration(milliseconds: 100));
+      expect(m.value, closeTo(0.0, 1e-9));
+      expect(m.isMoving, isFalse);
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        chainedDone,
+        isTrue,
+        reason: 'completes when the retarget genuinely settles',
+      );
+    });
+
+    testWidgets('a loop() started from a settling-tick listener plays out', (
+      tester,
+    ) async {
+      final m = Animation(0.0);
+      _host(tester, m);
+
+      var started = false;
+      m.addListener(() {
+        if (!started && m.value >= 1.0) {
+          started = true;
+          m.loop(
+            between: (0.0, 1.0),
+            period: const Duration(milliseconds: 100),
+          );
+        }
+      });
+
+      m.to(
+        1.0,
+        curve: Curves.linear,
+        duration: const Duration(milliseconds: 100),
+      );
+      tester.pump(const Duration(milliseconds: 100)); // reach 1.0 → loop()
+
+      expect(started, isTrue);
+      // The loop restarts from its first value (0.0) and runs its first
+      // leg 0 -> 1. It must not be consumed by the stale settle branch,
+      // which re-arms the mirror with from/target swapped so the first
+      // leg runs backwards (1 -> 0). Sample off the midpoint (0.25 of
+      // the period) so the two directions are distinguishable: up-from-0
+      // reads ~0.25, the swapped-down-from-1 bug reads ~0.75.
+      expect(m.isMoving, isTrue, reason: 'loop keeps ticking');
+      tester.pump(const Duration(milliseconds: 25));
+      expect(
+        m.value,
+        closeTo(0.25, 0.1),
+        reason: 'looping up from 0 toward 1 (not snapped/swapped)',
+      );
+    });
+  });
+
   group('scheduler integration', () {
     testWidgets('a settled animation holds no active ticker', (tester) {
       final m = Animation(0.0);
