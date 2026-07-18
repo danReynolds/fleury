@@ -830,6 +830,14 @@ class RenderLineChart extends RenderObject {
       return ((1 - t) * (pxH - 1)).round();
     }
 
+    // Clips a data-space segment to the visible [xmin,xmax]×[ymin,ymax] rect,
+    // returning null when it falls entirely outside. Rasterizing the clipped
+    // span keeps a finite out-of-range point drawing up to the boundary
+    // instead of vanishing, and keeps the mapped pixels inside the buffer so
+    // the Bresenham walk can't spin on a far-off overshoot.
+    _ClippedSegment? clip(double x0, double y0, double x1, double y1) =>
+        _clipSegmentToRect(x0, y0, x1, y1, xmin, xmax, ymin, ymax);
+
     final baselinePy = pxH - 1; // y-min row in pixel space — area fills to here
 
     // Reference *lines* go under the data so the series stays on top —
@@ -912,6 +920,7 @@ class RenderLineChart extends RenderObject {
           braille,
           toPx,
           toPy,
+          clip,
           baselinePy,
           x0,
           y0,
@@ -979,6 +988,7 @@ class RenderLineChart extends RenderObject {
     BrailleBuffer braille,
     int Function(num) toPx,
     int Function(num) toPy,
+    _SegmentClip clip,
     int baselinePy,
     num x0n,
     num y0n,
@@ -999,6 +1009,7 @@ class RenderLineChart extends RenderObject {
         braille,
         toPx,
         toPy,
+        clip,
         baselinePy,
         x0n,
         y0n,
@@ -1020,6 +1031,7 @@ class RenderLineChart extends RenderObject {
       braille,
       toPx,
       toPy,
+      clip,
       baselinePy,
       x0n,
       y0n,
@@ -1032,6 +1044,7 @@ class RenderLineChart extends RenderObject {
       braille,
       toPx,
       toPy,
+      clip,
       baselinePy,
       xc,
       ty,
@@ -1046,6 +1059,7 @@ class RenderLineChart extends RenderObject {
     BrailleBuffer braille,
     int Function(num) toPx,
     int Function(num) toPy,
+    _SegmentClip clip,
     int baselinePy,
     num x0,
     num y0,
@@ -1054,10 +1068,21 @@ class RenderLineChart extends RenderObject {
     Color color,
     bool fillArea,
   ) {
-    final px0 = toPx(x0), py0 = toPy(y0);
-    final px1 = toPx(x1), py1 = toPy(y1);
-    // Skip segments touching a non-finite (NaN/Infinity) endpoint.
-    if (px0 < 0 || py0 < 0 || px1 < 0 || py1 < 0) return;
+    // A non-finite endpoint is the missing-data sentinel (NaN/Infinity); skip
+    // the segment so the line breaks into a gap, as documented.
+    final dx0 = x0.toDouble(), dy0 = y0.toDouble();
+    final dx1 = x1.toDouble(), dy1 = y1.toDouble();
+    if (!dx0.isFinite || !dy0.isFinite || !dx1.isFinite || !dy1.isFinite) {
+      return;
+    }
+    // Clip to the visible rect before mapping to pixels: a finite out-of-range
+    // endpoint is drawn up to the boundary (not dropped), and the pixels stay
+    // in-buffer so the Bresenham walk below stays bounded.
+    final clipped = clip(dx0, dy0, dx1, dy1);
+    if (clipped == null) return; // segment lies entirely outside the plot
+    final (cx0, cy0, cx1, cy1) = clipped;
+    final px0 = toPx(cx0), py0 = toPy(cy0);
+    final px1 = toPx(cx1), py1 = toPy(cy1);
     braille.drawLine(px0, py0, px1, py1, color);
 
     if (!fillArea) return;
@@ -1580,5 +1605,91 @@ class RenderLineChart extends RenderObject {
   ) {
     final clipped = text.length > width ? text.substring(0, width) : text;
     _writeAt(buffer, leftCol + width - clipped.length, row, clipped, style);
+  }
+}
+
+/// A segment clipped to the plot rect: (x0, y0, x1, y1) in data space.
+typedef _ClippedSegment = (double, double, double, double);
+
+/// Clips a data-space segment to the plot rect, returning null when the whole
+/// segment lies outside it.
+typedef _SegmentClip =
+    _ClippedSegment? Function(double x0, double y0, double x1, double y1);
+
+/// Cohen–Sutherland clip of the segment `(x0,y0)-(x1,y1)` to the axis-aligned
+/// rect `[xmin,xmax] × [ymin,ymax]`, all in data space. Returns the clipped
+/// endpoints, or null when the segment does not intersect the rect. Endpoints
+/// are assumed finite (the caller filters out NaN/Infinity first).
+_ClippedSegment? _clipSegmentToRect(
+  double x0,
+  double y0,
+  double x1,
+  double y1,
+  double xmin,
+  double xmax,
+  double ymin,
+  double ymax,
+) {
+  const inside = 0;
+  const left = 1;
+  const right = 2;
+  const below = 4;
+  const above = 8;
+
+  int codeFor(double x, double y) {
+    var code = inside;
+    if (x < xmin) {
+      code |= left;
+    } else if (x > xmax) {
+      code |= right;
+    }
+    if (y < ymin) {
+      code |= below;
+    } else if (y > ymax) {
+      code |= above;
+    }
+    return code;
+  }
+
+  var code0 = codeFor(x0, y0);
+  var code1 = codeFor(x1, y1);
+
+  while (true) {
+    if ((code0 | code1) == 0) {
+      // Both endpoints inside the rect.
+      return (x0, y0, x1, y1);
+    }
+    if ((code0 & code1) != 0) {
+      // Both endpoints share an outside half-plane — no intersection. (The
+      // trivial-reject also guarantees the divisors below are non-zero: a
+      // segment parallel to the edge it is being clipped against would share
+      // that edge's bit and be rejected here.)
+      return null;
+    }
+    final outCode = code0 != 0 ? code0 : code1;
+    double x;
+    double y;
+    if ((outCode & above) != 0) {
+      x = x0 + (x1 - x0) * (ymax - y0) / (y1 - y0);
+      y = ymax;
+    } else if ((outCode & below) != 0) {
+      x = x0 + (x1 - x0) * (ymin - y0) / (y1 - y0);
+      y = ymin;
+    } else if ((outCode & right) != 0) {
+      y = y0 + (y1 - y0) * (xmax - x0) / (x1 - x0);
+      x = xmax;
+    } else {
+      y = y0 + (y1 - y0) * (xmin - x0) / (x1 - x0);
+      x = xmin;
+    }
+    if (outCode == code0) {
+      x0 = x;
+      y0 = y;
+      code0 = codeFor(x0, y0);
+    } else {
+      x1 = x;
+      y1 = y;
+      code1 = codeFor(x1, y1);
+    }
   }
 }

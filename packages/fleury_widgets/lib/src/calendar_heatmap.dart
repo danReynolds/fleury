@@ -150,6 +150,12 @@ class CalendarHeatmap extends StatelessWidget {
 
 DateTime _midnight(DateTime d) => DateTime(d.year, d.month, d.day);
 
+/// The calendar date of [d] anchored at UTC midnight. The heatmap grid is a
+/// pure calendar-date lattice, so anchoring it in UTC makes day-stepping
+/// (`add(Duration(days:))`) and day-counting (`difference().inDays`) exact even
+/// across a local DST transition, where a civil day is 23h or 25h long.
+DateTime _utcDate(DateTime d) => DateTime.utc(d.year, d.month, d.day);
+
 Map<DateTime, num> _normalizeCalendarValues(Map<DateTime, num> values) {
   if (values.isEmpty) return const <DateTime, num>{};
   return {
@@ -197,8 +203,10 @@ String _dateLabel(DateTime date) {
 }
 
 int _calendarDayCount(DateTime start, DateTime end) {
-  if (!end.isAfter(start) && !end.isAtSameMomentAs(start)) return 0;
-  return end.difference(start).inDays + 1;
+  final s = _utcDate(start);
+  final e = _utcDate(end);
+  if (e.isBefore(s)) return 0;
+  return e.difference(s).inDays + 1;
 }
 
 int _calendarWeekCount(
@@ -208,10 +216,10 @@ int _calendarWeekCount(
 }) {
   final days = _calendarDayCount(start, end);
   if (days <= 0) return 0;
-  final firstAnchor = start.subtract(
-    Duration(days: _backToCalendarWeekStart(start, weekStartsOn)),
-  );
-  final daysFromAnchor = end.difference(firstAnchor).inDays;
+  final firstAnchor = _utcDate(
+    start,
+  ).subtract(Duration(days: _backToCalendarWeekStart(start, weekStartsOn)));
+  final daysFromAnchor = _utcDate(end).difference(firstAnchor).inDays;
   return (daysFromAnchor ~/ 7) + 1;
 }
 
@@ -434,24 +442,12 @@ class RenderCalendarHeatmap extends RenderObject {
 
   int get _monthLabelHeight => _showMonthLabels ? 1 : 0;
 
-  /// Days between [_start] and [_end] inclusive — drives the visible
-  /// week count.
-  int get _dayCount {
-    if (!_end.isAfter(_start) && !_end.isAtSameMomentAs(_start)) return 0;
-    return _end.difference(_start).inDays + 1;
-  }
-
   /// Number of week columns to render. Anchors the first week to the
   /// week-start day on or before [_start], so each column always
-  /// contains a well-formed 7-day window.
-  int get _weekCount {
-    if (_dayCount <= 0) return 0;
-    final firstAnchor = _start.subtract(
-      Duration(days: _backToWeekStart(_start)),
-    );
-    final daysFromAnchor = _end.difference(firstAnchor).inDays;
-    return (daysFromAnchor ~/ 7) + 1;
-  }
+  /// contains a well-formed 7-day window. Shares the DST-safe calendar-date
+  /// math with the semantics/stats path so layout and paint never disagree.
+  int get _weekCount =>
+      _calendarWeekCount(_start, _end, weekStartsOn: _weekStartsOn);
 
   @override
   CellSize performLayout(CellConstraints constraints) {
@@ -501,7 +497,13 @@ class RenderCalendarHeatmap extends RenderObject {
 
     final gridLeft = offset.col + _dayLabelWidth;
     final gridTop = offset.row + _monthLabelHeight;
-    final firstAnchor = _start.subtract(
+    // Anchor the day grid in UTC: a UTC day is always 24h, so stepping it with
+    // Duration arithmetic below lands on exactly one calendar date per cell,
+    // even across a local DST fall-back/spring-forward. Compare cells against
+    // the UTC-anchored range bounds for the same reason.
+    final startDate = _utcDate(_start);
+    final endDate = _utcDate(_end);
+    final firstAnchor = startDate.subtract(
       Duration(days: _backToWeekStart(_start)),
     );
 
@@ -529,8 +531,10 @@ class RenderCalendarHeatmap extends RenderObject {
       final weekStart = firstAnchor.add(Duration(days: w * 7));
       for (var d = 0; d < 7; d++) {
         final day = weekStart.add(Duration(days: d));
-        if (day.isBefore(_start) || day.isAfter(_end)) continue;
-        final raw = _values[day] ?? _values[_midnight(day)];
+        if (day.isBefore(startDate) || day.isAfter(endDate)) continue;
+        // Value keys are normalized to local midnight; map the UTC grid date
+        // back to the same civil date for the lookup.
+        final raw = _values[DateTime(day.year, day.month, day.day)];
         if (raw == null) continue; // no recorded data — leave empty
         // Clamp values outside the visible range to the nearest bucket
         // rather than dropping them (peer convention — GitHub clamps,
@@ -565,7 +569,7 @@ class RenderCalendarHeatmap extends RenderObject {
         for (var d = 0; d < 7; d++) {
           final day = weekStart.add(Duration(days: d));
           if (day.day != 1) continue;
-          if (day.isBefore(_start) || day.isAfter(_end)) continue;
+          if (day.isBefore(startDate) || day.isAfter(endDate)) continue;
           final text = _monthAbbrevs[day.month - 1];
           final cellLeft = gridLeft + w * _cellWidth;
           for (var i = 0; i < text.length; i++) {

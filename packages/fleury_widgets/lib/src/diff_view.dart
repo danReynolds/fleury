@@ -212,6 +212,12 @@ DiffDocument parseUnifiedDiff(String source, {int? maxLineLength = 1000}) {
   String? newPath;
   int? oldCursor;
   int? newCursor;
+  // Unconsumed old/new-side lines promised by the current hunk's `@@` header.
+  // While either is positive we are inside a hunk body, where a leading
+  // '-'/'+' is always a removed/added content line (its remaining text is
+  // arbitrary) — never a '---'/'+++' file header.
+  var remainingOld = 0;
+  var remainingNew = 0;
 
   void addRow({
     required DiffLineKind kind,
@@ -243,24 +249,31 @@ DiffDocument parseUnifiedDiff(String source, {int? maxLineLength = 1000}) {
   if (rawLines.isNotEmpty && rawLines.last.isEmpty) rawLines.removeLast();
   for (final raw in rawLines) {
     final line = raw.endsWith('\r') ? raw.substring(0, raw.length - 1) : raw;
+    final inHunkBody = remainingOld > 0 || remainingNew > 0;
+    // `diff --git` and `@@` never carry a +/-/space prefix, so a bare one at
+    // column 0 is unambiguous even mid-hunk — a new file/hunk resets the body.
     if (line.startsWith('diff --git ')) {
       fileIndex += 1;
       oldPath = null;
       newPath = null;
       oldCursor = null;
       newCursor = null;
+      remainingOld = 0;
+      remainingNew = 0;
       currentHunkIndex = null;
       addRow(kind: DiffLineKind.fileHeader, text: line);
       continue;
     }
-    if (line.startsWith('--- ')) {
+    // '---'/'+++' are file headers only outside a hunk body; inside one an
+    // identical prefix is a deleted/added line whose content starts with -/+.
+    if (!inHunkBody && line.startsWith('--- ')) {
       oldPath = _normalizeDiffPath(line.substring(4));
       if (fileIndex < 0) fileIndex = 0;
       currentHunkIndex = null;
       addRow(kind: DiffLineKind.fileHeader, text: line);
       continue;
     }
-    if (line.startsWith('+++ ')) {
+    if (!inHunkBody && line.startsWith('+++ ')) {
       newPath = _normalizeDiffPath(line.substring(4));
       if (fileIndex < 0) fileIndex = 0;
       currentHunkIndex = null;
@@ -272,30 +285,38 @@ DiffDocument parseUnifiedDiff(String source, {int? maxLineLength = 1000}) {
       hunkIndex += 1;
       oldCursor = int.parse(hunk.group(1)!);
       newCursor = int.parse(hunk.group(3)!);
+      // Groups 2/4 are the old/new line counts (absent ⇒ 1); they bound the
+      // hunk body so the parser knows when '---'/'+++' become headers again.
+      remainingOld = hunk.group(2) != null ? int.parse(hunk.group(2)!) : 1;
+      remainingNew = hunk.group(4) != null ? int.parse(hunk.group(4)!) : 1;
       if (fileIndex < 0) fileIndex = 0;
       currentHunkIndex = hunkIndex;
       addRow(kind: DiffLineKind.hunkHeader, text: line);
       continue;
     }
+    // '\ No newline at end of file' annotates the previous line and consumes
+    // no old/new line, so it is handled regardless of the remaining counts.
     if (line.startsWith(r'\ ')) {
       addRow(kind: DiffLineKind.marker, text: line);
       continue;
     }
-    if (line.startsWith('+') && !line.startsWith('+++')) {
+    if (inHunkBody && line.startsWith('+')) {
       final currentNew = newCursor;
       addRow(kind: DiffLineKind.addition, text: line, newLine: currentNew);
       if (newCursor != null) newCursor += 1;
       additionCount += 1;
+      if (remainingNew > 0) remainingNew -= 1;
       continue;
     }
-    if (line.startsWith('-') && !line.startsWith('---')) {
+    if (inHunkBody && line.startsWith('-')) {
       final currentOld = oldCursor;
       addRow(kind: DiffLineKind.deletion, text: line, oldLine: currentOld);
       if (oldCursor != null) oldCursor += 1;
       deletionCount += 1;
+      if (remainingOld > 0) remainingOld -= 1;
       continue;
     }
-    if (line.startsWith(' ')) {
+    if (inHunkBody && line.startsWith(' ')) {
       final currentOld = oldCursor;
       final currentNew = newCursor;
       addRow(
@@ -306,6 +327,8 @@ DiffDocument parseUnifiedDiff(String source, {int? maxLineLength = 1000}) {
       );
       if (oldCursor != null) oldCursor += 1;
       if (newCursor != null) newCursor += 1;
+      if (remainingOld > 0) remainingOld -= 1;
+      if (remainingNew > 0) remainingNew -= 1;
       continue;
     }
     currentHunkIndex = null;
