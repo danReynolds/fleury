@@ -369,8 +369,14 @@ final class FleuryAppBridge {
     if (!isRunning) return;
     try {
       _transport.send(frame);
-    } on RemoteProtocolException {
-      rethrow;
+    } on RemoteProtocolException catch (e) {
+      // A recoverable protocol error (an over-cap frame that couldn't be
+      // encoded) leaves the connection intact — rethrow so the caller surfaces
+      // it as a tool error, not app death. Key on the flag, not the type: an
+      // unrecoverable protocol error means the peer must reconnect, so it is a
+      // genuine death like any transport failure below.
+      if (e.recoverable) rethrow;
+      _markExited();
     } catch (_) {
       _markExited();
     }
