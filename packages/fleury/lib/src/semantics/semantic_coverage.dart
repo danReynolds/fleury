@@ -209,7 +209,12 @@ _CoverageMap _coveredCells(
   for (final node in tree.nodes) {
     final bounds = node.bounds;
     if (bounds == null) continue;
-    if (!_providesReadableCoverage(node)) continue;
+    // An exclusion-shadow node (an excluding ExcludeSemantics) marks its region
+    // covered WITHOUT exposing text: the subtree was intentionally hidden from
+    // AT/agents, so its painted cells must not be re-minted as fallback nodes.
+    if (!_isSemanticExclusion(node) && !_providesReadableCoverage(node)) {
+      continue;
+    }
     final left = bounds.left.clamp(0, size.cols);
     final right = bounds.right.clamp(0, size.cols);
     final top = bounds.top.clamp(0, size.rows);
@@ -251,6 +256,9 @@ final class _CoverageMap {
 
   bool get isFullyCovered => coveredCellCount >= totalCellCount;
 }
+
+bool _isSemanticExclusion(SemanticNode node) =>
+    node.state[semanticExcludedStateKey] == true;
 
 bool _providesReadableCoverage(SemanticNode node) {
   return switch (node.role) {

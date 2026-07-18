@@ -422,6 +422,87 @@ void main() {
       );
     });
 
+    test(
+      'a supervised warm standby waits unbounded and pairs on a late INIT',
+      () async {
+        // A serve `--spawn` warm standby connects, then sits idle until a
+        // browser attaches — which can be well past [initTimeout]. The
+        // supervising host reaps orphans, so the leak-guard fuse must NOT
+        // apply: the standby waits however long the attach takes, then pairs
+        // on the pumped INIT. Regression: it self-destructed at the deadline
+        // and every reconnect paid full cold-start cost.
+        final saved = RemoteTerminalDriver.initTimeout;
+        // Zero so the fuse, if it applied, would fire on the next event-loop
+        // turn — deterministic, no wall-clock wait.
+        RemoteTerminalDriver.initTimeout = Duration.zero;
+        addTearDown(() => RemoteTerminalDriver.initTimeout = saved);
+
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(
+          transport,
+          superviseHandshakeWait: true,
+        );
+
+        Object? error;
+        var entered = false;
+        final entering = driver
+            .enter(TerminalMode.interactive)
+            .then(
+              (_) => entered = true,
+              onError: (Object e) => error = e,
+            );
+
+        // Let the would-be fuse fire: an unsupervised driver throws
+        // 'sent no INIT' by now.
+        await pumpEventQueue();
+        expect(
+          error,
+          isNull,
+          reason: 'a supervised standby must not self-destruct while idle',
+        );
+        expect(entered, isFalse);
+        expect(driver.isActive, isFalse);
+
+        // The browser finally attaches; serve pumps its INIT through.
+        transport.emit(
+          const InitFrame(
+            size: CellSize(120, 40),
+            colorMode: ColorMode.truecolor,
+            glyphTier: GlyphTier.ascii,
+            imageProtocol: ImageProtocol.kitty,
+            tmuxPassthrough: false,
+            protocolVersion: 2,
+          ),
+        );
+        await entering;
+        expect(entered, isTrue);
+        expect(error, isNull);
+        expect(driver.isActive, isTrue);
+        expect(driver.size, const CellSize(120, 40));
+
+        await driver.restore();
+      },
+    );
+
+    test(
+      'a supervised standby still fails enter() if the socket drops pre-INIT',
+      () async {
+        // Unbounded wait is not "wait forever no matter what": a broken
+        // transport before INIT must still fail enter() so the app exits
+        // cleanly rather than hanging on a dead socket.
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(
+          transport,
+          superviseHandshakeWait: true,
+        );
+
+        final entering = driver.enter(TerminalMode.interactive);
+        await transport.disconnect();
+
+        await expectLater(entering, throwsA(isA<StateError>()));
+      },
+    );
+
     test('restore() sends BYE and tears down', () async {
       final transport = _FakeTransport();
       final driver = RemoteTerminalDriver(transport);

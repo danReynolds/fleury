@@ -1416,6 +1416,12 @@ final class SemanticsElement extends ComponentElement
   }
 }
 
+/// State-marker key on the invisible "exclusion shadow" node an excluding
+/// [ExcludeSemantics] contributes. The web text-coverage fallback reads it to
+/// treat the excluded subtree's painted region as covered — so the content the
+/// app hid from AT/agents cannot leak back as synthetic text nodes.
+const String semanticExcludedStateKey = 'semanticExcluded';
+
 /// Drops [child]'s whole subtree from the semantic tree (while still rendering
 /// it) when [excluding] is true.
 ///
@@ -1446,6 +1452,11 @@ final class ExcludeSemantics extends ProxyWidget {
 final class _ExcludeSemanticsElement extends ComponentElement
     implements SemanticChildrenProvider {
   _ExcludeSemanticsElement(ExcludeSemantics super.widget);
+
+  /// Painted bounds of the excluded subtree, captured via [_SemanticBounds].
+  /// The collection walk contributes these as an exclusion-shadow node so the
+  /// web coverage fallback suppresses text over the hidden region.
+  CellRect? _bounds;
 
   @override
   ExcludeSemantics get widget => super.widget as ExcludeSemantics;
@@ -1486,7 +1497,15 @@ final class _ExcludeSemanticsElement extends ComponentElement
   }
 
   @override
-  Widget buildChild() => widget.child;
+  Widget buildChild() {
+    // Observe the excluded subtree's painted bounds (like [SemanticsElement])
+    // so the collection walk can contribute an exclusion-shadow node. No dirty
+    // signal on change: a repaint of the excluded content already lands in the
+    // coverage dirty-rows, forcing a fresh full walk that re-reads [_bounds].
+    return _SemanticBounds(onPaintBounds: _updateBounds, child: widget.child);
+  }
+
+  void _updateBounds(CellRect? bounds) => _bounds = bounds;
 
   @override
   void visitSemanticChildren(void Function(Element child) visitor) {
@@ -1635,6 +1654,27 @@ void _collectInto(
         return;
       }
     }
+  }
+  if (element is _ExcludeSemanticsElement && element.widget.excluding) {
+    // The excluded subtree contributes no readable semantics, but its painted
+    // cells must NOT leak back through the web text-coverage fallback. Emit an
+    // invisible, content-free shadow node carrying the subtree's painted
+    // bounds; coverage treats that region as covered without exposing any text.
+    // Bounds are null only before the first paint (nothing on screen to leak).
+    final bounds = element._bounds;
+    if (bounds != null) {
+      output.add(
+        SemanticNode(
+          id: SemanticNodeId(
+            '__fleury_semantics_excluded_${bounds.top}_${bounds.left}',
+          ),
+          role: SemanticRole.region,
+          bounds: bounds,
+          state: const SemanticState({semanticExcludedStateKey: true}),
+        ),
+      );
+    }
+    return;
   }
   if (element is SemanticChildrenProvider) {
     if (element is SemanticContributor) {
