@@ -4,10 +4,13 @@ import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 
 // The DST regression only manifests in a zone that actually observes the
-// autumn fall-back / spring-forward transitions (a 25h / 23h civil day). Run
-// these under a US-DST zone — CI sets `TZ=America/New_York`. In a fixed-offset
-// zone (e.g. UTC) the buggy and fixed date math agree, so the checks would be
-// vacuous; skip with a clear reason there instead of asserting nothing.
+// autumn fall-back / spring-forward transitions (a 25h / 23h civil day). The
+// dev tool pins `TZ=America/New_York` for the fleury_widgets test run (see
+// `_run(... workingDirectory: widgets, environment: {'TZ': ...})` in
+// tool/fleury_dev.dart), so `dart tool/fleury_dev.dart check` runs these
+// locally and in CI. In a fixed-offset zone (e.g. a bare `dart test` under
+// UTC) the buggy and fixed date math agree, so the checks would be vacuous;
+// skip with a clear reason there instead of asserting nothing.
 bool _hasFallBack2026() =>
     DateTime(2026, 11, 2).difference(DateTime(2026, 11, 1)).inHours == 25;
 bool _hasSpringForward2026() =>

@@ -412,6 +412,12 @@ class _Runner {
             ]
           : ['test'],
       workingDirectory: widgets,
+      // CalendarHeatmap's DST regression tests can only reproduce the bug in a
+      // DST-observing zone (Dart's DateTime models local+UTC only), so they
+      // self-skip under a fixed-offset zone. CI runners default to UTC — pin a
+      // DST zone here so those guards actually execute. Scoped to widgets so no
+      // other package's tests inherit a non-UTC clock.
+      environment: const {'TZ': 'America/New_York'},
     );
     await _run('dart', ['test'], workingDirectory: git);
     await _run('dart', [
