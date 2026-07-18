@@ -177,6 +177,13 @@ class LogRegionController extends ChangeNotifier {
   void jumpToIndex(int index) {
     _checkNotDisposed();
     followTail = false;
+    // Move the selection onto the target too, not just the scroll anchor. The
+    // pending jump is consumed by a single layout; on the next relayout (every
+    // streamed append re-lays the list) the selection-visibility pass would
+    // otherwise re-anchor the viewport back onto the old selection, silently
+    // reverting the jump. Anchoring the selection here keeps the target in
+    // view across relayouts. Writing a non-tail index keeps follow disengaged.
+    _list.selectedIndex = index;
     _list.jumpToIndex(index);
   }
 

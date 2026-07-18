@@ -199,5 +199,67 @@ void main() {
       expect(log.state['selectedIndex'], 1);
       expect(log.state['selectedSource'], 'stderr');
     });
+
+    testWidgets(
+      'a scrollback trim keeps a scrolled-up selection on the same logical '
+      'line instead of shifting it onto different content',
+      (tester) {
+        final buffer = LogBuffer(capacity: 4)
+          ..add(const LogLine('L0', LogSource.stdout))
+          ..add(const LogLine('L1', LogSource.stdout))
+          ..add(const LogLine('L2', LogSource.stdout))
+          ..add(const LogLine('L3', LogSource.stdout));
+        // A reader scrolled up and parked their selection on 'L1'.
+        final controller = LogRegionController(
+          selectedIndex: 1,
+          followTail: false,
+        );
+
+        tester.pumpWidget(
+          SizedBox(
+            width: 60,
+            height: 6,
+            child: TerminalOutputRegion(
+              buffer: buffer,
+              controller: controller,
+            ),
+          ),
+        );
+        tester.render(size: const CellSize(60, 6));
+        expect(
+          tester
+              .semantics()
+              .single(role: SemanticRole.listItem, selected: true)
+              .label,
+          'L1',
+        );
+
+        // At capacity, one more captured line trims the head ('L0') while the
+        // length stays constant, so no count-change/clamp fires.
+        buffer.add(const LogLine('L4', LogSource.stdout));
+        tester.pump();
+        tester.render(size: const CellSize(60, 6));
+
+        // The selection must still describe the same logical line ('L1',
+        // re-anchored down one row), not silently become 'L2'.
+        expect(
+          tester
+              .semantics()
+              .single(role: SemanticRole.listItem, selected: true)
+              .label,
+          'L1',
+        );
+      },
+      // The root-cause fix needs a stable logical id that survives a head
+      // trim. LogBuffer (packages/fleury/lib/src/runtime/output_capture.dart)
+      // exposes no monotonic base/total-added, and its LogLine carries no
+      // sequence, so buildTerminalOutputLogEntries can only key on the list
+      // index — which is exactly what shifts under a trim. Re-anchoring in the
+      // widget alone (delta-tracking or LogLine-instance keys) is a band-aid
+      // that misses the null-controller path and const-canonicalized dup
+      // lines. Unskip once LogBuffer carries a monotonic offset and the id is
+      // base+index. See audit finding terminal_output_region.dart:11.
+      skip: 'Blocked on LogBuffer monotonic base offset (core, out of scope).',
+    );
   });
 }

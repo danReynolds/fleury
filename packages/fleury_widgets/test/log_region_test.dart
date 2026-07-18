@@ -568,4 +568,51 @@ void main() {
       2,
     );
   });
+
+  testWidgets(
+    'jumpToIndex survives a later append instead of snapping back to the '
+    'tail selection',
+    (tester) {
+      final controller = LogRegionController(followTail: true);
+      List<LogEntry> build(int count) => [
+        for (var i = 0; i < count; i++)
+          LogEntry(id: 'e$i', message: 'line $i'),
+      ];
+
+      tester.pumpWidget(
+        LogRegion(controller: controller, entries: build(8)),
+      );
+      tester.render(size: const CellSize(40, 3));
+      expect(controller.selectedIndex, 7);
+      expect(controller.visibleRange?.first, 5);
+
+      // Jump to an earlier entry to read history.
+      controller.jumpToIndex(2);
+      tester.render(size: const CellSize(40, 3));
+      expect(controller.followTail, isFalse);
+      expect(
+        controller.selectedIndex,
+        2,
+        reason: 'the jump must move the selection to the target so a later '
+            'relayout keeps it in view',
+      );
+      expect(controller.visibleRange?.first, 2);
+
+      // A streamed entry arrives; the list relayouts.
+      tester.pumpWidget(
+        LogRegion(controller: controller, entries: build(9)),
+      );
+      tester.render(size: const CellSize(40, 3));
+
+      // The viewport must stay on the jumped-to region, not snap back to the
+      // stale tail selection.
+      expect(controller.followTail, isFalse);
+      expect(controller.selectedIndex, 2);
+      expect(
+        controller.visibleRange?.first,
+        2,
+        reason: 'the append must not revert the jump to the tail',
+      );
+    },
+  );
 }

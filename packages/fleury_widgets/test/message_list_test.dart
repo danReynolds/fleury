@@ -493,6 +493,101 @@ void main() {
     expect(list.state.selectedMessageId, 'm3');
   });
 
+  testWidgets(
+    'a streamed append does not re-engage followTail after the app '
+    'disengaged it',
+    (tester) {
+      final controller = MessageListController(followTail: true);
+      List<MessageEntry> build(int count) => [
+        for (var i = 0; i < count; i++)
+          MessageEntry(id: 'm$i', role: MessageRole.log, text: 'line $i'),
+      ];
+
+      tester.pumpWidget(
+        MessageList(controller: controller, messages: build(6)),
+      );
+      tester.render(size: const CellSize(40, 3));
+
+      // Following the tail: selection on the last message, tail in view.
+      expect(controller.followTail, isTrue);
+      expect(controller.selectedIndex, 5);
+      expect(controller.visibleRange?.last, 5);
+
+      // The app pauses auto-scroll to read history (documented as
+      // "freezes in place").
+      controller.followTail = false;
+      tester.render(size: const CellSize(40, 3));
+      expect(controller.selectedIndex, 5);
+      expect(controller.visibleRange?.last, 5);
+
+      // A streamed message arrives while the reader is parked.
+      tester.pumpWidget(
+        MessageList(controller: controller, messages: build(7)),
+      );
+      tester.render(size: const CellSize(40, 3));
+
+      // Follow must stay disengaged, the selection must stay on the message
+      // the reader left it on (id m5 == index 5), and the viewport must not
+      // yank down to the new tail (index 6).
+      expect(
+        controller.followTail,
+        isFalse,
+        reason: 'a streamed append must not silently re-engage followTail',
+      );
+      expect(controller.selectedIndex, 5);
+      expect(
+        controller.visibleRange?.last,
+        5,
+        reason: 'the viewport must not yank to the new tail (index 6)',
+      );
+    },
+  );
+
+  testWidgets(
+    'jumpToIndex survives a later append instead of snapping back to the '
+    'tail selection',
+    (tester) {
+      final controller = MessageListController(followTail: true);
+      List<MessageEntry> build(int count) => [
+        for (var i = 0; i < count; i++)
+          MessageEntry(id: 'm$i', role: MessageRole.log, text: 'line $i'),
+      ];
+
+      tester.pumpWidget(
+        MessageList(controller: controller, messages: build(8)),
+      );
+      tester.render(size: const CellSize(40, 3));
+      expect(controller.selectedIndex, 7);
+      expect(controller.visibleRange?.first, 5);
+
+      // Jump to an earlier message to read history mid-stream.
+      controller.jumpToIndex(2);
+      tester.render(size: const CellSize(40, 3));
+      expect(controller.followTail, isFalse);
+      expect(
+        controller.selectedIndex,
+        2,
+        reason: 'the jump must move the selection to the target',
+      );
+      expect(controller.visibleRange?.first, 2);
+
+      // A streamed message arrives; the list relayouts.
+      tester.pumpWidget(
+        MessageList(controller: controller, messages: build(9)),
+      );
+      tester.render(size: const CellSize(40, 3));
+
+      // The viewport stays on the jumped-to region and follow stays off.
+      expect(controller.followTail, isFalse);
+      expect(controller.selectedIndex, 2);
+      expect(
+        controller.visibleRange?.first,
+        2,
+        reason: 'the append must not revert the jump to the tail',
+      );
+    },
+  );
+
   group('copy/export', () {
     testWidgets('Ctrl+C copies the selected message', (tester) async {
       final controller = MessageListController(
