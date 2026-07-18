@@ -190,6 +190,73 @@ void main() {
       expect(controller.text, '');
     });
 
+    testWidgets(
+      'killing in an obscured field does not leak plaintext into the shared '
+      'kill ring, so Ctrl+Y in a visible field cannot recover the secret',
+      (tester) {
+        // The kill ring is a process-wide buffer shared across every field. A
+        // kill in an obscured (password) field must therefore never store the
+        // raw secret, or a later yank in any visible field would surface it —
+        // the same confidentiality contract the copy/cut path already honors
+        // by redacting obscured content.
+        TextEditingModel.killRing = '';
+        addTearDown(() => TextEditingModel.killRing = '');
+
+        final secretNode = FocusNode(debugLabel: 'secret');
+        addTearDown(secretNode.dispose);
+        final visibleNode = FocusNode(debugLabel: 'visible');
+        addTearDown(visibleNode.dispose);
+
+        final secret = TextEditingController(text: 'hunter2')..caretOffset = 7;
+        final visible = TextEditingController();
+
+        tester.pumpWidget(
+          Column(
+            children: [
+              TextInput(
+                controller: secret,
+                focusNode: secretNode,
+                autofocus: true,
+                obscureText: true,
+                keymap: TextEditingKeymap.emacsSingleLine,
+              ),
+              TextInput(
+                controller: visible,
+                focusNode: visibleNode,
+                keymap: TextEditingKeymap.emacsSingleLine,
+              ),
+            ],
+          ),
+        );
+        tester.render(size: const CellSize(20, 2));
+
+        // Ctrl+U kills the whole secret from the obscured field. The kill still
+        // edits the field (the text is removed)...
+        tester.sendKey(_ctrlChar('u'));
+        expect(secret.text, isEmpty, reason: 'kill still removes the text');
+        // ...but the plaintext must not have entered the shared kill ring.
+        expect(
+          TextEditingModel.killRing,
+          isNot(contains('hunter2')),
+          reason: 'obscured plaintext must never enter the shared kill ring',
+        );
+
+        // Move focus to a normal field and yank.
+        visibleNode.requestFocus();
+        tester.pump();
+        expect(visibleNode.hasFocus, isTrue);
+        tester.sendKey(_ctrlChar('y'));
+
+        expect(
+          visible.text,
+          isNot(contains('hunter2')),
+          reason:
+              'a kill in an obscured field must not be yankable as plaintext '
+              'into a visible field',
+        );
+      },
+    );
+
     testWidgets('Ctrl+arrows move by word through the default keymap', (
       tester,
     ) {

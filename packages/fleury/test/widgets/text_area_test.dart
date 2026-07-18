@@ -809,6 +809,36 @@ void main() {
       expect(tester.clipboard.readInProcess(), isNull);
       expect(ancestorCopies, 0);
     });
+
+    testWidgets('redacted policy kill does not capture into the kill ring', (
+      tester,
+    ) {
+      // The kill ring is process-wide and yankable from any field, so a kill in
+      // a redacted field must not store its raw content there. Seed a prior
+      // ordinary kill to prove the fix skips capture (leaving the entry intact)
+      // rather than overwriting it with a redacted placeholder.
+      TextEditingModel.killRing = 'prior';
+      addTearDown(() => TextEditingModel.killRing = '');
+
+      final ctl = TextEditingController(text: 'secretword')..caretOffset = 10;
+      tester.pumpWidget(
+        TextArea(
+          controller: ctl,
+          autofocus: true,
+          clipboardPolicy: TextClipboardPolicy.redacted,
+          keymap: TextEditingKeymap.emacsMultiline,
+        ),
+      );
+      tester.render(size: const CellSize(12, 2));
+
+      tester.sendKey(_ctrlChar('w')); // kill the word before the caret
+      expect(ctl.text, isEmpty, reason: 'kill still removes the text');
+      expect(
+        TextEditingModel.killRing,
+        'prior',
+        reason: 'redacted content must not enter the shared kill ring',
+      );
+    });
   });
 
   group('placeholder', () {
