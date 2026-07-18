@@ -157,6 +157,20 @@ String? _dateError(Object? value, Map<String, Object?> schema) {
   if (!_isoDate.hasMatch(text)) return 'expected a date in YYYY-MM-DD form';
   final parsed = DateTime.tryParse(text);
   if (parsed == null) return 'expected a date (ISO YYYY-MM-DD)';
+  // DateTime.tryParse NORMALIZES an out-of-range calendar date rather than
+  // failing (2026-02-31 → 2026-03-03, month 13 → next January), so a
+  // regex-shaped but impossible date would otherwise validate in-domain and the
+  // widget would silently apply a DIFFERENT day. Reject anything that doesn't
+  // round-trip to the exact components the agent sent — the regex fixes their
+  // positions, so this reads them back off `text` directly.
+  final year = int.parse(text.substring(0, 4));
+  final month = int.parse(text.substring(5, 7));
+  final dayOfMonth = int.parse(text.substring(8, 10));
+  if (parsed.year != year ||
+      parsed.month != month ||
+      parsed.day != dayOfMonth) {
+    return 'not a real calendar date (e.g. 2026-02-31 does not exist)';
+  }
   final day = DateTime(parsed.year, parsed.month, parsed.day);
   final min = schema['minimum'];
   final max = schema['maximum'];

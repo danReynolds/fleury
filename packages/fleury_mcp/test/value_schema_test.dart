@@ -190,6 +190,45 @@ void main() {
       expect(validateValueForSchema(s, 'not a date'), contains('date'));
     });
 
+    test('date: impossible calendar dates are rejected, not normalized', () {
+      // DateTime.tryParse rolls an out-of-range date over (2026-02-31 → Mar 3,
+      // month 13 → next January) instead of failing, so a regex-shaped but
+      // impossible date must be rejected here — otherwise the widget silently
+      // applies a DIFFERENT day than the agent asked for.
+      const s = {'type': 'string', 'format': 'date'};
+      expect(
+        validateValueForSchema(s, '2026-02-31'),
+        contains('calendar'),
+        reason: 'Feb 31 does not exist; it must not pass as 2026-03-03',
+      );
+      expect(
+        validateValueForSchema(s, '2026-13-01'),
+        contains('calendar'),
+        reason: 'month 13 does not exist; it must not pass as 2027-01-01',
+      );
+      // A non-leap Feb 29 is impossible; the same day in a leap year is fine.
+      expect(validateValueForSchema(s, '2026-02-29'), contains('calendar'));
+      expect(validateValueForSchema(s, '2024-02-29'), isNull);
+      // Month/day 00 roll backwards a month — also rejected.
+      expect(validateValueForSchema(s, '2026-00-15'), contains('calendar'));
+      expect(validateValueForSchema(s, '2026-06-00'), contains('calendar'));
+      // A real date still validates.
+      expect(validateValueForSchema(s, '2026-06-15'), isNull);
+    });
+
+    test('date: an impossible date is rejected even inside an allowed range', () {
+      // The round-trip check runs before the min/max comparison, so Feb 31 is
+      // rejected as impossible rather than silently normalized to Mar 3 and then
+      // range-checked against the wrong day.
+      const s = {
+        'type': 'string',
+        'format': 'date',
+        'minimum': '2026-01-01',
+        'maximum': '2026-12-31',
+      };
+      expect(validateValueForSchema(s, '2026-02-31'), contains('calendar'));
+    });
+
     test('enum: matches label or value, case-insensitive', () {
       final s = {
         'type': 'enum',
