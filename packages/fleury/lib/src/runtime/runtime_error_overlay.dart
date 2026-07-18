@@ -66,6 +66,10 @@ class RuntimeErrorReporter with ChangeNotifier {
   /// treats this as fatal rather than looping forever.
   bool get isStorming => _window.length >= 24;
 
+  /// True once [dispose] has run: [report] is a silent no-op from here on, so
+  /// the zone handler must fall back to stderr for anything arriving now.
+  bool get isDisposed => _disposed;
+
   void report(Object error, StackTrace stackTrace) {
     // The zone's uncaught-error handler can call report() AFTER teardown has
     // disposed this reporter. Without this guard it would arm a fresh,
