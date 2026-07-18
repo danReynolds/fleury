@@ -183,6 +183,11 @@ final class DomGridSurface implements FrameSurface {
 
   String _rootStyle() {
     final base = StringBuffer(
+      // overflow:hidden clips a preserved row to the current grid width during
+      // a resize: when cols shrink, the kept rows briefly hold their old wider
+      // content until the server's full repaint lands (~one RTT), and without
+      // this they would spill past the right edge instead of being clipped.
+      'overflow:hidden;'
       'user-select:none;white-space:pre;tab-size:1;'
       'font-kerning:none;font-variant-ligatures:none;'
       'font-feature-settings:"liga" 0,"clig" 0',
