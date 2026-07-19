@@ -1533,7 +1533,7 @@ void main() {
       emptyMark: ' ',
     );
     expect(output, contains('Fleury Launch Notes'));
-    expect(output, contains('docs (https://fleury.dev)'));
+    expect(output, contains('(https://danreynolds.github.io/fleury/).'));
     expect(output, contains('• Semantic graph drives tests'));
     expect(output, contains('│ unsafe safe'));
     expect(output, isNot(contains('token')));
@@ -1564,7 +1564,7 @@ void main() {
       role: SemanticRole.link,
       label: 'docs',
     );
-    expect(link.value, 'https://fleury.dev');
+    expect(link.value, 'https://danreynolds.github.io/fleury/');
     expect(link.state['markdownBlockIndex'], 2);
     expect(link.state.capabilityResolution, 'disabledByPolicy');
     expect(link.state.activeFallback, 'visible URL');

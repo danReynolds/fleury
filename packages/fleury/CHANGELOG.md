@@ -18,3 +18,6 @@ elements, state, layout) and terminal-native internals.
   damage, semantics, and remote-render wire contracts a platform host builds on.
 - **Testing** — the companion `fleury_test` package drives apps and asserts on
   the semantic tree without adding test libraries to production dependencies.
+- **Developer CLI** — `fleury create` generates a tested application with a
+  terminal-safe VS Code F5 setup, while `fleury shell` provides a guarded
+  real-terminal fallback for debuggers that expose only a non-TTY output pane.

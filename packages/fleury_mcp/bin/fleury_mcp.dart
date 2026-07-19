@@ -5,7 +5,7 @@
 // private socket; stdout stays a clean JSON-RPC channel (app logs and
 // diagnostics go to stderr).
 //
-//   fleury_mcp -- dart run my_app.dart
+//   fleury_mcp -- dart run bin/run_app.dart
 
 import 'dart:async';
 import 'dart:io';
@@ -58,7 +58,7 @@ Future<int> _run(List<String> args) async {
   if (command == null || command.isEmpty) {
     stderr.writeln(
       'fleury_mcp requires a command to run the app, e.g. '
-      '`fleury_mcp -- dart run my_app.dart`.',
+      '`fleury_mcp -- dart run bin/run_app.dart`.',
     );
     return 2;
   }
@@ -69,7 +69,7 @@ Future<int> _run(List<String> args) async {
     stderr.writeln(
       'fleury_mcp: launching via `dart run` JIT-compiles the app on startup '
       '(seconds). For a faster, repeatable launch, AOT-compile once '
-      '(`dart compile exe my_app.dart -o my_app`) and run `fleury_mcp -- '
+      '(`dart compile exe bin/run_app.dart -o my_app`) and run `fleury_mcp -- '
       './my_app`.',
     );
   }
@@ -173,5 +173,5 @@ void _printUsage() {
     'through its semantic tree, so an MCP host can read and operate it.',
   );
   stderr.writeln('');
-  stderr.writeln('Example: fleury_mcp -- dart run my_app.dart');
+  stderr.writeln('Example: fleury_mcp -- dart run bin/run_app.dart');
 }

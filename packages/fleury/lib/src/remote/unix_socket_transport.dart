@@ -128,7 +128,8 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
     if (!_pumpRunning) {
       _pumpRunning = true;
       // Kept so a graceful [close] can await the in-flight flush. _sendPump
-      // never throws (it catches flush errors), so this future never rejects.
+      // never throws (it catches disconnect errors), so this future never
+      // rejects.
       _pumpFuture = _sendPump();
     }
   }
@@ -139,17 +140,17 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
         // Hand the whole queue over, then flush. Sends that arrive while
         // the flush pends land in the queue and drive the next lap.
         var handed = 0;
-        for (final chunk in _sendQueue) {
-          _socket.add(chunk);
-          handed += chunk.length;
-        }
-        _sendQueue.clear();
         try {
+          for (final chunk in _sendQueue) {
+            _socket.add(chunk);
+            handed += chunk.length;
+          }
+          _sendQueue.clear();
           await _socket.flush();
         } catch (_) {
-          // Peer vanished mid-flush; the incoming stream's error/done
-          // path drives the session teardown. Stop counting so gated
-          // hosts wake instead of waiting on a dead pipe.
+          // Peer vanished before add() or during flush(); the incoming
+          // stream's error/done path drives session teardown. Stop counting
+          // so gated hosts wake instead of waiting on a dead pipe.
           _sendQueue.clear();
           _pendingSendBytes = 0;
           break;

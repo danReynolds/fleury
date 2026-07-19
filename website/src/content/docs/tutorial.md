@@ -18,8 +18,8 @@ count. Type, and the list narrows in place.
 
 ## 1. A static list
 
-Start with a stateless screen that just renders some data. Put this in
-`bin/my_app.dart`:
+Start with a stateless screen that just renders some data. Replace
+`lib/app.dart` in the generated project:
 
 ```dart
 import 'package:fleury/fleury.dart';
@@ -29,7 +29,14 @@ const _languages = [
   'Elixir', 'Zig', 'Swift', 'Kotlin', 'Haskell',
 ];
 
-void main() => runApp(const FilterApp());
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const FleuryApp(title: 'Filter', home: FilterApp());
+  }
+}
 
 class FilterApp extends StatelessWidget {
   const FilterApp({super.key});
@@ -47,8 +54,25 @@ class FilterApp extends StatelessWidget {
 }
 ```
 
-`dart run bin/my_app.dart` shows the list, one item per row, padded a cell off
-the edge. (`Ctrl-C` quits.) Nothing moves yet — let's make it react.
+The generated counter test also needs to follow the screen you just replaced.
+Use this small smoke for the rest of the tutorial:
+
+```dart title="test/app_test.dart"
+import 'package:fleury_test/fleury_test.dart';
+import 'package:my_app/app.dart';
+import 'package:test/test.dart';
+
+void main() {
+  testWidgets('shows the language list', (tester) {
+    tester.pumpWidget(const MyApp());
+    expect(tester.renderToString(emptyMark: ' '), contains('Dart'));
+  });
+}
+```
+
+Run `dart test` to check the smoke. Then press F5 or run
+`dart run bin/run_app.dart`. The list appears one item per row, padded a cell
+off the edge. (`Ctrl-C` quits.) Nothing moves yet — let's make it react.
 
 ## 2. Hold state
 

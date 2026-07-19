@@ -19,7 +19,14 @@ const _languages = [
   'Haskell',
 ];
 
-void main() => runApp(const FilterApp());
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const FleuryApp(title: 'Filter', home: FilterApp());
+  }
+}
 
 class FilterApp extends StatefulWidget {
   const FilterApp({super.key});

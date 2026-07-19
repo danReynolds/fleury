@@ -50,6 +50,9 @@ void main() {
           ('state parity absolute', "Flutter's, unchanged"),
           ('layout parity absolute', 'lays out exactly like Flutter'),
           ('universal debug-shell claim', 'Every fleury app ships'),
+          ('unowned Fleury domain', 'fleury.dev'),
+          ('obsolete scaffold entrypoint', 'bin/my_app.dart'),
+          ('obsolete root scaffold entrypoint', 'dart run my_app.dart'),
         ]) {
           if (text.containsPattern(pattern)) {
             failures.add('${p.relative(file.path, from: repo.path)}: $label');
@@ -113,10 +116,23 @@ void main() {
       );
     });
 
-    test('getting started declares and imports its browser dependencies', () {
+    test('getting started follows the generated project contract', () {
       final guide = File(
         p.join(repo.path, 'website/src/content/docs/getting-started.mdx'),
       ).readAsStringSync();
+      expect(guide, contains('fleury create my_app --dependency-source=git'));
+      expect(guide, contains('fleury create my_app'));
+      expect(guide, contains('dart run bin/run_app.dart'));
+      expect(guide, contains('title="lib/app.dart"'));
+      expect(guide, contains('title="test/app_test.dart"'));
+      expect(guide, contains('class MyApp extends StatelessWidget'));
+      expect(
+        guide,
+        contains("Change the test expectation from `uptime: 0s` to `CPU`"),
+      );
+      expect(guide, isNot(contains('dart create my_app')));
+      expect(guide, isNot(contains('title="bin/my_app.dart"')));
+
       expect(guide, contains('path: packages/fleury_web'));
       expect(guide, contains('web: ^1.1.1'));
       expect(guide, contains('title="lib/status_app.dart"'));
@@ -158,6 +174,47 @@ void main() {
       expect(guide, contains('semantic updates are diffed and sent'));
       expect(guide, contains('when the exposed tree or its painted coverage'));
       expect(guide, isNot(contains('cell-diff + semantics frames')));
+    });
+
+    test('hot-reload guidance requires a real VM source reload', () {
+      final surfaces = <File>[
+        File(p.join(repo.path, 'packages/fleury/doc/hot_reload.md')),
+        File(p.join(repo.path, 'packages/fleury/example/hot_reload_demo.dart')),
+        File(p.join(repo.path, 'packages/fleury/example/counter_demo.dart')),
+      ];
+      final combined = surfaces.map((file) => file.readAsStringSync()).join();
+
+      expect(combined, contains('reloadSources'));
+      expect(combined, isNot(contains('kill -SIGUSR1')));
+      expect(combined, isNot(contains('package:hotreloader')));
+      expect(combined, isNot(contains('dart pub global activate hotreloader')));
+    });
+
+    test('shipped Fleury examples do not link the unowned domain', () {
+      final surfaces = <File>[
+        File(p.join(repo.path, 'packages/storybook/lib/src/catalog.dart')),
+        File(
+          p.join(
+            repo.path,
+            'packages/fleury_example_console/lib/fleury_example_console.dart',
+          ),
+        ),
+        File(p.join(repo.path, 'packages/samples/bin/osc8_demo_app.dart')),
+        File(
+          p.join(
+            repo.path,
+            'packages/fleury/lib/src/foundation/fleury_error.dart',
+          ),
+        ),
+      ];
+      for (final surface in surfaces) {
+        final source = surface.readAsStringSync();
+        expect(
+          source,
+          isNot(contains('fleury.dev')),
+          reason: p.relative(surface.path, from: repo.path),
+        );
+      }
     });
 
     test('serve guide documents every public lifecycle and safety flag', () {

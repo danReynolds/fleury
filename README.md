@@ -42,6 +42,18 @@ AI agents can inspect and operate by meaning instead of terminal coordinates.
 
 ## A Fleury app
 
+After [installing the CLI](https://danreynolds.github.io/fleury/getting-started/):
+
+```sh
+fleury create my_app --dependency-source=git
+cd my_app
+```
+
+The generated project includes a runnable counter, a widget test, and the
+minimal VS Code configuration needed for F5 to launch into an interactive
+terminal. The Git-source flag is only needed during the pre-release window;
+under the scaffold, the application remains ordinary Dart:
+
 ```dart
 import 'package:fleury/fleury.dart';
 

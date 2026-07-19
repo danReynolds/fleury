@@ -2,8 +2,11 @@
 //
 // Subcommands:
 //
-//   fleury shell    Run a local-display proxy so an fleury app launched
-//                  under a debugger (VSCode, IntelliJ) can render into
+//   fleury create  Generate a tested Fleury application with a terminal-safe
+//                  VS Code F5 configuration.
+//
+//   fleury shell    Run a local-display proxy so a Fleury app launched
+//                  under a debugger (VS Code, IntelliJ) can render into
 //                  THIS terminal instead of fighting the IDE's stdout.
 //                  Implements the Unix-socket transport defined in
 //                  `lib/src/remote/`.
@@ -29,11 +32,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data' show Uint8List;
 
+import 'package:fleury/src/cli/create_command.dart';
+import 'package:fleury/src/cli/dart_sdk.dart';
 import 'package:fleury/src/foundation/geometry.dart';
 import 'package:fleury/src/remote/buffered_browser_input.dart';
 import 'package:fleury/src/remote/remote_client_asset.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/remote/serve_index_html.dart';
+import 'package:fleury/src/remote/shell_init.dart';
 import 'package:fleury/src/remote/spawn.dart';
 import 'package:fleury/src/remote/unix_socket_transport.dart';
 import 'package:fleury/src/terminal/capabilities.dart';
@@ -47,6 +53,8 @@ Future<void> main(List<String> args) async {
     exit(2);
   }
   switch (args[0]) {
+    case 'create':
+      exit(await runCreateCommand(args.sublist(1)));
     case 'shell':
       exit(await _runShell(args.sublist(1)));
     case 'serve':
@@ -73,6 +81,12 @@ void _printUsage() {
   stderr.writeln('fleury <subcommand> [args]');
   stderr.writeln('');
   stderr.writeln('App developer commands:');
+  stderr.writeln(
+    '  create   Create a Fleury application with tests and a working F5 setup.',
+  );
+  stderr.writeln(
+    '           Usage: fleury create <directory> [--no-editor-config] [--no-pub]',
+  );
   stderr.writeln(
     '  shell    Proxy fleury-app rendering through this terminal '
     'so the app can be',
@@ -153,12 +167,21 @@ Future<int> _runRepoDevTool(
   }
 
   final devTool = File('${root.path}/tool/fleury_dev.dart');
-  final process = await Process.start(
-    Platform.resolvedExecutable,
-    <String>[devTool.path, ...forwarded],
-    workingDirectory: root.path,
-    mode: ProcessStartMode.inheritStdio,
-  );
+  final Process process;
+  try {
+    process = await Process.start(
+      dartSdkExecutable,
+      <String>[devTool.path, ...forwarded],
+      workingDirectory: root.path,
+      mode: ProcessStartMode.inheritStdio,
+    );
+  } on ProcessException catch (error) {
+    stderr.writeln(
+      '$commandName could not start the Dart SDK: ${error.message}',
+    );
+    stderr.writeln('Install the Dart SDK and ensure `dart` is on PATH.');
+    return 1;
+  }
   return process.exitCode;
 }
 
@@ -202,14 +225,18 @@ Future<int> _runShell(List<String> args) async {
     );
     return 2;
   }
+  if (!stdin.hasTerminal || !_stdinSupportsTerminalModes()) {
+    stderr.writeln(
+      'fleury shell: stdin is not a terminal — input cannot be forwarded.',
+    );
+    return 2;
+  }
 
   final handleDir = Directory('.fleury');
   if (!handleDir.existsSync()) handleDir.createSync(recursive: true);
-  final socketPath = '${handleDir.path}/shell.sock';
   final handleFile = File('${handleDir.path}/handle');
-
-  final stale = await _checkExistingHandle(handleFile);
-  if (stale == _HandleStatus.live) {
+  final handleLock = _tryAcquireHandleLock(handleDir);
+  if (handleLock == null) {
     stderr.writeln(
       'fleury shell: another fleury shell/serve is already running here '
       '(handle at ${handleFile.path}).',
@@ -217,31 +244,31 @@ Future<int> _runShell(List<String> args) async {
     stderr.writeln('Stop it first, or run from a different directory.');
     return 2;
   }
+  _LocalSocketEndpoint.reclaimStaleFrom(handleFile);
 
-  // A stale socket from a crashed previous shell will block `bind`.
-  // Removing it is safe: the only contract on `.fleury/handle` is the
-  // path it points to, not the inode behind it.
+  late final _LocalSocketEndpoint endpoint;
   try {
-    File(socketPath).deleteSync();
-  } on FileSystemException {
-    /* not there, fine */
+    endpoint = _LocalSocketEndpoint.create();
+  } on FileSystemException catch (error) {
+    _releaseHandleLock(handleLock);
+    stderr.writeln('fleury shell: could not allocate a local socket: $error');
+    return 1;
   }
+  final socketPath = endpoint.path;
 
-  final server = await ServerSocket.bind(
-    InternetAddress(socketPath, type: InternetAddressType.unix),
-    0,
-  );
-  handleFile.writeAsStringSync(socketPath);
-  final absSocket = File(socketPath).absolute.path;
-  stderr.writeln('fleury shell ready at $socketPath');
-  stderr.writeln('');
-  stderr.writeln('To attach an app:');
-  stderr.writeln('  • run it from this directory:  dart run app.dart');
-  stderr.writeln('  • or from any directory, set FLEURY_HANDLE:');
-  stderr.writeln('      FLEURY_HANDLE=$absSocket dart run app.dart');
-  stderr.writeln('  • or launch it from your IDE — the discovery file');
-  stderr.writeln('    handles the rest automatically.');
-
+  late final ServerSocket server;
+  try {
+    server = await ServerSocket.bind(
+      InternetAddress(socketPath, type: InternetAddressType.unix),
+      0,
+    );
+    handleFile.writeAsStringSync(socketPath);
+  } on Object catch (error) {
+    endpoint.delete();
+    _releaseHandleLock(handleLock);
+    stderr.writeln('fleury shell: could not bind the local socket: $error');
+    return 1;
+  }
   final exitCode = Completer<int>();
 
   final shutdownSession = Completer<void>();
@@ -254,7 +281,12 @@ Future<int> _runShell(List<String> args) async {
 
     cleanupFuture = () async {
       if (!shutdownSession.isCompleted) shutdownSession.complete();
-      await server.close();
+      try {
+        await server.close();
+      } catch (_) {
+        // Keep cleaning up the discovery file and endpoint even when the
+        // listener has already been torn down by the operating system.
+      }
 
       final session = activeSession;
       if (session != null) {
@@ -272,21 +304,23 @@ Future<int> _runShell(List<String> args) async {
       try {
         handleFile.deleteSync();
       } catch (_) {}
-      try {
-        File(socketPath).deleteSync();
-      } catch (_) {}
+      endpoint.delete();
+      _releaseHandleLock(handleLock);
     }();
 
     return cleanupFuture!;
   }
 
-  // SIGINT in the shell tears down the proxy. The connected app sees
-  // its transport drop and exits cleanly via the events `onDone` path.
-  late StreamSubscription<ProcessSignal> intSub;
-  intSub = ProcessSignal.sigint.watch().listen((_) async {
-    await intSub.cancel();
+  // Terminal shutdown signals tear down the proxy. The connected app sees its
+  // transport drop and exits cleanly via the events `onDone` path.
+  var signalShutdownStarted = false;
+  late final List<StreamSubscription<ProcessSignal>> signalSubs;
+  signalSubs = _watchShutdownSignals((code, _) async {
+    if (signalShutdownStarted) return;
+    signalShutdownStarted = true;
+    await _cancelSignalSubscriptions(signalSubs);
     await cleanup();
-    if (!exitCode.isCompleted) exitCode.complete(130);
+    if (!exitCode.isCompleted) exitCode.complete(code);
   });
 
   server.listen((client) async {
@@ -301,10 +335,31 @@ Future<int> _runShell(List<String> args) async {
     }
     final session = _runSession(client, shutdownSignal: shutdownSession.future);
     activeSession = session;
-    final code = await session;
+    var code = 1;
+    try {
+      code = await session;
+    } on Object catch (error, stackTrace) {
+      stderr
+        ..writeln('fleury shell: session failed: $error')
+        ..writeln(stackTrace);
+    }
     await cleanup();
     if (!exitCode.isCompleted) exitCode.complete(code);
   });
+
+  // Readiness is a lifecycle contract: only announce it after the listener and
+  // shutdown cleanup are both armed.
+  stderr.writeln('fleury shell ready (handle at ${handleFile.path})');
+  stderr.writeln('');
+  stderr.writeln('To attach an app:');
+  stderr.writeln('  • run it from this directory:  dart run bin/run_app.dart');
+  stderr.writeln('  • or from any directory, set FLEURY_HANDLE:');
+  stderr.writeln(
+    '      FLEURY_HANDLE=${_posixShellQuote(socketPath)} '
+    'dart run bin/run_app.dart',
+  );
+  stderr.writeln('  • or launch it from your IDE — the discovery file');
+  stderr.writeln('    handles the rest automatically.');
 
   return exitCode.future;
 }
@@ -333,43 +388,51 @@ Future<int> _runSession(Socket client, {Future<void>? shutdownSignal}) async {
   // which we write verbatim to our stdout. But WE need to be the one
   // who set raw mode on our stdin (so we read keystrokes instead of
   // line-buffered input) and put OUR terminal into a clean state.
-  final originalLine = stdin.lineMode;
-  final originalEcho = stdin.echoMode;
-  stdin.lineMode = false;
-  stdin.echoMode = false;
-  // Bracketed paste + Kitty keyboard mirror the app's own setup so the
-  // bytes coming back to it match what a normal terminal would send.
-  stdout.write('\x1B[?1049h\x1B[?25l\x1B[?2004h\x1B[>1u');
-
-  // Initial handshake — send what the app needs to lay out its first
-  // frame correctly: actual size + the capabilities OUR terminal
-  // negotiated with the user's real terminal emulator.
-  final capabilities = detectTerminalCapabilitiesFromEnvironment(
-    Platform.environment,
-  );
-  transport.send(
-    InitFrame(
-      size: _localSize(),
-      colorMode: capabilities.colorMode,
-      glyphTier: capabilities.glyphTier,
-      imageProtocol: capabilities.imageProtocol,
-      tmuxPassthrough: capabilities.tmuxPassthrough,
-    ),
-  );
-
-  // SIGWINCH → RESIZE frame. The app reflows on its end.
-  final winchSub = ProcessSignal.sigwinch.watch().listen((_) {
-    transport.send(ResizeFrame(_localSize()));
-  });
-
-  // Stdin bytes → INPUT frame. No parsing; the app's own InputParser
-  // does the work on the other end.
-  final stdinSub = stdin.listen(
-    (bytes) => transport.send(InputFrame(_asUint8(bytes))),
-    cancelOnError: false,
-  );
-
+  bool? originalLine;
+  bool? originalEcho;
   try {
+    originalLine = stdin.lineMode;
+    originalEcho = stdin.echoMode;
+    stdin.lineMode = false;
+    stdin.echoMode = false;
+  } on Object {
+    try {
+      if (originalLine != null) stdin.lineMode = originalLine;
+    } catch (_) {}
+    try {
+      if (originalEcho != null) stdin.echoMode = originalEcho;
+    } catch (_) {}
+    rethrow;
+  }
+  StreamSubscription<ProcessSignal>? winchSub;
+  StreamSubscription<List<int>>? stdinSub;
+  try {
+    // Bracketed paste + Kitty keyboard mirror the app's own setup so the
+    // bytes coming back to it match what a normal terminal would send.
+    stdout.write('\x1B[?1049h\x1B[?25l\x1B[?2004h\x1B[>1u');
+
+    // Initial handshake — send what the app needs to lay out its first
+    // frame correctly: actual size + the capabilities OUR terminal
+    // negotiated with the user's real terminal emulator.
+    final capabilities = detectTerminalCapabilitiesFromEnvironment(
+      Platform.environment,
+    );
+    transport.send(
+      buildShellInitFrame(size: _localSize(), capabilities: capabilities),
+    );
+
+    // SIGWINCH → RESIZE frame. The app reflows on its end.
+    winchSub = ProcessSignal.sigwinch.watch().listen((_) {
+      transport.send(ResizeFrame(_localSize()));
+    });
+
+    // Stdin bytes → INPUT frame. No parsing; the app's own InputParser
+    // does the work on the other end.
+    stdinSub = stdin.listen(
+      (bytes) => transport.send(InputFrame(_asUint8(bytes))),
+      cancelOnError: false,
+    );
+
     // App's OUTPUT frames → stdout verbatim.
     await for (final frame in transport.incoming) {
       if (frame is OutputFrame) {
@@ -381,8 +444,8 @@ Future<int> _runSession(Socket client, {Future<void>? shutdownSignal}) async {
       // violation; silently drop rather than crash the shell.
     }
   } finally {
-    await winchSub.cancel();
-    await stdinSub.cancel();
+    await winchSub?.cancel();
+    await stdinSub?.cancel();
     // Restore terminal modes. Mirror order of the enter sequences.
     try {
       stdout.write('\x1B[<u\x1B[?2004l\x1B[?25h\x1B[?1049l');
@@ -406,9 +469,21 @@ CellSize _localSize() {
   }
 }
 
+bool _stdinSupportsTerminalModes() {
+  try {
+    stdin.lineMode;
+    stdin.echoMode;
+    return true;
+  } on StdinException {
+    return false;
+  }
+}
+
 /// Stdin's stream gives us `List<int>`; the protocol wants `Uint8List`
 /// for zero-copy framing downstream.
 Uint8List _asUint8(List<int> b) => b is Uint8List ? b : Uint8List.fromList(b);
+
+String _posixShellQuote(String value) => "'${value.replaceAll("'", "'\\''")}'";
 
 Future<int> _runServe(List<String> args) async {
   var port = 5777;
@@ -470,7 +545,7 @@ Future<int> _runServe(List<String> args) async {
       if (spawnCmd.isEmpty) {
         stderr.writeln(
           '--spawn requires a command, e.g. `fleury serve --spawn dart run '
-          'my_app.dart`',
+          'bin/run_app.dart`',
         );
         return 2;
       }
@@ -564,11 +639,9 @@ Future<int> _runServeBridge({
 }) async {
   final handleDir = Directory('.fleury');
   if (!handleDir.existsSync()) handleDir.createSync(recursive: true);
-  final socketPath = '${handleDir.path}/shell.sock';
   final handleFile = File('${handleDir.path}/handle');
-
-  final stale = await _checkExistingHandle(handleFile);
-  if (stale == _HandleStatus.live) {
+  final handleLock = _tryAcquireHandleLock(handleDir);
+  if (handleLock == null) {
     stderr.writeln(
       'fleury serve: another fleury serve/shell is already running here '
       '(handle at ${handleFile.path}).',
@@ -576,37 +649,44 @@ Future<int> _runServeBridge({
     stderr.writeln('Stop it first, or run from a different directory.');
     return 2;
   }
+  _LocalSocketEndpoint.reclaimStaleFrom(handleFile);
 
+  late final _LocalSocketEndpoint endpoint;
   try {
-    File(socketPath).deleteSync();
-  } on FileSystemException {
-    /* not there */
+    endpoint = _LocalSocketEndpoint.create();
+  } on FileSystemException catch (error) {
+    _releaseHandleLock(handleLock);
+    stderr.writeln('fleury serve: could not allocate a local socket: $error');
+    return 1;
   }
+  final socketPath = endpoint.path;
 
-  final appServer = await ServerSocket.bind(
-    InternetAddress(socketPath, type: InternetAddressType.unix),
-    0,
-  );
-  handleFile.writeAsStringSync(socketPath);
-  final httpServer = await HttpServer.bind(host, port);
-
-  final absSocket = File(socketPath).absolute.path;
-  stderr.writeln('fleury serve ready (bridge mode)');
-  stderr.writeln('  browser:    http://$host:$port');
-  stderr.writeln('  app handle: $socketPath');
-  stderr.writeln('');
-  stderr.writeln('Open the URL in your browser, then attach your app:');
-  stderr.writeln('  • from this directory:  dart run my_app.dart');
-  stderr.writeln(
-    '  • from any directory:   FLEURY_HANDLE=$absSocket dart run '
-    'my_app.dart',
-  );
-  stderr.writeln('');
-  stderr.writeln(
-    'Or use --spawn to have serve own the subprocess and isolate '
-    'per browser:',
-  );
-  stderr.writeln('  fleury serve --spawn dart run my_app.dart');
+  late final ServerSocket appServer;
+  try {
+    appServer = await ServerSocket.bind(
+      InternetAddress(socketPath, type: InternetAddressType.unix),
+      0,
+    );
+    handleFile.writeAsStringSync(socketPath);
+  } on Object catch (error) {
+    endpoint.delete();
+    _releaseHandleLock(handleLock);
+    stderr.writeln('fleury serve: could not bind the local socket: $error');
+    return 1;
+  }
+  late final HttpServer httpServer;
+  try {
+    httpServer = await HttpServer.bind(host, port);
+  } on Object catch (error) {
+    await appServer.close();
+    try {
+      handleFile.deleteSync();
+    } catch (_) {}
+    endpoint.delete();
+    _releaseHandleLock(handleLock);
+    stderr.writeln('fleury serve: could not bind $host:$port: $error');
+    return 1;
+  }
 
   final exitCode = Completer<int>();
 
@@ -728,25 +808,59 @@ Future<int> _runServeBridge({
     }
   });
 
-  Future<void> cleanup() async {
-    await appServer.close();
-    await httpServer.close(force: true);
-    pendingApp?.destroy();
-    await pendingBrowser?.dispose();
-    try {
-      handleFile.deleteSync();
-    } catch (_) {}
-    try {
-      File(socketPath).deleteSync();
-    } catch (_) {}
+  Future<void>? cleanupFuture;
+  Future<void> cleanup() {
+    final existing = cleanupFuture;
+    if (existing != null) return existing;
+    cleanupFuture = () async {
+      try {
+        await appServer.close();
+      } catch (_) {}
+      try {
+        await httpServer.close(force: true);
+      } catch (_) {}
+      pendingApp?.destroy();
+      try {
+        await pendingBrowser?.dispose();
+      } catch (_) {}
+      try {
+        handleFile.deleteSync();
+      } catch (_) {}
+      endpoint.delete();
+      _releaseHandleLock(handleLock);
+    }();
+    return cleanupFuture!;
   }
 
-  late StreamSubscription<ProcessSignal> intSub;
-  intSub = ProcessSignal.sigint.watch().listen((_) async {
-    await intSub.cancel();
+  var signalShutdownStarted = false;
+  late final List<StreamSubscription<ProcessSignal>> signalSubs;
+  signalSubs = _watchShutdownSignals((code, _) async {
+    if (signalShutdownStarted) return;
+    signalShutdownStarted = true;
+    await _cancelSignalSubscriptions(signalSubs);
     await cleanup();
-    if (!exitCode.isCompleted) exitCode.complete(130);
+    if (!exitCode.isCompleted) exitCode.complete(code);
   });
+
+  // Do not let callers treat the bridge as ready until its listeners and
+  // shutdown cleanup are fully armed.
+  stderr.writeln('fleury serve ready (bridge mode)');
+  stderr.writeln('  browser:    http://$host:$port');
+  stderr.writeln('  app handle: $socketPath');
+  stderr.writeln('');
+  stderr.writeln('Open the URL in your browser, then attach your app:');
+  stderr.writeln('  • from this directory:  dart run bin/run_app.dart');
+  stderr.writeln(
+    '  • from any directory:   '
+    'FLEURY_HANDLE=${_posixShellQuote(socketPath)} '
+    'dart run bin/run_app.dart',
+  );
+  stderr.writeln('');
+  stderr.writeln(
+    'Or use --spawn to have serve own the subprocess and isolate '
+    'per browser:',
+  );
+  stderr.writeln('  fleury serve --spawn dart run bin/run_app.dart');
 
   return exitCode.future;
 }
@@ -992,17 +1106,11 @@ Future<int> _runServeSpawn({
   };
   final handleDir = _createSpawnHandleDir();
   final httpServer = await HttpServer.bind(host, port);
-  stderr.writeln('fleury serve ready (spawn mode)');
-  stderr.writeln('  browser: http://$host:$port');
-  stderr.writeln('  spawn:   ${command.join(' ')}');
-  stderr.writeln(
-    'Sessions are isolated; a warm standby is kept ready so connections '
-    'skip the cold start.',
-  );
 
   final exitCode = Completer<int>();
   final sessions = <_SpawnSession>{};
   var sessionCounter = 0;
+  var shuttingDown = false;
   // Synchronous admission reservation. `sessions.where(isAttached)` can't be
   // the cap gate: attach happens two awaits after the check, so a BURST of
   // concurrent /ws connects would all observe the same pre-attach count and
@@ -1020,6 +1128,7 @@ Future<int> _runServeSpawn({
   Future<bool>? warmReady;
 
   void prepareWarm() {
+    if (shuttingDown) return;
     final id = ++sessionCounter;
     final s = _SpawnSession(id: id);
     warm = s;
@@ -1044,9 +1153,6 @@ Future<int> _runServeSpawn({
     );
   }
 
-  // Pre-spawn the first standby now, before anyone connects.
-  prepareWarm();
-
   httpServer.listen((req) async {
     if (req.uri.path != '/ws') {
       await _serveStaticAsset(req);
@@ -1063,6 +1169,12 @@ Future<int> _runServeSpawn({
     }
     if (!_isAuthorizedWebSocketRequest(req, token)) {
       await _rejectUnauthorizedWebSocket(req);
+      return;
+    }
+    if (shuttingDown) {
+      req.response.statusCode = HttpStatus.serviceUnavailable;
+      req.response.write('server is shutting down');
+      await req.response.close();
       return;
     }
     // Admission cap: each browser session is a full app subprocess, so an
@@ -1119,6 +1231,13 @@ Future<int> _runServeSpawn({
       }
       return;
     }
+    if (shuttingDown) {
+      release();
+      try {
+        await ws.close();
+      } catch (_) {}
+      return;
+    }
 
     // Claim the warm standby and immediately prepare the next one.
     final claimed = warm;
@@ -1132,6 +1251,13 @@ Future<int> _runServeSpawn({
       // this waits out the remainder — still no worse than a cold spawn, and
       // it avoids spawning a second process for the same browser.
       final ready = await claimedReady;
+      if (shuttingDown) {
+        release();
+        try {
+          await ws.close();
+        } catch (_) {}
+        return;
+      }
       if (ready && claimed.isReady) {
         stderr.writeln('[serve s${claimed.id}] paired browser to warm standby');
         claimed.attach(ws);
@@ -1152,6 +1278,15 @@ Future<int> _runServeSpawn({
       tag: 's$id',
       environment: spawnEnv,
     );
+    if (shuttingDown) {
+      await session.shutdown();
+      sessions.remove(session);
+      release();
+      try {
+        await ws.close();
+      } catch (_) {}
+      return;
+    }
     if (!ok) {
       try {
         await ws.close();
@@ -1171,29 +1306,64 @@ Future<int> _runServeSpawn({
     );
   });
 
-  Future<void> cleanup() async {
-    await httpServer.close(force: true);
-    // Tear down every live session — kills subprocesses and removes
-    // session sockets.
-    final pending = sessions.toList();
-    await Future.wait(pending.map((s) => s.shutdown()));
-    try {
-      handleDir.deleteSync(recursive: true);
-    } on FileSystemException {
-      // Best-effort cleanup; individual sessions also remove their sockets.
-    }
+  Future<void>? cleanupFuture;
+  Future<void> cleanup() {
+    // Gate request-handler continuations synchronously, before the first await
+    // in cleanup. A handler may be suspended in WebSocket upgrade or warmup;
+    // it must not add a cold session after the snapshot below.
+    shuttingDown = true;
+    final existing = cleanupFuture;
+    if (existing != null) return existing;
+    cleanupFuture = () async {
+      try {
+        await httpServer.close(force: true);
+      } catch (_) {}
+      // Tear down every live session — kills subprocesses and removes
+      // session sockets.
+      final pending = sessions.toList();
+      try {
+        await Future.wait(pending.map((s) => s.shutdown()));
+      } catch (_) {
+        // Continue to remove the shared handle directory even if one child
+        // has already disappeared underneath its shutdown routine.
+      }
+      try {
+        handleDir.deleteSync(recursive: true);
+      } on FileSystemException {
+        // Best-effort cleanup; individual sessions also remove their sockets.
+      }
+    }();
+    return cleanupFuture!;
   }
 
-  late StreamSubscription<ProcessSignal> intSub;
-  intSub = ProcessSignal.sigint.watch().listen((_) async {
-    await intSub.cancel();
+  var signalShutdownStarted = false;
+  late final List<StreamSubscription<ProcessSignal>> signalSubs;
+  signalSubs = _watchShutdownSignals((code, signalName) async {
+    if (signalShutdownStarted) return;
+    signalShutdownStarted = true;
+    shuttingDown = true;
+    await _cancelSignalSubscriptions(signalSubs);
     stderr.writeln(
-      '[serve] SIGINT — shutting down ${sessions.length} '
+      '[serve] $signalName — shutting down ${sessions.length} '
       'live session(s)',
     );
     await cleanup();
-    if (!exitCode.isCompleted) exitCode.complete(130);
+    if (!exitCode.isCompleted) exitCode.complete(code);
   });
+
+  // Pre-spawn only after shutdown handling is armed. Once a child can exist,
+  // every supported terminal signal has a path that aborts and awaits it.
+  prepareWarm();
+
+  // The ready marker is consumed by scripts, so emit it only after HTTP
+  // admission, the warm-session machinery, and shutdown cleanup are armed.
+  stderr.writeln('fleury serve ready (spawn mode)');
+  stderr.writeln('  browser: http://$host:$port');
+  stderr.writeln('  spawn:   ${command.join(' ')}');
+  stderr.writeln(
+    'Sessions are isolated; a warm standby is kept ready so connections '
+    'skip the cold start.',
+  );
 
   return exitCode.future;
 }
@@ -1220,6 +1390,9 @@ class _SpawnSession {
   SpawnedFleuryApp? _app;
   WebSocket? _browser;
   final _done = Completer<void>();
+  final _abortStartup = Completer<void>();
+  Future<bool>? _startup;
+  Future<void>? _shutdownFuture;
   var _shuttingDown = false;
 
   Future<void> get done => _done.future;
@@ -1251,13 +1424,31 @@ class _SpawnSession {
     required String handleDir,
     required String tag,
     Map<String, String>? environment,
+  }) {
+    final operation = _bringUp(
+      command: command,
+      handleDir: handleDir,
+      tag: tag,
+      environment: environment,
+    );
+    _startup = operation;
+    return operation;
+  }
+
+  Future<bool> _bringUp({
+    required List<String> command,
+    required String handleDir,
+    required String tag,
+    Map<String, String>? environment,
   }) async {
+    if (_shuttingDown) return false;
     try {
       _app = await spawnFleuryApp(
         command: command,
         socketPath: _socketPathFor(handleDir),
         connectTimeout: _spawnConnectTimeout,
         environment: environment,
+        abort: _abortStartup.future,
         onLog: (stream, line) => stderr.writeln('[$tag $stream] $line'),
       );
     } on ProcessException catch (e) {
@@ -1309,7 +1500,26 @@ class _SpawnSession {
     required WebSocket browser,
     required String tag,
     Map<String, String>? environment,
+  }) {
+    final operation = _start(
+      command: command,
+      handleDir: handleDir,
+      browser: browser,
+      tag: tag,
+      environment: environment,
+    );
+    _startup = operation;
+    return operation;
+  }
+
+  Future<bool> _start({
+    required List<String> command,
+    required String handleDir,
+    required WebSocket browser,
+    required String tag,
+    Map<String, String>? environment,
   }) async {
+    if (_shuttingDown) return false;
     _browser = browser;
     // The browser sends INIT immediately after the WebSocket opens, before the
     // subprocess can connect back. Listen + buffer now so the handshake isn't
@@ -1322,7 +1532,7 @@ class _SpawnSession {
         socketPath: _socketPathFor(handleDir),
         connectTimeout: _spawnConnectTimeout,
         environment: environment,
-        abort: browserInput.closed,
+        abort: Future.any<void>([browserInput.closed, _abortStartup.future]),
         onLog: (stream, line) => stderr.writeln('[$tag $stream] $line'),
       );
     } on ProcessException catch (e) {
@@ -1344,9 +1554,25 @@ class _SpawnSession {
     return true;
   }
 
-  Future<void> shutdown() async {
-    if (_shuttingDown) return;
+  Future<void> shutdown() => _shutdownFuture ??= _shutdown();
+
+  Future<void> _shutdown() async {
     _shuttingDown = true;
+    if (!_abortStartup.isCompleted) _abortStartup.complete();
+
+    // A warm session may be between Process.start and socket attachment, so
+    // `_app` is still null even though a child exists. The abort above makes
+    // spawnFleuryApp terminate and reap that child; awaiting startup closes the
+    // race before serve itself exits and removes the shared handle directory.
+    final startup = _startup;
+    if (startup != null) {
+      try {
+        await startup;
+      } catch (_) {
+        // Startup owns its process/socket cleanup on every failure path.
+      }
+    }
+
     // dispose() signals the process (SIGTERM → SIGKILL after a grace period) and
     // removes the session socket.
     final app = _app;
@@ -1653,40 +1879,202 @@ final class _StdioTerminalProbeTransport implements TerminalProbeTransport {
   Future<void> close() => _subscription.cancel();
 }
 
-enum _HandleStatus { absent, stale, live }
-
-/// Decides what to do about an existing `.fleury/handle` file before
-/// `fleury shell` / `fleury serve` (bridge mode) bind a new socket.
-///
-///   - absent: no handle file present, nothing to worry about.
-///   - stale:  handle file exists but its socket is dead (previous
-///             shell/serve crashed) — caller cleans up and proceeds.
-///   - live:   handle file points at a socket that accepts connections
-///             — another instance is alive; caller refuses to start.
-///
-/// We probe by connecting to the socket with a short timeout. If we
-/// connect, someone's listening; if it fails, the socket is gone. The
-/// probe connection IS observed by a live peer (it shows up as a
-/// momentary stale app connection), which is the lesser evil compared
-/// to the previous behavior of silently nuking the other instance's
-/// socket file.
-Future<_HandleStatus> _checkExistingHandle(File handleFile) async {
-  if (!handleFile.existsSync()) return _HandleStatus.absent;
-  final path = (await handleFile.readAsString()).trim();
-  if (path.isEmpty) return _HandleStatus.stale;
-  final connect = Socket.connect(
-    InternetAddress(path, type: InternetAddressType.unix),
-    0,
-  );
+RandomAccessFile? _tryAcquireHandleLock(Directory handleDir) {
+  final lock = File('${handleDir.path}/lock').openSync(mode: FileMode.append);
   try {
-    final probe = await connect.timeout(const Duration(milliseconds: 500));
-    await probe.close();
-    return _HandleStatus.live;
-  } on Object {
-    // Future.timeout does NOT cancel the underlying connect: if it resolves
-    // after the deadline we still own that socket and must close it, or its fd
-    // leaks. Attach a late-close to the original future (no-op if it errored).
-    unawaited(connect.then((s) => s.close()).catchError((_) {}));
-    return _HandleStatus.stale;
+    lock.lockSync(FileLock.exclusive);
+    return lock;
+  } on FileSystemException {
+    lock.closeSync();
+    return null;
   }
+}
+
+void _releaseHandleLock(RandomAccessFile lock) {
+  try {
+    lock.unlockSync();
+  } catch (_) {}
+  try {
+    lock.closeSync();
+  } catch (_) {}
+}
+
+typedef _ShutdownSignalHandler =
+    Future<void> Function(int exitCode, String signalName);
+
+/// Watches the process-shutdown signals supported by the current platform.
+///
+/// SIGHUP matters for shells and IDE terminals that disappear without sending
+/// Ctrl-C; SIGTERM is the normal supervisor/CI shutdown path. Windows exposes
+/// neither through Dart, so its Ctrl-C path remains SIGINT-only.
+List<StreamSubscription<ProcessSignal>> _watchShutdownSignals(
+  _ShutdownSignalHandler onSignal,
+) {
+  final subscriptions = <StreamSubscription<ProcessSignal>>[];
+
+  void watch(ProcessSignal signal, int code, String name) {
+    try {
+      subscriptions.add(
+        signal.watch().listen((_) => unawaited(onSignal(code, name))),
+      );
+    } on SignalException {
+      // A platform can expose a signal constant without allowing a watcher.
+    } on UnsupportedError {
+      // Keep the remaining supported shutdown paths active.
+    }
+  }
+
+  watch(ProcessSignal.sigint, 130, 'SIGINT');
+  if (!Platform.isWindows) {
+    watch(ProcessSignal.sighup, 129, 'SIGHUP');
+    watch(ProcessSignal.sigterm, 143, 'SIGTERM');
+  }
+  return subscriptions;
+}
+
+Future<void> _cancelSignalSubscriptions(
+  List<StreamSubscription<ProcessSignal>> subscriptions,
+) async {
+  for (final subscription in subscriptions) {
+    await subscription.cancel();
+  }
+}
+
+/// Owns a short, private Unix-socket directory outside the project path.
+///
+/// Unix-domain socket addresses have a small fixed-size path field (104 bytes
+/// on macOS). A perfectly valid project path can exceed it, so `.fleury/handle`
+/// points to this endpoint instead of a project-local socket file.
+final class _LocalSocketEndpoint {
+  _LocalSocketEndpoint._(this.directory, this.path, this._ownerLock);
+
+  final Directory directory;
+  final String path;
+  RandomAccessFile? _ownerLock;
+
+  /// Removes an endpoint left behind by a crashed shell/serve process.
+  ///
+  /// The handle file is project-writable input, so path shape alone is not
+  /// ownership. Reclamation requires the endpoint's owner lock to exist and be
+  /// acquirable non-blockingly; a live Fleury owner keeps that lock held.
+  static void reclaimStaleFrom(File handleFile) {
+    if (!handleFile.existsSync()) return;
+
+    String socketPath;
+    try {
+      socketPath = handleFile.readAsStringSync().trim();
+    } catch (_) {
+      return;
+    }
+    if (socketPath.isEmpty) return;
+
+    final rawFile = File(socketPath);
+    final normalizedFile = File.fromUri(rawFile.absolute.uri.normalizePath());
+    if (normalizedFile.path != socketPath || _basename(socketPath) != 's') {
+      return;
+    }
+
+    final endpointDirectory = normalizedFile.parent;
+    if (!_basename(endpointDirectory.path).startsWith('flr_')) return;
+    final allowedRoots = <String>{
+      Directory.systemTemp.absolute.path,
+      Directory('/tmp').absolute.path,
+    };
+    if (!allowedRoots.contains(endpointDirectory.parent.absolute.path)) return;
+
+    final ownerLockFile = File('${endpointDirectory.path}/owner.lock');
+    if (FileSystemEntity.typeSync(ownerLockFile.path, followLinks: false) !=
+        FileSystemEntityType.file) {
+      return;
+    }
+    RandomAccessFile? ownerLock;
+    try {
+      ownerLock = ownerLockFile.openSync(mode: FileMode.append);
+      ownerLock.lockSync(FileLock.exclusive);
+    } on FileSystemException {
+      try {
+        ownerLock?.closeSync();
+      } catch (_) {}
+      return;
+    }
+
+    try {
+      // The handle file and everything it points at are untrusted project
+      // input. Even after acquiring the advisory owner lock, never recursively
+      // delete this directory: a managed-looking path can contain unrelated
+      // files. Refuse reclamation unless the directory contains only the two
+      // entries Fleury itself owns. A file created after this check is still
+      // safe because the final directory removal is non-recursive.
+      final entries = endpointDirectory.listSync(followLinks: false);
+      final containsUnknownEntry = entries.any((entry) {
+        final name = _basename(entry.path);
+        final type = FileSystemEntity.typeSync(entry.path, followLinks: false);
+        return switch (name) {
+          'owner.lock' => type != FileSystemEntityType.file,
+          's' =>
+            type != FileSystemEntityType.file &&
+                type != FileSystemEntityType.unixDomainSock,
+          _ => true,
+        };
+      });
+      if (containsUnknownEntry) return;
+
+      normalizedFile.deleteSync();
+      ownerLockFile.deleteSync();
+      endpointDirectory.deleteSync();
+      handleFile.deleteSync();
+    } catch (_) {
+      // Best-effort only. In particular, a concurrently-added entry makes the
+      // non-recursive directory removal fail without deleting that entry.
+      // Binding a fresh endpoint below remains authoritative.
+    } finally {
+      _releaseHandleLock(ownerLock);
+    }
+  }
+
+  static _LocalSocketEndpoint create() {
+    final roots = <String>{Directory.systemTemp.path, '/tmp'};
+    for (final rootPath in roots) {
+      final root = Directory(rootPath);
+      if (!root.existsSync()) continue;
+      Directory? directory;
+      RandomAccessFile? ownerLock;
+      try {
+        directory = root.createTempSync('flr_');
+        ownerLock = File(
+          '${directory.path}/owner.lock',
+        ).openSync(mode: FileMode.append);
+        ownerLock.lockSync(FileLock.exclusive);
+        final path = '${directory.path}/s';
+        if (utf8.encode(path).length <= 100) {
+          return _LocalSocketEndpoint._(directory, path, ownerLock);
+        }
+      } on FileSystemException {
+        // Try the shorter conventional POSIX temp root below.
+      }
+      if (ownerLock != null) _releaseHandleLock(ownerLock);
+      try {
+        directory?.deleteSync(recursive: true);
+      } catch (_) {}
+    }
+    throw FileSystemException(
+      'no writable temp directory produced a Unix-socket path under 101 bytes',
+    );
+  }
+
+  void delete() {
+    final ownerLock = _ownerLock;
+    _ownerLock = null;
+    try {
+      directory.deleteSync(recursive: true);
+    } catch (_) {}
+    if (ownerLock != null) _releaseHandleLock(ownerLock);
+  }
+}
+
+String _basename(String path) {
+  final segments = Uri.directory(
+    path,
+  ).pathSegments.where((segment) => segment.isNotEmpty);
+  return segments.isEmpty ? '' : segments.last;
 }

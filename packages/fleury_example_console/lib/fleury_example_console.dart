@@ -3087,7 +3087,8 @@ class _SourceScreen extends StatelessWidget {
 const _demoMarkdown =
     '# Fleury Launch Notes\n'
     '\n'
-    'Build **reactive** TUIs with [docs](https://fleury.dev).\n'
+    'Build **reactive** TUIs with '
+    '[docs](https://danreynolds.github.io/fleury/).\n'
     '- Semantic graph drives tests\n'
     '- Capability policy guards output\n'
     '> unsafe safe\x1b]52;c;token\x07 payload stays inert\n'

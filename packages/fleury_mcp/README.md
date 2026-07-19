@@ -126,7 +126,7 @@ dart pub global activate --source path packages/fleury_mcp
 ### 2. Point an MCP host at any app
 
 ```bash
-claude mcp add my-app -- fleury_mcp -- dart run bin/my_app.dart
+claude mcp add my-app -- fleury_mcp -- dart run bin/run_app.dart
 ```
 
 Then ask the agent to read and operate the app — it will `get_ui` to see the
@@ -140,7 +140,7 @@ Launching via `dart run` JIT-compiles the app on the first read (a few seconds);
 near-instant, repeatable launch:
 
 ```bash
-dart compile exe bin/my_app.dart -o my_app
+dart compile exe bin/run_app.dart -o my_app
 claude mcp add my-app -- fleury_mcp -- ./my_app
 ```
 
@@ -153,7 +153,7 @@ without a host:
 printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{}}}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_ui","arguments":{}}}' \
-  | fleury_mcp -- dart run bin/my_app.dart
+  | fleury_mcp -- dart run bin/run_app.dart
 ```
 
 A cold `dart run` JIT-compiles the app first, which can take a few seconds — if

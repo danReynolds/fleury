@@ -236,7 +236,7 @@ A tiny counter built with the **Fleury** TUI framework.
 ## Run
 
 ```sh
-dart run bin/my_app.dart
+dart run lib/main.dart
 ```
 
 ## Layout

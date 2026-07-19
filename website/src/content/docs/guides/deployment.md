@@ -13,7 +13,7 @@ the hood, see [Serving and embedding](/fleury/architecture/serving-and-embedding
 In development, run the entry point directly:
 
 ```sh
-dart run bin/my_app.dart
+dart run bin/run_app.dart
 ```
 
 To distribute, compile to a **single native executable** — no Dart SDK needed on
@@ -21,7 +21,7 @@ the target machine. A Fleury app AOT-compiles like any Dart program; there's no
 special build step:
 
 ```sh
-dart compile exe bin/my_app.dart -o my_app
+dart compile exe bin/run_app.dart -o my_app
 ./my_app
 ```
 
@@ -30,19 +30,24 @@ That binary is the whole app. Ship it like any CLI tool.
 ## Run it in a browser (embed)
 
 The *same* widget tree compiles to JavaScript and runs client-side — no server.
-Write a tiny web entry point that mounts your app with
+First keep that tree in a web-safe library, as shown in
+[Getting started](/fleury/getting-started/#5-run-the-same-widget-tree-in-a-browser).
+Then write a tiny web entry point that mounts your app with
 [`mountApp`](/fleury/concepts/app-entry/):
 
 ```dart
 // web/main.dart
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury_web/fleury_web.dart';
-import 'package:fleury_widgets/fleury_widgets_web.dart';
+import 'package:my_app/status_app.dart';
 import 'package:web/web.dart' as web;
 
-void main() {
+Future<void> main() async {
   final host = web.document.getElementById('app')!;
-  mountApp(() => const MyApp(), into: host);
+  await mountApp(
+    () => const FleuryApp(title: 'My app', home: StatusApp()),
+    into: host,
+  );
 }
 ```
 
@@ -79,7 +84,7 @@ access, so every widget works, including the native-only ones:
 
 ```sh
 # Spawn a fresh app process for each browser session:
-fleury serve --spawn dart run my_app.dart
+fleury serve --spawn dart run bin/run_app.dart
 ```
 
 Flags (put them *before* `--spawn`, which greedily consumes everything after it
@@ -97,7 +102,7 @@ as the command to run):
 
 There are two models. **Bridge mode** (no `--spawn`) serves a single shared
 session — good for a local demo or IDE-driven debugging. **Spawn mode**
-(`--spawn dart run my_app.dart`) gives every browser connection its own isolated
+(`--spawn dart run bin/run_app.dart`) gives every browser connection its own isolated
 subprocess, with a warm standby so reconnects start quickly.
 
 The default bind address is loopback. If you deliberately expose it on a trusted
@@ -122,17 +127,28 @@ development when the preview needs the host — the filesystem, a process, or re
 
 ## Installing the `fleury` CLI
 
-`fleury serve` (and `shell`, `diagnose`) come from the `fleury` CLI. While Fleury
-is pre-release it isn't on pub.dev yet, so install it from a local checkout:
+`fleury create`, `serve`, `shell`, and `diagnose` come from the `fleury` CLI.
+While Fleury is pre-release it isn't on pub.dev yet. Install it directly from
+Git:
 
 ```sh
-dart pub global activate --source path packages/fleury
+dart pub global activate --source git \
+  https://github.com/danReynolds/fleury.git \
+  --git-path packages/fleury
 ```
 
-That puts `fleury` on your `PATH`. Without installing, you can always run it
-directly: `dart run packages/fleury/bin/fleury.dart serve …`.
+That puts `fleury` on your `PATH`. From the root of a local Fleury checkout, you
+can instead use `dart pub global activate --source path packages/fleury`, or run
+the source executable directly: `dart run packages/fleury/bin/fleury.dart serve …`.
+
+During the pre-release Git dependency window, create an app with:
+
+```sh
+fleury create my_app --dependency-source=git
+```
 
 > **Release status.** Fleury is pre-1.0 and not yet published to pub.dev; apps
 > depend on it via git or path dependencies (as in [Getting
-> started](/fleury/getting-started/)). Published packages, a Homebrew tap, and a
-> `create-fleury-app` scaffold are planned for after the API stabilizes.
+> started](/fleury/getting-started/)). The CLI scaffold is available now;
+> hosted dependencies and the normal `dart pub global activate fleury` path
+> become the default when the packages are published.

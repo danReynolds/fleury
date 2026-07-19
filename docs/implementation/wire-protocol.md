@@ -41,9 +41,10 @@ cleanly beside the input byte stream instead of being smuggled inside ANSI.
 
 ## Protocol version
 
-Current version: **5** (`remoteProtocolVersion`). It is carried in the INIT
-handshake as `v=<n>`; a peer that omits `v` is treated as **v1** (the legacy
-ANSI host).
+The latest structured-host version is **5** (`remoteProtocolVersion`). It is
+carried in the INIT handshake as `v=<n>`; `fleury shell` deliberately
+negotiates **v1** (`remoteAnsiProtocolVersion`) because it is the active ANSI
+terminal host.
 
 | Version | Added |
 | --- | --- |
@@ -64,7 +65,7 @@ frame, so test harnesses can inject either side. "Peer" is `serve` / `shell`;
 | `0x01` | INIT | Peer → App | Handshake: display size, color mode, glyph tier, image protocol, tmux passthrough, protocol version. Sent once before any input; echoed app → peer since v3. |
 | `0x02` | INPUT | Peer → App | Raw stdin bytes (escape sequences, key chords, paste) — legacy byte input path. |
 | `0x03` | RESIZE | Peer → App | Remote display resized (`cols`, `rows`). |
-| `0x10` | OUTPUT | App → Peer | Raw ANSI render bytes — legacy ANSI host (retired-but-reserved; the structured host emits PLAN/SEMANTICS instead). |
+| `0x10` | OUTPUT | App → Peer | Raw ANSI render bytes for the v1 `fleury shell` host; structured hosts emit PLAN/SEMANTICS instead. |
 | `0x11` | BYE | Either | Clean shutdown. Empty payload. |
 | `0x12` | PLAN | App → Peer | Binary presentation plan — the structured host's per-frame output driving a visual surface. |
 | `0x13` | SEMANTICS | App → Peer | UTF-8 JSON semantic snapshot of the rendered frame (accessibility + agent drivability). |

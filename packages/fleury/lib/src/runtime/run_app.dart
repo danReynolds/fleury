@@ -44,6 +44,7 @@ import '../terminal/terminal_image_encoder.dart';
 import 'frame_driver.dart';
 import 'frame_semantics_pipeline.dart';
 import 'frame_presentation.dart';
+import 'handle_discovery.dart';
 import '../remote/remote_clipboard.dart';
 import '../remote/wire_semantic_frame_presenter.dart';
 import 'wire_frame_presenter.dart';
@@ -1282,7 +1283,9 @@ Future<AppExit> _runAppImpl(
           await cleanup();
         }
         if (startupError != null) {
-          if (!done.isCompleted) done.completeError(startupError, startupStack!);
+          if (!done.isCompleted) {
+            done.completeError(startupError, startupStack!);
+          }
         } else if (!done.isCompleted) {
           done.complete(appExit);
         }
@@ -1503,14 +1506,14 @@ String _formatByteTelemetry(CountingAnsiSink sink) {
 ///      subprocess it just started, pointing at a session-specific
 ///      socket. Each browser session gets its own isolated app
 ///      process this way.
-///   2. `.fleury/handle` in CWD — `fleury shell` or single-session
-///      `fleury serve` is running locally; connect to it so the TUI
-///      renders into the shell's terminal or browser, leaving the
-///      IDE's stdout free for the debugger.
+///   2. `.fleury/handle` in CWD or an ancestor within the nearest Dart package
+///      — `fleury shell` or single-session `fleury serve` is running locally;
+///      connect to it so the TUI renders into the shell's terminal or browser,
+///      leaving the IDE's stdout free for the debugger.
 ///   3. Fall back to the native platform driver (the normal path).
 ///
 /// A handle that exists but points to a dead socket falls through to
-/// the Posix driver with a one-line stderr warning rather than
+/// the native platform driver with a one-line stderr warning rather than
 /// hanging — the shell may have crashed and the user's app shouldn't
 /// be held hostage.
 Future<TerminalDriver> _resolveDefaultDriver({
@@ -1535,7 +1538,7 @@ Future<TerminalDriver> _resolveDefaultDriver({
     }
   }
 
-  final handle = _findHandleUpward();
+  final handle = findImplicitFleuryHandle();
   if (handle == null) {
     return createNativeTerminalDriver(
       stdoutOverride: await nativeStdout?.call(),
@@ -1565,22 +1568,6 @@ Future<TerminalDriver> _resolveDefaultDriver({
     return createNativeTerminalDriver(
       stdoutOverride: await nativeStdout?.call(),
     );
-  }
-}
-
-/// Walks up from CWD looking for `.fleury/handle`, stopping at the
-/// filesystem root. Closes the "I ran my app from a subdirectory"
-/// footgun — git does the same for `.git/`, npm for `node_modules/`,
-/// dart for `pubspec.yaml`. Bounded by tree depth so worst-case is a
-/// dozen stat() calls.
-File? _findHandleUpward() {
-  var dir = File('.').absolute.parent;
-  while (true) {
-    final candidate = File('${dir.path}/.fleury/handle');
-    if (candidate.existsSync()) return candidate;
-    final parent = dir.parent;
-    if (parent.path == dir.path) return null; // hit filesystem root
-    dir = parent;
   }
 }
 

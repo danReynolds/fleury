@@ -23,6 +23,9 @@ jobs:
         run: dart tool/fleury_dev.dart bootstrap
       - name: Check (analyze + test + dart2js smoke, all packages)
         run: dart tool/fleury_dev.dart check
+      - name: Hot reload VM-service gate
+        working-directory: packages/fleury
+        run: dart run tool/hot_reload_probe/driver.dart
       # The fast perf-gate suite: deterministic counters + structural
       # invariants (serve-semantics, image-bench, bundle-size, alloc-gate,
       # paint-gate; ~11s). paint-gate's gated axes are exact counters
@@ -33,3 +36,32 @@ jobs:
       # docs/implementation/perf-gates.md.
       - name: Perf gates (fast suite)
         run: dart tool/fleury_dev.dart benchmark gates
+
+  create-smoke:
+    name: create smoke (${{ matrix.os }}, Dart ${{ matrix.sdk }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        sdk: ["3.12.2"]
+        include:
+          - os: ubuntu-latest
+            sdk: "3.10.4"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: ${{ matrix.sdk }}
+      - name: Resolve CLI test dependencies
+        working-directory: packages/fleury
+        run: dart pub get
+      - name: Generate, analyze, test, and compile a fresh project
+        working-directory: packages/fleury
+        run: >-
+          dart test
+          test/cli/create_command_test.dart
+          test/integration/create_project_test.dart
+          --concurrency=1
+          -x pty

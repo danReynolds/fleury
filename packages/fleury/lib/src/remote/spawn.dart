@@ -25,7 +25,7 @@ final class SpawnedFleuryApp {
   /// Tears down: cancels stdout/stderr forwarding, signals the process
   /// (SIGTERM, then SIGKILL after a grace period), and removes the socket (and
   /// its temp dir, if this spawn created it). Idempotent. Returns the process's
-  /// exit code (or the grace-kill sentinel), so a caller needn't await
+  /// exit code (or `-1` if it cannot be observed), so a caller needn't await
   /// `process.exitCode` itself.
   Future<int> dispose() => _dispose();
 }
@@ -171,17 +171,23 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
   final outSub = forward('out', LogSource.stdout, process.stdout);
   final errSub = forward('err', LogSource.stderr, process.stderr);
 
-  Future<int> killProcess() {
+  Future<int> killProcess() async {
     process.kill(ProcessSignal.sigterm);
-    return process.exitCode
-        .timeout(
-          killGrace,
-          onTimeout: () {
-            process.kill(ProcessSignal.sigkill);
-            return -9;
-          },
-        )
-        .catchError((_) => -1);
+    try {
+      return await process.exitCode.timeout(killGrace);
+    } on TimeoutException {
+      process.kill(ProcessSignal.sigkill);
+      try {
+        // Sending SIGKILL is not the end of process ownership: wait for the
+        // operating system to report the exit so callers cannot finish
+        // shutdown while the child is still live (or leave it unreaped).
+        return await process.exitCode;
+      } catch (_) {
+        return -1;
+      }
+    } catch (_) {
+      return -1;
+    }
   }
 
   // A cancellable timeout arm, so a successful connect doesn't leave a timer

@@ -2,27 +2,21 @@
 // save the file, and watch the running terminal update without losing
 // the counter value or the cursor position.
 //
-// Three ways to run this:
+// Supported workflow:
 //
 //   1. VS Code: open packages/fleury, press F5. fleury ships a
-//      `.vscode/launch.json` that wires --enable-vm-service and points
-//      the integrated terminal at the app. Cmd+S in any source file
-//      triggers reload.
+//      `.vscode/launch.json` that points Dart-Code at an integrated
+//      terminal. After editing, run `Dart: Hot Reload` from the command
+//      palette. To reload on save, opt into
+//      `dart.hotReloadOnSave: "allIfDirty"` in your user settings.
 //
-//   2. CLI with `hotreloader`: every example here works with the
-//      community `hotreloader` package which watches the filesystem
-//      and asks the VM to reload. fleury picks the reload event up
-//      automatically via `dart:developer`'s Service API.
-//        $ dart pub global activate hotreloader
-//        $ dart --enable-vm-service example/hot_reload_demo.dart
-//
-//   3. Editor-agnostic: any file watcher can SIGUSR1 the running
-//      process after recompiling. fleury installs a handler that calls
-//      `BuildOwner.reassembleApplication` on the signal.
-//        $ find lib example -name '*.dart' | entr -p kill -SIGUSR1 $PID
+//   2. Another debugger or tool may use the same Dart VM-service
+//      `reloadSources` RPC. Merely enabling the VM service or watching
+//      files is not enough: a VM-service client must request the reload.
 //
 // What hot reload DOES preserve: counter value, focus position,
-// scroll offsets, animation tickers mid-flight, every State field.
+// scroll offsets, and State fields. Animation primitives run their
+// documented reassemble behavior.
 // What it does NOT preserve: anything you compute in main() or
 // top-level state that is set once at startup.
 

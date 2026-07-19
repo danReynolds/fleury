@@ -102,13 +102,13 @@ There are two lifecycle models:
 
 ```sh
 # Run any fleury app and open it in a browser at http://127.0.0.1:5777
-fleury serve --spawn dart run my_app.dart
+fleury serve --spawn dart run bin/run_app.dart
 
 # Advanced: exposed on a trusted network — set a token
 fleury serve --port=8080 --host=0.0.0.0 \
              --allow-origin=https://example.com \
              --token=$(openssl rand -hex 16) \
-             --spawn dart run my_app.dart
+             --spawn dart run bin/run_app.dart
 # → open http://<host>:8080/?token=<secret>
 ```
 

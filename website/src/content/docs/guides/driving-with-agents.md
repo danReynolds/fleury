@@ -66,7 +66,7 @@ The driver is a separate executable, `fleury_mcp`.
 # Once published to pub.dev — add it as a dev-dependency and run it:
 #   dev_dependencies:
 #     fleury_mcp: ^0.1.0
-# then `dart run fleury_mcp -- dart run bin/my_app.dart`
+# then `dart run fleury_mcp -- dart run bin/run_app.dart`
 
 # Today, from a Fleury checkout — put it on your PATH:
 dart pub global activate --source path packages/fleury_mcp
@@ -77,7 +77,7 @@ dart pub global activate --source path packages/fleury_mcp
 Point a host at any app — the app needs no changes:
 
 ```sh
-claude mcp add my-app -- fleury_mcp -- dart run bin/my_app.dart
+claude mcp add my-app -- fleury_mcp -- dart run bin/run_app.dart
 ```
 
 or configure it like any other MCP server:
@@ -87,7 +87,7 @@ or configure it like any other MCP server:
   "mcpServers": {
     "my-app": {
       "command": "fleury_mcp",
-      "args": ["--", "dart", "run", "bin/my_app.dart"]
+      "args": ["--", "dart", "run", "bin/run_app.dart"]
     }
   }
 }
@@ -104,7 +104,7 @@ Launching via `dart run` JIT-compiles your app on the first read (a few seconds)
 near-instant launch:
 
 ```sh
-dart compile exe bin/my_app.dart -o my_app
+dart compile exe bin/run_app.dart -o my_app
 claude mcp add my-app -- fleury_mcp -- ./my_app
 ```
 

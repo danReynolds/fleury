@@ -17,7 +17,7 @@ The `fleury_mcp` package runs a Model Context Protocol server over a private wir
 to your app:
 
 ```sh
-fleury_mcp -- dart run my_app.dart
+fleury_mcp -- dart run bin/run_app.dart
 ```
 
 It spawns your app, tracks its live semantic tree, and exposes it as MCP: the

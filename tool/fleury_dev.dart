@@ -436,6 +436,16 @@ class _Runner {
     await _run('dart', ['test'], workingDirectory: samples);
     await _run('dart', ['test'], workingDirectory: mcp);
     if (!quick) {
+      // Public documentation is part of the supported developer experience.
+      // Keep its source/API contracts in the pull-request gate instead of
+      // discovering stale snippets only when the Pages workflow runs on main.
+      await _run('dart', [
+        'test',
+        'test/api_extract_test.dart',
+        'test/docs_accuracy_test.dart',
+        'test/doc_snippets_test.dart',
+      ], workingDirectory: webExamples);
+
       // dart2js smoke: the doc-examples entrypoint pulls in fleury_core,
       // fleury_widgets_web, fleury_web, and the samples — the whole
       // browser-safe surface compiles or this fails.

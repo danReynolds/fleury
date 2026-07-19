@@ -40,8 +40,8 @@ dart run tool/hot_reload_probe/driver.dart
 
 The driver:
 
-1. Backs up `target.dart` to `target.dart.bak`.
-2. Restores it (and removes the backup) when finished or on error.
+1. Keeps the original `target.dart` contents in memory.
+2. Restores those contents in a `finally` block on completion or handled error.
 3. Exits non-zero if any of the three properties fails.
 
 The probe is self-contained — no fixtures, no external services. The
