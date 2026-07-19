@@ -114,6 +114,12 @@ Future<int> runCreateCommand(List<String> args) async {
         'The project was created; resolve the dependency error and run '
         '`dart pub get` from ${target.path}.',
       );
+      if (options.dependencySource == _DependencySource.hosted) {
+        stderr.writeln(
+          "If the fleury packages aren't on pub.dev yet, scaffold against "
+          'the Git checkout instead: rerun with `--dependency-source=git`.',
+        );
+      }
       return code;
     }
   }
@@ -130,7 +136,8 @@ Future<int> runCreateCommand(List<String> args) async {
   if (options.includeEditorConfig) {
     stdout
       ..writeln('  code .')
-      ..writeln('  Press F5 to run in an interactive terminal.');
+      ..writeln('  Press F5 to run in an interactive terminal.')
+      ..writeln('  Edit and save while it runs — hot reload keeps your state.');
   } else {
     stdout.writeln('  dart run bin/run_app.dart');
   }
@@ -364,8 +371,11 @@ String _readme(String projectName, {required bool includeEditorConfig}) {
       : 'Run directly from an interactive terminal:';
   final editorNote = includeEditorConfig
       ? '''
-VS Code's F5 flow requires the official Dart extension
-(`Dart-Code.dart-code`). Fleury does not require a custom editor extension.
+Under F5, **saving a changed file hot reloads the running app** — the terminal
+updates in place and widget state survives (wired via `dart.hotReloadOnSave` in
+`.vscode/settings.json`). A plain `dart run` starts no VM service, so that path
+runs without hot reload. The F5 flow requires the official Dart extension
+(`Dart-Code.dart-code`); Fleury needs no custom editor extension.
 '''
       : '';
   return '''
@@ -389,6 +399,18 @@ $editorNote
 ```sh
 dart test
 ```
+
+## The same app, elsewhere
+
+- **In a browser** — `fleury serve --spawn dart run bin/run_app.dart` streams
+  this app, unchanged, to a browser tab.
+- **Driven by an AI agent** — `fleury_mcp -- dart run bin/run_app.dart` exposes
+  the running UI over the Model Context Protocol, so an agent reads and
+  operates it by meaning instead of screen-scraping.
+
+Both come from the same widget tree you edit in `lib/app.dart`. Guides, live
+widget demos, and the architecture tour:
+[danreynolds.github.io/fleury](https://danreynolds.github.io/fleury/).
 ''';
 }
 
@@ -425,7 +447,8 @@ const _launchJson = '''
 
 const _settingsJson = '''
 {
-  "dart.cliConsole": "terminal"
+  "dart.cliConsole": "terminal",
+  "dart.hotReloadOnSave": "allIfDirty"
 }
 ''';
 

@@ -26,9 +26,10 @@ too. Open `packages/fleury/` in VS Code, press F5, and the example launches.
 Then:
 
 - Run **Dart: Hot Reload** from the command palette after editing source.
-- If you prefer reload-on-save, set `dart.hotReloadOnSave` to `allIfDirty`
-  in your user settings. Fleury does not impose that workflow on generated
-  projects.
+- Or just save: `fleury create` projects set `dart.hotReloadOnSave:
+  "allIfDirty"` in their workspace settings, so saving a dirty file during a
+  debug session reloads automatically. (This repo's own workspace leaves it
+  unset — delete the line from a generated project to opt out.)
 - Stop and relaunch when you deliberately want to rebuild from scratch and
   drop state.
 
@@ -43,11 +44,12 @@ it. Enabling reload-on-save makes the save trigger that command automatically.
 ## Adding the same to your own app
 
 `fleury create my_app` writes the minimal project configuration automatically:
-`console: terminal` in `.vscode/launch.json` and `dart.cliConsole: terminal`
-in `.vscode/settings.json`. The Dart VS Code extension does the debugging and
-hot reload; Fleury reassembles automatically when the VM reports a reload.
+`console: terminal` in `.vscode/launch.json`, plus `dart.cliConsole: terminal`
+and `dart.hotReloadOnSave: "allIfDirty"` in `.vscode/settings.json`. The Dart
+VS Code extension does the debugging and hot reload; Fleury reassembles
+automatically when the VM reports a reload.
 
-For an existing project, copy those two fields and point `program` at your
+For an existing project, copy those three fields and point `program` at your
 entrypoint. No Fleury-specific VS Code extension is required.
 
 There is no fleury-specific VS Code extension. The hot reload

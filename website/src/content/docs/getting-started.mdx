@@ -54,8 +54,10 @@ beneath it with the familiar `Widget` / `build` / `setState` model.
 With the official [Dart extension](https://marketplace.visualstudio.com/items?itemName=Dart-Code.dart-code)
 installed, open the generated project in VS Code and press F5. Fleury's launch
 configuration opens a real integrated terminal, so rendering and input work
-while the app remains attached to the Dart debugger. Or run the same entrypoint
-directly — `Ctrl-C` quits:
+while the app remains attached to the Dart debugger — and **saving a changed
+file hot reloads the running app in place**, widget state intact (the scaffold
+wires `dart.hotReloadOnSave` for you). Or run the same entrypoint directly
+(no debugger, so no hot reload) — `Ctrl-C` quits:
 
 ```sh
 dart run bin/run_app.dart
