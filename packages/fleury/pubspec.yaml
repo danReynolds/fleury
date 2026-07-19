@@ -23,9 +23,8 @@ dependencies:
   # fd-level (dup2) stdout/stderr capture for the native runtime: stray output
   # from native/FFI libraries (which zones and IOOverrides cannot see) is kept
   # off the terminal so it can't corrupt rendered frames. POSIX-only at
-  # runtime; never imported by the web-safe barrels. Git dep until published.
-  stdio:
-    git: https://github.com/danReynolds/stdio.git
+  # runtime; never imported by the web-safe barrels.
+  stdio: ^0.3.0
   vm_service: ^15.0.2
 
 dev_dependencies:
