@@ -85,7 +85,7 @@ Terminals are keyboard-native, so bind submit to a chord as well as the button:
 ```dart
 KeyBindings(
   bindings: [
-    KeyBinding(const KeyChord.char('s', ctrl: true), onEvent: (_) => _submit()),
+    KeyBinding(KeyChord.ctrl.s, onEvent: (_) => _submit()),
   ],
   child: /* the form */,
 )

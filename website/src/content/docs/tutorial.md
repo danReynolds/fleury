@@ -185,6 +185,10 @@ Widget build(BuildContext context) {
 }
 ```
 
+Run it one more time. The field stays pinned while the list fills the screen,
+the count updates as you type, and a query with no hits (try `zz`) shows the
+empty state.
+
 That's a complete, interactive Fleury app: state held in a `State`, an input
 reported through `onChanged`, a derived list, and a layout that fills the screen.
 

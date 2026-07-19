@@ -59,10 +59,7 @@ class _SignupFormState extends State<SignupForm> {
     final showErrors = _submitted;
     return KeyBindings(
       bindings: [
-        KeyBinding(
-          const KeyChord.char('s', ctrl: true),
-          onEvent: (_) => _submit(),
-        ),
+        KeyBinding(KeyChord.ctrl.s, onEvent: (_) => _submit()),
       ],
       child: Padding(
         padding: const EdgeInsets.all(1),

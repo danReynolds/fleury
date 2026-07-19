@@ -102,7 +102,7 @@ function usageSection(slug, widget, snippet) {
   // Usage block in that case — the page still has the live example + API reference.
   // Add an explicit `code:` to the registry entry to show real usage instead.
   if (snippet && !/^const\s+_\w+\(\)$/.test(snippet.trim())) {
-    return `## Usage\n\n\`\`\`dart title=${yaml(widget + '.dart')}\n${snippet}\n\`\`\`\n\n`;
+    return `## Usage\n\n\`\`\`dart\n${snippet}\n\`\`\`\n\n`;
   }
   return '';
 }
@@ -234,8 +234,7 @@ function sourceSection(widget) {
   const url = `${REPO}/${e.file}${e.line ? `#L${e.line}` : ''}`;
   return (
     `## Source\n\n` +
-    `\`${widget}\` is defined in [\`${e.file}\`](${url}) — read the ` +
-    `implementation, or jump straight to the [widget catalog](/fleury/widgets/).\n\n`
+    `\`${widget}\` is defined in [\`${e.file}\`](${url}).\n\n`
   );
 }
 
@@ -416,14 +415,15 @@ const docNote = (reason) => {
     return (
       `:::note[Runs locally]\nThis widget uses \`dart:io\` (filesystem, processes, ` +
       `or image decoding), so it runs in a terminal or through ` +
-      `[\`fleury serve\`](/fleury/architecture/serving-and-embedding/) — not as an ` +
-      `in-browser embed. The reference below is generated from the source.\n:::\n`
+      `[\`fleury serve\`](/fleury/architecture/serving-and-embedding/) — which is ` +
+      `why this page has no live browser demo. The reference below is generated ` +
+      `from the source.\n:::\n`
     );
   if (reason === 'native-model')
     return (
-      `:::note[Supporting model]\nThis is a protocol-neutral data snapshot, not ` +
-      `a widget or an I/O service. Its current \`LogEntry\` dependency lives ` +
-      `in the native-only log library, so use it in a terminal or through ` +
+      `:::note[Supporting model]\nA plain data model, not a widget — it bundles ` +
+      `a workflow's task and process records for widgets to display. Because it ` +
+      `depends on the native-only log library, use it in a terminal or through ` +
       `[\`fleury serve\`](/fleury/architecture/serving-and-embedding/), not in a ` +
       `client-side embed.\n:::\n`
     );
@@ -531,9 +531,8 @@ let widgetIndex =
   `---\ntitle: Overview\ndescription: Every exported Fleury higher-level widget, plus the most-used core primitives — live where useful and source-backed throughout.\n---\n\n` +
   `This reference covers every widget exported by \`fleury_widgets\`, plus ` +
   `the core layout, text, async, and input primitives most apps reach for. ` +
-  `Live client-side examples are compiled with dart2js; every page has ` +
-  `constructor-specific API details generated from the ` +
-  `current Dart source.\n\n`;
+  `Most pages embed the real widget running live in your browser; every ` +
+  `page's API tables are generated from the current Dart source.\n\n`;
 for (const [category, items] of byCategory) {
   widgetIndex += `## ${category}\n\n`;
   for (const e of items)

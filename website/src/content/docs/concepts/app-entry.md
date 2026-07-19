@@ -78,7 +78,7 @@ its app scopes above a `Navigator`, so every pushed or presented route sees the
 same theme, command registry, status controller, shortcuts, extensions, and
 data sources. Those Navigator routes also install directional and Tab focus
 traversal. A bare root can add its own `FocusTraversalGroup` when it needs the
-same traversal behavior:
+same traversal behavior. The common case needs none of that:
 
 ```dart
 FleuryApp(

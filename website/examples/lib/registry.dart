@@ -239,7 +239,7 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     id: 'histogram.basic',
     widget: 'Histogram',
     category: 'Charts & meters',
-    blurb: 'Bins a list of samples into a frequency distribution.',
+    blurb: 'A frequency-distribution chart that bins raw samples for you.',
     cols: 52,
     rows: 12,
     builder: () => _framed(
@@ -457,7 +457,7 @@ Tabs(
     widget: 'MarkdownView',
     category: 'Documents',
     blurb:
-        'Renders Markdown — headings, lists, code, quotes — to styled cells.',
+        'A scrollable, keyboard-navigable viewer for full Markdown documents.',
     cols: 60,
     rows: 13,
     interactive: true,
@@ -467,7 +467,9 @@ Tabs(
     id: 'markdowntext.basic',
     widget: 'MarkdownText',
     category: 'Documents',
-    blurb: 'Lightweight Markdown for headings, emphasis, lists, and links.',
+    blurb:
+        'Lightweight inline Markdown for short strings — help text, labels, '
+        'captions.',
     cols: 56,
     rows: 9,
     code: """MarkdownText('''
@@ -561,7 +563,9 @@ Tabs(
     id: 'contextpanel.basic',
     widget: 'ContextPanel',
     category: 'Agent surfaces',
-    blurb: 'Lists context items with a token-usage meter and share bars.',
+    blurb:
+        'A panel of context items with per-item share bars and a token-usage '
+        'meter.',
     cols: 56,
     rows: 9,
     builder: () => _framed(
@@ -652,7 +656,8 @@ TextInput(
     widget: 'TextArea',
     category: 'Inputs & controls',
     blurb:
-        'A multiline editor with shared selection, clipboard, paste, and semantic editing.',
+        'A multiline editor with selection, clipboard, paste, and '
+        'agent-editable semantics.',
     cols: 44,
     rows: 7,
     interactive: true,
@@ -676,7 +681,8 @@ TextArea(
     widget: 'FormPanel',
     category: 'Inputs & controls',
     blurb:
-        'A declarative, validated form that runs in terminal, served, and embedded apps.',
+        'A declarative, validated form that runs in terminal and browser apps '
+        'alike.',
     cols: 54,
     rows: 12,
     interactive: true,
@@ -840,7 +846,8 @@ TextArea(
     id: 'radiogroup.basic',
     widget: 'RadioGroup',
     category: 'Inputs & controls',
-    blurb: 'A roving, arrow-key-navigable group of radio choices.',
+    blurb:
+        'An arrow-key-navigable group of radio choices on a single tab stop.',
     cols: 40,
     rows: 6,
     interactive: true,
@@ -910,7 +917,7 @@ TextArea(
     id: 'stepper.basic',
     widget: 'Stepper',
     category: 'Inputs & controls',
-    blurb: 'Increment/decrement a number with ↑/↓ (×10 with Shift).',
+    blurb: 'A compact number spinner; ↑/↓ adjust the value (×10 with Shift).',
     cols: 40,
     rows: 3,
     interactive: true,
@@ -939,7 +946,7 @@ TextArea(
     id: 'passwordinput.basic',
     widget: 'PasswordInput',
     category: 'Inputs & controls',
-    blurb: 'An obscured text field with a reveal chord (Ctrl-R).',
+    blurb: 'An obscured text field with a reveal shortcut (Ctrl-R).',
     cols: 40,
     rows: 3,
     interactive: true,
@@ -1039,7 +1046,7 @@ TextArea(
     id: 'menu.basic',
     widget: 'Menu',
     category: 'Navigation & overlays',
-    blurb: 'A trigger that opens a list of actions.',
+    blurb: 'A dropdown menu: a trigger that opens a floating list of actions.',
     cols: 40,
     rows: 7,
     interactive: true,
@@ -1089,7 +1096,7 @@ TextArea(
     id: 'keyhintbar.basic',
     widget: 'KeyHintBar',
     category: 'Navigation & overlays',
-    blurb: 'Shows the active focus chain’s visible keyboard bindings.',
+    blurb: 'A bar listing the keyboard shortcuts active for the current focus.',
     cols: 52,
     rows: 6,
     code: '''KeyBindings(
@@ -1143,7 +1150,7 @@ TextArea(
     id: 'searchpanel.basic',
     widget: 'SearchPanel',
     category: 'Navigation & overlays',
-    blurb: 'A query box over a result list, grouped and copyable.',
+    blurb: 'A search box over a grouped, copyable result list.',
     cols: 60,
     rows: 11,
     interactive: true,
@@ -1221,7 +1228,7 @@ TextArea(
     id: 'table.basic',
     widget: 'Table',
     category: 'Data & lists',
-    blurb: 'A text table of widget cells, with optional row selection.',
+    blurb: 'A column-aligned grid of widget cells, with optional row selection.',
     cols: 44,
     // Header + 3 data rows, framed, need 7; at rows: 6 the last row (lin) was
     // clipped.
@@ -1458,7 +1465,7 @@ TextArea(
     widget: 'ModelStatusBar',
     category: 'Agent surfaces',
     blurb:
-        'A status line for the active model: name, status, latency, and '
+        'A status line for the active model: name, state, latency, and '
         'token/context usage.',
     // A full-width status bar: model + live status + latency + a context meter.
     // The full widget (provider + mode + …) is ~90 cols — wider than the docs

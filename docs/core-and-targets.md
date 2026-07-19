@@ -7,7 +7,7 @@ that architecture: how the code is split across packages, why the core compiles
 to JavaScript at all, and the one import rule that keeps your widgets
 browser-safe.
 
-The short version: Fleury **has** a platform-neutral core that turns your widget
+The short version: Fleury has a platform-neutral core that turns your widget
 tree into a `CellBuffer` — an abstract grid of styled cells — and a set of
 **targets** that paint that buffer somewhere real. Everything above the seam (the
 **host SPI**) is identical no matter where the app ends up; the target is the only
