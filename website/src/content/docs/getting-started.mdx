@@ -262,8 +262,10 @@ shows the minimal HTML and the available browser-hosting choices.
 
 The terminal entrypoint still imports `fleury.dart` and calls `runApp`. You can
 also use the local **serve** bridge to preview that native app in a browser tab
-without changing its imports. Both modes, the compile command, and when to
-choose each are in [Deployment & distribution](/fleury/guides/deployment/).
+without changing its imports. The small `web/index.html` that hosts the `#app`
+element `main.dart` mounts into, the `dart compile js` build command, and when
+to choose each mode all live in
+[Deployment & distribution](/fleury/guides/deployment/).
 
 ## Where to next
 

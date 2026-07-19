@@ -71,6 +71,7 @@ final class SemanticNode {
   final Set<SemanticAction> actions;   // what you can DO to it
   final List<SemanticNode> children;   // the tree
   final SemanticState state;           // completed / failed / disabled…
+  // …plus a cell `bounds` rect and a `validationError` for invalid inputs.
 }
 ```
 
