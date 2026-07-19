@@ -337,6 +337,57 @@ const widgetsDir = join(DOCS, 'widgets');
 rmSync(widgetsDir, { recursive: true, force: true });
 mkdirSync(widgetsDir, { recursive: true });
 
+// "See also" pointers between easily-confused widgets, rendered right under the
+// intro so a reader on the wrong page finds the right one immediately. Keyed by
+// slug; each entry is `[label, slug, when-to-prefer-it]`.
+const SEE_ALSO = {
+  table: [
+    ['DataTable', 'datatable', 'for large or virtualized data sets'],
+    ['TreeTable', 'treetable', 'for hierarchies'],
+  ],
+  datatable: [
+    ['Table', 'table', 'for small grids of widget cells'],
+    ['TreeTable', 'treetable', 'for hierarchies'],
+  ],
+  treetable: [
+    ['DataTable', 'datatable', 'for flat data'],
+    ['Tree', 'tree', 'when you don’t need columns'],
+  ],
+  tree: [['TreeTable', 'treetable', 'for rows with columns']],
+  markdown: [['MarkdownText', 'markdowntext', 'for short inline strings']],
+  markdowntext: [['MarkdownView', 'markdown', 'for full documents']],
+  textinput: [
+    ['TextArea', 'textarea', 'for multiline text'],
+    ['CompletionTextInput', 'completiontextinput', 'for inline suggestions'],
+  ],
+  textarea: [['TextInput', 'textinput', 'for a single line']],
+  autocomplete: [
+    ['Select', 'select', 'for a short fixed choice list'],
+    ['CompletionTextInput', 'completiontextinput', 'for suggestions inside free text'],
+  ],
+  completiontextinput: [
+    ['Autocomplete', 'autocomplete', 'when the result is one picked option'],
+  ],
+  select: [
+    ['Autocomplete', 'autocomplete', 'to type-and-filter many options'],
+    ['MultiSelect', 'multiselect', 'for multiple choices'],
+  ],
+  multiselect: [['Select', 'select', 'for a single choice']],
+  stepper: [['NumberInput', 'numberinput', 'for typed numeric entry']],
+  numberinput: [['Stepper', 'stepper', 'for arrow-key increments']],
+  progressbar: [['Gauge', 'gauge', 'for a labelled meter with thresholds']],
+  scrollview: [['ListView', 'listview', 'for virtualized, selectable lists']],
+  listview: [['ScrollView', 'scrollview', 'for one tall non-list child']],
+};
+const seeAlsoLine = (slug) => {
+  const entries = SEE_ALSO[slug];
+  if (!entries) return '';
+  const parts = entries.map(
+    ([label, target, when]) => `[${label}](/fleury/widgets/${target}/) ${when}`
+  );
+  return `**See also:** ${parts.join(' · ')}.\n\n`;
+};
+
 for (const e of widgets) {
   const slug = e.id.split('.')[0];
   // Prefer the widget's own source doc comment (richer); fall back to the blurb.
@@ -368,8 +419,9 @@ for (const e of widgets) {
       `<Fragment slot="aside">\n\n` +
       `${liveBlock}\n\n` +
       `</Fragment>\n\n` +
-      // Left column: description → usage example(s) → API breakdown.
+      // Left column: description → see-also → usage example(s) → API breakdown.
       `${intro}\n\n` +
+      seeAlsoLine(slug) +
       usageSection(slug, e.widget, snippet) +
       constructorsSection(e.widget) +
       sourceSection(e.widget) +
@@ -410,7 +462,8 @@ for (const entry of DOC_ONLY) {
     );
   }
 }
-const docNote = (reason) => {
+const docNote = (d) => {
+  const reason = d.reason;
   if (reason === 'native')
     return (
       `:::note[Runs locally]\nThis widget uses \`dart:io\` (filesystem, processes, ` +
@@ -427,16 +480,22 @@ const docNote = (reason) => {
       `[\`fleury serve\`](/fleury/architecture/serving-and-embedding/), not in a ` +
       `client-side embed.\n:::\n`
     );
-  if (reason === 'core')
+  if (reason === 'core') {
+    // Point each primitive at the guide that actually shows it in context
+    // (layout for the box/flex primitives, loading-data for the async
+    // builders, and so on) instead of sending everyone to the layout guide.
+    const guide = d.guide ?? 'layout';
     return (
       `:::note[Core widget]\nA framework primitive from \`package:fleury\` — the ` +
       `same model you know from Flutter. The reference below is generated from ` +
-      `the source; the [guides](/fleury/guides/layout/) show these in context.\n:::\n`
+      `the source; the [${guide.replace(/-/g, ' ')} guide](/fleury/guides/${guide}/) ` +
+      `shows it in context.\n:::\n`
     );
+  }
   return (
-    `:::note[Imperative]\nShown by calling \`Toaster.show(context, …)\`, so ` +
-    `there's no static preview — wrap your app in a \`Toaster\` once, then ` +
-    `raise toasts from anywhere below it.\n:::\n`
+    `:::note[Imperative]\nToasts are raised at runtime with ` +
+    `\`Toaster.show(context, …)\`, so there's no static preview on this ` +
+    `page.\n:::\n`
   );
 };
 
@@ -444,26 +503,26 @@ const docNote = (reason) => {
 // and builder primitives a Flutter developer reaches for. Documented from source
 // like the rest of the reference; usage in context lives in the guides.
 const CORE = [
-  { slug: 'text', widget: 'Text', code: "Text('hello', style: CellStyle(bold: true))" },
-  { slug: 'richtext', widget: 'RichText',
+  { slug: 'text', guide: 'theming', widget: 'Text', code: "Text('hello', style: CellStyle(bold: true))" },
+  { slug: 'richtext', guide: 'theming', widget: 'RichText',
     code: "RichText(text: TextSpan(children: [\n  TextSpan(text: 'deploy '),\n  TextSpan(text: 'ok', style: CellStyle(bold: true)),\n]))" },
-  { slug: 'textspan', widget: 'TextSpan',
+  { slug: 'textspan', guide: 'theming', widget: 'TextSpan',
     code: "TextSpan(\n  text: 'deploy ',\n  children: [TextSpan(text: 'ok', style: CellStyle(bold: true))],\n)" },
-  { slug: 'listview', widget: 'ListView',
+  { slug: 'listview', guide: 'lists-and-scrolling', widget: 'ListView',
     code: "ListView.builder(\n  itemCount: rows.length,\n  itemBuilder: (context, i, selected) => Text(rows[i].label),\n)" },
-  { slug: 'scrollview', widget: 'ScrollView',
+  { slug: 'scrollview', guide: 'lists-and-scrolling', widget: 'ScrollView',
     code: "ScrollView(child: Column(children: [/* tall content */]))" },
-  { slug: 'futurebuilder', widget: 'FutureBuilder',
+  { slug: 'futurebuilder', guide: 'loading-data', widget: 'FutureBuilder',
     code: "FutureBuilder<List<Item>>(\n  future: load(),\n  builder: (context, snapshot) => snapshot.hasData\n      ? ItemList(snapshot.data!)\n      : const Text('Loading…'),\n)" },
-  { slug: 'streambuilder', widget: 'StreamBuilder',
+  { slug: 'streambuilder', guide: 'loading-data', widget: 'StreamBuilder',
     code: "StreamBuilder<int>(\n  stream: ticks,\n  initialData: 0,\n  builder: (context, snapshot) => Text('tick ${snapshot.data ?? 0}'),\n)" },
-  { slug: 'gesturedetector', widget: 'GestureDetector',
+  { slug: 'gesturedetector', guide: 'input-and-gestures', widget: 'GestureDetector',
     code: "GestureDetector(\n  onTap: _select,\n  onTapDown: (col, row) => _placeAt(col, row),\n  child: child,\n)" },
-  { slug: 'mouseregion', widget: 'MouseRegion',
+  { slug: 'mouseregion', guide: 'input-and-gestures', widget: 'MouseRegion',
     code: "MouseRegion(\n  onEnter: () => setHover(true),\n  onExit: () => setHover(false),\n  child: Text('hover me'),\n)" },
   { slug: 'layoutbuilder', widget: 'LayoutBuilder',
     code: "LayoutBuilder(\n  builder: (context, constraints) =>\n      (constraints.maxCols ?? 0) > 60 ? Wide() : Narrow(),\n)" },
-  { slug: 'listenablebuilder', widget: 'ListenableBuilder',
+  { slug: 'listenablebuilder', guide: 'state-management', widget: 'ListenableBuilder',
     code: "ListenableBuilder(\n  listenable: model,\n  builder: (context, child) => Text(model.statusLabel),\n)" },
   { slug: 'container', widget: 'Container',
     code: "Container(\n  width: 32,\n  padding: const EdgeInsets.symmetric(horizontal: 1),\n  border: BoxBorder(style: BorderStyle.rounded),\n  child: Text('Settings'),\n)" },
@@ -493,14 +552,18 @@ const exportedWidgetCount = assertExportedWidgetCoverage([
   ...DOC_PAGES,
 ]);
 assertReferenceComplete(DOC_PAGES.map((entry) => entry.widget), 'doc-only widget');
+// First sentence of a doc comment — for one-line settings (frontmatter
+// description, catalog bullets) where the whole first paragraph is too much.
+const firstSentence = (s) => s.split(/(?<=\.)\s+(?=[A-Z`(])/)[0];
 for (const d of DOC_PAGES) {
   const intro = api[d.widget]?.classDoc ? mdxSafe(api[d.widget].classDoc) : '';
   writeFileSync(
     join(widgetsDir, `${d.slug}.mdx`),
     `---\ntitle: ${yaml(d.widget)}\n` +
-      `description: ${yaml(api[d.widget]?.doc ?? d.widget)}\n---\n\n` +
+      `description: ${yaml(firstSentence(api[d.widget]?.doc ?? d.widget))}\n---\n\n` +
       (intro ? `${intro}\n\n` : '') +
-      `${docNote(d.reason)}\n` +
+      seeAlsoLine(d.slug) +
+      `${docNote(d)}\n` +
       (d.code ? `## Usage\n\n\`\`\`dart\n${d.code}\n\`\`\`\n\n` : '') +
       constructorsSection(d.widget) +
       sourceSection(d.widget) +
@@ -523,7 +586,9 @@ for (const d of DOC_PAGES) {
       : d.reason === 'native-model'
         ? ' *(supporting model; runs locally)*'
         : ' *(imperative)*';
-  const blurb = (api[d.widget]?.doc ?? '') + tag;
+  // One sentence only — several core/native doc comments open with a full
+  // paragraph, which read as walls of text next to the curated one-line blurbs.
+  const blurb = firstSentence(api[d.widget]?.doc ?? '') + tag;
   if (!byCategory.has(d.category)) byCategory.set(d.category, []);
   byCategory.get(d.category).push({ widget: d.widget, id: d.slug, blurb });
 }
@@ -533,8 +598,35 @@ let widgetIndex =
   `the core layout, text, async, and input primitives most apps reach for. ` +
   `Most pages embed the real widget running live in your browser; every ` +
   `page's API tables are generated from the current Dart source.\n\n`;
-for (const [category, items] of byCategory) {
+// Deliberate reading order: the control families a first visit scans for come
+// first; the framework primitives close the page. Unlisted categories (if a new
+// one appears in the registry) fall in after the listed ones, before Core.
+const CATEGORY_ORDER = [
+  'Inputs & controls',
+  'Data & lists',
+  'Charts & meters',
+  'Documents',
+  'Agent surfaces',
+  'Navigation & overlays',
+  'Layout',
+  'Supporting models',
+  'Core widgets',
+];
+const categoryRank = (c) => {
+  const i = CATEGORY_ORDER.indexOf(c);
+  return i === -1 ? CATEGORY_ORDER.length - 2 : i;
+};
+const orderedCategories = [...byCategory.entries()].sort(
+  (a, b) => categoryRank(a[0]) - categoryRank(b[0])
+);
+for (const [category, items] of orderedCategories) {
   widgetIndex += `## ${category}\n\n`;
+  if (category === 'Layout') {
+    widgetIndex +=
+      `The core layout primitives — \`Row\`, \`Column\`, \`Padding\`, ` +
+      `\`SizedBox\`, and friends — are under ` +
+      `[Core widgets](#core-widgets).\n\n`;
+  }
   for (const e of items)
     widgetIndex += `- [${e.widget}](/fleury/widgets/${e.id.split('.')[0]}/) — ${e.blurb}\n`;
   widgetIndex += `\n`;
@@ -585,6 +677,21 @@ const SHOWCASE_GOALS = {
     'See [Built for agents](/fleury/architecture/agents-and-semantics/).',
 };
 
+// One concrete interaction invitation per showcase, shown right above the live
+// demo — the demos are interactive, but without this visitors watch passively.
+// Each is grounded in the sample source (autofocus + handlers verified).
+const SHOWCASE_TRY = {
+  dashboard:
+    '*Try it: the process table has focus — ↑/↓ move the row selection ' +
+    'while the charts stream.*',
+  files:
+    '*Try it: arrow through the tree — the preview swaps viewers as the ' +
+    'selection changes.*',
+  agent:
+    '*Try it: type a message in the prompt (or just press Enter) and the ' +
+    'next turn streams in.*',
+};
+
 // Catalog widget name → { slug, category }, for the "widgets used" links.
 const catalog = new Map();
 for (const e of widgets)
@@ -615,6 +722,7 @@ for (const e of showcases) {
       // (it leads with the description). The demo then sits in a <ShowcaseStage>
       // with the run command + source link in the right-side rail beside it.
       `${SHOWCASE_GOALS[slug] ?? e.blurb}\n\n` +
+      (SHOWCASE_TRY[slug] ? `${SHOWCASE_TRY[slug]}\n\n` : '') +
       `<ShowcaseStage runCmd="fleury dev samples ${slug}"` +
       (file
         ? ` sourceFile="${file}" sourceUrl="${REPO}/packages/samples/lib/src/${file}"`

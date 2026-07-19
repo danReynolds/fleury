@@ -117,7 +117,10 @@ final class ModelStatusInfo {
       status == ModelRuntimeStatus.busy;
 }
 
-/// Compact context-window/token usage indicator.
+/// A one-line context-window meter: used/limit token counts, a utilization
+/// bar, and a percentage (`Context: 78k/200k [####......] 39%`). Nearing or
+/// exceeding the limit is announced in words — `NEAR LIMIT`, `OVER LIMIT` —
+/// not by color alone, so the state reads in monochrome.
 class TokenMeter extends StatelessWidget {
   const TokenMeter({
     super.key,
@@ -198,7 +201,10 @@ class TokenMeter extends StatelessWidget {
   }
 }
 
-/// Compact status bar for model-backed developer and agent workflows.
+/// A one-line status bar for the active model: provider/name, lifecycle
+/// state, and — when known — mode, latency, and queue depth, with a
+/// [TokenMeter] beside it by default. The line recolors as the runtime moves
+/// between states (connecting, ready, streaming, degraded, error).
 class ModelStatusBar extends StatelessWidget {
   const ModelStatusBar({
     super.key,

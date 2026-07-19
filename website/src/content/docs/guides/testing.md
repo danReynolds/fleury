@@ -69,6 +69,29 @@ testWidgets('opens details', (tester) async {
 });
 ```
 
+## Query and act by semantics
+
+The meaning-level assertions from the intro go through the semantic graph — the
+same tree [agents read](/fleury/architecture/agents-and-semantics/):
+
+- **`tester.semantics()`** returns a snapshot of the graph.
+- **`.single(role: …, label: …)`** finds exactly one node — by role, label,
+  value, or an action it advertises — and fails with the tree dumped when zero
+  or several match. Assert on what the node *is*: its `value`, `state`,
+  `actions`, whether it's `selected`.
+- **`tester.invokeSemanticAction(action, role: …, label: …)`** drives the UI by
+  meaning (the navigation test above) instead of scripting keystrokes.
+- **`tester.exists(text('…'))`** is the quick existence check.
+
+```dart
+final save = tester.semantics().single(
+  role: SemanticRole.button, label: 'Save');
+expect(save.actions, contains(SemanticAction.activate));
+```
+
+A test written this way survives a re-theme, a relayout, and the port to the
+browser, because none of those change what the UI *means*.
+
 ## Drive input
 
 Send key events and re-render to test interactions:
@@ -98,6 +121,26 @@ tester.pump(const Duration(seconds: 1)); // ~30 ticks at the default cadence
 ```
 
 `pumpAndSettle()` pumps until no tickers are active.
+
+## Golden files
+
+For layout-heavy screens, snapshot the rendered cells instead of hand-writing
+assertions:
+
+```dart
+testWidgets('dashboard layout is stable', (tester) {
+  tester.pumpWidget(const Dashboard());
+  expect(
+    tester.renderToString(size: const CellSize(80, 24)),
+    matchesGolden('dashboard.txt'),
+  );
+});
+```
+
+Goldens live under `test/goldens/` as plain text. A missing golden is written on
+the first run (the test bootstraps itself); after an intentional UI change, run
+with `FLEURY_UPDATE_GOLDENS=1` to rewrite them — and review the file diff before
+committing, the same discipline as any golden workflow.
 
 ## The parity oracle
 

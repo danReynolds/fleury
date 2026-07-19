@@ -81,6 +81,10 @@ export default defineConfig({
             { label: 'Testing', slug: 'guides/testing' },
             { label: 'Debugging', slug: 'guides/debugging' },
             {
+              label: 'Terminal capabilities',
+              slug: 'guides/terminal-capabilities',
+            },
+            {
               label: 'Driving with an agent (MCP)',
               slug: 'guides/driving-with-agents',
             },

@@ -184,7 +184,10 @@ String exportContextItem(
   return parts.where((part) => part.trim().isNotEmpty).join(' | ');
 }
 
-/// Compact context-pack inspector for model-backed developer workflows.
+/// A panel listing what is in the model's context window — files, messages,
+/// tool output — with each item's kind, priority, and token count under a
+/// one-line total. Turn on [showTokenShare] to append each item's share of
+/// the panel's tokens and make it obvious which items dominate the window.
 class ContextPanel extends StatefulWidget {
   const ContextPanel({
     super.key,

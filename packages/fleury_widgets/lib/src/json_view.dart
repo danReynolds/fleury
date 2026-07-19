@@ -351,7 +351,10 @@ String exportJsonViewRow(
   };
 }
 
-/// Keyboard-navigable, collapsible JSON structure viewer.
+/// A collapsible tree view of a JSON value: `▸`/`▾` rows expand and collapse
+/// in place, values are colored by type, and Ctrl+C copies the selected
+/// node's subtree as JSON (or just its visible line). Invalid source is
+/// rendered as a parse-error state instead of throwing.
 class JsonView extends StatefulWidget {
   JsonView({
     super.key,

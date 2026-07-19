@@ -51,7 +51,10 @@ final class ApprovalRequest {
   final String cancelLabel;
 }
 
-/// A compact approval prompt for developer-tool and agent-style workflows.
+/// A yes/no decision dialog for one [ApprovalRequest]: title, explanation,
+/// optional subject and detail lines, and Approve/Deny buttons with `y`/`n`
+/// key shortcuts. Destructive requests focus Deny by default, so a stray
+/// Enter can't trigger an irreversible action.
 class ApprovalPrompt extends StatelessWidget {
   const ApprovalPrompt({
     super.key,
