@@ -41,8 +41,11 @@ Focus(
 ```
 
 A `KeyEvent` carries `keyCode` (a `KeyCode` like `enter`, `escape`, `tab`, the
-arrows), the typed `char` (for printable input), and modifier flags
-`hasCtrl` / `hasAlt` / `hasShift`:
+arrows), the modifier flags `hasCtrl` / `hasAlt` / `hasShift`, and — for a
+modifier chord — a `char` holding the base key (Ctrl+S → `char: 's'`). Plain
+typed text is *not* a `KeyEvent`: printable and Unicode input arrives as a
+`TextInputEvent` that the text widgets consume, so `Focus(onKey:)` sees keys and
+chords, not character entry.
 
 ```dart
 if (event.hasCtrl && event.char == 's') save();
