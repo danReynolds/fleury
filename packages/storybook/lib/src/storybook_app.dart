@@ -14,7 +14,13 @@ class StorybookApp extends StatefulWidget {
     this.initialControlValues = const <String, Object?>{},
     this.initialTheme = StorybookThemeMode.cyber,
     this.initialViewport = StorybookViewportPreset.fit,
-  }) : stories = stories ?? storybookStories;
+  })  : assert(
+          stories == null || stories.isNotEmpty,
+          'StorybookApp needs at least one story: initState and _selectedStory '
+          'index the catalog directly. Pass a non-empty list, or omit `stories` '
+          'to use the built-in catalog.',
+        ),
+        stories = stories ?? storybookStories;
 
   final List<Story> stories;
   final String? initialStoryId;

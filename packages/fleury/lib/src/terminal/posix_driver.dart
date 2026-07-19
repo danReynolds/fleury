@@ -43,10 +43,12 @@ class PosixTerminalDriver
     @visibleForTesting void Function(int exitCode)? forceExitOverride,
     @visibleForTesting bool Function()? selfStopOverride,
     @visibleForTesting PosixTerminalModeController? terminalModeController,
+    @visibleForTesting bool? stdinIsSharedOverride,
   }) : _stdin = stdinOverride ?? stdin,
        _stdout = stdoutOverride ?? stdout,
        _forceExitOverride = forceExitOverride,
        _selfStopOverride = selfStopOverride,
+       _stdinSharedOverride = stdinIsSharedOverride,
        _terminalModeController =
            terminalModeController ?? NativePosixTerminalModeController() {
     _events = StreamController<TuiEvent>.broadcast(
@@ -88,6 +90,18 @@ class PosixTerminalDriver
   // whether raw mode is meaningful (and settable without throwing).
   late final bool _stdinIsTerminal = _stdin.hasTerminal;
   late final bool _stdoutIsTerminal = _stdout.hasTerminal;
+
+  // Test seam: null in production, where [_stdinIsShared] is derived from
+  // identity with the process-global `stdin`.
+  final bool? _stdinSharedOverride;
+
+  /// Whether [_stdin] is the process-global single-subscription stdin, which
+  /// must be retained and reused across sequential sessions rather than
+  /// cancelled — dart:io hands it out only once per process, so a second
+  /// `runApp`'s [enter] would otherwise throw 'Stream has already been listened
+  /// to'. An injected test stdin is not shared (each driver owns its own).
+  late final bool _stdinIsShared =
+      _stdinSharedOverride ?? identical(_stdin, stdin);
 
   final InputParser _parser = InputParser();
   late final StreamController<TuiEvent> _events;
@@ -353,52 +367,21 @@ class PosixTerminalDriver
       _wroteEnterSequences = true;
     }
 
-    _stdinSubscription = _stdin.listen(
-      (bytes) {
-        // During the startup image-protocol probe, the terminal's reply is for
-        // us, not the app — divert it to the probe buffer so it isn't parsed
-        // as keystrokes (and so a non-supporting terminal's reply is consumed
-        // rather than leaked as garbage).
-        if (_probing) {
-          _probeBuffer.addAll(bytes);
-          return;
-        }
-        if (_drainingLateProbe) {
-          // A probe timed out; its reply may still be arriving. Keep diverting
-          // until every owed DA terminator lands (then replay real input after
-          // the last one), rather than parsing the reply as keystrokes.
-          _probeBuffer.addAll(bytes);
-          if (_daReplyEndN(_probeBuffer, _daRepliesPending) >= 0) {
-            _finishLateProbeDrain();
-          } else if (_probeBuffer.length > _maxProbeBufferBytes) {
-            // A terminal spraying without a DA terminator: a real reply is
-            // tiny, so give up now rather than grow the buffer (and rescan it)
-            // for the full grace. Real keystrokes buffered here are replayed,
-            // not dropped (see [_giveUpLateProbeDrain]).
-            _giveUpLateProbeDrain();
-          }
-          return;
-        }
-        _parser.feed(bytes, _sink);
-        _scheduleFlush();
-        _schedulePasteIdleFlush();
-      },
-      onError: (Object error, StackTrace stack) {
-        if (!_events.isClosed) _events.addError(error, stack);
-      },
-      onDone: () {
-        // stdin EOF / PTY disconnect is the end of a local terminal session.
-        // Closing the driver event stream lets runApp's onDone path exit and
-        // restore instead of waiting forever on an input source that vanished.
-        _flushTimer?.cancel();
-        _flushTimer = null;
-        _pasteIdleTimer?.cancel();
-        _pasteIdleTimer = null;
-        _parser.finish(_sink); // finalizes any in-progress paste at EOF
-        if (!_events.isClosed) unawaited(_events.close());
-      },
-      cancelOnError: false,
-    );
+    // The process-global stdin is a single-subscription stream: retain and
+    // reuse its one subscription across sessions ([_SharedStdinSubscription]);
+    // an injected test stdin is cancelled per-session as before.
+    _stdinSubscription = _stdinIsShared
+        ? _sharedStdinFor(_stdin).acquire(
+            _handleStdinBytes,
+            onError: _handleStdinError,
+            onDone: _handleStdinDone,
+          )
+        : _stdin.listen(
+            _handleStdinBytes,
+            onError: _handleStdinError,
+            onDone: _handleStdinDone,
+            cancelOnError: false,
+          );
 
     // Actively confirm a native image protocol the environment didn't name
     // (e.g. Kitty graphics under Warp, which masquerades as xterm-256color).
@@ -418,6 +401,54 @@ class PosixTerminalDriver
     _active = true;
     _entering = false;
     _emitPendingSignalIfListened();
+  }
+
+  /// stdin data handler. Extracted so it can be re-pointed onto the retained
+  /// [_SharedStdinSubscription] when a later session reuses it.
+  void _handleStdinBytes(List<int> bytes) {
+    // During the startup image-protocol probe, the terminal's reply is for
+    // us, not the app — divert it to the probe buffer so it isn't parsed
+    // as keystrokes (and so a non-supporting terminal's reply is consumed
+    // rather than leaked as garbage).
+    if (_probing) {
+      _probeBuffer.addAll(bytes);
+      return;
+    }
+    if (_drainingLateProbe) {
+      // A probe timed out; its reply may still be arriving. Keep diverting
+      // until every owed DA terminator lands (then replay real input after
+      // the last one), rather than parsing the reply as keystrokes.
+      _probeBuffer.addAll(bytes);
+      if (_daReplyEndN(_probeBuffer, _daRepliesPending) >= 0) {
+        _finishLateProbeDrain();
+      } else if (_probeBuffer.length > _maxProbeBufferBytes) {
+        // A terminal spraying without a DA terminator: a real reply is
+        // tiny, so give up now rather than grow the buffer (and rescan it)
+        // for the full grace. Real keystrokes buffered here are replayed,
+        // not dropped (see [_giveUpLateProbeDrain]).
+        _giveUpLateProbeDrain();
+      }
+      return;
+    }
+    _parser.feed(bytes, _sink);
+    _scheduleFlush();
+    _schedulePasteIdleFlush();
+  }
+
+  void _handleStdinError(Object error, StackTrace stack) {
+    if (!_events.isClosed) _events.addError(error, stack);
+  }
+
+  void _handleStdinDone() {
+    // stdin EOF / PTY disconnect is the end of a local terminal session.
+    // Closing the driver event stream lets runApp's onDone path exit and
+    // restore instead of waiting forever on an input source that vanished.
+    _flushTimer?.cancel();
+    _flushTimer = null;
+    _pasteIdleTimer?.cancel();
+    _pasteIdleTimer = null;
+    _parser.finish(_sink); // finalizes any in-progress paste at EOF
+    if (!_events.isClosed) unawaited(_events.close());
   }
 
   /// When the environment doesn't already name a native image protocol, ask
@@ -929,10 +960,17 @@ class PosixTerminalDriver
     } catch (_) {}
     _termSubscription = null;
 
-    try {
-      await _stdinSubscription?.cancel();
-    } catch (_) {}
-    _stdinSubscription = null;
+    if (_stdinIsShared) {
+      // Never cancel the process-global single-subscription stdin — pause it
+      // for the next session and let its idle-cancel release it if none comes.
+      _sharedStdinFor(_stdin).release();
+      _stdinSubscription = null;
+    } else {
+      try {
+        await _stdinSubscription?.cancel();
+      } catch (_) {}
+      _stdinSubscription = null;
+    }
     try {
       await _resizeSubscription?.cancel();
     } catch (_) {}
@@ -1032,6 +1070,90 @@ class _ParserSink implements TuiEventSink {
     if (controller != null && !controller.isClosed) controller.add(event);
   }
 }
+
+/// Retains the single subscription to a process-global [Stdin] so sequential
+/// driver sessions in one process can share it.
+///
+/// dart:io's real `stdin` is a single-subscription stream that can be listened
+/// to only once per process: cancelling it when one `runApp` restores would
+/// make the next `runApp`'s [PosixTerminalDriver.enter] throw 'Stream has
+/// already been listened to'. So the subscription is retained here — paused on
+/// [release] and resumed with fresh handlers on the next [acquire]. Because a
+/// *paused* stdin subscription still keeps the event loop alive, [release]
+/// arms a zero-delay idle-cancel that fully cancels it when no next session
+/// claims it — so a normal single-session run still exits. A back-to-back
+/// second session (no event-loop turn in between) beats that timer and reuses
+/// the live subscription; a session that starts after an idle gap re-listens
+/// and, finding stdin already spent, degrades to no local input rather than
+/// crashing.
+class _SharedStdinSubscription {
+  _SharedStdinSubscription(this._stdin);
+
+  final Stdin _stdin;
+  StreamSubscription<List<int>>? _subscription;
+  Timer? _idleCancel;
+
+  /// Starts the shared subscription, or resumes it with fresh handlers for a
+  /// reusing session. Returns null only if stdin was already spent (an idle
+  /// gap let the idle-cancel fire) and cannot be listened to again.
+  StreamSubscription<List<int>>? acquire(
+    void Function(List<int> bytes) onData, {
+    required void Function(Object error, StackTrace stack) onError,
+    required void Function() onDone,
+  }) {
+    _idleCancel?.cancel();
+    _idleCancel = null;
+    final existing = _subscription;
+    if (existing != null) {
+      existing
+        ..onData(onData)
+        ..onError(onError)
+        ..onDone(onDone)
+        ..resume();
+      return existing;
+    }
+    try {
+      return _subscription = _stdin.listen(
+        onData,
+        onError: onError,
+        onDone: onDone,
+        cancelOnError: false,
+      );
+    } on StateError {
+      // stdin was consumed and cancelled by a prior session during an idle gap;
+      // it can't be handed out twice. Degrade to no local input, not a crash.
+      return _subscription = null;
+    }
+  }
+
+  /// Pauses the shared subscription for a later session and schedules an
+  /// idle-cancel so the process still exits if none arrives.
+  void release() {
+    final subscription = _subscription;
+    if (subscription == null) return;
+    subscription.pause();
+    _idleCancel?.cancel();
+    _idleCancel = Timer(Duration.zero, () {
+      _idleCancel = null;
+      // A reusing session may have resumed and re-retained a different (or the
+      // same) subscription in the meantime; only cancel the one we paused.
+      if (identical(_subscription, subscription)) {
+        unawaited(subscription.cancel());
+        _subscription = null;
+      }
+    });
+  }
+}
+
+/// One [_SharedStdinSubscription] per distinct [Stdin] object: sequential
+/// sessions over the same process-global stdin share it, while an injected test
+/// stdin gets its own entry (and real production stdin is never touched by a
+/// test that supplies a fake).
+final Expando<_SharedStdinSubscription> _sharedStdinSubscriptions =
+    Expando<_SharedStdinSubscription>('fleury.sharedStdin');
+
+_SharedStdinSubscription _sharedStdinFor(Stdin stream) =>
+    _sharedStdinSubscriptions[stream] ??= _SharedStdinSubscription(stream);
 
 /// Testable ownership boundary for the complete POSIX terminal mode.
 ///

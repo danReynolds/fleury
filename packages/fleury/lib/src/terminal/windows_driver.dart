@@ -24,8 +24,10 @@ class WindowsTerminalDriver
     Stdin? stdinOverride,
     Stdout? stdoutOverride,
     this.resizePollInterval = const Duration(milliseconds: 250),
+    @visibleForTesting bool? stdinIsSharedOverride,
   }) : _stdin = stdinOverride ?? stdin,
        _stdout = stdoutOverride ?? stdout,
+       _stdinSharedOverride = stdinIsSharedOverride,
        _consoleModeController = NativeWindowsConsoleModeController();
 
   final Stdin _stdin;
@@ -35,6 +37,18 @@ class WindowsTerminalDriver
 
   late final bool _stdinIsTerminal = _stdin.hasTerminal;
   late final bool _stdoutIsTerminal = _stdout.hasTerminal;
+
+  // Test seam: null in production, where [_stdinIsShared] is derived from
+  // identity with the process-global `stdin`.
+  final bool? _stdinSharedOverride;
+
+  /// Whether [_stdin] is the process-global single-subscription stdin, which
+  /// must be retained and reused across sequential sessions rather than
+  /// cancelled — dart:io hands it out only once per process, so a second
+  /// `runApp`'s [enter] would otherwise throw 'Stream has already been listened
+  /// to'. An injected test stdin is not shared (each driver owns its own).
+  late final bool _stdinIsShared =
+      _stdinSharedOverride ?? identical(_stdin, stdin);
 
   final InputParser _parser = InputParser();
   final StreamController<TuiEvent> _events =
@@ -112,25 +126,21 @@ class WindowsTerminalDriver
       _wroteEnterSequences = true;
     }
 
-    _stdinSubscription = _stdin.listen(
-      (bytes) {
-        _parser.feed(bytes, _sink);
-        _scheduleFlush();
-        _schedulePasteIdleFlush();
-      },
-      onError: (Object error, StackTrace stack) {
-        if (!_events.isClosed) _events.addError(error, stack);
-      },
-      onDone: () {
-        _flushTimer?.cancel();
-        _flushTimer = null;
-        _pasteIdleTimer?.cancel();
-        _pasteIdleTimer = null;
-        _parser.finish(_sink);
-        if (!_events.isClosed) unawaited(_events.close());
-      },
-      cancelOnError: false,
-    );
+    // The process-global stdin is a single-subscription stream: retain and
+    // reuse its one subscription across sessions ([_SharedStdinSubscription]);
+    // an injected test stdin is cancelled per-session as before.
+    _stdinSubscription = _stdinIsShared
+        ? _sharedStdinFor(_stdin).acquire(
+            _handleStdinBytes,
+            onError: _handleStdinError,
+            onDone: _handleStdinDone,
+          )
+        : _stdin.listen(
+            _handleStdinBytes,
+            onError: _handleStdinError,
+            onDone: _handleStdinDone,
+            cancelOnError: false,
+          );
 
     _lastSize = size;
     if (_stdoutIsTerminal && resizePollInterval > Duration.zero) {
@@ -141,6 +151,27 @@ class WindowsTerminalDriver
     }
 
     _active = true;
+  }
+
+  /// stdin data handler. Extracted so it can be re-pointed onto the retained
+  /// [_SharedStdinSubscription] when a later session reuses it.
+  void _handleStdinBytes(List<int> bytes) {
+    _parser.feed(bytes, _sink);
+    _scheduleFlush();
+    _schedulePasteIdleFlush();
+  }
+
+  void _handleStdinError(Object error, StackTrace stack) {
+    if (!_events.isClosed) _events.addError(error, stack);
+  }
+
+  void _handleStdinDone() {
+    _flushTimer?.cancel();
+    _flushTimer = null;
+    _pasteIdleTimer?.cancel();
+    _pasteIdleTimer = null;
+    _parser.finish(_sink);
+    if (!_events.isClosed) unawaited(_events.close());
   }
 
   void _enableConsoleMode(TerminalMode mode) {
@@ -284,10 +315,17 @@ class WindowsTerminalDriver
     _resizePollTimer?.cancel();
     _resizePollTimer = null;
 
-    try {
-      await _stdinSubscription?.cancel();
-    } catch (_) {}
-    _stdinSubscription = null;
+    if (_stdinIsShared) {
+      // Never cancel the process-global single-subscription stdin — pause it
+      // for the next session and let its idle-cancel release it if none comes.
+      _sharedStdinFor(_stdin).release();
+      _stdinSubscription = null;
+    } else {
+      try {
+        await _stdinSubscription?.cancel();
+      } catch (_) {}
+      _stdinSubscription = null;
+    }
 
     if (_wroteEnterSequences) {
       try {
@@ -560,6 +598,90 @@ class _ParserSink implements TuiEventSink {
     if (controller != null && !controller.isClosed) controller.add(event);
   }
 }
+
+/// Retains the single subscription to a process-global [Stdin] so sequential
+/// driver sessions in one process can share it.
+///
+/// dart:io's real `stdin` is a single-subscription stream that can be listened
+/// to only once per process: cancelling it when one `runApp` restores would
+/// make the next `runApp`'s [WindowsTerminalDriver.enter] throw 'Stream has
+/// already been listened to'. So the subscription is retained here — paused on
+/// [release] and resumed with fresh handlers on the next [acquire]. Because a
+/// *paused* stdin subscription still keeps the event loop alive, [release]
+/// arms a zero-delay idle-cancel that fully cancels it when no next session
+/// claims it — so a normal single-session run still exits. A back-to-back
+/// second session (no event-loop turn in between) beats that timer and reuses
+/// the live subscription; a session that starts after an idle gap re-listens
+/// and, finding stdin already spent, degrades to no local input rather than
+/// crashing.
+class _SharedStdinSubscription {
+  _SharedStdinSubscription(this._stdin);
+
+  final Stdin _stdin;
+  StreamSubscription<List<int>>? _subscription;
+  Timer? _idleCancel;
+
+  /// Starts the shared subscription, or resumes it with fresh handlers for a
+  /// reusing session. Returns null only if stdin was already spent (an idle
+  /// gap let the idle-cancel fire) and cannot be listened to again.
+  StreamSubscription<List<int>>? acquire(
+    void Function(List<int> bytes) onData, {
+    required void Function(Object error, StackTrace stack) onError,
+    required void Function() onDone,
+  }) {
+    _idleCancel?.cancel();
+    _idleCancel = null;
+    final existing = _subscription;
+    if (existing != null) {
+      existing
+        ..onData(onData)
+        ..onError(onError)
+        ..onDone(onDone)
+        ..resume();
+      return existing;
+    }
+    try {
+      return _subscription = _stdin.listen(
+        onData,
+        onError: onError,
+        onDone: onDone,
+        cancelOnError: false,
+      );
+    } on StateError {
+      // stdin was consumed and cancelled by a prior session during an idle gap;
+      // it can't be handed out twice. Degrade to no local input, not a crash.
+      return _subscription = null;
+    }
+  }
+
+  /// Pauses the shared subscription for a later session and schedules an
+  /// idle-cancel so the process still exits if none arrives.
+  void release() {
+    final subscription = _subscription;
+    if (subscription == null) return;
+    subscription.pause();
+    _idleCancel?.cancel();
+    _idleCancel = Timer(Duration.zero, () {
+      _idleCancel = null;
+      // A reusing session may have resumed and re-retained a different (or the
+      // same) subscription in the meantime; only cancel the one we paused.
+      if (identical(_subscription, subscription)) {
+        unawaited(subscription.cancel());
+        _subscription = null;
+      }
+    });
+  }
+}
+
+/// One [_SharedStdinSubscription] per distinct [Stdin] object: sequential
+/// sessions over the same process-global stdin share it, while an injected test
+/// stdin gets its own entry (and real production stdin is never touched by a
+/// test that supplies a fake).
+final Expando<_SharedStdinSubscription> _sharedStdinSubscriptions =
+    Expando<_SharedStdinSubscription>('fleury.sharedStdin');
+
+_SharedStdinSubscription _sharedStdinFor(Stdin stream) =>
+    _sharedStdinSubscriptions[stream] ??= _SharedStdinSubscription(stream);
 
 const _stdInputHandle = -10;
 const _stdOutputHandle = -11;

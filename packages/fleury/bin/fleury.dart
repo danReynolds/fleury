@@ -178,6 +178,23 @@ bool _isFleuryRepoRoot(Directory directory) {
 }
 
 Future<int> _runShell(List<String> args) async {
+  // The shell proxies a real terminal to a remote app: it forwards local
+  // keystrokes (so it puts its own stdin into raw mode) and writes the app's
+  // frames to stdout. Refuse a non-tty stdin up front — otherwise a
+  // backgrounded / redirected-stdin invocation (`fleury shell < /dev/null`)
+  // binds the socket, then the first app-attach throws a StdinException from
+  // _runSession's `stdin.lineMode` setup, escaping the accept callback as an
+  // unhandled async error and killing the shell without cleanup (a stale
+  // .fleury/handle + shell.sock left behind). Checked before the stdout guard
+  // so a stdin-less shell is named even when stdout is also redirected.
+  if (!stdin.hasTerminal) {
+    stderr.writeln(
+      'fleury shell: stdin is not a terminal — no keystrokes to forward. Run '
+      'it in an interactive terminal, not backgrounded or with redirected '
+      'stdin.',
+    );
+    return 2;
+  }
   if (!stdout.hasTerminal) {
     stderr.writeln(
       'fleury shell: stdout is not a terminal — nothing to '
