@@ -355,7 +355,11 @@ TraceTimelineStatus _traceStatusForTaskEvent<T>(TaskEvent<T> event) {
   };
 }
 
-/// Compact inspectable timeline for task/process/debug workflow events.
+/// A vertical timeline of workflow events — tool calls, task runs, process
+/// output — drawn along a connecting rail (`╭ ├ ╰`) with a status marker,
+/// duration, and source on each row. Rows navigate with the keyboard and
+/// copy with Ctrl+C, and [traceTimelineEntriesForTaskEvents] adapts a task
+/// controller's event history straight onto the timeline.
 class TraceTimeline extends StatefulWidget {
   const TraceTimeline({
     super.key,

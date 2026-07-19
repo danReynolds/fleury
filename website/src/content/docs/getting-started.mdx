@@ -262,15 +262,21 @@ Future<void> main() async {
 }
 ```
 
-Compile it with `dart compile js web/main.dart -o web/app.js -O2`. The browser
-host must provide a sized `#app` element; [Deployment & distribution](/fleury/guides/deployment/)
-shows the minimal HTML and the available browser-hosting choices.
+And now the payoff — you can watch it run in a browser immediately, no HTML
+required. The **serve** bridge previews the unchanged native app in a browser
+tab:
 
-The terminal entrypoint still imports `fleury.dart` and calls `runApp`. You can
-also use the local **serve** bridge to preview that native app in a browser tab
-without changing its imports. The small `web/index.html` that hosts the `#app`
-element `main.dart` mounts into, the `dart compile js` build command, and when
-to choose each mode all live in
+```sh
+fleury serve --spawn dart run bin/run_app.dart
+```
+
+Open the printed URL. That's your app — the same widget tree ticking in a
+browser, streamed from the native process.
+
+For a shipped, backend-free embed, compile the browser entrypoint you just
+wrote — `dart compile js web/main.dart -o web/app.js -O2` — and host it in a
+page with a sized `#app` element. The minimal `web/index.html`, and when to
+choose the embed or the serve bridge, live in
 [Deployment & distribution](/fleury/guides/deployment/).
 
 ## Where to next

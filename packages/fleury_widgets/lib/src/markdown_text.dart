@@ -581,7 +581,10 @@ String exportMarkdownSelection(
   };
 }
 
-/// Keyboard-navigable Markdown document viewer.
+/// A Markdown document viewer with a block cursor: content renders styled
+/// (headings tinted, inline bold/italic/code, blockquotes, fences) while
+/// arrow keys move a selection block by block. Ctrl+C copies the selected
+/// block's Markdown source — or the whole document.
 class MarkdownView extends StatefulWidget {
   MarkdownView({
     super.key,

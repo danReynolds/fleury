@@ -203,7 +203,11 @@ String exportFileMention(
   return parts.where((part) => part.trim().isNotEmpty).join(' | ');
 }
 
-/// Queryable file/symbol mention picker for composers and developer tools.
+/// An `@`-mention picker: a query input over a ranked list of files,
+/// directories, symbols, and URLs, where picking an entry hands the composer
+/// its mention text (`@lib/src/app.dart`). Results rank exact, prefix,
+/// substring, then fuzzy matches; supply [matcher] to replace the ranking
+/// entirely.
 class FileMentionPicker extends StatefulWidget {
   const FileMentionPicker({
     super.key,

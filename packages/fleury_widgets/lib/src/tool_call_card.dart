@@ -120,7 +120,10 @@ String exportToolCallSummary(
   return lines.join('\n');
 }
 
-/// Compact tool-call surface for developer and agent-style workflows.
+/// A card that renders one tool/function call — name, status, arguments, and
+/// output — as a single transcript entry. Tool text is sanitized before it
+/// reaches the screen, and the card offers a Copy action plus Cancel while
+/// the call is still running.
 class ToolCallCard extends StatefulWidget {
   const ToolCallCard({
     super.key,

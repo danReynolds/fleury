@@ -225,7 +225,10 @@ String exportPatchReviewFile(
   return parts.where((part) => part.trim().isNotEmpty).join(' | ');
 }
 
-/// Protocol-neutral patch review surface for developer-tool workflows.
+/// A file-by-file review of a patch: a file list with per-file review status
+/// and +added/-removed counts above an embedded [DiffView] of the change.
+/// Activating a file jumps the diff to it, and the default constructor
+/// builds everything — file rows included — from one unified-diff string.
 class PatchReview extends StatefulWidget {
   factory PatchReview({
     Key? key,

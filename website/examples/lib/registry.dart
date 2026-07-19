@@ -125,6 +125,19 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
       ),
     ),
   ),
+  // ── Tutorial (not catalogued — embedded at the top of the tutorial page so
+  //    readers interact with the finished app before building it) ────────────
+  ExampleInfo(
+    id: 'tutorial.filter',
+    widget: 'Filterable list',
+    category: 'Home',
+    blurb: 'The tutorial’s finished app: a list that narrows as you type.',
+    cols: 40,
+    // TextInput + count + blank + 10 languages = 14 content rows, +2 frame.
+    rows: 16,
+    interactive: true,
+    builder: () => const _TutorialFilterExample(),
+  ),
   // ── Charts & meters ──────────────────────────────────────────────────────
   ExampleInfo(
     id: 'gauge.basic',
@@ -1941,6 +1954,70 @@ class _PasswordInputExampleState extends State<_PasswordInputExample> {
       semanticLabel: 'Password',
     ),
   );
+}
+
+// The tutorial's finished FilterApp, mirrored from
+// doc_snippets/filterable_list.dart (the compile-checked source the prose walks
+// through) — keep the three in sync. `_framed` supplies the app's Padding.
+class _TutorialFilterExample extends StatefulWidget {
+  const _TutorialFilterExample();
+
+  @override
+  State<_TutorialFilterExample> createState() => _TutorialFilterExampleState();
+}
+
+class _TutorialFilterExampleState extends State<_TutorialFilterExample> {
+  static const _languages = <String>[
+    'Dart',
+    'Rust',
+    'Go',
+    'Python',
+    'TypeScript',
+    'Elixir',
+    'Zig',
+    'Swift',
+    'Kotlin',
+    'Haskell',
+  ];
+
+  String _query = '';
+
+  List<String> get _matches => _languages
+      .where((name) => name.toLowerCase().contains(_query.toLowerCase()))
+      .toList();
+
+  @override
+  Widget build(BuildContext context) {
+    final matches = _matches;
+    return _framed(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          TextInput(
+            autofocus: true,
+            placeholder: 'Filter languages…',
+            onChanged: (value) => setState(() => _query = value),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            '${matches.length} of ${_languages.length}',
+            style: const CellStyle(dim: true),
+          ),
+          const SizedBox(height: 1),
+          Expanded(
+            child: matches.isEmpty
+                ? const Text('No matches', style: CellStyle(dim: true))
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      for (final name in matches) Text(name),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _AutocompleteExample extends StatefulWidget {

@@ -3,6 +3,8 @@ title: "Tutorial: a filterable list"
 description: Build a small interactive TUI end-to-end — state, a text input, live filtering, and layout.
 ---
 
+import FleuryExample from '../../components/FleuryExample.astro';
+
 In about fifteen minutes you'll build a list that narrows live as you type —
 touching the three things every Fleury app is made of:
 [state](/fleury/concepts/widgets-and-state/), [layout](/fleury/guides/layout/), and input.
@@ -13,8 +15,10 @@ already.
 
 ## What we're building
 
-A single screen: a text field at the top, a filtered list below it, and a live
-count. Type, and the list narrows in place.
+This — a text field over a filtered list with a live count. It's the finished
+app, running in your browser; **type into it** and watch the list narrow:
+
+<FleuryExample id="tutorial.filter" cols={40} rows={16} interactive />
 
 ## 1. A static list
 

@@ -3,7 +3,7 @@ title: Fleury
 description: A retained-mode UI framework for the terminal — and the browser.
 template: splash
 hero:
-  tagline: A retained-mode UI framework for the terminal — and the browser. One widget tree, two surfaces.
+  tagline: A retained-mode UI framework for the terminal — and the browser. One widget tree, two surfaces, and a semantic graph agents can drive.
   actions:
     - text: Get started
       link: /fleury/getting-started/
@@ -72,17 +72,7 @@ bars stream, and the table responds to your clicks. Tab through them in the titl
 bar, or watch them cycle. The same reusable widget trees also run behind a
 native terminal entrypoint.
 
-And dropping it into *your* page is the fun part: hand Fleury a host element and a
-widget tree, and a `dart2js` bundle does the rest — no iframe, no backend, no
-screenshot. Every live demo on this site is one line like this:
-
-```dart
-mountApp(() => const Dashboard(), into: appHost);
-```
-
-[Embed Fleury in any page →](/fleury/architecture/serving-and-embedding/)
-
-And that same widget tree is *agent-first*: meaningful content and interactive
+That same widget tree is also *agent-first*: meaningful content and interactive
 widgets contribute roles, values, state, and supported actions, while
 layout-only structure can be folded away. An AI agent can therefore **drive**
 your app instead of screen-scraping it. Point any [Model Context
@@ -97,6 +87,16 @@ fleury_mcp -- dart run bin/run_app.dart
 
 [Drive it with an agent (MCP) →](/fleury/guides/driving-with-agents/)
 
+And dropping it into *your* page is the fun part: hand Fleury a host element and a
+widget tree, and a `dart2js` bundle does the rest — no iframe, no backend, no
+screenshot. Every live demo on this site is one line like this:
+
+```dart
+mountApp(() => const Dashboard(), into: appHost);
+```
+
+[Embed Fleury in any page →](/fleury/architecture/serving-and-embedding/)
+
 ## Why Fleury
 
 <CardGrid>
@@ -104,17 +104,18 @@ fleury_mcp -- dart run bin/run_app.dart
     Widgets, elements, render objects, and a semantics tree — incremental
     rebuilds, layout, and paint over a grid of cells instead of pixels.
   </FeatureCard>
-  <FeatureCard icon="laptop" title="One app, two surfaces" href="/fleury/comparison/" cta="Why Fleury">
-    The same app renders to a real terminal *or* the browser. A parity oracle
-    keeps the two surfaces honest.
-  </FeatureCard>
   <FeatureCard icon="open-book" title="Built for agents" href="/fleury/guides/driving-with-agents/" cta="Drive it with an agent">
     AI agents and tests operate the real UI over the Model Context Protocol — by
     its roles, state, and actions, not by screen-scraping. No server code to write.
   </FeatureCard>
-  <FeatureCard icon="rocket" title="Runs anywhere" href="/fleury/architecture/serving-and-embedding/" cta="Serving & embedding">
-    Embed widgets client-side with dart2js (no backend), or preview a full native
-    app locally in the browser with <code>fleury serve</code>.
+  <FeatureCard icon="laptop" title="One app, two surfaces" href="/fleury/architecture/serving-and-embedding/" cta="Serving & embedding">
+    The same app renders to a real terminal *or* the browser — embedded with
+    dart2js or previewed with <code>fleury serve</code>. A parity oracle keeps
+    the two surfaces honest.
+  </FeatureCard>
+  <FeatureCard icon="rocket" title="Fast, and measured" href="/fleury/architecture/performance/" cta="The numbers">
+    Dirty-subtree rebuilds and cell-level diffs — an idle app emits nothing.
+    Virtualized data widgets, and a benchmark suite with regression gates in CI.
   </FeatureCard>
 </CardGrid>
 

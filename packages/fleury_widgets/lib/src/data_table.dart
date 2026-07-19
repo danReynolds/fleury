@@ -538,7 +538,10 @@ class DataTableController extends ChangeNotifier {
   }
 }
 
-/// Render-island table for large, text-shaped data sets.
+/// A columnar table built for large, text-shaped data sets — thousands of
+/// rows scroll and select smoothly because only the visible rows are ever
+/// built. Selection works per row or per cell, typing jumps to a matching
+/// row, and Ctrl+C exports the selection as TSV or CSV.
 ///
 /// Unlike `Table`, this widget does not mount every cell as a widget. It asks
 /// [cellBuilder] only for the visible body rows, paints those directly into the

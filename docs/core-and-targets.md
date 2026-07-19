@@ -32,9 +32,7 @@ can be compiled to JS and dropped into a page.
 
 A **target** supplies the platform pieces behind the host SPI: a surface to paint
 into, an input source, a clock and frame scheduler, a clipboard, and (optionally)
-somewhere to project semantics. *(The seam is named the host SPI after the
-`fleury_host.dart` library that defines it; the pluggable implementation on the
-other side is the target.)*
+somewhere to project semantics.
 
 | Target | How you run it | Paints the `CellBuffer` to… | Platform |
 |--------|----------------|-----------------------------|----------|

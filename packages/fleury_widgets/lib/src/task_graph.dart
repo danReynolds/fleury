@@ -142,7 +142,11 @@ String exportTaskGraphNode(
   return lines.join('\n');
 }
 
-/// Compact task/plan graph for developer and agent-style workflows.
+/// A live view of a task plan: one row per task with a status marker (`[ ]`
+/// pending, `[>]` running, `[x]` done), its description, the tasks it waits
+/// on, and progress. Rows navigate with the keyboard, Ctrl+C copies the
+/// selected task, and selection stays on the same task id as nodes are
+/// rebuilt mid-run.
 class TaskGraph extends StatefulWidget {
   const TaskGraph({
     super.key,

@@ -65,6 +65,12 @@ buffer and semantic model it needs and presents them somewhere real.
              and runs in the page      the browser paints streamed frames
 ```
 
+Three terms recur across these pages, all visible in the diagram: the **host
+SPI** is the seam itself, named for the `fleury_host.dart` library that defines
+it; a **target** is a pluggable implementation behind that seam (terminal,
+embedded browser, served browser); and a **presenter** is the piece of a target
+that turns a finished frame into output — the ANSI writer, the DOM grid.
+
 The two browser targets are not the same thing. **Embedded** compiles your whole
 app to JavaScript with dart2js and runs it client-side — no backend, every live
 demo on this site works this way. **Served** keeps the app running natively on a

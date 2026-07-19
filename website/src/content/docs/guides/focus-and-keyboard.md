@@ -6,15 +6,17 @@ description: Handle key events, manage focus, and register app-wide shortcuts.
 Fleury routes every key event to the focused part of the tree. Most widgets —
 inputs, lists, trees, tables — manage their own focus and keys, so much of the
 time you write nothing. This guide is for when you don't, and the first question
-is *which tool*:
+is *which tool* — pick by **scope**:
 
-- **`Focus`** — a focusable region with an `onKey` callback. Reach for it to
-  handle keys *while a particular subtree is focused* (an arrow-key navigator, a
-  custom editor).
-- **`FocusNode`** — when you need to *move* focus yourself: focus a field on
-  mount, or jump focus on a button press.
-- **`KeyBindings`** — app-wide shortcuts that fire *regardless of what's focused*
-  (Ctrl-S to save, a command palette).
+| Use | When | Scope |
+|---|---|---|
+| **`KeyBindings`** | App- or screen-wide shortcuts (`Ctrl+S`, `Ctrl+P`, quit) that should fire regardless of what's focused | Ambient — matches while its subtree is mounted |
+| **`Focus`** | A widget handles keys *only while it's focused* (a custom list navigator, a canvas) | Local — active on focus |
+| **`FocusNode`** | You need to *drive* or *read* focus imperatively — move it (`Tab` between panes), check `hasFocus`, or wire a `Panel`'s accent | A handle you hold and pass to a widget |
+
+Reach for **`KeyBindings`** first — most shortcuts are ambient. They compose: a
+pane can hold a `FocusNode`, wrap its body in a `Focus` for while-focused keys,
+and still sit under an app-level `KeyBindings` for global shortcuts.
 
 ## Handle keys with Focus
 
@@ -94,20 +96,3 @@ it — above, or in a `Focus` — be deliberate about which should win; to inter
 the pop rather than race it, reach for a `PopScope` (see
 [Navigation](/fleury/guides/navigation/#guarding-back)).
 
-## Which tool? A quick decision
-
-Three tools handle keys; pick by *scope*:
-
-| Use | When | Scope |
-|---|---|---|
-| **`KeyBindings`** | App- or screen-wide shortcuts (`Ctrl+S`, `Ctrl+P`, quit) that should fire regardless of what's focused | Ambient — matches while its subtree is mounted |
-| **`Focus`** | A widget handles keys *only while it's focused* (a custom list navigator, a canvas) | Local — active on focus |
-| **`FocusNode`** | You need to *drive* or *read* focus imperatively — move it (`Tab` between panes), check `hasFocus`, or wire a `Panel`'s accent | A handle you hold and pass to a widget |
-
-Rules of thumb: reach for **`KeyBindings`** first — most shortcuts are ambient.
-Drop to **`Focus`** when a chord should only work while a specific widget has
-focus. Hold a **`FocusNode`** when the *arrangement* of focus is yours to manage
-(multi-pane apps that `Tab` between regions, or lighting up the active
-[`Panel`](/fleury/widgets/panel/)). They compose: a pane can hold a `FocusNode`, wrap
-its body in a `Focus` for while-focused keys, and still sit under an app-level
-`KeyBindings` for global shortcuts.

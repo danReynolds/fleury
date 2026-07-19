@@ -219,7 +219,10 @@ MessageListExportResult exportMessages(
   );
 }
 
-/// Keyboard-navigable transcript/message region for developer workflows.
+/// A conversation transcript: one row per message, prefixed and colored by
+/// role (`[user]`, `[assistant]`, `[tool]`…), selectable and copyable with
+/// the keyboard. By default the list follows the tail as messages stream in;
+/// [MessageListController] owns selection and the tail-follow switch.
 class MessageList extends StatefulWidget {
   const MessageList({
     super.key,

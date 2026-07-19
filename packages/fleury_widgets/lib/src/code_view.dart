@@ -289,7 +289,11 @@ String exportCodeSelection(
   };
 }
 
-/// Keyboard-navigable source-code viewer.
+/// A read-only source viewer: a line-number gutter, coarse per-line styling
+/// (comments, imports, keywords, and strings each get a tone), and a
+/// keyboard-movable line selection. Ctrl+C copies the selected line or the
+/// whole document, and source text is sanitized so stray escape sequences
+/// can't corrupt the frame.
 class CodeView extends StatefulWidget {
   CodeView({
     super.key,

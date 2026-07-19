@@ -33,6 +33,34 @@ Pop back from within a screen:
 context.pop();
 ```
 
+## Returning a result
+
+`push` returns a `Future` that completes with whatever the pushed screen pops.
+Type it, and `await` it:
+
+```dart
+final confirmed = await context.push<bool>(ConfirmDialog());
+if (confirmed == true) _delete();
+```
+
+The pushed screen returns its result by popping with a value:
+
+```dart
+context.pop(true);   // completes the awaiting push with `true`
+```
+
+## The full Navigator API
+
+The whole `NavigatorState` is available via `Navigator.of(context)`, or directly
+on the context:
+
+- `context.push<T>(screen)` — push and (optionally) await a result.
+- `context.pop([result])` — pop the top screen.
+- `Navigator.of(context).pushReplacement(screen)` — replace the current screen.
+- `Navigator.of(context).pushAndClear(screen)` — reset the stack to one screen.
+- `Navigator.of(context).popUntil<HomeScreen>()` — pop back to a screen by type.
+- `Navigator.of(context).canPop` — whether there's anything to pop.
+
 ## Commands that navigate
 
 Treat navigation as an application action, not as a second routing system.
@@ -69,45 +97,16 @@ navigation targets the right route or nested pane. A registry-backed
 scope; you do not maintain a separate palette list. `KeyHintBar` likewise shows
 the active shortcuts from the focus chain.
 
-Do not await a pushed route's lifetime inside a navigation command that is
-exposed as a semantic action. `push` completes only when that route pops; remote
-semantic dispatch waits for the command callback and serializes later semantic
-actions. Start the navigation with `unawaited` (from `dart:async`) and await any
-returned route result in the screen-owned helper instead, as the full example
-does.
+> **Don't await the push inside a command.** `push` completes only when the
+> pushed route pops, and remote semantic dispatch waits for the command callback
+> — awaiting it would serialize later semantic actions behind the open screen.
+> Start the navigation with `unawaited` (from `dart:async`) and await any
+> returned result in the screen-owned helper instead, as the full example does.
 
 The repository's
 [app-shell example](https://github.com/danReynolds/fleury/blob/main/packages/fleury_widgets/example/app_shell_demo.dart)
 puts the complete pattern together: an app-wide Ctrl+K palette command,
 route-local navigation and state commands, buttons, and semantic actions.
-
-## Returning a result
-
-`push` returns a `Future` that completes with whatever the pushed screen pops.
-Type it, and `await` it:
-
-```dart
-final confirmed = await context.push<bool>(ConfirmDialog());
-if (confirmed == true) _delete();
-```
-
-The pushed screen returns its result by popping with a value:
-
-```dart
-context.pop(true);   // completes the awaiting push with `true`
-```
-
-## The full Navigator API
-
-The whole `NavigatorState` is available via `Navigator.of(context)`, or directly
-on the context:
-
-- `context.push<T>(screen)` — push and (optionally) await a result.
-- `context.pop([result])` — pop the top screen.
-- `Navigator.of(context).pushReplacement(screen)` — replace the current screen.
-- `Navigator.of(context).pushAndClear(screen)` — reset the stack to one screen.
-- `Navigator.of(context).popUntil<HomeScreen>()` — pop back to a screen by type.
-- `Navigator.of(context).canPop` — whether there's anything to pop.
 
 ## Custom shells
 

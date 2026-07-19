@@ -431,6 +431,8 @@ void main() {
       'modelstatusbar.basic': <String>['Context', '%'], // full bar, meter intact
       'autocomplete.basic': <String>['Apple'], // seeded query opens the matches
       'tracetimeline.basic': <String>['Publish report'], // third event fits
+      // The tutorial-page embed: the full language list fits its frame.
+      'tutorial.filter': <String>['10 of 10', 'Dart', 'Haskell'],
     };
     final missing = <String>[];
     for (final entry in checks.entries) {

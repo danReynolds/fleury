@@ -163,6 +163,28 @@ border included** — a `Container(width: 10, border: BoxBorder())` gives the
 child 8 cells of interior, not 10. Leave `alignment` unset and the child
 stretches to fill; set it and the child is placed at that alignment instead.
 
+## Adapting to the terminal size
+
+The root constraints *are* the terminal size, and when the user resizes the
+terminal (or the browser tab, for a served or embedded app) Fleury re-lays-out
+the whole tree automatically — flexible layouts built from the widgets above
+adapt with no extra code. Two tools cover the cases where you want to *branch*
+on the available space rather than flow into it:
+
+- **`MediaQuery.sizeOf(context)`** returns the surface size in cells, and
+  rebuilds the widgets that read it on every resize — right for app-level
+  decisions like collapsing a sidebar below 100 columns.
+- **[`LayoutBuilder`](/fleury/widgets/layoutbuilder/)** makes the same decision
+  from the *local* constraints, so a pane can pick its own layout from the space
+  it was actually given rather than the whole screen:
+
+```dart
+LayoutBuilder(
+  builder: (context, constraints) =>
+      (constraints.maxCols ?? 0) > 60 ? const Wide() : const Narrow(),
+)
+```
+
 ## Constraints and intrinsic sizing
 
 Most layout falls out of the above. When you need to bound or measure a child

@@ -365,7 +365,10 @@ String exportDiffSelection(
   };
 }
 
-/// Keyboard-navigable unified diff viewer.
+/// A unified-diff viewer: additions, deletions, and hunk/file headers each
+/// styled, with the conventional old | new line-number gutter. The selection
+/// moves by row with the keyboard, and Ctrl+C copies the selected line — or
+/// its whole hunk, header included.
 class DiffView extends StatefulWidget {
   DiffView({
     super.key,
