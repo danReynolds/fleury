@@ -528,9 +528,16 @@ class RenderBarChart extends RenderObject {
     final stride = _barWidth + _gap;
     final centers = <int>[];
     final texts = <String>[];
+    // Right edge of the last drawn bar. Labels spread only within the bar band
+    // [firstCol, lastBarRight) — never into the chart box's trailing padding —
+    // so a fully-labelled chart renders identically and only blank (thinned)
+    // neighbours donate their room.
+    var lastBarRight = firstCol;
     for (var i = 0; i < _bars.length; i++) {
       final start = firstCol + i * stride;
       if (start >= rightEdge) break;
+      final barRight = start + _barWidth;
+      lastBarRight = barRight < rightEdge ? barRight : rightEdge;
       if (_bars[i].label.isEmpty) continue;
       centers.add(start + _barWidth ~/ 2);
       texts.add(_bars[i].label);
@@ -541,7 +548,7 @@ class RenderBarChart extends RenderObject {
       // this.left = midpoint + 1) guarantees labels never touch.
       final left = k == 0 ? firstCol : (centers[k - 1] + center) ~/ 2 + 1;
       final right = k == centers.length - 1
-          ? rightEdge
+          ? lastBarRight
           : (center + centers[k + 1]) ~/ 2;
       if (right - left <= 0) continue;
       final text = texts[k];
