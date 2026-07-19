@@ -1,10 +1,12 @@
 // Regression coverage for finding #1: a second Fleury session in the SAME
 // process crashed at enter() because dart:io's `stdin` is a process-global
-// single-subscription stream — restore() cancelled its subscription, so the
-// next runApp's `stdin.listen(...)` threw 'Stream has already been listened
-// to'. The driver now retains that one subscription (pause on restore, resume
-// on the next enter), with a zero-delay idle-cancel so a single-session run
-// still exits.
+// single-subscription stream — restore() cancels its subscription, and it can
+// never be listened to again, so the next runApp's `stdin.listen(...)` threw
+// the opaque 'Stream has already been listened to'. The driver now latches that
+// the global stdin was spent and rejects a second enter() up front with a
+// clear message (a real second-session-with-input feature would need a separate
+// process; that is out of scope here — this makes the limit legible instead of
+// a crash). An injected (test) stdin is exempt: each driver owns its own.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -16,10 +18,6 @@ import 'package:test/test.dart';
 /// dart:io's hazard: listening a second time after a cancel throws.
 class _FakeStdin implements Stdin {
   final _controller = StreamController<List<int>>();
-
-  void push(List<int> bytes) {
-    if (!_controller.isClosed) _controller.add(bytes);
-  }
 
   Future<void> close() => _controller.close();
 
@@ -66,124 +64,39 @@ class _NullStdout implements Stdout {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-String _typed(List<TuiEvent> events) =>
-    events.whereType<TextInputEvent>().map((event) => event.text).join();
-
-Future<void> _flush() => Future<void>.delayed(const Duration(milliseconds: 40));
-
 void main() {
   test(
-    'without sharing, cancel-then-relisten on one stdin throws — the hazard',
+    'an injected stdin is exempt: a fresh stream drives a session normally',
     () async {
-      // The non-shared (injected) path cancels on restore, exactly as a real
-      // single-subscription stdin behaves. Reusing the SAME stream for a second
-      // driver reproduces the crash the shared path exists to prevent.
-      final stdinStream = _FakeStdin();
+      // The guard keys on identity with the process-global stdin, so an
+      // injected stream is never latched — each driver cancels its own on
+      // restore, exactly as before. This pins that the guard doesn't leak into
+      // the injected/test path.
       final first = PosixTerminalDriver(
-        stdinOverride: stdinStream,
+        stdinOverride: _FakeStdin(),
         stdoutOverride: _NullStdout(),
       );
       await first.enter(TerminalMode.interactive);
       await first.restore();
 
       final second = PosixTerminalDriver(
-        stdinOverride: stdinStream,
+        stdinOverride: _FakeStdin(),
         stdoutOverride: _NullStdout(),
       );
-      await expectLater(
-        () => second.enter(TerminalMode.interactive),
-        throwsA(isA<StateError>()),
-      );
+      // A different injected stream is fine; no cross-driver latch.
+      await second.enter(TerminalMode.interactive);
       await second.restore();
-      await stdinStream.close();
     },
   );
 
-  test('posix: a second shared-stdin session reuses it — no crash, input flows',
-      () async {
-    final stdinStream = _FakeStdin();
-    final firstEvents = <TuiEvent>[];
-    final first = PosixTerminalDriver(
-      stdinOverride: stdinStream,
-      stdoutOverride: _NullStdout(),
-      stdinIsSharedOverride: true,
-    );
-    final firstSub = first.events.listen(firstEvents.add);
-    await first.enter(TerminalMode.interactive);
-    stdinStream.push('a'.codeUnits);
-    await _flush();
-    expect(_typed(firstEvents), 'a');
-
-    await first.restore();
-    // Back-to-back second session, with no event-loop turn in between, so it
-    // resumes the retained subscription before the idle-cancel timer fires.
-    final secondEvents = <TuiEvent>[];
-    final second = PosixTerminalDriver(
-      stdinOverride: stdinStream,
-      stdoutOverride: _NullStdout(),
-      stdinIsSharedOverride: true,
-    );
-    final secondSub = second.events.listen(secondEvents.add);
-    await second.enter(TerminalMode.interactive); // must NOT throw
-
-    stdinStream.push('b'.codeUnits);
-    await _flush();
-    expect(_typed(secondEvents), 'b', reason: 'reused stdin feeds session two');
-    expect(
-      _typed(firstEvents),
-      'a',
-      reason: 'the restored first session must not receive later input',
-    );
-
-    await second.restore();
-    await _flush(); // let the idle-cancel timer settle
-    await firstSub.cancel();
-    await secondSub.cancel();
-    await stdinStream.close();
-  });
-
-  test('windows: a second shared-stdin session reuses it — no crash, input flows',
-      () async {
-    // Off-Windows the console-mode controller is a no-op, so the driver's
-    // stdin lifecycle is exercisable here with fakes.
-    final stdinStream = _FakeStdin();
-    final firstEvents = <TuiEvent>[];
-    final first = WindowsTerminalDriver(
-      stdinOverride: stdinStream,
-      stdoutOverride: _NullStdout(),
-      stdinIsSharedOverride: true,
-    );
-    final firstSub = first.events.listen(firstEvents.add);
-    await first.enter(TerminalMode.interactive);
-    stdinStream.push('a'.codeUnits);
-    await _flush();
-    expect(_typed(firstEvents), 'a');
-
-    await first.restore();
-    final secondEvents = <TuiEvent>[];
-    final second = WindowsTerminalDriver(
-      stdinOverride: stdinStream,
-      stdoutOverride: _NullStdout(),
-      stdinIsSharedOverride: true,
-    );
-    final secondSub = second.events.listen(secondEvents.add);
-    await second.enter(TerminalMode.interactive); // must NOT throw
-
-    stdinStream.push('b'.codeUnits);
-    await _flush();
-    expect(_typed(secondEvents), 'b', reason: 'reused stdin feeds session two');
-    expect(_typed(firstEvents), 'a');
-
-    await second.restore();
-    await _flush();
-    await firstSub.cancel();
-    await secondSub.cancel();
-    await stdinStream.close();
-  });
-
   test(
-    'posix: two real-stdin sessions do not crash and the process still exits',
+    'posix: a second real-stdin session is rejected cleanly and the process '
+    'still exits',
     () async {
+      // Runs the fixture in a child process against the real process-global
+      // stdin: session two must be rejected with the clear message (not the
+      // opaque dart:io error), and the process must exit (never hang on a
+      // dangling stdin subscription).
       final fixture =
           '${Directory.current.path}/test/fixtures/second_session_stdin_fixture.dart';
       final process = await Process.start(
@@ -191,9 +104,9 @@ void main() {
         <String>['run', fixture],
         workingDirectory: Directory.current.path,
       );
-      // Keep the child's stdin OPEN (never write/close, never EOF) so a merely
-      // paused stdin subscription would keep its event loop alive and hang —
-      // exiting proves the retained subscription's idle-cancel released it.
+      // Keep the child's stdin OPEN (never write/close, never EOF) so a leaked
+      // stdin subscription would keep its event loop alive and hang — exiting
+      // proves session one released it on restore.
       final out = StringBuffer();
       final err = StringBuffer();
       process.stdout.transform(utf8.decoder).listen(out.write);
@@ -213,10 +126,15 @@ void main() {
       expect(
         timedOut,
         isFalse,
-        reason: 'process hung (a paused stdin subscription was never released)',
+        reason: 'process hung (a stdin subscription was never released)',
       );
       expect(exitCode, 0, reason: 'stdout:\n$out\nstderr:\n$err');
-      expect(out.toString(), contains('ALL-SESSIONS-DONE'));
+      expect(out.toString(), contains('SESSION-0-OK'));
+      expect(
+        out.toString(),
+        contains('SESSION-1-REJECTED-CLEANLY'),
+        reason: 'second session must be rejected with the clear message',
+      );
       expect(err.toString(), isNot(contains('already been listened')));
     },
     timeout: const Timeout(Duration(seconds: 90)),

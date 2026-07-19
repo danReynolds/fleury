@@ -144,5 +144,42 @@ void main() {
       expect(third, 2);
       expect(c.hasListeners, isTrue);
     });
+
+    test('reentrant notifyListeners fires each level without corrupting state',
+        () {
+      final c = _Counter();
+      var outer = 0;
+      var inner = 0;
+      var reentered = false;
+      c.addListener(() {
+        outer += 1;
+        if (!reentered) {
+          reentered = true;
+          c.increment(); // reentrant notifyListeners from inside a pass
+        }
+      });
+      c.addListener(() => inner += 1);
+
+      c.increment();
+
+      // Both listeners fire on the outer pass AND the nested reentrant pass;
+      // the nested pass must not compact early or skip a slot.
+      expect(outer, 2);
+      expect(inner, 2);
+      expect(c.hasListeners, isTrue);
+    });
+
+    test('a listener added twice and removed once still fires once', () {
+      final c = _Counter();
+      var calls = 0;
+      void listener() => calls += 1;
+      c.addListener(listener);
+      c.addListener(listener);
+      c.removeListener(listener); // removes one occurrence, like List.remove
+
+      c.increment();
+
+      expect(calls, 1, reason: 'the surviving occurrence fires exactly once');
+    });
   });
 }

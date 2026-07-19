@@ -7,10 +7,12 @@ void main() {
   test('an empty catalog is rejected at construction with a clear message', () {
     // Embed-only misuse: the CLI always passes the built-in catalog. An empty
     // list used to reach `stories[0]` in initState and RangeError on mount.
+    // A runtime ArgumentError (not a debug-only assert) so a release/`dart run`
+    // embedder gets the clear error instead of the RangeError too.
     expect(
       () => StorybookApp(stories: const []),
       throwsA(
-        isA<AssertionError>().having(
+        isA<ArgumentError>().having(
           (error) => error.toString(),
           'message',
           contains('at least one story'),
