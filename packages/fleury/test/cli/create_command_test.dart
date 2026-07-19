@@ -75,10 +75,17 @@ void main() {
     final settings = _jsonObject(
       File('${target.path}/.vscode/settings.json').readAsStringSync(),
     );
-    expect(settings, <String, Object?>{'dart.cliConsole': 'terminal'});
+    // Reload-on-save is deliberately part of the scaffold contract: without a
+    // trigger, F5 + edit + save leaves the terminal unchanged and hot reload
+    // looks broken (the Flutter muscle-memory expectation is save-to-reload).
+    // `allIfDirty` only fires during a debug session, and being a workspace
+    // setting it is a one-line delete to opt out.
+    expect(settings, <String, Object?>{
+      'dart.cliConsole': 'terminal',
+      'dart.hotReloadOnSave': 'allIfDirty',
+    });
     expect(settings, isNot(contains('editor.formatOnSave')));
     expect(settings, isNot(contains('dart.flutterHotReloadOnSave')));
-    expect(settings, isNot(contains('dart.hotReloadOnSave')));
 
     final pubspec = File('${target.path}/pubspec.yaml').readAsStringSync();
     expect(pubspec, contains('name: my_app'));
