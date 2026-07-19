@@ -14,7 +14,20 @@ class StorybookApp extends StatefulWidget {
     this.initialControlValues = const <String, Object?>{},
     this.initialTheme = StorybookThemeMode.cyber,
     this.initialViewport = StorybookViewportPreset.fit,
-  }) : stories = stories ?? storybookStories;
+  }) : stories = stories ?? storybookStories {
+    // A runtime throw, not an assert: `stories` is a public constructor
+    // parameter and asserts are stripped under `dart run`/AOT, so a release
+    // embedder passing `const []` would otherwise still RangeError on mount
+    // (initState and _selectedStory index the catalog directly).
+    if (this.stories.isEmpty) {
+      throw ArgumentError.value(
+        stories,
+        'stories',
+        'StorybookApp needs at least one story; pass a non-empty list or omit '
+        '`stories` to use the built-in catalog',
+      );
+    }
+  }
 
   final List<Story> stories;
   final String? initialStoryId;

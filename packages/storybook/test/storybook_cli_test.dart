@@ -163,6 +163,20 @@ void main() {
     expect(result.exitCode, 2);
     expect(result.stderr, contains('Unknown story: missing.story'));
   }, timeout: cliTimeout);
+
+  test('the `help` subcommand prints usage and exits 0 (no TUI takeover)',
+      () async {
+    final result = await _runStorybook(<String>['help']);
+
+    expect(
+      result.exitCode,
+      0,
+      reason: 'stdout:\n${result.stdout}\nstderr:\n${result.stderr}',
+    );
+    final output = result.stdout.toString();
+    expect(output, contains('Usage: dart run bin/storybook.dart'));
+    expect(output, contains('Commands:'));
+  }, timeout: cliTimeout);
 }
 
 Future<ProcessResult> _runStorybook(List<String> args) {

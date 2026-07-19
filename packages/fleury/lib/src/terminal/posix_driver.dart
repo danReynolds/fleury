@@ -58,6 +58,14 @@ class PosixTerminalDriver
   }
 
   final Stdin _stdin;
+
+  // dart:io hands out the process-global stdin exactly once: after a session
+  // listens to it and cancels (in [restore]), it can never be listened to
+  // again. This static latches once the global stdin has been spent so a
+  // second same-process [enter] fails with a clear message instead of the
+  // opaque 'Stream has already been listened to'. Injected test streams are
+  // exempt (each driver owns its own), so this never trips in unit tests.
+  static bool _globalStdinConsumed = false;
   final Stdout _stdout;
 
   /// How long a delivered [SignalEvent] may remain unresolved before the
@@ -309,6 +317,16 @@ class PosixTerminalDriver
   Future<void> enter(TerminalMode mode) async {
     if (_active) {
       throw StateError('PosixTerminalDriver.enter called on an active driver.');
+    }
+    // Reject a second same-process interactive session up front, before any
+    // terminal mutation, so the terminal is left untouched and the failure is
+    // legible (see [_globalStdinConsumed]).
+    if (identical(_stdin, stdin) && _globalStdinConsumed) {
+      throw StateError(
+        'Fleury supports one interactive session per process: the terminal '
+        'stdin was already consumed by an earlier runApp() and dart:io cannot '
+        'hand it out again. Run each interactive session in its own process.',
+      );
     }
     _restoring = false;
     _entering = true;
@@ -933,6 +951,9 @@ class PosixTerminalDriver
       await _stdinSubscription?.cancel();
     } catch (_) {}
     _stdinSubscription = null;
+    // Cancelling the process-global stdin spends it for the process lifetime;
+    // latch that so a second enter() rejects cleanly rather than crashing.
+    if (identical(_stdin, stdin)) _globalStdinConsumed = true;
     try {
       await _resizeSubscription?.cancel();
     } catch (_) {}

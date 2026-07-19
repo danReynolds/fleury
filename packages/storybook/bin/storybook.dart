@@ -349,12 +349,19 @@ final class _StorybookCliOptions {
   static _StorybookCliOptions parse(List<String> args) {
     var command = _StorybookCommand.run;
     var start = 0;
+    var help = false;
     if (args.isNotEmpty && !args.first.startsWith('-')) {
-      command = _parseCommand(args.first);
+      if (args.first == 'help') {
+        // `storybook help` prints usage and exits, exactly like `--help` —
+        // it must not fall through to the interactive `run` command and take
+        // over the terminal.
+        help = true;
+      } else {
+        command = _parseCommand(args.first);
+      }
       start = 1;
     }
 
-    var help = false;
     var json = false;
     var strict = false;
     var includeVariants = true;
@@ -439,7 +446,6 @@ _StorybookCommand _parseCommand(String raw) {
     'verify' || 'smoke' => _StorybookCommand.verify,
     'snapshot' || 'snapshots' => _StorybookCommand.snapshot,
     'coverage' => _StorybookCommand.coverage,
-    'help' => _StorybookCommand.run,
     _ => _unknownCommand(raw),
   };
 }
