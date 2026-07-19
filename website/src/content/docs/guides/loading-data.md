@@ -14,7 +14,7 @@ Give it a `Future` and a builder; the builder re-runs as the future resolves:
 
 ```dart
 FutureBuilder<List<Item>>(
-  future: fetchItems(),
+  future: _itemsFuture, // created once in initState: _itemsFuture = fetchItems();
   builder: (context, snapshot) {
     if (snapshot.connectionState != ConnectionState.done) {
       return const Text('Loading…');
@@ -38,7 +38,9 @@ first result instead of a waiting state.
 
 > Build the `Future` once — in `initState` or a field — not inside `build`. A
 > future created fresh on every rebuild restarts the work each frame. This is the
-> same footgun as in Flutter.
+> same footgun as in Flutter. To re-run the load (a refresh key, a retry button),
+> reassign that field inside `setState` — the builder returns to its loading
+> state and resolves again.
 
 ## StreamBuilder
 

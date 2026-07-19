@@ -10,8 +10,8 @@ of pixels.
 
 ## One tree, four jobs
 
-Fleury is a **retained-mode** framework. Its pipeline has four related views,
-but not every view is retained on every surface:
+Fleury is a **retained-mode** framework. Its pipeline has four related views
+(the fourth, semantics, is retained only where a surface consumes it):
 
 | Tree | Job |
 |------|-----|
@@ -39,8 +39,8 @@ Everything above is **platform-neutral in the way that matters**: free of
 `dart:io` (it compiles to JavaScript, guarded by a transitive-import test) and
 presenter-agnostic — nothing in it writes bytes to a terminal, a socket, or
 the DOM. Terminal *vocabulary* (capability enums, the ANSI renderer as a pure
-`CellBuffer → bytes` function) does live in the core; the escape hatches out
-of it are the presenters. The core's primary visual output is a `CellBuffer` — an abstract
+`CellBuffer → bytes` function) does live in the core; actually writing bytes
+to a device is the targets' job. The core's primary visual output is a `CellBuffer` — an abstract
 grid where each cell is a grapheme plus a style (fg/bg, bold, dim, inverse…).
 The same mounted tree also produces semantics for hosts that need accessibility,
 agent control, or structured browser sessions. A **target** takes the visual

@@ -77,8 +77,10 @@ widgets in a browser during development, use `serve` instead.
 ## Preview a native app with `serve`
 
 `fleury serve` carries a **native** app's rendered frames to a browser over a
-WebSocket, painting into a DOM cell grid. In spawn mode it starts and owns the
-app process; in bridge mode it attaches to an app that you start. It is
+WebSocket, painting into a DOM cell grid. (The `fleury` command comes from the
+CLI — [install it](#installing-the-fleury-cli) first if you haven't.) In spawn
+mode it starts and owns the app process; in bridge mode it attaches to an app
+that you start. It is
 primarily a local preview and debugging bridge. The app keeps full `dart:io`
 access, so every widget works, including the native-only ones:
 

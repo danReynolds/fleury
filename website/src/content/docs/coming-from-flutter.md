@@ -126,6 +126,7 @@ These transfer with little or no adjustment:
 | Lists | `ListView`, `ListView.builder`, `ScrollView` |
 | Inherited data | `Theme.of`, `MediaQuery.of`, `DefaultTextStyle`, `ListenableBuilder`, `ChangeNotifier`, `Listenable` |
 | Text | `Text`, `RichText`, `TextSpan` |
+| Testing | `testWidgets`, `tester.pumpWidget` via `package:fleury_test`, plus terminal-native helpers like `tester.renderToString` |
 
 The table is intentionally boring: most of the muscle memory is valid.
 

@@ -32,6 +32,8 @@ browser DOM, or a streamed session. The
 
 - **New here?** [Getting started](/fleury/getting-started/) builds your first app in a
   few minutes.
+- **Still deciding?** [Why Fleury](/fleury/comparison/) — what it does that peers
+  don't, and when to pick something else.
 - **Coming from Flutter?** [The map](/fleury/coming-from-flutter/) — what's identical,
   what's renamed, and what's deliberately different.
 - **Putting Fleury on the web?**

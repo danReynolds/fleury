@@ -48,10 +48,8 @@ page explains the split.
 ## 2. Run the app
 
 A Fleury program is a widget tree handed to `runApp`. `FleuryApp` is the
-lightweight app shell: its `home` screen gets app-wide navigation, theming, and
-command/status scopes. You build everything beneath it with the familiar
-`Widget` / `build` / `setState` model — it just paints to a grid of cells
-instead of pixels.
+lightweight app shell: its `home` screen gets app-wide navigation and theming. You build everything
+beneath it with the familiar `Widget` / `build` / `setState` model.
 
 With the official [Dart extension](https://marketplace.visualstudio.com/items?itemName=Dart-Code.dart-code)
 installed, open the generated project in VS Code and press F5. Fleury's launch
@@ -152,18 +150,30 @@ void main() {
 }
 ```
 
-Run `dart test`, then launch the app again. The progress bar fills once a
-minute.
+Run `dart test`, then launch the app again. The uptime line ticks every second,
+and the progress bar fills over the minute.
 
 ## 4. Compose widgets
 
 The widget library is broad — [browse the catalog](/fleury/widgets/) for API details and
 live examples across the main widget families. Charts, meters, and the rest
-compose like any other widget. Replace `StatusApp` and `_StatusAppState` with
-the stateless panel behind the live example at the top of this page, and remove
-the now-unused `dart:async` import:
+compose like any other widget. Replace `lib/app.dart` with the stateless panel
+behind the live example at the top of this page — the whole file: `MyApp` stays,
+the timer and its `dart:async` import go:
 
 ```dart title="lib/app.dart"
+import 'package:fleury/fleury.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const FleuryApp(title: 'Status monitor', home: StatusApp());
+  }
+}
+
 class StatusApp extends StatelessWidget {
   const StatusApp({super.key});
 
@@ -211,12 +221,8 @@ dependencies:
 
 Run `dart pub get` after editing the pubspec.
 
-Then move the reusable tree into a web-safe library that imports
-`package:fleury/fleury_core.dart` and
-`package:fleury_widgets/fleury_widgets_web.dart`.
-
-Move `StatusApp` into `lib/status_app.dart`, keeping its body unchanged and
-using these imports at the top:
+Then move `StatusApp` into its own web-safe library, `lib/status_app.dart` —
+body unchanged, with these web-safe imports at the top:
 
 ```dart title="lib/status_app.dart"
 import 'package:fleury/fleury_core.dart';

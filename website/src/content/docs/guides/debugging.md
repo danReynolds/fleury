@@ -3,12 +3,11 @@ title: Debugging
 description: The built-in debug shell — a toggleable sidebar with live frame stats, the semantic tree, rebuild diagnostics, captured logs, and runtime errors.
 ---
 
-Native apps launched with `runApp` include an optional **debug shell**: a
-dockable sidebar that needs no separate process and works over SSH because it
-renders in the same terminal. The default `DebugConfig` enables its hotkeys and
-event collection for JIT development runs, disables them for AOT product builds,
-and starts with the panel closed in either case. Apps can override both
-`enabled` and `startMode`.
+Native apps launched with `runApp` include a built-in **debug shell** — press
+`Ctrl+G` in any development run to open it. It's a dockable sidebar with no
+separate process, and it works over SSH because it renders in the same terminal.
+It's on by default under the JIT (`dart run`) and off in AOT product builds;
+[Configuring it](#configuring-it) covers overriding `enabled` and `startMode`.
 
 ## Try it hands-on
 

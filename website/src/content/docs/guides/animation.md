@@ -72,9 +72,12 @@ verb.
 ```dart
 class _PanelState extends State<Panel> {
   final _open = Animation(0.0); // 0 = closed, 1 = open
+  bool _isOpen = false;
 
-  void _toggle() =>
-      _open.to(_isOpen ? 0.0 : 1.0, spring: Spring.smooth);
+  void _toggle() {
+    _isOpen = !_isOpen;
+    _open.to(_isOpen ? 1.0 : 0.0, spring: Spring.smooth);
+  }
 
   @override
   void dispose() {

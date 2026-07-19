@@ -125,7 +125,7 @@ since the agent last read it, the action fails safe with a `stale_reference`
 error instead of mis-targeting. Pinning `Semantics(id: SemanticNodeId('submit'))` on the nodes
 that matter gives the agent a durable handle and sidesteps the guard entirely.
 
-So the agent isn't guessing which ids are durable, `get_ui` and `find_nodes`
+So that the agent isn't guessing which ids are durable, `get_ui` and `find_nodes`
 flag every positional node with `"stableId": false` and attach a one-line
 `idGuidance` note explaining it; a stable id is simply unannotated. An agent
 that needs to hold a reference across an interaction can see up front which

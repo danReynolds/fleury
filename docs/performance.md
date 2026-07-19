@@ -78,9 +78,8 @@ emitted, time to first byte, CPU, RSS, and peer fixtures under a real PTY.
 
 Benchmark output should make the next engineering question clearer. Local and
 profile runs show whether Fleury's own pipeline is staying proportional to the
-change. Wire runs show what happens at the terminal boundary: bytes written,
-frames emitted, time to first byte, CPU, and RSS. Peer fixture runs show how the
-same scenario behaves when expressed with other frameworks' natural APIs.
+change; wire runs, what happens at the terminal boundary; peer fixture runs, how
+the same scenario behaves when expressed with other frameworks' natural APIs.
 
 For durable comparisons, keep the fixture shape, terminal, machine, framework
 versions, and repeated-run variance beside the result. That context makes the

@@ -80,7 +80,9 @@ with concrete actions like `activate`, `submit`, `select`, `increment`, and `cop
 Tests assert on *meaning* — "row 3 is selected", "the CPU gauge reads 0.62" — and
 survive a re-theme, a layout change, or a port to the browser. An AI agent reads
 the graph and drives the UI through those actions instead of scraping ANSI and
-guessing keystrokes. It's produced by the core, runs alongside the visual frame
+guessing keystrokes — point any
+[Model Context Protocol](https://modelcontextprotocol.io) host at the app, no
+agent-specific integration to write. It's produced by the core, runs alongside the visual frame
 without adding terminal-paint work, and crosses the [`fleury serve`](/fleury/architecture/serving-and-embedding/)
 wire too — so a served preview is as inspectable as a terminal session. See
 [Built for agents](/fleury/architecture/agents-and-semantics/).
@@ -103,9 +105,9 @@ about **0.8 ms in the saved development fixture**, tracking the change rather
 than how much is on screen. Data widgets are virtualized, so a
 hundred-thousand-row table costs about a screenful. The
 [benchmark suite](/fleury/architecture/performance/) measures local pipeline work,
-real-terminal bytes and process cost, and the browser frame path. Current
-captures support a peer-competitive performance claim across many matched
-workloads, not a universal "fastest framework" ranking. The dashboard below
+real-terminal bytes and process cost, and the browser frame path. The numbers back a
+peer-competitive claim across many matched workloads — not a universal "fastest
+framework" ranking. The dashboard below
 streams on a ticker and repaints only the cells that change:
 
 <FleuryExample id="home.monitor" cols={34} rows={9} />
