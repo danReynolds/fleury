@@ -463,13 +463,30 @@ void main() {
       'a',
     ], reason: 'B must wait for A to settle — the mutex gates it');
 
-    // Settle A → B now runs and dispatches.
+    // Settle and acknowledge A → B now runs and dispatches. Supplying the v3
+    // result frame keeps this mutex test independent of the bridge's 2-second
+    // legacy-app fallback timeout (waiting on that exact boundary made the
+    // stress case flaky whenever the package suite was under load).
     await pushAndAwait(root(1));
+    transport.addIncoming(
+      const SemanticActionResultFrame(
+        SemanticNodeId('a'),
+        SemanticAction.activate,
+        SemanticActionInvocationStatus.completed,
+      ),
+    );
     await waitUntil(() => dispatched().length >= 2);
     expect(dispatched(), <String>['a', 'b']);
 
-    // Drain B and finish cleanly.
+    // Drain and acknowledge B, then finish cleanly.
     await pushAndAwait(root(2));
+    transport.addIncoming(
+      const SemanticActionResultFrame(
+        SemanticNodeId('b'),
+        SemanticAction.activate,
+        SemanticActionInvocationStatus.completed,
+      ),
+    );
     await Future.wait(<Future<void>>[pA, pB]);
   });
 

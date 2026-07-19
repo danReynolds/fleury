@@ -66,4 +66,35 @@ void main() {
       expect(received[1], isA<ByeFrame>());
     },
   );
+
+  test('peer closing before the first send is contained', () async {
+    final tmp = Directory.systemTemp.createTempSync('fleury-send-close-');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final path = '${tmp.path}/sock';
+    final server = await ServerSocket.bind(
+      InternetAddress(path, type: InternetAddressType.unix),
+      0,
+    );
+    addTearDown(server.close);
+
+    final acceptedFuture = server.first;
+    final transport = await UnixSocketFrameTransport.connect(path);
+    addTearDown(transport.close);
+    final accepted = await acceptedFuture;
+    accepted.destroy();
+    await Future<void>.delayed(const Duration(milliseconds: 25));
+
+    transport.send(
+      const InitFrame(
+        size: CellSize(80, 24),
+        colorMode: ColorMode.truecolor,
+        imageProtocol: ImageProtocol.halfBlock,
+        tmuxPassthrough: false,
+        protocolVersion: 1,
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await transport.sendDrained.timeout(const Duration(seconds: 1));
+    expect(transport.isSendBacklogged, isFalse);
+  });
 }

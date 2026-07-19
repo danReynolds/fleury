@@ -11,6 +11,22 @@ text, capability detection, and safe input handling.
 
 ## Quick start
 
+After [installing the CLI](https://danreynolds.github.io/fleury/getting-started/),
+create a tested application scaffold:
+
+```sh
+fleury create my_app --dependency-source=git
+cd my_app
+```
+
+Open the directory in VS Code and press F5, or run
+`dart run bin/run_app.dart` from an interactive terminal. The generated VS Code
+configuration uses the integrated terminal so input, rendering, breakpoints,
+and Dart hot reload share one normal debug session. The Git-source flag is only
+needed until the packages are published together.
+
+A smaller handwritten application looks like this:
+
 ```dart
 import 'package:fleury/fleury.dart';
 
@@ -77,14 +93,20 @@ Design rationale and the phased delivery plan live in the RFC:
 
 ## Testing
 
-Add `fleury_test` as a dev dependency, then use `FleuryTester` (the
-`testWidgets` analog) from `package:fleury_test/fleury_test.dart`:
+The generated scaffold already includes `fleury_test`. For an existing app,
+add it as a dev dependency using the same hosted, Git, or path source as the
+rest of your Fleury packages, then use `FleuryTester` (the `testWidgets`
+analog) from `package:fleury_test/fleury_test.dart`:
 
 ```yaml
 dev_dependencies:
   fleury_test: ^0.1.0
   test: ^1.26.3
 ```
+
+The hosted form above applies after publication; the
+[getting-started guide](https://danreynolds.github.io/fleury/getting-started/)
+shows the pre-release Git source.
 
 ```dart
 import 'package:fleury/fleury.dart';

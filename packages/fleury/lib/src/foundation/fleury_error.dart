@@ -26,7 +26,7 @@
 ///       'so Expanded cannot decide how much space to take.',
 ///   hint: 'Wrap Expanded children in a SizedBox(width: …) or '
 ///       'switch the ScrollView to vertical.',
-///   docs: 'https://fleury.dev/errors/unbounded-flex',
+///   docs: 'https://danreynolds.github.io/fleury/guides/layout/',
 /// );
 /// ```
 class FleuryError extends Error {

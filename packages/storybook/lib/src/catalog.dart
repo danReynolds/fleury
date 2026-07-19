@@ -3208,8 +3208,8 @@ const _hyperlinksMarkdown = '''
 
 Safe schemes become **real links** where the surface supports them:
 
-- [Fleury docs](https://fleury.dev) — an `https` link
-- [Email the team](mailto:hi@fleury.dev) — a `mailto` link
+- [Fleury docs](https://danreynolds.github.io/fleury/) — an `https` link
+- [Email example](mailto:hello@example.com) — a `mailto` link
 
 An unsafe scheme is **never** made clickable — it falls back to plain text:
 

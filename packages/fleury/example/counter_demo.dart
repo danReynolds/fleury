@@ -10,17 +10,16 @@
 //
 //   # From packages/fleury:
 //   dart pub get
-//   dart run --enable-vm-service example/counter_demo.dart
+//   dart run example/counter_demo.dart
 //
 //   # Press + or - to change the counter.
 //   # Press q or Ctrl+C to exit.
 //
-//   # To trigger a hot reload, in another shell:
-//   #   curl "http://127.0.0.1:<port>/?method=ext.fleury.reassemble&isolateId=<id>"
-//   # The simpler path: open DevTools and call the extension, OR run a
-//   # file watcher (e.g. package:hotreloader) that triggers reloadSources
-//   # and the framework will reassemble automatically on the
-//   # IsolateReload event.
+//   # For stateful hot reload, launch `fleury · counter demo` from this
+//   # package in VS Code, save after editing source, and run
+//   # `Dart: Hot Reload`.
+//   # Dart-Code calls the VM's reloadSources RPC; the framework then
+//   # reassembles automatically on the IsolateReload event.
 
 import 'dart:async';
 
@@ -93,8 +92,8 @@ class _CounterAppState extends State<CounterApp> {
           const Text('Press q or Ctrl+C to exit'),
           const Text(''),
           const Text(
-            'Edit this file and save; if a watcher is running, the app '
-            'reloads with the counter preserved.',
+            'Under Dart-Code, edit and save this file, then run Hot Reload; '
+            'the counter is preserved.',
             style: CellStyle(dim: true),
           ),
         ],

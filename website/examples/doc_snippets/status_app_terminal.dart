@@ -1,6 +1,5 @@
 import 'package:fleury/fleury.dart';
 
-import 'status_app.dart';
+import 'getting_started_app.dart';
 
-void main() =>
-    runApp(const FleuryApp(title: 'Status monitor', home: StatusApp()));
+void main() => runApp(const MyApp());

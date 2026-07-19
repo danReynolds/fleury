@@ -1,7 +1,7 @@
 // Spawns the real `fleury serve` process and verifies end-to-end:
 //
 //   1. HTTP GET / serves the retained-DOM Fleury renderer page
-//   2. The Unix socket binds at `.fleury/shell.sock`
+//   2. `.fleury/handle` points at the live short-path Unix socket
 //   3. Bytes round-trip both ways: bytes sent from a "browser"
 //      WebSocket reach the "app" Unix socket and vice versa
 //
@@ -25,6 +25,7 @@ void main() {
       late Process serveProcess;
       late int port;
       late String pkgRoot;
+      late String socketPath;
 
       setUp(() async {
         tempDir = Directory.systemTemp.createTempSync('fleury_serve_test_');
@@ -60,6 +61,7 @@ void main() {
             'serve did not start within 10s. stderr:\n$stderrBuf',
           ),
         );
+        socketPath = _readHandle(tempDir);
       });
 
       tearDown(() async {
@@ -71,6 +73,8 @@ void main() {
             return -9;
           },
         );
+        expect(File(socketPath).existsSync(), isFalse);
+        expect(File(socketPath).parent.existsSync(), isFalse);
         tempDir.deleteSync(recursive: true);
       });
 
@@ -178,7 +182,6 @@ void main() {
         () async {
           // Open both ends in parallel — the pairing logic shouldn't care
           // about arrival order.
-          final socketPath = '${tempDir.path}/.fleury/shell.sock';
           final ws = await WebSocket.connect(
             'ws://127.0.0.1:$port/ws',
             headers: {'origin': 'http://127.0.0.1:$port'},
@@ -227,7 +230,6 @@ void main() {
       test(
         'browser-first bridge preserves INIT for a real runApp app',
         () async {
-          final socketPath = '${tempDir.path}/.fleury/shell.sock';
           final ws = await WebSocket.connect(
             'ws://127.0.0.1:$port/ws',
             headers: {'origin': 'http://127.0.0.1:$port'},
@@ -342,6 +344,12 @@ void main() {
       }
     });
   }, tags: ['integration']);
+}
+
+String _readHandle(Directory project) {
+  final path = File('${project.path}/.fleury/handle').readAsStringSync().trim();
+  if (path.isEmpty) throw StateError('serve wrote an empty handle');
+  return path;
 }
 
 Future<Process> _startServeProcess({

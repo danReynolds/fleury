@@ -1,97 +1,69 @@
 # Hot reload
 
-fleury supports Dart-VM-class stateful hot reload: save a source file
-and the running terminal updates in place — counter values, focus,
-scroll positions, animation tickers all survive.
+fleury supports Dart-VM-class stateful hot reload: reload changed source and
+the running terminal updates in place while widget state, focus, and scroll
+positions survive.
 
-This is uncommon in TUI frameworks. Bubble Tea / Ratatui / Ink can only
-restart the process and lose state; Textual reloads CSS but not Python
-code. fleury inherits Flutter's reload mechanism by riding the Dart
-VM's `reloadSources` RPC.
+Fleury uses the Dart VM's `reloadSources` RPC and performs a framework-level
+reassemble walk after the VM reports a reload.
 
 ## What it does, in two sentences
 
-When you save a file, your editor (or a CLI watcher) tells the Dart VM
-to swap in the new code. fleury notices the swap, walks the element
+When Dart-Code tells the Dart VM to swap in new code, fleury notices the swap,
+walks the element
 tree calling `State.reassemble()` on each `State` and marking every
 element dirty, and the next frame redraws against the new code.
 
 ## Quick start (VS Code)
 
 **Prerequisite**: the official [Dart VS Code extension][dart-ext]
-(`Dart-Code.dart-code`). Anyone writing Dart in VS Code already has
-it; fleury itself does **not** require its own extension.
+(`Dart-Code.dart-code`). Fleury itself does **not** require its own extension.
 
-fleury ships `.vscode/launch.json` and `.vscode/settings.json` in
-this package — the launch config wires `--enable-vm-service` and
-points at the integrated terminal; the settings turn on
-`dart.flutterHotReloadOnSave` (which despite the name applies to any
-VM-service-enabled Dart program). Open `packages/fleury/` in VS
-Code, press F5, the example launches. Then:
+fleury ships `.vscode/launch.json` and `.vscode/settings.json` in this
+package. The launch config points every example at the integrated terminal;
+the setting makes Dart-Code use that terminal for inline Run and Debug actions
+too. Open `packages/fleury/` in VS Code, press F5, and the example launches.
+Then:
 
-- **Save a file** — Dart VS Code extension auto-reloads. Changes
-  appear instantly. (If reload-on-save isn't firing, check that
-  `dart.flutterHotReloadOnSave` is `"always"` in your user or
-  workspace settings.)
-- **Cmd+Shift+F5** (Mac) / **Ctrl+Shift+F5** (Win/Linux) — manual hot
-  reload via the command palette ("Dart: Hot Reload"). Always works
-  regardless of the on-save setting.
-- **Cmd+F5** — hot restart (rebuild the tree from scratch, drops state).
+- Run **Dart: Hot Reload** from the command palette after editing source.
+- If you prefer reload-on-save, set `dart.hotReloadOnSave` to `allIfDirty`
+  in your user settings. Fleury does not impose that workflow on generated
+  projects.
+- Stop and relaunch when you deliberately want to rebuild from scratch and
+  drop state.
 
 Try this: launch `fleury · hot reload demo`, press `→` a few times
 to bump the counter, then edit `_titleColor = AnsiColor(4)` to
 `AnsiColor(1)` in `example/hot_reload_demo.dart` and save. The title
-recolors live; the counter stays where you left it.
+recolors after you run **Dart: Hot Reload**; the counter stays where you left
+it. Enabling reload-on-save makes the save trigger that command automatically.
 
 [dart-ext]: https://marketplace.visualstudio.com/items?itemName=Dart-Code.dart-code
 
 ## Adding the same to your own app
 
-Copy fleury's `.vscode/launch.json` and `.vscode/settings.json`
-templates into your own project's `.vscode/`, swap the `program:` path
-to point at your `bin/your_app.dart`, and you're done. The Dart VS
-Code extension does all the work; fleury's framework reassemble
-runs automatically when the VM reports a reload.
+`fleury create my_app` writes the minimal project configuration automatically:
+`console: terminal` in `.vscode/launch.json` and `dart.cliConsole: terminal`
+in `.vscode/settings.json`. The Dart VS Code extension does the debugging and
+hot reload; Fleury reassembles automatically when the VM reports a reload.
+
+For an existing project, copy those two fields and point `program` at your
+entrypoint. No Fleury-specific VS Code extension is required.
 
 There is no fleury-specific VS Code extension. The hot reload
 mechanism rides on the standard VM service protocol that Dart-Code
 already speaks — when it fires `reloadSources`, fleury's
 `HotReloadController` picks up the `IsolateReload` event via
-`dart:developer` and calls `BuildOwner.reassembleApplication()`.
+the VM-service client and calls `BuildOwner.reassembleApplication()`.
 
-## Quick start (CLI)
+## Fallback for a debugger without a terminal
 
-```sh
-dart pub global activate hotreloader   # one time
-dart --enable-vm-service example/hot_reload_demo.dart
-```
-
-The community `hotreloader` package watches the filesystem and asks
-the VM to reload on change. fleury picks the reload event up
-automatically.
-
-## Other editors
-
-- **IntelliJ / Android Studio**: install the Dart plugin and use the
-  same launch.json fields under a Dart run configuration. Cmd+\ /
-  Ctrl+\ triggers Hot Reload via the same VM service path.
-- **Neovim with `dartls`** or **Emacs with `lsp-dart`**: trigger
-  reload through your LSP client's command interface (`Reload Sources`
-  RPC), or fall back to the SIGUSR1 path below.
-- **Anything else**: the SIGUSR1 path below works without an LSP.
-
-## Editor-agnostic (any file watcher)
-
-fleury also reassembles on SIGUSR1. Wire any watcher you like:
-
-```sh
-dart --enable-vm-service example/hot_reload_demo.dart &
-PID=$!
-find lib example -name '*.dart' | entr -p kill -SIGUSR1 $PID
-```
-
-(Windows: SIGUSR1 doesn't exist, so use the VS Code or `hotreloader`
-paths there.)
+Prefer an IDE-integrated terminal. On macOS or Linux, if an IDE can debug Dart
+but only offers a non-TTY output pane, run `fleury shell` from the project root
+and then launch the app from that project in the debugger. The app discovers
+`.fleury/handle`; rendering and input stay in the real terminal while the
+debugger remains attached. `FLEURY_HANDLE=<absolute socket>` is the explicit
+override when the app cannot discover the project handle.
 
 ## Adding hot reload to your own app
 
@@ -105,9 +77,9 @@ Future<void> main() async {
 }
 ```
 
-Then pick a launch path: VS Code (template above), CLI with
-`hotreloader`, or editor-agnostic SIGUSR1. All three use the same
-underlying mechanism — your `runApp` call is identical.
+Launch it through Dart-Code as described above. Fleury listens for the VM's
+source-reload event; a filesystem watcher that only restarts the
+process or sends a signal is not stateful hot reload.
 
 ## What survives a reload
 
@@ -115,8 +87,8 @@ underlying mechanism — your `runApp` call is identical.
   preserved across reload — only its code is swapped).
 - Focused widget (your text input stays focused).
 - Scroll offsets on `ListView` / `Tree`.
-- Animation tickers mid-flight (they re-anchor cleanly via the
-  scheduler's reassemble lane, so a value tween doesn't jump).
+- A value `Animation` settles at its current target so no stale completion is
+  left pending. A `FrameTicker` resets its phase and re-anchors its clock.
 - Subscriptions registered in `initState` (they were never torn
   down).
 
@@ -127,8 +99,8 @@ underlying mechanism — your `runApp` call is identical.
 - Object identity for new instances created in `build()` (Flutter same).
 - Edits that change a constructor signature, generic parameter, or
   add a non-`const` top-level initializer — the VM rejects these as
-  `isolate reload failed` and you get a stderr message. Hot restart
-  (Cmd+F5) instead — it's still fast, just drops state.
+  `isolate reload failed` and you get a stderr message. Stop and relaunch the
+  app instead; it drops state but picks up the unsupported change.
 
 ## Cache invalidation in your widgets
 
@@ -170,9 +142,6 @@ This is exactly the Flutter contract — same hook name, same semantics.
    available, it opens a `VmService` connection and subscribes to
    `IsolateReload` events. When one fires, it calls onReassemble. This
    is the path that powers VS Code's reload-on-save.
-4. On POSIX, the controller installs a `SIGUSR1` handler that also
-   calls onReassemble. This is the path that powers any file-watcher
-   wrapper (entr, fswatch, inotifywait, custom Makefiles).
 
 `BuildOwner.reassembleApplication()`:
 - Walks the element tree depth-first.
@@ -184,8 +153,8 @@ This is exactly the Flutter contract — same hook name, same semantics.
 `TickerScheduler.reassemble()`:
 - Fires every registered reassemble callback (a separate signal from
   per-frame tick callbacks).
-- Animation primitives use this to re-anchor in-flight tweens so they
-  continue smoothly rather than restarting.
+- `Animation` settles at its current target so no old completion remains
+  pending. `FrameTicker` resets its phase and re-anchors its clock.
 
 ## Disabling hot reload
 
@@ -193,16 +162,18 @@ This is exactly the Flutter contract — same hook name, same semantics.
 await runApp(const MyApp(), enableHotReload: false);
 ```
 
-Use this in production launches. It skips the service-extension
-registration, the VM-service connection, and the SIGUSR1 handler. The
-binary works fine without `--enable-vm-service`.
+Use this in production launches. It skips the service-extension registration
+and VM-service connection. The binary works fine without
+`--enable-vm-service`.
 
 ## Troubleshooting
 
-**"Nothing happens when I save"** — Check that `--enable-vm-service`
-was passed (VS Code's launch.json template includes it). Look for a
-startup line like `The Dart VM service is listening on http://...` in
-stderr; if you don't see it, the flag isn't being applied.
+**"Nothing happens when I save"** — Reload-on-save is optional and is not
+enabled by the generated project. Run **Dart: Hot Reload** from the command
+palette, or opt into `dart.hotReloadOnSave: "allIfDirty"` in your user
+settings. Dart-Code enables the VM service for a debug launch automatically;
+the VM-service flag alone is not hot reload because a client still has to call
+`reloadSources`.
 
 **"VS Code reloads my code but the UI doesn't update"** — Same root
 cause: the VM service is enabled, but fleury's controller didn't
@@ -213,8 +184,7 @@ attach. Check that `enableHotReload: true` (the default) in your
 Some edits can't be applied cleanly to a running tree (changing a
 `StatefulWidget` to a `StatelessWidget`, removing a field that the
 State references). The VM accepts the source change but the next
-build crashes. Hot restart instead (Cmd+F5 in VS Code, kill and
-relaunch in CLI).
+build crashes. Stop and relaunch the process.
 
 **"`isolate reload failed: missing fields`"** — You added a non-
 nullable field to a `State` class without a default value. The
@@ -231,14 +201,4 @@ field nullable / give it a default.
   confirm the Dart VM behavior before any framework code shipped
 - `example/hot_reload_demo.dart` — the demo
 - `.vscode/launch.json` — the VS Code wiring template
-
-## Comparison to peers
-
-| Framework | Stateful hot reload | Notes |
-| --- | --- | --- |
-| Flutter (Dart) | Yes | `WidgetsBinding.performReassemble` |
-| **fleury** | **Yes** | Same VM mechanism, framework-level reassemble walk |
-| Textual (Python) | CSS only | Python code reload requested in #4218; unimplemented |
-| Bubble Tea (Go) | No | `air` rebuilds + restarts |
-| Ratatui (Rust) | No | `cargo watch` rebuilds + restarts |
-| Ink (Node) | No | `nodemon` restarts |
+- `doc/vscode_f5_acceptance.md` — the manual editor/terminal release gate

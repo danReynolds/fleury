@@ -11,7 +11,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
-import 'dart:io';
 
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
@@ -44,7 +43,6 @@ class HotReloadController {
 
   VmService? _vm;
   StreamSubscription<Event>? _isolateEventSubscription;
-  StreamSubscription<ProcessSignal>? _sigusrSubscription;
 
   /// Attaches reload handlers to the current isolate.
   ///
@@ -82,22 +80,6 @@ class HotReloadController {
       await controller._connectVmService(serverUri);
     }
 
-    // SIGUSR1 is the editor-agnostic trigger: a file watcher (entr,
-    // inotifywait, fswatch, a Make recipe, etc.) can `kill -SIGUSR1
-    // <pid>` after recompiling and fleury reassembles. Mirrors Flutter
-    // `flutter run --pid-file` semantics. Windows has no SIGUSR1, so
-    // this no-ops there — the VM-service path covers VS Code.
-    if (!Platform.isWindows) {
-      try {
-        controller._sigusrSubscription = ProcessSignal.sigusr1.watch().listen(
-          (_) => onReassemble(),
-        );
-      } catch (_) {
-        // Some embedders (zero-tty pipelines, isolates without signal
-        // permission) refuse to install the handler. Best-effort.
-      }
-    }
-
     return controller;
   }
 
@@ -132,8 +114,6 @@ class HotReloadController {
   Future<void> dispose() async {
     await _isolateEventSubscription?.cancel();
     _isolateEventSubscription = null;
-    await _sigusrSubscription?.cancel();
-    _sigusrSubscription = null;
     await _vm?.dispose();
     _vm = null;
     // Clear only when this controller is the current owner — a later

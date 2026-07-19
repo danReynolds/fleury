@@ -1,13 +1,4 @@
 {
-  // VS Code launch config for the fleury examples. Two things matter:
-  //   1. "console": "terminal" — TUIs need a real PTY, not VS Code's
-  //      Debug Console.
-  //   2. "toolArgs": ["--enable-vm-service"] — exposes the Dart VM
-  //      service so hot reload works. Save any source file (Cmd+S) or
-  //      use Command Palette → "Dart: Hot Reload" (Cmd+Shift+F5).
-  //
-  // Copy this file (and only this file) into the .vscode/ of any app
-  // that depends on fleury to get the same workflow there.
   "version": "0.2.0",
   "configurations": [
     {
@@ -15,40 +6,35 @@
       "type": "dart",
       "request": "launch",
       "program": "example/hot_reload_demo.dart",
-      "console": "terminal",
-      "toolArgs": ["--enable-vm-service"]
+      "console": "terminal"
     },
     {
       "name": "fleury · counter demo",
       "type": "dart",
       "request": "launch",
       "program": "example/counter_demo.dart",
-      "console": "terminal",
-      "toolArgs": ["--enable-vm-service"]
+      "console": "terminal"
     },
     {
       "name": "fleury · chat demo",
       "type": "dart",
       "request": "launch",
       "program": "example/chat_demo.dart",
-      "console": "terminal",
-      "toolArgs": ["--enable-vm-service"]
+      "console": "terminal"
     },
     {
       "name": "fleury · animation showcase",
       "type": "dart",
       "request": "launch",
       "program": "example/animation_showcase.dart",
-      "console": "terminal",
-      "toolArgs": ["--enable-vm-service"]
+      "console": "terminal"
     },
     {
       "name": "fleury · showcase",
       "type": "dart",
       "request": "launch",
       "program": "example/showcase.dart",
-      "console": "terminal",
-      "toolArgs": ["--enable-vm-service"]
+      "console": "terminal"
     }
   ]
 }

@@ -52,22 +52,21 @@ Future<void> main() async {
     if (reloadReport.success != true) {
       stderr.writeln('driver: reload failed: ${reloadReport.toJson()}');
       exitCode = 3;
-      return;
-    }
+    } else {
+      // Give the runtime a beat to settle before we re-snapshot.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
 
-    // Give the runtime a beat to settle before we re-snapshot.
-    await Future<void>.delayed(const Duration(milliseconds: 200));
+      final postReload = await _snapshot(vm, isolateId);
+      _printSnapshot('post-reload', postReload);
 
-    final postReload = await _snapshot(vm, isolateId);
-    _printSnapshot('post-reload', postReload);
-
-    final verdict = _verdict(preReload, postReload);
-    print('\ndriver: verdict');
-    for (final line in verdict.lines) {
-      print('  $line');
-    }
-    if (!verdict.allPassed) {
-      exitCode = 1;
+      final verdict = _verdict(preReload, postReload);
+      print('\ndriver: verdict');
+      for (final line in verdict.lines) {
+        print('  $line');
+      }
+      if (!verdict.allPassed) {
+        exitCode = 1;
+      }
     }
   } catch (error, stack) {
     stderr.writeln('driver: error: $error');

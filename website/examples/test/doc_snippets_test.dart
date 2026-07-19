@@ -3,7 +3,11 @@ library;
 
 import 'dart:io';
 
+import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
+
+import '../doc_snippets/filterable_list.dart' as tutorial;
+import '../doc_snippets/getting_started_app.dart' as getting_started;
 
 /// Guards the compile-checked source behind the prose docs.
 ///
@@ -28,5 +32,17 @@ void main() {
           'doc_snippets/ AND the prose in website/src/content/docs that mirrors '
           'it.',
     );
+  });
+
+  testWidgets('final getting-started app renders against the real API', (
+    tester,
+  ) {
+    tester.pumpWidget(const getting_started.MyApp());
+    expect(tester.renderToString(emptyMark: ' '), contains('CPU'));
+  });
+
+  testWidgets('final tutorial app renders against the real API', (tester) {
+    tester.pumpWidget(const tutorial.MyApp());
+    expect(tester.renderToString(emptyMark: ' '), contains('Dart'));
   });
 }

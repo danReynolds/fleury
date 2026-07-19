@@ -87,7 +87,7 @@ the same widget tree, but different host entrypoints:
 | Native terminal app | `package:fleury/fleury.dart` | `runApp(const FleuryApp(title: 'My app', home: MyApp()))` |
 | Higher-level widgets in a terminal app | `package:fleury_widgets/fleury_widgets.dart` | still `runApp` |
 | Client-side browser embed | `package:fleury/fleury_core.dart`, `package:fleury_web/fleury_web.dart`, plus web-safe widgets | `mountApp(() => const FleuryApp(title: 'My app', home: MyApp()), into: host)` |
-| Browser session backed by a native process | terminal app imports | `fleury serve --spawn dart run my_app.dart` |
+| Browser session backed by a native process | terminal app imports | `fleury serve --spawn dart run bin/run_app.dart` |
 
 For a browser embed, the entrypoint is a tiny web file:
 
@@ -96,9 +96,9 @@ import 'package:fleury/fleury_core.dart';
 import 'package:fleury_web/fleury_web.dart';
 import 'package:web/web.dart' as web;
 
-void main() {
+Future<void> main() async {
   final host = web.document.getElementById('app')!;
-  mountApp(
+  await mountApp(
     () => const FleuryApp(title: 'My app', home: MyApp()),
     into: host,
   );

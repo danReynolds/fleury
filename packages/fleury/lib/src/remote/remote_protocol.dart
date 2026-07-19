@@ -29,9 +29,8 @@
 //     0x03 RESIZE   payload = `cols=<n>,rows=<n>`
 //
 //   App → Peer
-//     0x10 OUTPUT   payload = raw ANSI bytes to render (legacy ANSI host;
-//                            retired-but-reserved — the structured serve
-//                            host emits PLAN/SEMANTICS instead)
+//     0x10 OUTPUT   payload = raw ANSI bytes to render (the v1 `fleury shell`
+//                            host; structured hosts emit PLAN/SEMANTICS)
 //     0x12 PLAN     payload = binary presentation plan (see remote_codec)
 //     0x13 SEMANTICS payload = UTF-8 JSON semantic snapshot
 //     0x16 INLINE_IMAGE payload = [u16 idLen][utf8 id][image bytes] — one
@@ -141,6 +140,14 @@ import 'remote_codec.dart';
 /// Both additions are emitted only to peers that negotiated the corresponding
 /// version; plans without the feature remain byte-compatible with older peers.
 const int remoteProtocolVersion = 5;
+
+/// The ANSI terminal-host protocol spoken by `fleury shell`.
+///
+/// Keep this named separately from [remoteProtocolVersion]: shell renders raw
+/// [OutputFrame] bytes into a real terminal, while v2+ peers receive structured
+/// [PlanFrame]s. Accidentally negotiating the latest structured version leaves
+/// shell connected but blank.
+const int remoteAnsiProtocolVersion = 1;
 
 /// Default remote frame payload cap.
 ///

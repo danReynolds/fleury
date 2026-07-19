@@ -15,6 +15,7 @@ void main() {
       expect(result.exitCode, 0, reason: result.stderr.toString());
       final output = '${result.stdout}${result.stderr}';
       expect(output, contains('App developer commands:'));
+      expect(output, contains('create   Create a Fleury application'));
       expect(output, contains('Framework checkout commands:'));
       expect(output, contains('fleury dev demo'));
       expect(output, contains('fleury dev storybook'));
@@ -136,6 +137,16 @@ void main() {
           ),
         );
         expect(check.stdout, isNot(contains('proof_console_test.dart')));
+
+        final fullCheck = await _runTool(['--dry-run', 'check']);
+        expect(fullCheck.exitCode, 0, reason: fullCheck.stderr.toString());
+        expect(
+          fullCheck.stdout,
+          contains(
+            '(website/examples) dart test test/api_extract_test.dart '
+            'test/docs_accuracy_test.dart test/doc_snippets_test.dart',
+          ),
+        );
 
         final coverage = await _runTool(['--dry-run', 'coverage', '--strict']);
         expect(coverage.exitCode, 0, reason: coverage.stderr.toString());
