@@ -303,7 +303,16 @@ dependency_overrides:
         '--',
         Platform.resolvedExecutable,
         'bin/run_app.dart',
-      ], workingDirectory: project.path);
+      ], workingDirectory: project.path, environment: {
+        ...Platform.environment,
+        // Pin this test to the classic single-process run: its subject is
+        // the scaffold contract (first frame, input, restore, exit codes).
+        // Under the dev supervisor the VM-service banner becomes the PTY's
+        // first output, which shifts the scripted `--*-after-output-ms`
+        // timers into the child's JIT warmup. Supervised operation has its
+        // own end-to-end coverage in dev_bootstrap_pty_test.dart.
+        'FLEURY_HOT_RELOAD': '0',
+      });
 
       expect(
         capture.exitCode,

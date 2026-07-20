@@ -29,6 +29,7 @@ import '../rendering/surface_capabilities.dart';
 import '../terminal/capabilities.dart';
 import '../terminal/diagnostics.dart';
 import '../input/events.dart';
+import 'dev_bootstrap.dart';
 import 'package:stdio/stdio.dart' as fd;
 
 import '../terminal/native_driver.dart';
@@ -252,6 +253,26 @@ Future<AppExit> runApp(
   DebugConfig debug = const DebugConfig(),
   Duration frameInterval = Duration.zero,
 }) async {
+  // Plain `dart run` dev sessions hand the process to the dev supervisor:
+  // it re-spawns this same script as a child process with the VM service
+  // enabled (the child re-enters runApp and takes the classic path below),
+  // and drives save-to-reload + hot restart from outside the app. Every
+  // other kind of run — tests (injected driver), AOT, Windows, no TTY,
+  // serve handles, editor/debugger sessions with a live VM service — falls
+  // through untouched, and (shouldConsider being synchronous) with runApp's
+  // original synchronous prefix intact.
+  if (DevBootstrap.shouldConsider(
+    driverInjected: driver != null,
+    enableHotReload: enableHotReload,
+  )) {
+    await DevBootstrap.runOrFallThrough();
+    // Reaching here means this run was ineligible after async checks or the
+    // bootstrap could not start; run classically.
+  }
+  // The supervised child's half of the handshake: silently self-enable the
+  // VM service and tell the supervisor where it is. Fire-and-forget; a
+  // no-op outside supervised sessions.
+  DevBootstrap.maybeStartSupervisedChildHandshake();
   fd.Stdio? cap;
   try {
     return await _runAppImpl(
@@ -522,6 +543,7 @@ Future<AppExit> _runAppImpl(
   }
 
   HotReloadController? hotReload;
+  InAppDevReload? devSelfReload;
   StreamSubscription<TuiEvent>? eventSub;
   final exit = Completer<AppExit>();
   // Expose this run's exit to [requestExit]. Last-started run wins; the
@@ -755,6 +777,12 @@ Future<AppExit> _runAppImpl(
     hotReload = null;
     if (activeHotReload != null) {
       await captureAsync('hot reload controller', activeHotReload.dispose);
+    }
+
+    final activeSelfReload = devSelfReload;
+    devSelfReload = null;
+    if (activeSelfReload != null) {
+      await captureAsync('dev self-reload', activeSelfReload.dispose);
     }
 
     captureSync(
@@ -1252,6 +1280,28 @@ Future<AppExit> _runAppImpl(
           scheduleFrame('initial');
 
           if (enableHotReload) {
+            // Reload outcomes (from the dev bootstrap or in-app watcher)
+            // surface in the debug shell: Logs on success, Errors on
+            // failure — never the terminal, which the frame owns.
+            void reportReload(HotReloadReport report) {
+              if (report.success) {
+                final n = report.loadedLibraryCount;
+                capture.addLine(
+                  'Reloaded $n librar${n == 1 ? 'y' : 'ies'} '
+                  'in ${report.elapsed.inMilliseconds}ms',
+                  LogSource.stderr,
+                );
+              } else {
+                errorReporter.report(
+                  StateError(
+                    'hot reload failed: '
+                    '${report.message ?? 'rejected by the VM'}',
+                  ),
+                  StackTrace.current,
+                );
+              }
+            }
+
             hotReload = await HotReloadController.attach(
               onReassemble: () {
                 runtime.reassembleApplication();
@@ -1264,7 +1314,24 @@ Future<AppExit> _runAppImpl(
                 binding.tickerScheduler.reassemble();
                 scheduleFrame('hot-reload');
               },
+              onReloadReport: reportReload,
+              // The dev supervisor's hot restart: tear this session down
+              // through the normal exit path (terminal restore, capture
+              // stop, socket close); the supervisor respawns the process
+              // fresh.
+              onShutdownRequested: requestExit,
             );
+            // Save-to-reload for supervised (serve/remote) sessions, where
+            // the bootstrap must not run but the developer is still
+            // iterating — reloads flow straight to the browser preview.
+            // (Sync pre-gate: ineligible runs must not add an await here.)
+            if (InAppDevReload.shouldConsider(
+              enableHotReload: enableHotReload,
+            )) {
+              devSelfReload = await InAppDevReload.maybeStart(
+                onReport: reportReload,
+              );
+            }
           }
 
           activateDriverEvents();

@@ -1,18 +1,49 @@
 # Hot reload
 
-fleury supports Dart-VM-class stateful hot reload: reload changed source and
-the running terminal updates in place while widget state, focus, and scroll
-positions survive.
+fleury supports Dart-VM-class stateful hot reload: save a changed source file
+and the running terminal updates in place while widget state, focus, and
+scroll positions survive. It works **out of the box, in any editor** — no
+flags, no plugin, no wrapper command.
 
 Fleury uses the Dart VM's `reloadSources` RPC and performs a framework-level
 reassemble walk after the VM reports a reload.
 
 ## What it does, in two sentences
 
-When Dart-Code tells the Dart VM to swap in new code, fleury notices the swap,
-walks the element
-tree calling `State.reassemble()` on each `State` and marking every
+When new code is swapped into the Dart VM — by fleury's own dev supervisor on
+save, or by an editor like Dart-Code — fleury notices the swap, walks the
+element tree calling `State.reassemble()` on each `State` and marking every
 element dirty, and the next frame redraws against the new code.
+
+## Quick start (any editor)
+
+```sh
+dart run bin/main.dart
+```
+
+That's the whole setup. A plain JIT run on a real terminal starts fleury's
+**dev supervisor**: it re-runs your entrypoint as a supervised child process
+with the VM service enabled, watches your package's sources (`lib/`, `bin/`,
+and any local *path* dependencies — a framework checkout included), and hot
+reloads on save. Edit in vim, Zed, IntelliJ, anything — saving is the trigger.
+
+- Reload outcomes surface in the debug shell (`Ctrl+G`): "Reloaded N libraries
+  in Xms" in the **Logs** tab, compile errors in the **Errors** tab. The
+  frames themselves are never disturbed.
+- **Hot restart** — drop state and re-run `main()` fresh, same terminal
+  session — is one service-extension call away: any VM-service client (an
+  editor, `fleury_mcp`, a script) can invoke `ext.fleury.restart`. Reload
+  keeps state; restart is for the changes reload can't apply (see below).
+- Opt out with `FLEURY_HOT_RELOAD=0`, or `runApp(enableHotReload: false)`.
+- The supervisor steps aside automatically whenever something else owns the
+  run: an editor debug session (a live VM service), a `fleury serve` handle,
+  an AOT build, Windows, a non-TTY, or an injected test driver. Under a
+  `fleury serve --spawn` session the app still self-reloads on save — the
+  browser preview updates live — but never restarts (the serve socket accepts
+  exactly one connection).
+- One caveat: a dev restart re-runs `main()` without the original CLI
+  arguments (a process cannot recover its own argv for a sibling spawn). An
+  app that must re-see argv can set `FLEURY_HOT_RELOAD=0`.
 
 ## Quick start (VS Code)
 
@@ -101,8 +132,10 @@ process or sends a signal is not stateful hot reload.
 - Object identity for new instances created in `build()` (Flutter same).
 - Edits that change a constructor signature, generic parameter, or
   add a non-`const` top-level initializer — the VM rejects these as
-  `isolate reload failed` and you get a stderr message. Stop and relaunch the
-  app instead; it drops state but picks up the unsupported change.
+  `isolate reload failed` (the message lands in the debug shell's Errors
+  tab). **Hot restart** instead: invoke `ext.fleury.restart` (or stop and
+  relaunch); it drops state but picks up the unsupported change, in the same
+  terminal session.
 
 ## Cache invalidation in your widgets
 
@@ -130,6 +163,46 @@ class _MyWidgetState extends State<MyWidget> {
 ```
 
 This is exactly the Flutter contract — same hook name, same semantics.
+
+## How the dev supervisor works
+
+A plain `dart run` has no VM service, so nothing could trigger a reload —
+that's the gap the supervisor closes. When `runApp` starts in a plain JIT dev
+run (real TTY, no injected driver, no live VM service, no serve handle), the
+first process becomes a thin supervisor instead of running the app:
+
+1. It re-spawns the same entrypoint script as a **child process** with
+   `--enable-vm-service=0 --no-serve-devtools --write-service-info=<file>`
+   and `inheritStdio` — the child owns the PTY, raw mode, signals, and stdio
+   capture exactly as a normal run would. (The one visible trace is the VM
+   service's single startup line, which the alt screen immediately hides.
+   The service must come from VM flags: a runtime-enabled service's
+   `reloadSources` wedges — one of two VM-level landmines this design routes
+   around; the other is that reload deadlocks `Isolate.spawnUri` groups.)
+2. The child re-enters `runApp`, sees the `FLEURY_DEV_SUPERVISED` marker,
+   confirms its service URI through a handshake file, and runs the classic
+   single-isolate app — the same battle-tested shape an editor debugs.
+3. The supervisor watches the package sources (via `package_config.json`:
+   the root package plus local path deps; the pub cache is immutable and
+   skipped), debounces saves, and calls `reloadSources` on the child's main
+   isolate — then reports the outcome through `ext.fleury.reloadReport` so
+   it lands in the debug shell.
+4. `ext.fleury.restart` (registered in the app) asks the supervisor — via a
+   `postEvent` on the service's Extension stream — to restart: it requests a
+   graceful teardown (`ext.fleury.shutdown` → the normal exit path, terminal
+   restored), then respawns the child fresh. A wedged child is SIGKILLed,
+   the supervisor restores the terminal from outside (its own stdout *is*
+   the tty), and the respawn proceeds.
+5. When the child exits for real — quit, Ctrl+C, crash — the supervisor
+   mirrors its exit code. Both processes sit in the foreground process
+   group; the supervisor swallows its own signal deliveries and lets the
+   child's driver own the response.
+
+Why a child *process* rather than a child isolate: `reloadSources` against an
+`Isolate.spawnUri` group deadlocks the group when sources actually changed
+(reproducible with a plain-Dart child on SDK 3.12 — no fleury involved), so
+the supervisor uses the process boundary, which is also what keeps stdin,
+signal, and stdio-capture ownership trivially correct across restarts.
 
 ## How it works under the hood
 

@@ -26,6 +26,10 @@ dependencies:
   # runtime; never imported by the web-safe barrels.
   stdio: ^0.4.0
   vm_service: ^15.0.2
+  # Recursive, rename-aware source watching for dev-time hot reload (Linux
+  # inotify is not natively recursive; this is the dart-lang watcher used by
+  # the wider ecosystem's reload tooling). Never imported by web-safe barrels.
+  watcher: ^1.1.4
 
 dev_dependencies:
   benchmark_harness: ^2.3.1

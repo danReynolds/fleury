@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- Automatic hot reload for plain `dart run` sessions: a built-in dev
+  supervisor re-spawns the app with the VM service enabled, watches the
+  package sources (root package + local path deps), and hot reloads on save
+  — any editor, no flags, no extension. Reload telemetry and compile errors
+  surface in the debug shell (Logs / Errors tabs). Opt out with
+  `FLEURY_HOT_RELOAD=0` or `runApp(enableHotReload: false)`.
+- Hot restart: `ext.fleury.restart` tears the app down gracefully and
+  re-runs `main()` fresh in the same terminal session (for the edits reload
+  can't apply). `ext.fleury.shutdown` and `ext.fleury.reloadReport` complete
+  the dev-tooling service-extension surface.
+- Apps spawned under `fleury serve --spawn` self-reload on save (the browser
+  preview updates live); restart is intentionally disabled there.
+
 ## 0.1.0
 
 Initial public release.

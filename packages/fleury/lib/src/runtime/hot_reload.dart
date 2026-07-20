@@ -22,7 +22,46 @@ import 'package:vm_service/vm_service_io.dart';
 // successive runs (e.g. a test isolate) sees the right callback for
 // the currently-attached controller.
 void Function()? _activeOnReassemble;
+void Function(HotReloadReport report)? _activeOnReloadReport;
+void Function()? _activeOnShutdownRequested;
 bool _extensionRegistered = false;
+
+/// Outcome of one dev-tooling `reloadSources`, as delivered to the app via
+/// the `ext.fleury.reloadReport` extension.
+final class HotReloadReport {
+  const HotReloadReport({
+    required this.success,
+    required this.elapsed,
+    required this.loadedLibraryCount,
+    this.message,
+  });
+
+  /// Whether the VM accepted the reload.
+  final bool success;
+
+  /// Wall time of the `reloadSources` call.
+  final Duration elapsed;
+
+  /// Libraries the VM re-loaded (0 when unknown or failed).
+  final int loadedLibraryCount;
+
+  /// Compile/rejection detail on failure.
+  final String? message;
+}
+
+/// Connects a `package:vm_service` client to the VM service at [serverUri]
+/// (the http(s) URI from `Service.getInfo()`), translating it to the
+/// websocket endpoint. Shared by [HotReloadController] (in-app reassemble
+/// listener) and the dev bootstrap (source-watcher reload trigger).
+Future<VmService> connectVmServiceAt(Uri serverUri) {
+  final wsUri = serverUri.replace(
+    scheme: serverUri.scheme == 'https' ? 'wss' : 'ws',
+    path: serverUri.path.endsWith('/')
+        ? '${serverUri.path}ws'
+        : '${serverUri.path}/ws',
+  );
+  return vmServiceConnectUri(wsUri.toString());
+}
 
 /// Owns the hot-reload integration for one TUI session.
 ///
@@ -50,8 +89,17 @@ class HotReloadController {
   /// external tool can trigger a reassemble. If the VM service is
   /// available, also subscribes to the Isolate stream and reassembles
   /// on `IsolateReload` events.
+  ///
+  /// [onReloadReport] receives dev-tooling reload outcomes (the
+  /// `ext.fleury.reloadReport` extension, invoked by the dev bootstrap after
+  /// each `reloadSources`) so the runtime can surface "Reloaded N libraries
+  /// in Xms" and compile errors in the debug shell. [onShutdownRequested]
+  /// backs `ext.fleury.shutdown` — a graceful exit request used by the dev
+  /// bootstrap to tear this session down before a hot restart.
   static Future<HotReloadController> attach({
     required void Function() onReassemble,
+    void Function(HotReloadReport report)? onReloadReport,
+    void Function()? onShutdownRequested,
   }) async {
     final info = await developer.Service.getInfo();
     final serverUri = info.serverUri;
@@ -63,12 +111,54 @@ class HotReloadController {
     );
 
     _activeOnReassemble = onReassemble;
+    _activeOnReloadReport = onReloadReport;
+    _activeOnShutdownRequested = onShutdownRequested;
     if (!_extensionRegistered) {
       developer.registerExtension('ext.fleury.reassemble', (
         method,
         params,
       ) async {
         _activeOnReassemble?.call();
+        return developer.ServiceExtensionResponse.result(
+          jsonEncode({'ok': true}),
+        );
+      });
+      developer.registerExtension('ext.fleury.reloadReport', (
+        method,
+        params,
+      ) async {
+        _activeOnReloadReport?.call(
+          HotReloadReport(
+            success: params['success'] == 'true',
+            elapsed: Duration(
+              milliseconds: int.tryParse(params['elapsedMs'] ?? '') ?? 0,
+            ),
+            loadedLibraryCount:
+                int.tryParse(params['loadedLibraryCount'] ?? '') ?? 0,
+            message: params['message'],
+          ),
+        );
+        return developer.ServiceExtensionResponse.result(
+          jsonEncode({'ok': true}),
+        );
+      });
+      developer.registerExtension('ext.fleury.shutdown', (
+        method,
+        params,
+      ) async {
+        _activeOnShutdownRequested?.call();
+        return developer.ServiceExtensionResponse.result(
+          jsonEncode({'ok': true}),
+        );
+      });
+      developer.registerExtension('ext.fleury.restart', (
+        method,
+        params,
+      ) async {
+        // Invoked on the app; relayed as an event so the dev bootstrap (a
+        // service client) can orchestrate the teardown + respawn. A no-op
+        // without a bootstrap session.
+        developer.postEvent('fleury.restartRequested', const {});
         return developer.ServiceExtensionResponse.result(
           jsonEncode({'ok': true}),
         );
@@ -84,14 +174,8 @@ class HotReloadController {
   }
 
   Future<void> _connectVmService(Uri serverUri) async {
-    final wsUri = serverUri.replace(
-      scheme: serverUri.scheme == 'https' ? 'wss' : 'ws',
-      path: serverUri.path.endsWith('/')
-          ? '${serverUri.path}ws'
-          : '${serverUri.path}/ws',
-    );
     try {
-      _vm = await vmServiceConnectUri(wsUri.toString());
+      _vm = await connectVmServiceAt(serverUri);
       await _vm!.streamListen(EventStreams.kIsolate);
       _isolateEventSubscription = _vm!.onIsolateEvent.listen((event) {
         if (event.kind == EventKind.kIsolateReload) {
@@ -117,9 +201,11 @@ class HotReloadController {
     await _vm?.dispose();
     _vm = null;
     // Clear only when this controller is the current owner — a later
-    // attach() may have already swapped the cell.
+    // attach() may have already swapped the cells.
     if (identical(_activeOnReassemble, onReassemble)) {
       _activeOnReassemble = null;
+      _activeOnReloadReport = null;
+      _activeOnShutdownRequested = null;
     }
   }
 }
