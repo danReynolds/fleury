@@ -136,11 +136,13 @@ Future<int> runCreateCommand(List<String> args) async {
   if (options.includeEditorConfig) {
     stdout
       ..writeln('  code .')
-      ..writeln('  Press F5 to run in an interactive terminal.')
-      ..writeln('  Edit and save while it runs — hot reload keeps your state.');
+      ..writeln('  Press F5 to run in an interactive terminal.');
   } else {
     stdout.writeln('  dart run bin/run_app.dart');
   }
+  stdout.writeln(
+    '  Edit and save while it runs — hot reload keeps your state.',
+  );
   return 0;
 }
 
@@ -371,11 +373,9 @@ String _readme(String projectName, {required bool includeEditorConfig}) {
       : 'Run directly from an interactive terminal:';
   final editorNote = includeEditorConfig
       ? '''
-Under F5, **saving a changed file hot reloads the running app** — the terminal
-updates in place and widget state survives (wired via `dart.hotReloadOnSave` in
-`.vscode/settings.json`). A plain `dart run` starts no VM service, so that path
-runs without hot reload. The F5 flow requires the official Dart extension
-(`Dart-Code.dart-code`); Fleury needs no custom editor extension.
+Under F5 the Dart debugger drives the reload (wired via `dart.hotReloadOnSave`
+in `.vscode/settings.json`); the F5 flow requires the official Dart extension
+(`Dart-Code.dart-code`). Fleury needs no custom editor extension.
 '''
       : '';
   return '''
@@ -392,6 +392,10 @@ dart run bin/run_app.dart
 ```
 
 Press Enter or click **Increment**. Press Ctrl+C to quit.
+
+**Saving a changed file hot reloads the running app** — in any editor: the
+terminal updates in place and widget state survives. Set `FLEURY_HOT_RELOAD=0`
+to opt out.
 
 $editorNote
 ## Test
